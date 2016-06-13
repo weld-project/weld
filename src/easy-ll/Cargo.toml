@@ -1,0 +1,7 @@
+[package]
+name = "easy-ll"
+version = "0.1.0"
+authors = ["Matei Zaharia <matei.zaharia@gmail.com>"]
+
+[dependencies]
+llvm-sys = "0.3.0"

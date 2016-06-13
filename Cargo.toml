@@ -1,0 +1,10 @@
+[package]
+name = "weld"
+version = "0.1.0"
+authors = ["Matei Zaharia <matei.zaharia@gmail.com>"]
+
+[lib]
+path = "src/weld/lib.rs"
+
+[dependencies]
+easy-ll = { path = "src/easy-ll", version = "^0.1.0" }
