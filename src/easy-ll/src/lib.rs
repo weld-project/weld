@@ -12,7 +12,7 @@ use std::sync::{Once, ONCE_INIT};
 
 use llvm::execution_engine::LLVMMCJITCompilerOptions;
 use llvm::analysis::LLVMVerifierFailureAction;
-use llvm::transforms::pass_manager_builder;
+use llvm::transforms::pass_manager_builder as pmb;
 
 #[cfg(test)]
 mod tests;
@@ -143,19 +143,21 @@ pub fn compile_module(code: &str) -> Result<CompiledModule, LlvmError> {
             return Err(LlvmError(msg));
         }
 
+        // TODO: check type of run() function in module!
+
         // Optimize module
         let manager = llvm::core::LLVMCreatePassManager();
         if manager.is_null() {
             return Err(LlvmError::new("LLVMCreatePassManager returned null"))
         }
-        let builder = pass_manager_builder::LLVMPassManagerBuilderCreate();
+        let builder = pmb::LLVMPassManagerBuilderCreate();
         if builder.is_null() {
             return Err(LlvmError::new("LLVMPassManagerBuilderCreate returned null"))
         }
-        pass_manager_builder::LLVMPassManagerBuilderPopulateFunctionPassManager(builder, manager);
-        pass_manager_builder::LLVMPassManagerBuilderPopulateModulePassManager(builder, manager);
-        pass_manager_builder::LLVMPassManagerBuilderPopulateLTOPassManager(builder, manager, 1, 1);
-        pass_manager_builder::LLVMPassManagerBuilderDispose(builder);
+        pmb::LLVMPassManagerBuilderPopulateFunctionPassManager(builder, manager);
+        pmb::LLVMPassManagerBuilderPopulateModulePassManager(builder, manager);
+        pmb::LLVMPassManagerBuilderPopulateLTOPassManager(builder, manager, 1, 1);
+        pmb::LLVMPassManagerBuilderDispose(builder);
         llvm::core::LLVMRunPassManager(manager, module);
         llvm::core::LLVMDisposePassManager(manager);
         
@@ -177,7 +179,7 @@ pub fn compile_module(code: &str) -> Result<CompiledModule, LlvmError> {
 
         // Find the "run" function
         let func_address = llvm::execution_engine::LLVMGetFunctionAddress(
-            engine, CString::new("run").unwrap().into_raw());
+            engine, CString::new("run").unwrap().as_ptr());
         if func_address == 0 {
             return Err(LlvmError::new("No run function in module"))
         }
