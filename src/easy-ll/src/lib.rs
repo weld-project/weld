@@ -6,9 +6,17 @@ use std::fmt;
 use std::result::Result;
 use std::ops::Drop;
 use std::os::raw::c_char;
+use std::sync::{Once, ONCE_INIT};
+
+use llvm::execution_engine::LLVMMCJITCompilerOptions;
+use llvm::analysis::LLVMVerifierFailureAction;
+use llvm::transforms::pass_manager_builder;
 
 #[cfg(test)]
 mod tests;
+
+static ONCE: Once = ONCE_INIT;
+static mut initialize_failed: bool = false;
 
 #[derive(Debug)]
 pub struct LlvmError(String);
@@ -37,12 +45,17 @@ impl From<NulError> for LlvmError {
 pub struct CompiledModule {
     context: llvm::prelude::LLVMContextRef,
     engine: Option<llvm::execution_engine::LLVMExecutionEngineRef>,
-    entry: Option<&'static fn(u64) -> u64>
+    function: Option<extern "C" fn(u64) -> u64>
+}
+
+impl CompiledModule {
+    pub fn run(&self, arg: u64) -> u64 {
+        (self.function.unwrap())(arg)
+    }
 }
 
 impl Drop for CompiledModule {
     fn drop(&mut self) {
-        println!("Dropping {:?}", self);
         unsafe {
             self.engine.map(|e| {
                 llvm::execution_engine::LLVMDisposeExecutionEngine(e)
@@ -52,24 +65,32 @@ impl Drop for CompiledModule {
     }
 }
 
-pub fn initialize() -> Result<(), LlvmError> {
+fn initialize() {
     unsafe {
         if llvm::target::LLVM_InitializeNativeTarget() != 0 {
-            return Err(LlvmError::new("LLVM_InitializeNativeTarget failed"));
+            initialize_failed = true;
+            return;
         }
         if llvm::target::LLVM_InitializeNativeAsmPrinter() != 0 {
-            return Err(LlvmError::new("LLVM_InitializeNativeAsmPrinter failed"));
+            initialize_failed = true;
+            return;
         }
         if llvm::target::LLVM_InitializeNativeAsmParser() != 0 {
-            return Err(LlvmError::new("LLVM_InitializeNativeAsmParser failed"));
+            initialize_failed = true;
+            return;
         }
         llvm::execution_engine::LLVMLinkInMCJIT();
     }
-    Ok(())
 }
 
 pub fn compile_module(name: &str, code: &str) -> Result<CompiledModule, LlvmError> {
     unsafe {
+        // Initialize LLVM
+        ONCE.call_once(|| initialize());
+        if initialize_failed {
+            return Err(LlvmError::new("LLVM initialization failed"))
+        }
+
         // Create an LLVM context
         let context = llvm::core::LLVMContextCreate();
         if context.is_null() {
@@ -77,7 +98,7 @@ pub fn compile_module(name: &str, code: &str) -> Result<CompiledModule, LlvmErro
         }
         
         // Create a module
-        let mut module = CompiledModule { context: context, engine: None, entry: None };
+        let mut result = CompiledModule { context: context, engine: None, function: None };
         
         // Create a memory buffer to hold the code
         let code_len = code.len();
@@ -89,36 +110,67 @@ pub fn compile_module(name: &str, code: &str) -> Result<CompiledModule, LlvmErro
             return Err(LlvmError::new("LLVMCreateMemoryBufferWithMemoryRange failed"))
         }
 
-        println!("HERE 0");
         // Parse IR into a module
-        let mut module_ref = 0 as llvm::prelude::LLVMModuleRef;
+        let mut module = 0 as llvm::prelude::LLVMModuleRef;
         let mut error_str = 0 as *mut c_char;
         let result_code = llvm::ir_reader::LLVMParseIRInContext(
-            context, buffer, &mut module_ref, &mut error_str);
+            context, buffer, &mut module, &mut error_str);
         if result_code != 0 {
-            let message = format!("Parse error: {}", CStr::from_ptr(error_str).to_str().unwrap());
-            return Err(LlvmError(message));
+            let msg = format!("Compile error: {}", CStr::from_ptr(error_str).to_str().unwrap());
+            return Err(LlvmError(msg));
         }
 
-        // Create an execution engine
-        println!("HERE 1");
-        let mut engine_ref = 0 as llvm::execution_engine::LLVMExecutionEngineRef;
+        // Verify module
         let mut error_str = 0 as *mut c_char;
-        let result_code = llvm::execution_engine::LLVMCreateMCJITCompilerForModule(
-            &mut engine_ref,
-            module_ref,
-            0 as *mut llvm::execution_engine::LLVMMCJITCompilerOptions,
-            0,
-            &mut error_str);
-        println!("HERE 2 {} {:?}", result_code, error_str);
+        let result_code = llvm::analysis::LLVMVerifyModule(
+            module, LLVMVerifierFailureAction::LLVMReturnStatusAction, &mut error_str);
         if result_code != 0 {
-            //llvm::core::LLVMDisposeModule(module_ref);
-            let message = format!("Creating execution engine failed: {}",
+            let msg = format!("Module verification failed: {}",
                 CStr::from_ptr(error_str).to_str().unwrap());
-            return Err(LlvmError(message));
+            return Err(LlvmError(msg));
         }
-        module.engine = Some(engine_ref);
 
-        Err(LlvmError::new("EEK"))
+        // Optimize module
+        let manager = llvm::core::LLVMCreatePassManager();
+        if manager.is_null() {
+            return Err(LlvmError::new("LLVMCreatePassManager returned null"))
+        }
+        let builder = pass_manager_builder::LLVMPassManagerBuilderCreate();
+        if builder.is_null() {
+            return Err(LlvmError::new("LLVMPassManagerBuilderCreate returned null"))
+        }
+        pass_manager_builder::LLVMPassManagerBuilderPopulateFunctionPassManager(builder, manager);
+        pass_manager_builder::LLVMPassManagerBuilderPopulateModulePassManager(builder, manager);
+        pass_manager_builder::LLVMPassManagerBuilderPopulateLTOPassManager(builder, manager, 1, 1);
+        pass_manager_builder::LLVMPassManagerBuilderDispose(builder);
+        llvm::core::LLVMRunPassManager(manager, module);
+        llvm::core::LLVMDisposePassManager(manager);
+        
+        // Create an execution engine
+        let mut engine = 0 as llvm::execution_engine::LLVMExecutionEngineRef;
+        let mut error_str = 0 as *mut c_char;
+        let mut options: LLVMMCJITCompilerOptions = std::mem::uninitialized();
+        options.OptLevel = 2;
+        let options_size = std::mem::size_of::<LLVMMCJITCompilerOptions>();
+        llvm::execution_engine::LLVMInitializeMCJITCompilerOptions(&mut options, options_size);
+        let result_code = llvm::execution_engine::LLVMCreateMCJITCompilerForModule(
+            &mut engine, module, &mut options, options_size, &mut error_str);
+        if result_code != 0 {
+            let msg = format!("Creating execution engine failed: {}",
+                CStr::from_ptr(error_str).to_str().unwrap());
+            return Err(LlvmError(msg));
+        }
+        result.engine = Some(engine);
+
+        // Find the "run" function
+        let func_address = llvm::execution_engine::LLVMGetFunctionAddress(
+            engine, CString::new("run").unwrap().into_raw());
+        if func_address == 0 {
+            return Err(LlvmError::new("No run function in module"))
+        }
+        let func: extern fn(u64) -> u64 = std::mem::transmute(func_address);
+        result.function = Some(func);
+
+        Ok(result)
     }
 }
