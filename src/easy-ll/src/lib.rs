@@ -1,3 +1,5 @@
+//! A very simple wrapper for LLVM that can JIT functions written as IR strings.
+
 extern crate llvm_sys as llvm;
 
 use std::error::Error;
@@ -18,6 +20,7 @@ mod tests;
 static ONCE: Once = ONCE_INIT;
 static mut initialize_failed: bool = false;
 
+/// Error type returned by easy_ll.
 #[derive(Debug)]
 pub struct LlvmError(String);
 
@@ -41,6 +44,9 @@ impl From<NulError> for LlvmError {
     fn from(_: NulError) -> LlvmError { LlvmError::new("Null byte in string") }
 }
 
+/// A compiled module returned by `compile_module`, wrapping a `run` function that takes `u64`
+/// and returns `u64`. This structure includes (and manages) an LLVM execution engine, which is
+/// freed when this structure is dropped.
 #[derive(Debug)]
 pub struct CompiledModule {
     context: llvm::prelude::LLVMContextRef,
@@ -49,12 +55,14 @@ pub struct CompiledModule {
 }
 
 impl CompiledModule {
+    /// Call the module's `run` function. 
     pub fn run(&self, arg: u64) -> u64 {
         (self.function.unwrap())(arg)
     }
 }
 
 impl Drop for CompiledModule {
+    /// Disposes of the LLVM execution engine and compiled function.
     fn drop(&mut self) {
         unsafe {
             self.engine.map(|e| {
@@ -65,6 +73,8 @@ impl Drop for CompiledModule {
     }
 }
 
+/// Initialize LLVM or save an error message in `initialize_failed` if this does not work.
+/// We call this function only once in cases some steps are expensive.
 fn initialize() {
     unsafe {
         if llvm::target::LLVM_InitializeNativeTarget() != 0 {
@@ -83,7 +93,10 @@ fn initialize() {
     }
 }
 
-pub fn compile_module(name: &str, code: &str) -> Result<CompiledModule, LlvmError> {
+/// Compile a string of LLVM IR (in human readable format) into a `CompiledModule` that can then
+/// be executed. The LLVM IR should contain an entry point function called `run` that takes `i64`
+/// and returns `i64`, which will be called by `CompiledModule::run`.
+pub fn compile_module(code: &str) -> Result<CompiledModule, LlvmError> {
     unsafe {
         // Initialize LLVM
         ONCE.call_once(|| initialize());
@@ -102,7 +115,7 @@ pub fn compile_module(name: &str, code: &str) -> Result<CompiledModule, LlvmErro
         
         // Create a memory buffer to hold the code
         let code_len = code.len();
-        let name = try!(CString::new(name));
+        let name = try!(CString::new("module"));
         let code = try!(CString::new(code));
         let buffer = llvm::core::LLVMCreateMemoryBufferWithMemoryRange(
             code.as_ptr(), code_len, name.as_ptr(), 0);
