@@ -165,9 +165,9 @@ pub fn compile_module(code: &str) -> Result<CompiledModule, LlvmError> {
         let mut engine = 0 as llvm::execution_engine::LLVMExecutionEngineRef;
         let mut error_str = 0 as *mut c_char;
         let mut options: LLVMMCJITCompilerOptions = std::mem::uninitialized();
-        options.OptLevel = 2;
         let options_size = std::mem::size_of::<LLVMMCJITCompilerOptions>();
         llvm::execution_engine::LLVMInitializeMCJITCompilerOptions(&mut options, options_size);
+        options.OptLevel = 2;
         let result_code = llvm::execution_engine::LLVMCreateMCJITCompilerForModule(
             &mut engine, module, &mut options, options_size, &mut error_str);
         if result_code != 0 {
