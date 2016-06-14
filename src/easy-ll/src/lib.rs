@@ -77,26 +77,6 @@ impl Drop for CompiledModule {
     }
 }
 
-/// Initialize LLVM or save an error message in `initialize_failed` if this does not work.
-/// We call this function only once in cases some steps are expensive.
-fn initialize() {
-    unsafe {
-        if llvm::target::LLVM_InitializeNativeTarget() != 0 {
-            initialize_failed = true;
-            return;
-        }
-        if llvm::target::LLVM_InitializeNativeAsmPrinter() != 0 {
-            initialize_failed = true;
-            return;
-        }
-        if llvm::target::LLVM_InitializeNativeAsmParser() != 0 {
-            initialize_failed = true;
-            return;
-        }
-        llvm::execution_engine::LLVMLinkInMCJIT();
-    }
-}
-
 /// Compile a string of LLVM IR (in human readable format) into a `CompiledModule` that can then
 /// be executed. The LLVM IR should contain an entry point function called `run` that takes `i64`
 /// and returns `i64`, which will be called by `CompiledModule::run`.
@@ -121,7 +101,8 @@ pub fn compile_module(code: &str) -> Result<CompiledModule, LlvmError> {
         let module = try!(parse_module(context, code));
 
         // Validate and optimize the module 
-        try!(validate_module(module));
+        try!(verify_module(module));
+        try!(check_run_function(module));
         try!(optimize_module(module));
         
         // Create an execution engine for the module and find its run function
@@ -130,6 +111,26 @@ pub fn compile_module(code: &str) -> Result<CompiledModule, LlvmError> {
         result.function = Some(try!(find_run_function(engine)));
 
         Ok(result)
+    }
+}
+
+/// Initialize LLVM or save an error message in `initialize_failed` if this does not work.
+/// We call this function only once in cases some steps are expensive.
+fn initialize() {
+    unsafe {
+        if llvm::target::LLVM_InitializeNativeTarget() != 0 {
+            initialize_failed = true;
+            return;
+        }
+        if llvm::target::LLVM_InitializeNativeAsmPrinter() != 0 {
+            initialize_failed = true;
+            return;
+        }
+        if llvm::target::LLVM_InitializeNativeAsmParser() != 0 {
+            initialize_failed = true;
+            return;
+        }
+        llvm::execution_engine::LLVMLinkInMCJIT();
     }
 }
 
@@ -158,10 +159,8 @@ unsafe fn parse_module(context: LLVMContextRef, code: &str) -> Result<LLVMModule
     Ok(module)
 }
 
-/// Validate a module for use by `easy_ll` (checks both LLVM soundness and that the module
-/// has a run function with our expected signature).
-unsafe fn validate_module(module: LLVMModuleRef) -> Result<(), LlvmError> {
-    // Let LLVM verify basic structure of the module (e.g. phi nodes)
+/// Verify a module using LLVM's verifier (for basic block structure, etc).
+unsafe fn verify_module(module: LLVMModuleRef) -> Result<(), LlvmError> {
     let mut error_str = 0 as *mut c_char;
     let result_code = llvm::analysis::LLVMVerifyModule(
         module, LLVMVerifierFailureAction::LLVMReturnStatusAction, &mut error_str);
@@ -170,8 +169,11 @@ unsafe fn validate_module(module: LLVMModuleRef) -> Result<(), LlvmError> {
             CStr::from_ptr(error_str).to_str().unwrap());
         return Err(LlvmError(msg));
     }
+    Ok(())
+}
 
-    // Check that a "run" function exists and has type i64 -> i64
+/// Check that a module has a "run" function of type i64 -> i64.
+unsafe fn check_run_function(module: LLVMModuleRef) -> Result<(), LlvmError> {
     let run = CString::new("run").unwrap().as_ptr();
     let func = llvm::core::LLVMGetNamedFunction(module, run);
     if func.is_null() {
@@ -180,9 +182,8 @@ unsafe fn validate_module(module: LLVMModuleRef) -> Result<(), LlvmError> {
     let c_str = llvm::core::LLVMPrintTypeToString(llvm::core::LLVMTypeOf(func));
     let func_type = CStr::from_ptr(c_str).to_str().unwrap();
     if func_type != "i64 (i64)*" {
-        return Err(LlvmError(format!("Wrong function type: {}", func_type)));
+        return Err(LlvmError(format!("Run function has wrong type: {}", func_type)));
     }
-
     Ok(())
 }
 

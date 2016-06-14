@@ -50,5 +50,5 @@ fn wrong_function_type() {
        }
     ");
     assert!(!module.is_ok());
-    assert!(module.unwrap_err().description().contains("function type"));
+    assert!(module.unwrap_err().description().contains("wrong type"));
 }
