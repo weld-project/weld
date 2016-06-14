@@ -44,19 +44,19 @@ impl From<NulError> for LlvmError {
     fn from(_: NulError) -> LlvmError { LlvmError::new("Null byte in string") }
 }
 
-/// A compiled module returned by `compile_module`, wrapping a `run` function that takes `u64`
-/// and returns `u64`. This structure includes (and manages) an LLVM execution engine, which is
+/// A compiled module returned by `compile_module`, wrapping a `run` function that takes `i64`
+/// and returns `i64`. This structure includes (and manages) an LLVM execution engine, which is
 /// freed when this structure is dropped.
 #[derive(Debug)]
 pub struct CompiledModule {
     context: llvm::prelude::LLVMContextRef,
     engine: Option<llvm::execution_engine::LLVMExecutionEngineRef>,
-    function: Option<extern "C" fn(u64) -> u64>
+    function: Option<extern "C" fn(i64) -> i64>
 }
 
 impl CompiledModule {
     /// Call the module's `run` function. 
-    pub fn run(&self, arg: u64) -> u64 {
+    pub fn run(&self, arg: i64) -> i64 {
         (self.function.unwrap())(arg)
     }
 }
@@ -143,7 +143,17 @@ pub fn compile_module(code: &str) -> Result<CompiledModule, LlvmError> {
             return Err(LlvmError(msg));
         }
 
-        // TODO: check type of run() function in module!
+        // Check that a "run" function exists and has type i64 -> i64
+        let run_c_str = CString::new("run").unwrap().as_ptr();
+        let func = llvm::core::LLVMGetNamedFunction(module, run_c_str);
+        if func.is_null() {
+            return Err(LlvmError::new("No run function in module"));
+        }
+        let c_str = llvm::core::LLVMPrintTypeToString(llvm::core::LLVMTypeOf(func));
+        let func_type = CStr::from_ptr(c_str).to_str().unwrap();
+        if func_type != "i64 (i64)*" {
+            return Err(LlvmError(format!("Wrong function type: {}", func_type)));
+        }
 
         // Optimize module
         let manager = llvm::core::LLVMCreatePassManager();
@@ -154,7 +164,8 @@ pub fn compile_module(code: &str) -> Result<CompiledModule, LlvmError> {
         if builder.is_null() {
             return Err(LlvmError::new("LLVMPassManagerBuilderCreate returned null"))
         }
-        pmb::LLVMPassManagerBuilderPopulateFunctionPassManager(builder, manager);
+        // TODO: not clear we need both Module and LTO calls here; just LTO might work
+        pmb::LLVMPassManagerBuilderSetOptLevel(builder, 2);
         pmb::LLVMPassManagerBuilderPopulateModulePassManager(builder, manager);
         pmb::LLVMPassManagerBuilderPopulateLTOPassManager(builder, manager, 1, 1);
         pmb::LLVMPassManagerBuilderDispose(builder);
@@ -178,13 +189,12 @@ pub fn compile_module(code: &str) -> Result<CompiledModule, LlvmError> {
         result.engine = Some(engine);
 
         // Find the "run" function
-        let func_address = llvm::execution_engine::LLVMGetFunctionAddress(
-            engine, CString::new("run").unwrap().as_ptr());
+        let func_address = llvm::execution_engine::LLVMGetFunctionAddress(engine, run_c_str);
         if func_address == 0 {
             return Err(LlvmError::new("No run function in module"))
         }
-        let func: extern fn(u64) -> u64 = std::mem::transmute(func_address);
-        result.function = Some(func);
+        let function: extern fn(i64) -> i64 = std::mem::transmute(func_address);
+        result.function = Some(function);
 
         Ok(result)
     }

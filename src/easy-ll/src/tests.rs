@@ -41,3 +41,14 @@ fn no_run_function() {
     assert!(!module.is_ok());
     assert!(module.unwrap_err().description().contains("run function"));
 }
+
+#[test]
+fn wrong_function_type() {
+    let module = compile_module("
+       define i64 @run() {
+           ret i64 0
+       }
+    ");
+    assert!(!module.is_ok());
+    assert!(module.unwrap_err().description().contains("function type"));
+}
