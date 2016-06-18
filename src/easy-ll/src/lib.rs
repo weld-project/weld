@@ -18,6 +18,7 @@ use llvm::transforms::pass_manager_builder as pmb;
 #[cfg(test)]
 mod tests;
 
+// Helper objects to make sure we only initialize once
 static ONCE: Once = ONCE_INIT;
 static mut initialize_failed: bool = false;
 
