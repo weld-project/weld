@@ -4,6 +4,9 @@ use super::ast::Type::*;
 use super::ast::ScalarKind::*;
 use super::ast::BinOpKind::*;
 use super::eval::*;
+use super::grammar::parse_Expr;
+use super::type_inference::*;
+use super::pretty_print::*;
 
 #[test]
 fn basic_evaluate() {
@@ -12,47 +15,96 @@ fn basic_evaluate() {
         assert_eq!(*res, expected);
     }
 
-    let e0 = I32Literal(0);
-    let e1 = I32Literal(1);
-    let e2 = I32Literal(2);
-    let e3 = I32Literal(3);
+    let e0 = Box::new(I32Literal(0));
+    let e1 = Box::new(I32Literal(1));
+    let e2 = Box::new(I32Literal(2));
+    let e3 = Box::new(I32Literal(3));
     let sym1 = Symbol("sym1".to_string());
 
     check(&e0, 0);
 
-    let add = BinOp(Scalar(I32), Add, Box::new(e1.clone()), Box::new(e2.clone()));
+    let add = BinOp(Scalar(I32), Add, e1.clone(), e2.clone());
     check(&add, 3);
 
-    let sub = BinOp(Scalar(I32), Subtract, Box::new(e1.clone()), Box::new(e2.clone()));
+    let sub = BinOp(Scalar(I32), Subtract, e1.clone(), e2.clone());
     check(&sub, -1);
 
-    let mul = BinOp(Scalar(I32), Multiply, Box::new(e1.clone()), Box::new(e2.clone()));
+    let mul = BinOp(Scalar(I32), Multiply, e1.clone(), e2.clone());
     check(&mul, 2);
 
-    let div = BinOp(Scalar(I32), Divide, Box::new(e2.clone()), Box::new(e1.clone()));
+    let div = BinOp(Scalar(I32), Divide, e2.clone(), e1.clone());
     check(&div, 2);
 
-    let div0 = BinOp(Scalar(I32), Divide, Box::new(e2.clone()), Box::new(e0.clone()));
+    let div0 = BinOp(Scalar(I32), Divide, e2.clone(), e0.clone());
     assert!(evaluate(&div0).is_err());
 
-    let id1 = Ident(Scalar(I32), sym1.clone());
-    let body1 = BinOp(Scalar(I32), Add, Box::new(id1.clone()), Box::new(id1.clone())); 
-    let let1 = Let {
+    let id1 = Box::new(Ident(Scalar(I32), sym1.clone()));
+    let body1 = Box::new(BinOp(Scalar(I32), Add, id1.clone(), id1.clone())); 
+    let let1 = Box::new(Let {
         out_type: Scalar(I32),
         symbol: sym1.clone(),
-        value: Box::new(e1.clone()),
-        body: Box::new(body1.clone())
-    };
+        value: e1.clone(),
+        body: body1.clone()
+    });
     check(&let1, 2);
     assert!(evaluate(&body1).is_err());
 
-    let body2 = BinOp(Scalar(I32), Add, Box::new(let1.clone()), Box::new(id1.clone()));
-    let let2 = Let {
+    let body2 = Box::new(BinOp(Scalar(I32), Add, let1.clone(), id1.clone()));
+    let let2 = Box::new(Let {
         out_type: Scalar(I32),
         symbol: sym1.clone(),
-        value: Box::new(e3.clone()),
-        body: Box::new(body2.clone())
-    };
+        value: e3.clone(),
+        body: body2.clone()
+    });
     check(&let2, 5);
     assert!(evaluate(&body2).is_err());
+}
+
+#[test]
+fn parse_and_print_expressions() {
+    let e = parse_Expr("23").unwrap();
+    assert_eq!(print_expr(e.as_ref()).as_str(), "23");
+
+    let e = parse_Expr("true").unwrap();
+    assert_eq!(print_expr(e.as_ref()).as_str(), "true");
+
+    assert!(parse_Expr("999999999999999").is_err());  // i32 literal too big
+
+    let e = parse_Expr("23 + 32").unwrap();
+    assert_eq!(print_expr(e.as_ref()).as_str(), "(23+32)");
+
+    let e = parse_Expr("2 - 3 - 4").unwrap();
+    assert_eq!(print_expr(e.as_ref()).as_str(), "((2-3)-4)");
+
+    let e = parse_Expr("2 - (3 - 4)").unwrap();
+    assert_eq!(print_expr(e.as_ref()).as_str(), "(2-(3-4))");
+
+    let e = parse_Expr("a").unwrap();
+    assert_eq!(print_expr(e.as_ref()).as_str(), "a");
+
+    let e = parse_Expr("a := 2; a").unwrap();
+    assert_eq!(print_expr(e.as_ref()).as_str(), "a:=(2);a");
+}
+
+#[test]
+fn parse_and_print_typed_expressions() {
+    let mut e = *parse_Expr("23").unwrap();
+    assert_eq!(print_typed_expr(&e).as_str(), "23:?");
+    infer_types(&mut e).unwrap();
+    assert_eq!(print_typed_expr(&e).as_str(), "23:i32");
+
+    let mut e = *parse_Expr("true").unwrap();
+    assert_eq!(print_typed_expr(&e).as_str(), "true:?");
+    infer_types(&mut e).unwrap();
+    assert_eq!(print_typed_expr(&e).as_str(), "true:i32");
+
+    let mut e = *parse_Expr("23+32").unwrap();
+    assert_eq!(print_typed_expr(&e).as_str(), "(23:?+32:?)");
+    infer_types(&mut e).unwrap();
+    assert_eq!(print_typed_expr(&e).as_str(), "(23:i32+32:i32)");
+
+    let mut e = parse_Expr("a := 2; a").unwrap();
+    assert_eq!(print_typed_expr(e.as_ref()).as_str(), "a:?:=(2:?);a:?");
+    infer_types(&mut e).unwrap();
+    assert_eq!(print_typed_expr(e.as_ref()).as_str(), "a:i32:=(2:i32);a:i32");
 }

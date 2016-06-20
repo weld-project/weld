@@ -1,0 +1,68 @@
+
+use std::str::FromStr;
+
+use lalrpop_util::ParseError;
+
+use super::ast::BinOpKind::*;
+use super::ast::ScalarKind::*;
+use super::parser::*;
+use super::parser::ExprKind::*;
+use super::parser::Type::*;
+
+grammar;
+
+extern {
+    // Source location and error types returned by this parser. 
+    type Location = usize;
+    type Error = &'static str;
+}
+
+pub Type: Box<Type> = {
+    ScalarType
+};
+
+ScalarType: Box<Type> = {
+    "bool" => Box::new(Scalar(Bool)),
+    "i32" => Box::new(Scalar(I32))
+};
+
+pub Expr: Box<Expr> = {
+    Let,
+    <SumExpr>
+};
+
+Let: Box<Expr> = {
+    <s:Symbol> ":=" <value:SumExpr> ";" <body:Expr> => expr_box(Let(s, value, body)) 
+};
+
+SumExpr: Box<Expr> = {
+    <l:SumExpr> "+" <r:Term> => expr_box(BinOp(Add, l, r)),
+    <l:SumExpr> "-" <r:Term> => expr_box(BinOp(Subtract, l, r)),
+    <Term>
+};
+
+Term: Box<Expr> = {
+    BoolLiteral,
+    I32Literal,
+    Ident,
+    "(" <Expr> ")"
+};
+
+BoolLiteral: Box<Expr> = {
+    "true" => expr_box(BoolLiteral(true)),
+    "false" => expr_box(BoolLiteral(false)),
+};
+
+I32Literal: Box<Expr> = {
+    <s:r"[0-9]+"> =>? {
+       match i32::from_str(s) {
+           Ok(v) => Ok(expr_box(I32Literal(v))),
+           Err(_) => Err(ParseError::User { error: "bad i32 literal" })
+           // TODO: This won't work for -2**31 
+       }
+    }
+};
+
+Symbol: String = <s:r"[A-Za-z_][A_Za-z0-9_]*"> => s.to_string();
+
+Ident: Box<Expr> = <s:Symbol> => expr_box(Ident(s));

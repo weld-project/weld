@@ -8,7 +8,7 @@ pub enum Type {
     Builder(BuilderKind),
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ScalarKind {
     Bool,
     I32,
@@ -16,7 +16,8 @@ pub enum ScalarKind {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum BuilderKind {
-    VecBuilder(Box<Type>),
+    Appender(Box<Type>),
+    Merger(Box<Type>, BinOpKind)
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -56,7 +57,7 @@ pub fn get_type(expr: &Expr) -> Type {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum BinOpKind {
     Add,
     Subtract,
