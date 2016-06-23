@@ -105,6 +105,11 @@ fn print_expr_impl(expr: &Expr, typed: bool) -> String {
             res
         }
 
+        Map(ref data, ref body) =>
+            format!("map({},{})",
+                print_expr_impl(data, typed),
+                print_expr_impl(body, typed)),
+
         _ => "<?>".to_string() 
     }
 }

@@ -88,8 +88,11 @@ fn parse_and_print_expressions() {
     let e = parse_expr("[1, 2, 3]").unwrap();
     assert_eq!(print_expr(e.as_ref()).as_str(), "[1,2,3]");
 
-    let e = parse_expr("|a, b| a+b").unwrap();
+    let e = parse_expr("|a, b| a + b").unwrap();
     assert_eq!(print_expr(e.as_ref()).as_str(), "|a,b|(a+b)");
+
+    let e = parse_expr("map(d, |e| e+1)").unwrap();
+    assert_eq!(print_expr(e.as_ref()).as_str(), "map(d,|e|(e+1))");
 }
 
 #[test]
@@ -109,7 +112,20 @@ fn parse_and_print_typed_expressions() {
     infer_types(&mut e).unwrap();
     assert_eq!(print_typed_expr(e.as_ref()).as_str(), "a:i32:=(2);a:bool:=(false);a:bool");
 
-    let mut e = parse_expr("|a:i32, b:i32| a:i32 + b:i32").unwrap();
-    //infer_types(&mut e).unwrap();
+    // Types should propagate from function parameters to body 
+    let mut e = parse_expr("|a:i32, b:i32| a + b").unwrap();
+    infer_types(&mut e).unwrap();
     assert_eq!(print_typed_expr(e.as_ref()).as_str(), "|a:i32,b:i32|(a:i32+b:i32)");
+
+    let mut e = parse_expr("a := [1, 2, 3]; 1").unwrap();
+    infer_types(&mut e).unwrap();
+    assert_eq!(print_typed_expr(e.as_ref()).as_str(), "a:vec[i32]:=([1,2,3]);1");
+
+    // Mismatched types in MakeVector 
+    let mut e = parse_expr("[1, true]").unwrap();
+    assert!(infer_types(&mut e).is_err());
+
+    let mut e = parse_expr("d:=map([1],|x|x+1);1").unwrap();
+    infer_types(&mut e).unwrap();
+    assert_eq!(print_typed_expr(e.as_ref()).as_str(), "d:vec[i32]:=(map([1],|x:i32|(x:i32+1)));1");
 }

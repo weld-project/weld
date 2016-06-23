@@ -43,29 +43,59 @@ fn has_all_types(expr: &Expr) -> bool {
 
 /// Infer the types of expressions upward from the leaves of a tree, using infer_locally.
 /// Return true if any new expression's type was inferred, or an error if types are inconsistent.
-fn infer_up(expr: &mut Expr, env: &mut TypeMap, ft: Option<FunctionTypes>) -> WeldResult<bool> {
+fn infer_up(expr: &mut Expr, env: &mut TypeMap, fts: Option<FunctionTypes>) -> WeldResult<bool> {
     // Remember whether we inferred any new type
     let mut changed = false;
 
-    // Special case: for Let expressions, add their type in env if known
-    let mut old_binding = None;
-    if let Let(ref symbol, ref value, _) = expr.kind {
-        old_binding = env.insert(symbol.clone(), value.ty.clone());
+    // Special case: for Lets and Lambdas, add the types of identifiers they (re-)define to env.
+    let mut old_bindings: Vec<(String, Option<Option<Type>>)> = Vec::new();
+    match expr.kind {
+        Let(ref symbol, ref value, _) => {
+            old_bindings.push((symbol.clone(), env.insert(symbol.clone(), value.ty.clone())));
+        }
+
+        Lambda(ref params, _) => {
+            for p in params {
+                old_bindings.push((p.name.clone(), env.insert(p.name.clone(), p.ty.clone())));
+            }
+        }
+
+        _ => ()
     }
 
-    // Infer types of children first (with new environment) 
-    for c in expr.children_mut() {
-        changed |= try!(infer_up(c, env, None));
+    // Infer types of children first (with new environment)
+    match expr.kind {
+        Map(ref mut data, ref mut func) => {
+            changed |= try!(infer_up(data, env, None));
+            let data_type = match data.ty {
+                Some(Vector(ref elem_type)) => Some(*elem_type.clone()),
+                Some(_) => return weld_err("Mismatched types for Map"),
+                _ => None
+            };
+            let result_type = match expr.ty {
+                Some(Vector(ref elem_type)) => Some(*elem_type.clone()),
+                Some(_) => return weld_err("Mismatched types for Map"),
+                _ => None
+            };
+            let expected_fts = FunctionTypes { params: vec![data_type], result: result_type };
+            changed |= try!(infer_up(func, env, Some(expected_fts)));
+        }
+
+        _ => {
+            for c in expr.children_mut() {
+                changed |= try!(infer_up(c, env, None));
+            }
+        }
     }
 
     // Infer our type
-    changed |= try!(infer_locally(expr, env, None));
+    changed |= try!(infer_locally(expr, env, fts));
 
     // Undo the environment changes from Let
-    if let Let(ref symbol, _, _) = expr.kind {
-        match old_binding {
-            Some(old) => env.insert(symbol.clone(), old),
-            None => env.remove(symbol)
+    for (symbol, opt) in old_bindings {
+        match opt {
+            Some(old) => env.insert(symbol, old),
+            None => env.remove(&symbol)
         };
     }
 
@@ -74,7 +104,7 @@ fn infer_up(expr: &mut Expr, env: &mut TypeMap, ft: Option<FunctionTypes>) -> We
 
 /// Infer the type of expr or its children locally based on what is known about some of them.
 /// Return true if any new expression's type was inferred, or an error if types are inconsistent.  
-fn infer_locally(expr: &mut Expr, env: &mut TypeMap, ft: Option<FunctionTypes>) -> WeldResult<bool> {
+fn infer_locally(expr: &mut Expr, env: &mut TypeMap, fts: Option<FunctionTypes>) -> WeldResult<bool> {
     match expr.kind {
         I32Literal(_) => {
             match expr.ty {
@@ -98,9 +128,9 @@ fn infer_locally(expr: &mut Expr, env: &mut TypeMap, ft: Option<FunctionTypes>) 
             }
         }
 
-        BinOp(_, ref mut left, ref mut right) => {
+        BinOp(_, ref mut lefts, ref mut right) => {
             let mut types_seen = Vec::<Type>::new();
-            for &ty in [&expr.ty, &left.ty, &right.ty].iter() {
+            for &ty in [&expr.ty, &lefts.ty, &right.ty].iter() {
                 types_seen.extend(ty.clone());
             }
             if !types_seen.is_empty() {
@@ -111,7 +141,7 @@ fn infer_locally(expr: &mut Expr, env: &mut TypeMap, ft: Option<FunctionTypes>) 
                     }
                 }
                 let mut changed = false;
-                for ty in [&mut expr.ty, &mut left.ty, &mut right.ty].iter_mut() {
+                for ty in [&mut expr.ty, &mut lefts.ty, &mut right.ty].iter_mut() {
                     if ty.is_none() {
                         **ty = Some(first_type.clone()); 
                         changed = true;
@@ -153,8 +183,32 @@ fn infer_locally(expr: &mut Expr, env: &mut TypeMap, ft: Option<FunctionTypes>) 
             }
         }
 
+        MakeVector(ref exprs) if exprs.len() > 0 => {
+            // TODO: check types of all other vector elements!
+            let first_expr = exprs.first().unwrap();
+            match first_expr.ty {
+                Some(ref elem_type) => {
+                    for other_expr in exprs {
+                        if other_expr.ty != first_expr.ty {
+                            return weld_err("Mismatched types for MakeVector");
+                        }
+                    }
+                    let vec_type = Some(Vector(Box::new(elem_type.clone())));
+                    if expr.ty.is_some() && expr.ty != vec_type {
+                        return weld_err("Mismatched types for MakeVector");
+                    } else if expr.ty.is_none() {
+                        expr.ty = vec_type;
+                        Ok(true)
+                    } else {
+                        Ok(false)
+                    }
+                }
+                None => Ok(false)
+            }
+        }
+
         Lambda(ref mut params, ref mut body) => {
-            let (expected_params, expected_result) = match ft {
+            let (expected_params, expected_result) = match fts {
                 Some(FunctionTypes { params, result }) => (params, result),
                 None => (vec![None; params.len()], None)
             };
@@ -194,6 +248,21 @@ fn infer_locally(expr: &mut Expr, env: &mut TypeMap, ft: Option<FunctionTypes>) 
             }
 
             Ok(changed)
+        }
+
+        Map(_, ref func) => {
+            let expected_type = match func.ty {
+                Some(Function(_, ref res)) => Some(Vector(res.clone())),
+                _ => None
+            };
+            if expected_type.is_some() && expr.ty.is_some() && expr.ty != expected_type {
+                weld_err("Mismatched types for Map")
+            } else if expected_type.is_some() && expr.ty.is_none() {
+                expr.ty = expected_type;
+                Ok(true)
+            } else {
+                Ok(false)
+            }
         }
 
         _ => Ok(false)

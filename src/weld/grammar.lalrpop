@@ -58,7 +58,7 @@ Term: Box<Expr> = {
     I32Literal,
     Ident,
     MakeVector,
-    For,
+    Map,
     "(" <Expr> ")"
 };
 
@@ -111,8 +111,8 @@ MakeVector: Box<Expr> = {
     }
 };
 
-For: Box<Expr> = {
-   "for" "(" <d:Expr> "," <f:Expr> ")" => expr_box(For(d, f))
+Map: Box<Expr> = {
+   "map" "(" <d:Expr> "," <f:Expr> ")" => expr_box(Map(d, f))
 };
 
 Parameter: Parameter = <n:Name> <t:(":" <Type>)?> => Parameter { name: n, ty: t.map(|b| *b) };

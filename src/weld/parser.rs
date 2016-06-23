@@ -39,7 +39,7 @@ pub enum ExprKind {
     /// variables, body
     Lambda(Vec<Parameter>, Box<Expr>),
     /// data, function
-    For(Box<Expr>, Box<Expr>),
+    Map(Box<Expr>, Box<Expr>),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -60,6 +60,9 @@ impl Expr {
         match self.kind {
             BinOp(_, ref left, ref right) => vec![left.as_ref(), right.as_ref()],
             Let(_, ref value, ref body) => vec![value.as_ref(), body.as_ref()],
+            Lambda(_, ref body) => vec![body.as_ref()],
+            Map(ref data, ref body) => vec![data.as_ref(), body.as_ref()],
+            MakeVector(ref exprs) => exprs.iter().collect(),
             _ => vec![]
         }.into_iter()
     }
@@ -70,6 +73,9 @@ impl Expr {
         match self.kind {
             BinOp(_, ref mut left, ref mut right) => vec![left.as_mut(), right.as_mut()],
             Let(_, ref mut value, ref mut body) => vec![value.as_mut(), body.as_mut()],
+            Lambda(_, ref mut body) => vec![body.as_mut()],
+            Map(ref mut data, ref mut body) => vec![data.as_mut(), body.as_mut()],
+            MakeVector(ref mut exprs) => exprs.iter_mut().collect(),
             _ => vec![]
         }.into_iter()
     }
