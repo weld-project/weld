@@ -17,7 +17,10 @@ extern {
     type Error = &'static str;
 }
 
-pub Type: Box<Type> = {
+// Expose the nicer function name parse_expr instead of parse_Expr.
+pub expr = <Expr>;
+
+Type: Box<Type> = {
     ScalarType
 };
 
@@ -26,25 +29,36 @@ ScalarType: Box<Type> = {
     "i32" => Box::new(Scalar(I32))
 };
 
-pub Expr: Box<Expr> = {
-    Let,
-    <SumExpr>
+Expr: Box<Expr> = {
+    Lambda,
+    LetExpr
+};
+
+LetExpr: Box<Expr> = {
+   Let,
+   SumExpr
 };
 
 Let: Box<Expr> = {
-    <s:Symbol> ":=" <value:SumExpr> ";" <body:Expr> => expr_box(Let(s, value, body)) 
+    <s:Name> <t:(":" <Type>)?> ":=" <value:SumExpr> ";" <body:Expr> => {
+        let mut res = expr_box(Let(s, value, body));
+        res.ty = t.map(|b| *b);
+        res
+    }
 };
 
 SumExpr: Box<Expr> = {
     <l:SumExpr> "+" <r:Term> => expr_box(BinOp(Add, l, r)),
     <l:SumExpr> "-" <r:Term> => expr_box(BinOp(Subtract, l, r)),
-    <Term>
+    Term
 };
 
 Term: Box<Expr> = {
     BoolLiteral,
     I32Literal,
     Ident,
+    MakeVector,
+    For,
     "(" <Expr> ")"
 };
 
@@ -63,6 +77,44 @@ I32Literal: Box<Expr> = {
     }
 };
 
-Symbol: String = <s:r"[A-Za-z_][A_Za-z0-9_]*"> => s.to_string();
+Ident: Box<Expr> = {
+    <n:Name> <t:(":" <Type>)?> => {
+        let mut res = expr_box(Ident(n));
+        res.ty = t.map(|b| *b);
+        res
+    }
+};
 
-Ident: Box<Expr> = <s:Symbol> => expr_box(Ident(s));
+Lambda: Box<Expr> = {
+    "|" <p:Parameters> "|" <e:Expr> => expr_box(Lambda(p, e))
+};
+
+Parameters: Vec<Parameter> = {
+    <v:(<Parameter> ",")*> <p:Parameter?> => match p {
+        None => v,
+        Some(p) => {
+            let mut v = v;
+            v.push(p);
+            v
+        }
+    }
+};
+
+MakeVector: Box<Expr> = {
+    "[" <v:(<Expr> ",")*> <e:Expr?> "]" => {
+        let mut v = v;
+        if let Some(e) = e {
+            v.push(e);
+        }
+        let v: Vec<Expr> = v.into_iter().map(|b| *b).collect();
+        expr_box(MakeVector(v))
+    }
+};
+
+For: Box<Expr> = {
+   "for" "(" <d:Expr> "," <f:Expr> ")" => expr_box(For(d, f))
+};
+
+Parameter: Parameter = <n:Name> <t:(":" <Type>)?> => Parameter { name: n, ty: t.map(|b| *b) };
+
+Name: String = <s:r"[A-Za-z_][A_Za-z0-9_]*"> => s.to_string();

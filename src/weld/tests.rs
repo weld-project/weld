@@ -4,7 +4,7 @@ use super::ast::Type::*;
 use super::ast::ScalarKind::*;
 use super::ast::BinOpKind::*;
 use super::eval::*;
-use super::grammar::parse_Expr;
+use super::grammar::parse_expr;
 use super::type_inference::*;
 use super::pretty_print::*;
 
@@ -62,49 +62,54 @@ fn basic_evaluate() {
 
 #[test]
 fn parse_and_print_expressions() {
-    let e = parse_Expr("23").unwrap();
+    let e = parse_expr("23").unwrap();
     assert_eq!(print_expr(e.as_ref()).as_str(), "23");
 
-    let e = parse_Expr("true").unwrap();
+    let e = parse_expr("true").unwrap();
     assert_eq!(print_expr(e.as_ref()).as_str(), "true");
 
-    assert!(parse_Expr("999999999999999").is_err());  // i32 literal too big
+    assert!(parse_expr("999999999999999").is_err());  // i32 literal too big
 
-    let e = parse_Expr("23 + 32").unwrap();
+    let e = parse_expr("23 + 32").unwrap();
     assert_eq!(print_expr(e.as_ref()).as_str(), "(23+32)");
 
-    let e = parse_Expr("2 - 3 - 4").unwrap();
+    let e = parse_expr("2 - 3 - 4").unwrap();
     assert_eq!(print_expr(e.as_ref()).as_str(), "((2-3)-4)");
 
-    let e = parse_Expr("2 - (3 - 4)").unwrap();
+    let e = parse_expr("2 - (3 - 4)").unwrap();
     assert_eq!(print_expr(e.as_ref()).as_str(), "(2-(3-4))");
 
-    let e = parse_Expr("a").unwrap();
+    let e = parse_expr("a").unwrap();
     assert_eq!(print_expr(e.as_ref()).as_str(), "a");
 
-    let e = parse_Expr("a := 2; a").unwrap();
+    let e = parse_expr("a := 2; a").unwrap();
     assert_eq!(print_expr(e.as_ref()).as_str(), "a:=(2);a");
+
+    let e = parse_expr("[1, 2, 3]").unwrap();
+    assert_eq!(print_expr(e.as_ref()).as_str(), "[1,2,3]");
+
+    let e = parse_expr("|a, b| a+b").unwrap();
+    assert_eq!(print_expr(e.as_ref()).as_str(), "|a,b|(a+b)");
 }
 
 #[test]
 fn parse_and_print_typed_expressions() {
-    let mut e = *parse_Expr("23").unwrap();
-    assert_eq!(print_typed_expr(&e).as_str(), "23:?");
-    infer_types(&mut e).unwrap();
-    assert_eq!(print_typed_expr(&e).as_str(), "23:i32");
+    let e = *parse_expr("a").unwrap();
+    assert_eq!(print_typed_expr(&e).as_str(), "a:?");
 
-    let mut e = *parse_Expr("true").unwrap();
-    assert_eq!(print_typed_expr(&e).as_str(), "true:?");
+    let e = *parse_expr("a:i32").unwrap();
+    assert_eq!(print_typed_expr(&e).as_str(), "a:i32");
+    
+    let mut e = parse_expr("a := 2; a").unwrap();
+    assert_eq!(print_typed_expr(e.as_ref()).as_str(), "a:?:=(2);a:?");
     infer_types(&mut e).unwrap();
-    assert_eq!(print_typed_expr(&e).as_str(), "true:i32");
+    assert_eq!(print_typed_expr(e.as_ref()).as_str(), "a:i32:=(2);a:i32");
 
-    let mut e = *parse_Expr("23+32").unwrap();
-    assert_eq!(print_typed_expr(&e).as_str(), "(23:?+32:?)");
+    let mut e = parse_expr("a := 2; a := false; a").unwrap();
     infer_types(&mut e).unwrap();
-    assert_eq!(print_typed_expr(&e).as_str(), "(23:i32+32:i32)");
+    assert_eq!(print_typed_expr(e.as_ref()).as_str(), "a:i32:=(2);a:bool:=(false);a:bool");
 
-    let mut e = parse_Expr("a := 2; a").unwrap();
-    assert_eq!(print_typed_expr(e.as_ref()).as_str(), "a:?:=(2:?);a:?");
-    infer_types(&mut e).unwrap();
-    assert_eq!(print_typed_expr(e.as_ref()).as_str(), "a:i32:=(2:i32);a:i32");
+    let mut e = parse_expr("|a:i32, b:i32| a:i32 + b:i32").unwrap();
+    //infer_types(&mut e).unwrap();
+    assert_eq!(print_typed_expr(e.as_ref()).as_str(), "|a:i32,b:i32|(a:i32+b:i32)");
 }
