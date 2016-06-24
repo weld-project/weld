@@ -9,7 +9,7 @@ use super::parser::*;
 use super::parser::ExprKind::*;
 use super::parser::Type::*;
 
-grammar;
+grammar["LALR(1)"];
 
 extern {
     // Source location and error types returned by this parser. 
