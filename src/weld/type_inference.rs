@@ -26,7 +26,7 @@ pub fn infer_types(expr: &mut Expr) -> WeldResult<()> {
         let res = try!(infer_up(expr, &mut env, None));
         if res == false {
             if !has_all_types(expr) {
-                return weld_err("Could not infer some types")
+                return weld_err!("Could not infer some types")
             }
             return Ok(())
         }
@@ -69,12 +69,12 @@ fn infer_up(expr: &mut Expr, env: &mut TypeMap, fts: Option<FunctionTypes>) -> W
             changed |= try!(infer_up(data, env, None));
             let data_type = match data.ty {
                 Some(Vector(ref elem_type)) => Some(*elem_type.clone()),
-                Some(_) => return weld_err("Mismatched types for Map"),
+                Some(_) => return weld_err!("Mismatched types for Map"),
                 _ => None
             };
             let result_type = match expr.ty {
                 Some(Vector(ref elem_type)) => Some(*elem_type.clone()),
-                Some(_) => return weld_err("Mismatched types for Map"),
+                Some(_) => return weld_err!("Mismatched types for Map"),
                 _ => None
             };
             let expected_fts = FunctionTypes { params: vec![data_type], result: result_type };
@@ -113,7 +113,7 @@ fn infer_locally(expr: &mut Expr, env: &mut TypeMap, fts: Option<FunctionTypes>)
                     Ok(true)
                 }
                 Some(Scalar(I32)) => Ok(false),
-                Some(_) => weld_err("Wrong type ascribed to I32Literal")
+                Some(_) => weld_err!("Wrong type ascribed to I32Literal")
             }
         }
 
@@ -124,7 +124,7 @@ fn infer_locally(expr: &mut Expr, env: &mut TypeMap, fts: Option<FunctionTypes>)
                     Ok(true)
                 }
                 Some(Scalar(Bool)) => Ok(false),
-                Some(_) => weld_err("Wrong type ascribed to BoolLiteral")
+                Some(_) => weld_err!("Wrong type ascribed to BoolLiteral")
             }
         }
 
@@ -137,7 +137,7 @@ fn infer_locally(expr: &mut Expr, env: &mut TypeMap, fts: Option<FunctionTypes>)
                 let first_type = types_seen.pop().unwrap();
                 for ty in &types_seen {
                     if *ty != first_type {
-                        return weld_err("Mismatched types for BinOp")
+                        return weld_err!("Mismatched types for BinOp")
                     }
                 }
                 let mut changed = false;
@@ -154,10 +154,10 @@ fn infer_locally(expr: &mut Expr, env: &mut TypeMap, fts: Option<FunctionTypes>)
 
         Ident(ref symbol) => {
             match env.get(symbol) {
-                None => weld_err("Undefined identifier"),
+                None => weld_err!("Undefined identifier"),
                 Some(ty_opt) => {
                     if ty_opt.is_some() && expr.ty.is_some() && *ty_opt != expr.ty {
-                        weld_err("Mismatched types for Ident")
+                        weld_err!("Mismatched types for Ident")
                     } else if ty_opt.is_some() && expr.ty.is_none() {
                         expr.ty = ty_opt.clone();
                         Ok(true)
@@ -171,7 +171,7 @@ fn infer_locally(expr: &mut Expr, env: &mut TypeMap, fts: Option<FunctionTypes>)
 
         Let (_, _, ref mut body) => {
             if expr.ty.is_some() && body.ty.is_some() && expr.ty != body.ty {
-                weld_err("Mismatched types for Let body")
+                weld_err!("Mismatched types for Let body")
             } else if body.ty.is_some() && expr.ty.is_none() {
                 expr.ty = body.ty.clone();
                 Ok(true)
@@ -190,12 +190,12 @@ fn infer_locally(expr: &mut Expr, env: &mut TypeMap, fts: Option<FunctionTypes>)
                 Some(ref elem_type) => {
                     for other_expr in exprs {
                         if other_expr.ty != first_expr.ty {
-                            return weld_err("Mismatched types for MakeVector");
+                            return weld_err!("Mismatched types for MakeVector");
                         }
                     }
                     let vec_type = Some(Vector(Box::new(elem_type.clone())));
                     if expr.ty.is_some() && expr.ty != vec_type {
-                        return weld_err("Mismatched types for MakeVector");
+                        return weld_err!("Mismatched types for MakeVector");
                     } else if expr.ty.is_none() {
                         expr.ty = vec_type;
                         Ok(true)
@@ -219,7 +219,7 @@ fn infer_locally(expr: &mut Expr, env: &mut TypeMap, fts: Option<FunctionTypes>)
             for (i, p) in params.iter_mut().enumerate() {
                 let expected = expected_params.get(i).unwrap();
                 if p.ty.is_some() && expected.is_some() && p.ty != *expected {
-                    return weld_err("Mismatched parameter types for Lambda");
+                    return weld_err!("Mismatched parameter types for Lambda");
                 } else if p.ty.is_none() && expected.is_some() {
                     p.ty = expected.clone();
                     changed = true;
@@ -228,7 +228,7 @@ fn infer_locally(expr: &mut Expr, env: &mut TypeMap, fts: Option<FunctionTypes>)
 
             // Harmonize body type
             if body.ty.is_some() && expected_result.is_some() && body.ty != expected_result {
-                return weld_err("Mismatched return type for Lambda");
+                return weld_err!("Mismatched return type for Lambda");
             } else if body.ty.is_none() && expected_result.is_some() {
                 body.ty = expected_result.clone();
                 changed = true;
@@ -240,7 +240,7 @@ fn infer_locally(expr: &mut Expr, env: &mut TypeMap, fts: Option<FunctionTypes>)
                 let param_types = params.iter().map(|p| p.ty.clone().unwrap()).collect();
                 let func_type = Some(Function(param_types, Box::new(body.ty.clone().unwrap())));
                 if expr.ty.is_some() && expr.ty != func_type {
-                    return weld_err("Mismatched overall function type for Lambda");
+                    return weld_err!("Mismatched overall function type for Lambda");
                 } else if expr.ty.is_none() {
                     expr.ty = func_type;
                     changed = true;
@@ -256,7 +256,7 @@ fn infer_locally(expr: &mut Expr, env: &mut TypeMap, fts: Option<FunctionTypes>)
                 _ => None
             };
             if expected_type.is_some() && expr.ty.is_some() && expr.ty != expected_type {
-                weld_err("Mismatched types for Map")
+                weld_err!("Mismatched types for Map")
             } else if expected_type.is_some() && expr.ty.is_none() {
                 expr.ty = expected_type;
                 Ok(true)

@@ -29,7 +29,7 @@ fn evaluate_with_env(env: &mut HashMap<Symbol, Binding>, expr: &Expr) -> WeldRes
                 Add => Ok(left + right),
                 Subtract => Ok(left - right),
                 Multiply => Ok(left * right),
-                Divide => if right != 0 { Ok(left / right) } else { weld_err("division by 0") }
+                Divide => if right != 0 { Ok(left / right) } else { weld_err!("division by 0") }
             };
             res.map(|r| Box::new(r) as Box<Any>)
         },
@@ -42,7 +42,7 @@ fn evaluate_with_env(env: &mut HashMap<Symbol, Binding>, expr: &Expr) -> WeldRes
                 }
                 match *itype {
                     Scalar(I32) => Ok(Box::new(*value.downcast_ref::<i32>().unwrap())),
-                    _ => weld_err("Unsupported expression")
+                    _ => weld_err!("Unsupported expression")
                 }
             },
             None => Err(WeldError(format!("Binding not found: {:?}: {:?}", symbol, itype)))
@@ -59,6 +59,6 @@ fn evaluate_with_env(env: &mut HashMap<Symbol, Binding>, expr: &Expr) -> WeldRes
             result
         },
 
-        _ => weld_err("Unsupported expression"),
+        _ => weld_err!("Unsupported expression"),
     }
 }

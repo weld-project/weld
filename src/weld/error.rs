@@ -19,8 +19,3 @@ impl error::Error for WeldError {
 
 /// Result type returned by Weld.
 pub type WeldResult<T> = Result<T, WeldError>;
-
-/// Utility function to create an Err result with a WeldError.
-pub fn weld_err<T>(description: &str) -> WeldResult<T> {
-    Err(WeldError(description.to_string()))
-}
