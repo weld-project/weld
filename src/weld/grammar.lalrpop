@@ -21,7 +21,8 @@ extern {
 pub expr = <Expr>;
 
 Type: Box<Type> = {
-    ScalarType
+    ScalarType,
+    "vec" "[" <t:Type> "]" => Box::new(Vector(t))
 };
 
 ScalarType: Box<Type> = {
