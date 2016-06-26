@@ -9,7 +9,7 @@ use super::error::*;
 #[cfg(test)] use super::parser::parse_expr;
 #[cfg(test)] use super::ast::BinOpKind::*;
 
-type TypeMap = HashMap<String, Option<Type>>;
+type TypeMap = HashMap<Symbol, Option<Type>>;
 
 /// Partially inferred types about a function, which are passed down from parent nodes in ASTs.
 struct FunctionTypes {
@@ -48,7 +48,7 @@ fn infer_up(expr: &mut Expr, env: &mut TypeMap, fts: Option<FunctionTypes>) -> W
     let mut changed = false;
 
     // Special case: for Lets and Lambdas, add the types of identifiers they (re-)define to env.
-    let mut old_bindings: Vec<(String, Option<Option<Type>>)> = Vec::new();
+    let mut old_bindings: Vec<(Symbol, Option<Option<Type>>)> = Vec::new();
     match expr.kind {
         Let(ref symbol, ref value, _) => {
             old_bindings.push((symbol.clone(), env.insert(symbol.clone(), value.ty.clone())));

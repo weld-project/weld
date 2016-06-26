@@ -123,4 +123,4 @@ Map: Box<Expr> = {
 
 Parameter: Parameter = <n:Name> <t:(":" <Type>)?> => Parameter { name: n, ty: t.map(|b| *b) };
 
-Name: String = <s:r"[A-Za-z_][A_Za-z0-9_]*"> => s.to_string();
+Name: Symbol = <s:r"[A-Za-z_][A_Za-z0-9_]*"> => s.to_string();

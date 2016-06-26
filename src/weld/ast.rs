@@ -2,20 +2,6 @@
 
 use std::vec;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum ScalarKind {
-    Bool,
-    I32,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum BinOpKind {
-    Add,
-    Subtract,
-    Multiply,
-    Divide,
-}
-
 pub type Symbol = String;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -24,6 +10,12 @@ pub enum Type {
     Vector(Box<Type>),
     Builder(BuilderKind),
     Function(Vec<Type>, Box<Type>),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum ScalarKind {
+    Bool,
+    I32,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -38,17 +30,15 @@ pub struct Expr {
     pub kind: ExprKind
 }
 
-// TODO: Replace String with a Symbol class including some kind of context / ID 
-
 #[derive(Clone, Debug, PartialEq)]
 pub enum ExprKind {
     BoolLiteral(bool),
     I32Literal(i32),
     BinOp(BinOpKind, Box<Expr>, Box<Expr>),
-    Ident(String),
+    Ident(Symbol),
     MakeVector(Vec<Expr>),
     /// name, value, body
-    Let(String, Box<Expr>, Box<Expr>),
+    Let(Symbol, Box<Expr>, Box<Expr>),
     /// condition, on_true, on_false 
     If(Box<Expr>, Box<Expr>, Box<Expr>),
     /// variables, body
@@ -57,9 +47,17 @@ pub enum ExprKind {
     Map(Box<Expr>, Box<Expr>),
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum BinOpKind {
+    Add,
+    Subtract,
+    Multiply,
+    Divide,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Parameter {
-    pub name: String,
+    pub name: Symbol,
     pub ty: Option<Type>
 }
 
