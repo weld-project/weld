@@ -1,12 +1,12 @@
 use std::collections::HashMap;
 
+use super::ast::*;
 use super::ast::ScalarKind::*;
+use super::ast::Type::*;
+use super::ast::ExprKind::*;
 use super::error::*;
-use super::parser::*;
-use super::parser::Type::*;
-use super::parser::ExprKind::*;
 
-#[cfg(test)] use super::grammar::parse_expr;
+#[cfg(test)] use super::parser::parse_expr;
 #[cfg(test)] use super::ast::BinOpKind::*;
 
 type TypeMap = HashMap<String, Option<Type>>;

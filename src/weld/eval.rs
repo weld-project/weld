@@ -1,5 +1,7 @@
 //! Evaluate Weld ASTs at compile time (by interpreting them).
 
+/*
+
 use std::any::Any;
 use std::collections::HashMap;
 
@@ -62,3 +64,5 @@ fn evaluate_with_env(env: &mut HashMap<Symbol, Binding>, expr: &Expr) -> WeldRes
         _ => weld_err!("Unsupported expression"),
     }
 }
+
+*/

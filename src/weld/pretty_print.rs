@@ -1,10 +1,9 @@
 
-use super::ast::BinOpKind;
+use super::ast::*;
 use super::ast::BinOpKind::*;
 use super::ast::ScalarKind::*;
-use super::parser::*;
-use super::parser::Type::*;
-use super::parser::ExprKind::*;
+use super::ast::Type::*;
+use super::ast::ExprKind::*;
 
 // TODO: These methods could take a mutable string as an argument, or even a fmt::Format.
 

@@ -12,9 +12,8 @@ pub mod ast;
 pub mod eval;
 pub mod error;
 pub mod parser;
-pub mod grammar;
-pub mod type_inference;
 pub mod pretty_print;
+pub mod type_inference;
 
 #[cfg(test)]
 mod tests;

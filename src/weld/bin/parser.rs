@@ -1,9 +1,9 @@
 extern crate weld;
 
 use std::io::{stdin, stdout, Write};
-use weld::grammar::*;
-use weld::type_inference::infer_types;
+use weld::parser::*;
 use weld::pretty_print::*;
+use weld::type_inference::*;
 
 fn main() {
     loop {

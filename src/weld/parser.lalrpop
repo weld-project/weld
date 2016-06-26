@@ -3,11 +3,11 @@ use std::str::FromStr;
 
 use lalrpop_util::ParseError;
 
+use super::ast::*;
 use super::ast::BinOpKind::*;
 use super::ast::ScalarKind::*;
-use super::parser::*;
-use super::parser::ExprKind::*;
-use super::parser::Type::*;
+use super::ast::ExprKind::*;
+use super::ast::Type::*;
 
 grammar["LALR(1)"];
 
