@@ -106,27 +106,11 @@ fn infer_up(expr: &mut Expr, env: &mut TypeMap, fts: Option<FunctionTypes>) -> W
 /// Return true if any new expression's type was inferred, or an error if types are inconsistent.  
 fn infer_locally(expr: &mut Expr, env: &mut TypeMap, fts: Option<FunctionTypes>) -> WeldResult<bool> {
     match expr.kind {
-        I32Literal(_) => {
-            match expr.ty {
-                None => {
-                    expr.ty = Some(Scalar(I32));
-                    Ok(true)
-                }
-                Some(Scalar(I32)) => Ok(false),
-                Some(_) => weld_err!("Wrong type ascribed to I32Literal")
-            }
-        }
+        I32Literal(_) =>
+            push_concrete_type(&mut expr.ty, Scalar(I32), "Wrong type ascribed to I32Literal"),
 
-        BoolLiteral(_) => {
-            match expr.ty {
-                None => {
-                    expr.ty = Some(Scalar(Bool));
-                    Ok(true)
-                }
-                Some(Scalar(Bool)) => Ok(false),
-                Some(_) => weld_err!("Wrong type ascribed to BoolLiteral")
-            }
-        }
+        BoolLiteral(_) =>
+            push_concrete_type(&mut expr.ty, Scalar(Bool), "Wrong type ascribed to BoolLiteral"),
 
         BinOp(_, ref mut lefts, ref mut right) => {
             let mut types_seen = Vec::<Type>::new();
@@ -134,18 +118,10 @@ fn infer_locally(expr: &mut Expr, env: &mut TypeMap, fts: Option<FunctionTypes>)
                 types_seen.extend(ty.clone());
             }
             if !types_seen.is_empty() {
-                let first_type = types_seen.pop().unwrap();
-                for ty in &types_seen {
-                    if *ty != first_type {
-                        return weld_err!("Mismatched types for BinOp")
-                    }
-                }
+                let first_type = Some(types_seen.pop().unwrap());
                 let mut changed = false;
                 for ty in [&mut expr.ty, &mut lefts.ty, &mut right.ty].iter_mut() {
-                    if ty.is_none() {
-                        **ty = Some(first_type.clone()); 
-                        changed = true;
-                    }
+                    changed |= try!(push_type(ty, &first_type, "Mismatched types for BinOp"));
                 }
                 return Ok(changed)
             }
@@ -155,32 +131,15 @@ fn infer_locally(expr: &mut Expr, env: &mut TypeMap, fts: Option<FunctionTypes>)
         Ident(ref symbol) => {
             match env.get(symbol) {
                 None => weld_err!("Undefined identifier"),
-                Some(ty_opt) => {
-                    if ty_opt.is_some() && expr.ty.is_some() && *ty_opt != expr.ty {
-                        weld_err!("Mismatched types for Ident")
-                    } else if ty_opt.is_some() && expr.ty.is_none() {
-                        expr.ty = ty_opt.clone();
-                        Ok(true)
-                    } else {
-                        // Don't try to propagate the type up from this Ident to its Let node.
-                        Ok(false)
-                    }
-                } 
+                Some(t) => push_type(&mut expr.ty, t, "Mismatched types for Ident")
             }
         }
 
         Let (_, _, ref mut body) => {
-            if expr.ty.is_some() && body.ty.is_some() && expr.ty != body.ty {
-                weld_err!("Mismatched types for Let body")
-            } else if body.ty.is_some() && expr.ty.is_none() {
-                expr.ty = body.ty.clone();
-                Ok(true)
-            } else if body.ty.is_none() && expr.ty.is_some() {
-                body.ty = expr.ty.clone();
-                Ok(true)
-            } else {
-                Ok(false)
-            }
+            let mut changed = false;
+            changed |= try!(push_type(&mut expr.ty, &body.ty, "Mismatched types for Let body"));
+            changed |= try!(push_type(&mut body.ty, &expr.ty, "Mismatched types for Let body"));
+            Ok(changed)
         }
 
         MakeVector(ref exprs) if exprs.len() > 0 => {
@@ -194,14 +153,7 @@ fn infer_locally(expr: &mut Expr, env: &mut TypeMap, fts: Option<FunctionTypes>)
                         }
                     }
                     let vec_type = Some(Vector(Box::new(elem_type.clone())));
-                    if expr.ty.is_some() && expr.ty != vec_type {
-                        return weld_err!("Mismatched types for MakeVector");
-                    } else if expr.ty.is_none() {
-                        expr.ty = vec_type;
-                        Ok(true)
-                    } else {
-                        Ok(false)
-                    }
+                    push_type(&mut expr.ty, &vec_type, "Mismatched types for MakeVector")
                 }
                 None => Ok(false)
             }
@@ -218,33 +170,19 @@ fn infer_locally(expr: &mut Expr, env: &mut TypeMap, fts: Option<FunctionTypes>)
             // Harmonize parameter types
             for (i, p) in params.iter_mut().enumerate() {
                 let expected = expected_params.get(i).unwrap();
-                if p.ty.is_some() && expected.is_some() && p.ty != *expected {
-                    return weld_err!("Mismatched parameter types for Lambda");
-                } else if p.ty.is_none() && expected.is_some() {
-                    p.ty = expected.clone();
-                    changed = true;
-                }
+                changed |= try!(push_type(&mut p.ty, &expected, "Mismatched Lambda param types"));
             }
 
             // Harmonize body type
-            if body.ty.is_some() && expected_result.is_some() && body.ty != expected_result {
-                return weld_err!("Mismatched return type for Lambda");
-            } else if body.ty.is_none() && expected_result.is_some() {
-                body.ty = expected_result.clone();
-                changed = true;
-            }
+            changed |= try!(push_type(
+                &mut body.ty, &expected_result, "Mismatched Lambda return type"));
 
             // Set our overall type if we can
             let have_params = params.iter().all(|p| p.ty.is_some());
             if have_params && body.ty.is_some() {
                 let param_types = params.iter().map(|p| p.ty.clone().unwrap()).collect();
                 let func_type = Some(Function(param_types, Box::new(body.ty.clone().unwrap())));
-                if expr.ty.is_some() && expr.ty != func_type {
-                    return weld_err!("Mismatched overall function type for Lambda");
-                } else if expr.ty.is_none() {
-                    expr.ty = func_type;
-                    changed = true;
-                }
+                changed |= try!(push_type(&mut expr.ty, &func_type, "Mismatched type for Lambda"))
             }
 
             Ok(changed)
@@ -255,17 +193,36 @@ fn infer_locally(expr: &mut Expr, env: &mut TypeMap, fts: Option<FunctionTypes>)
                 Some(Function(_, ref res)) => Some(Vector(res.clone())),
                 _ => None
             };
-            if expected_type.is_some() && expr.ty.is_some() && expr.ty != expected_type {
-                weld_err!("Mismatched types for Map")
-            } else if expected_type.is_some() && expr.ty.is_none() {
-                expr.ty = expected_type;
-                Ok(true)
-            } else {
-                Ok(false)
-            }
+            push_type(&mut expr.ty, &expected_type, "Mismatched types for Map")
         }
 
         _ => Ok(false)
+    }
+}
+
+/// Force the given type to be assigned to an Option<Type>, or report an error if it has the wrong
+/// type. Return a result indicating whether the option has changed (i.e. a new type as added).
+fn push_concrete_type(opt: &mut Option<Type>, expected: Type, error: &str) -> WeldResult<bool> {
+    match *opt {
+        None => {
+            *opt = Some(expected);
+            Ok(true) 
+        }
+        Some(ref t) if *t == expected => Ok(false),
+        _ => weld_err!("{}", error)
+    }
+}
+
+/// Force the type of `dest` to be `src` if `src` is set, or report an error if it has the wrong
+/// type. Return a result indicating whether the type of `dest` has changed.
+fn push_type(dest: &mut Option<Type>, src: &Option<Type>, error: &str) -> WeldResult<bool> {
+    if dest.is_some() && src.is_some() && *dest != *src {
+        weld_err!("{}", error)
+    } else if src.is_some() && dest.is_none() {
+        *dest = src.clone();
+        Ok(true)
+    } else {
+        Ok(false)
     }
 }
 
