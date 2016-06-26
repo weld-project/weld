@@ -30,7 +30,7 @@ pub fn print_type(ty: &Type) -> String {
 }
 
 /// Print a data type option, outputting "?" if unknown.
-fn print_optional_type(ty: &Option<Type>) -> String {
+pub fn print_optional_type(ty: &Option<Type>) -> String {
     match *ty {
         Some(ref t) => print_type(t),
         None => "?".to_string()
