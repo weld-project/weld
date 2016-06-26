@@ -41,7 +41,7 @@ LetExpr: Box<Expr> = {
 };
 
 Let: Box<Expr> = {
-    <s:Name> <t:(":" <Type>)?> ":=" <value:SumExpr> ";" <body:Expr> => {
+    "let" <s:Name> <t:(":" <Type>)?> "=" <value:SumExpr> ";" <body:Expr> => {
         let mut res = expr_box(Let(s, value, body));
         res.ty = t.map(|b| *b);
         res
@@ -49,9 +49,18 @@ Let: Box<Expr> = {
 };
 
 SumExpr: Box<Expr> = {
-    <l:SumExpr> "+" <r:Term> => expr_box(BinOp(Add, l, r)),
-    <l:SumExpr> "-" <r:Term> => expr_box(BinOp(Subtract, l, r)),
-    Term
+    <l:SumExpr> "+" <r:AscribeExpr> => expr_box(BinOp(Add, l, r)),
+    <l:SumExpr> "-" <r:AscribeExpr> => expr_box(BinOp(Subtract, l, r)),
+    AscribeExpr
+};
+
+AscribeExpr: Box<Expr> = {
+    <term:Term> ":" <ty:Type> => {
+        let mut term = term;
+        term.ty = Some(*ty);
+        term
+    },
+    <Term>
 };
 
 Term: Box<Expr> = {
@@ -79,11 +88,7 @@ I32Literal: Box<Expr> = {
 };
 
 Ident: Box<Expr> = {
-    <n:Name> <t:(":" <Type>)?> => {
-        let mut res = expr_box(Ident(n));
-        res.ty = t.map(|b| *b);
-        res
-    }
+    <n:Name> => expr_box(Ident(n))
 };
 
 Lambda: Box<Expr> = {

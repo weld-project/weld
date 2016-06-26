@@ -252,20 +252,20 @@ fn infer_types_simple() {
 
 #[test]
 fn infer_types_let() {
-    let mut e = *parse_expr("a := 1; a + a").unwrap();
+    let mut e = *parse_expr("let a = 1; a + a").unwrap();
     assert!(infer_types(&mut e).is_ok());
     assert_eq!(e.ty, Some(Scalar(I32)));
 
     let mut e = *parse_expr("a + a").unwrap();
     assert!(infer_types(&mut e).is_err());
 
-    let mut e = *parse_expr("a:i32 := 1; a").unwrap();
+    let mut e = *parse_expr("let a:i32 = 1; a").unwrap();
     assert!(infer_types(&mut e).is_ok());
     assert_eq!(e.ty, Some(Scalar(I32)));
 
-    let mut e = *parse_expr("a:bool := 1; a").unwrap();
+    let mut e = *parse_expr("let a:bool = 1; a").unwrap();
     assert!(infer_types(&mut e).is_err());
 
-    let mut e = *parse_expr("a := 1; a:bool").unwrap();
+    let mut e = *parse_expr("let a = 1; a:bool").unwrap();
     assert!(infer_types(&mut e).is_err());
 }
