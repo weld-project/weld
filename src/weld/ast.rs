@@ -4,6 +4,7 @@ use std::vec;
 
 pub type Symbol = String;
 
+/// A data type.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Type {
     Scalar(ScalarKind),
@@ -24,51 +25,18 @@ pub enum BuilderKind {
     Merger(Box<Type>, BinOpKind)
 }
 
+/// An expression tree, having type annotations of type T. We make this parametrized because
+/// expressions have different "kinds" of types attached to them at different points in the
+/// compilation process -- namely PartialType when parsed and then Type after type inference.
 #[derive(Clone, Debug, PartialEq)]
-pub struct Expr {
-    pub ty: Option<Type>,
-    pub kind: ExprKind
+pub struct Expr<T> {
+    pub ty: T,
+    pub kind: ExprKind<T>
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum ExprKind {
-    BoolLiteral(bool),
-    I32Literal(i32),
-    BinOp(BinOpKind, Box<Expr>, Box<Expr>),
-    Ident(Symbol),
-    MakeVector(Vec<Expr>),
-    /// name, value, body
-    Let(Symbol, Box<Expr>, Box<Expr>),
-    /// condition, on_true, on_false 
-    If(Box<Expr>, Box<Expr>, Box<Expr>),
-    /// variables, body
-    Lambda(Vec<Parameter>, Box<Expr>),
-    /// data, function
-    Map(Box<Expr>, Box<Expr>),
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum BinOpKind {
-    Add,
-    Subtract,
-    Multiply,
-    Divide,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Parameter {
-    pub name: Symbol,
-    pub ty: Option<Type>
-}
-
-/// Create a box containing an untyped expression of the given kind.
-pub fn expr_box(kind: ExprKind) -> Box<Expr> {
-    Box::new(Expr { ty: None, kind: kind })
-}
-
-impl Expr {
+impl<T> Expr<T> {
     /// Get an iterator for the children of this expression.
-    pub fn children(&self) -> vec::IntoIter<&Expr> {
+    pub fn children(&self) -> vec::IntoIter<&Expr<T>> {
         use self::ExprKind::*;
         match self.kind {
             BinOp(_, ref left, ref right) => vec![left.as_ref(), right.as_ref()],
@@ -81,7 +49,7 @@ impl Expr {
     }
 
     /// Get an iterator of mutable references to the children of this expression.
-    pub fn children_mut(&mut self) -> vec::IntoIter<&mut Expr> {
+    pub fn children_mut(&mut self) -> vec::IntoIter<&mut Expr<T>> {
         use self::ExprKind::*;
         match self.kind {
             BinOp(_, ref mut left, ref mut right) => vec![left.as_mut(), right.as_mut()],
@@ -93,3 +61,40 @@ impl Expr {
         }.into_iter()
     }
 }
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum ExprKind<T> {
+    BoolLiteral(bool),
+    I32Literal(i32),
+    BinOp(BinOpKind, Box<Expr<T>>, Box<Expr<T>>),
+    Ident(Symbol),
+    MakeVector(Vec<Expr<T>>),
+    /// name, value, body
+    Let(Symbol, Box<Expr<T>>, Box<Expr<T>>),
+    /// condition, on_true, on_false 
+    If(Box<Expr<T>>, Box<Expr<T>>, Box<Expr<T>>),
+    /// variables, body
+    Lambda(Vec<Parameter<T>>, Box<Expr<T>>),
+    /// data, function
+    Map(Box<Expr<T>>, Box<Expr<T>>),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum BinOpKind {
+    Add,
+    Subtract,
+    Multiply,
+    Divide,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Parameter<T> {
+    pub name: Symbol,
+    pub ty: T
+}
+
+/// A typed expression struct
+pub type TypedExpr = Expr<Type>;
+
+/// A typed parameter
+pub type TypedParameter = Parameter<Type>;

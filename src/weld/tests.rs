@@ -1,4 +1,4 @@
-use super::parser::parse_expr;
+use super::grammar::parse_expr;
 use super::type_inference::*;
 use super::pretty_print::*;
 

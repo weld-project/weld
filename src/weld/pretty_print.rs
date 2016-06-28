@@ -1,60 +1,95 @@
 
-use super::ast::*;
+use super::ast::BinOpKind;
 use super::ast::BinOpKind::*;
 use super::ast::ScalarKind::*;
+use super::ast::Expr;
+use super::ast::Type;
 use super::ast::Type::*;
+use super::ast::Parameter;
 use super::ast::ExprKind::*;
+use super::partial_types;
+use super::partial_types::*;
 
 // TODO: These methods could take a mutable string as an argument, or even a fmt::Format.
 
-/// Print a data type.
-pub fn print_type(ty: &Type) -> String {
-    match *ty {
-        Scalar(Bool) => "bool".to_string(),
-        Scalar(I32) => "i32".to_string(),
-        Vector(ref elem) => format!("vec[{}]", print_type(elem)),
-        Function(ref params, ref ret) => {
-            let mut res = String::new();
-            res.push_str("(");
-            for (i, p) in params.iter().enumerate() {
-                if i > 0 { res.push_str(","); }
-                res.push_str(&print_type(p));
+/// A trait for printing types.
+pub trait PrintableType {
+    fn print(&self) -> String;
+}
+
+/// Print implementation for full Types
+impl PrintableType for Type {
+    fn print(&self) -> String {
+        match *self {
+            Scalar(Bool) => "bool".to_string(),
+            Scalar(I32) => "i32".to_string(),
+            Vector(ref elem) => format!("vec[{}]", elem.print()),
+            Function(ref params, ref ret) => {
+                let mut res = String::new();
+                res.push_str("(");
+                for (i, p) in params.iter().enumerate() {
+                    if i > 0 { res.push_str(","); }
+                    res.push_str(&p.print());
+                }
+                res.push_str(")=>");
+                res.push_str(&ret.print());
+                res
             }
-            res.push_str(")=>");
-            res.push_str(&print_type(ret));
-            res
+            _ => "??".to_string()
         }
-        _ => "?".to_string()
     }
 }
 
-/// Print a data type option, outputting "?" if unknown.
-pub fn print_optional_type(ty: &Option<Type>) -> String {
-    match *ty {
-        Some(ref t) => print_type(t),
-        None => "?".to_string()
+/// Print implementation for PartialTypes
+impl PrintableType for PartialType {
+    fn print(&self) -> String {
+        use partial_types::PartialType::*;
+        use partial_types::PartialBuilderKind::*;
+        match *self {
+            Unknown => "?".to_string(),
+            Scalar(Bool) => "bool".to_string(),
+            Scalar(I32) => "i32".to_string(),
+            Vector(ref elem) => format!("vec[{}]", elem.print()),
+            Function(ref params, ref ret) => {
+                let mut res = String::new();
+                res.push_str("(");
+                for (i, p) in params.iter().enumerate() {
+                    if i > 0 { res.push_str(","); }
+                    res.push_str(&p.print());
+                }
+                res.push_str(")=>");
+                res.push_str(&ret.print());
+                res
+            }
+            _ => "??".to_string()
+        }
     }
+}
+
+/// Print a type.
+pub fn print_type<T: PrintableType>(ty: &T) -> String {
+    ty.print()
 }
 
 /// Print an expression concisely (without any type annotations).
-pub fn print_expr(expr: &Expr) -> String {
+pub fn print_expr<T: PrintableType>(expr: &Expr<T>) -> String {
     print_expr_impl(expr, false)
 }
 
 /// Print an expression with type annotations on all symbols.
-pub fn print_typed_expr(expr: &Expr) -> String {
+pub fn print_typed_expr<T: PrintableType>(expr: &Expr<T>) -> String {
     print_expr_impl(expr, true)
 }
 
 /// Main work to print an expression.
-fn print_expr_impl(expr: &Expr, typed: bool) -> String {
+fn print_expr_impl<T: PrintableType>(expr: &Expr<T>, typed: bool) -> String {
     match expr.kind {
         BoolLiteral(v) => format!("{}", v),
         I32Literal(v) => format!("{}", v),
 
         Ident(ref symbol) => {
             if typed {
-                format!("{}:{}", symbol, print_optional_type(&expr.ty))
+                format!("{}:{}", symbol, expr.ty.print())
             } else {
                 format!("{}", symbol)
             }
@@ -70,7 +105,7 @@ fn print_expr_impl(expr: &Expr, typed: bool) -> String {
             if typed {
                 format!("let {}:{}=({});{}",
                         symbol,
-                        print_optional_type(&value.ty),
+                        expr.ty.print(),
                         print_expr_impl(value, typed),
                         print_expr_impl(body, typed))
             } else {
@@ -123,9 +158,9 @@ fn print_binop(op: BinOpKind) -> String {
 }
 
 /// Print a parameter, optionally showing its type.
-fn print_parameter(param: &Parameter, typed: bool) -> String {
+fn print_parameter<T: PrintableType>(param: &Parameter<T>, typed: bool) -> String {
     if typed {
-        format!("{}:{}", param.name, print_optional_type(&param.ty))
+        format!("{}:{}", param.name, param.ty.print())
     } else {
         format!("{}", param.name)
     }
