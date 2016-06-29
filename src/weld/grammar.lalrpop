@@ -1,0 +1,132 @@
+
+use std::str::FromStr;
+
+use lalrpop_util::ParseError;
+
+use super::ast::BinOpKind::*;
+use super::ast::ScalarKind::*;
+use super::ast::ExprKind::*;
+use super::ast::Parameter;
+use super::ast::Symbol;
+use super::partial_types::*;
+use super::partial_types::PartialType::*;
+
+grammar["LALR(1)"];
+
+extern {
+    // Source location and error types returned by this parser. 
+    type Location = usize;
+    type Error = &'static str;
+}
+
+// Expose the nicer function name parse_expr instead of parse_Expr.
+pub expr = <Expr>;
+
+Type: Box<PartialType> = {
+    ScalarType,
+    "vec" "[" <t:Type> "]" => Box::new(Vector(t))
+};
+
+ScalarType: Box<PartialType> = {
+    "bool" => Box::new(Scalar(Bool)),
+    "i32" => Box::new(Scalar(I32))
+};
+
+Expr: Box<PartialExpr> = {
+    Lambda,
+    LetExpr
+};
+
+LetExpr: Box<PartialExpr> = {
+   Let,
+   SumExpr
+};
+
+Let: Box<PartialExpr> = {
+    "let" <s:Name> <t:(":" <Type>)?> "=" <value:SumExpr> ";" <body:Expr> => {
+        let mut res = expr_box(Let(s, value, body));
+        if let Some(t) = t {
+            res.ty = *t;
+        }
+        res
+    }
+};
+
+SumExpr: Box<PartialExpr> = {
+    <l:SumExpr> "+" <r:AscribeExpr> => expr_box(BinOp(Add, l, r)),
+    <l:SumExpr> "-" <r:AscribeExpr> => expr_box(BinOp(Subtract, l, r)),
+    AscribeExpr
+};
+
+AscribeExpr: Box<PartialExpr> = {
+    <term:Term> ":" <ty:Type> => {
+        let mut term = term;
+        term.ty = *ty;
+        term
+    },
+    <Term>
+};
+
+Term: Box<PartialExpr> = {
+    BoolLiteral,
+    I32Literal,
+    Ident,
+    MakeVector,
+    Map,
+    "(" <Expr> ")"
+};
+
+BoolLiteral: Box<PartialExpr> = {
+    "true" => expr_box(BoolLiteral(true)),
+    "false" => expr_box(BoolLiteral(false)),
+};
+
+I32Literal: Box<PartialExpr> = {
+    <s:r"[0-9]+"> =>? {
+       match i32::from_str(s) {
+           Ok(v) => Ok(expr_box(I32Literal(v))),
+           Err(_) => Err(ParseError::User { error: "bad i32 literal" })
+           // TODO: This won't work for -2**31 
+       }
+    }
+};
+
+Ident: Box<PartialExpr> = {
+    <n:Name> => expr_box(Ident(n))
+};
+
+Lambda: Box<PartialExpr> = {
+    "|" <p:Parameters> "|" <e:Expr> => expr_box(Lambda(p, e))
+};
+
+Parameters: Vec<PartialParameter> = {
+    <v:(<Parameter> ",")*> <p:Parameter?> => match p {
+        None => v,
+        Some(p) => {
+            let mut v = v;
+            v.push(p);
+            v
+        }
+    }
+};
+
+MakeVector: Box<PartialExpr> = {
+    "[" <v:(<Expr> ",")*> <e:Expr?> "]" => {
+        let mut v = v;
+        if let Some(e) = e {
+            v.push(e);
+        }
+        let v: Vec<PartialExpr> = v.into_iter().map(|b| *b).collect();
+        expr_box(MakeVector(v))
+    }
+};
+
+Map: Box<PartialExpr> = {
+   "map" "(" <d:Expr> "," <f:Expr> ")" => expr_box(Map(d, f))
+};
+
+Parameter: PartialParameter = {
+    <n:Name> <t:(":" <Type>)?> => Parameter { name: n, ty: t.map(|b| *b).unwrap_or(Unknown) }
+};
+
+Name: Symbol = <s:r"[A-Za-z_][A_Za-z0-9_]*"> => s.to_string();

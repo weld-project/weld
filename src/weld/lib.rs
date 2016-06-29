@@ -11,7 +11,6 @@ macro_rules! weld_err {
 pub mod ast;
 pub mod eval;
 pub mod error;
-pub mod parser;
 pub mod grammar;
 pub mod partial_types;
 pub mod pretty_print;

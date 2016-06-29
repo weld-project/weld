@@ -2,6 +2,7 @@
 
 use std::vec;
 
+/// A symbol (identifier name); for now these are strings, but we may add some kind of scope ID.
 pub type Symbol = String;
 
 /// A data type.
@@ -93,8 +94,8 @@ pub struct Parameter<T> {
     pub ty: T
 }
 
-/// A typed expression struct
+/// A typed expression struct.
 pub type TypedExpr = Expr<Type>;
 
-/// A typed parameter
+/// A typed parameter.
 pub type TypedParameter = Parameter<Type>;
