@@ -9,7 +9,7 @@ use super::partial_types::PartialType;
 use super::partial_types::PartialType::*;
 
 #[cfg(test)] use super::grammar::*;
-#[cfg(test)] use super::parser::expr_box;
+#[cfg(test)] use super::partial_types::expr_box;
 #[cfg(test)] use super::ast::BinOpKind::*;
 
 type TypeMap = HashMap<Symbol, PartialType>;
@@ -46,7 +46,7 @@ fn infer_up(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> {
     // Remember whether we inferred any new type
     let mut changed = false;
 
-    // Special case: for Lets and Lambdas, add the types of identifiers they (re-)define to env.
+    // For Lets and Lambdas, add the identifiers they (re-)define to env
     let mut old_bindings: Vec<(Symbol, Option<PartialType>)> = Vec::new();
     match expr.kind {
         Let(ref symbol, ref value, _) => {
@@ -68,7 +68,7 @@ fn infer_up(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> {
         changed |= try!(infer_up(c, env));
     }
 
-    // Undo the environment changes from Let
+    // Undo the changes to env from Let and Lambda
     for (symbol, opt) in old_bindings {
         match opt {
             Some(old) => env.insert(symbol, old),
@@ -257,33 +257,33 @@ fn infer_types_simple() {
 
     let mut e = *int_lit.clone();
     assert!(infer_types(&mut e).is_ok());
-    assert_eq!(e.ty, Some(Scalar(I32)));
+    assert_eq!(e.ty, Scalar(I32));
     
     let mut e = *bool_lit.clone();
     assert!(infer_types(&mut e).is_ok());
-    assert_eq!(e.ty, Some(Scalar(Bool)));
+    assert_eq!(e.ty, Scalar(Bool));
     
     let mut e = *sum.clone();
     assert!(infer_types(&mut e).is_ok());
-    assert_eq!(e.ty, Some(Scalar(I32)));
+    assert_eq!(e.ty, Scalar(I32));
 
     let mut e = *prod.clone();
     assert!(infer_types(&mut e).is_ok());
-    assert_eq!(e.ty, Some(Scalar(I32)));
+    assert_eq!(e.ty, Scalar(I32));
 }
 
 #[test]
 fn infer_types_let() {
     let mut e = *parse_expr("let a = 1; a + a").unwrap();
     assert!(infer_types(&mut e).is_ok());
-    assert_eq!(e.ty, Some(Scalar(I32)));
+    assert_eq!(e.ty, Scalar(I32));
 
     let mut e = *parse_expr("a + a").unwrap();
     assert!(infer_types(&mut e).is_err());
 
     let mut e = *parse_expr("let a:i32 = 1; a").unwrap();
     assert!(infer_types(&mut e).is_ok());
-    assert_eq!(e.ty, Some(Scalar(I32)));
+    assert_eq!(e.ty, Scalar(I32));
 
     let mut e = *parse_expr("let a:bool = 1; a").unwrap();
     assert!(infer_types(&mut e).is_err());

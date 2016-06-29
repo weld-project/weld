@@ -103,7 +103,7 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>, typed: bool) -> String {
             if typed {
                 format!("let {}:{}=({});{}",
                         symbol,
-                        expr.ty.print(),
+                        value.ty.print(),
                         print_expr_impl(value, typed),
                         print_expr_impl(body, typed))
             } else {
