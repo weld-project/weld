@@ -45,6 +45,9 @@ impl<T> Expr<T> {
             Lambda(_, ref body) => vec![body.as_ref()],
             Map(ref data, ref body) => vec![data.as_ref(), body.as_ref()],
             MakeVector(ref exprs) => exprs.iter().collect(),
+            Merge(ref bldr, ref value) => vec![bldr.as_ref(), value.as_ref()],
+            For(ref data, ref bldr, ref func) =>
+                vec![data.as_ref(), bldr.as_ref(), func.as_ref()],
             _ => vec![]
         }.into_iter()
     }
@@ -58,6 +61,9 @@ impl<T> Expr<T> {
             Lambda(_, ref mut body) => vec![body.as_mut()],
             Map(ref mut data, ref mut body) => vec![data.as_mut(), body.as_mut()],
             MakeVector(ref mut exprs) => exprs.iter_mut().collect(),
+            Merge(ref mut bldr, ref mut value) => vec![bldr.as_mut(), value.as_mut()],
+            For(ref mut data, ref mut bldr, ref mut func) =>
+                vec![data.as_mut(), bldr.as_mut(), func.as_mut()],
             _ => vec![]
         }.into_iter()
     }
@@ -69,6 +75,7 @@ pub enum ExprKind<T> {
     I32Literal(i32),
     BinOp(BinOpKind, Box<Expr<T>>, Box<Expr<T>>),
     Ident(Symbol),
+    NewBuilder,  // TODO: this may need to take a parameter
     MakeVector(Vec<Expr<T>>),
     /// name, value, body
     Let(Symbol, Box<Expr<T>>, Box<Expr<T>>),
@@ -78,6 +85,10 @@ pub enum ExprKind<T> {
     Lambda(Vec<Parameter<T>>, Box<Expr<T>>),
     /// data, function
     Map(Box<Expr<T>>, Box<Expr<T>>),
+    /// builder, elem
+    Merge(Box<Expr<T>>, Box<Expr<T>>),
+    /// data, builder, func (very basic version for now)
+    For(Box<Expr<T>>, Box<Expr<T>>, Box<Expr<T>>)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

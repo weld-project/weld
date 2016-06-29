@@ -7,6 +7,7 @@ use super::error::*;
 use super::partial_types::PartialExpr;
 use super::partial_types::PartialType;
 use super::partial_types::PartialType::*;
+use super::partial_types::PartialBuilderKind::*;
 
 #[cfg(test)] use super::grammar::*;
 #[cfg(test)] use super::partial_types::expr_box;
@@ -161,25 +162,72 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             let mut changed = false;
 
             // Push data's type into func
-            let data_type = match data.ty {
-                Vector(ref elem_type) => *elem_type.clone(),
+            let elem_type = match data.ty {
+                Vector(ref elem) => *elem.clone(),
                 Unknown => Unknown,
                 _ => return weld_err!("Mismatched types for Map")
             };
             let result_type = match expr.ty {
-                Vector(ref elem_type) => *elem_type.clone(),
+                Vector(ref elem) => *elem.clone(),
                 Unknown => Unknown,
                 _ => return weld_err!("Mismatched types for Map")
             };
-            let func_type = Function(vec![data_type], Box::new(result_type));
+            let func_type = Function(vec![elem_type], Box::new(result_type));
             changed |= try!(push_type(&mut func.ty, &func_type, "Mismatched types for Map"));
 
             // Pull up our type from function
-            let our_type = match func.ty {
-                Function(_, ref res) => Vector(res.clone()),
-                _ => Vector(Box::new(Unknown))
+            match func.ty {
+                Function(ref params, ref result) if params.len() == 1 => {
+                    let ty = Vector(result.clone());
+                    changed |= try!(push_type(&mut expr.ty, &ty, "Mismatched types for Map"));
+                }
+                _ => return weld_err!("Invalid function parameter to Map")
             };
-            changed |= try!(push_type(&mut expr.ty, &our_type, "Mismatched types for Map"));
+
+            Ok(changed)
+        }
+
+        Merge(ref mut builder, ref mut value) => {
+            let mut changed = false;
+            match builder.ty {
+                Builder(ref mut b) => {
+                    let mty = b.merge_type_mut();
+                    changed |= try!(push_type(mty, &value.ty, "Mismatched types for Merge"));
+                    changed |= try!(push_type(&mut value.ty, mty, "Mismatched types for Merge"));
+                }
+                _ => ()
+            }
+            changed |= try!(push_type(&mut expr.ty, &builder.ty, "Mismatched types for Merge"));
+            changed |= try!(push_type(&mut builder.ty, &expr.ty, "Mismatched types for Merge"));
+            Ok(changed)
+        }
+
+        For(ref mut data, ref mut builder, ref mut func) => {
+            let mut changed = false;
+
+            // Push data and builder type into func
+            let elem_type = match data.ty {
+                Vector(ref elem) => *elem.clone(),
+                Unknown => Unknown,
+                _ => return weld_err!("Mismatched types for Map")
+            };
+            let bldr_type = builder.ty.clone();
+            let func_type = Function(vec![elem_type, bldr_type.clone()], Box::new(bldr_type));
+            changed |= try!(push_type(&mut func.ty, &func_type, "Mismatched types for For"));
+
+            // Push func's argument type and return type into builder
+            match func.ty {
+                Function(ref params, ref result) if params.len() == 2 => {
+                    changed |= try!(push_type(
+                        &mut builder.ty, params.get(1).unwrap(), "Mismatched types for For"));
+                    changed |= try!(push_type(
+                        &mut builder.ty, result.as_ref(), "Mismatched types for For"));
+                }
+                _ => return weld_err!("Mismatched types for For")
+            };
+
+            // Push builder's type to our expression
+            changed |= try!(push_type(&mut expr.ty, &builder.ty, "Mismatched types for For"));
 
             Ok(changed)
         }
@@ -241,6 +289,12 @@ fn push_type(dest: &mut PartialType, src: &PartialType, error: &str) -> WeldResu
                 changed |= try!(push_type(dest_res, src_res, error));
                 Ok(changed)
             },
+            _ => weld_err!("{}", error)
+        },
+
+        Builder(Appender(ref mut dest_elem)) => match *src {
+            Builder(Appender(ref src_elem)) =>
+                push_type(dest_elem.as_mut(), src_elem.as_ref(), error),
             _ => weld_err!("{}", error)
         },
 

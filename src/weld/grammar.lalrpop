@@ -10,6 +10,7 @@ use super::ast::Parameter;
 use super::ast::Symbol;
 use super::partial_types::*;
 use super::partial_types::PartialType::*;
+use super::partial_types::PartialBuilderKind::*;
 
 grammar["LALR(1)"];
 
@@ -23,13 +24,11 @@ extern {
 pub expr = <Expr>;
 
 Type: Box<PartialType> = {
-    ScalarType,
-    "vec" "[" <t:Type> "]" => Box::new(Vector(t))
-};
-
-ScalarType: Box<PartialType> = {
+    "?" => Box::new(Unknown),   // Don't really need this in the grammar but it's nice for testing
     "bool" => Box::new(Scalar(Bool)),
-    "i32" => Box::new(Scalar(I32))
+    "i32" => Box::new(Scalar(I32)),
+    "vec" "[" <t:Type> "]" => Box::new(Vector(t)),
+    "appender" "[" <t:Type> "]" => Box::new(Builder(Appender(t))),
 };
 
 Expr: Box<PartialExpr> = {
@@ -73,6 +72,9 @@ Term: Box<PartialExpr> = {
     Ident,
     MakeVector,
     Map,
+    NewBuilder,
+    Merge,
+    For,
     "(" <Expr> ")"
 };
 
@@ -110,6 +112,10 @@ Parameters: Vec<PartialParameter> = {
     }
 };
 
+Parameter: PartialParameter = {
+    <n:Name> <t:(":" <Type>)?> => Parameter { name: n, ty: t.map(|b| *b).unwrap_or(Unknown) }
+};
+
 MakeVector: Box<PartialExpr> = {
     "[" <v:(<Expr> ",")*> <e:Expr?> "]" => {
         let mut v = v;
@@ -125,8 +131,21 @@ Map: Box<PartialExpr> = {
    "map" "(" <d:Expr> "," <f:Expr> ")" => expr_box(Map(d, f))
 };
 
-Parameter: PartialParameter = {
-    <n:Name> <t:(":" <Type>)?> => Parameter { name: n, ty: t.map(|b| *b).unwrap_or(Unknown) }
+NewBuilder: Box<PartialExpr> = {
+    "appender" <t:("[" <Type> "]")?> => {
+        Box::new(PartialExpr {
+            kind: NewBuilder,
+            ty: Builder(Appender(t.unwrap_or(Box::new(Unknown))))
+        })
+    }
+};
+
+Merge: Box<PartialExpr> = {
+   "merge" "(" <b:Expr> "," <v:Expr> ")" => expr_box(Merge(b, v))
+};
+
+For: Box<PartialExpr> = {
+   "for" "(" <d:Expr> "," <b:Expr> "," <f:Expr> ")" => expr_box(For(d, b, f))
 };
 
 Name: Symbol = <s:r"[A-Za-z_][A_Za-z0-9_]*"> => s.to_string();

@@ -1,6 +1,7 @@
 
 use super::ast::BinOpKind;
 use super::ast::BinOpKind::*;
+use super::ast::BuilderKind::*;
 use super::ast::ScalarKind::*;
 use super::ast::Expr;
 use super::ast::Type;
@@ -33,7 +34,8 @@ impl PrintableType for Type {
                 res.push_str(")=>");
                 res.push_str(&ret.print());
                 res
-            }
+            },
+            Builder(Appender(ref elem)) => format!("appender[{}]", elem.print()),
             _ => "??".to_string()
         }
     }
@@ -43,6 +45,7 @@ impl PrintableType for Type {
 impl PrintableType for PartialType {
     fn print(&self) -> String {
         use partial_types::PartialType::*;
+        use partial_types::PartialBuilderKind::*;
         match *self {
             Unknown => "?".to_string(),
             Scalar(Bool) => "bool".to_string(),
@@ -58,7 +61,8 @@ impl PrintableType for PartialType {
                 res.push_str(")=>");
                 res.push_str(&ret.print());
                 res
-            }
+            },
+            Builder(Appender(ref elem)) => format!("appender[{}]", elem.print()),
             _ => "??".to_string()
         }
     }
@@ -137,10 +141,22 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>, typed: bool) -> String {
             res
         }
 
-        Map(ref data, ref body) =>
-            format!("map({},{})",
+        Map(ref data, ref body) => {
+            format!("map({},{})", print_expr_impl(data, typed), print_expr_impl(body, typed))
+        }
+
+        NewBuilder => expr.ty.print(),
+
+        Merge(ref builder, ref value) => {
+            format!("merge({},{})", print_expr_impl(builder, typed), print_expr_impl(value, typed))
+        }
+
+        For(ref data, ref builder, ref func) => {
+            format!("for({},{},{})",
                 print_expr_impl(data, typed),
-                print_expr_impl(body, typed)),
+                print_expr_impl(builder, typed),
+                print_expr_impl(func, typed))
+        }
 
         _ => "<?>".to_string() 
     }
