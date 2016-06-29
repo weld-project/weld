@@ -7,7 +7,6 @@ use super::ast::Type;
 use super::ast::Type::*;
 use super::ast::Parameter;
 use super::ast::ExprKind::*;
-use super::partial_types;
 use super::partial_types::*;
 
 // TODO: These methods could take a mutable string as an argument, or even a fmt::Format.
@@ -44,7 +43,6 @@ impl PrintableType for Type {
 impl PrintableType for PartialType {
     fn print(&self) -> String {
         use partial_types::PartialType::*;
-        use partial_types::PartialBuilderKind::*;
         match *self {
             Unknown => "?".to_string(),
             Scalar(Bool) => "bool".to_string(),

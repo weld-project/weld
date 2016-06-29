@@ -4,7 +4,6 @@ use super::ast::ScalarKind::*;
 use super::ast::Symbol;
 use super::ast::ExprKind::*;
 use super::error::*;
-use super::partial_types;
 use super::partial_types::PartialExpr;
 use super::partial_types::PartialType;
 use super::partial_types::PartialType::*;
@@ -23,7 +22,7 @@ pub fn infer_types(expr: &mut PartialExpr) -> WeldResult<()> {
     // be done by the first call to infer_up.
     loop {
         let mut env = TypeMap::new();
-        let res = try!(infer_up(expr, &mut env, None));
+        let res = try!(infer_up(expr, &mut env));
         if res == false {
             if !has_all_types(expr) {
                 return weld_err!("Could not infer some types")
@@ -35,7 +34,7 @@ pub fn infer_types(expr: &mut PartialExpr) -> WeldResult<()> {
 
 /// Do expr or all of its descendants have types set?
 fn has_all_types(expr: &PartialExpr) -> bool {
-    if !partial_types::is_complete(&expr.ty) {
+    if !expr.ty.is_complete() {
         return false;
     }
     expr.children().all(|c| has_all_types(c))
@@ -43,7 +42,7 @@ fn has_all_types(expr: &PartialExpr) -> bool {
 
 /// Infer the types of expressions upward from the leaves of a tree, using infer_locally.
 /// Return true if any new expression's type was inferred, or an error if types are inconsistent.
-fn infer_up(expr: &mut PartialExpr, env: &mut TypeMap, ft: Option<PartialType>) -> WeldResult<bool> {
+fn infer_up(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> {
     // Remember whether we inferred any new type
     let mut changed = false;
 
@@ -65,32 +64,9 @@ fn infer_up(expr: &mut PartialExpr, env: &mut TypeMap, ft: Option<PartialType>) 
     }
 
     // Infer types of children first (with new environment)
-    match expr.kind {
-        Map(ref mut data, ref mut func) => {
-            changed |= try!(infer_up(data, env, None));
-            let data_type = match data.ty {
-                Vector(ref elem_type) => *elem_type.clone(),
-                Unknown => Unknown,
-                _ => return weld_err!("Mismatched types for Map")
-            };
-            let result_type = match expr.ty {
-                Vector(ref elem_type) => *elem_type.clone(),
-                Unknown => Unknown,
-                _ => return weld_err!("Mismatched types for Map")
-            };
-            let expected_ft = Function(vec![data_type], Box::new(result_type));
-            changed |= try!(infer_up(func, env, Some(expected_ft)));
-        }
-
-        _ => {
-            for c in expr.children_mut() {
-                changed |= try!(infer_up(c, env, None));
-            }
-        }
+    for c in expr.children_mut() {
+        changed |= try!(infer_up(c, env));
     }
-
-    // Infer our type
-    changed |= try!(infer_locally(expr, env, ft));
 
     // Undo the environment changes from Let
     for (symbol, opt) in old_bindings {
@@ -100,12 +76,15 @@ fn infer_up(expr: &mut PartialExpr, env: &mut TypeMap, ft: Option<PartialType>) 
         };
     }
 
+    // Infer our type
+    changed |= try!(infer_locally(expr, env));
+
     Ok(changed)
 }
 
 /// Infer the type of expr or its children locally based on what is known about some of them.
 /// Return true if any new expression's type was inferred, or an error if types are inconsistent.  
-fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap, ft: Option<PartialType>) -> WeldResult<bool> {
+fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> {
     match expr.kind {
         I32Literal(_) =>
             push_complete_type(&mut expr.ty, Scalar(I32), "Wrong type ascribed to I32Literal"),
@@ -160,10 +139,6 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap, ft: Option<PartialTy
             let base_type = Function(vec![Unknown; params.len()], Box::new(Unknown));
             changed |= try!(push_type(&mut expr.ty, &base_type, "Mismatched types for Lambda"));
 
-            if let Some(ft) = ft {
-                changed |= try!(push_type(&mut expr.ty, &ft, "Mismatched types for Lambda"));
-            }
-
             if let Function(ref mut param_types, ref mut res_type) = expr.ty {
                 changed |= try!(push_type(res_type, &body.ty,
                     "Mismatched return types for Lambda"));
@@ -182,12 +157,31 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap, ft: Option<PartialTy
             Ok(changed)
         }
 
-        Map(_, ref func) => {
-            let expected_type = match func.ty {
+        Map(ref mut data, ref mut func) => {
+            let mut changed = false;
+
+            // Push data's type into func
+            let data_type = match data.ty {
+                Vector(ref elem_type) => *elem_type.clone(),
+                Unknown => Unknown,
+                _ => return weld_err!("Mismatched types for Map")
+            };
+            let result_type = match expr.ty {
+                Vector(ref elem_type) => *elem_type.clone(),
+                Unknown => Unknown,
+                _ => return weld_err!("Mismatched types for Map")
+            };
+            let func_type = Function(vec![data_type], Box::new(result_type));
+            changed |= try!(push_type(&mut func.ty, &func_type, "Mismatched types for Map"));
+
+            // Pull up our type from function
+            let our_type = match func.ty {
                 Function(_, ref res) => Vector(res.clone()),
                 _ => Vector(Box::new(Unknown))
             };
-            push_type(&mut expr.ty, &expected_type, "Mismatched types for Map")
+            changed |= try!(push_type(&mut expr.ty, &our_type, "Mismatched types for Map"));
+
+            Ok(changed)
         }
 
         _ => Ok(false)
@@ -197,13 +191,19 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap, ft: Option<PartialTy
 /// Force the given type to be assigned to a PartialType, or report an error if it has the wrong
 /// type. Return a Result indicating whether the option has changed (i.e. a new type as added).
 fn push_complete_type(dest: &mut PartialType, src: PartialType, error: &str) -> WeldResult<bool> {
-    match *dest {
-        Unknown => {  // TODO: this should just be "is dest less specified"
-            *dest = src;
-            Ok(true) 
+    match src {
+        Scalar(_) => {
+            if *dest == Unknown {
+                *dest = src;
+                Ok(true)
+            } else if *dest == src {
+                Ok(false)
+            } else {
+                weld_err!("{}", error)
+            }
         }
-        ref t if *t == src => Ok(false),
-        _ => weld_err!("{}", error)
+
+        _ => weld_err!("Internal error: no push_complete_type for {:?}", src)
     }
 }
 
