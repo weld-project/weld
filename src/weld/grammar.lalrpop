@@ -95,9 +95,9 @@ Term: Box<PartialExpr> = {
     I32Literal,
     Ident,
     MakeVector,
-    Map,
     NewBuilder,
     Merge,
+    Result,
     For,
     "(" <Expr> ")"
 };
@@ -128,10 +128,6 @@ MakeVector: Box<PartialExpr> = {
     }
 };
 
-Map: Box<PartialExpr> = {
-   "map" "(" <d:Expr> "," <f:Expr> ")" => expr_box(Map(d, f))
-};
-
 NewBuilder: Box<PartialExpr> = {
     "appender" <t:("[" <Type> "]")?> => {
         Box::new(PartialExpr {
@@ -143,6 +139,10 @@ NewBuilder: Box<PartialExpr> = {
 
 Merge: Box<PartialExpr> = {
    "merge" "(" <b:Expr> "," <v:Expr> ")" => expr_box(Merge(b, v))
+};
+
+Result: Box<PartialExpr> = {
+   "result" "(" <b:Expr> ")" => expr_box(Res(b))
 };
 
 For: Box<PartialExpr> = {

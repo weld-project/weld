@@ -50,14 +50,14 @@ pub enum ExprKind<T:Clone> {
     If(Box<Expr<T>>, Box<Expr<T>>, Box<Expr<T>>),
     /// variables, body
     Lambda(Vec<Parameter<T>>, Box<Expr<T>>),
-    /// data, function
-    Map(Box<Expr<T>>, Box<Expr<T>>),
-    /// builder, elem
-    Merge(Box<Expr<T>>, Box<Expr<T>>),
-    /// data, builder, func (very basic version for now)
-    For(Box<Expr<T>>, Box<Expr<T>>, Box<Expr<T>>),
     /// function, params
     Apply(Box<Expr<T>>, Vec<Expr<T>>),
+    /// data, builder, func (very basic version for now)
+    For(Box<Expr<T>>, Box<Expr<T>>, Box<Expr<T>>),
+    /// builder, elem
+    Merge(Box<Expr<T>>, Box<Expr<T>>),
+    /// builder
+    Res(Box<Expr<T>>)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -88,9 +88,9 @@ impl<T:Clone> Expr<T> {
             BinOp(_, ref left, ref right) => vec![left.as_ref(), right.as_ref()],
             Let(_, ref value, ref body) => vec![value.as_ref(), body.as_ref()],
             Lambda(_, ref body) => vec![body.as_ref()],
-            Map(ref data, ref body) => vec![data.as_ref(), body.as_ref()],
             MakeVector(ref exprs) => exprs.iter().collect(),
             Merge(ref bldr, ref value) => vec![bldr.as_ref(), value.as_ref()],
+            Res(ref bldr) => vec![bldr.as_ref()],
             For(ref data, ref bldr, ref func) =>
                 vec![data.as_ref(), bldr.as_ref(), func.as_ref()],
             If(ref cond, ref on_true, ref on_false) =>
@@ -112,9 +112,9 @@ impl<T:Clone> Expr<T> {
             BinOp(_, ref mut left, ref mut right) => vec![left.as_mut(), right.as_mut()],
             Let(_, ref mut value, ref mut body) => vec![value.as_mut(), body.as_mut()],
             Lambda(_, ref mut body) => vec![body.as_mut()],
-            Map(ref mut data, ref mut body) => vec![data.as_mut(), body.as_mut()],
             MakeVector(ref mut exprs) => exprs.iter_mut().collect(),
             Merge(ref mut bldr, ref mut value) => vec![bldr.as_mut(), value.as_mut()],
+            Res(ref mut bldr) => vec![bldr.as_mut()],
             For(ref mut data, ref mut bldr, ref mut func) =>
                 vec![data.as_mut(), bldr.as_mut(), func.as_mut()],
             If(ref mut cond, ref mut on_true, ref mut on_false) =>

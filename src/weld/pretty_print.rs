@@ -141,11 +141,9 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>, typed: bool) -> String {
             res
         }
 
-        Map(ref data, ref body) => {
-            format!("map({},{})", print_expr_impl(data, typed), print_expr_impl(body, typed))
-        }
-
         NewBuilder => expr.ty.print(),
+
+        Res(ref builder) => format!("result({})", print_expr_impl(builder, typed)),
 
         Merge(ref builder, ref value) => {
             format!("merge({},{})", print_expr_impl(builder, typed), print_expr_impl(value, typed))

@@ -33,8 +33,8 @@ fn parse_and_print_expressions() {
     let e = parse_expr("|a, b| a + b").unwrap();
     assert_eq!(print_expr(e.as_ref()).as_str(), "|a,b|(a+b)");
 
-    let e = parse_expr("map(d, |e| e+1)").unwrap();
-    assert_eq!(print_expr(e.as_ref()).as_str(), "map(d,|e|(e+1))");
+    let e = parse_expr("for(d, appender, |e| e+1)").unwrap();
+    assert_eq!(print_expr(e.as_ref()).as_str(), "for(d,appender[?],|e|(e+1))");
 }
 
 #[test]
@@ -67,8 +67,8 @@ fn parse_and_print_typed_expressions() {
     let mut e = parse_expr("[1, true]").unwrap();
     assert!(infer_types(&mut e).is_err());
 
-    let mut e = parse_expr("let d=map([1],|x|x+1);1").unwrap();
+    let mut e = parse_expr("for([1],appender,|b,x|merge(b,x))").unwrap();
     infer_types(&mut e).unwrap();
     assert_eq!(print_typed_expr(e.as_ref()).as_str(),
-        "let d:vec[i32]=(map([1],|x:i32|(x:i32+1)));1");
+        "for([1],appender[i32],|b:appender[i32],x:i32|merge(b:appender[i32],x:i32))");
 }

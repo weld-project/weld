@@ -107,7 +107,7 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
 
         Ident(ref symbol) => {
             match env.get(symbol) {
-                None => weld_err!("Undefined identifier"),
+                None => weld_err!("Undefined identifier: {}", symbol),
                 Some(t) => push_type(&mut expr.ty, t, "Mismatched types for Ident")
             }
         }
@@ -158,35 +158,6 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             Ok(changed)
         }
 
-        Map(ref mut data, ref mut func) => {
-            let mut changed = false;
-
-            // Push data's type into func
-            let elem_type = match data.ty {
-                Vector(ref elem) => *elem.clone(),
-                Unknown => Unknown,
-                _ => return weld_err!("Mismatched types for Map")
-            };
-            let result_type = match expr.ty {
-                Vector(ref elem) => *elem.clone(),
-                Unknown => Unknown,
-                _ => return weld_err!("Mismatched types for Map")
-            };
-            let func_type = Function(vec![elem_type], Box::new(result_type));
-            changed |= try!(push_type(&mut func.ty, &func_type, "Mismatched types for Map"));
-
-            // Pull up our type from function
-            match func.ty {
-                Function(ref params, ref result) if params.len() == 1 => {
-                    let ty = Vector(result.clone());
-                    changed |= try!(push_type(&mut expr.ty, &ty, "Mismatched types for Map"));
-                }
-                _ => return weld_err!("Invalid function parameter to Map")
-            };
-
-            Ok(changed)
-        }
-
         Merge(ref mut builder, ref mut value) => {
             let mut changed = false;
             match builder.ty {
@@ -195,10 +166,24 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
                     changed |= try!(push_type(mty, &value.ty, "Mismatched types for Merge"));
                     changed |= try!(push_type(&mut value.ty, mty, "Mismatched types for Merge"));
                 }
-                _ => ()
+                Unknown => (),
+                _ => return weld_err!("Internal error: Merge called on non-builder")
             }
             changed |= try!(push_type(&mut expr.ty, &builder.ty, "Mismatched types for Merge"));
             changed |= try!(push_type(&mut builder.ty, &expr.ty, "Mismatched types for Merge"));
+            Ok(changed)
+        }
+
+        Res(ref mut builder) => {
+            let mut changed = false;
+            match builder.ty {
+                Builder(ref mut b) => {
+                    let rty = b.result_type();
+                    changed |= try!(push_type(&mut expr.ty, &rty, "Mismatched types for Res"));
+                }
+                Unknown => (),
+                _ => return weld_err!("Internal error: Result called on non-builder")
+            }
             Ok(changed)
         }
 
@@ -212,14 +197,14 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
                 _ => return weld_err!("Mismatched types for Map")
             };
             let bldr_type = builder.ty.clone();
-            let func_type = Function(vec![elem_type, bldr_type.clone()], Box::new(bldr_type));
+            let func_type = Function(vec![bldr_type.clone(), elem_type], Box::new(bldr_type));
             changed |= try!(push_type(&mut func.ty, &func_type, "Mismatched types for For"));
 
             // Push func's argument type and return type into builder
             match func.ty {
                 Function(ref params, ref result) if params.len() == 2 => {
                     changed |= try!(push_type(
-                        &mut builder.ty, params.get(1).unwrap(), "Mismatched types for For"));
+                        &mut builder.ty, params.get(0).unwrap(), "Mismatched types for For"));
                     changed |= try!(push_type(
                         &mut builder.ty, result.as_ref(), "Mismatched types for For"));
                 }

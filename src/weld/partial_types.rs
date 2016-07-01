@@ -91,4 +91,13 @@ impl PartialBuilderKind {
             Merger(ref mut elem, _) => elem.as_mut(),
         }
     }
+
+    pub fn result_type(&self) -> PartialType {
+        use self::PartialType::*;
+        use self::PartialBuilderKind::*;
+        match *self {
+            Appender(ref elem) => Vector((*elem).clone()),
+            Merger(ref elem, _) => *elem.clone(),
+        }
+    }
 }
