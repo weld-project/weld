@@ -35,8 +35,8 @@ impl PrintableType for Type {
                 res.push_str(&ret.print());
                 res
             },
-            Builder(Appender(ref elem)) => format!("appender[{}]", elem.print()),
-            _ => "??".to_string()
+            Builder(Appender(ref t)) => format!("appender[{}]", t.print()),
+            Builder(Merger(ref t, op)) => format!("merger[{},{}]", t.print(), print_binop(op)),
         }
     }
 }
@@ -158,7 +158,24 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>, typed: bool) -> String {
                 print_expr_impl(func, typed))
         }
 
-        _ => "<?>".to_string() 
+        If(ref cond, ref on_true, ref on_false) => {
+            format!("if({},{},{})",
+                print_expr_impl(cond, typed),
+                print_expr_impl(on_true, typed),
+                print_expr_impl(on_false, typed))
+        }
+
+        Apply(ref func, ref params) => {
+            let mut res = String::new();
+            res.push_str(&format!("({})", print_expr_impl(func, typed)));
+            res.push_str("(");
+            for (i, p) in params.iter().enumerate() {
+                if i > 0 { res.push_str(","); }
+                res.push_str(&print_expr_impl(p, typed));
+            }
+            res.push_str(")");
+            res
+        }
     }
 }
 

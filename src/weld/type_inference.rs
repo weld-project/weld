@@ -119,7 +119,7 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             Ok(changed)
         }
 
-        MakeVector(ref mut exprs) if exprs.len() > 0 => {
+        MakeVector(ref mut exprs) => {
             let mut changed = false;
             let mut elem_type = Unknown;
             for ref e in exprs.iter() {
@@ -232,7 +232,50 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             Ok(changed)
         }
 
-        _ => Ok(false)
+        NewBuilder => {
+            match expr.ty {
+                Unknown | Builder(_) => Ok(false),
+                _ => weld_err!("Wrong type ascribed to NewBuilder")
+            }
+        }
+
+        If(ref mut cond, ref mut on_true, ref mut on_false) => {
+            let mut changed = false;
+            changed |= try!(push_complete_type(
+                &mut cond.ty, Scalar(Bool), "Mismatchd types for If"));
+            changed |= try!(push_type(&mut expr.ty, &on_true.ty, "Mismatchd types for If"));
+            changed |= try!(push_type(&mut expr.ty, &on_false.ty, "Mismatchd types for If"));
+            changed |= try!(push_type(&mut on_true.ty, &expr.ty, "Mismatchd types for If"));
+            changed |= try!(push_type(&mut on_false.ty, &expr.ty, "Mismatchd types for If"));
+            Ok(changed)
+        }
+
+        Apply(ref mut func, ref mut params) => {
+            let mut changed = false;
+
+            let func_type = Function(vec![Unknown; params.len()], Box::new(Unknown));
+            changed |= try!(push_type(&mut func.ty, &func_type, "Mismatched types for Apply"));
+
+            let fty = &mut func.ty;
+            match *fty {
+                Function(ref mut param_types, ref mut res_type) => {
+                    for (param_ty, param_expr) in param_types.iter_mut().zip(params.iter_mut()) {
+                        changed |= try!(push_type(param_ty, &param_expr.ty,
+                            "Mismatched parameter types for Apply"));
+                        changed |= try!(push_type(&mut param_expr.ty, param_ty,
+                            "Mismatched parameter types for Apply"));
+                    }
+                    changed |= try!(push_type(&mut expr.ty, res_type,
+                        "Mismatched result type for Apply"));
+                    changed |= try!(push_type(res_type, &expr.ty,
+                        "Mismatched result type for Apply"));
+                }
+
+                _ => return weld_err!("Internal error: Apply was not called on a function")
+            }
+
+            Ok(changed)
+        }
     }
 }
 

@@ -35,42 +35,9 @@ pub struct Expr<T> {
     pub kind: ExprKind<T>
 }
 
-impl<T> Expr<T> {
-    /// Get an iterator for the children of this expression.
-    pub fn children(&self) -> vec::IntoIter<&Expr<T>> {
-        use self::ExprKind::*;
-        match self.kind {
-            BinOp(_, ref left, ref right) => vec![left.as_ref(), right.as_ref()],
-            Let(_, ref value, ref body) => vec![value.as_ref(), body.as_ref()],
-            Lambda(_, ref body) => vec![body.as_ref()],
-            Map(ref data, ref body) => vec![data.as_ref(), body.as_ref()],
-            MakeVector(ref exprs) => exprs.iter().collect(),
-            Merge(ref bldr, ref value) => vec![bldr.as_ref(), value.as_ref()],
-            For(ref data, ref bldr, ref func) =>
-                vec![data.as_ref(), bldr.as_ref(), func.as_ref()],
-            _ => vec![]
-        }.into_iter()
-    }
-
-    /// Get an iterator of mutable references to the children of this expression.
-    pub fn children_mut(&mut self) -> vec::IntoIter<&mut Expr<T>> {
-        use self::ExprKind::*;
-        match self.kind {
-            BinOp(_, ref mut left, ref mut right) => vec![left.as_mut(), right.as_mut()],
-            Let(_, ref mut value, ref mut body) => vec![value.as_mut(), body.as_mut()],
-            Lambda(_, ref mut body) => vec![body.as_mut()],
-            Map(ref mut data, ref mut body) => vec![data.as_mut(), body.as_mut()],
-            MakeVector(ref mut exprs) => exprs.iter_mut().collect(),
-            Merge(ref mut bldr, ref mut value) => vec![bldr.as_mut(), value.as_mut()],
-            For(ref mut data, ref mut bldr, ref mut func) =>
-                vec![data.as_mut(), bldr.as_mut(), func.as_mut()],
-            _ => vec![]
-        }.into_iter()
-    }
-}
-
 #[derive(Clone, Debug, PartialEq)]
 pub enum ExprKind<T> {
+    // TODO: maybe all of these should take named parameters
     BoolLiteral(bool),
     I32Literal(i32),
     BinOp(BinOpKind, Box<Expr<T>>, Box<Expr<T>>),
@@ -88,7 +55,9 @@ pub enum ExprKind<T> {
     /// builder, elem
     Merge(Box<Expr<T>>, Box<Expr<T>>),
     /// data, builder, func (very basic version for now)
-    For(Box<Expr<T>>, Box<Expr<T>>, Box<Expr<T>>)
+    For(Box<Expr<T>>, Box<Expr<T>>, Box<Expr<T>>),
+    /// function, params
+    Apply(Box<Expr<T>>, Vec<Expr<T>>),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -110,3 +79,53 @@ pub type TypedExpr = Expr<Type>;
 
 /// A typed parameter.
 pub type TypedParameter = Parameter<Type>;
+
+impl<T> Expr<T> {
+    /// Get an iterator for the children of this expression.
+    pub fn children(&self) -> vec::IntoIter<&Expr<T>> {
+        use self::ExprKind::*;
+        match self.kind {
+            BinOp(_, ref left, ref right) => vec![left.as_ref(), right.as_ref()],
+            Let(_, ref value, ref body) => vec![value.as_ref(), body.as_ref()],
+            Lambda(_, ref body) => vec![body.as_ref()],
+            Map(ref data, ref body) => vec![data.as_ref(), body.as_ref()],
+            MakeVector(ref exprs) => exprs.iter().collect(),
+            Merge(ref bldr, ref value) => vec![bldr.as_ref(), value.as_ref()],
+            For(ref data, ref bldr, ref func) =>
+                vec![data.as_ref(), bldr.as_ref(), func.as_ref()],
+            If(ref cond, ref on_true, ref on_false) =>
+                vec![cond.as_ref(), on_true.as_ref(), on_false.as_ref()],
+            Apply(ref func, ref params) => {
+                let mut res = vec![func.as_ref()];
+                res.extend(params.iter());
+                res
+            }
+            // Explicitly list types instead of doing _ => ... to remember to add new types.
+            BoolLiteral(_) | I32Literal(_) | Ident(_) | NewBuilder => vec![]
+        }.into_iter()
+    }
+
+    /// Get an iterator of mutable references to the children of this expression.
+    pub fn children_mut(&mut self) -> vec::IntoIter<&mut Expr<T>> {
+        use self::ExprKind::*;
+        match self.kind {
+            BinOp(_, ref mut left, ref mut right) => vec![left.as_mut(), right.as_mut()],
+            Let(_, ref mut value, ref mut body) => vec![value.as_mut(), body.as_mut()],
+            Lambda(_, ref mut body) => vec![body.as_mut()],
+            Map(ref mut data, ref mut body) => vec![data.as_mut(), body.as_mut()],
+            MakeVector(ref mut exprs) => exprs.iter_mut().collect(),
+            Merge(ref mut bldr, ref mut value) => vec![bldr.as_mut(), value.as_mut()],
+            For(ref mut data, ref mut bldr, ref mut func) =>
+                vec![data.as_mut(), bldr.as_mut(), func.as_mut()],
+            If(ref mut cond, ref mut on_true, ref mut on_false) =>
+                vec![cond.as_mut(), on_true.as_mut(), on_false.as_mut()],
+            Apply(ref mut func, ref mut params) => {
+                let mut res = vec![func.as_mut()];
+                res.extend(params.iter_mut());
+                res
+            }
+            // Explicitly list types instead of doing _ => ... to remember to add new types.
+            BoolLiteral(_) | I32Literal(_) | Ident(_) | NewBuilder => vec![]
+        }.into_iter()
+    }
+}
