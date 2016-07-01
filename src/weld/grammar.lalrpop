@@ -95,6 +95,7 @@ Term: Box<PartialExpr> = {
     I32Literal,
     Ident,
     MakeVector,
+    If,
     NewBuilder,
     Merge,
     Result,
@@ -147,6 +148,10 @@ Result: Box<PartialExpr> = {
 
 For: Box<PartialExpr> = {
    "for" "(" <d:Expr> "," <b:Expr> "," <f:Expr> ")" => expr_box(For(d, b, f))
+};
+
+If: Box<PartialExpr> = {
+   "if" "(" <cond:Expr> "," <t:Expr> "," <f:Expr> ")" => expr_box(If(cond, t, f))
 };
 
 Name: Symbol = <s:r"[A-Za-z_][A_Za-z0-9_]*"> => s.to_string();
