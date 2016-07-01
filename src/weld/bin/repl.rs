@@ -16,6 +16,7 @@ fn main() {
             println!("");
             return  // Reached EOF
         }
+        // TODO: don't have so much nested stuff here
         let trimmed = line.trim();
         if trimmed != "" {
             match parse_program(trimmed) {

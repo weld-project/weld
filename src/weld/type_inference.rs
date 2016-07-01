@@ -113,10 +113,7 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
         }
 
         Let (_, _, ref mut body) => {
-            let mut changed = false;
-            changed |= try!(push_type(&mut expr.ty, &body.ty, "Mismatched types for Let body"));
-            changed |= try!(push_type(&mut body.ty, &expr.ty, "Mismatched types for Let body"));
-            Ok(changed)
+            sync_types(&mut expr.ty, &mut body.ty, "Mismatched types for Let body")
         }
 
         MakeVector(ref mut exprs) => {
@@ -141,15 +138,11 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             changed |= try!(push_type(&mut expr.ty, &base_type, "Mismatched types for Lambda"));
 
             if let Function(ref mut param_types, ref mut res_type) = expr.ty {
-                changed |= try!(push_type(res_type, &body.ty,
-                    "Mismatched return types for Lambda"));
-                changed |= try!(push_type(&mut body.ty, res_type,
-                    "Mismatched return types for Lambda"));
-                for (param_ty, param_expr) in param_types.iter_mut().zip(params.iter_mut()) {               
-                    changed |= try!(push_type(param_ty, &param_expr.ty,
-                        "Mismatched parameter types for Lambda"));
-                    changed |= try!(push_type(&mut param_expr.ty, param_ty,
-                        "Mismatched parameter types for Lambda"));
+                changed |= try!(sync_types(
+                    &mut body.ty, res_type, "Mismatched return types for Lambda"));
+                for (param_ty, param_expr) in param_types.iter_mut().zip(params.iter_mut()) {
+                    changed |= try!(sync_types(
+                        param_ty, &mut param_expr.ty, "Mismatched parameter types for Lambda"));
                 }
             } else {
                 return weld_err!("Internal error: type of Lambda was not Function");
@@ -163,14 +156,13 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             match builder.ty {
                 Builder(ref mut b) => {
                     let mty = b.merge_type_mut();
-                    changed |= try!(push_type(mty, &value.ty, "Mismatched types for Merge"));
-                    changed |= try!(push_type(&mut value.ty, mty, "Mismatched types for Merge"));
+                    changed |= try!(sync_types(mty, &mut value.ty, "Mismatched types for Merge"));
                 }
                 Unknown => (),
                 _ => return weld_err!("Internal error: Merge called on non-builder")
             }
-            changed |= try!(push_type(&mut expr.ty, &builder.ty, "Mismatched types for Merge"));
-            changed |= try!(push_type(&mut builder.ty, &expr.ty, "Mismatched types for Merge"));
+            changed |= try!(sync_types(
+                &mut expr.ty, &mut builder.ty, "Mismatched types for Merge"));
             Ok(changed)
         }
 
@@ -228,10 +220,8 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             let mut changed = false;
             changed |= try!(push_complete_type(
                 &mut cond.ty, Scalar(Bool), "Mismatchd types for If"));
-            changed |= try!(push_type(&mut expr.ty, &on_true.ty, "Mismatchd types for If"));
-            changed |= try!(push_type(&mut expr.ty, &on_false.ty, "Mismatchd types for If"));
-            changed |= try!(push_type(&mut on_true.ty, &expr.ty, "Mismatchd types for If"));
-            changed |= try!(push_type(&mut on_false.ty, &expr.ty, "Mismatchd types for If"));
+            changed |= try!(sync_types(&mut expr.ty, &mut on_true.ty, "Mismatchd types for If"));
+            changed |= try!(sync_types(&mut expr.ty, &mut on_false.ty, "Mismatchd types for If"));
             Ok(changed)
         }
 
@@ -244,16 +234,12 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             let fty = &mut func.ty;
             match *fty {
                 Function(ref mut param_types, ref mut res_type) => {
+                    changed |= try!(sync_types(&mut expr.ty, res_type,
+                        "Mismatched result type for Apply"));
                     for (param_ty, param_expr) in param_types.iter_mut().zip(params.iter_mut()) {
-                        changed |= try!(push_type(param_ty, &param_expr.ty,
-                            "Mismatched parameter types for Apply"));
-                        changed |= try!(push_type(&mut param_expr.ty, param_ty,
+                        changed |= try!(sync_types(param_ty, &mut param_expr.ty,
                             "Mismatched parameter types for Apply"));
                     }
-                    changed |= try!(push_type(&mut expr.ty, res_type,
-                        "Mismatched result type for Apply"));
-                    changed |= try!(push_type(res_type, &expr.ty,
-                        "Mismatched result type for Apply"));
                 }
 
                 _ => return weld_err!("Internal error: Apply was not called on a function")
@@ -328,6 +314,12 @@ fn push_type(dest: &mut PartialType, src: &PartialType, error: &str) -> WeldResu
 
         _ => weld_err!("push_type not implemented for {:?}", dest)
     }
+}
+
+/// Force two types to be equal, calling `push_type` in each direction. Return true if any type
+/// has changed in this process or an error if the types cannot be made to match.
+fn sync_types(t1: &mut PartialType, t2: &mut PartialType, error: &str) -> WeldResult<bool> {
+    Ok(try!(push_type(t1, t2, error)) | try!(push_type(t2, t1, error)))
 }
 
 #[test]
