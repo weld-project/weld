@@ -30,13 +30,13 @@ pub enum BuilderKind {
 /// expressions have different "kinds" of types attached to them at different points in the
 /// compilation process -- namely PartialType when parsed and then Type after type inference.
 #[derive(Clone, Debug, PartialEq)]
-pub struct Expr<T> {
+pub struct Expr<T:Clone> {
     pub ty: T,
     pub kind: ExprKind<T>
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum ExprKind<T> {
+pub enum ExprKind<T:Clone> {
     // TODO: maybe all of these should take named parameters
     BoolLiteral(bool),
     I32Literal(i32),
@@ -69,7 +69,7 @@ pub enum BinOpKind {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Parameter<T> {
+pub struct Parameter<T:Clone> {
     pub name: Symbol,
     pub ty: T
 }
@@ -80,7 +80,7 @@ pub type TypedExpr = Expr<Type>;
 /// A typed parameter.
 pub type TypedParameter = Parameter<Type>;
 
-impl<T> Expr<T> {
+impl<T:Clone> Expr<T> {
     /// Get an iterator for the children of this expression.
     pub fn children(&self) -> vec::IntoIter<&Expr<T>> {
         use self::ExprKind::*;
@@ -127,5 +127,43 @@ impl<T> Expr<T> {
             // Explicitly list types instead of doing _ => ... to remember to add new types.
             BoolLiteral(_) | I32Literal(_) | Ident(_) | NewBuilder => vec![]
         }.into_iter()
+    }
+
+    /// Substitute Ident nodes with the given symbol for another expression, stopping when an
+    /// expression in the tree redefines the symbol (e.g. Let or Lambda parameters).
+    pub fn substitute(&mut self, symbol: &Symbol, replacement: &Expr<T>) {
+        // Replace ourselves if we are exactly the symbol.
+        use self::ExprKind::*;
+        let mut self_matches = false;
+        match self.kind {
+            Ident(ref sym) if *sym == *symbol => self_matches = true,
+            _ => ()
+        }
+        if self_matches {
+            *self = (*replacement).clone();
+            return;
+        }
+
+        // Otherwise, replace any relevant children, unless we redefine the symbol.
+        match self.kind {
+            Let(ref name, ref mut value, ref mut body) => {
+                value.substitute(symbol, replacement);
+                if name != symbol {
+                    body.substitute(symbol, replacement);
+                }
+            }
+
+            Lambda(ref params, ref mut body) => {
+                if params.iter().all(|p| *p.name != *symbol) {
+                    body.substitute(symbol, replacement);
+                }
+            }
+
+            _ => {
+                for c in self.children_mut() {
+                    c.substitute(symbol, replacement);
+                }
+            }
+        }
     }
 }

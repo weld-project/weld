@@ -28,7 +28,7 @@ pub expr = <Expr>;
 pub program = <Program>;
 
 Program: Program = {
-    <macros:(<Macro>)*> <entry:Lambda> => Program { macros: macros, entry_point: *entry }
+    <macros:(<Macro> ";")*> <body:Expr> => Program { macros: macros, body: *body }
 };
 
 Type: Box<PartialType> = {

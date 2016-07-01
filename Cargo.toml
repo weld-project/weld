@@ -15,5 +15,5 @@ lalrpop-util = "0.11.0"
 path = "src/weld/lib.rs"
 
 [[bin]]
-name = "parser"
-path = "src/weld/bin/parser.rs"
+name = "repl"
+path = "src/weld/bin/repl.rs"

@@ -6,14 +6,15 @@ use std::vec::Vec;
 use super::ast::Symbol;
 use super::partial_types::*;
 
+#[derive(Debug)]
 pub struct Program {
     pub macros: Vec<Macro>,
-
-    /// Program entry point function -- this will actually be a Lambda expression.
-    pub entry_point: PartialExpr
+    /// Program body -- this will likely be a Lambda, but not always.
+    pub body: PartialExpr
 }
 
 /// A macro we will substitute at compile time.
+#[derive(Debug)]
 pub struct Macro {
     pub name: Symbol,
     pub parameters: Vec<Symbol>,
