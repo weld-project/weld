@@ -25,12 +25,14 @@ lazy_static! {
     };
 }
 
+/// Apply macros to a program, including the standard macros built into Weld.
 pub fn process_program(program: &Program) -> WeldResult<PartialExpr> {
     let mut all_macros = STANDARD_MACROS.clone();
     all_macros.extend(program.macros.iter().cloned());
     process_expression(&program.body, &all_macros)
 }
 
+/// Apply a specific list of macros to an expression (does not load the standard macros).
 pub fn process_expression(expr: &PartialExpr, macros: &Vec<Macro>) -> WeldResult<PartialExpr> {
     let mut macro_map: HashMap<Symbol, &Macro> = HashMap::new();
     for m in macros {

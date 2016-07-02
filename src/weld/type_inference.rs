@@ -192,7 +192,7 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             match func.ty {
                 Function(ref params, ref result) if params.len() == 2 => {
                     changed |= try!(push_type(
-                        &mut builder.ty, params.get(0).unwrap(), "For"));
+                        &mut builder.ty, &params[0], "For"));
                     changed |= try!(push_type(
                         &mut builder.ty, result.as_ref(), "For"));
                 }

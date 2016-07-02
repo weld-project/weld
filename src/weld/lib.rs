@@ -16,10 +16,10 @@ pub mod eval;
 pub mod error;
 pub mod grammar;
 pub mod macro_processor;
-pub mod partial_transforms;
 pub mod partial_types;
 pub mod pretty_print;
 pub mod program;
+pub mod transforms;
 pub mod type_inference;
 
 #[cfg(test)]

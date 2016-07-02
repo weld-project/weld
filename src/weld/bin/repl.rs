@@ -2,9 +2,9 @@ extern crate weld;
 
 use std::io::{stdin, stdout, Write};
 use weld::grammar::*;
-use weld::partial_transforms;
 use weld::pretty_print::*;
 use weld::type_inference::*;
+use weld::transforms;
 use weld::macro_processor;
 
 fn main() {
@@ -39,7 +39,7 @@ fn main() {
         let mut expr = expr.unwrap();
         println!("After macro substitution:\n{}\n", print_expr(&expr));
 
-        if let Err(ref e) = partial_transforms::inline_apply(&mut expr) {
+        if let Err(ref e) = transforms::inline_apply(&mut expr) {
             println!("Error during inlining applies: {}\n", e);
         }
         println!("After inlining applies:\n{}\n", print_expr(&expr));
@@ -51,5 +51,7 @@ fn main() {
         }
         println!("After type inference:\n{}\n", print_typed_expr(&expr));
         println!("Expression type: {}\n", print_type(&expr.ty));
+
+        expr.to_typed().expect("Type inference passed but to_typed failed!");
     }
 }

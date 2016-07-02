@@ -101,3 +101,62 @@ impl PartialBuilderKind {
         }
     }
 }
+
+impl PartialParameter {
+    pub fn to_typed(&self) -> WeldResult<TypedParameter> {
+        let t = try!(self.ty.to_type());
+        Ok(TypedParameter { name: self.name.clone(), ty: t })
+    }
+}
+
+impl PartialExpr {
+    pub fn to_typed(&self) -> WeldResult<TypedExpr> {
+        use ast::ExprKind::*;
+
+        fn typed_box(expr: &Box<PartialExpr>) -> WeldResult<Box<TypedExpr>> {
+            let e = try!(expr.to_typed());
+            Ok(Box::new(e))
+        }
+
+        let new_kind: ExprKind<Type> = match self.kind {
+            BoolLiteral(b) => BoolLiteral(b),
+            I32Literal(i) => I32Literal(i),
+            Ident(ref name) => Ident(name.clone()),
+            NewBuilder => NewBuilder,
+
+            BinOp(op, ref left, ref right) =>
+                BinOp(op, try!(typed_box(left)), try!(typed_box(right))),
+            
+            Let(ref name, ref value, ref body) => 
+                Let(name.clone(), try!(typed_box(value)), try!(typed_box(body))),
+
+            Lambda(ref params, ref body) => {
+                let params: WeldResult<Vec<_>> = params.iter().map(|p| p.to_typed()).collect();
+                Lambda(try!(params), try!(typed_box(body)))
+            }
+
+            MakeVector(ref exprs) => {
+                let exprs: WeldResult<Vec<_>> = exprs.iter().map(|e| e.to_typed()).collect();
+                MakeVector(try!(exprs))
+            }
+
+            Merge(ref bldr, ref value) =>
+                Merge(try!(typed_box(bldr)), try!(typed_box(value))),
+
+            Res(ref bldr) => Res(try!(typed_box(bldr))),
+
+            For(ref data, ref bldr, ref func) =>
+                For(try!(typed_box(data)), try!(typed_box(bldr)), try!(typed_box(func))),
+
+            If(ref cond, ref on_true, ref on_false) =>
+                If(try!(typed_box(cond)), try!(typed_box(on_true)), try!(typed_box(on_false))),
+
+            Apply(ref func, ref params) => {
+                let params: WeldResult<Vec<_>> = params.iter().map(|p| p.to_typed()).collect();
+                Apply(try!(typed_box(func)), try!(params))
+            }
+        };
+
+        Ok(TypedExpr { ty: try!(self.ty.to_type()), kind: new_kind })
+    }
+}
