@@ -1,5 +1,5 @@
 [package]
-name = "easy-ll"
+name = "easy_ll"
 version = "0.1.0"
 authors = ["Matei Zaharia <matei.zaharia@gmail.com>"]
 
