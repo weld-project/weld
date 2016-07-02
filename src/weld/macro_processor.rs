@@ -1,4 +1,10 @@
 //! Applies macros to an expression or program, yielding a final `PartialExpr`.
+//!
+//! Caveats / TODOs:
+//! - These macros are not yet hygienic if they define identifiers, though that could be done
+//!   by generating new Symbols for those.
+//! - Macros that reuse a parameter twice have its expansion appear twice, instead of assigning
+//!   it to a temporary as would happen with function application.
 
 use std::vec::Vec;
 use std::collections::HashMap;
@@ -27,7 +33,7 @@ pub fn process_expression(expr: &PartialExpr, macros: &Vec<Macro>) -> WeldResult
 
     let mut expr = expr.clone();
     for _ in 1..MAX_MACRO_DEPTH {
-        if !try!(apply_recursive(&mut expr, &macro_map)) {
+        if !try!(apply_macros(&mut expr, &macro_map)) {
             return Ok(expr)
         }
     }
@@ -35,14 +41,11 @@ pub fn process_expression(expr: &PartialExpr, macros: &Vec<Macro>) -> WeldResult
     weld_err!("Marco expansion recursed past {} levels", MAX_MACRO_DEPTH)
 }
 
-fn apply_recursive(
-        expr: &mut PartialExpr,
-        macro_map: &HashMap<Symbol, &Macro>)
-        -> WeldResult<bool> {
+fn apply_macros(expr: &mut PartialExpr, macros: &HashMap<Symbol, &Macro>) -> WeldResult<bool> {
     let mut new_expr = None;
     if let Apply(ref func, ref params) = expr.kind {
         if let Ident(ref name) = func.kind {
-            if let Some(mac) = macro_map.get(name) {
+            if let Some(mac) = macros.get(name) {
                 let mut new = mac.body.clone();
                 if params.len() != mac.parameters.len() {
                     return weld_err!("Wrong number of parameters for macro {}", mac.name);
@@ -61,7 +64,7 @@ fn apply_recursive(
         changed = true;
     }
     for c in expr.children_mut() {
-        changed |= try!(apply_recursive(c, macro_map));
+        changed |= try!(apply_macros(c, macros));
     }
     Ok(changed)
 }
