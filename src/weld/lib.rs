@@ -1,5 +1,8 @@
 extern crate lalrpop_util;
 
+#[macro_use]
+extern crate lazy_static;
+
 /// Utility macro to create an Err result with a WeldError.
 macro_rules! weld_err {
     ( $($arg:tt)* ) => ({

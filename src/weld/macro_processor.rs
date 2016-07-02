@@ -12,13 +12,23 @@ use std::collections::HashMap;
 use super::ast::*;
 use super::ast::ExprKind::*;
 use super::error::*;
+use super::grammar::parse_macros;
 use super::program::*;
 use super::partial_types::*;
 
 const MAX_MACRO_DEPTH: i32 = 30;
 
+lazy_static! {
+    static ref STANDARD_MACROS: Vec<Macro> = {
+        let code = include_str!("resources/standard_macros.weld");
+        parse_macros(code).unwrap()
+    };
+}
+
 pub fn process_program(program: &Program) -> WeldResult<PartialExpr> {
-    process_expression(&program.body, &program.macros)
+    let mut all_macros = STANDARD_MACROS.clone();
+    all_macros.extend(program.macros.iter().cloned());
+    process_expression(&program.body, &all_macros)
 }
 
 pub fn process_expression(expr: &PartialExpr, macros: &Vec<Macro>) -> WeldResult<PartialExpr> {

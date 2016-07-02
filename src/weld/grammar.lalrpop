@@ -27,6 +27,9 @@ pub expr = <Expr>;
 // Expose the nicer function name parse_program instead of parse_Program.
 pub program = <Program>;
 
+// A nice parse_macros function to just parse a list of macros.
+pub macros = <(<Macro> ";")*>;
+
 Program: Program = {
     <macros:(<Macro> ";")*> <body:Expr> => Program { macros: macros, body: *body }
 };

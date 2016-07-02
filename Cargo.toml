@@ -10,6 +10,7 @@ lalrpop = "0.11.0"
 [dependencies]
 easy-ll = { path = "src/easy-ll", version = "^0.1.0" }
 lalrpop-util = "0.11.0"
+lazy_static = "0.2.1"
 
 [lib]
 path = "src/weld/lib.rs"
