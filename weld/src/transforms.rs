@@ -1,8 +1,8 @@
 //! Common transformations on expressions.
 
-use super::ast::Expr;
-use super::ast::ExprKind::*;
-use super::error::*;
+use weld_ast::ast::Expr;
+use weld_ast::ast::ExprKind::*;
+use weld_error::*;
 
 /// Inlines Apply nodes whose argument is a Lambda expression. These often arise during macro
 /// expansion but it's simpler to inline them before doing type inference.

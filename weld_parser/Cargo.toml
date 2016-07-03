@@ -1,0 +1,13 @@
+[package]
+name = "weld_parser"
+version = "0.1.0"
+authors = ["Matei Zaharia <matei.zaharia@gmail.com>"]
+build = "build.rs"
+
+[build-dependencies]
+lalrpop = "0.11.0"
+
+[dependencies]
+lalrpop-util = "0.11.0"
+weld_error = { path = "../weld_error", version = "^0.1.0" }
+weld_ast = { path = "../weld_ast", version = "^0.1.0" }

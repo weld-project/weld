@@ -1,6 +1,6 @@
-use super::grammar::parse_expr;
+use weld_parser::parse_expr;
+use weld_ast::pretty_print::*;
 use super::type_inference::*;
-use super::pretty_print::*;
 
 #[test]
 fn parse_and_print_expressions() {
@@ -44,7 +44,7 @@ fn parse_and_print_typed_expressions() {
 
     let e = *parse_expr("a:i32").unwrap();
     assert_eq!(print_typed_expr(&e).as_str(), "a:i32");
-    
+
     let mut e = parse_expr("let a = 2; a").unwrap();
     assert_eq!(print_typed_expr(e.as_ref()).as_str(), "let a:?=(2);a:?");
     infer_types(&mut e).unwrap();

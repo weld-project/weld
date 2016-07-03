@@ -1,17 +1,17 @@
 use std::collections::HashMap;
 
-use super::ast::ScalarKind::*;
-use super::ast::Symbol;
-use super::ast::ExprKind::*;
-use super::error::*;
-use super::partial_types::PartialExpr;
-use super::partial_types::PartialType;
-use super::partial_types::PartialType::*;
-use super::partial_types::PartialBuilderKind::*;
+use weld_ast::ast::ScalarKind::*;
+use weld_ast::ast::Symbol;
+use weld_ast::ast::ExprKind::*;
+use weld_ast::partial_types::PartialExpr;
+use weld_ast::partial_types::PartialType;
+use weld_ast::partial_types::PartialType::*;
+use weld_ast::partial_types::PartialBuilderKind::*;
+use weld_error::*;
 
-#[cfg(test)] use super::grammar::*;
-#[cfg(test)] use super::partial_types::expr_box;
-#[cfg(test)] use super::ast::BinOpKind::*;
+#[cfg(test)] use weld_ast::partial_types::expr_box;
+#[cfg(test)] use weld_ast::ast::BinOpKind::*;
+#[cfg(test)] use weld_parser::*;
 
 type TypeMap = HashMap<Symbol, PartialType>;
 

@@ -3,15 +3,15 @@ use std::str::FromStr;
 
 use lalrpop_util::ParseError;
 
-use super::ast::BinOpKind::*;
-use super::ast::ScalarKind::*;
-use super::ast::ExprKind::*;
-use super::ast::Parameter;
-use super::ast::Symbol;
-use super::partial_types::*;
-use super::partial_types::PartialType::*;
-use super::partial_types::PartialBuilderKind::*;
-use super::program::*;
+use weld_ast::ast::BinOpKind::*;
+use weld_ast::ast::ScalarKind::*;
+use weld_ast::ast::ExprKind::*;
+use weld_ast::ast::Parameter;
+use weld_ast::ast::Symbol;
+use weld_ast::partial_types::*;
+use weld_ast::partial_types::PartialType::*;
+use weld_ast::partial_types::PartialBuilderKind::*;
+use weld_ast::program::*;
 
 grammar["LALR(1)"];
 

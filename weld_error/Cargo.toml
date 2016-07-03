@@ -1,0 +1,4 @@
+[package]
+name = "weld_error"
+version = "0.1.0"
+authors = ["Matei Zaharia <matei.zaharia@gmail.com>"]
