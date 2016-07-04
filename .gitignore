@@ -1,3 +1,3 @@
 target
 Cargo.lock
-weld_parser/src/grammar.rs
+weld_parser/grammar.rs

@@ -4,6 +4,9 @@ version = "0.1.0"
 authors = ["Matei Zaharia <matei.zaharia@gmail.com>"]
 build = "build.rs"
 
+[lib]
+path = "lib.rs"
+
 [build-dependencies]
 lalrpop = "0.11.0"
 
