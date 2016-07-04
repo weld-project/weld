@@ -9,8 +9,8 @@ use weld_ast::partial_types::PartialType::*;
 use weld_ast::partial_types::PartialBuilderKind::*;
 use weld_error::*;
 
+#[cfg(test)] use weld_ast::BinOpKind::*;
 #[cfg(test)] use weld_ast::partial_types::expr_box;
-#[cfg(test)] use weld_ast::ast::BinOpKind::*;
 #[cfg(test)] use weld_parser::*;
 
 type TypeMap = HashMap<Symbol, PartialType>;
