@@ -1,7 +1,7 @@
 //! Common transformations on expressions.
 
-use weld_ast::ast::Expr;
-use weld_ast::ast::ExprKind::*;
+use weld_ast::Expr;
+use weld_ast::ExprKind::*;
 use weld_error::*;
 
 /// Inlines Apply nodes whose argument is a Lambda expression. These often arise during macro

@@ -1,14 +1,11 @@
 use std::iter::Iterator;
 
-use super::ast::BinOpKind;
-use super::ast::BinOpKind::*;
-use super::ast::BuilderKind::*;
-use super::ast::ScalarKind::*;
-use super::ast::Expr;
-use super::ast::Type;
-use super::ast::Type::*;
-use super::ast::Parameter;
-use super::ast::ExprKind::*;
+use super::*;
+use super::BinOpKind::*;
+use super::BuilderKind::*;
+use super::ScalarKind::*;
+use super::Type::*;
+use super::ExprKind::*;
 use super::partial_types::*;
 
 // TODO: These methods could take a mutable string as an argument, or even a fmt::Format.

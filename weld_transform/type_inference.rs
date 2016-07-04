@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
-use weld_ast::ast::ScalarKind::*;
-use weld_ast::ast::Symbol;
-use weld_ast::ast::ExprKind::*;
+use weld_ast::ScalarKind::*;
+use weld_ast::Symbol;
+use weld_ast::ExprKind::*;
 use weld_ast::partial_types::PartialExpr;
 use weld_ast::partial_types::PartialType;
 use weld_ast::partial_types::PartialType::*;

@@ -1,6 +1,6 @@
-use weld_parser::parse_expr;
 use weld_ast::pretty_print::*;
-use super::type_inference::*;
+use weld_transform::type_inference::*;
+use weld_parser::parse_expr;
 
 #[test]
 fn parse_and_print_expressions() {

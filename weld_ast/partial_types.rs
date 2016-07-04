@@ -2,7 +2,7 @@
 
 use std::vec::Vec;
 
-use super::ast::*;
+use super::*;
 use weld_error::*;
 
 /// A partial data type, where some parameters may not be known.

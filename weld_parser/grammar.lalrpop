@@ -3,11 +3,11 @@ use std::str::FromStr;
 
 use lalrpop_util::ParseError;
 
-use weld_ast::ast::BinOpKind::*;
-use weld_ast::ast::ScalarKind::*;
-use weld_ast::ast::ExprKind::*;
-use weld_ast::ast::Parameter;
-use weld_ast::ast::Symbol;
+use weld_ast::BinOpKind::*;
+use weld_ast::ScalarKind::*;
+use weld_ast::ExprKind::*;
+use weld_ast::Parameter;
+use weld_ast::Symbol;
 use weld_ast::partial_types::*;
 use weld_ast::partial_types::PartialType::*;
 use weld_ast::partial_types::PartialBuilderKind::*;

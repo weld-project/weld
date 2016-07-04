@@ -9,8 +9,8 @@
 use std::vec::Vec;
 use std::collections::HashMap;
 
-use weld_ast::ast::*;
-use weld_ast::ast::ExprKind::*;
+use weld_ast::*;
+use weld_ast::ExprKind::*;
 use weld_ast::program::*;
 use weld_ast::partial_types::*;
 use weld_error::*;
