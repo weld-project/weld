@@ -146,6 +146,20 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             Ok(changed)
         }
 
+        GetField(ref mut param, index) => {
+            if let Struct(ref mut elem_types) = param.ty {
+                let index = index as usize;
+                if index >= elem_types.len() {
+                    return weld_err!("Invalid index for GetField")
+                }
+                sync_types(&mut elem_types[index], &mut expr.ty, "MakeStruct")
+            } else if param.ty == Unknown {
+                Ok(false)
+            } else {
+                weld_err!("Internal error: GetField called on {:?}", param.ty)
+            }
+        }
+
         Lambda(ref mut params, ref mut body) => {
             let mut changed = false;
 

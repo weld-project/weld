@@ -154,6 +154,8 @@ impl PartialExpr {
                 MakeStruct(try!(exprs))
             }
 
+            GetField(ref expr, index) => GetField(try!(typed_box(expr)), index),
+
             Merge(ref bldr, ref value) =>
                 Merge(try!(typed_box(bldr)), try!(typed_box(value))),
 

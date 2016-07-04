@@ -46,6 +46,7 @@ pub enum ExprKind<T:Clone> {
     NewBuilder,  // TODO: this may need to take a parameter
     MakeStruct(Vec<Expr<T>>),
     MakeVector(Vec<Expr<T>>),
+    GetField(Box<Expr<T>>, u32),
     /// name, value, body
     Let(Symbol, Box<Expr<T>>, Box<Expr<T>>),
     /// condition, on_true, on_false 
@@ -92,6 +93,7 @@ impl<T:Clone> Expr<T> {
             Lambda(_, ref body) => vec![body.as_ref()],
             MakeStruct(ref exprs) => exprs.iter().collect(),
             MakeVector(ref exprs) => exprs.iter().collect(),
+            GetField(ref expr, _) => vec![expr.as_ref()],
             Merge(ref bldr, ref value) => vec![bldr.as_ref(), value.as_ref()],
             Res(ref bldr) => vec![bldr.as_ref()],
             For(ref data, ref bldr, ref func) =>
@@ -117,6 +119,7 @@ impl<T:Clone> Expr<T> {
             Lambda(_, ref mut body) => vec![body.as_mut()],
             MakeStruct(ref mut exprs) => exprs.iter_mut().collect(),
             MakeVector(ref mut exprs) => exprs.iter_mut().collect(),
+            GetField(ref mut expr, _) => vec![expr.as_mut()],
             Merge(ref mut bldr, ref mut value) => vec![bldr.as_mut(), value.as_mut()],
             Res(ref mut bldr) => vec![bldr.as_mut()],
             For(ref mut data, ref mut bldr, ref mut func) =>

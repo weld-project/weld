@@ -22,10 +22,10 @@ extern {
 }
 
 // Expose the nicer function name parse_expr instead of parse_Expr.
-pub expr = <Expr>;
+pub expr = Expr;
 
 // Expose the nicer function name parse_program instead of parse_Program.
-pub program = <Program>;
+pub program = Program;
 
 // A nice parse_macros function to just parse a list of macros.
 pub macros = <(<Macro> ";")*>;
@@ -76,13 +76,23 @@ LetExpr: Box<PartialExpr> = {
 SumExpr: Box<PartialExpr> = {
     <l:SumExpr> "+" <r:AscribeExpr> => expr_box(BinOp(Add, l, r)),
     <l:SumExpr> "-" <r:AscribeExpr> => expr_box(BinOp(Subtract, l, r)),
+    <DotExpr>
+};
+
+DotExpr: Box<PartialExpr> = {
+    <d:DotExpr> "." <i:r"[0-9]+"> =>? {
+       match u32::from_str(i) {
+           Ok(i) => Ok(expr_box(GetField(d, i))),
+           Err(_) => Err(ParseError::User { error: "bad field index" })
+       }
+    },
     ApplyExpr
 };
 
 ApplyExpr: Box<PartialExpr> = {
     <f:Term> "(" <p:CommaSep<Expr>> ")" =>
         expr_box(Apply(f, p.into_iter().map(|b| *b).collect())),
-    <AscribeExpr>
+    AscribeExpr
 };
 
 AscribeExpr: Box<PartialExpr> = {
@@ -91,7 +101,7 @@ AscribeExpr: Box<PartialExpr> = {
         term.ty = *ty;
         term
     },
-    <Term>
+    Term
 };
 
 Term: Box<PartialExpr> = {
