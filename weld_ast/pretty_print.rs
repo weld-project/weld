@@ -1,3 +1,4 @@
+use std::iter::Iterator;
 
 use super::ast::BinOpKind;
 use super::ast::BinOpKind::*;
@@ -24,30 +25,12 @@ impl PrintableType for Type {
             Scalar(Bool) => "bool".to_string(),
             Scalar(I32) => "i32".to_string(),
             Vector(ref elem) => format!("vec[{}]", elem.print()),
-
-            Struct(ref elems) => {
-                let mut res = String::new();
-                res.push_str("{");
-                for (i, t) in elems.iter().enumerate() {
-                    if i > 0 { res.push_str(","); }
-                    res.push_str(&t.print());
-                }
-                res.push_str("}");
-                res
-            },
-
+            Struct(ref elems) => join("{", ",", "}", elems.iter().map(|e| e.print())),
             Function(ref params, ref ret) => {
-                let mut res = String::new();
-                res.push_str("(");
-                for (i, p) in params.iter().enumerate() {
-                    if i > 0 { res.push_str(","); }
-                    res.push_str(&p.print());
-                }
-                res.push_str(")=>");
+                let mut res = join("(", ",", ")=>", params.iter().map(|e| e.print()));
                 res.push_str(&ret.print());
                 res
             },
-
             Builder(Appender(ref t)) => format!("appender[{}]", t.print()),
             Builder(Merger(ref t, op)) => format!("merger[{},{}]", t.print(), print_binop(op)),
         }
@@ -64,30 +47,12 @@ impl PrintableType for PartialType {
             Scalar(Bool) => "bool".to_string(),
             Scalar(I32) => "i32".to_string(),
             Vector(ref elem) => format!("vec[{}]", elem.print()),
-
-            Struct(ref elems) => {
-                let mut res = String::new();
-                res.push_str("{");
-                for (i, t) in elems.iter().enumerate() {
-                    if i > 0 { res.push_str(","); }
-                    res.push_str(&t.print());
-                }
-                res.push_str("}");
-                res
-            },
-
+            Struct(ref elems) => join("{", ",", "}", elems.iter().map(|e| e.print())),
             Function(ref params, ref ret) => {
-                let mut res = String::new();
-                res.push_str("(");
-                for (i, p) in params.iter().enumerate() {
-                    if i > 0 { res.push_str(","); }
-                    res.push_str(&p.print());
-                }
-                res.push_str(")=>");
+                let mut res = join("(", ",", ")=>", params.iter().map(|e| e.print()));
                 res.push_str(&ret.print());
                 res
             },
-
             Builder(Appender(ref elem)) => format!("appender[{}]", elem.print()),
             Builder(Merger(ref t, op)) => format!("merger[{},{}]", t.print(), print_binop(op)),
         }
@@ -144,36 +109,14 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>, typed: bool) -> String {
             }
         }
 
-        MakeStruct(ref exprs) => {
-            let mut res = String::new();
-            res.push_str("{");
-            for (i, e) in exprs.iter().enumerate() {
-                if i > 0 { res.push_str(","); }
-                res.push_str(&print_expr_impl(e, typed));
-            }
-            res.push_str("}");
-            res
-        }
+        MakeStruct(ref exprs) =>
+            join("{", ",", "}", exprs.iter().map(|e| print_expr_impl(e, typed))),
 
-        MakeVector(ref exprs) => {
-            let mut res = String::new();
-            res.push_str("[");
-            for (i, e) in exprs.iter().enumerate() {
-                if i > 0 { res.push_str(","); }
-                res.push_str(&print_expr_impl(e, typed));
-            }
-            res.push_str("]");
-            res
-        }
+        MakeVector(ref exprs) =>
+            join("[", ",", "]", exprs.iter().map(|e| print_expr_impl(e, typed))),
 
         Lambda(ref params, ref body) => {
-            let mut res = String::new();
-            res.push_str("|");
-            for (i, p) in params.iter().enumerate() {
-                if i > 0 { res.push_str(","); }
-                res.push_str(&print_parameter(p, typed));
-            }
-            res.push_str("|");
+            let mut res = join("|", ",", "|", params.iter().map(|e| print_parameter(e, typed)));
             res.push_str(&print_expr_impl(body, typed));
             res
         }
@@ -201,14 +144,8 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>, typed: bool) -> String {
         }
 
         Apply(ref func, ref params) => {
-            let mut res = String::new();
-            res.push_str(&format!("({})", print_expr_impl(func, typed)));
-            res.push_str("(");
-            for (i, p) in params.iter().enumerate() {
-                if i > 0 { res.push_str(","); }
-                res.push_str(&print_expr_impl(p, typed));
-            }
-            res.push_str(")");
+            let mut res = format!("({})", print_expr_impl(func, typed));
+            res.push_str(&join("(", ",", ")", params.iter().map(|e| print_expr_impl(e, typed))));
             res
         }
     }
@@ -230,4 +167,15 @@ fn print_parameter<T: PrintableType>(param: &Parameter<T>, typed: bool) -> Strin
     } else {
         format!("{}", param.name)
     }
+}
+
+fn join<T:Iterator<Item=String>>(start: &str, sep: &str, end: &str, strings: T) -> String {
+    let mut res = String::new();
+    res.push_str(start);
+    for (i, s) in strings.enumerate() {
+        if i > 0 { res.push_str(sep); }
+        res.push_str(&s);
+    }
+    res.push_str(end);
+    res
 }
