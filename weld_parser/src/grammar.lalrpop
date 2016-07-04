@@ -39,6 +39,7 @@ Type: Box<PartialType> = {
     "bool" => Box::new(Scalar(Bool)),
     "i32" => Box::new(Scalar(I32)),
     "vec" "[" <t:Type> "]" => Box::new(Vector(t)),
+    "{" <ts:CommaSep<Type>> "}" => Box::new(Struct(ts.into_iter().map(|b| *b).collect())),
     "appender" "[" <t:Type> "]" => Box::new(Builder(Appender(t))),
 };
 
@@ -98,12 +99,13 @@ Term: Box<PartialExpr> = {
     I32Literal,
     Ident,
     MakeVector,
+    MakeStruct,
     If,
     NewBuilder,
     Merge,
     Result,
     For,
-    "(" <Expr> ")"
+    "(" <Expr> ")",
 };
 
 BoolLiteral: Box<PartialExpr> = {
@@ -129,6 +131,13 @@ MakeVector: Box<PartialExpr> = {
     "[" <v:CommaSep<Expr>> "]" => {
         let v: Vec<PartialExpr> = v.into_iter().map(|b| *b).collect();
         expr_box(MakeVector(v))
+    }
+};
+
+MakeStruct: Box<PartialExpr> = {
+    "{" <v:CommaSep<Expr>> "}" => {
+        let v: Vec<PartialExpr> = v.into_iter().map(|b| *b).collect();
+        expr_box(MakeStruct(v))
     }
 };
 

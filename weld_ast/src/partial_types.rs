@@ -12,6 +12,7 @@ pub enum PartialType {
     Scalar(ScalarKind),
     Vector(Box<PartialType>),
     Builder(PartialBuilderKind),
+    Struct(Vec<PartialType>),
     Function(Vec<PartialType>, Box<PartialType>),
 }
 
@@ -48,6 +49,13 @@ impl PartialType {
                 Ok(Type::Builder(BuilderKind::Appender(Box::new(try!(elem.to_type()))))),
             Builder(Merger(ref elem, op)) =>
                 Ok(Type::Builder(BuilderKind::Merger(Box::new(try!(elem.to_type())), op))),
+            Struct(ref elems) => {
+                let mut new_elems = Vec::with_capacity(elems.len());
+                for e in elems {
+                    new_elems.push(try!(e.to_type()));
+                }
+                Ok(Type::Struct(new_elems))
+            },
             Function(ref params, ref res) => {
                 let mut new_params = Vec::with_capacity(params.len());
                 for p in params {
@@ -55,7 +63,7 @@ impl PartialType {
                 }
                 let new_res = try!(res.to_type());
                 Ok(Type::Function(new_params, Box::new(new_res)))
-            }
+            },
         }
     }
 
@@ -69,6 +77,7 @@ impl PartialType {
             Vector(ref elem) => elem.is_complete(),
             Builder(Appender(ref elem)) => elem.is_complete(),
             Builder(Merger(ref elem, _)) => elem.is_complete(),
+            Struct(ref elems) => elems.iter().all(|e| e.is_complete()),
             Function(ref params, ref res) =>
                 params.iter().all(|p| p.is_complete()) && res.is_complete()
         }
@@ -138,6 +147,11 @@ impl PartialExpr {
             MakeVector(ref exprs) => {
                 let exprs: WeldResult<Vec<_>> = exprs.iter().map(|e| e.to_typed()).collect();
                 MakeVector(try!(exprs))
+            }
+
+            MakeStruct(ref exprs) => {
+                let exprs: WeldResult<Vec<_>> = exprs.iter().map(|e| e.to_typed()).collect();
+                MakeStruct(try!(exprs))
             }
 
             Merge(ref bldr, ref value) =>

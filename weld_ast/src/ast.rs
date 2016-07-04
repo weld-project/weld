@@ -11,6 +11,7 @@ pub enum Type {
     Scalar(ScalarKind),
     Vector(Box<Type>),
     Builder(BuilderKind),
+    Struct(Vec<Type>),
     Function(Vec<Type>, Box<Type>),
 }
 
@@ -43,6 +44,7 @@ pub enum ExprKind<T:Clone> {
     BinOp(BinOpKind, Box<Expr<T>>, Box<Expr<T>>),
     Ident(Symbol),
     NewBuilder,  // TODO: this may need to take a parameter
+    MakeStruct(Vec<Expr<T>>),
     MakeVector(Vec<Expr<T>>),
     /// name, value, body
     Let(Symbol, Box<Expr<T>>, Box<Expr<T>>),
@@ -88,6 +90,7 @@ impl<T:Clone> Expr<T> {
             BinOp(_, ref left, ref right) => vec![left.as_ref(), right.as_ref()],
             Let(_, ref value, ref body) => vec![value.as_ref(), body.as_ref()],
             Lambda(_, ref body) => vec![body.as_ref()],
+            MakeStruct(ref exprs) => exprs.iter().collect(),
             MakeVector(ref exprs) => exprs.iter().collect(),
             Merge(ref bldr, ref value) => vec![bldr.as_ref(), value.as_ref()],
             Res(ref bldr) => vec![bldr.as_ref()],
@@ -112,6 +115,7 @@ impl<T:Clone> Expr<T> {
             BinOp(_, ref mut left, ref mut right) => vec![left.as_mut(), right.as_mut()],
             Let(_, ref mut value, ref mut body) => vec![value.as_mut(), body.as_mut()],
             Lambda(_, ref mut body) => vec![body.as_mut()],
+            MakeStruct(ref mut exprs) => exprs.iter_mut().collect(),
             MakeVector(ref mut exprs) => exprs.iter_mut().collect(),
             Merge(ref mut bldr, ref mut value) => vec![bldr.as_mut(), value.as_mut()],
             Res(ref mut bldr) => vec![bldr.as_mut()],

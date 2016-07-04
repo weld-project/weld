@@ -129,6 +129,23 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             Ok(changed)
         }
 
+        MakeStruct(ref mut elems) => {
+            let mut changed = false;
+
+            let base_type = Struct(vec![Unknown; elems.len()]);
+            changed |= try!(push_type(&mut expr.ty, &base_type, "MakeStruct"));
+
+            if let Struct(ref mut elem_types) = expr.ty {
+                for (elem_ty, elem_expr) in elem_types.iter_mut().zip(elems.iter_mut()) {
+                    changed |= try!(sync_types(elem_ty, &mut elem_expr.ty, "MakeStruct"));
+                }
+            } else {
+                return weld_err!("Internal error: type of MakeStruct was not Struct");
+            }
+
+            Ok(changed)
+        }
+
         Lambda(ref mut params, ref mut body) => {
             let mut changed = false;
 
@@ -284,6 +301,20 @@ fn push_type(dest: &mut PartialType, src: &PartialType, context: &str) -> WeldRe
 
         Vector(ref mut dest_elem) => match *src {
             Vector(ref src_elem) => push_type(dest_elem, src_elem, context),
+            _ => weld_err!("Mismatched types in {}", context)
+        },
+
+        Struct(ref mut dest_elems) => match *src {
+            Struct(ref src_elems) => {
+                let mut changed = false;
+                if dest_elems.len() != src_elems.len() {
+                    return weld_err!("Mismatched types in {}", context);
+                }
+                for (dest_elem, src_elem) in dest_elems.iter_mut().zip(src_elems) {
+                    changed |= try!(push_type(dest_elem, src_elem, context));
+                }
+                Ok(changed)
+            },
             _ => weld_err!("Mismatched types in {}", context)
         },
 

@@ -24,6 +24,18 @@ impl PrintableType for Type {
             Scalar(Bool) => "bool".to_string(),
             Scalar(I32) => "i32".to_string(),
             Vector(ref elem) => format!("vec[{}]", elem.print()),
+
+            Struct(ref elems) => {
+                let mut res = String::new();
+                res.push_str("{");
+                for (i, t) in elems.iter().enumerate() {
+                    if i > 0 { res.push_str(","); }
+                    res.push_str(&t.print());
+                }
+                res.push_str("}");
+                res
+            },
+
             Function(ref params, ref ret) => {
                 let mut res = String::new();
                 res.push_str("(");
@@ -35,6 +47,7 @@ impl PrintableType for Type {
                 res.push_str(&ret.print());
                 res
             },
+
             Builder(Appender(ref t)) => format!("appender[{}]", t.print()),
             Builder(Merger(ref t, op)) => format!("merger[{},{}]", t.print(), print_binop(op)),
         }
@@ -51,6 +64,18 @@ impl PrintableType for PartialType {
             Scalar(Bool) => "bool".to_string(),
             Scalar(I32) => "i32".to_string(),
             Vector(ref elem) => format!("vec[{}]", elem.print()),
+
+            Struct(ref elems) => {
+                let mut res = String::new();
+                res.push_str("{");
+                for (i, t) in elems.iter().enumerate() {
+                    if i > 0 { res.push_str(","); }
+                    res.push_str(&t.print());
+                }
+                res.push_str("}");
+                res
+            },
+
             Function(ref params, ref ret) => {
                 let mut res = String::new();
                 res.push_str("(");
@@ -62,8 +87,9 @@ impl PrintableType for PartialType {
                 res.push_str(&ret.print());
                 res
             },
+
             Builder(Appender(ref elem)) => format!("appender[{}]", elem.print()),
-            _ => "??".to_string()
+            Builder(Merger(ref t, op)) => format!("merger[{},{}]", t.print(), print_binop(op)),
         }
     }
 }
@@ -116,6 +142,17 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>, typed: bool) -> String {
                         print_expr_impl(value, typed),
                         print_expr_impl(body, typed))
             }
+        }
+
+        MakeStruct(ref exprs) => {
+            let mut res = String::new();
+            res.push_str("{");
+            for (i, e) in exprs.iter().enumerate() {
+                if i > 0 { res.push_str(","); }
+                res.push_str(&print_expr_impl(e, typed));
+            }
+            res.push_str("}");
+            res
         }
 
         MakeVector(ref exprs) => {
