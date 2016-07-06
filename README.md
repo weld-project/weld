@@ -19,6 +19,7 @@ to update `PATH` temporarily while building Weld. You can check the version with
 ## Modules
 
 Weld is split up into several modules, partly to speed up compilation. They are as follows:
+* `easy_ll`: a simple wrapper for JIT-compiling modules using LLVM.
 * `weld_error`: common error type used throughout Weld (we might grow this to be a general
   utilities module).
 * `weld_ast`: data types for abstract syntax trees.
