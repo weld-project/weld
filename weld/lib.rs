@@ -1,7 +1,6 @@
 extern crate weld_ast;
-#[macro_use] extern crate weld_error;
 extern crate weld_transform;
 extern crate weld_parser;
+#[macro_use] extern crate weld_error;
 
-#[cfg(test)]
-mod tests;
+#[cfg(test)] mod tests;

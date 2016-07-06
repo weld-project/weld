@@ -21,26 +21,23 @@ extern {
     type Error = &'static str;
 }
 
-// Expose the nicer function name parse_expr instead of parse_Expr.
-pub expr = Expr;
+pub program = Program;    // Expose the nicer name parse_program instead of parse_Program
 
-// Expose the nicer function name parse_program instead of parse_Program.
-pub program = Program;
+pub expr: PartialExpr = <e:Expr> => *e;
 
-// A nice parse_macros function to just parse a list of macros.
 pub macros = <(<Macro> ";")*>;
 
-Program: Program = {
-    <macros:(<Macro> ";")*> <body:Expr> => Program { macros: macros, body: *body }
-};
-
-Type: Box<PartialType> = {
+pub Type: Box<PartialType> = {
     "?" => Box::new(Unknown),   // Don't really need this in the grammar but it's nice for testing
     "bool" => Box::new(Scalar(Bool)),
     "i32" => Box::new(Scalar(I32)),
     "vec" "[" <t:Type> "]" => Box::new(Vector(t)),
     "{" <ts:CommaSep<Type>> "}" => Box::new(Struct(ts.into_iter().map(|b| *b).collect())),
     "appender" "[" <t:Type> "]" => Box::new(Builder(Appender(t))),
+};
+
+Program: Program = {
+    <macros:(<Macro> ";")*> <body:Expr> => Program { macros: macros, body: *body }
 };
 
 Macro: Macro = {
