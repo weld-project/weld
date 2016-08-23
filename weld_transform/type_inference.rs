@@ -88,8 +88,14 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
         I32Literal(_) =>
             push_complete_type(&mut expr.ty, Scalar(I32), "I32Literal"),
 
+        I64Literal(_) =>
+            push_complete_type(&mut expr.ty, Scalar(I64), "I64Literal"),
+
         F32Literal(_) =>
             push_complete_type(&mut expr.ty, Scalar(F32), "F32Literal"),
+
+        F64Literal(_) =>
+            push_complete_type(&mut expr.ty, Scalar(F64), "F64Literal"),
 
         BoolLiteral(_) =>
             push_complete_type(&mut expr.ty, Scalar(Bool), "BoolLiteral"),
@@ -422,9 +428,17 @@ fn infer_types_let() {
     assert!(infer_types(&mut e).is_ok());
     assert_eq!(e.ty, Scalar(I32));
 
+    let mut e = parse_expr("let a:i64 = 1L; a").unwrap();
+    assert!(infer_types(&mut e).is_ok());
+    assert_eq!(e.ty, Scalar(I64));
+
     let mut e = parse_expr("let a:f32 = 1.0; a").unwrap();
     assert!(infer_types(&mut e).is_ok());
     assert_eq!(e.ty, Scalar(F32));
+
+    let mut e = parse_expr("let a:f64 = 1.0D; a").unwrap();
+    assert!(infer_types(&mut e).is_ok());
+    assert_eq!(e.ty, Scalar(F64));
 
     let mut e = parse_expr("let a:bool = 1; a").unwrap();
     assert!(infer_types(&mut e).is_err());
