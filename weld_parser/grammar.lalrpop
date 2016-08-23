@@ -31,6 +31,7 @@ pub Type: Box<PartialType> = {
     "?" => Box::new(Unknown),   // Don't really need this in the grammar but it's nice for testing
     "bool" => Box::new(Scalar(Bool)),
     "i32" => Box::new(Scalar(I32)),
+    "f32" => Box::new(Scalar(F32)),
     "vec" "[" <t:Type> "]" => Box::new(Vector(t)),
     "{" <ts:CommaSep<Type>> "}" => Box::new(Struct(ts.into_iter().map(|b| *b).collect())),
     "appender" "[" <t:Type> "]" => Box::new(Builder(Appender(t))),
@@ -104,6 +105,7 @@ AscribeExpr: Box<PartialExpr> = {
 Term: Box<PartialExpr> = {
     BoolLiteral,
     I32Literal,
+    F32Literal,
     Ident,
     MakeVector,
     MakeStruct,
@@ -115,19 +117,34 @@ Term: Box<PartialExpr> = {
     "(" <Expr> ")",
 };
 
-BoolLiteral: Box<PartialExpr> = {
-    "true" => expr_box(BoolLiteral(true)),
-    "false" => expr_box(BoolLiteral(false)),
+IntLiteralStr: &'input str = {
+  r"[0-9]+",
+  r"0b[0-1]+",
+  r"0o[0-7]+",
+  r"0x[a-fA-F0-9]+",
+};
+
+FloatLiteralStr: &'input str = {
+  r"[0-9]+\.[0-9]+",
 };
 
 I32Literal: Box<PartialExpr> = {
-    <s:r"[0-9]+"> =>? {
-       match i32::from_str(s) {
-           Ok(v) => Ok(expr_box(I32Literal(v))),
-           Err(_) => Err(ParseError::User { error: "bad i32 literal" })
-           // TODO: This won't work for -2**31 
-       }
-    }
+  <s:IntLiteralStr> =>? match i32::from_str(s) {
+    Ok(v) => Ok(expr_box(I32Literal(v))),
+    Err(_) => Err(ParseError::User { error: "bad i32 literal" })
+  }
+};
+
+F32Literal: Box<PartialExpr> = {
+  <s:FloatLiteralStr> =>? match f32::from_str(s) {
+    Ok(v) => Ok(expr_box(F32Literal(v))),
+    Err(_) => Err(ParseError::User { error: "bad f32 literal" })
+  }
+};
+
+BoolLiteral: Box<PartialExpr> = {
+    "true" => expr_box(BoolLiteral(true)),
+    "false" => expr_box(BoolLiteral(false)),
 };
 
 Ident: Box<PartialExpr> = {

@@ -19,6 +19,7 @@ pub enum Type {
 pub enum ScalarKind {
     Bool,
     I32,
+    F32,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -41,6 +42,7 @@ pub enum ExprKind<T:Clone> {
     // TODO: maybe all of these should take named parameters
     BoolLiteral(bool),
     I32Literal(i32),
+    F32Literal(f32),
     BinOp(BinOpKind, Box<Expr<T>>, Box<Expr<T>>),
     Ident(Symbol),
     NewBuilder,  // TODO: this may need to take a parameter
@@ -106,7 +108,7 @@ impl<T:Clone> Expr<T> {
                 res
             }
             // Explicitly list types instead of doing _ => ... to remember to add new types.
-            BoolLiteral(_) | I32Literal(_) | Ident(_) | NewBuilder => vec![]
+            BoolLiteral(_) | I32Literal(_) | F32Literal(_) | Ident(_) | NewBuilder => vec![]
         }.into_iter()
     }
 
@@ -132,7 +134,7 @@ impl<T:Clone> Expr<T> {
                 res
             }
             // Explicitly list types instead of doing _ => ... to remember to add new types.
-            BoolLiteral(_) | I32Literal(_) | Ident(_) | NewBuilder => vec![]
+            BoolLiteral(_) | I32Literal(_) | F32Literal(_) | Ident(_) | NewBuilder => vec![]
         }.into_iter()
     }
 
