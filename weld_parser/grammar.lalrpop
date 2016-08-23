@@ -125,13 +125,31 @@ IntLiteralStr: &'input str = {
 };
 
 FloatLiteralStr: &'input str = {
-  r"[0-9]+\.[0-9]+",
+  r"[0-9]+\.[0-9]+([eE][0-9]+)?",
+  r"[0-9]+[eE][0-9]+",
 };
 
 I32Literal: Box<PartialExpr> = {
-  <s:IntLiteralStr> =>? match i32::from_str(s) {
-    Ok(v) => Ok(expr_box(I32Literal(v))),
-    Err(_) => Err(ParseError::User { error: "bad i32 literal" })
+  <s:IntLiteralStr> =>? {
+    let o = s.to_string();
+    let radix = if o.contains("0x") {
+      16
+    } else if o.contains("0o") {
+      8
+    } else if o.contains("0b") {
+      2
+    } else {
+      10
+    };
+    let parsed = if radix == 10 {
+      i32::from_str(s)
+    } else {
+      i32::from_str_radix(&s[2..], radix)
+    };
+    match parsed {
+      Ok(v) => Ok(expr_box(I32Literal(v))),
+      Err(_) => Err(ParseError::User { error: "bad i32 literal" })
+    }
   }
 };
 

@@ -3,9 +3,18 @@ use weld_transform::type_inference::*;
 use weld_parser::parse_expr;
 
 #[test]
-fn parse_and_print_expressions() {
+fn parse_and_print_literal_expressions() {
     let e = parse_expr("23").unwrap();
     assert_eq!(print_expr(&e).as_str(), "23");
+
+    let e = parse_expr("0b111").unwrap();
+    assert_eq!(print_expr(&e).as_str(), "7");
+
+    let e = parse_expr("0xff").unwrap();
+    assert_eq!(print_expr(&e).as_str(), "255");
+
+    let e = parse_expr("0o10").unwrap();
+    assert_eq!(print_expr(&e).as_str(), "8");
 
     let e = parse_expr("23.0").unwrap();
     assert_eq!(print_expr(&e).as_str(), "23.0");
@@ -13,11 +22,20 @@ fn parse_and_print_expressions() {
     let e = parse_expr("23.5").unwrap();
     assert_eq!(print_expr(&e).as_str(), "23.5");
 
+    let e = parse_expr("23e5").unwrap();
+    assert_eq!(print_expr(&e).as_str(), "2300000.0");
+
+    let e = parse_expr("23.5e5").unwrap();
+    assert_eq!(print_expr(&e).as_str(), "2350000.0");
+
     let e = parse_expr("true").unwrap();
     assert_eq!(print_expr(&e).as_str(), "true");
 
     assert!(parse_expr("999999999999999").is_err());  // i32 literal too big
+}
 
+#[test]
+fn parse_and_print_simple_expressions() {
     let e = parse_expr("23 + 32").unwrap();
     assert_eq!(print_expr(&e).as_str(), "(23+32)");
 
