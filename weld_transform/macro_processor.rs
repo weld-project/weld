@@ -53,8 +53,47 @@ pub fn process_expression(expr: &PartialExpr, macros: &Vec<Macro>) -> WeldResult
     weld_err!("Marco expansion recursed past {} levels", MAX_MACRO_DEPTH)
 }
 
+/// Sanitizes macros by assigning unique symbol names to each symbol defined
+/// in the macro.
+fn sanitize_expr(e: &mut PartialExpr, symid: &mut usize) {
+    let mut names: HashMap<Symbol, Symbol> = HashMap::new();
+    match e.kind {
+        Let(ref name, _, _) => {
+            let mut new_name = String::new();
+            new_name.push_str(name.as_ref());
+            new_name.push_str("__Macro");
+            new_name.push_str(symid.to_string().as_ref());
+            names.insert(new_name, name.clone());
+        }
+        Lambda(ref params, _) => {
+            for p in params {
+                let mut new_name = String::new();
+                new_name.push_str(p.name.as_ref());
+                new_name.push_str("__Macro");
+                new_name.push_str(symid.to_string().as_ref());
+                names.insert(new_name, p.name.clone());
+            }
+        }
+        _ => {}
+    }
+
+    // If we found a match, substitute with new name.
+    for (old, new) in names {
+        let new_expr = PartialExpr {
+            ty: e.ty.clone(),
+            kind: Ident(new),
+        };
+        e.substitute(&old, &new_expr);
+    }
+
+    for c in e.children_mut() {
+        sanitize_expr(c, symid);
+    }
+}
+
 fn apply_macros(expr: &mut PartialExpr, macros: &HashMap<Symbol, &Macro>) -> WeldResult<bool> {
     let mut new_expr = None;
+    let mut symid = 0;
     if let Apply(ref func, ref params) = expr.kind {
         if let Ident(ref name) = func.kind {
             if let Some(mac) = macros.get(name) {
@@ -62,6 +101,9 @@ fn apply_macros(expr: &mut PartialExpr, macros: &HashMap<Symbol, &Macro>) -> Wel
                 if params.len() != mac.parameters.len() {
                     return weld_err!("Wrong number of parameters for macro {}", mac.name);
                 }
+                // Sanitize the macro by replacing names defined in the body
+                // with new ones.
+                sanitize_expr(&mut new, &mut symid);
                 for (name, value) in mac.parameters.iter().zip(params) {
                     new.substitute(name, value);
                 }
