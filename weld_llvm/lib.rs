@@ -12,6 +12,8 @@ use weld_ast::ScalarKind::*;
 use weld_ast::pretty_print::print_type;
 use weld_error::*;
 
+pub mod code_builder;
+
 /// Structure holding the state of code generation for a module, used to keep track of things
 /// like unique IDs, structure names, etc.
 pub struct GeneratorContext;
