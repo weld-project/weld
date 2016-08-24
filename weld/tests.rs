@@ -44,17 +44,17 @@ fn parse_and_print_literal_expressions() {
     assert_eq!(print_expr(&e).as_str(), "2350000.0");
 
     // Test f64 literal expressions.
-    let e = parse_expr("23.0D").unwrap();
-    assert_eq!(print_expr(&e).as_str(), "23.0D");
+    let e = parse_expr("23.0f").unwrap();
+    assert_eq!(print_expr(&e).as_str(), "23.0F");
 
-    let e = parse_expr("23.5D").unwrap();
-    assert_eq!(print_expr(&e).as_str(), "23.5D");
+    let e = parse_expr("23.5f").unwrap();
+    assert_eq!(print_expr(&e).as_str(), "23.5F");
 
-    let e = parse_expr("23e5D").unwrap();
-    assert_eq!(print_expr(&e).as_str(), "2300000.0D");
+    let e = parse_expr("23e5f").unwrap();
+    assert_eq!(print_expr(&e).as_str(), "2300000.0F");
 
-    let e = parse_expr("23.5e5D").unwrap();
-    assert_eq!(print_expr(&e).as_str(), "2350000.0D");
+    let e = parse_expr("23.5e5f").unwrap();
+    assert_eq!(print_expr(&e).as_str(), "2350000.0F");
 
     // Test boolean.
     let e = parse_expr("true").unwrap();
