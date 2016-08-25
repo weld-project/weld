@@ -31,6 +31,9 @@ pub Type: Box<PartialType> = {
     "?" => Box::new(Unknown),   // Don't really need this in the grammar but it's nice for testing
     "bool" => Box::new(Scalar(Bool)),
     "i32" => Box::new(Scalar(I32)),
+    "i64" => Box::new(Scalar(I64)),
+    "f32" => Box::new(Scalar(F32)),
+    "f64" => Box::new(Scalar(F64)),
     "vec" "[" <t:Type> "]" => Box::new(Vector(t)),
     "{" <ts:CommaSep<Type>> "}" => Box::new(Struct(ts.into_iter().map(|b| *b).collect())),
     "appender" "[" <t:Type> "]" => Box::new(Builder(Appender(t))),
@@ -104,6 +107,9 @@ AscribeExpr: Box<PartialExpr> = {
 Term: Box<PartialExpr> = {
     BoolLiteral,
     I32Literal,
+    I64Literal,
+    F32Literal,
+    F64Literal,
     Ident,
     MakeVector,
     MakeStruct,
@@ -115,19 +121,106 @@ Term: Box<PartialExpr> = {
     "(" <Expr> ")",
 };
 
-BoolLiteral: Box<PartialExpr> = {
-    "true" => expr_box(BoolLiteral(true)),
-    "false" => expr_box(BoolLiteral(false)),
+// Integers can be represented in decimal, octal, binary, or hex.
+I32LiteralStr: &'input str = {
+    r"[0-9]+",
+    r"0b[0-1]+",
+    r"0o[0-7]+",
+    r"0x[a-fA-F0-9]+",
+};
+
+// Longs are suffixed with the 'L' character.
+I64LiteralStr: &'input str = {
+    r"[0-9]+[lL]",
+    r"0b[0-1]+[lL]",
+    r"0o[0-7]+[lL]",
+    r"0x[a-fA-F0-9]+[lL]",
+};
+
+// Floats are suffixed with the 'F' character.
+F32LiteralStr: &'input str = {
+    r"[0-9]+\.[0-9]+([eE][0-9]+)?[fF]",
+    r"[0-9]+[eE][0-9]+[fF]",
+};
+
+F64LiteralStr: &'input str = {
+    r"[0-9]+\.[0-9]+([eE][0-9]+)?",
+    r"[0-9]+[eE][0-9]+",
 };
 
 I32Literal: Box<PartialExpr> = {
-    <s:r"[0-9]+"> =>? {
-       match i32::from_str(s) {
-           Ok(v) => Ok(expr_box(I32Literal(v))),
-           Err(_) => Err(ParseError::User { error: "bad i32 literal" })
-           // TODO: This won't work for -2**31 
-       }
+    <s:I32LiteralStr> =>? {
+        let o = s.to_string();
+        // Extract the radix to parse the string.
+        let radix = if o.contains("0x") {
+            16
+        } else if o.contains("0o") {
+            8
+        } else if o.contains("0b") {
+            2
+        } else {
+            10
+        };
+        let parsed = if radix == 10 {
+            i32::from_str(s)
+        } else {
+            i32::from_str_radix(&s[2..], radix)
+        };
+        match parsed {
+            Ok(v) => Ok(expr_box(I32Literal(v))),
+            Err(_) => Err(ParseError::User { error: "bad i32 literal" })
+        }
     }
+};
+
+I64Literal: Box<PartialExpr> = {
+    <s:I64LiteralStr> =>? {
+        // Parse out the trailing 'L'.
+        let s = &s[0 .. s.len()-1];
+        let o = s.to_string();
+        // Extract the radix to parse the string.
+        let radix = if o.contains("0x") {
+            16
+        } else if o.contains("0o") {
+            8
+        } else if o.contains("0b") {
+            2
+        } else {
+            10
+        };
+        let parsed = if radix == 10 {
+            i64::from_str(s)
+        } else {
+            i64::from_str_radix(&s[2..], radix)
+        };
+        match parsed {
+            Ok(v) => Ok(expr_box(I64Literal(v))),
+            Err(_) => Err(ParseError::User { error: "bad i64 literal" })
+        }
+    }
+};
+
+F32Literal: Box<PartialExpr> = {
+    <s:F32LiteralStr> =>?    {
+        // Parse out the trailing 'F'.
+        let s = &s[0 .. s.len()-1];
+        match f32::from_str(s) {
+            Ok(v) => Ok(expr_box(F32Literal(v))),
+            Err(_) => Err(ParseError::User { error: "bad f32 literal" })
+        }
+    }
+};
+
+F64Literal: Box<PartialExpr> = {
+    <s:F64LiteralStr> =>? match f64::from_str(s) {
+        Ok(v) => Ok(expr_box(F64Literal(v))),
+        Err(_) => Err(ParseError::User { error: "bad f64 literal" })
+    }
+};
+
+BoolLiteral: Box<PartialExpr> = {
+    "true" => expr_box(BoolLiteral(true)),
+    "false" => expr_box(BoolLiteral(false)),
 };
 
 Ident: Box<PartialExpr> = {

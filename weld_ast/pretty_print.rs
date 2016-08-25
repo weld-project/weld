@@ -21,6 +21,9 @@ impl PrintableType for Type {
         match *self {
             Scalar(Bool) => "bool".to_string(),
             Scalar(I32) => "i32".to_string(),
+            Scalar(I64) => "i64".to_string(),
+            Scalar(F32) => "f32".to_string(),
+            Scalar(F64) => "f64".to_string(),
             Vector(ref elem) => format!("vec[{}]", elem.print()),
             Struct(ref elems) => join("{", ",", "}", elems.iter().map(|e| e.print())),
             Function(ref params, ref ret) => {
@@ -43,6 +46,9 @@ impl PrintableType for PartialType {
             Unknown => "?".to_string(),
             Scalar(Bool) => "bool".to_string(),
             Scalar(I32) => "i32".to_string(),
+            Scalar(I64) => "i64".to_string(),
+            Scalar(F32) => "f32".to_string(),
+            Scalar(F64) => "f64".to_string(),
             Vector(ref elem) => format!("vec[{}]", elem.print()),
             Struct(ref elems) => join("{", ",", "}", elems.iter().map(|e| e.print())),
             Function(ref params, ref ret) => {
@@ -76,6 +82,24 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>, typed: bool) -> String {
     match expr.kind {
         BoolLiteral(v) => format!("{}", v),
         I32Literal(v) => format!("{}", v),
+        I64Literal(v) => format!("{}L", v),
+        F32Literal(v) => {
+            let mut s = format!("{}", v);
+            // Hack to disambiguate from integers.
+            if !s.contains(".") {
+                s.push_str(".0");
+            }
+            s.push_str("F");
+            s
+        }
+        F64Literal(v) => {
+            let mut s = format!("{}", v);
+            // Hack to disambiguate from integers.
+            if !s.contains(".") {
+                s.push_str(".0");
+            }
+            s
+        }
 
         Ident(ref symbol) => {
             if typed {

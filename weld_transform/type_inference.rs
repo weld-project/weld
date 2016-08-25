@@ -88,6 +88,15 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
         I32Literal(_) =>
             push_complete_type(&mut expr.ty, Scalar(I32), "I32Literal"),
 
+        I64Literal(_) =>
+            push_complete_type(&mut expr.ty, Scalar(I64), "I64Literal"),
+
+        F32Literal(_) =>
+            push_complete_type(&mut expr.ty, Scalar(F32), "F32Literal"),
+
+        F64Literal(_) =>
+            push_complete_type(&mut expr.ty, Scalar(F64), "F64Literal"),
+
         BoolLiteral(_) =>
             push_complete_type(&mut expr.ty, Scalar(Bool), "BoolLiteral"),
 
@@ -366,13 +375,20 @@ fn sync_types(t1: &mut PartialType, t2: &mut PartialType, error: &str) -> WeldRe
 #[test]
 fn infer_types_simple() {
     let int_lit = expr_box(I32Literal(1));
+    let float_lit = expr_box(F32Literal(1.0));
     let bool_lit = expr_box(BoolLiteral(false));
     let sum = expr_box(BinOp(Add, int_lit.clone(), int_lit.clone()));
     let prod = expr_box(BinOp(Multiply, sum.clone(), sum.clone()));
+    let fsum = expr_box(BinOp(Add, float_lit.clone(), float_lit.clone()));
+    let fprod = expr_box(BinOp(Add, float_lit.clone(), float_lit.clone()));
 
     let mut e = *int_lit.clone();
     assert!(infer_types(&mut e).is_ok());
     assert_eq!(e.ty, Scalar(I32));
+
+    let mut e = *float_lit.clone();
+    assert!(infer_types(&mut e).is_ok());
+    assert_eq!(e.ty, Scalar(F32));
     
     let mut e = *bool_lit.clone();
     assert!(infer_types(&mut e).is_ok());
@@ -385,6 +401,14 @@ fn infer_types_simple() {
     let mut e = *prod.clone();
     assert!(infer_types(&mut e).is_ok());
     assert_eq!(e.ty, Scalar(I32));
+
+    let mut e = *fsum.clone();
+    assert!(infer_types(&mut e).is_ok());
+    assert_eq!(e.ty, Scalar(F32));
+
+    let mut e = *fprod.clone();
+    assert!(infer_types(&mut e).is_ok());
+    assert_eq!(e.ty, Scalar(F32));
 }
 
 #[test]
@@ -393,12 +417,28 @@ fn infer_types_let() {
     assert!(infer_types(&mut e).is_ok());
     assert_eq!(e.ty, Scalar(I32));
 
+    let mut e = parse_expr("let a = 1.0f; a + a").unwrap();
+    assert!(infer_types(&mut e).is_ok());
+    assert_eq!(e.ty, Scalar(F32));
+
     let mut e = parse_expr("a + a").unwrap();
     assert!(infer_types(&mut e).is_err());
 
     let mut e = parse_expr("let a:i32 = 1; a").unwrap();
     assert!(infer_types(&mut e).is_ok());
     assert_eq!(e.ty, Scalar(I32));
+
+    let mut e = parse_expr("let a:i64 = 1L; a").unwrap();
+    assert!(infer_types(&mut e).is_ok());
+    assert_eq!(e.ty, Scalar(I64));
+
+    let mut e = parse_expr("let a:f32 = 1.0f; a").unwrap();
+    assert!(infer_types(&mut e).is_ok());
+    assert_eq!(e.ty, Scalar(F32));
+
+    let mut e = parse_expr("let a:f64 = 1.0; a").unwrap();
+    assert!(infer_types(&mut e).is_ok());
+    assert_eq!(e.ty, Scalar(F64));
 
     let mut e = parse_expr("let a:bool = 1; a").unwrap();
     assert!(infer_types(&mut e).is_err());

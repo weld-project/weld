@@ -130,6 +130,9 @@ impl PartialExpr {
         let new_kind: ExprKind<Type> = match self.kind {
             BoolLiteral(b) => BoolLiteral(b),
             I32Literal(i) => I32Literal(i),
+            I64Literal(i) => I64Literal(i),
+            F32Literal(i) => F32Literal(i),
+            F64Literal(i) => F64Literal(i),
             Ident(ref name) => Ident(name.clone()),
             NewBuilder => NewBuilder,
 

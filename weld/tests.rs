@@ -3,15 +3,43 @@ use weld_transform::type_inference::*;
 use weld_parser::parse_expr;
 
 #[test]
-fn parse_and_print_expressions() {
-    let e = parse_expr("23").unwrap();
-    assert_eq!(print_expr(&e).as_str(), "23");
+fn parse_and_print_literal_expressions() {
+    let tests = vec![
+        // tests i32 literal expressions.
+        ("23", "23"),
+        ("0b111", "7"),
+        ("0xff", "255"),
+        ("0o10", "8"),
+        // tests i64 literal expressions.
+        ("23L", "23L"),
+        ("7L", "7L"),
+        ("0xffL", "255L"),
+        ("0o10L", "8L"),
+        // tests f64 literal expressions.
+        ("23.0", "23.0"),
+        ("23.5", "23.5"),
+        ("23e5", "2300000.0"),
+        ("23.5e5", "2350000.0"),
+        // tests f32 literal expressions.
+        ("23.0f", "23.0F"),
+        ("23.5f", "23.5F"),
+        ("23e5f", "2300000.0F"),
+        ("23.5e5f", "2350000.0F"),
+        ("true", "true"),
+        ];
 
-    let e = parse_expr("true").unwrap();
-    assert_eq!(print_expr(&e).as_str(), "true");
+    for test in tests {
+        // Test i32 literal expressions.
+        let e = parse_expr(test.0).unwrap();
+        assert_eq!(print_expr(&e).as_str(), test.1);
+    }
 
+    // Test overflow of 32-bit variants.
     assert!(parse_expr("999999999999999").is_err());  // i32 literal too big
+}
 
+#[test]
+fn parse_and_print_simple_expressions() {
     let e = parse_expr("23 + 32").unwrap();
     assert_eq!(print_expr(&e).as_str(), "(23+32)");
 
@@ -27,8 +55,14 @@ fn parse_and_print_expressions() {
     let e = parse_expr("let a = 2; a").unwrap();
     assert_eq!(print_expr(&e).as_str(), "let a=(2);a");
 
+    let e = parse_expr("let a = 2.0; a").unwrap();
+    assert_eq!(print_expr(&e).as_str(), "let a=(2.0);a");
+
     let e = parse_expr("[1, 2, 3]").unwrap();
     assert_eq!(print_expr(&e).as_str(), "[1,2,3]");
+
+    let e = parse_expr("[1.0, 2.0, 3.0]").unwrap();
+    assert_eq!(print_expr(&e).as_str(), "[1.0,2.0,3.0]");
 
     let e = parse_expr("|a, b| a + b").unwrap();
     assert_eq!(print_expr(&e).as_str(), "|a,b|(a+b)");
@@ -58,6 +92,10 @@ fn parse_and_print_typed_expressions() {
     let mut e = parse_expr("|a:i32, b:i32| a + b").unwrap();
     infer_types(&mut e).unwrap();
     assert_eq!(print_typed_expr(&e).as_str(), "|a:i32,b:i32|(a:i32+b:i32)");
+
+    let mut e = parse_expr("|a:f32, b:f32| a + b").unwrap();
+    infer_types(&mut e).unwrap();
+    assert_eq!(print_typed_expr(&e).as_str(), "|a:f32,b:f32|(a:f32+b:f32)");
 
     let mut e = parse_expr("let a = [1, 2, 3]; 1").unwrap();
     infer_types(&mut e).unwrap();
