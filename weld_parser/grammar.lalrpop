@@ -137,15 +137,15 @@ I64LiteralStr: &'input str = {
     r"0x[a-fA-F0-9]+[lL]",
 };
 
+// Floats are suffixed with the 'F' character.
 F32LiteralStr: &'input str = {
-    r"[0-9]+\.[0-9]+([eE][0-9]+)?",
-    r"[0-9]+[eE][0-9]+",
-};
-
-// Doubles are suffixed with the 'D' character.
-F64LiteralStr: &'input str = {
     r"[0-9]+\.[0-9]+([eE][0-9]+)?[fF]",
     r"[0-9]+[eE][0-9]+[fF]",
+};
+
+F64LiteralStr: &'input str = {
+    r"[0-9]+\.[0-9]+([eE][0-9]+)?",
+    r"[0-9]+[eE][0-9]+",
 };
 
 I32Literal: Box<PartialExpr> = {
@@ -201,20 +201,20 @@ I64Literal: Box<PartialExpr> = {
 };
 
 F32Literal: Box<PartialExpr> = {
-    <s:F32LiteralStr> =>? match f32::from_str(s) {
-        Ok(v) => Ok(expr_box(F32Literal(v))),
-        Err(_) => Err(ParseError::User { error: "bad f32 literal" })
+    <s:F32LiteralStr> =>?    {
+        // Parse out the trailing 'F'.
+        let s = &s[0 .. s.len()-1];
+        match f32::from_str(s) {
+            Ok(v) => Ok(expr_box(F32Literal(v))),
+            Err(_) => Err(ParseError::User { error: "bad f32 literal" })
+        }
     }
 };
 
 F64Literal: Box<PartialExpr> = {
-    <s:F64LiteralStr> =>?    {
-        // Parse out the trailing 'D'.
-        let s = &s[0 .. s.len()-1];
-        match f64::from_str(s) {
-            Ok(v) => Ok(expr_box(F64Literal(v))),
-            Err(_) => Err(ParseError::User { error: "bad f64 literal" })
-        }
+    <s:F64LiteralStr> =>? match f64::from_str(s) {
+        Ok(v) => Ok(expr_box(F64Literal(v))),
+        Err(_) => Err(ParseError::User { error: "bad f64 literal" })
     }
 };
 

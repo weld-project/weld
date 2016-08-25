@@ -417,7 +417,7 @@ fn infer_types_let() {
     assert!(infer_types(&mut e).is_ok());
     assert_eq!(e.ty, Scalar(I32));
 
-    let mut e = parse_expr("let a = 1.0; a + a").unwrap();
+    let mut e = parse_expr("let a = 1.0f; a + a").unwrap();
     assert!(infer_types(&mut e).is_ok());
     assert_eq!(e.ty, Scalar(F32));
 
@@ -432,11 +432,11 @@ fn infer_types_let() {
     assert!(infer_types(&mut e).is_ok());
     assert_eq!(e.ty, Scalar(I64));
 
-    let mut e = parse_expr("let a:f32 = 1.0; a").unwrap();
+    let mut e = parse_expr("let a:f32 = 1.0f; a").unwrap();
     assert!(infer_types(&mut e).is_ok());
     assert_eq!(e.ty, Scalar(F32));
 
-    let mut e = parse_expr("let a:f64 = 1.0F; a").unwrap();
+    let mut e = parse_expr("let a:f64 = 1.0; a").unwrap();
     assert!(infer_types(&mut e).is_ok());
     assert_eq!(e.ty, Scalar(F64));
 

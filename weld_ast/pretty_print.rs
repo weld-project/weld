@@ -89,6 +89,7 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>, typed: bool) -> String {
             if !s.contains(".") {
                 s.push_str(".0");
             }
+            s.push_str("F");
             s
         }
         F64Literal(v) => {
@@ -97,7 +98,6 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>, typed: bool) -> String {
             if !s.contains(".") {
                 s.push_str(".0");
             }
-            s.push_str("F");
             s
         }
 

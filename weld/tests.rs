@@ -4,61 +4,35 @@ use weld_parser::parse_expr;
 
 #[test]
 fn parse_and_print_literal_expressions() {
-    // Test i32 literal expressions.
-    let e = parse_expr("23").unwrap();
-    assert_eq!(print_expr(&e).as_str(), "23");
+    let tests = vec![
+        // tests i32 literal expressions.
+        ("23", "23"),
+        ("0b111", "7"),
+        ("0xff", "255"),
+        ("0o10", "8"),
+        // tests i64 literal expressions.
+        ("23L", "23L"),
+        ("7L", "7L"),
+        ("0xffL", "255L"),
+        ("0o10L", "8L"),
+        // tests f64 literal expressions.
+        ("23.0", "23.0"),
+        ("23.5", "23.5"),
+        ("23e5", "2300000.0"),
+        ("23.5e5", "2350000.0"),
+        // tests f32 literal expressions.
+        ("23.0f", "23.0F"),
+        ("23.5f", "23.5F"),
+        ("23e5f", "2300000.0F"),
+        ("23.5e5f", "2350000.0F"),
+        ("true", "true"),
+        ];
 
-    let e = parse_expr("0b111").unwrap();
-    assert_eq!(print_expr(&e).as_str(), "7");
-
-    let e = parse_expr("0xff").unwrap();
-    assert_eq!(print_expr(&e).as_str(), "255");
-
-    let e = parse_expr("0o10").unwrap();
-    assert_eq!(print_expr(&e).as_str(), "8");
-
-    // Test i64 literal expressions.
-    let e = parse_expr("23L").unwrap();
-    assert_eq!(print_expr(&e).as_str(), "23L");
-
-    let e = parse_expr("0b111L").unwrap();
-    assert_eq!(print_expr(&e).as_str(), "7L");
-
-    let e = parse_expr("0xffL").unwrap();
-    assert_eq!(print_expr(&e).as_str(), "255L");
-
-    let e = parse_expr("0o10L").unwrap();
-    assert_eq!(print_expr(&e).as_str(), "8L");
-
-    // Test f32 literal expressions.
-    let e = parse_expr("23.0").unwrap();
-    assert_eq!(print_expr(&e).as_str(), "23.0");
-
-    let e = parse_expr("23.5").unwrap();
-    assert_eq!(print_expr(&e).as_str(), "23.5");
-
-    let e = parse_expr("23e5").unwrap();
-    assert_eq!(print_expr(&e).as_str(), "2300000.0");
-
-    let e = parse_expr("23.5e5").unwrap();
-    assert_eq!(print_expr(&e).as_str(), "2350000.0");
-
-    // Test f64 literal expressions.
-    let e = parse_expr("23.0f").unwrap();
-    assert_eq!(print_expr(&e).as_str(), "23.0F");
-
-    let e = parse_expr("23.5f").unwrap();
-    assert_eq!(print_expr(&e).as_str(), "23.5F");
-
-    let e = parse_expr("23e5f").unwrap();
-    assert_eq!(print_expr(&e).as_str(), "2300000.0F");
-
-    let e = parse_expr("23.5e5f").unwrap();
-    assert_eq!(print_expr(&e).as_str(), "2350000.0F");
-
-    // Test boolean.
-    let e = parse_expr("true").unwrap();
-    assert_eq!(print_expr(&e).as_str(), "true");
+    for test in tests {
+        // Test i32 literal expressions.
+        let e = parse_expr(test.0).unwrap();
+        assert_eq!(print_expr(&e).as_str(), test.1);
+    }
 
     // Test overflow of 32-bit variants.
     assert!(parse_expr("999999999999999").is_err());  // i32 literal too big
