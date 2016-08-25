@@ -4,7 +4,7 @@
 #![allow(dead_code)]
 
 use std::iter;
-use std::cmp;
+use std::cmp::max;
 
 #[derive(Debug)]
 pub struct CodeBuilder {
@@ -16,11 +16,11 @@ pub struct CodeBuilder {
 
 /// Methods for `CodeBuilder`.
 impl CodeBuilder {
-    /// `add_line` adds line to code and performs some simple formatting.
+    /// Adds line to code and performs some simple formatting.
     pub fn add_line(&mut self, line: &str) {
         let indent_change = (line.matches("{").count() as i32) -
             (line.matches("}").count() as i32);
-        let new_indent_level = cmp::max(0, self.indent_level + indent_change);
+        let new_indent_level = max(0, self.indent_level + indent_change);
         // Lines starting with '}' should be de-indented even if they
         // contain '{' after; in addition, lines ending with ':' are
         // typically labels, e.g., in LLVM.
@@ -45,22 +45,19 @@ impl CodeBuilder {
             .collect::<String>();
     }
 
-    /// `add_lines` adds several lines (split by \n) to this code builder.
+    /// Adds multiples lines (split by \n) to this code builder.
     pub fn add_lines(&mut self, code: &str) {
         for l in code.lines() {
             self.add_line(l);
         }
     }
 
-    /// `result` returns the code in this code builder so far.
+    /// Returns the code in this code builder so far.
     pub fn result(&self) -> String {
         self.code.clone()
     }
-}
 
-/// Functions associated with `CodeBuilder`.
-impl CodeBuilder {
-    /// `new` returns a new CodeBuilder.
+    /// Returns a new CodeBuilder.
     pub fn new(indent_size: i32) -> CodeBuilder {
         CodeBuilder {
             code: String::new(),
@@ -70,7 +67,7 @@ impl CodeBuilder {
         }
     }
 
-    /// `format` returns a formatted string using the CodeBuilder.
+    /// Returns a formatted string using the CodeBuilder.
     pub fn format(indent_size: i32, code: &str) -> String {
         let mut c = CodeBuilder::new(indent_size);
         c.add_lines(code);
