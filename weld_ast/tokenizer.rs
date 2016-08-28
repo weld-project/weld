@@ -42,7 +42,7 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
     lazy_static! {
         // Regular expression for splitting up tokens.
         static ref TOKEN_RE: Regex = Regex::new(
-            r"[A_Za-z0-9_.]+|[-+/*,=()[\]{}|&.:;?]|\S+").unwrap();
+            r"[A_Za-z0-9_]+|[-+/*,=()[\]{}|&\.:;?]|\S+").unwrap();
 
         // Regular expressions for various types of tokens. 
         static ref KEYWORD_RE: Regex = Regex::new(r"if|for|let|true|false|macro").unwrap();

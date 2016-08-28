@@ -1,9 +1,4 @@
 //! Top-down recursive descent parser for Weld.
-//!
-//! TODO:
-//! - Ascribe expression
-//! - Dot
-//! - Apply
 
 use std::vec::Vec;
 
@@ -20,11 +15,13 @@ use super::tokenizer::Token::*;
 
 #[cfg(test)] use super::pretty_print::*;
 
+/// Parse the complete input string as a partially-typed expression.
 pub fn parse_expr(input: &str) -> WeldResult<PartialExpr> {
     let tokens = try!(tokenize(input));
     Parser::new(&tokens).expr().map(|b| *b)
 }
 
+/// Parse the complete input string as a PartialType.
 pub fn parse_type(input: &str) -> WeldResult<PartialType> {
     let tokens = try!(tokenize(input));
     Parser::new(&tokens).partial_type()
@@ -124,10 +121,10 @@ impl<'t> Parser<'t> {
 
     /// Parse a product expression with terms separated by * and /.
     fn product_expr(&mut self) -> WeldResult<Box<PartialExpr>> {
-        let mut res = try!(self.leaf_expr());
+        let mut res = try!(self.ascribe_expr());
         while *self.peek() == TTimes || *self.peek() == TDivide {
             let token = self.next();
-            let right = try!(self.leaf_expr());
+            let right = try!(self.ascribe_expr());
             if *token == TTimes {
                 res = expr_box(BinOp(Multiply, res, right))
             } else {
@@ -135,6 +132,41 @@ impl<'t> Parser<'t> {
             }
         }
         Ok(res)
+    }
+
+    /// Parse a type abscription expression such as 'e: T', or lower-level ones in precedence.
+    fn ascribe_expr(&mut self) -> WeldResult<Box<PartialExpr>> {
+        let mut expr = try!(self.apply_expr());
+        let ty = try!(self.optional_type());
+        expr.ty = ty;
+        Ok(expr)
+    }
+
+    /// Parse application chain expression such as a.0.1().3().
+    fn apply_expr(&mut self) -> WeldResult<Box<PartialExpr>> {
+        let mut expr = try!(self.leaf_expr());
+        while *self.peek() == TDot || *self.peek() == TOpenParen {
+            if *self.next() == TDot {
+                match *self.next() {
+                    TI32Literal(v) if v >= 0 => expr = expr_box(GetField(expr, v as u32)),
+                    ref other => return weld_err!("Expected field index but got '{}'", other)
+                }
+            } else {  // TOpenParen
+                let mut params: Vec<PartialExpr> = Vec::new();
+                while *self.peek() != TCloseParen {
+                    let param = try!(self.expr());
+                    params.push(*param);
+                    if *self.peek() == TComma {
+                        self.next();
+                    } else if *self.peek() != TCloseParen {
+                        return weld_err!("Expected ',' or ')'")
+                    }
+                }
+                try!(self.consume(TCloseParen));
+                expr = expr_box(Apply(expr, params))
+            }
+        }
+        Ok(expr)
     }
 
     /// Parse a terminal expression at the bottom of the precedence chain.
@@ -208,8 +240,6 @@ impl<'t> Parser<'t> {
     /// Parse a PartialType starting at the current input position.  
     fn partial_type(&mut self) -> WeldResult<PartialType> {
         match *self.next() {
-            TQuestion => Ok(Unknown),
-
             TIdent(ref name) => {
                 match name.as_ref() {
                     "i32" => Ok(Scalar(I32)),
@@ -249,7 +279,9 @@ impl<'t> Parser<'t> {
                 }
                 try!(self.consume(TCloseBrace));
                 Ok(Struct(types))
-            }
+            },
+
+            TQuestion => Ok(Unknown),
 
             ref other => weld_err!("Expected type but got '{}'", other)
         }
@@ -274,9 +306,21 @@ fn basic_parsing() {
     assert_eq!(print_expr(&e), "let a=([2,3]);a");
 
     let e = parse_expr("|a, b:i32| a+b").unwrap();
-    assert_eq!(print_expr(&e), "|a,b|(a+b)");
+    assert_eq!(print_typed_expr(&e), "|a:?,b:i32|(a:?+b:?)");
+
+    let e = parse_expr("a.0.1").unwrap();
+    assert_eq!(print_expr(&e), "a.0.1");
+
+    let e = parse_expr("a(0,1).0").unwrap();
+    assert_eq!(print_expr(&e), "(a)(0,1).0");
+
+    let e = parse_expr("a.0(0,1).1()").unwrap();
+    assert_eq!(print_expr(&e), "((a.0)(0,1).1)()");
 
     assert!(parse_expr("10 * * 2").is_err());
+
+    let e = parse_expr("a: i32 + b").unwrap();
+    assert_eq!(print_typed_expr(&e), "(a:i32+b:?)");
 
     let t = parse_type("{i32, vec[vec[?]], ?}").unwrap();
     assert_eq!(print_type(&t), "{i32,vec[vec[?]],?}");
