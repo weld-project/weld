@@ -7,4 +7,6 @@ authors = ["Matei Zaharia <matei.zaharia@gmail.com>"]
 path = "lib.rs"
 
 [dependencies]
+lazy_static = "0.2.1"
+regex = "*"
 weld_error = { path = "../weld_error", version = "^0.1.0" }
