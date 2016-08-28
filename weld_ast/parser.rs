@@ -246,4 +246,7 @@ fn basic_parsing() {
 
     let t = parse_type("{i32, vec[vec[?]], ?}").unwrap();
     assert_eq!(print_type(&t), "{i32,vec[vec[?]],?}");
+
+    let t = parse_type("{}").unwrap();
+    assert_eq!(print_type(&t), "{}");
 }

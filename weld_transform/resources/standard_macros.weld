@@ -9,7 +9,7 @@ macro filter(data, func) = (
 macro flatten(data) = (
     result(for(
         data,
-        appender,
+        appender[?],
         |b, x| for(x, b, |b2, x2| merge(b2, x2))
     ))
 );

@@ -105,7 +105,7 @@ fn parse_and_print_typed_expressions() {
     let mut e = parse_expr("[1, true]").unwrap();
     assert!(infer_types(&mut e).is_err());
 
-    let mut e = parse_expr("for([1],appender,|b,x|merge(b,x))").unwrap();
+    let mut e = parse_expr("for([1],appender[?],|b,x|merge(b,x))").unwrap();
     infer_types(&mut e).unwrap();
     assert_eq!(print_typed_expr(&e).as_str(),
         "for([1],appender[i32],|b:appender[i32],x:i32|merge(b:appender[i32],x:i32))");
