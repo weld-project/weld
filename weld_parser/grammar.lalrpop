@@ -74,8 +74,8 @@ LetExpr: Box<PartialExpr> = {
 };
 
 SumExpr: Box<PartialExpr> = {
-    <l:SumExpr> "+" <r:AscribeExpr> => expr_box(BinOp(Add, l, r)),
-    <l:SumExpr> "-" <r:AscribeExpr> => expr_box(BinOp(Subtract, l, r)),
+    <l:SumExpr> "+" <r:DotExpr> => expr_box(BinOp(Add, l, r)),
+    <l:SumExpr> "-" <r:DotExpr> => expr_box(BinOp(Subtract, l, r)),
     <DotExpr>
 };
 

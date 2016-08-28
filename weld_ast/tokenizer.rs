@@ -1,3 +1,5 @@
+//! Breaks strings into Weld tokens for use in the parser.
+
 use std::fmt;
 use std::str::FromStr;
 use std::vec::Vec;

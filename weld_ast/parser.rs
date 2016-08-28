@@ -1,3 +1,10 @@
+//! Top-down recursive descent parser for Weld.
+//!
+//! TODO:
+//! - Ascribe expression
+//! - Dot
+//! - Apply
+
 use std::vec::Vec;
 
 use weld_error::*;
@@ -47,39 +54,65 @@ impl<'t> Parser<'t> {
         token
     }
 
-    /// Parse an expression starting at self.position.
+    /// Consume the next token and check that it equals `expected`. If not, return an Err.
+    fn consume(&mut self, expected: Token) -> WeldResult<()> {
+        if *self.next() != expected {
+            weld_err!("Expected '{}'", expected)
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Parse an expression starting at the current position.
     fn expr(&mut self) -> WeldResult<Box<PartialExpr>> {
         if *self.peek() == TLet {
             self.let_expr()
+        } else if *self.peek() == TBar {
+            self.lambda_expr()
         } else {
             self.sum_expr()
         }
     }
 
+    /// Parse 'let name = value; body' starting at the current position.
     fn let_expr(&mut self) -> WeldResult<Box<PartialExpr>> {
-        if *self.next() != TLet {
-            return weld_err!("Expected 'let'");
-        }
+        try!(self.consume(TLet));
         let name = try!(self.name());
         let ty = try!(self.optional_type());
-        if *self.next() != TEqual {
-            return weld_err!("Expected '='");
-        }
+        try!(self.consume(TEqual));
         let value = try!(self.sum_expr());
-        if *self.next() != TSemicolon {
-            return weld_err!("Expected ';'");
-        }
+        try!(self.consume(TSemicolon));
         let body = try!(self.expr());
         let mut expr = expr_box(Let(name, value, body));
         expr.ty = ty;
         Ok(expr)
     }
 
+    /// Parse '|params| body' starting at the current position.
+    fn lambda_expr(&mut self) -> WeldResult<Box<PartialExpr>> {
+        try!(self.consume(TBar));
+        let mut params: Vec<PartialParameter> = Vec::new();
+        while *self.peek() != TBar {
+            let name = try!(self.name());
+            let ty = try!(self.optional_type());
+            params.push(PartialParameter { name: name, ty: ty });
+            if *self.peek() == TComma {
+                self.next();
+            } else if *self.peek() != TBar {
+                return weld_err!("Expected ',' or '|'")
+            }
+        }
+        try!(self.consume(TBar));
+        let body = try!(self.expr());
+        Ok(expr_box(Lambda(params, body)))
+    }
+
+    /// Parse a sum expression with terms separated by + and - (for operator precedence).
     fn sum_expr(&mut self) -> WeldResult<Box<PartialExpr>> {
-        let mut res = try!(self.prod_expr());
+        let mut res = try!(self.product_expr());
         while *self.peek() == TPlus || *self.peek() == TMinus {
             let token = self.next();
-            let right = try!(self.prod_expr());
+            let right = try!(self.product_expr());
             if *token == TPlus {
                 res = expr_box(BinOp(Add, res, right))
             } else {
@@ -89,7 +122,8 @@ impl<'t> Parser<'t> {
         Ok(res)
     }
 
-    fn prod_expr(&mut self) -> WeldResult<Box<PartialExpr>> {
+    /// Parse a product expression with terms separated by * and /.
+    fn product_expr(&mut self) -> WeldResult<Box<PartialExpr>> {
         let mut res = try!(self.leaf_expr());
         while *self.peek() == TTimes || *self.peek() == TDivide {
             let token = self.next();
@@ -103,6 +137,7 @@ impl<'t> Parser<'t> {
         Ok(res)
     }
 
+    /// Parse a terminal expression at the bottom of the precedence chain.
     fn leaf_expr(&mut self) -> WeldResult<Box<PartialExpr>> {
         match *self.next() {
             TI32Literal(value) => Ok(expr_box(I32Literal(value))),
@@ -128,7 +163,7 @@ impl<'t> Parser<'t> {
                         return weld_err!("Expected ',' or ']'")
                     }
                 }
-                self.next();  // Will be a TCloseBracket
+                try!(self.consume(TCloseBracket));
                 Ok(expr_box(MakeVector(exprs)))
             }
 
@@ -143,7 +178,7 @@ impl<'t> Parser<'t> {
                         return weld_err!("Expected ',' or '}}'")
                     }
                 }
-                self.next();  // Will be a TCloseBrace
+                try!(self.consume(TCloseBrace));
                 Ok(expr_box(MakeStruct(exprs)))
             }
 
@@ -151,6 +186,7 @@ impl<'t> Parser<'t> {
         }
     }
 
+    /// Parse a name starting at the current input position.
     fn name(&mut self) -> WeldResult<Symbol> {
         match *self.next() {
             TIdent(ref name) => Ok(name.clone()),
@@ -158,15 +194,18 @@ impl<'t> Parser<'t> {
         }
     }
 
+    /// Optionally parse a type annotation such as ": i32" and return the result as a PartialType;
+    /// gives Unknown if there is no type annotation at the current position. 
     fn optional_type(&mut self) -> WeldResult<PartialType> {
         if *self.peek() == TColon {
-            self.next();   // Skip TColon
+            try!(self.consume(TColon));
             self.partial_type() 
         } else {
             Ok(Unknown)
         }
     }
 
+    /// Parse a PartialType starting at the current input position.  
     fn partial_type(&mut self) -> WeldResult<PartialType> {
         match *self.next() {
             TQuestion => Ok(Unknown),
@@ -180,24 +219,16 @@ impl<'t> Parser<'t> {
                     "bool" => Ok(Scalar(Bool)),
 
                     "vec" => {
-                        if *self.next() != TOpenBracket {
-                            return weld_err!("Expected '['");
-                        }
+                        try!(self.consume(TOpenBracket));
                         let elem_type = try!(self.partial_type());
-                        if *self.next() != TCloseBracket {
-                            return weld_err!("Expected ']'");
-                        }
+                        try!(self.consume(TCloseBracket));
                         Ok(Vector(Box::new(elem_type)))
                     }
 
                     "appender" => {
-                        if *self.next() == TOpenBracket {
-                            return weld_err!("Expected '['");
-                        }
+                        try!(self.consume(TOpenBracket));
                         let elem_type = try!(self.partial_type());
-                        if *self.next() != TCloseBracket {
-                            return weld_err!("Expected ']'");
-                        }
+                        try!(self.consume(TCloseBracket));
                         Ok(Builder(Appender(Box::new(elem_type))))
                     }
 
@@ -216,7 +247,7 @@ impl<'t> Parser<'t> {
                         return weld_err!("Expected ',' or '}}'")
                     }
                 }
-                self.next();  // Will be a TCloseBrace
+                try!(self.consume(TCloseBrace));
                 Ok(Struct(types))
             }
 
@@ -241,6 +272,9 @@ fn basic_parsing() {
 
     let e = parse_expr("let a: vec[i32] = [2, 3]; a").unwrap();
     assert_eq!(print_expr(&e), "let a=([2,3]);a");
+
+    let e = parse_expr("|a, b:i32| a+b").unwrap();
+    assert_eq!(print_expr(&e), "|a,b|(a+b)");
 
     assert!(parse_expr("10 * * 2").is_err());
 
