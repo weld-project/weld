@@ -1,4 +1,10 @@
 //! Breaks strings into Weld tokens for use in the parser.
+//!
+//! This module works by splitting the input string using a regular expression designed to find
+//! entire, non-overlapping patterns, such as literals (1e-5), identifiers (var1), and other
+//! individual tokens (+, -, $, if, |, etc). The regular expresions for various token types are
+//! matched greedily in an order that ensures the "largest" one wins first; for example, the
+//! string '1e-5' is parsed as a f64 literal, not as ('1e', '-', '5').
 
 use std::fmt;
 use std::str::FromStr;
@@ -60,7 +66,7 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
 
         // Regular expressions for various types of tokens.
         static ref KEYWORD_RE: Regex = Regex::new(
-            r"if|for|merge|result|let|true|false|macro|i32|i64|f32|f64|bool|vec|appender").unwrap();
+            "if|for|merge|result|let|true|false|macro|i32|i64|f32|f64|bool|vec|appender").unwrap();
 
         static ref IDENT_RE: Regex = Regex::new(r"^[A-Za-z$_][A-Za-z0-9$_]*$").unwrap();
 
@@ -243,4 +249,7 @@ fn basic_tokenize() {
 
     assert_eq!(tokenize("0b10").unwrap(), vec![TI32Literal(2), TEndOfInput]);
     assert_eq!(tokenize("0x10").unwrap(), vec![TI32Literal(16), TEndOfInput]);
+
+    assert_eq!(tokenize("1e-5f").unwrap(), vec![TF32Literal(1e-5f32), TEndOfInput]);
+    assert_eq!(tokenize("1e-5").unwrap(), vec![TF64Literal(1e-5), TEndOfInput]);
 }

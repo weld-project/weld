@@ -1,4 +1,7 @@
 //! Top-down recursive descent parser for Weld.
+//!
+//! Weld is designed to be parsable in one left-to-right pass through the input, without
+//! backtracking, so we simply track a position as we go and keep incrementing it.
 
 use std::vec::Vec;
 
@@ -37,7 +40,7 @@ pub fn parse_expr(input: &str) -> WeldResult<PartialExpr> {
 /// Parse the complete input string as a PartialType.
 pub fn parse_type(input: &str) -> WeldResult<PartialType> {
     let tokens = try!(tokenize(input));
-    Parser::new(&tokens).partial_type()
+    Parser::new(&tokens).type_()
 }
 
 /// A stateful object that parses a sequence of tokens, tracking its position at each point.
@@ -318,7 +321,7 @@ impl<'t> Parser<'t> {
                 let mut elem_type = Unknown;
                 if *self.peek() == TOpenBracket {
                     try!(self.consume(TOpenBracket));
-                    elem_type = try!(self.partial_type());
+                    elem_type = try!(self.type_());
                     try!(self.consume(TCloseBracket));
                 }
                 let mut expr = expr_box(NewBuilder);
@@ -343,14 +346,14 @@ impl<'t> Parser<'t> {
     fn optional_type(&mut self) -> WeldResult<PartialType> {
         if *self.peek() == TColon {
             try!(self.consume(TColon));
-            self.partial_type()
+            self.type_()
         } else {
             Ok(Unknown)
         }
     }
 
     /// Parse a PartialType starting at the current input position.
-    fn partial_type(&mut self) -> WeldResult<PartialType> {
+    fn type_(&mut self) -> WeldResult<PartialType> {
         match *self.next() {
             TI32 => Ok(Scalar(I32)),
             TI64 => Ok(Scalar(I64)),
@@ -360,14 +363,14 @@ impl<'t> Parser<'t> {
 
             TVec => {
                 try!(self.consume(TOpenBracket));
-                let elem_type = try!(self.partial_type());
+                let elem_type = try!(self.type_());
                 try!(self.consume(TCloseBracket));
                 Ok(Vector(Box::new(elem_type)))
             }
 
             TAppender => {
                 try!(self.consume(TOpenBracket));
-                let elem_type = try!(self.partial_type());
+                let elem_type = try!(self.type_());
                 try!(self.consume(TCloseBracket));
                 Ok(Builder(Appender(Box::new(elem_type))))
             }
@@ -375,7 +378,7 @@ impl<'t> Parser<'t> {
             TOpenBrace => {
                 let mut types: Vec<PartialType> = Vec::new();
                 while *self.peek() != TCloseBrace {
-                    let ty = try!(self.partial_type());
+                    let ty = try!(self.type_());
                     types.push(ty);
                     if *self.peek() == TComma {
                         self.next();
