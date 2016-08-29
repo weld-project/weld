@@ -5,11 +5,11 @@ extern crate weld_transform;
 
 use std::io::{stdin, stdout, Write};
 
+use weld_ast::parser::*;
 use weld_ast::pretty_print::*;
 use weld_transform::transforms;
 use weld_transform::type_inference::*;
 use weld_transform::macro_processor;
-use weld_parser::*;
 
 fn main() {
     loop {

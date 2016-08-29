@@ -136,7 +136,7 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>, typed: bool) -> String {
         MakeVector(ref exprs) =>
             join("[", ",", "]", exprs.iter().map(|e| print_expr_impl(e, typed))),
 
-        GetField(ref param, index) => format!("{}.{}", print_expr_impl(param, typed), index),
+        GetField(ref param, index) => format!("{}.${}", print_expr_impl(param, typed), index),
 
         Lambda(ref params, ref body) => {
             let mut res = join("|", ",", "|", params.iter().map(|e| print_parameter(e, typed)));

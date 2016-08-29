@@ -10,12 +10,25 @@ use super::ast::ScalarKind::*;
 use super::partial_types::*;
 use super::partial_types::PartialBuilderKind::*;
 use super::partial_types::PartialType::*;
+use super::program::*;
 use super::tokenizer::*;
 use super::tokenizer::Token::*;
 
 #[cfg(test)] use super::pretty_print::*;
 
-/// Parse the complete input string as a partially-typed expression.
+/// Parse the complete input string as a Weld program (optional macros plus one expression).
+pub fn parse_program(input: &str) -> WeldResult<Program> {
+    let tokens = try!(tokenize(input));
+    Parser::new(&tokens).program()
+}
+
+/// Parse the complete input string as a list of macros.
+pub fn parse_macros(input: &str) -> WeldResult<Vec<Macro>> {
+    let tokens = try!(tokenize(input));
+    Parser::new(&tokens).macros()
+}
+
+/// Parse the complete input string as an expression.
 pub fn parse_expr(input: &str) -> WeldResult<PartialExpr> {
     let tokens = try!(tokenize(input));
     Parser::new(&tokens).expr().map(|b| *b)
@@ -44,7 +57,7 @@ impl<'t> Parser<'t> {
         &self.tokens[self.position]
     }
 
-    /// Consume and return the next token. 
+    /// Consume and return the next token.
     fn next(&mut self) -> &'t Token {
         let token = &self.tokens[self.position];
         self.position += 1;
@@ -58,6 +71,43 @@ impl<'t> Parser<'t> {
         } else {
             Ok(())
         }
+    }
+
+    /// Parse a program (optional macros + one body expression) starting at the current position.
+    fn program(&mut self) -> WeldResult<Program> {
+        let macros = try!(self.macros());
+        let body = try!(self.expr());
+        Ok(Program { macros: macros, body: *body })
+    }
+
+    /// Parse a list of macros starting at the current position.
+    fn macros(&mut self) -> WeldResult<Vec<Macro>> {
+        let mut res: Vec<Macro> = Vec::new();
+        while *self.peek() == TMacro {
+            res.push(try!(self.macro_()));
+        }
+        Ok(res)
+    }
+
+    /// Parse a single macro starting at the current position.
+    fn macro_(&mut self) -> WeldResult<Macro> {
+        try!(self.consume(TMacro));
+        let name = try!(self.name());
+        let mut params: Vec<Symbol> = Vec::new();
+        try!(self.consume(TOpenParen));
+        while *self.peek() != TCloseParen {
+            params.push(try!(self.name()));
+            if *self.peek() == TComma {
+                self.next();
+            } else if *self.peek() != TCloseParen {
+                return weld_err!("Expected ',' or ')'");
+            }
+        }
+        try!(self.consume(TCloseParen));
+        try!(self.consume(TEqual));
+        let body = try!(self.expr());
+        try!(self.consume(TSemicolon));
+        Ok(Macro { name: name, parameters: params, body: *body })
     }
 
     /// Parse an expression starting at the current position.
@@ -137,18 +187,27 @@ impl<'t> Parser<'t> {
     /// Parse a type abscription expression such as 'e: T', or lower-level ones in precedence.
     fn ascribe_expr(&mut self) -> WeldResult<Box<PartialExpr>> {
         let mut expr = try!(self.apply_expr());
-        let ty = try!(self.optional_type());
-        expr.ty = ty;
+        if *self.peek() == TColon {
+            expr.ty = try!(self.optional_type());
+        }
         Ok(expr)
     }
 
-    /// Parse application chain expression such as a.0.1().3().
+    /// Parse application chain expression such as a.0().3().
     fn apply_expr(&mut self) -> WeldResult<Box<PartialExpr>> {
         let mut expr = try!(self.leaf_expr());
         while *self.peek() == TDot || *self.peek() == TOpenParen {
             if *self.next() == TDot {
                 match *self.next() {
-                    TI32Literal(v) if v >= 0 => expr = expr_box(GetField(expr, v as u32)),
+                    TIdent(ref value) => {
+                        if value.starts_with("$") {
+                            match u32::from_str_radix(&value[1..], 10) {
+                                Ok(index) => expr = expr_box(GetField(expr, index)),
+                                _ => return weld_err!("Expected field index but got '{}'", value)
+                            }
+                        }
+                    }
+
                     ref other => return weld_err!("Expected field index but got '{}'", other)
                 }
             } else {  // TOpenParen
@@ -173,6 +232,9 @@ impl<'t> Parser<'t> {
     fn leaf_expr(&mut self) -> WeldResult<Box<PartialExpr>> {
         match *self.next() {
             TI32Literal(value) => Ok(expr_box(I32Literal(value))),
+            TI64Literal(value) => Ok(expr_box(I64Literal(value))),
+            TF32Literal(value) => Ok(expr_box(F32Literal(value))),
+            TF64Literal(value) => Ok(expr_box(F64Literal(value))),
             TBoolLiteral(value) => Ok(expr_box(BoolLiteral(value))),
             TIdent(ref name) => Ok(expr_box(Ident(name.clone()))),
 
@@ -214,6 +276,56 @@ impl<'t> Parser<'t> {
                 Ok(expr_box(MakeStruct(exprs)))
             }
 
+            TIf => {
+                try!(self.consume(TOpenParen));
+                let cond = try!(self.expr());
+                try!(self.consume(TComma));
+                let on_true = try!(self.expr());
+                try!(self.consume(TComma));
+                let on_false = try!(self.expr());
+                try!(self.consume(TCloseParen));
+                Ok(expr_box(If(cond, on_true, on_false)))
+            }
+
+            TFor => {
+                try!(self.consume(TOpenParen));
+                let data = try!(self.expr());
+                try!(self.consume(TComma));
+                let builders = try!(self.expr());
+                try!(self.consume(TComma));
+                let body = try!(self.expr());
+                try!(self.consume(TCloseParen));
+                Ok(expr_box(For(data, builders, body)))
+            }
+
+            TMerge => {
+                try!(self.consume(TOpenParen));
+                let builder = try!(self.expr());
+                try!(self.consume(TComma));
+                let value = try!(self.expr());
+                try!(self.consume(TCloseParen));
+                Ok(expr_box(Merge(builder, value)))
+            }
+
+            TResult => {
+                try!(self.consume(TOpenParen));
+                let builder = try!(self.expr());
+                try!(self.consume(TCloseParen));
+                Ok(expr_box(Res(builder)))
+            }
+
+            TAppender => {
+                let mut elem_type = Unknown;
+                if *self.peek() == TOpenBracket {
+                    try!(self.consume(TOpenBracket));
+                    elem_type = try!(self.partial_type());
+                    try!(self.consume(TCloseBracket));
+                }
+                let mut expr = expr_box(NewBuilder);
+                expr.ty = Builder(Appender(Box::new(elem_type)));
+                Ok(expr)
+            }
+
             ref other => weld_err!("Expected expression but got '{}'", other)
         }
     }
@@ -227,44 +339,38 @@ impl<'t> Parser<'t> {
     }
 
     /// Optionally parse a type annotation such as ": i32" and return the result as a PartialType;
-    /// gives Unknown if there is no type annotation at the current position. 
+    /// gives Unknown if there is no type annotation at the current position.
     fn optional_type(&mut self) -> WeldResult<PartialType> {
         if *self.peek() == TColon {
             try!(self.consume(TColon));
-            self.partial_type() 
+            self.partial_type()
         } else {
             Ok(Unknown)
         }
     }
 
-    /// Parse a PartialType starting at the current input position.  
+    /// Parse a PartialType starting at the current input position.
     fn partial_type(&mut self) -> WeldResult<PartialType> {
         match *self.next() {
-            TIdent(ref name) => {
-                match name.as_ref() {
-                    "i32" => Ok(Scalar(I32)),
-                    "i64" => Ok(Scalar(I64)),
-                    "f32" => Ok(Scalar(F32)),
-                    "f64" => Ok(Scalar(F64)),
-                    "bool" => Ok(Scalar(Bool)),
+            TI32 => Ok(Scalar(I32)),
+            TI64 => Ok(Scalar(I64)),
+            TF32 => Ok(Scalar(F32)),
+            TF64 => Ok(Scalar(F64)),
+            TBool => Ok(Scalar(Bool)),
 
-                    "vec" => {
-                        try!(self.consume(TOpenBracket));
-                        let elem_type = try!(self.partial_type());
-                        try!(self.consume(TCloseBracket));
-                        Ok(Vector(Box::new(elem_type)))
-                    }
+            TVec => {
+                try!(self.consume(TOpenBracket));
+                let elem_type = try!(self.partial_type());
+                try!(self.consume(TCloseBracket));
+                Ok(Vector(Box::new(elem_type)))
+            }
 
-                    "appender" => {
-                        try!(self.consume(TOpenBracket));
-                        let elem_type = try!(self.partial_type());
-                        try!(self.consume(TCloseBracket));
-                        Ok(Builder(Appender(Box::new(elem_type))))
-                    }
-
-                    other => weld_err!("Expected type but got '{}'", other)
-                }
-            },
+            TAppender => {
+                try!(self.consume(TOpenBracket));
+                let elem_type = try!(self.partial_type());
+                try!(self.consume(TCloseBracket));
+                Ok(Builder(Appender(Box::new(elem_type))))
+            }
 
             TOpenBrace => {
                 let mut types: Vec<PartialType> = Vec::new();
@@ -308,19 +414,31 @@ fn basic_parsing() {
     let e = parse_expr("|a, b:i32| a+b").unwrap();
     assert_eq!(print_typed_expr(&e), "|a:?,b:i32|(a:?+b:?)");
 
-    let e = parse_expr("a.0.1").unwrap();
-    assert_eq!(print_expr(&e), "a.0.1");
+    let e = parse_expr("a.$0.$1").unwrap();
+    assert_eq!(print_expr(&e), "a.$0.$1");
 
-    let e = parse_expr("a(0,1).0").unwrap();
-    assert_eq!(print_expr(&e), "(a)(0,1).0");
+    let e = parse_expr("a(0,1).$0").unwrap();
+    assert_eq!(print_expr(&e), "(a)(0,1).$0");
 
-    let e = parse_expr("a.0(0,1).1()").unwrap();
-    assert_eq!(print_expr(&e), "((a.0)(0,1).1)()");
+    let e = parse_expr("a.$0(0,1).$1()").unwrap();
+    assert_eq!(print_expr(&e), "((a.$0)(0,1).$1)()");
+
+    let e = parse_expr("appender[?]").unwrap();
+    assert_eq!(print_expr(&e), "appender[?]");
+
+    let e = parse_expr("appender[i32]").unwrap();
+    assert_eq!(print_expr(&e), "appender[i32]");
 
     assert!(parse_expr("10 * * 2").is_err());
 
     let e = parse_expr("a: i32 + b").unwrap();
     assert_eq!(print_typed_expr(&e), "(a:i32+b:?)");
+
+    let p = parse_program("macro a(x) = x+x; macro b() = 5; a(b)").unwrap();
+    assert_eq!(p.macros.len(), 2);
+    assert_eq!(print_expr(&p.body), "(a)(b)");
+    assert_eq!(print_expr(&p.macros[0].body), "(x+x)");
+    assert_eq!(print_expr(&p.macros[1].body), "5");
 
     let t = parse_type("{i32, vec[vec[?]], ?}").unwrap();
     assert_eq!(print_type(&t), "{i32,vec[vec[?]],?}");

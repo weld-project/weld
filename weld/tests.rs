@@ -1,41 +1,42 @@
 use weld_ast::pretty_print::*;
 use weld_transform::type_inference::*;
-use weld_parser::parse_expr;
+use weld_ast::parser::parse_expr;
 
 #[test]
 fn parse_and_print_literal_expressions() {
     let tests = vec![
-        // tests i32 literal expressions.
+        // i32 literal expressions
         ("23", "23"),
         ("0b111", "7"),
         ("0xff", "255"),
-        ("0o10", "8"),
-        // tests i64 literal expressions.
+        // i64 literal expressions
         ("23L", "23L"),
         ("7L", "7L"),
         ("0xffL", "255L"),
-        ("0o10L", "8L"),
-        // tests f64 literal expressions.
+        // f64 literal expressions
         ("23.0", "23.0"),
         ("23.5", "23.5"),
         ("23e5", "2300000.0"),
         ("23.5e5", "2350000.0"),
-        // tests f32 literal expressions.
+        // f32 literal expressions
         ("23.0f", "23.0F"),
         ("23.5f", "23.5F"),
         ("23e5f", "2300000.0F"),
         ("23.5e5f", "2350000.0F"),
+        // bool literal expressions
         ("true", "true"),
-        ];
+        ("false", "false"),
+    ];
 
     for test in tests {
-        // Test i32 literal expressions.
         let e = parse_expr(test.0).unwrap();
         assert_eq!(print_expr(&e).as_str(), test.1);
     }
 
-    // Test overflow of 32-bit variants.
+    // Test overflow of integer types
     assert!(parse_expr("999999999999999").is_err());  // i32 literal too big
+    assert!(parse_expr("999999999999999L").is_ok());
+    assert!(parse_expr("999999999999999999999999999999L").is_err());  // i64 literal too big
 }
 
 #[test]
