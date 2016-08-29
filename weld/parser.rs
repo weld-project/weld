@@ -423,7 +423,7 @@ impl<'t> Parser<'t> {
 }
 
 #[test]
-fn expressions() {
+fn basic_parsing() {
     let e = parse_expr("10 - 2 - 3 + 1").unwrap();
     assert_eq!(print_expr(&e), "(((10-2)-3)+1)");
 
@@ -461,19 +461,13 @@ fn expressions() {
     assert_eq!(print_typed_expr(&e), "(a:i32+b:?)");
 
     assert!(parse_expr("10 * * 2").is_err());
-}
 
-#[test]
-fn programs() {
     let p = parse_program("macro a(x) = x+x; macro b() = 5; a(b)").unwrap();
     assert_eq!(p.macros.len(), 2);
     assert_eq!(print_expr(&p.body), "(a)(b)");
     assert_eq!(print_expr(&p.macros[0].body), "(x+x)");
     assert_eq!(print_expr(&p.macros[1].body), "5");
-}
 
-#[test]
-fn types() {
     let t = parse_type("{i32, vec[vec[?]], ?}").unwrap();
     assert_eq!(print_type(&t), "{i32,vec[vec[?]],?}");
 
