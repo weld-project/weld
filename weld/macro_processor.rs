@@ -9,12 +9,12 @@
 use std::vec::Vec;
 use std::collections::HashMap;
 
-use weld_ast::*;
-use weld_ast::ExprKind::*;
-use weld_ast::program::*;
-use weld_ast::parser::parse_macros;
-use weld_ast::partial_types::*;
-use weld_error::*;
+use super::ast::*;
+use super::ast::ExprKind::*;
+use super::program::*;
+use super::parser::parse_macros;
+use super::partial_types::*;
+use super::error::*;
 
 const MAX_MACRO_DEPTH: i32 = 30;
 

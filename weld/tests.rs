@@ -1,6 +1,6 @@
-use weld_ast::pretty_print::*;
-use weld_transform::type_inference::*;
-use weld_ast::parser::parse_expr;
+use super::pretty_print::*;
+use super::type_inference::*;
+use super::parser::parse_expr;
 
 #[test]
 fn parse_and_print_literal_expressions() {
@@ -89,7 +89,7 @@ fn parse_and_print_typed_expressions() {
     infer_types(&mut e).unwrap();
     assert_eq!(print_typed_expr(&e).as_str(), "let a:i32=(2);let a:bool=(false);a:bool");
 
-    // Types should propagate from function parameters to body 
+    // Types should propagate from function parameters to body
     let mut e = parse_expr("|a:i32, b:i32| a + b").unwrap();
     infer_types(&mut e).unwrap();
     assert_eq!(print_typed_expr(&e).as_str(), "|a:i32,b:i32|(a:i32+b:i32)");
@@ -102,7 +102,7 @@ fn parse_and_print_typed_expressions() {
     infer_types(&mut e).unwrap();
     assert_eq!(print_typed_expr(&e).as_str(), "let a:vec[i32]=([1,2,3]);1");
 
-    // Mismatched types in MakeVector 
+    // Mismatched types in MakeVector
     let mut e = parse_expr("[1, true]").unwrap();
     assert!(infer_types(&mut e).is_err());
 

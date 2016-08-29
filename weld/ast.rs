@@ -55,7 +55,7 @@ pub enum ExprKind<T:Clone> {
     GetField(Box<Expr<T>>, u32),
     /// name, value, body
     Let(Symbol, Box<Expr<T>>, Box<Expr<T>>),
-    /// condition, on_true, on_false 
+    /// condition, on_true, on_false
     If(Box<Expr<T>>, Box<Expr<T>>, Box<Expr<T>>),
     /// variables, body
     Lambda(Vec<Parameter<T>>, Box<Expr<T>>),

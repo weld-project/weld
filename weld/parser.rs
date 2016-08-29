@@ -2,11 +2,11 @@
 
 use std::vec::Vec;
 
-use weld_error::*;
 use super::ast::Symbol;
 use super::ast::BinOpKind::*;
 use super::ast::ExprKind::*;
 use super::ast::ScalarKind::*;
+use super::error::*;
 use super::partial_types::*;
 use super::partial_types::PartialBuilderKind::*;
 use super::partial_types::PartialType::*;

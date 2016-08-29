@@ -6,7 +6,7 @@ use std::vec::Vec;
 
 use regex::Regex;
 
-use weld_error::*;
+use super::error::*;
 
 #[derive(Clone,Debug,PartialEq)]
 pub enum Token {
