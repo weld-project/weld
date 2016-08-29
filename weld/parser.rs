@@ -1,6 +1,6 @@
 //! Top-down recursive descent parser for Weld.
 //!
-//! Weld is designed to be parsable in one left-to-right pass through the input, without
+//! Weld is designed to be parseable in one left-to-right pass through the input, without
 //! backtracking, so we simply track a position as we go and keep incrementing it.
 
 use std::vec::Vec;
