@@ -24,7 +24,7 @@ pub fn parse_program(input: &str) -> WeldResult<Program> {
     let tokens = try!(tokenize(input));
     let mut parser = Parser::new(&tokens);
     let res = parser.program();
-    if res.is_ok() && !parser.done() {
+    if res.is_ok() && !parser.is_done() {
         return weld_err!("Unexpected token: {}", parser.peek())
     }
     res
@@ -35,7 +35,7 @@ pub fn parse_macros(input: &str) -> WeldResult<Vec<Macro>> {
     let tokens = try!(tokenize(input));
     let mut parser = Parser::new(&tokens);
     let res = parser.macros();
-    if res.is_ok() && !parser.done() {
+    if res.is_ok() && !parser.is_done() {
         return weld_err!("Unexpected token: {}", parser.peek())
     }
     res
@@ -46,7 +46,7 @@ pub fn parse_expr(input: &str) -> WeldResult<PartialExpr> {
     let tokens = try!(tokenize(input));
     let mut parser = Parser::new(&tokens);
     let res = parser.expr().map(|b| *b);
-    if res.is_ok() && !parser.done() {
+    if res.is_ok() && !parser.is_done() {
         return weld_err!("Unexpected token: {}", parser.peek())
     }
     res
@@ -57,7 +57,7 @@ pub fn parse_type(input: &str) -> WeldResult<PartialType> {
     let tokens = try!(tokenize(input));
     let mut parser = Parser::new(&tokens);
     let res = parser.type_();
-    if res.is_ok() && !parser.done() {
+    if res.is_ok() && !parser.is_done() {
         return weld_err!("Unexpected token: {}", parser.peek())
     }
     res
@@ -97,7 +97,7 @@ impl<'t> Parser<'t> {
     }
 
     /// Are we done parsing all the input?
-    fn done(&self) -> bool {
+    fn is_done(&self) -> bool {
         self.position == self.tokens.len() || *self.peek() == TEndOfInput
     }
 
