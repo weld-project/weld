@@ -22,25 +22,45 @@ use super::tokenizer::Token::*;
 /// Parse the complete input string as a Weld program (optional macros plus one expression).
 pub fn parse_program(input: &str) -> WeldResult<Program> {
     let tokens = try!(tokenize(input));
-    Parser::new(&tokens).program()
+    let mut parser = Parser::new(&tokens);
+    let res = parser.program();
+    if res.is_ok() && !parser.done() {
+        return weld_err!("Unexpected token: {}", parser.peek())
+    }
+    res
 }
 
 /// Parse the complete input string as a list of macros.
 pub fn parse_macros(input: &str) -> WeldResult<Vec<Macro>> {
     let tokens = try!(tokenize(input));
-    Parser::new(&tokens).macros()
+    let mut parser = Parser::new(&tokens);
+    let res = parser.macros();
+    if res.is_ok() && !parser.done() {
+        return weld_err!("Unexpected token: {}", parser.peek())
+    }
+    res
 }
 
 /// Parse the complete input string as an expression.
 pub fn parse_expr(input: &str) -> WeldResult<PartialExpr> {
     let tokens = try!(tokenize(input));
-    Parser::new(&tokens).expr().map(|b| *b)
+    let mut parser = Parser::new(&tokens);
+    let res = parser.expr().map(|b| *b);
+    if res.is_ok() && !parser.done() {
+        return weld_err!("Unexpected token: {}", parser.peek())
+    }
+    res
 }
 
 /// Parse the complete input string as a PartialType.
 pub fn parse_type(input: &str) -> WeldResult<PartialType> {
     let tokens = try!(tokenize(input));
-    Parser::new(&tokens).type_()
+    let mut parser = Parser::new(&tokens);
+    let res = parser.type_();
+    if res.is_ok() && !parser.done() {
+        return weld_err!("Unexpected token: {}", parser.peek())
+    }
+    res
 }
 
 /// A stateful object that parses a sequence of tokens, tracking its position at each point.
@@ -74,6 +94,11 @@ impl<'t> Parser<'t> {
         } else {
             Ok(())
         }
+    }
+
+    /// Are we done parsing all the input?
+    fn done(&self) -> bool {
+        self.position == self.tokens.len() || *self.peek() == TEndOfInput
     }
 
     /// Parse a program (optional macros + one body expression) starting at the current position.
@@ -448,4 +473,9 @@ fn basic_parsing() {
 
     let t = parse_type("{}").unwrap();
     assert_eq!(print_type(&t), "{}");
+
+    assert!(parse_expr("a + b").is_ok());
+    assert!(parse_expr("a + b macro").is_err());
+    assert!(parse_program("macro a() = b; a() + b").is_ok());
+    assert!(parse_program("macro a() = b; a() + b;").is_err());
 }
