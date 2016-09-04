@@ -1,13 +1,13 @@
 //! Common transformations on expressions.
 
-use weld_ast::Expr;
-use weld_ast::ExprKind::*;
-use weld_error::*;
+use super::ast::Expr;
+use super::ast::ExprKind::*;
+use super::error::*;
 
 /// Inlines Apply nodes whose argument is a Lambda expression. These often arise during macro
 /// expansion but it's simpler to inline them before doing type inference.
 /// Unlike many of the other transformations, we make this one independent of types so that
-/// we can apply it before type inference. 
+/// we can apply it before type inference.
 ///
 /// Caveats:
 /// - Functions that reuse a parameter twice have its expansion appear twice, instead of assigning

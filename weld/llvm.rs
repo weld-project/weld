@@ -1,18 +1,10 @@
-extern crate easy_ll;
-extern crate weld_ast;
-extern crate weld_parser;
-#[macro_use] extern crate weld_error;
-
-#[cfg(test)] mod tests;
-
 use easy_ll::*;
-use weld_ast::*;
-use weld_ast::Type::*;
-use weld_ast::ScalarKind::*;
-use weld_ast::pretty_print::print_type;
-use weld_error::*;
 
-mod code_builder;
+use super::ast::*;
+use super::ast::Type::*;
+use super::ast::ScalarKind::*;
+use super::pretty_print::print_type;
+use super::error::*;
 
 /// Structure holding the state of code generation for a module, used to keep track of things
 /// like the code builder, unique IDs, structure names, etc.
@@ -30,4 +22,14 @@ impl GeneratorContext {
             _ => weld_err!("Unsupported type {}", print_type(t))
         }
     }
+}
+
+#[test]
+fn types() {
+    let mut ctx = GeneratorContext;
+    assert_eq!(ctx.llvm_type(&Scalar(I32)).unwrap(), "i32");
+    assert_eq!(ctx.llvm_type(&Scalar(Bool)).unwrap(), "i1");
+
+    //let weld_type = parse_type("{i32,bool,i32}").unwrap().to_type().unwrap();
+    //assert_eq!(ctx.llvm_type(&weld_type).unwrap(), "%s1");
 }

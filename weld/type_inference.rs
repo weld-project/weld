@@ -1,17 +1,17 @@
 use std::collections::HashMap;
 
-use weld_ast::ScalarKind::*;
-use weld_ast::Symbol;
-use weld_ast::ExprKind::*;
-use weld_ast::partial_types::PartialExpr;
-use weld_ast::partial_types::PartialType;
-use weld_ast::partial_types::PartialType::*;
-use weld_ast::partial_types::PartialBuilderKind::*;
-use weld_error::*;
+use super::ast::ScalarKind::*;
+use super::ast::Symbol;
+use super::ast::ExprKind::*;
+use super::partial_types::PartialExpr;
+use super::partial_types::PartialType;
+use super::partial_types::PartialType::*;
+use super::partial_types::PartialBuilderKind::*;
+use super::error::*;
 
-#[cfg(test)] use weld_ast::BinOpKind::*;
-#[cfg(test)] use weld_ast::partial_types::expr_box;
-#[cfg(test)] use weld_parser::*;
+#[cfg(test)] use super::ast::BinOpKind::*;
+#[cfg(test)] use super::parser::*;
+#[cfg(test)] use super::partial_types::expr_box;
 
 type TypeMap = HashMap<Symbol, PartialType>;
 
@@ -82,7 +82,7 @@ fn infer_up(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> {
 }
 
 /// Infer the type of expr or its children locally based on what is known about some of them.
-/// Return true if any new expression's type was inferred, or an error if types are inconsistent.  
+/// Return true if any new expression's type was inferred, or an error if types are inconsistent.
 fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> {
     match expr.kind {
         I32Literal(_) =>
@@ -389,11 +389,11 @@ fn infer_types_simple() {
     let mut e = *float_lit.clone();
     assert!(infer_types(&mut e).is_ok());
     assert_eq!(e.ty, Scalar(F32));
-    
+
     let mut e = *bool_lit.clone();
     assert!(infer_types(&mut e).is_ok());
     assert_eq!(e.ty, Scalar(Bool));
-    
+
     let mut e = *sum.clone();
     assert!(infer_types(&mut e).is_ok());
     assert_eq!(e.ty, Scalar(I32));

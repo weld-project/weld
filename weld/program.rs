@@ -3,7 +3,7 @@
 
 use std::vec::Vec;
 
-use super::Symbol;
+use super::ast::Symbol;
 use super::partial_types::*;
 
 #[derive(Clone, Debug, PartialEq)]

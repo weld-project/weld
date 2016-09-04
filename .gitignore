@@ -1,5 +1,4 @@
 target
 Cargo.lock
-weld_parser/grammar.rs
 .DS_Store
 *.swp

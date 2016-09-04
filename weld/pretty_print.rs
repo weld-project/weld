@@ -1,11 +1,11 @@
 use std::iter::Iterator;
 
-use super::*;
-use super::BinOpKind::*;
-use super::BuilderKind::*;
-use super::ScalarKind::*;
-use super::Type::*;
-use super::ExprKind::*;
+use super::ast::*;
+use super::ast::BinOpKind::*;
+use super::ast::BuilderKind::*;
+use super::ast::ScalarKind::*;
+use super::ast::Type::*;
+use super::ast::ExprKind::*;
 use super::partial_types::*;
 
 // TODO: These methods could take a mutable string as an argument, or even a fmt::Format.
@@ -136,7 +136,7 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>, typed: bool) -> String {
         MakeVector(ref exprs) =>
             join("[", ",", "]", exprs.iter().map(|e| print_expr_impl(e, typed))),
 
-        GetField(ref param, index) => format!("{}.{}", print_expr_impl(param, typed), index),
+        GetField(ref param, index) => format!("{}.${}", print_expr_impl(param, typed), index),
 
         Lambda(ref params, ref body) => {
             let mut res = join("|", ",", "|", params.iter().map(|e| print_parameter(e, typed)));

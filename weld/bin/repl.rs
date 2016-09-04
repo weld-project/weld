@@ -1,15 +1,12 @@
 extern crate weld;
-extern crate weld_ast;
-extern crate weld_parser;
-extern crate weld_transform;
 
 use std::io::{stdin, stdout, Write};
 
-use weld_ast::pretty_print::*;
-use weld_transform::transforms;
-use weld_transform::type_inference::*;
-use weld_transform::macro_processor;
-use weld_parser::*;
+use weld::parser::*;
+use weld::pretty_print::*;
+use weld::transforms;
+use weld::type_inference::*;
+use weld::macro_processor;
 
 fn main() {
     loop {

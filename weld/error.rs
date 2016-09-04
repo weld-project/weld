@@ -1,11 +1,3 @@
-/// Utility macro to create an Err result with a WeldError.
-#[macro_export]
-macro_rules! weld_err {
-    ( $($arg:tt)* ) => ({
-        ::std::result::Result::Err($crate::WeldError(format!($($arg)*)))
-    })
-}
-
 use std::error;
 use std::fmt;
 

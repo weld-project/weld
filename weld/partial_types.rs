@@ -2,8 +2,8 @@
 
 use std::vec::Vec;
 
-use super::*;
-use weld_error::*;
+use super::ast::*;
+use super::error::*;
 
 /// A partial data type, where some parameters may not be known.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -138,8 +138,8 @@ impl PartialExpr {
 
             BinOp(op, ref left, ref right) =>
                 BinOp(op, try!(typed_box(left)), try!(typed_box(right))),
-            
-            Let(ref name, ref value, ref body) => 
+
+            Let(ref name, ref value, ref body) =>
                 Let(name.clone(), try!(typed_box(value)), try!(typed_box(body))),
 
             Lambda(ref params, ref body) => {
