@@ -120,11 +120,11 @@ impl<'t> Parser<'t> {
     /// Parse a single macro starting at the current position.
     fn macro_(&mut self) -> WeldResult<Macro> {
         try!(self.consume(TMacro));
-        let name = try!(self.name());
+        let name = try!(self.symbol());
         let mut params: Vec<Symbol> = Vec::new();
         try!(self.consume(TOpenParen));
         while *self.peek() != TCloseParen {
-            params.push(try!(self.name()));
+            params.push(try!(self.symbol()));
             if *self.peek() == TComma {
                 self.next();
             } else if *self.peek() != TCloseParen {
@@ -152,7 +152,7 @@ impl<'t> Parser<'t> {
     /// Parse 'let name = value; body' starting at the current position.
     fn let_expr(&mut self) -> WeldResult<Box<PartialExpr>> {
         try!(self.consume(TLet));
-        let name = try!(self.name());
+        let name = try!(self.symbol());
         let ty = try!(self.optional_type());
         try!(self.consume(TEqual));
         let value = try!(self.sum_expr());
@@ -168,7 +168,7 @@ impl<'t> Parser<'t> {
         try!(self.consume(TBar));
         let mut params: Vec<PartialParameter> = Vec::new();
         while *self.peek() != TBar {
-            let name = try!(self.name());
+            let name = try!(self.symbol());
             let ty = try!(self.optional_type());
             params.push(PartialParameter { name: name, ty: ty });
             if *self.peek() == TComma {
@@ -264,7 +264,7 @@ impl<'t> Parser<'t> {
             TF32Literal(value) => Ok(expr_box(F32Literal(value))),
             TF64Literal(value) => Ok(expr_box(F64Literal(value))),
             TBoolLiteral(value) => Ok(expr_box(BoolLiteral(value))),
-            TIdent(ref name) => Ok(expr_box(Ident(name.clone()))),
+            TIdent(ref name) => Ok(expr_box(Ident(Symbol{name: name.clone(), id: 0}))),
 
             TOpenParen => {
                 let expr = try!(self.expr());
@@ -358,10 +358,10 @@ impl<'t> Parser<'t> {
         }
     }
 
-    /// Parse a name starting at the current input position.
-    fn name(&mut self) -> WeldResult<Symbol> {
+    /// Parse a symbol starting at the current input position.
+    fn symbol(&mut self) -> WeldResult<Symbol> {
         match *self.next() {
-            TIdent(ref name) => Ok(name.clone()),
+            TIdent(ref name) => Ok(Symbol { name: name.clone(), id: 0 }),
             ref other => weld_err!("Expected identifier but got '{}'", other)
         }
     }

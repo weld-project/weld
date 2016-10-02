@@ -1,9 +1,24 @@
 //! Abstract syntax tree for Weld.
 
 use std::vec;
+use std::fmt;
 
 /// A symbol (identifier name); for now these are strings, but we may add some kind of scope ID.
-pub type Symbol = String;
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Symbol {
+    pub name: String,
+    pub id: i32
+}
+
+impl fmt::Display for Symbol {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if self.id == 0 {
+            write!(f, "{}", self.name)
+        } else {
+            write!(f, "{}#{}", self.name, self.id)
+        }
+    }
+}
 
 /// A data type.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -167,7 +182,7 @@ impl<T:Clone> Expr<T> {
             }
 
             Lambda(ref params, ref mut body) => {
-                if params.iter().all(|p| *p.name != *symbol) {
+                if params.iter().all(|p| p.name != *symbol) {
                     body.substitute(symbol, replacement);
                 }
             }

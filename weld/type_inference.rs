@@ -114,7 +114,7 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
 
         Ident(ref symbol) => {
             match env.get(symbol) {
-                None => weld_err!("Undefined identifier: {}", symbol),
+                None => weld_err!("Undefined identifier: {}", symbol.name),
                 Some(t) => push_type(&mut expr.ty, t, "Ident")
             }
         }
