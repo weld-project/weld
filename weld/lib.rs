@@ -22,5 +22,6 @@ pub mod program;
 pub mod tokenizer;
 pub mod transforms;
 pub mod type_inference;
+pub mod util;
 
 #[cfg(test)] mod tests;

@@ -194,4 +194,12 @@ impl<T:Clone> Expr<T> {
             }
         }
     }
+
+    /// Run a closure on this expression and every child, in pre-order.
+    pub fn traverse<F>(&self, func: &mut F) where F: FnMut(&Expr<T>) -> () {
+        func(self);
+        for c in self.children() {
+            c.traverse(func);
+        }
+    }
 }

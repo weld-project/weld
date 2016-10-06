@@ -6,8 +6,8 @@
 //! - Macros that reuse a parameter twice have its expansion appear twice, instead of assigning
 //!   it to a temporary as would happen with function application.
 
-use std::vec::Vec;
 use std::collections::HashMap;
+use std::vec::Vec;
 
 use super::ast::*;
 use super::ast::ExprKind::*;
@@ -15,6 +15,7 @@ use super::program::*;
 use super::parser::parse_macros;
 use super::partial_types::*;
 use super::error::*;
+use super::util::IdGenerator;
 
 const MAX_MACRO_DEPTH: i32 = 30;
 
@@ -43,9 +44,11 @@ pub fn process_expression(expr: &PartialExpr, macros: &Vec<Macro>) -> WeldResult
         }
     }
 
+    let mut id_gen = IdGenerator::from_expression(&expr);
+
     let mut expr = expr.clone();
     for _ in 1..MAX_MACRO_DEPTH {
-        if !try!(apply_macros(&mut expr, &macro_map)) {
+        if !try!(apply_macros(&mut expr, &macro_map, &mut id_gen)) {
             return Ok(expr)
         }
     }
@@ -53,20 +56,24 @@ pub fn process_expression(expr: &PartialExpr, macros: &Vec<Macro>) -> WeldResult
     weld_err!("Marco expansion recursed past {} levels", MAX_MACRO_DEPTH)
 }
 
-fn apply_macros(expr: &mut PartialExpr, macros: &HashMap<Symbol, &Macro>) -> WeldResult<bool> {
+fn apply_macros(
+    expr: &mut PartialExpr,
+    macros: &HashMap<Symbol, &Macro>,
+    id_gen: &mut IdGenerator
+) -> WeldResult<bool> {
     let mut new_expr = None;
     if let Apply(ref func, ref params) = expr.kind {
         if let Ident(ref name) = func.kind {
             if let Some(mac) = macros.get(name) {
-                let mut new = mac.body.clone();
+                let mut new_body = mac.body.clone();
                 if params.len() != mac.parameters.len() {
                     return weld_err!("Wrong number of parameters for macro {}", mac.name);
                 }
+                update_defined_ids(&mut new_body, id_gen);
                 for (name, value) in mac.parameters.iter().zip(params) {
-                    new.substitute(name, value);
+                    new_body.substitute(name, value);
                 }
-                new_expr = Some(new);
-                //new_expr = Some(PartialExpr { ty: expr.ty.clone(), kind: BoolLiteral(true) });
+                new_expr = Some(new_body);
             }
         }
     }
@@ -76,7 +83,32 @@ fn apply_macros(expr: &mut PartialExpr, macros: &HashMap<Symbol, &Macro>) -> Wel
         changed = true;
     }
     for c in expr.children_mut() {
-        changed |= try!(apply_macros(c, macros));
+        changed |= try!(apply_macros(c, macros, id_gen));
     }
     Ok(changed)
+}
+
+fn update_defined_ids(expr: &mut PartialExpr, id_gen: &mut IdGenerator) {
+    if let Let(ref mut sym, ref value, ref mut body) = expr.kind {
+        if sym.id == 0 {
+            let new_sym = id_gen.new_symbol(&sym.name);
+            sym.id = new_sym.id;
+            let new_ident = PartialExpr { kind: Ident(new_sym), ty: value.ty.clone() };
+            body.substitute(sym, &new_ident);
+        }
+    }
+    if let Lambda(ref mut params, ref mut body) = expr.kind {
+        for ref mut param in params {
+            let sym = &mut param.name;
+            if sym.id == 0 {
+                let new_sym = id_gen.new_symbol(&sym.name);
+                sym.id = new_sym.id;
+                let new_ident = PartialExpr { kind: Ident(new_sym), ty: param.ty.clone() };
+                body.substitute(sym, &new_ident);
+            }
+        }
+    }
+    for c in expr.children_mut() {
+        update_defined_ids(c, id_gen);
+    }
 }
