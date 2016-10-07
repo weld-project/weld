@@ -56,10 +56,10 @@ fn parse_and_print_simple_expressions() {
     assert_eq!(print_expr(&e).as_str(), "a");
 
     let e = parse_expr("let a = 2; a").unwrap();
-    assert_eq!(print_expr(&e).as_str(), "let a=(2);a");
+    assert_eq!(print_expr(&e).as_str(), "(let a=(2);a)");
 
     let e = parse_expr("let a = 2.0; a").unwrap();
-    assert_eq!(print_expr(&e).as_str(), "let a=(2.0);a");
+    assert_eq!(print_expr(&e).as_str(), "(let a=(2.0);a)");
 
     let e = parse_expr("[1, 2, 3]").unwrap();
     assert_eq!(print_expr(&e).as_str(), "[1,2,3]");
@@ -89,13 +89,13 @@ fn parse_and_print_typed_expressions() {
     assert_eq!(print_typed_expr(&e).as_str(), "a:i32");
 
     let mut e = parse_expr("let a = 2; a").unwrap();
-    assert_eq!(print_typed_expr(&e).as_str(), "let a:?=(2);a:?");
+    assert_eq!(print_typed_expr(&e).as_str(), "(let a:?=(2);a:?)");
     infer_types(&mut e).unwrap();
-    assert_eq!(print_typed_expr(&e).as_str(), "let a:i32=(2);a:i32");
+    assert_eq!(print_typed_expr(&e).as_str(), "(let a:i32=(2);a:i32)");
 
     let mut e = parse_expr("let a = 2; let a = false; a").unwrap();
     infer_types(&mut e).unwrap();
-    assert_eq!(print_typed_expr(&e).as_str(), "let a:i32=(2);let a:bool=(false);a:bool");
+    assert_eq!(print_typed_expr(&e).as_str(), "(let a:i32=(2);(let a:bool=(false);a:bool))");
 
     // Types should propagate from function parameters to body
     let mut e = parse_expr("|a:i32, b:i32| a + b").unwrap();
@@ -108,7 +108,7 @@ fn parse_and_print_typed_expressions() {
 
     let mut e = parse_expr("let a = [1, 2, 3]; 1").unwrap();
     infer_types(&mut e).unwrap();
-    assert_eq!(print_typed_expr(&e).as_str(), "let a:vec[i32]=([1,2,3]);1");
+    assert_eq!(print_typed_expr(&e).as_str(), "(let a:vec[i32]=([1,2,3]);1)");
 
     // Mismatched types in MakeVector
     let mut e = parse_expr("[1, true]").unwrap();

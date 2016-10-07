@@ -117,13 +117,13 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>, typed: bool) -> String {
 
         Let(ref symbol, ref value, ref body) => {
             if typed {
-                format!("let {}:{}=({});{}",
+                format!("(let {}:{}=({});{})",
                         symbol,
                         value.ty.print(),
                         print_expr_impl(value, typed),
                         print_expr_impl(body, typed))
             } else {
-                format!("let {}=({});{}",
+                format!("(let {}=({});{})",
                         symbol,
                         print_expr_impl(value, typed),
                         print_expr_impl(body, typed))

@@ -434,10 +434,10 @@ fn basic_parsing() {
     assert_eq!(print_expr(&e), "[1,(2+3),2]");
 
     let e = parse_expr("let a = 3+2; let b = (let c=a; c); b").unwrap();
-    assert_eq!(print_expr(&e), "let a=((3+2));let b=(let c=(a);c);b");
+    assert_eq!(print_expr(&e), "(let a=((3+2));(let b=((let c=(a);c));b))");
 
     let e = parse_expr("let a: vec[i32] = [2, 3]; a").unwrap();
-    assert_eq!(print_expr(&e), "let a=([2,3]);a");
+    assert_eq!(print_expr(&e), "(let a=([2,3]);a)");
 
     let e = parse_expr("|a, b:i32| a+b").unwrap();
     assert_eq!(print_typed_expr(&e), "|a:?,b:i32|(a:?+b:?)");
