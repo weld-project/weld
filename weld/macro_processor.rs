@@ -13,7 +13,7 @@ use super::program::*;
 use super::parser::*;
 use super::partial_types::*;
 use super::error::*;
-use super::util::IdGenerator;
+use super::util::SymbolGenerator;
 
 #[cfg(test)] use super::pretty_print::*;
 
@@ -44,11 +44,11 @@ pub fn process_expression(expr: &PartialExpr, macros: &Vec<Macro>) -> WeldResult
         }
     }
 
-    let mut id_gen = IdGenerator::from_expression(&expr);
+    let mut sym_gen = SymbolGenerator::from_expression(&expr);
 
     let mut expr = expr.clone();
     for _ in 1..MAX_MACRO_DEPTH {
-        if !try!(apply_macros(&mut expr, &macro_map, &mut id_gen)) {
+        if !try!(apply_macros(&mut expr, &macro_map, &mut sym_gen)) {
             return Ok(expr)
         }
     }
@@ -59,7 +59,7 @@ pub fn process_expression(expr: &PartialExpr, macros: &Vec<Macro>) -> WeldResult
 fn apply_macros(
     expr: &mut PartialExpr,
     macros: &HashMap<Symbol, &Macro>,
-    id_gen: &mut IdGenerator
+    sym_gen: &mut SymbolGenerator
 ) -> WeldResult<bool> {
     let mut new_expr = None;
     if let Apply(ref func, ref params) = expr.kind {
@@ -69,7 +69,7 @@ fn apply_macros(
                 if params.len() != mac.parameters.len() {
                     return weld_err!("Wrong number of parameters for macro {}", mac.name);
                 }
-                update_defined_ids(&mut new_body, id_gen);
+                update_defined_ids(&mut new_body, sym_gen);
                 for (name, value) in mac.parameters.iter().zip(params) {
                     new_body.substitute(name, value);
                 }
@@ -83,15 +83,15 @@ fn apply_macros(
         changed = true;
     }
     for c in expr.children_mut() {
-        changed |= try!(apply_macros(c, macros, id_gen));
+        changed |= try!(apply_macros(c, macros, sym_gen));
     }
     Ok(changed)
 }
 
-fn update_defined_ids(expr: &mut PartialExpr, id_gen: &mut IdGenerator) {
+fn update_defined_ids(expr: &mut PartialExpr, sym_gen: &mut SymbolGenerator) {
     if let Let(ref mut sym, ref value, ref mut body) = expr.kind {
         if sym.id == 0 {
-            let new_sym = id_gen.new_symbol(&sym.name);
+            let new_sym = sym_gen.new_symbol(&sym.name);
             let new_ident = PartialExpr { kind: Ident(new_sym.clone()), ty: value.ty.clone() };
             body.substitute(sym, &new_ident);
             sym.id = new_sym.id;
@@ -101,7 +101,7 @@ fn update_defined_ids(expr: &mut PartialExpr, id_gen: &mut IdGenerator) {
         for ref mut param in params {
             let sym = &mut param.name;
             if sym.id == 0 {
-                let new_sym = id_gen.new_symbol(&sym.name);
+                let new_sym = sym_gen.new_symbol(&sym.name);
                 let new_ident = PartialExpr { kind: Ident(new_sym.clone()), ty: param.ty.clone() };
                 body.substitute(sym, &new_ident);
                 sym.id = new_sym.id;
@@ -109,7 +109,7 @@ fn update_defined_ids(expr: &mut PartialExpr, id_gen: &mut IdGenerator) {
         }
     }
     for c in expr.children_mut() {
-        update_defined_ids(c, id_gen);
+        update_defined_ids(c, sym_gen);
     }
 }
 
