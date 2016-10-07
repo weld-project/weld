@@ -177,3 +177,12 @@ fn macros_introducing_symbols() {
     let result = process_expression(&expr, &macros).unwrap();
     assert_eq!(print_expr(&result).as_str(), "|x#1|(x#1+(let x#2=(x);(x#2+x#2)))");
 }
+
+#[test]
+fn standard_macros() {
+    // Check that the standard macros file is loaded
+    let program = parse_program("map([1,2,3], |a|a+1)").unwrap();
+    let result = process_program(&program).unwrap();
+    assert_eq!(print_expr(&result).as_str(),
+        "result(for([1,2,3],appender[?],|b,x|merge(b,(|a|(a+1))(x))))");
+}
