@@ -1,8 +1,6 @@
 //! Applies macros to an expression or program, yielding a final `PartialExpr`.
 //!
-//! Caveats / TODOs:
-//! - These macros are not yet hygienic if they define identifiers, though that could be done
-//!   by generating new Symbols for those.
+//! Caveats:
 //! - Macros that reuse a parameter twice have its expansion appear twice, instead of assigning
 //!   it to a temporary as would happen with function application.
 

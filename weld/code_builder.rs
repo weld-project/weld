@@ -1,8 +1,5 @@
 //! Utility for generating code that handles some formatting.
 
-// TODO(shoumik): Remove - throwing warnings right now.
-#![allow(dead_code)]
-
 use std::iter;
 use std::cmp::max;
 
