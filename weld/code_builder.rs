@@ -1,8 +1,7 @@
-//! Utility for generating code that handles some formatting.
-
 use std::iter;
 use std::cmp::max;
 
+/// Utility struct for generating code that indents and formats it.
 #[derive(Debug)]
 pub struct CodeBuilder {
     code: String,
@@ -11,9 +10,8 @@ pub struct CodeBuilder {
     indent_string: String,
 }
 
-/// Methods for `CodeBuilder`.
 impl CodeBuilder {
-    /// Adds line to code and performs some simple formatting.
+    /// Adds a single line of code to this code builder, formatting it based on previous code.
     pub fn add_line(&mut self, line: &str) {
         let indent_change = (line.matches("{").count() as i32) -
             (line.matches("}").count() as i32);
@@ -42,20 +40,30 @@ impl CodeBuilder {
             .collect::<String>();
     }
 
-    /// Adds multiples lines (split by \n) to this code builder.
-    pub fn add_lines(&mut self, code: &str) {
+    /// Adds one or more lines (split by "\n") to this code builder.
+    pub fn add(&mut self, code: &str) {
         for l in code.lines() {
             self.add_line(l);
         }
     }
 
+    /// Adds the result of another CodeBuilder.
+    pub fn add_code(&mut self, builder: &CodeBuilder) {
+        self.code.push_str(builder.code.as_ref());
+    }
+
     /// Returns the code in this code builder so far.
-    pub fn result(&self) -> String {
-        self.code.clone()
+    pub fn result(&self) -> &str {
+        self.code.as_str()
     }
 
     /// Returns a new CodeBuilder.
-    pub fn new(indent_size: i32) -> CodeBuilder {
+    pub fn new() -> CodeBuilder {
+        CodeBuilder::with_indent_size(2)
+    }
+
+    /// Returns a new CodeBuilder with the given indent size.
+    pub fn with_indent_size(indent_size: i32) -> CodeBuilder {
         CodeBuilder {
             code: String::new(),
             indent_level: 0,
@@ -66,9 +74,9 @@ impl CodeBuilder {
 
     /// Returns a formatted string using the CodeBuilder.
     pub fn format(indent_size: i32, code: &str) -> String {
-        let mut c = CodeBuilder::new(indent_size);
-        c.add_lines(code);
-        c.result()
+        let mut c = CodeBuilder::with_indent_size(indent_size);
+        c.add(code);
+        c.code
     }
 }
 

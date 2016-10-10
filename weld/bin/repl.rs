@@ -1,12 +1,15 @@
+extern crate easy_ll;
 extern crate weld;
 
 use std::io::{stdin, stdout, Write};
 
+use weld::ast::ExprKind::*;
+use weld::llvm::LlvmGenerator;
+use weld::macro_processor;
 use weld::parser::*;
 use weld::pretty_print::*;
 use weld::transforms;
 use weld::type_inference::*;
-use weld::macro_processor;
 
 fn main() {
     loop {
@@ -53,6 +56,23 @@ fn main() {
         println!("After type inference:\n{}\n", print_typed_expr(&expr));
         println!("Expression type: {}\n", print_type(&expr.ty));
 
-        expr.to_typed().expect("Type inference passed but to_typed failed!");
+        let expr = expr.to_typed().unwrap();
+        if let Lambda(ref args, ref body) = expr.kind {
+            let mut generator = LlvmGenerator::new();
+            if let Err(ref e) = generator.add_function("run", args, body) {
+                println!("Error during LLVM code gen:\n{}\n", e);
+                continue;
+            }
+            let llvm_code = generator.result();
+            println!("LLVM code:\n{}\n", llvm_code);
+
+            if let Err(ref e) = easy_ll::compile_module(&llvm_code) {
+                println!("Error during LLVM compilation:\n{}\n", e);
+                continue;
+            }
+            println!("LLVM module compiled successfully\n")
+        } else {
+            println!("Expression is not a function, so not compiling to LLVM.\n")
+        }
     }
 }

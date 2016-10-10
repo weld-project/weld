@@ -1,3 +1,8 @@
+// Disable dead code macros in "build" mode but keep them on in "test" builds so that we don't
+// get spurious warnings for functions that are currently only used in tests. This is useful for
+// development but can be removed later.
+#![cfg_attr(not(test), allow(dead_code))]
+
 #[macro_use] extern crate lazy_static;
 extern crate regex;
 extern crate easy_ll;
