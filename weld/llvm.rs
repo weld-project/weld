@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::fmt::Write;
 
 use easy_ll::*;
 
@@ -35,7 +34,7 @@ pub struct LlvmGenerator {
 
 impl LlvmGenerator {
     pub fn new() -> LlvmGenerator {
-        LlvmGenerator {
+        let mut generator = LlvmGenerator {
             struct_names: HashMap::new(),
             struct_ids: IdGenerator::new("%s"),
             vec_names: HashMap::new(),
@@ -43,12 +42,15 @@ impl LlvmGenerator {
             var_ids: IdGenerator::new("%t"),
             prelude_code: CodeBuilder::new(),
             body_code: CodeBuilder::new(),
-        }
+        };
+        generator.prelude_code.add(include_str!("resources/prelude.ll"));
+        generator.prelude_code.add("\n");
+        generator
     }
 
     /// Return all the code generated so far.
     pub fn result(&mut self) -> String {
-        format!("; PRELUDE:\n{}\n; BODY:\n{}", self.prelude_code.result(), self.body_code.result())
+        format!("; PRELUDE:\n\n{}\n; BODY:\n\n{}", self.prelude_code.result(), self.body_code.result())
     }
 
     /// Add a function to the generated program.
@@ -59,7 +61,6 @@ impl LlvmGenerator {
         body: &TypedExpr
     ) -> WeldResult<()> {
         let mut code = &mut CodeBuilder::new();
-
         let mut arg_types = String::new();
         for (i, arg) in args.iter().enumerate() {
             arg_types.push_str(try!(self.llvm_type(&arg.ty)));
@@ -67,7 +68,6 @@ impl LlvmGenerator {
                 arg_types.push_str(", ");
             }
         }
-
         let res_type = try!(self.llvm_type(&body.ty)).to_string();
 
         code.add(format!("define {} @{}({}) {{", res_type, name, arg_types));
@@ -80,8 +80,8 @@ impl LlvmGenerator {
     }
 
     /// Add a function to the generated program, passing its parameters and return value through
-    /// pointers. This can be used for the main entry point function into Weld modules to pass
-    /// them arbitrary structures.
+    /// pointers encoded as i64. This is used for the main entry point function into Weld modules
+    /// to pass them arbitrary structures.
     pub fn add_function_on_pointers(
         &mut self,
         name: &str,
@@ -99,7 +99,7 @@ impl LlvmGenerator {
         let res_type = try!(self.llvm_type(&body.ty)).to_string();
         let mut code = &mut CodeBuilder::new();
 
-        code.add(format!("define i8* @{}(i8* %args) {{", name));
+        code.add(format!("define i64 @{}(i64 %args) {{", name));
 
         // Code to allocate a result structure
         code.add(format!(
@@ -112,7 +112,7 @@ impl LlvmGenerator {
 
         // Code to load args and call function
         code.add(format!(
-            "%args_typed = bitcast i8* %args to {args_type}*
+            "%args_typed = inttoptr i64 %args to {args_type}*
              %args_val = load {args_type}* %args_typed",
             args_type = args_type
         ));
@@ -124,7 +124,8 @@ impl LlvmGenerator {
         code.add(format!(
             "%res_val = call {res_type} @{raw_function_name}({arg_list})
              store {res_type} %res_val, {res_type}* %res_typed
-             ret i8* %res_bytes",
+             %res_address = ptrtoint {res_type}* %res_typed to i64
+             ret i64 %res_address",
             res_type = res_type,
             raw_function_name = raw_function_name,
             arg_list = arg_decls.join(", ")

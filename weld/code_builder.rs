@@ -76,55 +76,55 @@ impl CodeBuilder {
 
 #[test]
 fn code_builder_basic() {
-    let inp = "
+    let input = "
 class A {
 blahblah;
 }";
-   let exp = "
+   let expected = "
 class A {
   blahblah;
 }
 ";
-   assert_eq!(CodeBuilder::format(2, inp), exp);
+   assert_eq!(CodeBuilder::format(2, input), expected);
 
-   let inp = "
+   let input = "
 class A {
 if (c) {
 duh
      }
 }";
-   let exp = "
+   let expected = "
 class A {
   if (c) {
     duh
   }
 }
 ";
-   assert_eq!(CodeBuilder::format(2, inp), exp);
+   assert_eq!(CodeBuilder::format(2, input), expected);
 
-   let inp = "
+   let input = "
 class A {
 if (c) { duh }
 }";
-   let exp = "
+   let expected = "
 class A {
   if (c) { duh }
 }
 ";
-   assert_eq!(CodeBuilder::format(2, inp), exp);
+   assert_eq!(CodeBuilder::format(2, input), expected);
 
-   let inp = "
+   let input = "
 class A {
 if (c) { duh }
 myLabel:
 blah
 }";
-   let exp = "
+   let expected = "
 class A {
   if (c) { duh }
 myLabel:
   blah
 }
 ";
-   assert_eq!(CodeBuilder::format(2, inp), exp);
+   assert_eq!(CodeBuilder::format(2, input), expected);
 }
