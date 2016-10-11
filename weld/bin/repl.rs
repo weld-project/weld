@@ -59,7 +59,7 @@ fn main() {
         let expr = expr.to_typed().unwrap();
         if let Lambda(ref args, ref body) = expr.kind {
             let mut generator = LlvmGenerator::new();
-            if let Err(ref e) = generator.add_function("run", args, body) {
+            if let Err(ref e) = generator.add_function_on_pointers("run", args, body) {
                 println!("Error during LLVM code gen:\n{}\n", e);
                 continue;
             }

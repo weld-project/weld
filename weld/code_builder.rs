@@ -2,6 +2,7 @@ use std::iter;
 use std::cmp::max;
 
 /// Utility struct for generating code that indents and formats it.
+/// Also implements `std::fmt::Write` to support the `write!` macro.
 #[derive(Debug)]
 pub struct CodeBuilder {
     code: String,
@@ -13,6 +14,7 @@ pub struct CodeBuilder {
 impl CodeBuilder {
     /// Adds a single line of code to this code builder, formatting it based on previous code.
     pub fn add_line(&mut self, line: &str) {
+        let line = line.trim();
         let indent_change = (line.matches("{").count() as i32) -
             (line.matches("}").count() as i32);
         let new_indent_level = max(0, self.indent_level + indent_change);
@@ -30,7 +32,7 @@ impl CodeBuilder {
         };
 
         self.code.push_str(this_line_indent.as_ref());
-        self.code.push_str(line.trim());
+        self.code.push_str(line);
         self.code.push_str("\n");
 
         self.indent_level = new_indent_level;
@@ -41,8 +43,8 @@ impl CodeBuilder {
     }
 
     /// Adds one or more lines (split by "\n") to this code builder.
-    pub fn add(&mut self, code: &str) {
-        for l in code.lines() {
+    pub fn add<S>(&mut self, code: S) where S: AsRef<str> {
+        for l in code.as_ref().lines() {
             self.add_line(l);
         }
     }
@@ -73,7 +75,7 @@ impl CodeBuilder {
     }
 
     /// Returns a formatted string using the CodeBuilder.
-    pub fn format(indent_size: i32, code: &str) -> String {
+    pub fn format<S>(indent_size: i32, code: S) -> String where S: AsRef<str> {
         let mut c = CodeBuilder::with_indent_size(indent_size);
         c.add(code);
         c.code
@@ -97,7 +99,7 @@ class A {
 class A {
 if (c) {
 duh
-}
+     }
 }";
    let exp = "
 class A {

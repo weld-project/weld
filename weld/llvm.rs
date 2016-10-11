@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fmt::Write;
 
 use easy_ll::*;
 
@@ -50,13 +51,14 @@ impl LlvmGenerator {
         format!("; PRELUDE:\n{}\n; BODY:\n{}", self.prelude_code.result(), self.body_code.result())
     }
 
+    /// Add a function to the generated program.
     pub fn add_function(
         &mut self,
         name: &str,
         args: &Vec<TypedParameter>,
         body: &TypedExpr
     ) -> WeldResult<()> {
-        let mut code = CodeBuilder::new();
+        let mut code = &mut CodeBuilder::new();
 
         let mut arg_types = String::new();
         for (i, arg) in args.iter().enumerate() {
@@ -66,14 +68,70 @@ impl LlvmGenerator {
             }
         }
 
-        let result_type = String::from(try!(self.llvm_type(&body.ty)));
+        let res_type = try!(self.llvm_type(&body.ty)).to_string();
 
-        code.add(&format!("define {} @{}({}) {{", result_type, name, arg_types));
-        let result = try!(self.gen_expr(&body, &mut code));
-        code.add(&format!("ret {} {}", result_type, result));
-        code.add("}");
+        code.add(format!("define {} @{}({}) {{", res_type, name, arg_types));
+        let res_var = try!(self.gen_expr(&body, code));
+        code.add(format!("ret {} {}", res_type, res_var));
+        code.add(format!("}}\n\n"));
 
-        self.body_code.add_code(&code);
+        self.body_code.add_code(code);
+        Ok(())
+    }
+
+    /// Add a function to the generated program, passing its parameters and return value through
+    /// pointers. This can be used for the main entry point function into Weld modules to pass
+    /// them arbitrary structures.
+    pub fn add_function_on_pointers(
+        &mut self,
+        name: &str,
+        args: &Vec<TypedParameter>,
+        body: &TypedExpr
+    ) -> WeldResult<()> {
+        // First add the function on raw values, which we'll call from the pointer version.
+        let raw_function_name = format!("{}.raw", name);
+        try!(self.add_function(&raw_function_name, args, body));
+
+        // Define a struct with all the argument types as fields
+        let args_struct = Struct(args.iter().map(|a| a.ty.clone()).collect());
+        let args_type = try!(self.llvm_type(&args_struct)).to_string();
+
+        let res_type = try!(self.llvm_type(&body.ty)).to_string();
+        let mut code = &mut CodeBuilder::new();
+
+        code.add(format!("define i8* @{}(i8* %args) {{", name));
+
+        // Code to allocate a result structure
+        code.add(format!(
+            "%res_size_ptr = getelementptr {res_type}* null, i32 1
+             %res_size = ptrtoint {res_type}* %res_size_ptr to i64
+             %res_bytes = call i8* @malloc(i64 %res_size)
+             %res_typed = bitcast i8* %res_bytes to {res_type}*",
+            res_type = res_type
+        ));
+
+        // Code to load args and call function
+        code.add(format!(
+            "%args_typed = bitcast i8* %args to {args_type}*
+             %args_val = load {args_type}* %args_typed",
+            args_type = args_type
+        ));
+        let mut arg_decls: Vec<String> = Vec::new();
+        for (i, arg) in args.iter().enumerate() {
+            code.add(format!("%arg{} = extractvalue {} %args_val, {}", i, args_type, i));
+            arg_decls.push(format!("{} %arg{}", try!(self.llvm_type(&arg.ty)), i));
+        }
+        code.add(format!(
+            "%res_val = call {res_type} @{raw_function_name}({arg_list})
+             store {res_type} %res_val, {res_type}* %res_typed
+             ret i8* %res_bytes",
+            res_type = res_type,
+            raw_function_name = raw_function_name,
+            arg_list = arg_decls.join(", ")
+        ));
+        code.add(format!("}}\n\n"));
+
+        self.body_code.add_code(code);
         Ok(())
     }
 
@@ -88,13 +146,23 @@ impl LlvmGenerator {
 
             Struct(ref fields) => {
                 if self.struct_names.get(fields) == None {
-                    self.struct_names.insert(fields.clone(), self.struct_ids.next());
+                    // Declare the struct in prelude_code
+                    let name = self.struct_ids.next();
+                    let mut field_types: Vec<String> = Vec::new();
+                    for f in fields {
+                        field_types.push(try!(self.llvm_type(f)).to_string());
+                    }
+                    let field_types = field_types.join(", ");
+                    self.prelude_code.add(format!("{} = type {{ {} }}", &name, &field_types));
+                    // Add it into our map so we remember its name
+                    self.struct_names.insert(fields.clone(), name);
                 }
                 Ok(self.struct_names.get(fields).unwrap())
             }
 
             Vector(ref elem) => {
                 if self.vec_names.get(elem) == None {
+                    // TODO: declare the vector's struct and helper functions in self.prelude_code
                     self.vec_names.insert(*elem.clone(), self.vec_ids.next());
                 }
                 Ok(self.vec_names.get(elem).unwrap())
