@@ -1,4 +1,3 @@
-use std::iter;
 use std::cmp::max;
 
 /// Utility struct for generating code that indents and formats it.
@@ -8,38 +7,32 @@ pub struct CodeBuilder {
     code: String,
     indent_level: i32,
     indent_size: i32,
-    indent_string: String,
 }
 
 impl CodeBuilder {
     /// Adds a single line of code to this code builder, formatting it based on previous code.
-    pub fn add_line(&mut self, line: &str) {
-        let line = line.trim();
+    pub fn add_line<S>(&mut self, line: S) where S: AsRef<str> {
+        let line = line.as_ref().trim();
         let indent_change = (line.matches("{").count() as i32) -
             (line.matches("}").count() as i32);
         let new_indent_level = max(0, self.indent_level + indent_change);
-        // Lines starting with '}' should be de-indented even if they
-        // contain '{' after; in addition, lines ending with ':' are
-        // typically labels, e.g., in LLVM.
+
+        // Lines starting with '}' should be de-indented even if they contain '{' after; in
+        // addition, lines ending with ':' are typically labels, e.g., in LLVM.
         let this_line_indent = if line.starts_with("}") || line.ends_with(":") {
-            let spaces = (self.indent_size * (self.indent_level - 1)) as usize;
-            iter::repeat(" ")
-                .take(spaces)
-                .collect::<String>()
+            self.indent_level - 1
         } else {
-            // TODO(shoumik): How to avoid this clone...?
-            self.indent_string.clone()
+            self.indent_level
         };
 
-        self.code.push_str(this_line_indent.as_ref());
+        //self.code.push_str(this_line_indent.as_ref());
+        for _ in 0 .. this_line_indent * self.indent_size {
+            self.code.push(' ');
+        }
         self.code.push_str(line);
         self.code.push_str("\n");
 
         self.indent_level = new_indent_level;
-        let spaces = (self.indent_size * new_indent_level) as usize;
-        self.indent_string = iter::repeat(" ")
-            .take(spaces)
-            .collect::<String>();
     }
 
     /// Adds one or more lines (split by "\n") to this code builder.
@@ -70,7 +63,6 @@ impl CodeBuilder {
             code: String::new(),
             indent_level: 0,
             indent_size: indent_size,
-            indent_string: String::new(),
         }
     }
 
