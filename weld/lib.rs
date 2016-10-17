@@ -10,7 +10,7 @@ extern crate easy_ll;
 /// Utility macro to create an Err result with a WeldError from a format string.
 macro_rules! weld_err {
     ( $($arg:tt)* ) => ({
-        ::std::result::Result::Err($crate::error::WeldError(format!($($arg)*)))
+        ::std::result::Result::Err($crate::error::WeldError::new(format!($($arg)*)))
     })
 }
 

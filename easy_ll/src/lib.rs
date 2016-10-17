@@ -27,7 +27,9 @@ static mut initialize_failed: bool = false;
 pub struct LlvmError(String);
 
 impl LlvmError {
-    fn new(description: &str) -> LlvmError { LlvmError(description.to_string()) }
+    pub fn new(description: &str) -> LlvmError { LlvmError(description.to_string()) }
+
+    pub fn to_string(self) -> String { self.0 }
 }
 
 impl fmt::Display for LlvmError {
@@ -60,7 +62,7 @@ pub struct CompiledModule {
 }
 
 impl CompiledModule {
-    /// Call the module's `run` function. 
+    /// Call the module's `run` function.
     pub fn run(&self, arg: i64) -> i64 {
         (self.function.unwrap())(arg)
     }
@@ -94,18 +96,18 @@ pub fn compile_module(code: &str) -> Result<CompiledModule, LlvmError> {
         if context.is_null() {
             return Err(LlvmError::new("LLVMContextCreate returned null"))
         }
-        
+
         // Create a CompiledModule to wrap the context and our result (will clean it on Drop).
         let mut result = CompiledModule { context: context, engine: None, function: None };
-        
+
         // Parse the IR to get an LLVMModuleRef
         let module = try!(parse_module(context, code));
 
-        // Validate and optimize the module 
+        // Validate and optimize the module
         try!(verify_module(module));
         try!(check_run_function(module));
         try!(optimize_module(module));
-        
+
         // Create an execution engine for the module and find its run function
         let engine = try!(create_exec_engine(module));
         result.engine = Some(engine);

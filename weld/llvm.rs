@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use easy_ll::*;
+use easy_ll;
 
 use super::ast::*;
 use super::ast::Type::*;
@@ -8,10 +8,15 @@ use super::ast::ExprKind::*;
 use super::ast::ScalarKind::*;
 use super::code_builder::CodeBuilder;
 use super::error::*;
+use super::macro_processor;
 use super::pretty_print::*;
+use super::program::Program;
+use super::type_inference;
 use super::util::IdGenerator;
 
 #[cfg(test)] use super::parser::*;
+
+static PRELUDE_CODE: &'static str = include_str!("resources/prelude.ll");
 
 /// Generates LLVM code for one or more modules.
 pub struct LlvmGenerator {
@@ -22,8 +27,6 @@ pub struct LlvmGenerator {
     /// Track a unique name of the form %v0, %v1, etc for each vec generated.
     vec_names: HashMap<Type, String>,
     vec_ids: IdGenerator,
-
-    var_ids: IdGenerator,
 
     /// A CodeBuilder for prelude functions such as type and struct definitions.
     prelude_code: CodeBuilder,
@@ -39,11 +42,10 @@ impl LlvmGenerator {
             struct_ids: IdGenerator::new("%s"),
             vec_names: HashMap::new(),
             vec_ids: IdGenerator::new("%v"),
-            var_ids: IdGenerator::new("%t"),
             prelude_code: CodeBuilder::new(),
             body_code: CodeBuilder::new(),
         };
-        generator.prelude_code.add(include_str!("resources/prelude.ll"));
+        generator.prelude_code.add(PRELUDE_CODE);
         generator.prelude_code.add("\n");
         generator
     }
@@ -60,22 +62,36 @@ impl LlvmGenerator {
         args: &Vec<TypedParameter>,
         body: &TypedExpr
     ) -> WeldResult<()> {
-        let mut code = &mut CodeBuilder::new();
+        let mut ctx = &mut FunctionContext::new();
         let mut arg_types = String::new();
         for (i, arg) in args.iter().enumerate() {
-            arg_types.push_str(try!(self.llvm_type(&arg.ty)));
+            let arg = format!("{} {}.", try!(self.llvm_type(&arg.ty)), llvm_symbol(&arg.name));
+            arg_types.push_str(&arg);
             if i < args.len() - 1 {
                 arg_types.push_str(", ");
             }
         }
         let res_type = try!(self.llvm_type(&body.ty)).to_string();
 
-        code.add(format!("define {} @{}({}) {{", res_type, name, arg_types));
-        let res_var = try!(self.gen_expr(&body, code));
-        code.add(format!("ret {} {}", res_type, res_var));
-        code.add(format!("}}\n\n"));
+        // Start the entry block by defining the function and storing all its arguments on the
+        // stack (this makes them consistent with other local variables). Later, expressions may
+        // add more local variables to alloca_code.
+        ctx.alloca_code.add(format!("define {} @{}({}) {{", res_type, name, arg_types));
+        ctx.alloca_code.add(format!("entry:"));
+        for (i, arg) in args.iter().enumerate() {
+            let name = llvm_symbol(&arg.name);
+            let ty = try!(self.llvm_type(&arg.ty)).to_string();
+            ctx.alloca_code.add(format!("{} = alloca {}", name, ty));
+            ctx.code.add(format!("store {} {}., {}* {}", ty, name, ty, name));
+        }
 
-        self.body_code.add_code(code);
+        // Generate an expression for the function body.
+        let res_var = try!(self.gen_expr(&body, ctx));
+        ctx.code.add(format!("ret {} {}", res_type, res_var));
+        ctx.code.add(format!("}}\n\n"));
+
+        self.body_code.add(&ctx.alloca_code.result());
+        self.body_code.add(&ctx.code.result());
         Ok(())
     }
 
@@ -176,7 +192,11 @@ impl LlvmGenerator {
     /// Add an expression to a CodeBuilder, possibly generating prelude code earlier, and return
     /// a string that can be used to represent its result later (e.g. %var if introducing a local
     /// variable or an integer constant otherwise).
-    fn gen_expr(&mut self, expr: &TypedExpr, code: &mut CodeBuilder) -> WeldResult<String> {
+    fn gen_expr(
+        &mut self,
+        expr: &TypedExpr,
+        ctx: &mut FunctionContext
+    ) -> WeldResult<String> {
         match expr.kind {
             I32Literal(value) => Ok(format!("{}", value)),
             I64Literal(value) => Ok(format!("{}", value)),
@@ -184,30 +204,153 @@ impl LlvmGenerator {
             F64Literal(value) => Ok(format!("{}", value)),
             BoolLiteral(value) => Ok(format!("{}", if value {1} else {0})),
 
+            Ident(ref symbol) => {
+                let var = ctx.var_ids.next();
+                ctx.code.add(format!("{} = load {}* {}",
+                    var, try!(self.llvm_type(&expr.ty)), llvm_symbol(symbol)));
+                Ok(var)
+            },
+
+            BinOp(kind, ref left, ref right) => {
+                let op_name = try!(self.llvm_binop(kind, &left.ty));
+                let left_var = try!(self.gen_expr(left, ctx));
+                let right_var = try!(self.gen_expr(right, ctx));
+                let var = ctx.var_ids.next();
+                ctx.code.add(format!("{} = {} {} {}, {}",
+                    var, op_name, try!(self.llvm_type(&left.ty)), left_var, right_var));
+                Ok(var)
+            },
+
+            Let(ref name, ref value, ref body) => {
+                let value_var = try!(self.gen_expr(value, ctx));
+                let name = llvm_symbol(name);
+                let ty = try!(self.llvm_type(&value.ty)).to_string();
+                ctx.alloca_code.add(format!("{} = alloca {}", name, ty));
+                ctx.code.add(format!("store {} {}, {}* {}", ty, value_var, ty, name));
+                self.gen_expr(body, ctx)
+            }
+
             _ => weld_err!("Unsupported expression: {}", print_expr(expr))
+        }
+    }
+
+    /// Return the name of the LLVM instruction for a binary operation on a specific type.
+    fn llvm_binop(&mut self, op_kind: BinOpKind, ty: &Type) -> WeldResult<&'static str> {
+        match (op_kind, ty) {
+            (BinOpKind::Add, &Scalar(I32)) => Ok("add"),
+            (BinOpKind::Add, &Scalar(I64)) => Ok("add"),
+            (BinOpKind::Add, &Scalar(F32)) => Ok("fadd"),
+            (BinOpKind::Add, &Scalar(F64)) => Ok("fadd"),
+
+            (BinOpKind::Subtract, &Scalar(I32)) => Ok("sub"),
+            (BinOpKind::Subtract, &Scalar(I64)) => Ok("sub"),
+            (BinOpKind::Subtract, &Scalar(F32)) => Ok("fsub"),
+            (BinOpKind::Subtract, &Scalar(F64)) => Ok("fsub"),
+
+            (BinOpKind::Multiply, &Scalar(I32)) => Ok("mul"),
+            (BinOpKind::Multiply, &Scalar(I64)) => Ok("mul"),
+            (BinOpKind::Multiply, &Scalar(F32)) => Ok("fmul"),
+            (BinOpKind::Multiply, &Scalar(F64)) => Ok("fmul"),
+
+            (BinOpKind::Divide, &Scalar(I32)) => Ok("sdiv"),
+            (BinOpKind::Divide, &Scalar(I64)) => Ok("sdiv"),
+            (BinOpKind::Divide, &Scalar(F32)) => Ok("fdiv"),
+            (BinOpKind::Divide, &Scalar(F64)) => Ok("fdiv"),
+
+            _ => weld_err!("Unsupported binary op: {:?} on {}", op_kind, print_type(ty))
         }
     }
 }
 
-/// Generate a compiled LLVM module from a typed expression representing a function.
-pub fn generate(_: &TypedExpr) -> WeldResult<CompiledModule> {
-    weld_err!("Not implemented yet")
+/// Return the LLVM version of a Weld symbol (encoding any special characters for LLVM).
+fn llvm_symbol(symbol: &Symbol) -> String {
+    if symbol.id == 0 {
+        format!("%{}", symbol.name)
+    } else {
+        format!("%{}.{}", symbol.name, symbol.id)
+    }
+}
+
+/// Struct used to track state while generating a function.
+struct FunctionContext {
+    alloca_code: CodeBuilder,
+    code: CodeBuilder,
+    var_ids: IdGenerator,
+    label_ids: IdGenerator,
+}
+
+impl FunctionContext {
+    fn new() -> FunctionContext {
+        FunctionContext {
+            alloca_code: CodeBuilder::new(),
+            code: CodeBuilder::new(),
+            var_ids: IdGenerator::new("%"),
+            label_ids: IdGenerator::new("label"),
+        }
+    }
+}
+
+/// Generate a compiled LLVM module from a program whose body is a function.
+pub fn compile_program(program: &Program) -> WeldResult<easy_ll::CompiledModule> {
+    let mut expr = try!(macro_processor::process_program(program));
+    try!(type_inference::infer_types(&mut expr));
+    let expr = try!(expr.to_typed());
+    match expr.kind {
+        Lambda(ref params, ref body) => {
+            let mut gen = LlvmGenerator::new();
+            try!(gen.add_function_on_pointers("run", params, body));
+            Ok(try!(easy_ll::compile_module(&gen.result())))
+        },
+        _ => weld_err!("Expression passed to compile_function must be a Lambda")
+    }
 }
 
 #[test]
 fn types() {
-    let mut ctx = LlvmGenerator::new();
+    let mut gen = LlvmGenerator::new();
 
-    assert_eq!(ctx.llvm_type(&Scalar(I32)).unwrap(), "i32");
-    assert_eq!(ctx.llvm_type(&Scalar(I64)).unwrap(), "i64");
-    assert_eq!(ctx.llvm_type(&Scalar(F32)).unwrap(), "f32");
-    assert_eq!(ctx.llvm_type(&Scalar(F64)).unwrap(), "f64");
-    assert_eq!(ctx.llvm_type(&Scalar(Bool)).unwrap(), "i1");
+    assert_eq!(gen.llvm_type(&Scalar(I32)).unwrap(), "i32");
+    assert_eq!(gen.llvm_type(&Scalar(I64)).unwrap(), "i64");
+    assert_eq!(gen.llvm_type(&Scalar(F32)).unwrap(), "f32");
+    assert_eq!(gen.llvm_type(&Scalar(F64)).unwrap(), "f64");
+    assert_eq!(gen.llvm_type(&Scalar(Bool)).unwrap(), "i1");
 
     let struct1 = parse_type("{i32,bool,i32}").unwrap().to_type().unwrap();
-    assert_eq!(ctx.llvm_type(&struct1).unwrap(), "%s0");
-    assert_eq!(ctx.llvm_type(&struct1).unwrap(), "%s0");   // Name is reused for same struct
+    assert_eq!(gen.llvm_type(&struct1).unwrap(), "%s0");
+    assert_eq!(gen.llvm_type(&struct1).unwrap(), "%s0");   // Name is reused for same struct
 
     let struct2 = parse_type("{i32,bool}").unwrap().to_type().unwrap();
-    assert_eq!(ctx.llvm_type(&struct2).unwrap(), "%s1");
+    assert_eq!(gen.llvm_type(&struct2).unwrap(), "%s1");
+}
+
+#[test]
+fn basic_program() {
+    let code = "|| 40 + 2";
+    let module = compile_program(&parse_program(code).unwrap()).unwrap();
+    let result = module.run(0) as *const i32;
+    let result = unsafe { *result };
+    assert_eq!(result, 42);
+    // TODO: Free result
+}
+
+#[test]
+fn program_with_args() {
+    let code = "|x:i32| 40 + x";
+    let module = compile_program(&parse_program(code).unwrap()).unwrap();
+    let input: i32 = 2;
+    let result = module.run(&input as *const i32 as i64) as *const i32;
+    let result = unsafe { *result };
+    assert_eq!(result, 42);
+    // TODO: Free result
+}
+
+#[test]
+fn let_statement() {
+    let code = "|x:i32| let y = 40 + x; y + 2";
+    let module = compile_program(&parse_program(code).unwrap()).unwrap();
+    let input: i32 = 100;
+    let result = module.run(&input as *const i32 as i64) as *const i32;
+    let result = unsafe { *result };
+    assert_eq!(result, 142);
+    // TODO: Free result
 }
