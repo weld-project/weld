@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::collections::HashSet;
 
 use easy_ll;
 
@@ -65,7 +66,7 @@ impl LlvmGenerator {
         let mut ctx = &mut FunctionContext::new();
         let mut arg_types = String::new();
         for (i, arg) in args.iter().enumerate() {
-            let arg = format!("{} {}.", try!(self.llvm_type(&arg.ty)), llvm_symbol(&arg.name));
+            let arg = format!("{} {}.in", try!(self.llvm_type(&arg.ty)), llvm_symbol(&arg.name));
             arg_types.push_str(&arg);
             if i < args.len() - 1 {
                 arg_types.push_str(", ");
@@ -78,11 +79,11 @@ impl LlvmGenerator {
         // add more local variables to alloca_code.
         ctx.alloca_code.add(format!("define {} @{}({}) {{", res_type, name, arg_types));
         ctx.alloca_code.add(format!("entry:"));
-        for (i, arg) in args.iter().enumerate() {
+        for arg in args {
             let name = llvm_symbol(&arg.name);
             let ty = try!(self.llvm_type(&arg.ty)).to_string();
-            ctx.alloca_code.add(format!("{} = alloca {}", name, ty));
-            ctx.code.add(format!("store {} {}., {}* {}", ty, name, ty, name));
+            try!(ctx.add_alloca(&name, &ty));
+            ctx.code.add(format!("store {} {}.in, {}* {}", ty, name, ty, name));
         }
 
         // Generate an expression for the function body.
@@ -212,7 +213,7 @@ impl LlvmGenerator {
             },
 
             BinOp(kind, ref left, ref right) => {
-                let op_name = try!(self.llvm_binop(kind, &left.ty));
+                let op_name = try!(llvm_binop(kind, &left.ty));
                 let left_var = try!(self.gen_expr(left, ctx));
                 let right_var = try!(self.gen_expr(right, ctx));
                 let var = ctx.var_ids.next();
@@ -225,39 +226,43 @@ impl LlvmGenerator {
                 let value_var = try!(self.gen_expr(value, ctx));
                 let name = llvm_symbol(name);
                 let ty = try!(self.llvm_type(&value.ty)).to_string();
-                ctx.alloca_code.add(format!("{} = alloca {}", name, ty));
+                try!(ctx.add_alloca(&name, &ty));
                 ctx.code.add(format!("store {} {}, {}* {}", ty, value_var, ty, name));
                 self.gen_expr(body, ctx)
-            }
+            },
+
+            If(ref cond, ref on_true, ref on_false) => {
+                let cond_var = try!(self.gen_expr(cond, ctx));
+                let id = ctx.if_ids.next();
+                let true_label = format!("{}.true", id);
+                let false_label = format!("{}.false", id);
+                let end_true_label = format!("{}.true.end", id);
+                let end_false_label = format!("{}.false.end", id);
+                let end_label = format!("{}.end", id);
+
+                ctx.code.add(format!("br i1 {}, label %{}, label %{}",
+                    cond_var, true_label, false_label));
+                ctx.code.add(format!("{}:", true_label));
+                let true_var = try!(self.gen_expr(on_true, ctx));
+                ctx.code.add(format!("br label %{}", end_true_label));
+                ctx.code.add(format!("{}:", end_true_label));
+                ctx.code.add(format!("br label %{}", end_label));
+
+                ctx.code.add(format!("{}:", false_label));
+                let false_var = try!(self.gen_expr(on_false, ctx));
+                ctx.code.add(format!("br label %{}", end_false_label));
+                ctx.code.add(format!("{}:", end_false_label));
+                ctx.code.add(format!("br label %{}", end_label));
+
+                ctx.code.add(format!("{}:", end_label));
+                let var = ctx.var_ids.next();
+                let ty = try!(self.llvm_type(&expr.ty)).to_string();
+                ctx.code.add(format!("{} = phi {} [{}, %{}], [{}, %{}]",
+                    var, ty, true_var, end_true_label, false_var, end_false_label));
+                Ok(var)
+            },
 
             _ => weld_err!("Unsupported expression: {}", print_expr(expr))
-        }
-    }
-
-    /// Return the name of the LLVM instruction for a binary operation on a specific type.
-    fn llvm_binop(&mut self, op_kind: BinOpKind, ty: &Type) -> WeldResult<&'static str> {
-        match (op_kind, ty) {
-            (BinOpKind::Add, &Scalar(I32)) => Ok("add"),
-            (BinOpKind::Add, &Scalar(I64)) => Ok("add"),
-            (BinOpKind::Add, &Scalar(F32)) => Ok("fadd"),
-            (BinOpKind::Add, &Scalar(F64)) => Ok("fadd"),
-
-            (BinOpKind::Subtract, &Scalar(I32)) => Ok("sub"),
-            (BinOpKind::Subtract, &Scalar(I64)) => Ok("sub"),
-            (BinOpKind::Subtract, &Scalar(F32)) => Ok("fsub"),
-            (BinOpKind::Subtract, &Scalar(F64)) => Ok("fsub"),
-
-            (BinOpKind::Multiply, &Scalar(I32)) => Ok("mul"),
-            (BinOpKind::Multiply, &Scalar(I64)) => Ok("mul"),
-            (BinOpKind::Multiply, &Scalar(F32)) => Ok("fmul"),
-            (BinOpKind::Multiply, &Scalar(F64)) => Ok("fmul"),
-
-            (BinOpKind::Divide, &Scalar(I32)) => Ok("sdiv"),
-            (BinOpKind::Divide, &Scalar(I64)) => Ok("sdiv"),
-            (BinOpKind::Divide, &Scalar(F32)) => Ok("fdiv"),
-            (BinOpKind::Divide, &Scalar(F64)) => Ok("fdiv"),
-
-            _ => weld_err!("Unsupported binary op: {:?} on {}", op_kind, print_type(ty))
         }
     }
 }
@@ -271,12 +276,44 @@ fn llvm_symbol(symbol: &Symbol) -> String {
     }
 }
 
+
+
+/// Return the name of the LLVM instruction for a binary operation on a specific type.
+fn llvm_binop(op_kind: BinOpKind, ty: &Type) -> WeldResult<&'static str> {
+    match (op_kind, ty) {
+        (BinOpKind::Add, &Scalar(I32)) => Ok("add"),
+        (BinOpKind::Add, &Scalar(I64)) => Ok("add"),
+        (BinOpKind::Add, &Scalar(F32)) => Ok("fadd"),
+        (BinOpKind::Add, &Scalar(F64)) => Ok("fadd"),
+
+        (BinOpKind::Subtract, &Scalar(I32)) => Ok("sub"),
+        (BinOpKind::Subtract, &Scalar(I64)) => Ok("sub"),
+        (BinOpKind::Subtract, &Scalar(F32)) => Ok("fsub"),
+        (BinOpKind::Subtract, &Scalar(F64)) => Ok("fsub"),
+
+        (BinOpKind::Multiply, &Scalar(I32)) => Ok("mul"),
+        (BinOpKind::Multiply, &Scalar(I64)) => Ok("mul"),
+        (BinOpKind::Multiply, &Scalar(F32)) => Ok("fmul"),
+        (BinOpKind::Multiply, &Scalar(F64)) => Ok("fmul"),
+
+        (BinOpKind::Divide, &Scalar(I32)) => Ok("sdiv"),
+        (BinOpKind::Divide, &Scalar(I64)) => Ok("sdiv"),
+        (BinOpKind::Divide, &Scalar(F32)) => Ok("fdiv"),
+        (BinOpKind::Divide, &Scalar(F64)) => Ok("fdiv"),
+
+        _ => weld_err!("Unsupported binary op: {:?} on {}", op_kind, print_type(ty))
+    }
+}
+
 /// Struct used to track state while generating a function.
 struct FunctionContext {
+    /// Code section at the start of the function with alloca instructions for local symbols
     alloca_code: CodeBuilder,
+    /// Other code in function
     code: CodeBuilder,
+    defined_symbols: HashSet<String>,
     var_ids: IdGenerator,
-    label_ids: IdGenerator,
+    if_ids: IdGenerator,
 }
 
 impl FunctionContext {
@@ -285,7 +322,17 @@ impl FunctionContext {
             alloca_code: CodeBuilder::new(),
             code: CodeBuilder::new(),
             var_ids: IdGenerator::new("%"),
-            label_ids: IdGenerator::new("label"),
+            if_ids: IdGenerator::new("if"),
+            defined_symbols: HashSet::new(),
+        }
+    }
+
+    fn add_alloca(&mut self, symbol: &str, ty: &str) -> WeldResult<()> {
+        if !self.defined_symbols.insert(symbol.to_string()) {
+            weld_err!("Symbol already defined in function: {}", symbol)
+        } else {
+            self.alloca_code.add(format!("{} = alloca {}", symbol, ty));
+            Ok(())
         }
     }
 }
@@ -348,9 +395,20 @@ fn program_with_args() {
 fn let_statement() {
     let code = "|x:i32| let y = 40 + x; y + 2";
     let module = compile_program(&parse_program(code).unwrap()).unwrap();
-    let input: i32 = 100;
+    let input: i32 = 2;
     let result = module.run(&input as *const i32 as i64) as *const i32;
     let result = unsafe { *result };
-    assert_eq!(result, 142);
+    assert_eq!(result, 44);
+    // TODO: Free result
+}
+
+#[test]
+fn if_statement() {
+    let code = "|x:i32| if(true, 3, 4)";
+    let module = compile_program(&parse_program(code).unwrap()).unwrap();
+    let input: i32 = 2;
+    let result = module.run(&input as *const i32 as i64) as *const i32;
+    let result = unsafe { *result };
+    assert_eq!(result, 3);
     // TODO: Free result
 }

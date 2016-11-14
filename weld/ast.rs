@@ -90,6 +90,41 @@ pub enum BinOpKind {
     Subtract,
     Multiply,
     Divide,
+    Equal,
+    NotEqual,
+    LessThan,
+    LessThanOrEqual,
+    GreaterThan,
+    GreaterThanOrEqual,
+}
+
+impl BinOpKind {
+    pub fn is_comparison(&self) -> bool {
+        use ast::BinOpKind::*;
+        match *self {
+            Equal | NotEqual | LessThan | GreaterThan => true,
+            _ => false
+        }
+    }
+}
+
+impl fmt::Display for BinOpKind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use ast::BinOpKind::*;
+        let text = match *self {
+            Add => "+",
+            Subtract => "-",
+            Multiply => "*",
+            Divide => "/",
+            Equal => "==",
+            NotEqual => "!=",
+            LessThan => "<",
+            LessThanOrEqual => "<=",
+            GreaterThan => ">",
+            GreaterThanOrEqual => ">=",
+        };
+        f.write_str(text)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]

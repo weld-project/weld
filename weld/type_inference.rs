@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
+use super::ast::ExprKind::*;
 use super::ast::ScalarKind::*;
 use super::ast::Symbol;
-use super::ast::ExprKind::*;
 use super::partial_types::PartialExpr;
 use super::partial_types::PartialType;
 use super::partial_types::PartialType::*;
@@ -100,14 +100,20 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
         BoolLiteral(_) =>
             push_complete_type(&mut expr.ty, Scalar(Bool), "BoolLiteral"),
 
-        BinOp(_, ref mut lefts, ref mut right) => {
-            let mut best_type = Unknown;
-            for &ty in [&expr.ty, &lefts.ty, &right.ty].iter() {
-                try!(push_type(&mut best_type, ty, "BinOp"));
+        BinOp(op, ref mut left, ref mut right) => {
+            let mut elem_type = Unknown;
+            try!(push_type(&mut elem_type, &left.ty, "BinOp"));
+            try!(push_type(&mut elem_type, &right.ty, "BinOp"));
+            if !op.is_comparison() {
+                try!(push_type(&mut elem_type, &expr.ty, "BinOp"));
             }
             let mut changed = false;
-            for ty in [&mut expr.ty, &mut lefts.ty, &mut right.ty].iter_mut() {
-                changed |= try!(push_type(ty, &best_type, "BinOp"));
+            changed |= try!(push_type(&mut left.ty, &elem_type, "BinOp"));
+            changed |= try!(push_type(&mut right.ty, &elem_type, "BinOp"));
+            if op.is_comparison() {
+                changed |= try!(push_type(&mut right.ty, &Scalar(Bool), "BinOp"));
+            } else {
+                changed |= try!(push_type(&mut right.ty, &elem_type, "BinOp"));
             }
             Ok(changed)
         }

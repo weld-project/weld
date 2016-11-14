@@ -1,7 +1,6 @@
 use std::iter::Iterator;
 
 use super::ast::*;
-use super::ast::BinOpKind::*;
 use super::ast::BuilderKind::*;
 use super::ast::ScalarKind::*;
 use super::ast::Type::*;
@@ -27,12 +26,13 @@ impl PrintableType for Type {
             Vector(ref elem) => format!("vec[{}]", elem.print()),
             Struct(ref elems) => join("{", ",", "}", elems.iter().map(|e| e.print())),
             Function(ref params, ref ret) => {
-                let mut res = join("(", ",", ")=>", params.iter().map(|e| e.print()));
+                let mut res = join("|", ",", "|(", params.iter().map(|e| e.print()));
                 res.push_str(&ret.print());
+                res.push_str(")");
                 res
             },
             Builder(Appender(ref t)) => format!("appender[{}]", t.print()),
-            Builder(Merger(ref t, op)) => format!("merger[{},{}]", t.print(), print_binop(op)),
+            Builder(Merger(ref t, op)) => format!("merger[{},{}]", t.print(), op),
         }
     }
 }
@@ -57,7 +57,7 @@ impl PrintableType for PartialType {
                 res
             },
             Builder(Appender(ref elem)) => format!("appender[{}]", elem.print()),
-            Builder(Merger(ref t, op)) => format!("merger[{},{}]", t.print(), print_binop(op)),
+            Builder(Merger(ref t, op)) => format!("merger[{},{}]", t.print(), op),
         }
     }
 }
@@ -84,21 +84,21 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>, typed: bool) -> String {
         I32Literal(v) => format!("{}", v),
         I64Literal(v) => format!("{}L", v),
         F32Literal(v) => {
-            let mut s = format!("{}", v);
+            let mut res = format!("{}", v);
             // Hack to disambiguate from integers.
-            if !s.contains(".") {
-                s.push_str(".0");
+            if !res.contains(".") {
+                res.push_str(".0");
             }
-            s.push_str("F");
-            s
+            res.push_str("F");
+            res
         }
         F64Literal(v) => {
-            let mut s = format!("{}", v);
+            let mut res = format!("{}", v);
             // Hack to disambiguate from integers.
-            if !s.contains(".") {
-                s.push_str(".0");
+            if !res.contains(".") {
+                res.push_str(".0");
             }
-            s
+            res
         }
 
         Ident(ref symbol) => {
@@ -111,22 +111,20 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>, typed: bool) -> String {
 
         BinOp(kind, ref left, ref right) =>
             format!("({}{}{})",
-                    print_expr_impl(left, typed),
-                    print_binop(kind),
-                    print_expr_impl(right, typed)),
+                print_expr_impl(left, typed), kind, print_expr_impl(right, typed)),
 
         Let(ref symbol, ref value, ref body) => {
             if typed {
                 format!("(let {}:{}=({});{})",
-                        symbol,
-                        value.ty.print(),
-                        print_expr_impl(value, typed),
-                        print_expr_impl(body, typed))
+                    symbol,
+                    value.ty.print(),
+                    print_expr_impl(value, typed),
+                    print_expr_impl(body, typed))
             } else {
                 format!("(let {}=({});{})",
-                        symbol,
-                        print_expr_impl(value, typed),
-                        print_expr_impl(body, typed))
+                    symbol,
+                    print_expr_impl(value, typed),
+                    print_expr_impl(body, typed))
             }
         }
 
@@ -172,15 +170,6 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>, typed: bool) -> String {
             res
         }
     }
-}
-
-fn print_binop(op: BinOpKind) -> String {
-    match op {
-        Add => "+",
-        Subtract => "-",
-        Multiply => "*",
-        Divide => "/"
-    }.to_string()
 }
 
 /// Print a parameter, optionally showing its type.
