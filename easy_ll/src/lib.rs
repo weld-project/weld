@@ -177,9 +177,10 @@ unsafe fn verify_module(module: LLVMModuleRef) -> Result<(), LlvmError> {
 
 /// Check that a module has a "run" function of type i64 -> i64.
 unsafe fn check_run_function(module: LLVMModuleRef) -> Result<(), LlvmError> {
-    let run = CString::new("run").unwrap().as_ptr();
-    let func = llvm::core::LLVMGetNamedFunction(module, run);
+    let run = CString::new("run").unwrap();
+    let func = llvm::core::LLVMGetNamedFunction(module, run.as_ptr());
     if func.is_null() {
+        println!("EEEK");
         return Err(LlvmError::new("No run function in module"));
     }
     let c_str = llvm::core::LLVMPrintTypeToString(llvm::core::LLVMTypeOf(func));
@@ -230,8 +231,8 @@ unsafe fn create_exec_engine(module: LLVMModuleRef) -> Result<LLVMExecutionEngin
 
 /// Get a pointer to the "run" function in an execution engine.
 unsafe fn find_run_function(engine: LLVMExecutionEngineRef) -> Result<RunFunc, LlvmError> {
-    let run = CString::new("run").unwrap().as_ptr();
-    let func_addr = llvm::execution_engine::LLVMGetFunctionAddress(engine, run);
+    let run = CString::new("run").unwrap();
+    let func_addr = llvm::execution_engine::LLVMGetFunctionAddress(engine, run.as_ptr());
     if func_addr == 0 {
         return Err(LlvmError::new("No run function in module"))
     }
