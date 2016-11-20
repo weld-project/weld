@@ -46,6 +46,7 @@ pub enum Token {
     TMinus,
     TTimes,
     TDivide,
+    TModulo,
     TEqual,
     TBar,           // |
     TDot,
@@ -71,7 +72,7 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
         // Regular expression for splitting up tokens.
         static ref TOKEN_RE: Regex = Regex::new(concat!(
             r"[0-9]+\.[0-9]+([eE]-?[0-9]+)?[fF]?|[0-9]+[eE]-?[0-9]+[fF]?|",
-            r"[A-Za-z0-9$_]+|==|!=|>=|<=|&&|\|\||[-+/*,=()[\]{}|&\.:;?&\|^<>]|\S+"
+            r"[A-Za-z0-9$_]+|==|!=|>=|<=|&&|\|\||[-+/*%,=()[\]{}|&\.:;?&\|^<>]|\S+"
         )).unwrap();
 
         // Regular expressions for various types of tokens.
@@ -150,6 +151,7 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
                 "-" => TMinus,
                 "*" => TTimes,
                 "/" => TDivide,
+                "%" => TModulo,
                 "(" => TOpenParen,
                 ")" => TCloseParen,
                 "[" => TOpenBracket,
@@ -229,6 +231,7 @@ impl fmt::Display for Token {
                 TMinus => "-",
                 TTimes => "*",
                 TDivide => "/",
+                TModulo => "%",
                 TEqual => "=",
                 TBar => "|",
                 TDot => ".",

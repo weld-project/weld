@@ -269,15 +269,14 @@ impl<'t> Parser<'t> {
         // Unlike other expressions, we only allow one operator here; prevents stuff like a>b>c
         if *self.peek() == TLessThan || *self.peek() == TLessThanOrEqual ||
                 *self.peek() == TGreaterThan || *self.peek() == TGreaterThanOrEqual {
-            let token = self.next();
-            let right = try!(self.sum_expr());
-            let bin_op = match *token {
+            let op = match *self.next() {
                 TLessThan => LessThan,
                 TGreaterThan => GreaterThan,
                 TLessThanOrEqual => LessThanOrEqual,
                 _ => GreaterThanOrEqual
             };
-            res = expr_box(BinOp(bin_op, res, right))
+            let right = try!(self.sum_expr());
+            res = expr_box(BinOp(op, res, right))
         }
         Ok(res)
     }
@@ -297,17 +296,17 @@ impl<'t> Parser<'t> {
         Ok(res)
     }
 
-    /// Parse a product expression with terms separated by * and /.
+    /// Parse a product expression with terms separated by *, / and % (for precedence).
     fn product_expr(&mut self) -> WeldResult<Box<PartialExpr>> {
         let mut res = try!(self.ascribe_expr());
-        while *self.peek() == TTimes || *self.peek() == TDivide {
-            let token = self.next();
+        while *self.peek() == TTimes || *self.peek() == TDivide || *self.peek() == TModulo {
+            let op = match *self.next() {
+                TTimes => Multiply,
+                TDivide => Divide,
+                _ => Modulo,
+            };
             let right = try!(self.ascribe_expr());
-            if *token == TTimes {
-                res = expr_box(BinOp(Multiply, res, right))
-            } else {
-                res = expr_box(BinOp(Divide, res, right))
-            }
+            res = expr_box(BinOp(op, res, right))
         }
         Ok(res)
     }
@@ -597,6 +596,9 @@ fn operator_precedence() {
 
     let e = parse_expr("a / b - c <= d != e & f ^ g | h && i || j").unwrap();
     assert_eq!(print_expr(&e), "(((((((((a/b)-c)<=d)!=e)&f)^g)|h)&&i)||j)");
+
+    let e = parse_expr("a % b - c >= d != e & f ^ g | h && i || j").unwrap();
+    assert_eq!(print_expr(&e), "(((((((((a%b)-c)>=d)!=e)&f)^g)|h)&&i)||j)");
 }
 
 #[test]
