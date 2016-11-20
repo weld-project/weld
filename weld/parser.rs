@@ -142,10 +142,10 @@ impl<'t> Parser<'t> {
     fn expr(&mut self) -> WeldResult<Box<PartialExpr>> {
         if *self.peek() == TLet {
             self.let_expr()
-        } else if *self.peek() == TBar {
+        } else if *self.peek() == TBar || *self.peek() == TLogicalOr {
             self.lambda_expr()
         } else {
-            self.sum_expr()
+            self.operator_expr()
         }
     }
 
@@ -155,7 +155,7 @@ impl<'t> Parser<'t> {
         let name = try!(self.symbol());
         let ty = try!(self.optional_type());
         try!(self.consume(TEqual));
-        let value = try!(self.sum_expr());
+        let value = try!(self.operator_expr());
         try!(self.consume(TSemicolon));
         let body = try!(self.expr());
         let mut expr = expr_box(Let(name, value, body));
@@ -165,21 +165,121 @@ impl<'t> Parser<'t> {
 
     /// Parse '|params| body' starting at the current position.
     fn lambda_expr(&mut self) -> WeldResult<Box<PartialExpr>> {
-        try!(self.consume(TBar));
         let mut params: Vec<PartialParameter> = Vec::new();
-        while *self.peek() != TBar {
-            let name = try!(self.symbol());
-            let ty = try!(self.optional_type());
-            params.push(PartialParameter { name: name, ty: ty });
-            if *self.peek() == TComma {
-                self.next();
-            } else if *self.peek() != TBar {
-                return weld_err!("Expected ',' or '|'")
+        // The next token could be either '||' if there are no params, or '|' if there are some.
+        let token = self.next();
+        if *token == TBar {
+            while *self.peek() != TBar {
+                let name = try!(self.symbol());
+                let ty = try!(self.optional_type());
+                params.push(PartialParameter { name: name, ty: ty });
+                if *self.peek() == TComma {
+                    self.next();
+                } else if *self.peek() != TBar {
+                    return weld_err!("Expected ',' or '|'")
+                }
             }
+            try!(self.consume(TBar));
+        } else if *token != TLogicalOr {
+            return weld_err!("Expected '|' or '||'")
         }
-        try!(self.consume(TBar));
         let body = try!(self.expr());
         Ok(expr_box(Lambda(params, body)))
+    }
+
+    /// Parse an expression involving operators (||, &&, +, -, etc down the precedence chain)
+    fn operator_expr(&mut self) -> WeldResult<Box<PartialExpr>> {
+        self.logical_or_expr()
+    }
+
+    /// Parse a logical or expression with terms separated by || (for operator precedence).
+    fn logical_or_expr(&mut self) -> WeldResult<Box<PartialExpr>> {
+        let mut res = try!(self.logical_and_expr());
+        while *self.peek() == TLogicalOr {
+            self.consume(TLogicalOr)?;
+            let right = try!(self.logical_and_expr());
+            res = expr_box(BinOp(LogicalOr, res, right))
+        }
+        Ok(res)
+    }
+
+    /// Parse a logical and expression with terms separated by && (for operator precedence).
+    fn logical_and_expr(&mut self) -> WeldResult<Box<PartialExpr>> {
+        let mut res = try!(self.bitwise_or_expr());
+        while *self.peek() == TLogicalAnd {
+            self.consume(TLogicalAnd)?;
+            let right = try!(self.bitwise_or_expr());
+            res = expr_box(BinOp(LogicalAnd, res, right))
+        }
+        Ok(res)
+    }
+
+    /// Parse a bitwise or expression with terms separated by | (for operator precedence).
+    fn bitwise_or_expr(&mut self) -> WeldResult<Box<PartialExpr>> {
+        let mut res = try!(self.xor_expr());
+        while *self.peek() == TBar {
+            self.consume(TBar)?;
+            let right = try!(self.xor_expr());
+            res = expr_box(BinOp(BitwiseOr, res, right))
+        }
+        Ok(res)
+    }
+
+    /// Parse a bitwise or expression with terms separated by ^ (for operator precedence).
+    fn xor_expr(&mut self) -> WeldResult<Box<PartialExpr>> {
+        let mut res = try!(self.bitwise_and_expr());
+        while *self.peek() == TXor {
+            self.consume(TXor)?;
+            let right = try!(self.bitwise_and_expr());
+            res = expr_box(BinOp(Xor, res, right))
+        }
+        Ok(res)
+    }
+
+    /// Parse a bitwise and expression with terms separated by & (for operator precedence).
+    fn bitwise_and_expr(&mut self) -> WeldResult<Box<PartialExpr>> {
+        let mut res = try!(self.equality_expr());
+        while *self.peek() == TBitwiseAnd {
+            self.consume(TBitwiseAnd)?;
+            let right = try!(self.equality_expr());
+            res = expr_box(BinOp(BitwiseAnd, res, right))
+        }
+        Ok(res)
+    }
+
+    /// Parse an == or != expression (for operator precedence).
+    fn equality_expr(&mut self) -> WeldResult<Box<PartialExpr>> {
+        let mut res = try!(self.comparison_expr());
+        // Unlike other expressions, we only allow one operator here; prevents stuff like a==b==c
+        if *self.peek() == TEqualEqual || *self.peek() == TNotEqual {
+            let token = self.next();
+            let right = try!(self.comparison_expr());
+            if *token == TEqualEqual {
+                res = expr_box(BinOp(Equal, res, right))
+            } else {
+                res = expr_box(BinOp(NotEqual, res, right))
+            }
+        }
+        Ok(res)
+    }
+
+    /// Parse a <, >, <= or >= expression (for operator precedence).
+    fn comparison_expr(&mut self) -> WeldResult<Box<PartialExpr>> {
+        let mut res = try!(self.sum_expr());
+        // Unlike other expressions, we only allow one operator here; prevents stuff like a>b>c
+        if *self.peek() == TLessThan || *self.peek() == TLessThanOrEqual ||
+                *self.peek() == TGreaterThan || *self.peek() == TGreaterThanOrEqual {
+            let token = self.next();
+            let right = try!(self.sum_expr());
+            let bin_op = match *token {
+                TLessThan => LessThan,
+                TGreaterThan => GreaterThan,
+                TLessThanOrEqual => LessThanOrEqual,
+                _ => GreaterThanOrEqual
+            };
+            res = expr_box(BinOp(bin_op, res, right))
+        }
+        Ok(res)
     }
 
     /// Parse a sum expression with terms separated by + and - (for operator precedence).
@@ -442,6 +542,9 @@ fn basic_parsing() {
     let e = parse_expr("|a, b:i32| a+b").unwrap();
     assert_eq!(print_typed_expr(&e), "|a:?,b:i32|(a:?+b:?)");
 
+    let e = parse_expr("|| a||b").unwrap();
+    assert_eq!(print_expr(&e), "||(a||b)");
+
     let e = parse_expr("a.$0.$1").unwrap();
     assert_eq!(print_expr(&e), "a.$0.$1");
 
@@ -450,6 +553,12 @@ fn basic_parsing() {
 
     let e = parse_expr("a.$0(0,1).$1()").unwrap();
     assert_eq!(print_expr(&e), "((a.$0)(0,1).$1)()");
+
+    let e = parse_expr("a>b==c").unwrap();
+    assert_eq!(print_expr(&e), "((a>b)==c)");
+
+    assert!(parse_expr("a>b>c").is_err());
+    assert!(parse_expr("a==b==c").is_err());
 
     let e = parse_expr("appender[?]").unwrap();
     assert_eq!(print_expr(&e), "appender[?]");
@@ -473,6 +582,21 @@ fn basic_parsing() {
 
     let t = parse_type("{}").unwrap();
     assert_eq!(print_type(&t), "{}");
+}
+
+#[test]
+fn operator_precedence() {
+    let e = parse_expr("a - b - c - d").unwrap();
+    assert_eq!(print_expr(&e), "(((a-b)-c)-d)");
+
+    let e = parse_expr("a || b && c | d ^ e & f == g > h + i * j").unwrap();
+    assert_eq!(print_expr(&e), "(a||(b&&(c|(d^(e&(f==(g>(h+(i*j)))))))))");
+
+    let e = parse_expr("a * b + c > d == e & f ^ g | h && i || j").unwrap();
+    assert_eq!(print_expr(&e), "(((((((((a*b)+c)>d)==e)&f)^g)|h)&&i)||j)");
+
+    let e = parse_expr("a / b - c <= d != e & f ^ g | h && i || j").unwrap();
+    assert_eq!(print_expr(&e), "(((((((((a/b)-c)<=d)!=e)&f)^g)|h)&&i)||j)");
 }
 
 #[test]

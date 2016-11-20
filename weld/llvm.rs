@@ -301,7 +301,7 @@ fn llvm_binop(op_kind: BinOpKind, ty: &Type) -> WeldResult<&'static str> {
         (BinOpKind::Divide, &Scalar(F32)) => Ok("fdiv"),
         (BinOpKind::Divide, &Scalar(F64)) => Ok("fdiv"),
 
-        _ => weld_err!("Unsupported binary op: {:?} on {}", op_kind, print_type(ty))
+        _ => weld_err!("Unsupported binary op: {} on {}", op_kind, print_type(ty))
     }
 }
 
@@ -346,6 +346,7 @@ pub fn compile_program(program: &Program) -> WeldResult<easy_ll::CompiledModule>
         Lambda(ref params, ref body) => {
             let mut gen = LlvmGenerator::new();
             try!(gen.add_function_on_pointers("run", params, body));
+            println!("{}", gen.result());
             Ok(try!(easy_ll::compile_module(&gen.result())))
         },
         _ => weld_err!("Expression passed to compile_function must be a Lambda")

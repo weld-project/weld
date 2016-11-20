@@ -52,6 +52,16 @@ pub enum Token {
     TColon,
     TSemicolon,
     TQuestion,
+    TEqualEqual,
+    TNotEqual,
+    TLessThanOrEqual,
+    TGreaterThanOrEqual,
+    TLessThan,
+    TGreaterThan,
+    TLogicalAnd,
+    TLogicalOr,
+    TBitwiseAnd,
+    TXor,
     TEndOfInput
 }
 
@@ -61,7 +71,7 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
         // Regular expression for splitting up tokens.
         static ref TOKEN_RE: Regex = Regex::new(concat!(
             r"[0-9]+\.[0-9]+([eE]-?[0-9]+)?[fF]?|[0-9]+[eE]-?[0-9]+[fF]?|",
-            r"[A-Za-z0-9$_]+|[-+/*,=()[\]{}|&\.:;?]|\S+"
+            r"[A-Za-z0-9$_]+|==|!=|>=|<=|&&|\|\||[-+/*,=()[\]{}|&\.:;?&\|^<>]|\S+"
         )).unwrap();
 
         // Regular expressions for various types of tokens.
@@ -153,6 +163,16 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
                 ":" => TColon,
                 ";" => TSemicolon,
                 "?" => TQuestion,
+                "==" => TEqualEqual,
+                "!=" => TNotEqual,
+                "<" => TLessThan,
+                ">" => TGreaterThan,
+                "<=" => TLessThanOrEqual,
+                ">=" => TGreaterThanOrEqual,
+                "&&" => TLogicalAnd,
+                "||" => TLogicalOr,
+                "&" => TBitwiseAnd,
+                "^" => TXor,
                 _ => return weld_err!("Invalid input token: {}", text)
             });
         }
@@ -215,6 +235,16 @@ impl fmt::Display for Token {
                 TColon => ":",
                 TSemicolon => ";",
                 TQuestion => "?",
+                TEqualEqual => "==",
+                TNotEqual => "!=",
+                TLessThan => "<",
+                TGreaterThan => ">",
+                TLessThanOrEqual => "<=",
+                TGreaterThanOrEqual => ">=",
+                TLogicalAnd => "&&",
+                TLogicalOr => "||",
+                TBitwiseAnd => "&",
+                TXor => "^",
                 TEndOfInput => "<END>"
             })
         }
@@ -243,6 +273,9 @@ fn basic_tokenize() {
 
     assert_eq!(tokenize("a for 23 + z0").unwrap(),
         vec![TIdent("a".into()), TFor, TI32Literal(23), TPlus, TIdent("z0".into()), TEndOfInput]);
+
+    assert_eq!(tokenize("= == | || & &&").unwrap(),
+        vec![TEqual, TEqualEqual, TBar, TLogicalOr, TBitwiseAnd, TLogicalAnd, TEndOfInput]);
 
     assert!(tokenize("0a").is_err());
     assert!(tokenize("#").is_err());

@@ -96,6 +96,11 @@ pub enum BinOpKind {
     LessThanOrEqual,
     GreaterThan,
     GreaterThanOrEqual,
+    LogicalAnd,
+    LogicalOr,
+    BitwiseAnd,
+    BitwiseOr,
+    Xor,
 }
 
 impl BinOpKind {
@@ -122,6 +127,11 @@ impl fmt::Display for BinOpKind {
             LessThanOrEqual => "<=",
             GreaterThan => ">",
             GreaterThanOrEqual => ">=",
+            LogicalAnd => "&&",
+            LogicalOr => "||",
+            BitwiseAnd => "&",
+            BitwiseOr => "|",
+            Xor => "^",
         };
         f.write_str(text)
     }

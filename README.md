@@ -2,7 +2,7 @@
 
 ## Building
 
-To build Weld, you need [Rust stable](http://rust-lang.org) and [LLVM](http://llvm.org) 3.6 or
+To build Weld, you need [Rust 1.13 or higher](http://rust-lang.org) and [LLVM](http://llvm.org) 3.6 or
 higher. Set `PATH` so that `llvm-config` from your installation of LLVM is on the path and then
 run `cargo build` in the root directory.
 
@@ -46,16 +46,3 @@ result(for([1,2],appender[i32],|b:appender[i32],x:i32|merge(b:appender[i32],(x:i
 
 Expression type: vec[i32]
 ```
-
-## Modules
-
-Weld is split up into several modules, partly to speed up compilation. They are as follows:
-* `easy_ll`: a simple wrapper for JIT-compiling modules using LLVM.
-* `weld_error`: common error type used throughout Weld (we might grow this to be a general
-  utilities module).
-* `weld_ast`: data types for abstract syntax trees.
-* `weld_parser`: grammar and parser using [lalrpop](https://github.com/nikomatsakis/lalrpop).
-* `weld_transform`: various transformations including type inference (from partially typed to
-  fully typed ASTs), macro substitution, and others.
-* `weld_llvm`: code generator for LLVM.
-* `weld`: main module that contains integration tests and will eventually contain a public API.

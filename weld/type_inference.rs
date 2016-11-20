@@ -111,9 +111,9 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             changed |= try!(push_type(&mut left.ty, &elem_type, "BinOp"));
             changed |= try!(push_type(&mut right.ty, &elem_type, "BinOp"));
             if op.is_comparison() {
-                changed |= try!(push_type(&mut right.ty, &Scalar(Bool), "BinOp"));
+                changed |= try!(push_type(&mut expr.ty, &Scalar(Bool), "BinOp"));
             } else {
-                changed |= try!(push_type(&mut right.ty, &elem_type, "BinOp"));
+                changed |= try!(push_type(&mut expr.ty, &elem_type, "BinOp"));
             }
             Ok(changed)
         }
