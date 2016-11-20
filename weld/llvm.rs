@@ -301,6 +301,36 @@ fn llvm_binop(op_kind: BinOpKind, ty: &Type) -> WeldResult<&'static str> {
         (BinOpKind::Divide, &Scalar(F32)) => Ok("fdiv"),
         (BinOpKind::Divide, &Scalar(F64)) => Ok("fdiv"),
 
+        (BinOpKind::Equal, &Scalar(I32)) => Ok("icmp eq"),
+        (BinOpKind::Equal, &Scalar(I64)) => Ok("icmp eq"),
+        (BinOpKind::Equal, &Scalar(F32)) => Ok("fcmp oeq"),
+        (BinOpKind::Equal, &Scalar(F64)) => Ok("fcmp oeq"),
+
+        (BinOpKind::NotEqual, &Scalar(I32)) => Ok("icmp ne"),
+        (BinOpKind::NotEqual, &Scalar(I64)) => Ok("icmp ne"),
+        (BinOpKind::NotEqual, &Scalar(F32)) => Ok("fcmp one"),
+        (BinOpKind::NotEqual, &Scalar(F64)) => Ok("fcmp one"),
+
+        (BinOpKind::LessThan, &Scalar(I32)) => Ok("icmp slt"),
+        (BinOpKind::LessThan, &Scalar(I64)) => Ok("icmp slt"),
+        (BinOpKind::LessThan, &Scalar(F32)) => Ok("fcmp olt"),
+        (BinOpKind::LessThan, &Scalar(F64)) => Ok("fcmp olt"),
+
+        (BinOpKind::LessThanOrEqual, &Scalar(I32)) => Ok("icmp sle"),
+        (BinOpKind::LessThanOrEqual, &Scalar(I64)) => Ok("icmp sle"),
+        (BinOpKind::LessThanOrEqual, &Scalar(F32)) => Ok("fcmp ole"),
+        (BinOpKind::LessThanOrEqual, &Scalar(F64)) => Ok("fcmp ole"),
+
+        (BinOpKind::GreaterThan, &Scalar(I32)) => Ok("icmp sgt"),
+        (BinOpKind::GreaterThan, &Scalar(I64)) => Ok("icmp sgt"),
+        (BinOpKind::GreaterThan, &Scalar(F32)) => Ok("fcmp ogt"),
+        (BinOpKind::GreaterThan, &Scalar(F64)) => Ok("fcmp ogt"),
+
+        (BinOpKind::GreaterThanOrEqual, &Scalar(I32)) => Ok("icmp sge"),
+        (BinOpKind::GreaterThanOrEqual, &Scalar(I64)) => Ok("icmp sge"),
+        (BinOpKind::GreaterThanOrEqual, &Scalar(F32)) => Ok("fcmp oge"),
+        (BinOpKind::GreaterThanOrEqual, &Scalar(F64)) => Ok("fcmp oge"),
+
         _ => weld_err!("Unsupported binary op: {} on {}", op_kind, print_type(ty))
     }
 }
@@ -411,5 +441,21 @@ fn if_statement() {
     let result = module.run(&input as *const i32 as i64) as *const i32;
     let result = unsafe { *result };
     assert_eq!(result, 3);
+    // TODO: Free result
+}
+
+#[test]
+fn comparison() {
+    let code = "|x:i32| if(x>10, x, 10)";
+    let module = compile_program(&parse_program(code).unwrap()).unwrap();
+    let input: i32 = 2;
+    let result = module.run(&input as *const i32 as i64) as *const i32;
+    let result = unsafe { *result };
+    assert_eq!(result, 10);
+    // TODO: Free result
+    let input: i32 = 20;
+    let result = module.run(&input as *const i32 as i64) as *const i32;
+    let result = unsafe { *result };
+    assert_eq!(result, 20);
     // TODO: Free result
 }
