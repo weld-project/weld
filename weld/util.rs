@@ -37,13 +37,10 @@ impl SymbolGenerator {
         SymbolGenerator { id_map: id_map }
     }
 
-    pub fn new_symbol(&mut self, name: &String) -> Symbol {
-        let id = self.id_map.entry(name.clone()).or_insert(-1);
+    pub fn new_symbol(&mut self, name: &str) -> Symbol {
+        let id = self.id_map.entry(name.to_owned()).or_insert(-1);
         *id += 1;
-        Symbol {
-            name: name.clone(),
-            id: *id,
-        }
+        Symbol { name: name.to_owned(), id: *id }
     }
 }
 

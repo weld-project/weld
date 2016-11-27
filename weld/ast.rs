@@ -12,6 +12,16 @@ pub struct Symbol {
     pub id: i32,
 }
 
+impl Symbol {
+    pub fn new(name: &str, id: i32) -> Symbol {
+        Symbol { name: name.into(), id: id }
+    }
+
+    pub fn name(name: &str) -> Symbol {
+        Symbol { name: name.into(), id: 0 }
+    }
+}
+
 impl fmt::Display for Symbol {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if self.id == 0 {

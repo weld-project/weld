@@ -13,6 +13,7 @@ use weld::parser::*;
 use weld::pretty_print::*;
 use weld::transforms;
 use weld::type_inference::*;
+use weld::sir::ast_to_sir;
 
 fn main() {
     let home_path = env::home_dir().unwrap_or(PathBuf::new());
@@ -98,7 +99,12 @@ fn main() {
                 println!("Error during LLVM compilation:\n{}\n", e);
                 continue;
             }
-            println!("LLVM module compiled successfully\n")
+            println!("LLVM module compiled successfully\n");
+
+            match ast_to_sir(&expr) {
+                Ok(sir) => println!("SIR representation:\n{}\n", sir),
+                Err(ref e) => println!("Error during SIR code gen:\n{}\n", e)
+            };
         } else {
             println!("Expression is not a function, so not compiling to LLVM.\n")
         }
