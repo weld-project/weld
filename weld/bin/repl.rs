@@ -10,6 +10,7 @@ use weld::parser::*;
 use weld::pretty_print::*;
 use weld::transforms;
 use weld::type_inference::*;
+use weld::sir::ast_to_sir;
 
 fn main() {
     loop {
@@ -56,21 +57,27 @@ fn main() {
         println!("After type inference:\n{}\n", print_typed_expr(&expr));
         println!("Expression type: {}\n", print_type(&expr.ty));
 
+        // If the expression is a Lambda, try to compile it to SIR and LLVM
         let expr = expr.to_typed().unwrap();
         if let Lambda(ref args, ref body) = expr.kind {
-            let mut generator = LlvmGenerator::new();
-            if let Err(ref e) = generator.add_function_on_pointers("run", args, body) {
+            let mut llvm_gen = LlvmGenerator::new();
+            if let Err(ref e) = llvm_gen.add_function_on_pointers("run", args, body) {
                 println!("Error during LLVM code gen:\n{}\n", e);
                 continue;
             }
-            let llvm_code = generator.result();
+            let llvm_code = llvm_gen.result();
             println!("LLVM code:\n{}\n", llvm_code);
 
             if let Err(ref e) = easy_ll::compile_module(&llvm_code) {
                 println!("Error during LLVM compilation:\n{}\n", e);
                 continue;
             }
-            println!("LLVM module compiled successfully\n")
+            println!("LLVM module compiled successfully\n");
+
+            match ast_to_sir(&expr) {
+                Ok(sir) => println!("SIR representation:\n{}\n", sir),
+                Err(ref e) => println!("Error during SIR code gen:\n{}\n", e)
+            };
         } else {
             println!("Expression is not a function, so not compiling to LLVM.\n")
         }
