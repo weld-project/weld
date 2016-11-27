@@ -4,7 +4,7 @@ use std::vec;
 use std::fmt;
 
 /// A symbol (identifier name); for now these are strings, but we may add some kind of scope ID.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Symbol {
     pub name: String,
     pub id: i32
