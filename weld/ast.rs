@@ -83,11 +83,7 @@ pub struct Iter<T: TypeBounds> {
 #[derive(Clone, Debug, PartialEq)]
 pub enum ExprKind<T: TypeBounds> {
     // TODO: maybe all of these should take named parameters
-    BoolLiteral(bool),
-    I32Literal(i32),
-    I64Literal(i64),
-    F32Literal(f32),
-    F64Literal(f64),
+    Literal(LiteralKind),
     Ident(Symbol),
     BinOp {
         kind: BinOpKind,
@@ -131,6 +127,15 @@ pub enum ExprKind<T: TypeBounds> {
         value: Box<Expr<T>>,
     },
     Res { builder: Box<Expr<T>> },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum LiteralKind {
+    BoolLiteral(bool),
+    I32Literal(i32),
+    I64Literal(i64),
+    F32Literal(f32),
+    F64Literal(f64),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -242,8 +247,7 @@ impl<T: TypeBounds> Expr<T> {
                     res
                 }
                 // Explicitly list types instead of doing _ => ... to remember to add new types.
-                BoolLiteral(_) | I32Literal(_) | I64Literal(_) | F32Literal(_) |
-                F64Literal(_) | Ident(_) | NewBuilder => vec![],
+                Literal(_) | Ident(_) | NewBuilder => vec![],
             }
             .into_iter()
     }
@@ -289,8 +293,7 @@ impl<T: TypeBounds> Expr<T> {
                     res
                 }
                 // Explicitly list types instead of doing _ => ... to remember to add new types.
-                BoolLiteral(_) | I32Literal(_) | I64Literal(_) | F32Literal(_) |
-                F64Literal(_) | Ident(_) | NewBuilder => vec![],
+                Literal(_) | Ident(_) | NewBuilder => vec![],
             }
             .into_iter()
     }
@@ -349,11 +352,7 @@ impl<T: TypeBounds> Expr<T> {
                 (&For { .. }, &For { .. }) => Ok(true),
                 (&If { .. }, &If { .. }) => Ok(true),
                 (&Apply { .. }, &Apply { .. }) => Ok(true),
-                (&BoolLiteral(ref l), &BoolLiteral(ref r)) if l == r => Ok(true),
-                (&I32Literal(ref l), &I32Literal(ref r)) if l == r => Ok(true),
-                (&I64Literal(ref l), &I64Literal(ref r)) if l == r => Ok(true),
-                (&F32Literal(ref l), &F32Literal(ref r)) if l == r => Ok(true),
-                (&F64Literal(ref l), &F64Literal(ref r)) if l == r => Ok(true),
+                (&Literal(ref l), &Literal(ref r)) if l == r => Ok(true),
                 (&Ident(ref l), &Ident(ref r)) => {
                     if let Some(lv) = sym_map.get(l) {
                         Ok(**lv == *r)
