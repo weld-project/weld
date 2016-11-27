@@ -12,6 +12,11 @@ pub struct SymbolGenerator {
 }
 
 impl SymbolGenerator {
+    /// Initialize a SymbolGenerator with no existing symbols.
+    pub fn new() -> SymbolGenerator {
+        SymbolGenerator { id_map: HashMap::new() }
+    }
+
     /// Initialize a SymbolGenerator from all the symbols defined in an expression.
     pub fn from_expression<T: TypeBounds>(expr: &Expr<T>) -> SymbolGenerator {
         let mut id_map: HashMap<String, i32> = HashMap::new();
@@ -41,6 +46,14 @@ impl SymbolGenerator {
         let id = self.id_map.entry(name.to_owned()).or_insert(-1);
         *id += 1;
         Symbol { name: name.to_owned(), id: *id }
+    }
+
+    /// Return the next ID that will be given to a symbol with the given string name.
+    pub fn next_id(&self, name: &str) -> i32 {
+        match self.id_map.get(name) {
+            Some(id) => id + 1,
+            None => 0
+        }
     }
 }
 
