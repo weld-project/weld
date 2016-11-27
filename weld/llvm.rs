@@ -6,6 +6,7 @@ use easy_ll;
 use super::ast::*;
 use super::ast::Type::*;
 use super::ast::ExprKind::*;
+use super::ast::LiteralKind::*;
 use super::ast::ScalarKind::*;
 use super::code_builder::CodeBuilder;
 use super::error::*;
@@ -199,11 +200,11 @@ impl LlvmGenerator {
         ctx: &mut FunctionContext
     ) -> WeldResult<String> {
         match expr.kind {
-            I32Literal(value) => Ok(format!("{}", value)),
-            I64Literal(value) => Ok(format!("{}", value)),
-            F32Literal(value) => Ok(format!("{}", value)),
-            F64Literal(value) => Ok(format!("{}", value)),
-            BoolLiteral(value) => Ok(format!("{}", if value {1} else {0})),
+            Literal(I32Literal(v)) => Ok(format!("{}", v)),
+            Literal(I64Literal(v)) => Ok(format!("{}", v)),
+            Literal(F32Literal(v)) => Ok(format!("{}", v)),
+            Literal(F64Literal(v)) => Ok(format!("{}", v)),
+            Literal(BoolLiteral(v)) => Ok(format!("{}", if v {1} else {0})),
 
             Ident(ref symbol) => {
                 let var = ctx.var_ids.next();

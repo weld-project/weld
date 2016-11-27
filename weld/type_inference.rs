@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use super::ast::ExprKind::*;
+use super::ast::LiteralKind::*;
 use super::ast::ScalarKind::*;
 use super::ast::Symbol;
 use super::partial_types::PartialExpr;
@@ -85,19 +86,19 @@ fn infer_up(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> {
 /// Return true if any new expression's type was inferred, or an error if types are inconsistent.
 fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> {
     match expr.kind {
-        I32Literal(_) =>
+        Literal(I32Literal(_)) =>
             push_complete_type(&mut expr.ty, Scalar(I32), "I32Literal"),
 
-        I64Literal(_) =>
+        Literal(I64Literal(_)) =>
             push_complete_type(&mut expr.ty, Scalar(I64), "I64Literal"),
 
-        F32Literal(_) =>
+        Literal(F32Literal(_)) =>
             push_complete_type(&mut expr.ty, Scalar(F32), "F32Literal"),
 
-        F64Literal(_) =>
+        Literal(F64Literal(_)) =>
             push_complete_type(&mut expr.ty, Scalar(F64), "F64Literal"),
 
-        BoolLiteral(_) =>
+        Literal(BoolLiteral(_)) =>
             push_complete_type(&mut expr.ty, Scalar(Bool), "BoolLiteral"),
 
         BinOp(op, ref mut left, ref mut right) => {

@@ -67,11 +67,7 @@ pub struct Expr<T:Clone> {
 #[derive(Clone, Debug, PartialEq)]
 pub enum ExprKind<T:Clone> {
     // TODO: maybe all of these should take named parameters
-    BoolLiteral(bool),
-    I32Literal(i32),
-    I64Literal(i64),
-    F32Literal(f32),
-    F64Literal(f64),
+    Literal(LiteralKind),
     BinOp(BinOpKind, Box<Expr<T>>, Box<Expr<T>>),
     Ident(Symbol),
     NewBuilder,  // TODO: this may need to take a parameter
@@ -92,6 +88,15 @@ pub enum ExprKind<T:Clone> {
     Merge(Box<Expr<T>>, Box<Expr<T>>),
     /// builder
     Res(Box<Expr<T>>)
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum LiteralKind {
+    BoolLiteral(bool),
+    I32Literal(i32),
+    I64Literal(i64),
+    F32Literal(f32),
+    F64Literal(f64),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -184,7 +189,7 @@ impl<T:Clone> Expr<T> {
                 res
             }
             // Explicitly list types instead of doing _ => ... to remember to add new types.
-            BoolLiteral(_) | I32Literal(_) | I64Literal(_) | F32Literal(_) | F64Literal(_) | Ident(_) | NewBuilder => vec![]
+            Literal(_) | Ident(_) | NewBuilder => vec![]
         }.into_iter()
     }
 
@@ -210,7 +215,7 @@ impl<T:Clone> Expr<T> {
                 res
             }
             // Explicitly list types instead of doing _ => ... to remember to add new types.
-            BoolLiteral(_) | I32Literal(_) | I64Literal(_) | F32Literal(_) | F64Literal(_) | Ident(_) | NewBuilder => vec![]
+            Literal(_) | Ident(_) | NewBuilder => vec![]
         }.into_iter()
     }
 
