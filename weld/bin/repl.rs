@@ -97,16 +97,16 @@ fn main() {
 
             if let Err(ref e) = easy_ll::compile_module(&llvm_code) {
                 println!("Error during LLVM compilation:\n{}\n", e);
-                continue;
+            } else {
+                println!("LLVM module compiled successfully\n");
             }
-            println!("LLVM module compiled successfully\n");
 
             match ast_to_sir(&expr) {
                 Ok(sir) => println!("SIR representation:\n{}\n", sir),
                 Err(ref e) => println!("Error during SIR code gen:\n{}\n", e)
-            };
+            }
         } else {
-            println!("Expression is not a function, so not compiling to LLVM.\n")
+            println!("Expression is not a function, so not compiling to LLVM.\n");
         }
     }
     rl.save_history(&history_file_path).unwrap();
