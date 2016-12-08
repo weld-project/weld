@@ -418,12 +418,12 @@ impl<'t> Parser<'t> {
             TFor => {
                 try!(self.consume(TOpenParen));
                 let data = try!(self.expr());
-                let iter = Box::new(Iter{
-                    data: *data,
+                let iter = Iter{
+                    data: data,
                     start: None,
                     end: None,
                     stride: None
-                });
+                };
                 try!(self.consume(TComma));
                 let builders = try!(self.expr());
                 try!(self.consume(TComma));

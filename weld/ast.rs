@@ -58,10 +58,10 @@ pub struct Expr<T:Clone> {
 /// end index, and stride.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Iter<T:Clone> {
-    pub data: Expr<T>,
-    pub start: Option<Expr<T>>,
-    pub end: Option<Expr<T>>,
-    pub stride: Option<Expr<T>>
+    pub data: Box<Expr<T>>,
+    pub start: Option<Box<Expr<T>>>,
+    pub end: Option<Box<Expr<T>>>,
+    pub stride: Option<Box<Expr<T>>>
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -88,7 +88,7 @@ pub enum ExprKind<T:Clone> {
     Apply(Box<Expr<T>>, Vec<Expr<T>>),
     // TODO(shoumik): BoxIter<T>> -> Vec<Iter<T>>
     /// iterator, builder, func (very basic version for now)
-    For(Box<Iter<T>>, Box<Expr<T>>, Box<Expr<T>>),
+    For(Iter<T>, Box<Expr<T>>, Box<Expr<T>>),
     /// builder, elem
     Merge(Box<Expr<T>>, Box<Expr<T>>),
     /// builder
@@ -176,15 +176,15 @@ impl<T:Clone> Expr<T> {
             Merge(ref bldr, ref value) => vec![bldr.as_ref(), value.as_ref()],
             Res(ref bldr) => vec![bldr.as_ref()],
             For(ref iter, ref bldr, ref func) => {
-                let mut res = vec![&iter.data];
+                let mut res = vec![iter.data.as_ref()];
                 if let Some(ref s) = iter.start {
-                    res.push(&s);
+                    res.push(s);
                 }
                 if let Some(ref e) = iter.end {
-                    res.push(&e);
+                    res.push(e);
                 }
                 if let Some(ref s) = iter.stride {
-                    res.push(&s);
+                    res.push(s);
                 }
                 res.push(bldr.as_ref());
                 res.push(func.as_ref());
@@ -215,19 +215,16 @@ impl<T:Clone> Expr<T> {
             Merge(ref mut bldr, ref mut value) => vec![bldr.as_mut(), value.as_mut()],
             Res(ref mut bldr) => vec![bldr.as_mut()],
             For(ref mut iter, ref mut bldr, ref mut func) => {
-                let mut res = vec![&mut iter.data];
-                // TODO(shoumik): mut 
-                /*
+                let mut res = vec![iter.data.as_mut()];
                 if let Some(ref mut s) = iter.start {
-                    res.push(&mut s);
+                    res.push(s);
                 }
                 if let Some(ref mut e) = iter.end {
-                    res.push(&mut e);
+                    res.push(e);
                 }
                 if let Some(ref mut s) = iter.stride {
-                    res.push(&mut s);
+                    res.push(s);
                 }
-                */
                 res.push(bldr.as_mut());
                 res.push(func.as_mut());
                 res

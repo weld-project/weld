@@ -33,3 +33,5 @@ pub fn inline_apply<T:Clone>(expr: &mut Expr<T>) -> WeldResult<()> {
     }
     Ok(())
 }
+
+
