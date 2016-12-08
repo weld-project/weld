@@ -58,7 +58,7 @@ pub fn fuse_loops(expr: &mut Expr<Type>) -> WeldResult<()> {
                             // Everything matches up...fuse the loops.
                             new_expr = Some(Expr{
                                 ty: expr.ty.clone(),
-                                kind: For(iter2.clone(), bldr2.clone(), Box::new(replace_builder(lambda, nested, &mut sym_gen)))
+                                kind: For(iter2.clone(), bldr1.clone(), Box::new(replace_builder(lambda, nested, &mut sym_gen)))
                             })
                         }
                     }
@@ -102,22 +102,20 @@ fn replace_builder(lambda: &Expr<Type>,
     if let Lambda(ref args, ref mut body) = lambda.clone().kind {
         let ref old_bldr = args[0];
         // TODO(shoumik): index (change 1 -> 2).
-        let ref old_arg = args[1];
-        let new_bldr = Expr{ty: nested.ty.clone(), kind: Ident(sym_gen.new_symbol(&old_bldr.name.name))};
+        let new_sym = sym_gen.new_symbol(&old_bldr.name.name);
+        let new_bldr = Expr{ty: nested.ty.clone(), kind: Ident(new_sym.clone())};
         for child in body.children_mut() {
             match child.kind {
                 Merge(ref bldr, ref elem) if same_builder(&(*bldr).kind, &old_bldr.name) => {
                     apply_lambda(nested, vec![&new_bldr, elem]);
                 }
-                /*
-                For(ref iter, ref mut bldr, ref mut func) if (*bldr).kind == old_bldr => {
-                    bldr = new_bldr;
-                    func = replace_builder(func, nested, sym_gen);
+                For(_, ref mut bldr, ref mut func) if same_builder(&(*bldr).kind, &old_bldr.name) => {
+                    bldr.kind = new_bldr.kind.clone();
+                    func.kind = replace_builder(func, nested, sym_gen).kind.clone();
                 },
-                Ident(ref mut symbol, _) if symbol == old_bldr.name => {
-                    symbol = new_bldr.symbol;
+                Ident(ref mut symbol) if *symbol == new_sym => {
+                    *symbol = new_sym.clone();
                 }
-                */
                 _ => {}
             };
         }
