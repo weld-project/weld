@@ -1,8 +1,12 @@
 //! Common transformations on expressions.
 
-use super::ast::Expr;
+use super::ast::*;
 use super::ast::ExprKind::*;
+use super::ast::Type::*;
+use super::ast::BuilderKind::*;
 use super::error::*;
+
+use super::util::SymbolGenerator;
 
 /// Inlines Apply nodes whose argument is a Lambda expression. These often arise during macro
 /// expansion but it's simpler to inline them before doing type inference.
@@ -34,71 +38,90 @@ pub fn inline_apply<T:Clone>(expr: &mut Expr<T>) -> WeldResult<()> {
     Ok(())
 }
 
-pub fn fuse_loops<T:Clone>(expr: &mut Expr<T>) -> WeldResult<()> {
+pub fn fuse_loops(expr: &mut Expr<Type>) -> WeldResult<()> {
     for child in expr.children_mut() {
         try!(fuse_loops(child));
     }
 
-    let sym_gen = SymbolGenerator::from_expression(expr);
+    let mut sym_gen = SymbolGenerator::from_expression(expr);
+    let mut new_expr = None;
 
     // TODO(shoumik): Any way to nest these? box syntax is unstable...
-    if let For(mut ref iter1, mut ref bldr1, mut ref func1) = expr.kind {
-        let data = &iter1.data;
-        if let Res(ref res_bldr) = data {
-            if let For(ref iter2, ref bldr2, ref func2) = res_bldr.kind {
-                if let NewBuilder = bldr2 {
+    if let For(ref mut iter1, ref mut bldr1, ref mut nested) = (*expr).kind {
+        let data = &mut iter1.data;
+        if let Res(ref mut res_bldr) = (*data).kind {
+            if let For(ref mut iter2, ref mut bldr2, ref lambda) = (*res_bldr).kind.clone() {
+                if let NewBuilder = (*bldr2).kind {
                     let bldr_type = &bldr2.ty;
-                    if let Builder(ref kind) = bldr_type {
-                        if let Appender(_) = kind {
+                    if let Builder(ref kind) = *bldr_type {
+                        if let Appender(_) = *kind {
                             // Everything matches up...fuse the loops.
-                            iter1 = iter2;
-                            bldr1 = bldr2;
-                            func1 = Box::new(replace_builder(func1, func2, sym_gen));
+                            new_expr = Some(Expr{
+                                ty: expr.ty.clone(),
+                                kind: For(iter2.clone(), bldr2.clone(), Box::new(replace_builder(lambda, nested, &mut sym_gen)))
+                            })
                         }
                     }
                 }
             }
         }
     }
+    if let Some(new) = new_expr {
+        *expr = new;
+    }
     Ok(())
 }
 
-fn apply_lambda<T:Clone>(lambda: &mut Expr<T>, params: Vec<Parameter<T>>) {
-    if let Lambda(ref args, ref body) = lambda {
-        // TODO(shoumik): Better error handling here.
-        assert!(args.len() == params.len());
-        let replace = args.iter().zip(params).collect::<HashMap<_,_>>();
-        for (arg, param) in args.iter().zip(params) {
-            lambda.substitute(arg, param);
-        }
+/// Takes a lambda expression and a set of parameters and applies the 
+/// parameters to the lambda.
+fn apply_lambda(lambda: &mut Expr<Type>, params: Vec<&Expr<Type>>) {
+    let l_args: Vec<_>;
+    if let Lambda(ref args, _) = (*lambda).kind {
+        l_args = (*args).clone();
+    } else {
+        l_args = vec![];
+    }
+    assert!(l_args.len() == params.len());
+    for (arg, param) in l_args.iter().zip(params) {
+        lambda.substitute(&arg.name, param);
     }
 }
 
-fn replace_builder<T:Clone>(lambda: &mut Expr<T>,
-                            nested: &Expr<T>i,
-                            sym_gen: &mut SymbolGenerator) -> Expr<T> {
+fn replace_builder(lambda: &Expr<Type>,
+                            nested: &mut Expr<Type>,
+                            sym_gen: &mut SymbolGenerator) -> Expr<Type> {
 
-    if let Lambda(ref args, mut ref body) = lambda {
-        let old_bldr = args[0];
-        let old_arg = func.args[2];
-        let new_bldr = sym_gen.new_symbol(old_bldr.symbol);
+    fn same_builder(a: &ExprKind<Type>, b: &Symbol) -> bool {
+        if let Ident(ref symbol)  = *a { 
+            symbol == b 
+        } else {
+            false
+        }
+    }
+
+    if let Lambda(ref args, ref mut body) = lambda.clone().kind {
+        let ref old_bldr = args[0];
+        // TODO(shoumik): index (change 1 -> 2).
+        let ref old_arg = args[1];
+        let new_bldr = Expr{ty: nested.ty.clone(), kind: Ident(sym_gen.new_symbol(&old_bldr.name.name))};
         for child in body.children_mut() {
-            match child {
-                Merge(ref bldr, ref elem) if bldr == old_bldr => {
-                    // TODO(shoumik): Index.
-                    apply_lambda(lambda, vec![new_bldr, elem])
-                },
-                For(ref iter, ref mut bldr, ref mut func) i fbldr == old_bldr => {
-                    bldr = new_bldr;
-                    func = replace_builder(func, nested, sym_gen)
-                },
-                Iden(ref mut symbol, _) if symbol == old_bldr.symbol {
-                    symbol = new_bldr.symbol
+            match child.kind {
+                Merge(ref bldr, ref elem) if same_builder(&(*bldr).kind, &old_bldr.name) => {
+                    apply_lambda(nested, vec![&new_bldr, elem]);
                 }
+                /*
+                For(ref iter, ref mut bldr, ref mut func) if (*bldr).kind == old_bldr => {
+                    bldr = new_bldr;
+                    func = replace_builder(func, nested, sym_gen);
+                },
+                Ident(ref mut symbol, _) if symbol == old_bldr.name => {
+                    symbol = new_bldr.symbol;
+                }
+                */
+                _ => {}
             };
         }
     }
 
-    // TODO(shoumik): Index.
-    Lambda{params: vec![new_bldr, old_arg], body: body}
+    nested.clone()
 }
