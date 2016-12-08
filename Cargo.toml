@@ -6,6 +6,7 @@ authors = ["Matei Zaharia <matei.zaharia@gmail.com>"]
 [dependencies]
 lazy_static = "0.2.1"
 regex = "0.1.71"
+rustyline = "1.0.0"
 easy_ll = { path = "easy_ll", version = "^0.1.0" }
 
 [lib]
