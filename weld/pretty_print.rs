@@ -150,9 +150,10 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>, typed: bool) -> String {
             format!("merge({},{})", print_expr_impl(builder, typed), print_expr_impl(value, typed))
         }
 
-        For(ref data, ref builder, ref func) => {
+        For(ref iter, ref builder, ref func) => {
             format!("for({},{},{})",
-                print_expr_impl(data, typed),
+                // TODO(shoumik): Update to show more information.
+                print_expr_impl(&iter.data, typed),
                 print_expr_impl(builder, typed),
                 print_expr_impl(func, typed))
         }

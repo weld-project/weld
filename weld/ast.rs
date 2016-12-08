@@ -54,6 +54,16 @@ pub struct Expr<T:Clone> {
     pub kind: ExprKind<T>
 }
 
+/// An iterator, which specifies a vector to iterate over and optionally a start index,
+/// end index, and stride.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Iter<T:Clone> {
+    pub data: Expr<T>,
+    pub start: Option<Expr<T>>,
+    pub end: Option<Expr<T>>,
+    pub stride: Option<Expr<T>>
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum ExprKind<T:Clone> {
     // TODO: maybe all of these should take named parameters
@@ -76,8 +86,9 @@ pub enum ExprKind<T:Clone> {
     Lambda(Vec<Parameter<T>>, Box<Expr<T>>),
     /// function, params
     Apply(Box<Expr<T>>, Vec<Expr<T>>),
-    /// data, builder, func (very basic version for now)
-    For(Box<Expr<T>>, Box<Expr<T>>, Box<Expr<T>>),
+    // TODO(shoumik): BoxIter<T>> -> Vec<Iter<T>>
+    /// iterator, builder, func (very basic version for now)
+    For(Box<Iter<T>>, Box<Expr<T>>, Box<Expr<T>>),
     /// builder, elem
     Merge(Box<Expr<T>>, Box<Expr<T>>),
     /// builder
@@ -164,8 +175,21 @@ impl<T:Clone> Expr<T> {
             GetField(ref expr, _) => vec![expr.as_ref()],
             Merge(ref bldr, ref value) => vec![bldr.as_ref(), value.as_ref()],
             Res(ref bldr) => vec![bldr.as_ref()],
-            For(ref data, ref bldr, ref func) =>
-                vec![data.as_ref(), bldr.as_ref(), func.as_ref()],
+            For(ref iter, ref bldr, ref func) => {
+                let mut res = vec![&iter.data];
+                if let Some(ref s) = iter.start {
+                    res.push(&s);
+                }
+                if let Some(ref e) = iter.end {
+                    res.push(&e);
+                }
+                if let Some(ref s) = iter.stride {
+                    res.push(&s);
+                }
+                res.push(bldr.as_ref());
+                res.push(func.as_ref());
+                res
+            }
             If(ref cond, ref on_true, ref on_false) =>
                 vec![cond.as_ref(), on_true.as_ref(), on_false.as_ref()],
             Apply(ref func, ref params) => {
@@ -190,8 +214,24 @@ impl<T:Clone> Expr<T> {
             GetField(ref mut expr, _) => vec![expr.as_mut()],
             Merge(ref mut bldr, ref mut value) => vec![bldr.as_mut(), value.as_mut()],
             Res(ref mut bldr) => vec![bldr.as_mut()],
-            For(ref mut data, ref mut bldr, ref mut func) =>
-                vec![data.as_mut(), bldr.as_mut(), func.as_mut()],
+            For(ref mut iter, ref mut bldr, ref mut func) => {
+                let mut res = vec![&mut iter.data];
+                // TODO(shoumik): mut 
+                /*
+                if let Some(ref mut s) = iter.start {
+                    res.push(&mut s);
+                }
+                if let Some(ref mut e) = iter.end {
+                    res.push(&mut e);
+                }
+                if let Some(ref mut s) = iter.stride {
+                    res.push(&mut s);
+                }
+                */
+                res.push(bldr.as_mut());
+                res.push(func.as_mut());
+                res
+            }
             If(ref mut cond, ref mut on_true, ref mut on_false) =>
                 vec![cond.as_mut(), on_true.as_mut(), on_false.as_mut()],
             Apply(ref mut func, ref mut params) => {

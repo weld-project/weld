@@ -164,8 +164,19 @@ impl PartialExpr {
 
             Res(ref bldr) => Res(try!(typed_box(bldr))),
 
-            For(ref data, ref bldr, ref func) =>
-                For(try!(typed_box(data)), try!(typed_box(bldr)), try!(typed_box(func))),
+            For(ref iter, ref bldr, ref func) => {
+                // TODO(shoumik): Fix.
+                let start = try!(iter.start.as_ref().unwrap().to_typed());
+                let end = try!(iter.end.as_ref().unwrap().to_typed());
+                let stride = try!(iter.stride.as_ref().unwrap().to_typed());
+                let typed_iter = Box::new(Iter{
+                    data: try!(iter.data.to_typed()),
+                    start: Some(start),
+                    end: Some(end),
+                    stride: Some(stride),
+                });
+                For(typed_iter, try!(typed_box(bldr)), try!(typed_box(func)))
+            }
 
             If(ref cond, ref on_true, ref on_false) =>
                 If(try!(typed_box(cond)), try!(typed_box(on_true)), try!(typed_box(on_false))),

@@ -221,11 +221,11 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             Ok(changed)
         }
 
-        For(ref mut data, ref mut builder, ref mut func) => {
+        For(ref mut iter, ref mut builder, ref mut func) => {
             let mut changed = false;
 
-            // Push data and builder type into func
-            let elem_type = match data.ty {
+            // Push iter and builder type into func
+            let elem_type = match iter.data.ty {
                 Vector(ref elem) => *elem.clone(),
                 Unknown => Unknown,
                 _ => return weld_err!("For")

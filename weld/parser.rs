@@ -6,6 +6,7 @@
 use std::vec::Vec;
 
 use super::ast::Symbol;
+use super::ast::Iter;
 use super::ast::BinOpKind::*;
 use super::ast::ExprKind::*;
 use super::ast::ScalarKind::*;
@@ -417,12 +418,18 @@ impl<'t> Parser<'t> {
             TFor => {
                 try!(self.consume(TOpenParen));
                 let data = try!(self.expr());
+                let iter = Box::new(Iter{
+                    data: *data,
+                    start: None,
+                    end: None,
+                    stride: None
+                });
                 try!(self.consume(TComma));
                 let builders = try!(self.expr());
                 try!(self.consume(TComma));
                 let body = try!(self.expr());
                 try!(self.consume(TCloseParen));
-                Ok(expr_box(For(data, builders, body)))
+                Ok(expr_box(For(iter, builders, body)))
             }
 
             TMerge => {
