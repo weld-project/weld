@@ -99,9 +99,13 @@ fn replace_builder(lambda: &Expr<Type>,
         }
     }
 
-    if let Lambda(ref args, ref mut body) = lambda.clone().kind {
+    let mut new_body = None;
+
+    let new_params = if let Lambda(ref args, ref mut body) = lambda.clone().kind {
+        new_body = Some(*body.clone());
         let ref old_bldr = args[0];
         // TODO(shoumik): index (change 1 -> 2).
+        let ref old_arg = args[1];
         let new_sym = sym_gen.new_symbol(&old_bldr.name.name);
         let new_bldr = Expr{ty: nested.ty.clone(), kind: Ident(new_sym.clone())};
         for child in body.children_mut() {
@@ -119,7 +123,20 @@ fn replace_builder(lambda: &Expr<Type>,
                 _ => {}
             };
         }
-    }
 
-    nested.clone()
+        vec![
+            Parameter{ty: new_bldr.ty.clone(), name: new_sym.clone()},
+            Parameter{ty: old_arg.ty.clone(), name: old_arg.name.clone()}
+        ]
+    } else {
+        // TODO(shoumik): ...
+        vec![]
+    };
+
+    if let Some(new) = new_body {
+        Expr{ty: nested.ty.clone(), kind: Lambda(new_params, Box::new(new))}
+    } else {
+        nested.clone()
+    }
+        
 }
