@@ -112,6 +112,8 @@ fn replace_builder(lambda: &Expr<Type>,
 
     let mut new_func = None;
     if let Lambda(ref args, ref body) = lambda.kind {
+        println!("args: {:?}", args);
+        println!("body: {:?}", body);
         if let Lambda(ref nested_args, _) = nested.kind {
             let mut new_body = *body.clone();
             // The old builder Parameter.
@@ -122,11 +124,32 @@ fn replace_builder(lambda: &Expr<Type>,
             let new_sym = sym_gen.new_symbol(&old_bldr.name.name);
             let new_bldr = Expr{ty: nested_args[0].ty.clone(), kind: Ident(new_sym.clone())};
 
+            match new_body.kind.clone() {
+                Merge(ref bldr, ref elem) if same_builder(&(*bldr).kind, &old_bldr.name) => {
+                    let params: Vec<Expr<Type>> = vec![new_bldr.clone(), *elem.clone()];
+                    println!("replacing Merge!");
+                    new_body = Expr{ty: new_body.ty.clone(), kind: Apply(Box::new(nested.clone()), params)};
+                }
+                For(ref data, ref bldr, ref func) if same_builder(&(*bldr).kind, &old_bldr.name) => {
+                    new_body = Expr{
+                        ty: new_body.ty.clone(),
+                        kind: For(data.clone(), Box::new(new_bldr.clone()), Box::new(replace_builder(func, nested, sym_gen)))
+                    };
+                },
+                Ident(ref mut symbol) if *symbol == new_sym => {
+                    new_body = new_bldr.clone();
+                    println!("replacing Merge!");
+                }
+                _ => {}
+            };
+
             // Mutate the new body to replace the nested builder.
             for child in new_body.children_mut() {
+                println!("{:?}", child.kind);
                 match child.kind.clone() {
                     Merge(ref bldr, ref elem) if same_builder(&(*bldr).kind, &old_bldr.name) => {
                         let params: Vec<Expr<Type>> = vec![new_bldr.clone(), *elem.clone()];
+                        println!("replacing Merge!");
                         *child = Expr{ty: child.ty.clone(), kind: Apply(Box::new(nested.clone()), params)};
                     }
                     For(ref data, ref bldr, ref func) if same_builder(&(*bldr).kind, &old_bldr.name) => {
@@ -137,6 +160,7 @@ fn replace_builder(lambda: &Expr<Type>,
                     },
                     Ident(ref mut symbol) if *symbol == new_sym => {
                         *child = new_bldr.clone();
+                        println!("replacing Merge!");
                     }
                     _ => {}
                 };
