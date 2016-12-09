@@ -80,7 +80,14 @@ fn main() {
         println!("After type inference:\n{}\n", print_typed_expr(&expr));
         println!("Expression type: {}\n", print_type(&expr.ty));
 
-        let expr = expr.to_typed().unwrap();
+        let mut expr = expr.to_typed().unwrap();
+
+        if let Err(ref e) = transforms::fuse_loops(&mut expr) {
+            println!("Error during loop fusion: {}\n", e);
+            continue;
+        }
+        println!("After loop fusion:\n{}\n", print_typed_expr(&expr));
+
         if let Lambda(ref args, ref body) = expr.kind {
             let mut generator = LlvmGenerator::new();
             if let Err(ref e) = generator.add_function_on_pointers("run", args, body) {

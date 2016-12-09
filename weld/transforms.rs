@@ -38,6 +38,35 @@ pub fn inline_apply<T:Clone>(expr: &mut Expr<T>) -> WeldResult<()> {
     Ok(())
 }
 
+/*
+ * For(Res(For(v, vecbuilder[T], innerfunc)), outerbuilder, outerfunc) =>
+ *
+ * let newBuilder = Identifier(type of outerbuilder)
+ *
+ * if innerfunc is Merge(b, VALUE)
+ *      newBody = Apply(outerfunc, (outerbuilder, VALUE)) ??
+ *
+ * 
+ * return Lambda{params: [newBuilder, elem], body: newBody}
+ *
+ * for(res(for(v, vb[int], (y, b1) -> if(cond, merge(b1, y*2), b1)),
+ *      b2, (x, b3) -> merge(b3, x + 1))
+ *
+ *  func = if(cond, merge(b1, y*2), b1)
+ *  nested = merge(b3, x+1)
+ *
+ *  newBuilder = b4
+ *  elem = y*2
+ *      appliedTo nested
+ *
+ *  if(cond, merge(b4, (y*2) + 1), b4)
+ *
+ *  for(v, b2, (y, b4) -> merge(b4, (y*2) + 1)) 
+ *
+ *  
+ *
+ */
+
 pub fn fuse_loops(expr: &mut Expr<Type>) -> WeldResult<()> {
     for child in expr.children_mut() {
         try!(fuse_loops(child));
