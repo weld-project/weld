@@ -72,8 +72,8 @@ pub fn fuse_loops(expr: &mut Expr<Type>) -> WeldResult<()> {
     Ok(())
 }
 
-/// Takes a lambda expression and a set of parameters and applies the 
-/// parameters to the lambda.
+/// Takes a lambda expression and a set of expressions as parameters 
+/// and applies the parameters to the lambda.
 fn apply_lambda(lambda: &mut Expr<Type>, params: Vec<&Expr<Type>>) {
     let l_args: Vec<_>;
     if let Lambda(ref args, _) = (*lambda).kind {

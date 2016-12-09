@@ -1,5 +1,6 @@
 extern crate easy_ll;
 extern crate rustyline;
+extern crate easy_ll;
 extern crate weld;
 
 
@@ -89,11 +90,13 @@ fn main() {
             let llvm_code = generator.result();
             println!("LLVM code:\n{}\n", llvm_code);
 
+            /*
             if let Err(ref e) = easy_ll::compile_module(&llvm_code) {
                 println!("Error during LLVM compilation:\n{}\n", e);
                 continue;
             }
             println!("LLVM module compiled successfully\n")
+            */
         } else {
             println!("Expression is not a function, so not compiling to LLVM.\n")
         }

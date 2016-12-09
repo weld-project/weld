@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::collections::HashSet;
 
-use easy_ll;
+//use easy_ll;
 
 use super::ast::*;
 use super::ast::Type::*;
@@ -367,6 +367,7 @@ impl FunctionContext {
     }
 }
 
+/*
 /// Generate a compiled LLVM module from a program whose body is a function.
 pub fn compile_program(program: &Program) -> WeldResult<easy_ll::CompiledModule> {
     let mut expr = try!(macro_processor::process_program(program));
@@ -382,6 +383,7 @@ pub fn compile_program(program: &Program) -> WeldResult<easy_ll::CompiledModule>
         _ => weld_err!("Expression passed to compile_function must be a Lambda")
     }
 }
+*/
 
 #[test]
 fn types() {
@@ -401,6 +403,7 @@ fn types() {
     assert_eq!(gen.llvm_type(&struct2).unwrap(), "%s1");
 }
 
+/*
 #[test]
 fn basic_program() {
     let code = "|| 40 + 2";
@@ -459,3 +462,4 @@ fn comparison() {
     assert_eq!(result, 20);
     // TODO: Free result
 }
+*/
