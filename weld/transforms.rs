@@ -71,24 +71,20 @@ pub fn fuse_loops(expr: &mut Expr<Type>) -> WeldResult<()> {
     for child in expr.children_mut() {
         try!(fuse_loops(child));
     }
-
     let mut sym_gen = SymbolGenerator::from_expression(expr);
     let mut new_expr = None;
-
-    // TODO(shoumik): Any way to nest these? box syntax is unstable...
-    if let For(ref mut iter1, ref mut bldr1, ref mut nested) = (*expr).kind {
-        let data = &mut iter1.data;
-        if let Res(ref mut res_bldr) = (*data).kind {
-            if let For(ref mut iter2, ref mut bldr2, ref lambda) = (*res_bldr).kind.clone() {
-                if let NewBuilder = (*bldr2).kind {
-                    let bldr_type = &bldr2.ty;
-                    if let Builder(ref kind) = *bldr_type {
+    if let For(ref iter1, ref bldr1, ref nested) = expr.kind {
+        if let Res(ref res_bldr) = iter1.data.kind {
+            if let For(ref iter2, ref bldr2, ref lambda) = res_bldr.kind {
+                if let NewBuilder = bldr2.kind {
+                    if let Builder(ref kind) = bldr2.ty {
                         if let Appender(_) = *kind {
                             // Everything matches up...fuse the loops.
-                            new_expr = Some(Expr{
+                            let new = Expr{
                                 ty: expr.ty.clone(),
                                 kind: For(iter2.clone(), bldr1.clone(), Box::new(replace_builder(lambda, nested, &mut sym_gen)))
-                            })
+                            };
+                            new_expr = Some(new);
                         }
                     }
                 }
@@ -101,23 +97,9 @@ pub fn fuse_loops(expr: &mut Expr<Type>) -> WeldResult<()> {
     Ok(())
 }
 
-/// Takes a lambda expression and a set of expressions as parameters 
-/// and applies the parameters to the lambda.
-fn apply_lambda(lambda: &mut Expr<Type>, params: Vec<&Expr<Type>>) {
-    let l_args: Vec<_>;
-    if let Lambda(ref args, _) = (*lambda).kind {
-        l_args = (*args).clone();
-    } else {
-        l_args = vec![];
-    }
-    assert!(l_args.len() == params.len());
-    for (arg, param) in l_args.iter().zip(params) {
-        lambda.substitute(&arg.name, param);
-    }
-}
-
+/// Returns new function with nested builder applied to outer func.
 fn replace_builder(lambda: &Expr<Type>,
-                            nested: &mut Expr<Type>,
+                            nested: &Expr<Type>,
                             sym_gen: &mut SymbolGenerator) -> Expr<Type> {
 
     fn same_builder(a: &ExprKind<Type>, b: &Symbol) -> bool {
@@ -128,42 +110,48 @@ fn replace_builder(lambda: &Expr<Type>,
         }
     }
 
-    let mut new_body = None;
+    let mut new_func = None;
+    if let Lambda(ref args, ref body) = lambda.kind {
+        if let Lambda(ref nested_args, _) = nested.kind {
+            let mut new_body = *body.clone();
+            // The old builder Parameter.
+            let ref old_bldr = args[0];
+            // The  old element Parameter.
+            let ref old_arg = args[1];
+            // A new symbol and identifier for the builder.
+            let new_sym = sym_gen.new_symbol(&old_bldr.name.name);
+            let new_bldr = Expr{ty: nested_args[0].ty.clone(), kind: Ident(new_sym.clone())};
 
-    let new_params = if let Lambda(ref args, ref mut body) = lambda.clone().kind {
-        new_body = Some(*body.clone());
-        let ref old_bldr = args[0];
-        // TODO(shoumik): index (change 1 -> 2).
-        let ref old_arg = args[1];
-        let new_sym = sym_gen.new_symbol(&old_bldr.name.name);
-        let new_bldr = Expr{ty: nested.ty.clone(), kind: Ident(new_sym.clone())};
-        for child in body.children_mut() {
-            match child.kind {
-                Merge(ref bldr, ref elem) if same_builder(&(*bldr).kind, &old_bldr.name) => {
-                    apply_lambda(nested, vec![&new_bldr, elem]);
-                }
-                For(_, ref mut bldr, ref mut func) if same_builder(&(*bldr).kind, &old_bldr.name) => {
-                    bldr.kind = new_bldr.kind.clone();
-                    func.kind = replace_builder(func, nested, sym_gen).kind.clone();
-                },
-                Ident(ref mut symbol) if *symbol == new_sym => {
-                    *symbol = new_sym.clone();
-                }
-                _ => {}
-            };
+            // Mutate the new body to replace the nested builder.
+            for child in new_body.children_mut() {
+                match child.kind.clone() {
+                    Merge(ref bldr, ref elem) if same_builder(&(*bldr).kind, &old_bldr.name) => {
+                        let params: Vec<Expr<Type>> = vec![new_bldr.clone(), *elem.clone()];
+                        *child = Expr{ty: child.ty.clone(), kind: Apply(Box::new(nested.clone()), params)};
+                    }
+                    For(ref data, ref bldr, ref func) if same_builder(&(*bldr).kind, &old_bldr.name) => {
+                        *child = Expr{
+                            ty: child.ty.clone(),
+                            kind: For(data.clone(), Box::new(new_bldr.clone()), Box::new(replace_builder(func, nested, sym_gen)))
+                        };
+                    },
+                    Ident(ref mut symbol) if *symbol == new_sym => {
+                        *child = new_bldr.clone();
+                    }
+                    _ => {}
+                };
+            }
+
+            let new_params = vec![
+                Parameter{ty: new_bldr.ty.clone(), name: new_sym.clone()},
+                Parameter{ty: old_arg.ty.clone(), name: old_arg.name.clone()}
+            ];
+            new_func = Some(Expr{ty: nested.ty.clone(), kind: Lambda(new_params, Box::new(new_body))})
         }
+    }
 
-        vec![
-            Parameter{ty: new_bldr.ty.clone(), name: new_sym.clone()},
-            Parameter{ty: old_arg.ty.clone(), name: old_arg.name.clone()}
-        ]
-    } else {
-        // TODO(shoumik): ...
-        vec![]
-    };
-
-    if let Some(new) = new_body {
-        Expr{ty: nested.ty.clone(), kind: Lambda(new_params, Box::new(new))}
+    if let Some(new) = new_func {
+        new
     } else {
         nested.clone()
     }
