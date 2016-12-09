@@ -16,20 +16,12 @@ use weld::transforms;
 use weld::type_inference::*;
 
 fn main() {
-    let home_path = match env::home_dir() {
-        Some(path) => path,
-        None => PathBuf::new(),
-    };
+    let home_path = env::home_dir().unwrap_or(PathBuf::new());
     let history_file_path = home_path.join(".weld_history");
-    let history_file_path = match history_file_path.to_str() {
-        Some(history_file_path) => history_file_path,
-        None => ".weld_history",
-    };
+    let history_file_path = history_file_path.to_str().unwrap_or(".weld_history");
 
     let mut rl = Editor::<()>::new();
-    if let Err(_) = rl.load_history(&history_file_path) {
-        println!("No previous history.");
-    }
+    rl.load_history(&history_file_path).unwrap();
 
     loop {
         let raw_readline = rl.readline(">> ");
