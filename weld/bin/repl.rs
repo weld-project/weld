@@ -81,18 +81,11 @@ fn main() {
         println!("Expression type: {}\n", print_type(&expr.ty));
 
         let mut expr = expr.to_typed().unwrap();
-
         if let Err(ref e) = transforms::fuse_loops(&mut expr) {
             println!("Error during loop fusion: {}\n", e);
             continue;
         }
         println!("After loop fusion:\n{}\n", print_typed_expr(&expr));
-
-        // Inline again
-        if let Err(ref e) = transforms::inline_apply(&mut expr) {
-            println!("Error during inlining applies: {}\n", e);
-        }
-        println!("After inlining applies:\n{}\n", print_expr(&expr));
 
         if let Lambda(ref args, ref body) = expr.kind {
             let mut generator = LlvmGenerator::new();
