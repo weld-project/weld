@@ -6,8 +6,6 @@ use super::ast::Type::*;
 use super::ast::BuilderKind::*;
 use super::error::*;
 
-use super::pretty_print::*;
-
 use super::util::SymbolGenerator;
 
 /// Inlines Apply nodes whose argument is a Lambda expression. These often arise during macro
@@ -40,6 +38,8 @@ pub fn inline_apply<T:Clone>(expr: &mut Expr<T>) -> WeldResult<()> {
     Ok(())
 }
 
+/// Fuses loops where one for loop takes another as it's input, which prevents intermediate results
+/// from being materialized.
 pub fn fuse_loops(expr: &mut Expr<Type>) -> WeldResult<()> {
     for child in expr.children_mut() {
         try!(fuse_loops(child));
@@ -52,8 +52,6 @@ pub fn fuse_loops(expr: &mut Expr<Type>) -> WeldResult<()> {
                 if let NewBuilder = bldr2.kind {
                     if let Builder(ref kind) = bldr2.ty {
                         if let Appender(_) = *kind {
-                            // Everything matches up...fuse the loops.
-                            println!("{}\n --------", print_expr(expr));
                             let mut new = Expr{
                                 ty: expr.ty.clone(),
                                 kind: For(iter2.clone(), bldr1.clone(), Box::new(replace_builder(lambda, nested, &mut sym_gen)))
@@ -72,39 +70,41 @@ pub fn fuse_loops(expr: &mut Expr<Type>) -> WeldResult<()> {
     Ok(())
 }
 
-/// Returns new function with nested builder applied to outer func.
+/// Given a lambda which takes a builder and an argument, returns a new function which takes a new
+/// builder type and calls nested on the old values it would've merged into its old builder. This
+/// allows us to "compose" merge functions and avoid creating intermediate results.
 fn replace_builder(lambda: &Expr<Type>,
                             nested: &Expr<Type>,
                             sym_gen: &mut SymbolGenerator) -> Expr<Type> {
 
-    fn same_builder(a: &ExprKind<Type>, b: &Symbol) -> bool {
+    // Tests whether an identifier and symbol refer to the same value by
+    // comparing the symbols.
+    fn same_iden(a: &ExprKind<Type>, b: &Symbol) -> bool {
         if let Ident(ref symbol)  = *a { 
             symbol == b 
         } else {
             false
         }
     }
-
     let mut new_func = None;
     if let Lambda(ref args, ref body) = lambda.kind {
         if let Lambda(ref nested_args, _) = nested.kind {
             let mut new_body = *body.clone();
-            // The old builder Parameter.
             let ref old_bldr = args[0];
-            // The  old element Parameter.
             let ref old_arg = args[1];
-            // A new symbol and identifier for the builder.
             let new_sym = sym_gen.new_symbol(&old_bldr.name.name);
             let new_bldr = Expr{ty: nested_args[0].ty.clone(), kind: Ident(new_sym.clone())};
 
+            // replaces an old builder function with a new one, with the old builder
+            // operations inlined into the new Function.
             let replace = &mut |e: &mut Expr<Type>| {
                 let mut new_expr = None;
                 match e.kind {
-                    Merge(ref bldr, ref elem) if same_builder(&(*bldr).kind, &old_bldr.name) => {
+                    Merge(ref bldr, ref elem) if same_iden(&(*bldr).kind, &old_bldr.name) => {
                         let params: Vec<Expr<Type>> = vec![new_bldr.clone(), *elem.clone()];
                         new_expr = Some(Expr{ty: e.ty.clone(), kind: Apply(Box::new(nested.clone()), params)});
                     }
-                    For(ref data, ref bldr, ref func) if same_builder(&(*bldr).kind, &old_bldr.name) => {
+                    For(ref data, ref bldr, ref func) if same_iden(&(*bldr).kind, &old_bldr.name) => {
                         new_expr = Some(Expr{
                             ty: e.ty.clone(),
                             kind: For(data.clone(), Box::new(new_bldr.clone()), Box::new(replace_builder(func, nested, sym_gen)))
@@ -112,7 +112,6 @@ fn replace_builder(lambda: &Expr<Type>,
                     },
                     Ident(ref mut symbol) if *symbol == new_sym => {
                         new_expr = Some(new_bldr.clone());
-                        println!("replacing Merge!");
                     }
                     _ => {}
                 };
