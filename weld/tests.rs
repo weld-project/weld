@@ -75,6 +75,24 @@ fn parse_and_print_simple_expressions() {
 }
 
 #[test]
+fn simple_vertical_loop_fusion() {
+    // Two loops.
+    let e = parse_expr("for(result(for(d, appender, |e,b| merge(b,e+2))), appender, |b,f| merge(b, f+1))").unwrap();
+    let r = parse_expr("for(d, appender, |e,b| merge(b, (e+2)+1))").unwrap();
+    assert!(compare_ignoring_symbols(&e, &r));
+
+    // Three loops.
+    let e = parse_expr("for(result(for(result(for(d, appender, |e,b| merge(b,e+3))), appender, |e,b| merge(b,e+2)), appender, |b,f| merge(b, f+1)))").unwrap();
+    let r = parse_expr("for(d, appender, |e,b| merge(b, (((e+3)+2)+1)").unwrap();
+    assert!(compare_ignoring_symbols(&e, &r));
+
+    // Make sure correct builder is chosen.
+    let e = parse_expr("for(result(for(d, appender, |e,b| merge(b,e+2))), merger, |b,f| merge(b, f+1))").unwrap();
+    let r = parse_expr("for(d, merger, |e,b| merge(b, (e+2)+1))").unwrap();
+    assert!(compare_ignoring_symbols(&e, &r));
+}   
+
+#[test]
 fn parse_and_print_typed_expressions() {
     let e = parse_expr("a").unwrap();
     assert_eq!(print_typed_expr(&e).as_str(), "a:?");
