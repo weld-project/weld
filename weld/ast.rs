@@ -49,7 +49,7 @@ pub enum BuilderKind {
 /// expressions have different "kinds" of types attached to them at different points in the
 /// compilation process -- namely PartialType when parsed and then Type after type inference.
 #[derive(Clone, Debug, PartialEq)]
-pub struct Expr<T:Clone> {
+pub struct Expr<T:Clone + Eq> {
     pub ty: T,
     pub kind: ExprKind<T>
 }
@@ -57,7 +57,7 @@ pub struct Expr<T:Clone> {
 /// An iterator, which specifies a vector to iterate over and optionally a start index,
 /// end index, and stride.
 #[derive(Clone, Debug, PartialEq)]
-pub struct Iter<T:Clone> {
+pub struct Iter<T:Clone + Eq> {
     pub data: Box<Expr<T>>,
     pub start: Option<Box<Expr<T>>>,
     pub end: Option<Box<Expr<T>>>,
@@ -65,7 +65,7 @@ pub struct Iter<T:Clone> {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum ExprKind<T:Clone> {
+pub enum ExprKind<T:Clone+Eq> {
     // TODO: maybe all of these should take named parameters
     BoolLiteral(bool),
     I32Literal(i32),
@@ -151,7 +151,7 @@ impl fmt::Display for BinOpKind {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Parameter<T:Clone> {
+pub struct Parameter<T:Clone+Eq> {
     pub name: Symbol,
     pub ty: T
 }
@@ -162,7 +162,7 @@ pub type TypedExpr = Expr<Type>;
 /// A typed parameter.
 pub type TypedParameter = Parameter<Type>;
 
-impl<T:Clone> Expr<T> {
+impl<T:Clone+Eq> Expr<T> {
     /// Get an iterator for the children of this expression.
     pub fn children(&self) -> vec::IntoIter<&Expr<T>> {
         use self::ExprKind::*;
@@ -242,14 +242,18 @@ impl<T:Clone> Expr<T> {
     }
 
     /// Compares two expression trees, returning true if they are the same.
-    /// TODO(shoumik): make this Eq instead?
     pub fn compare(&self, other: &Expr<T>) -> bool {
         use self::ExprKind::*;
+        if self.ty != other.ty {
+            return false
+        }
         let same_kind = match (&self.kind, &other.kind) {
             (&BinOp(kind1, _, _), &BinOp(kind2, _, _)) if kind1 == kind2 => true,
             (&Let(ref sym1, _, _), &Let(ref sym2, _, _)) if sym1 == sym2 => true,
             (&NewBuilder, &NewBuilder) => true,
-            (&Lambda(..), &Lambda(..)) => true,
+            (&Lambda(ref params1, _), &Lambda(ref params2, _)) => {
+                params1.len() == params2.len() && params1.iter().zip(params2).all(|t| t.0 == t.1)
+            }
             (&MakeStruct(..), &MakeStruct(..)) => true,
             (&MakeVector(..), &MakeVector(..)) => true,
             (&GetField(_, idx1), &GetField(_, idx2)) if idx1 == idx2 => true,
@@ -281,57 +285,70 @@ impl<T:Clone> Expr<T> {
     /// Compares two expression trees, returning true if they are the same modulo symbol names.
     /// Symbols in the two expressions must have a one to one correspondance for the trees to be
     /// considered equal.
-    /// TODO(shoumik): make this Eq instead?
+    ///
+    /// Caveats:
+    ///     - If an undeclared symbol is encountered, this method return false.
     pub fn compare_ignoring_symbols(&self, other: &Expr<T>) -> bool {
         use self::ExprKind::*;
         use std::collections::HashMap;
         let mut sym_map: HashMap<&Symbol, &Symbol> = HashMap::new();
-        let same_kind = match (&self.kind, &other.kind) {
-            (&BinOp(ref kind1, _, _), &BinOp(ref kind2, _, _)) if kind1 == kind2 => true,
-            (&Let(ref sym1, _, _), &Let(ref sym2, _, _)) => {
-                sym_map.insert(sym1, sym2);
-                true
-            },
-            (&Lambda(ref params1, _), &Lambda(ref params2, _)) => {
-                // TODO(shoumik): compare parameter types
-                for (p1, p2) in params1.iter().zip(params2) {
-                    sym_map.insert(&p1.name,  &p2.name);
-                }
-                true
-            },
-            (&NewBuilder, &NewBuilder) => true,
-            (&MakeStruct(..), &MakeStruct(..)) => true,
-            (&MakeVector(..), &MakeVector(..)) => true,
-            (&GetField(_, idx1), &GetField(_, idx2)) if idx1 == idx2 => true,
-            (&Merge(..), &Merge(..)) => true,
-            (&Res(..), &Res(..)) => true,
-            (&For(..), &For(..)) => true,
-            (&If(..), &If(..)) => true,
-            (&Apply(..), &Apply(..)) => true,
-            (&BoolLiteral(ref l), &BoolLiteral(ref r)) if l == r => true,
-            (&I32Literal(ref l), &I32Literal(ref r)) if l == r => true,
-            (&I64Literal(ref l), &I64Literal(ref r)) if l == r => true,
-            (&F32Literal(ref l), &F32Literal(ref r)) if l == r => true,
-            (&F64Literal(ref l), &F64Literal(ref r)) if l == r => true,
-            (&Ident(ref l), &Ident(ref r)) => {
-                if let Some(lv) = sym_map.get(l) {
-                    **lv == *r
-                } else {
-                    false
-                }
+
+        fn _compare_ignoring_symbols<'b, 'a, U:Clone+Eq>(e1: &'a Expr<U>, e2: &'b Expr<U>, sym_map: &mut HashMap<&'a Symbol, &'b Symbol>) -> bool {
+            if e1.ty != e2.ty {
+                return false
             }
-            _ => false // all else fail.
-        };
-        if !same_kind {
-            return false
+            let same_kind = match (&e1.kind, &e2.kind) {
+                (&BinOp(ref kind1, _, _), &BinOp(ref kind2, _, _)) if kind1 == kind2 => true,
+                (&Let(ref sym1, _, _), &Let(ref sym2, _, _)) => {
+                    sym_map.insert(sym1, sym2);
+                    true
+                },
+                (&Lambda(ref params1, _), &Lambda(ref params2, _)) => {
+                    // Just compare types, and assume the symbol names "match up".
+                    if params1.len() == params2.len() && params1.iter().zip(params2).all(|t| t.0.ty == t.1.ty) {
+                        for (p1, p2) in params1.iter().zip(params2) {
+                            sym_map.insert(&p1.name,  &p2.name);
+                        }
+                        true
+                    } else {
+                        false
+                    }
+                },
+                (&NewBuilder, &NewBuilder) => true,
+                (&MakeStruct(..), &MakeStruct(..)) => true,
+                (&MakeVector(..), &MakeVector(..)) => true,
+                (&GetField(_, idx1), &GetField(_, idx2)) if idx1 == idx2 => true,
+                (&Merge(..), &Merge(..)) => true,
+                (&Res(..), &Res(..)) => true,
+                (&For(..), &For(..)) => true,
+                (&If(..), &If(..)) => true,
+                (&Apply(..), &Apply(..)) => true,
+                (&BoolLiteral(ref l), &BoolLiteral(ref r)) if l == r => true,
+                (&I32Literal(ref l), &I32Literal(ref r)) if l == r => true,
+                (&I64Literal(ref l), &I64Literal(ref r)) if l == r => true,
+                (&F32Literal(ref l), &F32Literal(ref r)) if l == r => true,
+                (&F64Literal(ref l), &F64Literal(ref r)) if l == r => true,
+                (&Ident(ref l), &Ident(ref r)) => {
+                    if let Some(lv) = sym_map.get(l) {
+                        **lv == *r
+                    } else {
+                        false
+                    }
+                }
+                _ => false // all else fail.
+            };
+            if !same_kind {
+                return false
+            }
+            let children: Vec<_> = e1.children().collect();
+            let e2_children: Vec<_> = e2.children().collect();
+            if children.len() == e2_children.len() {
+                children.iter().zip(e2_children).all(|e| _compare_ignoring_symbols(&e.0, &e.1, sym_map))
+            } else {
+                false
+            }
         }
-        let children: Vec<_> = self.children().collect();
-        let other_children: Vec<_> = other.children().collect();
-        if children.len() == other_children.len() {
-            children.iter().zip(other_children).all(|e| e.0.compare(&e.1))
-        } else {
-            false
-        }
+        _compare_ignoring_symbols(self, other, &mut sym_map)
     }
 
     /// Substitute Ident nodes with the given symbol for another expression, stopping when an
@@ -377,6 +394,14 @@ impl<T:Clone> Expr<T> {
         func(self);
         for c in self.children() {
             c.traverse(func);
+        }
+    }
+
+    /// Run a closure on this expression and every child, in pre-order.
+    pub fn traverse_mut<F>(&mut self, func: &mut F) where F: FnMut(&mut Expr<T>) -> () {
+        func(self);
+        for c in self.children_mut() {
+            c.traverse_mut(func);
         }
     }
 }

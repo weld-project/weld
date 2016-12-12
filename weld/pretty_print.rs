@@ -10,7 +10,7 @@ use super::partial_types::*;
 // TODO: These methods could take a mutable string as an argument, or even a fmt::Format.
 
 /// A trait for printing types.
-pub trait PrintableType: Clone {
+pub trait PrintableType: Clone+Eq {
     fn print(&self) -> String;
 }
 

@@ -18,7 +18,7 @@ use super::util::SymbolGenerator;
 ///   it to a temporary as would happen with function application.
 /// - Does not complete inlining if some of the functions take functions as arguments (in that
 ///   case, the expressions after inlining may lead to more inlining).
-pub fn inline_apply<T:Clone>(expr: &mut Expr<T>) -> WeldResult<()> {
+pub fn inline_apply<T:Clone+Eq>(expr: &mut Expr<T>) -> WeldResult<()> {
     for child in expr.children_mut() {
         try!(inline_apply(child));
     }

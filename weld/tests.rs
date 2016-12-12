@@ -1,8 +1,18 @@
-use super::ast::{Expr, ExprKind, Symbol};
+use super::ast::{Expr, Type, ExprKind, Symbol};
 use super::partial_types::PartialType::Unknown;
 use super::parser::parse_expr;
 use super::pretty_print::*;
 use super::type_inference::*;
+
+use super::transforms::fuse_loops;
+
+/// Returns a typed expression.
+#[cfg(test)]
+fn typed_expression(s: &str) -> Expr<Type> {
+    let mut e1 = parse_expr(s).unwrap();
+    infer_types(&mut e1).unwrap();
+    e1.to_typed().unwrap()
+}
 
 #[test]
 fn parse_and_print_literal_expressions() {
@@ -75,22 +85,51 @@ fn parse_and_print_simple_expressions() {
 }
 
 #[test]
-fn simple_vertical_loop_fusion() {
-    // Two loops.
-    let e = parse_expr("for(result(for(d, appender, |e,b| merge(b,e+2))), appender, |b,f| merge(b, f+1))").unwrap();
-    let r = parse_expr("for(d, appender, |e,b| merge(b, (e+2)+1))").unwrap();
-    assert!(compare_ignoring_symbols(&e, &r));
+fn compare_expressions() {
+    let e1 = parse_expr("23").unwrap();
+    let e2 = parse_expr("23").unwrap();
+    assert!(e1.compare(&e2));
 
-    // Three loops.
-    let e = parse_expr("for(result(for(result(for(d, appender, |e,b| merge(b,e+3))), appender, |e,b| merge(b,e+2)), appender, |b,f| merge(b, f+1)))").unwrap();
-    let r = parse_expr("for(d, appender, |e,b| merge(b, (((e+3)+2)+1)").unwrap();
-    assert!(compare_ignoring_symbols(&e, &r));
+    let e2 = parse_expr("23.0").unwrap();
+    assert!(!e1.compare(&e2));
 
-    // Make sure correct builder is chosen.
-    let e = parse_expr("for(result(for(d, appender, |e,b| merge(b,e+2))), merger, |b,f| merge(b, f+1))").unwrap();
-    let r = parse_expr("for(d, merger, |e,b| merge(b, (e+2)+1))").unwrap();
-    assert!(compare_ignoring_symbols(&e, &r));
-}   
+    let e1 = parse_expr("23 + 24").unwrap();
+    let e2 = parse_expr("23 + 24").unwrap();
+    assert!(e1.compare(&e2));
+
+    let e2 = parse_expr("24 + 23").unwrap();
+    assert!(!e1.compare(&e2));
+
+    let e1 = parse_expr("for([1,2], appender, |e| e+1)").unwrap();
+    let e2 = parse_expr("for([1,2], appender, |e| e+1)").unwrap();
+    assert!(e1.compare(&e2));
+
+    let e2 = parse_expr("for([1,2], appender, |f| f+1)").unwrap();
+    //assert!(e1.compare_ignoring_symbols(&e2));
+
+    let e1 = parse_expr("let a = 2; a").unwrap();
+    let e2 = parse_expr("let b = 2; b").unwrap();
+    assert!(e1.compare_ignoring_symbols(&e2));
+        
+    let e2 = parse_expr("let b = 2; c").unwrap();
+    assert!(!e1.compare_ignoring_symbols(&e2));
+
+    // Undefined symbols cause equality check to return false.
+    let e1 = parse_expr("[1, 2, 3, d]").unwrap();
+    let e2 = parse_expr("[1, 2, 3, d]").unwrap();
+    assert!(!e1.compare_ignoring_symbols(&e2));
+
+    // Symbols can be substituted, so equal.
+    let e1 = parse_expr("|a, b| a + b").unwrap();
+    let e2 = parse_expr("|c, d| c + d").unwrap();
+    assert!(e1.compare_ignoring_symbols(&e2));
+
+    // Symbols don't match up.
+    let e2 = parse_expr("|c, d| d + c").unwrap();
+    assert!(!e1.compare_ignoring_symbols(&e2));
+}
+
+ 
 
 #[test]
 fn parse_and_print_typed_expressions() {
@@ -136,4 +175,27 @@ fn parse_and_print_typed_expressions() {
     infer_types(&mut e).unwrap();
     assert_eq!(print_typed_expr(&e).as_str(),
         "for([1],appender[i32],|b:appender[i32],x:i32|merge(b:appender[i32],x:i32))");
+}
+
+
+
+#[test]
+fn simple_vertical_loop_fusion() {
+    // Two loops.
+    let mut e1 = typed_expression("for(result(for([1,2,3], appender, |b,e| merge(b,e+2))), appender, |b,f| merge(b, f+1))");
+    fuse_loops(&mut e1).unwrap();
+    let e2 = typed_expression("for([1,2,3], appender, |b,e| merge(b, (e+2)+1))");
+    assert!(e1.compare_ignoring_symbols(&e2));
+
+    // Three loops.
+    let mut e1 = typed_expression("for(result(for(result(for([1,2,3], appender, |b,e| merge(b,e+3))), appender, |b,e| merge(b,e+2))), appender, |b,f| merge(b, f+1))");
+    fuse_loops(&mut e1).unwrap();
+    let e2 = typed_expression("for([1,2,3], appender, |b,e| merge(b, (((e+3)+2)+1)))");
+    assert!(e1.compare_ignoring_symbols(&e2));
+
+    // Make sure correct builder is chosen.
+    let mut e1 = typed_expression("for(result(for([1,2,3], appender[i32], |b,e| merge(b,e+2))), appender[f64], |b,f| merge(b, 1.0))");
+    fuse_loops(&mut e1).unwrap();
+    let e2 = typed_expression("for([1,2,3], appender[f64], |b,e| merge(b, 1.0))");
+    assert!(e1.compare_ignoring_symbols(&e2));
 }
