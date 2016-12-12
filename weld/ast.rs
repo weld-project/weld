@@ -241,6 +241,42 @@ impl<T:Clone> Expr<T> {
         }.into_iter()
     }
 
+    /// Compares two expression trees, returning true if they are the same.
+    /// TODO(shoumik): make this Eq instead?
+    pub fn compare(&self, other: &Expr<T>) -> bool {
+        use self::ExprKind::*;
+        let same_kind = match (&self.kind, &other.kind) {
+            (&BinOp(kind1, _, _), &BinOp(kind2, _, _)) if kind1 == kind2 => true,
+            (&Let(..), &Let(..)) => true,
+            (&Lambda(..), &Lambda(..)) => true,
+            (&MakeStruct(..), &MakeStruct(..)) => true,
+            (&MakeVector(..), &MakeVector(..)) => true,
+            (&GetField(_, idx1), &GetField(_, idx2)) if idx1 == idx2 => true,
+            (&Merge(..), &Merge(..)) => true,
+            (&Res(..), &Res(..)) => true,
+            (&For(..), &For(..)) => true,
+            (&If(..), &If(..)) => true,
+            (&Apply(..), &Apply(..)) => true,
+            (&BoolLiteral(ref l), &BoolLiteral(ref r)) if l == r => true,
+            (&I32Literal(ref l), &I32Literal(ref r)) if l == r => true,
+            (&I64Literal(ref l), &I64Literal(ref r)) if l == r => true,
+            (&F32Literal(ref l), &F32Literal(ref r)) if l == r => true,
+            (&F64Literal(ref l), &F64Literal(ref r)) if l == r => true,
+            (&Ident(ref l), &Ident(ref r)) if l == r => true,
+            _ => false // all else fail.
+        };
+        if !same_kind {
+            return false
+        }
+        let children: Vec<_> = self.children().collect();
+        let other_children: Vec<_> = other.children().collect();
+        if children.len() == other_children.len() {
+            children.iter().zip(other_children).all(|e| e.0.compare(&e.1))
+        } else {
+            false
+        }
+    }
+
     /// Substitute Ident nodes with the given symbol for another expression, stopping when an
     /// expression in the tree redefines the symbol (e.g. Let or Lambda parameters).
     pub fn substitute(&mut self, symbol: &Symbol, replacement: &Expr<T>) {
