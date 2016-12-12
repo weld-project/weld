@@ -247,7 +247,8 @@ impl<T:Clone> Expr<T> {
         use self::ExprKind::*;
         let same_kind = match (&self.kind, &other.kind) {
             (&BinOp(kind1, _, _), &BinOp(kind2, _, _)) if kind1 == kind2 => true,
-            (&Let(..), &Let(..)) => true,
+            (&Let(ref sym1, _, _), &Let(ref sym2, _, _)) if sym1 == sym2 => true,
+            (&NewBuilder, &NewBuilder) => true,
             (&Lambda(..), &Lambda(..)) => true,
             (&MakeStruct(..), &MakeStruct(..)) => true,
             (&MakeVector(..), &MakeVector(..)) => true,
@@ -263,6 +264,62 @@ impl<T:Clone> Expr<T> {
             (&F32Literal(ref l), &F32Literal(ref r)) if l == r => true,
             (&F64Literal(ref l), &F64Literal(ref r)) if l == r => true,
             (&Ident(ref l), &Ident(ref r)) if l == r => true,
+            _ => false // all else fail.
+        };
+        if !same_kind {
+            return false
+        }
+        let children: Vec<_> = self.children().collect();
+        let other_children: Vec<_> = other.children().collect();
+        if children.len() == other_children.len() {
+            children.iter().zip(other_children).all(|e| e.0.compare(&e.1))
+        } else {
+            false
+        }
+    }
+
+    /// Compares two expression trees, returning true if they are the same modulo symbol names.
+    /// Symbols in the two expressions must have a one to one correspondance for the trees to be
+    /// considered equal.
+    /// TODO(shoumik): make this Eq instead?
+    pub fn compare_ignoring_symbols(&self, other: &Expr<T>) -> bool {
+        use self::ExprKind::*;
+        use std::collections::HashMap;
+        let mut sym_map: HashMap<&Symbol, &Symbol> = HashMap::new();
+        let same_kind = match (&self.kind, &other.kind) {
+            (&BinOp(ref kind1, _, _), &BinOp(ref kind2, _, _)) if kind1 == kind2 => true,
+            (&Let(ref sym1, _, _), &Let(ref sym2, _, _)) => {
+                sym_map.insert(sym1, sym2);
+                true
+            },
+            (&Lambda(ref params1, _), &Lambda(ref params2, _)) => {
+                // TODO(shoumik): compare parameter types
+                for (p1, p2) in params1.iter().zip(params2) {
+                    sym_map.insert(&p1.name,  &p2.name);
+                }
+                true
+            },
+            (&NewBuilder, &NewBuilder) => true,
+            (&MakeStruct(..), &MakeStruct(..)) => true,
+            (&MakeVector(..), &MakeVector(..)) => true,
+            (&GetField(_, idx1), &GetField(_, idx2)) if idx1 == idx2 => true,
+            (&Merge(..), &Merge(..)) => true,
+            (&Res(..), &Res(..)) => true,
+            (&For(..), &For(..)) => true,
+            (&If(..), &If(..)) => true,
+            (&Apply(..), &Apply(..)) => true,
+            (&BoolLiteral(ref l), &BoolLiteral(ref r)) if l == r => true,
+            (&I32Literal(ref l), &I32Literal(ref r)) if l == r => true,
+            (&I64Literal(ref l), &I64Literal(ref r)) if l == r => true,
+            (&F32Literal(ref l), &F32Literal(ref r)) if l == r => true,
+            (&F64Literal(ref l), &F64Literal(ref r)) if l == r => true,
+            (&Ident(ref l), &Ident(ref r)) => {
+                if let Some(lv) = sym_map.get(l) {
+                    **lv == *r
+                } else {
+                    false
+                }
+            }
             _ => false // all else fail.
         };
         if !same_kind {
