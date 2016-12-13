@@ -97,33 +97,53 @@ fn replace_builder(lambda: &Expr<Type>,
 
             // replaces an old builder function with a new one, with the old builder
             // operations inlined into the new Function.
-            let replace = &mut |e: &mut Expr<Type>| {
+            fn replace(e: &mut Expr<Type>,
+                       old_bldr: &Parameter<Type>,
+                       new_sym: &Symbol,
+                       new_bldr: &Expr<Type>,
+                       nested: &Expr<Type>,
+                       sym_gen: &mut SymbolGenerator) -> WeldResult<()> {
                 let mut new_expr = None;
                 match e.kind {
                     Merge(ref bldr, ref elem) if same_iden(&(*bldr).kind, &old_bldr.name) => {
                         let params: Vec<Expr<Type>> = vec![new_bldr.clone(), *elem.clone()];
-                        new_expr = Some(Expr{ty: e.ty.clone(), kind: Apply(Box::new(nested.clone()), params)});
+                        let mut expr = Expr{ty: e.ty.clone(), kind: Apply(Box::new(nested.clone()), params)};
+                        // Run inline apply here directly.
+                        try!(inline_apply(&mut expr));
+                        for c in expr.children_mut() {
+                            try!(replace(c, old_bldr, &new_sym, &new_bldr, nested, sym_gen));
+                        };
+                        new_expr = Some(expr);
                     }
                     For(ref data, ref bldr, ref func) if same_iden(&(*bldr).kind, &old_bldr.name) => {
-                        new_expr = Some(Expr{
+                        let mut expr = Expr{
                             ty: e.ty.clone(),
                             kind: For(data.clone(), Box::new(new_bldr.clone()), Box::new(replace_builder(func, nested, sym_gen)))
-                        });
+                        };
+                        for c in expr.children_mut() {
+                            try!(replace(c, old_bldr, &new_sym, &new_bldr, nested, sym_gen));
+                        };
+                        new_expr = Some(expr);
                     },
-                    Ident(ref mut symbol) if *symbol == new_sym => {
+                    Ident(ref mut symbol) if *symbol == old_bldr.name => {
+                        // No need to recurse since its just an identifier.
                         new_expr = Some(new_bldr.clone());
                     }
-                    _ => {}
+                    _ => {
+                        for c in e.children_mut() {
+                            try!(replace(c, old_bldr, &new_sym, &new_bldr, nested, sym_gen));
+                        };
+                    }
                 };
                 if let Some(new) = new_expr {
                     *e = new;
                 }
+                Ok(())
             };
 
             // Mutate the new body to replace the nested builder.
-            replace(&mut new_body);
-            for child in new_body.children_mut() {
-                replace(child);
+            if let Err(_) = replace(&mut new_body, old_bldr, &new_sym, &new_bldr, nested, sym_gen) {
+                return nested.clone();
             }
 
             let new_params = vec![

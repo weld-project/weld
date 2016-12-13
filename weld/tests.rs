@@ -85,53 +85,6 @@ fn parse_and_print_simple_expressions() {
 }
 
 #[test]
-fn compare_expressions() {
-    let e1 = parse_expr("23").unwrap();
-    let e2 = parse_expr("23").unwrap();
-    assert!(e1.compare(&e2));
-
-    let e2 = parse_expr("23.0").unwrap();
-    assert!(!e1.compare(&e2));
-
-    let e1 = parse_expr("23 + 24").unwrap();
-    let e2 = parse_expr("23 + 24").unwrap();
-    assert!(e1.compare(&e2));
-
-    let e2 = parse_expr("24 + 23").unwrap();
-    assert!(!e1.compare(&e2));
-
-    let e1 = parse_expr("for([1,2], appender, |e| e+1)").unwrap();
-    let e2 = parse_expr("for([1,2], appender, |e| e+1)").unwrap();
-    assert!(e1.compare(&e2));
-
-    let e2 = parse_expr("for([1,2], appender, |f| f+1)").unwrap();
-    //assert!(e1.compare_ignoring_symbols(&e2));
-
-    let e1 = parse_expr("let a = 2; a").unwrap();
-    let e2 = parse_expr("let b = 2; b").unwrap();
-    assert!(e1.compare_ignoring_symbols(&e2));
-        
-    let e2 = parse_expr("let b = 2; c").unwrap();
-    assert!(!e1.compare_ignoring_symbols(&e2));
-
-    // Undefined symbols cause equality check to return false.
-    let e1 = parse_expr("[1, 2, 3, d]").unwrap();
-    let e2 = parse_expr("[1, 2, 3, d]").unwrap();
-    assert!(!e1.compare_ignoring_symbols(&e2));
-
-    // Symbols can be substituted, so equal.
-    let e1 = parse_expr("|a, b| a + b").unwrap();
-    let e2 = parse_expr("|c, d| c + d").unwrap();
-    assert!(e1.compare_ignoring_symbols(&e2));
-
-    // Symbols don't match up.
-    let e2 = parse_expr("|c, d| d + c").unwrap();
-    assert!(!e1.compare_ignoring_symbols(&e2));
-}
-
- 
-
-#[test]
 fn parse_and_print_typed_expressions() {
     let e = parse_expr("a").unwrap();
     assert_eq!(print_typed_expr(&e).as_str(), "a:?");
@@ -177,6 +130,52 @@ fn parse_and_print_typed_expressions() {
         "for([1],appender[i32],|b:appender[i32],x:i32|merge(b:appender[i32],x:i32))");
 }
 
+#[test]
+fn compare_expressions() {
+    let e1 = parse_expr("23").unwrap();
+    let e2 = parse_expr("23").unwrap();
+    assert!(e1.compare(&e2));
+
+    let e2 = parse_expr("23.0").unwrap();
+    assert!(!e1.compare(&e2));
+
+    let e1 = parse_expr("23 + 24").unwrap();
+    let e2 = parse_expr("23 + 24").unwrap();
+    assert!(e1.compare(&e2));
+
+    let e2 = parse_expr("24 + 23").unwrap();
+    assert!(!e1.compare(&e2));
+
+    let e1 = parse_expr("for([1,2], appender, |e| e+1)").unwrap();
+    let e2 = parse_expr("for([1,2], appender, |e| e+1)").unwrap();
+    assert!(e1.compare(&e2));
+
+    let e2 = parse_expr("for([1,2], appender, |f| f+1)").unwrap();
+    assert!(e1.compare_ignoring_symbols(&e2));
+
+    let e1 = parse_expr("let a = 2; a").unwrap();
+    let e2 = parse_expr("let b = 2; b").unwrap();
+    assert!(e1.compare_ignoring_symbols(&e2));
+        
+    let e2 = parse_expr("let b = 2; c").unwrap();
+    assert!(!e1.compare_ignoring_symbols(&e2));
+
+    // Undefined symbols cause equality check to return false.
+    let e1 = parse_expr("[1, 2, 3, d]").unwrap();
+    let e2 = parse_expr("[1, 2, 3, d]").unwrap();
+    assert!(!e1.compare_ignoring_symbols(&e2));
+
+    // Symbols can be substituted, so equal.
+    let e1 = parse_expr("|a, b| a + b").unwrap();
+    let e2 = parse_expr("|c, d| c + d").unwrap();
+    assert!(e1.compare_ignoring_symbols(&e2));
+
+    // Symbols don't match up.
+    let e2 = parse_expr("|c, d| d + c").unwrap();
+    assert!(!e1.compare_ignoring_symbols(&e2));
+}
+
+
 
 
 #[test]
@@ -191,6 +190,12 @@ fn simple_vertical_loop_fusion() {
     let mut e1 = typed_expression("for(result(for(result(for([1,2,3], appender, |b,e| merge(b,e+3))), appender, |b,e| merge(b,e+2))), appender, |b,f| merge(b, f+1))");
     fuse_loops(&mut e1).unwrap();
     let e2 = typed_expression("for([1,2,3], appender, |b,e| merge(b, (((e+3)+2)+1)))");
+    assert!(e1.compare_ignoring_symbols(&e2));
+    
+    // Merges in other positions, replace builder identifiers.
+    let mut e1 = typed_expression("for(result(for([1,2,3], appender, |b,e| if(e>5, merge(b,e+2), b))), appender, |b,f| merge(b, f+1))");
+    fuse_loops(&mut e1).unwrap();
+    let e2 = typed_expression("for([1,2,3], appender, |b,e| if(e>5, merge(b, (e+2)+1), b))");
     assert!(e1.compare_ignoring_symbols(&e2));
 
     // Make sure correct builder is chosen.
