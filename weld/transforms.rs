@@ -99,7 +99,6 @@ fn replace_builder(lambda: &Expr<Type>,
             // operations inlined into the new Function.
             fn replace(e: &mut Expr<Type>,
                        old_bldr: &Parameter<Type>,
-                       new_sym: &Symbol,
                        new_bldr: &Expr<Type>,
                        nested: &Expr<Type>,
                        sym_gen: &mut SymbolGenerator) -> WeldResult<()> {
@@ -111,7 +110,7 @@ fn replace_builder(lambda: &Expr<Type>,
                         // Run inline apply here directly.
                         try!(inline_apply(&mut expr));
                         for c in expr.children_mut() {
-                            try!(replace(c, old_bldr, &new_sym, &new_bldr, nested, sym_gen));
+                            try!(replace(c, old_bldr, &new_bldr, nested, sym_gen));
                         };
                         new_expr = Some(expr);
                     }
@@ -121,7 +120,7 @@ fn replace_builder(lambda: &Expr<Type>,
                             kind: For(data.clone(), Box::new(new_bldr.clone()), Box::new(replace_builder(func, nested, sym_gen)))
                         };
                         for c in expr.children_mut() {
-                            try!(replace(c, old_bldr, &new_sym, &new_bldr, nested, sym_gen));
+                            try!(replace(c, old_bldr, &new_bldr, nested, sym_gen));
                         };
                         new_expr = Some(expr);
                     },
@@ -131,7 +130,7 @@ fn replace_builder(lambda: &Expr<Type>,
                     }
                     _ => {
                         for c in e.children_mut() {
-                            try!(replace(c, old_bldr, &new_sym, &new_bldr, nested, sym_gen));
+                            try!(replace(c, old_bldr, &new_bldr, nested, sym_gen));
                         };
                     }
                 };
@@ -142,7 +141,7 @@ fn replace_builder(lambda: &Expr<Type>,
             };
 
             // Mutate the new body to replace the nested builder.
-            if let Err(_) = replace(&mut new_body, old_bldr, &new_sym, &new_bldr, nested, sym_gen) {
+            if let Err(_) = replace(&mut new_body, old_bldr, &new_bldr, nested, sym_gen) {
                 return nested.clone();
             }
 
