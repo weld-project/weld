@@ -52,12 +52,10 @@ pub fn fuse_loops(expr: &mut Expr<Type>) -> WeldResult<()> {
                 if let NewBuilder = bldr2.kind {
                     if let Builder(ref kind) = bldr2.ty {
                         if let Appender(_) = *kind {
-                            let mut new = Expr{
+                            new_expr = Some(Expr{
                                 ty: expr.ty.clone(),
                                 kind: For(iter2.clone(), bldr1.clone(), Box::new(replace_builder(lambda, nested, &mut sym_gen)))
-                            };
-                            try!(inline_apply(&mut new));
-                            new_expr = Some(new);
+                            });
                         }
                     }
                 }
@@ -86,6 +84,7 @@ fn replace_builder(lambda: &Expr<Type>,
             false
         }
     }
+
     let mut new_func = None;
     if let Lambda(ref args, ref body) = lambda.kind {
         if let Lambda(ref nested_args, _) = nested.kind {
@@ -94,57 +93,28 @@ fn replace_builder(lambda: &Expr<Type>,
             let ref old_arg = args[1];
             let new_sym = sym_gen.new_symbol(&old_bldr.name.name);
             let new_bldr = Expr{ty: nested_args[0].ty.clone(), kind: Ident(new_sym.clone())};
-
-            // replaces an old builder function with a new one, with the old builder
-            // operations inlined into the new Function.
-            fn replace(e: &mut Expr<Type>,
-                       old_bldr: &Parameter<Type>,
-                       new_bldr: &Expr<Type>,
-                       nested: &Expr<Type>,
-                       sym_gen: &mut SymbolGenerator) -> WeldResult<()> {
-                let mut new_expr = None;
+            new_body.transform(&mut |ref mut e| {
                 match e.kind {
                     Merge(ref bldr, ref elem) if same_iden(&(*bldr).kind, &old_bldr.name) => {
                         let params: Vec<Expr<Type>> = vec![new_bldr.clone(), *elem.clone()];
                         let mut expr = Expr{ty: e.ty.clone(), kind: Apply(Box::new(nested.clone()), params)};
-                        // Run inline apply here directly.
-                        try!(inline_apply(&mut expr));
-                        for c in expr.children_mut() {
-                            try!(replace(c, old_bldr, &new_bldr, nested, sym_gen));
-                        };
-                        new_expr = Some(expr);
-                    }
+                        match inline_apply(&mut expr) {
+                            Ok(_) => Some(expr),
+                            Err(_) => None
+                        }
+                    },
                     For(ref data, ref bldr, ref func) if same_iden(&(*bldr).kind, &old_bldr.name) => {
-                        let mut expr = Expr{
+                        Some(Expr{
                             ty: e.ty.clone(),
                             kind: For(data.clone(), Box::new(new_bldr.clone()), Box::new(replace_builder(func, nested, sym_gen)))
-                        };
-                        for c in expr.children_mut() {
-                            try!(replace(c, old_bldr, &new_bldr, nested, sym_gen));
-                        };
-                        new_expr = Some(expr);
+                        })
                     },
                     Ident(ref mut symbol) if *symbol == old_bldr.name => {
-                        // No need to recurse since its just an identifier.
-                        new_expr = Some(new_bldr.clone());
-                    }
-                    _ => {
-                        for c in e.children_mut() {
-                            try!(replace(c, old_bldr, &new_bldr, nested, sym_gen));
-                        };
-                    }
-                };
-                if let Some(new) = new_expr {
-                    *e = new;
+                        Some(new_bldr.clone())
+                    },
+                    _ => None
                 }
-                Ok(())
-            };
-
-            // Mutate the new body to replace the nested builder.
-            if let Err(_) = replace(&mut new_body, old_bldr, &new_bldr, nested, sym_gen) {
-                return nested.clone();
-            }
-
+            });
             let new_params = vec![
                 Parameter{ty: new_bldr.ty.clone(), name: new_sym.clone()},
                 Parameter{ty: old_arg.ty.clone(), name: old_arg.name.clone()}

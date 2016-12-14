@@ -397,11 +397,13 @@ impl<T:Clone+Eq> Expr<T> {
         }
     }
 
-    /// Run a closure on this expression and every child, in pre-order.
-    pub fn traverse_mut<F>(&mut self, func: &mut F) where F: FnMut(&mut Expr<T>) -> () {
-        func(self);
+    /// Recursively transforms an expression in place by running a function on it and optionally replacing it with another expression.
+    pub fn transform<F>(&mut self, func: &mut F) where F: FnMut(&mut Expr<T>) -> Option<Expr<T>> {
+        if let Some(e) = func(self) {
+            *self = e;
+        }
         for c in self.children_mut() {
-            c.traverse_mut(func);
+            c.transform(func);
         }
     }
 }
