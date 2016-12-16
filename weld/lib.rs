@@ -5,7 +5,7 @@
 
 #[macro_use] extern crate lazy_static;
 extern crate regex;
-//extern crate easy_ll;
+extern crate easy_ll;
 
 /// Utility macro to create an Err result with a WeldError from a format string.
 macro_rules! weld_err {

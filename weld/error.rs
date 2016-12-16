@@ -2,7 +2,7 @@ use std::convert::From;
 use std::error;
 use std::fmt;
 
-//use easy_ll::LlvmError;
+use easy_ll::LlvmError;
 
 /// Error type returned by Weld.
 #[derive(Debug)]
@@ -26,13 +26,11 @@ impl error::Error for WeldError {
     fn cause(&self) -> Option<&error::Error> { None }
 }
 
-/*
 impl From<LlvmError> for WeldError {
     fn from(err: LlvmError) -> WeldError {
         WeldError(err.to_string())
     }
 }
-*/
 
 /// Result type returned by Weld.
 pub type WeldResult<T> = Result<T, WeldError>;
