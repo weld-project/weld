@@ -1,7 +1,7 @@
 //! Sequential IR for Weld programs
 
 use std::fmt;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use super::ast::*;
 use super::ast::ExprKind::*;
@@ -38,6 +38,7 @@ pub enum Terminator {
         builder: Symbol,
         body: BasicBlockId,
         data_arg: Symbol,
+        closure: HashSet<Symbol>,
         builder_arg: Symbol,
         exit: BasicBlockId,
         result: Symbol,
@@ -123,10 +124,15 @@ impl fmt::Display for Terminator {
                 write!(f, "branch {} B{} B{}", cond, on_true, on_false)
             },
             ParallelFor {
-                ref data, ref builder, body, ref data_arg, ref builder_arg, exit, ref result
+                ref data, ref builder, body, ref data_arg, ref closure, ref builder_arg, exit, ref result
             } => {
-                write!(f, "for {} {} B{} {} {} B{} {}",
-                    data, builder, body, data_arg, builder_arg, exit, result)
+                write!(f, "for {} {} B{} {} {} B{} {} [",
+                    data, builder, body, data_arg, builder_arg, exit, result)?;
+                for x in closure.iter() {
+                  write!(f, "{}, ", x)?;
+                }
+                write!(f, "]")?;
+                Ok(())
             },
             Jump(block) => write!(f, "jump B{}", block),
             Return(ref sym) => write!(f, "return {}", sym),
@@ -173,7 +179,8 @@ pub fn ast_to_sir(expr: &TypedExpr) -> WeldResult<SirFunction> {
         }
         func.params = params.clone();
         let first_block = func.add_block();
-        let (res_block, res_sym) = gen_expr(body, &mut func, first_block)?;
+        let mut dummy_closure = HashSet::new();
+        let (res_block, res_sym) = gen_expr(body, &mut func, &mut dummy_closure, first_block)?;
         func.blocks[res_block].terminator = Terminator::Return(res_sym);
         Ok((func))
     } else {
@@ -187,12 +194,16 @@ pub fn ast_to_sir(expr: &TypedExpr) -> WeldResult<SirFunction> {
 fn gen_expr(
     expr: &TypedExpr,
     func: &mut SirFunction,
+    loop_closure: &mut HashSet<Symbol>,
     cur_block: BasicBlockId
 ) -> WeldResult<(BasicBlockId, Symbol)> {
     use self::Statement::*;
     use self::Terminator::*;
     match expr.kind {
-        Ident(ref sym) => Ok((cur_block, sym.clone())),
+        Ident(ref sym) => {
+            loop_closure.insert(sym.clone());
+            Ok((cur_block, sym.clone()))
+        },
 
         Literal(lit) => {
             let res_sym = func.add_local(&expr.ty);
@@ -201,16 +212,17 @@ fn gen_expr(
         },
 
         Let(ref sym, ref value, ref body) => {
-            let (cur_block, val_sym) = gen_expr(value, func, cur_block)?;
+            let (cur_block, val_sym) = gen_expr(value, func, loop_closure, cur_block)?;
             func.add_local_named(&value.ty, sym);
             func.blocks[cur_block].add_statement(Assign(sym.clone(), val_sym));
-            let (cur_block, res_sym) = gen_expr(body, func, cur_block)?;
+            let (cur_block, res_sym) = gen_expr(body, func, loop_closure, cur_block)?;
+            loop_closure.remove(sym);
             Ok((cur_block, res_sym))
         },
 
         BinOp(kind, ref left, ref right) => {
-            let (cur_block, left_sym) = gen_expr(left, func, cur_block)?;
-            let (cur_block, right_sym) = gen_expr(right, func, cur_block)?;
+            let (cur_block, left_sym) = gen_expr(left, func, loop_closure, cur_block)?;
+            let (cur_block, right_sym) = gen_expr(right, func, loop_closure, cur_block)?;
             let res_sym = func.add_local(&expr.ty);
             func.blocks[cur_block].add_statement(
                 AssignBinOp(res_sym.clone(), kind, left.ty.clone(), left_sym, right_sym));
@@ -218,12 +230,12 @@ fn gen_expr(
         },
 
         If(ref cond, ref on_true, ref on_false) => {
-            let (cur_block, cond_sym) = gen_expr(cond, func, cur_block)?;
+            let (cur_block, cond_sym) = gen_expr(cond, func, loop_closure, cur_block)?;
             let true_block = func.add_block();
             let false_block = func.add_block();
             func.blocks[cur_block].terminator = Branch(cond_sym, true_block, false_block);
-            let (true_block, true_sym) = gen_expr(on_true, func, true_block)?;
-            let (false_block, false_sym) = gen_expr(on_false, func, false_block)?;
+            let (true_block, true_sym) = gen_expr(on_true, func, loop_closure, true_block)?;
+            let (false_block, false_sym) = gen_expr(on_false, func, loop_closure, false_block)?;
             let res_sym = func.add_local(&expr.ty);
             let res_block = func.add_block();
             func.blocks[true_block].add_statement(Assign(res_sym.clone(), true_sym));
@@ -234,15 +246,15 @@ fn gen_expr(
         },
 
         Merge(ref builder, ref elem) => {
-            let (cur_block, builder_sym) = gen_expr(builder, func, cur_block)?;
-            let (cur_block, elem_sym) = gen_expr(elem, func, cur_block)?;
+            let (cur_block, builder_sym) = gen_expr(builder, func, loop_closure, cur_block)?;
+            let (cur_block, elem_sym) = gen_expr(elem, func, loop_closure, cur_block)?;
             let res_sym = func.add_local(&expr.ty);
             func.blocks[cur_block].add_statement(DoMerge(res_sym.clone(), builder_sym, elem_sym));
             Ok((cur_block, res_sym))
         },
 
         Res(ref builder) => {
-            let (cur_block, builder_sym) = gen_expr(builder, func, cur_block)?;
+            let (cur_block, builder_sym) = gen_expr(builder, func, loop_closure, cur_block)?;
             let res_sym = func.add_local(&expr.ty);
             func.blocks[cur_block].add_statement(GetResult(res_sym.clone(), builder_sym));
             Ok((cur_block, res_sym))
@@ -256,10 +268,13 @@ fn gen_expr(
 
         For(ref data, ref builder, ref update) => {
             if let Lambda(ref params, ref body) = update.kind {
-                let (cur_block, data_sym) = gen_expr(data, func, cur_block)?;
-                let (cur_block, builder_sym) = gen_expr(builder, func, cur_block)?;
+                let mut inner_closure = HashSet::new();
+                let (cur_block, data_sym) = gen_expr(data, func, loop_closure, cur_block)?;
+                let (cur_block, builder_sym) = gen_expr(builder, func, loop_closure, cur_block)?;
                 let body_block = func.add_block();
-                let (body_end_block, body_res) = gen_expr(body, func, body_block)?;
+                let (body_end_block, body_res) = gen_expr(body, func, &mut inner_closure, body_block)?;
+                inner_closure.remove(&params[0].name);
+                inner_closure.remove(&params[1].name);
                 func.blocks[body_end_block].terminator = Return(body_res);
                 let exit_block = func.add_block();
                 let res_sym = func.add_local(&expr.ty);
@@ -268,10 +283,14 @@ fn gen_expr(
                     builder: builder_sym,
                     body: body_block,
                     data_arg: params[0].name.clone(),
+                    closure: inner_closure.clone(),
                     builder_arg: params[1].name.clone(),
                     exit: exit_block,
                     result: res_sym.clone()
                 };
+                for x in &inner_closure {
+                  loop_closure.insert(x.clone());
+                }
                 Ok((exit_block, res_sym))
             } else {
                 weld_err!("Argument to For was not a Lambda: {}", print_expr(update))
