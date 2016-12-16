@@ -195,6 +195,14 @@ fn gen_expr(
             Ok((cur_block, res_sym))
         },
 
+        Let(ref sym, ref value, ref body) => {
+            let (cur_block, val_sym) = gen_expr(value, func, cur_block)?;
+            let mut new = *body.clone();
+            new.substitute(sym, &Expr { ty: value.ty.clone(), kind: Ident(val_sym.clone()) });
+            let (cur_block, res_sym) = gen_expr(&new, func, cur_block)?;
+            Ok((cur_block, res_sym))
+        },
+
         BinOp(kind, ref left, ref right) => {
             let (cur_block, left_sym) = gen_expr(left, func, cur_block)?;
             let (cur_block, right_sym) = gen_expr(right, func, cur_block)?;
