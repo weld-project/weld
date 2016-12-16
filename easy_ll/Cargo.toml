@@ -2,6 +2,7 @@
 name = "easy_ll"
 version = "0.1.0"
 authors = ["Matei Zaharia <matei.zaharia@gmail.com>"]
+build = "build.rs"
 
 [dependencies]
 llvm-sys = "0.3.0"
