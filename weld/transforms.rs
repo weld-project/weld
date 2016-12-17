@@ -46,16 +46,19 @@ pub fn fuse_loops(expr: &mut Expr<Type>) -> WeldResult<()> {
     }
     let mut sym_gen = SymbolGenerator::from_expression(expr);
     let mut new_expr = None;
-    if let For(ref iter1, ref bldr1, ref nested) = expr.kind {
-        if let Res(ref res_bldr) = iter1.data.kind {
-            if let For(ref iter2, ref bldr2, ref lambda) = res_bldr.kind {
-                if let NewBuilder = bldr2.kind {
-                    if let Builder(ref kind) = bldr2.ty {
-                        if let Appender(_) = *kind {
-                            new_expr = Some(Expr{
-                                ty: expr.ty.clone(),
-                                kind: For(iter2.clone(), bldr1.clone(), Box::new(replace_builder(lambda, nested, &mut sym_gen)))
-                            });
+    if let For(ref iters1, ref bldr1, ref nested) = expr.kind {
+        if iters1.len() == 1 {
+            let ref iter1 = iters1[0];
+            if let Res(ref res_bldr) = iter1.data.kind {
+                if let For(ref iters2, ref bldr2, ref lambda) = res_bldr.kind {
+                    if let NewBuilder = bldr2.kind {
+                        if let Builder(ref kind) = bldr2.ty {
+                            if let Appender(_) = *kind {
+                                new_expr = Some(Expr{
+                                    ty: expr.ty.clone(),
+                                    kind: For(iters2.clone(), bldr1.clone(), Box::new(replace_builder(lambda, nested, &mut sym_gen)))
+                                });
+                            }
                         }
                     }
                 }

@@ -221,17 +221,26 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             Ok(changed)
         }
 
-        For(ref mut iter, ref mut builder, ref mut func) => {
+        For(ref mut iters, ref mut builder, ref mut func) => {
             let mut changed = false;
 
-            // Push iter and builder type into func
-            let elem_type = match iter.data.ty {
-                Vector(ref elem) => *elem.clone(),
-                Unknown => Unknown,
-                _ => return weld_err!("For")
+            // Push iters and builder type into func
+            let mut elem_types = vec![];
+            for iter in iters {
+                let elem_type = match iter.data.ty {
+                    Vector(ref elem) => *elem.clone(),
+                    Unknown => Unknown,
+                    _ => return weld_err!("For")
+                };
+                elem_types.push(elem_type);
+            }
+            let elem_types = if elem_types.len() == 1 {
+                elem_types[0].clone()
+            } else {
+                Struct(elem_types)
             };
             let bldr_type = builder.ty.clone();
-            let func_type = Function(vec![bldr_type.clone(), elem_type], Box::new(bldr_type));
+            let func_type = Function(vec![bldr_type.clone(), elem_types], Box::new(bldr_type));
             changed |= try!(push_type(&mut func.ty, &func_type, "For"));
 
             // Push func's argument type and return type into builder

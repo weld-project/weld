@@ -164,26 +164,30 @@ impl PartialExpr {
 
             Res(ref bldr) => Res(try!(typed_box(bldr))),
 
-            For(ref iter, ref bldr, ref func) => {
-                let start = match iter.start {
-                    Some(ref s) => Some(try!(typed_box(s))),
-                    None => None
-                }; 
-                let end = match iter.end {
-                    Some(ref e) => Some(try!(typed_box(e))),
-                    None => None
-                }; 
-                let stride = match iter.stride {
-                    Some(ref s) => Some(try!(typed_box(s))),
-                    None => None
-                }; 
-                let typed_iter = Iter{
-                    data: try!(typed_box(&iter.data)),
-                    start: start,
-                    end: end,
-                    stride: stride
-                };
-                For(typed_iter, try!(typed_box(bldr)), try!(typed_box(func)))
+            For(ref iters, ref bldr, ref func) => {
+                let mut typed_iters = vec![];
+                for iter in iters {
+                    let start = match iter.start {
+                        Some(ref s) => Some(try!(typed_box(s))),
+                        None => None
+                    }; 
+                    let end = match iter.end {
+                        Some(ref e) => Some(try!(typed_box(e))),
+                        None => None
+                    }; 
+                    let stride = match iter.stride {
+                        Some(ref s) => Some(try!(typed_box(s))),
+                        None => None
+                    }; 
+                    let typed_iter = Iter{
+                        data: try!(typed_box(&iter.data)),
+                        start: start,
+                        end: end,
+                        stride: stride
+                    };
+                    typed_iters.push(typed_iter);
+                }
+                For(typed_iters, try!(typed_box(bldr)), try!(typed_box(func)))
             }
 
             If(ref cond, ref on_true, ref on_false) =>
