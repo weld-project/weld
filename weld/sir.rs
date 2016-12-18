@@ -55,15 +55,17 @@ pub struct BasicBlock {
 
 pub struct SirFunction {
     params: Vec<TypedParameter>,
+    ret_type: Type,
     locals: HashMap<Symbol, Type>,
     blocks: Vec<BasicBlock>,
     sym_gen: SymbolGenerator,
 }
 
 impl SirFunction {
-    pub fn new() -> SirFunction {
+    pub fn new(ret_ty: &Type) -> SirFunction {
         SirFunction {
             params: vec![],
+            ret_type: ret_ty.clone(),
             blocks: vec![],
             locals: HashMap::new(),
             sym_gen: SymbolGenerator::new(),
@@ -153,6 +155,7 @@ impl fmt::Display for SirFunction {
         for param in &self.params {
             write!(f, "  {}: {}\n", param.name, print_type(&param.ty))?;
         }
+        write!(f, "Return Type: {}\n", print_type(&self.ret_type))?;
         write!(f, "Locals:\n")?;
         let locals_sorted: BTreeMap<&Symbol, &Type> = self.locals.iter().collect();
         for (name, ty) in locals_sorted {
@@ -167,7 +170,7 @@ impl fmt::Display for SirFunction {
 
 pub fn ast_to_sir(expr: &TypedExpr) -> WeldResult<SirFunction> {
     if let Lambda(ref params, ref body) = expr.kind {
-        let mut func = SirFunction::new();
+        let mut func = SirFunction::new(&expr.ty);
         func.sym_gen = SymbolGenerator::from_expression(expr);
         if func.sym_gen.next_id("tmp") == 0 {
             func.sym_gen.new_symbol("tmp");

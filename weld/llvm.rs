@@ -13,6 +13,7 @@ use super::error::*;
 use super::macro_processor;
 use super::pretty_print::*;
 use super::program::Program;
+use super::sir::*;
 use super::type_inference;
 use super::util::IdGenerator;
 
@@ -61,26 +62,25 @@ impl LlvmGenerator {
     pub fn add_function(
         &mut self,
         name: &str,
-        args: &Vec<TypedParameter>,
-        body: &TypedExpr
+        sir: &SirFunction
     ) -> WeldResult<()> {
         let mut ctx = &mut FunctionContext::new();
         let mut arg_types = String::new();
-        for (i, arg) in args.iter().enumerate() {
+        for (i, arg) in sir.params.iter().enumerate() {
             let arg = format!("{} {}.in", try!(self.llvm_type(&arg.ty)), llvm_symbol(&arg.name));
             arg_types.push_str(&arg);
             if i < args.len() - 1 {
                 arg_types.push_str(", ");
             }
         }
-        let res_type = try!(self.llvm_type(&body.ty)).to_string();
+        let res_type = try!(self.llvm_type(&sir.ret_type)).to_string();
 
         // Start the entry block by defining the function and storing all its arguments on the
         // stack (this makes them consistent with other local variables). Later, expressions may
         // add more local variables to alloca_code.
         ctx.alloca_code.add(format!("define {} @{}({}) {{", res_type, name, arg_types));
         ctx.alloca_code.add(format!("entry:"));
-        for arg in args {
+        for arg in sir.params {
             let name = llvm_symbol(&arg.name);
             let ty = try!(self.llvm_type(&arg.ty)).to_string();
             try!(ctx.add_alloca(&name, &ty));
@@ -88,7 +88,7 @@ impl LlvmGenerator {
         }
 
         // Generate an expression for the function body.
-        let res_var = try!(self.gen_expr(&body, ctx));
+        let res_var = try!(self.gen_sir(sir, ctx));
         ctx.code.add(format!("ret {} {}", res_type, res_var));
         ctx.code.add(format!("}}\n\n"));
 
@@ -103,18 +103,17 @@ impl LlvmGenerator {
     pub fn add_function_on_pointers(
         &mut self,
         name: &str,
-        args: &Vec<TypedParameter>,
-        body: &TypedExpr
+        sir: &SirFunction
     ) -> WeldResult<()> {
         // First add the function on raw values, which we'll call from the pointer version.
         let raw_function_name = format!("{}.raw", name);
-        try!(self.add_function(&raw_function_name, args, body));
+        try!(self.add_function(&raw_function_name, sir));
 
         // Define a struct with all the argument types as fields
-        let args_struct = Struct(args.iter().map(|a| a.ty.clone()).collect());
+        let args_struct = Struct(sir.params.iter().map(|a| a.ty.clone()).collect());
         let args_type = try!(self.llvm_type(&args_struct)).to_string();
 
-        let res_type = try!(self.llvm_type(&body.ty)).to_string();
+        let res_type = try!(self.llvm_type(&sir.ret_type)).to_string();
         let mut code = &mut CodeBuilder::new();
 
         code.add(format!("define i64 @{}(i64 %args) {{", name));
@@ -135,7 +134,7 @@ impl LlvmGenerator {
             args_type = args_type
         ));
         let mut arg_decls: Vec<String> = Vec::new();
-        for (i, arg) in args.iter().enumerate() {
+        for (i, arg) in sir.params.iter().enumerate() {
             code.add(format!("%arg{} = extractvalue {} %args_val, {}", i, args_type, i));
             arg_decls.push(format!("{} %arg{}", try!(self.llvm_type(&arg.ty)), i));
         }
@@ -196,9 +195,20 @@ impl LlvmGenerator {
     /// variable or an integer constant otherwise).
     fn gen_expr(
         &mut self,
-        expr: &TypedExpr,
+        sir: &SirFunction,
         ctx: &mut FunctionContext
     ) -> WeldResult<String> {
+        for b in sir.blocks.iter() {
+            ctx.code.add(format!("b{}:", b.id);
+            for s in b.statements.iter() {
+                match s {
+                    AssignBinOp(ref output, ref op, ref type, ref left, ref right) => {  
+                        ctx.code.add(format!("{} = {} {} {}, {}",
+                            var, op_name, try!(self.llvm_type(&left.ty)), left_var, right_var));
+                    }
+                }
+            }
+        }
         match expr.kind {
             Literal(I32Literal(v)) => Ok(format!("{}", v)),
             Literal(I64Literal(v)) => Ok(format!("{}", v)),
