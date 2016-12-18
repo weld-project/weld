@@ -124,7 +124,7 @@ impl fmt::Display for Terminator {
                 write!(f, "for {} {} B{} {} {} B{} {} [",
                     data, builder, body, data_arg, builder_arg, exit, result)?;
                 for x in closure.iter() {
-                  write!(f, "{}, ", x)?;
+                    write!(f, "{}, ", x)?;
                 }
                 write!(f, "]")?;
                 Ok(())
@@ -284,7 +284,7 @@ fn gen_expr(
                     result: res_sym.clone()
                 };
                 for x in &inner_closure {
-                  loop_closure.insert(x.clone());
+                    loop_closure.insert(x.clone());
                 }
                 Ok((exit_block, res_sym))
             } else {
