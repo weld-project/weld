@@ -86,6 +86,11 @@ impl SirFunction {
         self.locals.insert(sym.clone(), ty.clone());
         sym
     }
+
+    /// Add a local variable of the given type and name
+    pub fn add_local_named(&mut self, ty: &Type, sym: &Symbol) {
+        self.locals.insert(sym.clone(), ty.clone());
+    }
 }
 
 impl BasicBlock {
@@ -192,6 +197,14 @@ fn gen_expr(
         Literal(lit) => {
             let res_sym = func.add_local(&expr.ty);
             func.blocks[cur_block].add_statement(AssignLiteral(res_sym.clone(), lit));
+            Ok((cur_block, res_sym))
+        },
+
+        Let(ref sym, ref value, ref body) => {
+            let (cur_block, val_sym) = gen_expr(value, func, cur_block)?;
+            func.add_local_named(&value.ty, sym);
+            func.blocks[cur_block].add_statement(Assign(sym.clone(), val_sym));
+            let (cur_block, res_sym) = gen_expr(body, func, cur_block)?;
             Ok((cur_block, res_sym))
         },
 
