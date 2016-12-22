@@ -183,11 +183,7 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
             });
         }
     }
-
     tokens.push(TEndOfInput);
-
-    println!("{:?}", tokens);
-
     return Ok(tokens);
 }
 

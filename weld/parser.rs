@@ -360,7 +360,6 @@ impl<'t> Parser<'t> {
     /// a vector expression (i.e., without an explicit iter(..).
     fn parse_iter(&mut self) -> WeldResult<Iter<PartialType>> {
         if *self.peek() == TIter {
-            println!("saw iter");
             try!(self.consume(TIter));
             try!(self.consume(TOpenParen));
             let data = try!(self.expr());
@@ -455,7 +454,6 @@ impl<'t> Parser<'t> {
             }
 
             TFor => {
-                println!("parsing for");
                 try!(self.consume(TOpenParen));
                 let mut iters = vec![];
                 // Zips only appear as syntactic sugar in the context of Fors.
@@ -469,7 +467,6 @@ impl<'t> Parser<'t> {
                     }
                     try!(self.consume(TCloseParen));
                 } else {
-                    println!("parsing iter");
                     // Single unzipped vector.
                     iters.push(try!(self.parse_iter()));
                 }
