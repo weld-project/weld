@@ -85,6 +85,27 @@ fn parse_and_print_simple_expressions() {
 }
 
 #[test]
+fn parse_and_print_for_expressions() {
+    let e = parse_expr("for(d, appender, |e| e+1)").unwrap();
+    assert_eq!(print_expr(&e).as_str(), "for(d,appender[?],|e|(e+1))");
+
+    let e = parse_expr("for(iter(d), appender, |e| e+1)").unwrap();
+    assert_eq!(print_expr(&e).as_str(), "for(d,appender[?],|e|(e+1))");
+
+    let e = parse_expr("for(iter(d,0,4,1), appender, |e| e+1)").unwrap();
+    assert_eq!(print_expr(&e).as_str(), "for(iter(d,0,4,1),appender[?],|e|(e+1))");
+
+    let e = parse_expr("for(zip(d), appender, |e| e+1)").unwrap();
+    assert_eq!(print_expr(&e).as_str(), "for(d,appender[?],|e|(e+1))");
+
+    let e = parse_expr("for(zip(d,e), appender, |e| e+1)").unwrap();
+    assert_eq!(print_expr(&e).as_str(), "for(zip(d,e),appender[?],|e|(e+1))");
+
+    let e = parse_expr("for(zip(a,b,iter(c,0,4,1),iter(d)), appender, |e| e+1)").unwrap();
+    assert_eq!(print_expr(&e).as_str(), "for(zip(a,b,iter(c,0,4,1),d),appender[?],|e|(e+1))");
+}
+
+#[test]
 fn parse_and_print_typed_expressions() {
     let e = parse_expr("a").unwrap();
     assert_eq!(print_typed_expr(&e).as_str(), "a:?");
