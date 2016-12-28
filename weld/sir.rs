@@ -201,15 +201,19 @@ impl fmt::Display for SirProgram {
     }
 }
 
-pub fn sir_param_correction_helper(prog: &mut SirProgram, func_id: SirFunctionId, env: &mut HashMap<Symbol, Type>,
-closure: &mut HashSet<Symbol>) {
+/// env contains the symbol to type mappings that have been defined previously in the program,
+/// and any symbols that need to be passed in as parameters to this function will be added to
+/// closure (so that this function's callers can also add these symbols to their parameters list,
+/// if necessary).
+pub fn sir_param_correction_helper(prog: &mut SirProgram, func_id: SirFunctionId,
+env: &mut HashMap<Symbol, Type>, closure: &mut HashSet<Symbol>) {
     for (name, ty) in &prog.funcs[func_id].params {
         env.insert(name.clone(), ty.clone());
     }
     for (name, ty) in &prog.funcs[func_id].locals {
         env.insert(name.clone(), ty.clone());
     }
-    /// All symbols are unique, so there is no need to remove stuff from env at any point.
+    // All symbols are unique, so there is no need to remove stuff from env at any point.
     for block in prog.funcs[func_id].blocks.clone() {
         let mut vars = vec![];
         for statement in &block.statements {
@@ -256,6 +260,9 @@ closure: &mut HashSet<Symbol>) {
     }
 }
 
+/// ast_to_sir may result in the use of symbols across function boundaries,
+/// so we need to correct the function parameters to ensure that such symbols
+/// are passed in as arguments.
 pub fn sir_param_correction(prog: &mut SirProgram) -> WeldResult<()> {
     let mut env = HashMap::new();
     let mut closure = HashSet::new();
@@ -340,6 +347,8 @@ fn gen_expr(
             if true_func != cur_func || false_func != cur_func {
                 // TODO we probably want a better for name for this symbol than whatever res_sym is
                 prog.add_local_named(&expr.ty, &res_sym, false_func);
+                // the part after the if-else block is split out into a separate continuation
+                // function so that we don't have to duplicate this code
                 let cont_func = prog.add_func();
                 let cont_block = prog.funcs[cont_func].add_block();
                 prog.funcs[true_func].blocks[true_block].terminator = JumpFunction(cont_func);
