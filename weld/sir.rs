@@ -203,7 +203,7 @@ impl fmt::Display for SirProgram {
 
 /// Recursive helper function for sir_param_correction. env contains the symbol to type mappings
 /// that have been defined previously in the program. Any symbols that need to be passed in
-/// as closure parameters to this function will be added to closure (so that this function's
+/// as closure parameters to func_id will be added to closure (so that this function's
 /// callers can also add these symbols to their parameters list, if necessary).
 pub fn sir_param_correction_helper(prog: &mut SirProgram, func_id: FunctionId,
 env: &mut HashMap<Symbol, Type>, closure: &mut HashSet<Symbol>) {
