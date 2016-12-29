@@ -10,7 +10,7 @@ use super::pretty_print::*;
 use super::util::SymbolGenerator;
 
 type BasicBlockId = usize;
-type SirFunctionId = usize;
+type FunctionId = usize;
 
 /// A non-terminating statement inside a basic block.
 #[derive(Clone)]
@@ -35,15 +35,15 @@ pub enum Terminator {
     /// condition, on_true, on_false
     Branch(Symbol, BasicBlockId, BasicBlockId),
     JumpBlock(BasicBlockId),
-    JumpFunction(SirFunctionId),
+    JumpFunction(FunctionId),
     Return(Symbol),
     ParallelFor {
         data: Symbol,
         builder: Symbol,
         data_arg: Symbol,
         builder_arg: Symbol,
-        body: SirFunctionId,
-        cont: SirFunctionId
+        body: FunctionId,
+        cont: FunctionId
     },
     Crash
 }
@@ -56,8 +56,8 @@ pub struct BasicBlock {
     terminator: Terminator
 }
 
-pub struct SirFunction {
-    id: SirFunctionId,
+pub struct Function {
+    id: FunctionId,
     params: HashMap<Symbol, Type>,
     locals: HashMap<Symbol, Type>,
     blocks: Vec<BasicBlock>
@@ -65,7 +65,7 @@ pub struct SirFunction {
 
 pub struct SirProgram {
     /// funcs[0] is the main function
-    funcs: Vec<SirFunction>,
+    funcs: Vec<Function>,
     sym_gen: SymbolGenerator
 }
 
@@ -80,8 +80,8 @@ impl SirProgram {
         prog
     }
 
-    pub fn add_func(&mut self) -> SirFunctionId {
-        let func = SirFunction {
+    pub fn add_func(&mut self) -> FunctionId {
+        let func = Function {
             id: self.funcs.len(),
             params: HashMap::new(),
             blocks: vec![],
@@ -92,19 +92,19 @@ impl SirProgram {
     }
 
     /// Add a local variable of the given type and return a symbol for it.
-    pub fn add_local(&mut self, ty: &Type, func: SirFunctionId) -> Symbol {
+    pub fn add_local(&mut self, ty: &Type, func: FunctionId) -> Symbol {
         let sym = self.sym_gen.new_symbol(format!("fn{}_tmp", func).as_str());
         self.funcs[func].locals.insert(sym.clone(), ty.clone());
         sym
     }
 
     /// Add a local variable of the given type and name
-    pub fn add_local_named(&mut self, ty: &Type, sym: &Symbol, func: SirFunctionId) {
+    pub fn add_local_named(&mut self, ty: &Type, sym: &Symbol, func: FunctionId) {
         self.funcs[func].locals.insert(sym.clone(), ty.clone());
     }
 }
 
-impl SirFunction {
+impl Function {
     /// Add a new basic block and return its block ID.
     pub fn add_block(&mut self) -> BasicBlockId {
         let block = BasicBlock {
@@ -172,7 +172,7 @@ impl fmt::Display for BasicBlock {
     }
 }
 
-impl fmt::Display for SirFunction {
+impl fmt::Display for Function {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "F{}:\n", self.id)?;
         write!(f, "Params:\n")?;
@@ -201,11 +201,11 @@ impl fmt::Display for SirProgram {
     }
 }
 
-/// env contains the symbol to type mappings that have been defined previously in the program,
-/// and any symbols that need to be passed in as parameters to this function will be added to
-/// closure (so that this function's callers can also add these symbols to their parameters list,
-/// if necessary).
-pub fn sir_param_correction_helper(prog: &mut SirProgram, func_id: SirFunctionId,
+/// Recursive helper function for sir_param_correction. env contains the symbol to type mappings
+/// that have been defined previously in the program. Any symbols that need to be passed in
+/// as closure parameters to this function will be added to closure (so that this function's
+/// callers can also add these symbols to their parameters list, if necessary).
+pub fn sir_param_correction_helper(prog: &mut SirProgram, func_id: FunctionId,
 env: &mut HashMap<Symbol, Type>, closure: &mut HashSet<Symbol>) {
     for (name, ty) in &prog.funcs[func_id].params {
         env.insert(name.clone(), ty.clone());
@@ -260,9 +260,9 @@ env: &mut HashMap<Symbol, Type>, closure: &mut HashSet<Symbol>) {
     }
 }
 
-/// ast_to_sir may result in the use of symbols across function boundaries,
-/// so we need to correct the function parameters to ensure that such symbols
-/// are passed in as arguments.
+/// gen_expr may result in the use of symbols across function boundaries,
+/// so ast_to_sir calls sir_param_correction to correct function parameters
+/// to ensure that such symbols (the closure) are passed in as parameters.
 pub fn sir_param_correction(prog: &mut SirProgram) -> WeldResult<()> {
     let mut env = HashMap::new();
     let mut closure = HashSet::new();
@@ -276,7 +276,7 @@ pub fn sir_param_correction(prog: &mut SirProgram) -> WeldResult<()> {
     Ok(())
 }
 
-/// symbols must be unique in expr
+/// Convert an AST to a SIR program. Symbols must be unique in expr.
 pub fn ast_to_sir(expr: &TypedExpr) -> WeldResult<SirProgram> {
     if let Lambda(ref params, ref body) = expr.kind {
         let mut prog = SirProgram::new();
@@ -301,9 +301,9 @@ pub fn ast_to_sir(expr: &TypedExpr) -> WeldResult<SirProgram> {
 fn gen_expr(
     expr: &TypedExpr,
     prog: &mut SirProgram,
-    cur_func: SirFunctionId,
+    cur_func: FunctionId,
     cur_block: BasicBlockId
-) -> WeldResult<(SirFunctionId, BasicBlockId, Symbol)> {
+) -> WeldResult<(FunctionId, BasicBlockId, Symbol)> {
     use self::Statement::*;
     use self::Terminator::*;
     match expr.kind {
