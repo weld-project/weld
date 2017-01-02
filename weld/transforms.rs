@@ -71,6 +71,32 @@ pub fn fuse_loops(expr: &mut Expr<Type>) -> WeldResult<()> {
     Ok(())
 }
 
+/// Given an iterator, returns whether the iterator consumes every element of it's data vector.
+fn consumes_all(iter: &Iter<Type>) -> bool {
+    if let &Iter{start: None, end: None, stride: None, ..} = iter {
+        return true
+    } else if let &Iter{ref data, start: Some(ref start), end: Some(ref end), stride: Some(ref stride), ..} = iter {
+        // Looks like Iter(A, 0, Len(A), 1)
+        if let I64Literal(1) = stride.kind {
+            if let Ident(ref name) = data.kind {
+                if let I64Literal(0) = start.kind {
+                    // TODO implement Length
+                    /*
+                    if let Length(v) = end.kind {
+                        if let Ident(vsym) = v.kind {
+                            if vsym == name {
+                                return true
+                            }
+                        }
+                    }
+                    */
+                }
+            }
+        }
+    }
+    return false
+}
+
 /// Given a lambda which takes a builder and an argument, returns a new function which takes a new
 /// builder type and calls nested on the old values it would've merged into its old builder. This
 /// allows us to "compose" merge functions and avoid creating intermediate results.
