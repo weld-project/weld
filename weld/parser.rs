@@ -478,6 +478,13 @@ impl<'t> Parser<'t> {
                 Ok(expr_box(For(iters, builders, body)))
             }
 
+            TLen => {
+                try!(self.consume(TOpenParen));
+                let vector = try!(self.expr());
+                try!(self.consume(TCloseParen));
+                Ok(expr_box(Length(vector)))
+            }
+
             TMerge => {
                 try!(self.consume(TOpenParen));
                 let builder = try!(self.expr());

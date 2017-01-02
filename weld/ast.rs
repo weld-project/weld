@@ -78,6 +78,7 @@ pub enum ExprKind<T:Clone+Eq> {
     MakeStruct(Vec<Expr<T>>),
     MakeVector(Vec<Expr<T>>),
     GetField(Box<Expr<T>>, u32),
+    Length(Box<Expr<T>>),
     /// name, value, body
     Let(Symbol, Box<Expr<T>>, Box<Expr<T>>),
     /// condition, on_true, on_false
@@ -173,6 +174,7 @@ impl<T:Clone+Eq> Expr<T> {
             MakeStruct(ref exprs) => exprs.iter().collect(),
             MakeVector(ref exprs) => exprs.iter().collect(),
             GetField(ref expr, _) => vec![expr.as_ref()],
+            Length(ref expr) => vec![expr.as_ref()],
             Merge(ref bldr, ref value) => vec![bldr.as_ref(), value.as_ref()],
             Res(ref bldr) => vec![bldr.as_ref()],
             For(ref iters, ref bldr, ref func) => {
@@ -215,6 +217,7 @@ impl<T:Clone+Eq> Expr<T> {
             MakeStruct(ref mut exprs) => exprs.iter_mut().collect(),
             MakeVector(ref mut exprs) => exprs.iter_mut().collect(),
             GetField(ref mut expr, _) => vec![expr.as_mut()],
+            Length(ref mut expr) => vec![expr.as_mut()],
             Merge(ref mut bldr, ref mut value) => vec![bldr.as_mut(), value.as_mut()],
             Res(ref mut bldr) => vec![bldr.as_mut()],
             For(ref mut iters, ref mut bldr, ref mut func) => {
@@ -263,6 +266,7 @@ impl<T:Clone+Eq> Expr<T> {
             (&MakeStruct(..), &MakeStruct(..)) => true,
             (&MakeVector(..), &MakeVector(..)) => true,
             (&GetField(_, idx1), &GetField(_, idx2)) if idx1 == idx2 => true,
+            (&Length(..), &Length(..)) => true,
             (&Merge(..), &Merge(..)) => true,
             (&Res(..), &Res(..)) => true,
             (&For(..), &For(..)) => true,
@@ -301,6 +305,7 @@ impl<T:Clone+Eq> Expr<T> {
 
         fn _compare_ignoring_symbols<'b, 'a, U:Clone+Eq>(e1: &'a Expr<U>, e2: &'b Expr<U>, sym_map: &mut HashMap<&'a Symbol, &'b Symbol>) -> bool {
             if e1.ty != e2.ty {
+                println!("type mismatch");
                 return false
             }
             let same_kind = match (&e1.kind, &e2.kind) {
@@ -317,6 +322,7 @@ impl<T:Clone+Eq> Expr<T> {
                         }
                         true
                     } else {
+                        println!("lambda mismatch");
                         false
                     }
                 },
@@ -324,6 +330,7 @@ impl<T:Clone+Eq> Expr<T> {
                 (&MakeStruct(..), &MakeStruct(..)) => true,
                 (&MakeVector(..), &MakeVector(..)) => true,
                 (&GetField(_, idx1), &GetField(_, idx2)) if idx1 == idx2 => true,
+                (&Length(..), &Length(..)) => true,
                 (&Merge(..), &Merge(..)) => true,
                 (&Res(..), &Res(..)) => true,
                 (&For(..), &For(..)) => true,
@@ -344,6 +351,7 @@ impl<T:Clone+Eq> Expr<T> {
                 _ => false // all else fail.
             };
             if !same_kind {
+                println!("kind mismatch");
                 return false
             }
             let children: Vec<_> = e1.children().collect();

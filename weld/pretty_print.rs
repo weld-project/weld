@@ -157,6 +157,8 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>, typed: bool) -> String {
 
         GetField(ref param, index) => format!("{}.${}", print_expr_impl(param, typed), index),
 
+        Length(ref expr) => format!("len({})", print_expr_impl(expr, typed)),
+
         Lambda(ref params, ref body) => {
             let mut res = join("|", ",", "|", params.iter().map(|e| print_parameter(e, typed)));
             res.push_str(&print_expr_impl(body, typed));

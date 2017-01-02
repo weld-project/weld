@@ -125,7 +125,7 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             }
         }
 
-        Let (_, _, ref mut body) => {
+        Let(_, _, ref mut body) => {
             sync_types(&mut expr.ty, &mut body.ty, "Let body")
         }
 
@@ -173,6 +173,15 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             } else {
                 weld_err!("Internal error: GetField called on {:?}", param.ty)
             }
+        }
+
+        Length(ref mut vector) => {
+            match vector.ty {
+                Vector(_) => (),
+                Unknown => (),
+                _ => return weld_err!("Internal error: Length called on non-vector")
+            }
+            push_complete_type(&mut expr.ty, Scalar(I64), "Length")
         }
 
         Lambda(ref mut params, ref mut body) => {
@@ -223,7 +232,6 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
 
         For(ref mut iters, ref mut builder, ref mut func) => {
             let mut changed = false;
-
             // Push iters and builder type into func
             let mut elem_types = vec![];
             for iter in iters {
@@ -247,9 +255,9 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             match func.ty {
                 Function(ref params, ref result) if params.len() == 2 => {
                     changed |= try!(push_type(
-                        &mut builder.ty, &params[0], "For"));
+                            &mut builder.ty, &params[0], "For"));
                     changed |= try!(push_type(
-                        &mut builder.ty, result.as_ref(), "For"));
+                            &mut builder.ty, result.as_ref(), "For"));
                 }
                 _ => return weld_err!("For")
             };

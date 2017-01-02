@@ -51,13 +51,15 @@ pub fn fuse_loops(expr: &mut Expr<Type>) -> WeldResult<()> {
             let ref iter1 = iters1[0];
             if let Res(ref res_bldr) = iter1.data.kind {
                 if let For(ref iters2, ref bldr2, ref lambda) = res_bldr.kind {
-                    if let NewBuilder = bldr2.kind {
-                        if let Builder(ref kind) = bldr2.ty {
-                            if let Appender(_) = *kind {
-                                new_expr = Some(Expr{
-                                    ty: expr.ty.clone(),
-                                    kind: For(iters2.clone(), bldr1.clone(), Box::new(replace_builder(lambda, nested, &mut sym_gen)))
-                                });
+                    if iters2.iter().all(|ref i| consumes_all(&i)) {
+                        if let NewBuilder = bldr2.kind {
+                            if let Builder(ref kind) = bldr2.ty {
+                                if let Appender(_) = *kind {
+                                    new_expr = Some(Expr{
+                                        ty: expr.ty.clone(),
+                                        kind: For(iters2.clone(), bldr1.clone(), Box::new(replace_builder(lambda, nested, &mut sym_gen)))
+                                    });
+                                }
                             }
                         }
                     }
@@ -71,7 +73,7 @@ pub fn fuse_loops(expr: &mut Expr<Type>) -> WeldResult<()> {
     Ok(())
 }
 
-/// Given an iterator, returns whether the iterator consumes every element of it's data vector.
+/// Given an iterator, returns whether the iterator consumes every element of its data vector.
 fn consumes_all(iter: &Iter<Type>) -> bool {
     if let &Iter{start: None, end: None, stride: None, ..} = iter {
         return true
@@ -80,21 +82,18 @@ fn consumes_all(iter: &Iter<Type>) -> bool {
         if let I64Literal(1) = stride.kind {
             if let Ident(ref name) = data.kind {
                 if let I64Literal(0) = start.kind {
-                    // TODO implement Length
-                    /*
-                    if let Length(v) = end.kind {
-                        if let Ident(vsym) = v.kind {
+                    if let Length(ref v) = end.kind {
+                        if let Ident(ref vsym) = v.kind {
                             if vsym == name {
                                 return true
                             }
                         }
                     }
-                    */
                 }
             }
         }
     }
-    return false
+    false
 }
 
 /// Given a lambda which takes a builder and an argument, returns a new function which takes a new
@@ -148,7 +147,11 @@ fn replace_builder(lambda: &Expr<Type>,
                 Parameter{ty: new_bldr.ty.clone(), name: new_sym.clone()},
                 Parameter{ty: old_arg.ty.clone(), name: old_arg.name.clone()}
             ];
-            new_func = Some(Expr{ty: nested.ty.clone(), kind: Lambda(new_params, Box::new(new_body))})
+
+            if let Function(_, ref ret_ty) = nested.ty {
+                let new_func_type = Function(vec![new_bldr.ty.clone(), old_arg.ty.clone()], ret_ty.clone());
+                new_func = Some(Expr{ty: new_func_type, kind: Lambda(new_params, Box::new(new_body))})
+            }
         }
     }
 

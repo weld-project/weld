@@ -196,9 +196,6 @@ fn compare_expressions() {
     assert!(!e1.compare_ignoring_symbols(&e2));
 }
 
-
-
-
 #[test]
 fn simple_vertical_loop_fusion() {
     // Two loops.
@@ -223,5 +220,26 @@ fn simple_vertical_loop_fusion() {
     let mut e1 = typed_expression("for(result(for([1,2,3], appender[i32], |b,e| merge(b,e+2))), appender[f64], |b,f| merge(b, 1.0))");
     fuse_loops(&mut e1).unwrap();
     let e2 = typed_expression("for([1,2,3], appender[f64], |b,e| merge(b, 1.0))");
+    assert!(e1.compare_ignoring_symbols(&e2));
+
+    // Multiple inner loops.
+    let mut e1 = typed_expression("for(result(for(zip([1,2,3],[4,5,6]), appender, |b,e| merge(b,e.$0+2))), appender, |b,f| merge(b, f+1))");
+    fuse_loops(&mut e1).unwrap();
+    let e2 = typed_expression("for(zip([1,2,3],[4,5,6]), appender, |b,e| merge(b, (e.$0+2)+1))");
+    assert!(e1.compare_ignoring_symbols(&e2));
+
+    // Iter where inner data consumed fully.
+    let mut e1 = typed_expression("let a = [1,2,3]; for(result(for(iter(a, 0L, len(a), 1L), appender, |b,e| merge(b,e+2))), appender, |b,f| merge(b, f+1))");
+    fuse_loops(&mut e1).unwrap();
+    let e2 = typed_expression("let a = [1,2,3]; for(iter(a,0L,len(a),1L), appender, |b,e| merge(b, (e+2)+1))");
+    println!("{:?}", e2);
+    println!("{:?}", e1);
+    assert!(e1.compare_ignoring_symbols(&e2));
+
+    // Inner data not consumed fully.
+    let mut e1 = typed_expression("for(result(for(iter([1,2,3], 0, 1, 1), appender, |b,e| merge(b,e+2))), appender, |b,f| merge(b, f+1))");
+    fuse_loops(&mut e1).unwrap();
+    // Loop fusion should fail.
+    let e2 = typed_expression("for(result(for(iter([1,2,3], 0, 1, 1), appender, |b,e| merge(b,e+2))), appender, |b,f| merge(b, f+1))");
     assert!(e1.compare_ignoring_symbols(&e2));
 }

@@ -159,6 +159,8 @@ impl PartialExpr {
 
             GetField(ref expr, index) => GetField(try!(typed_box(expr)), index),
 
+            Length(ref expr) => Length(try!(typed_box(expr))),
+
             Merge(ref bldr, ref value) =>
                 Merge(try!(typed_box(bldr)), try!(typed_box(value))),
 
