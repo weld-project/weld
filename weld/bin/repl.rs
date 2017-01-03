@@ -10,6 +10,9 @@ use std::path::PathBuf;
 use weld::codegen::Generator;
 use weld::parser::*;
 
+// TODO(wcrichto): make this a command line option
+static VERBOSE: bool = false;
+
 fn main() {
     let home_path = env::home_dir().unwrap_or(PathBuf::new());
     let history_file_path = home_path.join(".weld_history");
@@ -51,18 +54,25 @@ fn main() {
             continue;
         }
         let program = program.unwrap();
-        println!("Raw structure:\n{:?}\n", program);
+        if VERBOSE { println!("Raw structure:\n{:?}\n", program); }
 
         make_generator!(generator);
-        if let Err(ref e) = generator.add_program(&program) {
+        if let Err(ref e) = generator.add_program(&program, "run") {
             println!("Error during LLVM code gen:\n{}\n", e);
             continue;
         }
         let llvm_code = generator.result();
-        println!("LLVM code:\n{}\n", llvm_code);
+        if VERBOSE {
+            println!("LLVM code:\n{}\n", llvm_code);
+            println!("LLVM module compiled successfully\n");
+        }
 
-        println!("LLVM module compiled successfully\n")
-
+        let f: Box<extern fn(i64) -> *const i32> =
+            generator.get_function("run".into()).expect("No function");
+        let result = f(&0 as *const i32 as i64);
+        let result = unsafe { *result };
+        println!("{}", result);
     }
+
     rl.save_history(&history_file_path).unwrap();
 }

@@ -14,7 +14,6 @@ macro_rules! weld_err {
 }
 
 extern crate llvm;
-extern crate llvm_sys;
 
 // TODO: Not all of these should be public
 pub mod ast;

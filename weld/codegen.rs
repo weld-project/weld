@@ -14,6 +14,7 @@ use super::pretty_print::*;
 use super::type_inference;
 use super::macro_processor;
 
+// TODO(wcrichto): add prelude to generator
 static PRELUDE_CODE: &'static str = include_str!("resources/prelude.ll");
 
 #[macro_export]
@@ -83,8 +84,7 @@ impl<'a> FunctionContext<'a> {
 pub struct Generator<'a> {
     ctx: &'a llvm::Context,
     module: &'a llvm::CSemiBox<'a, llvm::Module>,
-    engine: &'a llvm::CSemiBox<'a, llvm::JitEngine>,
-    functions: Vec<&'a llvm::Function>
+    engine: &'a llvm::CSemiBox<'a, llvm::JitEngine>
 }
 
 impl<'a> Drop for Generator<'a> {
@@ -103,8 +103,7 @@ impl<'a> Generator<'a> {
         Generator {
             ctx: ctx,
             engine: engine,
-            module: module,
-            functions: Vec::new()
+            module: module
         }
     }
 
@@ -122,13 +121,13 @@ impl<'a> Generator<'a> {
     }
 
     /// Generate a compiled LLVM module from a program whose body is a function.
-    pub fn add_program(&mut self, program: &Program) -> WeldResult<()> {
+    pub fn add_program(&mut self, program: &Program, name: &str) -> WeldResult<()> {
         let mut expr = macro_processor::process_program(program)?;
         type_inference::infer_types(&mut expr)?;
         let expr = expr.to_typed()?;
         match expr.kind {
             Lambda(ref params, ref body) => {
-                self.add_function_on_pointers(&self.module, "run", params, body)?;
+                self.add_function_on_pointers(&self.module, name, params, body)?;
                 Ok(())
             },
             _ => weld_err!("Expression passed to compile_function must be a Lambda")
@@ -325,22 +324,14 @@ impl<'a> Generator<'a> {
     }
 }
 
-/// Return the LLVM version of a Weld symbol (encoding any special characters for LLVM).
-fn llvm_symbol(symbol: &Symbol) -> String {
-    if symbol.id == 0 {
-        format!("%{}", symbol.name)
-    } else {
-        format!("%{}.{}", symbol.name, symbol.id)
-    }
-}
-
 macro_rules! make_test {
     ($name:ident, $code:expr, $input:expr, $expected:expr) => {
         #[test]
         fn $name() {
+            use super::parser::*;
             let code = $code;
             make_generator!(generator);
-            generator.add_program(&parse_program(code).expect("Could not parse"))
+            generator.add_program(&parse_program(code).expect("Could not parse"), "run")
                 .expect("Failed to add program");
             let f: Box<extern fn(i64) -> *const i32> =
                 generator.get_function("run".into()).expect("No function");
