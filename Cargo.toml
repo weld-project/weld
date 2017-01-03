@@ -7,7 +7,9 @@ authors = ["Matei Zaharia <matei.zaharia@gmail.com>"]
 lazy_static = "0.2.1"
 regex = "0.1.71"
 rustyline = "1.0.0"
-easy_ll = { path = "easy_ll", version = "^0.1.0" }
+llvm-sys = "0.4.0"
+#llvm-alt = "0.5.0"
+llvm-alt = { path = "../llvm-rs", version = "*" }
 
 [lib]
 path = "weld/lib.rs"
