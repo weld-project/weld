@@ -40,6 +40,10 @@ pub fn inline_apply<T:Clone+Eq>(expr: &mut Expr<T>) -> WeldResult<()> {
 
 /// Fuses for loops over the same vector in a zip into a single for loop which produces multiple
 /// builders.
+///
+/// Caveats:
+///     - start, end and stride are unused in each Iter in the outer loop.
+///     - Each ``nested'' loop can only have a single Iter.
 pub fn fuse_loops_horizontal(expr: &mut Expr<Type>) -> WeldResult<()> {
     for child in expr.children_mut() {
         try!(fuse_loops(child));
@@ -60,38 +64,40 @@ pub fn fuse_loops_horizontal(expr: &mut Expr<Type>) -> WeldResult<()> {
             // First, check if all the fors are over the same vector and have a pattern we can merge.
             if iters1.iter().all(|ref iter| {
                 let mut common_data = None;
-                if let Res(ref res_bldr) = iter.data.kind {
-                    if let For(ref iters2, ref bldr2, ref lambda) = res_bldr.kind {
-                        if iters2.iter().all(|ref i| consumes_all(&i)) {
-                            // TODO(shoumik): Extend this to work with all kinds of iters.
-                            // Basically just not doing this because it's tedious right now, it
-                            // will be much easier once PartialEq is implemented for Iter/Expr.
-                            if iters2.len() == 1 && iters2[0].start.is_none() && iters2[0].end.is_none() &&
-                                iters2[0].stride.is_none() && common_data.unwrap_or(&iters2[0].data).compare(&iters2[0].data) {
-                                if let NewBuilder = bldr2.kind {
-                                    if let Builder(ref kind) = bldr2.ty {
-                                        if let Appender(_) = *kind {
-                                            if let Lambda(ref args, ref body) = lambda.kind {
-                                                if let Merge(ref bldr,  ref expr) = body.kind {
-                                                    if let Ident(ref n) = bldr.kind {
-                                                        if *n == args[0].name {
-                                                            fors.push((args.clone(), expr.clone())); 
-                                                            old_bldr = Some(&args[0].name);
-                                                            old_elem = Some(&args[1].name);
-                                                            elem_type = Some(&args[1].ty);
-                                                            // See comment above.
-                                                            if common_data.is_none() {
-                                                                common_data = Some(&iters2[0].data);
+                if iter.start.is_none() && iter.end.is_none() && iter.stride.is_none() {
+                    if let Res(ref res_bldr) = iter.data.kind {
+                        if let For(ref iters2, ref bldr2, ref lambda) = res_bldr.kind {
+                            if iters2.iter().all(|ref i| consumes_all(&i)) {
+                                // TODO(shoumik): Extend this to work with all kinds of iters.
+                                // Basically just not doing this because it's tedious right now, it
+                                // will be much easier once PartialEq is implemented for Iter/Expr.
+                                if iters2.len() == 1 && iters2[0].start.is_none() && iters2[0].end.is_none() &&
+                                    iters2[0].stride.is_none() && common_data.unwrap_or(&iters2[0].data).compare(&iters2[0].data) {
+                                        if let NewBuilder = bldr2.kind {
+                                            if let Builder(ref kind) = bldr2.ty {
+                                                if let Appender(_) = *kind {
+                                                    if let Lambda(ref args, ref body) = lambda.kind {
+                                                        if let Merge(ref bldr,  ref expr) = body.kind {
+                                                            if let Ident(ref n) = bldr.kind {
+                                                                if *n == args[0].name {
+                                                                    fors.push((args.clone(), expr.clone())); 
+                                                                    old_bldr = Some(&args[0].name);
+                                                                    old_elem = Some(&args[1].name);
+                                                                    elem_type = Some(&args[1].ty);
+                                                                    // See comment above.
+                                                                    if common_data.is_none() {
+                                                                        common_data = Some(&iters2[0].data);
+                                                                    }
+                                                                    inner_for_data = Some(*common_data.unwrap().clone());
+                                                                    return true
+                                                                }
                                                             }
-                                                            inner_for_data = Some(*common_data.unwrap().clone());
-                                                            return true
                                                         }
                                                     }
                                                 }
                                             }
                                         }
                                     }
-                                }
                             }
                         }
                     }
