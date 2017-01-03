@@ -66,6 +66,45 @@ pub fn fuse_loops(expr: &mut Expr<Type>) -> WeldResult<()> {
                 }
             }
         }
+    } else if let For(ref iters1, _, _) = expr.kind {
+        // Collapses Zips with Fors over the same vector into a single For which produces multiple
+        // results.
+        if iters1.len() > 1 {
+            // Vector of tuples containing information about required expressions.
+            let mut fors = vec![];
+            let ref first_iter = iters1[0];
+            if iters1.iter().all(|ref iter| {
+                // TODO(shoumik): Compare the entire Iter (just implement PartialEq for all this
+                // stuff..)
+                if iter.data.compare(&first_iter.data) {
+                    if let Res(ref res_bldr) = iter.data.kind {
+                        if let For(ref iters2, ref bldr2, ref lambda) = res_bldr.kind {
+                            if iters2.iter().all(|ref i| consumes_all(&i)) {
+                                if let NewBuilder = bldr2.kind {
+                                    if let Builder(ref kind) = bldr2.ty {
+                                        if let Appender(_) = *kind {
+                                            if let Lambda(ref args, ref body) = lambda.kind {
+                                                if let Merge(ref bldr,  ref expr) = body.kind {
+                                                    if let Ident(ref n) = bldr.kind {
+                                                        if *n == args[0].name {
+                                                            fors.push((args.clone(), expr.clone())); 
+                                                            return true
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                return false
+            }) {
+                // TODO run the transform.
+            }
+        }
     }
     if let Some(new) = new_expr {
         *expr = new;
