@@ -79,11 +79,18 @@ fn main() {
         println!("Expression type: {}\n", print_type(&expr.ty));
 
         let mut expr = expr.to_typed().unwrap();
-        if let Err(ref e) = transforms::fuse_loops(&mut expr) {
-            println!("Error during loop fusion: {}\n", e);
+
+        if let Err(ref e) = transforms::fuse_loops_horizontal(&mut expr) {
+            println!("Error during horizontal loop fusion: {}\n", e);
             continue;
         }
-        println!("After loop fusion:\n{}\n", print_typed_expr(&expr));
+        println!("After horizontal loop fusion:\n{}\n", print_typed_expr(&expr));
+
+        if let Err(ref e) = transforms::fuse_loops(&mut expr) {
+            println!("Error during vertical loop fusion: {}\n", e);
+            continue;
+        }
+        println!("After vertical loop fusion:\n{}\n", print_typed_expr(&expr));
 
         if let Lambda(ref args, ref body) = expr.kind {
             let mut generator = LlvmGenerator::new();

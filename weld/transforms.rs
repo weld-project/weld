@@ -38,35 +38,15 @@ pub fn inline_apply<T:Clone+Eq>(expr: &mut Expr<T>) -> WeldResult<()> {
     Ok(())
 }
 
-/// Fuses loops where one for loop takes another as it's input, which prevents intermediate results
-/// from being materialized.
-pub fn fuse_loops(expr: &mut Expr<Type>) -> WeldResult<()> {
+/// Fuses for loops over the same vector in a zip into a single for loop which produces multiple
+/// builders.
+pub fn fuse_loops_horizontal(expr: &mut Expr<Type>) -> WeldResult<()> {
     for child in expr.children_mut() {
         try!(fuse_loops(child));
     }
     let mut sym_gen = SymbolGenerator::from_expression(expr);
     let mut new_expr = None;
-    if let For(ref iters1, ref bldr1, ref nested) = expr.kind {
-        if iters1.len() == 1 {
-            let ref iter1 = iters1[0];
-            if let Res(ref res_bldr) = iter1.data.kind {
-                if let For(ref iters2, ref bldr2, ref lambda) = res_bldr.kind {
-                    if iters2.iter().all(|ref i| consumes_all(&i)) {
-                        if let NewBuilder = bldr2.kind {
-                            if let Builder(ref kind) = bldr2.ty {
-                                if let Appender(_) = *kind {
-                                    new_expr = Some(Expr{
-                                        ty: expr.ty.clone(),
-                                        kind: For(iters2.clone(), bldr1.clone(), Box::new(replace_builder(lambda, nested, &mut sym_gen)))
-                                    });
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    } else if let For(ref iters1, ref outer_bldr, ref outer_func) = expr.kind {
+    if let For(ref iters1, ref outer_bldr, ref outer_func) = expr.kind {
         // Collapses Zips with Fors over the same vector into a single For which produces multiple
         // results.
         if iters1.len() > 1 {
@@ -123,8 +103,8 @@ pub fn fuse_loops(expr: &mut Expr<Type>) -> WeldResult<()> {
                 // Generate symbols and identifier expressions for the new builder and element parameters.
                 // TODO(shoumik): The old_bldr and old_elem aren't really needed; better way to gen
                 // new symbol?
-                let new_elem_sym = sym_gen.new_symbol(&old_bldr.as_ref().unwrap().name);
-                let new_bldr_sym = sym_gen.new_symbol(&old_elem.as_ref().unwrap().name);
+                let new_elem_sym = sym_gen.new_symbol(&old_elem.as_ref().unwrap().name);
+                let new_bldr_sym = sym_gen.new_symbol(&old_bldr.as_ref().unwrap().name);
                 let new_elem_expr = Expr {
                     ty: elem_type.unwrap().clone(),
                     kind: Ident(new_elem_sym.clone())
@@ -174,6 +154,41 @@ pub fn fuse_loops(expr: &mut Expr<Type>) -> WeldResult<()> {
         }
     }
     if let Some(new) = new_expr {
+        *expr = new;
+    }
+    Ok(())
+}
+
+/// Fuses loops where one for loop takes another as it's input, which prevents intermediate results
+/// from being materialized.
+pub fn fuse_loops(expr: &mut Expr<Type>) -> WeldResult<()> {
+    for child in expr.children_mut() {
+        try!(fuse_loops(child));
+    }
+    let mut sym_gen = SymbolGenerator::from_expression(expr);
+    let mut new_expr = None;
+    if let For(ref iters1, ref bldr1, ref nested) = expr.kind {
+        if iters1.len() == 1 {
+            let ref iter1 = iters1[0];
+            if let Res(ref res_bldr) = iter1.data.kind {
+                if let For(ref iters2, ref bldr2, ref lambda) = res_bldr.kind {
+                    if iters2.iter().all(|ref i| consumes_all(&i)) {
+                        if let NewBuilder = bldr2.kind {
+                            if let Builder(ref kind) = bldr2.ty {
+                                if let Appender(_) = *kind {
+                                    new_expr = Some(Expr{
+                                        ty: expr.ty.clone(),
+                                        kind: For(iters2.clone(), bldr1.clone(), Box::new(replace_builder(lambda, nested, &mut sym_gen)))
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+        if let Some(new) = new_expr {
         *expr = new;
     }
     Ok(())
