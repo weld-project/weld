@@ -17,6 +17,9 @@ use super::macro_processor;
 // TODO(wcrichto): add prelude to generator
 static PRELUDE_CODE: &'static str = include_str!("resources/prelude.ll");
 
+/// Macro for creating a new code generator instance. We use a macro instead of
+/// a function because the generator relies on references to various LLVM
+/// constructs, so we cannot encapsulate their construction in a function.
 #[macro_export]
 macro_rules! make_generator {
     ($generator:ident) => {
@@ -31,6 +34,8 @@ macro_rules! make_generator {
     }
 }
 
+/// Maintains stacks of all the LLVM values corresponding to each symbol live
+/// in the program. Essentially a hacky form of De Bruijn indices.
 struct SymbolStack<'a> {
     symbols: HashMap<Symbol, Vec<&'a llvm::Value>>
 }
@@ -42,11 +47,13 @@ impl<'a> SymbolStack<'a> {
         }
     }
 
+    /// Add a value to a symbol stack
     pub fn push(&mut self, key: &Symbol, val: &'a llvm::Value) {
         let mut stack = self.symbols.entry(key.clone()).or_insert(Vec::new());
         stack.push(val);
     }
 
+    /// Get the value corresponding to a sybmol
     pub fn peek(&self, key: &Symbol) -> WeldResult<&'a llvm::Value> {
         if !self.symbols.contains_key(key) {
             weld_err!("Missing symbol {:?}", key)
@@ -55,6 +62,7 @@ impl<'a> SymbolStack<'a> {
         }
     }
 
+    /// Remove the most recent value for a symbol
     pub fn pop(&mut self, key: &Symbol) -> WeldResult<()> {
         let mut stack = match self.symbols.get_mut(key) {
             Some(stack) => stack,
@@ -87,6 +95,8 @@ pub struct Generator<'a> {
     engine: &'a llvm::CSemiBox<'a, llvm::JitEngine>
 }
 
+/// Must remove all modules from the engine before its destruction, otherwise
+/// LLVM will crash. This is a convenient way to ensure that happens.
 impl<'a> Drop for Generator<'a> {
     fn drop(&mut self) {
         self.engine.remove_module(self.module);
@@ -107,11 +117,12 @@ impl<'a> Generator<'a> {
         }
     }
 
-    /// Return all the code generated so far.
+    /// Return all the LLVM code generated so far.
     pub fn result(&self) -> String {
         format!("{:?}", self.module)
     }
 
+    /// Get a pointer to a jitted function.
     pub fn get_function<I, O>(&self, name: String) -> WeldResult<Box<extern fn(I) -> O>> {
         let f = match self.engine.find_function(&name) {
             Some(f) => f,
@@ -216,7 +227,7 @@ impl<'a> Generator<'a> {
         Ok(())
     }
 
-    /// Return the LLVM type name corresponding to a Weld type.
+    /// Return the LLVM type corresponding to a Weld type.
     fn llvm_type(&self, ty: &Type) -> WeldResult<&'a llvm::Type> {
         match *ty {
             Scalar(Bool) => Ok(llvm::Type::get::<bool>(self.ctx)),
@@ -242,6 +253,7 @@ impl<'a> Generator<'a> {
         }
     }
 
+    /// Return the LLVM predicate corresponding to the input binop
     fn predicate_for_binop(&self, op_kind: BinOpKind) -> Predicate {
         match op_kind {
             BinOpKind::Equal => Predicate::Equal,
@@ -254,7 +266,7 @@ impl<'a> Generator<'a> {
         }
     }
 
-    /// Return the name of the LLVM instruction for a binary operation on a specific type.
+    /// Return the LLVM value for a binary operation on a specific type.
     fn llvm_binop(
         &self,
         op_kind: BinOpKind,
@@ -279,14 +291,13 @@ impl<'a> Generator<'a> {
         }
     }
 
-    /// Add an expression to a CodeBuilder, possibly generating prelude code earlier, and return
-    /// a string that can be used to represent its result later (e.g. %var if introducing a local
-    /// variable or an integer constant otherwise).
+    /// Return the LLVM value for an expression.
     fn gen_expr(
         &self,
         expr: &TypedExpr,
-        fn_ctx: &mut FunctionContext<'a>,
-    ) -> WeldResult<&'a llvm::Value> {
+        fn_ctx: &mut FunctionContext<'a>)
+        -> WeldResult<&'a llvm::Value>
+    {
         match expr.kind {
             I32Literal(value) => Ok(value.compile(self.ctx)),
             I64Literal(value) => Ok(value.compile(self.ctx)),
@@ -317,7 +328,7 @@ impl<'a> Generator<'a> {
                 let on_true = self.gen_expr(on_true, fn_ctx)?;
                 let on_false = self.gen_expr(on_false, fn_ctx)?;
                 Ok(fn_ctx.builder.build_select(cond, on_true, on_false))
-            },
+             },
 
             _ => weld_err!("Unsupported expression: {}", print_expr(expr))
         }
@@ -328,10 +339,10 @@ macro_rules! make_test {
     ($name:ident, $code:expr, $input:expr, $expected:expr) => {
         #[test]
         fn $name() {
-            use super::parser::*;
             let code = $code;
             make_generator!(generator);
-            generator.add_program(&parse_program(code).expect("Could not parse"), "run")
+            generator.add_program(
+                &super::parser::parse_program(code).expect("Could not parse"), "run")
                 .expect("Failed to add program");
             let f: Box<extern fn(i64) -> *const i32> =
                 generator.get_function("run".into()).expect("No function");
