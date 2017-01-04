@@ -1,21 +1,28 @@
-extern crate easy_ll;
-extern crate rustyline;
+#[macro_use]
 extern crate weld;
-
+extern crate llvm;
+extern crate rustyline;
+extern crate clap;
 
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
 use std::env;
 use std::path::PathBuf;
-use weld::ast::ExprKind::*;
-use weld::llvm::LlvmGenerator;
-use weld::macro_processor;
+use weld::codegen::Generator;
 use weld::parser::*;
-use weld::pretty_print::*;
-use weld::transforms;
-use weld::type_inference::*;
+use clap::App;
 
 fn main() {
+    let matches = App::new("Weld REPL")
+        .version("1.0")
+        .author("Matei Zaharia <matei.zaharia@gmail.com>")
+        .about("Executes Weld code interactively.")
+        .args_from_usage(
+            "-v, --verbose 'Enable verbose mode'")
+        .get_matches();
+
+    let verbose = matches.is_present("v");
+
     let home_path = env::home_dir().unwrap_or(PathBuf::new());
     let history_file_path = home_path.join(".weld_history");
     let history_file_path = history_file_path.to_str().unwrap_or(".weld_history");
@@ -56,47 +63,25 @@ fn main() {
             continue;
         }
         let program = program.unwrap();
-        println!("Raw structure:\n{:?}\n", program);
+        if verbose { println!("Raw structure:\n{:?}\n", program); }
 
-        let expr = macro_processor::process_program(&program);
-        if let Err(ref e) = expr {
-            println!("Error during macro substitution: {}", e);
+        make_generator!(generator);
+        if let Err(ref e) = generator.add_program(&program, "run") {
+            println!("Error during LLVM code gen:\n{}\n", e);
             continue;
         }
-        let mut expr = expr.unwrap();
-        println!("After macro substitution:\n{}\n", print_expr(&expr));
-
-        if let Err(ref e) = transforms::inline_apply(&mut expr) {
-            println!("Error during inlining applies: {}\n", e);
-        }
-        println!("After inlining applies:\n{}\n", print_expr(&expr));
-
-        if let Err(ref e) = infer_types(&mut expr) {
-            println!("Error during type inference: {}\n", e);
-            println!("Partially inferred types:\n{}\n", print_typed_expr(&expr));
-            continue;
-        }
-        println!("After type inference:\n{}\n", print_typed_expr(&expr));
-        println!("Expression type: {}\n", print_type(&expr.ty));
-
-        let expr = expr.to_typed().unwrap();
-        if let Lambda(ref args, ref body) = expr.kind {
-            let mut generator = LlvmGenerator::new();
-            if let Err(ref e) = generator.add_function_on_pointers("run", args, body) {
-                println!("Error during LLVM code gen:\n{}\n", e);
-                continue;
-            }
-            let llvm_code = generator.result();
+        let llvm_code = generator.result();
+        if verbose {
             println!("LLVM code:\n{}\n", llvm_code);
-
-            if let Err(ref e) = easy_ll::compile_module(&llvm_code) {
-                println!("Error during LLVM compilation:\n{}\n", e);
-                continue;
-            }
-            println!("LLVM module compiled successfully\n")
-        } else {
-            println!("Expression is not a function, so not compiling to LLVM.\n")
+            println!("LLVM module compiled successfully\n");
         }
+
+        let f: Box<extern fn(i64) -> *const i32> =
+            generator.get_function("run".into()).expect("No function");
+        let result = f(&0 as *const i32 as i64);
+        let result = unsafe { *result };
+        println!("{}", result);
     }
+
     rl.save_history(&history_file_path).unwrap();
 }

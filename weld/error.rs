@@ -1,8 +1,5 @@
-use std::convert::From;
 use std::error;
 use std::fmt;
-
-use easy_ll::LlvmError;
 
 /// Error type returned by Weld.
 #[derive(Debug)]
@@ -26,10 +23,12 @@ impl error::Error for WeldError {
     fn cause(&self) -> Option<&error::Error> { None }
 }
 
-impl From<LlvmError> for WeldError {
-    fn from(err: LlvmError) -> WeldError {
-        WeldError(err.to_string())
-    }
+/// Utility macro to create an Err result with a WeldError from a format string.
+#[macro_export]
+macro_rules! weld_err {
+    ( $($arg:tt)* ) => ({
+        ::std::result::Result::Err($crate::error::WeldError::new(format!($($arg)*)))
+    })
 }
 
 /// Result type returned by Weld.
