@@ -6,19 +6,12 @@
 #[macro_use] extern crate lazy_static;
 extern crate regex;
 
-/// Utility macro to create an Err result with a WeldError from a format string.
-macro_rules! weld_err {
-    ( $($arg:tt)* ) => ({
-        ::std::result::Result::Err($crate::error::WeldError::new(format!($($arg)*)))
-    })
-}
-
 extern crate llvm;
 
 // TODO: Not all of these should be public
 pub mod ast;
 pub mod code_builder;
-pub mod error;
+#[macro_use] pub mod error;
 #[macro_use] pub mod codegen;
 pub mod macro_processor;
 pub mod parser;

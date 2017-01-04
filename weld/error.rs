@@ -23,5 +23,13 @@ impl error::Error for WeldError {
     fn cause(&self) -> Option<&error::Error> { None }
 }
 
+/// Utility macro to create an Err result with a WeldError from a format string.
+#[macro_export]
+macro_rules! weld_err {
+    ( $($arg:tt)* ) => ({
+        ::std::result::Result::Err($crate::error::WeldError::new(format!($($arg)*)))
+    })
+}
+
 /// Result type returned by Weld.
 pub type WeldResult<T> = Result<T, WeldError>;
