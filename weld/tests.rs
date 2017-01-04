@@ -153,24 +153,7 @@ fn parse_and_print_typed_expressions() {
 
 #[test]
 fn compare_expressions() {
-    let e1 = parse_expr("23").unwrap();
-    let e2 = parse_expr("23").unwrap();
-    assert!(e1.compare(&e2));
-
-    let e2 = parse_expr("23.0").unwrap();
-    assert!(!e1.compare(&e2));
-
-    let e1 = parse_expr("23 + 24").unwrap();
-    let e2 = parse_expr("23 + 24").unwrap();
-    assert!(e1.compare(&e2));
-
-    let e2 = parse_expr("24 + 23").unwrap();
-    assert!(!e1.compare(&e2));
-
     let e1 = parse_expr("for([1,2], appender, |e| e+1)").unwrap();
-    let e2 = parse_expr("for([1,2], appender, |e| e+1)").unwrap();
-    assert!(e1.compare(&e2));
-
     let e2 = parse_expr("for([1,2], appender, |f| f+1)").unwrap();
     assert!(e1.compare_ignoring_symbols(&e2));
 
