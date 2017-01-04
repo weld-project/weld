@@ -373,6 +373,7 @@ impl<T:Clone+Eq> Expr<T> {
     pub fn transform<F>(&mut self, func: &mut F) where F: FnMut(&mut Expr<T>) -> Option<Expr<T>> {
         if let Some(e) = func(self) {
             *self = e;
+            return self.transform(func);
         }
         for c in self.children_mut() {
             c.transform(func);

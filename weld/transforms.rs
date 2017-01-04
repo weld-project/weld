@@ -19,59 +19,53 @@ use super::util::SymbolGenerator;
 /// - Does not complete inlining if some of the functions take functions as arguments (in that
 ///   case, the expressions after inlining may lead to more inlining).
 pub fn inline_apply<T:Clone+Eq>(expr: &mut Expr<T>) -> WeldResult<()> {
-    for child in expr.children_mut() {
-        try!(inline_apply(child));
-    }
-    let mut new_expr = None;
-    if let Apply(ref func, ref args) = expr.kind {
-        if let Lambda(ref params, ref body) = func.kind {
-            let mut new = *body.clone();
-            for (param, arg) in params.iter().zip(args) {
-                new.substitute(&param.name, &arg);
+    expr.transform(&mut |ref mut expr| {
+        if let Apply(ref func, ref args) = expr.kind {
+            if let Lambda(ref params, ref body) = func.kind {
+                let mut new = *body.clone();
+                for (param, arg) in params.iter().zip(args) {
+                    new.substitute(&param.name, &arg);
+                }
+                return Some(new);
             }
-            new_expr = Some(new);
         }
-    }
-    if let Some(new) = new_expr {
-        *expr = new;
-    }
+        None
+    });
     Ok(())
 }
 
 /// Fuses for loops over the same vector in a zip into a single for loop which produces multiple
 /// builders.
 pub fn fuse_loops_horizontal(expr: &mut Expr<Type>) -> WeldResult<()> {
-    for child in expr.children_mut() {
-        try!(fuse_loops_horizontal(child));
-    }
-    let mut sym_gen = SymbolGenerator::from_expression(expr);
-    let mut new_expr = None;
-    if let For(ref iters1, ref outer_bldr, ref outer_func) = expr.kind {
-        // Collapses Zips with Fors over the same vector into a single For which produces multiple results.
-        if iters1.len() > 1 {
-            // Vector of tuples containing the params and expressions of functions in nested lambdas.
-            let mut lambdas = vec![];
-            let mut common_data = None;
-            // Used to check if the same rows of each output are touched by the outer for.
-            let iter_data = (&iters1[0].start, &iters1[0].end, &iters1[0].stride);
-            // First, check if all the lambdas are over the same vector and have a pattern we can merge.
-            if iters1.iter().all(|ref iter| {
-                if (&iter.start, &iter.end, &iter.stride) == iter_data {
-                    if let Res(ref res_bldr) = iter.data.kind {
-                        if let For(ref iters2, ref bldr2, ref lambda) = res_bldr.kind {
-                            if common_data.is_none() {
-                                common_data = Some(iters2.clone());
-                            }
-                            if iters2 == common_data.as_ref().unwrap() { 
-                                if let NewBuilder = bldr2.kind {
-                                    if let Builder(ref kind) = bldr2.ty {
-                                        if let Appender(_) = *kind {
-                                            if let Lambda(ref args, ref body) = lambda.kind {
-                                                if let Merge(ref bldr,  ref expr) = body.kind {
-                                                    if let Ident(ref n) = bldr.kind {
-                                                        if *n == args[0].name {
-                                                            lambdas.push((args.clone(), expr.clone())); 
-                                                            return true
+    expr.transform(&mut |ref mut expr| {
+        let mut sym_gen = SymbolGenerator::from_expression(expr);
+        if let For(ref iters1, ref outer_bldr, ref outer_func) = expr.kind {
+            // Collapses Zips with Fors over the same vector into a single For which produces multiple results.
+            if iters1.len() > 1 {
+                // Vector of tuples containing the params and expressions of functions in nested lambdas.
+                let mut lambdas = vec![];
+                let mut common_data = None;
+                // Used to check if the same rows of each output are touched by the outer for.
+                let iter_data = (&iters1[0].start, &iters1[0].end, &iters1[0].stride);
+                // First, check if all the lambdas are over the same vector and have a pattern we can merge.
+                if iters1.iter().all(|ref iter| {
+                    if (&iter.start, &iter.end, &iter.stride) == iter_data {
+                        if let Res(ref res_bldr) = iter.data.kind {
+                            if let For(ref iters2, ref bldr2, ref lambda) = res_bldr.kind {
+                                if common_data.is_none() {
+                                    common_data = Some(iters2.clone());
+                                }
+                                if iters2 == common_data.as_ref().unwrap() { 
+                                    if let NewBuilder = bldr2.kind {
+                                        if let Builder(ref kind) = bldr2.ty {
+                                            if let Appender(_) = *kind {
+                                                if let Lambda(ref args, ref body) = lambda.kind {
+                                                    if let Merge(ref bldr,  ref expr) = body.kind {
+                                                        if let Ident(ref n) = bldr.kind {
+                                                            if *n == args[0].name {
+                                                                lambdas.push((args.clone(), expr.clone())); 
+                                                                return true
+                                                            }
                                                         }
                                                     }
                                                 }
@@ -82,98 +76,95 @@ pub fn fuse_loops_horizontal(expr: &mut Expr<Type>) -> WeldResult<()> {
                             }
                         }
                     }
-                }
-                return false
-            }) {
-                // Zip the expressions to create a ``struct of builders'' type.
-                let builder_type = Struct(lambdas.iter().map(|ref t| Builder(Appender(Box::new(t.1.ty.clone())))).collect::<Vec<_>>());
-                let elem_type = lambdas[0].0[1].ty.clone();
+                    return false
+                }) {
+                    // Zip the expressions to create a ``struct of builders'' type.
+                    let builder_type = Struct(lambdas.iter().map(|ref t| Builder(Appender(Box::new(t.1.ty.clone())))).collect::<Vec<_>>());
+                    let elem_type = lambdas[0].0[1].ty.clone();
 
-                // Parameters for the new fused function. Symbols names are generated using symbol
-                // names for the builder and element from an existing function.
-                let new_params = vec![
-                    Parameter{ty: builder_type.clone(), name: sym_gen.new_symbol(&lambdas[0].0[0].name.name)},
-                    Parameter{ty: elem_type.clone(), name: sym_gen.new_symbol(&lambdas[0].0[1].name.name)},
-                ];
+                    // Parameters for the new fused function. Symbols names are generated using symbol
+                    // names for the builder and element from an existing function.
+                    let new_params = vec![
+                        Parameter{ty: builder_type.clone(), name: sym_gen.new_symbol(&lambdas[0].0[0].name.name)},
+                        Parameter{ty: elem_type.clone(), name: sym_gen.new_symbol(&lambdas[0].0[1].name.name)},
+                    ];
 
-                // Generate Ident expressions for the new symbols and substitute them in the
-                // functions' merge expressions.
-                let new_bldr_expr = Expr {
-                    ty: builder_type.clone(),
-                    kind: Ident(new_params[0].name.clone())
-                };
-                let new_elem_expr = Expr {
-                    ty: elem_type.clone(),
-                    kind: Ident(new_params[1].name.clone())
-                };
-                for &mut (ref mut args, ref mut expr) in lambdas.iter_mut() {
-                    expr.substitute(&args[0].name, &new_bldr_expr);
-                    expr.substitute(&args[1].name, &new_elem_expr);
-                }
-
-                // Build up the new expression.
-                let new_merge_expr = Expr{
-                    ty: builder_type.clone(),
-                    kind: Merge(
-                        Box::new(new_bldr_expr),
-                        Box::new(Expr{
-                            ty: Struct(lambdas.iter().map(|ref e| e.1.ty.clone()).collect::<Vec<_>>()),
-                            kind: MakeStruct(lambdas.iter().map(|ref e| *e.1.clone()).collect::<Vec<_>>())
-                        })
-                    )
-                };
-                let new_func = Expr{
-                    ty: Function(new_params.iter().map(|ref p| p.ty.clone()).collect::<Vec<_>>(), Box::new(builder_type.clone())),
-                    kind: Lambda(new_params, Box::new(new_merge_expr))
-                };
-                let new_iter_expr = Expr{
-                    ty: Vector(Box::new(elem_type.clone())),
-                    kind: Res(Box::new(Expr{
+                    // Generate Ident expressions for the new symbols and substitute them in the
+                    // functions' merge expressions.
+                    let new_bldr_expr = Expr {
                         ty: builder_type.clone(),
-                        kind: For(common_data.unwrap(), Box::new(Expr{ty: builder_type.clone(), kind: NewBuilder}), Box::new(new_func))
-                    })),
-                };
+                        kind: Ident(new_params[0].name.clone())
+                    };
+                    let new_elem_expr = Expr {
+                        ty: elem_type.clone(),
+                        kind: Ident(new_params[1].name.clone())
+                    };
+                    for &mut (ref mut args, ref mut expr) in lambdas.iter_mut() {
+                        expr.substitute(&args[0].name, &new_bldr_expr);
+                        expr.substitute(&args[1].name, &new_elem_expr);
+                    }
 
-                // TODO(shoumik): Any way to avoid the clones here?
-                new_expr = Some(Expr{
-                    ty: expr.ty.clone(),
-                    kind: For(vec![Iter{
-                        data: Box::new(new_iter_expr),
-                        start: iters1[0].start.clone(),
-                        end: iters1[0].end.clone(),
-                        stride: iters1[0].stride.clone()
-                    }], outer_bldr.clone(), outer_func.clone())
-                });
+                    // Build up the new expression.
+                    let new_merge_expr = Expr{
+                        ty: builder_type.clone(),
+                        kind: Merge(
+                            Box::new(new_bldr_expr),
+                            Box::new(Expr{
+                                ty: Struct(lambdas.iter().map(|ref e| e.1.ty.clone()).collect::<Vec<_>>()),
+                                kind: MakeStruct(lambdas.iter().map(|ref e| *e.1.clone()).collect::<Vec<_>>())
+                            })
+                            )
+                    };
+                    let new_func = Expr{
+                        ty: Function(new_params.iter().map(|ref p| p.ty.clone()).collect::<Vec<_>>(), Box::new(builder_type.clone())),
+                        kind: Lambda(new_params, Box::new(new_merge_expr))
+                    };
+                    let new_iter_expr = Expr{
+                        ty: Vector(Box::new(elem_type.clone())),
+                        kind: Res(Box::new(Expr{
+                            ty: builder_type.clone(),
+                            kind: For(common_data.unwrap(), Box::new(Expr{ty: builder_type.clone(), kind: NewBuilder}), Box::new(new_func))
+                        })),
+                    };
+
+                    // TODO(shoumik): Any way to avoid the clones here?
+                    return Some(Expr{
+                        ty: expr.ty.clone(),
+                        kind: For(vec![Iter{
+                            data: Box::new(new_iter_expr),
+                            start: iters1[0].start.clone(),
+                            end: iters1[0].end.clone(),
+                            stride: iters1[0].stride.clone()
+                        }], outer_bldr.clone(), outer_func.clone())
+                    });
+                }
             }
         }
-    }
-    if let Some(new) = new_expr {
-        *expr = new;
-    }
+        None
+    });
     Ok(())
 }
 
 /// Fuses loops where one for loop takes another as it's input, which prevents intermediate results
 /// from being materialized.
 pub fn fuse_loops(expr: &mut Expr<Type>) -> WeldResult<()> {
-    for child in expr.children_mut() {
-        try!(fuse_loops(child));
-    }
-    let mut sym_gen = SymbolGenerator::from_expression(expr);
-    let mut new_expr = None;
-    if let For(ref iters1, ref bldr1, ref nested) = expr.kind {
-        if iters1.len() == 1 {
-            let ref iter1 = iters1[0];
-            if let Res(ref res_bldr) = iter1.data.kind {
-                if let For(ref iters2, ref bldr2, ref lambda) = res_bldr.kind {
-                    if iters2.iter().all(|ref i| consumes_all(&i)) {
-                        if let NewBuilder = bldr2.kind {
-                            if let Builder(ref kind) = bldr2.ty {
-                                if let Appender(_) = *kind {
-                                    new_expr = Some(Expr{
-                                        ty: expr.ty.clone(),
-                                        kind: For(iters2.clone(), bldr1.clone(), Box::new(replace_builder(lambda, nested, &mut sym_gen)))
-                                    });
+    expr.transform(&mut |ref mut expr| {
+        let mut sym_gen = SymbolGenerator::from_expression(expr);
+        if let For(ref iters1, ref bldr1, ref nested) = expr.kind {
+            if iters1.len() == 1 {
+                let ref iter1 = iters1[0];
+                if let Res(ref res_bldr) = iter1.data.kind {
+                    if let For(ref iters2, ref bldr2, ref lambda) = res_bldr.kind {
+                        if iters2.iter().all(|ref i| consumes_all(&i)) {
+                            if let NewBuilder = bldr2.kind {
+                                if let Builder(ref kind) = bldr2.ty {
+                                    if let Appender(_) = *kind {
+                                        let e = Expr{
+                                            ty: expr.ty.clone(),
+                                            kind: For(iters2.clone(), bldr1.clone(), Box::new(replace_builder(lambda, nested, &mut sym_gen)))
+                                        };
+                                        return Some(e)
+                                    }
                                 }
                             }
                         }
@@ -181,10 +172,8 @@ pub fn fuse_loops(expr: &mut Expr<Type>) -> WeldResult<()> {
                 }
             }
         }
-    }
-        if let Some(new) = new_expr {
-        *expr = new;
-    }
+        None
+    });
     Ok(())
 }
 
@@ -195,14 +184,17 @@ fn consumes_all(iter: &Iter<Type>) -> bool {
     } else if let &Iter{ref data, start: Some(ref start), end: Some(ref end), stride: Some(ref stride), ..} = iter {
         // Looks like Iter(A, 0, Len(A), 1)
         if let I64Literal(1) = stride.kind {
-            if let Ident(ref name) = data.kind {
-                if let I64Literal(0) = start.kind {
+            if let I64Literal(0) = start.kind {
+                if let Ident(ref name) = data.kind {
                     if let Length(ref v) = end.kind {
                         if let Ident(ref vsym) = v.kind {
-                            if vsym == name {
-                                return true
-                            }
+                            return vsym == name
                         }
+                    }
+                } else if let MakeVector(ref exprs) = data.kind {
+                    let num_elems = exprs.len() as i64;
+                    if let I64Literal(x) = end.kind {
+                        return num_elems == x
                     }
                 }
             }

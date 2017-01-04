@@ -191,6 +191,10 @@ fn simple_vertical_loop_fusion() {
     let mut e1 = typed_expression("for(result(for(result(for([1,2,3], appender, |b,e| merge(b,e+3))), appender, |b,e| merge(b,e+2))), appender, |b,f| merge(b, f+1))");
     fuse_loops(&mut e1).unwrap();
     let e2 = typed_expression("for([1,2,3], appender, |b,e| merge(b, (((e+3)+2)+1)))");
+
+    println!("{}", print_expr(&e1));
+    println!("{}", print_expr(&e2));
+
     assert!(e1.compare_ignoring_symbols(&e2));
     
     // Merges in other positions, replace builder identifiers.
