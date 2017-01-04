@@ -2,6 +2,7 @@
 extern crate weld;
 extern crate llvm;
 extern crate rustyline;
+extern crate clap;
 
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
@@ -9,11 +10,19 @@ use std::env;
 use std::path::PathBuf;
 use weld::codegen::Generator;
 use weld::parser::*;
-
-// TODO(wcrichto): make this a command line option
-static VERBOSE: bool = false;
+use clap::App;
 
 fn main() {
+    let matches = App::new("Weld REPL")
+        .version("1.0")
+        .author("Matei Zaharia <matei.zaharia@gmail.com>")
+        .about("Executes Weld code interactively.")
+        .args_from_usage(
+            "-v, --verbose 'Enable verbose mode'")
+        .get_matches();
+
+    let verbose = matches.is_present("v");
+
     let home_path = env::home_dir().unwrap_or(PathBuf::new());
     let history_file_path = home_path.join(".weld_history");
     let history_file_path = history_file_path.to_str().unwrap_or(".weld_history");
@@ -54,7 +63,7 @@ fn main() {
             continue;
         }
         let program = program.unwrap();
-        if VERBOSE { println!("Raw structure:\n{:?}\n", program); }
+        if verbose { println!("Raw structure:\n{:?}\n", program); }
 
         make_generator!(generator);
         if let Err(ref e) = generator.add_program(&program, "run") {
@@ -62,7 +71,7 @@ fn main() {
             continue;
         }
         let llvm_code = generator.result();
-        if VERBOSE {
+        if verbose {
             println!("LLVM code:\n{}\n", llvm_code);
             println!("LLVM module compiled successfully\n");
         }
