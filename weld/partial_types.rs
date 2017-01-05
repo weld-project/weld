@@ -85,11 +85,11 @@ impl PartialType {
 }
 
 impl PartialBuilderKind {
-    pub fn merge_type(&mut self) -> &PartialType {
+    pub fn merge_type(&mut self) -> PartialType {
         use self::PartialBuilderKind::*;
         match *self {
-            Appender(ref elem) => elem.as_ref(),
-            Merger(ref elem, _) => elem.as_ref(),
+            Appender(ref elem) => *elem.clone(),
+            Merger(ref elem, _) => *elem.clone(),
         }
     }
 

@@ -78,15 +78,16 @@ pub fn fuse_loops_horizontal(expr: &mut Expr<Type>) -> WeldResult<()> {
                     }
                     return false
                 }) {
-                    // Zip the expressions to create a ``struct of builders'' type.
-                    let builder_type = Struct(lambdas.iter().map(|ref t| Builder(Appender(Box::new(t.1.ty.clone())))).collect::<Vec<_>>());
-                    let elem_type = lambdas[0].0[1].ty.clone();
+                    // Zip the expressions to create an appender whose merge type is a struct.
+                    let merge_type = Struct(lambdas.iter().map(|ref e| e.1.ty.clone()).collect::<Vec<_>>());
+                    let builder_type = Builder(Appender(Box::new(merge_type.clone())));
+                    let func_elem_type = lambdas[0].0[1].ty.clone();
 
                     // Parameters for the new fused function. Symbols names are generated using symbol
                     // names for the builder and element from an existing function.
                     let new_params = vec![
                         Parameter{ty: builder_type.clone(), name: sym_gen.new_symbol(&lambdas[0].0[0].name.name)},
-                        Parameter{ty: elem_type.clone(), name: sym_gen.new_symbol(&lambdas[0].0[1].name.name)},
+                        Parameter{ty: func_elem_type.clone(), name: sym_gen.new_symbol(&lambdas[0].0[1].name.name)},
                     ];
 
                     // Generate Ident expressions for the new symbols and substitute them in the
@@ -96,7 +97,7 @@ pub fn fuse_loops_horizontal(expr: &mut Expr<Type>) -> WeldResult<()> {
                         kind: Ident(new_params[0].name.clone())
                     };
                     let new_elem_expr = Expr {
-                        ty: elem_type.clone(),
+                        ty: func_elem_type.clone(),
                         kind: Ident(new_params[1].name.clone())
                     };
                     for &mut (ref mut args, ref mut expr) in lambdas.iter_mut() {
@@ -110,8 +111,8 @@ pub fn fuse_loops_horizontal(expr: &mut Expr<Type>) -> WeldResult<()> {
                         kind: Merge(
                             Box::new(new_bldr_expr),
                             Box::new(Expr{
-                                ty: Struct(lambdas.iter().map(|ref e| e.1.ty.clone()).collect::<Vec<_>>()),
-                                kind: MakeStruct(lambdas.iter().map(|ref e| *e.1.clone()).collect::<Vec<_>>())
+                                ty: merge_type.clone(),
+                                kind: MakeStruct(lambdas.iter().map(|ref lambda| *lambda.1.clone()).collect::<Vec<_>>())
                             })
                             )
                     };
@@ -120,7 +121,7 @@ pub fn fuse_loops_horizontal(expr: &mut Expr<Type>) -> WeldResult<()> {
                         kind: Lambda(new_params, Box::new(new_merge_expr))
                     };
                     let new_iter_expr = Expr{
-                        ty: Vector(Box::new(elem_type.clone())),
+                        ty: Vector(Box::new(merge_type.clone())),
                         kind: Res(Box::new(Expr{
                             ty: builder_type.clone(),
                             kind: For(common_data.unwrap(), Box::new(Expr{ty: builder_type.clone(), kind: NewBuilder}), Box::new(new_func))

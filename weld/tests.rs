@@ -4,7 +4,9 @@ use super::parser::parse_expr;
 use super::pretty_print::*;
 use super::type_inference::*;
 
+// Transforms. TODO(shoumik) move these tests somewhere else?
 use super::transforms::fuse_loops;
+use super::transforms::fuse_loops_horizontal;
 
 /// Returns a typed expression.
 #[cfg(test)]
@@ -177,6 +179,18 @@ fn compare_expressions() {
     // Symbols don't match up.
     let e2 = parse_expr("|c, d| d + c").unwrap();
     assert!(!e1.compare_ignoring_symbols(&e2));
+}
+
+#[test]
+fn simple_horizontal_loop_fusion() {
+    let mut e1 = typed_expression("for(zip(
+            result(for([1,2,3], appender, |b,e| merge(b, e+1))),
+            result(for([1,2,3], appender,|b2,e2| merge(b2,e2+1)))
+        ), appender, |b,e| merge(b, e.$0+1))");
+    fuse_loops_horizontal(&mut e1).unwrap();
+    let e2 = typed_expression("for(result(for([1,2,3], appender, |b,e| merge(b, {e+1,e+1}))), appender, |b,e| merge(b, e.$0+1))");
+
+    assert!(e1.compare_ignoring_symbols(&e2));
 }
 
 #[test]
