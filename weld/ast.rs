@@ -263,7 +263,6 @@ impl<T:Clone+Eq> Expr<T> {
 
         fn _compare_ignoring_symbols<'b, 'a, U:Clone+Eq>(e1: &'a Expr<U>, e2: &'b Expr<U>, sym_map: &mut HashMap<&'a Symbol, &'b Symbol>) -> bool {
             if e1.ty != e2.ty {
-                println!("type mismatch");
                 return false
             }
             let same_kind = match (&e1.kind, &e2.kind) {
@@ -280,7 +279,6 @@ impl<T:Clone+Eq> Expr<T> {
                         }
                         true
                     } else {
-                        println!("lambda mismatch");
                         false
                     }
                 },
@@ -309,7 +307,6 @@ impl<T:Clone+Eq> Expr<T> {
                 _ => false // all else fail.
             };
             if !same_kind {
-                println!("kind mismatch");
                 return false
             }
             let children: Vec<_> = e1.children().collect();
