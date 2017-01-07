@@ -183,13 +183,50 @@ fn compare_expressions() {
 
 #[test]
 fn simple_horizontal_loop_fusion() {
+    // Two loops.
     let mut e1 = typed_expression("for(zip(
             result(for([1,2,3], appender, |b,e| merge(b, e+1))),
             result(for([1,2,3], appender,|b2,e2| merge(b2,e2+1)))
         ), appender, |b,e| merge(b, e.$0+1))");
     fuse_loops_horizontal(&mut e1).unwrap();
     let e2 = typed_expression("for(result(for([1,2,3], appender, |b,e| merge(b, {e+1,e+1}))), appender, |b,e| merge(b, e.$0+1))");
+    assert!(e1.compare_ignoring_symbols(&e2));
 
+    // Three loops.
+    let mut e1 = typed_expression("for(zip(
+            result(for([1,2,3], appender, |b,e| merge(b, e+1))),
+            result(for([1,2,3], appender,|b2,e2| merge(b2,e2+2))),
+            result(for([1,2,3], appender,|b3,e3| merge(b3,e3+3)))
+        ), appender, |b,e| merge(b, e.$0+1))");
+    fuse_loops_horizontal(&mut e1).unwrap();
+    let e2 = typed_expression("for(result(for([1,2,3], appender, |b,e| merge(b, {e+1,e+2,e+3}))), appender, |b,e| merge(b, e.$0+1))");
+    assert!(e1.compare_ignoring_symbols(&e2));
+
+    // Iters in inner loop
+    let mut e1 = typed_expression("for(zip(
+            result(for(iter([1,2,3], 0, 2, 1), appender, |b,e| merge(b, e+1))),
+            result(for(iter([1,2,3], 0, 2, 1), appender, |b,e| merge(b, e+2)))
+        ), appender, |b,e| merge(b, e.$0+1))");
+    fuse_loops_horizontal(&mut e1).unwrap();
+    let e2 = typed_expression("for(result(for(iter([1,2,3], 0, 2, 1), appender, |b,e| merge(b, {e+1,e+2}))), appender, |b,e| merge(b, e.$0+1))");
+    assert!(e1.compare_ignoring_symbols(&e2));
+
+    // Iters in outer loop.
+    let mut e1 = typed_expression("for(zip(
+            iter(result(for([1,2,3], appender, |b,e| merge(b, e+1))), 0, 2, 1),
+            iter(result(for([1,2,3], appender, |b,e| merge(b, e+2))), 0, 2, 1)
+        ), appender, |b,e| merge(b, e.$0+1))");
+    fuse_loops_horizontal(&mut e1).unwrap();
+    let e2 = typed_expression("for(iter(result(for([1,2,3], appender, |b,e| merge(b, {e+1,e+2}))), 0, 2, 1), appender, |b,e| merge(b, e.$0+1))");
+    assert!(e1.compare_ignoring_symbols(&e2));
+
+    // Two loops with different vectors; should fail.
+    let mut e1 = typed_expression("for(zip(
+            result(for([1,2,3], appender, |b,e| merge(b, e+1))),
+            result(for([1,2,4], appender,|b2,e2| merge(b2,e2+1)))
+        ), appender, |b,e| merge(b, e.$0+1))");
+    let e2 = e1.clone();
+    fuse_loops_horizontal(&mut e1).unwrap();
     assert!(e1.compare_ignoring_symbols(&e2));
 }
 
