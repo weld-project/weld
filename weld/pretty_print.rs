@@ -10,7 +10,7 @@ use super::partial_types::*;
 // TODO: These methods could take a mutable string as an argument, or even a fmt::Format.
 
 /// A trait for printing types.
-pub trait PrintableType: Clone+Eq {
+pub trait PrintableType: TypeBounds {
     fn print(&self) -> String;
 }
 
@@ -173,7 +173,7 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>, typed: bool) -> String {
             format!("merge({},{})", print_expr_impl(builder, typed), print_expr_impl(value, typed))
         }
 
-        For(ref iters, ref builder, ref func) => {
+        For{ref iters, ref builder, ref func} => {
             format!("for({},{},{})",
                 print_iters(iters, typed),
                 print_expr_impl(builder, typed),

@@ -475,7 +475,7 @@ impl<'t> Parser<'t> {
                 try!(self.consume(TComma));
                 let body = try!(self.expr());
                 try!(self.consume(TCloseParen));
-                Ok(expr_box(For(iters, builders, body)))
+                Ok(expr_box(For{iters: iters, builder: builders, func: body}))
             }
 
             TLen => {

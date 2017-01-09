@@ -3,6 +3,8 @@
 use std::vec;
 use std::fmt;
 
+use super::error::*;
+
 /// A symbol (identifier name); for now these are strings, but we may add some kind of scope ID.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Symbol {
@@ -45,11 +47,15 @@ pub enum BuilderKind {
     Merger(Box<Type>, BinOpKind)
 }
 
+pub trait TypeBounds: Clone + PartialEq {}
+
+impl TypeBounds for Type {}
+
 /// An expression tree, having type annotations of type T. We make this parametrized because
 /// expressions have different "kinds" of types attached to them at different points in the
 /// compilation process -- namely PartialType when parsed and then Type after type inference.
 #[derive(Clone, Debug, PartialEq)]
-pub struct Expr<T:Clone + Eq> {
+pub struct Expr<T:TypeBounds> {
     pub ty: T,
     pub kind: ExprKind<T>
 }
@@ -57,7 +63,7 @@ pub struct Expr<T:Clone + Eq> {
 /// An iterator, which specifies a vector to iterate over and optionally a start index,
 /// end index, and stride.
 #[derive(Clone, Debug, PartialEq)]
-pub struct Iter<T:Clone + Eq> {
+pub struct Iter<T:TypeBounds> {
     pub data: Box<Expr<T>>,
     pub start: Option<Box<Expr<T>>>,
     pub end: Option<Box<Expr<T>>>,
@@ -65,7 +71,7 @@ pub struct Iter<T:Clone + Eq> {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum ExprKind<T:Clone+Eq> {
+pub enum ExprKind<T:TypeBounds> {
     // TODO: maybe all of these should take named parameters
     BoolLiteral(bool),
     I32Literal(i32),
@@ -87,9 +93,8 @@ pub enum ExprKind<T:Clone+Eq> {
     Lambda(Vec<Parameter<T>>, Box<Expr<T>>),
     /// function, params
     Apply(Box<Expr<T>>, Vec<Expr<T>>),
-    // TODO(shoumik): BoxIter<T>> -> Vec<Iter<T>>
     /// iterator, builder, func
-    For(Vec<Iter<T>>, Box<Expr<T>>, Box<Expr<T>>),
+    For {iters: Vec<Iter<T>>, builder: Box<Expr<T>>, func: Box<Expr<T>>},
     /// builder, elem
     Merge(Box<Expr<T>>, Box<Expr<T>>),
     /// builder
@@ -152,7 +157,7 @@ impl fmt::Display for BinOpKind {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Parameter<T:Clone+Eq> {
+pub struct Parameter<T:TypeBounds> {
     pub name: Symbol,
     pub ty: T
 }
@@ -163,7 +168,7 @@ pub type TypedExpr = Expr<Type>;
 /// A typed parameter.
 pub type TypedParameter = Parameter<Type>;
 
-impl<T:Clone+Eq> Expr<T> {
+impl<T:TypeBounds> Expr<T> {
     /// Get an iterator for the children of this expression.
     pub fn children(&self) -> vec::IntoIter<&Expr<T>> {
         use self::ExprKind::*;
@@ -177,7 +182,7 @@ impl<T:Clone+Eq> Expr<T> {
             Length(ref expr) => vec![expr.as_ref()],
             Merge(ref bldr, ref value) => vec![bldr.as_ref(), value.as_ref()],
             Res(ref bldr) => vec![bldr.as_ref()],
-            For(ref iters, ref bldr, ref func) => {
+            For{ref iters, ref builder, ref func} => {
                 let mut res: Vec<&Expr<T>> = vec![];
                 for iter in iters {
                     res.push(iter.data.as_ref());
@@ -191,7 +196,7 @@ impl<T:Clone+Eq> Expr<T> {
                         res.push(s);
                     }
                 }
-                res.push(bldr.as_ref());
+                res.push(builder.as_ref());
                 res.push(func.as_ref());
                 res
             }
@@ -220,7 +225,7 @@ impl<T:Clone+Eq> Expr<T> {
             Length(ref mut expr) => vec![expr.as_mut()],
             Merge(ref mut bldr, ref mut value) => vec![bldr.as_mut(), value.as_mut()],
             Res(ref mut bldr) => vec![bldr.as_mut()],
-            For(ref mut iters, ref mut bldr, ref mut func) => {
+            For{ref mut iters, ref mut builder, ref mut func} => {
                 let mut res: Vec<&mut Expr<T>> = vec![];
                 for iter in iters {
                     res.push(iter.data.as_mut());
@@ -234,7 +239,7 @@ impl<T:Clone+Eq> Expr<T> {
                         res.push(s);
                     }
                 }
-                res.push(bldr.as_mut());
+                res.push(builder.as_mut());
                 res.push(func.as_mut());
                 res
             }
@@ -252,24 +257,25 @@ impl<T:Clone+Eq> Expr<T> {
 
     /// Compares two expression trees, returning true if they are the same modulo symbol names.
     /// Symbols in the two expressions must have a one to one correspondance for the trees to be
-    /// considered equal.
-    ///
-    /// Caveats:
-    ///     - If an undeclared symbol is encountered, this method return false.
-    pub fn compare_ignoring_symbols(&self, other: &Expr<T>) -> bool {
+    /// considered equal. If an undefined symbol is encountered in &self during the comparison,
+    /// returns an error.
+    pub fn compare_ignoring_symbols(&self, other: &Expr<T>) -> WeldResult<bool> {
         use self::ExprKind::*;
         use std::collections::HashMap;
         let mut sym_map: HashMap<&Symbol, &Symbol> = HashMap::new();
 
-        fn _compare_ignoring_symbols<'b, 'a, U:Clone+Eq>(e1: &'a Expr<U>, e2: &'b Expr<U>, sym_map: &mut HashMap<&'a Symbol, &'b Symbol>) -> bool {
+        fn _compare_ignoring_symbols<'b, 'a, U:TypeBounds>(e1: &'a Expr<U>, e2: &'b Expr<U>, sym_map: &mut HashMap<&'a Symbol, &'b Symbol>) -> WeldResult<bool> {
+            // First, check the type.
             if e1.ty != e2.ty {
-                return false
+                return Ok(false)
             }
+            // Check the kind of each expression. same_kind is true if each *non-expression* field
+            // is equal and the kind of the expression matches. Also records corresponding symbol names.
             let same_kind = match (&e1.kind, &e2.kind) {
-                (&BinOp(ref kind1, _, _), &BinOp(ref kind2, _, _)) if kind1 == kind2 => true,
+                (&BinOp(ref kind1, _, _), &BinOp(ref kind2, _, _)) if kind1 == kind2 => Ok(true),
                 (&Let(ref sym1, _, _), &Let(ref sym2, _, _)) => {
                     sym_map.insert(sym1, sym2);
-                    true
+                    Ok(true)
                 },
                 (&Lambda(ref params1, _), &Lambda(ref params2, _)) => {
                     // Just compare types, and assume the symbol names "match up".
@@ -277,45 +283,54 @@ impl<T:Clone+Eq> Expr<T> {
                         for (p1, p2) in params1.iter().zip(params2) {
                             sym_map.insert(&p1.name,  &p2.name);
                         }
-                        true
+                        Ok(true)
                     } else {
-                        false
+                        Ok(false)
                     }
                 },
-                (&NewBuilder, &NewBuilder) => true,
-                (&MakeStruct(..), &MakeStruct(..)) => true,
-                (&MakeVector(..), &MakeVector(..)) => true,
-                (&GetField(_, idx1), &GetField(_, idx2)) if idx1 == idx2 => true,
-                (&Length(..), &Length(..)) => true,
-                (&Merge(..), &Merge(..)) => true,
-                (&Res(..), &Res(..)) => true,
-                (&For(..), &For(..)) => true,
-                (&If(..), &If(..)) => true,
-                (&Apply(..), &Apply(..)) => true,
-                (&BoolLiteral(ref l), &BoolLiteral(ref r)) if l == r => true,
-                (&I32Literal(ref l), &I32Literal(ref r)) if l == r => true,
-                (&I64Literal(ref l), &I64Literal(ref r)) if l == r => true,
-                (&F32Literal(ref l), &F32Literal(ref r)) if l == r => true,
-                (&F64Literal(ref l), &F64Literal(ref r)) if l == r => true,
+                (&NewBuilder, &NewBuilder) => Ok(true),
+                (&MakeStruct(..), &MakeStruct(..)) => Ok(true),
+                (&MakeVector(..), &MakeVector(..)) => Ok(true),
+                (&GetField(_, idx1), &GetField(_, idx2)) if idx1 == idx2 => Ok(true),
+                (&Length(..), &Length(..)) => Ok(true),
+                (&Merge(..), &Merge(..)) => Ok(true),
+                (&Res(..), &Res(..)) => Ok(true),
+                (&For{..}, &For{..}) => Ok(true),
+                (&If(..), &If(..)) => Ok(true),
+                (&Apply(..), &Apply(..)) => Ok(true),
+                (&BoolLiteral(ref l), &BoolLiteral(ref r)) if l == r => Ok(true),
+                (&I32Literal(ref l), &I32Literal(ref r)) if l == r => Ok(true),
+                (&I64Literal(ref l), &I64Literal(ref r)) if l == r => Ok(true),
+                (&F32Literal(ref l), &F32Literal(ref r)) if l == r => Ok(true),
+                (&F64Literal(ref l), &F64Literal(ref r)) if l == r => Ok(true),
                 (&Ident(ref l), &Ident(ref r)) => {
                     if let Some(lv) = sym_map.get(l) {
-                        **lv == *r
+                        Ok(**lv == *r)
                     } else {
-                        false
+                        Err(WeldError::new("undefined symbol when comparing expressions".to_string()))
                     }
                 }
-                _ => false // all else fail.
+                _ => Ok(false) // all else fail.
             };
-            if !same_kind {
-                return false
+
+            // Return if encountered and error or kind doesn't match.
+            if same_kind.is_err() || !same_kind.as_ref().unwrap() {
+                return same_kind
             }
-            let children: Vec<_> = e1.children().collect();
+
+            // Recursively check the children.
+            let e1_children: Vec<_> = e1.children().collect();
             let e2_children: Vec<_> = e2.children().collect();
-            if children.len() == e2_children.len() {
-                children.iter().zip(e2_children).all(|e| _compare_ignoring_symbols(&e.0, &e.1, sym_map))
-            } else {
-                false
+            if e1_children.len() != e2_children.len() {
+                return Ok(false)
             }
+            for (c1, c2) in e1_children.iter().zip(e2_children) {
+                let res = _compare_ignoring_symbols(&c1, &c2, sym_map);     
+                if res.is_err() || !res.as_ref().unwrap() {
+                    return res
+                }
+            }
+            return Ok(true)
         }
         _compare_ignoring_symbols(self, other, &mut sym_map)
     }

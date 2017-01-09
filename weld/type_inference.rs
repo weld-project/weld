@@ -261,7 +261,7 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             Ok(changed)
         }
 
-        For(ref mut iters, ref mut builder, ref mut func) => {
+        For{ref mut iters, ref mut builder, ref mut func} => {
             let mut changed = false;
             // Push iters and builder type into func
             let mut elem_types = vec![];

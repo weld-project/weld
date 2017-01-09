@@ -65,9 +65,7 @@ fn main() {
         let mut expr = expr.unwrap();
         println!("After macro substitution:\n{}\n", print_expr(&expr));
 
-        if let Err(ref e) = transforms::inline_apply(&mut expr) {
-            println!("Error during inlining applies: {}\n", e);
-        }
+        transforms::inline_apply(&mut expr);
         println!("After inlining applies:\n{}\n", print_expr(&expr));
 
         if let Err(ref e) = infer_types(&mut expr) {
@@ -80,16 +78,10 @@ fn main() {
 
         let mut expr = expr.to_typed().unwrap();
 
-        if let Err(ref e) = transforms::fuse_loops_horizontal(&mut expr) {
-            println!("Error during horizontal loop fusion: {}\n", e);
-            continue;
-        }
+        transforms::fuse_loops_horizontal(&mut expr);
         println!("After horizontal loop fusion:\n{}\n", print_typed_expr(&expr));
 
-        if let Err(ref e) = transforms::fuse_loops(&mut expr) {
-            println!("Error during vertical loop fusion: {}\n", e);
-            continue;
-        }
+        transforms::fuse_loops_vertical(&mut expr);
         println!("After vertical loop fusion:\n{}\n", print_typed_expr(&expr));
 
         if let Lambda(ref args, ref body) = expr.kind {

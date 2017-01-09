@@ -16,6 +16,8 @@ pub enum PartialType {
     Function(Vec<PartialType>, Box<PartialType>),
 }
 
+impl TypeBounds for PartialType {}
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum PartialBuilderKind {
     Appender(Box<PartialType>),
@@ -166,7 +168,7 @@ impl PartialExpr {
 
             Res(ref bldr) => Res(try!(typed_box(bldr))),
 
-            For(ref iters, ref bldr, ref func) => {
+            For{ref iters, ref builder, ref func} => {
                 let mut typed_iters = vec![];
                 for iter in iters {
                     let start = match iter.start {
@@ -189,7 +191,7 @@ impl PartialExpr {
                     };
                     typed_iters.push(typed_iter);
                 }
-                For(typed_iters, try!(typed_box(bldr)), try!(typed_box(func)))
+                For{iters: typed_iters, builder: try!(typed_box(builder)), func: try!(typed_box(func))}
             }
 
             If(ref cond, ref on_true, ref on_false) =>

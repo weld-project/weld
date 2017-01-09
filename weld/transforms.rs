@@ -4,7 +4,6 @@ use super::ast::*;
 use super::ast::ExprKind::*;
 use super::ast::Type::*;
 use super::ast::BuilderKind::*;
-use super::error::*;
 
 use super::util::SymbolGenerator;
 
@@ -18,7 +17,7 @@ use super::util::SymbolGenerator;
 ///   it to a temporary as would happen with function application.
 /// - Does not complete inlining if some of the functions take functions as arguments (in that
 ///   case, the expressions after inlining may lead to more inlining).
-pub fn inline_apply<T:Clone+Eq>(expr: &mut Expr<T>) -> WeldResult<()> {
+pub fn inline_apply<T:TypeBounds>(expr: &mut Expr<T>) {
     expr.transform(&mut |ref mut expr| {
         if let Apply(ref func, ref args) = expr.kind {
             if let Lambda(ref params, ref body) = func.kind {
@@ -31,15 +30,14 @@ pub fn inline_apply<T:Clone+Eq>(expr: &mut Expr<T>) -> WeldResult<()> {
         }
         None
     });
-    Ok(())
 }
 
 /// Fuses for loops over the same vector in a zip into a single for loop which produces multiple
 /// builders.
-pub fn fuse_loops_horizontal(expr: &mut Expr<Type>) -> WeldResult<()> {
+pub fn fuse_loops_horizontal(expr: &mut Expr<Type>) {
     expr.transform(&mut |ref mut expr| {
         let mut sym_gen = SymbolGenerator::from_expression(expr);
-        if let For(ref iters1, ref outer_bldr, ref outer_func) = expr.kind {
+        if let For{iters: ref iters1, builder: ref outer_bldr, func: ref outer_func} = expr.kind {
             // Collapses Zips with Fors over the same vector into a single For which produces multiple results.
             if iters1.len() > 1 {
                 // Vector of tuples containing the params and expressions of functions in nested lambdas.
@@ -51,7 +49,7 @@ pub fn fuse_loops_horizontal(expr: &mut Expr<Type>) -> WeldResult<()> {
                 if iters1.iter().all(|ref iter| {
                     if (&iter.start, &iter.end, &iter.stride) == iter_data {
                         if let Res(ref res_bldr) = iter.data.kind {
-                            if let For(ref iters2, ref bldr2, ref lambda) = res_bldr.kind {
+                            if let For{iters: ref iters2, builder: ref bldr2, func: ref lambda} = res_bldr.kind {
                                 if common_data.is_none() {
                                     common_data = Some(iters2.clone());
                                 }
@@ -124,45 +122,44 @@ pub fn fuse_loops_horizontal(expr: &mut Expr<Type>) -> WeldResult<()> {
                         ty: Vector(Box::new(merge_type.clone())),
                         kind: Res(Box::new(Expr{
                             ty: builder_type.clone(),
-                            kind: For(common_data.unwrap(), Box::new(Expr{ty: builder_type.clone(), kind: NewBuilder}), Box::new(new_func))
+                            kind: For{iters: common_data.unwrap(), builder: Box::new(Expr{ty: builder_type.clone(), kind: NewBuilder}), func: Box::new(new_func)}
                         })),
                     };
 
                     // TODO(shoumik): Any way to avoid the clones here?
                     return Some(Expr{
                         ty: expr.ty.clone(),
-                        kind: For(vec![Iter{
+                        kind: For{iters: vec![Iter{
                             data: Box::new(new_iter_expr),
                             start: iters1[0].start.clone(),
                             end: iters1[0].end.clone(),
                             stride: iters1[0].stride.clone()
-                        }], outer_bldr.clone(), outer_func.clone())
+                        }], builder: outer_bldr.clone(), func: outer_func.clone()}
                     });
                 }
             }
         }
         None
     });
-    Ok(())
 }
 
 /// Fuses loops where one for loop takes another as it's input, which prevents intermediate results
 /// from being materialized.
-pub fn fuse_loops(expr: &mut Expr<Type>) -> WeldResult<()> {
+pub fn fuse_loops_vertical(expr: &mut Expr<Type>) {
     expr.transform(&mut |ref mut expr| {
         let mut sym_gen = SymbolGenerator::from_expression(expr);
-        if let For(ref iters1, ref bldr1, ref nested) = expr.kind {
+        if let For{iters: ref iters1, builder: ref bldr1, func: ref nested} = expr.kind {
             if iters1.len() == 1 {
                 let ref iter1 = iters1[0];
                 if let Res(ref res_bldr) = iter1.data.kind {
-                    if let For(ref iters2, ref bldr2, ref lambda) = res_bldr.kind {
+                    if let For{iters: ref iters2, builder: ref bldr2, func: ref lambda} = res_bldr.kind {
                         if iters2.iter().all(|ref i| consumes_all(&i)) {
                             if let NewBuilder = bldr2.kind {
                                 if let Builder(ref kind) = bldr2.ty {
                                     if let Appender(_) = *kind {
                                         let e = Expr{
                                             ty: expr.ty.clone(),
-                                            kind: For(iters2.clone(), bldr1.clone(), Box::new(replace_builder(lambda, nested, &mut sym_gen)))
+                                            kind: For{iters: iters2.clone(), builder: bldr1.clone(), func: Box::new(replace_builder(lambda, nested, &mut sym_gen))}
                                         };
                                         return Some(e)
                                     }
@@ -175,29 +172,24 @@ pub fn fuse_loops(expr: &mut Expr<Type>) -> WeldResult<()> {
         }
         None
     });
-    Ok(())
 }
 
 /// Given an iterator, returns whether the iterator consumes every element of its data vector.
 fn consumes_all(iter: &Iter<Type>) -> bool {
     if let &Iter{start: None, end: None, stride: None, ..} = iter {
         return true
-    } else if let &Iter{ref data, start: Some(ref start), end: Some(ref end), stride: Some(ref stride), ..} = iter {
-        // Looks like Iter(A, 0, Len(A), 1)
-        if let I64Literal(1) = stride.kind {
-            if let I64Literal(0) = start.kind {
-                if let Ident(ref name) = data.kind {
-                    if let Length(ref v) = end.kind {
-                        if let Ident(ref vsym) = v.kind {
-                            return vsym == name
-                        }
-                    }
-                } else if let MakeVector(ref exprs) = data.kind {
-                    let num_elems = exprs.len() as i64;
-                    if let I64Literal(x) = end.kind {
-                        return num_elems == x
-                    }
-                }
+    } else if let &Iter{ref data, start: Some(ref start), end: Some(ref end), stride: Some(ref stride)} = iter {
+        // Checks if the stride is 1 and an entire vector represented by a symbol is consumed.
+        if let (&I64Literal(1), &I64Literal(0), &Ident(ref name), &Length(ref v)) = (&stride.kind, &start.kind, &data.kind, &end.kind) {
+            if let Ident(ref vsym) = v.kind {
+                return vsym == name
+            }
+        }
+        // Checks if an entire vector literal is consumed.
+        if let (&I64Literal(1), &I64Literal(0), &MakeVector(ref exprs)) = (&stride.kind, &start.kind, &data.kind) {
+            let num_elems = exprs.len() as i64;
+            if let I64Literal(x) = end.kind {
+                return num_elems == x
             }
         }
     }
@@ -234,15 +226,13 @@ fn replace_builder(lambda: &Expr<Type>,
                     Merge(ref bldr, ref elem) if same_iden(&(*bldr).kind, &old_bldr.name) => {
                         let params: Vec<Expr<Type>> = vec![new_bldr.clone(), *elem.clone()];
                         let mut expr = Expr{ty: e.ty.clone(), kind: Apply(Box::new(nested.clone()), params)};
-                        match inline_apply(&mut expr) {
-                            Ok(_) => Some(expr),
-                            Err(_) => None
-                        }
+                        inline_apply(&mut expr);
+                        Some(expr)
                     },
-                    For(ref data, ref bldr, ref func) if same_iden(&(*bldr).kind, &old_bldr.name) => {
+                    For{iters: ref data, builder: ref bldr, ref func} if same_iden(&(*bldr).kind, &old_bldr.name) => {
                         Some(Expr{
                             ty: e.ty.clone(),
-                            kind: For(data.clone(), Box::new(new_bldr.clone()), Box::new(replace_builder(func, nested, sym_gen)))
+                            kind: For{iters: data.clone(), builder: Box::new(new_bldr.clone()), func: Box::new(replace_builder(func, nested, sym_gen))}
                         })
                     },
                     Ident(ref mut symbol) if *symbol == old_bldr.name => {
