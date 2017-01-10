@@ -13,7 +13,7 @@ pub struct SymbolGenerator {
 
 impl SymbolGenerator {
     /// Initialize a SymbolGenerator from all the symbols defined in an expression.
-    pub fn from_expression<T:Clone>(expr: &Expr<T>) -> SymbolGenerator {
+    pub fn from_expression<T:TypeBounds>(expr: &Expr<T>) -> SymbolGenerator {
         let mut id_map: HashMap<String, i32> = HashMap::new();
 
         let update_id = |id_map: &mut HashMap<String, i32>, symbol: &Symbol| {

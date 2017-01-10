@@ -16,6 +16,8 @@ pub enum PartialType {
     Function(Vec<PartialType>, Box<PartialType>),
 }
 
+impl TypeBounds for PartialType {}
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum PartialBuilderKind {
     Appender(Box<PartialType>),
@@ -85,11 +87,11 @@ impl PartialType {
 }
 
 impl PartialBuilderKind {
-    pub fn merge_type(&mut self) -> &PartialType {
+    pub fn merge_type(&mut self) -> PartialType {
         use self::PartialBuilderKind::*;
         match *self {
-            Appender(ref elem) => elem.as_ref(),
-            Merger(ref elem, _) => elem.as_ref(),
+            Appender(ref elem) => *elem.clone(),
+            Merger(ref elem, _) => *elem.clone(),
         }
     }
 
@@ -159,13 +161,38 @@ impl PartialExpr {
 
             GetField(ref expr, index) => GetField(try!(typed_box(expr)), index),
 
+            Length(ref expr) => Length(try!(typed_box(expr))),
+
             Merge(ref bldr, ref value) =>
                 Merge(try!(typed_box(bldr)), try!(typed_box(value))),
 
             Res(ref bldr) => Res(try!(typed_box(bldr))),
 
-            For(ref data, ref bldr, ref func) =>
-                For(try!(typed_box(data)), try!(typed_box(bldr)), try!(typed_box(func))),
+            For{ref iters, ref builder, ref func} => {
+                let mut typed_iters = vec![];
+                for iter in iters {
+                    let start = match iter.start {
+                        Some(ref s) => Some(try!(typed_box(s))),
+                        None => None
+                    }; 
+                    let end = match iter.end {
+                        Some(ref e) => Some(try!(typed_box(e))),
+                        None => None
+                    }; 
+                    let stride = match iter.stride {
+                        Some(ref s) => Some(try!(typed_box(s))),
+                        None => None
+                    }; 
+                    let typed_iter = Iter{
+                        data: try!(typed_box(&iter.data)),
+                        start: start,
+                        end: end,
+                        stride: stride
+                    };
+                    typed_iters.push(typed_iter);
+                }
+                For{iters: typed_iters, builder: try!(typed_box(builder)), func: try!(typed_box(func))}
+            }
 
             If(ref cond, ref on_true, ref on_false) =>
                 If(try!(typed_box(cond)), try!(typed_box(on_true)), try!(typed_box(on_false))),

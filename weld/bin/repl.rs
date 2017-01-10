@@ -1,7 +1,6 @@
-extern crate easy_ll;
 extern crate rustyline;
+extern crate easy_ll;
 extern crate weld;
-
 
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
@@ -66,9 +65,7 @@ fn main() {
         let mut expr = expr.unwrap();
         println!("After macro substitution:\n{}\n", print_expr(&expr));
 
-        if let Err(ref e) = transforms::inline_apply(&mut expr) {
-            println!("Error during inlining applies: {}\n", e);
-        }
+        transforms::inline_apply(&mut expr);
         println!("After inlining applies:\n{}\n", print_expr(&expr));
 
         if let Err(ref e) = infer_types(&mut expr) {
@@ -79,7 +76,14 @@ fn main() {
         println!("After type inference:\n{}\n", print_typed_expr(&expr));
         println!("Expression type: {}\n", print_type(&expr.ty));
 
-        let expr = expr.to_typed().unwrap();
+        let mut expr = expr.to_typed().unwrap();
+
+        transforms::fuse_loops_horizontal(&mut expr);
+        println!("After horizontal loop fusion:\n{}\n", print_typed_expr(&expr));
+
+        transforms::fuse_loops_vertical(&mut expr);
+        println!("After vertical loop fusion:\n{}\n", print_typed_expr(&expr));
+
         if let Lambda(ref args, ref body) = expr.kind {
             let mut generator = LlvmGenerator::new();
             if let Err(ref e) = generator.add_function_on_pointers("run", args, body) {

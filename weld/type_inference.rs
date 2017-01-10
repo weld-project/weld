@@ -125,7 +125,7 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             }
         }
 
-        Let (_, _, ref mut body) => {
+        Let(_, _, ref mut body) => {
             sync_types(&mut expr.ty, &mut body.ty, "Let body")
         }
 
@@ -175,6 +175,15 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             }
         }
 
+        Length(ref mut vector) => {
+            match vector.ty {
+                Vector(_) => (),
+                Unknown => (),
+                _ => return weld_err!("Internal error: Length called on non-vector")
+            }
+            push_complete_type(&mut expr.ty, Scalar(I64), "Length")
+        }
+
         Lambda(ref mut params, ref mut body) => {
             let mut changed = false;
 
@@ -200,6 +209,27 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
                     let mty = b.merge_type_mut();
                     changed |= try!(sync_types(mty, &mut value.ty, "Merge"));
                 }
+                Struct(ref mut tys) => {
+                    let mut rtys = vec![];
+                    for ty in tys.iter_mut(){
+                        if let &mut Builder(ref mut b) = ty {
+                            let rty = b.merge_type();
+                            rtys.push(rty);
+                        }
+                    }
+                    let ref mut mty = Struct(rtys);
+                    changed |= try!(sync_types(&mut value.ty, mty, "Merge"));
+                    // Now sync back the type to the actual builder.
+                    if let Struct(ref value_tys) = value.ty {
+                        for (i, ty) in tys.iter_mut().enumerate() {
+                            let ref val_ty = value_tys[i];
+                            if let &mut Builder(ref mut b) = ty {
+                                let mty = b.merge_type_mut();
+                                changed |= try!(push_type(mty, val_ty, "Merge"));
+                            }
+                        }
+                    } 
+                }
                 Unknown => (),
                 _ => return weld_err!("Internal error: Merge called on non-builder")
             }
@@ -215,32 +245,50 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
                     let rty = b.result_type();
                     changed |= try!(push_type(&mut expr.ty, &rty, "Res"));
                 }
+                Struct(ref mut tys) => {
+                    let mut rtys = vec![];
+                    for ty in tys {
+                        if let &mut Builder(ref mut b) = ty {
+                            let rty = b.result_type();
+                            rtys.push(rty);
+                        }
+                    }
+                    changed |= try!(push_type(&mut expr.ty, &Struct(rtys), "Res"));
+                }
                 Unknown => (),
                 _ => return weld_err!("Internal error: Result called on non-builder")
             }
             Ok(changed)
         }
 
-        For(ref mut data, ref mut builder, ref mut func) => {
+        For{ref mut iters, ref mut builder, ref mut func} => {
             let mut changed = false;
-
-            // Push data and builder type into func
-            let elem_type = match data.ty {
-                Vector(ref elem) => *elem.clone(),
-                Unknown => Unknown,
-                _ => return weld_err!("For")
+            // Push iters and builder type into func
+            let mut elem_types = vec![];
+            for iter in iters {
+                let elem_type = match iter.data.ty {
+                    Vector(ref elem) => *elem.clone(),
+                    Unknown => Unknown,
+                    _ => return weld_err!("For")
+                };
+                elem_types.push(elem_type);
+            }
+            let elem_types = if elem_types.len() == 1 {
+                elem_types[0].clone()
+            } else {
+                Struct(elem_types)
             };
             let bldr_type = builder.ty.clone();
-            let func_type = Function(vec![bldr_type.clone(), elem_type], Box::new(bldr_type));
+            let func_type = Function(vec![bldr_type.clone(), elem_types], Box::new(bldr_type));
             changed |= try!(push_type(&mut func.ty, &func_type, "For"));
 
             // Push func's argument type and return type into builder
             match func.ty {
                 Function(ref params, ref result) if params.len() == 2 => {
                     changed |= try!(push_type(
-                        &mut builder.ty, &params[0], "For"));
+                            &mut builder.ty, &params[0], "For"));
                     changed |= try!(push_type(
-                        &mut builder.ty, result.as_ref(), "For"));
+                            &mut builder.ty, result.as_ref(), "For"));
                 }
                 _ => return weld_err!("For")
             };

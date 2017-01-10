@@ -3,6 +3,8 @@
 use std::vec;
 use std::fmt;
 
+use super::error::*;
+
 /// A symbol (identifier name); for now these are strings, but we may add some kind of scope ID.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Symbol {
@@ -45,17 +47,31 @@ pub enum BuilderKind {
     Merger(Box<Type>, BinOpKind)
 }
 
+pub trait TypeBounds: Clone + PartialEq {}
+
+impl TypeBounds for Type {}
+
 /// An expression tree, having type annotations of type T. We make this parametrized because
 /// expressions have different "kinds" of types attached to them at different points in the
 /// compilation process -- namely PartialType when parsed and then Type after type inference.
 #[derive(Clone, Debug, PartialEq)]
-pub struct Expr<T:Clone> {
+pub struct Expr<T:TypeBounds> {
     pub ty: T,
     pub kind: ExprKind<T>
 }
 
+/// An iterator, which specifies a vector to iterate over and optionally a start index,
+/// end index, and stride.
 #[derive(Clone, Debug, PartialEq)]
-pub enum ExprKind<T:Clone> {
+pub struct Iter<T:TypeBounds> {
+    pub data: Box<Expr<T>>,
+    pub start: Option<Box<Expr<T>>>,
+    pub end: Option<Box<Expr<T>>>,
+    pub stride: Option<Box<Expr<T>>>
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum ExprKind<T:TypeBounds> {
     // TODO: maybe all of these should take named parameters
     BoolLiteral(bool),
     I32Literal(i32),
@@ -68,6 +84,7 @@ pub enum ExprKind<T:Clone> {
     MakeStruct(Vec<Expr<T>>),
     MakeVector(Vec<Expr<T>>),
     GetField(Box<Expr<T>>, u32),
+    Length(Box<Expr<T>>),
     /// name, value, body
     Let(Symbol, Box<Expr<T>>, Box<Expr<T>>),
     /// condition, on_true, on_false
@@ -76,8 +93,8 @@ pub enum ExprKind<T:Clone> {
     Lambda(Vec<Parameter<T>>, Box<Expr<T>>),
     /// function, params
     Apply(Box<Expr<T>>, Vec<Expr<T>>),
-    /// data, builder, func (very basic version for now)
-    For(Box<Expr<T>>, Box<Expr<T>>, Box<Expr<T>>),
+    /// iterator, builder, func
+    For {iters: Vec<Iter<T>>, builder: Box<Expr<T>>, func: Box<Expr<T>>},
     /// builder, elem
     Merge(Box<Expr<T>>, Box<Expr<T>>),
     /// builder
@@ -140,7 +157,7 @@ impl fmt::Display for BinOpKind {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Parameter<T:Clone> {
+pub struct Parameter<T:TypeBounds> {
     pub name: Symbol,
     pub ty: T
 }
@@ -151,7 +168,7 @@ pub type TypedExpr = Expr<Type>;
 /// A typed parameter.
 pub type TypedParameter = Parameter<Type>;
 
-impl<T:Clone> Expr<T> {
+impl<T:TypeBounds> Expr<T> {
     /// Get an iterator for the children of this expression.
     pub fn children(&self) -> vec::IntoIter<&Expr<T>> {
         use self::ExprKind::*;
@@ -162,10 +179,27 @@ impl<T:Clone> Expr<T> {
             MakeStruct(ref exprs) => exprs.iter().collect(),
             MakeVector(ref exprs) => exprs.iter().collect(),
             GetField(ref expr, _) => vec![expr.as_ref()],
+            Length(ref expr) => vec![expr.as_ref()],
             Merge(ref bldr, ref value) => vec![bldr.as_ref(), value.as_ref()],
             Res(ref bldr) => vec![bldr.as_ref()],
-            For(ref data, ref bldr, ref func) =>
-                vec![data.as_ref(), bldr.as_ref(), func.as_ref()],
+            For{ref iters, ref builder, ref func} => {
+                let mut res: Vec<&Expr<T>> = vec![];
+                for iter in iters {
+                    res.push(iter.data.as_ref());
+                    if let Some(ref s) = iter.start {
+                        res.push(s);
+                    }
+                    if let Some(ref e) = iter.end {
+                        res.push(e);
+                    }
+                    if let Some(ref s) = iter.stride {
+                        res.push(s);
+                    }
+                }
+                res.push(builder.as_ref());
+                res.push(func.as_ref());
+                res
+            }
             If(ref cond, ref on_true, ref on_false) =>
                 vec![cond.as_ref(), on_true.as_ref(), on_false.as_ref()],
             Apply(ref func, ref params) => {
@@ -188,10 +222,27 @@ impl<T:Clone> Expr<T> {
             MakeStruct(ref mut exprs) => exprs.iter_mut().collect(),
             MakeVector(ref mut exprs) => exprs.iter_mut().collect(),
             GetField(ref mut expr, _) => vec![expr.as_mut()],
+            Length(ref mut expr) => vec![expr.as_mut()],
             Merge(ref mut bldr, ref mut value) => vec![bldr.as_mut(), value.as_mut()],
             Res(ref mut bldr) => vec![bldr.as_mut()],
-            For(ref mut data, ref mut bldr, ref mut func) =>
-                vec![data.as_mut(), bldr.as_mut(), func.as_mut()],
+            For{ref mut iters, ref mut builder, ref mut func} => {
+                let mut res: Vec<&mut Expr<T>> = vec![];
+                for iter in iters {
+                    res.push(iter.data.as_mut());
+                    if let Some(ref mut s) = iter.start {
+                        res.push(s);
+                    }
+                    if let Some(ref mut e) = iter.end {
+                        res.push(e);
+                    }
+                    if let Some(ref mut s) = iter.stride {
+                        res.push(s);
+                    }
+                }
+                res.push(builder.as_mut());
+                res.push(func.as_mut());
+                res
+            }
             If(ref mut cond, ref mut on_true, ref mut on_false) =>
                 vec![cond.as_mut(), on_true.as_mut(), on_false.as_mut()],
             Apply(ref mut func, ref mut params) => {
@@ -202,6 +253,86 @@ impl<T:Clone> Expr<T> {
             // Explicitly list types instead of doing _ => ... to remember to add new types.
             BoolLiteral(_) | I32Literal(_) | I64Literal(_) | F32Literal(_) | F64Literal(_) | Ident(_) | NewBuilder => vec![]
         }.into_iter()
+    }
+
+    /// Compares two expression trees, returning true if they are the same modulo symbol names.
+    /// Symbols in the two expressions must have a one to one correspondance for the trees to be
+    /// considered equal. If an undefined symbol is encountered in &self during the comparison,
+    /// returns an error.
+    pub fn compare_ignoring_symbols(&self, other: &Expr<T>) -> WeldResult<bool> {
+        use self::ExprKind::*;
+        use std::collections::HashMap;
+        let mut sym_map: HashMap<&Symbol, &Symbol> = HashMap::new();
+
+        fn _compare_ignoring_symbols<'b, 'a, U:TypeBounds>(e1: &'a Expr<U>, e2: &'b Expr<U>, sym_map: &mut HashMap<&'a Symbol, &'b Symbol>) -> WeldResult<bool> {
+            // First, check the type.
+            if e1.ty != e2.ty {
+                return Ok(false)
+            }
+            // Check the kind of each expression. same_kind is true if each *non-expression* field
+            // is equal and the kind of the expression matches. Also records corresponding symbol names.
+            let same_kind = match (&e1.kind, &e2.kind) {
+                (&BinOp(ref kind1, _, _), &BinOp(ref kind2, _, _)) if kind1 == kind2 => Ok(true),
+                (&Let(ref sym1, _, _), &Let(ref sym2, _, _)) => {
+                    sym_map.insert(sym1, sym2);
+                    Ok(true)
+                },
+                (&Lambda(ref params1, _), &Lambda(ref params2, _)) => {
+                    // Just compare types, and assume the symbol names "match up".
+                    if params1.len() == params2.len() && params1.iter().zip(params2).all(|t| t.0.ty == t.1.ty) {
+                        for (p1, p2) in params1.iter().zip(params2) {
+                            sym_map.insert(&p1.name,  &p2.name);
+                        }
+                        Ok(true)
+                    } else {
+                        Ok(false)
+                    }
+                },
+                (&NewBuilder, &NewBuilder) => Ok(true),
+                (&MakeStruct(..), &MakeStruct(..)) => Ok(true),
+                (&MakeVector(..), &MakeVector(..)) => Ok(true),
+                (&GetField(_, idx1), &GetField(_, idx2)) if idx1 == idx2 => Ok(true),
+                (&Length(..), &Length(..)) => Ok(true),
+                (&Merge(..), &Merge(..)) => Ok(true),
+                (&Res(..), &Res(..)) => Ok(true),
+                (&For{..}, &For{..}) => Ok(true),
+                (&If(..), &If(..)) => Ok(true),
+                (&Apply(..), &Apply(..)) => Ok(true),
+                (&BoolLiteral(ref l), &BoolLiteral(ref r)) if l == r => Ok(true),
+                (&I32Literal(ref l), &I32Literal(ref r)) if l == r => Ok(true),
+                (&I64Literal(ref l), &I64Literal(ref r)) if l == r => Ok(true),
+                (&F32Literal(ref l), &F32Literal(ref r)) if l == r => Ok(true),
+                (&F64Literal(ref l), &F64Literal(ref r)) if l == r => Ok(true),
+                (&Ident(ref l), &Ident(ref r)) => {
+                    if let Some(lv) = sym_map.get(l) {
+                        Ok(**lv == *r)
+                    } else {
+                        Err(WeldError::new("undefined symbol when comparing expressions".to_string()))
+                    }
+                }
+                _ => Ok(false) // all else fail.
+            };
+
+            // Return if encountered and error or kind doesn't match.
+            if same_kind.is_err() || !same_kind.as_ref().unwrap() {
+                return same_kind
+            }
+
+            // Recursively check the children.
+            let e1_children: Vec<_> = e1.children().collect();
+            let e2_children: Vec<_> = e2.children().collect();
+            if e1_children.len() != e2_children.len() {
+                return Ok(false)
+            }
+            for (c1, c2) in e1_children.iter().zip(e2_children) {
+                let res = _compare_ignoring_symbols(&c1, &c2, sym_map);     
+                if res.is_err() || !res.as_ref().unwrap() {
+                    return res
+                }
+            }
+            return Ok(true)
+        }
+        _compare_ignoring_symbols(self, other, &mut sym_map)
     }
 
     /// Substitute Ident nodes with the given symbol for another expression, stopping when an
@@ -247,6 +378,17 @@ impl<T:Clone> Expr<T> {
         func(self);
         for c in self.children() {
             c.traverse(func);
+        }
+    }
+
+    /// Recursively transforms an expression in place by running a function on it and optionally replacing it with another expression.
+    pub fn transform<F>(&mut self, func: &mut F) where F: FnMut(&mut Expr<T>) -> Option<Expr<T>> {
+        if let Some(e) = func(self) {
+            *self = e;
+            return self.transform(func);
+        }
+        for c in self.children_mut() {
+            c.transform(func);
         }
     }
 }

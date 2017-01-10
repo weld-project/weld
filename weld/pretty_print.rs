@@ -10,7 +10,7 @@ use super::partial_types::*;
 // TODO: These methods could take a mutable string as an argument, or even a fmt::Format.
 
 /// A trait for printing types.
-pub trait PrintableType: Clone {
+pub trait PrintableType: TypeBounds {
     fn print(&self) -> String;
 }
 
@@ -77,6 +77,27 @@ pub fn print_typed_expr<T: PrintableType>(expr: &Expr<T>) -> String {
     print_expr_impl(expr, true)
 }
 
+fn print_iters<T: PrintableType>(iters: &Vec<Iter<T>>, typed: bool) -> String {
+    let mut iter_strs = vec![];
+    for iter in iters {
+        if let Some(_) = iter.start {
+            iter_strs.push(format!("iter({},{},{},{})",
+                print_expr_impl(iter.data.as_ref(), typed),
+                print_expr_impl(iter.start.as_ref().unwrap(), typed),
+                print_expr_impl(iter.end.as_ref().unwrap(), typed),
+                print_expr_impl(iter.stride.as_ref().unwrap(), typed)));
+        } else {
+            iter_strs.push(print_expr_impl(iter.data.as_ref(), typed));
+        }
+    }
+
+    if iters.len() > 1 {
+        format!("zip({})", iter_strs.join(","))
+    } else {
+        iter_strs[0].clone()
+    }
+}
+
 /// Main work to print an expression.
 fn print_expr_impl<T: PrintableType>(expr: &Expr<T>, typed: bool) -> String {
     match expr.kind {
@@ -136,6 +157,8 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>, typed: bool) -> String {
 
         GetField(ref param, index) => format!("{}.${}", print_expr_impl(param, typed), index),
 
+        Length(ref expr) => format!("len({})", print_expr_impl(expr, typed)),
+
         Lambda(ref params, ref body) => {
             let mut res = join("|", ",", "|", params.iter().map(|e| print_parameter(e, typed)));
             res.push_str(&print_expr_impl(body, typed));
@@ -150,9 +173,9 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>, typed: bool) -> String {
             format!("merge({},{})", print_expr_impl(builder, typed), print_expr_impl(value, typed))
         }
 
-        For(ref data, ref builder, ref func) => {
+        For{ref iters, ref builder, ref func} => {
             format!("for({},{},{})",
-                print_expr_impl(data, typed),
+                print_iters(iters, typed),
                 print_expr_impl(builder, typed),
                 print_expr_impl(func, typed))
         }

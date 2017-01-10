@@ -6,6 +6,7 @@
 use std::vec::Vec;
 
 use super::ast::Symbol;
+use super::ast::Iter;
 use super::ast::BinOpKind::*;
 use super::ast::ExprKind::*;
 use super::ast::ScalarKind::*;
@@ -355,6 +356,44 @@ impl<'t> Parser<'t> {
         Ok(expr)
     }
 
+    /// Parses a for loop iterator expression starting at the current position. This could also be
+    /// a vector expression (i.e., without an explicit iter(..).
+    fn parse_iter(&mut self) -> WeldResult<Iter<PartialType>> {
+        if *self.peek() == TIter {
+            try!(self.consume(TIter));
+            try!(self.consume(TOpenParen));
+            let data = try!(self.expr());
+            let mut start = None;
+            let mut end = None;
+            let mut stride = None;
+            if *self.peek() == TComma {
+                try!(self.consume(TComma));
+                start = Some(try!(self.expr()));
+                try!(self.consume(TComma));
+                end = Some(try!(self.expr()));
+                try!(self.consume(TComma));
+                stride = Some(try!(self.expr()));
+            }
+            let iter = Iter{
+                data: data,
+                start: start,
+                end: end,
+                stride: stride
+            };
+            try!(self.consume(TCloseParen));
+            Ok(iter)
+        } else {
+            let data = try!(self.expr());
+            let iter = Iter{
+                data: data,
+                start: None,
+                end: None,
+                stride: None
+            };
+            Ok(iter)
+        }
+    }
+
     /// Parse a terminal expression at the bottom of the precedence chain.
     fn leaf_expr(&mut self) -> WeldResult<Box<PartialExpr>> {
         match *self.next() {
@@ -416,13 +455,34 @@ impl<'t> Parser<'t> {
 
             TFor => {
                 try!(self.consume(TOpenParen));
-                let data = try!(self.expr());
+                let mut iters = vec![];
+                // Zips only appear as syntactic sugar in the context of Fors.
+                if *self.peek() == TZip {
+                    try!(self.consume(TZip));
+                    try!(self.consume(TOpenParen));
+                    iters.push(try!(self.parse_iter()));
+                    while *self.peek() == TComma {
+                        try!(self.consume(TComma));
+                        iters.push(try!(self.parse_iter()));
+                    }
+                    try!(self.consume(TCloseParen));
+                } else {
+                    // Single unzipped vector.
+                    iters.push(try!(self.parse_iter()));
+                }
                 try!(self.consume(TComma));
                 let builders = try!(self.expr());
                 try!(self.consume(TComma));
                 let body = try!(self.expr());
                 try!(self.consume(TCloseParen));
-                Ok(expr_box(For(data, builders, body)))
+                Ok(expr_box(For{iters: iters, builder: builders, func: body}))
+            }
+
+            TLen => {
+                try!(self.consume(TOpenParen));
+                let vector = try!(self.expr());
+                try!(self.consume(TCloseParen));
+                Ok(expr_box(Length(vector)))
             }
 
             TMerge => {
