@@ -52,18 +52,18 @@ pub fn inline_apply<T: TypeBounds>(expr: &mut Expr<T>) {
 pub fn fuse_loops_horizontal(expr: &mut Expr<Type>) {
     expr.transform(&mut |ref mut expr| {
         let mut sym_gen = SymbolGenerator::from_expression(expr);
-        if let For{iters: ref iters1, builder: ref outer_bldr, func: ref outer_func} = expr.kind {
-            if iters1.len() > 1 {
+        if let For{iters: ref all_iters, builder: ref outer_bldr, func: ref outer_func} = expr.kind {
+            if all_iters.len() > 1 {
                 // Vector of tuples containing the params and expressions of functions in nested lambdas.
                 let mut lambdas = vec![];
                 let mut common_data = None;
                 // Used to check if the same rows of each output are touched by the outer for.
-                let iter_data = (&iters1[0].start, &iters1[0].end, &iters1[0].stride);
+                let first_iter = (&all_iters[0].start, &all_iters[0].end, &all_iters[0].stride);
                 // First, check if all the lambdas are over the same vector and have a pattern we can merge.
                 // Below, for each iterator in the for loop, we checked if each nested for loop is
                 // over the same vector and has the same Iter parameters (i.e., same start, end, stride).
-                if iters1.iter().all(|ref iter| {
-                    if (&iter.start, &iter.end, &iter.stride) == iter_data {
+                if all_iters.iter().all(|ref iter| {
+                    if (&iter.start, &iter.end, &iter.stride) == first_iter {
                         // Make sure each nested for loop follows the ``result(for(a, appender, ...)) pattern.
                         if let Res(ref res_bldr) = iter.data.kind {
                             if let For{iters: ref iters2, builder: ref bldr2, func: ref lambda} = res_bldr.kind {
@@ -163,9 +163,9 @@ pub fn fuse_loops_horizontal(expr: &mut Expr<Type>) {
                         ty: expr.ty.clone(),
                         kind: For{iters: vec![Iter{
                             data: Box::new(new_iter_expr),
-                            start: iters1[0].start.clone(),
-                            end: iters1[0].end.clone(),
-                            stride: iters1[0].stride.clone()
+                            start: all_iters[0].start.clone(),
+                            end: all_iters[0].end.clone(),
+                            stride: all_iters[0].stride.clone()
                         }], builder: outer_bldr.clone(), func: outer_func.clone()}
                     });
                 }
@@ -180,9 +180,9 @@ pub fn fuse_loops_horizontal(expr: &mut Expr<Type>) {
 pub fn fuse_loops_vertical(expr: &mut Expr<Type>) {
     expr.transform(&mut |ref mut expr| {
         let mut sym_gen = SymbolGenerator::from_expression(expr);
-        if let For { iters: ref iters1, builder: ref bldr1, func: ref nested } = expr.kind {
-            if iters1.len() == 1 {
-                let ref iter1 = iters1[0];
+        if let For { iters: ref all_iters, builder: ref bldr1, func: ref nested } = expr.kind {
+            if all_iters.len() == 1 {
+                let ref iter1 = all_iters[0];
                 if let Res(ref res_bldr) = iter1.data.kind {
                     if let For { iters: ref iters2, builder: ref bldr2, func: ref lambda } =
                         res_bldr.kind {
