@@ -138,35 +138,35 @@ impl PartialExpr {
             Ident(ref name) => Ident(name.clone()),
             NewBuilder => NewBuilder,
 
-            BinOp(op, ref left, ref right) =>
-                BinOp(op, try!(typed_box(left)), try!(typed_box(right))),
+            BinOp{kind, ref left, ref right} =>
+                BinOp{kind: kind, left: try!(typed_box(left)), right: try!(typed_box(right))},
 
-            Let(ref name, ref value, ref body) =>
-                Let(name.clone(), try!(typed_box(value)), try!(typed_box(body))),
+            Let{ref name, ref value, ref body} =>
+                Let{name: name.clone(), value: try!(typed_box(value)), body: try!(typed_box(body))},
 
-            Lambda(ref params, ref body) => {
+            Lambda{ref params, ref body} => {
                 let params: WeldResult<Vec<_>> = params.iter().map(|p| p.to_typed()).collect();
-                Lambda(try!(params), try!(typed_box(body)))
+                Lambda{params: try!(params), body: try!(typed_box(body))}
             }
 
-            MakeVector(ref exprs) => {
-                let exprs: WeldResult<Vec<_>> = exprs.iter().map(|e| e.to_typed()).collect();
-                MakeVector(try!(exprs))
+            MakeVector{ref elems} => {
+                let elems: WeldResult<Vec<_>> = elems.iter().map(|e| e.to_typed()).collect();
+                MakeVector{elems: try!(elems)}
             }
 
-            MakeStruct(ref exprs) => {
-                let exprs: WeldResult<Vec<_>> = exprs.iter().map(|e| e.to_typed()).collect();
-                MakeStruct(try!(exprs))
+            MakeStruct{ref elems} => {
+                let elems: WeldResult<Vec<_>> = elems.iter().map(|e| e.to_typed()).collect();
+                MakeStruct{elems: try!(elems)}
             }
 
-            GetField(ref expr, index) => GetField(try!(typed_box(expr)), index),
+            GetField{ref expr, index} => GetField{expr: try!(typed_box(expr)), index: index},
 
-            Length(ref expr) => Length(try!(typed_box(expr))),
+            Length{ref data} => Length{data: try!(typed_box(data))},
 
-            Merge(ref bldr, ref value) =>
-                Merge(try!(typed_box(bldr)), try!(typed_box(value))),
+            Merge{ref builder, ref value} =>
+                Merge{builder: try!(typed_box(builder)), value: try!(typed_box(value))},
 
-            Res(ref bldr) => Res(try!(typed_box(bldr))),
+            Res{ref builder} => Res{builder: try!(typed_box(builder))},
 
             For{ref iters, ref builder, ref func} => {
                 let mut typed_iters = vec![];
@@ -194,12 +194,12 @@ impl PartialExpr {
                 For{iters: typed_iters, builder: try!(typed_box(builder)), func: try!(typed_box(func))}
             }
 
-            If(ref cond, ref on_true, ref on_false) =>
-                If(try!(typed_box(cond)), try!(typed_box(on_true)), try!(typed_box(on_false))),
+            If{ref cond, ref on_true, ref on_false} =>
+                If{cond: try!(typed_box(cond)), on_true: try!(typed_box(on_true)), on_false: try!(typed_box(on_false))},
 
-            Apply(ref func, ref params) => {
+            Apply{ref func, ref params} => {
                 let params: WeldResult<Vec<_>> = params.iter().map(|p| p.to_typed()).collect();
-                Apply(try!(typed_box(func)), try!(params))
+                Apply{func: try!(typed_box(func)), params: try!(params)}
             }
         };
 

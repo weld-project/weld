@@ -78,27 +78,20 @@ pub enum ExprKind<T:TypeBounds> {
     I64Literal(i64),
     F32Literal(f32),
     F64Literal(f64),
-    BinOp(BinOpKind, Box<Expr<T>>, Box<Expr<T>>),
     Ident(Symbol),
+    BinOp{kind: BinOpKind, left: Box<Expr<T>>, right: Box<Expr<T>>},
+    MakeStruct{elems: Vec<Expr<T>>},
+    MakeVector{elems: Vec<Expr<T>>},
+    GetField{expr: Box<Expr<T>>, index: u32},
+    Length{data: Box<Expr<T>>},
+    Let{name: Symbol, value: Box<Expr<T>>, body: Box<Expr<T>>},
+    If{cond: Box<Expr<T>>, on_true: Box<Expr<T>>, on_false: Box<Expr<T>>},
+    Lambda{params: Vec<Parameter<T>>, body: Box<Expr<T>>},
+    Apply{func: Box<Expr<T>>, params: Vec<Expr<T>>},
     NewBuilder,  // TODO: this may need to take a parameter
-    MakeStruct(Vec<Expr<T>>),
-    MakeVector(Vec<Expr<T>>),
-    GetField(Box<Expr<T>>, u32),
-    Length(Box<Expr<T>>),
-    /// name, value, body
-    Let(Symbol, Box<Expr<T>>, Box<Expr<T>>),
-    /// condition, on_true, on_false
-    If(Box<Expr<T>>, Box<Expr<T>>, Box<Expr<T>>),
-    /// variables, body
-    Lambda(Vec<Parameter<T>>, Box<Expr<T>>),
-    /// function, params
-    Apply(Box<Expr<T>>, Vec<Expr<T>>),
-    /// iterator, builder, func
-    For {iters: Vec<Iter<T>>, builder: Box<Expr<T>>, func: Box<Expr<T>>},
-    /// builder, elem
-    Merge(Box<Expr<T>>, Box<Expr<T>>),
-    /// builder
-    Res(Box<Expr<T>>)
+    For{iters: Vec<Iter<T>>, builder: Box<Expr<T>>, func: Box<Expr<T>>},
+    Merge{builder: Box<Expr<T>>, value: Box<Expr<T>>},
+    Res{builder: Box<Expr<T>>},
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -173,15 +166,15 @@ impl<T:TypeBounds> Expr<T> {
     pub fn children(&self) -> vec::IntoIter<&Expr<T>> {
         use self::ExprKind::*;
         match self.kind {
-            BinOp(_, ref left, ref right) => vec![left.as_ref(), right.as_ref()],
-            Let(_, ref value, ref body) => vec![value.as_ref(), body.as_ref()],
-            Lambda(_, ref body) => vec![body.as_ref()],
-            MakeStruct(ref exprs) => exprs.iter().collect(),
-            MakeVector(ref exprs) => exprs.iter().collect(),
-            GetField(ref expr, _) => vec![expr.as_ref()],
-            Length(ref expr) => vec![expr.as_ref()],
-            Merge(ref bldr, ref value) => vec![bldr.as_ref(), value.as_ref()],
-            Res(ref bldr) => vec![bldr.as_ref()],
+            BinOp{ref left, ref right, ..} => vec![left.as_ref(), right.as_ref()],
+            Let{ref value, ref body, ..} => vec![value.as_ref(), body.as_ref()],
+            Lambda{ref body, ..} => vec![body.as_ref()],
+            MakeStruct{ref elems} => elems.iter().collect(),
+            MakeVector{ref elems} => elems.iter().collect(),
+            GetField{ref expr, ..} => vec![expr.as_ref()],
+            Length{ref data} => vec![data.as_ref()],
+            Merge{ref builder, ref value} => vec![builder.as_ref(), value.as_ref()],
+            Res{ref builder} => vec![builder.as_ref()],
             For{ref iters, ref builder, ref func} => {
                 let mut res: Vec<&Expr<T>> = vec![];
                 for iter in iters {
@@ -200,9 +193,9 @@ impl<T:TypeBounds> Expr<T> {
                 res.push(func.as_ref());
                 res
             }
-            If(ref cond, ref on_true, ref on_false) =>
+            If{ref cond, ref on_true, ref on_false} =>
                 vec![cond.as_ref(), on_true.as_ref(), on_false.as_ref()],
-            Apply(ref func, ref params) => {
+            Apply{ref func, ref params} => {
                 let mut res = vec![func.as_ref()];
                 res.extend(params.iter());
                 res
@@ -216,15 +209,15 @@ impl<T:TypeBounds> Expr<T> {
     pub fn children_mut(&mut self) -> vec::IntoIter<&mut Expr<T>> {
         use self::ExprKind::*;
         match self.kind {
-            BinOp(_, ref mut left, ref mut right) => vec![left.as_mut(), right.as_mut()],
-            Let(_, ref mut value, ref mut body) => vec![value.as_mut(), body.as_mut()],
-            Lambda(_, ref mut body) => vec![body.as_mut()],
-            MakeStruct(ref mut exprs) => exprs.iter_mut().collect(),
-            MakeVector(ref mut exprs) => exprs.iter_mut().collect(),
-            GetField(ref mut expr, _) => vec![expr.as_mut()],
-            Length(ref mut expr) => vec![expr.as_mut()],
-            Merge(ref mut bldr, ref mut value) => vec![bldr.as_mut(), value.as_mut()],
-            Res(ref mut bldr) => vec![bldr.as_mut()],
+            BinOp{ref mut left, ref mut right, ..} => vec![left.as_mut(), right.as_mut()],
+            Let{ref mut value, ref mut body, ..} => vec![value.as_mut(), body.as_mut()],
+            Lambda{ref mut body, ..} => vec![body.as_mut()],
+            MakeStruct{ref mut elems} => elems.iter_mut().collect(),
+            MakeVector{ref mut elems} => elems.iter_mut().collect(),
+            GetField{ref mut expr, ..} => vec![expr.as_mut()],
+            Length{ref mut data} => vec![data.as_mut()],
+            Merge{ref mut builder, ref mut value} => vec![builder.as_mut(), value.as_mut()],
+            Res{ref mut builder} => vec![builder.as_mut()],
             For{ref mut iters, ref mut builder, ref mut func} => {
                 let mut res: Vec<&mut Expr<T>> = vec![];
                 for iter in iters {
@@ -243,9 +236,9 @@ impl<T:TypeBounds> Expr<T> {
                 res.push(func.as_mut());
                 res
             }
-            If(ref mut cond, ref mut on_true, ref mut on_false) =>
+            If{ref mut cond, ref mut on_true, ref mut on_false} =>
                 vec![cond.as_mut(), on_true.as_mut(), on_false.as_mut()],
-            Apply(ref mut func, ref mut params) => {
+            Apply{ref mut func, ref mut params} => {
                 let mut res = vec![func.as_mut()];
                 res.extend(params.iter_mut());
                 res
@@ -272,12 +265,12 @@ impl<T:TypeBounds> Expr<T> {
             // Check the kind of each expression. same_kind is true if each *non-expression* field
             // is equal and the kind of the expression matches. Also records corresponding symbol names.
             let same_kind = match (&e1.kind, &e2.kind) {
-                (&BinOp(ref kind1, _, _), &BinOp(ref kind2, _, _)) if kind1 == kind2 => Ok(true),
-                (&Let(ref sym1, _, _), &Let(ref sym2, _, _)) => {
+                (&BinOp{kind: ref kind1, ..}, &BinOp{kind: ref kind2, ..}) if kind1 == kind2 => Ok(true),
+                (&Let{name: ref sym1, ..}, &Let{name: ref sym2, ..}) => {
                     sym_map.insert(sym1, sym2);
                     Ok(true)
                 },
-                (&Lambda(ref params1, _), &Lambda(ref params2, _)) => {
+                (&Lambda{params: ref params1, ..}, &Lambda{params: ref params2, ..}) => {
                     // Just compare types, and assume the symbol names "match up".
                     if params1.len() == params2.len() && params1.iter().zip(params2).all(|t| t.0.ty == t.1.ty) {
                         for (p1, p2) in params1.iter().zip(params2) {
@@ -289,15 +282,15 @@ impl<T:TypeBounds> Expr<T> {
                     }
                 },
                 (&NewBuilder, &NewBuilder) => Ok(true),
-                (&MakeStruct(..), &MakeStruct(..)) => Ok(true),
-                (&MakeVector(..), &MakeVector(..)) => Ok(true),
-                (&GetField(_, idx1), &GetField(_, idx2)) if idx1 == idx2 => Ok(true),
-                (&Length(..), &Length(..)) => Ok(true),
-                (&Merge(..), &Merge(..)) => Ok(true),
-                (&Res(..), &Res(..)) => Ok(true),
+                (&MakeStruct{..}, &MakeStruct{..}) => Ok(true),
+                (&MakeVector{..}, &MakeVector{..}) => Ok(true),
+                (&GetField{index: idx1, ..}, &GetField{index: idx2, ..}) if idx1 == idx2 => Ok(true),
+                (&Length{..}, &Length{..}) => Ok(true),
+                (&Merge{..}, &Merge{..}) => Ok(true),
+                (&Res{..}, &Res{..}) => Ok(true),
                 (&For{..}, &For{..}) => Ok(true),
-                (&If(..), &If(..)) => Ok(true),
-                (&Apply(..), &Apply(..)) => Ok(true),
+                (&If{..}, &If{..}) => Ok(true),
+                (&Apply{..}, &Apply{..}) => Ok(true),
                 (&BoolLiteral(ref l), &BoolLiteral(ref r)) if l == r => Ok(true),
                 (&I32Literal(ref l), &I32Literal(ref r)) if l == r => Ok(true),
                 (&I64Literal(ref l), &I64Literal(ref r)) if l == r => Ok(true),
@@ -352,14 +345,14 @@ impl<T:TypeBounds> Expr<T> {
 
         // Otherwise, replace any relevant children, unless we redefine the symbol.
         match self.kind {
-            Let(ref name, ref mut value, ref mut body) => {
+            Let{ref name, ref mut value, ref mut body} => {
                 value.substitute(symbol, replacement);
                 if name != symbol {
                     body.substitute(symbol, replacement);
                 }
             }
 
-            Lambda(ref params, ref mut body) => {
+            Lambda{ref params, ref mut body} => {
                 if params.iter().all(|p| p.name != *symbol) {
                     body.substitute(symbol, replacement);
                 }

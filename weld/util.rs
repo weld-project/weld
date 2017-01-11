@@ -23,9 +23,9 @@ impl SymbolGenerator {
 
         expr.traverse(&mut |e| {
             match e.kind {
-                Let(ref sym, _, _) => update_id(&mut id_map, sym),
+                Let{ref name, ..} => update_id(&mut id_map, name),
                 Ident(ref sym) => update_id(&mut id_map, sym),
-                Lambda(ref params, _) => {
+                Lambda{ref params, ..} => {
                     for ref p in params {
                         update_id(&mut id_map, &p.name);
                     }

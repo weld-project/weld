@@ -159,7 +159,7 @@ impl<'t> Parser<'t> {
         let value = try!(self.operator_expr());
         try!(self.consume(TSemicolon));
         let body = try!(self.expr());
-        let mut expr = expr_box(Let(name, value, body));
+        let mut expr = expr_box(Let{name: name, value: value, body: body});
         expr.ty = ty;
         Ok(expr)
     }
@@ -185,7 +185,7 @@ impl<'t> Parser<'t> {
             return weld_err!("Expected '|' or '||'")
         }
         let body = try!(self.expr());
-        Ok(expr_box(Lambda(params, body)))
+        Ok(expr_box(Lambda{params: params, body: body}))
     }
 
     /// Parse an expression involving operators (||, &&, +, -, etc down the precedence chain)
@@ -199,7 +199,7 @@ impl<'t> Parser<'t> {
         while *self.peek() == TLogicalOr {
             self.consume(TLogicalOr)?;
             let right = try!(self.logical_and_expr());
-            res = expr_box(BinOp(LogicalOr, res, right))
+            res = expr_box(BinOp{kind: LogicalOr, left: res, right: right})
         }
         Ok(res)
     }
@@ -210,7 +210,7 @@ impl<'t> Parser<'t> {
         while *self.peek() == TLogicalAnd {
             self.consume(TLogicalAnd)?;
             let right = try!(self.bitwise_or_expr());
-            res = expr_box(BinOp(LogicalAnd, res, right))
+            res = expr_box(BinOp{kind: LogicalAnd, left: res, right: right})
         }
         Ok(res)
     }
@@ -221,7 +221,7 @@ impl<'t> Parser<'t> {
         while *self.peek() == TBar {
             self.consume(TBar)?;
             let right = try!(self.xor_expr());
-            res = expr_box(BinOp(BitwiseOr, res, right))
+            res = expr_box(BinOp{kind: BitwiseOr, left: res, right: right})
         }
         Ok(res)
     }
@@ -232,7 +232,7 @@ impl<'t> Parser<'t> {
         while *self.peek() == TXor {
             self.consume(TXor)?;
             let right = try!(self.bitwise_and_expr());
-            res = expr_box(BinOp(Xor, res, right))
+            res = expr_box(BinOp{kind: Xor, left: res, right: right})
         }
         Ok(res)
     }
@@ -243,7 +243,7 @@ impl<'t> Parser<'t> {
         while *self.peek() == TBitwiseAnd {
             self.consume(TBitwiseAnd)?;
             let right = try!(self.equality_expr());
-            res = expr_box(BinOp(BitwiseAnd, res, right))
+            res = expr_box(BinOp{kind: BitwiseAnd, left: res, right: right})
         }
         Ok(res)
     }
@@ -256,9 +256,9 @@ impl<'t> Parser<'t> {
             let token = self.next();
             let right = try!(self.comparison_expr());
             if *token == TEqualEqual {
-                res = expr_box(BinOp(Equal, res, right))
+                res = expr_box(BinOp{kind: Equal, left: res, right: right})
             } else {
-                res = expr_box(BinOp(NotEqual, res, right))
+                res = expr_box(BinOp{kind: NotEqual, left: res, right: right})
             }
         }
         Ok(res)
@@ -277,7 +277,7 @@ impl<'t> Parser<'t> {
                 _ => GreaterThanOrEqual
             };
             let right = try!(self.sum_expr());
-            res = expr_box(BinOp(op, res, right))
+            res = expr_box(BinOp{kind: op, left: res, right: right})
         }
         Ok(res)
     }
@@ -289,9 +289,9 @@ impl<'t> Parser<'t> {
             let token = self.next();
             let right = try!(self.product_expr());
             if *token == TPlus {
-                res = expr_box(BinOp(Add, res, right))
+                res = expr_box(BinOp{kind: Add, left: res, right: right})
             } else {
-                res = expr_box(BinOp(Subtract, res, right))
+                res = expr_box(BinOp{kind: Subtract, left: res, right: right})
             }
         }
         Ok(res)
@@ -307,7 +307,7 @@ impl<'t> Parser<'t> {
                 _ => Modulo,
             };
             let right = try!(self.ascribe_expr());
-            res = expr_box(BinOp(op, res, right))
+            res = expr_box(BinOp{kind :op, left: res, right: right})
         }
         Ok(res)
     }
@@ -330,7 +330,7 @@ impl<'t> Parser<'t> {
                     TIdent(ref value) => {
                         if value.starts_with("$") {
                             match u32::from_str_radix(&value[1..], 10) {
-                                Ok(index) => expr = expr_box(GetField(expr, index)),
+                                Ok(index) => expr = expr_box(GetField{expr: expr, index: index}),
                                 _ => return weld_err!("Expected field index but got '{}'", value)
                             }
                         }
@@ -350,7 +350,7 @@ impl<'t> Parser<'t> {
                     }
                 }
                 try!(self.consume(TCloseParen));
-                expr = expr_box(Apply(expr, params))
+                expr = expr_box(Apply{func: expr, params: params})
             }
         }
         Ok(expr)
@@ -424,7 +424,7 @@ impl<'t> Parser<'t> {
                     }
                 }
                 try!(self.consume(TCloseBracket));
-                Ok(expr_box(MakeVector(exprs)))
+                Ok(expr_box(MakeVector{elems: exprs}))
             }
 
             TOpenBrace => {
@@ -439,7 +439,7 @@ impl<'t> Parser<'t> {
                     }
                 }
                 try!(self.consume(TCloseBrace));
-                Ok(expr_box(MakeStruct(exprs)))
+                Ok(expr_box(MakeStruct{elems:exprs}))
             }
 
             TIf => {
@@ -450,7 +450,7 @@ impl<'t> Parser<'t> {
                 try!(self.consume(TComma));
                 let on_false = try!(self.expr());
                 try!(self.consume(TCloseParen));
-                Ok(expr_box(If(cond, on_true, on_false)))
+                Ok(expr_box(If{cond: cond, on_true: on_true, on_false: on_false}))
             }
 
             TFor => {
@@ -480,9 +480,9 @@ impl<'t> Parser<'t> {
 
             TLen => {
                 try!(self.consume(TOpenParen));
-                let vector = try!(self.expr());
+                let data = try!(self.expr());
                 try!(self.consume(TCloseParen));
-                Ok(expr_box(Length(vector)))
+                Ok(expr_box(Length{data: data}))
             }
 
             TMerge => {
@@ -491,14 +491,14 @@ impl<'t> Parser<'t> {
                 try!(self.consume(TComma));
                 let value = try!(self.expr());
                 try!(self.consume(TCloseParen));
-                Ok(expr_box(Merge(builder, value)))
+                Ok(expr_box(Merge{builder: builder, value: value}))
             }
 
             TResult => {
                 try!(self.consume(TOpenParen));
                 let builder = try!(self.expr());
                 try!(self.consume(TCloseParen));
-                Ok(expr_box(Res(builder)))
+                Ok(expr_box(Res{builder: builder}))
             }
 
             TAppender => {

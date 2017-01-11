@@ -62,7 +62,7 @@ fn apply_macros(
     sym_gen: &mut SymbolGenerator
 ) -> WeldResult<bool> {
     let mut new_expr = None;
-    if let Apply(ref func, ref params) = expr.kind {
+    if let Apply{ref func, ref params} = expr.kind {
         if let Ident(ref name) = func.kind {
             if let Some(mac) = macros.get(name) {
                 let mut new_body = mac.body.clone();
@@ -89,7 +89,7 @@ fn apply_macros(
 }
 
 fn update_defined_ids(expr: &mut PartialExpr, sym_gen: &mut SymbolGenerator) {
-    if let Let(ref mut sym, ref value, ref mut body) = expr.kind {
+    if let Let{name: ref mut sym, ref value, ref mut body} = expr.kind {
         if sym.id == 0 {
             let new_sym = sym_gen.new_symbol(&sym.name);
             let new_ident = PartialExpr { kind: Ident(new_sym.clone()), ty: value.ty.clone() };
@@ -97,7 +97,7 @@ fn update_defined_ids(expr: &mut PartialExpr, sym_gen: &mut SymbolGenerator) {
             sym.id = new_sym.id;
         }
     }
-    if let Lambda(ref mut params, ref mut body) = expr.kind {
+    if let Lambda{ref mut params, ref mut body} = expr.kind {
         for ref mut param in params {
             let sym = &mut param.name;
             if sym.id == 0 {

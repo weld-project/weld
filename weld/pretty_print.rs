@@ -130,36 +130,36 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>, typed: bool) -> String {
             }
         }
 
-        BinOp(kind, ref left, ref right) =>
+        BinOp{kind, ref left, ref right} =>
             format!("({}{}{})",
                 print_expr_impl(left, typed), kind, print_expr_impl(right, typed)),
 
-        Let(ref symbol, ref value, ref body) => {
+        Let{ref name, ref value, ref body} => {
             if typed {
                 format!("(let {}:{}=({});{})",
-                    symbol,
+                    name,
                     value.ty.print(),
                     print_expr_impl(value, typed),
                     print_expr_impl(body, typed))
             } else {
                 format!("(let {}=({});{})",
-                    symbol,
+                    name,
                     print_expr_impl(value, typed),
                     print_expr_impl(body, typed))
             }
         }
 
-        MakeStruct(ref exprs) =>
-            join("{", ",", "}", exprs.iter().map(|e| print_expr_impl(e, typed))),
+        MakeStruct{ref elems} =>
+            join("{", ",", "}", elems.iter().map(|e| print_expr_impl(e, typed))),
 
-        MakeVector(ref exprs) =>
-            join("[", ",", "]", exprs.iter().map(|e| print_expr_impl(e, typed))),
+        MakeVector{ref elems} =>
+            join("[", ",", "]", elems.iter().map(|e| print_expr_impl(e, typed))),
 
-        GetField(ref param, index) => format!("{}.${}", print_expr_impl(param, typed), index),
+        GetField{ref expr, index} => format!("{}.${}", print_expr_impl(expr, typed), index),
 
-        Length(ref expr) => format!("len({})", print_expr_impl(expr, typed)),
+        Length{ref data} => format!("len({})", print_expr_impl(data, typed)),
 
-        Lambda(ref params, ref body) => {
+        Lambda{ref params, ref body} => {
             let mut res = join("|", ",", "|", params.iter().map(|e| print_parameter(e, typed)));
             res.push_str(&print_expr_impl(body, typed));
             res
@@ -167,9 +167,9 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>, typed: bool) -> String {
 
         NewBuilder => expr.ty.print(),
 
-        Res(ref builder) => format!("result({})", print_expr_impl(builder, typed)),
+        Res{ref builder} => format!("result({})", print_expr_impl(builder, typed)),
 
-        Merge(ref builder, ref value) => {
+        Merge{ref builder, ref value} => {
             format!("merge({},{})", print_expr_impl(builder, typed), print_expr_impl(value, typed))
         }
 
@@ -180,14 +180,14 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>, typed: bool) -> String {
                 print_expr_impl(func, typed))
         }
 
-        If(ref cond, ref on_true, ref on_false) => {
+        If{ref cond, ref on_true, ref on_false} => {
             format!("if({},{},{})",
                 print_expr_impl(cond, typed),
                 print_expr_impl(on_true, typed),
                 print_expr_impl(on_false, typed))
         }
 
-        Apply(ref func, ref params) => {
+        Apply{ref func, ref params} => {
             let mut res = format!("({})", print_expr_impl(func, typed));
             res.push_str(&join("(", ",", ")", params.iter().map(|e| print_expr_impl(e, typed))));
             res
