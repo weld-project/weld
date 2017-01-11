@@ -212,7 +212,7 @@ impl LlvmGenerator {
                 Ok(var)
             },
 
-            BinOp(kind, ref left, ref right) => {
+            BinOp{kind, ref left, ref right} => {
                 let op_name = try!(llvm_binop(kind, &left.ty));
                 let left_var = try!(self.gen_expr(left, ctx));
                 let right_var = try!(self.gen_expr(right, ctx));
@@ -222,7 +222,7 @@ impl LlvmGenerator {
                 Ok(var)
             },
 
-            Let(ref name, ref value, ref body) => {
+            Let{ref name, ref value, ref body} => {
                 let value_var = try!(self.gen_expr(value, ctx));
                 let name = llvm_symbol(name);
                 let ty = try!(self.llvm_type(&value.ty)).to_string();
@@ -231,7 +231,7 @@ impl LlvmGenerator {
                 self.gen_expr(body, ctx)
             },
 
-            If(ref cond, ref on_true, ref on_false) => {
+            If{ref cond, ref on_true, ref on_false} => {
                 let cond_var = try!(self.gen_expr(cond, ctx));
                 let id = ctx.if_ids.next();
                 let true_label = format!("{}.true", id);
@@ -373,7 +373,7 @@ pub fn compile_program(program: &Program) -> WeldResult<easy_ll::CompiledModule>
     try!(type_inference::infer_types(&mut expr));
     let expr = try!(expr.to_typed());
     match expr.kind {
-        Lambda(ref params, ref body) => {
+        Lambda{ref params, ref body} => {
             let mut gen = LlvmGenerator::new();
             try!(gen.add_function_on_pointers("run", params, body));
             println!("{}", gen.result());

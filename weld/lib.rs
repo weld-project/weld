@@ -3,7 +3,8 @@
 // development but can be removed later.
 #![cfg_attr(not(test), allow(dead_code))]
 
-#[macro_use] extern crate lazy_static;
+#[macro_use]
+extern crate lazy_static;
 extern crate regex;
 extern crate easy_ll;
 
@@ -29,4 +30,5 @@ pub mod transforms;
 pub mod type_inference;
 pub mod util;
 
-#[cfg(test)] mod tests;
+#[cfg(test)]
+mod tests;

@@ -29,18 +29,18 @@ fn main() {
             Ok(raw_readline) => {
                 rl.add_history_entry(&raw_readline);
                 readline = raw_readline;
-            },
+            }
             Err(ReadlineError::Interrupted) => {
                 println!("Exiting!");
-                break
-            },
+                break;
+            }
             Err(ReadlineError::Eof) => {
                 println!("Exiting!");
-                break
-            },
+                break;
+            }
             Err(err) => {
                 println!("Error: {:?}", err);
-                break
+                break;
             }
         }
 
@@ -79,14 +79,15 @@ fn main() {
         let mut expr = expr.to_typed().unwrap();
 
         transforms::fuse_loops_horizontal(&mut expr);
-        println!("After horizontal loop fusion:\n{}\n", print_typed_expr(&expr));
+        println!("After horizontal loop fusion:\n{}\n",
+                 print_typed_expr(&expr));
 
         transforms::fuse_loops_vertical(&mut expr);
         println!("After vertical loop fusion:\n{}\n", print_typed_expr(&expr));
 
-        if let Lambda(ref args, ref body) = expr.kind {
+        if let Lambda { ref params, ref body } = expr.kind {
             let mut generator = LlvmGenerator::new();
-            if let Err(ref e) = generator.add_function_on_pointers("run", args, body) {
+            if let Err(ref e) = generator.add_function_on_pointers("run", params, body) {
                 println!("Error during LLVM code gen:\n{}\n", e);
                 continue;
             }

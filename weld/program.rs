@@ -10,7 +10,7 @@ use super::partial_types::*;
 pub struct Program {
     pub macros: Vec<Macro>,
     /// Program body -- this will likely be a Lambda, but not always.
-    pub body: PartialExpr
+    pub body: PartialExpr,
 }
 
 /// A macro we will substitute at compile time.
@@ -18,5 +18,5 @@ pub struct Program {
 pub struct Macro {
     pub name: Symbol,
     pub parameters: Vec<Symbol>,
-    pub body: PartialExpr
+    pub body: PartialExpr,
 }

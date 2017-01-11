@@ -15,7 +15,8 @@ use super::partial_types::*;
 use super::error::*;
 use super::util::SymbolGenerator;
 
-#[cfg(test)] use super::pretty_print::*;
+#[cfg(test)]
+use super::pretty_print::*;
 
 const MAX_MACRO_DEPTH: i32 = 30;
 
@@ -49,20 +50,19 @@ pub fn process_expression(expr: &PartialExpr, macros: &Vec<Macro>) -> WeldResult
     let mut expr = expr.clone();
     for _ in 1..MAX_MACRO_DEPTH {
         if !try!(apply_macros(&mut expr, &macro_map, &mut sym_gen)) {
-            return Ok(expr)
+            return Ok(expr);
         }
     }
 
     weld_err!("Marco expansion recursed past {} levels", MAX_MACRO_DEPTH)
 }
 
-fn apply_macros(
-    expr: &mut PartialExpr,
-    macros: &HashMap<Symbol, &Macro>,
-    sym_gen: &mut SymbolGenerator
-) -> WeldResult<bool> {
+fn apply_macros(expr: &mut PartialExpr,
+                macros: &HashMap<Symbol, &Macro>,
+                sym_gen: &mut SymbolGenerator)
+                -> WeldResult<bool> {
     let mut new_expr = None;
-    if let Apply(ref func, ref params) = expr.kind {
+    if let Apply { ref func, ref params } = expr.kind {
         if let Ident(ref name) = func.kind {
             if let Some(mac) = macros.get(name) {
                 let mut new_body = mac.body.clone();
@@ -89,20 +89,26 @@ fn apply_macros(
 }
 
 fn update_defined_ids(expr: &mut PartialExpr, sym_gen: &mut SymbolGenerator) {
-    if let Let(ref mut sym, ref value, ref mut body) = expr.kind {
+    if let Let { name: ref mut sym, ref value, ref mut body } = expr.kind {
         if sym.id == 0 {
             let new_sym = sym_gen.new_symbol(&sym.name);
-            let new_ident = PartialExpr { kind: Ident(new_sym.clone()), ty: value.ty.clone() };
+            let new_ident = PartialExpr {
+                kind: Ident(new_sym.clone()),
+                ty: value.ty.clone(),
+            };
             body.substitute(sym, &new_ident);
             sym.id = new_sym.id;
         }
     }
-    if let Lambda(ref mut params, ref mut body) = expr.kind {
+    if let Lambda { ref mut params, ref mut body } = expr.kind {
         for ref mut param in params {
             let sym = &mut param.name;
             if sym.id == 0 {
                 let new_sym = sym_gen.new_symbol(&sym.name);
-                let new_ident = PartialExpr { kind: Ident(new_sym.clone()), ty: param.ty.clone() };
+                let new_ident = PartialExpr {
+                    kind: Ident(new_sym.clone()),
+                    ty: param.ty.clone(),
+                };
                 body.substitute(sym, &new_ident);
                 sym.id = new_sym.id;
             }
@@ -169,13 +175,15 @@ fn macros_introducing_symbols() {
     let macros = parse_macros("macro adder(a) = |x| x+a;").unwrap();
     let expr = parse_expr("adder(x+adder(x)(1))").unwrap();
     let result = process_expression(&expr, &macros).unwrap();
-    assert_eq!(print_expr(&result).as_str(), "|x#1|(x#1+(x+(|x#2|(x#2+x))(1)))");
+    assert_eq!(print_expr(&result).as_str(),
+               "|x#1|(x#1+(x+(|x#2|(x#2+x))(1)))");
 
     // Similar case with multiple macros.
     let macros = parse_macros("macro adder(a)=|x|x+a; macro twice(a)=(let x=a; x+x);").unwrap();
     let expr = parse_expr("adder(twice(x))").unwrap();
     let result = process_expression(&expr, &macros).unwrap();
-    assert_eq!(print_expr(&result).as_str(), "|x#1|(x#1+(let x#2=(x);(x#2+x#2)))");
+    assert_eq!(print_expr(&result).as_str(),
+               "|x#1|(x#1+(let x#2=(x);(x#2+x#2)))");
 }
 
 #[test]
@@ -184,5 +192,5 @@ fn standard_macros() {
     let program = parse_program("map([1,2,3], |a|a+1)").unwrap();
     let result = process_program(&program).unwrap();
     assert_eq!(print_expr(&result).as_str(),
-        "result(for([1,2,3],appender[?],|b,x|merge(b,(|a|(a+1))(x))))");
+               "result(for([1,2,3],appender[?],|b,x|merge(b,(|a|(a+1))(x))))");
 }

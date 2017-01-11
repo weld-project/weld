@@ -8,12 +8,12 @@ use super::ast::ExprKind::*;
 /// Each SymbolGenerator tracks the maximum ID used for every symbol name, and can be used to
 /// create new symbols with the same name but a unique ID.
 pub struct SymbolGenerator {
-    id_map: HashMap<String, i32>
+    id_map: HashMap<String, i32>,
 }
 
 impl SymbolGenerator {
     /// Initialize a SymbolGenerator from all the symbols defined in an expression.
-    pub fn from_expression<T:TypeBounds>(expr: &Expr<T>) -> SymbolGenerator {
+    pub fn from_expression<T: TypeBounds>(expr: &Expr<T>) -> SymbolGenerator {
         let mut id_map: HashMap<String, i32> = HashMap::new();
 
         let update_id = |id_map: &mut HashMap<String, i32>, symbol: &Symbol| {
@@ -23,13 +23,13 @@ impl SymbolGenerator {
 
         expr.traverse(&mut |e| {
             match e.kind {
-                Let(ref sym, _, _) => update_id(&mut id_map, sym),
+                Let { ref name, .. } => update_id(&mut id_map, name),
                 Ident(ref sym) => update_id(&mut id_map, sym),
-                Lambda(ref params, _) => {
+                Lambda { ref params, .. } => {
                     for ref p in params {
                         update_id(&mut id_map, &p.name);
                     }
-                },
+                }
                 _ => {}
             }
         });
@@ -40,20 +40,26 @@ impl SymbolGenerator {
     pub fn new_symbol(&mut self, name: &String) -> Symbol {
         let id = self.id_map.entry(name.clone()).or_insert(-1);
         *id += 1;
-        Symbol { name: name.clone(), id: *id }
+        Symbol {
+            name: name.clone(),
+            id: *id,
+        }
     }
 }
 
 /// Utility struct to generate string IDs with a given prefix.
 pub struct IdGenerator {
     prefix: String,
-    next_id: i32
+    next_id: i32,
 }
 
 impl IdGenerator {
     /// Initialize an IdGenerator that will begin counting up from 0.
     pub fn new(prefix: &str) -> IdGenerator {
-        IdGenerator { prefix: String::from(prefix), next_id: 0 }
+        IdGenerator {
+            prefix: String::from(prefix),
+            next_id: 0,
+        }
     }
 
     /// Generate a new ID.

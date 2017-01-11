@@ -30,7 +30,7 @@ impl PrintableType for Type {
                 res.push_str(&ret.print());
                 res.push_str(")");
                 res
-            },
+            }
             Builder(Appender(ref t)) => format!("appender[{}]", t.print()),
             Builder(Merger(ref t, op)) => format!("merger[{},{}]", t.print(), op),
         }
@@ -55,7 +55,7 @@ impl PrintableType for PartialType {
                 let mut res = join("(", ",", ")=>", params.iter().map(|e| e.print()));
                 res.push_str(&ret.print());
                 res
-            },
+            }
             Builder(Appender(ref elem)) => format!("appender[{}]", elem.print()),
             Builder(Merger(ref t, op)) => format!("merger[{},{}]", t.print(), op),
         }
@@ -82,10 +82,10 @@ fn print_iters<T: PrintableType>(iters: &Vec<Iter<T>>, typed: bool) -> String {
     for iter in iters {
         if let Some(_) = iter.start {
             iter_strs.push(format!("iter({},{},{},{})",
-                print_expr_impl(iter.data.as_ref(), typed),
-                print_expr_impl(iter.start.as_ref().unwrap(), typed),
-                print_expr_impl(iter.end.as_ref().unwrap(), typed),
-                print_expr_impl(iter.stride.as_ref().unwrap(), typed)));
+                                   print_expr_impl(iter.data.as_ref(), typed),
+                                   print_expr_impl(iter.start.as_ref().unwrap(), typed),
+                                   print_expr_impl(iter.end.as_ref().unwrap(), typed),
+                                   print_expr_impl(iter.stride.as_ref().unwrap(), typed)));
         } else {
             iter_strs.push(print_expr_impl(iter.data.as_ref(), typed));
         }
@@ -130,66 +130,85 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>, typed: bool) -> String {
             }
         }
 
-        BinOp(kind, ref left, ref right) =>
+        BinOp { kind, ref left, ref right } => {
             format!("({}{}{})",
-                print_expr_impl(left, typed), kind, print_expr_impl(right, typed)),
+                    print_expr_impl(left, typed),
+                    kind,
+                    print_expr_impl(right, typed))
+        }
 
-        Let(ref symbol, ref value, ref body) => {
+        Let { ref name, ref value, ref body } => {
             if typed {
                 format!("(let {}:{}=({});{})",
-                    symbol,
-                    value.ty.print(),
-                    print_expr_impl(value, typed),
-                    print_expr_impl(body, typed))
+                        name,
+                        value.ty.print(),
+                        print_expr_impl(value, typed),
+                        print_expr_impl(body, typed))
             } else {
                 format!("(let {}=({});{})",
-                    symbol,
-                    print_expr_impl(value, typed),
-                    print_expr_impl(body, typed))
+                        name,
+                        print_expr_impl(value, typed),
+                        print_expr_impl(body, typed))
             }
         }
 
-        MakeStruct(ref exprs) =>
-            join("{", ",", "}", exprs.iter().map(|e| print_expr_impl(e, typed))),
+        MakeStruct { ref elems } => {
+            join("{",
+                 ",",
+                 "}",
+                 elems.iter().map(|e| print_expr_impl(e, typed)))
+        }
 
-        MakeVector(ref exprs) =>
-            join("[", ",", "]", exprs.iter().map(|e| print_expr_impl(e, typed))),
+        MakeVector { ref elems } => {
+            join("[",
+                 ",",
+                 "]",
+                 elems.iter().map(|e| print_expr_impl(e, typed)))
+        }
 
-        GetField(ref param, index) => format!("{}.${}", print_expr_impl(param, typed), index),
+        GetField { ref expr, index } => format!("{}.${}", print_expr_impl(expr, typed), index),
 
-        Length(ref expr) => format!("len({})", print_expr_impl(expr, typed)),
+        Length { ref data } => format!("len({})", print_expr_impl(data, typed)),
 
-        Lambda(ref params, ref body) => {
-            let mut res = join("|", ",", "|", params.iter().map(|e| print_parameter(e, typed)));
+        Lambda { ref params, ref body } => {
+            let mut res = join("|",
+                               ",",
+                               "|",
+                               params.iter().map(|e| print_parameter(e, typed)));
             res.push_str(&print_expr_impl(body, typed));
             res
         }
 
         NewBuilder => expr.ty.print(),
 
-        Res(ref builder) => format!("result({})", print_expr_impl(builder, typed)),
+        Res { ref builder } => format!("result({})", print_expr_impl(builder, typed)),
 
-        Merge(ref builder, ref value) => {
-            format!("merge({},{})", print_expr_impl(builder, typed), print_expr_impl(value, typed))
+        Merge { ref builder, ref value } => {
+            format!("merge({},{})",
+                    print_expr_impl(builder, typed),
+                    print_expr_impl(value, typed))
         }
 
-        For{ref iters, ref builder, ref func} => {
+        For { ref iters, ref builder, ref func } => {
             format!("for({},{},{})",
-                print_iters(iters, typed),
-                print_expr_impl(builder, typed),
-                print_expr_impl(func, typed))
+                    print_iters(iters, typed),
+                    print_expr_impl(builder, typed),
+                    print_expr_impl(func, typed))
         }
 
-        If(ref cond, ref on_true, ref on_false) => {
+        If { ref cond, ref on_true, ref on_false } => {
             format!("if({},{},{})",
-                print_expr_impl(cond, typed),
-                print_expr_impl(on_true, typed),
-                print_expr_impl(on_false, typed))
+                    print_expr_impl(cond, typed),
+                    print_expr_impl(on_true, typed),
+                    print_expr_impl(on_false, typed))
         }
 
-        Apply(ref func, ref params) => {
+        Apply { ref func, ref params } => {
             let mut res = format!("({})", print_expr_impl(func, typed));
-            res.push_str(&join("(", ",", ")", params.iter().map(|e| print_expr_impl(e, typed))));
+            res.push_str(&join("(",
+                               ",",
+                               ")",
+                               params.iter().map(|e| print_expr_impl(e, typed))));
             res
         }
     }
@@ -204,11 +223,13 @@ fn print_parameter<T: PrintableType>(param: &Parameter<T>, typed: bool) -> Strin
     }
 }
 
-fn join<T:Iterator<Item=String>>(start: &str, sep: &str, end: &str, strings: T) -> String {
+fn join<T: Iterator<Item = String>>(start: &str, sep: &str, end: &str, strings: T) -> String {
     let mut res = String::new();
     res.push_str(start);
     for (i, s) in strings.enumerate() {
-        if i > 0 { res.push_str(sep); }
+        if i > 0 {
+            res.push_str(sep);
+        }
         res.push_str(&s);
     }
     res.push_str(end);

@@ -19,8 +19,8 @@ use super::util::SymbolGenerator;
 ///   case, the expressions after inlining may lead to more inlining).
 pub fn inline_apply<T: TypeBounds>(expr: &mut Expr<T>) {
     expr.transform(&mut |ref mut expr| {
-        if let Apply(ref func, ref args) = expr.kind {
-            if let Lambda(ref params, ref body) = func.kind {
+        if let Apply { ref func, params: ref args } = expr.kind {
+            if let Lambda { ref params, ref body } = func.kind {
                 let mut new = *body.clone();
                 for (param, arg) in params.iter().zip(args) {
                     new.substitute(&param.name, &arg);
@@ -65,7 +65,7 @@ pub fn fuse_loops_horizontal(expr: &mut Expr<Type>) {
                 if all_iters.iter().all(|ref iter| {
                     if (&iter.start, &iter.end, &iter.stride) == first_iter {
                         // Make sure each nested for loop follows the ``result(for(a, appender, ...)) pattern.
-                        if let Res(ref res_bldr) = iter.data.kind {
+                        if let Res{builder: ref res_bldr} = iter.data.kind {
                             if let For{iters: ref iters2, builder: ref bldr2, func: ref lambda} = res_bldr.kind {
                                 if common_data.is_none() {
                                     common_data = Some(iters2.clone());
@@ -74,13 +74,13 @@ pub fn fuse_loops_horizontal(expr: &mut Expr<Type>) {
                                     if let NewBuilder = bldr2.kind {
                                         if let Builder(ref kind) = bldr2.ty {
                                             if let Appender(_) = *kind {
-                                                if let Lambda(ref args, ref body) = lambda.kind {
-                                                    if let Merge(ref bldr,  ref expr) = body.kind {
-                                                        if let Ident(ref n) = bldr.kind {
+                                                if let Lambda{params: ref args, ref body} = lambda.kind {
+                                                    if let Merge{ref builder, ref value} = body.kind {
+                                                        if let Ident(ref n) = builder.kind {
                                                             if *n == args[0].name {
                                                                 // Save the arguments and expressions for the function so
                                                                 // they can be used for fusion later.
-                                                                lambdas.push((args.clone(), expr.clone())); 
+                                                                lambdas.push((args.clone(), value.clone())); 
                                                                 return true
                                                             }
                                                         }
@@ -138,24 +138,24 @@ pub fn fuse_loops_horizontal(expr: &mut Expr<Type>) {
                     // each zipped for is over the same input data.
                     let new_merge_expr = Expr{
                         ty: builder_type.clone(),
-                        kind: Merge(
-                            Box::new(new_bldr_expr),
-                            Box::new(Expr{
+                        kind: Merge{
+                            builder: Box::new(new_bldr_expr),
+                            value: Box::new(Expr{
                                 ty: merge_type.clone(),
-                                kind: MakeStruct(lambdas.iter().map(|ref lambda| *lambda.1.clone()).collect::<Vec<_>>())
+                                kind: MakeStruct{elems: lambdas.iter().map(|ref lambda| *lambda.1.clone()).collect::<Vec<_>>()}
                             })
-                            )
+                            }
                     };
                     let new_func = Expr{
                         ty: Function(new_params.iter().map(|ref p| p.ty.clone()).collect::<Vec<_>>(), Box::new(builder_type.clone())),
-                        kind: Lambda(new_params, Box::new(new_merge_expr))
+                        kind: Lambda{params: new_params, body: Box::new(new_merge_expr)}
                     };
                     let new_iter_expr = Expr{
                         ty: Vector(Box::new(merge_type.clone())),
-                        kind: Res(Box::new(Expr{
+                        kind: Res{builder: Box::new(Expr{
                             ty: builder_type.clone(),
                             kind: For{iters: common_data.unwrap(), builder: Box::new(Expr{ty: builder_type.clone(), kind: NewBuilder}), func: Box::new(new_func)}
-                        })),
+                        })},
                     };
 
                     // TODO(shoumik): Any way to avoid the clones here?
@@ -183,7 +183,7 @@ pub fn fuse_loops_vertical(expr: &mut Expr<Type>) {
         if let For { iters: ref all_iters, builder: ref bldr1, func: ref nested } = expr.kind {
             if all_iters.len() == 1 {
                 let ref iter1 = all_iters[0];
-                if let Res(ref res_bldr) = iter1.data.kind {
+                if let Res { builder: ref res_bldr } = iter1.data.kind {
                     if let For { iters: ref iters2, builder: ref bldr2, func: ref lambda } =
                         res_bldr.kind {
                         if iters2.iter().all(|ref i| consumes_all(&i)) {
@@ -222,16 +222,16 @@ fn consumes_all(iter: &Iter<Type>) -> bool {
                           end: Some(ref end),
                           stride: Some(ref stride) } = iter {
         // Checks if the stride is 1 and an entire vector represented by a symbol is consumed.
-        if let (&I64Literal(1), &I64Literal(0), &Ident(ref name), &Length(ref v)) =
+        if let (&I64Literal(1), &I64Literal(0), &Ident(ref name), &Length { data: ref v }) =
             (&stride.kind, &start.kind, &data.kind, &end.kind) {
             if let Ident(ref vsym) = v.kind {
                 return vsym == name;
             }
         }
         // Checks if an entire vector literal is consumed.
-        if let (&I64Literal(1), &I64Literal(0), &MakeVector(ref exprs)) =
+        if let (&I64Literal(1), &I64Literal(0), &MakeVector { ref elems }) =
             (&stride.kind, &start.kind, &data.kind) {
-            let num_elems = exprs.len() as i64;
+            let num_elems = elems.len() as i64;
             if let I64Literal(x) = end.kind {
                 return num_elems == x;
             }
@@ -259,8 +259,8 @@ fn replace_builder(lambda: &Expr<Type>,
     }
 
     let mut new_func = None;
-    if let Lambda(ref args, ref body) = lambda.kind {
-        if let Lambda(ref nested_args, _) = nested.kind {
+    if let Lambda { params: ref args, ref body } = lambda.kind {
+        if let Lambda { params: ref nested_args, .. } = nested.kind {
             let mut new_body = *body.clone();
             let ref old_bldr = args[0];
             let ref old_arg = args[1];
@@ -271,11 +271,15 @@ fn replace_builder(lambda: &Expr<Type>,
             };
             new_body.transform(&mut |ref mut e| {
                 match e.kind {
-                    Merge(ref bldr, ref elem) if same_iden(&(*bldr).kind, &old_bldr.name) => {
-                        let params: Vec<Expr<Type>> = vec![new_bldr.clone(), *elem.clone()];
+                    Merge { ref builder, ref value } if same_iden(&(*builder).kind,
+                                                                  &old_bldr.name) => {
+                        let params: Vec<Expr<Type>> = vec![new_bldr.clone(), *value.clone()];
                         let mut expr = Expr {
                             ty: e.ty.clone(),
-                            kind: Apply(Box::new(nested.clone()), params),
+                            kind: Apply {
+                                func: Box::new(nested.clone()),
+                                params: params,
+                            },
                         };
                         inline_apply(&mut expr);
                         Some(expr)
@@ -309,7 +313,10 @@ fn replace_builder(lambda: &Expr<Type>,
                                              ret_ty.clone());
                 new_func = Some(Expr {
                     ty: new_func_type,
-                    kind: Lambda(new_params, Box::new(new_body)),
+                    kind: Lambda {
+                        params: new_params,
+                        body: Box::new(new_body),
+                    },
                 })
             }
         }

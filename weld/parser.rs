@@ -18,7 +18,8 @@ use super::program::*;
 use super::tokenizer::*;
 use super::tokenizer::Token::*;
 
-#[cfg(test)] use super::pretty_print::*;
+#[cfg(test)]
+use super::pretty_print::*;
 
 /// Parse the complete input string as a Weld program (optional macros plus one expression).
 pub fn parse_program(input: &str) -> WeldResult<Program> {
@@ -26,7 +27,7 @@ pub fn parse_program(input: &str) -> WeldResult<Program> {
     let mut parser = Parser::new(&tokens);
     let res = parser.program();
     if res.is_ok() && !parser.is_done() {
-        return weld_err!("Unexpected token: {}", parser.peek())
+        return weld_err!("Unexpected token: {}", parser.peek());
     }
     res
 }
@@ -37,7 +38,7 @@ pub fn parse_macros(input: &str) -> WeldResult<Vec<Macro>> {
     let mut parser = Parser::new(&tokens);
     let res = parser.macros();
     if res.is_ok() && !parser.is_done() {
-        return weld_err!("Unexpected token: {}", parser.peek())
+        return weld_err!("Unexpected token: {}", parser.peek());
     }
     res
 }
@@ -48,7 +49,7 @@ pub fn parse_expr(input: &str) -> WeldResult<PartialExpr> {
     let mut parser = Parser::new(&tokens);
     let res = parser.expr().map(|b| *b);
     if res.is_ok() && !parser.is_done() {
-        return weld_err!("Unexpected token: {}", parser.peek())
+        return weld_err!("Unexpected token: {}", parser.peek());
     }
     res
 }
@@ -59,7 +60,7 @@ pub fn parse_type(input: &str) -> WeldResult<PartialType> {
     let mut parser = Parser::new(&tokens);
     let res = parser.type_();
     if res.is_ok() && !parser.is_done() {
-        return weld_err!("Unexpected token: {}", parser.peek())
+        return weld_err!("Unexpected token: {}", parser.peek());
     }
     res
 }
@@ -68,12 +69,15 @@ pub fn parse_type(input: &str) -> WeldResult<PartialType> {
 /// Assumes that the tokens end with a TEndOfInput.
 struct Parser<'t> {
     tokens: &'t [Token],
-    position: usize
+    position: usize,
 }
 
 impl<'t> Parser<'t> {
     fn new(tokens: &[Token]) -> Parser {
-        Parser { tokens: tokens, position: 0 }
+        Parser {
+            tokens: tokens,
+            position: 0,
+        }
     }
 
     /// Look at the next token to be parsed.
@@ -106,7 +110,10 @@ impl<'t> Parser<'t> {
     fn program(&mut self) -> WeldResult<Program> {
         let macros = try!(self.macros());
         let body = try!(self.expr());
-        Ok(Program { macros: macros, body: *body })
+        Ok(Program {
+            macros: macros,
+            body: *body,
+        })
     }
 
     /// Parse a list of macros starting at the current position.
@@ -136,7 +143,11 @@ impl<'t> Parser<'t> {
         try!(self.consume(TEqual));
         let body = try!(self.expr());
         try!(self.consume(TSemicolon));
-        Ok(Macro { name: name, parameters: params, body: *body })
+        Ok(Macro {
+            name: name,
+            parameters: params,
+            body: *body,
+        })
     }
 
     /// Parse an expression starting at the current position.
@@ -159,7 +170,11 @@ impl<'t> Parser<'t> {
         let value = try!(self.operator_expr());
         try!(self.consume(TSemicolon));
         let body = try!(self.expr());
-        let mut expr = expr_box(Let(name, value, body));
+        let mut expr = expr_box(Let {
+            name: name,
+            value: value,
+            body: body,
+        });
         expr.ty = ty;
         Ok(expr)
     }
@@ -173,19 +188,25 @@ impl<'t> Parser<'t> {
             while *self.peek() != TBar {
                 let name = try!(self.symbol());
                 let ty = try!(self.optional_type());
-                params.push(PartialParameter { name: name, ty: ty });
+                params.push(PartialParameter {
+                    name: name,
+                    ty: ty,
+                });
                 if *self.peek() == TComma {
                     self.next();
                 } else if *self.peek() != TBar {
-                    return weld_err!("Expected ',' or '|'")
+                    return weld_err!("Expected ',' or '|'");
                 }
             }
             try!(self.consume(TBar));
         } else if *token != TLogicalOr {
-            return weld_err!("Expected '|' or '||'")
+            return weld_err!("Expected '|' or '||'");
         }
         let body = try!(self.expr());
-        Ok(expr_box(Lambda(params, body)))
+        Ok(expr_box(Lambda {
+            params: params,
+            body: body,
+        }))
     }
 
     /// Parse an expression involving operators (||, &&, +, -, etc down the precedence chain)
@@ -199,7 +220,11 @@ impl<'t> Parser<'t> {
         while *self.peek() == TLogicalOr {
             self.consume(TLogicalOr)?;
             let right = try!(self.logical_and_expr());
-            res = expr_box(BinOp(LogicalOr, res, right))
+            res = expr_box(BinOp {
+                kind: LogicalOr,
+                left: res,
+                right: right,
+            })
         }
         Ok(res)
     }
@@ -210,7 +235,11 @@ impl<'t> Parser<'t> {
         while *self.peek() == TLogicalAnd {
             self.consume(TLogicalAnd)?;
             let right = try!(self.bitwise_or_expr());
-            res = expr_box(BinOp(LogicalAnd, res, right))
+            res = expr_box(BinOp {
+                kind: LogicalAnd,
+                left: res,
+                right: right,
+            })
         }
         Ok(res)
     }
@@ -221,7 +250,11 @@ impl<'t> Parser<'t> {
         while *self.peek() == TBar {
             self.consume(TBar)?;
             let right = try!(self.xor_expr());
-            res = expr_box(BinOp(BitwiseOr, res, right))
+            res = expr_box(BinOp {
+                kind: BitwiseOr,
+                left: res,
+                right: right,
+            })
         }
         Ok(res)
     }
@@ -232,7 +265,11 @@ impl<'t> Parser<'t> {
         while *self.peek() == TXor {
             self.consume(TXor)?;
             let right = try!(self.bitwise_and_expr());
-            res = expr_box(BinOp(Xor, res, right))
+            res = expr_box(BinOp {
+                kind: Xor,
+                left: res,
+                right: right,
+            })
         }
         Ok(res)
     }
@@ -243,7 +280,11 @@ impl<'t> Parser<'t> {
         while *self.peek() == TBitwiseAnd {
             self.consume(TBitwiseAnd)?;
             let right = try!(self.equality_expr());
-            res = expr_box(BinOp(BitwiseAnd, res, right))
+            res = expr_box(BinOp {
+                kind: BitwiseAnd,
+                left: res,
+                right: right,
+            })
         }
         Ok(res)
     }
@@ -256,9 +297,17 @@ impl<'t> Parser<'t> {
             let token = self.next();
             let right = try!(self.comparison_expr());
             if *token == TEqualEqual {
-                res = expr_box(BinOp(Equal, res, right))
+                res = expr_box(BinOp {
+                    kind: Equal,
+                    left: res,
+                    right: right,
+                })
             } else {
-                res = expr_box(BinOp(NotEqual, res, right))
+                res = expr_box(BinOp {
+                    kind: NotEqual,
+                    left: res,
+                    right: right,
+                })
             }
         }
         Ok(res)
@@ -269,15 +318,19 @@ impl<'t> Parser<'t> {
         let mut res = try!(self.sum_expr());
         // Unlike other expressions, we only allow one operator here; prevents stuff like a>b>c
         if *self.peek() == TLessThan || *self.peek() == TLessThanOrEqual ||
-                *self.peek() == TGreaterThan || *self.peek() == TGreaterThanOrEqual {
+           *self.peek() == TGreaterThan || *self.peek() == TGreaterThanOrEqual {
             let op = match *self.next() {
                 TLessThan => LessThan,
                 TGreaterThan => GreaterThan,
                 TLessThanOrEqual => LessThanOrEqual,
-                _ => GreaterThanOrEqual
+                _ => GreaterThanOrEqual,
             };
             let right = try!(self.sum_expr());
-            res = expr_box(BinOp(op, res, right))
+            res = expr_box(BinOp {
+                kind: op,
+                left: res,
+                right: right,
+            })
         }
         Ok(res)
     }
@@ -289,9 +342,17 @@ impl<'t> Parser<'t> {
             let token = self.next();
             let right = try!(self.product_expr());
             if *token == TPlus {
-                res = expr_box(BinOp(Add, res, right))
+                res = expr_box(BinOp {
+                    kind: Add,
+                    left: res,
+                    right: right,
+                })
             } else {
-                res = expr_box(BinOp(Subtract, res, right))
+                res = expr_box(BinOp {
+                    kind: Subtract,
+                    left: res,
+                    right: right,
+                })
             }
         }
         Ok(res)
@@ -307,7 +368,11 @@ impl<'t> Parser<'t> {
                 _ => Modulo,
             };
             let right = try!(self.ascribe_expr());
-            res = expr_box(BinOp(op, res, right))
+            res = expr_box(BinOp {
+                kind: op,
+                left: res,
+                right: right,
+            })
         }
         Ok(res)
     }
@@ -330,15 +395,21 @@ impl<'t> Parser<'t> {
                     TIdent(ref value) => {
                         if value.starts_with("$") {
                             match u32::from_str_radix(&value[1..], 10) {
-                                Ok(index) => expr = expr_box(GetField(expr, index)),
-                                _ => return weld_err!("Expected field index but got '{}'", value)
+                                Ok(index) => {
+                                    expr = expr_box(GetField {
+                                        expr: expr,
+                                        index: index,
+                                    })
+                                }
+                                _ => return weld_err!("Expected field index but got '{}'", value),
                             }
                         }
                     }
 
-                    ref other => return weld_err!("Expected field index but got '{}'", other)
+                    ref other => return weld_err!("Expected field index but got '{}'", other),
                 }
-            } else {  // TOpenParen
+            } else {
+                // TOpenParen
                 let mut params: Vec<PartialExpr> = Vec::new();
                 while *self.peek() != TCloseParen {
                     let param = try!(self.expr());
@@ -346,11 +417,14 @@ impl<'t> Parser<'t> {
                     if *self.peek() == TComma {
                         self.next();
                     } else if *self.peek() != TCloseParen {
-                        return weld_err!("Expected ',' or ')'")
+                        return weld_err!("Expected ',' or ')'");
                     }
                 }
                 try!(self.consume(TCloseParen));
-                expr = expr_box(Apply(expr, params))
+                expr = expr_box(Apply {
+                    func: expr,
+                    params: params,
+                })
             }
         }
         Ok(expr)
@@ -374,21 +448,21 @@ impl<'t> Parser<'t> {
                 try!(self.consume(TComma));
                 stride = Some(try!(self.expr()));
             }
-            let iter = Iter{
+            let iter = Iter {
                 data: data,
                 start: start,
                 end: end,
-                stride: stride
+                stride: stride,
             };
             try!(self.consume(TCloseParen));
             Ok(iter)
         } else {
             let data = try!(self.expr());
-            let iter = Iter{
+            let iter = Iter {
                 data: data,
                 start: None,
                 end: None,
-                stride: None
+                stride: None,
             };
             Ok(iter)
         }
@@ -402,15 +476,20 @@ impl<'t> Parser<'t> {
             TF32Literal(value) => Ok(expr_box(F32Literal(value))),
             TF64Literal(value) => Ok(expr_box(F64Literal(value))),
             TBoolLiteral(value) => Ok(expr_box(BoolLiteral(value))),
-            TIdent(ref name) => Ok(expr_box(Ident(Symbol{name: name.clone(), id: 0}))),
+            TIdent(ref name) => {
+                Ok(expr_box(Ident(Symbol {
+                    name: name.clone(),
+                    id: 0,
+                })))
+            }
 
             TOpenParen => {
                 let expr = try!(self.expr());
                 if *self.next() != TCloseParen {
-                    return weld_err!("Expected ')'")
+                    return weld_err!("Expected ')'");
                 }
                 Ok(expr)
-            },
+            }
 
             TOpenBracket => {
                 let mut exprs: Vec<PartialExpr> = Vec::new();
@@ -420,11 +499,11 @@ impl<'t> Parser<'t> {
                     if *self.peek() == TComma {
                         self.next();
                     } else if *self.peek() != TCloseBracket {
-                        return weld_err!("Expected ',' or ']'")
+                        return weld_err!("Expected ',' or ']'");
                     }
                 }
                 try!(self.consume(TCloseBracket));
-                Ok(expr_box(MakeVector(exprs)))
+                Ok(expr_box(MakeVector { elems: exprs }))
             }
 
             TOpenBrace => {
@@ -435,11 +514,11 @@ impl<'t> Parser<'t> {
                     if *self.peek() == TComma {
                         self.next();
                     } else if *self.peek() != TCloseBrace {
-                        return weld_err!("Expected ',' or '}}'")
+                        return weld_err!("Expected ',' or '}}'");
                     }
                 }
                 try!(self.consume(TCloseBrace));
-                Ok(expr_box(MakeStruct(exprs)))
+                Ok(expr_box(MakeStruct { elems: exprs }))
             }
 
             TIf => {
@@ -450,7 +529,11 @@ impl<'t> Parser<'t> {
                 try!(self.consume(TComma));
                 let on_false = try!(self.expr());
                 try!(self.consume(TCloseParen));
-                Ok(expr_box(If(cond, on_true, on_false)))
+                Ok(expr_box(If {
+                    cond: cond,
+                    on_true: on_true,
+                    on_false: on_false,
+                }))
             }
 
             TFor => {
@@ -475,14 +558,18 @@ impl<'t> Parser<'t> {
                 try!(self.consume(TComma));
                 let body = try!(self.expr());
                 try!(self.consume(TCloseParen));
-                Ok(expr_box(For{iters: iters, builder: builders, func: body}))
+                Ok(expr_box(For {
+                    iters: iters,
+                    builder: builders,
+                    func: body,
+                }))
             }
 
             TLen => {
                 try!(self.consume(TOpenParen));
-                let vector = try!(self.expr());
+                let data = try!(self.expr());
                 try!(self.consume(TCloseParen));
-                Ok(expr_box(Length(vector)))
+                Ok(expr_box(Length { data: data }))
             }
 
             TMerge => {
@@ -491,14 +578,17 @@ impl<'t> Parser<'t> {
                 try!(self.consume(TComma));
                 let value = try!(self.expr());
                 try!(self.consume(TCloseParen));
-                Ok(expr_box(Merge(builder, value)))
+                Ok(expr_box(Merge {
+                    builder: builder,
+                    value: value,
+                }))
             }
 
             TResult => {
                 try!(self.consume(TOpenParen));
                 let builder = try!(self.expr());
                 try!(self.consume(TCloseParen));
-                Ok(expr_box(Res(builder)))
+                Ok(expr_box(Res { builder: builder }))
             }
 
             TAppender => {
@@ -513,15 +603,20 @@ impl<'t> Parser<'t> {
                 Ok(expr)
             }
 
-            ref other => weld_err!("Expected expression but got '{}'", other)
+            ref other => weld_err!("Expected expression but got '{}'", other),
         }
     }
 
     /// Parse a symbol starting at the current input position.
     fn symbol(&mut self) -> WeldResult<Symbol> {
         match *self.next() {
-            TIdent(ref name) => Ok(Symbol { name: name.clone(), id: 0 }),
-            ref other => weld_err!("Expected identifier but got '{}'", other)
+            TIdent(ref name) => {
+                Ok(Symbol {
+                    name: name.clone(),
+                    id: 0,
+                })
+            }
+            ref other => weld_err!("Expected identifier but got '{}'", other),
         }
     }
 
@@ -567,16 +662,16 @@ impl<'t> Parser<'t> {
                     if *self.peek() == TComma {
                         self.next();
                     } else if *self.peek() != TCloseBrace {
-                        return weld_err!("Expected ',' or '}}'")
+                        return weld_err!("Expected ',' or '}}'");
                     }
                 }
                 try!(self.consume(TCloseBrace));
                 Ok(Struct(types))
-            },
+            }
 
             TQuestion => Ok(Unknown),
 
-            ref other => weld_err!("Expected type but got '{}'", other)
+            ref other => weld_err!("Expected type but got '{}'", other),
         }
     }
 }

@@ -21,7 +21,7 @@ impl TypeBounds for PartialType {}
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum PartialBuilderKind {
     Appender(Box<PartialType>),
-    Merger(Box<PartialType>, BinOpKind)
+    Merger(Box<PartialType>, BinOpKind),
 }
 
 /// A partially typed expression.
@@ -32,7 +32,10 @@ pub type PartialParameter = Parameter<PartialType>;
 
 /// Create a box containing an untyped expression of the given kind.
 pub fn expr_box(kind: ExprKind<PartialType>) -> Box<PartialExpr> {
-    Box::new(PartialExpr { ty: PartialType::Unknown, kind: kind })
+    Box::new(PartialExpr {
+        ty: PartialType::Unknown,
+        kind: kind,
+    })
 }
 
 impl PartialType {
@@ -41,23 +44,22 @@ impl PartialType {
         use self::PartialType::*;
         use self::PartialBuilderKind::*;
         match *self {
-            Unknown =>
-                weld_err!("Incomplete partial type"),
-            Scalar(kind) =>
-                Ok(Type::Scalar(kind)),
-            Vector(ref elem) =>
-                Ok(Type::Vector(Box::new(try!(elem.to_type())))),
-            Builder(Appender(ref elem)) =>
-                Ok(Type::Builder(BuilderKind::Appender(Box::new(try!(elem.to_type()))))),
-            Builder(Merger(ref elem, op)) =>
-                Ok(Type::Builder(BuilderKind::Merger(Box::new(try!(elem.to_type())), op))),
+            Unknown => weld_err!("Incomplete partial type"),
+            Scalar(kind) => Ok(Type::Scalar(kind)),
+            Vector(ref elem) => Ok(Type::Vector(Box::new(try!(elem.to_type())))),
+            Builder(Appender(ref elem)) => {
+                Ok(Type::Builder(BuilderKind::Appender(Box::new(try!(elem.to_type())))))
+            }
+            Builder(Merger(ref elem, op)) => {
+                Ok(Type::Builder(BuilderKind::Merger(Box::new(try!(elem.to_type())), op)))
+            }
             Struct(ref elems) => {
                 let mut new_elems = Vec::with_capacity(elems.len());
                 for e in elems {
                     new_elems.push(try!(e.to_type()));
                 }
                 Ok(Type::Struct(new_elems))
-            },
+            }
             Function(ref params, ref res) => {
                 let mut new_params = Vec::with_capacity(params.len());
                 for p in params {
@@ -65,7 +67,7 @@ impl PartialType {
                 }
                 let new_res = try!(res.to_type());
                 Ok(Type::Function(new_params, Box::new(new_res)))
-            },
+            }
         }
     }
 
@@ -80,8 +82,9 @@ impl PartialType {
             Builder(Appender(ref elem)) => elem.is_complete(),
             Builder(Merger(ref elem, _)) => elem.is_complete(),
             Struct(ref elems) => elems.iter().all(|e| e.is_complete()),
-            Function(ref params, ref res) =>
+            Function(ref params, ref res) => {
                 params.iter().all(|p| p.is_complete()) && res.is_complete()
+            }
         }
     }
 }
@@ -116,7 +119,10 @@ impl PartialBuilderKind {
 impl PartialParameter {
     pub fn to_typed(&self) -> WeldResult<TypedParameter> {
         let t = try!(self.ty.to_type());
-        Ok(TypedParameter { name: self.name.clone(), ty: t })
+        Ok(TypedParameter {
+            name: self.name.clone(),
+            ty: t,
+        })
     }
 }
 
@@ -138,71 +144,108 @@ impl PartialExpr {
             Ident(ref name) => Ident(name.clone()),
             NewBuilder => NewBuilder,
 
-            BinOp(op, ref left, ref right) =>
-                BinOp(op, try!(typed_box(left)), try!(typed_box(right))),
+            BinOp { kind, ref left, ref right } => {
+                BinOp {
+                    kind: kind,
+                    left: try!(typed_box(left)),
+                    right: try!(typed_box(right)),
+                }
+            }
 
-            Let(ref name, ref value, ref body) =>
-                Let(name.clone(), try!(typed_box(value)), try!(typed_box(body))),
+            Let { ref name, ref value, ref body } => {
+                Let {
+                    name: name.clone(),
+                    value: try!(typed_box(value)),
+                    body: try!(typed_box(body)),
+                }
+            }
 
-            Lambda(ref params, ref body) => {
+            Lambda { ref params, ref body } => {
                 let params: WeldResult<Vec<_>> = params.iter().map(|p| p.to_typed()).collect();
-                Lambda(try!(params), try!(typed_box(body)))
+                Lambda {
+                    params: try!(params),
+                    body: try!(typed_box(body)),
+                }
             }
 
-            MakeVector(ref exprs) => {
-                let exprs: WeldResult<Vec<_>> = exprs.iter().map(|e| e.to_typed()).collect();
-                MakeVector(try!(exprs))
+            MakeVector { ref elems } => {
+                let elems: WeldResult<Vec<_>> = elems.iter().map(|e| e.to_typed()).collect();
+                MakeVector { elems: try!(elems) }
             }
 
-            MakeStruct(ref exprs) => {
-                let exprs: WeldResult<Vec<_>> = exprs.iter().map(|e| e.to_typed()).collect();
-                MakeStruct(try!(exprs))
+            MakeStruct { ref elems } => {
+                let elems: WeldResult<Vec<_>> = elems.iter().map(|e| e.to_typed()).collect();
+                MakeStruct { elems: try!(elems) }
             }
 
-            GetField(ref expr, index) => GetField(try!(typed_box(expr)), index),
+            GetField { ref expr, index } => {
+                GetField {
+                    expr: try!(typed_box(expr)),
+                    index: index,
+                }
+            }
 
-            Length(ref expr) => Length(try!(typed_box(expr))),
+            Length { ref data } => Length { data: try!(typed_box(data)) },
 
-            Merge(ref bldr, ref value) =>
-                Merge(try!(typed_box(bldr)), try!(typed_box(value))),
+            Merge { ref builder, ref value } => {
+                Merge {
+                    builder: try!(typed_box(builder)),
+                    value: try!(typed_box(value)),
+                }
+            }
 
-            Res(ref bldr) => Res(try!(typed_box(bldr))),
+            Res { ref builder } => Res { builder: try!(typed_box(builder)) },
 
-            For{ref iters, ref builder, ref func} => {
+            For { ref iters, ref builder, ref func } => {
                 let mut typed_iters = vec![];
                 for iter in iters {
                     let start = match iter.start {
                         Some(ref s) => Some(try!(typed_box(s))),
-                        None => None
-                    }; 
+                        None => None,
+                    };
                     let end = match iter.end {
                         Some(ref e) => Some(try!(typed_box(e))),
-                        None => None
-                    }; 
+                        None => None,
+                    };
                     let stride = match iter.stride {
                         Some(ref s) => Some(try!(typed_box(s))),
-                        None => None
-                    }; 
-                    let typed_iter = Iter{
+                        None => None,
+                    };
+                    let typed_iter = Iter {
                         data: try!(typed_box(&iter.data)),
                         start: start,
                         end: end,
-                        stride: stride
+                        stride: stride,
                     };
                     typed_iters.push(typed_iter);
                 }
-                For{iters: typed_iters, builder: try!(typed_box(builder)), func: try!(typed_box(func))}
+                For {
+                    iters: typed_iters,
+                    builder: try!(typed_box(builder)),
+                    func: try!(typed_box(func)),
+                }
             }
 
-            If(ref cond, ref on_true, ref on_false) =>
-                If(try!(typed_box(cond)), try!(typed_box(on_true)), try!(typed_box(on_false))),
+            If { ref cond, ref on_true, ref on_false } => {
+                If {
+                    cond: try!(typed_box(cond)),
+                    on_true: try!(typed_box(on_true)),
+                    on_false: try!(typed_box(on_false)),
+                }
+            }
 
-            Apply(ref func, ref params) => {
+            Apply { ref func, ref params } => {
                 let params: WeldResult<Vec<_>> = params.iter().map(|p| p.to_typed()).collect();
-                Apply(try!(typed_box(func)), try!(params))
+                Apply {
+                    func: try!(typed_box(func)),
+                    params: try!(params),
+                }
             }
         };
 
-        Ok(TypedExpr { ty: try!(self.ty.to_type()), kind: new_kind })
+        Ok(TypedExpr {
+            ty: try!(self.ty.to_type()),
+            kind: new_kind,
+        })
     }
 }
