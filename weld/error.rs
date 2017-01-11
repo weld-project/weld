@@ -21,9 +21,13 @@ impl fmt::Display for WeldError {
 }
 
 impl error::Error for WeldError {
-    fn description(&self) -> &str { &self.0 }
+    fn description(&self) -> &str {
+        &self.0
+    }
 
-    fn cause(&self) -> Option<&error::Error> { None }
+    fn cause(&self) -> Option<&error::Error> {
+        None
+    }
 }
 
 impl From<LlvmError> for WeldError {

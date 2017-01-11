@@ -11,10 +11,11 @@ pub struct CodeBuilder {
 
 impl CodeBuilder {
     /// Adds a single line of code to this code builder, formatting it based on previous code.
-    pub fn add_line<S>(&mut self, line: S) where S: AsRef<str> {
+    pub fn add_line<S>(&mut self, line: S)
+        where S: AsRef<str>
+    {
         let line = line.as_ref().trim();
-        let indent_change = (line.matches("{").count() as i32) -
-            (line.matches("}").count() as i32);
+        let indent_change = (line.matches("{").count() as i32) - (line.matches("}").count() as i32);
         let new_indent_level = max(0, self.indent_level + indent_change);
 
         // Lines starting with '}' should be de-indented even if they contain '{' after; in
@@ -25,8 +26,8 @@ impl CodeBuilder {
             self.indent_level
         };
 
-        //self.code.push_str(this_line_indent.as_ref());
-        for _ in 0 .. this_line_indent * self.indent_size {
+        // self.code.push_str(this_line_indent.as_ref());
+        for _ in 0..this_line_indent * self.indent_size {
             self.code.push(' ');
         }
         self.code.push_str(line);
@@ -36,7 +37,9 @@ impl CodeBuilder {
     }
 
     /// Adds one or more lines (split by "\n") to this code builder.
-    pub fn add<S>(&mut self, code: S) where S: AsRef<str> {
+    pub fn add<S>(&mut self, code: S)
+        where S: AsRef<str>
+    {
         for l in code.as_ref().lines() {
             self.add_line(l);
         }
@@ -67,7 +70,9 @@ impl CodeBuilder {
     }
 
     /// Returns a formatted string using the CodeBuilder.
-    pub fn format<S>(indent_size: i32, code: S) -> String where S: AsRef<str> {
+    pub fn format<S>(indent_size: i32, code: S) -> String
+        where S: AsRef<str>
+    {
         let mut c = CodeBuilder::with_indent_size(indent_size);
         c.add(code);
         c.code
@@ -80,51 +85,51 @@ fn code_builder_basic() {
 class A {
 blahblah;
 }";
-   let expected = "
+    let expected = "
 class A {
   blahblah;
 }
 ";
-   assert_eq!(CodeBuilder::format(2, input), expected);
+    assert_eq!(CodeBuilder::format(2, input), expected);
 
-   let input = "
+    let input = "
 class A {
 if (c) {
 duh
      }
 }";
-   let expected = "
+    let expected = "
 class A {
   if (c) {
     duh
   }
 }
 ";
-   assert_eq!(CodeBuilder::format(2, input), expected);
+    assert_eq!(CodeBuilder::format(2, input), expected);
 
-   let input = "
+    let input = "
 class A {
 if (c) { duh }
 }";
-   let expected = "
+    let expected = "
 class A {
   if (c) { duh }
 }
 ";
-   assert_eq!(CodeBuilder::format(2, input), expected);
+    assert_eq!(CodeBuilder::format(2, input), expected);
 
-   let input = "
+    let input = "
 class A {
 if (c) { duh }
 myLabel:
 blah
 }";
-   let expected = "
+    let expected = "
 class A {
   if (c) { duh }
 myLabel:
   blah
 }
 ";
-   assert_eq!(CodeBuilder::format(2, input), expected);
+    assert_eq!(CodeBuilder::format(2, input), expected);
 }

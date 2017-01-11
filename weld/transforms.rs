@@ -19,8 +19,8 @@ use super::util::SymbolGenerator;
 ///   case, the expressions after inlining may lead to more inlining).
 pub fn inline_apply<T: TypeBounds>(expr: &mut Expr<T>) {
     expr.transform(&mut |ref mut expr| {
-        if let Apply{ref func, params: ref args} = expr.kind {
-            if let Lambda{ref params, ref body} = func.kind {
+        if let Apply { ref func, params: ref args } = expr.kind {
+            if let Lambda { ref params, ref body } = func.kind {
                 let mut new = *body.clone();
                 for (param, arg) in params.iter().zip(args) {
                     new.substitute(&param.name, &arg);
@@ -183,7 +183,7 @@ pub fn fuse_loops_vertical(expr: &mut Expr<Type>) {
         if let For { iters: ref all_iters, builder: ref bldr1, func: ref nested } = expr.kind {
             if all_iters.len() == 1 {
                 let ref iter1 = all_iters[0];
-                if let Res{builder: ref res_bldr} = iter1.data.kind {
+                if let Res { builder: ref res_bldr } = iter1.data.kind {
                     if let For { iters: ref iters2, builder: ref bldr2, func: ref lambda } =
                         res_bldr.kind {
                         if iters2.iter().all(|ref i| consumes_all(&i)) {
@@ -222,14 +222,14 @@ fn consumes_all(iter: &Iter<Type>) -> bool {
                           end: Some(ref end),
                           stride: Some(ref stride) } = iter {
         // Checks if the stride is 1 and an entire vector represented by a symbol is consumed.
-        if let (&I64Literal(1), &I64Literal(0), &Ident(ref name), &Length{data: ref v}) =
+        if let (&I64Literal(1), &I64Literal(0), &Ident(ref name), &Length { data: ref v }) =
             (&stride.kind, &start.kind, &data.kind, &end.kind) {
             if let Ident(ref vsym) = v.kind {
                 return vsym == name;
             }
         }
         // Checks if an entire vector literal is consumed.
-        if let (&I64Literal(1), &I64Literal(0), &MakeVector{ref elems}) =
+        if let (&I64Literal(1), &I64Literal(0), &MakeVector { ref elems }) =
             (&stride.kind, &start.kind, &data.kind) {
             let num_elems = elems.len() as i64;
             if let I64Literal(x) = end.kind {
@@ -259,8 +259,8 @@ fn replace_builder(lambda: &Expr<Type>,
     }
 
     let mut new_func = None;
-    if let Lambda{params: ref args, ref body} = lambda.kind {
-        if let Lambda{params: ref nested_args, ..} = nested.kind {
+    if let Lambda { params: ref args, ref body } = lambda.kind {
+        if let Lambda { params: ref nested_args, .. } = nested.kind {
             let mut new_body = *body.clone();
             let ref old_bldr = args[0];
             let ref old_arg = args[1];
@@ -271,11 +271,15 @@ fn replace_builder(lambda: &Expr<Type>,
             };
             new_body.transform(&mut |ref mut e| {
                 match e.kind {
-                    Merge{ref builder, ref value} if same_iden(&(*builder).kind, &old_bldr.name) => {
+                    Merge { ref builder, ref value } if same_iden(&(*builder).kind,
+                                                                  &old_bldr.name) => {
                         let params: Vec<Expr<Type>> = vec![new_bldr.clone(), *value.clone()];
                         let mut expr = Expr {
                             ty: e.ty.clone(),
-                            kind: Apply{func: Box::new(nested.clone()), params: params},
+                            kind: Apply {
+                                func: Box::new(nested.clone()),
+                                params: params,
+                            },
                         };
                         inline_apply(&mut expr);
                         Some(expr)
@@ -309,7 +313,10 @@ fn replace_builder(lambda: &Expr<Type>,
                                              ret_ty.clone());
                 new_func = Some(Expr {
                     ty: new_func_type,
-                    kind: Lambda{params: new_params, body: Box::new(new_body)},
+                    kind: Lambda {
+                        params: new_params,
+                        body: Box::new(new_body),
+                    },
                 })
             }
         }

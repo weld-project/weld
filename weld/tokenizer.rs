@@ -38,12 +38,12 @@ pub enum Token {
     TIter,
     TLen,
     TAppender,
-    TOpenParen,     // (
-    TCloseParen,    // )
-    TOpenBracket,   // [
-    TCloseBracket,  // ]
-    TOpenBrace,     // {
-    TCloseBrace,    // }
+    TOpenParen, // (
+    TCloseParen, // )
+    TOpenBracket, // [
+    TCloseBracket, // ]
+    TOpenBrace, // {
+    TCloseBrace, // }
     TComma,
     TPlus,
     TMinus,
@@ -51,7 +51,7 @@ pub enum Token {
     TDivide,
     TModulo,
     TEqual,
-    TBar,           // |
+    TBar, // |
     TDot,
     TColon,
     TSemicolon,
@@ -66,7 +66,7 @@ pub enum Token {
     TLogicalOr,
     TBitwiseAnd,
     TXor,
-    TEndOfInput
+    TEndOfInput,
 }
 
 /// Break up a string into tokens.
@@ -125,7 +125,7 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
                 "len" => TLen,
                 "true" => TBoolLiteral(true),
                 "false" => TBoolLiteral(false),
-                _ => return weld_err!("Invalid input token: {}", text)
+                _ => return weld_err!("Invalid input token: {}", text),
             });
         } else if IDENT_RE.is_match(text) {
             tokens.push(TIdent(text.to_string()));
@@ -142,14 +142,14 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
         } else if I64_BASE_16_RE.is_match(text) {
             tokens.push(try!(parse_i64_literal(text, 16)))
         } else if F32_RE.is_match(text) {
-            match f32::from_str(&text[..text.len()-1]) {
+            match f32::from_str(&text[..text.len() - 1]) {
                 Ok(value) => tokens.push(Token::TF32Literal(value)),
-                Err(_) => return weld_err!("Invalid f32 literal: {}", text)
+                Err(_) => return weld_err!("Invalid f32 literal: {}", text),
             }
         } else if F64_RE.is_match(text) {
             match f64::from_str(text) {
                 Ok(value) => tokens.push(Token::TF64Literal(value)),
-                Err(_) => return weld_err!("Invalid f32 literal: {}", text)
+                Err(_) => return weld_err!("Invalid f32 literal: {}", text),
             }
         } else {
             tokens.push(match text {
@@ -181,7 +181,7 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
                 "||" => TLogicalOr,
                 "&" => TBitwiseAnd,
                 "^" => TXor,
-                _ => return weld_err!("Invalid input token: {}", text)
+                _ => return weld_err!("Invalid input token: {}", text),
             });
         }
     }
@@ -202,61 +202,65 @@ impl fmt::Display for Token {
             TIdent(ref value) => write!(f, "{}", value),
 
             // Cases that return fixed strings
-            ref other => write!(f, "{}", match *other {
-                // These cases are handled above but repeated here for exhaustive match
-                TI32Literal(_) => "",
-                TI64Literal(_) => "",
-                TF32Literal(_) => "",
-                TF64Literal(_) => "",
-                TBoolLiteral(_) => "",
-                TIdent(_) => "",
-                // Other cases that return fixed strings
-                TIf => "if",
-                TFor => "for",
-                TMerge => "merge",
-                TResult => "result",
-                TLet => "let",
-                TMacro => "macro",
-                TI32 => "i32",
-                TI64 => "i64",
-                TF32 => "f32",
-                TF64 => "f64",
-                TBool => "bool",
-                TVec => "vec",
-                TAppender => "appender",
-                TZip => "zip",
-                TIter => "iter",
-                TLen => "len",
-                TOpenParen => "(",
-                TCloseParen => ")",
-                TOpenBracket => "[",
-                TCloseBracket => "]",
-                TOpenBrace => "{",
-                TCloseBrace => "}",
-                TComma => ",",
-                TPlus => "+",
-                TMinus => "-",
-                TTimes => "*",
-                TDivide => "/",
-                TModulo => "%",
-                TEqual => "=",
-                TBar => "|",
-                TDot => ".",
-                TColon => ":",
-                TSemicolon => ";",
-                TQuestion => "?",
-                TEqualEqual => "==",
-                TNotEqual => "!=",
-                TLessThan => "<",
-                TGreaterThan => ">",
-                TLessThanOrEqual => "<=",
-                TGreaterThanOrEqual => ">=",
-                TLogicalAnd => "&&",
-                TLogicalOr => "||",
-                TBitwiseAnd => "&",
-                TXor => "^",
-                TEndOfInput => "<END>"
-            })
+            ref other => {
+                write!(f,
+                       "{}",
+                       match *other {
+                           // These cases are handled above but repeated here for exhaustive match
+                           TI32Literal(_) => "",
+                           TI64Literal(_) => "",
+                           TF32Literal(_) => "",
+                           TF64Literal(_) => "",
+                           TBoolLiteral(_) => "",
+                           TIdent(_) => "",
+                           // Other cases that return fixed strings
+                           TIf => "if",
+                           TFor => "for",
+                           TMerge => "merge",
+                           TResult => "result",
+                           TLet => "let",
+                           TMacro => "macro",
+                           TI32 => "i32",
+                           TI64 => "i64",
+                           TF32 => "f32",
+                           TF64 => "f64",
+                           TBool => "bool",
+                           TVec => "vec",
+                           TAppender => "appender",
+                           TZip => "zip",
+                           TIter => "iter",
+                           TLen => "len",
+                           TOpenParen => "(",
+                           TCloseParen => ")",
+                           TOpenBracket => "[",
+                           TCloseBracket => "]",
+                           TOpenBrace => "{",
+                           TCloseBrace => "}",
+                           TComma => ",",
+                           TPlus => "+",
+                           TMinus => "-",
+                           TTimes => "*",
+                           TDivide => "/",
+                           TModulo => "%",
+                           TEqual => "=",
+                           TBar => "|",
+                           TDot => ".",
+                           TColon => ":",
+                           TSemicolon => ";",
+                           TQuestion => "?",
+                           TEqualEqual => "==",
+                           TNotEqual => "!=",
+                           TLessThan => "<",
+                           TGreaterThan => ">",
+                           TLessThanOrEqual => "<=",
+                           TGreaterThanOrEqual => ">=",
+                           TLogicalAnd => "&&",
+                           TLogicalOr => "||",
+                           TBitwiseAnd => "&",
+                           TXor => "^",
+                           TEndOfInput => "<END>",
+                       })
+            }
         }
     }
 }
@@ -265,15 +269,19 @@ fn parse_i32_literal(input: &str, base: u32) -> WeldResult<Token> {
     let slice = if base == 10 { input } else { &input[2..] };
     match i32::from_str_radix(slice, base) {
         Ok(value) => Ok(Token::TI32Literal(value)),
-        Err(_) => weld_err!("Invalid i32 literal: {}", input)
+        Err(_) => weld_err!("Invalid i32 literal: {}", input),
     }
 }
 
 fn parse_i64_literal(input: &str, base: u32) -> WeldResult<Token> {
-    let slice = if base == 10 { &input[..input.len()-1] } else { &input[2..input.len()-1] };
+    let slice = if base == 10 {
+        &input[..input.len() - 1]
+    } else {
+        &input[2..input.len() - 1]
+    };
     match i64::from_str_radix(slice, base) {
         Ok(value) => Ok(Token::TI64Literal(value)),
-        Err(_) => weld_err!("Invalid i32 literal: {}", input)
+        Err(_) => weld_err!("Invalid i32 literal: {}", input),
     }
 }
 
@@ -282,17 +290,25 @@ fn basic_tokenize() {
     use self::Token::*;
 
     assert_eq!(tokenize("a for 23 + z0").unwrap(),
-        vec![TIdent("a".into()), TFor, TI32Literal(23), TPlus, TIdent("z0".into()), TEndOfInput]);
+               vec![TIdent("a".into()),
+                    TFor,
+                    TI32Literal(23),
+                    TPlus,
+                    TIdent("z0".into()),
+                    TEndOfInput]);
 
     assert_eq!(tokenize("= == | || & &&").unwrap(),
-        vec![TEqual, TEqualEqual, TBar, TLogicalOr, TBitwiseAnd, TLogicalAnd, TEndOfInput]);
+               vec![TEqual, TEqualEqual, TBar, TLogicalOr, TBitwiseAnd, TLogicalAnd, TEndOfInput]);
 
     assert!(tokenize("0a").is_err());
     assert!(tokenize("#").is_err());
 
     assert_eq!(tokenize("0b10").unwrap(), vec![TI32Literal(2), TEndOfInput]);
-    assert_eq!(tokenize("0x10").unwrap(), vec![TI32Literal(16), TEndOfInput]);
+    assert_eq!(tokenize("0x10").unwrap(),
+               vec![TI32Literal(16), TEndOfInput]);
 
-    assert_eq!(tokenize("1e-5f").unwrap(), vec![TF32Literal(1e-5f32), TEndOfInput]);
-    assert_eq!(tokenize("1e-5").unwrap(), vec![TF64Literal(1e-5), TEndOfInput]);
+    assert_eq!(tokenize("1e-5f").unwrap(),
+               vec![TF32Literal(1e-5f32), TEndOfInput]);
+    assert_eq!(tokenize("1e-5").unwrap(),
+               vec![TF64Literal(1e-5), TEndOfInput]);
 }
