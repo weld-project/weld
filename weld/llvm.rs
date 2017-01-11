@@ -15,8 +15,7 @@ use super::program::Program;
 use super::type_inference;
 use super::util::IdGenerator;
 
-#[cfg(test)]
-use super::parser::*;
+#[cfg(test)] use super::parser::*;
 
 static PRELUDE_CODE: &'static str = include_str!("resources/prelude.ll");
 
@@ -54,23 +53,20 @@ impl LlvmGenerator {
 
     /// Return all the code generated so far.
     pub fn result(&mut self) -> String {
-        format!("; PRELUDE:\n\n{}\n; BODY:\n\n{}",
-                self.prelude_code.result(),
-                self.body_code.result())
+        format!("; PRELUDE:\n\n{}\n; BODY:\n\n{}", self.prelude_code.result(), self.body_code.result())
     }
 
     /// Add a function to the generated program.
-    pub fn add_function(&mut self,
-                        name: &str,
-                        args: &Vec<TypedParameter>,
-                        body: &TypedExpr)
-                        -> WeldResult<()> {
+    pub fn add_function(
+        &mut self,
+        name: &str,
+        args: &Vec<TypedParameter>,
+        body: &TypedExpr
+    ) -> WeldResult<()> {
         let mut ctx = &mut FunctionContext::new();
         let mut arg_types = String::new();
         for (i, arg) in args.iter().enumerate() {
-            let arg = format!("{} {}.in",
-                              try!(self.llvm_type(&arg.ty)),
-                              llvm_symbol(&arg.name));
+            let arg = format!("{} {}.in", try!(self.llvm_type(&arg.ty)), llvm_symbol(&arg.name));
             arg_types.push_str(&arg);
             if i < args.len() - 1 {
                 arg_types.push_str(", ");
@@ -103,11 +99,12 @@ impl LlvmGenerator {
     /// Add a function to the generated program, passing its parameters and return value through
     /// pointers encoded as i64. This is used for the main entry point function into Weld modules
     /// to pass them arbitrary structures.
-    pub fn add_function_on_pointers(&mut self,
-                                    name: &str,
-                                    args: &Vec<TypedParameter>,
-                                    body: &TypedExpr)
-                                    -> WeldResult<()> {
+    pub fn add_function_on_pointers(
+        &mut self,
+        name: &str,
+        args: &Vec<TypedParameter>,
+        body: &TypedExpr
+    ) -> WeldResult<()> {
         // First add the function on raw values, which we'll call from the pointer version.
         let raw_function_name = format!("{}.raw", name);
         try!(self.add_function(&raw_function_name, args, body));
@@ -122,35 +119,34 @@ impl LlvmGenerator {
         code.add(format!("define i64 @{}(i64 %args) {{", name));
 
         // Code to allocate a result structure
-        code.add(format!("%res_size_ptr = getelementptr {res_type}* null, i32 1
-             \
-                          %res_size = ptrtoint {res_type}* %res_size_ptr to i64
-             \
-                          %res_bytes = call i8* @malloc(i64 %res_size)
-             %res_typed \
-                          = bitcast i8* %res_bytes to {res_type}*",
-                         res_type = res_type));
+        code.add(format!(
+            "%res_size_ptr = getelementptr {res_type}* null, i32 1
+             %res_size = ptrtoint {res_type}* %res_size_ptr to i64
+             %res_bytes = call i8* @malloc(i64 %res_size)
+             %res_typed = bitcast i8* %res_bytes to {res_type}*",
+            res_type = res_type
+        ));
 
         // Code to load args and call function
-        code.add(format!("%args_typed = inttoptr i64 %args to {args_type}*
-             \
-                          %args_val = load {args_type}* %args_typed",
-                         args_type = args_type));
+        code.add(format!(
+            "%args_typed = inttoptr i64 %args to {args_type}*
+             %args_val = load {args_type}* %args_typed",
+            args_type = args_type
+        ));
         let mut arg_decls: Vec<String> = Vec::new();
         for (i, arg) in args.iter().enumerate() {
             code.add(format!("%arg{} = extractvalue {} %args_val, {}", i, args_type, i));
             arg_decls.push(format!("{} %arg{}", try!(self.llvm_type(&arg.ty)), i));
         }
-        code.add(format!("%res_val = call {res_type} @{raw_function_name}({arg_list})
-             \
-                          store {res_type} %res_val, {res_type}* %res_typed
-             \
-                          %res_address = ptrtoint {res_type}* %res_typed to i64
-             \
-                          ret i64 %res_address",
-                         res_type = res_type,
-                         raw_function_name = raw_function_name,
-                         arg_list = arg_decls.join(", ")));
+        code.add(format!(
+            "%res_val = call {res_type} @{raw_function_name}({arg_list})
+             store {res_type} %res_val, {res_type}* %res_typed
+             %res_address = ptrtoint {res_type}* %res_typed to i64
+             ret i64 %res_address",
+            res_type = res_type,
+            raw_function_name = raw_function_name,
+            arg_list = arg_decls.join(", ")
+        ));
         code.add(format!("}}\n\n"));
 
         self.body_code.add_code(code);
@@ -190,54 +186,52 @@ impl LlvmGenerator {
                 Ok(self.vec_names.get(elem).unwrap())
             }
 
-            _ => weld_err!("Unsupported type {}", print_type(ty)),
+            _ => weld_err!("Unsupported type {}", print_type(ty))
         }
     }
 
     /// Add an expression to a CodeBuilder, possibly generating prelude code earlier, and return
     /// a string that can be used to represent its result later (e.g. %var if introducing a local
     /// variable or an integer constant otherwise).
-    fn gen_expr(&mut self, expr: &TypedExpr, ctx: &mut FunctionContext) -> WeldResult<String> {
+    fn gen_expr(
+        &mut self,
+        expr: &TypedExpr,
+        ctx: &mut FunctionContext
+    ) -> WeldResult<String> {
         match expr.kind {
             I32Literal(value) => Ok(format!("{}", value)),
             I64Literal(value) => Ok(format!("{}", value)),
             F32Literal(value) => Ok(format!("{}", value)),
             F64Literal(value) => Ok(format!("{}", value)),
-            BoolLiteral(value) => Ok(format!("{}", if value { 1 } else { 0 })),
+            BoolLiteral(value) => Ok(format!("{}", if value {1} else {0})),
 
             Ident(ref symbol) => {
                 let var = ctx.var_ids.next();
                 ctx.code.add(format!("{} = load {}* {}",
-                                     var,
-                                     try!(self.llvm_type(&expr.ty)),
-                                     llvm_symbol(symbol)));
+                    var, try!(self.llvm_type(&expr.ty)), llvm_symbol(symbol)));
                 Ok(var)
-            }
+            },
 
-            BinOp { kind, ref left, ref right } => {
+            BinOp{kind, ref left, ref right} => {
                 let op_name = try!(llvm_binop(kind, &left.ty));
                 let left_var = try!(self.gen_expr(left, ctx));
                 let right_var = try!(self.gen_expr(right, ctx));
                 let var = ctx.var_ids.next();
                 ctx.code.add(format!("{} = {} {} {}, {}",
-                                     var,
-                                     op_name,
-                                     try!(self.llvm_type(&left.ty)),
-                                     left_var,
-                                     right_var));
+                    var, op_name, try!(self.llvm_type(&left.ty)), left_var, right_var));
                 Ok(var)
-            }
+            },
 
-            Let { ref name, ref value, ref body } => {
+            Let{ref name, ref value, ref body} => {
                 let value_var = try!(self.gen_expr(value, ctx));
                 let name = llvm_symbol(name);
                 let ty = try!(self.llvm_type(&value.ty)).to_string();
                 try!(ctx.add_alloca(&name, &ty));
                 ctx.code.add(format!("store {} {}, {}* {}", ty, value_var, ty, name));
                 self.gen_expr(body, ctx)
-            }
+            },
 
-            If { ref cond, ref on_true, ref on_false } => {
+            If{ref cond, ref on_true, ref on_false} => {
                 let cond_var = try!(self.gen_expr(cond, ctx));
                 let id = ctx.if_ids.next();
                 let true_label = format!("{}.true", id);
@@ -247,9 +241,7 @@ impl LlvmGenerator {
                 let end_label = format!("{}.end", id);
 
                 ctx.code.add(format!("br i1 {}, label %{}, label %{}",
-                                     cond_var,
-                                     true_label,
-                                     false_label));
+                    cond_var, true_label, false_label));
                 ctx.code.add(format!("{}:", true_label));
                 let true_var = try!(self.gen_expr(on_true, ctx));
                 ctx.code.add(format!("br label %{}", end_true_label));
@@ -266,16 +258,11 @@ impl LlvmGenerator {
                 let var = ctx.var_ids.next();
                 let ty = try!(self.llvm_type(&expr.ty)).to_string();
                 ctx.code.add(format!("{} = phi {} [{}, %{}], [{}, %{}]",
-                                     var,
-                                     ty,
-                                     true_var,
-                                     end_true_label,
-                                     false_var,
-                                     end_false_label));
+                    var, ty, true_var, end_true_label, false_var, end_false_label));
                 Ok(var)
-            }
+            },
 
-            _ => weld_err!("Unsupported expression: {}", print_expr(expr)),
+            _ => weld_err!("Unsupported expression: {}", print_expr(expr))
         }
     }
 }
@@ -344,7 +331,7 @@ fn llvm_binop(op_kind: BinOpKind, ty: &Type) -> WeldResult<&'static str> {
         (BinOpKind::GreaterThanOrEqual, &Scalar(F32)) => Ok("fcmp oge"),
         (BinOpKind::GreaterThanOrEqual, &Scalar(F64)) => Ok("fcmp oge"),
 
-        _ => weld_err!("Unsupported binary op: {} on {}", op_kind, print_type(ty)),
+        _ => weld_err!("Unsupported binary op: {} on {}", op_kind, print_type(ty))
     }
 }
 
@@ -386,13 +373,13 @@ pub fn compile_program(program: &Program) -> WeldResult<easy_ll::CompiledModule>
     try!(type_inference::infer_types(&mut expr));
     let expr = try!(expr.to_typed());
     match expr.kind {
-        Lambda { ref params, ref body } => {
+        Lambda{ref params, ref body} => {
             let mut gen = LlvmGenerator::new();
             try!(gen.add_function_on_pointers("run", params, body));
             println!("{}", gen.result());
             Ok(try!(easy_ll::compile_module(&gen.result())))
-        }
-        _ => weld_err!("Expression passed to compile_function must be a Lambda"),
+        },
+        _ => weld_err!("Expression passed to compile_function must be a Lambda")
     }
 }
 
