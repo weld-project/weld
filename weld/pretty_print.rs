@@ -169,6 +169,11 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>, typed: bool) -> String {
         GetField { ref expr, index } => format!("{}.${}", print_expr_impl(expr, typed), index),
 
         Length { ref data } => format!("len({})", print_expr_impl(data, typed)),
+        Lookup { ref data, ref index } => {
+            format!("lookup({},{})",
+                    print_expr_impl(data, typed),
+                    print_expr_impl(index, typed))
+        }
 
         Lambda { ref params, ref body } => {
             let mut res = join("|",

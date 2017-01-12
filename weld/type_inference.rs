@@ -178,6 +178,19 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             push_complete_type(&mut expr.ty, Scalar(I64), "Length")
         }
 
+        Lookup { ref mut data, ref mut index } => {
+            if let Vector(ref elem_type) = data.ty {
+                let mut changed = false;
+                changed |= try!(push_complete_type(&mut index.ty, Scalar(I64), "Lookup"));
+                changed |= try!(push_type(&mut expr.ty, &elem_type, "Lookup"));
+                Ok(changed)
+            } else if data.ty == Unknown {
+                Ok(false)
+            } else {
+                weld_err!("Internal error: Lookup called on {:?}", data.ty)
+            }
+        }
+
         Lambda { ref mut params, ref mut body } => {
             let mut changed = false;
 
@@ -513,9 +526,22 @@ fn infer_types_let() {
     assert!(infer_types(&mut e).is_ok());
     assert_eq!(e.ty, Scalar(F64));
 
+    let mut e = parse_expr("let a = lookup([1,2,3], 0L); a").unwrap();
+    assert!(infer_types(&mut e).is_ok());
+    assert_eq!(e.ty, Scalar(I32));
+
+    let mut e = parse_expr("let a = lookup([1.0f,2.0f,3.0f], 0L); a").unwrap();
+    assert!(infer_types(&mut e).is_ok());
+    assert_eq!(e.ty, Scalar(F32));
+
+    let mut e = parse_expr("let a = lookup(lookup([[1],[2],[3]], 0L), 0L); a").unwrap();
+    assert!(infer_types(&mut e).is_ok());
+    assert_eq!(e.ty, Scalar(I32));
+
     let mut e = parse_expr("let a:bool = 1; a").unwrap();
     assert!(infer_types(&mut e).is_err());
 
     let mut e = parse_expr("let a = 1; a:bool").unwrap();
     assert!(infer_types(&mut e).is_err());
+
 }
