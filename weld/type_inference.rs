@@ -285,12 +285,13 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
                 Struct(elem_types)
             };
             let bldr_type = builder.ty.clone();
-            let func_type = Function(vec![bldr_type.clone(), elem_types], Box::new(bldr_type));
+            let func_type = Function(vec![bldr_type.clone(), Scalar(I64), elem_types],
+                                     Box::new(bldr_type));
             changed |= try!(push_type(&mut func.ty, &func_type, "For"));
 
             // Push func's argument type and return type into builder
             match func.ty {
-                Function(ref params, ref result) if params.len() == 2 => {
+                Function(ref params, ref result) if params.len() == 3 => {
                     changed |= try!(push_type(&mut builder.ty, &params[0], "For"));
                     changed |= try!(push_type(&mut builder.ty, result.as_ref(), "For"));
                 }
@@ -299,7 +300,6 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
 
             // Push builder's type to our expression
             changed |= try!(push_type(&mut expr.ty, &builder.ty, "For"));
-
             Ok(changed)
         }
 
