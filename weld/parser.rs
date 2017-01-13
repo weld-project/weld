@@ -572,6 +572,18 @@ impl<'t> Parser<'t> {
                 Ok(expr_box(Length { data: data }))
             }
 
+            TLookup => {
+                try!(self.consume(TOpenParen));
+                let data = try!(self.expr());
+                try!(self.consume(TComma));
+                let index = try!(self.expr());
+                try!(self.consume(TCloseParen));
+                Ok(expr_box(Lookup {
+                    data: data,
+                    index: index,
+                }))
+            }
+
             TMerge => {
                 try!(self.consume(TOpenParen));
                 let builder = try!(self.expr());

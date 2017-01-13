@@ -186,6 +186,12 @@ impl PartialExpr {
             }
 
             Length { ref data } => Length { data: try!(typed_box(data)) },
+            Lookup { ref data, ref index } => {
+                Lookup {
+                    data: try!(typed_box(data)),
+                    index: try!(typed_box(index)),
+                }
+            }
 
             Merge { ref builder, ref value } => {
                 Merge {
