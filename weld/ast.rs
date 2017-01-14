@@ -51,6 +51,20 @@ pub enum ScalarKind {
     F64,
 }
 
+impl fmt::Display for ScalarKind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use ast::ScalarKind::*;
+        let text = match *self {
+            Bool => "bool",
+            I32 => "i32",
+            I64 => "i64",
+            F32 => "f32",
+            F64 => "f64"
+        };
+        f.write_str(text)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum BuilderKind {
     Appender(Box<Type>),
@@ -89,6 +103,10 @@ pub enum ExprKind<T: TypeBounds> {
         kind: BinOpKind,
         left: Box<Expr<T>>,
         right: Box<Expr<T>>,
+    },
+    Cast {
+        kind: ScalarKind,
+        child_expr: Box<Expr<T>>
     },
     MakeStruct { elems: Vec<Expr<T>> },
     MakeVector { elems: Vec<Expr<T>> },
@@ -211,6 +229,7 @@ impl<T: TypeBounds> Expr<T> {
         use self::ExprKind::*;
         match self.kind {
                 BinOp { ref left, ref right, .. } => vec![left.as_ref(), right.as_ref()],
+                Cast { ref child_expr, .. } => vec![child_expr.as_ref()],
                 Let { ref value, ref body, .. } => vec![value.as_ref(), body.as_ref()],
                 Lambda { ref body, .. } => vec![body.as_ref()],
                 MakeStruct { ref elems } => elems.iter().collect(),
@@ -257,6 +276,7 @@ impl<T: TypeBounds> Expr<T> {
         use self::ExprKind::*;
         match self.kind {
                 BinOp { ref mut left, ref mut right, .. } => vec![left.as_mut(), right.as_mut()],
+                Cast { ref mut child_expr, .. } => vec![child_expr.as_mut()],
                 Let { ref mut value, ref mut body, .. } => vec![value.as_mut(), body.as_mut()],
                 Lambda { ref mut body, .. } => vec![body.as_mut()],
                 MakeStruct { ref mut elems } => elems.iter_mut().collect(),
@@ -321,6 +341,10 @@ impl<T: TypeBounds> Expr<T> {
             let same_kind = match (&e1.kind, &e2.kind) {
                 (&BinOp { kind: ref kind1, .. }, &BinOp { kind: ref kind2, .. }) if kind1 ==
                                                                                     kind2 => {
+                    Ok(true)
+                }
+                (&Cast { kind: ref kind1, .. }, &Cast { kind: ref kind2, .. }) if kind1 ==
+                                                                                  kind2 => {
                     Ok(true)
                 }
                 (&Let { name: ref sym1, .. }, &Let { name: ref sym2, .. }) => {

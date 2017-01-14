@@ -10,7 +10,7 @@ use super::ast::Iter;
 use super::ast::BinOpKind::*;
 use super::ast::ExprKind::*;
 use super::ast::LiteralKind::*;
-use super::ast::ScalarKind::*;
+use super::ast::ScalarKind;
 use super::error::*;
 use super::partial_types::*;
 use super::partial_types::PartialBuilderKind::*;
@@ -469,6 +469,22 @@ impl<'t> Parser<'t> {
         }
     }
 
+    /// Parses a cast operation, the type being cast to is passed in as an argument.
+    fn parse_cast(&mut self, kind: ScalarKind) -> WeldResult<Box<PartialExpr>> {
+        if *self.next() != TOpenParen {
+            return weld_err!("Expected '('");
+        }
+        let expr = try!(self.expr());
+        if *self.next() != TCloseParen {
+            return weld_err!("Expected ')");
+        }
+        let cast_expr = expr_box(Cast {
+            kind: kind,
+            child_expr: expr
+        });
+        Ok(cast_expr)
+    }
+
     /// Parse a terminal expression at the bottom of the precedence chain.
     fn leaf_expr(&mut self) -> WeldResult<Box<PartialExpr>> {
         match *self.next() {
@@ -477,7 +493,33 @@ impl<'t> Parser<'t> {
             TF32Literal(v) => Ok(expr_box(Literal(F32Literal(v)))),
             TF64Literal(v) => Ok(expr_box(Literal(F64Literal(v)))),
             TBoolLiteral(v) => Ok(expr_box(Literal(BoolLiteral(v)))),
-            TIdent(ref name) => Ok(expr_box(Ident(Symbol{name: name.clone(), id: 0}))),
+            TI32 => {
+                let expr = try!(self.parse_cast(ScalarKind::I32));
+                Ok(expr)
+            }
+            TI64 => {
+                let expr = try!(self.parse_cast(ScalarKind::I64));
+                Ok(expr)
+            }
+            TF32 => {
+                let expr = try!(self.parse_cast(ScalarKind::F32));
+                Ok(expr)
+            }
+            TF64 => {
+                let expr = try!(self.parse_cast(ScalarKind::F64));
+                Ok(expr)
+            }
+            TBool => {
+                let expr = try!(self.parse_cast(ScalarKind::Bool));
+                Ok(expr)
+            }
+
+            TIdent(ref name) => {
+                Ok(expr_box(Ident(Symbol {
+                    name: name.clone(),
+                    id: 0,
+                })))
+            }
 
             TOpenParen => {
                 let expr = try!(self.expr());
@@ -642,11 +684,11 @@ impl<'t> Parser<'t> {
     /// Parse a PartialType starting at the current input position.
     fn type_(&mut self) -> WeldResult<PartialType> {
         match *self.next() {
-            TI32 => Ok(Scalar(I32)),
-            TI64 => Ok(Scalar(I64)),
-            TF32 => Ok(Scalar(F32)),
-            TF64 => Ok(Scalar(F64)),
-            TBool => Ok(Scalar(Bool)),
+            TI32 => Ok(Scalar(ScalarKind::I32)),
+            TI64 => Ok(Scalar(ScalarKind::I64)),
+            TF32 => Ok(Scalar(ScalarKind::F32)),
+            TF64 => Ok(Scalar(ScalarKind::F64)),
+            TBool => Ok(Scalar(ScalarKind::Bool)),
 
             TVec => {
                 try!(self.consume(TOpenBracket));
@@ -691,6 +733,15 @@ fn basic_parsing() {
 
     let e = parse_expr("10 * 2 - 4 - 3 / 1").unwrap();
     assert_eq!(print_expr(&e), "(((10*2)-4)-(3/1))");
+
+    let e = parse_expr("i32(10 + 3 + 2)").unwrap();
+    assert_eq!(print_expr(&e), "(i32(((10+3)+2)))");
+
+    let e = parse_expr("10 + 64 + i32(10.0)").unwrap();
+    assert_eq!(print_expr(&e), "((10+64)+(i32(10.0)))");
+
+    let e = parse_expr("10 + 64 + f32(bool(19))").unwrap();
+    assert_eq!(print_expr(&e), "((10+64)+(f32((bool(19)))))");
 
     let e = parse_expr("[1, 2+3, 2]").unwrap();
     assert_eq!(print_expr(&e), "[1,(2+3),2]");

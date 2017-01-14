@@ -153,6 +153,13 @@ impl PartialExpr {
                 }
             }
 
+            Cast { kind, ref child_expr } => {
+                Cast {
+                    kind: kind,
+                    child_expr: try!(typed_box(child_expr))
+                }
+            }
+
             Let { ref name, ref value, ref body } => {
                 Let {
                     name: name.clone(),

@@ -121,6 +121,15 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             Ok(changed)
         }
 
+        Cast { kind, ref mut child_expr } => {
+            let mut elem_type = Unknown;
+            try!(push_type(&mut elem_type, &child_expr.ty, "Cast"));
+            let mut changed = false;
+            changed |= try!(push_type(&mut child_expr.ty, &elem_type, "Cast"));
+            changed |= try!(push_complete_type(& mut expr.ty, Scalar(kind), "Cast"));
+            Ok(changed)
+        }
+
         Ident(ref symbol) => {
             match env.get(symbol) {
                 None => weld_err!("Undefined identifier: {}", symbol.name),
@@ -473,6 +482,14 @@ fn infer_types_simple() {
         left: float_lit.clone(),
         right: float_lit.clone(),
     });
+    let f64cast = expr_box(Cast {
+        kind: F64,
+        child_expr: fprod.clone()
+    });
+    let boolcast = expr_box(Cast {
+        kind: Bool,
+        child_expr: f64cast.clone()
+    });
 
     let mut e = *int_lit.clone();
     assert!(infer_types(&mut e).is_ok());
@@ -501,6 +518,14 @@ fn infer_types_simple() {
     let mut e = *fprod.clone();
     assert!(infer_types(&mut e).is_ok());
     assert_eq!(e.ty, Scalar(F32));
+
+    let mut e = *f64cast.clone();
+    assert!(infer_types(&mut e).is_ok());
+    assert_eq!(e.ty, Scalar(F64));
+
+    let mut e = *boolcast.clone();
+    assert!(infer_types(&mut e).is_ok());
+    assert_eq!(e.ty, Scalar(Bool));
 }
 
 #[test]
