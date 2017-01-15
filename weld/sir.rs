@@ -212,7 +212,7 @@ impl fmt::Display for SirProgram {
 /// that have been defined previously in the program. Any symbols that need to be passed in
 /// as closure parameters to func_id will be added to closure (so that func_id's
 /// callers can also add these symbols to their parameters list, if necessary).
-pub fn sir_param_correction_helper(prog: &mut SirProgram, func_id: FunctionId,
+fn sir_param_correction_helper(prog: &mut SirProgram, func_id: FunctionId,
 env: &mut HashMap<Symbol, Type>, closure: &mut HashSet<Symbol>) {
     for (name, ty) in &prog.funcs[func_id].params {
         env.insert(name.clone(), ty.clone());
@@ -270,7 +270,7 @@ env: &mut HashMap<Symbol, Type>, closure: &mut HashSet<Symbol>) {
 /// gen_expr may result in the use of symbols across function boundaries,
 /// so ast_to_sir calls sir_param_correction to correct function parameters
 /// to ensure that such symbols (the closure) are passed in as parameters.
-pub fn sir_param_correction(prog: &mut SirProgram) -> WeldResult<()> {
+fn sir_param_correction(prog: &mut SirProgram) -> WeldResult<()> {
     let mut env = HashMap::new();
     let mut closure = HashSet::new();
     sir_param_correction_helper(prog, 0, &mut env, &mut closure);
@@ -285,7 +285,7 @@ pub fn sir_param_correction(prog: &mut SirProgram) -> WeldResult<()> {
 
 /// Convert an AST to a SIR program. Symbols must be unique in expr.
 pub fn ast_to_sir(expr: &TypedExpr) -> WeldResult<SirProgram> {
-    if let Lambda(ref params, ref body) = expr.kind {
+    if let Lambda { ref params, ref body } = expr.kind {
         let mut prog = SirProgram::new(&expr.ty, params);
         prog.sym_gen = SymbolGenerator::from_expression(expr);
         for tp in params {
@@ -302,8 +302,8 @@ pub fn ast_to_sir(expr: &TypedExpr) -> WeldResult<SirProgram> {
 }
 
 /// Generate code to compute the expression `expr` starting at the current tail of `cur_block`,
-/// possibly creating new basic blocks and functions in the process. Return the basic block that
-/// the expression will be ready in, and its symbol therein.
+/// possibly creating new basic blocks and functions in the process. Return the function and
+/// basic block that the expression will be ready in, and its symbol therein.
 fn gen_expr(
     expr: &TypedExpr,
     prog: &mut SirProgram,
@@ -323,15 +323,15 @@ fn gen_expr(
             Ok((cur_func, cur_block, res_sym))
         },
 
-        Let(ref sym, ref value, ref body) => {
+        Let { ref name, ref value, ref body } => {
             let (cur_func, cur_block, val_sym) = gen_expr(value, prog, cur_func, cur_block)?;
-            prog.add_local_named(&value.ty, sym, cur_func);
-            prog.funcs[cur_func].blocks[cur_block].add_statement(Assign(sym.clone(), val_sym));
+            prog.add_local_named(&value.ty, name, cur_func);
+            prog.funcs[cur_func].blocks[cur_block].add_statement(Assign(name.clone(), val_sym));
             let (cur_func, cur_block, res_sym) = gen_expr(body, prog, cur_func, cur_block)?;
             Ok((cur_func, cur_block, res_sym))
         },
 
-        BinOp(kind, ref left, ref right) => {
+        BinOp { kind, ref left, ref right } => {
             let (cur_func, cur_block, left_sym) = gen_expr(left, prog, cur_func, cur_block)?;
             let (cur_func, cur_block, right_sym) = gen_expr(right, prog, cur_func, cur_block)?;
             let res_sym = prog.add_local(&expr.ty, cur_func);
@@ -340,7 +340,7 @@ fn gen_expr(
             Ok((cur_func, cur_block, res_sym))
         },
 
-        If(ref cond, ref on_true, ref on_false) => {
+        If { ref cond, ref on_true, ref on_false } => {
             let (cur_func, cur_block, cond_sym) = gen_expr(cond, prog, cur_func, cur_block)?;
             let true_block = prog.funcs[cur_func].add_block();
             let false_block = prog.funcs[cur_func].add_block();
@@ -368,15 +368,15 @@ fn gen_expr(
             }
         },
 
-        Merge(ref builder, ref elem) => {
+        Merge { ref builder, ref value } => {
             let (cur_func, cur_block, builder_sym) = gen_expr(builder, prog, cur_func, cur_block)?;
-            let (cur_func, cur_block, elem_sym) = gen_expr(elem, prog, cur_func, cur_block)?;
+            let (cur_func, cur_block, elem_sym) = gen_expr(value, prog, cur_func, cur_block)?;
             prog.funcs[cur_func].blocks[cur_block].add_statement(DoMerge(builder_sym.clone(),
                 elem_sym));
             Ok((cur_func, cur_block, builder_sym))
         },
 
-        Res(ref builder) => {
+        Res { ref builder } => {
             let (cur_func, cur_block, builder_sym) = gen_expr(builder, prog, cur_func, cur_block)?;
             let res_sym = prog.add_local(&expr.ty, cur_func);
             prog.funcs[cur_func].blocks[cur_block].add_statement(GetResult(res_sym.clone(), builder_sym));
@@ -389,8 +389,14 @@ fn gen_expr(
             Ok((cur_func, cur_block, res_sym))
         },
 
-        For(ref data, ref builder, ref update) => {
-            if let Lambda(ref params, ref body) = update.kind {
+        For { ref iters, ref builder, ref func } => {
+            if iters.len() != 1 || iters[0].start.is_some() || iters[0].end.is_some()
+            || iters[0].stride.is_some() {
+                // TODO support this
+                weld_err!("Only single-array loops with null start/end/stride currently supported")?
+            }
+            let data: &TypedExpr = &iters[0].data;
+            if let Lambda { ref params, ref body } = func.kind {
                 let (cur_func, cur_block, data_sym) = gen_expr(data, prog, cur_func, cur_block)?;
                 let (cur_func, cur_block, builder_sym) = gen_expr(builder, prog, cur_func, cur_block)?;
                 let body_func = prog.add_func();
@@ -416,7 +422,7 @@ fn gen_expr(
                 );
                 Ok((cont_func, cont_block, builder_sym))
             } else {
-                weld_err!("Argument to For was not a Lambda: {}", print_expr(update))
+                weld_err!("Argument to For was not a Lambda: {}", print_expr(func))
             }
         },
 

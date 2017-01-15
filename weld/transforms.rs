@@ -4,6 +4,7 @@ use super::ast::*;
 use super::ast::ExprKind::*;
 use super::ast::Type::*;
 use super::ast::BuilderKind::*;
+use super::ast::LiteralKind::*;
 
 use super::util::SymbolGenerator;
 
@@ -222,17 +223,17 @@ fn consumes_all(iter: &Iter<Type>) -> bool {
                           end: Some(ref end),
                           stride: Some(ref stride) } = iter {
         // Checks if the stride is 1 and an entire vector represented by a symbol is consumed.
-        if let (&I64Literal(1), &I64Literal(0), &Ident(ref name), &Length { data: ref v }) =
-            (&stride.kind, &start.kind, &data.kind, &end.kind) {
+        if let (&Literal(I64Literal(1)), &Literal(I64Literal(0)), &Ident(ref name),
+            &Length { data: ref v }) = (&stride.kind, &start.kind, &data.kind, &end.kind) {
             if let Ident(ref vsym) = v.kind {
                 return vsym == name;
             }
         }
         // Checks if an entire vector literal is consumed.
-        if let (&I64Literal(1), &I64Literal(0), &MakeVector { ref elems }) =
+        if let (&Literal(I64Literal(1)), &Literal(I64Literal(0)), &MakeVector { ref elems }) =
             (&stride.kind, &start.kind, &data.kind) {
             let num_elems = elems.len() as i64;
-            if let I64Literal(x) = end.kind {
+            if let Literal(I64Literal(x)) = end.kind {
                 return num_elems == x;
             }
         }

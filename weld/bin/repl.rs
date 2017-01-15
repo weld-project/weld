@@ -5,10 +5,8 @@ extern crate weld;
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
 use std::env;
-use std::io::{stdin, stdout, Write};
 use std::path::PathBuf;
 
-use weld::ast::ExprKind::*;
 use weld::llvm::LlvmGenerator;
 use weld::macro_processor;
 use weld::parser::*;
@@ -23,7 +21,7 @@ fn main() {
     let history_file_path = history_file_path.to_str().unwrap_or(".weld_history");
 
     let mut rl = Editor::<()>::new();
-    rl.load_history(&history_file_path).unwrap();
+    if let Err(_) = rl.load_history(&history_file_path) {}
 
     loop {
         let raw_readline = rl.readline(">> ");
