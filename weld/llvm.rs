@@ -1,24 +1,30 @@
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::collections::BTreeMap;
 
 use easy_ll;
 
 use super::ast::*;
 use super::ast::Type::*;
-use super::ast::ExprKind::*;
 use super::ast::LiteralKind::*;
 use super::ast::ScalarKind::*;
+use super::ast::BuilderKind::*;
 use super::code_builder::CodeBuilder;
 use super::error::*;
 use super::macro_processor;
 use super::pretty_print::*;
 use super::program::Program;
+use super::sir;
+use super::sir::*;
+use super::sir::Statement::*;
+use super::sir::Terminator::*;
 use super::type_inference;
 use super::util::IdGenerator;
 
 #[cfg(test)] use super::parser::*;
 
 static PRELUDE_CODE: &'static str = include_str!("resources/prelude.ll");
+static VECTOR_CODE: &'static str = include_str!("resources/vector.ll");
 
 /// Generates LLVM code for one or more modules.
 pub struct LlvmGenerator {
@@ -30,11 +36,34 @@ pub struct LlvmGenerator {
     vec_names: HashMap<Type, String>,
     vec_ids: IdGenerator,
 
+    /// TODO This is unnecessary but satisfies the compiler for now.
+    bld_names: HashMap<BuilderKind, String>,
+
     /// A CodeBuilder for prelude functions such as type and struct definitions.
     prelude_code: CodeBuilder,
 
     /// A CodeBuilder for body functions in the module.
     body_code: CodeBuilder,
+    visited: HashSet<sir::FunctionId>
+}
+
+fn get_combined_params(sir: &SirProgram, par_for: &ParallelForData)
+    -> HashMap<Symbol, Type> {
+    let mut body_params = sir.funcs[par_for.body].params.clone();
+    for (arg, ty) in sir.funcs[par_for.cont].params.iter() {
+        body_params.insert(arg.clone(), ty.clone());
+    }
+    body_params
+}
+
+fn get_sym_ty<'a>(func: &'a SirFunction, sym: &Symbol) -> WeldResult<&'a Type> {
+    if func.locals.get(sym).is_some() {
+        Ok(func.locals.get(sym).unwrap())
+    } else if func.params.get(sym).is_some() {
+        Ok(func.params.get(sym).unwrap())
+    } else {
+        weld_err!("Can't find symbol {}#{}", sym.name, sym.id)
+    }
 }
 
 impl LlvmGenerator {
@@ -44,8 +73,10 @@ impl LlvmGenerator {
             struct_ids: IdGenerator::new("%s"),
             vec_names: HashMap::new(),
             vec_ids: IdGenerator::new("%v"),
+            bld_names: HashMap::new(),
             prelude_code: CodeBuilder::new(),
             body_code: CodeBuilder::new(),
+            visited: HashSet::new()
         };
         generator.prelude_code.add(PRELUDE_CODE);
         generator.prelude_code.add("\n");
@@ -57,43 +88,123 @@ impl LlvmGenerator {
         format!("; PRELUDE:\n\n{}\n; BODY:\n\n{}", self.prelude_code.result(), self.body_code.result())
     }
 
+    fn get_arg_str(&mut self, params: &HashMap<Symbol, Type>, suffix: &str) -> WeldResult<String> {
+        let mut arg_types = String::new();
+        let params_sorted: BTreeMap<&Symbol, &Type> = params.iter().collect();
+        for (arg, ty) in params_sorted.iter() {
+            let arg_str = format!("{} {}{}, ", try!(self.llvm_type(&ty)), llvm_symbol(&arg), suffix);
+            arg_types.push_str(&arg_str);
+        }
+        arg_types.push_str("%work_t* %cur.work");
+        Ok(arg_types)
+    }
+
     /// Add a function to the generated program.
     pub fn add_function(
         &mut self,
-        name: &str,
-        args: &Vec<TypedParameter>,
-        body: &TypedExpr
+        sir: &SirProgram,
+        func: &SirFunction,
+        // only non-None if func is a ParallelFor body
+        containing_loop: Option<ParallelForData>
     ) -> WeldResult<()> {
-        let mut ctx = &mut FunctionContext::new();
-        let mut arg_types = String::new();
-        for (i, arg) in args.iter().enumerate() {
-            let arg = format!("{} {}.in", try!(self.llvm_type(&arg.ty)), llvm_symbol(&arg.name));
-            arg_types.push_str(&arg);
-            if i < args.len() - 1 {
-                arg_types.push_str(", ");
-            }
+        if !self.visited.insert(func.id) {
+            return Ok(());
         }
-        let res_type = try!(self.llvm_type(&body.ty)).to_string();
+        let mut ctx = &mut FunctionContext::new();
+        let mut arg_types = try!(self.get_arg_str(&func.params, ".in"));
+        if containing_loop.is_some() {
+            arg_types.push_str(", i64 %lower.idx, i64 %upper.idx");
+        }
 
         // Start the entry block by defining the function and storing all its arguments on the
         // stack (this makes them consistent with other local variables). Later, expressions may
         // add more local variables to alloca_code.
-        ctx.alloca_code.add(format!("define {} @{}({}) {{", res_type, name, arg_types));
+        ctx.alloca_code.add(format!("define void @f{}({}) {{", func.id, arg_types));
         ctx.alloca_code.add(format!("entry:"));
-        for arg in args {
-            let name = llvm_symbol(&arg.name);
-            let ty = try!(self.llvm_type(&arg.ty)).to_string();
-            try!(ctx.add_alloca(&name, &ty));
-            ctx.code.add(format!("store {} {}.in, {}* {}", ty, name, ty, name));
+        for (arg, ty) in func.params.iter() {
+            let arg_str = llvm_symbol(&arg);
+            let ty_str = try!(self.llvm_type(&ty)).to_string();
+            try!(ctx.add_alloca(&arg_str, &ty_str));
+            ctx.code.add(format!("store {} {}.in, {}* {}", ty_str, arg_str, ty_str, arg_str));
+        }
+        for (arg, ty) in func.locals.iter() {
+            let arg_str = llvm_symbol(&arg);
+            let ty_str = try!(self.llvm_type(&ty)).to_string();
+            try!(ctx.add_alloca(&arg_str, &ty_str));
+        }
+        
+        if containing_loop.is_some() {
+            let par_for = containing_loop.clone().unwrap();
+            let bld_ty_str = try!(self.llvm_type(func.params.get(&par_for.builder).unwrap())).to_string();
+            let bld_param_str = llvm_symbol(&par_for.builder);
+            let bld_arg_str = llvm_symbol(&par_for.builder_arg);
+            ctx.code.add(format!("store {} {}.in, {}* {}", &bld_ty_str, bld_param_str, &bld_ty_str,
+                bld_arg_str));
+            try!(ctx.add_alloca("%cur.idx", "i64"));
+            ctx.code.add("store i64 %lower.idx, i64* %cur.idx");
+            ctx.code.add("br label %loop_start");
+            ctx.code.add("loop_start:");
+            let idx_tmp = try!(self.load_var("%cur.idx", "i64", ctx));
+            let idx_cmp = ctx.var_ids.next();
+            ctx.code.add(format!("{} = icmp ult i64 {}, %upper.idx", idx_cmp, idx_tmp));
+            ctx.code.add(format!("br i1 {}, label %loop_body, label %loop_end", idx_cmp));
+            ctx.code.add("loop_body:");
+            // TODO support loop data that is not a single vector
+            let data_ty_str = try!(self.llvm_type(func.params.get(&par_for.data).unwrap())).to_string();
+            let data_str = try!(self.load_var(llvm_symbol(&par_for.data).as_str(), &data_ty_str, ctx));
+            let data_prefix = format!("@{}", data_ty_str.replace("%", ""));
+            let elem_str = llvm_symbol(&par_for.data_arg);
+            let elem_ty_str = try!(self.llvm_type(func.locals.get(&par_for.data_arg).unwrap())).to_string();
+            let elem_tmp_ptr = ctx.var_ids.next();
+            ctx.code.add(format!("{} = call {}* {}.at({} {}, i64 {})", elem_tmp_ptr, &elem_ty_str,
+                data_prefix, &data_ty_str, data_str, idx_tmp));
+            let elem_tmp = try!(self.load_var(&elem_tmp_ptr, &elem_ty_str, ctx));
+            ctx.code.add(format!("store {} {}, {}* {}", &elem_ty_str, elem_tmp, &elem_ty_str, elem_str));
         }
 
+        ctx.code.add(format!("br label %b{}", func.blocks[0].id));
         // Generate an expression for the function body.
-        let res_var = try!(self.gen_expr(&body, ctx));
-        ctx.code.add(format!("ret {} {}", res_type, res_var));
-        ctx.code.add(format!("}}\n\n"));
+        try!(self.gen_func(sir, func, ctx));
+        if containing_loop.is_some() {
+            ctx.code.add("br label %loop_terminator");
+            ctx.code.add("loop_terminator:");
+            let idx_tmp = try!(self.load_var("%cur.idx", "i64", ctx));
+            let idx_inc = ctx.var_ids.next();
+            ctx.code.add(format!("{} = add i64 {}, 1", idx_inc, idx_tmp));
+            ctx.code.add(format!("store i64 {}, i64* %cur.idx", idx_inc));
+            ctx.code.add("br label %loop_start");
+            ctx.code.add("loop_end:");
+        }
+        ctx.code.add("ret void");
+        ctx.code.add("}\n\n");
 
         self.body_code.add(&ctx.alloca_code.result());
         self.body_code.add(&ctx.code.result());
+
+        if containing_loop.is_some() {
+            // TODO add parallel wrappers for loop bodies and continuations
+            let par_for = containing_loop.clone().unwrap();
+            if par_for.body == func.id {
+                let mut serial_ctx = &mut FunctionContext::new();
+                let serial_arg_types = try!(self.get_arg_str(&get_combined_params(sir, &par_for), ""));
+                serial_ctx.code.add(format!("define void @f{}_ser_wrapper({}) {{", func.id,
+                    serial_arg_types));
+                let data_str = llvm_symbol(&par_for.data);
+                let data_ty_str = try!(self.llvm_type(func.params.get(&par_for.data).unwrap())).to_string();
+                let data_prefix = format!("@{}", data_ty_str.replace("%", ""));
+                let vec_size = serial_ctx.var_ids.next();
+                serial_ctx.code.add(format!("{} = call i64 {}.size({} {})", vec_size, data_prefix,
+                    data_ty_str, data_str));
+                let mut body_arg_types = try!(self.get_arg_str(&func.params, ""));
+                body_arg_types.push_str(format!(", i64 0, i64 {}", vec_size).as_str());
+                serial_ctx.code.add(format!("call void @f{}({})", func.id, body_arg_types));
+                let cont_arg_types = try!(self.get_arg_str(&sir.funcs[par_for.cont].params, ""));
+                serial_ctx.code.add(format!("call void @f{}({})", par_for.cont, cont_arg_types));
+                serial_ctx.code.add("ret void");
+                serial_ctx.code.add("}\n\n");
+                self.body_code.add(&serial_ctx.code.result());
+            }
+        }
         Ok(())
     }
 
@@ -103,30 +214,18 @@ impl LlvmGenerator {
     pub fn add_function_on_pointers(
         &mut self,
         name: &str,
-        args: &Vec<TypedParameter>,
-        body: &TypedExpr
+        sir: &SirProgram
     ) -> WeldResult<()> {
         // First add the function on raw values, which we'll call from the pointer version.
-        let raw_function_name = format!("{}.raw", name);
-        try!(self.add_function(&raw_function_name, args, body));
+        try!(self.add_function(sir, &sir.funcs[0], None));
 
         // Define a struct with all the argument types as fields
-        let args_struct = Struct(args.iter().map(|a| a.ty.clone()).collect());
+        let args_struct = Struct(sir.top_params.iter().map(|a| a.ty.clone()).collect());
         let args_type = try!(self.llvm_type(&args_struct)).to_string();
 
-        let res_type = try!(self.llvm_type(&body.ty)).to_string();
         let mut code = &mut CodeBuilder::new();
 
         code.add(format!("define i64 @{}(i64 %args) {{", name));
-
-        // Code to allocate a result structure
-        code.add(format!(
-            "%res_size_ptr = getelementptr {res_type}* null, i32 1
-             %res_size = ptrtoint {res_type}* %res_size_ptr to i64
-             %res_bytes = call i8* @malloc(i64 %res_size)
-             %res_typed = bitcast i8* %res_bytes to {res_type}*",
-            res_type = res_type
-        ));
 
         // Code to load args and call function
         code.add(format!(
@@ -134,19 +233,30 @@ impl LlvmGenerator {
              %args_val = load {args_type}* %args_typed",
             args_type = args_type
         ));
-        let mut arg_decls: Vec<String> = Vec::new();
-        for (i, arg) in args.iter().enumerate() {
-            code.add(format!("%arg{} = extractvalue {} %args_val, {}", i, args_type, i));
-            arg_decls.push(format!("{} %arg{}", try!(self.llvm_type(&arg.ty)), i));
+        
+        let mut arg_pos_map: HashMap<Symbol, usize> = HashMap::new();
+        for (i, a) in sir.top_params.iter().enumerate() {
+            arg_pos_map.insert(a.name.clone(), i);    
         }
+        let mut arg_decls = String::new();
+        let params_sorted: BTreeMap<&Symbol, &Type> = sir.funcs[0].params.iter().collect();
+        for (arg, ty) in params_sorted.iter() {
+            let idx = arg_pos_map.get(arg).unwrap();
+            code.add(format!("%arg{} = extractvalue {} %args_val, {}", idx, args_type, idx));
+            arg_decls.push_str(format!("{} %arg{}, ", try!(self.llvm_type(&ty)), idx).as_str());
+        }
+        arg_decls.push_str("%work_t* %cur.work");
         code.add(format!(
-            "%res_val = call {res_type} @{raw_function_name}({arg_list})
-             store {res_type} %res_val, {res_type}* %res_typed
-             %res_address = ptrtoint {res_type}* %res_typed to i64
+            "%cur.work.size.ptr = getelementptr %work_t* null, i32 1
+             %cur.work.size = ptrtoint %work_t* %cur.work.size.ptr to i64 
+             %cur.work.raw = call i8* @malloc(i64 %cur.work.size)
+             %cur.work = bitcast i8* %cur.work.raw to %work_t*
+             call void @f0({arg_list})
+             %res_ptr_ptr = getelementptr %work_t* %cur.work, i32 0, i32 0
+             %res_ptr = load i8** %res_ptr_ptr
+             %res_address = ptrtoint i8* %res_ptr to i64
              ret i64 %res_address",
-            res_type = res_type,
-            raw_function_name = raw_function_name,
-            arg_list = arg_decls.join(", ")
+            arg_list = arg_decls
         ));
         code.add(format!("}}\n\n"));
 
@@ -177,94 +287,224 @@ impl LlvmGenerator {
                     self.struct_names.insert(fields.clone(), name);
                 }
                 Ok(self.struct_names.get(fields).unwrap())
-            }
+            },
 
             Vector(ref elem) => {
                 if self.vec_names.get(elem) == None {
-                    // TODO: declare the vector's struct and helper functions in self.prelude_code
-                    self.vec_names.insert(*elem.clone(), self.vec_ids.next());
+                    let elem_ty = try!(self.llvm_type(elem)).to_string();
+                    let elem_prefix = format!("@{}", elem_ty.replace("%", ""));
+                    let name = self.vec_ids.next();
+                    self.vec_names.insert(*elem.clone(), name.clone());
+                    let prefix_replaced = VECTOR_CODE.replace("$ELEM_PREFIX", &elem_prefix);
+                    let elem_replaced = prefix_replaced.replace("$ELEM", &elem_ty);
+                    let name_replaced = elem_replaced.replace("$NAME", &name.replace("%", ""));
+                    self.prelude_code.add(&name_replaced);
+                    self.prelude_code.add("\n");
                 }
                 Ok(self.vec_names.get(elem).unwrap())
+            },
+
+            Builder(ref bk) => {
+                if self.bld_names.get(bk) == None {
+                    match *bk {
+                        Appender(ref t) => {
+                            let bld_ty = Vector(t.clone());
+                            let bld_ty_str = try!(self.llvm_type(&bld_ty)).to_string();
+                            self.bld_names.insert(bk.clone(), format!("{}.bld", &bld_ty_str));
+                        },
+                        _ => weld_err!("Unsupported builder type {} in llvm_type", print_type(ty))?
+                    }
+                }
+                Ok(self.bld_names.get(bk).unwrap())
             }
 
-            _ => weld_err!("Unsupported type {}", print_type(ty))
+            _ => weld_err!("Unsupported type {}", print_type(ty))?
         }
+    }
+
+    fn load_var(
+        &mut self,
+        sym: &str,
+        ty: &str,
+        ctx: &mut FunctionContext
+    ) -> WeldResult<String> {
+        let var = ctx.var_ids.next();
+        ctx.code.add(format!("{} = load {}* {}", var, ty, sym));
+        Ok(var)
     }
 
     /// Add an expression to a CodeBuilder, possibly generating prelude code earlier, and return
     /// a string that can be used to represent its result later (e.g. %var if introducing a local
     /// variable or an integer constant otherwise).
-    fn gen_expr(
+    fn gen_func(
         &mut self,
-        expr: &TypedExpr,
+        sir: &SirProgram,
+        func: &SirFunction,
         ctx: &mut FunctionContext
     ) -> WeldResult<String> {
-        match expr.kind {
-            Literal(I32Literal(v)) => Ok(format!("{}", v)),
-            Literal(I64Literal(v)) => Ok(format!("{}", v)),
-            Literal(F32Literal(v)) => Ok(format!("{}", v)),
-            Literal(F64Literal(v)) => Ok(format!("{}", v)),
-            Literal(BoolLiteral(v)) => Ok(format!("{}", if v {1} else {0})),
-
-            Ident(ref symbol) => {
-                let var = ctx.var_ids.next();
-                ctx.code.add(format!("{} = load {}* {}",
-                    var, try!(self.llvm_type(&expr.ty)), llvm_symbol(symbol)));
-                Ok(var)
-            },
-
-            BinOp{kind, ref left, ref right} => {
-                let op_name = try!(llvm_binop(kind, &left.ty));
-                let left_var = try!(self.gen_expr(left, ctx));
-                let right_var = try!(self.gen_expr(right, ctx));
-                let var = ctx.var_ids.next();
-                ctx.code.add(format!("{} = {} {} {}, {}",
-                    var, op_name, try!(self.llvm_type(&left.ty)), left_var, right_var));
-                Ok(var)
-            },
-
-            Let{ref name, ref value, ref body} => {
-                let value_var = try!(self.gen_expr(value, ctx));
-                let name = llvm_symbol(name);
-                let ty = try!(self.llvm_type(&value.ty)).to_string();
-                try!(ctx.add_alloca(&name, &ty));
-                ctx.code.add(format!("store {} {}, {}* {}", ty, value_var, ty, name));
-                self.gen_expr(body, ctx)
-            },
-
-            If{ref cond, ref on_true, ref on_false} => {
-                let cond_var = try!(self.gen_expr(cond, ctx));
-                let id = ctx.if_ids.next();
-                let true_label = format!("{}.true", id);
-                let false_label = format!("{}.false", id);
-                let end_true_label = format!("{}.true.end", id);
-                let end_false_label = format!("{}.false.end", id);
-                let end_label = format!("{}.end", id);
-
-                ctx.code.add(format!("br i1 {}, label %{}, label %{}",
-                    cond_var, true_label, false_label));
-                ctx.code.add(format!("{}:", true_label));
-                let true_var = try!(self.gen_expr(on_true, ctx));
-                ctx.code.add(format!("br label %{}", end_true_label));
-                ctx.code.add(format!("{}:", end_true_label));
-                ctx.code.add(format!("br label %{}", end_label));
-
-                ctx.code.add(format!("{}:", false_label));
-                let false_var = try!(self.gen_expr(on_false, ctx));
-                ctx.code.add(format!("br label %{}", end_false_label));
-                ctx.code.add(format!("{}:", end_false_label));
-                ctx.code.add(format!("br label %{}", end_label));
-
-                ctx.code.add(format!("{}:", end_label));
-                let var = ctx.var_ids.next();
-                let ty = try!(self.llvm_type(&expr.ty)).to_string();
-                ctx.code.add(format!("{} = phi {} [{}, %{}], [{}, %{}]",
-                    var, ty, true_var, end_true_label, false_var, end_false_label));
-                Ok(var)
-            },
-
-            _ => weld_err!("Unsupported expression: {}", print_expr(expr))
+        for b in func.blocks.iter() {
+            ctx.code.add(format!("b{}:", b.id));
+            for s in b.statements.iter() {
+                match *s {
+                    AssignBinOp(ref output, op, ref ty, ref left, ref right) => {
+                        let op_name = try!(llvm_binop(op, ty));
+                        let ll_ty = try!(self.llvm_type(ty)).to_string();
+                        let left_tmp = try!(self.load_var(llvm_symbol(left).as_str(),
+                            &ll_ty, ctx));
+                        let right_tmp = try!(self.load_var(llvm_symbol(right).as_str(),
+                            &ll_ty, ctx));
+                        let bin_tmp = ctx.var_ids.next();
+                        ctx.code.add(format!("{} = {} {} {}, {}",
+                            bin_tmp, op_name, &ll_ty, left_tmp, right_tmp));
+                        ctx.code.add(format!("store {} {}, {}* {}", ll_ty, bin_tmp, ll_ty, llvm_symbol(output)));
+                    },
+                    Assign(ref out, ref value) => {
+                        let ty = try!(get_sym_ty(func, out));
+                        let ll_ty = try!(self.llvm_type(&ty)).to_string();
+                        let val_tmp = try!(self.load_var(llvm_symbol(value).as_str(), &ll_ty, ctx));
+                        ctx.code.add(format!("store {} {}, {}* {}", &ll_ty, val_tmp, &ll_ty, llvm_symbol(out)));
+                    },
+                    AssignLiteral(ref out, ref lit) => {
+                        match *lit {
+                            BoolLiteral(l) => ctx.code.add(format!("store i1 {}, i1* {}",
+                                if l { 1 } else { 0 }, llvm_symbol(out))),
+                            I32Literal(l) => ctx.code.add(format!("store i32 {}, i32* {}",
+                                l, llvm_symbol(out))),
+                            I64Literal(l) => ctx.code.add(format!("store i64 {}, i64* {}",
+                                l, llvm_symbol(out))),
+                            F32Literal(l) => ctx.code.add(format!("store f32 {}, f32* {}",
+                                l, llvm_symbol(out))),
+                            F64Literal(l) => ctx.code.add(format!("store f64 {}, f64* {}",
+                                l, llvm_symbol(out)))
+                        }
+                    },
+                    DoMerge(ref bld, ref elem) => {
+                        let bld_ty = try!(get_sym_ty(func, bld));
+                        match *bld_ty {
+                            Builder(ref bk) => {
+                                match *bk {
+                                    Appender(ref t) => {
+                                        let bld_ty_str = try!(self.llvm_type(&bld_ty)).to_string();
+                                        let bld_prefix = format!("@{}", bld_ty_str.replace("%", ""));
+                                        let elem_ty_str = try!(self.llvm_type(t)).to_string();
+                                        let bld_tmp = try!(self.load_var(llvm_symbol(bld).as_str(), &bld_ty_str,
+                                            ctx));
+                                        let elem_tmp = try!(self.load_var(llvm_symbol(elem).as_str(), &elem_ty_str,
+                                            ctx));
+                                        ctx.code.add(format!("call {} {}.merge({} {}, {} {})", &bld_ty_str,
+                                            bld_prefix, &bld_ty_str, bld_tmp, &elem_ty_str, elem_tmp));
+                                    },
+                                    _ => weld_err!("Unsupported builder type {} in DoMerge", print_type(bld_ty))?
+                                }
+                            },
+                            _ => weld_err!("Non builder type {} found in DoMerge", print_type(bld_ty))?
+                        }
+                    },
+                    GetResult(ref out, ref value) => {
+                        let bld_ty = try!(get_sym_ty(func, value));
+                        let res_ty = try!(get_sym_ty(func, out));
+                        match *bld_ty {
+                            Builder(ref bk) => {
+                                match *bk {
+                                    Appender(_) => {
+                                        let bld_ty_str = try!(self.llvm_type(&bld_ty)).to_string();
+                                        let bld_prefix = format!("@{}", bld_ty_str.replace("%", ""));
+                                        let res_ty_str = try!(self.llvm_type(&res_ty)).to_string();
+                                        let bld_tmp = try!(self.load_var(llvm_symbol(value).as_str(), &bld_ty_str,
+                                            ctx));
+                                        let res_tmp = ctx.var_ids.next();
+                                        ctx.code.add(format!("{} = call {} {}.result({} {})", &res_tmp,
+                                            &res_ty_str, bld_prefix, &bld_ty_str, bld_tmp));
+                                        ctx.code.add(format!("store {} {}, {}* {}", &res_ty_str,
+                                            &res_tmp, &res_ty_str, llvm_symbol(out)));
+                                    },
+                                    _ => weld_err!("Unsupported builder type {} in GetResult", print_type(bld_ty))?
+                                }
+                            },
+                            _ => weld_err!("Non builder type {} found in GetResult", print_type(bld_ty))?
+                        }
+                    },
+                    CreateBuilder(ref out, ref ty) => {
+                        match *ty {
+                            Builder(ref bk) => {
+                                match *bk {
+                                    Appender(_) => {
+                                        let bld_ty_str = try!(self.llvm_type(ty));
+                                        let bld_prefix = format!("@{}", bld_ty_str.replace("%", ""));
+                                        let bld_tmp = ctx.var_ids.next();
+                                        ctx.code.add(format!("{} = call {} {}.new(i64 16)", bld_tmp,
+                                            bld_ty_str, bld_prefix));
+                                        ctx.code.add(format!("store {} {}, {}* {}", bld_ty_str,
+                                            bld_tmp, bld_ty_str, llvm_symbol(out)));
+                                    },
+                                    _ => weld_err!("Unsupported builder type {} in CreateBuilder", print_type(ty))?
+                                }
+                            },
+                            _ => weld_err!("Non builder type {} found in CreateResult", print_type(ty))?
+                        }
+                    }
+                }
+            }
+            match b.terminator {
+                Branch(ref cond, on_true, on_false) => {
+                    let cond_tmp = try!(self.load_var(llvm_symbol(cond).as_str(), "i1", ctx));
+                    ctx.code.add(format!("br i1 {}, label %b{}, label %b{}", cond_tmp, on_true, on_false));
+                },
+                ParallelFor(ref pf) => {
+                    try!(self.add_function(sir, &sir.funcs[pf.cont], None));
+                    try!(self.add_function(sir, &sir.funcs[pf.body], Some(pf.clone())));
+                    // TODO add parallel wrapper call
+                    let params = get_combined_params(sir, pf);
+                    let params_sorted: BTreeMap<&Symbol, &Type> = params.iter().collect();
+                    let mut arg_types = String::new();
+                    for (arg, ty) in params_sorted.iter() {
+                        let ll_ty = try!(self.llvm_type(&ty)).to_string();
+                        let arg_tmp = try!(self.load_var(llvm_symbol(arg).as_str(), &ll_ty, ctx));
+                        let arg_str = format!("{} {}, ", &ll_ty, arg_tmp);
+                        arg_types.push_str(&arg_str);
+                    }
+                    arg_types.push_str("%work_t* %cur.work");
+                    ctx.code.add(format!("call void @f{}_ser_wrapper({})", pf.body, arg_types));
+                },
+                JumpBlock(block) => {
+                    ctx.code.add(format!("br label %b{}", block));
+                },
+                JumpFunction(func) => {
+                    try!(self.add_function(sir, &sir.funcs[func], None));
+                    let params_sorted: BTreeMap<&Symbol, &Type> = sir.funcs[func].params.iter().collect();
+                    let mut arg_types = String::new();
+                    for (arg, ty) in params_sorted.iter() {
+                        let ll_ty = try!(self.llvm_type(&ty)).to_string();
+                        let arg_tmp = try!(self.load_var(llvm_symbol(arg).as_str(), &ll_ty, ctx));
+                        let arg_str = format!("{} {}, ", &ll_ty, arg_tmp);
+                        arg_types.push_str(&arg_str);
+                    }
+                    arg_types.push_str("%work_t* %cur.work");
+                    ctx.code.add(format!("call void @f{}({})", func, arg_types));
+                },
+                ProgramReturn(ref sym) => {
+                    let ty = try!(get_sym_ty(func, sym));
+                    let ty_str = try!(self.llvm_type(ty)).to_string();
+                    let res_tmp = try!(self.load_var(llvm_symbol(sym).as_str(), &ty_str, ctx));
+                    let elem_size_ptr = ctx.var_ids.next();
+                    let elem_size = ctx.var_ids.next();
+                    let elem_storage = ctx.var_ids.next();
+                    let elem_storage_typed = ctx.var_ids.next();
+                    let work_res_ptr = ctx.var_ids.next();
+                    ctx.code.add(format!("{} = getelementptr {}* null, i32 1", &elem_size_ptr, &ty_str));
+                    ctx.code.add(format!("{} = ptrtoint {}* {} to i64", &elem_size, &ty_str, &elem_size_ptr));
+                    ctx.code.add(format!("{} = call i8* @malloc(i64 {})", &elem_storage, &elem_size));
+                    ctx.code.add(format!("{} = bitcast i8* {} to {}*", &elem_storage_typed,
+                        &elem_storage, &ty_str));
+                    ctx.code.add(format!("store {} {}, {}* {}", &ty_str, res_tmp, &ty_str, &elem_storage_typed));
+                    ctx.code.add(format!("{} = getelementptr %work_t* %cur.work, i32 0, i32 0", &work_res_ptr));
+                    ctx.code.add(format!("store i8* {}, i8** {}", &elem_storage, &work_res_ptr));
+                },
+                EndFunction => {},
+                Crash => { /* TODO do something else here? */ }
+            }
         }
+        Ok(format!(""))
     }
 }
 
@@ -352,7 +592,7 @@ impl FunctionContext {
         FunctionContext {
             alloca_code: CodeBuilder::new(),
             code: CodeBuilder::new(),
-            var_ids: IdGenerator::new("%"),
+            var_ids: IdGenerator::new("%t."),
             if_ids: IdGenerator::new("if"),
             defined_symbols: HashSet::new(),
         }
@@ -373,15 +613,11 @@ pub fn compile_program(program: &Program) -> WeldResult<easy_ll::CompiledModule>
     let mut expr = try!(macro_processor::process_program(program));
     try!(type_inference::infer_types(&mut expr));
     let expr = try!(expr.to_typed());
-    match expr.kind {
-        Lambda{ref params, ref body} => {
-            let mut gen = LlvmGenerator::new();
-            try!(gen.add_function_on_pointers("run", params, body));
-            println!("{}", gen.result());
-            Ok(try!(easy_ll::compile_module(&gen.result())))
-        },
-        _ => weld_err!("Expression passed to compile_function must be a Lambda")
-    }
+    let sir_prog = try!(sir::ast_to_sir(&expr));
+    let mut gen = LlvmGenerator::new();
+    try!(gen.add_function_on_pointers("run", &sir_prog));
+    println!("{}", gen.result());
+    Ok(try!(easy_ll::compile_module(&gen.result())))
 }
 
 #[test]

@@ -9,8 +9,8 @@ use super::error::*;
 use super::pretty_print::*;
 use super::util::SymbolGenerator;
 
-type BasicBlockId = usize;
-type FunctionId = usize;
+pub type BasicBlockId = usize;
+pub type FunctionId = usize;
 
 /// A non-terminating statement inside a basic block.
 #[derive(Clone)]
@@ -21,12 +21,22 @@ pub enum Statement {
     Assign(Symbol, Symbol),
     /// output, value
     AssignLiteral(Symbol, LiteralKind),
-    /// output, builder, value
-    DoMerge(Symbol, Symbol, Symbol),
+    /// builder, value
+    DoMerge(Symbol, Symbol),
     /// output, builder
     GetResult(Symbol, Symbol),
     /// output, builder type
     CreateBuilder(Symbol, Type),
+}
+
+#[derive(Clone)]
+pub struct ParallelForData {
+    pub data: Symbol,
+    pub builder: Symbol,
+    pub data_arg: Symbol,
+    pub builder_arg: Symbol,
+    pub body: FunctionId,
+    pub cont: FunctionId    
 }
 
 /// A terminating statement inside a basic block.
@@ -36,43 +46,41 @@ pub enum Terminator {
     Branch(Symbol, BasicBlockId, BasicBlockId),
     JumpBlock(BasicBlockId),
     JumpFunction(FunctionId),
-    Return(Symbol),
-    ParallelFor {
-        data: Symbol,
-        builder: Symbol,
-        data_arg: Symbol,
-        builder_arg: Symbol,
-        body: FunctionId,
-        cont: FunctionId
-    },
+    ProgramReturn(Symbol),
+    EndFunction,
+    ParallelFor(ParallelForData),
     Crash
 }
 
 /// A basic block inside a SIR program
 #[derive(Clone)]
 pub struct BasicBlock {
-    id: BasicBlockId,
-    statements: Vec<Statement>,
-    terminator: Terminator
+    pub id: BasicBlockId,
+    pub statements: Vec<Statement>,
+    pub terminator: Terminator
 }
 
-pub struct Function {
-    id: FunctionId,
-    params: HashMap<Symbol, Type>,
-    locals: HashMap<Symbol, Type>,
-    blocks: Vec<BasicBlock>
+pub struct SirFunction {
+    pub id: FunctionId,
+    pub params: HashMap<Symbol, Type>,
+    pub locals: HashMap<Symbol, Type>,
+    pub blocks: Vec<BasicBlock>
 }
 
 pub struct SirProgram {
     /// funcs[0] is the main function
-    funcs: Vec<Function>,
+    pub funcs: Vec<SirFunction>,
+    pub ret_ty: Type,
+    pub top_params: Vec<TypedParameter>,
     sym_gen: SymbolGenerator
 }
 
 impl SirProgram {
-    pub fn new() -> SirProgram {
+    pub fn new(ret_ty: &Type, top_params: &Vec<TypedParameter>) -> SirProgram {
         let mut prog = SirProgram {
             funcs: vec![],
+            ret_ty: ret_ty.clone(),
+            top_params: top_params.clone(),
             sym_gen: SymbolGenerator::new()
         };
         /// add main
@@ -81,7 +89,7 @@ impl SirProgram {
     }
 
     pub fn add_func(&mut self) -> FunctionId {
-        let func = Function {
+        let func = SirFunction {
             id: self.funcs.len(),
             params: HashMap::new(),
             blocks: vec![],
@@ -104,7 +112,7 @@ impl SirProgram {
     }
 }
 
-impl Function {
+impl SirFunction {
     /// Add a new basic block and return its block ID.
     pub fn add_block(&mut self) -> BasicBlockId {
         let block = BasicBlock {
@@ -132,7 +140,7 @@ impl fmt::Display for Statement {
             },
             Assign(ref out, ref value) => write!(f, "{} = {}", out, value),
             AssignLiteral(ref out, ref lit) => write!(f, "{} = {}", out, print_literal(lit)),
-            DoMerge(ref out, ref bld, ref elem) => write!(f, "{} = merge {} {}", out, bld, elem),
+            DoMerge(ref bld, ref elem) => write!(f, "merge {} {}", bld, elem),
             GetResult(ref out, ref value) => write!(f, "{} = result {}", out, value),
             CreateBuilder(ref out, ref ty) => write!(f, "{} = new {}", out, print_type(ty)),
         }
@@ -146,16 +154,15 @@ impl fmt::Display for Terminator {
             Branch(ref cond, ref on_true, ref on_false) => {
                 write!(f, "branch {} B{} B{}", cond, on_true, on_false)
             },
-            ParallelFor {
-                ref data, ref builder, ref data_arg, ref builder_arg, body, cont
-            } => {
+            ParallelFor(ref pf) => {
                 write!(f, "for {} {} {} {} F{} F{}",
-                    data, builder, data_arg, builder_arg, body, cont)?;
+                    pf.data, pf.builder, pf.data_arg, pf.builder_arg, pf.body, pf.cont)?;
                 Ok(())
             },
             JumpBlock(block) => write!(f, "jump B{}", block),
             JumpFunction(func) => write!(f, "jump F{}", func),
-            Return(ref sym) => write!(f, "return {}", sym),
+            ProgramReturn(ref sym) => write!(f, "return {}", sym),
+            EndFunction => write!(f, "end"),
             Crash => write!(f, "crash")
         }
     }
@@ -172,7 +179,7 @@ impl fmt::Display for BasicBlock {
     }
 }
 
-impl fmt::Display for Function {
+impl fmt::Display for SirFunction {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "F{}:\n", self.id)?;
         write!(f, "Params:\n")?;
@@ -203,7 +210,7 @@ impl fmt::Display for SirProgram {
 
 /// Recursive helper function for sir_param_correction. env contains the symbol to type mappings
 /// that have been defined previously in the program. Any symbols that need to be passed in
-/// as closure parameters to func_id will be added to closure (so that this function's
+/// as closure parameters to func_id will be added to closure (so that func_id's
 /// callers can also add these symbols to their parameters list, if necessary).
 pub fn sir_param_correction_helper(prog: &mut SirProgram, func_id: FunctionId,
 env: &mut HashMap<Symbol, Type>, closure: &mut HashSet<Symbol>) {
@@ -224,7 +231,7 @@ env: &mut HashMap<Symbol, Type>, closure: &mut HashSet<Symbol>) {
                     vars.push(right.clone());
                 },
                 Assign(_, ref value) => vars.push(value.clone()),
-                DoMerge(_, ref bld, ref elem) => {
+                DoMerge(ref bld, ref elem) => {
                     vars.push(bld.clone());
                     vars.push(elem.clone());
                 },
@@ -242,9 +249,9 @@ env: &mut HashMap<Symbol, Type>, closure: &mut HashSet<Symbol>) {
         use self::Terminator::*;
         match block.terminator {
             // TODO how do we get rid of unused variable warnings here?
-            ParallelFor {data, builder, data_arg, builder_arg, body, cont} => {
-                sir_param_correction_helper(prog, body, env, &mut inner_closure);
-                sir_param_correction_helper(prog, cont, env, &mut inner_closure);
+            ParallelFor(ref pf) => {
+                sir_param_correction_helper(prog, pf.body, env, &mut inner_closure);
+                sir_param_correction_helper(prog, pf.cont, env, &mut inner_closure);
             },
             JumpFunction(jump_func) => {
                 sir_param_correction_helper(prog, jump_func, env, &mut inner_closure);
@@ -279,15 +286,14 @@ pub fn sir_param_correction(prog: &mut SirProgram) -> WeldResult<()> {
 /// Convert an AST to a SIR program. Symbols must be unique in expr.
 pub fn ast_to_sir(expr: &TypedExpr) -> WeldResult<SirProgram> {
     if let Lambda(ref params, ref body) = expr.kind {
-        let mut prog = SirProgram::new();
+        let mut prog = SirProgram::new(&expr.ty, params);
         prog.sym_gen = SymbolGenerator::from_expression(expr);
         for tp in params {
             prog.funcs[0].params.insert(tp.name.clone(), tp.ty.clone());
         }
         let first_block = prog.funcs[0].add_block();
         let (res_func, res_block, res_sym) = gen_expr(body, &mut prog, 0, first_block)?;
-        // TODO we probably want this to be a special kind of return for the final program result
-        prog.funcs[res_func].blocks[res_block].terminator = Terminator::Return(res_sym);
+        prog.funcs[res_func].blocks[res_block].terminator = Terminator::ProgramReturn(res_sym);
         sir_param_correction(&mut prog)?;
         Ok((prog))
     } else {
@@ -365,9 +371,9 @@ fn gen_expr(
         Merge(ref builder, ref elem) => {
             let (cur_func, cur_block, builder_sym) = gen_expr(builder, prog, cur_func, cur_block)?;
             let (cur_func, cur_block, elem_sym) = gen_expr(elem, prog, cur_func, cur_block)?;
-            let res_sym = prog.add_local(&expr.ty, cur_func);
-            prog.funcs[cur_func].blocks[cur_block].add_statement(DoMerge(res_sym.clone(), builder_sym, elem_sym));
-            Ok((cur_func, cur_block, res_sym))
+            prog.funcs[cur_func].blocks[cur_block].add_statement(DoMerge(builder_sym.clone(),
+                elem_sym));
+            Ok((cur_func, cur_block, builder_sym))
         },
 
         Res(ref builder) => {
@@ -393,19 +399,21 @@ fn gen_expr(
                 prog.add_local_named(&params[1].ty, &params[1].name, body_func);
                 prog.funcs[body_func].params.insert(data_sym.clone(), data.ty.clone());
                 prog.funcs[body_func].params.insert(builder_sym.clone(), builder.ty.clone());
-                let (body_end_func, body_end_block, body_res) = gen_expr(body, prog, body_func, body_block)?;
+                let (body_end_func, body_end_block, _) = gen_expr(body, prog, body_func, body_block)?;
                 // TODO this is a useless line
-                prog.funcs[body_end_func].blocks[body_end_block].terminator = Return(body_res);
+                prog.funcs[body_end_func].blocks[body_end_block].terminator = EndFunction;
                 let cont_func = prog.add_func();
                 let cont_block = prog.funcs[cont_func].add_block();
-                prog.funcs[cur_func].blocks[cur_block].terminator = ParallelFor {
-                    data: data_sym,
-                    builder: builder_sym.clone(),
-                    data_arg: params[0].name.clone(),
-                    builder_arg: params[1].name.clone(),
-                    body: body_func,
-                    cont: cont_func
-                };
+                prog.funcs[cur_func].blocks[cur_block].terminator = ParallelFor(
+                    ParallelForData {
+                        data: data_sym,
+                        builder: builder_sym.clone(),
+                        data_arg: params[1].name.clone(),
+                        builder_arg: params[0].name.clone(),
+                        body: body_func,
+                        cont: cont_func
+                    }
+                );
                 Ok((cont_func, cont_block, builder_sym))
             } else {
                 weld_err!("Argument to For was not a Lambda: {}", print_expr(update))
