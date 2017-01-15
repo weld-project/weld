@@ -246,17 +246,16 @@ env: &mut HashMap<Symbol, Type>, closure: &mut HashSet<Symbol>) {
         for statement in &block.statements {
             use self::Statement::*;
             match *statement {
-                // TODO how do we get rid of unused variable warnings here?
-                AssignBinOp { ref output, ref op, ref ty, ref left, ref right } => {
+                AssignBinOp { ref left, ref right, .. } => {
                     vars.push(left.clone());
                     vars.push(right.clone());
                 },
-                Assign { ref output, ref value } => vars.push(value.clone()),
+                Assign { ref value, .. } => vars.push(value.clone()),
                 DoMerge { ref builder, ref value } => {
                     vars.push(builder.clone());
                     vars.push(value.clone());
                 },
-                GetResult { ref output, ref builder } => vars.push(builder.clone()),
+                GetResult { ref builder, .. } => vars.push(builder.clone()),
                 _ => {}
             }   
         }
