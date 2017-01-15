@@ -9,6 +9,7 @@ use super::ast::Symbol;
 use super::ast::Iter;
 use super::ast::BinOpKind::*;
 use super::ast::ExprKind::*;
+use super::ast::LiteralKind::*;
 use super::ast::ScalarKind::*;
 use super::error::*;
 use super::partial_types::*;
@@ -471,17 +472,12 @@ impl<'t> Parser<'t> {
     /// Parse a terminal expression at the bottom of the precedence chain.
     fn leaf_expr(&mut self) -> WeldResult<Box<PartialExpr>> {
         match *self.next() {
-            TI32Literal(value) => Ok(expr_box(I32Literal(value))),
-            TI64Literal(value) => Ok(expr_box(I64Literal(value))),
-            TF32Literal(value) => Ok(expr_box(F32Literal(value))),
-            TF64Literal(value) => Ok(expr_box(F64Literal(value))),
-            TBoolLiteral(value) => Ok(expr_box(BoolLiteral(value))),
-            TIdent(ref name) => {
-                Ok(expr_box(Ident(Symbol {
-                    name: name.clone(),
-                    id: 0,
-                })))
-            }
+            TI32Literal(v) => Ok(expr_box(Literal(I32Literal(v)))),
+            TI64Literal(v) => Ok(expr_box(Literal(I64Literal(v)))),
+            TF32Literal(v) => Ok(expr_box(Literal(F32Literal(v)))),
+            TF64Literal(v) => Ok(expr_box(Literal(F64Literal(v)))),
+            TBoolLiteral(v) => Ok(expr_box(Literal(BoolLiteral(v)))),
+            TIdent(ref name) => Ok(expr_box(Ident(Symbol{name: name.clone(), id: 0}))),
 
             TOpenParen => {
                 let expr = try!(self.expr());
