@@ -346,7 +346,7 @@ impl LlvmGenerator {
             ctx.code.add(format!("b{}:", b.id));
             for s in b.statements.iter() {
                 match *s {
-                    AssignBinOp(ref output, op, ref ty, ref left, ref right) => {
+                    AssignBinOp { ref output, op, ref ty, ref left, ref right } => {
                         let op_name = try!(llvm_binop(op, ty));
                         let ll_ty = try!(self.llvm_type(ty)).to_string();
                         let left_tmp = try!(self.load_var(llvm_symbol(left).as_str(),
@@ -356,30 +356,33 @@ impl LlvmGenerator {
                         let bin_tmp = ctx.var_ids.next();
                         ctx.code.add(format!("{} = {} {} {}, {}",
                             bin_tmp, op_name, &ll_ty, left_tmp, right_tmp));
-                        ctx.code.add(format!("store {} {}, {}* {}", ll_ty, bin_tmp, ll_ty, llvm_symbol(output)));
+                        let out_ty = try!(get_sym_ty(func, output));
+                        let out_ty_str = try!(self.llvm_type(&out_ty)).to_string();
+                        ctx.code.add(format!("store {} {}, {}* {}", out_ty_str, bin_tmp,
+                            out_ty_str, llvm_symbol(output)));
                     },
-                    Assign(ref out, ref value) => {
-                        let ty = try!(get_sym_ty(func, out));
+                    Assign { ref output, ref value } => {
+                        let ty = try!(get_sym_ty(func, output));
                         let ll_ty = try!(self.llvm_type(&ty)).to_string();
                         let val_tmp = try!(self.load_var(llvm_symbol(value).as_str(), &ll_ty, ctx));
-                        ctx.code.add(format!("store {} {}, {}* {}", &ll_ty, val_tmp, &ll_ty, llvm_symbol(out)));
+                        ctx.code.add(format!("store {} {}, {}* {}", &ll_ty, val_tmp, &ll_ty, llvm_symbol(output)));
                     },
-                    AssignLiteral(ref out, ref lit) => {
-                        match *lit {
+                    AssignLiteral { ref output, ref value } => {
+                        match *value {
                             BoolLiteral(l) => ctx.code.add(format!("store i1 {}, i1* {}",
-                                if l { 1 } else { 0 }, llvm_symbol(out))),
+                                if l { 1 } else { 0 }, llvm_symbol(output))),
                             I32Literal(l) => ctx.code.add(format!("store i32 {}, i32* {}",
-                                l, llvm_symbol(out))),
+                                l, llvm_symbol(output))),
                             I64Literal(l) => ctx.code.add(format!("store i64 {}, i64* {}",
-                                l, llvm_symbol(out))),
+                                l, llvm_symbol(output))),
                             F32Literal(l) => ctx.code.add(format!("store f32 {}, f32* {}",
-                                l, llvm_symbol(out))),
+                                l, llvm_symbol(output))),
                             F64Literal(l) => ctx.code.add(format!("store f64 {}, f64* {}",
-                                l, llvm_symbol(out)))
+                                l, llvm_symbol(output)))
                         }
                     },
-                    DoMerge(ref bld, ref elem) => {
-                        let bld_ty = try!(get_sym_ty(func, bld));
+                    DoMerge { ref builder, ref value } => {
+                        let bld_ty = try!(get_sym_ty(func, builder));
                         match *bld_ty {
                             Builder(ref bk) => {
                                 match *bk {
@@ -387,9 +390,9 @@ impl LlvmGenerator {
                                         let bld_ty_str = try!(self.llvm_type(&bld_ty)).to_string();
                                         let bld_prefix = format!("@{}", bld_ty_str.replace("%", ""));
                                         let elem_ty_str = try!(self.llvm_type(t)).to_string();
-                                        let bld_tmp = try!(self.load_var(llvm_symbol(bld).as_str(), &bld_ty_str,
+                                        let bld_tmp = try!(self.load_var(llvm_symbol(builder).as_str(), &bld_ty_str,
                                             ctx));
-                                        let elem_tmp = try!(self.load_var(llvm_symbol(elem).as_str(), &elem_ty_str,
+                                        let elem_tmp = try!(self.load_var(llvm_symbol(value).as_str(), &elem_ty_str,
                                             ctx));
                                         ctx.code.add(format!("call {} {}.merge({} {}, {} {})", &bld_ty_str,
                                             bld_prefix, &bld_ty_str, bld_tmp, &elem_ty_str, elem_tmp));
@@ -400,9 +403,9 @@ impl LlvmGenerator {
                             _ => weld_err!("Non builder type {} found in DoMerge", print_type(bld_ty))?
                         }
                     },
-                    GetResult(ref out, ref value) => {
-                        let bld_ty = try!(get_sym_ty(func, value));
-                        let res_ty = try!(get_sym_ty(func, out));
+                    GetResult { ref output, ref builder } => {
+                        let bld_ty = try!(get_sym_ty(func, builder));
+                        let res_ty = try!(get_sym_ty(func, output));
                         match *bld_ty {
                             Builder(ref bk) => {
                                 match *bk {
@@ -410,13 +413,13 @@ impl LlvmGenerator {
                                         let bld_ty_str = try!(self.llvm_type(&bld_ty)).to_string();
                                         let bld_prefix = format!("@{}", bld_ty_str.replace("%", ""));
                                         let res_ty_str = try!(self.llvm_type(&res_ty)).to_string();
-                                        let bld_tmp = try!(self.load_var(llvm_symbol(value).as_str(), &bld_ty_str,
+                                        let bld_tmp = try!(self.load_var(llvm_symbol(builder).as_str(), &bld_ty_str,
                                             ctx));
                                         let res_tmp = ctx.var_ids.next();
                                         ctx.code.add(format!("{} = call {} {}.result({} {})", &res_tmp,
                                             &res_ty_str, bld_prefix, &bld_ty_str, bld_tmp));
                                         ctx.code.add(format!("store {} {}, {}* {}", &res_ty_str,
-                                            &res_tmp, &res_ty_str, llvm_symbol(out)));
+                                            &res_tmp, &res_ty_str, llvm_symbol(output)));
                                     },
                                     _ => weld_err!("Unsupported builder type {} in GetResult", print_type(bld_ty))?
                                 }
@@ -424,7 +427,7 @@ impl LlvmGenerator {
                             _ => weld_err!("Non builder type {} found in GetResult", print_type(bld_ty))?
                         }
                     },
-                    CreateBuilder(ref out, ref ty) => {
+                    CreateBuilder { ref output, ref ty } => {
                         match *ty {
                             Builder(ref bk) => {
                                 match *bk {
@@ -435,7 +438,7 @@ impl LlvmGenerator {
                                         ctx.code.add(format!("{} = call {} {}.new(i64 16)", bld_tmp,
                                             bld_ty_str, bld_prefix));
                                         ctx.code.add(format!("store {} {}, {}* {}", bld_ty_str,
-                                            bld_tmp, bld_ty_str, llvm_symbol(out)));
+                                            bld_tmp, bld_ty_str, llvm_symbol(output)));
                                     },
                                     _ => weld_err!("Unsupported builder type {} in CreateBuilder", print_type(ty))?
                                 }
@@ -446,7 +449,7 @@ impl LlvmGenerator {
                 }
             }
             match b.terminator {
-                Branch(ref cond, on_true, on_false) => {
+                Branch { ref cond, on_true, on_false } => {
                     let cond_tmp = try!(self.load_var(llvm_symbol(cond).as_str(), "i1", ctx));
                     ctx.code.add(format!("br i1 {}, label %b{}, label %b{}", cond_tmp, on_true, on_false));
                 },

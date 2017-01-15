@@ -450,9 +450,9 @@ fn sync_types(t1: &mut PartialType, t2: &mut PartialType, error: &str) -> WeldRe
 
 #[test]
 fn infer_types_simple() {
-    let int_lit = expr_box(I32Literal(1));
-    let float_lit = expr_box(F32Literal(1.0));
-    let bool_lit = expr_box(BoolLiteral(false));
+    let int_lit = expr_box(Literal(I32Literal(1)));
+    let float_lit = expr_box(Literal(F32Literal(1.0)));
+    let bool_lit = expr_box(Literal(BoolLiteral(false)));
     let sum = expr_box(BinOp {
         kind: Add,
         left: int_lit.clone(),
