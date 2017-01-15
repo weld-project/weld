@@ -120,9 +120,7 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>, typed: bool) -> String {
         }
 
         Cast { kind, ref child_expr } => {
-            format!("({}({}))",
-                    kind,
-                    print_expr_impl(child_expr, typed))
+            format!("({}({}))", kind, print_expr_impl(child_expr, typed))
         }
 
         Let { ref name, ref value, ref body } => {

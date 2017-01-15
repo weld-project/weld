@@ -59,7 +59,7 @@ impl fmt::Display for ScalarKind {
             I32 => "i32",
             I64 => "i64",
             F32 => "f32",
-            F64 => "f64"
+            F64 => "f64",
         };
         f.write_str(text)
     }
@@ -106,7 +106,7 @@ pub enum ExprKind<T: TypeBounds> {
     },
     Cast {
         kind: ScalarKind,
-        child_expr: Box<Expr<T>>
+        child_expr: Box<Expr<T>>,
     },
     MakeStruct { elems: Vec<Expr<T>> },
     MakeVector { elems: Vec<Expr<T>> },
@@ -344,9 +344,7 @@ impl<T: TypeBounds> Expr<T> {
                     Ok(true)
                 }
                 (&Cast { kind: ref kind1, .. }, &Cast { kind: ref kind2, .. }) if kind1 ==
-                                                                                  kind2 => {
-                    Ok(true)
-                }
+                                                                                  kind2 => Ok(true),
                 (&Let { name: ref sym1, .. }, &Let { name: ref sym2, .. }) => {
                     sym_map.insert(sym1, sym2);
                     Ok(true)

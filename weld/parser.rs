@@ -480,7 +480,7 @@ impl<'t> Parser<'t> {
         }
         let cast_expr = expr_box(Cast {
             kind: kind,
-            child_expr: expr
+            child_expr: expr,
         });
         Ok(cast_expr)
     }

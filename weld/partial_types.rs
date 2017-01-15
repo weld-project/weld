@@ -156,7 +156,7 @@ impl PartialExpr {
             Cast { kind, ref child_expr } => {
                 Cast {
                     kind: kind,
-                    child_expr: try!(typed_box(child_expr))
+                    child_expr: try!(typed_box(child_expr)),
                 }
             }
 

@@ -126,7 +126,7 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             try!(push_type(&mut elem_type, &child_expr.ty, "Cast"));
             let mut changed = false;
             changed |= try!(push_type(&mut child_expr.ty, &elem_type, "Cast"));
-            changed |= try!(push_complete_type(& mut expr.ty, Scalar(kind), "Cast"));
+            changed |= try!(push_complete_type(&mut expr.ty, Scalar(kind), "Cast"));
             Ok(changed)
         }
 
@@ -484,11 +484,11 @@ fn infer_types_simple() {
     });
     let f64cast = expr_box(Cast {
         kind: F64,
-        child_expr: fprod.clone()
+        child_expr: fprod.clone(),
     });
     let boolcast = expr_box(Cast {
         kind: Bool,
-        child_expr: f64cast.clone()
+        child_expr: f64cast.clone(),
     });
 
     let mut e = *int_lit.clone();
