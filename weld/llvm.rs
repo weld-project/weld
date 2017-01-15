@@ -132,7 +132,7 @@ impl LlvmGenerator {
             let ty_str = try!(self.llvm_type(&ty)).to_string();
             try!(ctx.add_alloca(&arg_str, &ty_str));
         }
-        
+
         if containing_loop.is_some() {
             let par_for = containing_loop.clone().unwrap();
             let bld_ty_str = try!(self.llvm_type(func.params.get(&par_for.builder).unwrap())).to_string();
@@ -233,10 +233,10 @@ impl LlvmGenerator {
              %args_val = load {args_type}* %args_typed",
             args_type = args_type
         ));
-        
+
         let mut arg_pos_map: HashMap<Symbol, usize> = HashMap::new();
         for (i, a) in sir.top_params.iter().enumerate() {
-            arg_pos_map.insert(a.name.clone(), i);    
+            arg_pos_map.insert(a.name.clone(), i);
         }
         let mut arg_decls = String::new();
         let params_sorted: BTreeMap<&Symbol, &Type> = sir.funcs[0].params.iter().collect();
@@ -248,7 +248,7 @@ impl LlvmGenerator {
         arg_decls.push_str("%work_t* %cur.work");
         code.add(format!(
             "%cur.work.size.ptr = getelementptr %work_t* null, i32 1
-             %cur.work.size = ptrtoint %work_t* %cur.work.size.ptr to i64 
+             %cur.work.size = ptrtoint %work_t* %cur.work.size.ptr to i64
              %cur.work.raw = call i8* @malloc(i64 %cur.work.size)
              %cur.work = bitcast i8* %cur.work.raw to %work_t*
              call void @f0({arg_list})

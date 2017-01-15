@@ -36,7 +36,7 @@ pub struct ParallelForData {
     pub data_arg: Symbol,
     pub builder_arg: Symbol,
     pub body: FunctionId,
-    pub cont: FunctionId    
+    pub cont: FunctionId
 }
 
 /// A terminating statement inside a basic block.
