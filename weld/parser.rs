@@ -743,6 +743,12 @@ fn basic_parsing() {
     let e = parse_expr("10 + 64 + f32(bool(19))").unwrap();
     assert_eq!(print_expr(&e), "((10+64)+(f32((bool(19)))))");
 
+    let e = parse_expr("1L:i64 + i64(1)").unwrap();
+    assert_eq!(print_expr(&e), "(1L+(i64(1)))");
+
+    let e = parse_expr("i64(1L:i64)").unwrap();
+    assert_eq!(print_expr(&e), "(i64(1L))");
+
     let e = parse_expr("[1, 2+3, 2]").unwrap();
     assert_eq!(print_expr(&e), "[1,(2+3),2]");
 
