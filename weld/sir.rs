@@ -15,18 +15,33 @@ pub type FunctionId = usize;
 /// A non-terminating statement inside a basic block.
 #[derive(Clone)]
 pub enum Statement {
-    /// output, op, type, left, right
-    AssignBinOp(Symbol, BinOpKind, Type, Symbol, Symbol),
-    /// output, value
-    Assign(Symbol, Symbol),
-    /// output, value
-    AssignLiteral(Symbol, LiteralKind),
-    /// builder, value
-    DoMerge(Symbol, Symbol),
-    /// output, builder
-    GetResult(Symbol, Symbol),
-    /// output, builder type
-    CreateBuilder(Symbol, Type),
+    AssignBinOp {
+        output: Symbol,
+        op: BinOpKind,
+        ty: Type,
+        left: Symbol,
+        right: Symbol
+    },
+    Assign {
+        output: Symbol,
+        value: Symbol
+    },
+    AssignLiteral {
+        output: Symbol,
+        value: LiteralKind
+    },
+    DoMerge {
+        builder: Symbol,
+        value: Symbol
+    },
+    GetResult {
+        output: Symbol,
+        builder: Symbol
+    },
+    CreateBuilder {
+        output: Symbol,
+        ty: Type
+    },
 }
 
 #[derive(Clone)]
@@ -42,8 +57,11 @@ pub struct ParallelForData {
 /// A terminating statement inside a basic block.
 #[derive(Clone)]
 pub enum Terminator {
-    /// condition, on_true, on_false
-    Branch(Symbol, BasicBlockId, BasicBlockId),
+    Branch {
+        cond: Symbol,
+        on_true: BasicBlockId,
+        on_false: BasicBlockId
+    },
     JumpBlock(BasicBlockId),
     JumpFunction(FunctionId),
     ProgramReturn(Symbol),
@@ -135,14 +153,16 @@ impl fmt::Display for Statement {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use self::Statement::*;
         match *self {
-            AssignBinOp(ref out, ref op, ref ty, ref left, ref right) => {
-                write!(f, "{} = {} {} {} {}", out, op, print_type(ty), left, right)
+            AssignBinOp { ref output, ref op, ref ty, ref left, ref right } => {
+                write!(f, "{} = {} {} {} {}", output, op, print_type(ty), left, right)
             },
-            Assign(ref out, ref value) => write!(f, "{} = {}", out, value),
-            AssignLiteral(ref out, ref lit) => write!(f, "{} = {}", out, print_literal(lit)),
-            DoMerge(ref bld, ref elem) => write!(f, "merge {} {}", bld, elem),
-            GetResult(ref out, ref value) => write!(f, "{} = result {}", out, value),
-            CreateBuilder(ref out, ref ty) => write!(f, "{} = new {}", out, print_type(ty)),
+            Assign { ref output, ref value } => write!(f, "{} = {}", output, value),
+            AssignLiteral { ref output, ref value } => write!(f, "{} = {}", output,
+                print_literal(value)),
+            DoMerge { ref builder, ref value } => write!(f, "merge {} {}", builder, value),
+            GetResult { ref output, ref builder } => write!(f, "{} = result {}", output, builder),
+            CreateBuilder { ref output, ref ty }  => write!(f, "{} = new {}", output,
+                print_type(ty)),
         }
     }
 }
@@ -151,7 +171,7 @@ impl fmt::Display for Terminator {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use self::Terminator::*;
         match *self {
-            Branch(ref cond, ref on_true, ref on_false) => {
+            Branch { ref cond, ref on_true, ref on_false } => {
                 write!(f, "branch {} B{} B{}", cond, on_true, on_false)
             },
             ParallelFor(ref pf) => {
@@ -226,16 +246,17 @@ env: &mut HashMap<Symbol, Type>, closure: &mut HashSet<Symbol>) {
         for statement in &block.statements {
             use self::Statement::*;
             match *statement {
-                AssignBinOp(_, _, _, ref left, ref right) => {
+                // TODO how do we get rid of unused variable warnings here?
+                AssignBinOp { ref output, ref op, ref ty, ref left, ref right } => {
                     vars.push(left.clone());
                     vars.push(right.clone());
                 },
-                Assign(_, ref value) => vars.push(value.clone()),
-                DoMerge(ref bld, ref elem) => {
-                    vars.push(bld.clone());
-                    vars.push(elem.clone());
+                Assign { ref output, ref value } => vars.push(value.clone()),
+                DoMerge { ref builder, ref value } => {
+                    vars.push(builder.clone());
+                    vars.push(value.clone());
                 },
-                GetResult(_, ref value) => vars.push(value.clone()),
+                GetResult { ref output, ref builder } => vars.push(builder.clone()),
                 _ => {}
             }   
         }
@@ -248,7 +269,6 @@ env: &mut HashMap<Symbol, Type>, closure: &mut HashSet<Symbol>) {
         let mut inner_closure = HashSet::new();
         use self::Terminator::*;
         match block.terminator {
-            // TODO how do we get rid of unused variable warnings here?
             ParallelFor(ref pf) => {
                 sir_param_correction_helper(prog, pf.body, env, &mut inner_closure);
                 sir_param_correction_helper(prog, pf.cont, env, &mut inner_closure);
@@ -319,14 +339,16 @@ fn gen_expr(
 
         Literal(lit) => {
             let res_sym = prog.add_local(&expr.ty, cur_func);
-            prog.funcs[cur_func].blocks[cur_block].add_statement(AssignLiteral(res_sym.clone(), lit));
+            prog.funcs[cur_func].blocks[cur_block].add_statement(
+                AssignLiteral { output: res_sym.clone(), value: lit });
             Ok((cur_func, cur_block, res_sym))
         },
 
         Let { ref name, ref value, ref body } => {
             let (cur_func, cur_block, val_sym) = gen_expr(value, prog, cur_func, cur_block)?;
             prog.add_local_named(&value.ty, name, cur_func);
-            prog.funcs[cur_func].blocks[cur_block].add_statement(Assign(name.clone(), val_sym));
+            prog.funcs[cur_func].blocks[cur_block].add_statement(
+                Assign { output: name.clone(), value: val_sym });
             let (cur_func, cur_block, res_sym) = gen_expr(body, prog, cur_func, cur_block)?;
             Ok((cur_func, cur_block, res_sym))
         },
@@ -336,7 +358,13 @@ fn gen_expr(
             let (cur_func, cur_block, right_sym) = gen_expr(right, prog, cur_func, cur_block)?;
             let res_sym = prog.add_local(&expr.ty, cur_func);
             prog.funcs[cur_func].blocks[cur_block].add_statement(
-                AssignBinOp(res_sym.clone(), kind, left.ty.clone(), left_sym, right_sym));
+                AssignBinOp {
+                    output: res_sym.clone(),
+                    op: kind,
+                    ty: left.ty.clone(),
+                    left: left_sym,
+                    right: right_sym
+                });
             Ok((cur_func, cur_block, res_sym))
         },
 
@@ -344,12 +372,19 @@ fn gen_expr(
             let (cur_func, cur_block, cond_sym) = gen_expr(cond, prog, cur_func, cur_block)?;
             let true_block = prog.funcs[cur_func].add_block();
             let false_block = prog.funcs[cur_func].add_block();
-            prog.funcs[cur_func].blocks[cur_block].terminator = Branch(cond_sym, true_block, false_block);
+            prog.funcs[cur_func].blocks[cur_block].terminator =
+                Branch {
+                    cond: cond_sym,
+                    on_true: true_block,
+                    on_false: false_block
+                };
             let (true_func, true_block, true_sym) = gen_expr(on_true, prog, cur_func, true_block)?;
             let (false_func, false_block, false_sym) = gen_expr(on_false, prog, cur_func, false_block)?;
             let res_sym = prog.add_local(&expr.ty, true_func);
-            prog.funcs[true_func].blocks[true_block].add_statement(Assign(res_sym.clone(), true_sym));
-            prog.funcs[false_func].blocks[false_block].add_statement(Assign(res_sym.clone(), false_sym));
+            prog.funcs[true_func].blocks[true_block].add_statement(
+                Assign { output: res_sym.clone(), value: true_sym });
+            prog.funcs[false_func].blocks[false_block].add_statement(
+                Assign { output: res_sym.clone(), value: false_sym });
             if true_func != cur_func || false_func != cur_func {
                 // TODO we probably want a better for name for this symbol than whatever res_sym is
                 prog.add_local_named(&expr.ty, &res_sym, false_func);
@@ -371,21 +406,23 @@ fn gen_expr(
         Merge { ref builder, ref value } => {
             let (cur_func, cur_block, builder_sym) = gen_expr(builder, prog, cur_func, cur_block)?;
             let (cur_func, cur_block, elem_sym) = gen_expr(value, prog, cur_func, cur_block)?;
-            prog.funcs[cur_func].blocks[cur_block].add_statement(DoMerge(builder_sym.clone(),
-                elem_sym));
+            prog.funcs[cur_func].blocks[cur_block].add_statement(
+                DoMerge { builder: builder_sym.clone(), value: elem_sym });
             Ok((cur_func, cur_block, builder_sym))
         },
 
         Res { ref builder } => {
             let (cur_func, cur_block, builder_sym) = gen_expr(builder, prog, cur_func, cur_block)?;
             let res_sym = prog.add_local(&expr.ty, cur_func);
-            prog.funcs[cur_func].blocks[cur_block].add_statement(GetResult(res_sym.clone(), builder_sym));
+            prog.funcs[cur_func].blocks[cur_block].add_statement(
+                GetResult { output: res_sym.clone(), builder: builder_sym });
             Ok((cur_func, cur_block, res_sym))
         },
 
         NewBuilder => {
             let res_sym = prog.add_local(&expr.ty, cur_func);
-            prog.funcs[cur_func].blocks[cur_block].add_statement(CreateBuilder(res_sym.clone(), expr.ty.clone()));
+            prog.funcs[cur_func].blocks[cur_block].add_statement(
+                CreateBuilder { output: res_sym.clone(), ty: expr.ty.clone() });
             Ok((cur_func, cur_block, res_sym))
         },
 
