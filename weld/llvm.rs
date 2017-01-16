@@ -587,7 +587,6 @@ struct FunctionContext {
     code: CodeBuilder,
     defined_symbols: HashSet<String>,
     var_ids: IdGenerator,
-    if_ids: IdGenerator,
 }
 
 impl FunctionContext {
@@ -596,7 +595,6 @@ impl FunctionContext {
             alloca_code: CodeBuilder::new(),
             code: CodeBuilder::new(),
             var_ids: IdGenerator::new("%t."),
-            if_ids: IdGenerator::new("if"),
             defined_symbols: HashSet::new(),
         }
     }
