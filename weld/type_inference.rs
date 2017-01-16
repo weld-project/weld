@@ -121,10 +121,8 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             Ok(changed)
         }
 
-        Cast { kind, ref mut child_expr } => {
-            let mut changed = false;
-            changed |= try!(push_complete_type(&mut expr.ty, Scalar(kind), "Cast"));
-            Ok(changed)
+        Cast { kind, .. } => {
+            Ok(try!(push_complete_type(&mut expr.ty, Scalar(kind), "Cast")))
         }
 
         Ident(ref symbol) => {
