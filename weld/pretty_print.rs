@@ -119,6 +119,10 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>, typed: bool) -> String {
                     print_expr_impl(right, typed))
         }
 
+        Cast { kind, ref child_expr } => {
+            format!("({}({}))", kind, print_expr_impl(child_expr, typed))
+        }
+
         Let { ref name, ref value, ref body } => {
             if typed {
                 format!("(let {}:{}=({});{})",
