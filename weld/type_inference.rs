@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use super::ast::ExprKind::*;
+use super::ast::LiteralKind::*;
 use super::ast::ScalarKind::*;
 use super::ast::Symbol;
 use super::partial_types::PartialExpr;
@@ -87,15 +88,20 @@ fn infer_up(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> {
 /// Return true if any new expression's type was inferred, or an error if types are inconsistent.
 fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> {
     match expr.kind {
-        I32Literal(_) => push_complete_type(&mut expr.ty, Scalar(I32), "I32Literal"),
+        Literal(I32Literal(_)) =>
+            push_complete_type(&mut expr.ty, Scalar(I32), "I32Literal"),
 
-        I64Literal(_) => push_complete_type(&mut expr.ty, Scalar(I64), "I64Literal"),
+        Literal(I64Literal(_)) =>
+            push_complete_type(&mut expr.ty, Scalar(I64), "I64Literal"),
 
-        F32Literal(_) => push_complete_type(&mut expr.ty, Scalar(F32), "F32Literal"),
+        Literal(F32Literal(_)) =>
+            push_complete_type(&mut expr.ty, Scalar(F32), "F32Literal"),
 
-        F64Literal(_) => push_complete_type(&mut expr.ty, Scalar(F64), "F64Literal"),
+        Literal(F64Literal(_)) =>
+            push_complete_type(&mut expr.ty, Scalar(F64), "F64Literal"),
 
-        BoolLiteral(_) => push_complete_type(&mut expr.ty, Scalar(Bool), "BoolLiteral"),
+        Literal(BoolLiteral(_)) =>
+            push_complete_type(&mut expr.ty, Scalar(Bool), "BoolLiteral"),
 
         BinOp { kind: op, ref mut left, ref mut right } => {
             let mut elem_type = Unknown;
@@ -113,6 +119,10 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
                 changed |= try!(push_type(&mut expr.ty, &elem_type, "BinOp"));
             }
             Ok(changed)
+        }
+
+        Cast { kind, .. } => {
+            Ok(try!(push_complete_type(&mut expr.ty, Scalar(kind), "Cast")))
         }
 
         Ident(ref symbol) => {
@@ -444,9 +454,9 @@ fn sync_types(t1: &mut PartialType, t2: &mut PartialType, error: &str) -> WeldRe
 
 #[test]
 fn infer_types_simple() {
-    let int_lit = expr_box(I32Literal(1));
-    let float_lit = expr_box(F32Literal(1.0));
-    let bool_lit = expr_box(BoolLiteral(false));
+    let int_lit = expr_box(Literal(I32Literal(1)));
+    let float_lit = expr_box(Literal(F32Literal(1.0)));
+    let bool_lit = expr_box(Literal(BoolLiteral(false)));
     let sum = expr_box(BinOp {
         kind: Add,
         left: int_lit.clone(),
@@ -466,6 +476,14 @@ fn infer_types_simple() {
         kind: Add,
         left: float_lit.clone(),
         right: float_lit.clone(),
+    });
+    let f64cast = expr_box(Cast {
+        kind: F64,
+        child_expr: fprod.clone(),
+    });
+    let boolcast = expr_box(Cast {
+        kind: Bool,
+        child_expr: f64cast.clone(),
     });
 
     let mut e = *int_lit.clone();
@@ -495,6 +513,14 @@ fn infer_types_simple() {
     let mut e = *fprod.clone();
     assert!(infer_types(&mut e).is_ok());
     assert_eq!(e.ty, Scalar(F32));
+
+    let mut e = *f64cast.clone();
+    assert!(infer_types(&mut e).is_ok());
+    assert_eq!(e.ty, Scalar(F64));
+
+    let mut e = *boolcast.clone();
+    assert!(infer_types(&mut e).is_ok());
+    assert_eq!(e.ty, Scalar(Bool));
 }
 
 #[test]

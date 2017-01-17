@@ -129,6 +129,7 @@ impl PartialParameter {
 impl PartialExpr {
     pub fn to_typed(&self) -> WeldResult<TypedExpr> {
         use ast::ExprKind::*;
+        use ast::LiteralKind::*;
 
         fn typed_box(expr: &Box<PartialExpr>) -> WeldResult<Box<TypedExpr>> {
             let e = try!(expr.to_typed());
@@ -136,11 +137,11 @@ impl PartialExpr {
         }
 
         let new_kind: ExprKind<Type> = match self.kind {
-            BoolLiteral(b) => BoolLiteral(b),
-            I32Literal(i) => I32Literal(i),
-            I64Literal(i) => I64Literal(i),
-            F32Literal(i) => F32Literal(i),
-            F64Literal(i) => F64Literal(i),
+            Literal(BoolLiteral(v)) => Literal(BoolLiteral(v)),
+            Literal(I32Literal(v)) => Literal(I32Literal(v)),
+            Literal(I64Literal(v)) => Literal(I64Literal(v)),
+            Literal(F32Literal(v)) => Literal(F32Literal(v)),
+            Literal(F64Literal(v)) => Literal(F64Literal(v)),
             Ident(ref name) => Ident(name.clone()),
             NewBuilder => NewBuilder,
 
@@ -149,6 +150,13 @@ impl PartialExpr {
                     kind: kind,
                     left: try!(typed_box(left)),
                     right: try!(typed_box(right)),
+                }
+            }
+
+            Cast { kind, ref child_expr } => {
+                Cast {
+                    kind: kind,
+                    child_expr: try!(typed_box(child_expr)),
                 }
             }
 

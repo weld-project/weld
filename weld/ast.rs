@@ -6,10 +6,20 @@ use std::fmt;
 use super::error::*;
 
 /// A symbol (identifier name); for now these are strings, but we may add some kind of scope ID.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Symbol {
     pub name: String,
     pub id: i32,
+}
+
+impl Symbol {
+    pub fn new(name: &str, id: i32) -> Symbol {
+        Symbol { name: name.into(), id: id }
+    }
+
+    pub fn name(name: &str) -> Symbol {
+        Symbol { name: name.into(), id: 0 }
+    }
 }
 
 impl fmt::Display for Symbol {
@@ -39,6 +49,20 @@ pub enum ScalarKind {
     I64,
     F32,
     F64,
+}
+
+impl fmt::Display for ScalarKind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use ast::ScalarKind::*;
+        let text = match *self {
+            Bool => "bool",
+            I32 => "i32",
+            I64 => "i64",
+            F32 => "f32",
+            F64 => "f64",
+        };
+        f.write_str(text)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -73,16 +97,16 @@ pub struct Iter<T: TypeBounds> {
 #[derive(Clone, Debug, PartialEq)]
 pub enum ExprKind<T: TypeBounds> {
     // TODO: maybe all of these should take named parameters
-    BoolLiteral(bool),
-    I32Literal(i32),
-    I64Literal(i64),
-    F32Literal(f32),
-    F64Literal(f64),
+    Literal(LiteralKind),
     Ident(Symbol),
     BinOp {
         kind: BinOpKind,
         left: Box<Expr<T>>,
         right: Box<Expr<T>>,
+    },
+    Cast {
+        kind: ScalarKind,
+        child_expr: Box<Expr<T>>,
     },
     MakeStruct { elems: Vec<Expr<T>> },
     MakeVector { elems: Vec<Expr<T>> },
@@ -121,6 +145,15 @@ pub enum ExprKind<T: TypeBounds> {
         value: Box<Expr<T>>,
     },
     Res { builder: Box<Expr<T>> },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum LiteralKind {
+    BoolLiteral(bool),
+    I32Literal(i32),
+    I64Literal(i64),
+    F32Literal(f32),
+    F64Literal(f64),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -196,6 +229,7 @@ impl<T: TypeBounds> Expr<T> {
         use self::ExprKind::*;
         match self.kind {
                 BinOp { ref left, ref right, .. } => vec![left.as_ref(), right.as_ref()],
+                Cast { ref child_expr, .. } => vec![child_expr.as_ref()],
                 Let { ref value, ref body, .. } => vec![value.as_ref(), body.as_ref()],
                 Lambda { ref body, .. } => vec![body.as_ref()],
                 MakeStruct { ref elems } => elems.iter().collect(),
@@ -232,8 +266,7 @@ impl<T: TypeBounds> Expr<T> {
                     res
                 }
                 // Explicitly list types instead of doing _ => ... to remember to add new types.
-                BoolLiteral(_) | I32Literal(_) | I64Literal(_) | F32Literal(_) |
-                F64Literal(_) | Ident(_) | NewBuilder => vec![],
+                Literal(_) | Ident(_) | NewBuilder => vec![],
             }
             .into_iter()
     }
@@ -243,6 +276,7 @@ impl<T: TypeBounds> Expr<T> {
         use self::ExprKind::*;
         match self.kind {
                 BinOp { ref mut left, ref mut right, .. } => vec![left.as_mut(), right.as_mut()],
+                Cast { ref mut child_expr, .. } => vec![child_expr.as_mut()],
                 Let { ref mut value, ref mut body, .. } => vec![value.as_mut(), body.as_mut()],
                 Lambda { ref mut body, .. } => vec![body.as_mut()],
                 MakeStruct { ref mut elems } => elems.iter_mut().collect(),
@@ -279,8 +313,7 @@ impl<T: TypeBounds> Expr<T> {
                     res
                 }
                 // Explicitly list types instead of doing _ => ... to remember to add new types.
-                BoolLiteral(_) | I32Literal(_) | I64Literal(_) | F32Literal(_) |
-                F64Literal(_) | Ident(_) | NewBuilder => vec![],
+                Literal(_) | Ident(_) | NewBuilder => vec![],
             }
             .into_iter()
     }
@@ -310,6 +343,8 @@ impl<T: TypeBounds> Expr<T> {
                                                                                     kind2 => {
                     Ok(true)
                 }
+                (&Cast { kind: ref kind1, .. }, &Cast { kind: ref kind2, .. }) if kind1 ==
+                                                                                  kind2 => Ok(true),
                 (&Let { name: ref sym1, .. }, &Let { name: ref sym2, .. }) => {
                     sym_map.insert(sym1, sym2);
                     Ok(true)
@@ -339,11 +374,7 @@ impl<T: TypeBounds> Expr<T> {
                 (&For { .. }, &For { .. }) => Ok(true),
                 (&If { .. }, &If { .. }) => Ok(true),
                 (&Apply { .. }, &Apply { .. }) => Ok(true),
-                (&BoolLiteral(ref l), &BoolLiteral(ref r)) if l == r => Ok(true),
-                (&I32Literal(ref l), &I32Literal(ref r)) if l == r => Ok(true),
-                (&I64Literal(ref l), &I64Literal(ref r)) if l == r => Ok(true),
-                (&F32Literal(ref l), &F32Literal(ref r)) if l == r => Ok(true),
-                (&F64Literal(ref l), &F64Literal(ref r)) if l == r => Ok(true),
+                (&Literal(ref l), &Literal(ref r)) if l == r => Ok(true),
                 (&Ident(ref l), &Ident(ref r)) => {
                     if let Some(lv) = sym_map.get(l) {
                         Ok(**lv == *r)

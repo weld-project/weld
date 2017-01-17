@@ -5,6 +5,7 @@ use super::ast::BuilderKind::*;
 use super::ast::ScalarKind::*;
 use super::ast::Type::*;
 use super::ast::ExprKind::*;
+use super::ast::LiteralKind::*;
 use super::partial_types::*;
 
 // TODO: These methods could take a mutable string as an argument, or even a fmt::Format.
@@ -101,26 +102,7 @@ fn print_iters<T: PrintableType>(iters: &Vec<Iter<T>>, typed: bool) -> String {
 /// Main work to print an expression.
 fn print_expr_impl<T: PrintableType>(expr: &Expr<T>, typed: bool) -> String {
     match expr.kind {
-        BoolLiteral(v) => format!("{}", v),
-        I32Literal(v) => format!("{}", v),
-        I64Literal(v) => format!("{}L", v),
-        F32Literal(v) => {
-            let mut res = format!("{}", v);
-            // Hack to disambiguate from integers.
-            if !res.contains(".") {
-                res.push_str(".0");
-            }
-            res.push_str("F");
-            res
-        }
-        F64Literal(v) => {
-            let mut res = format!("{}", v);
-            // Hack to disambiguate from integers.
-            if !res.contains(".") {
-                res.push_str(".0");
-            }
-            res
-        }
+        Literal(ref lit) => print_literal(lit),
 
         Ident(ref symbol) => {
             if typed {
@@ -135,6 +117,10 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>, typed: bool) -> String {
                     print_expr_impl(left, typed),
                     kind,
                     print_expr_impl(right, typed))
+        }
+
+        Cast { kind, ref child_expr } => {
+            format!("({}({}))", kind, print_expr_impl(child_expr, typed))
         }
 
         Let { ref name, ref value, ref body } => {
@@ -214,6 +200,32 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>, typed: bool) -> String {
                                ",",
                                ")",
                                params.iter().map(|e| print_expr_impl(e, typed))));
+            res
+        }
+    }
+}
+
+/// Print a literal value.
+pub fn print_literal(lit: &LiteralKind) -> String {
+    match *lit {
+        BoolLiteral(v) => format!("{}", v),
+        I32Literal(v) => format!("{}", v),
+        I64Literal(v) => format!("{}L", v),
+        F32Literal(v) => {
+            let mut res = format!("{}", v);
+            // Hack to disambiguate from integers.
+            if !res.contains(".") {
+                res.push_str(".0");
+            }
+            res.push_str("F");
+            res
+        }
+        F64Literal(v) => {
+            let mut res = format!("{}", v);
+            // Hack to disambiguate from integers.
+            if !res.contains(".") {
+                res.push_str(".0");
+            }
             res
         }
     }

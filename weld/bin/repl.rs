@@ -6,13 +6,14 @@ use rustyline::error::ReadlineError;
 use rustyline::Editor;
 use std::env;
 use std::path::PathBuf;
-use weld::ast::ExprKind::*;
+
 use weld::llvm::LlvmGenerator;
 use weld::macro_processor;
 use weld::parser::*;
 use weld::pretty_print::*;
 use weld::transforms;
 use weld::type_inference::*;
+use weld::sir::ast_to_sir;
 
 fn main() {
     let home_path = env::home_dir().unwrap_or(PathBuf::new());
@@ -20,7 +21,7 @@ fn main() {
     let history_file_path = history_file_path.to_str().unwrap_or(".weld_history");
 
     let mut rl = Editor::<()>::new();
-    rl.load_history(&history_file_path).unwrap();
+    if let Err(_) = rl.load_history(&history_file_path) {}
 
     loop {
         let raw_readline = rl.readline(">> ");
@@ -85,22 +86,27 @@ fn main() {
         transforms::fuse_loops_vertical(&mut expr);
         println!("After vertical loop fusion:\n{}\n", print_typed_expr(&expr));
 
-        if let Lambda { ref params, ref body } = expr.kind {
-            let mut generator = LlvmGenerator::new();
-            if let Err(ref e) = generator.add_function_on_pointers("run", params, body) {
-                println!("Error during LLVM code gen:\n{}\n", e);
-                continue;
-            }
-            let llvm_code = generator.result();
-            println!("LLVM code:\n{}\n", llvm_code);
+        let sir_result = ast_to_sir(&expr);
+        match sir_result {
+            Ok(sir) => {
+                println!("SIR representation:\n{}\n", &sir);
+                let mut llvm_gen = LlvmGenerator::new();
+                if let Err(ref e) = llvm_gen.add_function_on_pointers("run", &sir) {
+                    println!("Error during LLVM code gen:\n{}\n", e);
+                } else {
+                    let llvm_code = llvm_gen.result();
+                    println!("LLVM code:\n{}\n", llvm_code);
 
-            if let Err(ref e) = easy_ll::compile_module(&llvm_code) {
-                println!("Error during LLVM compilation:\n{}\n", e);
-                continue;
+                    if let Err(ref e) = easy_ll::compile_module(&llvm_code) {
+                        println!("Error during LLVM compilation:\n{}\n", e);
+                    } else {
+                        println!("LLVM module compiled successfully\n");
+                    }
+                }
+            },
+            Err(ref e) => {
+                println!("Error during SIR code gen:\n{}\n", e);
             }
-            println!("LLVM module compiled successfully\n")
-        } else {
-            println!("Expression is not a function, so not compiling to LLVM.\n")
         }
     }
     rl.save_history(&history_file_path).unwrap();

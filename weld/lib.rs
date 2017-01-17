@@ -25,6 +25,7 @@ pub mod parser;
 pub mod partial_types;
 pub mod pretty_print;
 pub mod program;
+pub mod sir;
 pub mod tokenizer;
 pub mod transforms;
 pub mod type_inference;
