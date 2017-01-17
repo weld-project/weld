@@ -22,6 +22,12 @@ pub enum Statement {
         left: Symbol,
         right: Symbol
     },
+    CastOp {
+        output: Symbol,
+        old_ty: Type,
+        new_ty: Type,
+        child: Symbol,
+    },
     Assign {
         output: Symbol,
         value: Symbol
@@ -156,6 +162,9 @@ impl fmt::Display for Statement {
             AssignBinOp { ref output, ref op, ref ty, ref left, ref right } => {
                 write!(f, "{} = {} {} {} {}", output, op, print_type(ty), left, right)
             },
+            CastOp { ref output, ref new_ty, ref child, .. } => {
+                write!(f, "{} = cast({}, {})", output, child, print_type(new_ty))
+            },
             Assign { ref output, ref value } => write!(f, "{} = {}", output, value),
             AssignLiteral { ref output, ref value } => write!(f, "{} = {}", output,
                 print_literal(value)),
@@ -249,6 +258,9 @@ env: &mut HashMap<Symbol, Type>, closure: &mut HashSet<Symbol>) {
                 AssignBinOp { ref left, ref right, .. } => {
                     vars.push(left.clone());
                     vars.push(right.clone());
+                },
+                CastOp { ref child, .. } => {
+                    vars.push(child.clone());
                 },
                 Assign { ref value, .. } => vars.push(value.clone()),
                 DoMerge { ref builder, ref value } => {
@@ -364,6 +376,20 @@ fn gen_expr(
                     left: left_sym,
                     right: right_sym
                 });
+            Ok((cur_func, cur_block, res_sym))
+        },
+
+        Cast { ref child_expr, .. } => {
+            let (cur_func, cur_block, child_sym) = gen_expr(child_expr, prog, cur_func, cur_block)?;
+            let res_sym = prog.add_local(&expr.ty, cur_func);
+            prog.funcs[cur_func].blocks[cur_block].add_statement(
+                CastOp {
+                    output: res_sym.clone(),
+                    old_ty: child_expr.ty.clone(),
+                    new_ty: expr.ty.clone(),
+                    child: child_sym,
+                }
+            );
             Ok((cur_func, cur_block, res_sym))
         },
 
