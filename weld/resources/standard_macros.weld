@@ -1,15 +1,15 @@
 macro map(data, func) = (
-  result(for(data, appender, |b, x| merge(b, func(x))))
+  result(for(data, appender, |b, i, x| merge(b, func(x))))
 );
 
 macro filter(data, func) = (
-  result(for(data, appender, |b, x| if(func(x), merge(b, x), b)))
+  result(for(data, appender, |b, i, x| if(func(x), merge(b, x), b)))
 );
 
 macro flatten(data) = (
     result(for(
         data,
         appender[?],
-        |b, x| for(x, b, |b2, x2| merge(b2, x2))
+        |b, x| for(x, b, |b2, i2, x2| merge(b2, x2))
     ))
 );
