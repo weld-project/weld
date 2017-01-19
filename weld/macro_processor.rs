@@ -192,5 +192,5 @@ fn standard_macros() {
     let program = parse_program("map([1,2,3], |a|a+1)").unwrap();
     let result = process_program(&program).unwrap();
     assert_eq!(print_expr(&result).as_str(),
-               "result(for([1,2,3],appender[?],|b,x|merge(b,(|a|(a+1))(x))))");
+               "result(for([1,2,3],appender[?],|b,i,x|merge(b,(|a|(a+1))(x))))");
 }

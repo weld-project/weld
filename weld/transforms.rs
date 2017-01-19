@@ -6,7 +6,93 @@ use super::ast::Type::*;
 use super::ast::BuilderKind::*;
 use super::ast::LiteralKind::*;
 
+use std::collections::HashMap;
+
 use super::util::SymbolGenerator;
+
+/// Modifies symbol names so each symbol is unique in the AST. This transform should be applied
+/// "up front" and downstream transforms shoud then use SymbolGenerator to generate new unique
+/// symbols.
+pub fn uniquify<T: TypeBounds>(expr: &mut Expr<T>) {
+    // Maps a string name to its current integer ID in the current scope.
+    let mut id_map: HashMap<String, i32> = HashMap::new();
+    _uniquify(expr, &mut id_map);
+}
+
+/// Helper function for uniquify.
+fn _uniquify<T: TypeBounds>(expr: &mut Expr<T>, id_map: &mut HashMap<String, i32>) {
+
+    // Increments the ID for a given symbol name and returns the new symbol.
+    let push_id = |id_map: &mut HashMap<String, i32>, name: &String| {
+        let id = id_map.entry(name.clone()).or_insert(-1);
+        *id += 1;
+        Symbol::new(&name.clone(), *id)
+    };
+
+    // Decrements the ID for a given symbol name and returns the new symbol.
+    let pop_id = |id_map: &mut HashMap<String, i32>, name: &String| {
+        let id = id_map.entry(name.clone()).or_insert(-1);
+        *id -= 1;
+        Symbol::new(&name.clone(), *id)
+    };
+
+    // Returns the current for a given name.
+    let get_id = |id_map: &HashMap<String, i32>, name: &String| {
+        let id = id_map.get(name).unwrap();
+        Symbol::new(&name.clone(), *id)
+    };
+
+    // Walk the expression tree, maintaining a map of the highest ID seen for a given
+    // symbol. The ID is incremented when a symbol is redefined in a new scope, and
+    // decremented when exiting the scope.
+    expr.transform_and_continue(&mut |ref mut e| {
+        if let Ident(ref sym) = e.kind {
+            return Some((Expr {
+                             ty: e.ty.clone(),
+                             kind: Ident(get_id(id_map, &sym.name)),
+                         },
+                         false));
+        } else if let Lambda { ref mut params, ref mut body } = e.kind {
+            // Create new parameters for the lambda that will replace this one.
+            let new_params = params.iter()
+                .map(|ref p| {
+                    Parameter {
+                        ty: p.ty.clone(),
+                        name: push_id(id_map, &p.name.name),
+                    }
+                })
+                .collect::<Vec<_>>();
+
+            _uniquify(body, id_map);
+            for param in params.iter() {
+                pop_id(id_map, &param.name.name);
+            }
+
+            return Some((Expr {
+                             ty: e.ty.clone(),
+                             kind: Lambda {
+                                 params: new_params,
+                                 body: body.clone(),
+                             },
+                         },
+                         false));
+        } else if let Let { ref mut name, ref mut value, ref mut body } = e.kind {
+            _uniquify(value, id_map);
+            let new_sym = push_id(id_map, &name.name);
+            _uniquify(body, id_map);
+            return Some((Expr {
+                             ty: e.ty.clone(),
+                             kind: Let {
+                                 name: new_sym,
+                                 value: value.clone(),
+                                 body: body.clone(),
+                             },
+                         },
+                         false));
+        }
+        None
+    });
+}
 
 /// Inlines Apply nodes whose argument is a Lambda expression. These often arise during macro
 /// expansion but it's simpler to inline them before doing type inference.
@@ -31,6 +117,46 @@ pub fn inline_apply<T: TypeBounds>(expr: &mut Expr<T>) {
         }
         None
     });
+}
+
+/// Inlines Let calls if the symbol defined by the Let statement is used
+/// less than one time.
+pub fn inline_let(expr: &mut Expr<Type>) {
+    expr.transform(&mut |ref mut expr| {
+        if let Let { ref mut name, ref mut value, ref mut body } = expr.kind {
+            if symbol_usage_count(name, body) <= 1 {
+                body.transform(&mut |ref mut expr| {
+                    // TODO(shoumik): What about symbol redefinitions?
+                    if let Ident(ref symbol) = expr.kind {
+                        if symbol == name {
+                            return Some(*value.clone());
+                        }
+                    }
+                    return None;
+                });
+                return Some(*body.clone());
+            }
+        }
+        return None;
+    });
+}
+
+fn symbol_usage_count(sym: &Symbol, expr: &Expr<Type>) -> u32 {
+    let mut usage_count = 0;
+    expr.traverse(&mut |ref e| {
+        if let For { ref func, .. } = e.kind {
+            // The other child expressions of the For will be counted by traverse.
+            if symbol_usage_count(sym, func) >= 1 {
+                usage_count += 3;
+            }
+        } else if let Ident(ref symbol) = e.kind {
+            if sym == symbol {
+                usage_count += 1;
+            }
+        }
+    });
+
+    usage_count
 }
 
 /// Fuses for loops over the same vector in a zip into a single for loop which produces a vector of
@@ -101,17 +227,18 @@ pub fn fuse_loops_horizontal(expr: &mut Expr<Type>) {
                     // transform. Produce the new expression by zipping the functions of each
                     // nested for into a single merge into a struct.
  
-                    // Zip the expressions to create an appender whose merge type is a struct.
+                    // Zip the expressions to create an appender whose merge (value) type is a struct.
                     let merge_type = Struct(lambdas.iter().map(|ref e| e.1.ty.clone()).collect::<Vec<_>>());
                     let builder_type = Builder(Appender(Box::new(merge_type.clone())));
                     // The element type remains unchanged.
-                    let func_elem_type = lambdas[0].0[1].ty.clone();
+                    let func_elem_type = lambdas[0].0[2].ty.clone();
 
                     // Parameters for the new fused function. Symbols names are generated using symbol
                     // names for the builder and element from an existing function.
                     let new_params = vec![
                         Parameter{ty: builder_type.clone(), name: sym_gen.new_symbol(&lambdas[0].0[0].name.name)},
-                        Parameter{ty: func_elem_type.clone(), name: sym_gen.new_symbol(&lambdas[0].0[1].name.name)},
+                        Parameter{ty: Scalar(ScalarKind::I64), name: sym_gen.new_symbol(&lambdas[0].0[1].name.name)},
+                        Parameter{ty: func_elem_type.clone(), name: sym_gen.new_symbol(&lambdas[0].0[2].name.name)},
                     ];
 
                     // Generate Ident expressions for the new symbols and substitute them in the
@@ -120,13 +247,18 @@ pub fn fuse_loops_horizontal(expr: &mut Expr<Type>) {
                         ty: builder_type.clone(),
                         kind: Ident(new_params[0].name.clone())
                     };
+                    let new_index_expr = Expr {
+                        ty: Scalar(ScalarKind::I64),
+                        kind: Ident(new_params[1].name.clone())
+                    };
                     let new_elem_expr = Expr {
                         ty: func_elem_type.clone(),
-                        kind: Ident(new_params[1].name.clone())
+                        kind: Ident(new_params[2].name.clone())
                     };
                     for &mut (ref mut args, ref mut expr) in lambdas.iter_mut() {
                         expr.substitute(&args[0].name, &new_bldr_expr);
-                        expr.substitute(&args[1].name, &new_elem_expr);
+                        expr.substitute(&args[1].name, &new_index_expr);
+                        expr.substitute(&args[2].name, &new_elem_expr);
                     }
 
                     // Build up the new expression. The new expression merges structs into an
@@ -223,8 +355,10 @@ fn consumes_all(iter: &Iter<Type>) -> bool {
                           end: Some(ref end),
                           stride: Some(ref stride) } = iter {
         // Checks if the stride is 1 and an entire vector represented by a symbol is consumed.
-        if let (&Literal(I64Literal(1)), &Literal(I64Literal(0)), &Ident(ref name),
-            &Length { data: ref v }) = (&stride.kind, &start.kind, &data.kind, &end.kind) {
+        if let (&Literal(I64Literal(1)),
+                &Literal(I64Literal(0)),
+                &Ident(ref name),
+                &Length { data: ref v }) = (&stride.kind, &start.kind, &data.kind, &end.kind) {
             if let Ident(ref vsym) = v.kind {
                 return vsym == name;
             }
@@ -264,17 +398,24 @@ fn replace_builder(lambda: &Expr<Type>,
         if let Lambda { params: ref nested_args, .. } = nested.kind {
             let mut new_body = *body.clone();
             let ref old_bldr = args[0];
-            let ref old_arg = args[1];
-            let new_sym = sym_gen.new_symbol(&old_bldr.name.name);
+            let ref old_index = args[1];
+            let ref old_arg = args[2];
+            let new_bldr_sym = sym_gen.new_symbol(&old_bldr.name.name);
+            let new_index_sym = sym_gen.new_symbol(&old_index.name.name);
             let new_bldr = Expr {
                 ty: nested_args[0].ty.clone(),
-                kind: Ident(new_sym.clone()),
+                kind: Ident(new_bldr_sym.clone()),
+            };
+            let new_index = Expr {
+                ty: nested_args[1].ty.clone(),
+                kind: Ident(new_index_sym.clone()),
             };
             new_body.transform(&mut |ref mut e| {
                 match e.kind {
                     Merge { ref builder, ref value } if same_iden(&(*builder).kind,
                                                                   &old_bldr.name) => {
-                        let params: Vec<Expr<Type>> = vec![new_bldr.clone(), *value.clone()];
+                        let params: Vec<Expr<Type>> =
+                            vec![new_bldr.clone(), new_index.clone(), *value.clone()];
                         let mut expr = Expr {
                             ty: e.ty.clone(),
                             kind: Apply {
@@ -297,12 +438,17 @@ fn replace_builder(lambda: &Expr<Type>,
                         })
                     }
                     Ident(ref mut symbol) if *symbol == old_bldr.name => Some(new_bldr.clone()),
+                    Ident(ref mut symbol) if *symbol == old_index.name => Some(new_index.clone()),
                     _ => None,
                 }
             });
             let new_params = vec![Parameter {
                                       ty: new_bldr.ty.clone(),
-                                      name: new_sym.clone(),
+                                      name: new_bldr_sym.clone(),
+                                  },
+                                  Parameter {
+                                      ty: Scalar(ScalarKind::I64),
+                                      name: new_index_sym.clone(),
                                   },
                                   Parameter {
                                       ty: old_arg.ty.clone(),
@@ -310,8 +456,9 @@ fn replace_builder(lambda: &Expr<Type>,
                                   }];
 
             if let Function(_, ref ret_ty) = nested.ty {
-                let new_func_type = Function(vec![new_bldr.ty.clone(), old_arg.ty.clone()],
-                                             ret_ty.clone());
+                let new_func_type =
+                    Function(new_params.iter().map(|e| e.ty.clone()).collect::<Vec<_>>(),
+                             ret_ty.clone());
                 new_func = Some(Expr {
                     ty: new_func_type,
                     kind: Lambda {

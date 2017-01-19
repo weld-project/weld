@@ -7,6 +7,8 @@ use super::type_inference::*;
 // Transforms. TODO(shoumik) move these tests somewhere else?
 use super::transforms::fuse_loops_vertical;
 use super::transforms::fuse_loops_horizontal;
+use super::transforms::inline_let;
+use super::transforms::uniquify;
 
 /// Returns a typed expression.
 #[cfg(test)]
@@ -85,6 +87,29 @@ fn parse_and_print_simple_expressions() {
 }
 
 #[test]
+fn parse_and_print_uniquified_expressions() {
+    let mut e = parse_expr("let a = 2; a").unwrap();
+    uniquify(&mut e);
+    assert_eq!(print_expr(&e).as_str(), "(let a=(2);a)");
+
+    // Redefine a symbol.
+    let mut e = parse_expr("let a = 2; let a = 3; a").unwrap();
+    uniquify(&mut e);
+    assert_eq!(print_expr(&e).as_str(), "(let a=(2);(let a#1=(3);a#1))");
+
+    // Make sure Let values aren't renamed.
+    let mut e = parse_expr("let a = 2; let a = a+1; a").unwrap();
+    uniquify(&mut e);
+    assert_eq!(print_expr(&e).as_str(), "(let a=(2);(let a#1=((a+1));a#1))");
+
+    // Lambdas and proper scoping.
+    let mut e = parse_expr("let a = 2; (|a,b|a+b)(1,2) + a").unwrap();
+    uniquify(&mut e);
+    assert_eq!(print_expr(&e).as_str(),
+               "(let a=(2);((|a#1,b|(a#1+b))(1,2)+a))");
+}
+
+#[test]
 fn parse_and_print_for_expressions() {
     let e = parse_expr("for(d, appender, |e| e+1)").unwrap();
     assert_eq!(print_expr(&e).as_str(), "for(d,appender[?],|e|(e+1))");
@@ -153,10 +178,10 @@ fn parse_and_print_typed_expressions() {
     let mut e = parse_expr("[1, true]").unwrap();
     assert!(infer_types(&mut e).is_err());
 
-    let mut e = parse_expr("for([1],appender[?],|b,x|merge(b,x))").unwrap();
+    let mut e = parse_expr("for([1],appender[?],|b,i,x|merge(b,x))").unwrap();
     infer_types(&mut e).unwrap();
     assert_eq!(print_typed_expr(&e).as_str(),
-               "for([1],appender[i32],|b:appender[i32],x:i32|merge(b:appender[i32],x:i32))");
+               "for([1],appender[i32],|b:appender[i32],i:i64,x:i32|merge(b:appender[i32],x:i32))");
 }
 
 #[test]
@@ -191,50 +216,50 @@ fn compare_expressions() {
 fn simple_horizontal_loop_fusion() {
     // Two loops.
     let mut e1 = typed_expression("for(zip(
-            result(for([1,2,3], appender, |b,e| merge(b, e+1))),
-            result(for([1,2,3], appender,|b2,e2| merge(b2,e2+1)))
-        ), appender, |b,e| merge(b, e.$0+1))");
+            result(for([1,2,3], appender, |b,i,e| merge(b, e+1))),
+            result(for([1,2,3], appender,|b2,i2,e2| merge(b2,e2+1)))
+        ), appender, |b,i,e| merge(b, e.$0+1))");
     fuse_loops_horizontal(&mut e1);
-    let e2 = typed_expression("for(result(for([1,2,3], appender, |b,e| merge(b, {e+1,e+1}))), \
-                               appender, |b,e| merge(b, e.$0+1))");
+    let e2 = typed_expression("for(result(for([1,2,3], appender, |b,i,e| merge(b, {e+1,e+1}))), \
+                               appender, |b,i,e| merge(b, e.$0+1))");
     assert!(e1.compare_ignoring_symbols(&e2).unwrap());
 
     // Three loops.
     let mut e1 = typed_expression("for(zip(
-            result(for([1,2,3], appender, |b,e| merge(b, e+1))),
-            result(for([1,2,3], appender,|b2,e2| merge(b2,e2+2))),
-            result(for([1,2,3], appender,|b3,e3| merge(b3,e3+3)))
-        ), appender, |b,e| merge(b, e.$0+1))");
+            result(for([1,2,3], appender, |b,i,e| merge(b, e+1))),
+            result(for([1,2,3], appender,|b2,i2,e2| merge(b2,e2+2))),
+            result(for([1,2,3], appender,|b3,i3,e3| merge(b3,e3+3)))
+        ), appender, |b,i,e| merge(b, e.$0+1))");
     fuse_loops_horizontal(&mut e1);
-    let e2 = typed_expression("for(result(for([1,2,3], appender, |b,e| merge(b, \
-                               {e+1,e+2,e+3}))), appender, |b,e| merge(b, e.$0+1))");
+    let e2 = typed_expression("for(result(for([1,2,3], appender, |b,i,e| merge(b, \
+                               {e+1,e+2,e+3}))), appender, |b,i,e| merge(b, e.$0+1))");
     assert!(e1.compare_ignoring_symbols(&e2).unwrap());
 
     // Iters in inner loop
     let mut e1 = typed_expression("for(zip(
-            result(for(iter([1,2,3], 0, 2, 1), appender, |b,e| merge(b, e+1))),
-            result(for(iter([1,2,3], 0, 2, 1), appender, |b,e| merge(b, e+2)))
-        ), appender, |b,e| merge(b, e.$0+1))");
+            result(for(iter([1,2,3], 0, 2, 1), appender, |b,i,e| merge(b, e+1))),
+            result(for(iter([1,2,3], 0, 2, 1), appender, |b,i,e| merge(b, e+2)))
+        ), appender, |b,i,e| merge(b, e.$0+1))");
     fuse_loops_horizontal(&mut e1);
-    let e2 = typed_expression("for(result(for(iter([1,2,3], 0, 2, 1), appender, |b,e| merge(b, \
-                               {e+1,e+2}))), appender, |b,e| merge(b, e.$0+1))");
+    let e2 = typed_expression("for(result(for(iter([1,2,3], 0, 2, 1), appender, |b,i,e| merge(b, \
+                               {e+1,e+2}))), appender, |b,i,e| merge(b, e.$0+1))");
     assert!(e1.compare_ignoring_symbols(&e2).unwrap());
 
     // Iters in outer loop.
     let mut e1 = typed_expression("for(zip(
-            iter(result(for([1,2,3], appender, |b,e| merge(b, e+1))), 0, 2, 1),
-            iter(result(for([1,2,3], appender, |b,e| merge(b, e+2))), 0, 2, 1)
-        ), appender, |b,e| merge(b, e.$0+1))");
+            iter(result(for([1,2,3], appender, |b,i,e| merge(b, e+1))), 0, 2, 1),
+            iter(result(for([1,2,3], appender, |b,i,e| merge(b, e+2))), 0, 2, 1)
+        ), appender, |b,i,e| merge(b, e.$0+1))");
     fuse_loops_horizontal(&mut e1);
-    let e2 = typed_expression("for(iter(result(for([1,2,3], appender, |b,e| merge(b, \
-                               {e+1,e+2}))), 0, 2, 1), appender, |b,e| merge(b, e.$0+1))");
+    let e2 = typed_expression("for(iter(result(for([1,2,3], appender, |b,i,e| merge(b, \
+                               {e+1,e+2}))), 0, 2, 1), appender, |b,i,e| merge(b, e.$0+1))");
     assert!(e1.compare_ignoring_symbols(&e2).unwrap());
 
     // Two loops with different vectors; should fail.
     let mut e1 = typed_expression("for(zip(
-            result(for([1,2,3], appender, |b,e| merge(b, e+1))),
-            result(for([1,2,4], appender,|b2,e2| merge(b2,e2+1)))
-        ), appender, |b,e| merge(b, e.$0+1))");
+            result(for([1,2,3], appender, |b,i,e| merge(b, e+1))),
+            result(for([1,2,4], appender,|b2,i2,e2| merge(b2,e2+1)))
+        ), appender, |b,i,e| merge(b, e.$0+1))");
     let e2 = e1.clone();
     fuse_loops_horizontal(&mut e1);
     assert!(e1.compare_ignoring_symbols(&e2).unwrap());
@@ -243,55 +268,84 @@ fn simple_horizontal_loop_fusion() {
 #[test]
 fn simple_vertical_loop_fusion() {
     // Two loops.
-    let mut e1 = typed_expression("for(result(for([1,2,3], appender, |b,e| merge(b,e+2))), \
-                                   appender, |b,f| merge(b, f+1))");
+    let mut e1 = typed_expression("for(result(for([1,2,3], appender, |b,i,e| merge(b,e+2))), \
+                                   appender, |b,h,f| merge(b, f+1))");
     fuse_loops_vertical(&mut e1);
-    let e2 = typed_expression("for([1,2,3], appender, |b,e| merge(b, (e+2)+1))");
+    let e2 = typed_expression("for([1,2,3], appender, |b,i,e| merge(b, (e+2)+1))");
+    println!("{}", print_expr(&e1));
     assert!(e1.compare_ignoring_symbols(&e2).unwrap());
 
     // Three loops.
-    let mut e1 = typed_expression("for(result(for(result(for([1,2,3], appender, |b,e| \
-                                   merge(b,e+3))), appender, |b,e| merge(b,e+2))), appender, \
-                                   |b,f| merge(b, f+1))");
+    let mut e1 = typed_expression("for(result(for(result(for([1,2,3], appender, |b,i,e| \
+                                   merge(b,e+3))), appender, |b,i,e| merge(b,e+2))), appender, \
+                                   |b,h,f| merge(b, f+1))");
     fuse_loops_vertical(&mut e1);
-    let e2 = typed_expression("for([1,2,3], appender, |b,e| merge(b, (((e+3)+2)+1)))");
+    let e2 = typed_expression("for([1,2,3], appender, |b,i,e| merge(b, (((e+3)+2)+1)))");
     assert!(e1.compare_ignoring_symbols(&e2).unwrap());
 
     // Merges in other positions, replace builder identifiers.
-    let mut e1 = typed_expression("for(result(for([1,2,3], appender, |b,e| if(e>5, merge(b,e+2), \
-                                   b))), appender, |b,f| merge(b, f+1))");
+    let mut e1 = typed_expression("for(result(for([1,2,3], appender, |b,i,e| if(e>5, \
+                                   merge(b,e+2), b))), appender, |b,h,f| merge(b, f+1))");
     fuse_loops_vertical(&mut e1);
-    let e2 = typed_expression("for([1,2,3], appender, |b,e| if(e>5, merge(b, (e+2)+1), b))");
+    let e2 = typed_expression("for([1,2,3], appender, |b,i,e| if(e>5, merge(b, (e+2)+1), b))");
     assert!(e1.compare_ignoring_symbols(&e2).unwrap());
 
     // Make sure correct builder is chosen.
-    let mut e1 = typed_expression("for(result(for([1,2,3], appender[i32], |b,e| merge(b,e+2))), \
-                                   appender[f64], |b,f| merge(b, 1.0))");
+    let mut e1 = typed_expression("for(result(for([1,2,3], appender[i32], |b,i,e| \
+                                   merge(b,e+2))), appender[f64], |b,h,f| merge(b, 1.0))");
     fuse_loops_vertical(&mut e1);
-    let e2 = typed_expression("for([1,2,3], appender[f64], |b,e| merge(b, 1.0))");
+    let e2 = typed_expression("for([1,2,3], appender[f64], |b,i,e| merge(b, 1.0))");
     assert!(e1.compare_ignoring_symbols(&e2).unwrap());
 
     // Multiple inner loops.
-    let mut e1 = typed_expression("for(result(for(zip([1,2,3],[4,5,6]), appender, |b,e| \
-                                   merge(b,e.$0+2))), appender, |b,f| merge(b, f+1))");
+    let mut e1 = typed_expression("for(result(for(zip([1,2,3],[4,5,6]), appender, |b,i,e| \
+                                   merge(b,e.$0+2))), appender, |b,h,f| merge(b, f+1))");
     fuse_loops_vertical(&mut e1);
-    let e2 = typed_expression("for(zip([1,2,3],[4,5,6]), appender, |b,e| merge(b, (e.$0+2)+1))");
+    let e2 = typed_expression("for(zip([1,2,3],[4,5,6]), appender, |b,i,e| merge(b, (e.$0+2)+1))");
     assert!(e1.compare_ignoring_symbols(&e2).unwrap());
 
     // Iter where inner data consumed fully.
     let mut e1 = typed_expression("let a = [1,2,3]; for(result(for(iter(a, 0L, len(a), 1L), \
-                                   appender, |b,e| merge(b,e+2))), appender, |b,f| merge(b, f+1))");
+                                   appender, |b,i,e| merge(b,e+2))), appender, |b,h,f| merge(b, \
+                                   f+1))");
     fuse_loops_vertical(&mut e1);
-    let e2 = typed_expression("let a = [1,2,3]; for(iter(a,0L,len(a),1L), appender, |b,e| \
+    let e2 = typed_expression("let a = [1,2,3]; for(iter(a,0L,len(a),1L), appender, |b,i,e| \
                                merge(b, (e+2)+1))");
     assert!(e1.compare_ignoring_symbols(&e2).unwrap());
 
     // Inner data not consumed fully.
-    let mut e1 = typed_expression("for(result(for(iter([1,2,3], 0, 1, 1), appender, |b,e| \
-                                   merge(b,e+2))), appender, |b,f| merge(b, f+1))");
+    let mut e1 = typed_expression("for(result(for(iter([1,2,3], 0, 1, 1), appender, |b,i,e| \
+                                   merge(b,e+2))), appender, |b,h,f| merge(b, f+1))");
     fuse_loops_vertical(&mut e1);
     // Loop fusion should fail.
-    let e2 = typed_expression("for(result(for(iter([1,2,3], 0, 1, 1), appender, |b,e| \
-                               merge(b,e+2))), appender, |b,f| merge(b, f+1))");
+    let e2 = typed_expression("for(result(for(iter([1,2,3], 0, 1, 1), appender, |b,i,e| \
+                               merge(b,e+2))), appender, |b,h,f| merge(b, f+1))");
+    assert!(e1.compare_ignoring_symbols(&e2).unwrap());
+}
+
+#[test]
+fn inline_lets() {
+    let mut e1 = typed_expression("let a = 1; a + 2");
+    inline_let(&mut e1);
+    let e2 = typed_expression("1 + 2");
+    assert!(e1.compare_ignoring_symbols(&e2).unwrap());
+
+    let mut e1 = typed_expression("let a = 1; a + a + 2");
+    // The transform should fail since the identifier is used more than once.
+    inline_let(&mut e1);
+    let e2 = typed_expression("let a = 1; a + a + 2");
+    assert!(e1.compare_ignoring_symbols(&e2).unwrap());
+
+    let mut e1 = typed_expression("let a = 1L; for([1L,2L,3L], appender, |b,i,e| merge(b, e + a \
+                                   + 2L))");
+    inline_let(&mut e1);
+    // The transform should fail since the identifier is used in a loop.
+    let e2 = typed_expression("let a = 1L; for([1L,2L,3L], appender, |b,i,e| merge(b, e + a + \
+                               2L))");
+    assert!(e1.compare_ignoring_symbols(&e2).unwrap());
+
+    let mut e1 = typed_expression("let a = 1; let b = 2; let c = 3; a + b + c");
+    inline_let(&mut e1);
+    let e2 = typed_expression("1 + 2 + 3");
     assert!(e1.compare_ignoring_symbols(&e2).unwrap());
 }

@@ -270,8 +270,8 @@ impl LlvmGenerator {
             Scalar(Bool) => Ok("i1"),
             Scalar(I32) => Ok("i32"),
             Scalar(I64) => Ok("i64"),
-            Scalar(F32) => Ok("f32"),
-            Scalar(F64) => Ok("f64"),
+            Scalar(F32) => Ok("float"),
+            Scalar(F64) => Ok("double"),
 
             Struct(ref fields) => {
                 if self.struct_names.get(fields) == None {
@@ -361,6 +361,22 @@ impl LlvmGenerator {
                         ctx.code.add(format!("store {} {}, {}* {}", out_ty_str, bin_tmp,
                             out_ty_str, llvm_symbol(output)));
                     },
+                    CastOp { ref output, ref old_ty, ref new_ty, ref child } => {
+                        if old_ty != new_ty {
+                            let op_name = try!(llvm_castop(&old_ty, &new_ty));
+                            let old_ll_ty = try!(self.llvm_type(&old_ty)).to_string();
+                            let new_ll_ty = try!(self.llvm_type(&new_ty)).to_string();
+                            let child_tmp = try!(self.load_var(llvm_symbol(child).as_str(),
+                                &old_ll_ty, ctx));
+                            let cast_tmp = ctx.var_ids.next();
+                            ctx.code.add(format!("{} = {} {} {} to {}",
+                                cast_tmp, op_name, old_ll_ty, child_tmp, new_ll_ty));
+                            let out_ty = try!(get_sym_ty(func, output));
+                            let out_ty_str = try!(self.llvm_type(&out_ty)).to_string();
+                        ctx.code.add(format!("store {} {}, {}* {}", out_ty_str, cast_tmp,
+                            out_ty_str, llvm_symbol(output)));
+                        }
+                    },
                     Assign { ref output, ref value } => {
                         let ty = try!(get_sym_ty(func, output));
                         let ll_ty = try!(self.llvm_type(&ty)).to_string();
@@ -375,9 +391,9 @@ impl LlvmGenerator {
                                 l, llvm_symbol(output))),
                             I64Literal(l) => ctx.code.add(format!("store i64 {}, i64* {}",
                                 l, llvm_symbol(output))),
-                            F32Literal(l) => ctx.code.add(format!("store f32 {}, f32* {}",
+                            F32Literal(l) => ctx.code.add(format!("store float {:.3}, float* {}",
                                 l, llvm_symbol(output))),
-                            F64Literal(l) => ctx.code.add(format!("store f64 {}, f64* {}",
+                            F64Literal(l) => ctx.code.add(format!("store double {:.3}, double* {}",
                                 l, llvm_symbol(output)))
                         }
                     },
@@ -579,6 +595,24 @@ fn llvm_binop(op_kind: BinOpKind, ty: &Type) -> WeldResult<&'static str> {
     }
 }
 
+/// Return the name of hte LLVM instruction for a cast operation between specific types.
+fn llvm_castop(ty1: &Type, ty2: &Type) -> WeldResult<&'static str> {
+    match (ty1, ty2) {
+        (&Scalar(F64), &Scalar(Bool)) => Ok("fptoui"),
+        (&Scalar(F32), &Scalar(Bool)) => Ok("fptoui"),
+        (&Scalar(Bool), &Scalar(F64)) => Ok("uitofp"),
+        (&Scalar(Bool), &Scalar(F32)) => Ok("uitofp"),
+        (&Scalar(F64), &Scalar(F32)) => Ok("fptrunc"),
+        (&Scalar(F32), &Scalar(F64)) => Ok("fpext"),
+        (&Scalar(F64), _) => Ok("fptosi"),
+        (&Scalar(F32), _) => Ok("fptosi"),
+        (_, &Scalar(F64)) => Ok("sitofp"),
+        (_, &Scalar(F32)) => Ok("sitofp"),
+        (&Scalar(Bool), _) => Ok("zext"),
+        _ => Ok("trunc")
+    }
+}
+
 /// Struct used to track state while generating a function.
 struct FunctionContext {
     /// Code section at the start of the function with alloca instructions for local symbols
@@ -627,8 +661,8 @@ fn types() {
 
     assert_eq!(gen.llvm_type(&Scalar(I32)).unwrap(), "i32");
     assert_eq!(gen.llvm_type(&Scalar(I64)).unwrap(), "i64");
-    assert_eq!(gen.llvm_type(&Scalar(F32)).unwrap(), "f32");
-    assert_eq!(gen.llvm_type(&Scalar(F64)).unwrap(), "f64");
+    assert_eq!(gen.llvm_type(&Scalar(F32)).unwrap(), "float");
+    assert_eq!(gen.llvm_type(&Scalar(F64)).unwrap(), "double");
     assert_eq!(gen.llvm_type(&Scalar(Bool)).unwrap(), "i1");
 
     let struct1 = parse_type("{i32,bool,i32}").unwrap().to_type().unwrap();
@@ -646,6 +680,26 @@ fn basic_program() {
     let result = module.run(0) as *const i32;
     let result = unsafe { *result };
     assert_eq!(result, 42);
+    // TODO: Free result
+}
+
+#[test]
+fn f64_cast() {
+    let code = "|| f64(40 + 2)";
+    let module = compile_program(&parse_program(code).unwrap()).unwrap();
+    let result = module.run(0) as *const f64;
+    let result = unsafe { *result };
+    assert_eq!(result, 42.0);
+    // TODO: Free result
+}
+
+#[test]
+fn i32_cast() {
+    let code = "|| i32(0.251 * 4.0)";
+    let module = compile_program(&parse_program(code).unwrap()).unwrap();
+    let result = module.run(0) as *const i32;
+    let result = unsafe { *result };
+    assert_eq!(result, 1);
     // TODO: Free result
 }
 
