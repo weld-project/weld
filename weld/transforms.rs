@@ -8,6 +8,66 @@ use super::ast::LiteralKind::*;
 
 use super::util::SymbolGenerator;
 
+fn uniquify<T: TypeBounds>(expr: &mut Expr<T>, id_map: &mut HashMap<String, i32>) {
+    expr.transform_and_continue(&mut |ref mut e| {
+        if let Lambda { ref mut params, ref mut body } = e.kind {
+            for param in params.iter() {
+                id_map.insert(name, id_map.get(param.name.name).unwrap_or(-1) + 1);
+            }
+            let new_params = params.map(|&p| Parameter{ty: p.ty.clone(), sym: Symbol::new(id_map.get(p.name.name))});
+            _uniquify(body, id_map);
+            // "Pop" the symbol off the stack.
+            if id_map.get(param.name.name).unwrap() == 0 {
+                id_map.remove(param.name.name)
+            } else {
+                id_map.insert(name, id_map.get(param.name.name).unwrap() - 1);
+            }
+
+            Some(Expr {
+                ty: e.ty.clone(),
+                kind: Lambda{params: new_params, body: body.clone()}
+            }, false);
+        }
+        if let Let { ref mut name, ref mut value, ref mut body } = e.kind {
+            _uniquify(value, id_map);
+            id_map.insert(name.name, id_map.get(name).unwrap_or(-1) + 1);
+            let id = id_map.get(name.name).unwrap();
+            _uniquify(body, id_map);
+            // "Pop" the symbol off the stack.
+            if id_map.get(param.name.name).unwrap() == 0 {
+                id_map.remove(param.name.name)
+            } else {
+                id_map.insert(name, id_map.get(param.name.name).unwrap() - 1);
+            }
+            return Some((Expr {
+                ty: e.ty.clone(),
+                kind: Let {
+                    name: Symbol::new(name, id);
+                          value: value.clone(),
+                          body: body.clone(),
+                },
+            }, false));
+        }
+        if let Ident(ref mut sym) = e.kind {
+            // Modify the symbol name in place.
+            return Some((Expr {
+                ty: e.ty.clone(),
+                kind: Ident(Symbol(id_map.get(syn.name))),
+            }, false));
+        }
+        None
+    });
+}
+
+/// Modifies symbol names so each symbol is unique in the AST. This transform should be applied
+/// "up front" and downstream transforms shoud then use SymbolGenerator to generate new unique
+/// symbols.
+pub fn uniquify<T: TypeBounds>(expr: &mut Expr<T>) {
+    // Maps a string name to its current integer ID in the current scope.
+    //
+    let mut id_map: HashMap<String, i32> = HashMap::new();
+    _uniquify(expr, &mut id_map);
+}
 /// Inlines Apply nodes whose argument is a Lambda expression. These often arise during macro
 /// expansion but it's simpler to inline them before doing type inference.
 /// Unlike many of the other transformations, we make this one independent of types so that
@@ -31,6 +91,46 @@ pub fn inline_apply<T: TypeBounds>(expr: &mut Expr<T>) {
         }
         None
     });
+}
+
+/// Inlines Let calls if the symbol defined by the Let statement is used
+/// less than one time.
+pub fn inline_let(expr: &mut Expr<Type>) {
+    expr.transform(&mut |ref mut expr| {
+        if let Let { ref mut name, ref mut value, ref mut body } = expr.kind {
+            if symbol_usage_count(name, body) <= 1 {
+                body.transform(&mut |ref mut expr| {
+                    // TODO(shoumik): What about symbol redefinitions?
+                    if let Ident(ref symbol) = expr.kind {
+                        if symbol == name {
+                            return Some(*value.clone());
+                        }
+                    }
+                    return None;
+                });
+                return Some(*body.clone());
+            }
+        }
+        return None;
+    });
+}
+
+fn symbol_usage_count(sym: &Symbol, expr: &Expr<Type>) -> u32 {
+    let mut usage_count = 0;
+    expr.traverse(&mut |ref e| {
+        if let For { ref func, .. } = e.kind {
+            // The other child expressions of the For will be counted by traverse.
+            if symbol_usage_count(sym, func) >= 1 {
+                usage_count += 3;
+            }
+        } else if let Ident(ref symbol) = e.kind {
+            if sym == symbol {
+                usage_count += 1;
+            }
+        }
+    });
+
+    usage_count
 }
 
 /// Fuses for loops over the same vector in a zip into a single for loop which produces a vector of
@@ -229,8 +329,10 @@ fn consumes_all(iter: &Iter<Type>) -> bool {
                           end: Some(ref end),
                           stride: Some(ref stride) } = iter {
         // Checks if the stride is 1 and an entire vector represented by a symbol is consumed.
-        if let (&Literal(I64Literal(1)), &Literal(I64Literal(0)), &Ident(ref name),
-            &Length { data: ref v }) = (&stride.kind, &start.kind, &data.kind, &end.kind) {
+        if let (&Literal(I64Literal(1)),
+                &Literal(I64Literal(0)),
+                &Ident(ref name),
+                &Length { data: ref v }) = (&stride.kind, &start.kind, &data.kind, &end.kind) {
             if let Ident(ref vsym) = v.kind {
                 return vsym == name;
             }
