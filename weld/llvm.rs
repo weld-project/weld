@@ -149,17 +149,51 @@ impl LlvmGenerator {
             ctx.code.add(format!("{} = icmp ult i64 {}, %upper.idx", idx_cmp, idx_tmp));
             ctx.code.add(format!("br i1 {}, label %loop_body, label %loop_end", idx_cmp));
             ctx.code.add("loop_body:");
-            // TODO support loop data that is not a single vector
-            let data_ty_str = try!(self.llvm_type(func.params.get(&par_for.data).unwrap())).to_string();
-            let data_str = try!(self.load_var(llvm_symbol(&par_for.data).as_str(), &data_ty_str, ctx));
-            let data_prefix = format!("@{}", data_ty_str.replace("%", ""));
+            let mut prev_ref = String::from("undef");
+            let elem_ty = func.locals.get(&par_for.data_arg).unwrap();
+            let elem_ty_str = try!(self.llvm_type(&elem_ty)).to_string();
+            for (i, iter) in par_for.data.iter().enumerate() {
+                let data_ty_str = try!(self.llvm_type(func.params.get(&iter.data).unwrap())).to_string();
+                let data_str = try!(self.load_var(llvm_symbol(&iter.data).as_str(), &data_ty_str, ctx));
+                let data_prefix = format!("@{}", data_ty_str.replace("%", ""));
+                let inner_elem_tmp_ptr = ctx.var_ids.next();
+                let inner_elem_ty_str =
+                    if par_for.data.len() == 1 {
+                        elem_ty_str.clone()
+                    } else {
+                        match *elem_ty {
+                            Struct(ref v) => try!(self.llvm_type(&v[i])).to_string(),
+                            _ => weld_err!("Internal error: invalid element type {}", print_type(elem_ty))?
+                        }
+                    };
+                let arr_idx =
+                    if iter.start.is_some() {
+                        let offset = ctx.var_ids.next();
+                        ctx.code.add(format!("{} = mul i64 {}, {}", offset, idx_tmp,
+                            llvm_symbol(&iter.stride.clone().unwrap())));
+                        let final_idx = ctx.var_ids.next();
+                        ctx.code.add(format!("{} = add i64 {}, {}", final_idx,
+                            llvm_symbol(&iter.start.clone().unwrap()), offset));
+                        final_idx
+                    } else {
+                        idx_tmp.clone()
+                    };
+                ctx.code.add(format!("{} = call {}* {}.at({} {}, i64 {})", inner_elem_tmp_ptr,
+                    &inner_elem_ty_str, data_prefix, &data_ty_str, data_str, arr_idx));
+                let inner_elem_tmp = try!(self.load_var(&inner_elem_tmp_ptr, &inner_elem_ty_str, ctx));
+                if par_for.data.len() == 1 {
+                    prev_ref.clear();
+                    prev_ref.push_str(&inner_elem_tmp);
+                } else {
+                    let elem_tmp = ctx.var_ids.next();
+                    ctx.code.add(format!("{} = {} {}, {} {}, {}", elem_tmp, elem_ty_str, prev_ref,
+                        inner_elem_ty_str, inner_elem_tmp, i));
+                    prev_ref.clear();
+                    prev_ref.push_str(&elem_tmp);
+                }
+            }
             let elem_str = llvm_symbol(&par_for.data_arg);
-            let elem_ty_str = try!(self.llvm_type(func.locals.get(&par_for.data_arg).unwrap())).to_string();
-            let elem_tmp_ptr = ctx.var_ids.next();
-            ctx.code.add(format!("{} = call {}* {}.at({} {}, i64 {})", elem_tmp_ptr, &elem_ty_str,
-                data_prefix, &data_ty_str, data_str, idx_tmp));
-            let elem_tmp = try!(self.load_var(&elem_tmp_ptr, &elem_ty_str, ctx));
-            ctx.code.add(format!("store {} {}, {}* {}", &elem_ty_str, elem_tmp, &elem_ty_str, elem_str));
+            ctx.code.add(format!("store {} {}, {}* {}", &elem_ty_str, prev_ref, &elem_ty_str, elem_str));
         }
 
         ctx.code.add(format!("br label %b{}", func.blocks[0].id));
@@ -189,14 +223,26 @@ impl LlvmGenerator {
                 let serial_arg_types = try!(self.get_arg_str(&get_combined_params(sir, &par_for), ""));
                 serial_ctx.code.add(format!("define void @f{}_ser_wrapper({}) {{", func.id,
                     serial_arg_types));
-                let data_str = llvm_symbol(&par_for.data);
-                let data_ty_str = try!(self.llvm_type(func.params.get(&par_for.data).unwrap())).to_string();
-                let data_prefix = format!("@{}", data_ty_str.replace("%", ""));
-                let vec_size = serial_ctx.var_ids.next();
-                serial_ctx.code.add(format!("{} = call i64 {}.size({} {})", vec_size, data_prefix,
-                    data_ty_str, data_str));
+                let upper_bound = serial_ctx.var_ids.next();
+                if par_for.data[0].start.is_none() {
+                    let first_data = &par_for.data[0].data;
+                    let data_str = llvm_symbol(&first_data);
+                    let data_ty_str = try!(self.llvm_type(func.params.get(&first_data).unwrap())).to_string();
+                    let data_prefix = format!("@{}", data_ty_str.replace("%", ""));
+                    serial_ctx.code.add(format!("{} = call i64 {}.size({} {})", upper_bound, data_prefix,
+                        data_ty_str, data_str));
+                } else {
+                    let start_str = llvm_symbol(&par_for.data[0].start.clone().unwrap());
+                    let end_str = llvm_symbol(&par_for.data[0].end.clone().unwrap());
+                    let stride_str = llvm_symbol(&par_for.data[0].stride.clone().unwrap());
+                    let diff_tmp = serial_ctx.var_ids.next();
+                    // TODO check for errors in the given bounds: end >= start >= 0, stride > 0,
+                    // (end - start) % stride == 0
+                    serial_ctx.code.add(format!("{} = sub i64 {}, {}", diff_tmp, end_str, start_str));
+                    serial_ctx.code.add(format!("{} = udiv i64 {}, {}", upper_bound, diff_tmp, stride_str));
+                }
                 let mut body_arg_types = try!(self.get_arg_str(&func.params, ""));
-                body_arg_types.push_str(format!(", i64 0, i64 {}", vec_size).as_str());
+                body_arg_types.push_str(format!(", i64 0, i64 {}", upper_bound).as_str());
                 serial_ctx.code.add(format!("call void @f{}({})", func.id, body_arg_types));
                 let cont_arg_types = try!(self.get_arg_str(&sir.funcs[par_for.cont].params, ""));
                 serial_ctx.code.add(format!("call void @f{}({})", par_for.cont, cont_arg_types));
