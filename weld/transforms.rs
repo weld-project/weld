@@ -6,68 +6,94 @@ use super::ast::Type::*;
 use super::ast::BuilderKind::*;
 use super::ast::LiteralKind::*;
 
+use std::collections::HashMap;
+
 use super::util::SymbolGenerator;
-
-fn uniquify<T: TypeBounds>(expr: &mut Expr<T>, id_map: &mut HashMap<String, i32>) {
-    expr.transform_and_continue(&mut |ref mut e| {
-        if let Lambda { ref mut params, ref mut body } = e.kind {
-            for param in params.iter() {
-                id_map.insert(name, id_map.get(param.name.name).unwrap_or(-1) + 1);
-            }
-            let new_params = params.map(|&p| Parameter{ty: p.ty.clone(), sym: Symbol::new(id_map.get(p.name.name))});
-            _uniquify(body, id_map);
-            // "Pop" the symbol off the stack.
-            if id_map.get(param.name.name).unwrap() == 0 {
-                id_map.remove(param.name.name)
-            } else {
-                id_map.insert(name, id_map.get(param.name.name).unwrap() - 1);
-            }
-
-            Some(Expr {
-                ty: e.ty.clone(),
-                kind: Lambda{params: new_params, body: body.clone()}
-            }, false);
-        }
-        if let Let { ref mut name, ref mut value, ref mut body } = e.kind {
-            _uniquify(value, id_map);
-            id_map.insert(name.name, id_map.get(name).unwrap_or(-1) + 1);
-            let id = id_map.get(name.name).unwrap();
-            _uniquify(body, id_map);
-            // "Pop" the symbol off the stack.
-            if id_map.get(param.name.name).unwrap() == 0 {
-                id_map.remove(param.name.name)
-            } else {
-                id_map.insert(name, id_map.get(param.name.name).unwrap() - 1);
-            }
-            return Some((Expr {
-                ty: e.ty.clone(),
-                kind: Let {
-                    name: Symbol::new(name, id);
-                          value: value.clone(),
-                          body: body.clone(),
-                },
-            }, false));
-        }
-        if let Ident(ref mut sym) = e.kind {
-            // Modify the symbol name in place.
-            return Some((Expr {
-                ty: e.ty.clone(),
-                kind: Ident(Symbol(id_map.get(syn.name))),
-            }, false));
-        }
-        None
-    });
-}
 
 /// Modifies symbol names so each symbol is unique in the AST. This transform should be applied
 /// "up front" and downstream transforms shoud then use SymbolGenerator to generate new unique
 /// symbols.
 pub fn uniquify<T: TypeBounds>(expr: &mut Expr<T>) {
     // Maps a string name to its current integer ID in the current scope.
-    //
     let mut id_map: HashMap<String, i32> = HashMap::new();
     _uniquify(expr, &mut id_map);
 }
+
+/// Helper function for uniquify.
+fn _uniquify<T: TypeBounds>(expr: &mut Expr<T>, id_map: &mut HashMap<String, i32>) {
+
+    // Increments the ID for a given symbol name and returns the new symbol.
+    let push_id = |id_map: &mut HashMap<String, i32>, name: &String| {
+        let id = id_map.entry(name.clone()).or_insert(-1);
+        *id += 1;
+        Symbol::new(&name.clone(), *id)
+    };
+
+    // Decrements the ID for a given symbol name and returns the new symbol.
+    let pop_id = |id_map: &mut HashMap<String, i32>, name: &String| {
+        let id = id_map.entry(name.clone()).or_insert(-1);
+        *id -= 1;
+        Symbol::new(&name.clone(), *id)
+    };
+
+    // Returns the current for a given name.
+    let get_id = |id_map: &HashMap<String, i32>, name: &String| {
+        let id = id_map.get(name).unwrap();
+        Symbol::new(&name.clone(), *id)
+    };
+
+    // Walk the expression tree, maintaining a map of the highest ID seen for a given
+    // symbol. The ID is incremented when a symbol is redefined in a new scope, and
+    // decremented when exiting the scope.
+    expr.transform_and_continue(&mut |ref mut e| {
+        if let Ident(ref sym) = e.kind {
+            return Some((Expr {
+                             ty: e.ty.clone(),
+                             kind: Ident(get_id(id_map, &sym.name)),
+                         },
+                         false));
+        } else if let Lambda { ref mut params, ref mut body } = e.kind {
+            // Create new parameters for the lambda that will replace this one.
+            let new_params = params.iter()
+                .map(|ref p| {
+                    Parameter {
+                        ty: p.ty.clone(),
+                        name: push_id(id_map, &p.name.name),
+                    }
+                })
+                .collect::<Vec<_>>();
+
+            _uniquify(body, id_map);
+            for param in params.iter() {
+                pop_id(id_map, &param.name.name);
+            }
+
+            return Some((Expr {
+                             ty: e.ty.clone(),
+                             kind: Lambda {
+                                 params: new_params,
+                                 body: body.clone(),
+                             },
+                         },
+                         false));
+        } else if let Let { ref mut name, ref mut value, ref mut body } = e.kind {
+            _uniquify(value, id_map);
+            let new_sym = push_id(id_map, &name.name);
+            _uniquify(body, id_map);
+            return Some((Expr {
+                             ty: e.ty.clone(),
+                             kind: Let {
+                                 name: new_sym,
+                                 value: value.clone(),
+                                 body: body.clone(),
+                             },
+                         },
+                         false));
+        }
+        None
+    });
+}
+
 /// Inlines Apply nodes whose argument is a Lambda expression. These often arise during macro
 /// expansion but it's simpler to inline them before doing type inference.
 /// Unlike many of the other transformations, we make this one independent of types so that

@@ -14,11 +14,17 @@ pub struct Symbol {
 
 impl Symbol {
     pub fn new(name: &str, id: i32) -> Symbol {
-        Symbol { name: name.into(), id: id }
+        Symbol {
+            name: name.into(),
+            id: id,
+        }
     }
 
     pub fn name(name: &str) -> Symbol {
-        Symbol { name: name.into(), id: 0 }
+        Symbol {
+            name: name.into(),
+            id: 0,
+        }
     }
 }
 
@@ -455,6 +461,27 @@ impl<T: TypeBounds> Expr<T> {
             c.traverse(func);
         }
     }
+
+    /// Recursively transforms an expression in place by running a function on it and optionally replacing it with another expression.
+    pub fn transform_and_continue<F>(&mut self, func: &mut F)
+        where F: FnMut(&mut Expr<T>) -> Option<(Expr<T>, bool)>
+    {
+        match func(self) {
+            Some((e, true)) => {
+                *self = e;
+                return self.transform_and_continue(func);
+            }
+            Some((e, false)) => {
+                *self = e;
+            }
+            None => {
+                for c in self.children_mut() {
+                    c.transform_and_continue(func);
+                }
+            }
+        }
+    }
+
 
     /// Recursively transforms an expression in place by running a function on it and optionally replacing it with another expression.
     pub fn transform<F>(&mut self, func: &mut F)
