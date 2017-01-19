@@ -8,6 +8,7 @@ use super::type_inference::*;
 use super::transforms::fuse_loops_vertical;
 use super::transforms::fuse_loops_horizontal;
 use super::transforms::inline_let;
+use super::transforms::uniquify;
 
 /// Returns a typed expression.
 #[cfg(test)]
@@ -83,6 +84,29 @@ fn parse_and_print_simple_expressions() {
 
     let e = parse_expr("for(d, appender, |e| e+1)").unwrap();
     assert_eq!(print_expr(&e).as_str(), "for(d,appender[?],|e|(e+1))");
+}
+
+#[test]
+fn parse_and_print_uniquified_expressions() {
+    let mut e = parse_expr("let a = 2; a").unwrap();
+    uniquify(&mut e);
+    assert_eq!(print_expr(&e).as_str(), "(let a=(2);a)");
+
+    // Redefine a symbol.
+    let mut e = parse_expr("let a = 2; let a = 3; a").unwrap();
+    uniquify(&mut e);
+    assert_eq!(print_expr(&e).as_str(), "(let a=(2);(let a#1=(3);a#1))");
+
+    // Make sure Let values aren't renamed.
+    let mut e = parse_expr("let a = 2; let a = a+1; a").unwrap();
+    uniquify(&mut e);
+    assert_eq!(print_expr(&e).as_str(), "(let a=(2);(let a#1=((a+1));a#1))");
+
+    // Lambdas and proper scoping.
+    let mut e = parse_expr("let a = 2; (|a,b|a+b)(1,2) + a").unwrap();
+    uniquify(&mut e);
+    assert_eq!(print_expr(&e).as_str(),
+               "(let a=(2);((|a#1,b|(a#1+b))(1,2)+a))");
 }
 
 #[test]
@@ -312,11 +336,11 @@ fn inline_lets() {
     let e2 = typed_expression("let a = 1; a + a + 2");
     assert!(e1.compare_ignoring_symbols(&e2).unwrap());
 
-    let mut e1 = typed_expression("let a = 1L; for([1L,2L,3L], appender, |b,e| merge(b, e + a \
+    let mut e1 = typed_expression("let a = 1L; for([1L,2L,3L], appender, |b,i,e| merge(b, e + a \
                                    + 2L))");
     inline_let(&mut e1);
     // The transform should fail since the identifier is used in a loop.
-    let e2 = typed_expression("let a = 1L; for([1L,2L,3L], appender, |b,e| merge(b, e + a + \
+    let e2 = typed_expression("let a = 1L; for([1L,2L,3L], appender, |b,i,e| merge(b, e + a + \
                                2L))");
     assert!(e1.compare_ignoring_symbols(&e2).unwrap());
 
