@@ -493,6 +493,7 @@ fn gen_expr(
                     prog.funcs[body_func].params.insert(data_res.2.clone(), iter.data.ty.clone());
                     let start_sym =
                         if iter.start.is_some() {
+                            // TODO is there a cleaner way to do this?
                             let start_expr =
                                 match iter.start {
                                     Some(ref e) => e,
