@@ -48,6 +48,11 @@ pub enum Statement {
         output: Symbol,
         ty: Type
     },
+    AssignField {
+        output: Symbol,
+        value: Symbol,
+        index: u32
+    }
 }
 
 #[derive(Clone)]
@@ -181,6 +186,8 @@ impl fmt::Display for Statement {
             GetResult { ref output, ref builder } => write!(f, "{} = result {}", output, builder),
             CreateBuilder { ref output, ref ty }  => write!(f, "{} = new {}", output,
                 print_type(ty)),
+            AssignField { ref output, ref value, index } => write!(f, "{} = {}.{}",
+                output, value, index)
         }
     }
 }
@@ -293,6 +300,7 @@ env: &mut HashMap<Symbol, Type>, closure: &mut HashSet<Symbol>) {
                     vars.push(value.clone());
                 },
                 GetResult { ref builder, .. } => vars.push(builder.clone()),
+                AssignField { ref value, .. } => vars.push(value.clone()),
                 _ => {}
             }   
         }
@@ -494,6 +502,20 @@ fn gen_expr(
             prog.funcs[cur_func].blocks[cur_block].add_statement(
                 CreateBuilder { output: res_sym.clone(), ty: expr.ty.clone() });
             Ok((cur_func, cur_block, res_sym))
+        },
+
+        GetField { ref expr, index } => {
+            let (cur_func, cur_block, struct_sym) = gen_expr(expr, prog, cur_func, cur_block)?;
+            let field_ty =
+                match expr.ty {
+                    super::ast::Type::Struct(ref v) => &v[index as usize],
+                    _ => weld_err!("Internal error: tried to get field of type {}",
+                        print_type(&expr.ty))?
+                };
+            let res_sym = prog.add_local(&field_ty, cur_func);
+            prog.funcs[cur_func].blocks[cur_block].add_statement(
+                AssignField { output: res_sym.clone(), value: struct_sym, index: index });
+            Ok((cur_func, cur_block, res_sym))            
         },
 
         For { ref iters, ref builder, ref func } => {

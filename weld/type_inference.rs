@@ -281,28 +281,23 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             let mut changed = false;
             // Push iters and builder type into func
             let mut elem_types = vec![];
-            for iter in iters {
+            for iter in iters.iter_mut() {
                 let elem_type = match iter.data.ty {
                     Vector(ref elem) => *elem.clone(),
                     Unknown => Unknown,
                     _ => return weld_err!("For"),
                 };
-                // verify that the start, stride, and end of each iter is i64
+                elem_types.push(elem_type);
                 if iter.start.is_some() {
-                    for i in [&iter.start, &iter.end, &iter.stride].into_iter() {
+                    for i in [&mut iter.start, &mut iter.end, &mut iter.stride].iter_mut() {
                         match **i {
-                            Some(ref e) => {
-                                match e.ty {
-                                    Scalar(I64) => {},
-                                    Unknown => {},
-                                    _ => return weld_err!("Internal error: iter param has type {:?}", e.ty)
-                                }
+                            Some(ref mut e) => {
+                                changed |= try!(push_complete_type(&mut e.ty, Scalar(I64), "iter"))
                             },
                             None => return weld_err!("Impossible")
                         };
                     }
                 }
-                elem_types.push(elem_type);
             }
             let elem_types = if elem_types.len() == 1 {
                 elem_types[0].clone()

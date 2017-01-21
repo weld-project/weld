@@ -189,8 +189,8 @@ impl LlvmGenerator {
                     prev_ref.push_str(&inner_elem_tmp);
                 } else {
                     let elem_tmp = ctx.var_ids.next();
-                    ctx.code.add(format!("{} = {} {}, {} {}, {}", elem_tmp, elem_ty_str, prev_ref,
-                        inner_elem_ty_str, inner_elem_tmp, i));
+                    ctx.code.add(format!("{} = insertvalue {} {}, {} {}, {}", elem_tmp,
+                        elem_ty_str, prev_ref, inner_elem_ty_str, inner_elem_tmp, i));
                     prev_ref.clear();
                     prev_ref.push_str(&elem_tmp);
                 }
@@ -432,7 +432,19 @@ impl LlvmGenerator {
                         let ty = try!(get_sym_ty(func, output));
                         let ll_ty = try!(self.llvm_type(&ty)).to_string();
                         let val_tmp = try!(self.load_var(llvm_symbol(value).as_str(), &ll_ty, ctx));
-                        ctx.code.add(format!("store {} {}, {}* {}", &ll_ty, val_tmp, &ll_ty, llvm_symbol(output)));
+                        ctx.code.add(format!("store {} {}, {}* {}", &ll_ty, val_tmp, &ll_ty,
+                            llvm_symbol(output)));
+                    },
+                    AssignField { ref output, ref value, index } => {
+                        let struct_ty = try!(self.llvm_type(try!(get_sym_ty(func, value)))).to_string();
+                        let field_ty = try!(self.llvm_type(try!(get_sym_ty(func, output)))).to_string();
+                        let struct_tmp = try!(self.load_var(llvm_symbol(value).as_str(),
+                            &struct_ty, ctx));
+                        let res_tmp = ctx.var_ids.next();
+                        ctx.code.add(format!("{} = extractvalue {} {}, {}", res_tmp, struct_ty,
+                            struct_tmp, index));
+                        ctx.code.add(format!("store {} {}, {}* {}", field_ty, res_tmp, field_ty,
+                            llvm_symbol(output)));
                     },
                     AssignLiteral { ref output, ref value } => {
                         match *value {
@@ -863,24 +875,25 @@ fn if_for_loop() {
 }
 
 #[test]
-fn iter_for_loop() {
+fn iters_for_loop() {
     #[derive(Clone)]
     #[allow(dead_code)]
     struct Vec { data: *const i32, len: i64 }
     #[allow(dead_code)]
-    struct Args { x: Vec, a: i32 }
+    struct Args { x: Vec, y: Vec }
 
-    let code = "|x:vec[i32], a:i32| result(for(iter(x,0L,4L,2L), appender, |b,i,e| merge(b,e+a)))";
+    let code = "|x:vec[i32], y:vec[i32]| \
+                result(for(zip(iter(x,0L,4L,2L), y), appender, |b,i,e| merge(b,e.$0+e.$1)))";
     let module = compile_program(&parse_program(code).unwrap()).unwrap();
-    let input = [1, 2, 3, 4];
-    let args = Args { x: Vec { data: &input as *const i32, len: 4 }, a: 1 };
+    let x = [1, 2, 3, 4];
+    let y = [5, 6];
+    let args = Args { x: Vec { data: &x as *const i32, len: 4 },
+                      y: Vec { data: &y as *const i32, len: 2 } };
     let result_raw = module.run(&args as *const Args as i64) as *const Vec;
     let result = unsafe { (*result_raw).clone() };
-    let output = [2, 4];
+    let output = [6, 9];
     for i in 0..(result.len as isize) {
         assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
     }
     // TODO: Free result_raw
 }
-
-// TODO add test with for loop over multiple vectors (zip)
