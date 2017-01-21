@@ -18,6 +18,7 @@ use super::sir;
 use super::sir::*;
 use super::sir::Statement::*;
 use super::sir::Terminator::*;
+use super::transforms;
 use super::type_inference;
 use super::util::IdGenerator;
 
@@ -169,11 +170,13 @@ impl LlvmGenerator {
                 let arr_idx =
                     if iter.start.is_some() {
                         let offset = ctx.var_ids.next();
-                        ctx.code.add(format!("{} = mul i64 {}, {}", offset, idx_tmp,
-                            llvm_symbol(&iter.stride.clone().unwrap())));
+                        let stride_str = try!(self.load_var(
+                            llvm_symbol(&iter.stride.clone().unwrap()).as_str(), "i64", ctx));
+                        let start_str = try!(self.load_var(
+                            llvm_symbol(&iter.start.clone().unwrap()).as_str(), "i64", ctx));
+                        ctx.code.add(format!("{} = mul i64 {}, {}", offset, idx_tmp, stride_str));
                         let final_idx = ctx.var_ids.next();
-                        ctx.code.add(format!("{} = add i64 {}, {}", final_idx,
-                            llvm_symbol(&iter.start.clone().unwrap()), offset));
+                        ctx.code.add(format!("{} = add i64 {}, {}", final_idx, start_str, offset));
                         final_idx
                     } else {
                         idx_tmp.clone()
@@ -194,11 +197,13 @@ impl LlvmGenerator {
             }
             let elem_str = llvm_symbol(&par_for.data_arg);
             ctx.code.add(format!("store {} {}, {}* {}", &elem_ty_str, prev_ref, &elem_ty_str, elem_str));
+            ctx.code.add(format!("store i64 {}, i64* {}", idx_tmp, llvm_symbol(&par_for.idx_arg)));
         }
 
         ctx.code.add(format!("br label %b{}", func.blocks[0].id));
         // Generate an expression for the function body.
         try!(self.gen_func(sir, func, ctx));
+        ctx.code.add("body_end:");
         if containing_loop.is_some() {
             ctx.code.add("br label %loop_terminator");
             ctx.code.add("loop_terminator:");
@@ -530,6 +535,7 @@ impl LlvmGenerator {
                     }
                     arg_types.push_str("%work_t* %cur.work");
                     ctx.code.add(format!("call void @f{}_ser_wrapper({})", pf.body, arg_types));
+                    ctx.code.add("br label %body_end");
                 },
                 JumpBlock(block) => {
                     ctx.code.add(format!("br label %b{}", block));
@@ -546,6 +552,7 @@ impl LlvmGenerator {
                     }
                     arg_types.push_str("%work_t* %cur.work");
                     ctx.code.add(format!("call void @f{}({})", func, arg_types));
+                    ctx.code.add("br label %body_end");
                 },
                 ProgramReturn(ref sym) => {
                     let ty = try!(get_sym_ty(func, sym));
@@ -564,8 +571,11 @@ impl LlvmGenerator {
                     ctx.code.add(format!("store {} {}, {}* {}", &ty_str, res_tmp, &ty_str, &elem_storage_typed));
                     ctx.code.add(format!("{} = getelementptr %work_t* %cur.work, i32 0, i32 0", &work_res_ptr));
                     ctx.code.add(format!("store i8* {}, i8** {}", &elem_storage, &work_res_ptr));
+                    ctx.code.add("br label %body_end");
                 },
-                EndFunction => {},
+                EndFunction => {
+                    ctx.code.add("br label %body_end");
+                },
                 Crash => { /* TODO do something else here? */ }
             }
         }
@@ -655,6 +665,7 @@ fn llvm_castop(ty1: &Type, ty2: &Type) -> WeldResult<&'static str> {
         (_, &Scalar(F64)) => Ok("sitofp"),
         (_, &Scalar(F32)) => Ok("sitofp"),
         (&Scalar(Bool), _) => Ok("zext"),
+        (_, &Scalar(I64)) => Ok("sext"),
         _ => Ok("trunc")
     }
 }
@@ -693,7 +704,8 @@ impl FunctionContext {
 pub fn compile_program(program: &Program) -> WeldResult<easy_ll::CompiledModule> {
     let mut expr = try!(macro_processor::process_program(program));
     try!(type_inference::infer_types(&mut expr));
-    let expr = try!(expr.to_typed());
+    let mut expr = try!(expr.to_typed());
+    transforms::inline_apply(&mut expr);
     let sir_prog = try!(sir::ast_to_sir(&expr));
     let mut gen = LlvmGenerator::new();
     try!(gen.add_function_on_pointers("run", &sir_prog));
@@ -797,3 +809,78 @@ fn comparison() {
     assert_eq!(result, 20);
     // TODO: Free result
 }
+
+#[test]
+fn simple_for_loop() {
+    #[derive(Clone)]
+    #[allow(dead_code)]
+    struct Vec { data: *const i32, len: i64 }
+    #[allow(dead_code)]
+    struct Args { x: Vec, a: i32 }
+
+    let code = "|x:vec[i32], a:i32| let b=a+1; map(x, |e| e+b)";
+    let module = compile_program(&parse_program(code).unwrap()).unwrap();
+    let input = [1, 2];
+    let args = Args { x: Vec { data: &input as *const i32, len: 2 }, a: 1 };
+    let result_raw = module.run(&args as *const Args as i64) as *const Vec;
+    let result = unsafe { (*result_raw).clone() };
+    let output = [3, 4];
+    for i in 0..(result.len as isize) {
+        assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
+    }
+    // TODO: Free result_raw
+}
+
+#[test]
+fn if_for_loop() {
+    #[derive(Clone)]
+    #[allow(dead_code)]
+    struct Vec { data: *const i32, len: i64 }
+    #[allow(dead_code)]
+    struct Args { x: Vec, a: i32 }
+
+    let code = "|x:vec[i32], a:i32| if(a > 5, map(x, |e| e+1), map(x, |e| e+2))";
+    let module = compile_program(&parse_program(code).unwrap()).unwrap();
+    let input = [1, 2];
+
+    let args = Args { x: Vec { data: &input as *const i32, len: 2 }, a: 1 };
+    let result_raw = module.run(&args as *const Args as i64) as *const Vec;
+    let result = unsafe { (*result_raw).clone() };
+    let output = [3, 4];
+    for i in 0..(result.len as isize) {
+        assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
+    }
+    // TODO: Free result_raw
+
+    let args = Args { x: Vec { data: &input as *const i32, len: 2 }, a: 6 };
+    let result_raw = module.run(&args as *const Args as i64) as *const Vec;
+    let result = unsafe { (*result_raw).clone() };
+    let output = [2, 3];
+    for i in 0..(result.len as isize) {
+        assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
+    }
+    // TODO: Free result_raw
+}
+
+#[test]
+fn iter_for_loop() {
+    #[derive(Clone)]
+    #[allow(dead_code)]
+    struct Vec { data: *const i32, len: i64 }
+    #[allow(dead_code)]
+    struct Args { x: Vec, a: i32 }
+
+    let code = "|x:vec[i32], a:i32| result(for(iter(x,0L,4L,2L), appender, |b,i,e| merge(b,e+a)))";
+    let module = compile_program(&parse_program(code).unwrap()).unwrap();
+    let input = [1, 2, 3, 4];
+    let args = Args { x: Vec { data: &input as *const i32, len: 4 }, a: 1 };
+    let result_raw = module.run(&args as *const Args as i64) as *const Vec;
+    let result = unsafe { (*result_raw).clone() };
+    let output = [2, 4];
+    for i in 0..(result.len as isize) {
+        assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
+    }
+    // TODO: Free result_raw
+}
+
+// TODO add test with for loop over multiple vectors (zip)

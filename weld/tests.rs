@@ -92,9 +92,9 @@ fn parse_and_print_for_expressions() {
     let e = parse_expr("for(iter(d), appender, |e| e+1)").unwrap();
     assert_eq!(print_expr(&e).as_str(), "for(d,appender[?],|e|(e+1))");
 
-    let e = parse_expr("for(iter(d,0,4,1), appender, |e| e+1)").unwrap();
+    let e = parse_expr("for(iter(d,0L,4L,1L), appender, |e| e+1)").unwrap();
     assert_eq!(print_expr(&e).as_str(),
-               "for(iter(d,0,4,1),appender[?],|e|(e+1))");
+               "for(iter(d,0L,4L,1L),appender[?],|e|(e+1))");
 
     let e = parse_expr("for(zip(d), appender, |e| e+1)").unwrap();
     assert_eq!(print_expr(&e).as_str(), "for(d,appender[?],|e|(e+1))");
@@ -103,9 +103,9 @@ fn parse_and_print_for_expressions() {
     assert_eq!(print_expr(&e).as_str(),
                "for(zip(d,e),appender[?],|e|(e+1))");
 
-    let e = parse_expr("for(zip(a,b,iter(c,0,4,1),iter(d)), appender, |e| e+1)").unwrap();
+    let e = parse_expr("for(zip(a,b,iter(c,0L,4L,1L),iter(d)), appender, |e| e+1)").unwrap();
     assert_eq!(print_expr(&e).as_str(),
-               "for(zip(a,b,iter(c,0,4,1),d),appender[?],|e|(e+1))");
+               "for(zip(a,b,iter(c,0L,4L,1L),d),appender[?],|e|(e+1))");
 }
 
 #[test]
@@ -212,22 +212,22 @@ fn simple_horizontal_loop_fusion() {
 
     // Iters in inner loop
     let mut e1 = typed_expression("for(zip(
-            result(for(iter([1,2,3], 0, 2, 1), appender, |b,i,e| merge(b, e+1))),
-            result(for(iter([1,2,3], 0, 2, 1), appender, |b,i,e| merge(b, e+2)))
+            result(for(iter([1,2,3], 0L, 2L, 1L), appender, |b,i,e| merge(b, e+1))),
+            result(for(iter([1,2,3], 0L, 2L, 1L), appender, |b,i,e| merge(b, e+2)))
         ), appender, |b,i,e| merge(b, e.$0+1))");
     fuse_loops_horizontal(&mut e1);
-    let e2 = typed_expression("for(result(for(iter([1,2,3], 0, 2, 1), appender, |b,i,e| merge(b, \
+    let e2 = typed_expression("for(result(for(iter([1,2,3], 0L, 2L, 1L), appender, |b,i,e| merge(b, \
                                {e+1,e+2}))), appender, |b,i,e| merge(b, e.$0+1))");
     assert!(e1.compare_ignoring_symbols(&e2).unwrap());
 
     // Iters in outer loop.
     let mut e1 = typed_expression("for(zip(
-            iter(result(for([1,2,3], appender, |b,i,e| merge(b, e+1))), 0, 2, 1),
-            iter(result(for([1,2,3], appender, |b,i,e| merge(b, e+2))), 0, 2, 1)
+            iter(result(for([1,2,3], appender, |b,i,e| merge(b, e+1))), 0L, 2L, 1L),
+            iter(result(for([1,2,3], appender, |b,i,e| merge(b, e+2))), 0L, 2L, 1L)
         ), appender, |b,i,e| merge(b, e.$0+1))");
     fuse_loops_horizontal(&mut e1);
     let e2 = typed_expression("for(iter(result(for([1,2,3], appender, |b,i,e| merge(b, \
-                               {e+1,e+2}))), 0, 2, 1), appender, |b,i,e| merge(b, e.$0+1))");
+                               {e+1,e+2}))), 0L, 2L, 1L), appender, |b,i,e| merge(b, e.$0+1))");
     assert!(e1.compare_ignoring_symbols(&e2).unwrap());
 
     // Two loops with different vectors; should fail.
@@ -289,11 +289,11 @@ fn simple_vertical_loop_fusion() {
     assert!(e1.compare_ignoring_symbols(&e2).unwrap());
 
     // Inner data not consumed fully.
-    let mut e1 = typed_expression("for(result(for(iter([1,2,3], 0, 1, 1), appender, |b,i,e| \
+    let mut e1 = typed_expression("for(result(for(iter([1,2,3], 0L, 1L, 1L), appender, |b,i,e| \
                                    merge(b,e+2))), appender, |b,h,f| merge(b, f+1))");
     fuse_loops_vertical(&mut e1);
     // Loop fusion should fail.
-    let e2 = typed_expression("for(result(for(iter([1,2,3], 0, 1, 1), appender, |b,i,e| \
+    let e2 = typed_expression("for(result(for(iter([1,2,3], 0L, 1L, 1L), appender, |b,i,e| \
                                merge(b,e+2))), appender, |b,h,f| merge(b, f+1))");
     assert!(e1.compare_ignoring_symbols(&e2).unwrap());
 }

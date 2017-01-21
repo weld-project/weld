@@ -282,6 +282,7 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             // Push iters and builder type into func
             let mut elem_types = vec![];
             for iter in iters {
+                // TODO verify that the start, stride, and end of each iter is i64
                 let elem_type = match iter.data.ty {
                     Vector(ref elem) => *elem.clone(),
                     Unknown => Unknown,

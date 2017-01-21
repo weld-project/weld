@@ -64,6 +64,7 @@ pub struct ParallelForData {
     pub builder: Symbol,
     pub data_arg: Symbol,
     pub builder_arg: Symbol,
+    pub idx_arg: Symbol,
     pub body: FunctionId,
     pub cont: FunctionId
 }
@@ -197,8 +198,8 @@ impl fmt::Display for Terminator {
                     write!(f, "{}, ", iter)?;
                 }
                 write!(f, "] ")?;
-                write!(f, "{} {} {} F{} F{}", pf.builder, pf.data_arg, pf.builder_arg, pf.body,
-                    pf.cont)?;
+                write!(f, "{} {} {} {} F{} F{}", pf.builder, pf.builder_arg, pf.idx_arg,
+                    pf.data_arg, pf.body, pf.cont)?;
                 Ok(())
             },
             JumpBlock(block) => write!(f, "jump B{}", block),
@@ -295,6 +296,27 @@ env: &mut HashMap<Symbol, Type>, closure: &mut HashSet<Symbol>) {
                 _ => {}
             }   
         }
+        use self::Terminator::*;
+        match block.terminator {
+            Branch { ref cond, .. } => {
+                vars.push(cond.clone());
+            },
+            ProgramReturn(ref sym) => {
+                vars.push(sym.clone());
+            },
+            ParallelFor(ref pf) => {
+                for iter in pf.data.iter() {
+                    vars.push(iter.data.clone());
+                    if iter.start.is_some() {
+                        vars.push(iter.start.clone().unwrap());
+                        vars.push(iter.end.clone().unwrap());
+                        vars.push(iter.stride.clone().unwrap());
+                    }
+                }
+                vars.push(pf.builder.clone());
+            },
+            _ => {}
+        }
         for var in &vars {
             if prog.funcs[func_id].locals.get(&var) == None {
                 prog.funcs[func_id].params.insert(var.clone(), env.get(&var).unwrap().clone());
@@ -302,7 +324,6 @@ env: &mut HashMap<Symbol, Type>, closure: &mut HashSet<Symbol>) {
             }
         }
         let mut inner_closure = HashSet::new();
-        use self::Terminator::*;
         match block.terminator {
             ParallelFor(ref pf) => {
                 sir_param_correction_helper(prog, pf.body, env, &mut inner_closure);
@@ -482,6 +503,7 @@ fn gen_expr(
                 let body_block = prog.funcs[body_func].add_block();
                 prog.add_local_named(&params[0].ty, &params[0].name, body_func);
                 prog.add_local_named(&params[1].ty, &params[1].name, body_func);
+                prog.add_local_named(&params[2].ty, &params[2].name, body_func);
                 prog.funcs[body_func].params.insert(builder_sym.clone(), builder.ty.clone());
                 let mut cur_func = cur_func;
                 let mut cur_block = cur_block;
@@ -546,8 +568,9 @@ fn gen_expr(
                     ParallelForData {
                         data: pf_iters,
                         builder: builder_sym.clone(),
-                        data_arg: params[1].name.clone(),
+                        data_arg: params[2].name.clone(),
                         builder_arg: params[0].name.clone(),
+                        idx_arg: params[1].name.clone(),
                         body: body_func,
                         cont: cont_func
                     }
