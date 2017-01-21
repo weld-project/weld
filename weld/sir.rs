@@ -301,7 +301,8 @@ env: &mut HashMap<Symbol, Type>, closure: &mut HashSet<Symbol>) {
                 },
                 GetResult { ref builder, .. } => vars.push(builder.clone()),
                 AssignField { ref value, .. } => vars.push(value.clone()),
-                _ => {}
+                AssignLiteral { .. } => {},
+                CreateBuilder { .. } => {}
             }   
         }
         use self::Terminator::*;
