@@ -18,6 +18,7 @@ use super::sir;
 use super::sir::*;
 use super::sir::Statement::*;
 use super::sir::Terminator::*;
+use super::transforms;
 use super::type_inference;
 use super::util::IdGenerator;
 
@@ -149,22 +150,60 @@ impl LlvmGenerator {
             ctx.code.add(format!("{} = icmp ult i64 {}, %upper.idx", idx_cmp, idx_tmp));
             ctx.code.add(format!("br i1 {}, label %loop_body, label %loop_end", idx_cmp));
             ctx.code.add("loop_body:");
-            // TODO support loop data that is not a single vector
-            let data_ty_str = try!(self.llvm_type(func.params.get(&par_for.data).unwrap())).to_string();
-            let data_str = try!(self.load_var(llvm_symbol(&par_for.data).as_str(), &data_ty_str, ctx));
-            let data_prefix = format!("@{}", data_ty_str.replace("%", ""));
+            let mut prev_ref = String::from("undef");
+            let elem_ty = func.locals.get(&par_for.data_arg).unwrap();
+            let elem_ty_str = try!(self.llvm_type(&elem_ty)).to_string();
+            for (i, iter) in par_for.data.iter().enumerate() {
+                let data_ty_str = try!(self.llvm_type(func.params.get(&iter.data).unwrap())).to_string();
+                let data_str = try!(self.load_var(llvm_symbol(&iter.data).as_str(), &data_ty_str, ctx));
+                let data_prefix = format!("@{}", data_ty_str.replace("%", ""));
+                let inner_elem_tmp_ptr = ctx.var_ids.next();
+                let inner_elem_ty_str =
+                    if par_for.data.len() == 1 {
+                        elem_ty_str.clone()
+                    } else {
+                        match *elem_ty {
+                            Struct(ref v) => try!(self.llvm_type(&v[i])).to_string(),
+                            _ => weld_err!("Internal error: invalid element type {}", print_type(elem_ty))?
+                        }
+                    };
+                let arr_idx =
+                    if iter.start.is_some() {
+                        let offset = ctx.var_ids.next();
+                        let stride_str = try!(self.load_var(
+                            llvm_symbol(&iter.stride.clone().unwrap()).as_str(), "i64", ctx));
+                        let start_str = try!(self.load_var(
+                            llvm_symbol(&iter.start.clone().unwrap()).as_str(), "i64", ctx));
+                        ctx.code.add(format!("{} = mul i64 {}, {}", offset, idx_tmp, stride_str));
+                        let final_idx = ctx.var_ids.next();
+                        ctx.code.add(format!("{} = add i64 {}, {}", final_idx, start_str, offset));
+                        final_idx
+                    } else {
+                        idx_tmp.clone()
+                    };
+                ctx.code.add(format!("{} = call {}* {}.at({} {}, i64 {})", inner_elem_tmp_ptr,
+                    &inner_elem_ty_str, data_prefix, &data_ty_str, data_str, arr_idx));
+                let inner_elem_tmp = try!(self.load_var(&inner_elem_tmp_ptr, &inner_elem_ty_str, ctx));
+                if par_for.data.len() == 1 {
+                    prev_ref.clear();
+                    prev_ref.push_str(&inner_elem_tmp);
+                } else {
+                    let elem_tmp = ctx.var_ids.next();
+                    ctx.code.add(format!("{} = insertvalue {} {}, {} {}, {}", elem_tmp,
+                        elem_ty_str, prev_ref, inner_elem_ty_str, inner_elem_tmp, i));
+                    prev_ref.clear();
+                    prev_ref.push_str(&elem_tmp);
+                }
+            }
             let elem_str = llvm_symbol(&par_for.data_arg);
-            let elem_ty_str = try!(self.llvm_type(func.locals.get(&par_for.data_arg).unwrap())).to_string();
-            let elem_tmp_ptr = ctx.var_ids.next();
-            ctx.code.add(format!("{} = call {}* {}.at({} {}, i64 {})", elem_tmp_ptr, &elem_ty_str,
-                data_prefix, &data_ty_str, data_str, idx_tmp));
-            let elem_tmp = try!(self.load_var(&elem_tmp_ptr, &elem_ty_str, ctx));
-            ctx.code.add(format!("store {} {}, {}* {}", &elem_ty_str, elem_tmp, &elem_ty_str, elem_str));
+            ctx.code.add(format!("store {} {}, {}* {}", &elem_ty_str, prev_ref, &elem_ty_str, elem_str));
+            ctx.code.add(format!("store i64 {}, i64* {}", idx_tmp, llvm_symbol(&par_for.idx_arg)));
         }
 
         ctx.code.add(format!("br label %b{}", func.blocks[0].id));
         // Generate an expression for the function body.
         try!(self.gen_func(sir, func, ctx));
+        ctx.code.add("body_end:");
         if containing_loop.is_some() {
             ctx.code.add("br label %loop_terminator");
             ctx.code.add("loop_terminator:");
@@ -189,14 +228,26 @@ impl LlvmGenerator {
                 let serial_arg_types = try!(self.get_arg_str(&get_combined_params(sir, &par_for), ""));
                 serial_ctx.code.add(format!("define void @f{}_ser_wrapper({}) {{", func.id,
                     serial_arg_types));
-                let data_str = llvm_symbol(&par_for.data);
-                let data_ty_str = try!(self.llvm_type(func.params.get(&par_for.data).unwrap())).to_string();
-                let data_prefix = format!("@{}", data_ty_str.replace("%", ""));
-                let vec_size = serial_ctx.var_ids.next();
-                serial_ctx.code.add(format!("{} = call i64 {}.size({} {})", vec_size, data_prefix,
-                    data_ty_str, data_str));
+                let upper_bound = serial_ctx.var_ids.next();
+                if par_for.data[0].start.is_none() {
+                    let first_data = &par_for.data[0].data;
+                    let data_str = llvm_symbol(&first_data);
+                    let data_ty_str = try!(self.llvm_type(func.params.get(&first_data).unwrap())).to_string();
+                    let data_prefix = format!("@{}", data_ty_str.replace("%", ""));
+                    serial_ctx.code.add(format!("{} = call i64 {}.size({} {})", upper_bound, data_prefix,
+                        data_ty_str, data_str));
+                } else {
+                    let start_str = llvm_symbol(&par_for.data[0].start.clone().unwrap());
+                    let end_str = llvm_symbol(&par_for.data[0].end.clone().unwrap());
+                    let stride_str = llvm_symbol(&par_for.data[0].stride.clone().unwrap());
+                    let diff_tmp = serial_ctx.var_ids.next();
+                    // TODO check for errors in the given bounds: end >= start >= 0, stride > 0,
+                    // (end - start) % stride == 0
+                    serial_ctx.code.add(format!("{} = sub i64 {}, {}", diff_tmp, end_str, start_str));
+                    serial_ctx.code.add(format!("{} = udiv i64 {}, {}", upper_bound, diff_tmp, stride_str));
+                }
                 let mut body_arg_types = try!(self.get_arg_str(&func.params, ""));
-                body_arg_types.push_str(format!(", i64 0, i64 {}", vec_size).as_str());
+                body_arg_types.push_str(format!(", i64 0, i64 {}", upper_bound).as_str());
                 serial_ctx.code.add(format!("call void @f{}({})", func.id, body_arg_types));
                 let cont_arg_types = try!(self.get_arg_str(&sir.funcs[par_for.cont].params, ""));
                 serial_ctx.code.add(format!("call void @f{}({})", par_for.cont, cont_arg_types));
@@ -381,7 +432,19 @@ impl LlvmGenerator {
                         let ty = try!(get_sym_ty(func, output));
                         let ll_ty = try!(self.llvm_type(&ty)).to_string();
                         let val_tmp = try!(self.load_var(llvm_symbol(value).as_str(), &ll_ty, ctx));
-                        ctx.code.add(format!("store {} {}, {}* {}", &ll_ty, val_tmp, &ll_ty, llvm_symbol(output)));
+                        ctx.code.add(format!("store {} {}, {}* {}", &ll_ty, val_tmp, &ll_ty,
+                            llvm_symbol(output)));
+                    },
+                    AssignField { ref output, ref value, index } => {
+                        let struct_ty = try!(self.llvm_type(try!(get_sym_ty(func, value)))).to_string();
+                        let field_ty = try!(self.llvm_type(try!(get_sym_ty(func, output)))).to_string();
+                        let struct_tmp = try!(self.load_var(llvm_symbol(value).as_str(),
+                            &struct_ty, ctx));
+                        let res_tmp = ctx.var_ids.next();
+                        ctx.code.add(format!("{} = extractvalue {} {}, {}", res_tmp, struct_ty,
+                            struct_tmp, index));
+                        ctx.code.add(format!("store {} {}, {}* {}", field_ty, res_tmp, field_ty,
+                            llvm_symbol(output)));
                     },
                     AssignLiteral { ref output, ref value } => {
                         match *value {
@@ -484,6 +547,7 @@ impl LlvmGenerator {
                     }
                     arg_types.push_str("%work_t* %cur.work");
                     ctx.code.add(format!("call void @f{}_ser_wrapper({})", pf.body, arg_types));
+                    ctx.code.add("br label %body_end");
                 },
                 JumpBlock(block) => {
                     ctx.code.add(format!("br label %b{}", block));
@@ -500,6 +564,7 @@ impl LlvmGenerator {
                     }
                     arg_types.push_str("%work_t* %cur.work");
                     ctx.code.add(format!("call void @f{}({})", func, arg_types));
+                    ctx.code.add("br label %body_end");
                 },
                 ProgramReturn(ref sym) => {
                     let ty = try!(get_sym_ty(func, sym));
@@ -518,8 +583,11 @@ impl LlvmGenerator {
                     ctx.code.add(format!("store {} {}, {}* {}", &ty_str, res_tmp, &ty_str, &elem_storage_typed));
                     ctx.code.add(format!("{} = getelementptr %work_t* %cur.work, i32 0, i32 0", &work_res_ptr));
                     ctx.code.add(format!("store i8* {}, i8** {}", &elem_storage, &work_res_ptr));
+                    ctx.code.add("br label %body_end");
                 },
-                EndFunction => {},
+                EndFunction => {
+                    ctx.code.add("br label %body_end");
+                },
                 Crash => { /* TODO do something else here? */ }
             }
         }
@@ -609,6 +677,7 @@ fn llvm_castop(ty1: &Type, ty2: &Type) -> WeldResult<&'static str> {
         (_, &Scalar(F64)) => Ok("sitofp"),
         (_, &Scalar(F32)) => Ok("sitofp"),
         (&Scalar(Bool), _) => Ok("zext"),
+        (_, &Scalar(I64)) => Ok("sext"),
         _ => Ok("trunc")
     }
 }
@@ -647,7 +716,8 @@ impl FunctionContext {
 pub fn compile_program(program: &Program) -> WeldResult<easy_ll::CompiledModule> {
     let mut expr = try!(macro_processor::process_program(program));
     try!(type_inference::infer_types(&mut expr));
-    let expr = try!(expr.to_typed());
+    let mut expr = try!(expr.to_typed());
+    transforms::inline_apply(&mut expr);
     let sir_prog = try!(sir::ast_to_sir(&expr));
     let mut gen = LlvmGenerator::new();
     try!(gen.add_function_on_pointers("run", &sir_prog));
@@ -750,4 +820,80 @@ fn comparison() {
     let result = unsafe { *result };
     assert_eq!(result, 20);
     // TODO: Free result
+}
+
+#[test]
+fn simple_for_loop() {
+    #[derive(Clone)]
+    #[allow(dead_code)]
+    struct Vec { data: *const i32, len: i64 }
+    #[allow(dead_code)]
+    struct Args { x: Vec, a: i32 }
+
+    let code = "|x:vec[i32], a:i32| let b=a+1; map(x, |e| e+b)";
+    let module = compile_program(&parse_program(code).unwrap()).unwrap();
+    let input = [1, 2];
+    let args = Args { x: Vec { data: &input as *const i32, len: 2 }, a: 1 };
+    let result_raw = module.run(&args as *const Args as i64) as *const Vec;
+    let result = unsafe { (*result_raw).clone() };
+    let output = [3, 4];
+    for i in 0..(result.len as isize) {
+        assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
+    }
+    // TODO: Free result_raw
+}
+
+#[test]
+fn if_for_loop() {
+    #[derive(Clone)]
+    #[allow(dead_code)]
+    struct Vec { data: *const i32, len: i64 }
+    #[allow(dead_code)]
+    struct Args { x: Vec, a: i32 }
+
+    let code = "|x:vec[i32], a:i32| if(a > 5, map(x, |e| e+1), map(x, |e| e+2))";
+    let module = compile_program(&parse_program(code).unwrap()).unwrap();
+    let input = [1, 2];
+
+    let args = Args { x: Vec { data: &input as *const i32, len: 2 }, a: 1 };
+    let result_raw = module.run(&args as *const Args as i64) as *const Vec;
+    let result = unsafe { (*result_raw).clone() };
+    let output = [3, 4];
+    for i in 0..(result.len as isize) {
+        assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
+    }
+    // TODO: Free result_raw
+
+    let args = Args { x: Vec { data: &input as *const i32, len: 2 }, a: 6 };
+    let result_raw = module.run(&args as *const Args as i64) as *const Vec;
+    let result = unsafe { (*result_raw).clone() };
+    let output = [2, 3];
+    for i in 0..(result.len as isize) {
+        assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
+    }
+    // TODO: Free result_raw
+}
+
+#[test]
+fn iters_for_loop() {
+    #[derive(Clone)]
+    #[allow(dead_code)]
+    struct Vec { data: *const i32, len: i64 }
+    #[allow(dead_code)]
+    struct Args { x: Vec, y: Vec }
+
+    let code = "|x:vec[i32], y:vec[i32]| \
+                result(for(zip(iter(x,0L,4L,2L), y), appender, |b,i,e| merge(b,e.$0+e.$1)))";
+    let module = compile_program(&parse_program(code).unwrap()).unwrap();
+    let x = [1, 2, 3, 4];
+    let y = [5, 6];
+    let args = Args { x: Vec { data: &x as *const i32, len: 4 },
+                      y: Vec { data: &y as *const i32, len: 2 } };
+    let result_raw = module.run(&args as *const Args as i64) as *const Vec;
+    let result = unsafe { (*result_raw).clone() };
+    let output = [6, 9];
+    for i in 0..(result.len as isize) {
+        assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
+    }
+    // TODO: Free result_raw
 }
