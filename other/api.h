@@ -1,90 +1,102 @@
+/**
+ *
+ * Weld Runtime Interface.
+ *
+ */
 #ifndef _WELD_H_
 #define _WELD_H_
 
-/** 
- * The C API for Weld.
- */
+// Types
 
-/**
- * The top level type of a Weld value.
- */
-typedef enum {
-    I32 = 0,
-    I64,
-    F32,
-    F64,
-    VEC,
-    DICT,
-    STRUCT,
-} weld_type_t;
+/** An object encapsulating a Weld value. */
+typedef void* weld_object_t;
 
-/**
- * A Weld value represented as a raw data pointer.
- */
-typedef struct {
-    weld_type_t ty;     /** The type of the top level object. */
-    void *data;         /** A pointer to the data for this object. */
+/** A runnable Weld module. */
+typedef void* weld_module_t;
 
-    // Private Fields
-    bool _owned;         /** If true, this value is allocated and owned by the Weld Runtime. */
-} weld_value_t;
+// Objects
 
-/**
- * A Weld configuration.
+/** Returns a Weld-readable object with the given input buffer.
  *
- * The configuration is used by the Weld compiler and runtime to determine how
- * code should be generated and executed. The configuration controls both
- * compile-time parameters and runtime parameters (the latter which can be changed
- * across runs of the same compiled module).
+ * A Weld object created using this method is owned by the caller.
+ * The caller must ensure that the data buffer remains a valid pointer
+ * to memory until after the object is used by the runtime. The object
+ * must be freed with `weld_object_free`.
+ *
+ * @param data the data this object captures.
+ * @return a new Weld object.
  */
-typedef struct {
-    unsigned cores; /** The number of cores to run */
-     /** 
-     * The maximum amount of memory the module is allowed to allocate on one
-     * run, in kilobytes. 
-     */
-    size_t mem_limit;
-} weld_config_t; // TODO(shoumik) Make compile and runtime config different?
+weld_object_t 
+weld_object_new(void *data);
 
-/**
- * A compiled Weld module.
+/** Returns 1 if the object's data is owned by the Weld runtime, or
+ * 0 otherwise.
  *
- * A Weld module represents a compiled runnable Weld program.
+ * An object owned by the Weld runtime is freed using the `weld_object_free`
+ * call. Non-owned objects must have their *data buffers* (retrieved using
+ * `weld_object_data`) freed by the caller; this Weld object must still
+ * be garbage collected using `weld_object_free` however.
+ *
+ * @param obj the object to check
+ * @return 1 if owned, 0 otherwise.
  */
-typedef struct {
-    weld_config_t conf; /** The compile time configuration for this module */
-    void *binary;       /** A pointer to the binary for this module */
-} weld_module_t;
+int 
+weld_object_owned(weld_object_t obj);
 
-/** Takes a Weld program and produces a module.
+/** Returns this object's data buffer.
  *
- * The Weld module can be executed using the `weld_run_module` call.
+ * @param obj the object whose data buffer should be retrieved.
+ * @return a void * data buffer. The caller is responsible for knowing
+ * the type of the buffer and casting it appropriately.
  */
-weld_module_t weld_compile_module(const char *program, weld_config_t *conf);
+void* 
+weld_object_data(weld_object_t);
 
-/** Runs a Weld module against a list of arguments and returns a result.
+/* Frees a Weld object.
  *
- * This function does not perform any type checking; the caller is responsible
- * for ensuring that the passed argument is compatible with the data
- * expected by the Weld module. 
+ * Each Weld object must be freed using this call. Owned objects also
+ * free their data buffers; non-owned objects require the caller to free
+ * the buffer explicitly. This Weld object is invalid after this call.
  *
- * The args argument is a contiguous block of memory. The value in the buffer
- * can be viewed as a struct where the field at index i corresponds to the ith
- * argument of the Weld function encapsulated by module.
+ * @param obj the object to free.
+ */
+void 
+weld_object_free(weld_object_t);
+
+// Modules
+
+/** Compiles a Weld module.
+ *
+ * Takes a string and configuration and returns a runnable module.
+ *
+ * @param program a Weld program to compile
+ * @param conf a configuration for the module.
+ * @return a runnable module.
+ */
+weld_module_t 
+weld_module_compile(const char *program, const char *conf);
+
+/** Runs a module using the given argument.
+ *
+ * Multi-argument Weld functions take a Weld object encapsulating
+ * a single struct as an argument. The field at index i in the struct
+ * represents the ith argument of the Weld function.
  *
  * @param module the module to run.
- * @param args A formatted buffer of arguments for the module.
- *
- * @return a Weld value capturing the return value of the function. The return
- * value is *owned* by the Weld runtime and must be freed using `weld_free`.
+ * @param arg the argument for the module's function.
+ * @return an owned Weld object representing the return value. The caller
+ * is responsible for knowing what the type of the return value is based on
+ * the module she runs.
  */
-weld_value_t weld_run_module(weld_module_t *module, weld_value_t *args);
+weld_object_t 
+weld_module_run(weld_module_t, weld_object_t arg);
 
-/* Frees a Weld value owned by the Weld runtime. If a value not owned by the
- * runtime is passed as an argument, this function does nothing.
+/** Garbage collects a module.
  *
- * @param value the value to free
+ * @param module the module to garbage collect.
  */
-void weld_free(weld_value_t *value);
+void 
+weld_module_free(weld_module_t);
 
 #endif
+
