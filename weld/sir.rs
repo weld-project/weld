@@ -515,7 +515,7 @@ fn gen_expr(
             let res_sym = prog.add_local(&field_ty, cur_func);
             prog.funcs[cur_func].blocks[cur_block].add_statement(
                 AssignField { output: res_sym.clone(), value: struct_sym, index: index });
-            Ok((cur_func, cur_block, res_sym))            
+            Ok((cur_func, cur_block, res_sym))
         },
 
         For { ref iters, ref builder, ref func } => {
