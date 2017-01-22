@@ -66,6 +66,9 @@ fn main() {
         let mut expr = expr.unwrap();
         println!("After macro substitution:\n{}\n", print_expr(&expr));
 
+        transforms::inline_apply(&mut expr);
+        println!("After inline_apply:\n{}\n", print_expr(&expr));
+
         transforms::uniquify(&mut expr);
         println!("After uniquify :\n{}\n", print_expr(&expr));
 

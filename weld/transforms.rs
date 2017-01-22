@@ -51,41 +51,53 @@ pub fn inline_zips(expr: &mut Expr<Type>) {
 /// symbols.
 pub fn uniquify<T: TypeBounds>(expr: &mut Expr<T>) {
     // Maps a string name to its current integer ID in the current scope.
-    let mut id_map: HashMap<String, i32> = HashMap::new();
-    _uniquify(expr, &mut id_map);
+    let mut id_map: HashMap<Symbol, i32> = HashMap::new();
+    // Maps a symbol name to the the maximum ID observed for it.
+    let mut max_ids: HashMap<String, i32> = HashMap::new();
+    _uniquify(expr, &mut id_map, &mut max_ids);
 }
 
 /// Helper function for uniquify.
-fn _uniquify<T: TypeBounds>(expr: &mut Expr<T>, id_map: &mut HashMap<String, i32>) {
+fn _uniquify<T: TypeBounds>(expr: &mut Expr<T>,
+                            id_map: &mut HashMap<Symbol, i32>,
+                            max_ids: &mut HashMap<String, i32>) {
 
-    // Increments the ID for a given symbol name and returns the new symbol.
-    let push_id = |id_map: &mut HashMap<String, i32>, name: &String| {
-        let id = id_map.entry(name.clone()).or_insert(-1);
-        *id += 1;
-        Symbol::new(&name.clone(), *id)
-    };
+    // Given a newly defined Symbol sym, increments the symbol's ID and returns a new symbol.
+    let push_id =
+        |id_map: &mut HashMap<Symbol, i32>, max_ids: &mut HashMap<String, i32>, sym: &Symbol| {
+            let max_id = max_ids.entry(sym.name.clone()).or_insert(-1);
+            let id = id_map.entry(sym.clone()).or_insert(*max_id);
+            *id += 1;
+            if *id > *max_id {
+                *max_id = *id;
+            }
+            Symbol::new(&sym.name.clone(), *id)
+        };
 
-    // Decrements the ID for a given symbol name and returns the new symbol.
-    let pop_id = |id_map: &mut HashMap<String, i32>, name: &String| {
-        let id = id_map.entry(name.clone()).or_insert(-1);
+    // Decrements the ID for a given symbol name and returns the new symbol If the symbol is not
+    // found, it was undefined in the current expression.
+    let pop_id = |id_map: &mut HashMap<Symbol, i32>, sym: &Symbol| {
+        let id = id_map.entry(sym.clone()).or_insert(-1);
         *id -= 1;
-        Symbol::new(&name.clone(), *id)
+        Symbol::new(&sym.name.clone(), *id)
     };
 
-    // Returns the current for a given name.
-    let get_id = |id_map: &HashMap<String, i32>, name: &String| {
-        let id = id_map.get(name).unwrap();
-        Symbol::new(&name.clone(), *id)
+    // Returns the current ID for a given defined symbol. If the symbol is not found, it was
+    // undefined in the expression.
+    let get_id = |id_map: &mut HashMap<Symbol, i32>, sym: &Symbol| {
+        let id = id_map.get(sym).unwrap();
+        Symbol::new(&sym.name.clone(), *id)
     };
 
     // Walk the expression tree, maintaining a map of the highest ID seen for a given
     // symbol. The ID is incremented when a symbol is redefined in a new scope, and
-    // decremented when exiting the scope.
+    // decremented when exiting the scope. Symbols seen in the original expression
+    // are tracked as keys.
     expr.transform_and_continue(&mut |ref mut e| {
         if let Ident(ref sym) = e.kind {
             return Some((Expr {
                              ty: e.ty.clone(),
-                             kind: Ident(get_id(id_map, &sym.name)),
+                             kind: Ident(get_id(id_map, sym)),
                          },
                          false));
         } else if let Lambda { ref mut params, ref mut body } = e.kind {
@@ -94,14 +106,14 @@ fn _uniquify<T: TypeBounds>(expr: &mut Expr<T>, id_map: &mut HashMap<String, i32
                 .map(|ref p| {
                     Parameter {
                         ty: p.ty.clone(),
-                        name: push_id(id_map, &p.name.name),
+                        name: push_id(id_map, max_ids, &p.name),
                     }
                 })
                 .collect::<Vec<_>>();
 
-            _uniquify(body, id_map);
+            _uniquify(body, id_map, max_ids);
             for param in params.iter() {
-                pop_id(id_map, &param.name.name);
+                pop_id(id_map, &param.name);
             }
 
             return Some((Expr {
@@ -113,9 +125,9 @@ fn _uniquify<T: TypeBounds>(expr: &mut Expr<T>, id_map: &mut HashMap<String, i32
                          },
                          false));
         } else if let Let { ref mut name, ref mut value, ref mut body } = e.kind {
-            _uniquify(value, id_map);
-            let new_sym = push_id(id_map, &name.name);
-            _uniquify(body, id_map);
+            _uniquify(value, id_map, max_ids);
+            let new_sym = push_id(id_map, max_ids, &name);
+            _uniquify(body, id_map, max_ids);
             return Some((Expr {
                              ty: e.ty.clone(),
                              kind: Let {

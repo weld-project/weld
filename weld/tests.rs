@@ -242,8 +242,8 @@ fn simple_horizontal_loop_fusion() {
             result(for(iter([1,2,3], 0L, 2L, 1L), appender, |b,i,e| merge(b, e+2)))
         ), appender, |b,i,e| merge(b, e.$0+1))");
     fuse_loops_horizontal(&mut e1);
-    let e2 = typed_expression("for(result(for(iter([1,2,3], 0L, 2L, 1L), appender, |b,i,e| merge(b, \
-                               {e+1,e+2}))), appender, |b,i,e| merge(b, e.$0+1))");
+    let e2 = typed_expression("for(result(for(iter([1,2,3], 0L, 2L, 1L), appender, |b,i,e| \
+                               merge(b, {e+1,e+2}))), appender, |b,i,e| merge(b, e.$0+1))");
     assert!(e1.compare_ignoring_symbols(&e2).unwrap());
 
     // Iters in outer loop.
