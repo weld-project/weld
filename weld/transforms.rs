@@ -10,6 +10,42 @@ use std::collections::HashMap;
 
 use super::util::SymbolGenerator;
 
+/// Inlines Zip expressions as collections of iters. Using Zips outside of a For loop is currently
+/// unsupported behavior. This transform handles the simple case of converting Zips in macros
+/// such as map and filter into Iters in For loops.
+///
+/// TODO(shoumik): Perhaps Zip should just be a macro? Then macros need to be ordered.
+pub fn inline_zips(expr: &mut Expr<Type>) {
+    expr.transform(&mut |ref mut e| {
+        if let For { ref mut iters, ref builder, ref func } = e.kind {
+            if iters.len() == 1 {
+                let ref first_iter = iters[0];
+                if let Zip { ref vectors } = first_iter.data.kind {
+                    let new_iters = vectors.iter()
+                        .map(|v| {
+                            Iter {
+                                data: Box::new(v.clone()),
+                                start: None,
+                                end: None,
+                                stride: None,
+                            }
+                        })
+                        .collect::<Vec<_>>();
+                    return Some(Expr {
+                        ty: e.ty.clone(),
+                        kind: For {
+                            iters: new_iters,
+                            builder: builder.clone(),
+                            func: func.clone(),
+                        },
+                    });
+                }
+            }
+        }
+        None
+    });
+}
+
 /// Modifies symbol names so each symbol is unique in the AST. This transform should be applied
 /// "up front" and downstream transforms shoud then use SymbolGenerator to generate new unique
 /// symbols.

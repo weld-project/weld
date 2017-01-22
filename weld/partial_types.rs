@@ -181,6 +181,11 @@ impl PartialExpr {
                 MakeVector { elems: try!(elems) }
             }
 
+            Zip { ref vectors } => {
+                let vectors: WeldResult<Vec<_>> = vectors.iter().map(|e| e.to_typed()).collect();
+                Zip { vectors: try!(vectors) }
+            }
+
             MakeStruct { ref elems } => {
                 let elems: WeldResult<Vec<_>> = elems.iter().map(|e| e.to_typed()).collect();
                 MakeStruct { elems: try!(elems) }

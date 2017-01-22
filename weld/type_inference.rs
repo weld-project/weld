@@ -88,20 +88,15 @@ fn infer_up(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> {
 /// Return true if any new expression's type was inferred, or an error if types are inconsistent.
 fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> {
     match expr.kind {
-        Literal(I32Literal(_)) =>
-            push_complete_type(&mut expr.ty, Scalar(I32), "I32Literal"),
+        Literal(I32Literal(_)) => push_complete_type(&mut expr.ty, Scalar(I32), "I32Literal"),
 
-        Literal(I64Literal(_)) =>
-            push_complete_type(&mut expr.ty, Scalar(I64), "I64Literal"),
+        Literal(I64Literal(_)) => push_complete_type(&mut expr.ty, Scalar(I64), "I64Literal"),
 
-        Literal(F32Literal(_)) =>
-            push_complete_type(&mut expr.ty, Scalar(F32), "F32Literal"),
+        Literal(F32Literal(_)) => push_complete_type(&mut expr.ty, Scalar(F32), "F32Literal"),
 
-        Literal(F64Literal(_)) =>
-            push_complete_type(&mut expr.ty, Scalar(F64), "F64Literal"),
+        Literal(F64Literal(_)) => push_complete_type(&mut expr.ty, Scalar(F64), "F64Literal"),
 
-        Literal(BoolLiteral(_)) =>
-            push_complete_type(&mut expr.ty, Scalar(Bool), "BoolLiteral"),
+        Literal(BoolLiteral(_)) => push_complete_type(&mut expr.ty, Scalar(Bool), "BoolLiteral"),
 
         BinOp { kind: op, ref mut left, ref mut right } => {
             let mut elem_type = Unknown;
@@ -121,9 +116,7 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             Ok(changed)
         }
 
-        Cast { kind, .. } => {
-            Ok(try!(push_complete_type(&mut expr.ty, Scalar(kind), "Cast")))
-        }
+        Cast { kind, .. } => Ok(try!(push_complete_type(&mut expr.ty, Scalar(kind), "Cast"))),
 
         Ident(ref symbol) => {
             match env.get(symbol) {
@@ -145,6 +138,28 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             }
             let vec_type = Vector(Box::new(elem_type));
             changed |= try!(push_type(&mut expr.ty, &vec_type, "MakeVector"));
+            Ok(changed)
+        }
+
+        Zip { ref mut vectors } => {
+            let mut changed = false;
+
+            let base_type = Vector(Box::new(Struct(vec![Unknown; vectors.len()])));
+            changed |= try!(push_type(&mut expr.ty, &base_type, "Zip"));
+
+            if let Vector(ref mut elem_type) = expr.ty {
+                if let Struct(ref mut vec_types) = **elem_type {
+                    for (vec_ty, vec_expr) in vec_types.iter_mut().zip(vectors.iter_mut()) {
+                        if let Vector(ref elem_type) = vec_expr.ty {
+                            changed |= try!(push_type(vec_ty, elem_type, "Zip"));
+                        } else {
+                            return weld_err!("Internal error: Zip argument not a Vector");
+                        }
+                    }
+                }
+            } else {
+                return weld_err!("Internal error: type of Zip was not Vector(Struct(..))");
+            }
             Ok(changed)
         }
 
