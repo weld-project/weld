@@ -48,14 +48,28 @@ pub enum Statement {
         output: Symbol,
         ty: Type
     },
+    AssignField {
+        output: Symbol,
+        value: Symbol,
+        index: u32
+    }
+}
+
+#[derive(Clone)]
+pub struct ParallelForIter {
+    pub data: Symbol,
+    pub start: Option<Symbol>,
+    pub end: Option<Symbol>,
+    pub stride: Option<Symbol>
 }
 
 #[derive(Clone)]
 pub struct ParallelForData {
-    pub data: Symbol,
+    pub data: Vec<ParallelForIter>,
     pub builder: Symbol,
     pub data_arg: Symbol,
     pub builder_arg: Symbol,
+    pub idx_arg: Symbol,
     pub body: FunctionId,
     pub cont: FunctionId
 }
@@ -172,6 +186,8 @@ impl fmt::Display for Statement {
             GetResult { ref output, ref builder } => write!(f, "{} = result {}", output, builder),
             CreateBuilder { ref output, ref ty }  => write!(f, "{} = new {}", output,
                 print_type(ty)),
+            AssignField { ref output, ref value, index } => write!(f, "{} = {}.{}",
+                output, value, index)
         }
     }
 }
@@ -184,8 +200,13 @@ impl fmt::Display for Terminator {
                 write!(f, "branch {} B{} B{}", cond, on_true, on_false)
             },
             ParallelFor(ref pf) => {
-                write!(f, "for {} {} {} {} F{} F{}",
-                    pf.data, pf.builder, pf.data_arg, pf.builder_arg, pf.body, pf.cont)?;
+                write!(f, "for [")?;
+                for iter in &pf.data {
+                    write!(f, "{}, ", iter)?;
+                }
+                write!(f, "] ")?;
+                write!(f, "{} {} {} {} F{} F{}", pf.builder, pf.builder_arg, pf.idx_arg,
+                    pf.data_arg, pf.body, pf.cont)?;
                 Ok(())
             },
             JumpBlock(block) => write!(f, "jump B{}", block),
@@ -193,6 +214,17 @@ impl fmt::Display for Terminator {
             ProgramReturn(ref sym) => write!(f, "return {}", sym),
             EndFunction => write!(f, "end"),
             Crash => write!(f, "crash")
+        }
+    }
+}
+
+impl fmt::Display for ParallelForIter {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if self.start.is_some() {
+            write!(f, "iter({}, {}, {}, {})", self.data, self.start.clone().unwrap(),
+                self.end.clone().unwrap(), self.stride.clone().unwrap())
+        } else {
+            write!(f, "{}", self.data)
         }
     }
 }
@@ -268,8 +300,31 @@ env: &mut HashMap<Symbol, Type>, closure: &mut HashSet<Symbol>) {
                     vars.push(value.clone());
                 },
                 GetResult { ref builder, .. } => vars.push(builder.clone()),
-                _ => {}
+                AssignField { ref value, .. } => vars.push(value.clone()),
+                AssignLiteral { .. } => {},
+                CreateBuilder { .. } => {}
             }   
+        }
+        use self::Terminator::*;
+        match block.terminator {
+            Branch { ref cond, .. } => {
+                vars.push(cond.clone());
+            },
+            ProgramReturn(ref sym) => {
+                vars.push(sym.clone());
+            },
+            ParallelFor(ref pf) => {
+                for iter in pf.data.iter() {
+                    vars.push(iter.data.clone());
+                    if iter.start.is_some() {
+                        vars.push(iter.start.clone().unwrap());
+                        vars.push(iter.end.clone().unwrap());
+                        vars.push(iter.stride.clone().unwrap());
+                    }
+                }
+                vars.push(pf.builder.clone());
+            },
+            _ => {}
         }
         for var in &vars {
             if prog.funcs[func_id].locals.get(&var) == None {
@@ -278,7 +333,6 @@ env: &mut HashMap<Symbol, Type>, closure: &mut HashSet<Symbol>) {
             }
         }
         let mut inner_closure = HashSet::new();
-        use self::Terminator::*;
         match block.terminator {
             ParallelFor(ref pf) => {
                 sir_param_correction_helper(prog, pf.body, env, &mut inner_closure);
@@ -451,33 +505,95 @@ fn gen_expr(
             Ok((cur_func, cur_block, res_sym))
         },
 
+        GetField { ref expr, index } => {
+            let (cur_func, cur_block, struct_sym) = gen_expr(expr, prog, cur_func, cur_block)?;
+            let field_ty =
+                match expr.ty {
+                    super::ast::Type::Struct(ref v) => &v[index as usize],
+                    _ => weld_err!("Internal error: tried to get field of type {}",
+                        print_type(&expr.ty))?
+                };
+            let res_sym = prog.add_local(&field_ty, cur_func);
+            prog.funcs[cur_func].blocks[cur_block].add_statement(
+                AssignField { output: res_sym.clone(), value: struct_sym, index: index });
+            Ok((cur_func, cur_block, res_sym))
+        },
+
         For { ref iters, ref builder, ref func } => {
-            if iters.len() != 1 || iters[0].start.is_some() || iters[0].end.is_some()
-            || iters[0].stride.is_some() {
-                // TODO support this
-                weld_err!("Only single-array loops with null start/end/stride currently supported")?
-            }
-            let data: &TypedExpr = &iters[0].data;
             if let Lambda { ref params, ref body } = func.kind {
-                let (cur_func, cur_block, data_sym) = gen_expr(data, prog, cur_func, cur_block)?;
                 let (cur_func, cur_block, builder_sym) = gen_expr(builder, prog, cur_func, cur_block)?;
                 let body_func = prog.add_func();
                 let body_block = prog.funcs[body_func].add_block();
                 prog.add_local_named(&params[0].ty, &params[0].name, body_func);
                 prog.add_local_named(&params[1].ty, &params[1].name, body_func);
-                prog.funcs[body_func].params.insert(data_sym.clone(), data.ty.clone());
+                prog.add_local_named(&params[2].ty, &params[2].name, body_func);
                 prog.funcs[body_func].params.insert(builder_sym.clone(), builder.ty.clone());
+                let mut cur_func = cur_func;
+                let mut cur_block = cur_block;
+                let mut pf_iters: Vec<ParallelForIter> = Vec::new();
+                for iter in iters.iter() {
+                    let data_res = gen_expr(&iter.data, prog, cur_func, cur_block)?;
+                    cur_func = data_res.0;
+                    cur_block = data_res.1;
+                    prog.funcs[body_func].params.insert(data_res.2.clone(), iter.data.ty.clone());
+                    let start_sym =
+                        if iter.start.is_some() {
+                            // TODO is there a cleaner way to do this?
+                            let start_expr =
+                                match iter.start {
+                                    Some(ref e) => e,
+                                    _ => weld_err!("Can't reach this")?
+                                };
+                            let start_res = gen_expr(&start_expr, prog, cur_func, cur_block)?;
+                            cur_func = start_res.0;
+                            cur_block = start_res.1;
+                            prog.funcs[body_func].params.insert(start_res.2.clone(), start_expr.ty.clone());
+                            Some(start_res.2)
+                        } else { None };
+                    let end_sym =
+                        if iter.end.is_some() {
+                            let end_expr =
+                                match iter.end {
+                                    Some(ref e) => e,
+                                    _ => weld_err!("Can't reach this")?
+                                };
+                            let end_res = gen_expr(&end_expr, prog, cur_func, cur_block)?;
+                            cur_func = end_res.0;
+                            cur_block = end_res.1;
+                            prog.funcs[body_func].params.insert(end_res.2.clone(), end_expr.ty.clone());
+                            Some(end_res.2)
+                        } else { None };
+                    let stride_sym =
+                        if iter.stride.is_some() {
+                            let stride_expr =
+                                match iter.stride {
+                                    Some(ref e) => e,
+                                    _ => weld_err!("Can't reach this")?
+                                };
+                            let stride_res = gen_expr(&stride_expr, prog, cur_func, cur_block)?;
+                            cur_func = stride_res.0;
+                            cur_block = stride_res.1;
+                            prog.funcs[body_func].params.insert(stride_res.2.clone(), stride_expr.ty.clone());
+                            Some(stride_res.2)
+                        } else { None };
+                    pf_iters.push(ParallelForIter {
+                        data: data_res.2,
+                        start: start_sym,
+                        end: end_sym,
+                        stride: stride_sym
+                    });
+                }
                 let (body_end_func, body_end_block, _) = gen_expr(body, prog, body_func, body_block)?;
-                // TODO this is a useless line
                 prog.funcs[body_end_func].blocks[body_end_block].terminator = EndFunction;
                 let cont_func = prog.add_func();
                 let cont_block = prog.funcs[cont_func].add_block();
                 prog.funcs[cur_func].blocks[cur_block].terminator = ParallelFor(
                     ParallelForData {
-                        data: data_sym,
+                        data: pf_iters,
                         builder: builder_sym.clone(),
-                        data_arg: params[1].name.clone(),
+                        data_arg: params[2].name.clone(),
                         builder_arg: params[0].name.clone(),
+                        idx_arg: params[1].name.clone(),
                         body: body_func,
                         cont: cont_func
                     }
