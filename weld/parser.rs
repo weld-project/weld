@@ -673,6 +673,32 @@ impl<'t> Parser<'t> {
                 Ok(expr)
             }
 
+            TMerger => {
+                let elem_type: PartialType;
+                let bin_op: _;
+                self.consume(TOpenBracket)?;
+                elem_type = self.type_()?;
+                self.consume(TComma)?;
+                // Basic merger supports Plus and Times right now.
+                match *self.peek() {
+                    TPlus => {
+                        self.consume(TPlus)?;
+                        bin_op = Add;
+                    }
+                    TTimes => {
+                        self.consume(TPlus)?;
+                        bin_op = Multiply;
+                    }
+                    _ => {
+                        return weld_err!("expected commutatitive binary op in merger");
+                    }
+                };
+                self.consume(TCloseBracket)?;
+                let mut expr = expr_box(NewBuilder);
+                expr.ty = Builder(Merger(Box::new(elem_type), bin_op));
+                Ok(expr)
+            }
+
             ref other => weld_err!("Expected expression but got '{}'", other),
         }
     }
