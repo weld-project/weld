@@ -430,7 +430,7 @@ impl LlvmGenerator {
             ctx.code.add(format!("b{}:", b.id));
             for s in b.statements.iter() {
                 match *s {
-                    AssignBinOp { ref output, op, ref ty, ref left, ref right } => {
+                    BinOp { ref output, op, ref ty, ref left, ref right } => {
                         let op_name = try!(llvm_binop(op, ty));
                         let ll_ty = try!(self.llvm_type(ty)).to_string();
                         let left_tmp = try!(self.load_var(llvm_symbol(left).as_str(), &ll_ty, ctx));
@@ -451,7 +451,7 @@ impl LlvmGenerator {
                                              out_ty_str,
                                              llvm_symbol(output)));
                     }
-                    CastOp { ref output, ref old_ty, ref new_ty, ref child } => {
+                    Cast { ref output, ref old_ty, ref new_ty, ref child } => {
                         if old_ty != new_ty {
                             let op_name = try!(llvm_castop(&old_ty, &new_ty));
                             let old_ll_ty = try!(self.llvm_type(&old_ty)).to_string();
@@ -484,7 +484,7 @@ impl LlvmGenerator {
                                              &ll_ty,
                                              llvm_symbol(output)));
                     }
-                    AssignField { ref output, ref value, index } => {
+                    GetField { ref output, ref value, index } => {
                         let struct_ty = try!(self.llvm_type(try!(get_sym_ty(func, value))))
                             .to_string();
                         let field_ty = try!(self.llvm_type(try!(get_sym_ty(func, output))))
@@ -530,7 +530,7 @@ impl LlvmGenerator {
                             }
                         }
                     }
-                    DoMerge { ref builder, ref value } => {
+                    Merge { ref builder, ref value } => {
                         let bld_ty = try!(get_sym_ty(func, builder));
                         match *bld_ty {
                             Builder(ref bk) => {
@@ -568,7 +568,7 @@ impl LlvmGenerator {
                             }
                         }
                     }
-                    GetResult { ref output, ref builder } => {
+                    Res { ref output, ref builder } => {
                         let bld_ty = try!(get_sym_ty(func, builder));
                         let res_ty = try!(get_sym_ty(func, output));
                         match *bld_ty {
@@ -608,7 +608,7 @@ impl LlvmGenerator {
                             }
                         }
                     }
-                    CreateBuilder { ref output, ref ty } => {
+                    NewBuilder { ref output, ref ty } => {
                         match *ty {
                             Builder(ref bk) => {
                                 match *bk {

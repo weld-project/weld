@@ -4,7 +4,6 @@ use std::fmt;
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use super::ast::*;
-use super::ast::ExprKind::*;
 use super::error::*;
 use super::pretty_print::*;
 use super::util::SymbolGenerator;
@@ -15,14 +14,14 @@ pub type FunctionId = usize;
 /// A non-terminating statement inside a basic block.
 #[derive(Clone)]
 pub enum Statement {
-    AssignBinOp {
+    BinOp {
         output: Symbol,
         op: BinOpKind,
         ty: Type,
         left: Symbol,
         right: Symbol
     },
-    CastOp {
+    Cast {
         output: Symbol,
         old_ty: Type,
         new_ty: Type,
@@ -36,19 +35,19 @@ pub enum Statement {
         output: Symbol,
         value: LiteralKind
     },
-    DoMerge {
+    Merge {
         builder: Symbol,
         value: Symbol
     },
-    GetResult {
+    Res {
         output: Symbol,
         builder: Symbol
     },
-    CreateBuilder {
+    NewBuilder {
         output: Symbol,
         ty: Type
     },
-    AssignField {
+    GetField {
         output: Symbol,
         value: Symbol,
         index: u32
@@ -173,20 +172,20 @@ impl fmt::Display for Statement {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use self::Statement::*;
         match *self {
-            AssignBinOp { ref output, ref op, ref ty, ref left, ref right } => {
+            BinOp { ref output, ref op, ref ty, ref left, ref right } => {
                 write!(f, "{} = {} {} {} {}", output, op, print_type(ty), left, right)
             },
-            CastOp { ref output, ref new_ty, ref child, .. } => {
+            Cast { ref output, ref new_ty, ref child, .. } => {
                 write!(f, "{} = cast({}, {})", output, child, print_type(new_ty))
             },
             Assign { ref output, ref value } => write!(f, "{} = {}", output, value),
             AssignLiteral { ref output, ref value } => write!(f, "{} = {}", output,
                 print_literal(value)),
-            DoMerge { ref builder, ref value } => write!(f, "merge {} {}", builder, value),
-            GetResult { ref output, ref builder } => write!(f, "{} = result {}", output, builder),
-            CreateBuilder { ref output, ref ty }  => write!(f, "{} = new {}", output,
+            Merge { ref builder, ref value } => write!(f, "merge {} {}", builder, value),
+            Res { ref output, ref builder } => write!(f, "{} = result {}", output, builder),
+            NewBuilder { ref output, ref ty }  => write!(f, "{} = new {}", output,
                 print_type(ty)),
-            AssignField { ref output, ref value, index } => write!(f, "{} = {}.{}",
+            GetField { ref output, ref value, index } => write!(f, "{} = {}.{}",
                 output, value, index)
         }
     }
@@ -287,22 +286,22 @@ env: &mut HashMap<Symbol, Type>, closure: &mut HashSet<Symbol>) {
         for statement in &block.statements {
             use self::Statement::*;
             match *statement {
-                AssignBinOp { ref left, ref right, .. } => {
+                BinOp { ref left, ref right, .. } => {
                     vars.push(left.clone());
                     vars.push(right.clone());
                 },
-                CastOp { ref child, .. } => {
+                Cast { ref child, .. } => {
                     vars.push(child.clone());
                 },
                 Assign { ref value, .. } => vars.push(value.clone()),
-                DoMerge { ref builder, ref value } => {
+                Merge { ref builder, ref value } => {
                     vars.push(builder.clone());
                     vars.push(value.clone());
                 },
-                GetResult { ref builder, .. } => vars.push(builder.clone()),
-                AssignField { ref value, .. } => vars.push(value.clone()),
+                Res { ref builder, .. } => vars.push(builder.clone()),
+                GetField { ref value, .. } => vars.push(value.clone()),
                 AssignLiteral { .. } => {},
-                CreateBuilder { .. } => {}
+                NewBuilder { .. } => {}
             }   
         }
         use self::Terminator::*;
@@ -370,7 +369,7 @@ fn sir_param_correction(prog: &mut SirProgram) -> WeldResult<()> {
 
 /// Convert an AST to a SIR program. Symbols must be unique in expr.
 pub fn ast_to_sir(expr: &TypedExpr) -> WeldResult<SirProgram> {
-    if let Lambda { ref params, ref body } = expr.kind {
+    if let ExprKind::Lambda { ref params, ref body } = expr.kind {
         let mut prog = SirProgram::new(&expr.ty, params);
         prog.sym_gen = SymbolGenerator::from_expression(expr);
         for tp in params {
@@ -398,18 +397,18 @@ fn gen_expr(
     use self::Statement::*;
     use self::Terminator::*;
     match expr.kind {
-        Ident(ref sym) => {
+        ExprKind::Ident(ref sym) => {
             Ok((cur_func, cur_block, sym.clone()))
         },
 
-        Literal(lit) => {
+        ExprKind::Literal(lit) => {
             let res_sym = prog.add_local(&expr.ty, cur_func);
             prog.funcs[cur_func].blocks[cur_block].add_statement(
                 AssignLiteral { output: res_sym.clone(), value: lit });
             Ok((cur_func, cur_block, res_sym))
         },
 
-        Let { ref name, ref value, ref body } => {
+        ExprKind::Let { ref name, ref value, ref body } => {
             let (cur_func, cur_block, val_sym) = gen_expr(value, prog, cur_func, cur_block)?;
             prog.add_local_named(&value.ty, name, cur_func);
             prog.funcs[cur_func].blocks[cur_block].add_statement(
@@ -418,12 +417,12 @@ fn gen_expr(
             Ok((cur_func, cur_block, res_sym))
         },
 
-        BinOp { kind, ref left, ref right } => {
+        ExprKind::BinOp { kind, ref left, ref right } => {
             let (cur_func, cur_block, left_sym) = gen_expr(left, prog, cur_func, cur_block)?;
             let (cur_func, cur_block, right_sym) = gen_expr(right, prog, cur_func, cur_block)?;
             let res_sym = prog.add_local(&expr.ty, cur_func);
             prog.funcs[cur_func].blocks[cur_block].add_statement(
-                AssignBinOp {
+                BinOp {
                     output: res_sym.clone(),
                     op: kind,
                     ty: left.ty.clone(),
@@ -433,11 +432,11 @@ fn gen_expr(
             Ok((cur_func, cur_block, res_sym))
         },
 
-        Cast { ref child_expr, .. } => {
+        ExprKind::Cast { ref child_expr, .. } => {
             let (cur_func, cur_block, child_sym) = gen_expr(child_expr, prog, cur_func, cur_block)?;
             let res_sym = prog.add_local(&expr.ty, cur_func);
             prog.funcs[cur_func].blocks[cur_block].add_statement(
-                CastOp {
+                Cast {
                     output: res_sym.clone(),
                     old_ty: child_expr.ty.clone(),
                     new_ty: expr.ty.clone(),
@@ -447,7 +446,7 @@ fn gen_expr(
             Ok((cur_func, cur_block, res_sym))
         },
 
-        If { ref cond, ref on_true, ref on_false } => {
+        ExprKind::If { ref cond, ref on_true, ref on_false } => {
             let (cur_func, cur_block, cond_sym) = gen_expr(cond, prog, cur_func, cur_block)?;
             let true_block = prog.funcs[cur_func].add_block();
             let false_block = prog.funcs[cur_func].add_block();
@@ -482,30 +481,30 @@ fn gen_expr(
             }
         },
 
-        Merge { ref builder, ref value } => {
+        ExprKind::Merge { ref builder, ref value } => {
             let (cur_func, cur_block, builder_sym) = gen_expr(builder, prog, cur_func, cur_block)?;
             let (cur_func, cur_block, elem_sym) = gen_expr(value, prog, cur_func, cur_block)?;
             prog.funcs[cur_func].blocks[cur_block].add_statement(
-                DoMerge { builder: builder_sym.clone(), value: elem_sym });
+                Merge { builder: builder_sym.clone(), value: elem_sym });
             Ok((cur_func, cur_block, builder_sym))
         },
 
-        Res { ref builder } => {
+        ExprKind::Res { ref builder } => {
             let (cur_func, cur_block, builder_sym) = gen_expr(builder, prog, cur_func, cur_block)?;
             let res_sym = prog.add_local(&expr.ty, cur_func);
             prog.funcs[cur_func].blocks[cur_block].add_statement(
-                GetResult { output: res_sym.clone(), builder: builder_sym });
+                Res { output: res_sym.clone(), builder: builder_sym });
             Ok((cur_func, cur_block, res_sym))
         },
 
-        NewBuilder => {
+        ExprKind::NewBuilder => {
             let res_sym = prog.add_local(&expr.ty, cur_func);
             prog.funcs[cur_func].blocks[cur_block].add_statement(
-                CreateBuilder { output: res_sym.clone(), ty: expr.ty.clone() });
+                NewBuilder { output: res_sym.clone(), ty: expr.ty.clone() });
             Ok((cur_func, cur_block, res_sym))
         },
 
-        GetField { ref expr, index } => {
+        ExprKind::GetField { ref expr, index } => {
             let (cur_func, cur_block, struct_sym) = gen_expr(expr, prog, cur_func, cur_block)?;
             let field_ty =
                 match expr.ty {
@@ -515,12 +514,12 @@ fn gen_expr(
                 };
             let res_sym = prog.add_local(&field_ty, cur_func);
             prog.funcs[cur_func].blocks[cur_block].add_statement(
-                AssignField { output: res_sym.clone(), value: struct_sym, index: index });
+                GetField { output: res_sym.clone(), value: struct_sym, index: index });
             Ok((cur_func, cur_block, res_sym))
         },
 
-        For { ref iters, ref builder, ref func } => {
-            if let Lambda { ref params, ref body } = func.kind {
+        ExprKind::For { ref iters, ref builder, ref func } => {
+            if let ExprKind::Lambda { ref params, ref body } = func.kind {
                 let (cur_func, cur_block, builder_sym) = gen_expr(builder, prog, cur_func, cur_block)?;
                 let body_func = prog.add_func();
                 let body_block = prog.funcs[body_func].add_block();
