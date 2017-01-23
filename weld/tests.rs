@@ -7,7 +7,6 @@ use super::type_inference::*;
 // Transforms. TODO(shoumik) move these tests somewhere else?
 use super::transforms::fuse_loops_vertical;
 use super::transforms::fuse_loops_horizontal;
-use super::transforms::inline_zips;
 use super::transforms::inline_let;
 use super::transforms::uniquify;
 
