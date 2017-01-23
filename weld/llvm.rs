@@ -125,7 +125,7 @@ impl LlvmGenerator {
         // stack (this makes them consistent with other local variables). Later, expressions may
         // add more local variables to alloca_code.
         ctx.alloca_code.add(format!("define void @f{}({}) {{", func.id, arg_types));
-        ctx.alloca_code.add(format!("entry:"));
+        ctx.alloca_code.add(format!("fn.entry:"));
         for (arg, ty) in func.params.iter() {
             let arg_str = llvm_symbol(&arg);
             let ty_str = try!(self.llvm_type(&ty)).to_string();
@@ -151,13 +151,13 @@ impl LlvmGenerator {
                                  bld_arg_str));
             try!(ctx.add_alloca("%cur.idx", "i64"));
             ctx.code.add("store i64 %lower.idx, i64* %cur.idx");
-            ctx.code.add("br label %loop_start");
-            ctx.code.add("loop_start:");
+            ctx.code.add("br label %loop.start");
+            ctx.code.add("loop.start:");
             let idx_tmp = try!(self.load_var("%cur.idx", "i64", ctx));
             let idx_cmp = ctx.var_ids.next();
             ctx.code.add(format!("{} = icmp ult i64 {}, %upper.idx", idx_cmp, idx_tmp));
-            ctx.code.add(format!("br i1 {}, label %loop_body, label %loop_end", idx_cmp));
-            ctx.code.add("loop_body:");
+            ctx.code.add(format!("br i1 {}, label %loop.body, label %loop.end", idx_cmp));
+            ctx.code.add("loop.body:");
             let mut prev_ref = String::from("undef");
             let elem_ty = func.locals.get(&par_for.data_arg).unwrap();
             let elem_ty_str = try!(self.llvm_type(&elem_ty)).to_string();
@@ -228,19 +228,19 @@ impl LlvmGenerator {
                                  llvm_symbol(&par_for.idx_arg)));
         }
 
-        ctx.code.add(format!("br label %b{}", func.blocks[0].id));
+        ctx.code.add(format!("br label %b.{}", func.blocks[0].id));
         // Generate an expression for the function body.
         try!(self.gen_func(sir, func, ctx));
-        ctx.code.add("body_end:");
+        ctx.code.add("body.end:");
         if containing_loop.is_some() {
-            ctx.code.add("br label %loop_terminator");
-            ctx.code.add("loop_terminator:");
+            ctx.code.add("br label %loop.terminator");
+            ctx.code.add("loop.terminator:");
             let idx_tmp = try!(self.load_var("%cur.idx", "i64", ctx));
             let idx_inc = ctx.var_ids.next();
             ctx.code.add(format!("{} = add i64 {}, 1", idx_inc, idx_tmp));
             ctx.code.add(format!("store i64 {}, i64* %cur.idx", idx_inc));
-            ctx.code.add("br label %loop_start");
-            ctx.code.add("loop_end:");
+            ctx.code.add("br label %loop.start");
+            ctx.code.add("loop.end:");
         }
         ctx.code.add("ret void");
         ctx.code.add("}\n\n");
@@ -255,7 +255,7 @@ impl LlvmGenerator {
                 let mut serial_ctx = &mut FunctionContext::new();
                 let serial_arg_types =
                     try!(self.get_arg_str(&get_combined_params(sir, &par_for), ""));
-                serial_ctx.code.add(format!("define void @f{}_ser_wrapper({}) {{",
+                serial_ctx.code.add(format!("define void @f{}_wrapper({}) {{",
                                             func.id,
                                             serial_arg_types));
                 let upper_bound = serial_ctx.var_ids.next();
@@ -282,6 +282,7 @@ impl LlvmGenerator {
                     serial_ctx.code
                         .add(format!("{} = udiv i64 {}, {}", upper_bound, diff_tmp, stride_str));
                 }
+
                 let mut body_arg_types = try!(self.get_arg_str(&func.params, ""));
                 body_arg_types.push_str(format!(", i64 0, i64 {}", upper_bound).as_str());
                 serial_ctx.code.add(format!("call void @f{}({})", func.id, body_arg_types));
@@ -427,7 +428,7 @@ impl LlvmGenerator {
                 ctx: &mut FunctionContext)
                 -> WeldResult<String> {
         for b in func.blocks.iter() {
-            ctx.code.add(format!("b{}:", b.id));
+            ctx.code.add(format!("b.{}:", b.id));
             for s in b.statements.iter() {
                 match *s {
                     BinOp { ref output, op, ref ty, ref left, ref right } => {
@@ -644,7 +645,7 @@ impl LlvmGenerator {
             match b.terminator {
                 Branch { ref cond, on_true, on_false } => {
                     let cond_tmp = try!(self.load_var(llvm_symbol(cond).as_str(), "i1", ctx));
-                    ctx.code.add(format!("br i1 {}, label %b{}, label %b{}",
+                    ctx.code.add(format!("br i1 {}, label %b.{}, label %b.{}",
                                          cond_tmp,
                                          on_true,
                                          on_false));
@@ -663,11 +664,11 @@ impl LlvmGenerator {
                         arg_types.push_str(&arg_str);
                     }
                     arg_types.push_str("%work_t* %cur.work");
-                    ctx.code.add(format!("call void @f{}_ser_wrapper({})", pf.body, arg_types));
-                    ctx.code.add("br label %body_end");
+                    ctx.code.add(format!("call void @f{}_wrapper({})", pf.body, arg_types));
+                    ctx.code.add("br label %body.end");
                 }
                 JumpBlock(block) => {
-                    ctx.code.add(format!("br label %b{}", block));
+                    ctx.code.add(format!("br label %b.{}", block));
                 }
                 JumpFunction(func) => {
                     try!(self.add_function(sir, &sir.funcs[func], None));
@@ -682,7 +683,7 @@ impl LlvmGenerator {
                     }
                     arg_types.push_str("%work_t* %cur.work");
                     ctx.code.add(format!("call void @f{}({})", func, arg_types));
-                    ctx.code.add("br label %body_end");
+                    ctx.code.add("br label %body.end");
                 }
                 ProgramReturn(ref sym) => {
                     let ty = try!(get_sym_ty(func, sym));
@@ -714,10 +715,10 @@ impl LlvmGenerator {
                     ctx.code.add(format!("{} = getelementptr %work_t* %cur.work, i32 0, i32 0",
                                          &work_res_ptr));
                     ctx.code.add(format!("store i8* {}, i8** {}", &elem_storage, &work_res_ptr));
-                    ctx.code.add("br label %body_end");
+                    ctx.code.add("br label %body.end");
                 }
                 EndFunction => {
-                    ctx.code.add("br label %body_end");
+                    ctx.code.add("br label %body.end");
                 }
                 Crash => {
                     // TODO do something else here?
