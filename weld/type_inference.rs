@@ -308,8 +308,8 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
                         match **i {
                             Some(ref mut e) => {
                                 changed |= try!(push_complete_type(&mut e.ty, Scalar(I64), "iter"))
-                            },
-                            None => return weld_err!("Impossible")
+                            }
+                            None => return weld_err!("Impossible"),
                         };
                     }
                 }
