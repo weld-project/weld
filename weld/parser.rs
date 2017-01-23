@@ -574,10 +574,30 @@ impl<'t> Parser<'t> {
                 }))
             }
 
+            TZip => {
+                try!(self.consume(TOpenParen));
+                let mut vectors = vec![];
+                while *self.peek() != TCloseParen {
+                    let vector = try!(self.expr());
+                    vectors.push(*vector);
+                    if *self.peek() == TComma {
+                        self.next();
+                    } else if *self.peek() != TCloseParen {
+                        return weld_err!("Expected ',' or ')'");
+                    }
+                }
+                try!(self.consume(TCloseParen));
+                if vectors.len() < 2 {
+                    return weld_err!("Expected two or more arguments in Zip");
+                }
+                Ok(expr_box(Zip { vectors: vectors }))
+            }
+
             TFor => {
                 try!(self.consume(TOpenParen));
                 let mut iters = vec![];
-                // Zips only appear as syntactic sugar in the context of Fors.
+                // Zips only appear as syntactic sugar in the context of Fors (they don't
+                // become Zip expressions).
                 if *self.peek() == TZip {
                     try!(self.consume(TZip));
                     try!(self.consume(TOpenParen));

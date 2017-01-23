@@ -67,7 +67,10 @@ fn main() {
         println!("After macro substitution:\n{}\n", print_expr(&expr));
 
         transforms::inline_apply(&mut expr);
-        println!("After inlining applies:\n{}\n", print_expr(&expr));
+        println!("After inline_apply:\n{}\n", print_expr(&expr));
+
+        transforms::uniquify(&mut expr);
+        println!("After uniquify :\n{}\n", print_expr(&expr));
 
         if let Err(ref e) = infer_types(&mut expr) {
             println!("Error during type inference: {}\n", e);
@@ -78,6 +81,9 @@ fn main() {
         println!("Expression type: {}\n", print_type(&expr.ty));
 
         let mut expr = expr.to_typed().unwrap();
+
+        transforms::inline_zips(&mut expr);
+        println!("After inlining zips:\n{}\n", print_typed_expr(&expr));
 
         transforms::fuse_loops_horizontal(&mut expr);
         println!("After horizontal loop fusion:\n{}\n",
@@ -103,7 +109,7 @@ fn main() {
                         println!("LLVM module compiled successfully\n");
                     }
                 }
-            },
+            }
             Err(ref e) => {
                 println!("Error during SIR code gen:\n{}\n", e);
             }
