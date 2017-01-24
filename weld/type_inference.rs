@@ -300,7 +300,7 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
                 let elem_type = match iter.data.ty {
                     Vector(ref elem) => *elem.clone(),
                     Unknown => Unknown,
-                    _ => return weld_err!("For"),
+                    _ => return weld_err!("non-vector type in For"),
                 };
                 elem_types.push(elem_type);
                 if iter.start.is_some() {
@@ -467,7 +467,14 @@ fn push_type(dest: &mut PartialType, src: &PartialType, context: &str) -> WeldRe
             }
         }
 
-        _ => weld_err!("Internal error: push_type not implemented for {:?}", dest),
+        Builder(Merger(ref mut dest_elem, _)) => {
+            match *src {
+                Builder(Merger(ref src_elem, _)) => {
+                    push_type(dest_elem.as_mut(), src_elem.as_ref(), context)
+                }
+                _ => weld_err!("Mismatched types in {}", context),
+            }
+        }
     }
 }
 
