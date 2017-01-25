@@ -261,9 +261,8 @@ impl LlvmGenerator {
                 let mut serial_ctx = &mut FunctionContext::new();
                 let serial_arg_types =
                     try!(self.get_arg_str(&get_combined_params(sir, &par_for), ""));
-                serial_ctx.code.add(format!("define void @f{}_wrapper({}) {{",
-                                            func.id,
-                                            serial_arg_types));
+                serial_ctx.code
+                    .add(format!("define void @f{}_wrapper({}) {{", func.id, serial_arg_types));
                 let upper_bound = serial_ctx.var_ids.next();
                 if par_for.data[0].start.is_none() {
                     let first_data = &par_for.data[0].data;
