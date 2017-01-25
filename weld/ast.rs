@@ -116,6 +116,7 @@ pub enum ExprKind<T: TypeBounds> {
     },
     MakeStruct { elems: Vec<Expr<T>> },
     MakeVector { elems: Vec<Expr<T>> },
+    Zip { vectors: Vec<Expr<T>> },
     GetField { expr: Box<Expr<T>>, index: u32 },
     Length { data: Box<Expr<T>> },
     Lookup {
@@ -240,6 +241,7 @@ impl<T: TypeBounds> Expr<T> {
                 Lambda { ref body, .. } => vec![body.as_ref()],
                 MakeStruct { ref elems } => elems.iter().collect(),
                 MakeVector { ref elems } => elems.iter().collect(),
+                Zip { ref vectors } => vectors.iter().collect(),
                 GetField { ref expr, .. } => vec![expr.as_ref()],
                 Length { ref data } => vec![data.as_ref()],
                 Lookup { ref data, ref index } => vec![data.as_ref(), index.as_ref()],
@@ -287,6 +289,7 @@ impl<T: TypeBounds> Expr<T> {
                 Lambda { ref mut body, .. } => vec![body.as_mut()],
                 MakeStruct { ref mut elems } => elems.iter_mut().collect(),
                 MakeVector { ref mut elems } => elems.iter_mut().collect(),
+                Zip { ref mut vectors } => vectors.iter_mut().collect(),
                 GetField { ref mut expr, .. } => vec![expr.as_mut()],
                 Length { ref mut data } => vec![data.as_mut()],
                 Lookup { ref mut data, ref mut index } => vec![data.as_mut(), index.as_mut()],
@@ -370,6 +373,7 @@ impl<T: TypeBounds> Expr<T> {
                 (&NewBuilder, &NewBuilder) => Ok(true),
                 (&MakeStruct { .. }, &MakeStruct { .. }) => Ok(true),
                 (&MakeVector { .. }, &MakeVector { .. }) => Ok(true),
+                (&Zip { .. }, &Zip { .. }) => Ok(true),
                 (&GetField { index: idx1, .. }, &GetField { index: idx2, .. }) if idx1 == idx2 => {
                     Ok(true)
                 }

@@ -152,6 +152,13 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>, typed: bool) -> String {
                  elems.iter().map(|e| print_expr_impl(e, typed)))
         }
 
+        Zip { ref vectors } => {
+            join("zip(",
+                 ",",
+                 ")",
+                 vectors.iter().map(|e| print_expr_impl(e, typed)))
+        }
+
         GetField { ref expr, index } => format!("{}.${}", print_expr_impl(expr, typed), index),
 
         Length { ref data } => format!("len({})", print_expr_impl(data, typed)),

@@ -574,10 +574,30 @@ impl<'t> Parser<'t> {
                 }))
             }
 
+            TZip => {
+                try!(self.consume(TOpenParen));
+                let mut vectors = vec![];
+                while *self.peek() != TCloseParen {
+                    let vector = try!(self.expr());
+                    vectors.push(*vector);
+                    if *self.peek() == TComma {
+                        self.next();
+                    } else if *self.peek() != TCloseParen {
+                        return weld_err!("Expected ',' or ')'");
+                    }
+                }
+                try!(self.consume(TCloseParen));
+                if vectors.len() < 2 {
+                    return weld_err!("Expected two or more arguments in Zip");
+                }
+                Ok(expr_box(Zip { vectors: vectors }))
+            }
+
             TFor => {
                 try!(self.consume(TOpenParen));
                 let mut iters = vec![];
-                // Zips only appear as syntactic sugar in the context of Fors.
+                // Zips only appear as syntactic sugar in the context of Fors (they don't
+                // become Zip expressions).
                 if *self.peek() == TZip {
                     try!(self.consume(TZip));
                     try!(self.consume(TOpenParen));
@@ -650,6 +670,32 @@ impl<'t> Parser<'t> {
                 }
                 let mut expr = expr_box(NewBuilder);
                 expr.ty = Builder(Appender(Box::new(elem_type)));
+                Ok(expr)
+            }
+
+            TMerger => {
+                let elem_type: PartialType;
+                let bin_op: _;
+                self.consume(TOpenBracket)?;
+                elem_type = self.type_()?;
+                self.consume(TComma)?;
+                // Basic merger supports Plus and Times right now.
+                match *self.peek() {
+                    TPlus => {
+                        self.consume(TPlus)?;
+                        bin_op = Add;
+                    }
+                    TTimes => {
+                        self.consume(TPlus)?;
+                        bin_op = Multiply;
+                    }
+                    _ => {
+                        return weld_err!("expected commutatitive binary op in merger");
+                    }
+                };
+                self.consume(TCloseBracket)?;
+                let mut expr = expr_box(NewBuilder);
+                expr.ty = Builder(Merger(Box::new(elem_type), bin_op));
                 Ok(expr)
             }
 

@@ -141,6 +141,28 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             Ok(changed)
         }
 
+        Zip { ref mut vectors } => {
+            let mut changed = false;
+
+            let base_type = Vector(Box::new(Struct(vec![Unknown; vectors.len()])));
+            changed |= try!(push_type(&mut expr.ty, &base_type, "Zip"));
+
+            if let Vector(ref mut elem_type) = expr.ty {
+                if let Struct(ref mut vec_types) = **elem_type {
+                    for (vec_ty, vec_expr) in vec_types.iter_mut().zip(vectors.iter_mut()) {
+                        if let Vector(ref elem_type) = vec_expr.ty {
+                            changed |= try!(push_type(vec_ty, elem_type, "Zip"));
+                        } else {
+                            return weld_err!("Internal error: Zip argument not a Vector");
+                        }
+                    }
+                }
+            } else {
+                return weld_err!("Internal error: type of Zip was not Vector(Struct(..))");
+            }
+            Ok(changed)
+        }
+
         MakeStruct { ref mut elems } => {
             let mut changed = false;
 
@@ -274,13 +296,23 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             let mut changed = false;
             // Push iters and builder type into func
             let mut elem_types = vec![];
-            for iter in iters {
+            for iter in iters.iter_mut() {
                 let elem_type = match iter.data.ty {
                     Vector(ref elem) => *elem.clone(),
                     Unknown => Unknown,
-                    _ => return weld_err!("For"),
+                    _ => return weld_err!("non-vector type in For"),
                 };
                 elem_types.push(elem_type);
+                if iter.start.is_some() {
+                    for i in [&mut iter.start, &mut iter.end, &mut iter.stride].iter_mut() {
+                        match **i {
+                            Some(ref mut e) => {
+                                changed |= try!(push_complete_type(&mut e.ty, Scalar(I64), "iter"))
+                            }
+                            None => return weld_err!("Impossible"),
+                        };
+                    }
+                }
             }
             let elem_types = if elem_types.len() == 1 {
                 elem_types[0].clone()
@@ -435,7 +467,14 @@ fn push_type(dest: &mut PartialType, src: &PartialType, context: &str) -> WeldRe
             }
         }
 
-        _ => weld_err!("Internal error: push_type not implemented for {:?}", dest),
+        Builder(Merger(ref mut dest_elem, _)) => {
+            match *src {
+                Builder(Merger(ref src_elem, _)) => {
+                    push_type(dest_elem.as_mut(), src_elem.as_ref(), context)
+                }
+                _ => weld_err!("Mismatched types in {}", context),
+            }
+        }
     }
 }
 
