@@ -14,7 +14,10 @@ typedef void* weld_object_t;
 /** A runnable Weld module. */
 typedef void* weld_module_t;
 
-// Objects
+/** A handle to a Weld error. */
+typedef void* weld_error_t;
+
+// ************* Objects ****************
 
 /** Returns a Weld-readable object with the given input buffer.
  *
@@ -63,7 +66,7 @@ weld_object_data(weld_object_t);
 void 
 weld_object_free(weld_object_t);
 
-// Modules
+// ************* Modules ****************
 
 /** Compiles a Weld module.
  *
@@ -71,10 +74,11 @@ weld_object_free(weld_object_t);
  *
  * @param program a Weld program to compile
  * @param conf a configuration for the module.
+ * @param err an unintialized handle to a Weld error.
  * @return a runnable module.
  */
 weld_module_t 
-weld_module_compile(const char *program, const char *conf);
+weld_module_compile(const char *program, const char *conf, weld_error_t);
 
 /** Runs a module using the given argument.
  *
@@ -84,12 +88,13 @@ weld_module_compile(const char *program, const char *conf);
  *
  * @param module the module to run.
  * @param arg the argument for the module's function.
+ * @param err an unintialized handle to a Weld error.
  * @return an owned Weld object representing the return value. The caller
  * is responsible for knowing what the type of the return value is based on
  * the module she runs.
  */
 weld_object_t 
-weld_module_run(weld_module_t, weld_object_t arg);
+weld_module_run(weld_module_t, weld_object_t arg, weld_error_t err);
 
 /** Garbage collects a module.
  *
@@ -97,6 +102,23 @@ weld_module_run(weld_module_t, weld_object_t arg);
  */
 void 
 weld_module_free(weld_module_t);
+
+// ************* Errors ****************
+
+/** Returns an error message for a given error.
+ *
+ * @param err the error
+ * @return a string error message.
+ */
+const char *weld_error_message(weld_error_t);
+
+/** Free a Weld error.
+ *
+ * @param err the error
+ */
+void weld_error_free(weld_error_t);
+
+
 
 #endif
 

@@ -88,20 +88,15 @@ fn infer_up(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> {
 /// Return true if any new expression's type was inferred, or an error if types are inconsistent.
 fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> {
     match expr.kind {
-        Literal(I32Literal(_)) =>
-            push_complete_type(&mut expr.ty, Scalar(I32), "I32Literal"),
+        Literal(I32Literal(_)) => push_complete_type(&mut expr.ty, Scalar(I32), "I32Literal"),
 
-        Literal(I64Literal(_)) =>
-            push_complete_type(&mut expr.ty, Scalar(I64), "I64Literal"),
+        Literal(I64Literal(_)) => push_complete_type(&mut expr.ty, Scalar(I64), "I64Literal"),
 
-        Literal(F32Literal(_)) =>
-            push_complete_type(&mut expr.ty, Scalar(F32), "F32Literal"),
+        Literal(F32Literal(_)) => push_complete_type(&mut expr.ty, Scalar(F32), "F32Literal"),
 
-        Literal(F64Literal(_)) =>
-            push_complete_type(&mut expr.ty, Scalar(F64), "F64Literal"),
+        Literal(F64Literal(_)) => push_complete_type(&mut expr.ty, Scalar(F64), "F64Literal"),
 
-        Literal(BoolLiteral(_)) =>
-            push_complete_type(&mut expr.ty, Scalar(Bool), "BoolLiteral"),
+        Literal(BoolLiteral(_)) => push_complete_type(&mut expr.ty, Scalar(Bool), "BoolLiteral"),
 
         BinOp { kind: op, ref mut left, ref mut right } => {
             let mut elem_type = Unknown;
@@ -121,9 +116,7 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             Ok(changed)
         }
 
-        Cast { kind, .. } => {
-            Ok(try!(push_complete_type(&mut expr.ty, Scalar(kind), "Cast")))
-        }
+        Cast { kind, .. } => Ok(try!(push_complete_type(&mut expr.ty, Scalar(kind), "Cast"))),
 
         Ident(ref symbol) => {
             match env.get(symbol) {

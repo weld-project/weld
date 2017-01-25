@@ -20,7 +20,7 @@ pub enum Statement {
         op: BinOpKind,
         ty: Type,
         left: Symbol,
-        right: Symbol
+        right: Symbol,
     },
     CastOp {
         output: Symbol,
@@ -28,26 +28,11 @@ pub enum Statement {
         new_ty: Type,
         child: Symbol,
     },
-    Assign {
-        output: Symbol,
-        value: Symbol
-    },
-    AssignLiteral {
-        output: Symbol,
-        value: LiteralKind
-    },
-    DoMerge {
-        builder: Symbol,
-        value: Symbol
-    },
-    GetResult {
-        output: Symbol,
-        builder: Symbol
-    },
-    CreateBuilder {
-        output: Symbol,
-        ty: Type
-    },
+    Assign { output: Symbol, value: Symbol },
+    AssignLiteral { output: Symbol, value: LiteralKind },
+    DoMerge { builder: Symbol, value: Symbol },
+    GetResult { output: Symbol, builder: Symbol },
+    CreateBuilder { output: Symbol, ty: Type },
 }
 
 #[derive(Clone)]
@@ -57,7 +42,7 @@ pub struct ParallelForData {
     pub data_arg: Symbol,
     pub builder_arg: Symbol,
     pub body: FunctionId,
-    pub cont: FunctionId
+    pub cont: FunctionId,
 }
 
 /// A terminating statement inside a basic block.
@@ -66,14 +51,14 @@ pub enum Terminator {
     Branch {
         cond: Symbol,
         on_true: BasicBlockId,
-        on_false: BasicBlockId
+        on_false: BasicBlockId,
     },
     JumpBlock(BasicBlockId),
     JumpFunction(FunctionId),
     ProgramReturn(Symbol),
     EndFunction,
     ParallelFor(ParallelForData),
-    Crash
+    Crash,
 }
 
 /// A basic block inside a SIR program
@@ -81,14 +66,14 @@ pub enum Terminator {
 pub struct BasicBlock {
     pub id: BasicBlockId,
     pub statements: Vec<Statement>,
-    pub terminator: Terminator
+    pub terminator: Terminator,
 }
 
 pub struct SirFunction {
     pub id: FunctionId,
     pub params: HashMap<Symbol, Type>,
     pub locals: HashMap<Symbol, Type>,
-    pub blocks: Vec<BasicBlock>
+    pub blocks: Vec<BasicBlock>,
 }
 
 pub struct SirProgram {
@@ -96,7 +81,7 @@ pub struct SirProgram {
     pub funcs: Vec<SirFunction>,
     pub ret_ty: Type,
     pub top_params: Vec<TypedParameter>,
-    sym_gen: SymbolGenerator
+    sym_gen: SymbolGenerator,
 }
 
 impl SirProgram {
@@ -105,7 +90,7 @@ impl SirProgram {
             funcs: vec![],
             ret_ty: ret_ty.clone(),
             top_params: top_params.clone(),
-            sym_gen: SymbolGenerator::new()
+            sym_gen: SymbolGenerator::new(),
         };
         /// add main
         prog.add_func();
@@ -117,10 +102,10 @@ impl SirProgram {
             id: self.funcs.len(),
             params: HashMap::new(),
             blocks: vec![],
-            locals: HashMap::new()
+            locals: HashMap::new(),
         };
         self.funcs.push(func);
-        self.funcs.len() - 1       
+        self.funcs.len() - 1
     }
 
     /// Add a local variable of the given type and return a symbol for it.
@@ -142,7 +127,7 @@ impl SirFunction {
         let block = BasicBlock {
             id: self.blocks.len(),
             statements: vec![],
-            terminator: Terminator::Crash
+            terminator: Terminator::Crash,
         };
         self.blocks.push(block);
         self.blocks.len() - 1
@@ -160,18 +145,26 @@ impl fmt::Display for Statement {
         use self::Statement::*;
         match *self {
             AssignBinOp { ref output, ref op, ref ty, ref left, ref right } => {
-                write!(f, "{} = {} {} {} {}", output, op, print_type(ty), left, right)
-            },
+                write!(f,
+                       "{} = {} {} {} {}",
+                       output,
+                       op,
+                       print_type(ty),
+                       left,
+                       right)
+            }
             CastOp { ref output, ref new_ty, ref child, .. } => {
                 write!(f, "{} = cast({}, {})", output, child, print_type(new_ty))
-            },
+            }
             Assign { ref output, ref value } => write!(f, "{} = {}", output, value),
-            AssignLiteral { ref output, ref value } => write!(f, "{} = {}", output,
-                print_literal(value)),
+            AssignLiteral { ref output, ref value } => {
+                write!(f, "{} = {}", output, print_literal(value))
+            }
             DoMerge { ref builder, ref value } => write!(f, "merge {} {}", builder, value),
             GetResult { ref output, ref builder } => write!(f, "{} = result {}", output, builder),
-            CreateBuilder { ref output, ref ty }  => write!(f, "{} = new {}", output,
-                print_type(ty)),
+            CreateBuilder { ref output, ref ty } => {
+                write!(f, "{} = new {}", output, print_type(ty))
+            }
         }
     }
 }
@@ -182,17 +175,23 @@ impl fmt::Display for Terminator {
         match *self {
             Branch { ref cond, ref on_true, ref on_false } => {
                 write!(f, "branch {} B{} B{}", cond, on_true, on_false)
-            },
+            }
             ParallelFor(ref pf) => {
-                write!(f, "for {} {} {} {} F{} F{}",
-                    pf.data, pf.builder, pf.data_arg, pf.builder_arg, pf.body, pf.cont)?;
+                write!(f,
+                       "for {} {} {} {} F{} F{}",
+                       pf.data,
+                       pf.builder,
+                       pf.data_arg,
+                       pf.builder_arg,
+                       pf.body,
+                       pf.cont)?;
                 Ok(())
-            },
+            }
             JumpBlock(block) => write!(f, "jump B{}", block),
             JumpFunction(func) => write!(f, "jump F{}", func),
             ProgramReturn(ref sym) => write!(f, "return {}", sym),
             EndFunction => write!(f, "end"),
-            Crash => write!(f, "crash")
+            Crash => write!(f, "crash"),
         }
     }
 }
@@ -241,8 +240,10 @@ impl fmt::Display for SirProgram {
 /// that have been defined previously in the program. Any symbols that need to be passed in
 /// as closure parameters to func_id will be added to closure (so that func_id's
 /// callers can also add these symbols to their parameters list, if necessary).
-fn sir_param_correction_helper(prog: &mut SirProgram, func_id: FunctionId,
-env: &mut HashMap<Symbol, Type>, closure: &mut HashSet<Symbol>) {
+fn sir_param_correction_helper(prog: &mut SirProgram,
+                               func_id: FunctionId,
+                               env: &mut HashMap<Symbol, Type>,
+                               closure: &mut HashSet<Symbol>) {
     for (name, ty) in &prog.funcs[func_id].params {
         env.insert(name.clone(), ty.clone());
     }
@@ -258,18 +259,18 @@ env: &mut HashMap<Symbol, Type>, closure: &mut HashSet<Symbol>) {
                 AssignBinOp { ref left, ref right, .. } => {
                     vars.push(left.clone());
                     vars.push(right.clone());
-                },
+                }
                 CastOp { ref child, .. } => {
                     vars.push(child.clone());
-                },
+                }
                 Assign { ref value, .. } => vars.push(value.clone()),
                 DoMerge { ref builder, ref value } => {
                     vars.push(builder.clone());
                     vars.push(value.clone());
-                },
+                }
                 GetResult { ref builder, .. } => vars.push(builder.clone()),
                 _ => {}
-            }   
+            }
         }
         for var in &vars {
             if prog.funcs[func_id].locals.get(&var) == None {
@@ -283,10 +284,10 @@ env: &mut HashMap<Symbol, Type>, closure: &mut HashSet<Symbol>) {
             ParallelFor(ref pf) => {
                 sir_param_correction_helper(prog, pf.body, env, &mut inner_closure);
                 sir_param_correction_helper(prog, pf.cont, env, &mut inner_closure);
-            },
+            }
             JumpFunction(jump_func) => {
                 sir_param_correction_helper(prog, jump_func, env, &mut inner_closure);
-            },
+            }
             _ => {}       
         }
         for var in inner_closure {
@@ -335,81 +336,83 @@ pub fn ast_to_sir(expr: &TypedExpr) -> WeldResult<SirProgram> {
 /// Generate code to compute the expression `expr` starting at the current tail of `cur_block`,
 /// possibly creating new basic blocks and functions in the process. Return the function and
 /// basic block that the expression will be ready in, and its symbol therein.
-fn gen_expr(
-    expr: &TypedExpr,
-    prog: &mut SirProgram,
-    cur_func: FunctionId,
-    cur_block: BasicBlockId
-) -> WeldResult<(FunctionId, BasicBlockId, Symbol)> {
+fn gen_expr(expr: &TypedExpr,
+            prog: &mut SirProgram,
+            cur_func: FunctionId,
+            cur_block: BasicBlockId)
+            -> WeldResult<(FunctionId, BasicBlockId, Symbol)> {
     use self::Statement::*;
     use self::Terminator::*;
     match expr.kind {
-        Ident(ref sym) => {
-            Ok((cur_func, cur_block, sym.clone()))
-        },
+        Ident(ref sym) => Ok((cur_func, cur_block, sym.clone())),
 
         Literal(lit) => {
             let res_sym = prog.add_local(&expr.ty, cur_func);
-            prog.funcs[cur_func].blocks[cur_block].add_statement(
-                AssignLiteral { output: res_sym.clone(), value: lit });
+            prog.funcs[cur_func].blocks[cur_block].add_statement(AssignLiteral {
+                output: res_sym.clone(),
+                value: lit,
+            });
             Ok((cur_func, cur_block, res_sym))
-        },
+        }
 
         Let { ref name, ref value, ref body } => {
             let (cur_func, cur_block, val_sym) = gen_expr(value, prog, cur_func, cur_block)?;
             prog.add_local_named(&value.ty, name, cur_func);
-            prog.funcs[cur_func].blocks[cur_block].add_statement(
-                Assign { output: name.clone(), value: val_sym });
+            prog.funcs[cur_func].blocks[cur_block].add_statement(Assign {
+                output: name.clone(),
+                value: val_sym,
+            });
             let (cur_func, cur_block, res_sym) = gen_expr(body, prog, cur_func, cur_block)?;
             Ok((cur_func, cur_block, res_sym))
-        },
+        }
 
         BinOp { kind, ref left, ref right } => {
             let (cur_func, cur_block, left_sym) = gen_expr(left, prog, cur_func, cur_block)?;
             let (cur_func, cur_block, right_sym) = gen_expr(right, prog, cur_func, cur_block)?;
             let res_sym = prog.add_local(&expr.ty, cur_func);
-            prog.funcs[cur_func].blocks[cur_block].add_statement(
-                AssignBinOp {
-                    output: res_sym.clone(),
-                    op: kind,
-                    ty: left.ty.clone(),
-                    left: left_sym,
-                    right: right_sym
-                });
+            prog.funcs[cur_func].blocks[cur_block].add_statement(AssignBinOp {
+                output: res_sym.clone(),
+                op: kind,
+                ty: left.ty.clone(),
+                left: left_sym,
+                right: right_sym,
+            });
             Ok((cur_func, cur_block, res_sym))
-        },
+        }
 
         Cast { ref child_expr, .. } => {
             let (cur_func, cur_block, child_sym) = gen_expr(child_expr, prog, cur_func, cur_block)?;
             let res_sym = prog.add_local(&expr.ty, cur_func);
-            prog.funcs[cur_func].blocks[cur_block].add_statement(
-                CastOp {
-                    output: res_sym.clone(),
-                    old_ty: child_expr.ty.clone(),
-                    new_ty: expr.ty.clone(),
-                    child: child_sym,
-                }
-            );
+            prog.funcs[cur_func].blocks[cur_block].add_statement(CastOp {
+                output: res_sym.clone(),
+                old_ty: child_expr.ty.clone(),
+                new_ty: expr.ty.clone(),
+                child: child_sym,
+            });
             Ok((cur_func, cur_block, res_sym))
-        },
+        }
 
         If { ref cond, ref on_true, ref on_false } => {
             let (cur_func, cur_block, cond_sym) = gen_expr(cond, prog, cur_func, cur_block)?;
             let true_block = prog.funcs[cur_func].add_block();
             let false_block = prog.funcs[cur_func].add_block();
-            prog.funcs[cur_func].blocks[cur_block].terminator =
-                Branch {
-                    cond: cond_sym,
-                    on_true: true_block,
-                    on_false: false_block
-                };
+            prog.funcs[cur_func].blocks[cur_block].terminator = Branch {
+                cond: cond_sym,
+                on_true: true_block,
+                on_false: false_block,
+            };
             let (true_func, true_block, true_sym) = gen_expr(on_true, prog, cur_func, true_block)?;
-            let (false_func, false_block, false_sym) = gen_expr(on_false, prog, cur_func, false_block)?;
+            let (false_func, false_block, false_sym) =
+                gen_expr(on_false, prog, cur_func, false_block)?;
             let res_sym = prog.add_local(&expr.ty, true_func);
-            prog.funcs[true_func].blocks[true_block].add_statement(
-                Assign { output: res_sym.clone(), value: true_sym });
-            prog.funcs[false_func].blocks[false_block].add_statement(
-                Assign { output: res_sym.clone(), value: false_sym });
+            prog.funcs[true_func].blocks[true_block].add_statement(Assign {
+                output: res_sym.clone(),
+                value: true_sym,
+            });
+            prog.funcs[false_func].blocks[false_block].add_statement(Assign {
+                output: res_sym.clone(),
+                value: false_sym,
+            });
             if true_func != cur_func || false_func != cur_func {
                 // TODO we probably want a better for name for this symbol than whatever res_sym is
                 prog.add_local_named(&expr.ty, &res_sym, false_func);
@@ -426,68 +429,74 @@ fn gen_expr(
                 prog.funcs[false_func].blocks[false_block].terminator = JumpBlock(cont_block);
                 Ok((cur_func, cont_block, res_sym))
             }
-        },
+        }
 
         Merge { ref builder, ref value } => {
             let (cur_func, cur_block, builder_sym) = gen_expr(builder, prog, cur_func, cur_block)?;
             let (cur_func, cur_block, elem_sym) = gen_expr(value, prog, cur_func, cur_block)?;
-            prog.funcs[cur_func].blocks[cur_block].add_statement(
-                DoMerge { builder: builder_sym.clone(), value: elem_sym });
+            prog.funcs[cur_func].blocks[cur_block].add_statement(DoMerge {
+                builder: builder_sym.clone(),
+                value: elem_sym,
+            });
             Ok((cur_func, cur_block, builder_sym))
-        },
+        }
 
         Res { ref builder } => {
             let (cur_func, cur_block, builder_sym) = gen_expr(builder, prog, cur_func, cur_block)?;
             let res_sym = prog.add_local(&expr.ty, cur_func);
-            prog.funcs[cur_func].blocks[cur_block].add_statement(
-                GetResult { output: res_sym.clone(), builder: builder_sym });
+            prog.funcs[cur_func].blocks[cur_block].add_statement(GetResult {
+                output: res_sym.clone(),
+                builder: builder_sym,
+            });
             Ok((cur_func, cur_block, res_sym))
-        },
+        }
 
         NewBuilder => {
             let res_sym = prog.add_local(&expr.ty, cur_func);
-            prog.funcs[cur_func].blocks[cur_block].add_statement(
-                CreateBuilder { output: res_sym.clone(), ty: expr.ty.clone() });
+            prog.funcs[cur_func].blocks[cur_block].add_statement(CreateBuilder {
+                output: res_sym.clone(),
+                ty: expr.ty.clone(),
+            });
             Ok((cur_func, cur_block, res_sym))
-        },
+        }
 
         For { ref iters, ref builder, ref func } => {
-            if iters.len() != 1 || iters[0].start.is_some() || iters[0].end.is_some()
-            || iters[0].stride.is_some() {
+            if iters.len() != 1 || iters[0].start.is_some() || iters[0].end.is_some() ||
+               iters[0].stride.is_some() {
                 // TODO support this
                 weld_err!("Only single-array loops with null start/end/stride currently supported")?
             }
             let data: &TypedExpr = &iters[0].data;
             if let Lambda { ref params, ref body } = func.kind {
                 let (cur_func, cur_block, data_sym) = gen_expr(data, prog, cur_func, cur_block)?;
-                let (cur_func, cur_block, builder_sym) = gen_expr(builder, prog, cur_func, cur_block)?;
+                let (cur_func, cur_block, builder_sym) =
+                    gen_expr(builder, prog, cur_func, cur_block)?;
                 let body_func = prog.add_func();
                 let body_block = prog.funcs[body_func].add_block();
                 prog.add_local_named(&params[0].ty, &params[0].name, body_func);
                 prog.add_local_named(&params[1].ty, &params[1].name, body_func);
                 prog.funcs[body_func].params.insert(data_sym.clone(), data.ty.clone());
                 prog.funcs[body_func].params.insert(builder_sym.clone(), builder.ty.clone());
-                let (body_end_func, body_end_block, _) = gen_expr(body, prog, body_func, body_block)?;
+                let (body_end_func, body_end_block, _) =
+                    gen_expr(body, prog, body_func, body_block)?;
                 // TODO this is a useless line
                 prog.funcs[body_end_func].blocks[body_end_block].terminator = EndFunction;
                 let cont_func = prog.add_func();
                 let cont_block = prog.funcs[cont_func].add_block();
-                prog.funcs[cur_func].blocks[cur_block].terminator = ParallelFor(
-                    ParallelForData {
-                        data: data_sym,
-                        builder: builder_sym.clone(),
-                        data_arg: params[1].name.clone(),
-                        builder_arg: params[0].name.clone(),
-                        body: body_func,
-                        cont: cont_func
-                    }
-                );
+                prog.funcs[cur_func].blocks[cur_block].terminator = ParallelFor(ParallelForData {
+                    data: data_sym,
+                    builder: builder_sym.clone(),
+                    data_arg: params[1].name.clone(),
+                    builder_arg: params[0].name.clone(),
+                    body: body_func,
+                    cont: cont_func,
+                });
                 Ok((cont_func, cont_block, builder_sym))
             } else {
                 weld_err!("Argument to For was not a Lambda: {}", print_expr(func))
             }
-        },
+        }
 
-        _ => weld_err!("Unsupported expression: {}", print_expr(expr))
+        _ => weld_err!("Unsupported expression: {}", print_expr(expr)),
     }
 }
