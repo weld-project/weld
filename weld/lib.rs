@@ -40,10 +40,6 @@ pub mod transforms;
 pub mod type_inference;
 pub mod util;
 
-// API.
-pub type WeldObjectHandle = u64;
-pub type WeldModuleHandle = u64;
-
 #[no_mangle]
 pub extern "C" fn weld_module_compile(prog: *const c_char,
                                       conf: *const c_char)
@@ -134,14 +130,12 @@ pub extern "C" fn weld_module_compile(prog: *const c_char,
 }
 
 #[no_mangle]
-pub extern "C" fn weld_module_run(ptr: *mut easy_ll::CompiledModule, arg: i64) -> i64 {
+pub extern "C" fn weld_module_run(ptr: *mut easy_ll::CompiledModule, arg: *const u8) -> i64 {
     let module = unsafe {
         assert!(!ptr.is_null());
         &mut *ptr
     };
-    let result = module.run(&arg as *const i64 as i64) as *const i64;
-    let result = unsafe { *result };
-    println!("Result in rust: {}", result);
+    let result = module.run(arg as i64) as *const u8 as i64;
     return result;
 }
 
