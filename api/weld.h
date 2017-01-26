@@ -1,6 +1,7 @@
 /**
  *
- * Weld Runtime Interface.
+ * Weld Runtime C Interface.
+ * Link the Weld library with -lweld.
  *
  */
 #ifndef _WELD_H_
@@ -29,7 +30,7 @@ typedef void* weld_error_t;
  * @param data the data this object captures.
  * @return a new Weld object.
  */
-weld_object_t 
+extern "C" weld_object_t 
 weld_object_new(void *data);
 
 /** Returns 1 if the object's data is owned by the Weld runtime, or
@@ -43,7 +44,7 @@ weld_object_new(void *data);
  * @param obj the object to check
  * @return 1 if owned, 0 otherwise.
  */
-int 
+extern "C" int 
 weld_object_owned(weld_object_t obj);
 
 /** Returns this object's data buffer.
@@ -52,8 +53,8 @@ weld_object_owned(weld_object_t obj);
  * @return a void * data buffer. The caller is responsible for knowing
  * the type of the buffer and casting it appropriately.
  */
-void* 
-weld_object_data(weld_object_t);
+extern "C" void* 
+weld_object_data(weld_object_t obj);
 
 /* Frees a Weld object.
  *
@@ -63,7 +64,7 @@ weld_object_data(weld_object_t);
  *
  * @param obj the object to free.
  */
-void 
+extern "C" void 
 weld_object_free(weld_object_t);
 
 // ************* Modules ****************
@@ -72,13 +73,13 @@ weld_object_free(weld_object_t);
  *
  * Takes a string and configuration and returns a runnable module.
  *
- * @param program a Weld program to compile
+ * @param code a Weld program to compile
  * @param conf a configuration for the module.
- * @param err an unintialized handle to a Weld error.
+ * @param err a NULL handle to a Weld error.
  * @return a runnable module.
  */
-weld_module_t 
-weld_module_compile(const char *program, const char *conf, weld_error_t);
+extern "C" weld_module_t 
+weld_module_compile(const char *code, const char *conf, weld_error_t *err);
 
 /** Runs a module using the given argument.
  *
@@ -88,35 +89,47 @@ weld_module_compile(const char *program, const char *conf, weld_error_t);
  *
  * @param module the module to run.
  * @param arg the argument for the module's function.
- * @param err an unintialized handle to a Weld error.
+ * @param err a NULL handle to a Weld error.
  * @return an owned Weld object representing the return value. The caller
  * is responsible for knowing what the type of the return value is based on
  * the module she runs.
  */
-weld_object_t 
-weld_module_run(weld_module_t, weld_object_t arg, weld_error_t err);
+extern "C" weld_object_t 
+weld_module_run(weld_module_t, weld_object_t arg, weld_error_t *err);
 
 /** Garbage collects a module.
  *
  * @param module the module to garbage collect.
  */
-void 
+extern "C" void 
 weld_module_free(weld_module_t);
 
 // ************* Errors ****************
+
+/** Returns whether an error was set or if the task was a success.
+ *
+ * This function returns false if the error was null.
+ *
+ * @param err the error to check
+ * @param nonzero if the error was a success, 0 otherwise.
+ */
+extern "C" int
+weld_error_success(weld_error_t);
 
 /** Returns an error message for a given error.
  *
  * @param err the error
  * @return a string error message.
  */
-const char *weld_error_message(weld_error_t);
+extern "C" const char *
+weld_error_message(weld_error_t);
 
 /** Free a Weld error.
  *
  * @param err the error
  */
-void weld_error_free(weld_error_t);
+extern "C" void 
+weld_error_free(weld_error_t);
 
 
 

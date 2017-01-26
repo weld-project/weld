@@ -12,7 +12,7 @@ libc = "0.2.0"
 
 [lib]
 path = "weld/lib.rs"
-crate-type = ["staticlib", "rlib"]
+crate-type = ["dylib", "rlib"]
 
 [[bin]]
 name = "repl"
