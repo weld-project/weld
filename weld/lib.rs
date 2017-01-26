@@ -37,15 +37,18 @@ pub mod type_inference;
 pub mod util;
 
 pub struct WeldExternalError {
+    success: bool,
     message: String,
 }
 
 impl WeldExternalError {
-    fn new(message: &str) -> WeldExternalError {
-        WeldExternalError { message: message.to_string() }
+    fn new(success: bool, message: &str) -> WeldExternalError {
+        WeldExternalError {
+            success: success,
+            message: message.to_string(),
+        }
     }
 }
-
 
 #[no_mangle]
 pub extern "C" fn weld_module_compile(code: *const c_char,
@@ -66,13 +69,14 @@ pub extern "C" fn weld_module_compile(code: *const c_char,
 
     let err = unsafe {
         if err.is_null() {
-            Box::into_raw(Box::new(WeldExternalError::new("Success")));
+            Box::into_raw(Box::new(WeldExternalError::new(true, "Success")));
         }
         &mut *err
     };
 
     let module = llvm::compile_program(&parser::parse_program(code).unwrap());
     if let Err(ref e) = module {
+        err.success = false;
         err.message = e.description().to_string();
         return std::ptr::null_mut();
     }
@@ -80,11 +84,22 @@ pub extern "C" fn weld_module_compile(code: *const c_char,
 }
 
 #[no_mangle]
-pub extern "C" fn weld_module_run(ptr: *mut easy_ll::CompiledModule, arg: *const u8) -> i64 {
+pub extern "C" fn weld_module_run(ptr: *mut easy_ll::CompiledModule,
+                                  arg: *const u8,
+                                  err: *mut WeldExternalError)
+                                  -> i64 {
     let module = unsafe {
         assert!(!ptr.is_null());
         &mut *ptr
     };
+
+    let err = unsafe {
+        if err.is_null() {
+            Box::into_raw(Box::new(WeldExternalError::new(true, "Success")));
+        }
+        &mut *err
+    };
+
     let result = module.run(arg as i64) as *const u8 as i64;
     return result;
 }
@@ -96,6 +111,17 @@ pub extern "C" fn weld_module_free(ptr: *mut easy_ll::CompiledModule) {
     }
     unsafe { Box::from_raw(ptr) };
 
+}
+
+#[no_mangle]
+pub extern "C" fn weld_error_success(err: *mut WeldExternalError) -> u32 {
+    let err = unsafe {
+        if err.is_null() {
+            return 1;
+        }
+        &mut *err
+    };
+    err.success as u32
 }
 
 #[no_mangle]
