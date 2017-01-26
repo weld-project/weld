@@ -11,7 +11,7 @@ extern crate libc;
 
 use std::error::Error;
 use libc::c_char;
-use std::ffi::CStr;
+use std::ffi::{CString, CStr};
 
 /// Utility macro to create an Err result with a WeldError from a format string.
 macro_rules! weld_err {
@@ -38,14 +38,14 @@ pub mod util;
 
 pub struct WeldExternalError {
     success: bool,
-    message: String,
+    message: CString,
 }
 
 impl WeldExternalError {
     fn new(success: bool, message: &str) -> WeldExternalError {
         WeldExternalError {
             success: success,
-            message: message.to_string(),
+            message: CString::new(message).unwrap(),
         }
     }
 }
@@ -53,7 +53,7 @@ impl WeldExternalError {
 #[no_mangle]
 pub extern "C" fn weld_module_compile(code: *const c_char,
                                       conf: *const c_char,
-                                      err: *mut WeldExternalError)
+                                      err: *mut *mut WeldExternalError)
                                       -> *mut easy_ll::CompiledModule {
     let code = unsafe {
         assert!(!code.is_null());
@@ -68,16 +68,14 @@ pub extern "C" fn weld_module_compile(code: *const c_char,
     let conf = conf.to_str().unwrap();
 
     let err = unsafe {
-        if err.is_null() {
-            Box::into_raw(Box::new(WeldExternalError::new(true, "Success")));
-        }
-        &mut *err
+        *err = Box::into_raw(Box::new(WeldExternalError::new(true, "Success")));
+        &mut **err
     };
 
     let module = llvm::compile_program(&parser::parse_program(code).unwrap());
     if let Err(ref e) = module {
         err.success = false;
-        err.message = e.description().to_string();
+        err.message = CString::new(e.description()).unwrap();
         return std::ptr::null_mut();
     }
     Box::into_raw(Box::new(module.unwrap()))
@@ -91,13 +89,6 @@ pub extern "C" fn weld_module_run(ptr: *mut easy_ll::CompiledModule,
     let module = unsafe {
         assert!(!ptr.is_null());
         &mut *ptr
-    };
-
-    let err = unsafe {
-        if err.is_null() {
-            Box::into_raw(Box::new(WeldExternalError::new(true, "Success")));
-        }
-        &mut *err
     };
 
     let result = module.run(arg as i64) as *const u8 as i64;
@@ -114,14 +105,14 @@ pub extern "C" fn weld_module_free(ptr: *mut easy_ll::CompiledModule) {
 }
 
 #[no_mangle]
-pub extern "C" fn weld_error_success(err: *mut WeldExternalError) -> u32 {
+pub extern "C" fn weld_error_success(err: *mut WeldExternalError) -> i32 {
     let err = unsafe {
         if err.is_null() {
             return 1;
         }
         &mut *err
     };
-    err.success as u32
+    err.success as i32
 }
 
 #[no_mangle]
