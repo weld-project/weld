@@ -1049,7 +1049,6 @@ pub fn compile_program(program: &Program) -> WeldResult<easy_ll::CompiledModule>
     let sir_prog = try!(sir::ast_to_sir(&expr));
     let mut gen = LlvmGenerator::new();
     try!(gen.add_function_on_pointers("run", &sir_prog));
-    println!("{}", gen.result());
     Ok(try!(easy_ll::compile_module(&gen.result())))
 }
 
