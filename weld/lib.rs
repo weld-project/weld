@@ -37,27 +37,27 @@ pub mod type_inference;
 pub mod util;
 
 pub struct WeldError {
-    success: bool,
+    code: i32,
     message: CString,
 }
 
-pub struct WeldObject {
+pub struct WeldValue {
     data: *const c_void,
     owned: bool,
 }
 
 impl WeldError {
-    fn new(success: bool, message: &str) -> WeldError {
+    fn new(code: i32, message: &str) -> WeldError {
         WeldError {
-            success: success,
+            code: code,
             message: CString::new(message).unwrap(),
         }
     }
 }
 
 #[no_mangle]
-pub extern "C" fn weld_object_new(data: *const c_void) -> *mut WeldObject {
-    Box::into_raw(Box::new(WeldObject {
+pub extern "C" fn weld_value_new(data: *const c_void) -> *mut WeldValue {
+    Box::into_raw(Box::new(WeldValue {
         data: data,
         owned: false,
     }))
@@ -65,7 +65,7 @@ pub extern "C" fn weld_object_new(data: *const c_void) -> *mut WeldObject {
 
 
 #[no_mangle]
-pub extern "C" fn weld_object_owned(obj: *const WeldObject) -> i32 {
+pub extern "C" fn weld_value_owned(obj: *const WeldValue) -> i32 {
     let obj = unsafe {
         assert!(!obj.is_null());
         &*obj
@@ -74,7 +74,7 @@ pub extern "C" fn weld_object_owned(obj: *const WeldObject) -> i32 {
 }
 
 #[no_mangle]
-pub extern "C" fn weld_object_data(obj: *const WeldObject) -> *const c_void {
+pub extern "C" fn weld_value_data(obj: *const WeldValue) -> *const c_void {
     let obj = unsafe {
         assert!(!obj.is_null());
         &*obj
@@ -83,7 +83,7 @@ pub extern "C" fn weld_object_data(obj: *const WeldObject) -> *const c_void {
 }
 
 #[no_mangle]
-pub extern "C" fn weld_object_free(obj: *mut WeldObject) {
+pub extern "C" fn weld_value_free(obj: *mut WeldValue) {
     if obj.is_null() {
         return;
     }
@@ -107,16 +107,15 @@ pub extern "C" fn weld_module_compile(code: *const c_char,
     };
     let conf = conf.to_str().unwrap();
 
-    // TODO(shoumik): If the err is already holding an object, will it get dropped?
+    // TODO(shoumik): If the err is already holding an value, will it get dropped?
     let err = unsafe {
-        *err = Box::into_raw(Box::new(WeldError::new(true, "Success")));
+        *err = Box::into_raw(Box::new(WeldError::new(0, "Success")));
         &mut **err
     };
 
     let module = llvm::compile_program(&parser::parse_program(code).unwrap());
     if let Err(ref e) = module {
-        // TODO(shoumik): Error codes instead?
-        err.success = false;
+        err.code = 1;
         err.message = CString::new(e.description()).unwrap();
         return std::ptr::null_mut();
     }
@@ -125,9 +124,9 @@ pub extern "C" fn weld_module_compile(code: *const c_char,
 
 #[no_mangle]
 pub extern "C" fn weld_module_run(module: *mut easy_ll::CompiledModule,
-                                  arg: *const WeldObject,
+                                  arg: *const WeldValue,
                                   err: *mut *mut WeldError)
-                                  -> *mut WeldObject {
+                                  -> *mut WeldValue {
     let module = unsafe {
         assert!(!module.is_null());
         &mut *module
@@ -140,7 +139,7 @@ pub extern "C" fn weld_module_run(module: *mut easy_ll::CompiledModule,
 
     // TODO(shoumik): Error reporting - at least basic crashes
     let result = module.run(arg.data as i64) as *const c_void;
-    Box::into_raw(Box::new(WeldObject {
+    Box::into_raw(Box::new(WeldValue {
         data: result,
         owned: true,
     }))
@@ -156,14 +155,14 @@ pub extern "C" fn weld_module_free(ptr: *mut easy_ll::CompiledModule) {
 }
 
 #[no_mangle]
-pub extern "C" fn weld_error_success(err: *mut WeldError) -> i32 {
+pub extern "C" fn weld_error_code(err: *mut WeldError) -> i32 {
     let err = unsafe {
         if err.is_null() {
             return 1;
         }
         &mut *err
     };
-    err.success as i32
+    err.code as i32
 }
 
 #[no_mangle]

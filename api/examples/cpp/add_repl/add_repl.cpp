@@ -12,7 +12,7 @@ int main() {
     weld_error_t e = NULL;
     weld_module_t m = weld_module_compile("|x:i64| x+5L", "configuration", &e);
 
-    if (weld_error_success(e)) {
+    if (weld_error_code(e)) {
         const char *err = weld_error_message(e);
         printf("Error message: %s\n", err);
     }
@@ -37,16 +37,16 @@ int main() {
         }
 
         int64_t input = (int64_t)x;
-        weld_object_t arg = weld_object_new(&input);
+        weld_value_t arg = weld_value_new(&input);
 
         // Run the module and get the result.
-        weld_object_t result = weld_module_run(m, arg, &e);
-        void *result_data = weld_object_data(result);
+        weld_value_t result = weld_module_run(m, arg, &e);
+        void *result_data = weld_value_data(result);
         printf("Answer: %lld\n", *(int64_t *)result_data);
 
-        // Free the objects.
-        weld_object_free(result);
-        weld_object_free(arg);
+        // Free the values.
+        weld_value_free(result);
+        weld_value_free(arg);
     }
 
     weld_error_free(e);
