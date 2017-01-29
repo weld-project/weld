@@ -51,6 +51,40 @@ fn bench_integer_vector_sum(bench: &mut Bencher) {
     bench.iter(|| module.run(&args as *const Args as i64))
 }
 
+fn bench_integer_map_reduce(bench: &mut Bencher) {
+
+    #[allow(dead_code)]
+    struct Args {
+        x: WeldVec,
+    }
+
+    let code = "|x:vec[i32]| result(for(map(x, |e| e * 4), merger[i32,+], |b,i,e| \
+                merge(b, e)))";
+    let module = compile(code);
+
+    let size: i64 = 10000000;
+    let x = vec![4; size as usize];
+
+    let args = Args {
+        x: WeldVec {
+            data: x.as_ptr() as *const i32,
+            len: size,
+        },
+    };
+
+    // Run the module.
+    // TODO(shoumik): How to free this memory?
+    bench.iter(|| module.run(&args as *const Args as i64))
+}
+
+fn bench_loadfile(bench: &mut Bencher) {
+    let code = include_str!("benchmarks/sum.weld");
+    println!("{}", code)
+}
+
 // Add other benchmarks here.
-benchmark_group!(benchmarks, bench_integer_vector_sum);
+benchmark_group!(benchmarks,
+                 bench_loadfile,
+                 bench_integer_vector_sum,
+                 bench_integer_map_reduce);
 benchmark_main!(benchmarks);
