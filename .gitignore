@@ -2,4 +2,5 @@ target
 Cargo.lock
 .DS_Store
 *.swp
+*.ll
 rusty-tags.vi
