@@ -171,138 +171,140 @@ impl LlvmGenerator {
         if !self.visited.insert(func.id) {
             return Ok(());
         }
-        let mut ctx = &mut FunctionContext::new();
-        let mut arg_types = try!(self.get_arg_str(&func.params, ".in"));
-        if containing_loop.is_some() {
-            arg_types.push_str(", i64 %lower.idx, i64 %upper.idx");
-        }
-
-        // Start the entry block by defining the function and storing all its arguments on the
-        // stack (this makes them consistent with other local variables). Later, expressions may
-        // add more local variables to alloca_code.
-        ctx.alloca_code.add(format!("define void @f{}({}) {{", func.id, arg_types));
-        ctx.alloca_code.add(format!("fn.entry:"));
-        for (arg, ty) in func.params.iter() {
-            let arg_str = llvm_symbol(&arg);
-            let ty_str = try!(self.llvm_type(&ty)).to_string();
-            try!(ctx.add_alloca(&arg_str, &ty_str));
-            ctx.code.add(format!("store {} {}.in, {}* {}", ty_str, arg_str, ty_str, arg_str));
-        }
-        for (arg, ty) in func.locals.iter() {
-            let arg_str = llvm_symbol(&arg);
-            let ty_str = try!(self.llvm_type(&ty)).to_string();
-            try!(ctx.add_alloca(&arg_str, &ty_str));
-        }
-
-        if containing_loop.is_some() {
-            let par_for = containing_loop.clone().unwrap();
-            let bld_ty_str = try!(self.llvm_type(func.params.get(&par_for.builder).unwrap()))
-                .to_string();
-            let bld_param_str = llvm_symbol(&par_for.builder);
-            let bld_arg_str = llvm_symbol(&par_for.builder_arg);
-            ctx.code.add(format!("store {} {}.in, {}* {}",
-                                 &bld_ty_str,
-                                 bld_param_str,
-                                 &bld_ty_str,
-                                 bld_arg_str));
-            try!(ctx.add_alloca("%cur.idx", "i64"));
-            ctx.code.add("store i64 %lower.idx, i64* %cur.idx");
-            ctx.code.add("br label %loop.start");
-            ctx.code.add("loop.start:");
-            let idx_tmp = try!(self.load_var("%cur.idx", "i64", ctx));
-            let idx_cmp = ctx.var_ids.next();
-            ctx.code.add(format!("{} = icmp ult i64 {}, %upper.idx", idx_cmp, idx_tmp));
-            ctx.code.add(format!("br i1 {}, label %loop.body, label %loop.end", idx_cmp));
-            ctx.code.add("loop.body:");
-            let mut prev_ref = String::from("undef");
-            let elem_ty = func.locals.get(&par_for.data_arg).unwrap();
-            let elem_ty_str = try!(self.llvm_type(&elem_ty)).to_string();
-            for (i, iter) in par_for.data.iter().enumerate() {
-                let data_ty_str = try!(self.llvm_type(func.params.get(&iter.data).unwrap()))
-                    .to_string();
-                let data_str =
-                    try!(self.load_var(llvm_symbol(&iter.data).as_str(), &data_ty_str, ctx));
-                let data_prefix = format!("@{}", data_ty_str.replace("%", ""));
-                let inner_elem_tmp_ptr = ctx.var_ids.next();
-                let inner_elem_ty_str = if par_for.data.len() == 1 {
-                    elem_ty_str.clone()
-                } else {
-                    match *elem_ty {
-                        Struct(ref v) => try!(self.llvm_type(&v[i])).to_string(),
-                        _ => {
-                            weld_err!("Internal error: invalid element type {}",
-                                      print_type(elem_ty))?
-                        }
-                    }
-                };
-                let arr_idx = if iter.start.is_some() {
-                    let offset = ctx.var_ids.next();
-                    let stride_str = try!(self.load_var(
-                            llvm_symbol(&iter.stride.clone().unwrap()).as_str(), "i64", ctx));
-                    let start_str = try!(self.load_var(
-                            llvm_symbol(&iter.start.clone().unwrap()).as_str(), "i64", ctx));
-                    ctx.code.add(format!("{} = mul i64 {}, {}", offset, idx_tmp, stride_str));
-                    let final_idx = ctx.var_ids.next();
-                    ctx.code.add(format!("{} = add i64 {}, {}", final_idx, start_str, offset));
-                    final_idx
-                } else {
-                    idx_tmp.clone()
-                };
-                ctx.code.add(format!("{} = call {}* {}.at({} {}, i64 {})",
-                                     inner_elem_tmp_ptr,
-                                     &inner_elem_ty_str,
-                                     data_prefix,
-                                     &data_ty_str,
-                                     data_str,
-                                     arr_idx));
-                let inner_elem_tmp =
-                    try!(self.load_var(&inner_elem_tmp_ptr, &inner_elem_ty_str, ctx));
-                if par_for.data.len() == 1 {
-                    prev_ref.clear();
-                    prev_ref.push_str(&inner_elem_tmp);
-                } else {
-                    let elem_tmp = ctx.var_ids.next();
-                    ctx.code.add(format!("{} = insertvalue {} {}, {} {}, {}",
-                                         elem_tmp,
-                                         elem_ty_str,
-                                         prev_ref,
-                                         inner_elem_ty_str,
-                                         inner_elem_tmp,
-                                         i));
-                    prev_ref.clear();
-                    prev_ref.push_str(&elem_tmp);
-                }
+        {
+            let mut ctx = &mut FunctionContext::new();
+            let mut arg_types = try!(self.get_arg_str(&func.params, ".in"));
+            if containing_loop.is_some() {
+                arg_types.push_str(", i64 %lower.idx, i64 %upper.idx");
             }
-            let elem_str = llvm_symbol(&par_for.data_arg);
-            ctx.code.add(format!("store {} {}, {}* {}",
-                                 &elem_ty_str,
-                                 prev_ref,
-                                 &elem_ty_str,
-                                 elem_str));
-            ctx.code.add(format!("store i64 {}, i64* {}",
-                                 idx_tmp,
-                                 llvm_symbol(&par_for.idx_arg)));
-        }
 
-        ctx.code.add(format!("br label %b.b{}", func.blocks[0].id));
-        // Generate an expression for the function body.
-        try!(self.gen_func(sir, func, ctx));
-        ctx.code.add("body.end:");
-        if containing_loop.is_some() {
-            ctx.code.add("br label %loop.terminator");
-            ctx.code.add("loop.terminator:");
-            let idx_tmp = try!(self.load_var("%cur.idx", "i64", ctx));
-            let idx_inc = ctx.var_ids.next();
-            ctx.code.add(format!("{} = add i64 {}, 1", idx_inc, idx_tmp));
-            ctx.code.add(format!("store i64 {}, i64* %cur.idx", idx_inc));
-            ctx.code.add("br label %loop.start");
-            ctx.code.add("loop.end:");
-        }
-        ctx.code.add("ret void");
-        ctx.code.add("}\n\n");
+            // Start the entry block by defining the function and storing all its arguments on the
+            // stack (this makes them consistent with other local variables). Later, expressions may
+            // add more local variables to alloca_code.
+            ctx.alloca_code.add(format!("define void @f{}({}) {{", func.id, arg_types));
+            ctx.alloca_code.add(format!("fn.entry:"));
+            for (arg, ty) in func.params.iter() {
+                let arg_str = llvm_symbol(&arg);
+                let ty_str = try!(self.llvm_type(&ty)).to_string();
+                try!(ctx.add_alloca(&arg_str, &ty_str));
+                ctx.code.add(format!("store {} {}.in, {}* {}", ty_str, arg_str, ty_str, arg_str));
+            }
+            for (arg, ty) in func.locals.iter() {
+                let arg_str = llvm_symbol(&arg);
+                let ty_str = try!(self.llvm_type(&ty)).to_string();
+                try!(ctx.add_alloca(&arg_str, &ty_str));
+            }
 
-        self.body_code.add(&ctx.alloca_code.result());
-        self.body_code.add(&ctx.code.result());
+            if containing_loop.is_some() {
+                let par_for = containing_loop.clone().unwrap();
+                let bld_ty_str = try!(self.llvm_type(func.params.get(&par_for.builder).unwrap()))
+                    .to_string();
+                let bld_param_str = llvm_symbol(&par_for.builder);
+                let bld_arg_str = llvm_symbol(&par_for.builder_arg);
+                ctx.code.add(format!("store {} {}.in, {}* {}",
+                                    &bld_ty_str,
+                                    bld_param_str,
+                                    &bld_ty_str,
+                                    bld_arg_str));
+                try!(ctx.add_alloca("%cur.idx", "i64"));
+                ctx.code.add("store i64 %lower.idx, i64* %cur.idx");
+                ctx.code.add("br label %loop.start");
+                ctx.code.add("loop.start:");
+                let idx_tmp = try!(self.load_var("%cur.idx", "i64", ctx));
+                let idx_cmp = ctx.var_ids.next();
+                ctx.code.add(format!("{} = icmp ult i64 {}, %upper.idx", idx_cmp, idx_tmp));
+                ctx.code.add(format!("br i1 {}, label %loop.body, label %loop.end", idx_cmp));
+                ctx.code.add("loop.body:");
+                let mut prev_ref = String::from("undef");
+                let elem_ty = func.locals.get(&par_for.data_arg).unwrap();
+                let elem_ty_str = try!(self.llvm_type(&elem_ty)).to_string();
+                for (i, iter) in par_for.data.iter().enumerate() {
+                    let data_ty_str = try!(self.llvm_type(func.params.get(&iter.data).unwrap()))
+                        .to_string();
+                    let data_str =
+                        try!(self.load_var(llvm_symbol(&iter.data).as_str(), &data_ty_str, ctx));
+                    let data_prefix = format!("@{}", data_ty_str.replace("%", ""));
+                    let inner_elem_tmp_ptr = ctx.var_ids.next();
+                    let inner_elem_ty_str = if par_for.data.len() == 1 {
+                        elem_ty_str.clone()
+                    } else {
+                        match *elem_ty {
+                            Struct(ref v) => try!(self.llvm_type(&v[i])).to_string(),
+                            _ => {
+                                weld_err!("Internal error: invalid element type {}",
+                                        print_type(elem_ty))?
+                            }
+                        }
+                    };
+                    let arr_idx = if iter.start.is_some() {
+                        let offset = ctx.var_ids.next();
+                        let stride_str = try!(self.load_var(
+                                llvm_symbol(&iter.stride.clone().unwrap()).as_str(), "i64", ctx));
+                        let start_str = try!(self.load_var(
+                                llvm_symbol(&iter.start.clone().unwrap()).as_str(), "i64", ctx));
+                        ctx.code.add(format!("{} = mul i64 {}, {}", offset, idx_tmp, stride_str));
+                        let final_idx = ctx.var_ids.next();
+                        ctx.code.add(format!("{} = add i64 {}, {}", final_idx, start_str, offset));
+                        final_idx
+                    } else {
+                        idx_tmp.clone()
+                    };
+                    ctx.code.add(format!("{} = call {}* {}.at({} {}, i64 {})",
+                                        inner_elem_tmp_ptr,
+                                        &inner_elem_ty_str,
+                                        data_prefix,
+                                        &data_ty_str,
+                                        data_str,
+                                        arr_idx));
+                    let inner_elem_tmp =
+                        try!(self.load_var(&inner_elem_tmp_ptr, &inner_elem_ty_str, ctx));
+                    if par_for.data.len() == 1 {
+                        prev_ref.clear();
+                        prev_ref.push_str(&inner_elem_tmp);
+                    } else {
+                        let elem_tmp = ctx.var_ids.next();
+                        ctx.code.add(format!("{} = insertvalue {} {}, {} {}, {}",
+                                            elem_tmp,
+                                            elem_ty_str,
+                                            prev_ref,
+                                            inner_elem_ty_str,
+                                            inner_elem_tmp,
+                                            i));
+                        prev_ref.clear();
+                        prev_ref.push_str(&elem_tmp);
+                    }
+                }
+                let elem_str = llvm_symbol(&par_for.data_arg);
+                ctx.code.add(format!("store {} {}, {}* {}",
+                                    &elem_ty_str,
+                                    prev_ref,
+                                    &elem_ty_str,
+                                    elem_str));
+                ctx.code.add(format!("store i64 {}, i64* {}",
+                                    idx_tmp,
+                                    llvm_symbol(&par_for.idx_arg)));
+            }
+
+            ctx.code.add(format!("br label %b.b{}", func.blocks[0].id));
+            // Generate an expression for the function body.
+            try!(self.gen_func(sir, func, ctx));
+            ctx.code.add("body.end:");
+            if containing_loop.is_some() {
+                ctx.code.add("br label %loop.terminator");
+                ctx.code.add("loop.terminator:");
+                let idx_tmp = try!(self.load_var("%cur.idx", "i64", ctx));
+                let idx_inc = ctx.var_ids.next();
+                ctx.code.add(format!("{} = add i64 {}, 1", idx_inc, idx_tmp));
+                ctx.code.add(format!("store i64 {}, i64* %cur.idx", idx_inc));
+                ctx.code.add("br label %loop.start");
+                ctx.code.add("loop.end:");
+            }
+            ctx.code.add("ret void");
+            ctx.code.add("}\n\n");
+
+            self.body_code.add(&ctx.alloca_code.result());
+            self.body_code.add(&ctx.code.result());
+        }
 
         if containing_loop.is_some() {
             let par_for = containing_loop.clone().unwrap();
@@ -370,14 +372,14 @@ impl LlvmGenerator {
                 let lower_bound = par_body_ctx.var_ids.next();
                 let upper_bound_ptr = par_body_ctx.var_ids.next();
                 let upper_bound = par_body_ctx.var_ids.next();
-                ctx.code.add(format!("{} = getelementptr %work_t* %cur.work, i32 0, i32 1",
+                par_body_ctx.code.add(format!("{} = getelementptr %work_t* %cur.work, i32 0, i32 1",
                                         lower_bound_ptr));
-                ctx.code.add(format!("{} = load i64* {}", lower_bound, lower_bound_ptr));
-                ctx.code.add(format!("{} = getelementptr %work_t* %cur.work, i32 0, i32 2",
+                par_body_ctx.code.add(format!("{} = load i64* {}", lower_bound, lower_bound_ptr));
+                par_body_ctx.code.add(format!("{} = getelementptr %work_t* %cur.work, i32 0, i32 2",
                                         upper_bound_ptr));
-                ctx.code.add(format!("{} = load i64* {}", upper_bound, upper_bound_ptr));
+                par_body_ctx.code.add(format!("{} = load i64* {}", upper_bound, upper_bound_ptr));
                 let body_arg_types = try!(self.get_arg_str(&func.params, ""));
-                ctx.code.add(format!("call void @f{}({}, i64 {}, i64 {})", func.id, body_arg_types,
+                par_body_ctx.code.add(format!("call void @f{}({}, i64 {}, i64 {})", func.id, body_arg_types,
                     lower_bound, upper_bound));
                 par_body_ctx.code.add("ret void");
                 par_body_ctx.code.add("}\n\n");
