@@ -187,7 +187,9 @@ impl BinOpKind {
     pub fn is_comparison(&self) -> bool {
         use ast::BinOpKind::*;
         match *self {
-            Equal | NotEqual | LessThan | GreaterThan => true,
+            Equal | NotEqual | LessThan | GreaterThan | LessThanOrEqual | GreaterThanOrEqual => {
+                true
+            }
             _ => false,
         }
     }

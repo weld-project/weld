@@ -6,10 +6,6 @@ macro filter(data, func) = (
   result(for(data, appender, |b, i, x| if(func(x), merge(b, x), b)))
 );
 
-macro agg(data, ty, func) = (
-  result(for(data, merger[ty,func], |b, i, x| merge(b, x)))
-);
-
 macro flatten(data) = (
     result(for(
         data,

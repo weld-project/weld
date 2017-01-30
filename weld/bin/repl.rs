@@ -92,6 +92,8 @@ fn main() {
         transforms::fuse_loops_vertical(&mut expr);
         println!("After vertical loop fusion:\n{}\n", print_typed_expr(&expr));
 
+        println!("final program raw: {:?}", expr);
+
         let sir_result = ast_to_sir(&expr);
         match sir_result {
             Ok(sir) => {

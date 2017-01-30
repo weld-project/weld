@@ -955,11 +955,13 @@ fn llvm_binop(op_kind: BinOpKind, ty: &Type) -> WeldResult<&'static str> {
         (BinOpKind::Divide, &Scalar(F32)) => Ok("fdiv"),
         (BinOpKind::Divide, &Scalar(F64)) => Ok("fdiv"),
 
+        (BinOpKind::Equal, &Scalar(Bool)) => Ok("icmp eq"),
         (BinOpKind::Equal, &Scalar(I32)) => Ok("icmp eq"),
         (BinOpKind::Equal, &Scalar(I64)) => Ok("icmp eq"),
         (BinOpKind::Equal, &Scalar(F32)) => Ok("fcmp oeq"),
         (BinOpKind::Equal, &Scalar(F64)) => Ok("fcmp oeq"),
 
+        (BinOpKind::NotEqual, &Scalar(Bool)) => Ok("icmp ne"),
         (BinOpKind::NotEqual, &Scalar(I32)) => Ok("icmp ne"),
         (BinOpKind::NotEqual, &Scalar(I64)) => Ok("icmp ne"),
         (BinOpKind::NotEqual, &Scalar(F32)) => Ok("fcmp one"),
@@ -984,6 +986,9 @@ fn llvm_binop(op_kind: BinOpKind, ty: &Type) -> WeldResult<&'static str> {
         (BinOpKind::GreaterThanOrEqual, &Scalar(I64)) => Ok("icmp sge"),
         (BinOpKind::GreaterThanOrEqual, &Scalar(F32)) => Ok("fcmp oge"),
         (BinOpKind::GreaterThanOrEqual, &Scalar(F64)) => Ok("fcmp oge"),
+
+        (BinOpKind::LogicalAnd, &Scalar(Bool)) => Ok("and"),
+        (BinOpKind::LogicalOr, &Scalar(Bool)) => Ok("or"),
 
         _ => weld_err!("Unsupported binary op: {} on {}", op_kind, print_type(ty)),
     }

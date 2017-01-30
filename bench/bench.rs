@@ -15,7 +15,9 @@ struct WeldVec {
     len: i64,
 }
 
+/// Compiles a string into an LLVM module.
 fn compile(code: &str) -> easy_ll::CompiledModule {
+    let code = code.trim();
     let module = llvm::compile_program(&parser::parse_program(code).unwrap());
     module.unwrap()
 }
@@ -78,13 +80,10 @@ fn bench_integer_map_reduce(bench: &mut Bencher) {
 }
 
 fn bench_loadfile(bench: &mut Bencher) {
-    let code = include_str!("benchmarks/sum.weld");
-    println!("{}", code)
+    let code = include_str!("benchmarks/tpch/q6.weld");
+    let module = compile(code);
 }
 
 // Add other benchmarks here.
-benchmark_group!(benchmarks,
-                 bench_loadfile,
-                 bench_integer_vector_sum,
-                 bench_integer_map_reduce);
+benchmark_group!(benchmarks, bench_loadfile);
 benchmark_main!(benchmarks);
