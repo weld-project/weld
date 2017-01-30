@@ -27,9 +27,13 @@ static mut initialize_failed: bool = false;
 pub struct LlvmError(String);
 
 impl LlvmError {
-    pub fn new(description: &str) -> LlvmError { LlvmError(description.to_string()) }
+    pub fn new(description: &str) -> LlvmError {
+        LlvmError(description.to_string())
+    }
 
-    pub fn to_string(self) -> String { self.0 }
+    pub fn to_string(self) -> String {
+        self.0
+    }
 }
 
 impl fmt::Display for LlvmError {
@@ -39,13 +43,19 @@ impl fmt::Display for LlvmError {
 }
 
 impl Error for LlvmError {
-    fn description(&self) -> &str { &self.0 }
+    fn description(&self) -> &str {
+        &self.0
+    }
 
-    fn cause(&self) -> Option<&Error> { None }
+    fn cause(&self) -> Option<&Error> {
+        None
+    }
 }
 
 impl From<NulError> for LlvmError {
-    fn from(_: NulError) -> LlvmError { LlvmError::new("Null byte in string") }
+    fn from(_: NulError) -> LlvmError {
+        LlvmError::new("Null byte in string")
+    }
 }
 
 /// The type of our "run" function pointer.
@@ -58,7 +68,7 @@ type RunFunc = extern "C" fn(i64) -> i64;
 pub struct CompiledModule {
     context: LLVMContextRef,
     engine: Option<LLVMExecutionEngineRef>,
-    function: Option<RunFunc>
+    function: Option<RunFunc>,
 }
 
 impl CompiledModule {
@@ -72,9 +82,7 @@ impl Drop for CompiledModule {
     /// Disposes of the LLVM execution engine and compiled function.
     fn drop(&mut self) {
         unsafe {
-            self.engine.map(|e| {
-                llvm::execution_engine::LLVMDisposeExecutionEngine(e)
-            });
+            self.engine.map(|e| llvm::execution_engine::LLVMDisposeExecutionEngine(e));
             llvm::core::LLVMContextDispose(self.context);
         }
     }
@@ -88,17 +96,21 @@ pub fn compile_module(code: &str) -> Result<CompiledModule, LlvmError> {
         // Initialize LLVM
         ONCE.call_once(|| initialize());
         if initialize_failed {
-            return Err(LlvmError::new("LLVM initialization failed"))
+            return Err(LlvmError::new("LLVM initialization failed"));
         }
 
         // Create an LLVM context
         let context = llvm::core::LLVMContextCreate();
         if context.is_null() {
-            return Err(LlvmError::new("LLVMContextCreate returned null"))
+            return Err(LlvmError::new("LLVMContextCreate returned null"));
         }
 
         // Create a CompiledModule to wrap the context and our result (will clean it on Drop).
-        let mut result = CompiledModule { context: context, engine: None, function: None };
+        let mut result = CompiledModule {
+            context: context,
+            engine: None,
+            function: None,
+        };
 
         // Parse the IR to get an LLVMModuleRef
         let module = try!(parse_module(context, code));
@@ -143,19 +155,22 @@ unsafe fn parse_module(context: LLVMContextRef, code: &str) -> Result<LLVMModule
     let code_len = code.len();
     let name = try!(CString::new("module"));
     let code = try!(CString::new(code));
-    let buffer = llvm::core::LLVMCreateMemoryBufferWithMemoryRange(
-        code.as_ptr(), code_len, name.as_ptr(), 0);
+    let buffer = llvm::core::LLVMCreateMemoryBufferWithMemoryRange(code.as_ptr(),
+                                                                   code_len,
+                                                                   name.as_ptr(),
+                                                                   0);
     if buffer.is_null() {
-        return Err(LlvmError::new("LLVMCreateMemoryBufferWithMemoryRange failed"))
+        return Err(LlvmError::new("LLVMCreateMemoryBufferWithMemoryRange failed"));
     }
 
     // Parse IR into a module
     let mut module = 0 as LLVMModuleRef;
     let mut error_str = 0 as *mut c_char;
-    let result_code = llvm::ir_reader::LLVMParseIRInContext(
-        context, buffer, &mut module, &mut error_str);
+    let result_code =
+        llvm::ir_reader::LLVMParseIRInContext(context, buffer, &mut module, &mut error_str);
     if result_code != 0 {
-        let msg = format!("Compile error: {}", CStr::from_ptr(error_str).to_str().unwrap());
+        let msg = format!("Compile error: {}",
+                          CStr::from_ptr(error_str).to_str().unwrap());
         return Err(LlvmError(msg));
     }
 
@@ -165,11 +180,13 @@ unsafe fn parse_module(context: LLVMContextRef, code: &str) -> Result<LLVMModule
 /// Verify a module using LLVM's verifier (for basic block structure, etc).
 unsafe fn verify_module(module: LLVMModuleRef) -> Result<(), LlvmError> {
     let mut error_str = 0 as *mut c_char;
-    let result_code = llvm::analysis::LLVMVerifyModule(
-        module, LLVMVerifierFailureAction::LLVMReturnStatusAction, &mut error_str);
+    let result_code =
+        llvm::analysis::LLVMVerifyModule(module,
+                                         LLVMVerifierFailureAction::LLVMReturnStatusAction,
+                                         &mut error_str);
     if result_code != 0 {
         let msg = format!("Module verification failed: {}",
-            CStr::from_ptr(error_str).to_str().unwrap());
+                          CStr::from_ptr(error_str).to_str().unwrap());
         return Err(LlvmError(msg));
     }
     Ok(())
@@ -195,11 +212,11 @@ unsafe fn check_run_function(module: LLVMModuleRef) -> Result<(), LlvmError> {
 unsafe fn optimize_module(module: LLVMModuleRef) -> Result<(), LlvmError> {
     let manager = llvm::core::LLVMCreatePassManager();
     if manager.is_null() {
-        return Err(LlvmError::new("LLVMCreatePassManager returned null"))
+        return Err(LlvmError::new("LLVMCreatePassManager returned null"));
     }
     let builder = pmb::LLVMPassManagerBuilderCreate();
     if builder.is_null() {
-        return Err(LlvmError::new("LLVMPassManagerBuilderCreate returned null"))
+        return Err(LlvmError::new("LLVMPassManagerBuilderCreate returned null"));
     }
     // TODO: not clear we need both Module and LTO calls here; just LTO might work
     pmb::LLVMPassManagerBuilderSetOptLevel(builder, 2);
@@ -219,11 +236,14 @@ unsafe fn create_exec_engine(module: LLVMModuleRef) -> Result<LLVMExecutionEngin
     let options_size = std::mem::size_of::<LLVMMCJITCompilerOptions>();
     llvm::execution_engine::LLVMInitializeMCJITCompilerOptions(&mut options, options_size);
     options.OptLevel = 2;
-    let result_code = llvm::execution_engine::LLVMCreateMCJITCompilerForModule(
-        &mut engine, module, &mut options, options_size, &mut error_str);
+    let result_code = llvm::execution_engine::LLVMCreateMCJITCompilerForModule(&mut engine,
+                                                                               module,
+                                                                               &mut options,
+                                                                               options_size,
+                                                                               &mut error_str);
     if result_code != 0 {
         let msg = format!("Creating execution engine failed: {}",
-            CStr::from_ptr(error_str).to_str().unwrap());
+                          CStr::from_ptr(error_str).to_str().unwrap());
         return Err(LlvmError(msg));
     }
     Ok(engine)
@@ -234,7 +254,7 @@ unsafe fn find_run_function(engine: LLVMExecutionEngineRef) -> Result<RunFunc, L
     let run = CString::new("run").unwrap();
     let func_addr = llvm::execution_engine::LLVMGetFunctionAddress(engine, run.as_ptr());
     if func_addr == 0 {
-        return Err(LlvmError::new("No run function in module"))
+        return Err(LlvmError::new("No run function in module"));
     }
     let function: RunFunc = std::mem::transmute(func_addr);
     Ok(function)

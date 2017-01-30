@@ -3,4 +3,7 @@ Cargo.lock
 .DS_Store
 *.swp
 *.ll
+*.pyc
 rusty-tags.vi
+run
+notes

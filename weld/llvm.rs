@@ -27,6 +27,7 @@ use super::parser::*;
 
 static PRELUDE_CODE: &'static str = include_str!("resources/prelude.ll");
 static VECTOR_CODE: &'static str = include_str!("resources/vector.ll");
+static MERGER_CODE: &'static str = include_str!("resources/merger.ll");
 
 /// Generates LLVM code for one or more modules.
 pub struct LlvmGenerator {
@@ -37,6 +38,9 @@ pub struct LlvmGenerator {
     /// Track a unique name of the form %v0, %v1, etc for each vec generated.
     vec_names: HashMap<Type, String>,
     vec_ids: IdGenerator,
+
+    merger_names: HashMap<(Type, BinOpKind), String>,
+    merger_ids: IdGenerator,
 
     /// TODO This is unnecessary but satisfies the compiler for now.
     bld_names: HashMap<BuilderKind, String>,
@@ -74,6 +78,8 @@ impl LlvmGenerator {
             struct_ids: IdGenerator::new("%s"),
             vec_names: HashMap::new(),
             vec_ids: IdGenerator::new("%v"),
+            merger_names: HashMap::new(),
+            merger_ids: IdGenerator::new("%m"),
             bld_names: HashMap::new(),
             prelude_code: CodeBuilder::new(),
             body_code: CodeBuilder::new(),
@@ -496,7 +502,27 @@ impl LlvmGenerator {
                             let bld_ty_str = try!(self.llvm_type(&bld_ty)).to_string();
                             self.bld_names.insert(bk.clone(), format!("{}.bld", &bld_ty_str));
                         }
-                        _ => weld_err!("Unsupported builder type {} in llvm_type", print_type(ty))?,
+                        Merger(ref t, ref op) => {
+                            if self.merger_names.get(&(*t.clone(), *op)) == None {
+                                let elem_ty = self.llvm_type(t)?.to_string();
+                                let elem_prefix = format!("@{}", elem_ty.replace("%", ""));
+                                let name = self.merger_ids.next();
+                                self.merger_names
+                                    .insert((*t.clone(), op.clone()), name.clone());
+                                let prefix_replaced =
+                                    MERGER_CODE.replace("$ELEM_PREFIX", &elem_prefix);
+                                let elem_replaced = prefix_replaced.replace("$ELEM", &elem_ty);
+                                let name_replaced =
+                                    elem_replaced.replace("$NAME", &name.replace("%", ""));
+                                let binop_replaced =
+                                    name_replaced.replace("$OP", &llvm_binop(*op, t)?);
+                                self.prelude_code.add(&binop_replaced);
+                                self.prelude_code.add("\n");
+                            }
+                            let bld_ty_str = self.merger_names.get(&(*t.clone(), *op)).unwrap();
+                            self.bld_names
+                                .insert(bk.clone(), format!("{}.bld", &bld_ty_str));
+                        }
                     }
                 }
                 Ok(self.bld_names.get(bk).unwrap())
@@ -650,9 +676,26 @@ impl LlvmGenerator {
                                                              &elem_ty_str,
                                                              elem_tmp));
                                     }
-                                    _ => {
-                                        weld_err!("Unsupported builder type {} in DoMerge",
-                                                  print_type(bld_ty))?
+                                    Merger(ref t, _) => {
+                                        let bld_ty_str = self.llvm_type(&bld_ty)?.to_string();
+                                        let bld_prefix = format!("@{}",
+                                                                 bld_ty_str.replace("%", ""));
+                                        let elem_ty_str = self.llvm_type(t)?.to_string();
+                                        let bld_tmp = self.load_var(llvm_symbol(builder).as_str(),
+                                                      &bld_ty_str,
+                                                      ctx)?;
+                                        let elem_tmp = self.load_var(llvm_symbol(value).as_str(),
+                                                      &elem_ty_str,
+                                                      ctx)?;
+                                        // TODO(shoumik) Template for Merger
+                                        ctx.code.add(format!("call {} {}.merge({} {}, {} {})",
+                                                             &bld_ty_str,
+                                                             bld_prefix,
+                                                             &bld_ty_str,
+                                                             bld_tmp,
+                                                             &elem_ty_str,
+                                                             elem_tmp));
+
                                     }
                                 }
                             }
@@ -690,9 +733,27 @@ impl LlvmGenerator {
                                                              &res_ty_str,
                                                              llvm_symbol(output)));
                                     }
-                                    _ => {
-                                        weld_err!("Unsupported builder type {} in GetResult",
-                                                  print_type(bld_ty))?
+                                    Merger(_, _) => {
+                                        let bld_ty_str = try!(self.llvm_type(&bld_ty)).to_string();
+                                        let bld_prefix = format!("@{}",
+                                                                 bld_ty_str.replace("%", ""));
+                                        let res_ty_str = try!(self.llvm_type(&res_ty)).to_string();
+                                        let bld_tmp =
+                                            try!(self.load_var(llvm_symbol(builder).as_str(),
+                                                               &bld_ty_str,
+                                                               ctx));
+                                        let res_tmp = ctx.var_ids.next();
+                                        ctx.code.add(format!("{} = call {} {}.result({} {})",
+                                                             &res_tmp,
+                                                             &res_ty_str,
+                                                             bld_prefix,
+                                                             &bld_ty_str,
+                                                             bld_tmp));
+                                        ctx.code.add(format!("store {} {}, {}* {}",
+                                                             &res_ty_str,
+                                                             &res_tmp,
+                                                             &res_ty_str,
+                                                             llvm_symbol(output)));
                                     }
                                 }
                             }
@@ -721,9 +782,20 @@ impl LlvmGenerator {
                                                              bld_ty_str,
                                                              llvm_symbol(output)));
                                     }
-                                    _ => {
-                                        weld_err!("Unsupported builder type {} in CreateBuilder",
-                                                  print_type(ty))?
+                                    Merger(_, _) => {
+                                        let bld_ty_str = try!(self.llvm_type(ty));
+                                        let bld_prefix = format!("@{}",
+                                                                 bld_ty_str.replace("%", ""));
+                                        let bld_tmp = ctx.var_ids.next();
+                                        ctx.code.add(format!("{} = call {} {}.new()",
+                                                             bld_tmp,
+                                                             bld_ty_str,
+                                                             bld_prefix));
+                                        ctx.code.add(format!("store {} {}, {}* {}",
+                                                             bld_ty_str,
+                                                             bld_tmp,
+                                                             bld_ty_str,
+                                                             llvm_symbol(output)));
                                     }
                                 }
                             }
@@ -1049,7 +1121,7 @@ fn comparison() {
 }
 
 #[test]
-fn simple_for_loop() {
+fn simple_for_appender_loop() {
     #[derive(Clone)]
     #[allow(dead_code)]
     struct Vec {
@@ -1078,6 +1150,37 @@ fn simple_for_loop() {
     for i in 0..(result.len as isize) {
         assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
     }
+    // TODO: Free result_raw
+}
+
+#[test]
+fn simple_for_merger_loop() {
+    #[derive(Clone)]
+    #[allow(dead_code)]
+    struct Vec {
+        data: *const i32,
+        len: i64,
+    }
+    #[allow(dead_code)]
+    struct Args {
+        x: Vec,
+        a: i32,
+    }
+
+    let code = "|x:vec[i32], a:i32| result(for(x, merger[i32,+], |b,i,e| merge(b, e+a)))";
+    let module = compile_program(&parse_program(code).unwrap()).unwrap();
+    let input = [1, 2, 3, 4, 5];
+    let args = Args {
+        x: Vec {
+            data: &input as *const i32,
+            len: 5,
+        },
+        a: 1,
+    };
+    let result_raw = module.run(&args as *const Args as i64) as *const i32;
+    let result = unsafe { (*result_raw).clone() };
+    let output = 20;
+    assert_eq!(result, output);
     // TODO: Free result_raw
 }
 
