@@ -79,11 +79,53 @@ fn bench_integer_map_reduce(bench: &mut Bencher) {
     bench.iter(|| module.run(&args as *const Args as i64))
 }
 
-fn bench_loadfile(bench: &mut Bencher) {
+fn bench_tpch_q6(bench: &mut Bencher) {
     let code = include_str!("benchmarks/tpch/q6.weld");
+
+    #[allow(dead_code)]
+    struct Args {
+        l_shipdate: WeldVec,
+        l_discount: WeldVec,
+        l_quantity: WeldVec,
+        l_ep: WeldVec,
+    }
+
+    // Setup the arguments.
+    let size: i64 = 500;
+    let l_shipdate: Vec<i32> = vec![19940505; size as usize];
+    let l_discount: Vec<i32> = vec![6; size as usize];
+    let l_quantity: Vec<i32> = vec![20; size as usize];
+    let l_ep: Vec<i32> = vec![100; size as usize];
+
+    // All predicates pass
+    let expect = l_ep[0] * l_discount[0] * (size as i32);
+
+    let args = Args {
+        l_shipdate: WeldVec {
+            data: l_shipdate.as_ptr() as *const i32,
+            len: size,
+        },
+        l_discount: WeldVec {
+            data: l_discount.as_ptr() as *const i32,
+            len: size,
+        },
+        l_quantity: WeldVec {
+            data: l_quantity.as_ptr() as *const i32,
+            len: size,
+        },
+        l_ep: WeldVec {
+            data: l_ep.as_ptr() as *const i32,
+            len: size,
+        },
+    };
     let module = compile(code);
+    bench.iter(|| {
+        let result_raw = module.run(&args as *const Args as i64) as *const i32;
+        let result = unsafe { *result_raw.clone() };
+        assert_eq!(result, expect as i32);
+    })
 }
 
 // Add other benchmarks here.
-benchmark_group!(benchmarks, bench_loadfile);
+benchmark_group!(benchmarks, bench_tpch_q6);
 benchmark_main!(benchmarks);
