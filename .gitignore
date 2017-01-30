@@ -3,6 +3,7 @@ Cargo.lock
 .DS_Store
 *.swp
 *.ll
+*.bc
 *.pyc
 rusty-tags.vi
 run
