@@ -1,0 +1,16 @@
+|l_shipdate: vec[i32], l_discount: vec[i32], l_quantity: vec[i32], l_ep: vec[i32]|
+    agg(
+        map(
+            filter(
+                zip(l_shipdate, l_discount, l_quantity, l_ep),
+                |x| t.$0 >= 19940101 && t.$0 < 19950101 && t.$1 >= 5 && t.$1 <= 7 && t.$2 < 24
+            ),
+            |x| x.$3 * x.$1
+        ),
+        i32,
+        +
+    )
+
+                
+
+
