@@ -14,6 +14,7 @@ struct work_t {
   int deps;
   // to disambiguate the relative order of tasks with identical loop bounds
   int64_t task_id;
+  int continued; // boolean
 } __attribute__((packed));
 
 typedef struct work_t work_t;

@@ -84,7 +84,9 @@ static inline int try_steal() {
 
 static inline void finish_frame(work_t *frame) {
   if (frame->cont == NULL) {
-    done = true;
+    if (!frame->continued) {
+      done = true;
+    }
     free(frame->data);
   } else {
     /*
@@ -125,8 +127,12 @@ extern "C" void pl_start_loop(work_t *w, void *body_data, void *cont_data, void 
   cont_task->data = cont_data; 
   cont_task->fp = cont;
   set_cont(body_task, cont_task);
-  if (w != NULL && w->cont != NULL) {
-    set_cont(cont_task, w->cont);
+  if (w != NULL) {
+    if (w->cont != NULL) {
+      set_cont(cont_task, w->cont);
+    } else {
+      w->continued = true;
+    }
   }
   if (started) {
     pthread_spin_lock((all_work_queue_locks + my_id()));
