@@ -111,8 +111,10 @@ impl LlvmGenerator {
         Ok(arg_types)
     }
 
-    fn unload_arg_struct(&mut self, params: &HashMap<Symbol, Type>,
-        ctx: &mut FunctionContext) -> WeldResult<()> {
+    fn unload_arg_struct(&mut self,
+                         params: &HashMap<Symbol, Type>,
+                         ctx: &mut FunctionContext)
+                         -> WeldResult<()> {
         let params_sorted: BTreeMap<&Symbol, &Type> = params.iter().collect();
         let ll_ty = try!(self.llvm_type(
             &Struct(params_sorted.iter().map(|p| p.1.clone()).cloned().collect())));
@@ -121,25 +123,41 @@ impl LlvmGenerator {
         let work_data_ptr = ctx.var_ids.next();
         let work_data = ctx.var_ids.next();
         ctx.code.add(format!("{} = getelementptr %work_t* %cur.work, i32 0, i32 0",
-                                work_data_ptr));
+                             work_data_ptr));
         ctx.code.add(format!("{} = load i8** {}", work_data, work_data_ptr));
-        ctx.code.add(format!("{} = bitcast i8* {} to {}*", storage_typed, work_data, ll_ty));
+        ctx.code.add(format!("{} = bitcast i8* {} to {}*",
+                             storage_typed,
+                             work_data,
+                             ll_ty));
         ctx.code.add(format!("{} = load {}* {}", storage, ll_ty, storage_typed));
         for (i, (arg, _)) in params_sorted.iter().enumerate() {
-            ctx.code.add(format!("{} = extractvalue {} {}, {}", llvm_symbol(arg), ll_ty, storage, i));
+            ctx.code.add(format!("{} = extractvalue {} {}, {}",
+                                 llvm_symbol(arg),
+                                 ll_ty,
+                                 storage,
+                                 i));
         }
         Ok(())
     }
 
-    fn get_arg_struct(&mut self, params: &HashMap<Symbol, Type>, ctx: &mut FunctionContext) -> WeldResult<String> {
+    fn get_arg_struct(&mut self,
+                      params: &HashMap<Symbol, Type>,
+                      ctx: &mut FunctionContext)
+                      -> WeldResult<String> {
         let params_sorted: BTreeMap<&Symbol, &Type> = params.iter().collect();
         let mut prev_ref = String::from("undef");
         let ll_ty = try!(self.llvm_type(
-            &Struct(params_sorted.iter().map(|p| p.1.clone()).cloned().collect()))).to_string();
+            &Struct(params_sorted.iter().map(|p| p.1.clone()).cloned().collect())))
+            .to_string();
         for (i, (arg, ty)) in params_sorted.iter().enumerate() {
             let next_ref = ctx.var_ids.next();
-            ctx.code.add(format!("{} = insertvalue {} {}, {} {}, {}", next_ref, ll_ty, prev_ref,
-                try!(self.llvm_type(&ty)), llvm_symbol(arg), i));
+            ctx.code.add(format!("{} = insertvalue {} {}, {} {}, {}",
+                                 next_ref,
+                                 ll_ty,
+                                 prev_ref,
+                                 try!(self.llvm_type(&ty)),
+                                 llvm_symbol(arg),
+                                 i));
             prev_ref.clear();
             prev_ref.push_str(&next_ref);
         }
@@ -147,23 +165,22 @@ impl LlvmGenerator {
         let struct_size = ctx.var_ids.next();
         let struct_storage = ctx.var_ids.next();
         let struct_storage_typed = ctx.var_ids.next();
-        ctx.code.add(format!("{} = getelementptr {}* null, i32 1",
-                                struct_size_ptr, ll_ty));
+        ctx.code.add(format!("{} = getelementptr {}* null, i32 1", struct_size_ptr, ll_ty));
         ctx.code.add(format!("{} = ptrtoint {}* {} to i64",
-                                struct_size,
-                                ll_ty,
-                                struct_size_ptr));
+                             struct_size,
+                             ll_ty,
+                             struct_size_ptr));
         ctx.code
             .add(format!("{} = call i8* @malloc(i64 {})", struct_storage, struct_size));
         ctx.code.add(format!("{} = bitcast i8* {} to {}*",
-                                struct_storage_typed,
-                                struct_storage,
-                                ll_ty));
+                             struct_storage_typed,
+                             struct_storage,
+                             ll_ty));
         ctx.code.add(format!("store {} {}, {}* {}",
-                                ll_ty,
-                                prev_ref,
-                                ll_ty,
-                                struct_storage_typed));
+                             ll_ty,
+                             prev_ref,
+                             ll_ty,
+                             struct_storage_typed));
         Ok(struct_storage)
     }
 
@@ -208,10 +225,10 @@ impl LlvmGenerator {
                 let bld_param_str = llvm_symbol(&par_for.builder);
                 let bld_arg_str = llvm_symbol(&par_for.builder_arg);
                 ctx.code.add(format!("store {} {}.in, {}* {}",
-                                    &bld_ty_str,
-                                    bld_param_str,
-                                    &bld_ty_str,
-                                    bld_arg_str));
+                                     &bld_ty_str,
+                                     bld_param_str,
+                                     &bld_ty_str,
+                                     bld_arg_str));
                 try!(ctx.add_alloca("%cur.idx", "i64"));
                 ctx.code.add("store i64 %lower.idx, i64* %cur.idx");
                 ctx.code.add("br label %loop.start");
@@ -238,7 +255,7 @@ impl LlvmGenerator {
                             Struct(ref v) => try!(self.llvm_type(&v[i])).to_string(),
                             _ => {
                                 weld_err!("Internal error: invalid element type {}",
-                                        print_type(elem_ty))?
+                                          print_type(elem_ty))?
                             }
                         }
                     };
@@ -256,12 +273,12 @@ impl LlvmGenerator {
                         idx_tmp.clone()
                     };
                     ctx.code.add(format!("{} = call {}* {}.at({} {}, i64 {})",
-                                        inner_elem_tmp_ptr,
-                                        &inner_elem_ty_str,
-                                        data_prefix,
-                                        &data_ty_str,
-                                        data_str,
-                                        arr_idx));
+                                         inner_elem_tmp_ptr,
+                                         &inner_elem_ty_str,
+                                         data_prefix,
+                                         &data_ty_str,
+                                         data_str,
+                                         arr_idx));
                     let inner_elem_tmp =
                         try!(self.load_var(&inner_elem_tmp_ptr, &inner_elem_ty_str, ctx));
                     if par_for.data.len() == 1 {
@@ -270,25 +287,25 @@ impl LlvmGenerator {
                     } else {
                         let elem_tmp = ctx.var_ids.next();
                         ctx.code.add(format!("{} = insertvalue {} {}, {} {}, {}",
-                                            elem_tmp,
-                                            elem_ty_str,
-                                            prev_ref,
-                                            inner_elem_ty_str,
-                                            inner_elem_tmp,
-                                            i));
+                                             elem_tmp,
+                                             elem_ty_str,
+                                             prev_ref,
+                                             inner_elem_ty_str,
+                                             inner_elem_tmp,
+                                             i));
                         prev_ref.clear();
                         prev_ref.push_str(&elem_tmp);
                     }
                 }
                 let elem_str = llvm_symbol(&par_for.data_arg);
                 ctx.code.add(format!("store {} {}, {}* {}",
-                                    &elem_ty_str,
-                                    prev_ref,
-                                    &elem_ty_str,
-                                    elem_str));
+                                     &elem_ty_str,
+                                     prev_ref,
+                                     &elem_ty_str,
+                                     elem_str));
                 ctx.code.add(format!("store i64 {}, i64* {}",
-                                    idx_tmp,
-                                    llvm_symbol(&par_for.idx_arg)));
+                                     idx_tmp,
+                                     llvm_symbol(&par_for.idx_arg)));
             }
 
             ctx.code.add(format!("br label %b.b{}", func.blocks[0].id));
@@ -318,9 +335,8 @@ impl LlvmGenerator {
                 let mut wrap_ctx = &mut FunctionContext::new();
                 let serial_arg_types =
                     try!(self.get_arg_str(&get_combined_params(sir, &par_for), ""));
-                wrap_ctx.code.add(format!("define void @f{}_wrapper({}) {{",
-                                            func.id,
-                                            serial_arg_types));
+                wrap_ctx.code
+                    .add(format!("define void @f{}_wrapper({}) {{", func.id, serial_arg_types));
                 wrap_ctx.code.add(format!("fn.entry:"));
                 let upper_bound = wrap_ctx.var_ids.next();
                 if par_for.data[0].start.is_none() {
@@ -330,10 +346,10 @@ impl LlvmGenerator {
                         .to_string();
                     let data_prefix = format!("@{}", data_ty_str.replace("%", ""));
                     wrap_ctx.code.add(format!("{} = call i64 {}.size({} {})",
-                                                upper_bound,
-                                                data_prefix,
-                                                data_ty_str,
-                                                data_str));
+                                              upper_bound,
+                                              data_prefix,
+                                              data_ty_str,
+                                              data_str));
                 } else {
                     let start_str = llvm_symbol(&par_for.data[0].start.clone().unwrap());
                     let end_str = llvm_symbol(&par_for.data[0].end.clone().unwrap());
@@ -360,10 +376,17 @@ impl LlvmGenerator {
                 wrap_ctx.code.add(format!("br label %fn.end"));
                 wrap_ctx.code.add(format!("for.par:"));
                 let body_struct = try!(self.get_arg_struct(&func.params, &mut wrap_ctx));
-                let cont_struct = try!(self.get_arg_struct(&sir.funcs[par_for.cont].params, &mut wrap_ctx));
-                wrap_ctx.code.add(format!("call void @pl_start_loop(%work_t* %cur.work, i8* {}, \
-                    i8* {}, void (%work_t*)* @f{}_par, void (%work_t*)* @f{}_par, i64 0, i64 {})",
-                    body_struct, cont_struct, func.id, par_for.cont, upper_bound));
+                let cont_struct =
+                    try!(self.get_arg_struct(&sir.funcs[par_for.cont].params, &mut wrap_ctx));
+                wrap_ctx.code
+                    .add(format!("call void @pl_start_loop(%work_t* %cur.work, i8* {}, i8* {}, \
+                                  void (%work_t*)* @f{}_par, void (%work_t*)* @f{}_par, i64 0, \
+                                  i64 {})",
+                                 body_struct,
+                                 cont_struct,
+                                 func.id,
+                                 par_for.cont,
+                                 upper_bound));
                 wrap_ctx.code.add(format!("br label %fn.end"));
                 wrap_ctx.code.add("fn.end:");
                 wrap_ctx.code.add("ret void");
@@ -372,28 +395,35 @@ impl LlvmGenerator {
             }
             {
                 let mut par_body_ctx = &mut FunctionContext::new();
-                par_body_ctx.code.add(format!("define void @f{}_par(%work_t* %cur.work) {{", func.id));
+                par_body_ctx.code
+                    .add(format!("define void @f{}_par(%work_t* %cur.work) {{", func.id));
                 try!(self.unload_arg_struct(&func.params, &mut par_body_ctx));
                 let lower_bound_ptr = par_body_ctx.var_ids.next();
                 let lower_bound = par_body_ctx.var_ids.next();
                 let upper_bound_ptr = par_body_ctx.var_ids.next();
                 let upper_bound = par_body_ctx.var_ids.next();
-                par_body_ctx.code.add(format!("{} = getelementptr %work_t* %cur.work, i32 0, i32 1",
-                                        lower_bound_ptr));
+                par_body_ctx.code
+                    .add(format!("{} = getelementptr %work_t* %cur.work, i32 0, i32 1",
+                                 lower_bound_ptr));
                 par_body_ctx.code.add(format!("{} = load i64* {}", lower_bound, lower_bound_ptr));
-                par_body_ctx.code.add(format!("{} = getelementptr %work_t* %cur.work, i32 0, i32 2",
-                                        upper_bound_ptr));
+                par_body_ctx.code
+                    .add(format!("{} = getelementptr %work_t* %cur.work, i32 0, i32 2",
+                                 upper_bound_ptr));
                 par_body_ctx.code.add(format!("{} = load i64* {}", upper_bound, upper_bound_ptr));
                 let body_arg_types = try!(self.get_arg_str(&func.params, ""));
-                par_body_ctx.code.add(format!("call void @f{}({}, i64 {}, i64 {})", func.id, body_arg_types,
-                    lower_bound, upper_bound));
+                par_body_ctx.code.add(format!("call void @f{}({}, i64 {}, i64 {})",
+                                              func.id,
+                                              body_arg_types,
+                                              lower_bound,
+                                              upper_bound));
                 par_body_ctx.code.add("ret void");
                 par_body_ctx.code.add("}\n\n");
                 self.body_code.add(&par_body_ctx.code.result());
             }
             {
                 let mut par_cont_ctx = &mut FunctionContext::new();
-                par_cont_ctx.code.add(format!("define void @f{}_par(%work_t* %cur.work) {{", par_for.cont));
+                par_cont_ctx.code
+                    .add(format!("define void @f{}_par(%work_t* %cur.work) {{", par_for.cont));
                 try!(self.unload_arg_struct(&sir.funcs[par_for.cont].params, &mut par_cont_ctx));
                 let cont_arg_types = try!(self.get_arg_str(&sir.funcs[par_for.cont].params, ""));
                 par_cont_ctx.code.add(format!("call void @f{}({})", par_for.cont, cont_arg_types));
@@ -1035,7 +1065,7 @@ fn types() {
 
     let struct1 = parse_type("{i32,bool,i32}").unwrap().to_type().unwrap();
     assert_eq!(gen.llvm_type(&struct1).unwrap(), "%s0");
-    assert_eq!(gen.llvm_type(&struct1).unwrap(), "%s0");   // Name is reused for same struct
+    assert_eq!(gen.llvm_type(&struct1).unwrap(), "%s0"); // Name is reused for same struct
 
     let struct2 = parse_type("{i32,bool}").unwrap().to_type().unwrap();
     assert_eq!(gen.llvm_type(&struct2).unwrap(), "%s1");

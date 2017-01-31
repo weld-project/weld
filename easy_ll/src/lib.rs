@@ -159,8 +159,9 @@ fn initialize() {
     }
 }
 
-unsafe fn parse_module_helper(context: LLVMContextRef, buffer: LLVMMemoryBufferRef)
-    -> Result<LLVMModuleRef, LlvmError> {
+unsafe fn parse_module_helper(context: LLVMContextRef,
+                              buffer: LLVMMemoryBufferRef)
+                              -> Result<LLVMModuleRef, LlvmError> {
     // Parse IR into a module
     let mut module = 0 as LLVMModuleRef;
     let mut error_str = 0 as *mut c_char;
@@ -176,7 +177,9 @@ unsafe fn parse_module_helper(context: LLVMContextRef, buffer: LLVMMemoryBufferR
 }
 
 /// Parse a string of IR code into an `LLVMModuleRef` for the given context.
-unsafe fn parse_module_str(context: LLVMContextRef, code: &str) -> Result<LLVMModuleRef, LlvmError> {
+unsafe fn parse_module_str(context: LLVMContextRef,
+                           code: &str)
+                           -> Result<LLVMModuleRef, LlvmError> {
     // Create an LLVM memory buffer around the code
     let code_len = code.len();
     let name = try!(CString::new("module"));
@@ -193,14 +196,18 @@ unsafe fn parse_module_str(context: LLVMContextRef, code: &str) -> Result<LLVMMo
 }
 
 /// Parse a file of IR code into an `LLVMModuleRef` for the given context.
-unsafe fn parse_module_file(context: LLVMContextRef, file: &str) -> Result<LLVMModuleRef, LlvmError> {
+unsafe fn parse_module_file(context: LLVMContextRef,
+                            file: &str)
+                            -> Result<LLVMModuleRef, LlvmError> {
     let mut buffer = 0 as LLVMMemoryBufferRef;
     let mut error_str = 0 as *mut c_char;
     let file_name = CString::new(file).unwrap();
     let result_code = llvm::core::LLVMCreateMemoryBufferWithContentsOfFile(file_name.as_ptr(),
-        &mut buffer, &mut error_str);
+                                                                           &mut buffer,
+                                                                           &mut error_str);
     if result_code != 0 {
-        let msg = format!("Error reading module file {}: {}", file,
+        let msg = format!("Error reading module file {}: {}",
+                          file,
                           CStr::from_ptr(error_str).to_str().unwrap());
         return Err(LlvmError(msg));
     }
