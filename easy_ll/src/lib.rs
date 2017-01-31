@@ -92,7 +92,7 @@ impl Drop for CompiledModule {
 /// Compile a string of LLVM IR (in human readable format) into a `CompiledModule` that can then
 /// be executed. The LLVM IR should contain an entry point function called `run` that takes `i64`
 /// and returns `i64`, which will be called by `CompiledModule::run`.
-pub fn compile_module(code: &str) -> Result<CompiledModule, LlvmError> {
+pub fn compile_module(code: &str, num_threads: i32) -> Result<CompiledModule, LlvmError> {
     unsafe {
         // Initialize LLVM
         ONCE.call_once(|| initialize());
@@ -124,8 +124,11 @@ pub fn compile_module(code: &str) -> Result<CompiledModule, LlvmError> {
         // Create an execution engine for the module and find its run function
         let engine = try!(create_exec_engine(module));
 
-        // TODO maybe make the libraries a parameter
-        Command::new("make").arg("-C").arg("cpp").output();
+        // TODO maybe make the set of libraries a parameter
+        #[allow(unused_must_use)]
+        {
+            Command::new("make").arg("-C").arg("cpp").arg(format!("W={}", num_threads)).output();
+        }
         let pl_module = try!(parse_module_file(context, "cpp/parlib.bc"));
         llvm::execution_engine::LLVMAddModule(engine, pl_module);
 
