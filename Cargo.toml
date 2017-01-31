@@ -9,7 +9,6 @@ regex = "0.1.71"
 rustyline = "1.0.0"
 easy_ll = { path = "easy_ll", version = "^0.1.0" }
 libc = "0.2.0"
-bencher = "0.1.2"
 
 [lib]
 path = "weld/lib.rs"
@@ -20,6 +19,5 @@ name = "repl"
 path = "weld/bin/repl.rs"
 
 [[bench]]
-name = "bench"
-path = "bench/bench.rs"
+name = "benches"
 harness = false
