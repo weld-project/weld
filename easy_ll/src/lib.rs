@@ -127,6 +127,7 @@ pub fn compile_module(code: &str, num_threads: i32) -> Result<CompiledModule, Ll
         // TODO maybe make the set of libraries a parameter
         #[allow(unused_must_use)]
         {
+            Command::new("make").arg("-C").arg("cpp").arg("clean").output();
             Command::new("make").arg("-C").arg("cpp").arg(format!("W={}", num_threads)).output();
         }
         let pl_module = try!(parse_module_file(context, "cpp/parlib.bc"));
