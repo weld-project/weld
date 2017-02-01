@@ -103,7 +103,7 @@ fn main() {
                     let llvm_code = llvm_gen.result();
                     println!("LLVM code:\n{}\n", llvm_code);
 
-                    if let Err(ref e) = easy_ll::compile_module(&llvm_code, 1) {
+                    if let Err(ref e) = easy_ll::compile_module(&llvm_code) {
                         println!("Error during LLVM compilation:\n{}\n", e);
                     } else {
                         println!("LLVM module compiled successfully\n");

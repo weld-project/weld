@@ -11,10 +11,10 @@ struct work_t {
   // cont is dependent on the completion of this work item (and possibly others as well)
   work_t *cont;
   // number of remaining parent dependencies
-  int deps;
+  int32_t deps;
   // to disambiguate the relative order of tasks with identical loop bounds
   int64_t task_id;
-  int continued; // boolean
+  int32_t continued; // boolean
 } __attribute__((packed));
 
 typedef struct work_t work_t;
@@ -22,6 +22,7 @@ typedef struct work_t work_t;
 extern "C" {
   void set_result(void *res);
   void *get_result();
+  void set_nworkers(int32_t n);
   void pl_start_loop(work_t *w, void *body_data, void *cont_data, void (*body)(work_t*),
     void (*cont)(work_t*), int64_t lower, int64_t upper);
 }

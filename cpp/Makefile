@@ -16,7 +16,7 @@ CFLAGS = -Wall -fno-use-cxa-atexit
 all: parlib.bc
 
 parlib.bc: parlib.cpp
-	${CLANG} ${CFLAGS} -DW=${W} -c -emit-llvm parlib.cpp
+	${CLANG} ${CFLAGS} -c -emit-llvm parlib.cpp
 
 clean:
 	rm -f *.bc

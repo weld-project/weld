@@ -60,7 +60,7 @@ impl From<NulError> for LlvmError {
 }
 
 /// The type of our "run" function pointer.
-type RunFunc = extern "C" fn(i64) -> i64;
+type RunFunc = extern "C" fn(i64, i32) -> i64;
 
 /// A compiled module returned by `compile_module`, wrapping a `run` function that takes `i64`
 /// and returns `i64`. This structure includes (and manages) an LLVM execution engine, which is
@@ -74,8 +74,8 @@ pub struct CompiledModule {
 
 impl CompiledModule {
     /// Call the module's `run` function.
-    pub fn run(&self, arg: i64) -> i64 {
-        (self.function.unwrap())(arg)
+    pub fn run(&self, arg: i64, nworkers: i32) -> i64 {
+        (self.function.unwrap())(arg, nworkers)
     }
 }
 
@@ -92,7 +92,7 @@ impl Drop for CompiledModule {
 /// Compile a string of LLVM IR (in human readable format) into a `CompiledModule` that can then
 /// be executed. The LLVM IR should contain an entry point function called `run` that takes `i64`
 /// and returns `i64`, which will be called by `CompiledModule::run`.
-pub fn compile_module(code: &str, num_threads: i32) -> Result<CompiledModule, LlvmError> {
+pub fn compile_module(code: &str) -> Result<CompiledModule, LlvmError> {
     unsafe {
         // Initialize LLVM
         ONCE.call_once(|| initialize());
@@ -127,8 +127,7 @@ pub fn compile_module(code: &str, num_threads: i32) -> Result<CompiledModule, Ll
         // TODO maybe make the set of libraries a parameter
         #[allow(unused_must_use)]
         {
-            Command::new("make").arg("-C").arg("cpp").arg("clean").output();
-            Command::new("make").arg("-C").arg("cpp").arg(format!("W={}", num_threads)).output();
+            Command::new("make").arg("-C").arg("cpp").output();
         }
         let pl_module = try!(parse_module_file(context, "cpp/parlib.bc"));
         llvm::execution_engine::LLVMAddModule(engine, pl_module);
@@ -243,7 +242,7 @@ unsafe fn check_run_function(module: LLVMModuleRef) -> Result<(), LlvmError> {
     }
     let c_str = llvm::core::LLVMPrintTypeToString(llvm::core::LLVMTypeOf(func));
     let func_type = CStr::from_ptr(c_str).to_str().unwrap();
-    if func_type != "i64 (i64)*" {
+    if func_type != "i64 (i64, i32)*" {
         return Err(LlvmError(format!("Run function has wrong type: {}", func_type)));
     }
     Ok(())

@@ -448,8 +448,8 @@ impl LlvmGenerator {
 
         let mut code = &mut CodeBuilder::new();
 
-        code.add(format!("define i64 @{}(i64 %args) {{", name));
-
+        code.add(format!("define i64 @{}(i64 %args, i32 %nworkers) {{", name));
+        code.add(format!("call void @set_nworkers(i32 %nworkers)"));
         // Code to load args and call function
         code.add(format!("%args_typed = inttoptr i64 %args to {args_type}*
              \
@@ -1050,7 +1050,7 @@ pub fn compile_program(program: &Program) -> WeldResult<easy_ll::CompiledModule>
     let mut gen = LlvmGenerator::new();
     try!(gen.add_function_on_pointers("run", &sir_prog));
     println!("{}", gen.result());
-    Ok(try!(easy_ll::compile_module(&gen.result(), 1)))
+    Ok(try!(easy_ll::compile_module(&gen.result())))
 }
 
 #[test]
@@ -1075,7 +1075,7 @@ fn types() {
 fn basic_program() {
     let code = "|| 40 + 2";
     let module = compile_program(&parse_program(code).unwrap()).unwrap();
-    let result = module.run(0) as *const i32;
+    let result = module.run(0, 1) as *const i32;
     let result = unsafe { *result };
     assert_eq!(result, 42);
     // TODO: Free result
@@ -1085,7 +1085,7 @@ fn basic_program() {
 fn f64_cast() {
     let code = "|| f64(40 + 2)";
     let module = compile_program(&parse_program(code).unwrap()).unwrap();
-    let result = module.run(0) as *const f64;
+    let result = module.run(0, 1) as *const f64;
     let result = unsafe { *result };
     assert_eq!(result, 42.0);
     // TODO: Free result
@@ -1095,7 +1095,7 @@ fn f64_cast() {
 fn i32_cast() {
     let code = "|| i32(0.251 * 4.0)";
     let module = compile_program(&parse_program(code).unwrap()).unwrap();
-    let result = module.run(0) as *const i32;
+    let result = module.run(0, 1) as *const i32;
     let result = unsafe { *result };
     assert_eq!(result, 1);
     // TODO: Free result
@@ -1106,7 +1106,7 @@ fn program_with_args() {
     let code = "|x:i32| 40 + x";
     let module = compile_program(&parse_program(code).unwrap()).unwrap();
     let input: i32 = 2;
-    let result = module.run(&input as *const i32 as i64) as *const i32;
+    let result = module.run(&input as *const i32 as i64, 1) as *const i32;
     let result = unsafe { *result };
     assert_eq!(result, 42);
     // TODO: Free result
@@ -1117,7 +1117,7 @@ fn let_statement() {
     let code = "|x:i32| let y = 40 + x; y + 2";
     let module = compile_program(&parse_program(code).unwrap()).unwrap();
     let input: i32 = 2;
-    let result = module.run(&input as *const i32 as i64) as *const i32;
+    let result = module.run(&input as *const i32 as i64, 1) as *const i32;
     let result = unsafe { *result };
     assert_eq!(result, 44);
     // TODO: Free result
@@ -1128,7 +1128,7 @@ fn if_statement() {
     let code = "|x:i32| if(true, 3, 4)";
     let module = compile_program(&parse_program(code).unwrap()).unwrap();
     let input: i32 = 2;
-    let result = module.run(&input as *const i32 as i64) as *const i32;
+    let result = module.run(&input as *const i32 as i64, 1) as *const i32;
     let result = unsafe { *result };
     assert_eq!(result, 3);
     // TODO: Free result
@@ -1139,12 +1139,12 @@ fn comparison() {
     let code = "|x:i32| if(x>10, x, 10)";
     let module = compile_program(&parse_program(code).unwrap()).unwrap();
     let input: i32 = 2;
-    let result = module.run(&input as *const i32 as i64) as *const i32;
+    let result = module.run(&input as *const i32 as i64, 1) as *const i32;
     let result = unsafe { *result };
     assert_eq!(result, 10);
     // TODO: Free result
     let input: i32 = 20;
-    let result = module.run(&input as *const i32 as i64) as *const i32;
+    let result = module.run(&input as *const i32 as i64, 1) as *const i32;
     let result = unsafe { *result };
     assert_eq!(result, 20);
     // TODO: Free result
@@ -1174,7 +1174,7 @@ fn simple_for_appender_loop() {
         },
         a: 1,
     };
-    let result_raw = module.run(&args as *const Args as i64) as *const Vec;
+    let result_raw = module.run(&args as *const Args as i64, 1) as *const Vec;
     let result = unsafe { (*result_raw).clone() };
     let output = [3, 4];
     for i in 0..(result.len as isize) {
@@ -1207,7 +1207,7 @@ fn simple_for_merger_loop() {
         },
         a: 1,
     };
-    let result_raw = module.run(&args as *const Args as i64) as *const i32;
+    let result_raw = module.run(&args as *const Args as i64, 1) as *const i32;
     let result = unsafe { (*result_raw).clone() };
     let output = 20;
     assert_eq!(result, output);
@@ -1239,7 +1239,7 @@ fn if_for_loop() {
         },
         a: 1,
     };
-    let result_raw = module.run(&args as *const Args as i64) as *const Vec;
+    let result_raw = module.run(&args as *const Args as i64, 1) as *const Vec;
     let result = unsafe { (*result_raw).clone() };
     let output = [3, 4];
     for i in 0..(result.len as isize) {
@@ -1254,7 +1254,7 @@ fn if_for_loop() {
         },
         a: 6,
     };
-    let result_raw = module.run(&args as *const Args as i64) as *const Vec;
+    let result_raw = module.run(&args as *const Args as i64, 1) as *const Vec;
     let result = unsafe { (*result_raw).clone() };
     let output = [2, 3];
     for i in 0..(result.len as isize) {
@@ -1292,7 +1292,7 @@ fn map_zip_loop() {
             len: 2,
         },
     };
-    let result_raw = module.run(&args as *const Args as i64) as *const Vec;
+    let result_raw = module.run(&args as *const Args as i64, 1) as *const Vec;
     let result = unsafe { (*result_raw).clone() };
     let output = [6, 8, 10, 12];
     for i in 0..(result.len as isize) {
@@ -1330,7 +1330,7 @@ fn iters_for_loop() {
             len: 2,
         },
     };
-    let result_raw = module.run(&args as *const Args as i64) as *const Vec;
+    let result_raw = module.run(&args as *const Args as i64, 1) as *const Vec;
     let result = unsafe { (*result_raw).clone() };
     let output = [6, 9];
     for i in 0..(result.len as isize) {
