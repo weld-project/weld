@@ -329,7 +329,6 @@ pub fn winsorize(samples: &mut [f64], pct: f64) {
 
 #[cfg(test)]
 mod tests {
-    use super::Stats;
     use super::Summary;
     use std::f64;
     use std::io::prelude::*;
@@ -343,6 +342,7 @@ mod tests {
         })
     }
 
+    #[allow(dead_code)]
     fn check(samples: &[f64], summ: &Summary) {
 
         let summ2 = Summary::new(samples);
