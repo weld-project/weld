@@ -55,7 +55,7 @@ fn bench_integer_vector_sum(bench: &mut Bencher) {
 
     // Run the module.
     // TODO(shoumik): How to free this memory?
-    bench.iter(|| module.run(&args as *const Args as i64))
+    bench.iter(|| module.run(&args as *const Args as i64, 1))
 }
 
 fn bench_integer_map_reduce(bench: &mut Bencher) {
@@ -80,7 +80,7 @@ fn bench_integer_map_reduce(bench: &mut Bencher) {
     };
 
     // TODO(shoumik): How to free this memory?
-    bench.iter(|| module.run(&args as *const Args as i64))
+    bench.iter(|| module.run(&args as *const Args as i64, 1))
 }
 
 fn bench_tpch_q6(bench: &mut Bencher) {
@@ -124,7 +124,7 @@ fn bench_tpch_q6(bench: &mut Bencher) {
     };
     let module = compile(code);
     bench.iter(|| {
-        let result_raw = module.run(&args as *const Args as i64) as *const i32;
+        let result_raw = module.run(&args as *const Args as i64, 1) as *const i32;
         let result = unsafe { *result_raw.clone() };
         assert_eq!(result, expect as i32);
     })
