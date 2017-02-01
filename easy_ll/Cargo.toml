@@ -6,3 +6,4 @@ build = "build.rs"
 
 [dependencies]
 llvm-sys = "0.3.0"
+libc = "0.2.0"

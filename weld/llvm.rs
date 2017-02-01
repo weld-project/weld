@@ -171,7 +171,9 @@ impl LlvmGenerator {
                              ll_ty,
                              struct_size_ptr));
         ctx.code
-            .add(format!("{} = call i8* @malloc(i64 {})", struct_storage, struct_size));
+            .add(format!("{} = call i8* @weld_rt_malloc(i64 0, i64 {})",
+                         struct_storage,
+                         struct_size));
         ctx.code.add(format!("{} = bitcast i8* {} to {}*",
                              struct_storage_typed,
                              struct_storage,
@@ -896,7 +898,9 @@ impl LlvmGenerator {
                                          &ty_str,
                                          &elem_size_ptr));
                     ctx.code
-                        .add(format!("{} = call i8* @malloc(i64 {})", &elem_storage, &elem_size));
+                        .add(format!("{} = call i8* @weld_rt_malloc(i64 0, i64 {})",
+                                     &elem_storage,
+                                     &elem_size));
                     ctx.code.add(format!("{} = bitcast i8* {} to {}*",
                                          &elem_storage_typed,
                                          &elem_storage,

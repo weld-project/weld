@@ -14,7 +14,7 @@ define %$NAME.bld @$NAME.bld.new() {
   %1 = insertvalue %$NAME.bld.inner undef, $ELEM 0, 0
   %bldSizePtr = getelementptr %$NAME.bld.inner* null, i32 1
   %bldSize = ptrtoint %$NAME.bld.inner* %bldSizePtr to i64
-  %2 = call i8* @malloc(i64 %bldSize)
+  %2 = call i8* @weld_rt_malloc(i64 0, i64 %bldSize)
   %3 = bitcast i8* %2 to %$NAME.bld.inner*
   store %$NAME.bld.inner %1, %$NAME.bld.inner* %3
   ret %$NAME.bld %3

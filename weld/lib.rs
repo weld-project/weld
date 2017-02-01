@@ -44,6 +44,11 @@ lazy_static! {
     static ref ALLOCS: Mutex<HashMap<i64, (usize, usize)>> = Mutex::new(HashMap::new());
 }
 
+extern "C" {
+    pub fn malloc(size: libc::size_t) -> *mut c_void;
+    pub fn realloc(ptr: *mut c_void, size: libc::size_t) -> *mut c_void;
+    pub fn free(ptr: *mut c_void);
+}
 
 pub struct WeldError {
     code: i32,
@@ -160,6 +165,16 @@ pub extern "C" fn weld_module_free(ptr: *mut easy_ll::CompiledModule) {
     if ptr.is_null() {
         return;
     }
+
+    // Free all allocated memory for this module.
+    // TODO(shoumik): This actually frees memory for *all* modules right now, which
+    // isn't exactly what we want. FIXME.
+    let mut guarded = ALLOCS.lock().unwrap();
+    let keys: Vec<_> = guarded.keys().map(|k| *k).collect();
+    for key in keys.iter() {
+        let (len, cap) = guarded.remove(key).unwrap();
+        unsafe { mem::drop(Vec::from_raw_parts(*key as *mut i8, len, cap)) }
+    }
     unsafe { Box::from_raw(ptr) };
 
 }
@@ -195,7 +210,10 @@ pub extern "C" fn weld_error_free(err: *mut WeldError) {
 }
 
 #[no_mangle]
-pub extern "C" fn weld_rt_malloc(module_id: u64, size: libc::uint64_t) -> *mut c_void {
+pub extern "C" fn weld_rt_malloc(module_id: i64, size: libc::int64_t) -> *mut c_void {
+
+    return unsafe { malloc(size as usize) };
+
     if size == 0 {
         return std::ptr::null_mut();
     }
@@ -213,7 +231,34 @@ pub extern "C" fn weld_rt_malloc(module_id: u64, size: libc::uint64_t) -> *mut c
 }
 
 #[no_mangle]
+pub extern "C" fn weld_rt_realloc(data: *mut c_void, size: libc::int64_t) -> *mut c_void {
+
+    return unsafe { realloc(data, size as usize) };
+
+    if data.is_null() {
+        return std::ptr::null_mut();
+    }
+
+    let data = data as *mut i8;
+
+    let mut guarded = ALLOCS.lock().unwrap();
+    let len_and_cap = guarded.entry((data as i64)).or_insert((0, 0));
+    let mut vec = unsafe { Vec::from_raw_parts(data, len_and_cap.0, len_and_cap.1) };
+    vec.reserve_exact(len_and_cap.1 - (size as usize));
+
+    let ptr = vec.as_mut_ptr();
+    len_and_cap.0 = vec.len();
+    len_and_cap.1 = vec.capacity();
+    mem::forget(vec);
+
+    ptr as *mut c_void
+}
+
+#[no_mangle]
 pub extern "C" fn weld_rt_free(data: *mut c_void) {
+
+    return unsafe { free(data) };
+
     if data.is_null() {
         return;
     }

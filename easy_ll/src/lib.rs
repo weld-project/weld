@@ -1,6 +1,7 @@
 //! A very simple wrapper for LLVM that can JIT functions written as IR strings.
 
 extern crate llvm_sys as llvm;
+extern crate libc;
 
 use std::error::Error;
 use std::ffi::{CStr, CString, NulError};
@@ -11,6 +12,7 @@ use std::os::raw::c_char;
 use std::process::Command;
 use std::sync::{Once, ONCE_INIT};
 
+use llvm::support::LLVMLoadLibraryPermanently;
 use llvm::prelude::{LLVMContextRef, LLVMModuleRef, LLVMMemoryBufferRef};
 use llvm::execution_engine::{LLVMExecutionEngineRef, LLVMMCJITCompilerOptions};
 use llvm::analysis::LLVMVerifierFailureAction;
@@ -105,6 +107,13 @@ pub fn compile_module(code: &str) -> Result<CompiledModule, LlvmError> {
         if context.is_null() {
             return Err(LlvmError::new("LLVMContextCreate returned null"));
         }
+
+        // Allow the LLVM module to call Weld runtime functions.
+        // TODO(shoumik): Using a relative path here seems sketchy. Should we require the
+        // library to live on the LD_LIBRARY_PATH instead?
+        LLVMLoadLibraryPermanently("target/release/libweld.dylib"
+            .to_string()
+            .as_ptr() as *const c_char);
 
         // Create a CompiledModule to wrap the context and our result (will clean it on Drop).
         let mut result = CompiledModule {
