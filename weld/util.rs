@@ -26,17 +26,15 @@ impl SymbolGenerator {
             *id = max(*id, symbol.id);
         };
 
-        expr.traverse(&mut |e| {
-            match e.kind {
-                Let { ref name, .. } => update_id(&mut id_map, name),
-                Ident(ref sym) => update_id(&mut id_map, sym),
-                Lambda { ref params, .. } => {
-                    for ref p in params {
-                        update_id(&mut id_map, &p.name);
-                    }
+        expr.traverse(&mut |e| match e.kind {
+            Let { ref name, .. } => update_id(&mut id_map, name),
+            Ident(ref sym) => update_id(&mut id_map, sym),
+            Lambda { ref params, .. } => {
+                for ref p in params {
+                    update_id(&mut id_map, &p.name);
                 }
-                _ => {}
             }
+            _ => {}
         });
 
         SymbolGenerator { id_map: id_map }

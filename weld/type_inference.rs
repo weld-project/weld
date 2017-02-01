@@ -118,6 +118,33 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
 
         Cast { kind, .. } => Ok(try!(push_complete_type(&mut expr.ty, Scalar(kind), "Cast"))),
 
+        ToVec { ref mut child_expr } => {
+            let mut changed = false;
+
+            let base_type = Vector(Box::new(Struct(vec![Unknown, Unknown])));
+            changed |= try!(push_type(&mut expr.ty, &base_type, "ToVec"));
+
+            if let Vector(ref mut elem_type) = expr.ty {
+                if let Struct(ref mut field_types) = **elem_type {
+                    if let Dict(ref key_type, ref value_type) = child_expr.ty {
+                        for (field_ty, child_expr_field) in
+                            field_types.iter_mut()
+                                .zip(vec![key_type.clone(), value_type.clone()].iter_mut()) {
+                            changed |= try!(push_type(field_ty, child_expr_field, "ToVec"));
+                        }
+                    } else {
+                        return weld_err!("Internal error: toVec argument needs to be a dict");
+                    }
+                } else {
+                    return weld_err!("Internal error: vector field in toVec return type is not a \
+                                      struct");
+                }
+            } else {
+                return weld_err!("Internal error: type of toVec was not Vector(..)");
+            }
+            Ok(changed)
+        }
+
         Ident(ref symbol) => {
             match env.get(symbol) {
                 None => weld_err!("Undefined identifier: {}", symbol.name),
@@ -208,6 +235,11 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
                 let mut changed = false;
                 changed |= try!(push_complete_type(&mut index.ty, Scalar(I64), "Lookup"));
                 changed |= try!(push_type(&mut expr.ty, &elem_type, "Lookup"));
+                Ok(changed)
+            } else if let Dict(ref key_type, ref value_type) = data.ty {
+                let mut changed = false;
+                changed |= try!(push_type(&mut index.ty, &key_type, "Lookup"));
+                changed |= try!(push_type(&mut expr.ty, &value_type, "Lookup"));
                 Ok(changed)
             } else if data.ty == Unknown {
                 Ok(false)
@@ -414,14 +446,27 @@ fn push_type(dest: &mut PartialType, src: &PartialType, context: &str) -> WeldRe
         Scalar(ref d) => {
             match *src {
                 Scalar(ref s) if d == s => Ok(false),
-                _ => weld_err!("Mismatched types in {}", context),
+                _ => weld_err!("Mismatched types in Scalar, {}", context),
             }
         }
 
         Vector(ref mut dest_elem) => {
             match *src {
                 Vector(ref src_elem) => push_type(dest_elem, src_elem, context),
-                _ => weld_err!("Mismatched types in {}", context),
+                _ => weld_err!("Mismatched types in Vector, {}", context),
+            }
+        }
+
+        Dict(ref mut dest_key_ty, ref mut dest_value_ty) => {
+            match *src {
+                Dict(ref src_key_ty, ref src_value_ty) => {
+                    let mut changed = false;
+                    changed |= try!(push_type(dest_key_ty.as_mut(), src_key_ty.as_ref(), context));
+                    changed |=
+                        try!(push_type(dest_value_ty.as_mut(), src_value_ty.as_ref(), context));
+                    Ok(changed)
+                }
+                _ => weld_err!("Mismatched types in Dict, {}", context),
             }
         }
 
@@ -430,14 +475,14 @@ fn push_type(dest: &mut PartialType, src: &PartialType, context: &str) -> WeldRe
                 Struct(ref src_elems) => {
                     let mut changed = false;
                     if dest_elems.len() != src_elems.len() {
-                        return weld_err!("Mismatched types in {}", context);
+                        return weld_err!("Mismatched types in Struct, {}", context);
                     }
                     for (dest_elem, src_elem) in dest_elems.iter_mut().zip(src_elems) {
                         changed |= try!(push_type(dest_elem, src_elem, context));
                     }
                     Ok(changed)
                 }
-                _ => weld_err!("Mismatched types in {}", context),
+                _ => weld_err!("Mismatched types in Struct, {}", context),
             }
         }
 
@@ -446,7 +491,7 @@ fn push_type(dest: &mut PartialType, src: &PartialType, context: &str) -> WeldRe
                 Function(ref src_params, ref src_res) => {
                     let mut changed = false;
                     if dest_params.len() != src_params.len() {
-                        return weld_err!("Mismatched types in {}", context);
+                        return weld_err!("Mismatched types in Function, {}", context);
                     }
                     for (dest_param, src_param) in dest_params.iter_mut().zip(src_params) {
                         changed |= try!(push_type(dest_param, src_param, context));
@@ -454,7 +499,7 @@ fn push_type(dest: &mut PartialType, src: &PartialType, context: &str) -> WeldRe
                     changed |= try!(push_type(dest_res, src_res, context));
                     Ok(changed)
                 }
-                _ => weld_err!("Mismatched types in {}", context),
+                _ => weld_err!("Mismatched types in Function, {}", context),
             }
         }
 
@@ -463,7 +508,25 @@ fn push_type(dest: &mut PartialType, src: &PartialType, context: &str) -> WeldRe
                 Builder(Appender(ref src_elem)) => {
                     push_type(dest_elem.as_mut(), src_elem.as_ref(), context)
                 }
-                _ => weld_err!("Mismatched types in {}", context),
+                _ => weld_err!("Mismatched types in Appender, {}", context),
+            }
+        }
+
+        Builder(DictMerger(ref mut dest_key_ty,
+                           ref mut dest_value_ty,
+                           ref mut dest_merge_ty,
+                           _)) => {
+            match *src {
+                Builder(DictMerger(ref src_key_ty, ref src_value_ty, ref src_merge_ty, _)) => {
+                    let mut changed = false;
+                    changed |= try!(push_type(dest_key_ty.as_mut(), src_key_ty.as_ref(), context));
+                    changed |=
+                        try!(push_type(dest_value_ty.as_mut(), src_value_ty.as_ref(), context));
+                    changed |=
+                        try!(push_type(dest_merge_ty.as_mut(), src_merge_ty.as_ref(), context));
+                    Ok(changed)
+                }
+                _ => weld_err!("Mismatched types in DictMerger, {}", context),
             }
         }
 

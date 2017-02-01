@@ -159,6 +159,11 @@ done:
   ret i64 %res
 }
 
+; Dummy hash function; this is needed for structs that use these vecbuilders as fields.
+define i64 @$NAME.bld.hash(%$NAME.bld %bld) {
+  ret i64 0
+}
+
 ; Compare two vectors lexicographically.
 define i32 @$NAME.cmp(%$NAME %a, %$NAME %b) {
 entry:
@@ -192,4 +197,9 @@ body2:
 done:
   %res = call i32 @i64.cmp(i64 %sizeA, i64 %sizeB)
   ret i32 %res
+}
+
+; Dummy comparison function; this is needed for structs that use these vecbuilders as fields.
+define i32 @$NAME.bld.cmp(%$NAME.bld %bld1, %$NAME.bld %bld2) {
+  ret i32 -1
 }

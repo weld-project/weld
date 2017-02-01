@@ -48,9 +48,9 @@ fn parse_and_print_literal_expressions() {
     }
 
     // Test overflow of integer types
-    assert!(parse_expr("999999999999999").is_err());  // i32 literal too big
+    assert!(parse_expr("999999999999999").is_err()); // i32 literal too big
     assert!(parse_expr("999999999999999L").is_ok());
-    assert!(parse_expr("999999999999999999999999999999L").is_err());  // i64 literal too big
+    assert!(parse_expr("999999999999999999999999999999L").is_err()); // i64 literal too big
 }
 
 #[test]

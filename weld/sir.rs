@@ -27,6 +27,17 @@ pub enum Statement {
         new_ty: Type,
         child: Symbol,
     },
+    Lookup {
+        output: Symbol,
+        child: Symbol,
+        index: Symbol,
+    },
+    ToVec {
+        output: Symbol,
+        old_ty: Type,
+        new_ty: Type,
+        child: Symbol,
+    },
     Assign { output: Symbol, value: Symbol },
     AssignLiteral { output: Symbol, value: LiteralKind },
     Merge { builder: Symbol, value: Symbol },
@@ -169,6 +180,10 @@ impl fmt::Display for Statement {
             Cast { ref output, ref new_ty, ref child, .. } => {
                 write!(f, "{} = cast({}, {})", output, child, print_type(new_ty))
             }
+            Lookup { ref output, ref child, ref index } => {
+                write!(f, "{} = lookup({}, {})", output, child, index)
+            }
+            ToVec { ref output, ref child, .. } => write!(f, "{} = toVec({})", output, child),
             Assign { ref output, ref value } => write!(f, "{} = {}", output, value),
             AssignLiteral { ref output, ref value } => {
                 write!(f, "{} = {}", output, print_literal(value))
@@ -295,6 +310,13 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
                     vars.push(right.clone());
                 }
                 Cast { ref child, .. } => {
+                    vars.push(child.clone());
+                }
+                Lookup { ref child, ref index, .. } => {
+                    vars.push(child.clone());
+                    vars.push(index.clone());
+                }
+                ToVec { ref child, .. } => {
                     vars.push(child.clone());
                 }
                 Assign { ref value, .. } => vars.push(value.clone()),
@@ -440,6 +462,30 @@ fn gen_expr(expr: &TypedExpr,
             let (cur_func, cur_block, child_sym) = gen_expr(child_expr, prog, cur_func, cur_block)?;
             let res_sym = prog.add_local(&expr.ty, cur_func);
             prog.funcs[cur_func].blocks[cur_block].add_statement(Cast {
+                output: res_sym.clone(),
+                old_ty: child_expr.ty.clone(),
+                new_ty: expr.ty.clone(),
+                child: child_sym,
+            });
+            Ok((cur_func, cur_block, res_sym))
+        }
+
+        ExprKind::Lookup { ref data, ref index } => {
+            let (cur_func, cur_block, data_sym) = gen_expr(data, prog, cur_func, cur_block)?;
+            let (cur_func, cur_block, index_sym) = gen_expr(index, prog, cur_func, cur_block)?;
+            let res_sym = prog.add_local(&expr.ty, cur_func);
+            prog.funcs[cur_func].blocks[cur_block].add_statement(Lookup {
+                output: res_sym.clone(),
+                child: data_sym,
+                index: index_sym.clone(),
+            });
+            Ok((cur_func, cur_block, res_sym))
+        }
+
+        ExprKind::ToVec { ref child_expr } => {
+            let (cur_func, cur_block, child_sym) = gen_expr(child_expr, prog, cur_func, cur_block)?;
+            let res_sym = prog.add_local(&expr.ty, cur_func);
+            prog.funcs[cur_func].blocks[cur_block].add_statement(ToVec {
                 output: res_sym.clone(),
                 old_ty: child_expr.ty.clone(),
                 new_ty: expr.ty.clone(),
