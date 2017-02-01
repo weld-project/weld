@@ -14,7 +14,7 @@ define %$NAME @$NAME.new(i64 %size) {
   %elemSizePtr = getelementptr $ELEM* null, i32 1
   %elemSize = ptrtoint $ELEM* %elemSizePtr to i64
   %allocSize = mul i64 %elemSize, %size
-  %bytes = call i8* @malloc(i64 %allocSize)
+  %bytes = call i8* @weld_rt_malloc(i64 0, i64 %allocSize)
   %elements = bitcast i8* %bytes to $ELEM*
   %1 = insertvalue %$NAME undef, $ELEM* %elements, 0
   %2 = insertvalue %$NAME %1, i64 %size, 1
@@ -41,14 +41,14 @@ define %$NAME.bld @$NAME.bld.new(i64 %capacity) {
   %elemSizePtr = getelementptr $ELEM* null, i32 1
   %elemSize = ptrtoint $ELEM* %elemSizePtr to i64
   %allocSize = mul i64 %elemSize, %capacity
-  %bytes = call i8* @malloc(i64 %allocSize)
+  %bytes = call i8* @weld_rt_malloc(i64 0, i64 %allocSize)
   %elements = bitcast i8* %bytes to $ELEM*
   %1 = insertvalue %$NAME.bld.inner undef, $ELEM* %elements, 0
   %2 = insertvalue %$NAME.bld.inner %1, i64 0, 1
   %3 = insertvalue %$NAME.bld.inner %2, i64 %capacity, 2
   %bldSizePtr = getelementptr %$NAME.bld.inner* null, i32 1
   %bldSize = ptrtoint %$NAME.bld.inner* %bldSizePtr to i64
-  %4 = call i8* @malloc(i64 %bldSize)
+  %4 = call i8* @weld_rt_malloc(i64 0, i64 %bldSize)
   %5 = bitcast i8* %4 to %$NAME.bld.inner*
   store %$NAME.bld.inner %3, %$NAME.bld.inner* %5
   ret %$NAME.bld %5
@@ -70,7 +70,7 @@ onFull:
   %elements = extractvalue %$NAME.bld.inner %bld, 0
   %bytes = bitcast $ELEM* %elements to i8*
   %allocSize = mul i64 %elemSize, %newCapacity
-  %newBytes = call i8* @realloc(i8* %bytes, i64 %allocSize)
+  %newBytes = call i8* @weld_rt_realloc(i8* %bytes, i64 %allocSize)
   %newElements = bitcast i8* %newBytes to $ELEM*
   %bld1 = insertvalue %$NAME.bld.inner %bld, $ELEM* %newElements, 0
   %bld2 = insertvalue %$NAME.bld.inner %bld1, i64 %newCapacity, 2
@@ -96,7 +96,7 @@ define %$NAME @$NAME.bld.result(%$NAME.bld %bldPtr) {
   %elemSizePtr = getelementptr $ELEM* null, i32 1
   %elemSize = ptrtoint $ELEM* %elemSizePtr to i64
   %allocSize = mul i64 %elemSize, %size
-  %newBytes = call i8* @realloc(i8* %bytes, i64 %allocSize)
+  %newBytes = call i8* @weld_rt_realloc(i8* %bytes, i64 %allocSize)
   %newElements = bitcast i8* %newBytes to $ELEM*
   %toFree = bitcast %$NAME.bld.inner* %bldPtr to i8*
   call void @free(i8* %toFree)

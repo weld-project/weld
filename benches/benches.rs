@@ -7,12 +7,15 @@
 use std::collections::HashMap;
 
 extern crate weld;
+extern crate libc;
 extern crate easy_ll;
 
 use bencher;
 
 use self::weld::*;
 use bencher::Bencher;
+
+use self::libc::c_void;
 
 #[derive(Clone)]
 #[allow(dead_code)]
@@ -61,8 +64,15 @@ fn bench_integer_vector_sum(bench: &mut Bencher) {
     for i in 0..(result.len as isize) {
         assert_eq!(unsafe { *result.data.offset(i) }, x[0] + y[0]);
     }
+    weld_rt_free(result.data as *mut c_void);
+    weld_rt_free(result_raw as *mut c_void);
 
-    bench.iter(|| module.run(&args as *const Args as i64, 1));
+    bench.iter(|| {
+        let result_raw = module.run(&args as *const Args as i64, 1) as *const WeldVec;
+        let result = unsafe { (*result_raw).clone() };
+        weld_rt_free(result.data as *mut c_void);
+        weld_rt_free(result_raw as *mut c_void);
+    });
 }
 
 fn bench_integer_map_reduce(bench: &mut Bencher) {

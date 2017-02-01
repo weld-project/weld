@@ -22,7 +22,7 @@ int main() {
         x[4] = 5;
 
         // This should prevent a huge memory blow up (comment it out and run top to see memory blowup)
-        //weld_rt_free((void *)x);
+        weld_rt_free((void *)x);
     }
 
     return 0;
