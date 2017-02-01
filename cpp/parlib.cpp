@@ -123,7 +123,7 @@ static inline void set_cont(work_t *w, work_t *cont) {
   __sync_fetch_and_add(&cont->deps, 1);
 }
 
-static inline void execute();
+static inline void execute(work_t *initial_task);
 
 // called from generated code to schedule a for loop with the given body and continuation
 // the data pointers store the closures for the body and continuation
@@ -157,9 +157,8 @@ extern "C" void pl_start_loop(work_t *w, void *body_data, void *cont_data, void 
     (all_work_queues + my_id())->push_front(body_task);
     pthread_spin_unlock((all_work_queue_locks + my_id()));
   } else {
-    all_work_queues[0].push_front(body_task);
     // start the parallel runtime
-    execute();
+    execute(body_task);
   }
 }
 
@@ -234,9 +233,9 @@ static inline void cleanup_computation_state() {
     all_work_queues[i].clear();
   }
 
-  free(all_work_queue_locks);
-  free(all_work_queues);
-  free(workers);
+  delete [] all_work_queue_locks;
+  delete [] all_work_queues;
+  delete [] workers;
 
   started = false;
   done = false;
@@ -246,11 +245,13 @@ static inline void cleanup_computation_state() {
 // block until the computation is complete
 // once execute() returns all state has been reset and it is safe to run
 // another computation
-static inline void execute() {
+static inline void execute(work_t *initial_task) {
   started = true;
-  workers = (pthread_t *)malloc(sizeof(pthread_t) * W);
-  all_work_queue_locks = (work_queue_lock *)malloc(sizeof(work_queue_lock) * W);
-  all_work_queues = (work_queue *)malloc(sizeof(work_queue) * W);
+  workers = new pthread_t[W];
+  all_work_queue_locks = new work_queue_lock[W];
+  all_work_queues = new work_queue[W];
+
+  all_work_queues[0].push_front(initial_task);
 
   for (int32_t i = 0; i < W; i++) {
     pthread_spin_init(all_work_queue_locks + i, 0);
