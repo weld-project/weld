@@ -9,9 +9,11 @@ extern crate regex;
 extern crate easy_ll;
 extern crate libc;
 
+use std::collections::HashMap;
 use std::error::Error;
 use libc::{c_char, c_void};
 use std::ffi::{CString, CStr};
+use std::mem;
 
 /// Utility macro to create an Err result with a WeldError from a format string.
 macro_rules! weld_err {
@@ -35,6 +37,13 @@ pub mod tokenizer;
 pub mod transforms;
 pub mod type_inference;
 pub mod util;
+
+use std::sync::Mutex;
+
+lazy_static! {
+    static ref ALLOCS: Mutex<HashMap<i64, (usize, usize)>> = Mutex::new(HashMap::new());
+}
+
 
 pub struct WeldError {
     code: i32,
@@ -183,6 +192,42 @@ pub extern "C" fn weld_error_free(err: *mut WeldError) {
         return;
     }
     unsafe { Box::from_raw(err) };
+}
+
+#[no_mangle]
+pub extern "C" fn weld_rt_malloc(module_id: u64, size: libc::uint64_t) -> *mut c_void {
+    if size == 0 {
+        return std::ptr::null_mut();
+    }
+
+    let mut memory: Vec<i8> = Vec::with_capacity(size as usize);
+    let ptr = memory.as_mut_ptr();
+    let len = memory.len();
+    let cap = memory.capacity();
+    mem::forget(memory);
+
+    // Need to record the allocated capacity and length so we can reconstruct
+    // the vector when we free it.
+    ALLOCS.lock().unwrap().insert(ptr as i64, (len, cap));
+    ptr as *mut c_void
+}
+
+#[no_mangle]
+pub extern "C" fn weld_rt_free(data: *mut c_void) {
+    if data.is_null() {
+        return;
+    }
+
+    let data = data as *mut i8;
+
+    unsafe {
+        let printer = data as *mut i32;
+        println!("{}", *printer);
+        println!("{}", *(printer.offset(1)));
+    }
+
+    let (len, cap) = ALLOCS.lock().unwrap().remove(&(data as i64)).unwrap();
+    unsafe { mem::drop(Vec::from_raw_parts(data, len, cap)) }
 }
 
 #[cfg(test)]

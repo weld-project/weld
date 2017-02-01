@@ -129,6 +129,13 @@ weld_error_message(weld_error_t);
 extern "C" void 
 weld_error_free(weld_error_t);
 
+// Weld memory management.
+
+extern "C" void*
+weld_rt_malloc(uint64_t module_id, size_t size);
+
+extern "C" void
+weld_rt_free(void *data);
 
 
 #endif
