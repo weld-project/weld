@@ -514,6 +514,13 @@ impl<'t> Parser<'t> {
                 Ok(expr)
             }
 
+            TToVec => {
+                try!(self.consume(TOpenParen));
+                let child_expr = try!(self.expr());
+                try!(self.consume(TCloseParen));
+                Ok(expr_box(ToVec { child_expr: child_expr }))
+            }
+
             TIdent(ref name) => {
                 Ok(expr_box(Ident(Symbol {
                     name: name.clone(),
@@ -686,7 +693,7 @@ impl<'t> Parser<'t> {
                         bin_op = Add;
                     }
                     TTimes => {
-                        self.consume(TPlus)?;
+                        self.consume(TTimes)?;
                         bin_op = Multiply;
                     }
                     ref t => {
@@ -697,6 +704,39 @@ impl<'t> Parser<'t> {
                 self.consume(TCloseBracket)?;
                 let mut expr = expr_box(NewBuilder);
                 expr.ty = Builder(Merger(Box::new(elem_type), bin_op));
+                Ok(expr)
+            }
+
+            TDictMerger => {
+                let key_type: PartialType;
+                let value_type: PartialType;
+                let bin_op: _;
+                try!(self.consume(TOpenBracket));
+                key_type = try!(self.type_());
+                try!(self.consume(TComma));
+                value_type = try!(self.type_());
+                try!(self.consume(TComma));
+                // DictMerger right now supports Plus and Times only.
+                match *self.peek() {
+                    TPlus => {
+                        self.consume(TPlus)?;
+                        bin_op = Add;
+                    }
+                    TTimes => {
+                        self.consume(TTimes)?;
+                        bin_op = Multiply;
+                    }
+                    _ => {
+                        return weld_err!("expected commutative binary op in dictMerger");
+                    }
+                }
+                try!(self.consume(TCloseBracket));
+                let mut expr = expr_box(NewBuilder);
+                expr.ty = Builder(DictMerger(Box::new(key_type.clone()),
+                                             Box::new(value_type.clone()),
+                                             Box::new(Struct(vec![key_type.clone(),
+                                                                  value_type.clone()])),
+                                             bin_op));
                 Ok(expr)
             }
 

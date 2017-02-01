@@ -38,3 +38,13 @@ define $ELEM @$NAME.bld.result(%$NAME.bld %bldPtr) {
   call void @free(i8* %toFree)
   ret $ELEM %v
 }
+
+; Dummy hash function; this is needed for structs that use these mergers as fields.
+define i64 @$NAME.bld.hash(%$NAME.bld %bld) {
+  ret i64 0
+}
+
+; Dummy comparison function; this is needed for structs that use these mergers as fields.
+define i32 @$NAME.bld.cmp(%$NAME.bld %bld1, %$NAME.bld %bld2) {
+  ret i32 -1
+}

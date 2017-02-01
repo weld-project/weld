@@ -43,6 +43,7 @@ impl fmt::Display for Symbol {
 pub enum Type {
     Scalar(ScalarKind),
     Vector(Box<Type>),
+    Dict(Box<Type>, Box<Type>),
     Builder(BuilderKind),
     Struct(Vec<Type>),
     Function(Vec<Type>, Box<Type>),
@@ -75,6 +76,7 @@ impl fmt::Display for ScalarKind {
 pub enum BuilderKind {
     Appender(Box<Type>),
     Merger(Box<Type>, BinOpKind),
+    DictMerger(Box<Type>, Box<Type>, BinOpKind),
 }
 
 pub trait TypeBounds: Clone + PartialEq {}
@@ -114,6 +116,7 @@ pub enum ExprKind<T: TypeBounds> {
         kind: ScalarKind,
         child_expr: Box<Expr<T>>,
     },
+    ToVec { child_expr: Box<Expr<T>> },
     MakeStruct { elems: Vec<Expr<T>> },
     MakeVector { elems: Vec<Expr<T>> },
     Zip { vectors: Vec<Expr<T>> },
@@ -239,6 +242,7 @@ impl<T: TypeBounds> Expr<T> {
         match self.kind {
                 BinOp { ref left, ref right, .. } => vec![left.as_ref(), right.as_ref()],
                 Cast { ref child_expr, .. } => vec![child_expr.as_ref()],
+                ToVec { ref child_expr } => vec![child_expr.as_ref()],
                 Let { ref value, ref body, .. } => vec![value.as_ref(), body.as_ref()],
                 Lambda { ref body, .. } => vec![body.as_ref()],
                 MakeStruct { ref elems } => elems.iter().collect(),
@@ -287,6 +291,7 @@ impl<T: TypeBounds> Expr<T> {
         match self.kind {
                 BinOp { ref mut left, ref mut right, .. } => vec![left.as_mut(), right.as_mut()],
                 Cast { ref mut child_expr, .. } => vec![child_expr.as_mut()],
+                ToVec { ref mut child_expr } => vec![child_expr.as_mut()],
                 Let { ref mut value, ref mut body, .. } => vec![value.as_mut(), body.as_mut()],
                 Lambda { ref mut body, .. } => vec![body.as_mut()],
                 MakeStruct { ref mut elems } => elems.iter_mut().collect(),
@@ -356,6 +361,7 @@ impl<T: TypeBounds> Expr<T> {
                 }
                 (&Cast { kind: ref kind1, .. }, &Cast { kind: ref kind2, .. }) if kind1 ==
                                                                                   kind2 => Ok(true),
+                (&ToVec { .. }, &ToVec { .. }) => Ok(true),
                 (&Let { name: ref sym1, .. }, &Let { name: ref sym2, .. }) => {
                     sym_map.insert(sym1, sym2);
                     Ok(true)

@@ -40,6 +40,8 @@ pub enum Token {
     TLookup,
     TAppender,
     TMerger,
+    TDictMerger,
+    TToVec,
     TOpenParen, // (
     TCloseParen, // )
     TOpenBracket, // [
@@ -82,7 +84,8 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
 
         // Regular expressions for various types of tokens.
         static ref KEYWORD_RE: Regex = Regex::new(
-            "if|for|zip|len|lookup|iter|merge|result|let|true|false|macro|i32|i64|f32|f64|bool|vec|appender|merger").unwrap();
+            "if|for|zip|len|lookup|iter|merge|result|let|true|false|macro|\
+             i32|i64|f32|f64|bool|vec|appender|merger|dictmerger|tovec").unwrap();
 
         static ref IDENT_RE: Regex = Regex::new(r"^[A-Za-z$_][A-Za-z0-9$_]*$").unwrap();
 
@@ -123,6 +126,8 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
                 "vec" => TVec,
                 "appender" => TAppender,
                 "merger" => TMerger,
+                "dictmerger" => TDictMerger,
+                "tovec" => TToVec,
                 "zip" => TZip,
                 "iter" => TIter,
                 "len" => TLen,
@@ -232,6 +237,8 @@ impl fmt::Display for Token {
                            TVec => "vec",
                            TAppender => "appender",
                            TMerger => "merger",
+                           TDictMerger => "dictmerger",
+                           TToVec => "tovec",
                            TZip => "zip",
                            TIter => "iter",
                            TLen => "len",

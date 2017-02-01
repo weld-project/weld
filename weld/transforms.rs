@@ -458,38 +458,34 @@ fn replace_builder(lambda: &Expr<Type>,
                 ty: nested_args[1].ty.clone(),
                 kind: Ident(new_index_sym.clone()),
             };
-            new_body.ty = new_bldr.ty.clone();
-            new_body.transform(&mut |ref mut e| {
-                match e.kind {
-                    Merge { ref builder, ref value } if same_iden(&(*builder).kind,
-                                                                  &old_bldr.name) => {
-                        let params: Vec<Expr<Type>> =
-                            vec![new_bldr.clone(), new_index.clone(), *value.clone()];
-                        let mut expr = Expr {
-                            ty: e.ty.clone(),
-                            kind: Apply {
-                                func: Box::new(nested.clone()),
-                                params: params,
-                            },
-                        };
-                        inline_apply(&mut expr);
-                        Some(expr)
-                    }
-                    For { iters: ref data, builder: ref bldr, ref func }
-                        if same_iden(&(*bldr).kind, &old_bldr.name) => {
-                        Some(Expr {
-                            ty: e.ty.clone(),
-                            kind: For {
-                                iters: data.clone(),
-                                builder: Box::new(new_bldr.clone()),
-                                func: Box::new(replace_builder(func, nested, sym_gen)),
-                            },
-                        })
-                    }
-                    Ident(ref mut symbol) if *symbol == old_bldr.name => Some(new_bldr.clone()),
-                    Ident(ref mut symbol) if *symbol == old_index.name => Some(new_index.clone()),
-                    _ => None,
+            new_body.transform(&mut |ref mut e| match e.kind {
+                Merge { ref builder, ref value } if same_iden(&(*builder).kind, &old_bldr.name) => {
+                    let params: Vec<Expr<Type>> =
+                        vec![new_bldr.clone(), new_index.clone(), *value.clone()];
+                    let mut expr = Expr {
+                        ty: e.ty.clone(),
+                        kind: Apply {
+                            func: Box::new(nested.clone()),
+                            params: params,
+                        },
+                    };
+                    inline_apply(&mut expr);
+                    Some(expr)
                 }
+                For { iters: ref data, builder: ref bldr, ref func }
+                    if same_iden(&(*bldr).kind, &old_bldr.name) => {
+                    Some(Expr {
+                        ty: e.ty.clone(),
+                        kind: For {
+                            iters: data.clone(),
+                            builder: Box::new(new_bldr.clone()),
+                            func: Box::new(replace_builder(func, nested, sym_gen)),
+                        },
+                    })
+                }
+                Ident(ref mut symbol) if *symbol == old_bldr.name => Some(new_bldr.clone()),
+                Ident(ref mut symbol) if *symbol == old_index.name => Some(new_index.clone()),
+                _ => None,
             });
             let new_params = vec![Parameter {
                                       ty: new_bldr.ty.clone(),
