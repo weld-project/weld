@@ -31,12 +31,19 @@ fn run_benchmarks(filename: String, benches: HashMap<String, fn(&mut bencher::Be
     let mut wtr = csv::Writer::from_file(filename).unwrap();
     // Encode the CSV header.
     let result =
-        wtr.encode(("name", "mean(ms)", "min(ms)", "max(ms)", "median(ms)", "std_dev(ms)"));
+        wtr.encode(("name",
+                    "config",
+                    "mean(ms)",
+                    "min(ms)",
+                    "max(ms)",
+                    "median(ms)",
+                    "std_dev(ms)"));
     assert!(result.is_ok());
     for (bench_name, bench_fn) in benches.iter() {
         // Extract statistics.
         let Summary { min, max, mean, median, std_dev, .. } = benchmark(bench_fn).ns_iter_summ;
         let record = (bench_name,
+                      "weld",
                       format_ns(mean),
                       format_ns(min),
                       format_ns(max),
