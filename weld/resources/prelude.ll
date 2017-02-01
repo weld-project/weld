@@ -26,7 +26,12 @@ declare void @qsort(i8*, i64, i64, i32 (i8*, i8*)*)
 ; declare void @nvl_log_i64(i64)
 
 ; Parallel runtime structures
-%work_t = type { i8* }
+%work_t = type { i8*, i64, i64, void (%work_t*)*, %work_t*, i32, i64, i32 }
+
+declare void @set_result(i8*)
+declare i8* @get_result()
+declare void @set_nworkers(i32)
+declare void @pl_start_loop(%work_t*, i8*, i8*, void (%work_t*)*, void (%work_t*)*, i64, i64);
 
 ; Hash functions
 

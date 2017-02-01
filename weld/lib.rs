@@ -138,7 +138,8 @@ pub extern "C" fn weld_module_run(module: *mut easy_ll::CompiledModule,
     };
 
     // TODO(shoumik): Error reporting - at least basic crashes
-    let result = module.run(arg.data as i64) as *const c_void;
+    // TODO(shoumik): Set the number of threads correctly
+    let result = module.run(arg.data as i64, 1) as *const c_void;
     Box::into_raw(Box::new(WeldValue {
         data: result,
         owned: true,
