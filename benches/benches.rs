@@ -39,8 +39,8 @@ fn bench_integer_vector_sum(bench: &mut Bencher) {
     let module = compile(code);
 
     let size: i64 = 10000000;
-    let x = vec![4; size as usize];
-    let y = vec![5; size as usize];
+    let x: Vec<i32> = vec![4; size as usize];
+    let y: Vec<i32> = vec![5; size as usize];
 
     let args = Args {
         x: WeldVec {
@@ -53,9 +53,16 @@ fn bench_integer_vector_sum(bench: &mut Bencher) {
         },
     };
 
-    // Run the module.
-    // TODO(shoumik): How to free this memory?
-    bench.iter(|| module.run(&args as *const Args as i64, 1))
+    // TODO(shoumik): Free memory.
+
+    // Run once to check for correctness.
+    let result_raw = module.run(&args as *const Args as i64, 1) as *const WeldVec;
+    let result = unsafe { (*result_raw).clone() };
+    for i in 0..(result.len as isize) {
+        assert_eq!(unsafe { *result.data.offset(i) }, x[0] + y[0]);
+    }
+
+    bench.iter(|| module.run(&args as *const Args as i64, 1));
 }
 
 fn bench_integer_map_reduce(bench: &mut Bencher) {
@@ -70,7 +77,7 @@ fn bench_integer_map_reduce(bench: &mut Bencher) {
     let module = compile(code);
 
     let size: i64 = 10000000;
-    let x = vec![4; size as usize];
+    let x: Vec<i32> = vec![4; size as usize];
 
     let args = Args {
         x: WeldVec {
@@ -79,7 +86,12 @@ fn bench_integer_map_reduce(bench: &mut Bencher) {
         },
     };
 
-    // TODO(shoumik): How to free this memory?
+    // Check correctness.
+    let expect = x[0] * 4 * (size as i32);
+    let result_raw = module.run(&args as *const Args as i64, 1) as *const i32;
+    let result = unsafe { *result_raw.clone() };
+    assert_eq!(expect, result);
+
     bench.iter(|| module.run(&args as *const Args as i64, 1))
 }
 
