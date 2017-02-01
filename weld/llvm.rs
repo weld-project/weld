@@ -1345,3 +1345,26 @@ fn iters_for_loop() {
     }
     // TODO: Free result_raw
 }
+
+#[test]
+fn serial_parlib_test() {
+    #[derive(Clone)]
+    #[allow(dead_code)]
+    struct WeldVec {
+        data: *const i32,
+        len: i64,
+    }
+
+    let code = "|x:vec[i32]| result(for(x, merger[i32,+], |b,i,e| merge(b, e)))";
+    let module = compile_program(&parse_program(code).unwrap()).unwrap();
+    let size: i32 = 10000;
+    let input: Vec<i32> = vec![1; size as usize];
+    let args = WeldVec {
+        data: input.as_ptr() as *const i32,
+        len: size as i64,
+    };
+    let result_raw = module.run(&args as *const WeldVec as i64, 1) as *const i32;
+    let result = unsafe { (*result_raw).clone() };
+    assert_eq!(result, size);
+    // TODO: Free result_raw
+}
