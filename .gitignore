@@ -8,3 +8,4 @@ Cargo.lock
 rusty-tags.vi
 run
 notes
+bench.csv

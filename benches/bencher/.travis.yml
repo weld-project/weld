@@ -1,0 +1,22 @@
+language: rust
+sudo: false
+
+# run builds for all the trains (and more)
+rust:
+  - 1.10.0
+  - stable
+  - beta
+  - nightly
+
+# the main build
+script:
+  - |
+      cargo build &&
+      cargo test &&
+      cargo test --release &&
+      cargo doc &&
+      cargo bench
+
+branches:
+  only:
+    - master

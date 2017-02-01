@@ -955,11 +955,13 @@ fn llvm_binop(op_kind: BinOpKind, ty: &Type) -> WeldResult<&'static str> {
         (BinOpKind::Divide, &Scalar(F32)) => Ok("fdiv"),
         (BinOpKind::Divide, &Scalar(F64)) => Ok("fdiv"),
 
+        (BinOpKind::Equal, &Scalar(Bool)) => Ok("icmp eq"),
         (BinOpKind::Equal, &Scalar(I32)) => Ok("icmp eq"),
         (BinOpKind::Equal, &Scalar(I64)) => Ok("icmp eq"),
         (BinOpKind::Equal, &Scalar(F32)) => Ok("fcmp oeq"),
         (BinOpKind::Equal, &Scalar(F64)) => Ok("fcmp oeq"),
 
+        (BinOpKind::NotEqual, &Scalar(Bool)) => Ok("icmp ne"),
         (BinOpKind::NotEqual, &Scalar(I32)) => Ok("icmp ne"),
         (BinOpKind::NotEqual, &Scalar(I64)) => Ok("icmp ne"),
         (BinOpKind::NotEqual, &Scalar(F32)) => Ok("fcmp one"),
@@ -984,6 +986,9 @@ fn llvm_binop(op_kind: BinOpKind, ty: &Type) -> WeldResult<&'static str> {
         (BinOpKind::GreaterThanOrEqual, &Scalar(I64)) => Ok("icmp sge"),
         (BinOpKind::GreaterThanOrEqual, &Scalar(F32)) => Ok("fcmp oge"),
         (BinOpKind::GreaterThanOrEqual, &Scalar(F64)) => Ok("fcmp oge"),
+
+        (BinOpKind::LogicalAnd, &Scalar(Bool)) => Ok("and"),
+        (BinOpKind::LogicalOr, &Scalar(Bool)) => Ok("or"),
 
         _ => weld_err!("Unsupported binary op: {} on {}", op_kind, print_type(ty)),
     }
@@ -1045,11 +1050,13 @@ pub fn compile_program(program: &Program) -> WeldResult<easy_ll::CompiledModule>
     try!(type_inference::infer_types(&mut expr));
     let mut expr = try!(expr.to_typed());
     transforms::inline_apply(&mut expr);
+    transforms::inline_let(&mut expr);
     transforms::inline_zips(&mut expr);
+    transforms::fuse_loops_horizontal(&mut expr);
+    transforms::fuse_loops_vertical(&mut expr);
     let sir_prog = try!(sir::ast_to_sir(&expr));
     let mut gen = LlvmGenerator::new();
     try!(gen.add_function_on_pointers("run", &sir_prog));
-    println!("{}", gen.result());
     Ok(try!(easy_ll::compile_module(&gen.result())))
 }
 

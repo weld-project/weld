@@ -9,6 +9,8 @@ regex = "0.1.71"
 rustyline = "1.0.0"
 easy_ll = { path = "easy_ll", version = "^0.1.0" }
 libc = "0.2.0"
+getopts = "0.2.14"
+csv = "0.15.0"
 
 [lib]
 path = "weld/lib.rs"
@@ -17,3 +19,8 @@ crate-type = ["dylib", "rlib"]
 [[bin]]
 name = "repl"
 path = "weld/bin/repl.rs"
+
+[[bench]]
+name = "benches"
+path = "benches/driver.rs"
+harness = false

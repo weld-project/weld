@@ -689,8 +689,9 @@ impl<'t> Parser<'t> {
                         self.consume(TPlus)?;
                         bin_op = Multiply;
                     }
-                    _ => {
-                        return weld_err!("expected commutatitive binary op in merger");
+                    ref t => {
+                        return weld_err!("expected commutative binary op in merger but got '{}'",
+                                         t);
                     }
                 };
                 self.consume(TCloseBracket)?;
