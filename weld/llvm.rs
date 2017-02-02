@@ -24,6 +24,8 @@ use super::util::IdGenerator;
 
 #[cfg(test)]
 use super::parser::*;
+#[cfg(test)]
+use super::weld_run_free;
 
 static PRELUDE_CODE: &'static str = include_str!("resources/prelude.ll");
 static VECTOR_CODE: &'static str = include_str!("resources/vector.ll");
@@ -1089,7 +1091,9 @@ fn basic_program() {
     let result = module.run(0, 1) as *const i32;
     let result = unsafe { *result };
     assert_eq!(result, 42);
-    // TODO: Free result
+
+    // TODO(shoumik): Use a proper run_id;
+    weld_run_free(0);
 }
 
 #[test]
@@ -1099,7 +1103,8 @@ fn f64_cast() {
     let result = module.run(0, 1) as *const f64;
     let result = unsafe { *result };
     assert_eq!(result, 42.0);
-    // TODO: Free result
+    // TODO(shoumik): Use a proper run_id;
+    weld_run_free(0);
 }
 
 #[test]
@@ -1109,7 +1114,8 @@ fn i32_cast() {
     let result = module.run(0, 1) as *const i32;
     let result = unsafe { *result };
     assert_eq!(result, 1);
-    // TODO: Free result
+    // TODO(shoumik): Use a proper run_id;
+    weld_run_free(0);
 }
 
 #[test]
@@ -1120,7 +1126,8 @@ fn program_with_args() {
     let result = module.run(&input as *const i32 as i64, 1) as *const i32;
     let result = unsafe { *result };
     assert_eq!(result, 42);
-    // TODO: Free result
+    // TODO(shoumik): Use a proper run_id;
+    weld_run_free(0);
 }
 
 #[test]
@@ -1131,7 +1138,8 @@ fn let_statement() {
     let result = module.run(&input as *const i32 as i64, 1) as *const i32;
     let result = unsafe { *result };
     assert_eq!(result, 44);
-    // TODO: Free result
+    // TODO(shoumik): Use a proper run_id;
+    weld_run_free(0);
 }
 
 #[test]
@@ -1142,7 +1150,8 @@ fn if_statement() {
     let result = module.run(&input as *const i32 as i64, 1) as *const i32;
     let result = unsafe { *result };
     assert_eq!(result, 3);
-    // TODO: Free result
+    // TODO(shoumik): Use a proper run_id;
+    weld_run_free(0);
 }
 
 #[test]
@@ -1153,12 +1162,14 @@ fn comparison() {
     let result = module.run(&input as *const i32 as i64, 1) as *const i32;
     let result = unsafe { *result };
     assert_eq!(result, 10);
-    // TODO: Free result
+    // TODO(shoumik): Use a proper run_id;
+    weld_run_free(0);
     let input: i32 = 20;
     let result = module.run(&input as *const i32 as i64, 1) as *const i32;
     let result = unsafe { *result };
     assert_eq!(result, 20);
-    // TODO: Free result
+    // TODO(shoumik): Use a proper run_id;
+    weld_run_free(0);
 }
 
 #[test]
@@ -1191,7 +1202,8 @@ fn simple_for_appender_loop() {
     for i in 0..(result.len as isize) {
         assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
     }
-    // TODO: Free result_raw
+    // TODO(shoumik): Use a proper run_id;
+    weld_run_free(0);
 }
 
 #[test]
@@ -1222,7 +1234,8 @@ fn simple_for_merger_loop() {
     let result = unsafe { (*result_raw).clone() };
     let output = 20;
     assert_eq!(result, output);
-    // TODO: Free result_raw
+    // TODO(shoumik): Use a proper run_id;
+    weld_run_free(0);
 }
 
 #[test]
@@ -1256,7 +1269,8 @@ fn if_for_loop() {
     for i in 0..(result.len as isize) {
         assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
     }
-    // TODO: Free result_raw
+    // TODO(shoumik): Use a proper run_id;
+    weld_run_free(0);
 
     let args = Args {
         x: Vec {
@@ -1271,7 +1285,8 @@ fn if_for_loop() {
     for i in 0..(result.len as isize) {
         assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
     }
-    // TODO: Free result_raw
+    // TODO(shoumik): Use a proper run_id;
+    weld_run_free(0);
 }
 
 #[test]
@@ -1309,7 +1324,8 @@ fn map_zip_loop() {
     for i in 0..(result.len as isize) {
         assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
     }
-    // TODO: Free result_raw
+    // TODO(shoumik): Use a proper run_id;
+    weld_run_free(0);
 }
 
 #[test]
@@ -1347,5 +1363,6 @@ fn iters_for_loop() {
     for i in 0..(result.len as isize) {
         assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
     }
-    // TODO: Free result_raw
+    // TODO(shoumik): Use a proper run_id;
+    weld_run_free(0);
 }
