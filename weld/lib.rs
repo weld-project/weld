@@ -42,7 +42,7 @@ use std::sync::Mutex;
 
 lazy_static! {
     // Maps a run to a list of pointers that must be freed when the run is freed.
-    static ref ALLOCATIONS: Mutex<HashMap<i64, HashSet<i64>>> = Mutex::new(HashMap::new());
+    static ref ALLOCATIONS: Mutex<HashMap<i64, HashSet<u64>>> = Mutex::new(HashMap::new());
 }
 
 // C Functions used by the Weld runtime.
@@ -213,9 +213,14 @@ pub extern "C" fn weld_error_free(err: *mut WeldError) {
 pub extern "C" fn weld_rt_malloc(module_id: i64, size: libc::int64_t) -> *mut c_void {
     let mut guarded = ALLOCATIONS.lock().unwrap();
     let ptr = unsafe { malloc(size as usize) };
+    if !guarded.contains_key(&0) {
+        // TODO(shoumik): Track runs.
+        guarded.insert(0, HashSet::new());
+    }
     // TODO(shoumik): Track runs.
+    println!("malloc {} (size={})", ptr as u64, size as u64);
     let entries = guarded.entry(0).or_insert(HashSet::new());
-    entries.insert(ptr as i64);
+    entries.insert(ptr as u64);
     ptr
 }
 
@@ -228,9 +233,13 @@ pub extern "C" fn weld_rt_realloc(data: *mut c_void, size: libc::int64_t) -> *mu
     if !guarded.contains_key(&0) {
         panic!("Unseen run {}", 0);
     }
+    println!("realloc {} to {} (size={})",
+             data as u64,
+             ptr as u64,
+             size as u64);
     let entries = guarded.entry(0).or_insert(HashSet::new());
-    entries.remove(&(data as i64));
-    entries.insert(ptr as i64);
+    entries.remove(&(data as u64));
+    entries.insert(ptr as u64);
     ptr
 }
 
@@ -240,8 +249,9 @@ pub extern "C" fn weld_rt_free(data: *mut c_void) {
     let mut guarded = ALLOCATIONS.lock().unwrap();
     unsafe { free(data) };
     // TODO(shoumik): Track runs
+    println!("free {}", data as u64);
     let entries = guarded.entry(0).or_insert(HashSet::new());
-    entries.remove(&(data as i64));
+    entries.remove(&(data as u64));
 
 }
 
@@ -256,7 +266,8 @@ pub extern "C" fn weld_run_free(run_id: i64) {
     {
         let entries = guarded.entry(0).or_insert(HashSet::new());
         for entry in entries.iter() {
-            unsafe { free(*entry as *mut c_void) }
+            println!("free {}", *entry as u64);
+            unsafe { free(*entry as *mut c_void) };
         }
     }
     // TODO(shoumik): Track runs

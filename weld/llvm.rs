@@ -1234,7 +1234,7 @@ fn simple_for_merger_loop() {
     let result = unsafe { (*result_raw).clone() };
     let output = 20;
     assert_eq!(result, output);
-    // TODO(shoumik): Use a proper run_id;
+    // TODO(shoumik): Use a proper run_id.
     weld_run_free(0);
 }
 
