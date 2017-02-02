@@ -24,6 +24,9 @@ struct WeldVec {
     len: i64,
 }
 
+// TODO(shoumik): Should this use the Weld C API instead? That way we can free stuff more easily
+// too by freeing the module after each benchmark run.
+
 /// Compiles a string into an LLVM module.
 fn compile(code: &str) -> easy_ll::CompiledModule {
     let code = code.trim();
@@ -56,7 +59,8 @@ fn bench_integer_vector_sum(bench: &mut Bencher) {
         },
     };
 
-    // TODO(shoumik): Free memory.
+    // We should use the API here so we can use the same allocation/free patterns as everywhere
+    // else.
 
     // Run once to check for correctness.
     let result_raw = module.run(&args as *const Args as i64, 1) as *const WeldVec;
