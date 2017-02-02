@@ -20,14 +20,14 @@ int main() {
     const size_t LEN = 10000000;
 
     printf("sleeping before input allocation so memory can be observed..\n");
-    sleep(10);
+    sleep(5);
 
     struct vec inp;
     inp.data = (int32_t *)malloc(sizeof(int32_t) * LEN);
     inp.length = LEN;
 
     printf("sleeping before module compilation so memory can be observed..\n");
-    sleep(10);
+    sleep(5);
 
     // Compile Weld module.
     weld_error_t e = NULL;
@@ -66,7 +66,7 @@ int main() {
     weld_module_free(m);
 
     printf("sleeping before quit so memory can be observed..\n");
-    sleep(10);
+    sleep(5);
 
     return 0;
 }
