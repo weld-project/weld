@@ -498,6 +498,7 @@ impl LlvmGenerator {
     fn llvm_type(&mut self, ty: &Type) -> WeldResult<&str> {
         match *ty {
             Scalar(Bool) => Ok("i1"),
+            Scalar(Char) => Ok("i8"),
             Scalar(I32) => Ok("i32"),
             Scalar(I64) => Ok("i64"),
             Scalar(F32) => Ok("float"),
@@ -872,6 +873,9 @@ impl LlvmGenerator {
                                 ctx.code.add(format!("store i1 {}, i1* {}",
                                                      if l { 1 } else { 0 },
                                                      llvm_symbol(output)))
+                            }
+                            CharLiteral(l) => {
+                                ctx.code.add(format!("store i8 {}, i8* {}", l, llvm_symbol(output)))
                             }
                             I32Literal(l) => {
                                 ctx.code
@@ -1341,6 +1345,7 @@ fn types() {
     assert_eq!(gen.llvm_type(&Scalar(I64)).unwrap(), "i64");
     assert_eq!(gen.llvm_type(&Scalar(F32)).unwrap(), "float");
     assert_eq!(gen.llvm_type(&Scalar(F64)).unwrap(), "double");
+    assert_eq!(gen.llvm_type(&Scalar(Char)).unwrap(), "i8");
     assert_eq!(gen.llvm_type(&Scalar(Bool)).unwrap(), "i1");
 
     let struct1 = parse_type("{i32,bool,i32}").unwrap().to_type().unwrap();

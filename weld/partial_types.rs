@@ -154,6 +154,7 @@ impl PartialExpr {
 
         let new_kind: ExprKind<Type> = match self.kind {
             Literal(BoolLiteral(v)) => Literal(BoolLiteral(v)),
+            Literal(CharLiteral(v)) => Literal(CharLiteral(v)),
             Literal(I32Literal(v)) => Literal(I32Literal(v)),
             Literal(I64Literal(v)) => Literal(I64Literal(v)),
             Literal(F32Literal(v)) => Literal(F32Literal(v)),

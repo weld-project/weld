@@ -492,6 +492,7 @@ impl<'t> Parser<'t> {
             TI64Literal(v) => Ok(expr_box(Literal(I64Literal(v)))),
             TF32Literal(v) => Ok(expr_box(Literal(F32Literal(v)))),
             TF64Literal(v) => Ok(expr_box(Literal(F64Literal(v)))),
+            TCharLiteral(v) => Ok(expr_box(Literal(CharLiteral(v)))),
             TBoolLiteral(v) => Ok(expr_box(Literal(BoolLiteral(v)))),
             TI32 => {
                 let expr = try!(self.parse_cast(ScalarKind::I32));
@@ -507,6 +508,10 @@ impl<'t> Parser<'t> {
             }
             TF64 => {
                 let expr = try!(self.parse_cast(ScalarKind::F64));
+                Ok(expr)
+            }
+            TChar => {
+                let expr = try!(self.parse_cast(ScalarKind::Char));
                 Ok(expr)
             }
             TBool => {
@@ -775,6 +780,7 @@ impl<'t> Parser<'t> {
             TI64 => Ok(Scalar(ScalarKind::I64)),
             TF32 => Ok(Scalar(ScalarKind::F32)),
             TF64 => Ok(Scalar(ScalarKind::F64)),
+            TChar => Ok(Scalar(ScalarKind::Char)),
             TBool => Ok(Scalar(ScalarKind::Bool)),
 
             TVec => {
@@ -875,6 +881,9 @@ fn basic_parsing() {
     let e = parse_expr("a: i32 + b").unwrap();
     assert_eq!(print_typed_expr(&e), "(a:i32+b:?)");
 
+    let e = parse_expr("|a:char| a").unwrap();
+    assert_eq!(print_typed_expr(&e), "|a:char|a:?");
+    
     assert!(parse_expr("10 * * 2").is_err());
 
     let p = parse_program("macro a(x) = x+x; macro b() = 5; a(b)").unwrap();

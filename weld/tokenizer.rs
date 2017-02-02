@@ -20,6 +20,7 @@ pub enum Token {
     TI64Literal(i64),
     TF32Literal(f32),
     TF64Literal(f64),
+    TCharLiteral(char),
     TBoolLiteral(bool),
     TIdent(String),
     TIf,
@@ -32,6 +33,7 @@ pub enum Token {
     TI64,
     TF32,
     TF64,
+    TChar,
     TBool,
     TVec,
     TZip,
@@ -85,7 +87,7 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
         // Regular expressions for various types of tokens.
         static ref KEYWORD_RE: Regex = Regex::new(
             "if|for|zip|len|lookup|iter|merge|result|let|true|false|macro|\
-             i32|i64|f32|f64|bool|vec|appender|merger|dictmerger|tovec").unwrap();
+             i32|i64|f32|f64|bool|char|vec|appender|merger|dictmerger|tovec").unwrap();
 
         static ref IDENT_RE: Regex = Regex::new(r"^[A-Za-z$_][A-Za-z0-9$_]*$").unwrap();
 
@@ -122,6 +124,7 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
                 "i64" => TI64,
                 "f32" => TF32,
                 "f64" => TF64,
+                "char" => TChar,
                 "bool" => TBool,
                 "vec" => TVec,
                 "appender" => TAppender,
@@ -207,6 +210,7 @@ impl fmt::Display for Token {
             TI64Literal(ref value) => write!(f, "{}L", value),
             TF32Literal(ref value) => write!(f, "{}F", value),
             TF64Literal(ref value) => write!(f, "{}", value),  // TODO: force .0?
+            TCharLiteral(ref value) => write!(f, "{}", value),
             TBoolLiteral(ref value) => write!(f, "{}", value),
             TIdent(ref value) => write!(f, "{}", value),
 
@@ -220,6 +224,7 @@ impl fmt::Display for Token {
                            TI64Literal(_) => "",
                            TF32Literal(_) => "",
                            TF64Literal(_) => "",
+                           TCharLiteral(_) => "",
                            TBoolLiteral(_) => "",
                            TIdent(_) => "",
                            // Other cases that return fixed strings
@@ -233,6 +238,7 @@ impl fmt::Display for Token {
                            TI64 => "i64",
                            TF32 => "f32",
                            TF64 => "f64",
+                           TChar => "char",
                            TBool => "bool",
                            TVec => "vec",
                            TAppender => "appender",
@@ -312,7 +318,9 @@ fn basic_tokenize() {
 
     assert_eq!(tokenize("= == | || & &&").unwrap(),
                vec![TEqual, TEqualEqual, TBar, TLogicalOr, TBitwiseAnd, TLogicalAnd, TEndOfInput]);
-
+    assert_eq!(tokenize("|a:char| a").unwrap(),
+               vec![TBar, TIdent("a".into()), TColon, TChar, TBar, TIdent("a".into()), TEndOfInput]);
+    
     assert!(tokenize("0a").is_err());
     assert!(tokenize("#").is_err());
 
