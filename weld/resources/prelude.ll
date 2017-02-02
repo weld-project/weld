@@ -6,9 +6,6 @@ declare void @llvm.memset.p0i8.i64(i8*, i8, i64, i32, i1)
 declare i64 @llvm.ctlz.i64(i64, i1)
 
 ; C library functions
-declare i8* @malloc(i64)
-declare void @free(i8*)
-declare i8* @realloc(i8*, i64)
 declare void @qsort(i8*, i64, i64, i32 (i8*, i8*)*)
 
 ;; Weld library functions

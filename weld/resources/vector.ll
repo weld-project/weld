@@ -99,7 +99,7 @@ define %$NAME @$NAME.bld.result(%$NAME.bld %bldPtr) {
   %newBytes = call i8* @weld_rt_realloc(i8* %bytes, i64 %allocSize)
   %newElements = bitcast i8* %newBytes to $ELEM*
   %toFree = bitcast %$NAME.bld.inner* %bldPtr to i8*
-  call void @free(i8* %toFree)
+  call void @weld_rt_free(i8* %toFree)
   %1 = insertvalue %$NAME undef, $ELEM* %newElements, 0
   %2 = insertvalue %$NAME %1, i64 %size, 1
   ret %$NAME %2

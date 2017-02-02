@@ -1,2 +1,1 @@
-Uses the C Weld interface to create a Weld module which adds 5 to a number.
-
+Tests memory allocation by allocating a large array in a loop, and then freeing it.
