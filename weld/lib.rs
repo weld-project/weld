@@ -218,7 +218,6 @@ pub extern "C" fn weld_rt_malloc(module_id: i64, size: libc::int64_t) -> *mut c_
         guarded.insert(0, HashSet::new());
     }
     // TODO(shoumik): Track runs.
-    println!("malloc {} (size={})", ptr as u64, size as u64);
     let entries = guarded.entry(0).or_insert(HashSet::new());
     entries.insert(ptr as u64);
     ptr
@@ -233,10 +232,6 @@ pub extern "C" fn weld_rt_realloc(data: *mut c_void, size: libc::int64_t) -> *mu
     if !guarded.contains_key(&0) {
         panic!("Unseen run {}", 0);
     }
-    println!("realloc {} to {} (size={})",
-             data as u64,
-             ptr as u64,
-             size as u64);
     let entries = guarded.entry(0).or_insert(HashSet::new());
     entries.remove(&(data as u64));
     entries.insert(ptr as u64);
@@ -249,7 +244,6 @@ pub extern "C" fn weld_rt_free(data: *mut c_void) {
     let mut guarded = ALLOCATIONS.lock().unwrap();
     unsafe { free(data) };
     // TODO(shoumik): Track runs
-    println!("free {}", data as u64);
     let entries = guarded.entry(0).or_insert(HashSet::new());
     entries.remove(&(data as u64));
 
@@ -266,7 +260,6 @@ pub extern "C" fn weld_run_free(run_id: i64) {
     {
         let entries = guarded.entry(0).or_insert(HashSet::new());
         for entry in entries.iter() {
-            println!("free {}", *entry as u64);
             unsafe { free(*entry as *mut c_void) };
         }
     }
