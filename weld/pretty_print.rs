@@ -20,6 +20,7 @@ impl PrintableType for Type {
     fn print(&self) -> String {
         match *self {
             Scalar(Bool) => "bool".to_string(),
+            Scalar(Char) => "char".to_string(),
             Scalar(I32) => "i32".to_string(),
             Scalar(I64) => "i64".to_string(),
             Scalar(F32) => "f32".to_string(),
@@ -50,6 +51,7 @@ impl PrintableType for PartialType {
         match *self {
             Unknown => "?".to_string(),
             Scalar(Bool) => "bool".to_string(),
+            Scalar(Char) => "char".to_string(),
             Scalar(I32) => "i32".to_string(),
             Scalar(I64) => "i64".to_string(),
             Scalar(F32) => "f32".to_string(),
@@ -226,6 +228,7 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>, typed: bool) -> String {
 pub fn print_literal(lit: &LiteralKind) -> String {
     match *lit {
         BoolLiteral(v) => format!("{}", v),
+        CharLiteral(v) => format!("{}", v),
         I32Literal(v) => format!("{}", v),
         I64Literal(v) => format!("{}L", v),
         F32Literal(v) => {
