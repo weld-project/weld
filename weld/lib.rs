@@ -14,6 +14,7 @@ use std::collections::HashSet;
 use std::error::Error;
 use libc::{c_char, c_void};
 use std::ffi::{CString, CStr};
+use std::mem;
 
 /// Utility macro to create an Err result with a WeldError from a format string.
 macro_rules! weld_err {
@@ -41,7 +42,8 @@ pub mod util;
 use std::sync::Mutex;
 
 lazy_static! {
-    // Maps a run to a list of pointers that must be freed when the run is freed.
+    // Maps a run to a list of pointers that must be freed for a given run of a module.
+    // The key is a globally unique run ID.
     static ref ALLOCATIONS: Mutex<HashMap<i64, HashSet<u64>>> = Mutex::new(HashMap::new());
 }
 
@@ -59,7 +61,7 @@ pub struct WeldError {
 
 pub struct WeldValue {
     data: *const c_void,
-    owned: bool,
+    run_id: Option<i64>,
 }
 
 impl WeldError {
@@ -75,10 +77,9 @@ impl WeldError {
 pub extern "C" fn weld_value_new(data: *const c_void) -> *mut WeldValue {
     Box::into_raw(Box::new(WeldValue {
         data: data,
-        owned: false,
+        run_id: None,
     }))
 }
-
 
 #[no_mangle]
 pub extern "C" fn weld_value_owned(obj: *const WeldValue) -> i32 {
@@ -86,7 +87,7 @@ pub extern "C" fn weld_value_owned(obj: *const WeldValue) -> i32 {
         assert!(!obj.is_null());
         &*obj
     };
-    obj.owned as i32
+    obj.run_id.is_some() as i32
 }
 
 #[no_mangle]
@@ -100,15 +101,19 @@ pub extern "C" fn weld_value_data(obj: *const WeldValue) -> *const c_void {
 
 #[no_mangle]
 pub extern "C" fn weld_value_free(obj: *mut WeldValue) {
-    if obj.is_null() {
-        return;
+    let value = unsafe {
+        if obj.is_null() {
+            return;
+        } else {
+            &mut *obj
+        }
+    };
+
+    if let Some(run_id) = value.run_id {
+        // Free all the memory associated with the run.
+        weld_run_free(run_id);
     }
-
-    // TODO(shoumik): Should this actually free the underlying memory as well, if it's owned?
-    // If we do that, we need a data structure that keeps track of unfreed pointers allocated by
-    // a module. When the module is freed, all memory allocated by the module must also be freed.
-
-    unsafe { Box::from_raw(obj) };
+    mem::drop(obj);
 }
 
 #[no_mangle]
@@ -162,7 +167,7 @@ pub extern "C" fn weld_module_run(module: *mut easy_ll::CompiledModule,
     let result = module.run(arg.data as i64, 1) as *const c_void;
     Box::into_raw(Box::new(WeldValue {
         data: result,
-        owned: true,
+        run_id: Some(0),
     }))
 }
 
@@ -171,10 +176,6 @@ pub extern "C" fn weld_module_free(ptr: *mut easy_ll::CompiledModule) {
     if ptr.is_null() {
         return;
     }
-
-    // TODO(shoumik): Free all unfreed memory. The contract of this call is that
-    // the caller doesn't access any pointers returned/owned by the module (or
-    // copies the data she needs out).
     unsafe { Box::from_raw(ptr) };
 }
 
@@ -210,7 +211,7 @@ pub extern "C" fn weld_error_free(err: *mut WeldError) {
 
 #[no_mangle]
 /// Used by modules to allocate data.
-pub extern "C" fn weld_rt_malloc(module_id: i64, size: libc::int64_t) -> *mut c_void {
+pub extern "C" fn weld_rt_malloc(run_id: i64, size: libc::int64_t) -> *mut c_void {
     let mut guarded = ALLOCATIONS.lock().unwrap();
     let ptr = unsafe { malloc(size as usize) };
     if !guarded.contains_key(&0) {
@@ -249,9 +250,8 @@ pub extern "C" fn weld_rt_free(data: *mut c_void) {
 
 }
 
-#[no_mangle]
-/// Frees all data associated with a given run.
-pub extern "C" fn weld_run_free(run_id: i64) {
+/// Used by tests to free memory after a run.
+pub fn weld_run_free(run_id: i64) {
     let mut guarded = ALLOCATIONS.lock().unwrap();
     // TODO(shoumik): Track runs
     if !guarded.contains_key(&0) {

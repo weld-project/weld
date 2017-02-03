@@ -68,14 +68,11 @@ fn bench_integer_vector_sum(bench: &mut Bencher) {
     for i in 0..(result.len as isize) {
         assert_eq!(unsafe { *result.data.offset(i) }, x[0] + y[0]);
     }
-    weld_rt_free(result.data as *mut c_void);
-    weld_rt_free(result_raw as *mut c_void);
+    weld_run_free(0);
 
     bench.iter(|| {
-        let result_raw = module.run(&args as *const Args as i64, 1) as *const WeldVec;
-        let result = unsafe { (*result_raw).clone() };
-        weld_rt_free(result.data as *mut c_void);
-        weld_rt_free(result_raw as *mut c_void);
+        module.run(&args as *const Args as i64, 1) as *const WeldVec;
+        weld_run_free(0);
     });
 }
 
@@ -105,8 +102,12 @@ fn bench_integer_map_reduce(bench: &mut Bencher) {
     let result_raw = module.run(&args as *const Args as i64, 1) as *const i32;
     let result = unsafe { *result_raw.clone() };
     assert_eq!(expect, result);
+    weld_run_free(0);
 
-    bench.iter(|| module.run(&args as *const Args as i64, 1))
+    bench.iter(|| {
+        module.run(&args as *const Args as i64, 1);
+        weld_run_free(0);
+    })
 }
 
 fn bench_tpch_q6(bench: &mut Bencher) {
@@ -148,11 +149,15 @@ fn bench_tpch_q6(bench: &mut Bencher) {
             len: size,
         },
     };
+
     let module = compile(code);
+    let result_raw = module.run(&args as *const Args as i64, 1) as *const i32;
+    let result = unsafe { *result_raw.clone() };
+    assert_eq!(result, expect as i32);
+
     bench.iter(|| {
-        let result_raw = module.run(&args as *const Args as i64, 1) as *const i32;
-        let result = unsafe { *result_raw.clone() };
-        assert_eq!(result, expect as i32);
+        module.run(&args as *const Args as i64, 1) as *const i32;
+        weld_run_free(0);
     })
 }
 
