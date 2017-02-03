@@ -13,9 +13,6 @@ struct vec {
     int64_t length;
 };
 
-extern "C" void weld_rt_free(void *data);
-extern "C" void *weld_rt_malloc(int64_t _, size_t size);
-
 int main() {
     const size_t LEN = 10000000;
 
@@ -48,15 +45,14 @@ int main() {
         // This allocates some data.
         weld_value_t res = weld_module_run(m, arg, &e);
 
-        // This frees the value wrapper object.
+        // This frees the value and all memory associated with the run that couldn't
+        // safely be freed before.
         weld_value_free(res);
         weld_error_free(e);
 
-        // This frees it. Without this line, we should see a large memory blowup.
-        weld_run_free(0);
-
-        if (i > 5000) {
-            sleep(1);
+        if (i == 2500) {
+            printf("Pausing run loop so memory can be observed...\n");
+            sleep(5);
         }
     }
 
