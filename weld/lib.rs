@@ -74,6 +74,10 @@ impl WeldError {
 }
 
 #[no_mangle]
+/// Returns a new Weld value.
+///
+/// The value returned by this method is *not* owned by the runtime, so any data this value refers
+/// to must be managed by the caller.
 pub extern "C" fn weld_value_new(data: *const c_void) -> *mut WeldValue {
     Box::into_raw(Box::new(WeldValue {
         data: data,
@@ -82,6 +86,7 @@ pub extern "C" fn weld_value_new(data: *const c_void) -> *mut WeldValue {
 }
 
 #[no_mangle]
+/// Returns true if this Weld value is owned by the runtime.
 pub extern "C" fn weld_value_owned(obj: *const WeldValue) -> i32 {
     let obj = unsafe {
         assert!(!obj.is_null());
@@ -91,6 +96,7 @@ pub extern "C" fn weld_value_owned(obj: *const WeldValue) -> i32 {
 }
 
 #[no_mangle]
+/// Returns a pointer to the data wrapped by the given Weld value.
 pub extern "C" fn weld_value_data(obj: *const WeldValue) -> *const c_void {
     let obj = unsafe {
         assert!(!obj.is_null());
@@ -100,6 +106,12 @@ pub extern "C" fn weld_value_data(obj: *const WeldValue) -> *const c_void {
 }
 
 #[no_mangle]
+/// Frees a Weld value.
+///
+/// All Weld values must be freed using this call.
+/// Weld values which are owned by the runtime also free the data they contain.
+/// Weld values which are not owned by the runtime only free the structure used
+/// to wrap the data; the actual data itself is owned by the caller.
 pub extern "C" fn weld_value_free(obj: *mut WeldValue) {
     let value = unsafe {
         if obj.is_null() {
@@ -117,6 +129,7 @@ pub extern "C" fn weld_value_free(obj: *mut WeldValue) {
 }
 
 #[no_mangle]
+/// Given some Weld code and a configuration, returns a runnable Weld module.
 pub extern "C" fn weld_module_compile(code: *const c_char,
                                       conf: *const c_char,
                                       err: *mut *mut WeldError)
@@ -148,6 +161,9 @@ pub extern "C" fn weld_module_compile(code: *const c_char,
 }
 
 #[no_mangle]
+/// Runs a module.
+///
+/// The module may write a value into the provided error pointer.
 pub extern "C" fn weld_module_run(module: *mut easy_ll::CompiledModule,
                                   arg: *const WeldValue,
                                   err: *mut *mut WeldError)
@@ -172,6 +188,10 @@ pub extern "C" fn weld_module_run(module: *mut easy_ll::CompiledModule,
 }
 
 #[no_mangle]
+/// Frees a module.
+///
+/// Freeing a module does not free the memory it may have allocated. Values returned by the module
+/// must be freed explicitly using `weld_value_free`.
 pub extern "C" fn weld_module_free(ptr: *mut easy_ll::CompiledModule) {
     if ptr.is_null() {
         return;
@@ -180,6 +200,7 @@ pub extern "C" fn weld_module_free(ptr: *mut easy_ll::CompiledModule) {
 }
 
 #[no_mangle]
+/// Returns an error code for a Weld error object.
 pub extern "C" fn weld_error_code(err: *mut WeldError) -> i32 {
     let err = unsafe {
         if err.is_null() {
@@ -191,6 +212,7 @@ pub extern "C" fn weld_error_code(err: *mut WeldError) -> i32 {
 }
 
 #[no_mangle]
+/// Returns a C pointer representing a Weld error message.
 pub extern "C" fn weld_error_message(err: *mut WeldError) -> *const c_char {
     let err = unsafe {
         if err.is_null() {
@@ -202,6 +224,7 @@ pub extern "C" fn weld_error_message(err: *mut WeldError) -> *const c_char {
 }
 
 #[no_mangle]
+/// Frees a Weld error object.
 pub extern "C" fn weld_error_free(err: *mut WeldError) {
     if err.is_null() {
         return;
@@ -210,7 +233,12 @@ pub extern "C" fn weld_error_free(err: *mut WeldError) {
 }
 
 #[no_mangle]
-/// Used by modules to allocate data.
+/// Weld runtime wrapper around malloc.
+///
+/// This function tracks the pointer returned by malloc in an allocation list. The allocation list
+/// is _per run_, where the run is tracked via the `run_id` parameter.
+///
+/// This should never be called directly; it is meant to be used by the runtime directly.
 pub extern "C" fn weld_rt_malloc(run_id: i64, size: libc::int64_t) -> *mut c_void {
     let mut guarded = ALLOCATIONS.lock().unwrap();
     let ptr = unsafe { malloc(size as usize) };
@@ -225,7 +253,12 @@ pub extern "C" fn weld_rt_malloc(run_id: i64, size: libc::int64_t) -> *mut c_voi
 }
 
 #[no_mangle]
-/// Used by modules to reallocate data.
+/// Weld Runtime wrapper around realloc.
+///
+/// This function will potentially replace an existing pointer in the allocation list with a new
+/// one, if realloc returns a new address.
+///
+/// This should never be called directly; it is meant to be used by the runtime directly.
 pub extern "C" fn weld_rt_realloc(data: *mut c_void, size: libc::int64_t) -> *mut c_void {
     let mut guarded = ALLOCATIONS.lock().unwrap();
     let ptr = unsafe { realloc(data, size as usize) };
@@ -240,7 +273,11 @@ pub extern "C" fn weld_rt_realloc(data: *mut c_void, size: libc::int64_t) -> *mu
 }
 
 #[no_mangle]
-/// This can be used to free data allocated by the Weld runtime.
+/// Weld Runtime wrapper around free.
+///
+/// This function removes the pointer from the list of allocated pointers.
+///
+/// This should never be called directly; it is meant to be used by the runtime directly.
 pub extern "C" fn weld_rt_free(data: *mut c_void) {
     let mut guarded = ALLOCATIONS.lock().unwrap();
     unsafe { free(data) };
@@ -250,7 +287,10 @@ pub extern "C" fn weld_rt_free(data: *mut c_void) {
 
 }
 
-/// Used by tests to free memory after a run.
+/// Frees memory for a given run.
+///
+/// This is used by internal tests to free memory, as well as by the `weld_value_free` function
+/// to free a return value and all associated memory.
 pub fn weld_run_free(run_id: i64) {
     let mut guarded = ALLOCATIONS.lock().unwrap();
     // TODO(shoumik): Track runs
