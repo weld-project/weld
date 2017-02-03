@@ -52,7 +52,7 @@ pub enum Type {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ScalarKind {
     Bool,
-    Char,
+    I8,
     I32,
     I64,
     F32,
@@ -64,7 +64,7 @@ impl fmt::Display for ScalarKind {
         use ast::ScalarKind::*;
         let text = match *self {
             Bool => "bool",
-            Char => "char",
+            I8 => "i8",
             I32 => "i32",
             I64 => "i64",
             F32 => "f32",
@@ -162,7 +162,7 @@ pub enum ExprKind<T: TypeBounds> {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum LiteralKind {
     BoolLiteral(bool),
-    CharLiteral(char),
+    I8Literal(i8),
     I32Literal(i32),
     I64Literal(i64),
     F32Literal(f32),
