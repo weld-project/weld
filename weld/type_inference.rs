@@ -96,7 +96,7 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
 
         Literal(F64Literal(_)) => push_complete_type(&mut expr.ty, Scalar(F64), "F64Literal"),
 
-        Literal(CharLiteral(_)) => push_complete_type(&mut expr.ty, Scalar(Char), "CharLiteral"),
+        Literal(I8Literal(_)) => push_complete_type(&mut expr.ty, Scalar(I8), "I8Literal"),
         
         Literal(BoolLiteral(_)) => push_complete_type(&mut expr.ty, Scalar(Bool), "BoolLiteral"),
 
