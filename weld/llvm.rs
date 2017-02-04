@@ -1470,8 +1470,8 @@ fn simple_vector_lookup() {
     let result_raw = module.run(&args as *const Args as i64, 1) as *const i32;
     let result = unsafe { (*result_raw).clone() };
     let output = input[3];
-    assert_eq!(output, result)
-    // TODO: Free result_raw
+    assert_eq!(output, result);
+    weld_run_free(0);
 }
 
 #[test]
@@ -1597,8 +1597,8 @@ fn simple_for_dictmerger_loop() {
         }
         assert_eq!(success, true);
     }
-    assert_eq!(result.len, output_keys.len() as i64)
-    // TODO: Free result_raw
+    assert_eq!(result.len, output_keys.len() as i64);
+    weld_run_free(0);
 }
 
 #[test]
@@ -1633,8 +1633,8 @@ fn simple_dict_lookup() {
     let result_raw = module.run(&args as *const Args as i64, 1) as *const i32;
     let result = unsafe { (*result_raw).clone() };
     let output = 4;
-    assert_eq!(output, result)
-    // TODO: Free result_raw
+    assert_eq!(output, result);
+    weld_run_free(0);
 }
 
 #[test]
@@ -1786,5 +1786,5 @@ fn serial_parlib_test() {
     let result_raw = module.run(&args as *const WeldVec as i64, 1) as *const i32;
     let result = unsafe { (*result_raw).clone() };
     assert_eq!(result, size);
-    // TODO: Free result_raw
+    weld_run_free(0);
 }
