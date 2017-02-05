@@ -1670,9 +1670,22 @@ fn simple_length() {
     let result_raw = module.run(&args as *const Args as i64, 1) as *const i32;
     let result = unsafe { (*result_raw).clone() };
     let output = 5;
-    assert_eq!(output, result);
+    assert_eq!(output, result)
+}
 
-    // Test len after filter
+#[test]
+fn filter_length() {
+    #[derive(Clone)]
+    #[allow(dead_code)]
+    struct Vec {
+        data: *const i32,
+        len: i64,
+    }
+    #[allow(dead_code)]
+    struct Args {
+        x: Vec,
+    }
+    
     let code = "|x:vec[i32]| len(filter(x, |i| i < 4 && i > 1))";
     let module = compile_program(&parse_program(code).unwrap()).unwrap();
     let data = [2, 3, 4, 2, 1];
