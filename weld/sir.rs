@@ -40,7 +40,6 @@ pub enum Statement {
     },
     Length {
         output: Symbol,
-        old_ty: Type,
         child: Symbol,
     },
     Assign { output: Symbol, value: Symbol },
@@ -508,7 +507,6 @@ fn gen_expr(expr: &TypedExpr,
             let res_sym = prog.add_local(&expr.ty, cur_func);
             prog.funcs[cur_func].blocks[cur_block].add_statement(Length {
                 output: res_sym.clone(),
-                old_ty: data.ty.clone(),
                 child: data_sym,
             });
             Ok((cur_func, cur_block, res_sym))
