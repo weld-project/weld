@@ -221,7 +221,6 @@ pub extern "C" fn weld_module_run(module: *mut easy_ll::CompiledModule,
     Box::into_raw(Box::new(WeldValue {
         data: result,
         run_id: Some(my_run_id),
-        owned: true,
     }))
 }
 
