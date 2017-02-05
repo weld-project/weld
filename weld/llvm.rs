@@ -838,6 +838,25 @@ impl LlvmGenerator {
                                              out_ty_str,
                                              llvm_symbol(output)));
                     }
+                    Length { ref output, ref old_ty, ref child } => {
+                        let old_ll_ty = try!(self.llvm_type(&old_ty)).to_string();
+                        let dict_prefix = format!("@{}", old_ll_ty.replace("%", ""));
+                        let child_tmp = try!(self.load_var(llvm_symbol(child).as_str(),
+                                                           &old_ll_ty, ctx));
+                        let res_tmp = ctx.var_ids.next();
+                        ctx.code.add(format!("{} = call i64 {}.size({} {})",
+                                             res_tmp,
+                                             dict_prefix,
+                                             old_ll_ty,
+                                             child_tmp));
+                        let out_ty = try!(get_sym_ty(func, output));
+                        let out_ty_str = try!(self.llvm_type(&out_ty)).to_string();
+                        ctx.code.add(format!("store {} {}, {}* {}",
+                                             out_ty_str,
+                                             res_tmp,
+                                             out_ty_str,
+                                             llvm_symbol(output)));
+                    }
                     Assign { ref output, ref value } => {
                         let ty = try!(get_sym_ty(func, output));
                         let ll_ty = try!(self.llvm_type(&ty)).to_string();
@@ -1621,6 +1640,35 @@ fn simple_dict_lookup() {
     let result_raw = module.run(&args as *const Args as i64, 1) as *const i32;
     let result = unsafe { (*result_raw).clone() };
     let output = 4;
+    assert_eq!(output, result)
+    // TODO: Free result_raw
+}
+
+#[test]
+fn simple_length() {
+    #[derive(Clone)]
+    #[allow(dead_code)]
+    struct Vec {
+        data: *const i32,
+        len: i64,
+    }
+    #[allow(dead_code)]
+    struct Args {
+        x: Vec,
+    }
+
+    let code = "|x:vec[i32]| len(x)";
+    let module = compile_program(&parse_program(code).unwrap()).unwrap();
+    let data = [2, 3, 4, 2, 1];
+    let args = Args {
+        x: Vec {
+            data: &data as *const i32,
+            len: 5,
+        },
+    };
+    let result_raw = module.run(&args as *const Args as i64, 1) as *const i32;
+    let result = unsafe { (*result_raw).clone() };
+    let output = 5;
     assert_eq!(output, result)
     // TODO: Free result_raw
 }
