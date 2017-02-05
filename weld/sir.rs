@@ -38,6 +38,11 @@ pub enum Statement {
         new_ty: Type,
         child: Symbol,
     },
+    Length {
+        output: Symbol,
+        old_ty: Type,
+        child: Symbol,
+    },
     Assign { output: Symbol, value: Symbol },
     AssignLiteral { output: Symbol, value: LiteralKind },
     Merge { builder: Symbol, value: Symbol },
@@ -184,6 +189,7 @@ impl fmt::Display for Statement {
                 write!(f, "{} = lookup({}, {})", output, child, index)
             }
             ToVec { ref output, ref child, .. } => write!(f, "{} = toVec({})", output, child),
+            Length { ref output, ref child, .. } => write!(f, "{} = len({})", output, child),
             Assign { ref output, ref value } => write!(f, "{} = {}", output, value),
             AssignLiteral { ref output, ref value } => {
                 write!(f, "{} = {}", output, print_literal(value))
@@ -317,6 +323,9 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
                     vars.push(index.clone());
                 }
                 ToVec { ref child, .. } => {
+                    vars.push(child.clone());
+                }
+                Length { ref child, .. } => {
                     vars.push(child.clone());
                 }
                 Assign { ref value, .. } => vars.push(value.clone()),
@@ -494,6 +503,17 @@ fn gen_expr(expr: &TypedExpr,
             Ok((cur_func, cur_block, res_sym))
         }
 
+        ExprKind::Length { ref data } => {
+            let (cur_func, cur_block, data_sym) = gen_expr(data, prog, cur_func, cur_block)?;
+            let res_sym = prog.add_local(&expr.ty, cur_func);
+            prog.funcs[cur_func].blocks[cur_block].add_statement(Length {
+                output: res_sym.clone(),
+                old_ty: data.ty.clone(),
+                child: data_sym,
+            });
+            Ok((cur_func, cur_block, res_sym))
+        }
+        
         ExprKind::If { ref cond, ref on_true, ref on_false } => {
             let (cur_func, cur_block, cond_sym) = gen_expr(cond, prog, cur_func, cur_block)?;
             let true_block = prog.funcs[cur_func].add_block();
