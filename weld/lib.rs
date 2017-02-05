@@ -41,10 +41,28 @@ pub mod util;
 
 use std::sync::Mutex;
 
+/// Hold memory information for a run.
+struct RunMemoryInfo {
+    allocations: HashSet<u64>,
+    mem_limit: i64,
+    mem_allocated: i64,
+}
+
+impl RunMemoryInfo {
+    fn new(limit: i64) -> RunMemoryInfo {
+        RunMemoryInfo {
+            allocations: HashSet::new(),
+            mem_limit: limit,
+            mem_allocated: 0,
+        }
+    }
+}
+
 lazy_static! {
     // Maps a run to a list of pointers that must be freed for a given run of a module.
     // The key is a globally unique run ID.
-    static ref ALLOCATIONS: Mutex<HashMap<i64, HashSet<u64>>> = Mutex::new(HashMap::new());
+    static ref ALLOCATIONS: Mutex<HashMap<i64, RunMemoryInfo>> = Mutex::new(HashMap::new());
+    static ref RUN_ID_NEXT: Mutex<i64> = Mutex::new(0);
 }
 
 // C Functions used by the Weld runtime.
@@ -86,13 +104,19 @@ pub extern "C" fn weld_value_new(data: *const c_void) -> *mut WeldValue {
 }
 
 #[no_mangle]
-/// Returns true if this Weld value is owned by the runtime.
-pub extern "C" fn weld_value_owned(obj: *const WeldValue) -> i32 {
+/// Returns the Run ID of the value if the value is owned by the Weld runtime, or -1 if the caller
+/// owns the value.
+pub extern "C" fn weld_value_run(obj: *const WeldValue) -> i64 {
     let obj = unsafe {
         assert!(!obj.is_null());
         &*obj
     };
-    obj.run_id.is_some() as i32
+
+    if let Some(rid) = obj.run_id {
+        rid as i64
+    } else {
+        -1
+    }
 }
 
 #[no_mangle]
@@ -178,12 +202,26 @@ pub extern "C" fn weld_module_run(module: *mut easy_ll::CompiledModule,
         &*arg
     };
 
-    // TODO(shoumik): Error reporting - at least basic crashes
+    // TODO(shoumik): Set the memory limit correctly (config?)
+    let mem_limit = 1000000;
     // TODO(shoumik): Set the number of threads correctly
-    let result = module.run(arg.data as i64, 1) as *const c_void;
+    let threads = 1;
+    let my_run_id;
+
+    // Put this in it's own scope so the mutexes are unlocked.
+    {
+        let mut guarded = ALLOCATIONS.lock().unwrap();
+        let mut run_id = RUN_ID_NEXT.lock().unwrap();
+        my_run_id = run_id.clone();
+        *run_id += 1;
+        guarded.insert(run_id.clone(), RunMemoryInfo::new(mem_limit));
+    }
+
+    // TODO(shoumik): Error reporting - at least basic crashes
+    let result = module.run(arg.data as i64, threads, mem_limit) as *const c_void;
     Box::into_raw(Box::new(WeldValue {
         data: result,
-        run_id: Some(0),
+        run_id: Some(my_run_id),
     }))
 }
 
@@ -239,16 +277,16 @@ pub extern "C" fn weld_error_free(err: *mut WeldError) {
 /// is _per run_, where the run is tracked via the `run_id` parameter.
 ///
 /// This should never be called directly; it is meant to be used by the runtime directly.
-pub extern "C" fn weld_rt_malloc(run_id: i64, size: libc::int64_t) -> *mut c_void {
+pub extern "C" fn weld_rt_malloc(run_id: libc::int64_t, size: libc::int64_t) -> *mut c_void {
+    let run_id = run_id as i64;
     let mut guarded = ALLOCATIONS.lock().unwrap();
-    let ptr = unsafe { malloc(size as usize) };
-    if !guarded.contains_key(&0) {
-        // TODO(shoumik): Track runs.
-        guarded.insert(0, HashSet::new());
+    let mem_info = guarded.entry(run_id).or_insert(RunMemoryInfo::new(0));
+    if mem_info.mem_allocated + (size as i64) > mem_info.mem_limit {
+        println!("Exceeded memory limit: {}B", mem_info.mem_limit);
+        return std::ptr::null_mut();
     }
-    // TODO(shoumik): Track runs.
-    let entries = guarded.entry(0).or_insert(HashSet::new());
-    entries.insert(ptr as u64);
+    let ptr = unsafe { malloc(size as usize) };
+    mem_info.allocations.insert(ptr as u64);
     ptr
 }
 
@@ -259,16 +297,25 @@ pub extern "C" fn weld_rt_malloc(run_id: i64, size: libc::int64_t) -> *mut c_voi
 /// one, if realloc returns a new address.
 ///
 /// This should never be called directly; it is meant to be used by the runtime directly.
-pub extern "C" fn weld_rt_realloc(data: *mut c_void, size: libc::int64_t) -> *mut c_void {
+pub extern "C" fn weld_rt_realloc(run_id: libc::int64_t,
+
+                                  data: *mut c_void,
+                                  size: libc::int64_t)
+                                  -> *mut c_void {
+    let run_id = run_id as i64;
     let mut guarded = ALLOCATIONS.lock().unwrap();
-    let ptr = unsafe { realloc(data, size as usize) };
-    // TODO(shoumik): Track runs.
-    if !guarded.contains_key(&0) {
-        panic!("Unseen run {}", 0);
+    if !guarded.contains_key(&run_id) {
+        panic!("Unseen run {}", run_id);
     }
-    let entries = guarded.entry(0).or_insert(HashSet::new());
-    entries.remove(&(data as u64));
-    entries.insert(ptr as u64);
+    let mem_info = guarded.entry(run_id).or_insert(RunMemoryInfo::new(0));
+    // TODO(shoumik): Accounting here is wrong.
+    if mem_info.mem_allocated + (size as i64) > mem_info.mem_limit {
+        println!("Exceeded memory limit: {}B", mem_info.mem_limit);
+        return std::ptr::null_mut();
+    }
+    let ptr = unsafe { realloc(data, size as usize) };
+    mem_info.allocations.remove(&(data as u64));
+    mem_info.allocations.insert(ptr as u64);
     ptr
 }
 
@@ -278,33 +325,49 @@ pub extern "C" fn weld_rt_realloc(data: *mut c_void, size: libc::int64_t) -> *mu
 /// This function removes the pointer from the list of allocated pointers.
 ///
 /// This should never be called directly; it is meant to be used by the runtime directly.
-pub extern "C" fn weld_rt_free(data: *mut c_void) {
+pub extern "C" fn weld_rt_free(run_id: libc::int64_t, data: *mut c_void) {
+    let run_id = run_id as i64;
     let mut guarded = ALLOCATIONS.lock().unwrap();
+    if !guarded.contains_key(&run_id) {
+        panic!("Unseen run {}", run_id);
+    }
+    // TODO(shoumik): Decrement bytes allocated.
+    let mem_info = guarded.entry(run_id).or_insert(RunMemoryInfo::new(0));
     unsafe { free(data) };
-    // TODO(shoumik): Track runs
-    let entries = guarded.entry(0).or_insert(HashSet::new());
-    entries.remove(&(data as u64));
+    mem_info.allocations.remove(&(data as u64));
 
 }
 
-/// Frees memory for a given run.
+/// Frees all memory for a given run. Passing in -1 frees all memory from all runs.
 ///
 /// This is used by internal tests to free memory, as well as by the `weld_value_free` function
 /// to free a return value and all associated memory.
 pub fn weld_run_free(run_id: i64) {
     let mut guarded = ALLOCATIONS.lock().unwrap();
-    // TODO(shoumik): Track runs
-    if !guarded.contains_key(&0) {
-        return;
-    }
-    {
-        let entries = guarded.entry(0).or_insert(HashSet::new());
-        for entry in entries.iter() {
-            unsafe { free(*entry as *mut c_void) };
+    if run_id == -1 {
+        // Free all memory from all runs.
+        let keys: Vec<_> = guarded.keys().map(|i| *i).collect();
+        for key in keys {
+            {
+                let mem_info = guarded.entry(run_id).or_insert(RunMemoryInfo::new(0));
+                for entry in mem_info.allocations.iter() {
+                    unsafe { free(*entry as *mut c_void) };
+                }
+            }
+            guarded.remove(&key);
         }
+    } else {
+        if !guarded.contains_key(&run_id) {
+            return;
+        }
+        {
+            let mem_info = guarded.entry(run_id).or_insert(RunMemoryInfo::new(0));
+            for entry in mem_info.allocations.iter() {
+                unsafe { free(*entry as *mut c_void) };
+            }
+        }
+        guarded.remove(&run_id);
     }
-    // TODO(shoumik): Track runs
-    guarded.remove(&0);
 }
 
 #[cfg(test)]

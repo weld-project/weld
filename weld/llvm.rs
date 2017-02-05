@@ -177,14 +177,17 @@ impl LlvmGenerator {
         let struct_size = ctx.var_ids.next();
         let struct_storage = ctx.var_ids.next();
         let struct_storage_typed = ctx.var_ids.next();
+        let run_id = ctx.var_ids.next();
         ctx.code.add(format!("{} = getelementptr {}* null, i32 1", struct_size_ptr, ll_ty));
         ctx.code.add(format!("{} = ptrtoint {}* {} to i64",
                              struct_size,
                              ll_ty,
                              struct_size_ptr));
+        ctx.code.add(format!("{} = call i64 @get_runid()", run_id));
         ctx.code
-            .add(format!("{} = call i8* @weld_rt_malloc(i64 0, i64 {})",
+            .add(format!("{} = call i8* @weld_rt_malloc(i64 {}, i64 {})",
                          struct_storage,
+                         run_id,
                          struct_size));
         ctx.code.add(format!("{} = bitcast i8* {} to {}*",
                              struct_storage_typed,
@@ -462,8 +465,10 @@ impl LlvmGenerator {
 
         let mut code = &mut CodeBuilder::new();
 
-        code.add(format!("define i64 @{}(i64 %args, i32 %nworkers) {{", name));
+        code.add(format!("define i64 @{}(i64 %args, i32 %nworkers, i64 %rid) {{",
+                         name));
         code.add(format!("call void @set_nworkers(i32 %nworkers)"));
+        code.add(format!("call void @set_runid(i64 %rid)"));
         // Code to load args and call function
         code.add(format!("%args_typed = inttoptr i64 %args to {args_type}*
              \
@@ -1165,6 +1170,7 @@ impl LlvmGenerator {
                     let elem_size = ctx.var_ids.next();
                     let elem_storage = ctx.var_ids.next();
                     let elem_storage_typed = ctx.var_ids.next();
+                    let run_id = ctx.var_ids.next();
                     ctx.code.add(format!("{} = getelementptr {}* null, i32 1",
                                          &elem_size_ptr,
                                          &ty_str));
@@ -1172,9 +1178,12 @@ impl LlvmGenerator {
                                          &elem_size,
                                          &ty_str,
                                          &elem_size_ptr));
+
+                    ctx.code.add(format!("{} = call i64 @get_runid()", run_id));
                     ctx.code
-                        .add(format!("{} = call i8* @weld_rt_malloc(i64 0, i64 {})",
+                        .add(format!("{} = call i8* @weld_rt_malloc(i64 {}, i64 {})",
                                      &elem_storage,
+                                     &run_id,
                                      &elem_size));
                     ctx.code.add(format!("{} = bitcast i8* {} to {}*",
                                          &elem_storage_typed,
@@ -1361,34 +1370,31 @@ fn types() {
 fn basic_program() {
     let code = "|| 40 + 2";
     let module = compile_program(&parse_program(code).unwrap()).unwrap();
-    let result = module.run(0, 1) as *const i32;
+    let result = module.run(0, 1, 0) as *const i32;
     let result = unsafe { *result };
     assert_eq!(result, 42);
 
-    // TODO(shoumik): Use a proper run_id;
-    weld_run_free(0);
+    weld_run_free(-1);
 }
 
 #[test]
 fn f64_cast() {
     let code = "|| f64(40 + 2)";
     let module = compile_program(&parse_program(code).unwrap()).unwrap();
-    let result = module.run(0, 1) as *const f64;
+    let result = module.run(0, 1, 0) as *const f64;
     let result = unsafe { *result };
     assert_eq!(result, 42.0);
-    // TODO(shoumik): Use a proper run_id;
-    weld_run_free(0);
+    weld_run_free(-1);
 }
 
 #[test]
 fn i32_cast() {
     let code = "|| i32(0.251 * 4.0)";
     let module = compile_program(&parse_program(code).unwrap()).unwrap();
-    let result = module.run(0, 1) as *const i32;
+    let result = module.run(0, 1, 0) as *const i32;
     let result = unsafe { *result };
     assert_eq!(result, 1);
-    // TODO(shoumik): Use a proper run_id;
-    weld_run_free(0);
+    weld_run_free(-1);
 }
 
 #[test]
@@ -1396,11 +1402,10 @@ fn program_with_args() {
     let code = "|x:i32| 40 + x";
     let module = compile_program(&parse_program(code).unwrap()).unwrap();
     let input: i32 = 2;
-    let result = module.run(&input as *const i32 as i64, 1) as *const i32;
+    let result = module.run(&input as *const i32 as i64, 1, 0) as *const i32;
     let result = unsafe { *result };
     assert_eq!(result, 42);
-    // TODO(shoumik): Use a proper run_id;
-    weld_run_free(0);
+    weld_run_free(-1);
 }
 
 #[test]
@@ -1408,11 +1413,10 @@ fn let_statement() {
     let code = "|x:i32| let y = 40 + x; y + 2";
     let module = compile_program(&parse_program(code).unwrap()).unwrap();
     let input: i32 = 2;
-    let result = module.run(&input as *const i32 as i64, 1) as *const i32;
+    let result = module.run(&input as *const i32 as i64, 1, 0) as *const i32;
     let result = unsafe { *result };
     assert_eq!(result, 44);
-    // TODO(shoumik): Use a proper run_id;
-    weld_run_free(0);
+    weld_run_free(-1);
 }
 
 #[test]
@@ -1420,11 +1424,10 @@ fn if_statement() {
     let code = "|x:i32| if(true, 3, 4)";
     let module = compile_program(&parse_program(code).unwrap()).unwrap();
     let input: i32 = 2;
-    let result = module.run(&input as *const i32 as i64, 1) as *const i32;
+    let result = module.run(&input as *const i32 as i64, 1, 0) as *const i32;
     let result = unsafe { *result };
     assert_eq!(result, 3);
-    // TODO(shoumik): Use a proper run_id;
-    weld_run_free(0);
+    weld_run_free(-1);
 }
 
 #[test]
@@ -1432,17 +1435,15 @@ fn comparison() {
     let code = "|x:i32| if(x>10, x, 10)";
     let module = compile_program(&parse_program(code).unwrap()).unwrap();
     let input: i32 = 2;
-    let result = module.run(&input as *const i32 as i64, 1) as *const i32;
+    let result = module.run(&input as *const i32 as i64, 1, 0) as *const i32;
     let result = unsafe { *result };
     assert_eq!(result, 10);
-    // TODO(shoumik): Use a proper run_id;
-    weld_run_free(0);
+    weld_run_free(-1);
     let input: i32 = 20;
-    let result = module.run(&input as *const i32 as i64, 1) as *const i32;
+    let result = module.run(&input as *const i32 as i64, 1, 0) as *const i32;
     let result = unsafe { *result };
     assert_eq!(result, 20);
-    // TODO(shoumik): Use a proper run_id;
-    weld_run_free(0);
+    weld_run_free(-1);
 }
 
 #[test]
@@ -1467,11 +1468,11 @@ fn simple_vector_lookup() {
             len: 4,
         },
     };
-    let result_raw = module.run(&args as *const Args as i64, 1) as *const i32;
+    let result_raw = module.run(&args as *const Args as i64, 1, 0) as *const i32;
     let result = unsafe { (*result_raw).clone() };
     let output = input[3];
     assert_eq!(output, result);
-    weld_run_free(0);
+    weld_run_free(-1);
 }
 
 #[test]
@@ -1498,14 +1499,13 @@ fn simple_for_appender_loop() {
         },
         a: 1,
     };
-    let result_raw = module.run(&args as *const Args as i64, 1) as *const Vec;
+    let result_raw = module.run(&args as *const Args as i64, 1, 0) as *const Vec;
     let result = unsafe { (*result_raw).clone() };
     let output = [3, 4];
     for i in 0..(result.len as isize) {
         assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
     }
-    // TODO(shoumik): Use a proper run_id;
-    weld_run_free(0);
+    weld_run_free(-1);
 }
 
 #[test]
@@ -1532,12 +1532,11 @@ fn simple_for_merger_loop() {
         },
         a: 1,
     };
-    let result_raw = module.run(&args as *const Args as i64, 1) as *const i32;
+    let result_raw = module.run(&args as *const Args as i64, 1, 0) as *const i32;
     let result = unsafe { (*result_raw).clone() };
     let output = 20;
     assert_eq!(result, output);
-    // TODO(shoumik): Use a proper run_id.
-    weld_run_free(0);
+    weld_run_free(-1);
 }
 
 #[test]
@@ -1580,7 +1579,7 @@ fn simple_for_dictmerger_loop() {
             len: 5,
         },
     };
-    let result_raw = module.run(&args as *const Args as i64, 1) as *const VecPrime;
+    let result_raw = module.run(&args as *const Args as i64, 1, 0) as *const VecPrime;
     let result = unsafe { (*result_raw).clone() };
     let output_keys = [1, 2, 3];
     let output_values = [4, 7, 1];
@@ -1598,7 +1597,7 @@ fn simple_for_dictmerger_loop() {
         assert_eq!(success, true);
     }
     assert_eq!(result.len, output_keys.len() as i64);
-    weld_run_free(0);
+    weld_run_free(-1);
 }
 
 #[test]
@@ -1630,11 +1629,11 @@ fn simple_dict_lookup() {
             len: 5,
         },
     };
-    let result_raw = module.run(&args as *const Args as i64, 1) as *const i32;
+    let result_raw = module.run(&args as *const Args as i64, 1, 0) as *const i32;
     let result = unsafe { (*result_raw).clone() };
     let output = 4;
     assert_eq!(output, result);
-    weld_run_free(0);
+    weld_run_free(-1);
 }
 
 #[test]
@@ -1662,14 +1661,13 @@ fn if_for_loop() {
         },
         a: 1,
     };
-    let result_raw = module.run(&args as *const Args as i64, 1) as *const Vec;
+    let result_raw = module.run(&args as *const Args as i64, 1, 0) as *const Vec;
     let result = unsafe { (*result_raw).clone() };
     let output = [3, 4];
     for i in 0..(result.len as isize) {
         assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
     }
-    // TODO(shoumik): Use a proper run_id;
-    weld_run_free(0);
+    weld_run_free(-1);
 
     let args = Args {
         x: Vec {
@@ -1678,14 +1676,13 @@ fn if_for_loop() {
         },
         a: 6,
     };
-    let result_raw = module.run(&args as *const Args as i64, 1) as *const Vec;
+    let result_raw = module.run(&args as *const Args as i64, 1, 0) as *const Vec;
     let result = unsafe { (*result_raw).clone() };
     let output = [2, 3];
     for i in 0..(result.len as isize) {
         assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
     }
-    // TODO(shoumik): Use a proper run_id;
-    weld_run_free(0);
+    weld_run_free(-1);
 }
 
 #[test]
@@ -1717,14 +1714,13 @@ fn map_zip_loop() {
             len: 2,
         },
     };
-    let result_raw = module.run(&args as *const Args as i64, 1) as *const Vec;
+    let result_raw = module.run(&args as *const Args as i64, 1, 0) as *const Vec;
     let result = unsafe { (*result_raw).clone() };
     let output = [6, 8, 10, 12];
     for i in 0..(result.len as isize) {
         assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
     }
-    // TODO(shoumik): Use a proper run_id;
-    weld_run_free(0);
+    weld_run_free(-1);
 }
 
 #[test]
@@ -1756,14 +1752,13 @@ fn iters_for_loop() {
             len: 2,
         },
     };
-    let result_raw = module.run(&args as *const Args as i64, 1) as *const Vec;
+    let result_raw = module.run(&args as *const Args as i64, 1, 0) as *const Vec;
     let result = unsafe { (*result_raw).clone() };
     let output = [6, 9];
     for i in 0..(result.len as isize) {
         assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
     }
-    // TODO(shoumik): Use a proper run_id;
-    weld_run_free(0);
+    weld_run_free(-1);
 }
 
 #[test]
@@ -1783,8 +1778,8 @@ fn serial_parlib_test() {
         data: input.as_ptr() as *const i32,
         len: size as i64,
     };
-    let result_raw = module.run(&args as *const WeldVec as i64, 1) as *const i32;
+    let result_raw = module.run(&args as *const WeldVec as i64, 1, 0) as *const i32;
     let result = unsafe { (*result_raw).clone() };
     assert_eq!(result, size);
-    weld_run_free(0);
+    weld_run_free(-1);
 }

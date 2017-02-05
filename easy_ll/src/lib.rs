@@ -62,7 +62,7 @@ impl From<NulError> for LlvmError {
 }
 
 /// The type of our "run" function pointer.
-type RunFunc = extern "C" fn(i64, i32) -> i64;
+type RunFunc = extern "C" fn(i64, i32, i64) -> i64;
 
 /// A compiled module returned by `compile_module`, wrapping a `run` function that takes `i64`
 /// and returns `i64`. This structure includes (and manages) an LLVM execution engine, which is
@@ -76,8 +76,8 @@ pub struct CompiledModule {
 
 impl CompiledModule {
     /// Call the module's `run` function.
-    pub fn run(&self, arg: i64, nworkers: i32) -> i64 {
-        (self.function.unwrap())(arg, nworkers)
+    pub fn run(&self, arg: i64, nworkers: i32, run_id: i64) -> i64 {
+        (self.function.unwrap())(arg, nworkers, run_id)
     }
 }
 
@@ -251,7 +251,7 @@ unsafe fn check_run_function(module: LLVMModuleRef) -> Result<(), LlvmError> {
     }
     let c_str = llvm::core::LLVMPrintTypeToString(llvm::core::LLVMTypeOf(func));
     let func_type = CStr::from_ptr(c_str).to_str().unwrap();
-    if func_type != "i64 (i64, i32)*" {
+    if func_type != "i64 (i64, i32, i64)*" {
         return Err(LlvmError(format!("Run function has wrong type: {}", func_type)));
     }
     Ok(())

@@ -68,11 +68,11 @@ fn bench_integer_vector_sum(bench: &mut Bencher) {
     for i in 0..(result.len as isize) {
         assert_eq!(unsafe { *result.data.offset(i) }, x[0] + y[0]);
     }
-    weld_run_free(0);
+    weld_run_free(-1);
 
     bench.iter(|| {
         module.run(&args as *const Args as i64, 1) as *const WeldVec;
-        weld_run_free(0);
+        weld_run_free(-1);
     });
 }
 
@@ -102,11 +102,11 @@ fn bench_integer_map_reduce(bench: &mut Bencher) {
     let result_raw = module.run(&args as *const Args as i64, 1) as *const i32;
     let result = unsafe { *result_raw.clone() };
     assert_eq!(expect, result);
-    weld_run_free(0);
+    weld_run_free(-1);
 
     bench.iter(|| {
         module.run(&args as *const Args as i64, 1);
-        weld_run_free(0);
+        weld_run_free(-1);
     })
 }
 
@@ -157,7 +157,7 @@ fn bench_tpch_q6(bench: &mut Bencher) {
 
     bench.iter(|| {
         module.run(&args as *const Args as i64, 1) as *const i32;
-        weld_run_free(0);
+        weld_run_free(-1);
     })
 }
 
