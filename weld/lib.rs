@@ -111,7 +111,6 @@ pub extern "C" fn weld_value_run(obj: *const WeldValue) -> i64 {
         assert!(!obj.is_null());
         &*obj
     };
-
     if let Some(rid) = obj.run_id {
         rid as i64
     } else {
@@ -222,6 +221,7 @@ pub extern "C" fn weld_module_run(module: *mut easy_ll::CompiledModule,
     Box::into_raw(Box::new(WeldValue {
         data: result,
         run_id: Some(my_run_id),
+        owned: true,
     }))
 }
 

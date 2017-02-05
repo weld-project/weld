@@ -1373,7 +1373,6 @@ fn basic_program() {
     let result = module.run(0, 1, 0) as *const i32;
     let result = unsafe { *result };
     assert_eq!(result, 42);
-
     weld_run_free(-1);
 }
 
