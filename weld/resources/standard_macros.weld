@@ -10,6 +10,6 @@ macro flatten(data) = (
     result(for(
         data,
         appender[?],
-        |b, x| for(x, b, |b2, i2, x2| merge(b2, x2))
+        |b, i, x| for(x, b, |b2, i2, x2| merge(b2, x2))
     ))
 );
