@@ -202,7 +202,7 @@ pub extern "C" fn weld_module_run(module: *mut easy_ll::CompiledModule,
     };
 
     // TODO(shoumik): Set the memory limit correctly (config?)
-    let mem_limit = 1000000;
+    let mem_limit = 1000000000;
     // TODO(shoumik): Set the number of threads correctly
     let threads = 1;
     let my_run_id;
@@ -213,11 +213,11 @@ pub extern "C" fn weld_module_run(module: *mut easy_ll::CompiledModule,
         let mut run_id = RUN_ID_NEXT.lock().unwrap();
         my_run_id = run_id.clone();
         *run_id += 1;
-        guarded.insert(run_id.clone(), RunMemoryInfo::new(mem_limit));
+        guarded.insert(my_run_id, RunMemoryInfo::new(mem_limit));
     }
 
     // TODO(shoumik): Error reporting - at least basic crashes
-    let result = module.run(arg.data as i64, threads, mem_limit) as *const c_void;
+    let result = module.run(arg.data as i64, threads, my_run_id) as *const c_void;
     Box::into_raw(Box::new(WeldValue {
         data: result,
         run_id: Some(my_run_id),
@@ -279,9 +279,14 @@ pub extern "C" fn weld_error_free(err: *mut WeldError) {
 pub extern "C" fn weld_rt_malloc(run_id: libc::int64_t, size: libc::int64_t) -> *mut c_void {
     let run_id = run_id as i64;
     let mut guarded = ALLOCATIONS.lock().unwrap();
+    if !guarded.contains_key(&run_id) {
+        println!("Unseen run {}", run_id);
+    }
     let mem_info = guarded.entry(run_id).or_insert(RunMemoryInfo::new(0));
     if mem_info.mem_allocated + (size as i64) > mem_info.mem_limit {
-        println!("Exceeded memory limit: {}B", mem_info.mem_limit);
+        println!("weld_rt_malloc: Exceeded memory limit: {}B > {}B",
+                 mem_info.mem_allocated,
+                 mem_info.mem_limit);
         return std::ptr::null_mut();
     }
     let ptr = unsafe { malloc(size as usize) };
@@ -309,7 +314,8 @@ pub extern "C" fn weld_rt_realloc(run_id: libc::int64_t,
     let mem_info = guarded.entry(run_id).or_insert(RunMemoryInfo::new(0));
     // TODO(shoumik): Accounting here is wrong.
     if mem_info.mem_allocated + (size as i64) > mem_info.mem_limit {
-        println!("Exceeded memory limit: {}B", mem_info.mem_limit);
+        println!("weld_rt_realloc: Exceeded memory limit: {}B",
+                 mem_info.mem_limit);
         return std::ptr::null_mut();
     }
     let ptr = unsafe { realloc(data, size as usize) };

@@ -17,14 +17,14 @@ int main() {
     const size_t LEN = 10000000;
 
     printf("sleeping before input allocation so memory can be observed..\n");
-    sleep(5);
+    //sleep(5);
 
     struct vec inp;
     inp.data = (int32_t *)malloc(sizeof(int32_t) * LEN);
     inp.length = LEN;
 
     printf("sleeping before module compilation so memory can be observed..\n");
-    sleep(5);
+    //sleep(5);
 
     // Compile Weld module.
     weld_error_t e = NULL;
@@ -38,7 +38,7 @@ int main() {
     weld_value_t arg = weld_value_new(&inp);
 
     printf("starting run loop...\n");
-    sleep(1);
+    //sleep(1);
 
     for (int i = 0; i < 5010; i++) {
         weld_error_t e = NULL;
@@ -49,11 +49,7 @@ int main() {
         // safely be freed before.
         weld_value_free(res);
         weld_error_free(e);
-
-        if (i == 2500) {
-            printf("Pausing run loop so memory can be observed...\n");
-            sleep(5);
-        }
+        printf("%d\n", i);
     }
 
     // Clean up other resources.
@@ -62,7 +58,7 @@ int main() {
     weld_module_free(m);
 
     printf("sleeping before quit so memory can be observed..\n");
-    sleep(5);
+    //sleep(5);
 
     return 0;
 }
