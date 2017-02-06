@@ -26,6 +26,12 @@ use super::util::IdGenerator;
 use super::parser::*;
 #[cfg(test)]
 use super::weld_run_free;
+#[cfg(test)]
+use super::weld_rt_malloc;
+#[cfg(test)]
+use super::weld_rt_realloc;
+#[cfg(test)]
+use super::weld_rt_free;
 
 static PRELUDE_CODE: &'static str = include_str!("resources/prelude.ll");
 static VECTOR_CODE: &'static str = include_str!("resources/vector.ll");
@@ -1379,12 +1385,15 @@ fn types() {
 }
 
 #[test]
+fn runtime_functions() {
+    weld_rt_free(0, weld_rt_realloc(0, weld_rt_malloc(0, 16), 32));
+}
+
+#[test]
 fn basic_program() {
     let code = "|| 40 + 2";
 
-    // assert!(easy_ll::load_library("libweld").is_ok());
     let module = compile_program(&parse_program(code).unwrap()).unwrap();
-
     let inp = Box::new(WeldInputArgs {
         input: 0,
         nworkers: 1,
@@ -1401,7 +1410,6 @@ fn basic_program() {
 #[test]
 fn f64_cast() {
     let code = "|| f64(40 + 2)";
-    assert!(easy_ll::load_library("libweld").is_ok());
     let module = compile_program(&parse_program(code).unwrap()).unwrap();
 
     let inp = Box::new(WeldInputArgs {
@@ -1420,7 +1428,6 @@ fn f64_cast() {
 #[test]
 fn i32_cast() {
     let code = "|| i32(0.251 * 4.0)";
-    assert!(easy_ll::load_library("libweld").is_ok());
     let module = compile_program(&parse_program(code).unwrap()).unwrap();
     let inp = Box::new(WeldInputArgs {
         input: 0,
@@ -1438,7 +1445,6 @@ fn i32_cast() {
 #[test]
 fn program_with_args() {
     let code = "|x:i32| 40 + x";
-    assert!(easy_ll::load_library("libweld").is_ok());
     let module = compile_program(&parse_program(code).unwrap()).unwrap();
     let input: i32 = 2;
     let inp = Box::new(WeldInputArgs {
@@ -1457,7 +1463,6 @@ fn program_with_args() {
 #[test]
 fn let_statement() {
     let code = "|x:i32| let y = 40 + x; y + 2";
-    assert!(easy_ll::load_library("libweld").is_ok());
     let module = compile_program(&parse_program(code).unwrap()).unwrap();
     let input: i32 = 2;
     let inp = Box::new(WeldInputArgs {
@@ -1476,7 +1481,6 @@ fn let_statement() {
 #[test]
 fn if_statement() {
     let code = "|x:i32| if(true, 3, 4)";
-    assert!(easy_ll::load_library("libweld").is_ok());
     let module = compile_program(&parse_program(code).unwrap()).unwrap();
     let input: i32 = 2;
     let inp = Box::new(WeldInputArgs {
@@ -1495,7 +1499,6 @@ fn if_statement() {
 #[test]
 fn comparison() {
     let code = "|x:i32| if(x>10, x, 10)";
-    assert!(easy_ll::load_library("libweld").is_ok());
     let module = compile_program(&parse_program(code).unwrap()).unwrap();
     let mut input: i32 = 2;
     let inp = Box::new(WeldInputArgs {
@@ -1531,7 +1534,6 @@ fn simple_vector_lookup() {
     }
 
     let code = "|x:vec[i32]| lookup(x, 3L)";
-    assert!(easy_ll::load_library("libweld").is_ok());
     let module = compile_program(&parse_program(code).unwrap()).unwrap();
     let input = [1, 2, 4, 5];
     let args = Args {
@@ -1570,7 +1572,6 @@ fn simple_for_appender_loop() {
     }
 
     let code = "|x:vec[i32], a:i32| let b=a+1; map(x, |e| e+b)";
-    assert!(easy_ll::load_library("libweld").is_ok());
     let module = compile_program(&parse_program(code).unwrap()).unwrap();
     let input = [1, 2];
     let args = Args {
@@ -1612,7 +1613,6 @@ fn simple_for_merger_loop() {
     }
 
     let code = "|x:vec[i32], a:i32| result(for(x, merger[i32,+], |b,i,e| merge(b, e+a)))";
-    assert!(easy_ll::load_library("libweld").is_ok());
     let module = compile_program(&parse_program(code).unwrap()).unwrap();
     let input = [1, 2, 3, 4, 5];
     let args = Args {
@@ -1664,7 +1664,6 @@ fn simple_for_dictmerger_loop() {
 
     let code = "|x:vec[i32], y:vec[i32]| tovec(result(for(zip(x,y), dictmerger[i32,i32,+], \
                 |b,i,e| merge(b, e))))";
-    assert!(easy_ll::load_library("libweld").is_ok());
     let module = compile_program(&parse_program(code).unwrap()).unwrap();
     let keys = [1, 2, 2, 1, 3];
     let values = [2, 3, 4, 2, 1];
@@ -1723,7 +1722,6 @@ fn simple_dict_lookup() {
 
     let code = "|x:vec[i32], y:vec[i32]| let a = result(for(zip(x,y), dictmerger[i32,i32,+], \
                 |b,i,e| merge(b, e))); lookup(a, 1)";
-    assert!(easy_ll::load_library("libweld").is_ok());
     let module = compile_program(&parse_program(code).unwrap()).unwrap();
     let keys = [1, 2, 2, 1, 3];
     let values = [2, 3, 4, 2, 1];
@@ -1767,7 +1765,6 @@ fn if_for_loop() {
     }
 
     let code = "|x:vec[i32], a:i32| if(a > 5, map(x, |e| e+1), map(x, |e| e+2))";
-    assert!(easy_ll::load_library("libweld").is_ok());
     let module = compile_program(&parse_program(code).unwrap()).unwrap();
     let input = [1, 2];
 
@@ -1832,7 +1829,6 @@ fn map_zip_loop() {
     }
 
     let code = "|x:vec[i32], y:vec[i32]| map(zip(x,y), |e| e.$0 + e.$1)";
-    assert!(easy_ll::load_library("libweld").is_ok());
     let module = compile_program(&parse_program(code).unwrap()).unwrap();
     let x = [1, 2, 3, 4];
     let y = [5, 6, 7, 8];
@@ -1879,7 +1875,6 @@ fn iters_for_loop() {
 
     let code = "|x:vec[i32], y:vec[i32]| result(for(zip(iter(x,0L,4L,2L), y), appender, |b,i,e| \
                 merge(b,e.$0+e.$1)))";
-    assert!(easy_ll::load_library("libweld").is_ok());
     let module = compile_program(&parse_program(code).unwrap()).unwrap();
     let x = [1, 2, 3, 4];
     let y = [5, 6];
@@ -1919,7 +1914,6 @@ fn serial_parlib_test() {
         len: i64,
     }
     let code = "|x:vec[i32]| result(for(x, merger[i32,+], |b,i,e| merge(b, e)))";
-    assert!(easy_ll::load_library("libweld").is_ok());
     let module = compile_program(&parse_program(code).unwrap()).unwrap();
     let size: i32 = 10000;
     let input: Vec<i32> = vec![1; size as usize];
