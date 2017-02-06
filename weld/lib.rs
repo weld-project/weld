@@ -179,6 +179,15 @@ pub extern "C" fn weld_module_compile(code: *const c_char,
         &mut **err
     };
 
+    // The library needs to be loaded here since the compilation process will verify that
+    // each symbol can be found.
+    // TODO(shoumik): Better error handling.
+    if easy_ll::load_library("libweld").is_err() {
+        err.code = 1;
+        err.message = CString::new("Couldn't load libweld library").unwrap();
+        return std::ptr::null_mut();
+    }
+
     let module = llvm::compile_program(&parser::parse_program(code).unwrap());
     if let Err(ref e) = module {
         err.code = 1;
@@ -221,8 +230,15 @@ pub extern "C" fn weld_module_run(module: *mut easy_ll::CompiledModule,
         guarded.insert(my_run_id, RunMemoryInfo::new(mem_limit));
     }
 
+    let input = Box::new(llvm::WeldInputArgs {
+        input: arg.data as i64,
+        nworkers: threads,
+        run_id: my_run_id,
+    });
+    let ptr = Box::into_raw(input) as i64;
+
     // TODO(shoumik): Error reporting - at least basic crashes
-    let result = module.run(arg.data as i64, threads, my_run_id) as *const c_void;
+    let result = module.run(ptr) as *const c_void;
     Box::into_raw(Box::new(WeldValue {
         data: result,
         run_id: Some(my_run_id),

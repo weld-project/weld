@@ -16,6 +16,9 @@ declare void    @weld_rt_free(i64, i8*)
 ; Parallel runtime structures
 %work_t = type { i8*, i64, i64, void (%work_t*)*, %work_t*, i32, i64, i32 }
 
+; Input argument (input data pointer, nworkers, runId)
+%input_arg_t = type { i64, i32, i64 }
+
 declare void @set_result(i8*)
 declare i8* @get_result()
 declare void @set_nworkers(i32)

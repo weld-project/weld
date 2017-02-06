@@ -62,6 +62,13 @@ pub struct LlvmGenerator {
     visited: HashSet<sir::FunctionId>,
 }
 
+/// A wrapper for a struct passed as input to the Weld runtime.
+pub struct WeldInputArgs {
+    pub input: i64,
+    pub nworkers: i32,
+    pub run_id: i64,
+}
+
 fn get_combined_params(sir: &SirProgram, par_for: &ParallelForData) -> HashMap<Symbol, Type> {
     let mut body_params = sir.funcs[par_for.body].params.clone();
     for (arg, ty) in sir.funcs[par_for.cont].params.iter() {
@@ -465,8 +472,13 @@ impl LlvmGenerator {
 
         let mut code = &mut CodeBuilder::new();
 
-        code.add(format!("define i64 @{}(i64 %args, i32 %nworkers, i64 %rid) {{",
-                         name));
+        code.add(format!("define i64 @{}(i64 %input) {{", name));
+        // Unpack the input, which is always struct defined by the type %input_arg_t in prelude.ll.
+        code.add(format!("%inp_typed = inttoptr i64 %input to %input_arg_t*"));
+        code.add(format!("%inp_val = load %input_arg_t* %inp_typed"));
+        code.add(format!("%args = extractvalue %input_arg_t %inp_val, 0"));
+        code.add(format!("%nworkers = extractvalue %input_arg_t %inp_val, 1"));
+        code.add(format!("%rid = extractvalue %input_arg_t %inp_val, 2"));
         code.add(format!("call void @set_nworkers(i32 %nworkers)"));
         code.add(format!("call void @set_runid(i64 %rid)"));
         // Code to load args and call function
@@ -1369,8 +1381,18 @@ fn types() {
 #[test]
 fn basic_program() {
     let code = "|| 40 + 2";
+
+    // assert!(easy_ll::load_library("libweld").is_ok());
     let module = compile_program(&parse_program(code).unwrap()).unwrap();
-    let result = module.run(0, 1, 0) as *const i32;
+
+    let inp = Box::new(WeldInputArgs {
+        input: 0,
+        nworkers: 1,
+        run_id: 0,
+    });
+    let ptr = Box::into_raw(inp) as i64;
+
+    let result = module.run(ptr) as *const i32;
     let result = unsafe { *result };
     assert_eq!(result, 42);
     weld_run_free(-1);
@@ -1379,8 +1401,17 @@ fn basic_program() {
 #[test]
 fn f64_cast() {
     let code = "|| f64(40 + 2)";
+    assert!(easy_ll::load_library("libweld").is_ok());
     let module = compile_program(&parse_program(code).unwrap()).unwrap();
-    let result = module.run(0, 1, 0) as *const f64;
+
+    let inp = Box::new(WeldInputArgs {
+        input: 0,
+        nworkers: 1,
+        run_id: 0,
+    });
+    let ptr = Box::into_raw(inp) as i64;
+
+    let result = module.run(ptr) as *const f64;
     let result = unsafe { *result };
     assert_eq!(result, 42.0);
     weld_run_free(-1);
@@ -1389,8 +1420,16 @@ fn f64_cast() {
 #[test]
 fn i32_cast() {
     let code = "|| i32(0.251 * 4.0)";
+    assert!(easy_ll::load_library("libweld").is_ok());
     let module = compile_program(&parse_program(code).unwrap()).unwrap();
-    let result = module.run(0, 1, 0) as *const i32;
+    let inp = Box::new(WeldInputArgs {
+        input: 0,
+        nworkers: 1,
+        run_id: 0,
+    });
+    let ptr = Box::into_raw(inp) as i64;
+
+    let result = module.run(ptr) as *const i32;
     let result = unsafe { *result };
     assert_eq!(result, 1);
     weld_run_free(-1);
@@ -1399,9 +1438,17 @@ fn i32_cast() {
 #[test]
 fn program_with_args() {
     let code = "|x:i32| 40 + x";
+    assert!(easy_ll::load_library("libweld").is_ok());
     let module = compile_program(&parse_program(code).unwrap()).unwrap();
     let input: i32 = 2;
-    let result = module.run(&input as *const i32 as i64, 1, 0) as *const i32;
+    let inp = Box::new(WeldInputArgs {
+        input: &input as *const i32 as i64,
+        nworkers: 1,
+        run_id: 0,
+    });
+    let ptr = Box::into_raw(inp) as i64;
+
+    let result = module.run(ptr) as *const i32;
     let result = unsafe { *result };
     assert_eq!(result, 42);
     weld_run_free(-1);
@@ -1410,9 +1457,17 @@ fn program_with_args() {
 #[test]
 fn let_statement() {
     let code = "|x:i32| let y = 40 + x; y + 2";
+    assert!(easy_ll::load_library("libweld").is_ok());
     let module = compile_program(&parse_program(code).unwrap()).unwrap();
     let input: i32 = 2;
-    let result = module.run(&input as *const i32 as i64, 1, 0) as *const i32;
+    let inp = Box::new(WeldInputArgs {
+        input: &input as *const i32 as i64,
+        nworkers: 1,
+        run_id: 0,
+    });
+    let ptr = Box::into_raw(inp) as i64;
+
+    let result = module.run(ptr) as *const i32;
     let result = unsafe { *result };
     assert_eq!(result, 44);
     weld_run_free(-1);
@@ -1421,9 +1476,17 @@ fn let_statement() {
 #[test]
 fn if_statement() {
     let code = "|x:i32| if(true, 3, 4)";
+    assert!(easy_ll::load_library("libweld").is_ok());
     let module = compile_program(&parse_program(code).unwrap()).unwrap();
     let input: i32 = 2;
-    let result = module.run(&input as *const i32 as i64, 1, 0) as *const i32;
+    let inp = Box::new(WeldInputArgs {
+        input: &input as *const i32 as i64,
+        nworkers: 1,
+        run_id: 0,
+    });
+
+    let ptr = Box::into_raw(inp) as i64;
+    let result = module.run(ptr) as *const i32;
     let result = unsafe { *result };
     assert_eq!(result, 3);
     weld_run_free(-1);
@@ -1432,14 +1495,23 @@ fn if_statement() {
 #[test]
 fn comparison() {
     let code = "|x:i32| if(x>10, x, 10)";
+    assert!(easy_ll::load_library("libweld").is_ok());
     let module = compile_program(&parse_program(code).unwrap()).unwrap();
-    let input: i32 = 2;
-    let result = module.run(&input as *const i32 as i64, 1, 0) as *const i32;
+    let mut input: i32 = 2;
+    let inp = Box::new(WeldInputArgs {
+        input: &input as *const i32 as i64,
+        nworkers: 1,
+        run_id: 0,
+    });
+    let ptr = Box::into_raw(inp) as i64;
+
+    let result = module.run(ptr) as *const i32;
     let result = unsafe { *result };
     assert_eq!(result, 10);
     weld_run_free(-1);
-    let input: i32 = 20;
-    let result = module.run(&input as *const i32 as i64, 1, 0) as *const i32;
+
+    input = 20;
+    let result = module.run(ptr) as *const i32;
     let result = unsafe { *result };
     assert_eq!(result, 20);
     weld_run_free(-1);
@@ -1459,6 +1531,7 @@ fn simple_vector_lookup() {
     }
 
     let code = "|x:vec[i32]| lookup(x, 3L)";
+    assert!(easy_ll::load_library("libweld").is_ok());
     let module = compile_program(&parse_program(code).unwrap()).unwrap();
     let input = [1, 2, 4, 5];
     let args = Args {
@@ -1467,7 +1540,15 @@ fn simple_vector_lookup() {
             len: 4,
         },
     };
-    let result_raw = module.run(&args as *const Args as i64, 1, 0) as *const i32;
+
+    let inp = Box::new(WeldInputArgs {
+        input: &args as *const Args as i64,
+        nworkers: 1,
+        run_id: 0,
+    });
+    let ptr = Box::into_raw(inp) as i64;
+
+    let result_raw = module.run(ptr) as *const i32;
     let result = unsafe { (*result_raw).clone() };
     let output = input[3];
     assert_eq!(output, result);
@@ -1489,6 +1570,7 @@ fn simple_for_appender_loop() {
     }
 
     let code = "|x:vec[i32], a:i32| let b=a+1; map(x, |e| e+b)";
+    assert!(easy_ll::load_library("libweld").is_ok());
     let module = compile_program(&parse_program(code).unwrap()).unwrap();
     let input = [1, 2];
     let args = Args {
@@ -1498,7 +1580,15 @@ fn simple_for_appender_loop() {
         },
         a: 1,
     };
-    let result_raw = module.run(&args as *const Args as i64, 1, 0) as *const Vec;
+
+    let inp = Box::new(WeldInputArgs {
+        input: &args as *const Args as i64,
+        nworkers: 1,
+        run_id: 0,
+    });
+    let ptr = Box::into_raw(inp) as i64;
+    //
+    let result_raw = module.run(ptr) as *const Vec;
     let result = unsafe { (*result_raw).clone() };
     let output = [3, 4];
     for i in 0..(result.len as isize) {
@@ -1522,6 +1612,7 @@ fn simple_for_merger_loop() {
     }
 
     let code = "|x:vec[i32], a:i32| result(for(x, merger[i32,+], |b,i,e| merge(b, e+a)))";
+    assert!(easy_ll::load_library("libweld").is_ok());
     let module = compile_program(&parse_program(code).unwrap()).unwrap();
     let input = [1, 2, 3, 4, 5];
     let args = Args {
@@ -1531,7 +1622,15 @@ fn simple_for_merger_loop() {
         },
         a: 1,
     };
-    let result_raw = module.run(&args as *const Args as i64, 1, 0) as *const i32;
+
+    let inp = Box::new(WeldInputArgs {
+        input: &args as *const Args as i64,
+        nworkers: 1,
+        run_id: 0,
+    });
+    let ptr = Box::into_raw(inp) as i64;
+
+    let result_raw = module.run(ptr) as *const i32;
     let result = unsafe { (*result_raw).clone() };
     let output = 20;
     assert_eq!(result, output);
@@ -1565,6 +1664,7 @@ fn simple_for_dictmerger_loop() {
 
     let code = "|x:vec[i32], y:vec[i32]| tovec(result(for(zip(x,y), dictmerger[i32,i32,+], \
                 |b,i,e| merge(b, e))))";
+    assert!(easy_ll::load_library("libweld").is_ok());
     let module = compile_program(&parse_program(code).unwrap()).unwrap();
     let keys = [1, 2, 2, 1, 3];
     let values = [2, 3, 4, 2, 1];
@@ -1578,7 +1678,15 @@ fn simple_for_dictmerger_loop() {
             len: 5,
         },
     };
-    let result_raw = module.run(&args as *const Args as i64, 1, 0) as *const VecPrime;
+
+    let inp = Box::new(WeldInputArgs {
+        input: &args as *const Args as i64,
+        nworkers: 1,
+        run_id: 0,
+    });
+    let ptr = Box::into_raw(inp) as i64;
+
+    let result_raw = module.run(ptr) as *const VecPrime;
     let result = unsafe { (*result_raw).clone() };
     let output_keys = [1, 2, 3];
     let output_values = [4, 7, 1];
@@ -1615,6 +1723,7 @@ fn simple_dict_lookup() {
 
     let code = "|x:vec[i32], y:vec[i32]| let a = result(for(zip(x,y), dictmerger[i32,i32,+], \
                 |b,i,e| merge(b, e))); lookup(a, 1)";
+    assert!(easy_ll::load_library("libweld").is_ok());
     let module = compile_program(&parse_program(code).unwrap()).unwrap();
     let keys = [1, 2, 2, 1, 3];
     let values = [2, 3, 4, 2, 1];
@@ -1628,7 +1737,15 @@ fn simple_dict_lookup() {
             len: 5,
         },
     };
-    let result_raw = module.run(&args as *const Args as i64, 1, 0) as *const i32;
+
+    let inp = Box::new(WeldInputArgs {
+        input: &args as *const Args as i64,
+        nworkers: 1,
+        run_id: 0,
+    });
+    let ptr = Box::into_raw(inp) as i64;
+
+    let result_raw = module.run(ptr) as *const i32;
     let result = unsafe { (*result_raw).clone() };
     let output = 4;
     assert_eq!(output, result);
@@ -1650,6 +1767,7 @@ fn if_for_loop() {
     }
 
     let code = "|x:vec[i32], a:i32| if(a > 5, map(x, |e| e+1), map(x, |e| e+2))";
+    assert!(easy_ll::load_library("libweld").is_ok());
     let module = compile_program(&parse_program(code).unwrap()).unwrap();
     let input = [1, 2];
 
@@ -1660,7 +1778,15 @@ fn if_for_loop() {
         },
         a: 1,
     };
-    let result_raw = module.run(&args as *const Args as i64, 1, 0) as *const Vec;
+
+    let inp = Box::new(WeldInputArgs {
+        input: &args as *const Args as i64,
+        nworkers: 1,
+        run_id: 0,
+    });
+    let ptr = Box::into_raw(inp) as i64;
+
+    let result_raw = module.run(ptr) as *const Vec;
     let result = unsafe { (*result_raw).clone() };
     let output = [3, 4];
     for i in 0..(result.len as isize) {
@@ -1675,7 +1801,14 @@ fn if_for_loop() {
         },
         a: 6,
     };
-    let result_raw = module.run(&args as *const Args as i64, 1, 0) as *const Vec;
+    let inp = Box::new(WeldInputArgs {
+        input: &args as *const Args as i64,
+        nworkers: 1,
+        run_id: 0,
+    });
+    let ptr = Box::into_raw(inp) as i64;
+
+    let result_raw = module.run(ptr) as *const Vec;
     let result = unsafe { (*result_raw).clone() };
     let output = [2, 3];
     for i in 0..(result.len as isize) {
@@ -1698,8 +1831,8 @@ fn map_zip_loop() {
         y: Vec,
     }
 
-    let code = "|x:vec[i32], y:vec[i32]| \
-                map(zip(x,y), |e| e.$0 + e.$1)";
+    let code = "|x:vec[i32], y:vec[i32]| map(zip(x,y), |e| e.$0 + e.$1)";
+    assert!(easy_ll::load_library("libweld").is_ok());
     let module = compile_program(&parse_program(code).unwrap()).unwrap();
     let x = [1, 2, 3, 4];
     let y = [5, 6, 7, 8];
@@ -1713,7 +1846,15 @@ fn map_zip_loop() {
             len: 2,
         },
     };
-    let result_raw = module.run(&args as *const Args as i64, 1, 0) as *const Vec;
+
+    let inp = Box::new(WeldInputArgs {
+        input: &args as *const Args as i64,
+        nworkers: 1,
+        run_id: 0,
+    });
+    let ptr = Box::into_raw(inp) as i64;
+
+    let result_raw = module.run(ptr) as *const Vec;
     let result = unsafe { (*result_raw).clone() };
     let output = [6, 8, 10, 12];
     for i in 0..(result.len as isize) {
@@ -1736,8 +1877,9 @@ fn iters_for_loop() {
         y: Vec,
     }
 
-    let code = "|x:vec[i32], y:vec[i32]| \
-                result(for(zip(iter(x,0L,4L,2L), y), appender, |b,i,e| merge(b,e.$0+e.$1)))";
+    let code = "|x:vec[i32], y:vec[i32]| result(for(zip(iter(x,0L,4L,2L), y), appender, |b,i,e| \
+                merge(b,e.$0+e.$1)))";
+    assert!(easy_ll::load_library("libweld").is_ok());
     let module = compile_program(&parse_program(code).unwrap()).unwrap();
     let x = [1, 2, 3, 4];
     let y = [5, 6];
@@ -1751,7 +1893,15 @@ fn iters_for_loop() {
             len: 2,
         },
     };
-    let result_raw = module.run(&args as *const Args as i64, 1, 0) as *const Vec;
+
+    let inp = Box::new(WeldInputArgs {
+        input: &args as *const Args as i64,
+        nworkers: 1,
+        run_id: 0,
+    });
+    let ptr = Box::into_raw(inp) as i64;
+
+    let result_raw = module.run(ptr) as *const Vec;
     let result = unsafe { (*result_raw).clone() };
     let output = [6, 9];
     for i in 0..(result.len as isize) {
@@ -1759,7 +1909,7 @@ fn iters_for_loop() {
     }
     weld_run_free(-1);
 }
-
+//
 #[test]
 fn serial_parlib_test() {
     #[derive(Clone)]
@@ -1768,8 +1918,8 @@ fn serial_parlib_test() {
         data: *const i32,
         len: i64,
     }
-
     let code = "|x:vec[i32]| result(for(x, merger[i32,+], |b,i,e| merge(b, e)))";
+    assert!(easy_ll::load_library("libweld").is_ok());
     let module = compile_program(&parse_program(code).unwrap()).unwrap();
     let size: i32 = 10000;
     let input: Vec<i32> = vec![1; size as usize];
@@ -1777,7 +1927,15 @@ fn serial_parlib_test() {
         data: input.as_ptr() as *const i32,
         len: size as i64,
     };
-    let result_raw = module.run(&args as *const WeldVec as i64, 1, 0) as *const i32;
+
+    let inp = Box::new(WeldInputArgs {
+        input: &args as *const WeldVec as i64,
+        nworkers: 1,
+        run_id: 0,
+    });
+    let ptr = Box::into_raw(inp) as i64;
+
+    let result_raw = module.run(ptr) as *const i32;
     let result = unsafe { (*result_raw).clone() };
     assert_eq!(result, size);
     weld_run_free(-1);
