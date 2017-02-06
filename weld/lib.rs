@@ -207,7 +207,7 @@ pub extern "C" fn weld_module_run(module: *mut easy_ll::CompiledModule,
     };
 
     // TODO(shoumik): Set the memory limit correctly (config?)
-    let mem_limit = 1000000000;
+    let mem_limit = DEFAULT_MEM;
     // TODO(shoumik): Set the number of threads correctly
     let threads = 1;
     let my_run_id;
@@ -324,6 +324,7 @@ pub extern "C" fn weld_rt_realloc(run_id: libc::int64_t,
     if mem_info.mem_allocated + (plus_bytes as i64) > mem_info.mem_limit {
         println!("weld_rt_realloc: Exceeded memory limit: {}B",
                  mem_info.mem_limit);
+        // TODO(shoumik): Do something better here.
         return std::ptr::null_mut();
     }
     let ptr = unsafe { realloc(data, size as usize) };
