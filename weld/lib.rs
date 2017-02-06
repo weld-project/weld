@@ -291,9 +291,7 @@ pub extern "C" fn weld_error_free(err: *mut WeldError) {
 pub extern "C" fn weld_rt_malloc(run_id: libc::int64_t, size: libc::int64_t) -> *mut c_void {
     let run_id = run_id as i64;
     let mut guarded = ALLOCATIONS.lock().unwrap();
-    if !guarded.contains_key(&run_id) {
-        println!("Unseen run {}", run_id);
-    }
+    if !guarded.contains_key(&run_id) {}
     let mem_info = guarded.entry(run_id).or_insert(RunMemoryInfo::new(DEFAULT_MEM));
     if mem_info.mem_allocated + (size as i64) > mem_info.mem_limit {
         println!("weld_rt_malloc: Exceeded memory limit: {}B > {}B",

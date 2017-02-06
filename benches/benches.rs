@@ -15,8 +15,6 @@ use bencher;
 use self::weld::*;
 use bencher::Bencher;
 
-use self::libc::c_void;
-
 #[derive(Clone)]
 #[allow(dead_code)]
 struct WeldVec {
@@ -24,8 +22,10 @@ struct WeldVec {
     len: i64,
 }
 
-// TODO(shoumik): Should this use the Weld C API instead? That way we can free stuff more easily
-// too by freeing the module after each benchmark run.
+// To prevent things from becoming dead-code eliminated.
+fn runtime_functions() {
+    weld_rt_free(0, weld_rt_realloc(0, weld_rt_malloc(0, 16), 32));
+}
 
 /// Compiles a string into an LLVM module.
 fn compile(code: &str) -> easy_ll::CompiledModule {
@@ -59,11 +59,15 @@ fn bench_integer_vector_sum(bench: &mut Bencher) {
         },
     };
 
-    // We should use the API here so we can use the same allocation/free patterns as everywhere
-    // else.
+    let inp = Box::new(llvm::WeldInputArgs {
+        input: &args as *const Args as i64,
+        nworkers: 1,
+        run_id: 0,
+    });
+    let ptr = Box::into_raw(inp) as i64;
 
     // Run once to check for correctness.
-    let result_raw = module.run(&args as *const Args as i64, 1) as *const WeldVec;
+    let result_raw = module.run(ptr) as *const WeldVec;
     let result = unsafe { (*result_raw).clone() };
     for i in 0..(result.len as isize) {
         assert_eq!(unsafe { *result.data.offset(i) }, x[0] + y[0]);
@@ -71,7 +75,7 @@ fn bench_integer_vector_sum(bench: &mut Bencher) {
     weld_run_free(-1);
 
     bench.iter(|| {
-        module.run(&args as *const Args as i64, 1, 0) as *const WeldVec;
+        module.run(ptr) as *const WeldVec;
         weld_run_free(-1);
     });
 }
@@ -97,15 +101,22 @@ fn bench_integer_map_reduce(bench: &mut Bencher) {
         },
     };
 
+    let inp = Box::new(llvm::WeldInputArgs {
+        input: &args as *const Args as i64,
+        nworkers: 1,
+        run_id: 0,
+    });
+    let ptr = Box::into_raw(inp) as i64;
+
     // Check correctness.
     let expect = x[0] * 4 * (size as i32);
-    let result_raw = module.run(&args as *const Args as i64, 1) as *const i32;
+    let result_raw = module.run(ptr) as *const i32;
     let result = unsafe { *result_raw.clone() };
     assert_eq!(expect, result);
     weld_run_free(-1);
 
     bench.iter(|| {
-        module.run(&args as *const Args as i64, 1, 0);
+        module.run(ptr);
         weld_run_free(-1);
     })
 }
@@ -150,19 +161,29 @@ fn bench_tpch_q6(bench: &mut Bencher) {
         },
     };
 
+    let inp = Box::new(llvm::WeldInputArgs {
+        input: &args as *const Args as i64,
+        nworkers: 1,
+        run_id: 0,
+    });
+    let ptr = Box::into_raw(inp) as i64;
+
     let module = compile(code);
-    let result_raw = module.run(&args as *const Args as i64, 1) as *const i32;
+    let result_raw = module.run(ptr) as *const i32;
     let result = unsafe { *result_raw.clone() };
     assert_eq!(result, expect as i32);
 
     bench.iter(|| {
-        module.run(&args as *const Args as i64, 1, 0) as *const i32;
+        module.run(ptr) as *const i32;
         weld_run_free(-1);
     })
 }
 
 /// Register functions that can be run with the benchmarking suite here.
 pub fn registered_benchmarks() -> HashMap<String, fn(&mut bencher::Bencher)> {
+
+    runtime_functions();
+
     let mut benchmarks_all: HashMap<String, fn(&mut bencher::Bencher)> = HashMap::new();
     benchmarks_all.insert("bench_integer_vector_sum".to_string(),
                           bench_integer_vector_sum);
