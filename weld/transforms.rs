@@ -458,6 +458,7 @@ fn replace_builder(lambda: &Expr<Type>,
                 ty: nested_args[1].ty.clone(),
                 kind: Ident(new_index_sym.clone()),
             };
+            new_body.ty = new_bldr.ty.clone();
             new_body.transform(&mut |ref mut e| match e.kind {
                 Merge { ref builder, ref value } if same_iden(&(*builder).kind, &old_bldr.name) => {
                     let params: Vec<Expr<Type>> =

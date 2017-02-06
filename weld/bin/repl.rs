@@ -7,18 +7,25 @@ use rustyline::Editor;
 use std::env;
 use std::path::PathBuf;
 
+use weld::*;
 use weld::llvm::LlvmGenerator;
-use weld::macro_processor;
 use weld::parser::*;
 use weld::pretty_print::*;
-use weld::transforms;
 use weld::type_inference::*;
 use weld::sir::ast_to_sir;
+
+// To prevent de-duplication. Really annoying to have these everywhere...how to prevent them from
+// being optimized out?
+fn runtime_functions() {
+    weld_rt_free(0, weld_rt_realloc(0, weld_rt_malloc(0, 16), 32));
+}
 
 fn main() {
     let home_path = env::home_dir().unwrap_or(PathBuf::new());
     let history_file_path = home_path.join(".weld_history");
     let history_file_path = history_file_path.to_str().unwrap_or(".weld_history");
+
+    runtime_functions();
 
     let mut rl = Editor::<()>::new();
     if let Err(_) = rl.load_history(&history_file_path) {}
