@@ -179,15 +179,6 @@ pub extern "C" fn weld_module_compile(code: *const c_char,
         &mut **err
     };
 
-    // The library needs to be loaded here since the compilation process will verify that
-    // each symbol can be found.
-    // TODO(shoumik): Better error handling.
-    if easy_ll::load_library("libweld").is_err() {
-        err.code = 1;
-        err.message = CString::new("Couldn't load libweld library").unwrap();
-        return std::ptr::null_mut();
-    }
-
     let module = llvm::compile_program(&parser::parse_program(code).unwrap());
     if let Err(ref e) = module {
         err.code = 1;
