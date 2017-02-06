@@ -111,7 +111,7 @@ pub fn compile_module(code: &str) -> Result<CompiledModule, LlvmError> {
         // Allow the LLVM module to call Weld runtime functions.
         // TODO(shoumik): Using a relative path here seems sketchy. Should we require the
         // library to live on the LD_LIBRARY_PATH instead?
-        LLVMLoadLibraryPermanently("target/debug/libweld.dylib"
+        LLVMLoadLibraryPermanently("libweld.dylib"
             .to_string()
             .as_ptr() as *const c_char);
 

@@ -10,7 +10,6 @@ extern crate easy_ll;
 extern crate libc;
 
 use std::collections::HashMap;
-use std::collections::HashSet;
 use std::error::Error;
 use libc::{c_char, c_void};
 use std::ffi::{CString, CStr};
@@ -43,15 +42,18 @@ use std::sync::Mutex;
 
 /// Hold memory information for a run.
 struct RunMemoryInfo {
-    allocations: HashSet<u64>,
+    // Maps addresses to allocation sizes.
+    allocations: HashMap<u64, u64>,
+    // The memory limit (max amount of live heap allocated memory) for this run.
     mem_limit: i64,
+    // The total bytes allocated for this run.
     mem_allocated: i64,
 }
 
 impl RunMemoryInfo {
     fn new(limit: i64) -> RunMemoryInfo {
         RunMemoryInfo {
-            allocations: HashSet::new(),
+            allocations: HashMap::new(),
             mem_limit: limit,
             mem_allocated: 0,
         }
@@ -64,6 +66,9 @@ lazy_static! {
     static ref ALLOCATIONS: Mutex<HashMap<i64, RunMemoryInfo>> = Mutex::new(HashMap::new());
     static ref RUN_ID_NEXT: Mutex<i64> = Mutex::new(0);
 }
+
+// Default memory size of 1GB.
+const DEFAULT_MEM: i64 = 1000000000;
 
 // C Functions used by the Weld runtime.
 extern "C" {
@@ -282,7 +287,7 @@ pub extern "C" fn weld_rt_malloc(run_id: libc::int64_t, size: libc::int64_t) -> 
     if !guarded.contains_key(&run_id) {
         println!("Unseen run {}", run_id);
     }
-    let mem_info = guarded.entry(run_id).or_insert(RunMemoryInfo::new(0));
+    let mem_info = guarded.entry(run_id).or_insert(RunMemoryInfo::new(DEFAULT_MEM));
     if mem_info.mem_allocated + (size as i64) > mem_info.mem_limit {
         println!("weld_rt_malloc: Exceeded memory limit: {}B > {}B",
                  mem_info.mem_allocated,
@@ -290,7 +295,8 @@ pub extern "C" fn weld_rt_malloc(run_id: libc::int64_t, size: libc::int64_t) -> 
         return std::ptr::null_mut();
     }
     let ptr = unsafe { malloc(size as usize) };
-    mem_info.allocations.insert(ptr as u64);
+    mem_info.mem_allocated += size;
+    mem_info.allocations.insert(ptr as u64, size as u64);
     ptr
 }
 
@@ -311,16 +317,19 @@ pub extern "C" fn weld_rt_realloc(run_id: libc::int64_t,
     if !guarded.contains_key(&run_id) {
         panic!("Unseen run {}", run_id);
     }
-    let mem_info = guarded.entry(run_id).or_insert(RunMemoryInfo::new(0));
-    // TODO(shoumik): Accounting here is wrong.
-    if mem_info.mem_allocated + (size as i64) > mem_info.mem_limit {
+    let mem_info = guarded.entry(run_id).or_insert(RunMemoryInfo::new(DEFAULT_MEM));
+    let old_size = *mem_info.allocations.get(&(data as u64)).unwrap() as i64;
+    // Number of additional bytes we'll allocate.
+    let plus_bytes = size - old_size;
+    if mem_info.mem_allocated + (plus_bytes as i64) > mem_info.mem_limit {
         println!("weld_rt_realloc: Exceeded memory limit: {}B",
                  mem_info.mem_limit);
         return std::ptr::null_mut();
     }
     let ptr = unsafe { realloc(data, size as usize) };
+    mem_info.mem_allocated += plus_bytes;
     mem_info.allocations.remove(&(data as u64));
-    mem_info.allocations.insert(ptr as u64);
+    mem_info.allocations.insert(ptr as u64, size as u64);
     ptr
 }
 
@@ -336,9 +345,10 @@ pub extern "C" fn weld_rt_free(run_id: libc::int64_t, data: *mut c_void) {
     if !guarded.contains_key(&run_id) {
         panic!("Unseen run {}", run_id);
     }
-    // TODO(shoumik): Decrement bytes allocated.
-    let mem_info = guarded.entry(run_id).or_insert(RunMemoryInfo::new(0));
+    let mem_info = guarded.entry(run_id).or_insert(RunMemoryInfo::new(DEFAULT_MEM));
+    let bytes_freed = *mem_info.allocations.get(&(data as u64)).unwrap();
     unsafe { free(data) };
+    mem_info.mem_allocated -= bytes_freed as i64;
     mem_info.allocations.remove(&(data as u64));
 
 }
@@ -354,9 +364,9 @@ pub fn weld_run_free(run_id: i64) {
         let keys: Vec<_> = guarded.keys().map(|i| *i).collect();
         for key in keys {
             {
-                let mem_info = guarded.entry(run_id).or_insert(RunMemoryInfo::new(0));
+                let mem_info = guarded.entry(run_id).or_insert(RunMemoryInfo::new(DEFAULT_MEM));
                 for entry in mem_info.allocations.iter() {
-                    unsafe { free(*entry as *mut c_void) };
+                    unsafe { free(*entry.0 as *mut c_void) };
                 }
             }
             guarded.remove(&key);
@@ -366,9 +376,9 @@ pub fn weld_run_free(run_id: i64) {
             return;
         }
         {
-            let mem_info = guarded.entry(run_id).or_insert(RunMemoryInfo::new(0));
+            let mem_info = guarded.entry(run_id).or_insert(RunMemoryInfo::new(DEFAULT_MEM));
             for entry in mem_info.allocations.iter() {
-                unsafe { free(*entry as *mut c_void) };
+                unsafe { free(*entry.0 as *mut c_void) };
             }
         }
         guarded.remove(&run_id);

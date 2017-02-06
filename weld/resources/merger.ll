@@ -37,7 +37,7 @@ define $ELEM @$NAME.bld.result(%$NAME.bld %bldPtr) {
   %v = extractvalue %$NAME.bld.inner %bld, 0
   %toFree = bitcast %$NAME.bld.inner* %bldPtr to i8*
   %runId = call i64 @get_runid()
-  call void @weld_rt_free(%runId, i8* %toFree)
+  call void @weld_rt_free(i64 %runId, i8* %toFree)
   ret $ELEM %v
 }
 
