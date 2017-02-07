@@ -12,8 +12,8 @@ declare void @qsort(i8*, i64, i64, i32 (i8*, i8*)*)
 declare i8*     @weld_rt_malloc(i64, i64)
 declare i8*     @weld_rt_realloc(i64, i8*, i64)
 declare void    @weld_rt_free(i64, i8*)
-declare i8*     @new_merger(i64, i64, i64)
-declare i8*     @get_merger_at_index(i8*, i64, i64)
+declare i8*     @new_merger(i64, i64, i32)
+declare i8*     @get_merger_at_index(i8*, i64, i32)
 declare void    @free_merger(i8*, i64)
 
 ; Parallel runtime structures
@@ -24,8 +24,11 @@ declare void    @free_merger(i8*, i64)
 
 declare void @set_result(i8*)
 declare i8* @get_result()
-declare void @set_nworkers(i32)
 declare void @pl_start_loop(%work_t*, i8*, i8*, void (%work_t*)*, void (%work_t*)*, i64, i64);
+
+; Number of workers
+declare void @set_nworkers(i32)
+declare i32 @get_nworkers()
 
 ; Run IDs
 declare void @set_runid(i64)

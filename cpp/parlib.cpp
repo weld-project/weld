@@ -62,16 +62,20 @@ extern "C" void set_result(void *res) {
   result = res;
 }
 
+extern "C" int32_t get_nworkers() {
+  return W;
+}
+
 extern "C" void set_nworkers(int32_t n) {
   W = n;
 }
 
 extern "C" int64_t get_runid() {
-    return run_id;
+  return run_id;
 }
 
 extern "C" void set_runid(int64_t id) {
-    run_id = id;
+  run_id = id;
 }
 
 // attempt to steal from back of the queue of a random victim

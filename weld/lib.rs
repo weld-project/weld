@@ -400,9 +400,9 @@ fn num_cache_blocks(size: i64) -> i64 {
 }
 
 #[no_mangle]
-pub extern "C" fn new_merger(size: i64, runid: i64, nworkers: i64) -> *mut c_void {
+pub extern "C" fn new_merger(size: i64, runid: i64, nworkers: i32) -> *mut c_void {
     let num_blocks = num_cache_blocks(size) as i64;
-    let total_blocks = num_blocks * nworkers * (CACHE_LINE as i64);
+    let total_blocks = num_blocks * (nworkers as i64) * (CACHE_LINE as i64);
     let ptr = weld_rt_malloc(runid, total_blocks as libc::int64_t);
     for i in 0..nworkers {
         let merger_ptr = get_merger_at_index(ptr, size, i);
@@ -412,12 +412,12 @@ pub extern "C" fn new_merger(size: i64, runid: i64, nworkers: i64) -> *mut c_voi
 }
 
 #[no_mangle]
-pub extern "C" fn get_merger_at_index(ptr: *mut c_void, size: i64, i: i64) -> *mut libc::c_void {
+pub extern "C" fn get_merger_at_index(ptr: *mut c_void, size: i64, i: i32) -> *mut libc::c_void {
     let ptr = ptr as *mut libc::uint8_t;
     let ptr = unsafe { (((ptr.offset((CACHE_LINE - 1) as isize)) as u64) & MASK) } as
               *mut libc::uint8_t;
     let num_blocks = num_cache_blocks(size) as i64;
-    let offset = num_blocks * i * (CACHE_LINE as i64);
+    let offset = num_blocks * (i as i64) * (CACHE_LINE as i64);
     let merger_ptr = unsafe { ptr.offset(offset as isize) } as *mut libc::c_void;
     merger_ptr
 }
@@ -442,7 +442,7 @@ fn merger_fns() {
     }
     aligned_ptr = aligned_ptr << CACHE_BITS;
     for i in 0..nworkers {
-        let offset = (i * num_cache_blocks(size) * (CACHE_LINE as i64)) as isize;
+        let offset = (num_cache_blocks(size) * (i as i64) * (CACHE_LINE as i64)) as isize;
         let merger_ptr = unsafe { (aligned_ptr as *mut libc::uint8_t).offset(offset) };
         unsafe { *(merger_ptr as *mut u32) = i as u32 };
     }

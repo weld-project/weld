@@ -22,6 +22,7 @@ typedef struct work_t work_t;
 extern "C" {
   void set_result(void *res);
   void *get_result();
+  int32_t get_nworkers();
   void set_nworkers(int32_t n);
   int64_t get_runid();
   void set_runid(int64_t rid);
