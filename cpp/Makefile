@@ -14,10 +14,13 @@ else
 endif
 
 
-all: parlib.bc
+all: parlib.bc vb.bc
 
 parlib.bc: parlib.cpp
 	${CLANG} ${CFLAGS} -c -emit-llvm parlib.cpp
+
+vb.bc: vb.cpp
+	${CLANG} ${CFLAGS} -c -emit-llvm vb.cpp
 
 clean:
 	rm -f *.bc
