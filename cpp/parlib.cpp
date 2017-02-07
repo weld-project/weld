@@ -8,6 +8,11 @@
 #include <algorithm>
 #include "parlib.h"
 
+// Memory allocation functions for Weld.
+extern "C" void *weld_rt_malloc(int64_t run_id, size_t size);
+extern "C" void *weld_rt_realloc(int64_t run_id, void *data, size_t size);
+extern "C" void weld_rt_free(int64_t run_id, void *data);
+
 /*
 The Weld parallel runtime. When the comments refer to a "computation",
 this means a single complete execution of a Weld program.
@@ -21,6 +26,7 @@ typedef deque<work_t *> work_queue;
 typedef pthread_spinlock_t work_queue_lock;
 
 int32_t W = 1; // number of workers, default 1
+int64_t run_id = 1; // the current run ID.
 pthread_t *workers = NULL;
 work_queue *all_work_queues = NULL; // queue per worker
 work_queue_lock *all_work_queue_locks = NULL; // lock per queue
@@ -60,6 +66,14 @@ extern "C" void set_nworkers(int32_t n) {
   W = n;
 }
 
+extern "C" int64_t get_runid() {
+    return run_id;
+}
+
+extern "C" void set_runid(int64_t id) {
+    run_id = id;
+}
+
 // attempt to steal from back of the queue of a random victim
 // should be called when own work queue empty
 static inline bool try_steal() {
@@ -93,7 +107,7 @@ static inline void finish_task(work_t *task) {
       // the computation is over
       done = true;
     }
-    free(task->data);
+    weld_rt_free(get_runid(), task->data);
   } else {
     /*
     int64_t old, updated;
@@ -110,10 +124,10 @@ static inline void finish_task(work_t *task) {
       (all_work_queues + my_id())->push_front(task->cont);
       pthread_spin_unlock((all_work_queue_locks + my_id()));
       // we are the last sibling with this data, so we can free it
-      free(task->data);
+      weld_rt_free(get_runid(), task->data);
     }
   }
-  free(task);
+  weld_rt_free(get_runid(), task);
 }
 
 // set the continuation of w to cont and increment cont
@@ -131,13 +145,14 @@ static inline void execute(work_t *initial_task);
 // w is the currently executing task
 extern "C" void pl_start_loop(work_t *w, void *body_data, void *cont_data, void (*body)(work_t*),
   void (*cont)(work_t*), int64_t lower, int64_t upper) {
-  // calloc 0-initializes all the fields so we don't need to set the fields that we want to be 0
-  work_t *body_task = (work_t *)calloc(sizeof(work_t), 1);
+  work_t *body_task = (work_t *)weld_rt_malloc(get_runid(), sizeof(work_t));
+  memset(body_task, 0, sizeof(work_t));
   body_task->data = body_data;
   body_task->fp = body;
   body_task->lower = lower;
   body_task->upper = upper;
-  work_t *cont_task = (work_t *)calloc(sizeof(work_t), 1);
+  work_t *cont_task = (work_t *)weld_rt_malloc(get_runid(), sizeof(work_t));
+  memset(cont_task, 0, sizeof(work_t));
   cont_task->data = cont_data; 
   cont_task->fp = cont;
   set_cont(body_task, cont_task);
@@ -168,7 +183,7 @@ extern "C" void pl_start_loop(work_t *w, void *body_data, void *cont_data, void 
 static inline void split_task(work_t *task) {
   // TODO make this a constant
   while (task->upper - task->lower >= 1024) {
-    work_t *last_half = (work_t *)malloc(sizeof(work_t));
+    work_t *last_half = (work_t *)weld_rt_malloc(get_runid(), sizeof(work_t));
     memcpy(last_half, task, sizeof(work_t));
     int64_t mid = (task->lower + task->upper) / 2;
     task->upper = mid;

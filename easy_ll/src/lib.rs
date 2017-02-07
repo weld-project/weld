@@ -1,6 +1,7 @@
 //! A very simple wrapper for LLVM that can JIT functions written as IR strings.
 
 extern crate llvm_sys as llvm;
+extern crate libc;
 
 use std::error::Error;
 use std::ffi::{CStr, CString, NulError};
@@ -11,6 +12,7 @@ use std::os::raw::c_char;
 use std::process::Command;
 use std::sync::{Once, ONCE_INIT};
 
+use llvm::support::LLVMLoadLibraryPermanently;
 use llvm::prelude::{LLVMContextRef, LLVMModuleRef, LLVMMemoryBufferRef};
 use llvm::execution_engine::{LLVMExecutionEngineRef, LLVMMCJITCompilerOptions};
 use llvm::analysis::LLVMVerifierFailureAction;
@@ -60,7 +62,7 @@ impl From<NulError> for LlvmError {
 }
 
 /// The type of our "run" function pointer.
-type RunFunc = extern "C" fn(i64, i32) -> i64;
+type RunFunc = extern "C" fn(i64) -> i64;
 
 /// A compiled module returned by `compile_module`, wrapping a `run` function that takes `i64`
 /// and returns `i64`. This structure includes (and manages) an LLVM execution engine, which is
@@ -74,8 +76,8 @@ pub struct CompiledModule {
 
 impl CompiledModule {
     /// Call the module's `run` function.
-    pub fn run(&self, arg: i64, nworkers: i32) -> i64 {
-        (self.function.unwrap())(arg, nworkers)
+    pub fn run(&self, arg: i64) -> i64 {
+        (self.function.unwrap())(arg)
     }
 }
 
@@ -86,6 +88,25 @@ impl Drop for CompiledModule {
             self.engine.map(|e| llvm::execution_engine::LLVMDisposeExecutionEngine(e));
             llvm::core::LLVMContextDispose(self.context);
         }
+    }
+}
+
+/// Loads a dynamic library by name. It is safe to call this function multiple times. The library
+/// must be on the search path or in one of the build directories for the module.
+pub fn load_library(libname: &str) -> Result<(), LlvmError> {
+    let ext = if cfg!(target_os = "linux") {
+        "so"
+    } else if cfg!(target_os = "macos") {
+        "dylib"
+    } else {
+        return Err(LlvmError::new("Unknown target os"));
+    };
+    let libname = format!("{}.{}", libname, ext);
+
+    if unsafe { LLVMLoadLibraryPermanently(libname.to_string().as_ptr() as *const c_char) } == 0 {
+        Ok(())
+    } else {
+        Err(LlvmError::new(format!("Couldn't load  library {}", libname).as_ref()))
     }
 }
 
@@ -242,7 +263,7 @@ unsafe fn check_run_function(module: LLVMModuleRef) -> Result<(), LlvmError> {
     }
     let c_str = llvm::core::LLVMPrintTypeToString(llvm::core::LLVMTypeOf(func));
     let func_type = CStr::from_ptr(c_str).to_str().unwrap();
-    if func_type != "i64 (i64, i32)*" {
+    if func_type != "i64 (i64)*" {
         return Err(LlvmError(format!("Run function has wrong type: {}", func_type)));
     }
     Ok(())

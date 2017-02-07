@@ -7,6 +7,7 @@
 use std::collections::HashMap;
 
 extern crate weld;
+extern crate libc;
 extern crate easy_ll;
 
 use bencher;
@@ -19,6 +20,11 @@ use bencher::Bencher;
 struct WeldVec {
     data: *const i32,
     len: i64,
+}
+
+// To prevent things from becoming dead-code eliminated.
+fn runtime_functions() {
+    weld_rt_free(0, weld_rt_realloc(0, weld_rt_malloc(0, 16), 32));
 }
 
 /// Compiles a string into an LLVM module.
@@ -53,16 +59,25 @@ fn bench_integer_vector_sum(bench: &mut Bencher) {
         },
     };
 
-    // TODO(shoumik): Free memory.
+    let inp = Box::new(llvm::WeldInputArgs {
+        input: &args as *const Args as i64,
+        nworkers: 1,
+        run_id: 0,
+    });
+    let ptr = Box::into_raw(inp) as i64;
 
     // Run once to check for correctness.
-    let result_raw = module.run(&args as *const Args as i64, 1) as *const WeldVec;
+    let result_raw = module.run(ptr) as *const WeldVec;
     let result = unsafe { (*result_raw).clone() };
     for i in 0..(result.len as isize) {
         assert_eq!(unsafe { *result.data.offset(i) }, x[0] + y[0]);
     }
+    weld_run_free(-1);
 
-    bench.iter(|| module.run(&args as *const Args as i64, 1));
+    bench.iter(|| {
+        module.run(ptr) as *const WeldVec;
+        weld_run_free(-1);
+    });
 }
 
 fn bench_integer_map_reduce(bench: &mut Bencher) {
@@ -86,13 +101,24 @@ fn bench_integer_map_reduce(bench: &mut Bencher) {
         },
     };
 
+    let inp = Box::new(llvm::WeldInputArgs {
+        input: &args as *const Args as i64,
+        nworkers: 1,
+        run_id: 0,
+    });
+    let ptr = Box::into_raw(inp) as i64;
+
     // Check correctness.
     let expect = x[0] * 4 * (size as i32);
-    let result_raw = module.run(&args as *const Args as i64, 1) as *const i32;
+    let result_raw = module.run(ptr) as *const i32;
     let result = unsafe { *result_raw.clone() };
     assert_eq!(expect, result);
+    weld_run_free(-1);
 
-    bench.iter(|| module.run(&args as *const Args as i64, 1))
+    bench.iter(|| {
+        module.run(ptr);
+        weld_run_free(-1);
+    })
 }
 
 fn bench_tpch_q6(bench: &mut Bencher) {
@@ -134,16 +160,30 @@ fn bench_tpch_q6(bench: &mut Bencher) {
             len: size,
         },
     };
+
+    let inp = Box::new(llvm::WeldInputArgs {
+        input: &args as *const Args as i64,
+        nworkers: 1,
+        run_id: 0,
+    });
+    let ptr = Box::into_raw(inp) as i64;
+
     let module = compile(code);
+    let result_raw = module.run(ptr) as *const i32;
+    let result = unsafe { *result_raw.clone() };
+    assert_eq!(result, expect as i32);
+
     bench.iter(|| {
-        let result_raw = module.run(&args as *const Args as i64, 1) as *const i32;
-        let result = unsafe { *result_raw.clone() };
-        assert_eq!(result, expect as i32);
+        module.run(ptr) as *const i32;
+        weld_run_free(-1);
     })
 }
 
 /// Register functions that can be run with the benchmarking suite here.
 pub fn registered_benchmarks() -> HashMap<String, fn(&mut bencher::Bencher)> {
+
+    runtime_functions();
+
     let mut benchmarks_all: HashMap<String, fn(&mut bencher::Bencher)> = HashMap::new();
     benchmarks_all.insert("bench_integer_vector_sum".to_string(),
                           bench_integer_vector_sum);

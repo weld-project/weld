@@ -23,6 +23,8 @@ extern "C" {
   void set_result(void *res);
   void *get_result();
   void set_nworkers(int32_t n);
+  int64_t get_runid();
+  void set_runid(int64_t rid);
   void pl_start_loop(work_t *w, void *body_data, void *cont_data, void (*body)(work_t*),
     void (*cont)(work_t*), int64_t lower, int64_t upper);
 }

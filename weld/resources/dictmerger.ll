@@ -15,7 +15,8 @@ define %$NAME.bld @$NAME.bld.new(i64 %capacity) {
   %entrySizePtr = getelementptr %$NAME.entry* null, i32 1
   %entrySize = ptrtoint %$NAME.entry* %entrySizePtr to i64
   %allocSize = mul i64 %entrySize, %capacity
-  %bytes = call i8* @malloc(i64 %allocSize)
+  %runId = call i64 @get_runid()
+  %bytes = call i8* @weld_rt_malloc(i64 %runId, i64 %allocSize)
   ; Memset all the bytes to 0 to set the isFilled fields to 0
   call void @llvm.memset.p0i8.i64(i8* %bytes, i8 0, i64 %allocSize, i32 8, i1 0)
   %entries = bitcast i8* %bytes to %$NAME.entry*
@@ -24,7 +25,7 @@ define %$NAME.bld @$NAME.bld.new(i64 %capacity) {
   %3 = insertvalue %$NAME %2, i64 %capacity, 2
   %bldSizePtr = getelementptr %$NAME.bld null, i32 1
   %bldSize = ptrtoint %$NAME.bld %bldSizePtr to i64
-  %4 = call i8* @malloc(i64 %bldSize)
+  %4 = call i8* @weld_rt_malloc(i64 %runId, i64 %bldSize)
   %5 = bitcast i8* %4 to %$NAME*
   store %$NAME %3, %$NAME.bld %5
   ret %$NAME.bld %5
@@ -61,7 +62,8 @@ define %$NAME @$NAME.bld.result(%$NAME.bld %bldPtr) {
   ; TODO: Fix this
   %bld = load %$NAME.bld %bldPtr
   %toFree = bitcast %$NAME.bld %bldPtr to i8*
-  call void @free(i8* %toFree)
+  %runId = call i64 @get_runid()
+  call void @weld_rt_free(i64 %runId, i8* %toFree)
   ret %$NAME %bld
 }
 

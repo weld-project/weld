@@ -14,7 +14,8 @@ define %$NAME.bld @$NAME.bld.new() {
   %1 = insertvalue %$NAME.bld.inner undef, $ELEM 0, 0
   %bldSizePtr = getelementptr %$NAME.bld.inner* null, i32 1
   %bldSize = ptrtoint %$NAME.bld.inner* %bldSizePtr to i64
-  %2 = call i8* @malloc(i64 %bldSize)
+  %runId = call i64 @get_runid()
+  %2 = call i8* @weld_rt_malloc(i64 %runId, i64 %bldSize)
   %3 = bitcast i8* %2 to %$NAME.bld.inner*
   store %$NAME.bld.inner %1, %$NAME.bld.inner* %3
   ret %$NAME.bld %3
@@ -35,7 +36,8 @@ define $ELEM @$NAME.bld.result(%$NAME.bld %bldPtr) {
   %bld = load %$NAME.bld.inner* %bldPtr
   %v = extractvalue %$NAME.bld.inner %bld, 0
   %toFree = bitcast %$NAME.bld.inner* %bldPtr to i8*
-  call void @free(i8* %toFree)
+  %runId = call i64 @get_runid()
+  call void @weld_rt_free(i64 %runId, i8* %toFree)
   ret $ELEM %v
 }
 

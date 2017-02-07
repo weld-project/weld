@@ -129,7 +129,10 @@ weld_error_message(weld_error_t);
 extern "C" void 
 weld_error_free(weld_error_t);
 
+// Weld memory management.
 
+extern "C" void*
+weld_run_free(int64_t run_id);
 
 #endif
 

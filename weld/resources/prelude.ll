@@ -6,32 +6,27 @@ declare void @llvm.memset.p0i8.i64(i8*, i8, i64, i32, i1)
 declare i64 @llvm.ctlz.i64(i64, i1)
 
 ; C library functions
-declare i8* @malloc(i64)
-declare void @free(i8*)
-declare i8* @realloc(i8*, i64)
 declare void @qsort(i8*, i64, i64, i32 (i8*, i8*)*)
 
-;; Weld library functions
-; declare i32 @nvl_set_log_file(i8*)
-; declare void @nvl_set_use_regions(i32)
-; declare void @nvl_log_regions()
-; declare i8* @nvl_region_create(i64)
-; declare void @nvl_region_destroy(i8*)
-; declare void @nvl_region_incref(i8*)
-; declare void @nvl_region_decref(i8*)
-; declare i32 @nvl_region_reference_other(i8*, i8*)
-; declare i32 @nvl_region_copy_nested_refs(i8*, i8*)
-; declare i8* @nvl_malloc_in_region(i8*, i64)
-; declare i8* @nvl_realloc_in_region(i8*, i8*, i64)
-; declare void @nvl_log_i64(i64)
+; Weld library functions (new)
+declare i8*     @weld_rt_malloc(i64, i64)
+declare i8*     @weld_rt_realloc(i64, i8*, i64)
+declare void    @weld_rt_free(i64, i8*)
 
 ; Parallel runtime structures
 %work_t = type { i8*, i64, i64, void (%work_t*)*, %work_t*, i32, i64, i32 }
+
+; Input argument (input data pointer, nworkers, runId)
+%input_arg_t = type { i64, i32, i64 }
 
 declare void @set_result(i8*)
 declare i8* @get_result()
 declare void @set_nworkers(i32)
 declare void @pl_start_loop(%work_t*, i8*, i8*, void (%work_t*)*, void (%work_t*)*, i64, i64);
+
+; Run IDs
+declare void @set_runid(i64)
+declare i64 @get_runid()
 
 ; Hash functions
 
