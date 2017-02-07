@@ -320,7 +320,7 @@ fn basic_tokenize() {
                vec![TEqual, TEqualEqual, TBar, TLogicalOr, TBitwiseAnd, TLogicalAnd, TEndOfInput]);
     assert_eq!(tokenize("|a:i8| a").unwrap(),
                vec![TBar, TIdent("a".into()), TColon, TI8, TBar, TIdent("a".into()), TEndOfInput]);
-    
+
     assert!(tokenize("0a").is_err());
     assert!(tokenize("#").is_err());
 

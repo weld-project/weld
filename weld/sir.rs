@@ -38,10 +38,7 @@ pub enum Statement {
         new_ty: Type,
         child: Symbol,
     },
-    Length {
-        output: Symbol,
-        child: Symbol,
-    },
+    Length { output: Symbol, child: Symbol },
     Assign { output: Symbol, value: Symbol },
     AssignLiteral { output: Symbol, value: LiteralKind },
     Merge { builder: Symbol, value: Symbol },
@@ -511,7 +508,7 @@ fn gen_expr(expr: &TypedExpr,
             });
             Ok((cur_func, cur_block, res_sym))
         }
-        
+
         ExprKind::If { ref cond, ref on_true, ref on_false } => {
             let (cur_func, cur_block, cond_sym) = gen_expr(cond, prog, cur_func, cur_block)?;
             let true_block = prog.funcs[cur_func].add_block();

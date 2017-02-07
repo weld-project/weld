@@ -1824,7 +1824,7 @@ fn filter_length() {
     struct Args {
         x: Vec,
     }
-    
+
     let code = "|x:vec[i32]| len(filter(x, |i| i < 4 && i > 1))";
     let module = compile_program(&parse_program(code).unwrap()).unwrap();
     let data = [2, 3, 4, 2, 1];
@@ -1864,7 +1864,7 @@ fn flat_map_length() {
 
     let code = "|x:vec[i32]| len(flatten(map(x, |i:i32| x)))";
     let module = compile_program(&parse_program(code).unwrap()).unwrap();
-    
+
     let data = [2, 3, 4, 2, 1];
     let args = Args {
         x: Vec {

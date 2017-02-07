@@ -883,7 +883,7 @@ fn basic_parsing() {
 
     let e = parse_expr("|a:i8| a").unwrap();
     assert_eq!(print_typed_expr(&e), "|a:i8|a:?");
-    
+
     assert!(parse_expr("10 * * 2").is_err());
 
     let p = parse_program("macro a(x) = x+x; macro b() = 5; a(b)").unwrap();
