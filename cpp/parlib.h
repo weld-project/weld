@@ -5,17 +5,21 @@
 struct work_t {
   void *data;
   int64_t lower;
-  int64_t upper; 
+  int64_t upper;
+  int64_t cur_idx;
+  int32_t stolen; // boolean
+  int64_t *nest_pos;
+  int32_t nest_pos_len;
+  // to disambiguate the relative order of tasks with identical loop bounds
+  int64_t task_id;
   // work function
   void (*fp)(work_t*);
   // cont is dependent on the completion of this work item (and possibly others as well)
   work_t *cont;
   // number of remaining parent dependencies
   int32_t deps;
-  // to disambiguate the relative order of tasks with identical loop bounds
-  int64_t task_id;
   int32_t continued; // boolean
-} __attribute__((packed));
+};
 
 typedef struct work_t work_t;
 
@@ -29,6 +33,7 @@ extern "C" {
   void set_runid(int64_t rid);
   void pl_start_loop(work_t *w, void *body_data, void *cont_data, void (*body)(work_t*),
     void (*cont)(work_t*), int64_t lower, int64_t upper);
+  void execute(void (*run)(work_t*), void* data);
 }
 
 #ifdef __APPLE__
