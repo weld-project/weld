@@ -44,6 +44,10 @@ static inline int32_t my_id() {
   return (int32_t)reinterpret_cast<intptr_t>(pthread_getspecific(id));
 }
 
+extern "C" int32_t my_id_public() {
+  return (int32_t)reinterpret_cast<intptr_t>(pthread_getspecific(id));
+}
+
 extern "C" void take_global_lock() {
   pthread_mutex_lock(&global_lock);
 }

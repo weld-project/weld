@@ -20,6 +20,7 @@ struct work_t {
 typedef struct work_t work_t;
 
 extern "C" {
+  int32_t my_id_public();
   void set_result(void *res);
   void *get_result();
   int32_t get_nworkers();
