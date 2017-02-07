@@ -1797,10 +1797,19 @@ fn simple_length() {
             len: 5,
         },
     };
-    let result_raw = module.run(&args as *const Args as i64, 1) as *const i32;
+
+    let inp = Box::new(WeldInputArgs {
+        input: &args as *const Args as i64,
+        nworkers: 1,
+        run_id: 0,
+    });
+    let ptr = Box::into_raw(inp) as i64;
+
+    let result_raw = module.run(ptr) as *const i32;
     let result = unsafe { (*result_raw).clone() };
     let output = 5;
-    assert_eq!(output, result)
+    assert_eq!(output, result);
+    weld_run_free(-1);
 }
 
 #[test]
@@ -1825,11 +1834,19 @@ fn filter_length() {
             len: 5,
         },
     };
-    let result_raw = module.run(&args as *const Args as i64, 1) as *const i32;
+
+    let inp = Box::new(WeldInputArgs {
+        input: &args as *const Args as i64,
+        nworkers: 1,
+        run_id: 0,
+    });
+    let ptr = Box::into_raw(inp) as i64;
+
+    let result_raw = module.run(ptr) as *const i32;
     let result = unsafe { (*result_raw).clone() };
     let output = 3;
-    assert_eq!(output, result)
-    // TODO: Free result_raw
+    assert_eq!(output, result);
+    weld_run_free(-1);
 }
 
 #[test]
@@ -1844,7 +1861,7 @@ fn flat_map_length() {
     struct Args {
         x: Vec,
     }
-    
+
     let code = "|x:vec[i32]| len(flatten(map(x, |i:i32| x)))";
     let module = compile_program(&parse_program(code).unwrap()).unwrap();
     
@@ -1855,11 +1872,19 @@ fn flat_map_length() {
             len: 5,
         },
     };
-    let result_raw = module.run(&args as *const Args as i64, 1) as *const i32;
+
+    let inp = Box::new(WeldInputArgs {
+        input: &args as *const Args as i64,
+        nworkers: 1,
+        run_id: 0,
+    });
+    let ptr = Box::into_raw(inp) as i64;
+
+    let result_raw = module.run(ptr) as *const i32;
     let result = unsafe { (*result_raw).clone() };
     let output = 25;
-    assert_eq!(output, result)
-    // TODO: Free result_raw
+    assert_eq!(output, result);
+    weld_run_free(-1);
 }
 
 #[test]
