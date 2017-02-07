@@ -12,6 +12,9 @@ declare void @qsort(i8*, i64, i64, i32 (i8*, i8*)*)
 declare i8*     @weld_rt_malloc(i64, i64)
 declare i8*     @weld_rt_realloc(i64, i8*, i64)
 declare void    @weld_rt_free(i64, i8*)
+declare i8*     @new_merger(i64, i64, i64)
+declare i8*     @get_merger_at_index(i8*, i64, i64)
+declare void    @free_merger(i8*, i64)
 
 ; Parallel runtime structures
 %work_t = type { i8*, i64, i64, void (%work_t*)*, %work_t*, i32, i64, i32 }
