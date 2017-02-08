@@ -148,7 +148,7 @@ freeBody:
 
 endLabel:
   %runId = call i64 @get_runid()
-  call void @weld_rt_free(i64 %runId, i8* %bldPtr)
+  call void @free_merger(i8* %bldPtr, i64 %runId)
   %finalRes = load %$NAME* %finalDictPtr
   ret %$NAME %finalRes
 }

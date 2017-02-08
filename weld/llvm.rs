@@ -997,17 +997,16 @@ impl LlvmGenerator {
                                                                &elem_ty_str,
                                                                ctx));
                                         let threadid_tmp =
-                                            try!(self.load_var("%cur.threadIdPtr",
-                                                               "i32",
-                                                               ctx));
-                                        ctx.code.add(format!("call {} {}.merge({} {}, {} {}, i32 {})",
-                                                             bld_ty_str,
-                                                             bld_prefix,
-                                                             bld_ty_str,
-                                                             bld_tmp,
-                                                             elem_ty_str,
-                                                             elem_tmp,
-                                                             threadid_tmp));
+                                            try!(self.load_var("%cur.threadIdPtr", "i32", ctx));
+                                        ctx.code
+                                            .add(format!("call {} {}.merge({} {}, {} {}, i32 {})",
+                                                         bld_ty_str,
+                                                         bld_prefix,
+                                                         bld_ty_str,
+                                                         bld_tmp,
+                                                         elem_ty_str,
+                                                         elem_tmp,
+                                                         threadid_tmp));
                                     }
                                     Merger(ref t, _) => {
                                         let bld_ty_str = self.llvm_type(&bld_ty)?.to_string();
@@ -1020,14 +1019,17 @@ impl LlvmGenerator {
                                         let elem_tmp = self.load_var(llvm_symbol(value).as_str(),
                                                       &elem_ty_str,
                                                       ctx)?;
-                                        // TODO(shoumik) Template for Merger
-                                        ctx.code.add(format!("call {} {}.merge({} {}, {} {})",
-                                                             bld_ty_str,
-                                                             bld_prefix,
-                                                             bld_ty_str,
-                                                             bld_tmp,
-                                                             elem_ty_str,
-                                                             elem_tmp));
+                                        let threadid_tmp =
+                                            self.load_var("%cur.threadIdPtr", "i32", ctx)?;
+                                        ctx.code
+                                            .add(format!("call {} {}.merge({} {}, {} {}, i32 {})",
+                                                         bld_ty_str,
+                                                         bld_prefix,
+                                                         bld_ty_str,
+                                                         bld_tmp,
+                                                         elem_ty_str,
+                                                         elem_tmp,
+                                                         threadid_tmp));
 
                                     }
                                 }

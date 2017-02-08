@@ -18,6 +18,11 @@ use weld::sir::ast_to_sir;
 // being optimized out?
 fn runtime_functions() {
     weld_rt_free(0, weld_rt_realloc(0, weld_rt_malloc(0, 16), 32));
+    let x = new_merger(16, 0, 1);
+    if get_merger_at_index(x, 16, 0) != std::ptr::null_mut() {
+        free_merger(x, 0);
+    }
+
 }
 
 fn main() {
