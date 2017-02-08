@@ -68,7 +68,7 @@ done:
   %final = phi $ELEM [ %first, %entry ], [ %updated, %body ]
   %runId = call i64 @get_runid()
   %asPtr = bitcast %$NAME.bld %bldArgPtr to i8*
-  call void @free_merger(i8 *rawPtr, i64 %runId)
+  call void @free_merger(i8* %asPtr, i64 %runId)
   ret $ELEM %final
 }
 
