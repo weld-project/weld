@@ -139,7 +139,7 @@ freeLabel:
 
 freeBody:
   %k = phi i32 [ 0, %freeLabel ], [ %k2, %freeBody ]
-  %dictPtr2 = call %$NAME* @$NAME.bld.getptrIndexed(%$NAME.bld %bldPtr, i32 %i)
+  %dictPtr2 = call %$NAME* @$NAME.bld.getptrIndexed(%$NAME.bld %bldPtr, i32 %k)
   %dict2 = load %$NAME* %dictPtr2
   call void @$NAME.free(%$NAME %dict2)
   %k2 = add i32 %k, 1

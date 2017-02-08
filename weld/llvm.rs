@@ -1748,6 +1748,80 @@ fn simple_for_dictmerger_loop() {
 }
 
 #[test]
+fn simple_parallel_for_dictmerger_loop() {
+    #[derive(Clone)]
+    #[allow(dead_code)]
+    struct Vec {
+        data: *const i32,
+        len: i64,
+    }
+    #[allow(dead_code)]
+    struct Pair {
+        ele1: i32,
+        ele2: i32,
+    }
+    #[derive(Clone)]
+    #[allow(dead_code)]
+    struct VecPrime {
+        data: *const Pair,
+        len: i64,
+    }
+    #[allow(dead_code)]
+    struct Args {
+        x: Vec,
+        y: Vec,
+    }
+
+    let code = "|x:vec[i32], y:vec[i32]| tovec(result(for(zip(x,y), dictmerger[i32,i32,+], \
+                |b,i,e| merge(b, e))))";
+    let module = compile_program(&parse_program(code).unwrap()).unwrap();
+    const DICT_SIZE: usize = 8192;
+    let mut keys = [0; DICT_SIZE];
+    let mut values = [0; DICT_SIZE];
+    for i in 0..DICT_SIZE {
+        keys[i] = i as i32;
+        values[i] = i as i32;
+    }
+    let args = Args {
+        x: Vec {
+            data: &keys as *const i32,
+            len: DICT_SIZE as i64,
+        },
+        y: Vec {
+            data: &values as *const i32,
+            len: DICT_SIZE as i64,
+        },
+    };
+
+    let inp = Box::new(WeldInputArgs {
+        input: &args as *const Args as i64,
+        nworkers: 4,
+        run_id: 0,
+    });
+    let ptr = Box::into_raw(inp) as i64;
+
+    let result_raw = module.run(ptr) as *const VecPrime;
+    let result = unsafe { (*result_raw).clone() };
+    let output_keys = keys;
+    let output_values = values;
+    for i in 0..(output_keys.len() as isize) {
+        let mut success = false;
+        let key = unsafe { (*result.data.offset(i)).ele1 };
+        let value = unsafe { (*result.data.offset(i)).ele2 };
+        for j in 0..(output_keys.len()) {
+            if output_keys[j] == key {
+                if output_values[j] == value {
+                    success = true;
+                }
+            }
+        }
+        assert_eq!(success, true);
+    }
+    assert_eq!(result.len, output_keys.len() as i64);
+    weld_run_free(-1);
+}
+
+#[test]
 fn simple_dict_lookup() {
     #[derive(Clone)]
     #[allow(dead_code)]
