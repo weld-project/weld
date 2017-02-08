@@ -12,7 +12,7 @@ extern crate libc;
 use std::collections::HashMap;
 use std::error::Error;
 use libc::{c_char, c_void};
-use std::ffi::{CString, CStr};
+use std::ffi::CStr;
 use std::mem;
 
 /// Utility macro to create an Err result with a WeldError from a format string.
@@ -73,7 +73,9 @@ pub enum WeldRuntimeErrno {
     Success = 0,
     CompileError,
     ArrayOutOfBounds,
+    BadIteratorLength,
     MismatchedZipSize,
+    Unknown,
     ErrnoMax,
 }
 
@@ -116,6 +118,7 @@ pub struct WeldValue {
 }
 
 impl WeldError {
+    /// Returns a new WeldError where the message is just the errno name.
     fn new(errno: WeldRuntimeErrno) -> WeldError {
         WeldError {
             errno: errno,
@@ -123,6 +126,7 @@ impl WeldError {
         }
     }
 
+    /// Returns a new WeldError with the given message.
     fn new_with_message(errno: WeldRuntimeErrno, message: String) -> WeldError {
         WeldError {
             errno: errno,
@@ -268,7 +272,7 @@ pub extern "C" fn weld_module_run(module: *mut easy_ll::CompiledModule,
     });
     let ptr = Box::into_raw(input) as i64;
 
-    let mut result = module.run(ptr) as *const c_void;
+    let result = module.run(ptr) as *const c_void;
     let errno = weld_rt_get_errno(my_run_id);
     if errno != WeldRuntimeErrno::Success {
         weld_run_free(my_run_id);
@@ -413,6 +417,10 @@ pub extern "C" fn weld_rt_free(run_id: libc::int64_t, data: *mut c_void) {
 pub extern "C" fn weld_rt_get_errno(run_id: libc::int64_t) -> WeldRuntimeErrno {
     let run_id = run_id as i64;
     let guarded = WELD_ERRNOS.read().unwrap();
+    if !guarded.contains_key(&run_id) {
+        // TODO(shoumik): Better behavior here.
+        return WeldRuntimeErrno::Success;
+    }
     *guarded.get(&run_id).unwrap()
 }
 

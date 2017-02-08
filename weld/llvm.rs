@@ -4,6 +4,8 @@ use std::collections::BTreeMap;
 
 use easy_ll;
 
+use super::WeldRuntimeErrno;
+
 use super::ast::*;
 use super::ast::Type::*;
 use super::ast::LiteralKind::*;
@@ -32,6 +34,8 @@ use super::weld_rt_malloc;
 use super::weld_rt_realloc;
 #[cfg(test)]
 use super::weld_rt_free;
+#[cfg(test)]
+use super::weld_rt_get_errno;
 
 static PRELUDE_CODE: &'static str = include_str!("resources/prelude.ll");
 static VECTOR_CODE: &'static str = include_str!("resources/vector.ll");
@@ -369,12 +373,12 @@ impl LlvmGenerator {
                     .add(format!("define void @f{}_wrapper({}) {{", func.id, serial_arg_types));
                 wrap_ctx.code.add(format!("fn.entry:"));
                 let upper_bound = wrap_ctx.var_ids.next();
+                let first_data = &par_for.data[0].data;
+                let data_str = llvm_symbol(&first_data);
+                let data_ty_str = try!(self.llvm_type(func.params.get(&first_data).unwrap()))
+                    .to_string();
+                let data_prefix = format!("@{}", data_ty_str.replace("%", ""));
                 if par_for.data[0].start.is_none() {
-                    let first_data = &par_for.data[0].data;
-                    let data_str = llvm_symbol(&first_data);
-                    let data_ty_str = try!(self.llvm_type(func.params.get(&first_data).unwrap()))
-                        .to_string();
-                    let data_prefix = format!("@{}", data_ty_str.replace("%", ""));
                     wrap_ctx.code.add(format!("{} = call i64 {}.size({} {})",
                                               upper_bound,
                                               data_prefix,
@@ -385,16 +389,47 @@ impl LlvmGenerator {
                     let end_str = llvm_symbol(&par_for.data[0].end.clone().unwrap());
                     let stride_str = llvm_symbol(&par_for.data[0].stride.clone().unwrap());
                     let diff_tmp = wrap_ctx.var_ids.next();
+                    let vector_len = wrap_ctx.var_ids.next();
+                    let upper_bounds_check = wrap_ctx.var_ids.next();
                     // TODO check for errors in the given bounds: end >= start >= 0, stride > 0,
                     // (end - start) % stride == 0 => Crash
+                    wrap_ctx.code.add(format!("{} = call i64 {}.size({} {})",
+                                              vector_len,
+                                              data_prefix,
+                                              data_ty_str,
+                                              data_str));
                     wrap_ctx.code
                         .add(format!("{} = sub i64 {}, {}", diff_tmp, end_str, start_str));
                     wrap_ctx.code
                         .add(format!("{} = udiv i64 {}, {}", upper_bound, diff_tmp, stride_str));
+
+                    // Performs a basic bounds check to ensure we don't overrun the length of the
+                    // input vector.
+                    //
+                    // TODO(shoumik): This error checking stuff is pretty generic
+                    // (except for the actual check) and  can possibly be factored out into a
+                    // different function.
+                    wrap_ctx.code.add(format!("{} = icmp ugt i64 {}, {}",
+                                              upper_bounds_check,
+                                              upper_bound,
+                                              vector_len));
+                    wrap_ctx.code
+                        .add(format!("br i1 {}, label %fn.boundcheckpassed, label \
+                                      %fn.boundcheckfailed",
+                                     upper_bounds_check));
+                    wrap_ctx.code.add(format!("fn.boundcheckfailed:"));
+                    let errno = WeldRuntimeErrno::BadIteratorLength;
+                    let run_id = wrap_ctx.var_ids.next();
+                    wrap_ctx.code.add(format!("{} = call i64 @get_runid()", run_id));
+                    wrap_ctx.code.add(format!("call void @weld_rt_set_errno(i64 {}, i64 {})",
+                                              run_id,
+                                              errno as i64));
+                    wrap_ctx.code.add(format!("br label %fn.end"));
                 }
                 let bound_cmp = wrap_ctx.var_ids.next();
                 // TODO make a smarter decision on whether to call serial here (+ context-dependent
                 // grain size)
+                wrap_ctx.code.add(format!("fn.boundcheckpassed:"));
                 wrap_ctx.code.add(format!("{} = icmp ult i64 {}, 1024", bound_cmp, upper_bound));
                 wrap_ctx.code.add(format!("br i1 {}, label %for.ser, label %for.par", bound_cmp));
                 wrap_ctx.code.add(format!("for.ser:"));
@@ -1243,7 +1278,11 @@ impl LlvmGenerator {
                     ctx.code.add("br label %body.end");
                 }
                 Crash => {
-                    // TODO do something else here?
+                    let errno = WeldRuntimeErrno::Unknown as i64;
+                    let run_id = ctx.var_ids.next();
+                    ctx.code.add(format!("call void @weld_rt_set_errno(i64 {}, i64 {})",
+                                         run_id,
+                                         errno));
                 }
             }
         }
@@ -1412,6 +1451,8 @@ fn types() {
 #[test]
 fn runtime_functions() {
     weld_rt_free(0, weld_rt_realloc(0, weld_rt_malloc(0, 16), 32));
+    weld_rt_set_errno(-1, 0);
+    weld_rt_get_errno(-1);
 }
 
 #[test]
@@ -2069,5 +2110,48 @@ fn serial_parlib_test() {
     let result_raw = module.run(ptr) as *const i32;
     let result = unsafe { (*result_raw).clone() };
     assert_eq!(result, size);
+    weld_run_free(-1);
+}
+
+#[test]
+fn iters_outofbounds_error_test() {
+    use std::ptr;
+    use super::WeldRuntimeErrno;
+
+    #[derive(Clone)]
+    #[allow(dead_code)]
+    struct Vec {
+        data: *const i32,
+        len: i64,
+    }
+    #[allow(dead_code)]
+    struct Args {
+        x: Vec,
+    }
+
+    let code = "|x:vec[i32]| result(for(iter(x,0L,8L,1L), appender, |b,i,e| \
+                merge(b,e+1)))";
+    let module = compile_program(&parse_program(code).unwrap()).unwrap();
+    let x = [1, 2, 3, 4];
+    let args = Args {
+        x: Vec {
+            data: &x as *const i32,
+            len: 4,
+        },
+    };
+
+    let inp = Box::new(WeldInputArgs {
+        input: &args as *const Args as i64,
+        nworkers: 1,
+        run_id: 0,
+    });
+    let ptr = Box::into_raw(inp) as i64;
+
+    let result_raw = module.run(ptr) as *const Vec;
+
+    // Get the error back for the run ID we used.
+    let errno = weld_rt_get_errno(0);
+    assert_eq!(errno, WeldRuntimeErrno::BadIteratorLength);
+    assert_eq!(result, ptr::null_mut());
     weld_run_free(-1);
 }

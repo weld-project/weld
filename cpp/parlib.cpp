@@ -13,6 +13,9 @@ extern "C" void *weld_rt_malloc(int64_t run_id, size_t size);
 extern "C" void *weld_rt_realloc(int64_t run_id, void *data, size_t size);
 extern "C" void weld_rt_free(int64_t run_id, void *data);
 
+extern "C" int64_t weld_rt_get_errno(int64_t run_id);
+extern "C" void weld_rt_set_errno(int64_t run_id, int64_t errno);
+
 /*
 The Weld parallel runtime. When the comments refer to a "computation",
 this means a single complete execution of a Weld program.
@@ -132,6 +135,12 @@ static inline void finish_task(work_t *task) {
     }
   }
   weld_rt_free(get_runid(), task);
+
+  // Exit the thread if there's an error.
+  if (weld_rt_get_errno(get_runid()) != 0) {
+    printf("Exiting upon errno value\n");
+    pthread_exit(NULL);
+  }
 }
 
 // set the continuation of w to cont and increment cont
@@ -227,7 +236,7 @@ static void *thread_func(void *data) {
   CPU_ZERO(&set);
   CPU_SET(tid, &set);
   if (sched_setaffinity(0, sizeof(set), &set) == -1) {
-    printf("unable to set affinitiy for thread %d\n", tid);
+    printf("unable to set affinity for thread %d\n", tid);
   }
 #endif
 
