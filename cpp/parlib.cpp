@@ -8,7 +8,7 @@
 #include <algorithm>
 #include "parlib.h"
 
-// Memory allocation functions for Weld.
+// Memory allocation functions for Weld, .
 extern "C" void *weld_rt_malloc(int64_t run_id, size_t size);
 extern "C" void *weld_rt_realloc(int64_t run_id, void *data, size_t size);
 extern "C" void weld_rt_free(int64_t run_id, void *data);

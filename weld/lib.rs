@@ -39,12 +39,15 @@ pub mod type_inference;
 pub mod util;
 
 use std::sync::Mutex;
+use std::sync::RwLock;
+use std::fmt;
 
 const CACHE_BITS: i64 = 6;
 const CACHE_LINE: u64 = (1 << (CACHE_BITS as u64));
 const MASK: u64 = (!(CACHE_LINE - 1));
 
 /// Hold memory information for a run.
+#[derive(Clone, Debug)]
 struct RunMemoryInfo {
     // Maps addresses to allocation sizes.
     allocations: HashMap<u64, u64>,
@@ -64,10 +67,30 @@ impl RunMemoryInfo {
     }
 }
 
+/// An errno set by the runtime.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd)]
+pub enum WeldRuntimeErrno {
+    Success = 0,
+    CompileError,
+    ArrayOutOfBounds,
+    MismatchedZipSize,
+    ErrnoMax,
+}
+
+impl fmt::Display for WeldRuntimeErrno {
+    /// Just return the errno name.
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
 lazy_static! {
     // Maps a run to a list of pointers that must be freed for a given run of a module.
     // The key is a globally unique run ID.
     static ref ALLOCATIONS: Mutex<HashMap<i64, RunMemoryInfo>> = Mutex::new(HashMap::new());
+    // Error codes for each active run. This is highly inefficient right now; writing a value
+    // requires a lock across *all* runs, which is unnecessary.
+    static ref WELD_ERRNOS: RwLock<HashMap<i64, WeldRuntimeErrno>> = RwLock::new(HashMap::new());
     static ref RUN_ID_NEXT: Mutex<i64> = Mutex::new(0);
 }
 
@@ -81,9 +104,10 @@ extern "C" {
     pub fn free(ptr: *mut c_void);
 }
 
+#[derive(Clone, Debug, PartialEq)]
 pub struct WeldError {
-    code: i32,
-    message: CString,
+    errno: WeldRuntimeErrno,
+    message: String,
 }
 
 pub struct WeldValue {
@@ -92,10 +116,17 @@ pub struct WeldValue {
 }
 
 impl WeldError {
-    fn new(code: i32, message: &str) -> WeldError {
+    fn new(errno: WeldRuntimeErrno) -> WeldError {
         WeldError {
-            code: code,
-            message: CString::new(message).unwrap(),
+            errno: errno,
+            message: errno.to_string(),
+        }
+    }
+
+    fn new_with_message(errno: WeldRuntimeErrno, message: String) -> WeldError {
+        WeldError {
+            errno: errno,
+            message: message,
         }
     }
 }
@@ -179,14 +210,14 @@ pub extern "C" fn weld_module_compile(code: *const c_char,
     let conf = conf.to_str().unwrap();
 
     let err = unsafe {
-        *err = Box::into_raw(Box::new(WeldError::new(0, "Success")));
+        *err = Box::into_raw(Box::new(WeldError::new(WeldRuntimeErrno::Success)));
         &mut **err
     };
 
     let module = llvm::compile_program(&parser::parse_program(code).unwrap());
     if let Err(ref e) = module {
-        err.code = 1;
-        err.message = CString::new(e.description()).unwrap();
+        err.errno = WeldRuntimeErrno::CompileError;
+        err.message = e.description().to_string();
         return std::ptr::null_mut();
     }
     Box::into_raw(Box::new(module.unwrap()))
@@ -208,6 +239,11 @@ pub extern "C" fn weld_module_run(module: *mut easy_ll::CompiledModule,
     let arg = unsafe {
         assert!(!arg.is_null());
         &*arg
+    };
+
+    let err = unsafe {
+        *err = Box::into_raw(Box::new(WeldError::new(WeldRuntimeErrno::Success)));
+        &mut **err
     };
 
     // TODO(shoumik): Set the memory limit correctly (config?)
@@ -232,8 +268,14 @@ pub extern "C" fn weld_module_run(module: *mut easy_ll::CompiledModule,
     });
     let ptr = Box::into_raw(input) as i64;
 
-    // TODO(shoumik): Error reporting - at least basic crashes
-    let result = module.run(ptr) as *const c_void;
+    let mut result = module.run(ptr) as *const c_void;
+    let errno = weld_rt_get_errno(my_run_id);
+    if errno != WeldRuntimeErrno::Success {
+        weld_run_free(my_run_id);
+        *err = WeldError::new(errno);
+        return std::ptr::null_mut();
+    }
+
     Box::into_raw(Box::new(WeldValue {
         data: result,
         run_id: Some(my_run_id),
@@ -254,14 +296,14 @@ pub extern "C" fn weld_module_free(ptr: *mut easy_ll::CompiledModule) {
 
 #[no_mangle]
 /// Returns an error code for a Weld error object.
-pub extern "C" fn weld_error_code(err: *mut WeldError) -> i32 {
+pub extern "C" fn weld_error_code(err: *mut WeldError) -> libc::int32_t {
     let err = unsafe {
         if err.is_null() {
             return 1;
         }
         &mut *err
     };
-    err.code as i32
+    err.errno as libc::int32_t
 }
 
 #[no_mangle]
@@ -361,6 +403,32 @@ pub extern "C" fn weld_rt_free(run_id: libc::int64_t, data: *mut c_void) {
     mem_info.mem_allocated -= bytes_freed as i64;
     mem_info.allocations.remove(&(data as u64));
 
+}
+
+#[no_mangle]
+/// Returns the errno for a run.
+///
+/// Worker threads exit if the global `weld_errno` variable is set to a non-zero value,
+/// designating a runtime error.
+pub extern "C" fn weld_rt_get_errno(run_id: libc::int64_t) -> WeldRuntimeErrno {
+    let run_id = run_id as i64;
+    let guarded = WELD_ERRNOS.read().unwrap();
+    *guarded.get(&run_id).unwrap()
+}
+
+#[no_mangle]
+/// Sets an errno for the given run.
+///
+/// This signals all threads in the run to stop execution and return.
+// TODO(shoumik): Taking a Rust enum as an argument here seems sketchy.
+pub extern "C" fn weld_rt_set_errno(run_id: libc::int64_t, errno: WeldRuntimeErrno) {
+    if errno > WeldRuntimeErrno::ErrnoMax {
+        panic!("Unknown errno {} set", errno);
+    }
+    let run_id = run_id as i64;
+    let mut guarded = WELD_ERRNOS.write().unwrap();
+    let entry = guarded.entry(run_id).or_insert(errno);
+    *entry = errno;
 }
 
 /// Frees all memory for a given run. Passing in -1 frees all memory from all runs.
