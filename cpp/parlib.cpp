@@ -81,6 +81,11 @@ extern "C" void set_runid(int64_t id) {
   run_id = id;
 }
 
+extern "C" void weld_abort_thread() {
+    printf("aborting thread %d\n", my_id());
+    pthread_exit(NULL);
+}
+
 // attempt to steal from back of the queue of a random victim
 // should be called when own work queue empty
 static inline bool try_steal() {
@@ -108,6 +113,15 @@ static inline bool try_steal() {
 // decrease the dependency count of the continuation, run the continuation
 // if necessary, or signal the end of the computation if we are ddone
 static inline void finish_task(work_t *task) {
+  // Exit the thread if there's an error.
+  // We don't need to worry about freeing here; the runtime will
+  // free all allocated memory as long as it is allocated with
+  // `weld_rt_malloc` or `weld_rt_realloc`.
+  if (weld_rt_get_errno(get_runid()) != 0) {
+    printf("Exiting upon errno value %d \n", my_id());
+    weld_abort_thread();
+  }
+
   if (task->cont == NULL) {
     if (!task->continued) {
       // if this task has no continuation and there was no for loop to end it,
@@ -135,12 +149,6 @@ static inline void finish_task(work_t *task) {
     }
   }
   weld_rt_free(get_runid(), task);
-
-  // Exit the thread if there's an error.
-  if (weld_rt_get_errno(get_runid()) != 0) {
-    printf("Exiting upon errno value\n");
-    pthread_exit(NULL);
-  }
 }
 
 // set the continuation of w to cont and increment cont
@@ -288,6 +296,7 @@ static inline void execute(work_t *initial_task) {
   pthread_key_create(&id, NULL);
   pthread_mutex_init(&global_lock, NULL);
 
+  printf("Creating %d threads\n", W);
   for (int32_t i = 0; i < W; i++) {
     pthread_create(workers + i, NULL, &thread_func, reinterpret_cast<void *>(i));
   }
@@ -295,6 +304,7 @@ static inline void execute(work_t *initial_task) {
   for (int32_t i = 0; i < W; i++) {
     pthread_join(workers[i], NULL);
   }
+  printf("All threads joined\n");
 
   cleanup_computation_state();
 }

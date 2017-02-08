@@ -18,6 +18,8 @@ use weld::sir::ast_to_sir;
 // being optimized out?
 fn runtime_functions() {
     weld_rt_free(0, weld_rt_realloc(0, weld_rt_malloc(0, 16), 32));
+    weld_rt_set_errno(-1, WeldRuntimeErrno::Success);
+    weld_rt_get_errno(-1);
 }
 
 fn main() {
