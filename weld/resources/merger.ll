@@ -12,11 +12,11 @@
 ; Returns a pointer to builder data for index i (generally, i is the thread ID).
 define %$NAME.bld @$NAME.bld.getPtrIndexed(%$NAME.bld %bldPtr, i32 %i) alwaysinline {
   %mergerPtr = getelementptr %$NAME.bld null, i32 1
-  %mergerSize = ptrtoint %$NAME* %mergerPtr to i64
+  %mergerSize = ptrtoint %$NAME.bld %mergerPtr to i64
   %asPtr = bitcast %$NAME.bld %bldPtr to i8*
-  %rawPtr = call i8* get_merger_at_index(i8* %asPtr, i64 %mergerSize, i32 %i)
+  %rawPtr = call i8* @get_merger_at_index(i8* %asPtr, i64 %mergerSize, i32 %i)
   %ptr = bitcast i8* %rawPtr to %$NAME.bld
-  ret %ptr 
+  ret %$NAME.bld %ptr
 }
 
 ; Initialize and return a new merger.
@@ -30,12 +30,12 @@ define %$NAME.bld @$NAME.bld.new() {
   ; kind of initialization here like in the dictmerger if we allow more complex
   ; merger types.
   %bldPtrTyped = bitcast i8* %bldPtr to %$NAME.bld
-  ret %bldPtrTyped
+  ret %$NAME.bld %bldPtrTyped
 }
 
 ; Merge a value into a builder.
 define %$NAME.bld @$NAME.bld.merge(%$NAME.bld %bldPtr, $ELEM %value, i32 %workerId) {
-  %bldPtrLocal = call %$NAME.bld @%$NAME.bld.getPtrIndexed(%$NAME.bld %bldPtr, i32 %workerId)
+  %bldPtrLocal = call %$NAME.bld @$NAME.bld.getPtrIndexed(%$NAME.bld %bldPtr, i32 %workerId)
   %bld = load %$NAME.bld.inner* %bldPtrLocal
   %v = extractvalue %$NAME.bld.inner %bld, 0
   %1 = $OP $ELEM %v, %value
@@ -45,8 +45,8 @@ define %$NAME.bld @$NAME.bld.merge(%$NAME.bld %bldPtr, $ELEM %value, i32 %worker
 }
 
 ; Merge a value into a builder.
-define $ELEM @$NAME.bld.result(%$NAME.bld %bldPtr) {
-  %bldPtrFirst = call %$NAME.bld @%$NAME.bld.getPtrIndexed(%$NAME.bld %bldPtr, i32 0)
+define $ELEM @$NAME.bld.result(%$NAME.bld %bldArgPtr) {
+  %bldPtrFirst = call %$NAME.bld @$NAME.bld.getPtrIndexed(%$NAME.bld %bldArgPtr, i32 0)
   %bldFirst = load %$NAME.bld.inner* %bldPtrFirst
   %first = extractvalue %$NAME.bld.inner %bldFirst, 0
   %nworkers = call i32 @get_nworkers()
@@ -57,7 +57,7 @@ entry:
 body:
   %i = phi i32 [ 1, %entry ], [ %i2, %body ]
   %cur = phi $ELEM [ %first, %entry ], [ %updated, %body ]
-  %bldPtr = call %$NAME.bld @%$NAME.bld.getPtrIndexed(%$NAME.bld %bldPtr, i32 %i)
+  %bldPtr = call %$NAME.bld @$NAME.bld.getPtrIndexed(%$NAME.bld %bldArgPtr, i32 %i)
   %bld = load %$NAME.bld.inner* %bldPtr
   %val = extractvalue %$NAME.bld.inner %bld, 0
   %updated = $OP $ELEM %val, %cur
