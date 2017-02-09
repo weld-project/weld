@@ -23,7 +23,6 @@ pub enum Statement {
     },
     Cast {
         output: Symbol,
-        old_ty: Type,
         new_ty: Type,
         child: Symbol,
     },
@@ -34,8 +33,6 @@ pub enum Statement {
     },
     ToVec {
         output: Symbol,
-        old_ty: Type,
-        new_ty: Type,
         child: Symbol,
     },
     Length { output: Symbol, child: Symbol },
@@ -178,13 +175,13 @@ impl fmt::Display for Statement {
                        left,
                        right)
             }
-            Cast { ref output, ref new_ty, ref child, .. } => {
+            Cast { ref output, ref new_ty, ref child } => {
                 write!(f, "{} = cast({}, {})", output, child, print_type(new_ty))
             }
             Lookup { ref output, ref child, ref index } => {
                 write!(f, "{} = lookup({}, {})", output, child, index)
             }
-            ToVec { ref output, ref child, .. } => write!(f, "{} = toVec({})", output, child),
+            ToVec { ref output, ref child } => write!(f, "{} = toVec({})", output, child),
             Length { ref output, ref child, .. } => write!(f, "{} = len({})", output, child),
             Assign { ref output, ref value } => write!(f, "{} = {}", output, value),
             AssignLiteral { ref output, ref value } => {
@@ -468,7 +465,6 @@ fn gen_expr(expr: &TypedExpr,
             let res_sym = prog.add_local(&expr.ty, cur_func);
             prog.funcs[cur_func].blocks[cur_block].add_statement(Cast {
                 output: res_sym.clone(),
-                old_ty: child_expr.ty.clone(),
                 new_ty: expr.ty.clone(),
                 child: child_sym,
             });
@@ -492,8 +488,6 @@ fn gen_expr(expr: &TypedExpr,
             let res_sym = prog.add_local(&expr.ty, cur_func);
             prog.funcs[cur_func].blocks[cur_block].add_statement(ToVec {
                 output: res_sym.clone(),
-                old_ty: child_expr.ty.clone(),
-                new_ty: expr.ty.clone(),
                 child: child_sym,
             });
             Ok((cur_func, cur_block, res_sym))

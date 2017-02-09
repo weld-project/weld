@@ -763,7 +763,8 @@ impl LlvmGenerator {
                                              out_ty_str,
                                              llvm_symbol(output)));
                     }
-                    Cast { ref output, ref old_ty, ref new_ty, ref child } => {
+                    Cast { ref output, ref new_ty, ref child } => {
+                        let old_ty = try!(get_sym_ty(func, child));
                         if old_ty != new_ty {
                             let op_name = try!(llvm_castop(&old_ty, &new_ty));
                             let old_ll_ty = try!(self.llvm_type(&old_ty)).to_string();
@@ -855,7 +856,9 @@ impl LlvmGenerator {
                             _ => weld_err!("Illegal type {} in Lookup", print_type(child_ty))?,
                         }
                     }
-                    ToVec { ref output, ref old_ty, ref new_ty, ref child } => {
+                    ToVec { ref output, ref child } => {
+                        let old_ty = try!(get_sym_ty(func, child));
+                        let new_ty = try!(get_sym_ty(func, output));
                         let old_ll_ty = try!(self.llvm_type(&old_ty)).to_string();
                         let new_ll_ty = try!(self.llvm_type(&new_ty)).to_string();
                         let dict_prefix = format!("@{}", old_ll_ty.replace("%", ""));
