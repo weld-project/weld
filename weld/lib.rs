@@ -400,7 +400,7 @@ fn num_cache_blocks(size: i64) -> i64 {
 }
 
 #[no_mangle]
-pub extern "C" fn new_merger(size: i64, runid: i64, nworkers: i32) -> *mut c_void {
+pub extern "C" fn new_merger(runid: i64, size: i64, nworkers: i32) -> *mut c_void {
     let num_blocks = num_cache_blocks(size) as i64;
     let total_blocks = num_blocks * (nworkers as i64) * (CACHE_LINE as i64);
     let ptr = weld_rt_malloc(runid, total_blocks as libc::int64_t);
@@ -423,7 +423,7 @@ pub extern "C" fn get_merger_at_index(ptr: *mut c_void, size: i64, i: i32) -> *m
 }
 
 #[no_mangle]
-pub extern "C" fn free_merger(ptr: *mut c_void, runid: i64) {
+pub extern "C" fn free_merger(runid: i64, ptr: *mut c_void) {
     weld_rt_free(runid, ptr);
 }
 
@@ -432,7 +432,7 @@ fn merger_fns() {
     let runid = 0;
     let nworkers = 4;
     let size = 4;
-    let ptr = new_merger(size, runid, nworkers);
+    let ptr = new_merger(runid, size, nworkers);
     let ptr_u64 = ptr as u64;
     let mut aligned_ptr = ptr_u64 >> CACHE_BITS;
     // In case allocated ptr is not already cache-aligned, need next cache-aligned
@@ -452,7 +452,7 @@ fn merger_fns() {
         // Read value previously stored, make sure they match.
         assert_eq!(output, i as u32);
     }
-    free_merger(ptr, runid);
+    free_merger(runid, ptr);
 }
 
 #[test]

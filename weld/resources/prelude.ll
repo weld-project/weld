@@ -14,7 +14,7 @@ declare i8*     @weld_rt_realloc(i64, i8*, i64)
 declare void    @weld_rt_free(i64, i8*)
 declare i8*     @new_merger(i64, i64, i32)
 declare i8*     @get_merger_at_index(i8*, i64, i32)
-declare void    @free_merger(i8*, i64)
+declare void    @free_merger(i64, i8*)
 declare i32     @my_id_public()
 
 ; Parallel runtime structures

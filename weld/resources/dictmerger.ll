@@ -19,7 +19,7 @@ define %$NAME.bld @$NAME.bld.new(i64 %capacity) {
   %structSizePtr = getelementptr %$NAME* null, i32 1
   %structSize = ptrtoint %$NAME* %structSizePtr to i64
 
-  %bldPtr = call i8* @new_merger(i64 %structSize, i64 %runId, i32 %nworkers)
+  %bldPtr = call i8* @new_merger(i64 %runId, i64 %structSize, i32 %nworkers)
   br label %entry
 
 entry:
@@ -148,7 +148,7 @@ freeBody:
 
 endLabel:
   %runId = call i64 @get_runid()
-  call void @free_merger(i8* %bldPtr, i64 %runId)
+  call void @free_merger(i64 %runId, i8* %bldPtr)
   %finalRes = load %$NAME* %finalDictPtr
   ret %$NAME %finalRes
 }

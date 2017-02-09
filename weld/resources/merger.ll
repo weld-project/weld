@@ -25,7 +25,7 @@ define %$NAME.bld @$NAME.bld.new() {
   %bldSize = ptrtoint %$NAME.bld.inner* %bldSizePtr to i64
   %runId = call i64 @get_runid()
   %nworkers = call i32 @get_nworkers()
-  %bldPtr = call i8* @new_merger(i64 %bldSize, i64 %runId, i32 %nworkers)
+  %bldPtr = call i8* @new_merger(i64 %runId, i64 %bldSize, i32 %nworkers)
   ; TODO(shoumik): For now, mergers can only be scalars. We may need to do some
   ; kind of initialization here like in the dictmerger if we allow more complex
   ; merger types.
@@ -68,7 +68,7 @@ done:
   %final = phi $ELEM [ %first, %entry ], [ %updated, %body ]
   %runId = call i64 @get_runid()
   %asPtr = bitcast %$NAME.bld %bldArgPtr to i8*
-  call void @free_merger(i8* %asPtr, i64 %runId)
+  call void @free_merger(i64 %runId, i8* %asPtr)
   ret $ELEM %final
 }
 
