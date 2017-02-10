@@ -122,12 +122,11 @@ fn main() {
         // Do some basic token parsing here.
         let mut tokens = trimmed.splitn(2, " ");
         let command = tokens.next().unwrap();
-        let arg = tokens.next();
+        let arg = tokens.next().unwrap_or("");
         if reserved_words.contains_key(command) {
             let command = reserved_words.get(command).unwrap();
             match *command {
                 ReplCommands::LoadFile => {
-                    let arg = arg.unwrap_or("");
                     match process_loadfile(arg.to_string()) {
                         Err(s) => {
                             println!("{}", s);
