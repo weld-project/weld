@@ -1286,60 +1286,86 @@ fn llvm_symbol(symbol: &Symbol) -> String {
 /// Return the name of the LLVM instruction for a binary operation on a specific type.
 fn llvm_binop(op_kind: BinOpKind, ty: &Type) -> WeldResult<&'static str> {
     match (op_kind, ty) {
+
+        (BinOpKind::Add, &Scalar(I8)) => Ok("add"),
         (BinOpKind::Add, &Scalar(I32)) => Ok("add"),
         (BinOpKind::Add, &Scalar(I64)) => Ok("add"),
         (BinOpKind::Add, &Scalar(F32)) => Ok("fadd"),
         (BinOpKind::Add, &Scalar(F64)) => Ok("fadd"),
 
+        (BinOpKind::Subtract, &Scalar(I8)) => Ok("sub"),
         (BinOpKind::Subtract, &Scalar(I32)) => Ok("sub"),
         (BinOpKind::Subtract, &Scalar(I64)) => Ok("sub"),
         (BinOpKind::Subtract, &Scalar(F32)) => Ok("fsub"),
         (BinOpKind::Subtract, &Scalar(F64)) => Ok("fsub"),
 
+        (BinOpKind::Multiply, &Scalar(I8)) => Ok("mul"),
         (BinOpKind::Multiply, &Scalar(I32)) => Ok("mul"),
         (BinOpKind::Multiply, &Scalar(I64)) => Ok("mul"),
         (BinOpKind::Multiply, &Scalar(F32)) => Ok("fmul"),
         (BinOpKind::Multiply, &Scalar(F64)) => Ok("fmul"),
 
+        (BinOpKind::Divide, &Scalar(I8)) => Ok("sdiv"),
         (BinOpKind::Divide, &Scalar(I32)) => Ok("sdiv"),
         (BinOpKind::Divide, &Scalar(I64)) => Ok("sdiv"),
         (BinOpKind::Divide, &Scalar(F32)) => Ok("fdiv"),
         (BinOpKind::Divide, &Scalar(F64)) => Ok("fdiv"),
 
         (BinOpKind::Equal, &Scalar(Bool)) => Ok("icmp eq"),
+        (BinOpKind::Equal, &Scalar(I8)) => Ok("icmp eq"),
         (BinOpKind::Equal, &Scalar(I32)) => Ok("icmp eq"),
         (BinOpKind::Equal, &Scalar(I64)) => Ok("icmp eq"),
         (BinOpKind::Equal, &Scalar(F32)) => Ok("fcmp oeq"),
         (BinOpKind::Equal, &Scalar(F64)) => Ok("fcmp oeq"),
 
         (BinOpKind::NotEqual, &Scalar(Bool)) => Ok("icmp ne"),
+        (BinOpKind::NotEqual, &Scalar(I8)) => Ok("icmp ne"),
         (BinOpKind::NotEqual, &Scalar(I32)) => Ok("icmp ne"),
         (BinOpKind::NotEqual, &Scalar(I64)) => Ok("icmp ne"),
         (BinOpKind::NotEqual, &Scalar(F32)) => Ok("fcmp one"),
         (BinOpKind::NotEqual, &Scalar(F64)) => Ok("fcmp one"),
 
+        (BinOpKind::LessThan, &Scalar(I8)) => Ok("icmp slt"),
+        (BinOpKind::LessThan, &Scalar(I32)) => Ok("icmp slt"),
         (BinOpKind::LessThan, &Scalar(I32)) => Ok("icmp slt"),
         (BinOpKind::LessThan, &Scalar(I64)) => Ok("icmp slt"),
         (BinOpKind::LessThan, &Scalar(F32)) => Ok("fcmp olt"),
         (BinOpKind::LessThan, &Scalar(F64)) => Ok("fcmp olt"),
 
+        (BinOpKind::LessThanOrEqual, &Scalar(I8)) => Ok("icmp sle"),
         (BinOpKind::LessThanOrEqual, &Scalar(I32)) => Ok("icmp sle"),
         (BinOpKind::LessThanOrEqual, &Scalar(I64)) => Ok("icmp sle"),
         (BinOpKind::LessThanOrEqual, &Scalar(F32)) => Ok("fcmp ole"),
         (BinOpKind::LessThanOrEqual, &Scalar(F64)) => Ok("fcmp ole"),
 
+        (BinOpKind::GreaterThan, &Scalar(I8)) => Ok("icmp sgt"),
         (BinOpKind::GreaterThan, &Scalar(I32)) => Ok("icmp sgt"),
         (BinOpKind::GreaterThan, &Scalar(I64)) => Ok("icmp sgt"),
         (BinOpKind::GreaterThan, &Scalar(F32)) => Ok("fcmp ogt"),
         (BinOpKind::GreaterThan, &Scalar(F64)) => Ok("fcmp ogt"),
 
+        (BinOpKind::GreaterThanOrEqual, &Scalar(I8)) => Ok("icmp sge"),
         (BinOpKind::GreaterThanOrEqual, &Scalar(I32)) => Ok("icmp sge"),
         (BinOpKind::GreaterThanOrEqual, &Scalar(I64)) => Ok("icmp sge"),
         (BinOpKind::GreaterThanOrEqual, &Scalar(F32)) => Ok("fcmp oge"),
         (BinOpKind::GreaterThanOrEqual, &Scalar(F64)) => Ok("fcmp oge"),
 
         (BinOpKind::LogicalAnd, &Scalar(Bool)) => Ok("and"),
+        (BinOpKind::BitwiseAnd, &Scalar(Bool)) => Ok("and"),
+        (BinOpKind::BitwiseAnd, &Scalar(I8)) => Ok("and"),
+        (BinOpKind::BitwiseAnd, &Scalar(I32)) => Ok("and"),
+        (BinOpKind::BitwiseAnd, &Scalar(I64)) => Ok("and"),
+
         (BinOpKind::LogicalOr, &Scalar(Bool)) => Ok("or"),
+        (BinOpKind::BitwiseOr, &Scalar(Bool)) => Ok("or"),
+        (BinOpKind::BitwiseOr, &Scalar(I8)) => Ok("or"),
+        (BinOpKind::BitwiseOr, &Scalar(I32)) => Ok("or"),
+        (BinOpKind::BitwiseOr, &Scalar(I64)) => Ok("or"),
+
+        (BinOpKind::Xor, &Scalar(Bool)) => Ok("xor"),
+        (BinOpKind::Xor, &Scalar(I8)) => Ok("xor"),
+        (BinOpKind::Xor, &Scalar(I32)) => Ok("xor"),
+        (BinOpKind::Xor, &Scalar(I64)) => Ok("xor"),
 
         _ => weld_err!("Unsupported binary op: {} on {}", op_kind, print_type(ty)),
     }
