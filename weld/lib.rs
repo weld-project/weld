@@ -71,6 +71,7 @@ pub enum WeldRuntimeErrno {
     ArrayOutOfBounds,
     BadIteratorLength,
     MismatchedZipSize,
+    OutOfMemory,
     Unknown,
     ErrnoMax,
 }
@@ -337,12 +338,13 @@ pub extern "C" fn weld_error_free(err: *mut WeldError) {
 pub extern "C" fn weld_rt_malloc(run_id: libc::int64_t, size: libc::int64_t) -> *mut c_void {
     let run_id = run_id as i64;
     let mut guarded = ALLOCATIONS.lock().unwrap();
-    if !guarded.contains_key(&run_id) {}
     let mem_info = guarded.entry(run_id).or_insert(RunMemoryInfo::new(DEFAULT_MEM));
     if mem_info.mem_allocated + (size as i64) > mem_info.mem_limit {
         println!("weld_rt_malloc: Exceeded memory limit: {}B > {}B",
                  mem_info.mem_allocated,
                  mem_info.mem_limit);
+        // TODO(shoumik): pthread_exit here directly.
+        weld_rt_set_errno(run_id, WeldRuntimeErrno::OutOfMemory);
         return std::ptr::null_mut();
     }
     let ptr = unsafe { malloc(size as usize) };
@@ -375,7 +377,8 @@ pub extern "C" fn weld_rt_realloc(run_id: libc::int64_t,
     if mem_info.mem_allocated + (plus_bytes as i64) > mem_info.mem_limit {
         println!("weld_rt_realloc: Exceeded memory limit: {}B",
                  mem_info.mem_limit);
-        // TODO(shoumik): Do something better here.
+        // TODO(shoumik): pthread_exit here directly.
+        weld_rt_set_errno(run_id, WeldRuntimeErrno::OutOfMemory);
         return std::ptr::null_mut();
     }
     let ptr = unsafe { realloc(data, size as usize) };
@@ -432,7 +435,6 @@ pub extern "C" fn weld_rt_set_errno(run_id: libc::int64_t, errno: WeldRuntimeErr
     let run_id = run_id as i64;
     let mut guarded = WELD_ERRNOS.write().unwrap();
     let entry = guarded.entry(run_id).or_insert(errno);
-    println!("set errno value {}", errno);
     *entry = errno;
 }
 
