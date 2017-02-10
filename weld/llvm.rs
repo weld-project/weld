@@ -1327,7 +1327,6 @@ fn llvm_binop(op_kind: BinOpKind, ty: &Type) -> WeldResult<&'static str> {
 
         (BinOpKind::LessThan, &Scalar(I8)) => Ok("icmp slt"),
         (BinOpKind::LessThan, &Scalar(I32)) => Ok("icmp slt"),
-        (BinOpKind::LessThan, &Scalar(I32)) => Ok("icmp slt"),
         (BinOpKind::LessThan, &Scalar(I64)) => Ok("icmp slt"),
         (BinOpKind::LessThan, &Scalar(F32)) => Ok("fcmp olt"),
         (BinOpKind::LessThan, &Scalar(F64)) => Ok("fcmp olt"),
