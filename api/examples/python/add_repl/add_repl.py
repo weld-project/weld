@@ -8,6 +8,7 @@ code = ctypes.c_char_p("|x:i64| x + 5L")
 conf = ctypes.c_char_p("configuration")
 err = ctypes.c_void_p()
 module = weld.weld_module_compile(code, conf, ctypes.byref(err))
+print weld.weld_error_message(err)
 
 while True:
     inp = raw_input(">>> ")

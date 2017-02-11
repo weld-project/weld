@@ -183,6 +183,9 @@ pub extern "C" fn weld_module_compile(code: *const c_char,
         &mut **err
     };
 
+    if let Err(e) = easy_ll::load_library("target/debug/libweld") {
+        println!("load failed: {}", e.description());
+    }
     let module = llvm::compile_program(&parser::parse_program(code).unwrap());
     if let Err(ref e) = module {
         err.code = 1;
@@ -215,6 +218,7 @@ pub extern "C" fn weld_module_run(module: *mut easy_ll::CompiledModule,
     // TODO(shoumik): Set the number of threads correctly
     let threads = 1;
     let my_run_id;
+
 
     // Put this in it's own scope so the mutexes are unlocked.
     {
@@ -414,8 +418,8 @@ pub extern "C" fn new_merger(runid: i64, size: i64, nworkers: i32) -> *mut c_voi
 #[no_mangle]
 pub extern "C" fn get_merger_at_index(ptr: *mut c_void, size: i64, i: i32) -> *mut libc::c_void {
     let ptr = ptr as *mut libc::uint8_t;
-    let ptr = unsafe { (((ptr.offset((CACHE_LINE - 1) as isize)) as u64) & MASK) } as
-              *mut libc::uint8_t;
+    let ptr =
+        unsafe { (((ptr.offset((CACHE_LINE - 1) as isize)) as u64) & MASK) } as *mut libc::uint8_t;
     let num_blocks = num_cache_blocks(size) as i64;
     let offset = num_blocks * (i as i64) * (CACHE_LINE as i64);
     let merger_ptr = unsafe { ptr.offset(offset as isize) } as *mut libc::c_void;
