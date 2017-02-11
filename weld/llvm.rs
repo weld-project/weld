@@ -174,7 +174,7 @@ impl LlvmGenerator {
         let full_task_bit = ctx.var_ids.next();
         ctx.code
             .add(format!("{} = getelementptr %work_t* %cur.work, i32 0, i32 4",
-                            full_task_ptr));
+                         full_task_ptr));
         ctx.code.add(format!("{} = load i32* {}", full_task_int, full_task_ptr));
         ctx.code.add(format!("{} = trunc i32 {} to i1", full_task_bit, full_task_int));
         ctx.code.add(format!("br i1 {}, label %new_pieces, label %fn_call", full_task_bit));
@@ -187,12 +187,15 @@ impl LlvmGenerator {
                         Appender(_) => {
                             let bld_ty_str = try!(self.llvm_type(ty)).to_string();
                             let bld_prefix = format!("@{}", bld_ty_str.replace("%", ""));
-                            ctx.code.add(format!("call void {}.newPiece({} {}, %work_t* %cur.work)",
-                                bld_prefix, bld_ty_str, llvm_symbol(arg)));
-                        },
+                            ctx.code
+                                .add(format!("call void {}.newPiece({} {}, %work_t* %cur.work)",
+                                             bld_prefix,
+                                             bld_ty_str,
+                                             llvm_symbol(arg)));
+                        }
                         _ => {}
                     }
-                },
+                }
                 _ => {}
             }
         }
@@ -302,7 +305,8 @@ impl LlvmGenerator {
                 ctx.code.add("loop.start:");
                 let idx_tmp = try!(self.load_var("%cur.idx", "i64", ctx));
                 let work_idx_ptr = ctx.var_ids.next();
-                ctx.code.add(format!("{} = getelementptr %work_t* %cur.work, i32 0, i32 3", work_idx_ptr));
+                ctx.code.add(format!("{} = getelementptr %work_t* %cur.work, i32 0, i32 3",
+                                     work_idx_ptr));
                 ctx.code.add(format!("store i64 {}, i64* {}", idx_tmp, work_idx_ptr));
                 let idx_cmp = ctx.var_ids.next();
                 ctx.code.add(format!("{} = icmp ult i64 {}, %upper.idx", idx_cmp, idx_tmp));
@@ -547,7 +551,7 @@ impl LlvmGenerator {
         run_ctx.code.add(format!("%r.args_typed = inttoptr i64 %r.args to {args_type}*
              \
                           %r.args_val = load {args_type}* %r.args_typed",
-                         args_type = args_type));
+                                 args_type = args_type));
 
         let mut arg_pos_map: HashMap<Symbol, usize> = HashMap::new();
         for (i, a) in sir.top_params.iter().enumerate() {
@@ -556,9 +560,9 @@ impl LlvmGenerator {
         for (arg, _) in sir.funcs[0].params.iter() {
             let idx = arg_pos_map.get(arg).unwrap();
             run_ctx.code.add(format!("{} = extractvalue {} %r.args_val, {}",
-                             llvm_symbol(arg),
-                             args_type,
-                             idx));
+                                     llvm_symbol(arg),
+                                     args_type,
+                                     idx));
         }
         let run_struct = try!(self.get_arg_struct(&sir.funcs[0].params, &mut run_ctx));
         run_ctx.code.add(format!("call \
@@ -567,7 +571,7 @@ impl LlvmGenerator {
              %res_address = ptrtoint i8* %res_ptr to i64
              \
                           ret i64 %res_address",
-                         run_struct));
+                                 run_struct));
         run_ctx.code.add("}\n\n");
 
         self.body_code.add(&run_ctx.code.result());
@@ -753,7 +757,8 @@ impl LlvmGenerator {
                                 DICTMERGER_CODE.replace("$NAME", &bld_ty_str.replace("%", ""));
                             let key_ty_replaced = name_replaced.replace("$KEY", &key_ty);
                             let value_ty_replaced = key_ty_replaced.replace("$VALUE", &value_ty);
-                            let kv_struct_replaced = value_ty_replaced.replace("$KV_STRUCT", &kv_struct_ty.replace("%", ""));
+                            let kv_struct_replaced = value_ty_replaced.replace("$KV_STRUCT",
+                                &kv_struct_ty.replace("%", ""));
                             let op_replaced =
                                 kv_struct_replaced.replace("$OP", &llvm_binop(*op, vt)?);
                             let kv_vec_prefix_replaced =
@@ -1025,7 +1030,8 @@ impl LlvmGenerator {
                                             try!(self.load_var(llvm_symbol(value).as_str(),
                                                                &elem_ty_str,
                                                                ctx));
-                                        ctx.code.add(format!("call {} {}.merge({} {}, {} {}, i32 %cur.tid)",
+                                        ctx.code.add(format!("call {} {}.merge({} {}, {} {}, \
+                                                              i32 %cur.tid)",
                                                              bld_ty_str,
                                                              bld_prefix,
                                                              bld_ty_str,
@@ -1049,7 +1055,8 @@ impl LlvmGenerator {
                                                                &elem_ty_str,
                                                                ctx));
                                         ctx.code
-                                            .add(format!("call {} {}.merge({} {}, {} {}, i32 %cur.tid)",
+                                            .add(format!("call {} {}.merge({} {}, {} {}, i32 \
+                                                          %cur.tid)",
                                                          bld_ty_str,
                                                          bld_prefix,
                                                          bld_ty_str,
@@ -1069,7 +1076,8 @@ impl LlvmGenerator {
                                                       &elem_ty_str,
                                                       ctx)?;
                                         ctx.code
-                                            .add(format!("call {} {}.merge({} {}, {} {}, i32 %cur.tid)",
+                                            .add(format!("call {} {}.merge({} {}, {} {}, i32 \
+                                                          %cur.tid)",
                                                          bld_ty_str,
                                                          bld_prefix,
                                                          bld_ty_str,
@@ -1175,10 +1183,12 @@ impl LlvmGenerator {
                                         let bld_prefix = format!("@{}",
                                                                  bld_ty_str.replace("%", ""));
                                         let bld_tmp = ctx.var_ids.next();
-                                        ctx.code.add(format!("{} = call {} {}.new(i64 16, %work_t* %cur.work)",
-                                                             bld_tmp,
-                                                             bld_ty_str,
-                                                             bld_prefix));
+                                        ctx.code
+                                            .add(format!("{} = call {} {}.new(i64 16, %work_t* \
+                                                          %cur.work)",
+                                                         bld_tmp,
+                                                         bld_ty_str,
+                                                         bld_prefix));
                                         ctx.code.add(format!("store {} {}, {}* {}",
                                                              bld_ty_str,
                                                              bld_tmp,
