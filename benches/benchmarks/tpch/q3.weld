@@ -1,0 +1,19 @@
+|o_orderkey: vec[i32], o_custkey: vec[i32], o_shippriority: vec[i32],
+    l_orderkey: vec[i32], l_ep: vec[f32], l_discount: vec[f32], l_shipdate: vec[i32],
+    c_mktsegment: vec[i32], c_custkey: vec[i32]|
+        let index = result(for(
+            zip(c_custkey, c_mktsegment),
+            dictmerger[i32,i32,+],
+            |b,i,e| merge(b, {e.$0,e.$1})
+        ));
+        let hash_output = for(result(filter(
+                zip(o_orderkey, o_custkey, o_orderdate, o_shippriority),
+                |r| r.$2 < 199503024 && lookup(index, r.$1) == 1
+            ),
+            dictmerger[i32,{i32,i32,i32},+],
+            |b,i,e|
+                merge(b, {e.$0, {e.$1
+        
+            
+                            
+
