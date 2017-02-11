@@ -31,10 +31,7 @@ pub enum Statement {
         child: Symbol,
         index: Symbol,
     },
-    ToVec {
-        output: Symbol,
-        child: Symbol,
-    },
+    ToVec { output: Symbol, child: Symbol },
     Length { output: Symbol, child: Symbol },
     Assign { output: Symbol, value: Symbol },
     AssignLiteral { output: Symbol, value: LiteralKind },
