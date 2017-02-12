@@ -715,6 +715,10 @@ impl LlvmGenerator {
                             self.prelude_code.add("\n");
                             self.bld_names.insert(bk.clone(), format!("{}.bld", bld_ty_str));
                         }
+                        // TODO(shoumik)
+                        VecMerger(ref elem, ref op) => {
+                            panic!("unimplemented");
+                        }
                     }
                 }
                 Ok(self.bld_names.get(bk).unwrap())
@@ -1035,6 +1039,10 @@ impl LlvmGenerator {
                                                          threadid_tmp));
 
                                     }
+                                    // TODO(shoumik)
+                                    VecMerger(ref t, _) => {
+                                        panic!("unimplemented");
+                                    }
                                 }
                             }
                             _ => {
@@ -1115,6 +1123,10 @@ impl LlvmGenerator {
                                                              res_ty_str,
                                                              llvm_symbol(output)));
                                     }
+                                    // TODO(shoumik)
+                                    VecMerger(_, _) => {
+                                        panic!("unimplemented");
+                                    }
                                 }
                             }
                             _ => {
@@ -1123,7 +1135,7 @@ impl LlvmGenerator {
                             }
                         }
                     }
-                    NewBuilder { ref output, ref ty } => {
+                    NewBuilder { ref output, ref arg, ref ty } => {
                         match *ty {
                             Builder(ref bk) => {
                                 match *bk {
@@ -1171,6 +1183,18 @@ impl LlvmGenerator {
                                                              bld_tmp,
                                                              bld_ty_str,
                                                              llvm_symbol(output)));
+                                    }
+                                    VecMerger(_, _) => {
+                                        // TODO(shoumik): Generate code.
+                                        match *arg {
+                                            Some(ref s) => {
+                                                panic!("unimplemented");
+                                            }
+                                            None => {
+                                                weld_err!("Internal error: NewBuilder(VecMerger) \
+                                                           expected argument in LLVM codegen")?
+                                            }
+                                        }
                                     }
                                 }
                             }
