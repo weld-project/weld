@@ -1,0 +1,42 @@
+|l_returnflag: vec[i8], l_linestatus: vec[i8], l_quantity: vec[f32],
+    l_ep: vec[f32], l_discount: vec[f32], l_shipdate: vec[i32], l_tax: vec[f32]|
+    let sums = res(for(
+        filter(zip(l_returnflag, l_linestatus, l_quantity,
+            l_ep, l_discount, l_shipdate, l_tax),
+            |e| e.$5 <= 19980901
+        ),
+        vecmerger[{i8,i8,f32,f32,f32,f32,i32},+]([
+            {0,0,0.0,0.0,0.0,0.0,0},
+            {0,0,0.0,0.0,0.0,0.0,0},
+            {0,0,0.0,0.0,0.0,0.0,0},
+            {0,0,0.0,0.0,0.0,0.0,0},
+            {0,0,0.0,0.0,0.0,0.0,0},
+            {0,0,0.0,0.0,0.0,0.0,0},
+        ]),
+        |b,i,e| => 
+            let sum_disc_price = e.$3 * (1 - e.$4);
+            merge(b, { 
+            i64(e.$0*2 + e.$1),
+            {
+                e.$0,
+                e.$1,
+                e.$2,
+                sum_disc_price,
+                sum_disc_price * (1 - e.$6),
+                e.$4,
+                1
+            }
+        })
+    ));
+    {
+        sums.$0,
+        sums.$1,
+        sums.$2,
+        sums.$3,
+        sums.$4,
+        sums.$2 / sums.$6,
+        sums.$3 / sums.$6,
+        sums.$5 / sums.$6,
+        sums.$6
+    }
+                
