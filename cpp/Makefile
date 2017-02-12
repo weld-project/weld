@@ -8,7 +8,6 @@ ifeq (${OS}, Darwin)
 else ifeq (${OS}, Linux)
   # Linux
   CLANG ?= /usr/bin/clang-${LLVM_VERSION}
-  CFLAGS += -fno-use-cxa-get-exception-ptr
 else
   $(error Unsupported platform: ${OS})
 endif
