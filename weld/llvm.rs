@@ -783,7 +783,7 @@ impl LlvmGenerator {
     }
 
     /// Given a pointer to a some data retrieved from a builder, generates code to merge a value
-    /// into the builder.
+    /// into the builder. The result should be stored back into the pointer to complete the merge.
     fn gen_merge(&mut self,
                  builder_ptr: String,
                  merge_value: String,
@@ -792,23 +792,6 @@ impl LlvmGenerator {
                  merge_ty: &Type,
                  ctx: &mut FunctionContext)
                  -> WeldResult<()> {
-        // Input:
-        //       -The variable that's returned from  from the builder's merge() function (a symbol)
-        //      - The Op to run (part of the builder type)
-        //      - The value being merged (A symbol - is this a pointer? let's say no.)
-        //      - The type of the element being merged.
-        //
-        //  Pseudocode:
-        //
-        //      %1 = loadBuilder %builder_ptr
-        //      loop:
-        //          %builder_elem = extractvalue %1, %i
-        //          %merge_elem = extractavlue %inp, %i
-        //          %updated = OP builder,elem, merge_elem
-        //          %new = putvalue %updated, %1
-        //          goto loop until end.
-        //      store
-        //
         let builder_value = ctx.var_ids.next();
         let mut res = ctx.var_ids.next();
         ctx.code.add(format!("{} = load {}* {}",
