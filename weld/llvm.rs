@@ -828,6 +828,32 @@ impl LlvmGenerator {
             ctx.code.add(format!("b.b{}:", b.id));
             for s in b.statements.iter() {
                 match *s {
+                    MakeStruct { ref output, ref elems } => {
+                        let mut cur = "undef".to_string();
+                        let ll_ty = try!(self.llvm_type(&Struct(elems.iter()
+                                .map(|e| e.1.clone())
+                                .collect::<Vec<_>>())))
+                            .to_string();
+                        for (i, &(ref elem, ref ty)) in elems.iter().enumerate() {
+                            let ll_elem_ty = try!(self.llvm_type(&ty)).to_string();
+                            let tmp =
+                                try!(self.load_var(llvm_symbol(&elem).as_str(), &ll_elem_ty, ctx));
+                            let struct_name = ctx.var_ids.next();
+                            ctx.code.add(format!("{} = insertvalue {} {}, {} {}, {}",
+                                                 &struct_name,
+                                                 &ll_ty,
+                                                 &cur,
+                                                 &ll_elem_ty,
+                                                 &tmp,
+                                                 i));
+                            cur = struct_name.clone();
+                        }
+                        ctx.code.add(format!("store {} {}, {}* {}",
+                                             ll_ty,
+                                             cur,
+                                             ll_ty,
+                                             llvm_symbol(output)));
+                    }
                     BinOp { ref output, op, ref ty, ref left, ref right } => {
                         let op_name = try!(llvm_binop(op, ty));
                         let ll_ty = try!(self.llvm_type(ty)).to_string();
