@@ -49,7 +49,7 @@ pub struct LlvmGenerator {
     vec_names: HashMap<Type, String>,
     vec_ids: IdGenerator,
 
-    merger_names: HashMap<(Type, BinOpKind), String>,
+    merger_names: HashMap<Type, String>,
     merger_ids: IdGenerator,
 
     /// Tracks a unique name of the form %d0, %d1, etc for each dict generated.
@@ -165,6 +165,44 @@ impl LlvmGenerator {
         Ok(())
     }
 
+    fn create_new_pieces(&mut self,
+                         params: &HashMap<Symbol, Type>,
+                         ctx: &mut FunctionContext)
+                         -> WeldResult<()> {
+        let full_task_ptr = ctx.var_ids.next();
+        let full_task_int = ctx.var_ids.next();
+        let full_task_bit = ctx.var_ids.next();
+        ctx.code
+            .add(format!("{} = getelementptr %work_t* %cur.work, i32 0, i32 4",
+                         full_task_ptr));
+        ctx.code.add(format!("{} = load i32* {}", full_task_int, full_task_ptr));
+        ctx.code.add(format!("{} = trunc i32 {} to i1", full_task_bit, full_task_int));
+        ctx.code.add(format!("br i1 {}, label %new_pieces, label %fn_call", full_task_bit));
+        ctx.code.add("new_pieces:");
+        let params_sorted: BTreeMap<&Symbol, &Type> = params.iter().collect();
+        for (arg, ty) in params_sorted.iter() {
+            match **ty {
+                Builder(ref bk) => {
+                    match *bk {
+                        Appender(_) => {
+                            let bld_ty_str = try!(self.llvm_type(ty)).to_string();
+                            let bld_prefix = format!("@{}", bld_ty_str.replace("%", ""));
+                            ctx.code
+                                .add(format!("call void {}.newPiece({} {}, %work_t* %cur.work)",
+                                             bld_prefix,
+                                             bld_ty_str,
+                                             llvm_symbol(arg)));
+                        }
+                        _ => {}
+                    }
+                }
+                _ => {}
+            }
+        }
+        ctx.code.add("br label %fn_call");
+        Ok(())
+    }
+
     fn get_arg_struct(&mut self,
                       params: &HashMap<Symbol, Type>,
                       ctx: &mut FunctionContext)
@@ -248,9 +286,7 @@ impl LlvmGenerator {
                 try!(ctx.add_alloca(&arg_str, &ty_str));
             }
 
-            try!(ctx.add_alloca("%cur.threadIdPtr", "i32"));
-            ctx.code.add(format!("%cur.threadId = call i32 @my_id_public()"));
-            ctx.code.add(format!("store i32 %cur.threadId, i32* %cur.threadIdPtr"));
+            ctx.code.add(format!("%cur.tid = call i32 @my_id_public()"));
 
             if containing_loop.is_some() {
                 let par_for = containing_loop.clone().unwrap();
@@ -268,6 +304,10 @@ impl LlvmGenerator {
                 ctx.code.add("br label %loop.start");
                 ctx.code.add("loop.start:");
                 let idx_tmp = try!(self.load_var("%cur.idx", "i64", ctx));
+                let work_idx_ptr = ctx.var_ids.next();
+                ctx.code.add(format!("{} = getelementptr %work_t* %cur.work, i32 0, i32 3",
+                                     work_idx_ptr));
+                ctx.code.add(format!("store i64 {}, i64* {}", idx_tmp, work_idx_ptr));
                 let idx_cmp = ctx.var_ids.next();
                 ctx.code.add(format!("{} = icmp ult i64 {}, %upper.idx", idx_cmp, idx_tmp));
                 ctx.code.add(format!("br i1 {}, label %loop.body, label %loop.end", idx_cmp));
@@ -431,6 +471,7 @@ impl LlvmGenerator {
                 let mut par_body_ctx = &mut FunctionContext::new();
                 par_body_ctx.code
                     .add(format!("define void @f{}_par(%work_t* %cur.work) {{", func.id));
+                par_body_ctx.code.add("entry:");
                 try!(self.unload_arg_struct(&func.params, &mut par_body_ctx));
                 let lower_bound_ptr = par_body_ctx.var_ids.next();
                 let lower_bound = par_body_ctx.var_ids.next();
@@ -445,6 +486,8 @@ impl LlvmGenerator {
                                  upper_bound_ptr));
                 par_body_ctx.code.add(format!("{} = load i64* {}", upper_bound, upper_bound_ptr));
                 let body_arg_types = try!(self.get_arg_str(&func.params, ""));
+                try!(self.create_new_pieces(&func.params, &mut par_body_ctx));
+                par_body_ctx.code.add("fn_call:");
                 par_body_ctx.code.add(format!("call void @f{}({}, i64 {}, i64 {})",
                                               func.id,
                                               body_arg_types,
@@ -458,13 +501,26 @@ impl LlvmGenerator {
                 let mut par_cont_ctx = &mut FunctionContext::new();
                 par_cont_ctx.code
                     .add(format!("define void @f{}_par(%work_t* %cur.work) {{", par_for.cont));
+                par_cont_ctx.code.add("entry:");
                 try!(self.unload_arg_struct(&sir.funcs[par_for.cont].params, &mut par_cont_ctx));
+                try!(self.create_new_pieces(&sir.funcs[par_for.cont].params, &mut par_cont_ctx));
+                par_cont_ctx.code.add("fn_call:");
                 let cont_arg_types = try!(self.get_arg_str(&sir.funcs[par_for.cont].params, ""));
                 par_cont_ctx.code.add(format!("call void @f{}({})", par_for.cont, cont_arg_types));
                 par_cont_ctx.code.add("ret void");
                 par_cont_ctx.code.add("}\n\n");
                 self.body_code.add(&par_cont_ctx.code.result());
             }
+        }
+        if func.id == 0 {
+            let mut par_top_ctx = &mut FunctionContext::new();
+            par_top_ctx.code.add("define void @f0_par(%work_t* %cur.work) {");
+            try!(self.unload_arg_struct(&sir.funcs[0].params, &mut par_top_ctx));
+            let top_arg_types = try!(self.get_arg_str(&sir.funcs[0].params, ""));
+            par_top_ctx.code.add(format!("call void @f0({})", top_arg_types));
+            par_top_ctx.code.add("ret void");
+            par_top_ctx.code.add("}\n\n");
+            self.body_code.add(&par_top_ctx.code.result());
         }
         Ok(())
     }
@@ -480,48 +536,45 @@ impl LlvmGenerator {
         let args_struct = Struct(sir.top_params.iter().map(|a| a.ty.clone()).collect());
         let args_type = try!(self.llvm_type(&args_struct)).to_string();
 
-        let mut code = &mut CodeBuilder::new();
+        let mut run_ctx = &mut FunctionContext::new();
 
-        code.add(format!("define i64 @{}(i64 %input) {{", name));
+        run_ctx.code.add(format!("define i64 @{}(i64 %r.input) {{", name));
         // Unpack the input, which is always struct defined by the type %input_arg_t in prelude.ll.
-        code.add(format!("%inp_typed = inttoptr i64 %input to %input_arg_t*"));
-        code.add(format!("%inp_val = load %input_arg_t* %inp_typed"));
-        code.add(format!("%args = extractvalue %input_arg_t %inp_val, 0"));
-        code.add(format!("%nworkers = extractvalue %input_arg_t %inp_val, 1"));
-        code.add(format!("%rid = extractvalue %input_arg_t %inp_val, 2"));
-        code.add(format!("call void @set_nworkers(i32 %nworkers)"));
-        code.add(format!("call void @set_runid(i64 %rid)"));
+        run_ctx.code.add(format!("%r.inp_typed = inttoptr i64 %r.input to %input_arg_t*"));
+        run_ctx.code.add(format!("%r.inp_val = load %input_arg_t* %r.inp_typed"));
+        run_ctx.code.add(format!("%r.args = extractvalue %input_arg_t %r.inp_val, 0"));
+        run_ctx.code.add(format!("%r.nworkers = extractvalue %input_arg_t %r.inp_val, 1"));
+        run_ctx.code.add(format!("%r.rid = extractvalue %input_arg_t %r.inp_val, 2"));
+        run_ctx.code.add(format!("call void @set_nworkers(i32 %r.nworkers)"));
+        run_ctx.code.add(format!("call void @set_runid(i64 %r.rid)"));
         // Code to load args and call function
-        code.add(format!("%args_typed = inttoptr i64 %args to {args_type}*
+        run_ctx.code.add(format!("%r.args_typed = inttoptr i64 %r.args to {args_type}*
              \
-                          %args_val = load {args_type}* %args_typed",
-                         args_type = args_type));
+                          %r.args_val = load {args_type}* %r.args_typed",
+                                 args_type = args_type));
 
         let mut arg_pos_map: HashMap<Symbol, usize> = HashMap::new();
         for (i, a) in sir.top_params.iter().enumerate() {
             arg_pos_map.insert(a.name.clone(), i);
         }
-        let mut arg_decls = String::new();
-        let params_sorted: BTreeMap<&Symbol, &Type> = sir.funcs[0].params.iter().collect();
-        for (arg, ty) in params_sorted.iter() {
+        for (arg, _) in sir.funcs[0].params.iter() {
             let idx = arg_pos_map.get(arg).unwrap();
-            code.add(format!("%arg{} = extractvalue {} %args_val, {}",
-                             idx,
-                             args_type,
-                             idx));
-            arg_decls.push_str(format!("{} %arg{}, ", try!(self.llvm_type(&ty)), idx).as_str());
+            run_ctx.code.add(format!("{} = extractvalue {} %r.args_val, {}",
+                                     llvm_symbol(arg),
+                                     args_type,
+                                     idx));
         }
-        arg_decls.push_str("%work_t* null");
-        code.add(format!("call \
-                          void @f0({arg_list})
+        let run_struct = try!(self.get_arg_struct(&sir.funcs[0].params, &mut run_ctx));
+        run_ctx.code.add(format!("call \
+                          void @execute(void (%work_t*)* @f0_par, i8* {})
              %res_ptr = call i8* @get_result()
              %res_address = ptrtoint i8* %res_ptr to i64
              \
                           ret i64 %res_address",
-                         arg_list = arg_decls));
-        code.add(format!("}}\n\n"));
+                                 run_struct));
+        run_ctx.code.add("}\n\n");
 
-        self.body_code.add_code(code);
+        self.body_code.add(&run_ctx.code.result());
         Ok(())
     }
 
@@ -669,24 +722,22 @@ impl LlvmGenerator {
                             let bld_ty_str = try!(self.llvm_type(&bld_ty)).to_string();
                             self.bld_names.insert(bk.clone(), format!("{}.bld", bld_ty_str));
                         }
-                        Merger(ref t, ref op) => {
-                            if self.merger_names.get(&(*t.clone(), *op)) == None {
+                        Merger(ref t, _) => {
+                            if self.merger_names.get(t) == None {
                                 let elem_ty = self.llvm_type(t)?.to_string();
                                 let elem_prefix = format!("@{}", elem_ty.replace("%", ""));
                                 let name = self.merger_ids.next();
                                 self.merger_names
-                                    .insert((*t.clone(), op.clone()), name.clone());
+                                    .insert(*t.clone(), name.clone());
                                 let prefix_replaced =
                                     MERGER_CODE.replace("$ELEM_PREFIX", &elem_prefix);
                                 let elem_replaced = prefix_replaced.replace("$ELEM", &elem_ty);
                                 let name_replaced =
                                     elem_replaced.replace("$NAME", &name.replace("%", ""));
-                                let binop_replaced =
-                                    name_replaced.replace("$OP", &llvm_binop(*op, t)?);
-                                self.prelude_code.add(&binop_replaced);
+                                self.prelude_code.add(&name_replaced);
                                 self.prelude_code.add("\n");
                             }
-                            let bld_ty_str = self.merger_names.get(&(*t.clone(), *op)).unwrap();
+                            let bld_ty_str = self.merger_names.get(t).unwrap();
                             self.bld_names
                                 .insert(bk.clone(), format!("{}.bld", bld_ty_str));
                         }
@@ -704,7 +755,8 @@ impl LlvmGenerator {
                                 DICTMERGER_CODE.replace("$NAME", &bld_ty_str.replace("%", ""));
                             let key_ty_replaced = name_replaced.replace("$KEY", &key_ty);
                             let value_ty_replaced = key_ty_replaced.replace("$VALUE", &value_ty);
-                            let kv_struct_replaced = value_ty_replaced.replace("$KV_STRUCT", &kv_struct_ty.replace("%", ""));
+                            let kv_struct_replaced = value_ty_replaced.replace("$KV_STRUCT",
+                                &kv_struct_ty.replace("%", ""));
                             let op_replaced =
                                 kv_struct_replaced.replace("$OP", &llvm_binop(*op, vt)?);
                             let kv_vec_prefix_replaced =
@@ -715,9 +767,10 @@ impl LlvmGenerator {
                             self.prelude_code.add("\n");
                             self.bld_names.insert(bk.clone(), format!("{}.bld", bld_ty_str));
                         }
-                        // TODO(shoumik)
-                        VecMerger(ref elem, ref op) => {
-                            panic!("unimplemented");
+                        VecMerger(ref elem, _) => {
+                            let bld_ty = Vector(elem.clone());
+                            let bld_ty_str = try!(self.llvm_type(&bld_ty)).to_string();
+                            self.bld_names.insert(bk.clone(), format!("{}.vm.bld", bld_ty_str));
                         }
                     }
                 }
@@ -734,6 +787,77 @@ impl LlvmGenerator {
         Ok(var)
     }
 
+    /// Given a pointer to a some data retrieved from a builder, generates code to merge a value
+    /// into the builder. The result should be stored back into the pointer to complete the merge.
+    fn gen_merge(&mut self,
+                 builder_ptr: String,
+                 merge_value: String,
+                 merge_ty_str: String,
+                 bin_op: &BinOpKind,
+                 merge_ty: &Type,
+                 ctx: &mut FunctionContext)
+                 -> WeldResult<()> {
+        let builder_value = ctx.var_ids.next();
+        let mut res = ctx.var_ids.next();
+        ctx.code.add(format!("{} = load {}* {}",
+                             &builder_value,
+                             &merge_ty_str,
+                             &builder_ptr));
+        if let Scalar(_) = *merge_ty {
+            ctx.code.add(format!("{} = {} {} {}, {}",
+                                 &res,
+                                 try!(llvm_binop(*bin_op, merge_ty)),
+                                 &merge_ty_str,
+                                 builder_value,
+                                 merge_value));
+        } else if let Struct(ref tys) = *merge_ty {
+            let mut cur = "undef".to_string();
+            for (i, ty) in tys.iter().enumerate() {
+                let merge_elem = ctx.var_ids.next();
+                let builder_elem = ctx.var_ids.next();
+                let struct_name = ctx.var_ids.next();
+                let binop_value = ctx.var_ids.next();
+                let elem_ty_str = try!(self.llvm_type(ty)).to_string();
+                ctx.code.add(format!("{} = extractvalue {} {}, {}",
+                                     &merge_elem,
+                                     &merge_ty_str,
+                                     &merge_value,
+                                     i));
+                ctx.code.add(format!("{} = extractvalue {} {}, {}",
+                                     &builder_elem,
+                                     &merge_ty_str,
+                                     &builder_value,
+                                     i));
+                ctx.code.add(format!("{} = {} {} {}, {}",
+                                     &binop_value,
+                                     try!(llvm_binop(*bin_op, ty)),
+                                     &elem_ty_str,
+                                     &merge_elem,
+                                     &builder_elem));
+                ctx.code.add(format!("{} = insertvalue {} {}, {} {}, {}",
+                                     &struct_name,
+                                     &merge_ty_str,
+                                     &cur,
+                                     &elem_ty_str,
+                                     &binop_value,
+                                     i));
+                res = struct_name.clone();
+                cur = struct_name.clone();
+            }
+        } else {
+            unreachable!();
+        }
+
+        // Store the resulting merge value back into the builder pointer.
+        ctx.code.add(format!("store {} {}, {}* {}",
+                             &merge_ty_str,
+                             &res,
+                             &merge_ty_str,
+                             &builder_ptr));
+        Ok(())
+    }
+
+
     /// Add an expression to a CodeBuilder, possibly generating prelude code earlier, and return
     /// a string that can be used to represent its result later (e.g. %var if introducing a local
     /// variable or an integer constant otherwise).
@@ -746,6 +870,32 @@ impl LlvmGenerator {
             ctx.code.add(format!("b.b{}:", b.id));
             for s in b.statements.iter() {
                 match *s {
+                    MakeStruct { ref output, ref elems } => {
+                        let mut cur = "undef".to_string();
+                        let ll_ty = try!(self.llvm_type(&Struct(elems.iter()
+                                .map(|e| e.1.clone())
+                                .collect::<Vec<_>>())))
+                            .to_string();
+                        for (i, &(ref elem, ref ty)) in elems.iter().enumerate() {
+                            let ll_elem_ty = try!(self.llvm_type(&ty)).to_string();
+                            let tmp =
+                                try!(self.load_var(llvm_symbol(&elem).as_str(), &ll_elem_ty, ctx));
+                            let struct_name = ctx.var_ids.next();
+                            ctx.code.add(format!("{} = insertvalue {} {}, {} {}, {}",
+                                                 &struct_name,
+                                                 &ll_ty,
+                                                 &cur,
+                                                 &ll_elem_ty,
+                                                 &tmp,
+                                                 i));
+                            cur = struct_name.clone();
+                        }
+                        ctx.code.add(format!("store {} {}, {}* {}",
+                                             ll_ty,
+                                             cur,
+                                             ll_ty,
+                                             llvm_symbol(output)));
+                    }
                     BinOp { ref output, op, ref ty, ref left, ref right } => {
                         let op_name = try!(llvm_binop(op, ty));
                         let ll_ty = try!(self.llvm_type(ty)).to_string();
@@ -980,7 +1130,8 @@ impl LlvmGenerator {
                                             try!(self.load_var(llvm_symbol(value).as_str(),
                                                                &elem_ty_str,
                                                                ctx));
-                                        ctx.code.add(format!("call {} {}.merge({} {}, {} {})",
+                                        ctx.code.add(format!("call {} {}.merge({} {}, {} {}, \
+                                                              i32 %cur.tid)",
                                                              bld_ty_str,
                                                              bld_prefix,
                                                              bld_ty_str,
@@ -1003,19 +1154,17 @@ impl LlvmGenerator {
                                             try!(self.load_var(llvm_symbol(value).as_str(),
                                                                &elem_ty_str,
                                                                ctx));
-                                        let threadid_tmp =
-                                            try!(self.load_var("%cur.threadIdPtr", "i32", ctx));
                                         ctx.code
-                                            .add(format!("call {} {}.merge({} {}, {} {}, i32 {})",
+                                            .add(format!("call {} {}.merge({} {}, {} {}, i32 \
+                                                          %cur.tid)",
                                                          bld_ty_str,
                                                          bld_prefix,
                                                          bld_ty_str,
                                                          bld_tmp,
                                                          elem_ty_str,
-                                                         elem_tmp,
-                                                         threadid_tmp));
+                                                         elem_tmp));
                                     }
-                                    Merger(ref t, _) => {
+                                    Merger(ref t, ref op) => {
                                         let bld_ty_str = self.llvm_type(&bld_ty)?.to_string();
                                         let bld_prefix = format!("@{}",
                                                                  bld_ty_str.replace("%", ""));
@@ -1028,20 +1177,65 @@ impl LlvmGenerator {
                                                       ctx)?;
                                         let threadid_tmp =
                                             self.load_var("%cur.threadIdPtr", "i32", ctx)?;
+                                        let bld_ptr_raw = ctx.var_ids.next();
+                                        let bld_ptr = ctx.var_ids.next();
                                         ctx.code
-                                            .add(format!("call {} {}.merge({} {}, {} {}, i32 {})",
-                                                         bld_ty_str,
+                                            .add(format!("{} = call i8* {}.merge_ptr({} {}, i32 \
+                                                          {})",
+                                                         bld_ptr_raw,
                                                          bld_prefix,
                                                          bld_ty_str,
                                                          bld_tmp,
-                                                         elem_ty_str,
-                                                         elem_tmp,
                                                          threadid_tmp));
-
+                                        ctx.code.add(format!("{} = bitcast i8* {} to {}*",
+                                                             bld_ptr,
+                                                             bld_ptr_raw,
+                                                             elem_ty_str));
+                                        try!(self.gen_merge(bld_ptr, elem_tmp, elem_ty_str, op, t, ctx));
                                     }
-                                    // TODO(shoumik)
-                                    VecMerger(ref t, _) => {
-                                        panic!("unimplemented");
+                                    VecMerger(ref t, ref op) => {
+                                        let bld_ty_str = self.llvm_type(&bld_ty)?.to_string();
+                                        let bld_prefix = format!("@{}",
+                                                                 bld_ty_str.replace("%", ""));
+                                        let elem_ty_str = self.llvm_type(t)?.to_string();
+                                        let merge_ty = Struct(vec![Scalar(ScalarKind::I64),
+                                                                   *t.clone()]);
+                                        let merge_ty_str = self.llvm_type(&merge_ty)?
+                                            .to_string();
+                                        let bld_tmp = self.load_var(llvm_symbol(builder).as_str(),
+                                                      &bld_ty_str,
+                                                      ctx)?;
+                                        let elem_tmp = self.load_var(llvm_symbol(value).as_str(),
+                                                      &elem_ty_str,
+                                                      ctx)?;
+                                        let index_var = ctx.var_ids.next();
+                                        let elem_var = ctx.var_ids.next();
+                                        ctx.code.add(format!("{} = extractvalue {} {}, 0",
+                                                             index_var,
+                                                             merge_ty_str,
+                                                             elem_tmp));
+                                        ctx.code.add(format!("{} = extractvalue {} {}, 1",
+                                                             elem_var,
+                                                             merge_ty_str,
+                                                             elem_tmp));
+                                        let threadid_tmp =
+                                            self.load_var("%cur.threadIdPtr", "i32", ctx)?;
+                                        let bld_ptr_raw = ctx.var_ids.next();
+                                        let bld_ptr = ctx.var_ids.next();
+                                        ctx.code
+                                            .add(format!("{} = call i8* {}.merge_ptr({} {}, i64 \
+                                                          {}, i32 {})",
+                                                         bld_ptr_raw,
+                                                         bld_prefix,
+                                                         bld_ty_str,
+                                                         bld_tmp,
+                                                         index_var,
+                                                         threadid_tmp));
+                                        ctx.code.add(format!("{} = bitcast i8* {} to {}*",
+                                                             bld_ptr,
+                                                             bld_ptr_raw,
+                                                             elem_ty_str));
+                                        try!(self.gen_merge(bld_ptr, elem_var, elem_ty_str, op, t, ctx));
                                     }
                                 }
                             }
@@ -1079,7 +1273,7 @@ impl LlvmGenerator {
                                                              res_ty_str,
                                                              llvm_symbol(output)));
                                     }
-                                    Merger(_, _) => {
+                                    Merger(ref t, ref op) => {
                                         let bld_ty_str = try!(self.llvm_type(&bld_ty)).to_string();
                                         let bld_prefix = format!("@{}",
                                                                  bld_ty_str.replace("%", ""));
@@ -1088,16 +1282,83 @@ impl LlvmGenerator {
                                             try!(self.load_var(llvm_symbol(builder).as_str(),
                                                                &bld_ty_str,
                                                                ctx));
-                                        let res_tmp = ctx.var_ids.next();
-                                        ctx.code.add(format!("{} = call {} {}.result({} {})",
-                                                             res_tmp,
-                                                             res_ty_str,
-                                                             bld_prefix,
-                                                             bld_ty_str,
-                                                             bld_tmp));
+
+                                        // Get the first builder.
+                                        ctx.code
+                                            .add(format!("%bldPtrFirst = call {bld_ty_str} \
+                                                          {bld_prefix}.\
+                                                          getPtrIndexed({bld_ty_str} \
+                                                          {bld_tmp}, i32 0)",
+                                                         bld_ty_str = bld_ty_str,
+                                                         bld_prefix = bld_prefix,
+                                                         bld_tmp = bld_tmp));
+                                        ctx.code.add(format!("
+                                        \
+                                                              %bldPtrCasted = bitcast \
+                                                              {bld_ty_str} %bldPtrFirst to \
+                                                              {elem_ty_str}*",
+                                                             bld_ty_str = bld_ty_str,
+                                                             elem_ty_str = res_ty_str.clone()));
+
+                                        ctx.code.add(format!("
+                                            %first = load {elem_ty_str}* %bldPtrCasted
+                                            %nworkers = call i32 @get_nworkers()
+                                            br label %entry
+                                          entry:
+                                            %cond = icmp ult i32 1, %nworkers
+                                            br i1 %cond, label %body, label %done
+                                        ",
+                                                             elem_ty_str = res_ty_str.clone()));
+
+                                        ctx.code.add(format!("body:
+  %i = phi i32 [ 1, %entry  \
+                                                              ], [ %i2, %body ]
+  %bldPtr = \
+                                                              call {bld_ty_str} \
+                                                              {bld_prefix}.\
+                                                              getPtrIndexed({bld_ty_str} \
+                                                              {bld_tmp}, i32 %i)
+  %val = load \
+                                                              {elem_ty_str}* %bldPtr",
+                                                             bld_prefix = bld_prefix,
+                                                             bld_ty_str = bld_ty_str,
+                                                             elem_ty_str = res_ty_str.clone(),
+                                                             bld_tmp = bld_tmp));
+
+                                        try!(self.gen_merge("%bldPtrFirst".to_string(),
+                                                            "%val".to_string(),
+                                                            res_ty_str.to_string(),
+                                                            op,
+                                                            t,
+                                                            ctx));
+
+                                        ctx.code.add(format!("%i2 = add i32 %i, 1
+                                                              %cond2 = icmp ult i32 %i2, \
+                                                              %nworkers
+                                            \
+                                                              br i1 %cond2, label %body, label \
+                                                              %done
+                                            \
+                                                              done:
+                                                \
+                                                              %final = load {res_ty_str}* \
+                                                              %bldPtrFirst
+                                                \
+                                                              %runId = call i64 @get_runid()
+                                                  \
+                                                              %asPtr = bitcast \
+                                                              {bld_ty_str} {bld_tmp} to \
+                                                              i8*
+                                                    \
+                                                              call void @free_merger(i64 \
+                                                              %runId, i8* %asPtr)",
+                                                             bld_tmp = bld_tmp,
+                                                             bld_ty_str = bld_ty_str,
+                                                             res_ty_str = res_ty_str.to_string()));
+
                                         ctx.code.add(format!("store {} {}, {}* {}",
                                                              res_ty_str,
-                                                             res_tmp,
+                                                             "%final".to_string(),
                                                              res_ty_str,
                                                              llvm_symbol(output)));
                                     }
@@ -1144,10 +1405,12 @@ impl LlvmGenerator {
                                         let bld_prefix = format!("@{}",
                                                                  bld_ty_str.replace("%", ""));
                                         let bld_tmp = ctx.var_ids.next();
-                                        ctx.code.add(format!("{} = call {} {}.new(i64 16)",
-                                                             bld_tmp,
-                                                             bld_ty_str,
-                                                             bld_prefix));
+                                        ctx.code
+                                            .add(format!("{} = call {} {}.new(i64 16, %work_t* \
+                                                          %cur.work)",
+                                                         bld_tmp,
+                                                         bld_ty_str,
+                                                         bld_prefix));
                                         ctx.code.add(format!("store {} {}, {}* {}",
                                                              bld_ty_str,
                                                              bld_tmp,
@@ -1184,11 +1447,35 @@ impl LlvmGenerator {
                                                              bld_ty_str,
                                                              llvm_symbol(output)));
                                     }
-                                    VecMerger(_, _) => {
+                                    VecMerger(ref elem, _) => {
                                         // TODO(shoumik): Generate code.
                                         match *arg {
                                             Some(ref s) => {
-                                                panic!("unimplemented");
+                                                let bld_ty_str = try!(self.llvm_type(ty))
+                                                    .to_string();
+                                                let bld_prefix = format!("@{}",
+                                                                 bld_ty_str.replace("%", ""));
+                                                let arg_ty =
+                                                    try!(self.llvm_type(&Vector(elem.clone())))
+                                                        .to_string();
+                                                let arg_ty_str = arg_ty.to_string();
+                                                let arg_str = self.load_var(llvm_symbol(s).as_str(),
+                                                              &arg_ty_str,
+                                                              ctx)?;
+
+                                                let bld_tmp = ctx.var_ids.next();
+                                                ctx.code.add(format!("{} = call {} {}.new({} \
+                                                                      {})",
+                                                                     bld_tmp,
+                                                                     bld_ty_str,
+                                                                     bld_prefix,
+                                                                     arg_ty_str,
+                                                                     arg_str));
+                                                ctx.code.add(format!("store {} {}, {}* {}",
+                                                                     bld_ty_str,
+                                                                     bld_tmp,
+                                                                     bld_ty_str,
+                                                                     llvm_symbol(output)));
                                             }
                                             None => {
                                                 weld_err!("Internal error: NewBuilder(VecMerger) \
@@ -1199,7 +1486,7 @@ impl LlvmGenerator {
                                 }
                             }
                             _ => {
-                                weld_err!("Non builder type {} found in CreateResult",
+                                weld_err!("Non builder type {} found in NewBuilder",
                                           print_type(ty))?
                             }
                         }
@@ -1683,12 +1970,51 @@ fn simple_for_appender_loop() {
         run_id: 0,
     });
     let ptr = Box::into_raw(inp) as i64;
-    //
+
     let result_raw = module.run(ptr) as *const Vec;
     let result = unsafe { (*result_raw).clone() };
     let output = [3, 4];
     for i in 0..(result.len as isize) {
         assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
+    }
+    weld_run_free(-1);
+}
+
+#[test]
+fn simple_parallel_for_appender_loop() {
+    #[derive(Clone)]
+    #[allow(dead_code)]
+    struct WeldVec {
+        data: *const i32,
+        len: i64,
+    }
+    #[derive(Clone)]
+    #[allow(dead_code)]
+    struct WeldVec64 {
+        data: *const i64,
+        len: i64,
+    }
+    let code = "|x:vec[i32]| result(for(x, appender[i64], |b,i,e| merge(b, i)))";
+    let module = compile_program(&parse_program(code).unwrap()).unwrap();
+    let size: i32 = 10000;
+    let input: Vec<i32> = vec![0; size as usize];
+    let args = WeldVec {
+        data: input.as_ptr() as *const i32,
+        len: size as i64,
+    };
+
+    let inp = Box::new(WeldInputArgs {
+        input: &args as *const WeldVec as i64,
+        nworkers: 4,
+        run_id: 0,
+    });
+    let ptr = Box::into_raw(inp) as i64;
+
+    let result_raw = module.run(ptr) as *const WeldVec64;
+    let result = unsafe { (*result_raw).clone() };
+    assert_eq!(result.len as i32, size);
+    for i in 0..(result.len as isize) {
+        assert_eq!(unsafe { *result.data.offset(i) }, i as i64)
     }
     weld_run_free(-1);
 }
@@ -2185,7 +2511,7 @@ fn iters_for_loop() {
     }
     weld_run_free(-1);
 }
-//
+
 #[test]
 fn serial_parlib_test() {
     #[derive(Clone)]

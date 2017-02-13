@@ -6,8 +6,64 @@
 ; - ELEM_PREFIX: prefix for helper functions on ELEM (e.g. @i32 or @MyStruct)
 
 %$NAME = type { $ELEM*, i64 }           ; elements, size
-%$NAME.bld.inner = type { $ELEM*, i64, i64 }  ; elements, size, capacity
-%$NAME.bld = type %$NAME.bld.inner*
+%$NAME.bld = type i8*
+
+; VecMerger
+%$NAME.vm.bld = type %$NAME*
+
+; Returns a pointer to builder data for index i (generally, i is the thread ID).
+define %$NAME.vm.bld @$NAME.vm.bld.getPtrIndexed(%$NAME %v, i32 %i) alwaysinline {
+  %mergerPtr = getelementptr %$NAME* null, i32 1
+  %mergerSize = ptrtoint %$NAME* %mergerPtr to i64
+  %asPtr = bitcast %$NAME.bld %bldPtr to i8*
+  %rawPtr = call i8* @get_merger_at_index(i8* %asPtr, i64 %mergerSize, i32 %i)
+  %ptr = bitcast i8* %rawPtr to %$NAME.vm.bld
+  ret %$NAME.vm.bld %ptr
+}
+
+; Initialize and return a new vecmerger with the given initial vector.
+define %$NAME.vm.bld @$NAME.vm.bld.new(%$NAME %vec) {
+  %nworkers = call i32 @get_nworkers()
+  %runId = call i64 @get_runid()
+  %structSizePtr = getelementptr %$NAME* null, i32 1
+  %structSize = ptrtoint %$NAME* %structSizePtr to i64
+
+  %bldPtr = call i8* @new_merger(i64 %runId, i64 %structSize, i32 %nworkers)
+
+  ; Copy the initial value into the first vector
+  %first = call %$NAME.vm.bld @$NAME.vm.bld.getptrIndexed(%$NAME.bld %bldPtr, i32 0)
+  %cloned = call %$NAME @$NAME.clone(%$NAME %vec)
+  %capacity = call i64 @$NAME.size(%$NAME %vec)
+  store first %$NAME %cloned, %$NAME.vm.bld %first
+  br label %entry
+
+entry:
+  %cond = icmp ult i32 1, %nworkers
+  br i1 %cond, label %body, label %done
+
+body:
+  %i = phi i32 [ 0, %entry ], [ %i2, %body ]
+  %vec = call %$NAME* @$NAME.vm.bld.getptrIndexed(%$NAME.bld %bldPtr, i32 %i)
+  %newVec = call %$NAME @$NAME.new(i64 %capacity)
+  store %$NAME %newVec, %$NAME* %vec
+  %i2 = add i32 %i, 1
+  %cond2 = icmp ult i32 %i2, %nworkers
+  br i1 %cond2, label %body, label %done
+
+done:
+  ret %$NAME.vm.bld %bldPtr
+}
+
+; Returns a pointer to the value an element should be merged into.
+; The caller should perform the merge operation on the contents of this pointer
+; and then store the resulting value back.
+define i8* @$NAME.vm.bld.merge_ptr(%$NAME.vm.bld %bldPtr, i64 %index, i32 %workerId) {
+  %bldPtrLocal = call %$NAME* @$NAME.vm.bld.getPtrIndexed(%$NAME.vm.bld %bldPtr, i32 %workerId)
+  %vec = load %$NAME* %bldPtrLocal
+  %elem = call $ELEM* @$NAME.at(%$NAME %vec, i64 %index)
+  %elemPtrRaw = bitcast $ELEM* %elem to i8*
+  ret i8* %elemPtrRaw
+}
 
 ; Initialize and return a new vector with the given size.
 define %$NAME @$NAME.new(i64 %size) {
@@ -38,30 +94,26 @@ define %$NAME @$NAME.clone(%$NAME %vec) {
 }
 
 ; Initialize and return a new builder, with the given initial capacity.
-define %$NAME.bld @$NAME.bld.new(i64 %capacity) {
+define %$NAME.bld @$NAME.bld.new(i64 %capacity, %work_t* %cur.work) {
   %elemSizePtr = getelementptr $ELEM* null, i32 1
   %elemSize = ptrtoint $ELEM* %elemSizePtr to i64
-  %allocSize = mul i64 %elemSize, %capacity
-  %runId = call i64 @get_runid()
-  %bytes = call i8* @weld_rt_malloc(i64 %runId, i64 %allocSize)
-  %elements = bitcast i8* %bytes to $ELEM*
-  %1 = insertvalue %$NAME.bld.inner undef, $ELEM* %elements, 0
-  %2 = insertvalue %$NAME.bld.inner %1, i64 0, 1
-  %3 = insertvalue %$NAME.bld.inner %2, i64 %capacity, 2
-  %bldSizePtr = getelementptr %$NAME.bld.inner* null, i32 1
-  %bldSize = ptrtoint %$NAME.bld.inner* %bldSizePtr to i64
-  %4 = call i8* @weld_rt_malloc(i64 %runId, i64 %bldSize)
-  %5 = bitcast i8* %4 to %$NAME.bld.inner*
-  store %$NAME.bld.inner %3, %$NAME.bld.inner* %5
-  ret %$NAME.bld %5
+  %newVb = call i8* @new_vb(i64 %elemSize, i64 %capacity)
+  call void @$NAME.bld.newPiece(%$NAME.bld %newVb, %work_t* %cur.work)
+  ret %$NAME.bld %newVb
+}
+
+define void @$NAME.bld.newPiece(%$NAME.bld %bldPtr, %work_t* %cur.work) {
+  call void @new_piece(i8* %bldPtr, %work_t* %cur.work)
+  ret void
 }
 
 ; Append a value into a builder, growing its space if needed.
-define %$NAME.bld @$NAME.bld.merge(%$NAME.bld %bldPtr, $ELEM %value) {
+define %$NAME.bld @$NAME.bld.merge(%$NAME.bld %bldPtr, $ELEM %value, i32 %myId) {
 entry:
-  %bld = load %$NAME.bld.inner* %bldPtr
-  %size = extractvalue %$NAME.bld.inner %bld, 1
-  %capacity = extractvalue %$NAME.bld.inner %bld, 2
+  %curPiecePtr = call %vb.vp* @cur_piece(i8* %bldPtr, i32 %myId)
+  %curPiece = load %vb.vp* %curPiecePtr
+  %size = extractvalue %vb.vp %curPiece, 4
+  %capacity = extractvalue %vb.vp %curPiece, 5
   %full = icmp eq i64 %size, %capacity
   br i1 %full, label %onFull, label %finish
 
@@ -69,42 +121,33 @@ onFull:
   %newCapacity = mul i64 %capacity, 2
   %elemSizePtr = getelementptr $ELEM* null, i32 1
   %elemSize = ptrtoint $ELEM* %elemSizePtr to i64
-  %elements = extractvalue %$NAME.bld.inner %bld, 0
-  %bytes = bitcast $ELEM* %elements to i8*
+  %bytes = extractvalue %vb.vp %curPiece, 3
   %allocSize = mul i64 %elemSize, %newCapacity
   %runId = call i64 @get_runid()
   %newBytes = call i8* @weld_rt_realloc(i64 %runId, i8* %bytes, i64 %allocSize)
-  %newElements = bitcast i8* %newBytes to $ELEM*
-  %bld1 = insertvalue %$NAME.bld.inner %bld, $ELEM* %newElements, 0
-  %bld2 = insertvalue %$NAME.bld.inner %bld1, i64 %newCapacity, 2
+  %curPiece1 = insertvalue %vb.vp %curPiece, i8* %newBytes, 3
+  %curPiece2 = insertvalue %vb.vp %curPiece1, i64 %newCapacity, 5
   br label %finish
 
 finish:
-  %bld3 = phi %$NAME.bld.inner [ %bld, %entry ], [ %bld2, %onFull ]
-  %elements3 = extractvalue %$NAME.bld.inner %bld3, 0
-  %insertPtr = getelementptr $ELEM* %elements3, i64 %size
+  %curPiece3 = phi %vb.vp [ %curPiece, %entry ], [ %curPiece2, %onFull ]
+  %bytes1 = extractvalue %vb.vp %curPiece3, 3
+  %elements = bitcast i8* %bytes1 to $ELEM*
+  %insertPtr = getelementptr $ELEM* %elements, i64 %size
   store $ELEM %value, $ELEM* %insertPtr
   %newSize = add i64 %size, 1
-  %bld4 = insertvalue %$NAME.bld.inner %bld3, i64 %newSize, 1
-  store %$NAME.bld.inner %bld4, %$NAME.bld.inner* %bldPtr
+  %curPiece4 = insertvalue %vb.vp %curPiece3, i64 %newSize, 4
+  store %vb.vp %curPiece4, %vb.vp* %curPiecePtr
   ret %$NAME.bld %bldPtr
 }
 
 ; Complete building a vector, trimming any extra space left while growing it.
 define %$NAME @$NAME.bld.result(%$NAME.bld %bldPtr) {
-  %bld = load %$NAME.bld.inner* %bldPtr
-  %elements = extractvalue %$NAME.bld.inner %bld, 0
-  %size = extractvalue %$NAME.bld.inner %bld, 1
-  %bytes = bitcast $ELEM* %elements to i8*
-  %elemSizePtr = getelementptr $ELEM* null, i32 1
-  %elemSize = ptrtoint $ELEM* %elemSizePtr to i64
-  %allocSize = mul i64 %elemSize, %size
-  %runId = call i64 @get_runid()
-  %newBytes = call i8* @weld_rt_realloc(i64 %runId, i8* %bytes, i64 %allocSize)
-  %newElements = bitcast i8* %newBytes to $ELEM*
-  %toFree = bitcast %$NAME.bld.inner* %bldPtr to i8*
-  call void @weld_rt_free(i64 %runId, i8* %toFree)
-  %1 = insertvalue %$NAME undef, $ELEM* %newElements, 0
+  %out = call %vb.out @result_vb(i8* %bldPtr)
+  %bytes = extractvalue %vb.out %out, 0
+  %size = extractvalue %vb.out %out, 1
+  %elems = bitcast i8* %bytes to $ELEM*
+  %1 = insertvalue %$NAME undef, $ELEM* %elems, 0
   %2 = insertvalue %$NAME %1, i64 %size, 1
   ret %$NAME %2
 }
@@ -124,16 +167,19 @@ define $ELEM* @$NAME.at(%$NAME %vec, i64 %index) {
 
 
 ; Get the length of a VecBuilder.
-define i64 @$NAME.bld.size(%$NAME.bld %bldPtr) {
-  %bld = load %$NAME.bld.inner* %bldPtr
-  %size = extractvalue %$NAME.bld.inner %bld, 1
+define i64 @$NAME.bld.size(%$NAME.bld %bldPtr, i32 %myId) {
+  %curPiecePtr = call %vb.vp* @cur_piece(i8* %bldPtr, i32 %myId)
+  %curPiece = load %vb.vp* %curPiecePtr
+  %size = extractvalue %vb.vp %curPiece, 4
   ret i64 %size
 }
 
 ; Get a pointer to the index'th element of a VecBuilder.
-define $ELEM* @$NAME.bld.at(%$NAME.bld %bldPtr, i64 %index) {
-  %bld = load %$NAME.bld.inner* %bldPtr
-  %elements = extractvalue %$NAME.bld.inner %bld, 0
+define $ELEM* @$NAME.bld.at(%$NAME.bld %bldPtr, i64 %index, i32 %myId) {
+  %curPiecePtr = call %vb.vp* @cur_piece(i8* %bldPtr, i32 %myId)
+  %curPiece = load %vb.vp* %curPiecePtr
+  %bytes = extractvalue %vb.vp %curPiece, 3
+  %elements = bitcast i8* %bytes to $ELEM*
   %ptr = getelementptr $ELEM* %elements, i64 %index
   ret $ELEM* %ptr
 }

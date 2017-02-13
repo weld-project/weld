@@ -374,9 +374,7 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
 
         NewBuilder(ref mut e) => {
             let mut changed = match expr.ty {
-                Unknown | Builder(_) => {
-                    changed = false;
-                }
+                Unknown | Builder(_) => false,
                 _ => return weld_err!("Wrong type ascribed to NewBuilder"),
             };
             // For builders with arguments (Just VecMerger for now).
@@ -548,6 +546,27 @@ fn push_type(dest: &mut PartialType, src: &PartialType, context: &str) -> WeldRe
                         try!(push_type(dest_value_ty.as_mut(), src_value_ty.as_ref(), context));
                     changed |=
                         try!(push_type(dest_merge_ty.as_mut(), src_merge_ty.as_ref(), context));
+
+                    // For now, any commutative-merge builder only supports either a single scalar
+                    // or a struct of scalars.
+                    match **dest_value_ty {
+                        Struct(ref tys) => {
+                            for ty in tys {
+                                match *ty {
+                                    Scalar(_) => {}
+                                    _ => {
+                                        return weld_err!("Commutatitive merge builders only \
+                                                          support structs with scalars");
+                                    }
+                                }
+                            }
+                        }
+                        Scalar(_) => {}
+                        _ => {
+                            return weld_err!("Commutatitive merge builders only support scalars \
+                                              or structs of scalars");
+                        }
+                    }
                     Ok(changed)
                 }
                 _ => weld_err!("Mismatched types in DictMerger, {}", context),
@@ -562,7 +581,30 @@ fn push_type(dest: &mut PartialType, src: &PartialType, context: &str) -> WeldRe
                         try!(push_type(dest_elem_ty.as_mut(), src_elem_ty.as_ref(), context));
                     changed |=
                         try!(push_type(dest_merge_ty.as_mut(), src_merge_ty.as_ref(), context));
+
+                    // For now, any commutative-merge builder only supports either a single scalar
+                    // or a struct of scalars.
+                    match **dest_elem_ty {
+                        Struct(ref tys) => {
+                            for ty in tys {
+                                match *ty {
+                                    Scalar(_) => {}
+                                    _ => {
+                                        return weld_err!("Commutative merge builders only \
+                                                          support structs with scalars");
+                                    }
+                                }
+                            }
+                        }
+                        Scalar(_) => {}
+                        _ => {
+                            return weld_err!("Commutative merge builders only support scalars \
+                                              or structs of scalars");
+                        }
+                    }
                     Ok(changed)
+
+
                 }
                 _ => weld_err!("Mismatched types in VecMerger, {}", context),
             }
@@ -571,7 +613,28 @@ fn push_type(dest: &mut PartialType, src: &PartialType, context: &str) -> WeldRe
         Builder(Merger(ref mut dest_elem, _)) => {
             match *src {
                 Builder(Merger(ref src_elem, _)) => {
-                    push_type(dest_elem.as_mut(), src_elem.as_ref(), context)
+                    let changed = push_type(dest_elem.as_mut(), src_elem.as_ref(), context)?;
+                    // For now, any commutative-merge builder only supports either a single scalar
+                    // or a struct of scalars. TODO(shoumik): Factor into function.
+                    match **dest_elem {
+                        Struct(ref tys) => {
+                            for ty in tys {
+                                match *ty {
+                                    Scalar(_) => {}
+                                    _ => {
+                                        return weld_err!("Commutatitive merge builders only \
+                                                          support structs with scalars");
+                                    }
+                                }
+                            }
+                        }
+                        Scalar(_) => {}
+                        _ => {
+                            return weld_err!("Commutatitive merge builders only support scalars \
+                                              or structs of scalars");
+                        }
+                    }
+                    Ok(changed)
                 }
                 _ => weld_err!("Mismatched types in {}", context),
             }
