@@ -31,7 +31,6 @@ pthread_t *workers = NULL;
 work_queue *all_work_queues = NULL; // queue per worker
 work_queue_lock *all_work_queue_locks = NULL; // lock per queue
 
-volatile bool started = false; // have we started the parallel runtime?
 volatile bool done = false; // if a computation is currently running, have we finished it?
 volatile void *result = NULL; // stores the final result of the computation to be passed back
 // to the caller
@@ -82,6 +81,30 @@ extern "C" void set_runid(int64_t id) {
   run_id = id;
 }
 
+// task->stolen must be true
+static inline void set_nest_pos(work_t *task) {
+  vector<int64_t> pos;
+  pos.push_back(task->lower);
+  work_t *cur = task->cont;
+  int32_t nest_pos_len = 1;
+  while (cur != NULL) {
+    pos.push_back(cur->cur_idx);
+    cur = cur->cont;
+    nest_pos_len++;
+  }
+  task->nest_pos = (int64_t *)weld_rt_malloc(get_runid(), sizeof(int64_t) * nest_pos_len);
+  task->nest_pos_len = nest_pos_len;
+  reverse_copy(pos.begin(), pos.end(), task->nest_pos);
+}
+
+static inline void set_stolen(work_t *task) {
+  if (task->stolen) {
+    return;
+  }
+  task->stolen = true;
+  set_nest_pos(task);
+}
+
 // attempt to steal from back of the queue of a random victim
 // should be called when own work queue empty
 static inline bool try_steal() {
@@ -95,6 +118,7 @@ static inline bool try_steal() {
       work_t *popped = its_work_queue->back();
       its_work_queue->pop_back();
       pthread_spin_unlock(all_work_queue_locks + victim);
+      set_stolen(popped);
       pthread_spin_lock((all_work_queue_locks + my_id()));
       (all_work_queues + my_id())->push_front(popped);
       pthread_spin_unlock((all_work_queue_locks + my_id()));
@@ -117,22 +141,25 @@ static inline void finish_task(work_t *task) {
     }
     weld_rt_free(get_runid(), task->data);
   } else {
-    /*
+    // TODO move this and other work to steal path only
     int64_t old, updated;
     do {
       old = task->cont->task_id;
       updated = std::max(old, task->task_id + 1);
     } while (!__sync_bool_compare_and_swap(&task->cont->task_id, old, updated));
-    */
 
     int32_t previous = __sync_fetch_and_sub(&task->cont->deps, 1);
     if (previous == 1) {
       // run the continuation since we are the last dependency
+      set_stolen(task->cont);
       pthread_spin_lock((all_work_queue_locks + my_id()));
       (all_work_queues + my_id())->push_front(task->cont);
       pthread_spin_unlock((all_work_queue_locks + my_id()));
       // we are the last sibling with this data, so we can free it
       weld_rt_free(get_runid(), task->data);
+    }
+    if (task->stolen) {
+      weld_rt_free(get_runid(), task->nest_pos);
     }
   }
   weld_rt_free(get_runid(), task);
@@ -144,8 +171,6 @@ static inline void set_cont(work_t *w, work_t *cont) {
   w->cont = cont;
   __sync_fetch_and_add(&cont->deps, 1);
 }
-
-static inline void execute(work_t *initial_task);
 
 // called from generated code to schedule a for loop with the given body and continuation
 // the data pointers store the closures for the body and continuation
@@ -159,11 +184,14 @@ extern "C" void pl_start_loop(work_t *w, void *body_data, void *cont_data, void 
   body_task->fp = body;
   body_task->lower = lower;
   body_task->upper = upper;
+  body_task->task_id = w->task_id;
   work_t *cont_task = (work_t *)weld_rt_malloc(get_runid(), sizeof(work_t));
   memset(cont_task, 0, sizeof(work_t));
   cont_task->data = cont_data; 
   cont_task->fp = cont;
+  cont_task->cur_idx = w->cur_idx;
   set_cont(body_task, cont_task);
+  set_stolen(body_task);
   if (w != NULL) {
     if (w->cont != NULL) {
       // inherit the current task's continuation
@@ -175,14 +203,17 @@ extern "C" void pl_start_loop(work_t *w, void *body_data, void *cont_data, void 
       w->continued = true;
     }
   }
-  if (started) {
-    pthread_spin_lock((all_work_queue_locks + my_id()));
-    (all_work_queues + my_id())->push_front(body_task);
-    pthread_spin_unlock((all_work_queue_locks + my_id()));
-  } else {
-    // start the parallel runtime
-    execute(body_task);
-  }
+
+  pthread_spin_lock((all_work_queue_locks + my_id()));
+  (all_work_queues + my_id())->push_front(body_task);
+  pthread_spin_unlock((all_work_queue_locks + my_id()));
+}
+
+static inline work_t *clone_task(work_t *task) {
+  work_t *clone = (work_t *)weld_rt_malloc(get_runid(), sizeof(work_t));
+  memcpy(clone, task, sizeof(work_t));
+  clone->stolen = false;
+  return clone;
 }
 
 // repeatedly break off the second half of the task into a new task
@@ -191,8 +222,7 @@ extern "C" void pl_start_loop(work_t *w, void *body_data, void *cont_data, void 
 static inline void split_task(work_t *task) {
   // TODO make this a constant
   while (task->upper - task->lower >= 1024) {
-    work_t *last_half = (work_t *)weld_rt_malloc(get_runid(), sizeof(work_t));
-    memcpy(last_half, task, sizeof(work_t));
+    work_t *last_half = clone_task(task);
     int64_t mid = (task->lower + task->upper) / 2;
     task->upper = mid;
     last_half->lower = mid;
@@ -260,7 +290,6 @@ static inline void cleanup_computation_state() {
   delete [] all_work_queues;
   delete [] workers;
 
-  started = false;
   done = false;
 }
 
@@ -268,13 +297,17 @@ static inline void cleanup_computation_state() {
 // block until the computation is complete
 // once execute() returns all state has been reset and it is safe to run
 // another computation
-static inline void execute(work_t *initial_task) {
-  started = true;
+extern "C" void execute(void (*run)(work_t*), void *data) {
   workers = new pthread_t[W];
   all_work_queue_locks = new work_queue_lock[W];
   all_work_queues = new work_queue[W];
 
-  all_work_queues[0].push_front(initial_task);
+  work_t *run_task = (work_t *)weld_rt_malloc(get_runid(), sizeof(work_t));
+  memset(run_task, 0, sizeof(work_t));
+  run_task->data = data;
+  run_task->fp = run;
+  set_stolen(run_task);
+  all_work_queues[0].push_front(run_task);
 
   for (int32_t i = 0; i < W; i++) {
     pthread_spin_init(all_work_queue_locks + i, 0);

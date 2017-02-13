@@ -152,6 +152,8 @@ pub fn compile_module(code: &str) -> Result<CompiledModule, LlvmError> {
         }
         let pl_module = try!(parse_module_file(context, "cpp/parlib.bc"));
         llvm::execution_engine::LLVMAddModule(engine, pl_module);
+        let vb_module = try!(parse_module_file(context, "cpp/vb.bc"));
+        llvm::execution_engine::LLVMAddModule(engine, vb_module);
 
         result.engine = Some(engine);
         result.function = Some(try!(find_run_function(engine)));
