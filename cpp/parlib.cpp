@@ -81,28 +81,38 @@ extern "C" void set_runid(int64_t id) {
   run_id = id;
 }
 
-// task->stolen must be true
-static inline void set_nest_pos(work_t *task) {
-  vector<int64_t> pos;
-  pos.push_back(task->lower);
+// task->full_task must be true
+static inline void set_nest(work_t *task) {
+  vector<int64_t> idxs;
+  vector<int64_t> task_ids;
+  idxs.push_back(task->cur_idx);
+  task_ids.push_back(task->task_id);
   work_t *cur = task->cont;
-  int32_t nest_pos_len = 1;
+  int32_t nest_len = 1;
   while (cur != NULL) {
-    pos.push_back(cur->cur_idx);
+    idxs.push_back(cur->cur_idx);
+    // subtract 1 because the conts give us the continuations and we want the
+    // task_id's of the loop bodies before the continuations
+    task_ids.push_back(cur->task_id - 1);
     cur = cur->cont;
-    nest_pos_len++;
+    nest_len++;
   }
-  task->nest_pos = (int64_t *)weld_rt_malloc(get_runid(), sizeof(int64_t) * nest_pos_len);
-  task->nest_pos_len = nest_pos_len;
-  reverse_copy(pos.begin(), pos.end(), task->nest_pos);
+  task->nest_idxs = (int64_t *)weld_rt_malloc(get_runid(), sizeof(int64_t) * nest_len);
+  task->nest_task_ids = (int64_t *)weld_rt_malloc(get_runid(), sizeof(int64_t) * nest_len);
+  task->nest_len = nest_len;
+  // we want the outermost idxs to be the "high-order bits" when we do a comparison of task nests
+  reverse_copy(idxs.begin(), idxs.end(), task->nest_idxs);
+  reverse_copy(task_ids.begin(), task_ids.end(), task->nest_task_ids);
 }
 
-static inline void set_stolen(work_t *task) {
-  if (task->stolen) {
+static inline void set_full_task(work_t *task) {
+  // possible for task to already be full, e.g. if the head task from a start_loop call is queued
+  // but stolen before it can be executed (the thief tries to set_full_task a second time)
+  if (task->full_task) {
     return;
   }
-  task->stolen = true;
-  set_nest_pos(task);
+  task->full_task = true;
+  set_nest(task);
 }
 
 // attempt to steal from back of the queue of a random victim
@@ -118,7 +128,7 @@ static inline bool try_steal() {
       work_t *popped = its_work_queue->back();
       its_work_queue->pop_back();
       pthread_spin_unlock(all_work_queue_locks + victim);
-      set_stolen(popped);
+      set_full_task(popped);
       pthread_spin_lock((all_work_queue_locks + my_id()));
       (all_work_queues + my_id())->push_front(popped);
       pthread_spin_unlock((all_work_queue_locks + my_id()));
@@ -131,7 +141,7 @@ static inline bool try_steal() {
 
 // called once task function returns
 // decrease the dependency count of the continuation, run the continuation
-// if necessary, or signal the end of the computation if we are ddone
+// if necessary, or signal the end of the computation if we are done
 static inline void finish_task(work_t *task) {
   if (task->cont == NULL) {
     if (!task->continued) {
@@ -141,25 +151,19 @@ static inline void finish_task(work_t *task) {
     }
     weld_rt_free(get_runid(), task->data);
   } else {
-    // TODO move this and other work to steal path only
-    int64_t old, updated;
-    do {
-      old = task->cont->task_id;
-      updated = std::max(old, task->task_id + 1);
-    } while (!__sync_bool_compare_and_swap(&task->cont->task_id, old, updated));
-
     int32_t previous = __sync_fetch_and_sub(&task->cont->deps, 1);
     if (previous == 1) {
       // run the continuation since we are the last dependency
-      set_stolen(task->cont);
+      set_full_task(task->cont);
       pthread_spin_lock((all_work_queue_locks + my_id()));
       (all_work_queues + my_id())->push_front(task->cont);
       pthread_spin_unlock((all_work_queue_locks + my_id()));
       // we are the last sibling with this data, so we can free it
       weld_rt_free(get_runid(), task->data);
     }
-    if (task->stolen) {
-      weld_rt_free(get_runid(), task->nest_pos);
+    if (task->full_task) {
+      weld_rt_free(get_runid(), task->nest_idxs);
+      weld_rt_free(get_runid(), task->nest_task_ids);
     }
   }
   weld_rt_free(get_runid(), task);
@@ -177,21 +181,24 @@ static inline void set_cont(work_t *w, work_t *cont) {
 // lower and upper give the iteration range for the loop
 // w is the currently executing task
 extern "C" void pl_start_loop(work_t *w, void *body_data, void *cont_data, void (*body)(work_t*),
-  void (*cont)(work_t*), int64_t lower, int64_t upper) {
+  void (*cont)(work_t*), int64_t lower, int64_t upper, int32_t grain_size) {
   work_t *body_task = (work_t *)weld_rt_malloc(get_runid(), sizeof(work_t));
   memset(body_task, 0, sizeof(work_t));
   body_task->data = body_data;
   body_task->fp = body;
   body_task->lower = lower;
   body_task->upper = upper;
-  body_task->task_id = w->task_id;
+  body_task->cur_idx = lower;
+  body_task->task_id = w->task_id + 1;
+  body_task->grain_size = grain_size;
   work_t *cont_task = (work_t *)weld_rt_malloc(get_runid(), sizeof(work_t));
   memset(cont_task, 0, sizeof(work_t));
   cont_task->data = cont_data; 
   cont_task->fp = cont;
   cont_task->cur_idx = w->cur_idx;
+  // ensures continuation and all descendants have greater task ID than body
+  cont_task->task_id = w->task_id + 2;
   set_cont(body_task, cont_task);
-  set_stolen(body_task);
   if (w != NULL) {
     if (w->cont != NULL) {
       // inherit the current task's continuation
@@ -203,6 +210,7 @@ extern "C" void pl_start_loop(work_t *w, void *body_data, void *cont_data, void 
       w->continued = true;
     }
   }
+  set_full_task(body_task);
 
   pthread_spin_lock((all_work_queue_locks + my_id()));
   (all_work_queues + my_id())->push_front(body_task);
@@ -212,7 +220,7 @@ extern "C" void pl_start_loop(work_t *w, void *body_data, void *cont_data, void 
 static inline work_t *clone_task(work_t *task) {
   work_t *clone = (work_t *)weld_rt_malloc(get_runid(), sizeof(work_t));
   memcpy(clone, task, sizeof(work_t));
-  clone->stolen = false;
+  clone->full_task = false;
   return clone;
 }
 
@@ -220,12 +228,12 @@ static inline work_t *clone_task(work_t *task) {
 // until the task's size in iterations drops below a certain threshold
 // call with my_id() queue lock held
 static inline void split_task(work_t *task) {
-  // TODO make this a constant
-  while (task->upper - task->lower >= 1024) {
+  while (task->upper - task->lower > task->grain_size) {
     work_t *last_half = clone_task(task);
     int64_t mid = (task->lower + task->upper) / 2;
     task->upper = mid;
     last_half->lower = mid;
+    last_half->cur_idx = mid;
     // task must have non-NULL cont if it has non-zero number of iterations and therefore
     // is a loop body
     set_cont(last_half, task->cont);
@@ -306,7 +314,8 @@ extern "C" void execute(void (*run)(work_t*), void *data) {
   memset(run_task, 0, sizeof(work_t));
   run_task->data = data;
   run_task->fp = run;
-  set_stolen(run_task);
+  // this initial task can be thought of as a continuation
+  set_full_task(run_task);
   all_work_queues[0].push_front(run_task);
 
   for (int32_t i = 0; i < W; i++) {
