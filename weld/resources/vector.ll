@@ -55,8 +55,8 @@ define %$NAME.bld @$NAME.bld.merge(%$NAME.bld %bldPtr, $ELEM %value, i32 %myId) 
 entry:
   %curPiecePtr = call %vb.vp* @cur_piece(i8* %bldPtr, i32 %myId)
   %curPiece = load %vb.vp* %curPiecePtr
-  %size = extractvalue %vb.vp %curPiece, 4
-  %capacity = extractvalue %vb.vp %curPiece, 5
+  %size = extractvalue %vb.vp %curPiece, 1
+  %capacity = extractvalue %vb.vp %curPiece, 2
   %full = icmp eq i64 %size, %capacity
   br i1 %full, label %onFull, label %finish
 
@@ -64,22 +64,22 @@ onFull:
   %newCapacity = mul i64 %capacity, 2
   %elemSizePtr = getelementptr $ELEM* null, i32 1
   %elemSize = ptrtoint $ELEM* %elemSizePtr to i64
-  %bytes = extractvalue %vb.vp %curPiece, 3
+  %bytes = extractvalue %vb.vp %curPiece, 0
   %allocSize = mul i64 %elemSize, %newCapacity
   %runId = call i64 @get_runid()
   %newBytes = call i8* @weld_rt_realloc(i64 %runId, i8* %bytes, i64 %allocSize)
-  %curPiece1 = insertvalue %vb.vp %curPiece, i8* %newBytes, 3
-  %curPiece2 = insertvalue %vb.vp %curPiece1, i64 %newCapacity, 5
+  %curPiece1 = insertvalue %vb.vp %curPiece, i8* %newBytes, 0
+  %curPiece2 = insertvalue %vb.vp %curPiece1, i64 %newCapacity, 2
   br label %finish
 
 finish:
   %curPiece3 = phi %vb.vp [ %curPiece, %entry ], [ %curPiece2, %onFull ]
-  %bytes1 = extractvalue %vb.vp %curPiece3, 3
+  %bytes1 = extractvalue %vb.vp %curPiece3, 0
   %elements = bitcast i8* %bytes1 to $ELEM*
   %insertPtr = getelementptr $ELEM* %elements, i64 %size
   store $ELEM %value, $ELEM* %insertPtr
   %newSize = add i64 %size, 1
-  %curPiece4 = insertvalue %vb.vp %curPiece3, i64 %newSize, 4
+  %curPiece4 = insertvalue %vb.vp %curPiece3, i64 %newSize, 1
   store %vb.vp %curPiece4, %vb.vp* %curPiecePtr
   ret %$NAME.bld %bldPtr
 }
@@ -113,7 +113,7 @@ define $ELEM* @$NAME.at(%$NAME %vec, i64 %index) {
 define i64 @$NAME.bld.size(%$NAME.bld %bldPtr, i32 %myId) {
   %curPiecePtr = call %vb.vp* @cur_piece(i8* %bldPtr, i32 %myId)
   %curPiece = load %vb.vp* %curPiecePtr
-  %size = extractvalue %vb.vp %curPiece, 4
+  %size = extractvalue %vb.vp %curPiece, 1
   ret i64 %size
 }
 
@@ -121,7 +121,7 @@ define i64 @$NAME.bld.size(%$NAME.bld %bldPtr, i32 %myId) {
 define $ELEM* @$NAME.bld.at(%$NAME.bld %bldPtr, i64 %index, i32 %myId) {
   %curPiecePtr = call %vb.vp* @cur_piece(i8* %bldPtr, i32 %myId)
   %curPiece = load %vb.vp* %curPiecePtr
-  %bytes = extractvalue %vb.vp %curPiece, 3
+  %bytes = extractvalue %vb.vp %curPiece, 0
   %elements = bitcast i8* %bytes to $ELEM*
   %ptr = getelementptr $ELEM* %elements, i64 %index
   ret $ELEM* %ptr

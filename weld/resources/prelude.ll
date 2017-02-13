@@ -18,8 +18,8 @@ declare void    @free_merger(i64, i8*)
 declare i32     @my_id_public()
 
 ; Parallel runtime structures
-%work_t = type { i8*, i64, i64, i64, i32, i64*, i32, i64, void (%work_t*)*, %work_t*, i32, i32 }
-%vb.vp = type { i64*, i32, i64, i8*, i64, i64 }
+%work_t = type { i8*, i64, i64, i64, i32, i64*, i64*, i32, i64, void (%work_t*)*, %work_t*, i32, i32, i32 }
+%vb.vp = type { i8*, i64, i64, i64*, i64*, i32 }
 %vb.out = type { i8*, i64 }
 
 ; Input argument (input data pointer, nworkers, runId)
@@ -27,7 +27,7 @@ declare i32     @my_id_public()
 
 declare void @set_result(i8*)
 declare i8* @get_result()
-declare void @pl_start_loop(%work_t*, i8*, i8*, void (%work_t*)*, void (%work_t*)*, i64, i64)
+declare void @pl_start_loop(%work_t*, i8*, i8*, void (%work_t*)*, void (%work_t*)*, i64, i64, i32)
 declare void @execute(void (%work_t*)*, i8*)
 declare i8* @new_vb(i64, i64)
 declare void @new_piece(i8*, %work_t*)

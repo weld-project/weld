@@ -437,17 +437,22 @@ impl LlvmGenerator {
                         .add(format!("{} = udiv i64 {}, {}", upper_bound, diff_tmp, stride_str));
                 }
                 let bound_cmp = wrap_ctx.var_ids.next();
-                // TODO make a smarter decision on whether to call serial here (+ context-dependent
-                // grain size)
-                wrap_ctx.code.add(format!("{} = icmp ult i64 {}, 1024", bound_cmp, upper_bound));
-                wrap_ctx.code.add(format!("br i1 {}, label %for.ser, label %for.par", bound_cmp));
-                wrap_ctx.code.add(format!("for.ser:"));
-                let mut body_arg_types = try!(self.get_arg_str(&func.params, ""));
-                body_arg_types.push_str(format!(", i64 0, i64 {}", upper_bound).as_str());
-                wrap_ctx.code.add(format!("call void @f{}({})", func.id, body_arg_types));
-                let cont_arg_types = try!(self.get_arg_str(&sir.funcs[par_for.cont].params, ""));
-                wrap_ctx.code.add(format!("call void @f{}({})", par_for.cont, cont_arg_types));
-                wrap_ctx.code.add(format!("br label %fn.end"));
+                let mut grain_size = 1024;
+                if par_for.innermost {
+                    wrap_ctx.code.add(format!("{} = icmp ule i64 {}, {}", bound_cmp, upper_bound,
+                        grain_size));
+                    wrap_ctx.code.add(format!("br i1 {}, label %for.ser, label %for.par", bound_cmp));
+                    wrap_ctx.code.add(format!("for.ser:"));
+                    let mut body_arg_types = try!(self.get_arg_str(&func.params, ""));
+                    body_arg_types.push_str(format!(", i64 0, i64 {}", upper_bound).as_str());
+                    wrap_ctx.code.add(format!("call void @f{}({})", func.id, body_arg_types));
+                    let cont_arg_types = try!(self.get_arg_str(&sir.funcs[par_for.cont].params, ""));
+                    wrap_ctx.code.add(format!("call void @f{}({})", par_for.cont, cont_arg_types));
+                    wrap_ctx.code.add(format!("br label %fn.end"));
+                } else {
+                    wrap_ctx.code.add("br label %for.par");
+                    grain_size = 1;
+                }
                 wrap_ctx.code.add(format!("for.par:"));
                 let body_struct = try!(self.get_arg_struct(&func.params, &mut wrap_ctx));
                 let cont_struct =
@@ -455,12 +460,13 @@ impl LlvmGenerator {
                 wrap_ctx.code
                     .add(format!("call void @pl_start_loop(%work_t* %cur.work, i8* {}, i8* {}, \
                                   void (%work_t*)* @f{}_par, void (%work_t*)* @f{}_par, i64 0, \
-                                  i64 {})",
+                                  i64 {}, i32 {})",
                                  body_struct,
                                  cont_struct,
                                  func.id,
                                  par_for.cont,
-                                 upper_bound));
+                                 upper_bound,
+                                 grain_size));
                 wrap_ctx.code.add(format!("br label %fn.end"));
                 wrap_ctx.code.add("fn.end:");
                 wrap_ctx.code.add("ret void");
@@ -1757,6 +1763,51 @@ fn simple_parallel_for_appender_loop() {
     assert_eq!(result.len as i32, size);
     for i in 0..(result.len as isize) {
         assert_eq!(unsafe { *result.data.offset(i) }, i as i64)
+    }
+    weld_run_free(-1);
+}
+
+#[test]
+fn complex_parallel_for_appender_loop() {
+    #[derive(Clone)]
+    #[allow(dead_code)]
+    struct WeldVec {
+        data: *const i32,
+        len: i64,
+    }
+    #[derive(Clone)]
+    #[allow(dead_code)]
+    struct WeldVec64 {
+        data: *const i64,
+        len: i64,
+    }
+    let code = "|x:vec[i32]| let a=appender[i64]; let b=merge(a,0L); let r=for(x,b,|b,i,e| \
+                let c=merge(b,1L); let d=for(x,c,|b,i,e| if(i<1L, merge(b,i), b)); merge(d, 2L)); \
+                result(merge(r,3L))";
+    let module = compile_program(&parse_program(code).unwrap()).unwrap();
+    let size: i32 = 3000;
+    let input: Vec<i32> = vec![0; size as usize];
+    let args = WeldVec {
+        data: input.as_ptr() as *const i32,
+        len: size as i64,
+    };
+
+    let inp = Box::new(WeldInputArgs {
+        input: &args as *const WeldVec as i64,
+        nworkers: 4,
+        run_id: 0,
+    });
+    let ptr = Box::into_raw(inp) as i64;
+
+    let result_raw = module.run(ptr) as *const WeldVec64;
+    let result = unsafe { (*result_raw).clone() };
+    assert_eq!(result.len as i32, size * 3 + 2);
+    assert_eq!(unsafe { *result.data.offset(0) }, 0);
+    assert_eq!(unsafe { *result.data.offset((size * 3 + 1) as isize) }, 3);
+    for i in 0..(size as isize) {
+        assert_eq!(unsafe { *result.data.offset(i * 3 + 1) }, 1);
+        assert_eq!(unsafe { *result.data.offset(i * 3 + 2) }, 0);
+        assert_eq!(unsafe { *result.data.offset(i * 3 + 3) }, 2)
     }
     weld_run_free(-1);
 }

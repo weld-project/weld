@@ -62,6 +62,7 @@ pub struct ParallelForData {
     pub idx_arg: Symbol,
     pub body: FunctionId,
     pub cont: FunctionId,
+    pub innermost: bool
 }
 
 /// A terminating statement inside a basic block.
@@ -208,13 +209,14 @@ impl fmt::Display for Terminator {
                 }
                 write!(f, "] ")?;
                 write!(f,
-                       "{} {} {} {} F{} F{}",
+                       "{} {} {} {} F{} F{} {}",
                        pf.builder,
                        pf.builder_arg,
                        pf.idx_arg,
                        pf.data_arg,
                        pf.body,
-                       pf.cont)?;
+                       pf.cont,
+                       pf.innermost)?;
                 Ok(())
             }
             JumpBlock(block) => write!(f, "jump B{}", block),
@@ -660,6 +662,12 @@ fn gen_expr(expr: &TypedExpr,
                 prog.funcs[body_end_func].blocks[body_end_block].terminator = EndFunction;
                 let cont_func = prog.add_func();
                 let cont_block = prog.funcs[cont_func].add_block();
+                let mut is_innermost = true;
+                body.traverse(&mut |ref e| {
+                    if let ExprKind::For { .. } = e.kind {
+                        is_innermost = false;
+                    }
+                });
                 prog.funcs[cur_func].blocks[cur_block].terminator = ParallelFor(ParallelForData {
                     data: pf_iters,
                     builder: builder_sym.clone(),
@@ -668,6 +676,7 @@ fn gen_expr(expr: &TypedExpr,
                     idx_arg: params[1].name.clone(),
                     body: body_func,
                     cont: cont_func,
+                    innermost: is_innermost
                 });
                 Ok((cont_func, cont_block, builder_sym))
             } else {
