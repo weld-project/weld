@@ -6,6 +6,7 @@
 #include <queue>
 #include <deque>
 #include <algorithm>
+#include "assert.h"
 #include "parlib.h"
 
 // Memory allocation functions for Weld.
@@ -81,8 +82,8 @@ extern "C" void set_runid(int64_t id) {
   run_id = id;
 }
 
-// task->full_task must be true
 static inline void set_nest(work_t *task) {
+  assert(task->full_task);
   vector<int64_t> idxs;
   vector<int64_t> task_ids;
   idxs.push_back(task->cur_idx);

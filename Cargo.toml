@@ -24,3 +24,7 @@ path = "weld/bin/repl.rs"
 name = "benches"
 path = "benches/driver.rs"
 harness = false
+
+[[test]]
+name = "integration_tests"
+harness = false

@@ -62,7 +62,7 @@ pub struct ParallelForData {
     pub idx_arg: Symbol,
     pub body: FunctionId,
     pub cont: FunctionId,
-    pub innermost: bool
+    pub innermost: bool,
 }
 
 /// A terminating statement inside a basic block.
@@ -303,6 +303,7 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
         for statement in &block.statements {
             use self::Statement::*;
             match *statement {
+                // push any existing symbols that are used (but not assigned) by the statement
                 BinOp { ref left, ref right, .. } => {
                     vars.push(left.clone());
                     vars.push(right.clone());
@@ -333,6 +334,7 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
         }
         use self::Terminator::*;
         match block.terminator {
+            // push any existing symbols that are used by the terminator
             Branch { ref cond, .. } => {
                 vars.push(cond.clone());
             }
@@ -350,7 +352,10 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
                 }
                 vars.push(pf.builder.clone());
             }
-            _ => {}
+            JumpBlock(_) => {}
+            JumpFunction(_) => {}
+            EndFunction => {}
+            Crash => {}
         }
         for var in &vars {
             if prog.funcs[func_id].locals.get(&var) == None {
@@ -360,6 +365,7 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
         }
         let mut inner_closure = HashSet::new();
         match block.terminator {
+            // make a recursive call for other functions referenced by the terminator
             ParallelFor(ref pf) => {
                 sir_param_correction_helper(prog, pf.body, env, &mut inner_closure);
                 sir_param_correction_helper(prog, pf.cont, env, &mut inner_closure);
@@ -367,7 +373,11 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
             JumpFunction(jump_func) => {
                 sir_param_correction_helper(prog, jump_func, env, &mut inner_closure);
             }
-            _ => {}       
+            Branch { .. } => {}
+            JumpBlock(_) => {}
+            ProgramReturn(_) => {}
+            EndFunction => {}
+            Crash => {}
         }
         for var in inner_closure {
             if prog.funcs[func_id].locals.get(&var) == None {
@@ -663,10 +673,8 @@ fn gen_expr(expr: &TypedExpr,
                 let cont_func = prog.add_func();
                 let cont_block = prog.funcs[cont_func].add_block();
                 let mut is_innermost = true;
-                body.traverse(&mut |ref e| {
-                    if let ExprKind::For { .. } = e.kind {
-                        is_innermost = false;
-                    }
+                body.traverse(&mut |ref e| if let ExprKind::For { .. } = e.kind {
+                    is_innermost = false;
                 });
                 prog.funcs[cur_func].blocks[cur_block].terminator = ParallelFor(ParallelForData {
                     data: pf_iters,
@@ -676,7 +684,7 @@ fn gen_expr(expr: &TypedExpr,
                     idx_arg: params[1].name.clone(),
                     body: body_func,
                     cont: cont_func,
-                    innermost: is_innermost
+                    innermost: is_innermost,
                 });
                 Ok((cont_func, cont_block, builder_sym))
             } else {
