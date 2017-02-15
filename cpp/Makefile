@@ -13,16 +13,19 @@ else
 endif
 
 
-all: parlib.bc vb.bc
+all: libpar.a 
 
-parlib.bc: parlib.cpp
-	${CLANG} ${CFLAGS} -c -emit-llvm parlib.cpp
+parlib.o: parlib.cpp
+	${CLANG} ${CFLAGS} -c $< -o $@ 
 
-vb.bc: vb.cpp
-	${CLANG} ${CFLAGS} -c -emit-llvm vb.cpp
+vb.o: vb.cpp
+	${CLANG} ${CFLAGS} -c $< -o $@
+
+libpar.a: parlib.o vb.o
+	ar rcs $@ $^
 
 clean:
-	rm -f *.bc
+	rm -f *.bc *.a *.o
 
 .phony: all
 

@@ -9,11 +9,6 @@
 #include "assert.h"
 #include "parlib.h"
 
-// Memory allocation functions for Weld.
-extern "C" void *weld_rt_malloc(int64_t run_id, size_t size);
-extern "C" void *weld_rt_realloc(int64_t run_id, void *data, size_t size);
-extern "C" void weld_rt_free(int64_t run_id, void *data);
-
 /*
 The Weld parallel runtime. When the comments refer to a "computation",
 this means a single complete execution of a Weld program.

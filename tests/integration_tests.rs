@@ -8,6 +8,19 @@ use weld::weld_rt_free;
 use weld::new_merger;
 use weld::get_merger_at_index;
 use weld::free_merger;
+use weld::my_id_public;
+use weld::set_result;
+use weld::get_result;
+use weld::get_nworkers;
+use weld::set_nworkers;
+use weld::get_runid;
+use weld::set_runid;
+use weld::pl_start_loop;
+use weld::execute;
+use weld::new_vb;
+use weld::new_piece;
+use weld::cur_piece;
+use weld::result_vb;
 
 fn mem_fns() {
     weld_rt_free(0, weld_rt_realloc(0, weld_rt_malloc(0, 16), 32));
@@ -18,6 +31,22 @@ fn merger_fns() {
     let ptr = new_merger(0, 4, 1);
     let merger_ptr = get_merger_at_index(ptr, 4, 0);
     free_merger(0, ptr);
+}
+
+fn parlib_fns() {
+    println!("{:p}", my_id_public as *const ());
+    println!("{:p}", set_result as *const ());
+    println!("{:p}", get_result as *const ());
+    println!("{:p}", get_nworkers as *const ());
+    println!("{:p}", set_nworkers as *const ());
+    println!("{:p}", get_runid as *const ());
+    println!("{:p}", set_runid as *const ());
+    println!("{:p}", pl_start_loop as *const ());
+    println!("{:p}", execute as *const ());
+    println!("{:p}", new_vb as *const ());
+    println!("{:p}", new_piece as *const ());
+    println!("{:p}", cur_piece as *const ());
+    println!("{:p}", result_vb as *const ());
 }
 
 fn basic_program() {
@@ -817,6 +846,7 @@ fn serial_parlib_test() {
 fn main() {
     mem_fns();
     merger_fns();
+    parlib_fns();
     basic_program();
     f64_cast();
     i32_cast();

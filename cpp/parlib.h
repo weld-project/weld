@@ -1,6 +1,11 @@
 #ifndef _PARLIB_H_
 #define _PARLIB_H_
 
+// Memory allocation functions for Weld.
+extern "C" void *weld_rt_malloc(int64_t run_id, size_t size);
+extern "C" void *weld_rt_realloc(int64_t run_id, void *data, size_t size);
+extern "C" void weld_rt_free(int64_t run_id, void *data);
+
 // work item
 struct work_t {
   // parameters for the task function
@@ -58,6 +63,20 @@ struct work_t {
 
 typedef struct work_t work_t;
 
+struct vec_piece {
+  void *data;
+  int64_t size;
+  int64_t capacity;
+  int64_t *nest_idxs;
+  int64_t *nest_task_ids;
+  int32_t nest_len;
+};
+
+typedef struct {
+  void *data;
+  int64_t size;
+} vec_output;
+
 extern "C" {
   int32_t my_id_public();
   void set_result(void *res);
@@ -69,6 +88,11 @@ extern "C" {
   void pl_start_loop(work_t *w, void *body_data, void *cont_data, void (*body)(work_t*),
     void (*cont)(work_t*), int64_t lower, int64_t upper, int32_t grain_size);
   void execute(void (*run)(work_t*), void* data);
+
+  void *new_vb(int64_t elem_size, int64_t starting_cap);
+  void new_piece(void *v, work_t *w);
+  vec_piece *cur_piece(void *v, int32_t my_id);
+  
 }
 
 #ifdef __APPLE__
