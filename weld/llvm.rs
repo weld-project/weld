@@ -1175,18 +1175,15 @@ impl LlvmGenerator {
                                         let elem_tmp = self.load_var(llvm_symbol(value).as_str(),
                                                       &elem_ty_str,
                                                       ctx)?;
-                                        let threadid_tmp =
-                                            self.load_var("%cur.threadIdPtr", "i32", ctx)?;
                                         let bld_ptr_raw = ctx.var_ids.next();
                                         let bld_ptr = ctx.var_ids.next();
                                         ctx.code
                                             .add(format!("{} = call i8* {}.merge_ptr({} {}, i32 \
-                                                          {})",
+                                                          %cur.tid)",
                                                          bld_ptr_raw,
                                                          bld_prefix,
                                                          bld_ty_str,
-                                                         bld_tmp,
-                                                         threadid_tmp));
+                                                         bld_tmp));
                                         ctx.code.add(format!("{} = bitcast i8* {} to {}*",
                                                              bld_ptr,
                                                              bld_ptr_raw,
@@ -1206,7 +1203,7 @@ impl LlvmGenerator {
                                                       &bld_ty_str,
                                                       ctx)?;
                                         let elem_tmp = self.load_var(llvm_symbol(value).as_str(),
-                                                      &elem_ty_str,
+                                                      &merge_ty_str,
                                                       ctx)?;
                                         let index_var = ctx.var_ids.next();
                                         let elem_var = ctx.var_ids.next();
@@ -1218,19 +1215,16 @@ impl LlvmGenerator {
                                                              elem_var,
                                                              merge_ty_str,
                                                              elem_tmp));
-                                        let threadid_tmp =
-                                            self.load_var("%cur.threadIdPtr", "i32", ctx)?;
                                         let bld_ptr_raw = ctx.var_ids.next();
                                         let bld_ptr = ctx.var_ids.next();
                                         ctx.code
                                             .add(format!("{} = call i8* {}.merge_ptr({} {}, i64 \
-                                                          {}, i32 {})",
+                                                          {}, i32 %cur.tid)",
                                                          bld_ptr_raw,
                                                          bld_prefix,
                                                          bld_ty_str,
                                                          bld_tmp,
-                                                         index_var,
-                                                         threadid_tmp));
+                                                         index_var));
                                         ctx.code.add(format!("{} = bitcast i8* {} to {}*",
                                                              bld_ptr,
                                                              bld_ptr_raw,
@@ -1385,8 +1379,44 @@ impl LlvmGenerator {
                                                              llvm_symbol(output)));
                                     }
                                     // TODO(shoumik)
-                                    VecMerger(_, _) => {
-                                        panic!("unimplemented");
+                                    VecMerger(ref t, ref op) => {
+                                        let bld_ty_str = try!(self.llvm_type(&bld_ty)).to_string();
+                                        let bld_prefix = format!("@{}",
+                                                                 bld_ty_str.replace("%", ""));
+                                        let res_ty_str = try!(self.llvm_type(&res_ty)).to_string();
+                                        let bld_tmp =
+                                            try!(self.load_var(llvm_symbol(builder).as_str(),
+                                                               &bld_ty_str,
+                                                               ctx));
+
+                                        // Get the first builder.
+                                        ctx.code
+                                            .add(format!("%bldPtrFirst = call {bld_ty_str} \
+                                                          {bld_prefix}.\
+                                                          getPtrIndexed({bld_ty_str} \
+                                                          {bld_tmp}, i32 0)",
+                                                         bld_ty_str = bld_ty_str,
+                                                         bld_prefix = bld_prefix,
+                                                         bld_tmp = bld_tmp));
+                                        ctx.code.add(format!("
+                                        \
+                                                              %bldPtrCasted = bitcast \
+                                                              {bld_ty_str} %bldPtrFirst to \
+                                                              {res_ty_str}*",
+                                                             bld_ty_str = bld_ty_str,
+                                                             res_ty_str = res_ty_str.clone()));
+
+                                        ctx.code.add(format!("
+                                                              \
+                                                              %first = load {res_ty_str}* \
+                                                              %bldPtrCasted
+                                                              \
+                                                              store {res_ty_str} %first, \
+                                                              {res_ty_str}* {output}
+                                                              \
+                                                              ",
+                                                             res_ty_str = res_ty_str.clone(),
+                                                             output = llvm_symbol(output)));
                                     }
                                 }
                             }
@@ -2055,6 +2085,38 @@ fn simple_for_merger_loop() {
     let result = unsafe { (*result_raw).clone() };
     let output = 20;
     assert_eq!(result, output);
+    weld_run_free(-1);
+}
+
+#[test]
+fn simple_for_vecmerger_loop() {
+    #[derive(Clone)]
+    #[allow(dead_code)]
+    struct Vec {
+        data: *const i32,
+        len: i64,
+    }
+
+    let code = "|x:vec[i32]| result(for(x, vecmerger[i32,+](x), |b,i,e| b))";
+    let module = compile_program(&parse_program(code).unwrap()).unwrap();
+    let input = [1, 1, 1, 1, 1];
+    let args = Vec {
+        data: &input as *const i32,
+        len: input.len() as i64,
+    };
+    let inp = Box::new(WeldInputArgs {
+        input: &args as *const Vec as i64,
+        nworkers: 1,
+        run_id: 7,
+    });
+    let ptr = Box::into_raw(inp) as i64;
+
+    let result_raw = module.run(ptr) as *const Vec;
+    let result = unsafe { (*result_raw).clone() };
+    assert_eq!(result.len, input.len() as i64);
+    for i in 0..(result.len as isize) {
+        assert_eq!(unsafe { *result.data.offset(i) }, input[i as usize]);
+    }
     weld_run_free(-1);
 }
 
