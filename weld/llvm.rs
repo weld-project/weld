@@ -1809,14 +1809,14 @@ fn basic_program() {
     let inp = Box::new(WeldInputArgs {
         input: 0,
         nworkers: 1,
-        run_id: 0,
+        run_id: 1,
     });
     let ptr = Box::into_raw(inp) as i64;
 
     let result = module.run(ptr) as *const i32;
     let result = unsafe { *result };
     assert_eq!(result, 42);
-    weld_run_free(-1);
+    weld_run_free(1);
 }
 
 #[test]
@@ -1827,14 +1827,14 @@ fn f64_cast() {
     let inp = Box::new(WeldInputArgs {
         input: 0,
         nworkers: 1,
-        run_id: 0,
+        run_id: 2,
     });
     let ptr = Box::into_raw(inp) as i64;
 
     let result = module.run(ptr) as *const f64;
     let result = unsafe { *result };
     assert_eq!(result, 42.0);
-    weld_run_free(-1);
+    weld_run_free(2);
 }
 
 #[test]
@@ -1844,14 +1844,14 @@ fn i32_cast() {
     let inp = Box::new(WeldInputArgs {
         input: 0,
         nworkers: 1,
-        run_id: 0,
+        run_id: 3,
     });
     let ptr = Box::into_raw(inp) as i64;
 
     let result = module.run(ptr) as *const i32;
     let result = unsafe { *result };
     assert_eq!(result, 1);
-    weld_run_free(-1);
+    weld_run_free(3);
 }
 
 #[test]
@@ -1862,14 +1862,14 @@ fn program_with_args() {
     let inp = Box::new(WeldInputArgs {
         input: &input as *const i32 as i64,
         nworkers: 1,
-        run_id: 0,
+        run_id: 4,
     });
     let ptr = Box::into_raw(inp) as i64;
 
     let result = module.run(ptr) as *const i32;
     let result = unsafe { *result };
     assert_eq!(result, 42);
-    weld_run_free(-1);
+    weld_run_free(4);
 }
 
 #[test]
@@ -1880,14 +1880,14 @@ fn let_statement() {
     let inp = Box::new(WeldInputArgs {
         input: &input as *const i32 as i64,
         nworkers: 1,
-        run_id: 0,
+        run_id: 5,
     });
     let ptr = Box::into_raw(inp) as i64;
 
     let result = module.run(ptr) as *const i32;
     let result = unsafe { *result };
     assert_eq!(result, 44);
-    weld_run_free(-1);
+    weld_run_free(5);
 }
 
 #[test]
@@ -1898,14 +1898,14 @@ fn if_statement() {
     let inp = Box::new(WeldInputArgs {
         input: &input as *const i32 as i64,
         nworkers: 1,
-        run_id: 0,
+        run_id: 6,
     });
 
     let ptr = Box::into_raw(inp) as i64;
     let result = module.run(ptr) as *const i32;
     let result = unsafe { *result };
     assert_eq!(result, 3);
-    weld_run_free(-1);
+    weld_run_free(6);
 }
 
 #[test]
@@ -1916,20 +1916,20 @@ fn comparison() {
     let inp = Box::new(WeldInputArgs {
         input: &input as *const i32 as i64,
         nworkers: 1,
-        run_id: 0,
+        run_id: 7,
     });
     let ptr = Box::into_raw(inp) as i64;
 
     let result = module.run(ptr) as *const i32;
     let result = unsafe { *result };
     assert_eq!(result, 10);
-    weld_run_free(-1);
+    weld_run_free(7);
 
     input = 20;
     let result = module.run(ptr) as *const i32;
     let result = unsafe { *result };
     assert_eq!(result, 20);
-    weld_run_free(-1);
+    weld_run_free(7);
 }
 
 #[test]
@@ -1958,7 +1958,7 @@ fn simple_vector_lookup() {
     let inp = Box::new(WeldInputArgs {
         input: &args as *const Args as i64,
         nworkers: 1,
-        run_id: 0,
+        run_id: 8,
     });
     let ptr = Box::into_raw(inp) as i64;
 
@@ -1966,7 +1966,7 @@ fn simple_vector_lookup() {
     let result = unsafe { (*result_raw).clone() };
     let output = input[3];
     assert_eq!(output, result);
-    weld_run_free(-1);
+    weld_run_free(8);
 }
 
 #[test]
@@ -1997,7 +1997,7 @@ fn simple_for_appender_loop() {
     let inp = Box::new(WeldInputArgs {
         input: &args as *const Args as i64,
         nworkers: 1,
-        run_id: 0,
+        run_id: 9,
     });
     let ptr = Box::into_raw(inp) as i64;
 
@@ -2007,7 +2007,7 @@ fn simple_for_appender_loop() {
     for i in 0..(result.len as isize) {
         assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
     }
-    weld_run_free(-1);
+    weld_run_free(9);
 }
 
 #[test]
@@ -2036,7 +2036,7 @@ fn simple_parallel_for_appender_loop() {
     let inp = Box::new(WeldInputArgs {
         input: &args as *const WeldVec as i64,
         nworkers: 4,
-        run_id: 0,
+        run_id: 10,
     });
     let ptr = Box::into_raw(inp) as i64;
 
@@ -2046,7 +2046,7 @@ fn simple_parallel_for_appender_loop() {
     for i in 0..(result.len as isize) {
         assert_eq!(unsafe { *result.data.offset(i) }, i as i64)
     }
-    weld_run_free(-1);
+    weld_run_free(10);
 }
 
 #[test]
@@ -2077,7 +2077,7 @@ fn simple_for_merger_loop() {
     let inp = Box::new(WeldInputArgs {
         input: &args as *const Args as i64,
         nworkers: 1,
-        run_id: 0,
+        run_id: 11,
     });
     let ptr = Box::into_raw(inp) as i64;
 
@@ -2085,7 +2085,7 @@ fn simple_for_merger_loop() {
     let result = unsafe { (*result_raw).clone() };
     let output = 20;
     assert_eq!(result, output);
-    weld_run_free(-1);
+    weld_run_free(11);
 }
 
 #[test]
@@ -2107,7 +2107,7 @@ fn simple_for_vecmerger_loop() {
     let inp = Box::new(WeldInputArgs {
         input: &args as *const Vec as i64,
         nworkers: 1,
-        run_id: 7,
+        run_id: 12,
     });
     let ptr = Box::into_raw(inp) as i64;
 
@@ -2117,7 +2117,40 @@ fn simple_for_vecmerger_loop() {
     for i in 0..(result.len as isize) {
         assert_eq!(unsafe { *result.data.offset(i) }, input[i as usize]);
     }
-    weld_run_free(-1);
+    weld_run_free(12);
+}
+
+#[test]
+fn simple_for_vecmerger_loop_2() {
+    #[derive(Clone)]
+    #[allow(dead_code)]
+    struct Vec {
+        data: *const i32,
+        len: i64,
+    }
+
+    let code = "|x:vec[i32]| result(for(x, vecmerger[i32,+](x), |b,i,e| merge(b, {i,e*7})))";
+    let module = compile_program(&parse_program(code).unwrap()).unwrap();
+    let input = [1, 1, 1, 1, 1];
+    let args = Vec {
+        data: &input as *const i32,
+        len: input.len() as i64,
+    };
+    let inp = Box::new(WeldInputArgs {
+        input: &args as *const Vec as i64,
+        nworkers: 1,
+        run_id: 25,
+    });
+    let ptr = Box::into_raw(inp) as i64;
+
+    let result_raw = module.run(ptr) as *const Vec;
+    let result = unsafe { (*result_raw).clone() };
+    assert_eq!(result.len, input.len() as i64);
+    for i in 0..(result.len as isize) {
+        assert_eq!(unsafe { *result.data.offset(i) },
+                   input[i as usize] + input[i as usize] * 7);
+    }
+    weld_run_free(25);
 }
 
 #[test]
@@ -2164,7 +2197,7 @@ fn simple_for_dictmerger_loop() {
     let inp = Box::new(WeldInputArgs {
         input: &args as *const Args as i64,
         nworkers: 1,
-        run_id: 0,
+        run_id: 13,
     });
     let ptr = Box::into_raw(inp) as i64;
 
@@ -2186,7 +2219,7 @@ fn simple_for_dictmerger_loop() {
         assert_eq!(success, true);
     }
     assert_eq!(result.len, output_keys.len() as i64);
-    weld_run_free(-1);
+    weld_run_free(13);
 }
 
 #[test]
@@ -2238,7 +2271,7 @@ fn simple_parallel_for_dictmerger_loop() {
     let inp = Box::new(WeldInputArgs {
         input: &args as *const Args as i64,
         nworkers: 4,
-        run_id: 0,
+        run_id: 14,
     });
     let ptr = Box::into_raw(inp) as i64;
 
@@ -2260,7 +2293,7 @@ fn simple_parallel_for_dictmerger_loop() {
         assert_eq!(success, true);
     }
     assert_eq!(result.len, output_keys.len() as i64);
-    weld_run_free(-1);
+    weld_run_free(14);
 }
 
 #[test]
@@ -2296,7 +2329,7 @@ fn simple_dict_lookup() {
     let inp = Box::new(WeldInputArgs {
         input: &args as *const Args as i64,
         nworkers: 1,
-        run_id: 0,
+        run_id: 15,
     });
     let ptr = Box::into_raw(inp) as i64;
 
@@ -2304,7 +2337,7 @@ fn simple_dict_lookup() {
     let result = unsafe { (*result_raw).clone() };
     let output = 4;
     assert_eq!(output, result);
-    weld_run_free(-1);
+    weld_run_free(15);
 }
 
 #[test]
@@ -2333,7 +2366,7 @@ fn simple_length() {
     let inp = Box::new(WeldInputArgs {
         input: &args as *const Args as i64,
         nworkers: 1,
-        run_id: 0,
+        run_id: 16,
     });
     let ptr = Box::into_raw(inp) as i64;
 
@@ -2341,7 +2374,7 @@ fn simple_length() {
     let result = unsafe { (*result_raw).clone() };
     let output = 5;
     assert_eq!(output, result);
-    weld_run_free(-1);
+    weld_run_free(16);
 }
 
 #[test]
@@ -2370,7 +2403,7 @@ fn filter_length() {
     let inp = Box::new(WeldInputArgs {
         input: &args as *const Args as i64,
         nworkers: 1,
-        run_id: 0,
+        run_id: 17,
     });
     let ptr = Box::into_raw(inp) as i64;
 
@@ -2378,7 +2411,7 @@ fn filter_length() {
     let result = unsafe { (*result_raw).clone() };
     let output = 3;
     assert_eq!(output, result);
-    weld_run_free(-1);
+    weld_run_free(17);
 }
 
 #[test]
@@ -2408,7 +2441,7 @@ fn flat_map_length() {
     let inp = Box::new(WeldInputArgs {
         input: &args as *const Args as i64,
         nworkers: 1,
-        run_id: 0,
+        run_id: 18,
     });
     let ptr = Box::into_raw(inp) as i64;
 
@@ -2416,7 +2449,7 @@ fn flat_map_length() {
     let result = unsafe { (*result_raw).clone() };
     let output = 25;
     assert_eq!(output, result);
-    weld_run_free(-1);
+    weld_run_free(18);
 }
 
 #[test]
@@ -2448,7 +2481,7 @@ fn if_for_loop() {
     let inp = Box::new(WeldInputArgs {
         input: &args as *const Args as i64,
         nworkers: 1,
-        run_id: 0,
+        run_id: 19,
     });
     let ptr = Box::into_raw(inp) as i64;
 
@@ -2458,7 +2491,7 @@ fn if_for_loop() {
     for i in 0..(result.len as isize) {
         assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
     }
-    weld_run_free(-1);
+    weld_run_free(19);
 
     let args = Args {
         x: Vec {
@@ -2470,7 +2503,7 @@ fn if_for_loop() {
     let inp = Box::new(WeldInputArgs {
         input: &args as *const Args as i64,
         nworkers: 1,
-        run_id: 0,
+        run_id: 20,
     });
     let ptr = Box::into_raw(inp) as i64;
 
@@ -2480,7 +2513,7 @@ fn if_for_loop() {
     for i in 0..(result.len as isize) {
         assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
     }
-    weld_run_free(-1);
+    weld_run_free(20);
 }
 
 #[test]
@@ -2515,7 +2548,7 @@ fn map_zip_loop() {
     let inp = Box::new(WeldInputArgs {
         input: &args as *const Args as i64,
         nworkers: 1,
-        run_id: 0,
+        run_id: 21,
     });
     let ptr = Box::into_raw(inp) as i64;
 
@@ -2525,7 +2558,7 @@ fn map_zip_loop() {
     for i in 0..(result.len as isize) {
         assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
     }
-    weld_run_free(-1);
+    weld_run_free(21);
 }
 
 #[test]
@@ -2561,7 +2594,7 @@ fn iters_for_loop() {
     let inp = Box::new(WeldInputArgs {
         input: &args as *const Args as i64,
         nworkers: 1,
-        run_id: 0,
+        run_id: 22,
     });
     let ptr = Box::into_raw(inp) as i64;
 
@@ -2571,7 +2604,7 @@ fn iters_for_loop() {
     for i in 0..(result.len as isize) {
         assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
     }
-    weld_run_free(-1);
+    weld_run_free(22);
 }
 
 #[test]
@@ -2594,12 +2627,12 @@ fn serial_parlib_test() {
     let inp = Box::new(WeldInputArgs {
         input: &args as *const WeldVec as i64,
         nworkers: 1,
-        run_id: 0,
+        run_id: 23,
     });
     let ptr = Box::into_raw(inp) as i64;
 
     let result_raw = module.run(ptr) as *const i32;
     let result = unsafe { (*result_raw).clone() };
     assert_eq!(result, size);
-    weld_run_free(-1);
+    weld_run_free(23);
 }
