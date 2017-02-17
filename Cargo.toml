@@ -2,6 +2,7 @@
 name = "weld"
 version = "0.1.0"
 authors = ["Matei Zaharia <matei.zaharia@gmail.com>"]
+build = "build.rs"
 
 [dependencies]
 lazy_static = "0.2.1"
@@ -23,4 +24,8 @@ path = "weld/bin/repl.rs"
 [[bench]]
 name = "benches"
 path = "benches/driver.rs"
+harness = false
+
+[[test]]
+name = "integration_tests"
 harness = false

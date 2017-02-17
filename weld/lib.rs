@@ -81,6 +81,59 @@ extern "C" {
     pub fn free(ptr: *mut c_void);
 }
 
+#[repr(C)]
+pub struct work_t {
+    data: *mut c_void,
+    lower: i64,
+    upper: i64,
+    cur_idx: i64,
+    full_task: i32,
+    nest_idxs: *mut i64,
+    nest_task_ids: *mut i64,
+    nest_len: i32,
+    task_id: i64,
+    fp: extern fn(*mut work_t),
+    cont: *mut work_t,
+    deps: i32,
+    continued: i32
+}
+
+#[repr(C)]
+pub struct vec_piece {
+    data: *mut c_void,
+    size: i64,
+    capacity: i64,
+    nest_idxs: *mut i64,
+    nest_task_ids: *mut i64,
+    nest_len: i32
+}
+
+#[repr(C)]
+pub struct vec_output {
+    data: *mut c_void,
+    size: i64
+}
+
+#[link(name = "par", kind = "static")]
+extern "C" {
+    pub fn my_id_public() -> i32;
+    pub fn set_result(res: *mut c_void);
+    pub fn get_result() -> *mut c_void;
+    pub fn get_nworkers() -> i32;
+    pub fn set_nworkers(n: i32);
+    pub fn get_runid() -> i64;
+    pub fn set_runid(rid: i64);
+    pub fn pl_start_loop(w: *mut work_t, body_data: *mut c_void, cont_data: *mut c_void,
+        body: extern fn(*mut work_t), cont: extern fn(*mut work_t), lower: i64, upper: i64,
+        grain_size: i32);
+    pub fn execute(run: extern fn(*mut work_t), data: *mut c_void);
+
+    pub fn new_vb(elem_size: i64, starting_cap: i64) -> *mut c_void;
+    pub fn new_piece(v: *mut c_void, w: *mut work_t);
+    pub fn cur_piece(v: *mut c_void, my_id: i32) -> *mut vec_piece;
+    pub fn result_vb(v: *mut c_void) -> vec_output;
+}
+
 pub struct WeldError {
     code: i32,
     message: CString,

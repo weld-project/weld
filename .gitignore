@@ -5,6 +5,8 @@ Cargo.lock
 *.ll
 *.bc
 *.pyc
+*.o
+*.a
 rusty-tags.vi
 run
 notes
