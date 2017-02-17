@@ -372,11 +372,31 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             Ok(changed)
         }
 
-        NewBuilder => {
-            match expr.ty {
-                Unknown | Builder(_) => Ok(false),
-                _ => weld_err!("Wrong type ascribed to NewBuilder"),
+        NewBuilder(ref mut e) => {
+            let mut changed = match expr.ty {
+                Unknown | Builder(_) => false,
+                _ => return weld_err!("Wrong type ascribed to NewBuilder"),
+            };
+            // For builders with arguments (Just VecMerger for now).
+            if let Builder(ref bty) = expr.ty {
+                match *bty {
+                    VecMerger(ref elem, _, _) => {
+                        match *e {
+                            None => {
+                                return weld_err!("Expected argument for NewBuilder of type \
+                                                  VecMerger");
+                            } 
+                            Some(ref mut arg) => {
+                                changed |= try!(push_type(&mut arg.ty,
+                                                          &Vector(elem.clone()),
+                                                          "NewBuilder(VecMerger)"));
+                            }
+                        }
+                    }
+                    _ => {} // No arguments for the builder.
+                }
             }
+            Ok(changed)
         }
 
         If { ref mut cond, ref mut on_true, ref mut on_false } => {
@@ -550,6 +570,43 @@ fn push_type(dest: &mut PartialType, src: &PartialType, context: &str) -> WeldRe
                     Ok(changed)
                 }
                 _ => weld_err!("Mismatched types in DictMerger, {}", context),
+            }
+        }
+
+        Builder(VecMerger(ref mut dest_elem_ty, ref mut dest_merge_ty, _)) => {
+            match *src {
+                Builder(VecMerger(ref src_elem_ty, ref src_merge_ty, _)) => {
+                    let mut changed = false;
+                    changed |=
+                        try!(push_type(dest_elem_ty.as_mut(), src_elem_ty.as_ref(), context));
+                    changed |=
+                        try!(push_type(dest_merge_ty.as_mut(), src_merge_ty.as_ref(), context));
+
+                    // For now, any commutative-merge builder only supports either a single scalar
+                    // or a struct of scalars.
+                    match **dest_elem_ty {
+                        Struct(ref tys) => {
+                            for ty in tys {
+                                match *ty {
+                                    Scalar(_) => {}
+                                    _ => {
+                                        return weld_err!("Commutative merge builders only \
+                                                          support structs with scalars");
+                                    }
+                                }
+                            }
+                        }
+                        Scalar(_) => {}
+                        _ => {
+                            return weld_err!("Commutative merge builders only support scalars \
+                                              or structs of scalars");
+                        }
+                    }
+                    Ok(changed)
+
+
+                }
+                _ => weld_err!("Mismatched types in VecMerger, {}", context),
             }
         }
 

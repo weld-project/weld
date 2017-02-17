@@ -680,7 +680,7 @@ impl<'t> Parser<'t> {
                     elem_type = try!(self.type_());
                     try!(self.consume(TCloseBracket));
                 }
-                let mut expr = expr_box(NewBuilder);
+                let mut expr = expr_box(NewBuilder(None));
                 expr.ty = Builder(Appender(Box::new(elem_type)));
                 Ok(expr)
             }
@@ -707,7 +707,7 @@ impl<'t> Parser<'t> {
                     }
                 };
                 self.consume(TCloseBracket)?;
-                let mut expr = expr_box(NewBuilder);
+                let mut expr = expr_box(NewBuilder(None));
                 expr.ty = Builder(Merger(Box::new(elem_type), bin_op));
                 Ok(expr)
             }
@@ -732,16 +732,48 @@ impl<'t> Parser<'t> {
                         bin_op = Multiply;
                     }
                     _ => {
-                        return weld_err!("expected commutative binary op in dictMerger");
+                        return weld_err!("expected commutative binary op in dictmerger");
                     }
                 }
                 try!(self.consume(TCloseBracket));
-                let mut expr = expr_box(NewBuilder);
+                let mut expr = expr_box(NewBuilder(None));
                 expr.ty = Builder(DictMerger(Box::new(key_type.clone()),
                                              Box::new(value_type.clone()),
                                              Box::new(Struct(vec![key_type.clone(),
                                                                   value_type.clone()])),
                                              bin_op));
+                Ok(expr)
+            }
+
+            TVecMerger => {
+                let elem_type: PartialType;
+                let bin_op: _;
+                try!(self.consume(TOpenBracket));
+                elem_type = try!(self.type_());
+                try!(self.consume(TComma));
+                // VecMerger right now supports Plus and Times only.
+                match *self.peek() {
+                    TPlus => {
+                        self.consume(TPlus)?;
+                        bin_op = Add;
+                    }
+                    TTimes => {
+                        self.consume(TTimes)?;
+                        bin_op = Multiply;
+                    }
+                    _ => {
+                        return weld_err!("expected commutative binary op in vecmerger");
+                    }
+                }
+                try!(self.consume(TCloseBracket));
+                try!(self.consume(TOpenParen));
+                let expr = try!(self.expr());
+                try!(self.consume(TCloseParen));
+                let mut expr = expr_box(NewBuilder(Some(expr)));
+                expr.ty = Builder(VecMerger(Box::new(elem_type.clone()),
+                                            Box::new(Struct(vec![Scalar(ScalarKind::I64),
+                                                                 elem_type.clone()])),
+                                            bin_op));
                 Ok(expr)
             }
 

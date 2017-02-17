@@ -24,6 +24,8 @@ pub enum PartialBuilderKind {
     Appender(Box<PartialType>),
     // Key type, value type, merge type (struct of <key,value> pairs)
     DictMerger(Box<PartialType>, Box<PartialType>, Box<PartialType>, BinOpKind),
+    // elem type, merge type (struct of <index, value> pairs
+    VecMerger(Box<PartialType>, Box<PartialType>, BinOpKind),
     Merger(Box<PartialType>, BinOpKind),
 }
 
@@ -61,6 +63,9 @@ impl PartialType {
                                                          Box::new(try!(vt.to_type())),
                                                          op)))
             }
+            Builder(VecMerger(ref elem, _, op)) => {
+                Ok(Type::Builder(BuilderKind::VecMerger(Box::new(try!(elem.to_type())), op)))
+            }
             Builder(Merger(ref elem, op)) => {
                 Ok(Type::Builder(BuilderKind::Merger(Box::new(try!(elem.to_type())), op)))
             }
@@ -93,6 +98,7 @@ impl PartialType {
             Dict(ref kt, ref vt) => kt.is_complete() && vt.is_complete(),
             Builder(Appender(ref elem)) => elem.is_complete(),
             Builder(DictMerger(ref kt, ref vt, _, _)) => kt.is_complete() && vt.is_complete(),
+            Builder(VecMerger(ref elem, _, _)) => elem.is_complete(),
             Builder(Merger(ref elem, _)) => elem.is_complete(),
             Struct(ref elems) => elems.iter().all(|e| e.is_complete()),
             Function(ref params, ref res) => {
@@ -108,6 +114,7 @@ impl PartialBuilderKind {
         match *self {
             Appender(ref elem) => *elem.clone(),
             DictMerger(_, _, ref mt, _) => *mt.clone(),
+            VecMerger(_, ref mt, _) => *mt.clone(),
             Merger(ref elem, _) => *elem.clone(),
         }
     }
@@ -117,6 +124,7 @@ impl PartialBuilderKind {
         match *self {
             Appender(ref mut elem) => elem.as_mut(),
             DictMerger(_, _, ref mut mt, _) => mt.as_mut(),
+            VecMerger(_, ref mut mt, _) => mt.as_mut(),
             Merger(ref mut elem, _) => elem.as_mut(),
         }
     }
@@ -127,6 +135,7 @@ impl PartialBuilderKind {
         match *self {
             Appender(ref elem) => Vector((*elem).clone()),
             DictMerger(ref kt, ref vt, _, _) => Dict((*kt).clone(), (*vt).clone()),
+            VecMerger(ref elem, _, _) => Vector((*elem).clone()),
             Merger(ref elem, _) => *elem.clone(),
         }
     }
@@ -160,7 +169,6 @@ impl PartialExpr {
             Literal(F32Literal(v)) => Literal(F32Literal(v)),
             Literal(F64Literal(v)) => Literal(F64Literal(v)),
             Ident(ref name) => Ident(name.clone()),
-            NewBuilder => NewBuilder,
 
             BinOp { kind, ref left, ref right } => {
                 BinOp {
@@ -278,6 +286,13 @@ impl PartialExpr {
                     func: try!(typed_box(func)),
                     params: try!(params),
                 }
+            }
+            NewBuilder(ref arg) => {
+                let typed_arg = match *arg {
+                    Some(ref e) => Some(try!(typed_box(e))),
+                    None => None,
+                };
+                NewBuilder(typed_arg)
             }
         };
 

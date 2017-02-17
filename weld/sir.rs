@@ -37,7 +37,11 @@ pub enum Statement {
     AssignLiteral { output: Symbol, value: LiteralKind },
     Merge { builder: Symbol, value: Symbol },
     Res { output: Symbol, builder: Symbol },
-    NewBuilder { output: Symbol, ty: Type },
+    NewBuilder {
+        output: Symbol,
+        arg: Option<Symbol>,
+        ty: Type,
+    },
     MakeStruct {
         output: Symbol,
         elems: Vec<(Symbol, Type)>,
@@ -191,7 +195,14 @@ impl fmt::Display for Statement {
             }
             Merge { ref builder, ref value } => write!(f, "merge {} {}", builder, value),
             Res { ref output, ref builder } => write!(f, "{} = result {}", output, builder),
-            NewBuilder { ref output, ref ty } => write!(f, "{} = new {}", output, print_type(ty)),
+            NewBuilder { ref output, ref arg, ref ty } => {
+                let arg_str = if let Some(ref a) = *arg {
+                    a.to_string()
+                } else {
+                    "".to_string()
+                };
+                write!(f, "{} = new {}({})", output, print_type(ty), arg_str)
+            }
             MakeStruct { ref output, ref elems } => {
                 write!(f,
                        "{} = new {}",
@@ -339,7 +350,11 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
                 Res { ref builder, .. } => vars.push(builder.clone()),
                 GetField { ref value, .. } => vars.push(value.clone()),
                 AssignLiteral { .. } => {}
-                NewBuilder { .. } => {}
+                NewBuilder { ref arg, .. } => {
+                    if let Some(ref a) = *arg {
+                        vars.push(a.clone());
+                    }
+                }
                 MakeStruct { ref elems, .. } => {
                     for elem in elems {
                         vars.push(elem.0.clone());
@@ -586,10 +601,17 @@ fn gen_expr(expr: &TypedExpr,
             Ok((cur_func, cur_block, res_sym))
         }
 
-        ExprKind::NewBuilder => {
+        ExprKind::NewBuilder(ref arg) => {
+            let (cur_func, cur_block, arg_sym) = if let Some(ref a) = *arg {
+                let (cur_func, cur_block, arg_sym) = gen_expr(a, prog, cur_func, cur_block)?;
+                (cur_func, cur_block, Some(arg_sym))
+            } else {
+                (cur_func, cur_block, None)
+            };
             let res_sym = prog.add_local(&expr.ty, cur_func);
             prog.funcs[cur_func].blocks[cur_block].add_statement(NewBuilder {
                 output: res_sym.clone(),
+                arg: arg_sym,
                 ty: expr.ty.clone(),
             });
             Ok((cur_func, cur_block, res_sym))
