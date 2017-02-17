@@ -246,7 +246,7 @@ pub fn fuse_loops_horizontal(expr: &mut Expr<Type>) {
                                     common_data = Some(iters2.clone());
                                 }
                                 if iters2 == common_data.as_ref().unwrap() { 
-                                    if let NewBuilder = bldr2.kind {
+                                    if let NewBuilder(_) = bldr2.kind {
                                         if let Builder(ref kind) = bldr2.ty {
                                             if let Appender(_) = *kind {
                                                 if let Lambda{params: ref args, ref body} = lambda.kind {
@@ -335,7 +335,7 @@ pub fn fuse_loops_horizontal(expr: &mut Expr<Type>) {
                         ty: Vector(Box::new(merge_type.clone())),
                         kind: Res{builder: Box::new(Expr{
                             ty: builder_type.clone(),
-                            kind: For{iters: common_data.unwrap(), builder: Box::new(Expr{ty: builder_type.clone(), kind: NewBuilder}), func: Box::new(new_func)}
+                            kind: For{iters: common_data.unwrap(), builder: Box::new(Expr{ty: builder_type.clone(), kind: NewBuilder(None)}), func: Box::new(new_func)}
                         })},
                     };
 
@@ -368,7 +368,7 @@ pub fn fuse_loops_vertical(expr: &mut Expr<Type>) {
                     if let For { iters: ref iters2, builder: ref bldr2, func: ref lambda } =
                         res_bldr.kind {
                         if iters2.iter().all(|ref i| consumes_all(&i)) {
-                            if let NewBuilder = bldr2.kind {
+                            if let NewBuilder(_) = bldr2.kind {
                                 if let Builder(ref kind) = bldr2.ty {
                                     if let Appender(_) = *kind {
                                         let e = Expr {

@@ -34,6 +34,7 @@ fn merger_fns() {
     free_merger(0, ptr);
 }
 
+/// Required to prevent symbols from being optimized out during compilation.
 fn parlib_fns() {
     println!("{:p}", my_id_public as *const ());
     println!("{:p}", set_result as *const ());
@@ -367,6 +368,100 @@ fn simple_for_merger_loop() {
     let result = unsafe { (*result_raw).clone() };
     let output = 20;
     assert_eq!(result, output);
+    weld_run_free(-1);
+}
+
+fn simple_for_vecmerger_loop() {
+    #[derive(Clone)]
+    #[allow(dead_code)]
+    struct Vec {
+        data: *const i32,
+        len: i64,
+    }
+    let code = "|x:vec[i32]| result(for(x, vecmerger[i32,+](x), |b,i,e| b))";
+    let module = compile_program(&parse_program(code).unwrap()).unwrap();
+    let input = [1, 1, 1, 1, 1];
+    let args = Vec {
+        data: &input as *const i32,
+        len: input.len() as i64,
+    };
+    let inp = Box::new(WeldInputArgs {
+        input: &args as *const Vec as i64,
+        nworkers: 1,
+        run_id: 0,
+    });
+    let ptr = Box::into_raw(inp) as i64;
+
+    let result_raw = module.run(ptr) as *const Vec;
+    let result = unsafe { (*result_raw).clone() };
+    assert_eq!(result.len, input.len() as i64);
+    for i in 0..(result.len as isize) {
+        assert_eq!(unsafe { *result.data.offset(i) }, input[i as usize]);
+    }
+    weld_run_free(-1);
+}
+
+fn simple_for_vecmerger_loop_2() {
+    #[derive(Clone)]
+    #[allow(dead_code)]
+    struct Vec {
+        data: *const i32,
+        len: i64,
+    }
+
+    let code = "|x:vec[i32]| result(for(x, vecmerger[i32,+](x), |b,i,e| merge(b, {i,e*7})))";
+    let module = compile_program(&parse_program(code).unwrap()).unwrap();
+    let input = [1, 1, 1, 1, 1];
+    let args = Vec {
+        data: &input as *const i32,
+        len: input.len() as i64,
+    };
+    let inp = Box::new(WeldInputArgs {
+        input: &args as *const Vec as i64,
+        nworkers: 1,
+        run_id: 0,
+    });
+    let ptr = Box::into_raw(inp) as i64;
+
+    let result_raw = module.run(ptr) as *const Vec;
+    let result = unsafe { (*result_raw).clone() };
+    assert_eq!(result.len, input.len() as i64);
+    for i in 0..(result.len as isize) {
+        assert_eq!(unsafe { *result.data.offset(i) },
+                   input[i as usize] + input[i as usize] * 7);
+    }
+    weld_run_free(-1);
+}
+
+fn parallel_for_vecmerger_loop() {
+    #[derive(Clone)]
+    #[allow(dead_code)]
+    struct Vec {
+        data: *const i32,
+        len: i64,
+    }
+
+    let code = "|x:vec[i32]| result(for(x, vecmerger[i32,+](x), |b,i,e| merge(b, {i,e*7})))";
+    let module = compile_program(&parse_program(code).unwrap()).unwrap();
+    let input = [1; 4096];
+    let args = Vec {
+        data: &input as *const i32,
+        len: input.len() as i64,
+    };
+    let inp = Box::new(WeldInputArgs {
+        input: &args as *const Vec as i64,
+        nworkers: 4,
+        run_id: 0,
+    });
+    let ptr = Box::into_raw(inp) as i64;
+
+    let result_raw = module.run(ptr) as *const Vec;
+    let result = unsafe { (*result_raw).clone() };
+    assert_eq!(result.len, input.len() as i64);
+    for i in 0..(result.len as isize) {
+        assert_eq!(unsafe { *result.data.offset(i) },
+                   input[i as usize] + input[i as usize] * 7);
+    }
     weld_run_free(-1);
 }
 
@@ -846,6 +941,11 @@ fn serial_parlib_test() {
 
 fn main() {
     let args: Vec<String> = env::args().collect();
+
+    println!("");
+    println!("running tests");
+    let mut passed = 0;
+
     let tests: Vec<(&str, fn())> =
         vec![("mem_fns", mem_fns),
              ("merger_fns", merger_fns),
@@ -862,6 +962,9 @@ fn main() {
              ("simple_parallel_for_appender_loop", simple_parallel_for_appender_loop),
              ("complex_parallel_for_appender_loop", complex_parallel_for_appender_loop),
              ("simple_for_merger_loop", simple_for_merger_loop),
+             ("simple_for_vecmerger_loop", simple_for_vecmerger_loop),
+             ("simple_for_vecmerger_loop_2", simple_for_vecmerger_loop_2),
+             ("parallel_for_vecmerger_loop", parallel_for_vecmerger_loop),
              ("simple_for_dictmerger_loop", simple_for_dictmerger_loop),
              ("simple_parallel_for_dictmerger_loop", simple_parallel_for_dictmerger_loop),
              ("simple_dict_lookup", simple_dict_lookup),
@@ -873,9 +976,6 @@ fn main() {
              ("iters_for_loop", iters_for_loop),
              ("serial_parlib_test", serial_parlib_test)];
 
-    println!("");
-    println!("running tests");
-    let mut passed = 0;
     for t in tests.iter() {
         match t.0 {
             // don't run these two, they exist only to make sure functions don't get optimized out

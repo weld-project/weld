@@ -8,6 +8,65 @@
 %$NAME = type { $ELEM*, i64 }           ; elements, size
 %$NAME.bld = type i8*
 
+; VecMerger
+%$NAME.vm.bld = type %$NAME*
+
+; Returns a pointer to builder data for index i (generally, i is the thread ID).
+define %$NAME.vm.bld @$NAME.vm.bld.getPtrIndexed(%$NAME.vm.bld %bldPtr, i32 %i) alwaysinline {
+  %mergerPtr = getelementptr %$NAME* null, i32 1
+  %mergerSize = ptrtoint %$NAME* %mergerPtr to i64
+  %asPtr = bitcast %$NAME.vm.bld %bldPtr to i8*
+  %rawPtr = call i8* @get_merger_at_index(i8* %asPtr, i64 %mergerSize, i32 %i)
+  %ptr = bitcast i8* %rawPtr to %$NAME.vm.bld
+  ret %$NAME.vm.bld %ptr
+}
+
+; Initialize and return a new vecmerger with the given initial vector.
+define %$NAME.vm.bld @$NAME.vm.bld.new(%$NAME %vec) {
+  %nworkers = call i32 @get_nworkers()
+  %runId = call i64 @get_runid()
+  %structSizePtr = getelementptr %$NAME* null, i32 1
+  %structSize = ptrtoint %$NAME* %structSizePtr to i64
+
+  %bldPtr = call i8* @new_merger(i64 %runId, i64 %structSize, i32 %nworkers)
+  %typedPtr = bitcast i8* %bldPtr to %$NAME.vm.bld
+
+  ; Copy the initial value into the first vector
+  %first = call %$NAME.vm.bld @$NAME.vm.bld.getPtrIndexed(%$NAME.vm.bld %typedPtr, i32 0)
+  %cloned = call %$NAME @$NAME.clone(%$NAME %vec)
+  %capacity = call i64 @$NAME.size(%$NAME %vec)
+  store %$NAME %cloned, %$NAME.vm.bld %first
+  br label %entry
+
+entry:
+  %cond = icmp ult i32 1, %nworkers
+  br i1 %cond, label %body, label %done
+
+body:
+  %i = phi i32 [ 1, %entry ], [ %i2, %body ]
+  %vecPtr = call %$NAME* @$NAME.vm.bld.getPtrIndexed(%$NAME.vm.bld %typedPtr, i32 %i)
+  %newVec = call %$NAME @$NAME.new(i64 %capacity)
+  call void @$NAME.zero(%$NAME %newVec)
+  store %$NAME %newVec, %$NAME* %vecPtr
+  %i2 = add i32 %i, 1
+  %cond2 = icmp ult i32 %i2, %nworkers
+  br i1 %cond2, label %body, label %done
+
+done:
+  ret %$NAME.vm.bld %typedPtr
+}
+
+; Returns a pointer to the value an element should be merged into.
+; The caller should perform the merge operation on the contents of this pointer
+; and then store the resulting value back.
+define i8* @$NAME.vm.bld.merge_ptr(%$NAME.vm.bld %bldPtr, i64 %index, i32 %workerId) {
+  %bldPtrLocal = call %$NAME* @$NAME.vm.bld.getPtrIndexed(%$NAME.vm.bld %bldPtr, i32 %workerId)
+  %vec = load %$NAME* %bldPtrLocal
+  %elem = call $ELEM* @$NAME.at(%$NAME %vec, i64 %index)
+  %elemPtrRaw = bitcast $ELEM* %elem to i8*
+  ret i8* %elemPtrRaw
+}
+
 ; Initialize and return a new vector with the given size.
 define %$NAME @$NAME.new(i64 %size) {
   %elemSizePtr = getelementptr $ELEM* null, i32 1
@@ -19,6 +78,19 @@ define %$NAME @$NAME.new(i64 %size) {
   %1 = insertvalue %$NAME undef, $ELEM* %elements, 0
   %2 = insertvalue %$NAME %1, i64 %size, 1
   ret %$NAME %2
+}
+
+; Zeroes a vector's underlying buffer.
+define void @$NAME.zero(%$NAME %v) {
+  %elements = extractvalue %$NAME %v, 0
+  %size = extractvalue %$NAME %v, 1
+  %bytes = bitcast $ELEM* %elements to i8*
+
+  %elemSizePtr = getelementptr $ELEM* null, i32 1
+  %elemSize = ptrtoint $ELEM* %elemSizePtr to i64
+  %allocSize = mul i64 %elemSize, %size
+  call void @llvm.memset.p0i8.i64(i8* %bytes, i8 0, i64 %allocSize, i32 8, i1 0)
+  ret void
 }
 
 ; Clone a vector.
@@ -157,6 +229,11 @@ define i64 @$NAME.bld.hash(%$NAME.bld %bld) {
   ret i64 0
 }
 
+; Dummy hash function; this is needed for structs that use these vecbuilders as fields.
+define i64 @$NAME.vm.bld.hash(%$NAME.vm.bld %bld) {
+  ret i64 0
+}
+
 ; Compare two vectors lexicographically.
 define i32 @$NAME.cmp(%$NAME %a, %$NAME %b) {
 entry:
@@ -194,5 +271,10 @@ done:
 
 ; Dummy comparison function; this is needed for structs that use these vecbuilders as fields.
 define i32 @$NAME.bld.cmp(%$NAME.bld %bld1, %$NAME.bld %bld2) {
+  ret i32 -1
+}
+
+; Dummy comparison function; this is needed for structs that use these vecmergers as fields.
+define i32 @$NAME.vm.bld.cmp(%$NAME.vm.bld %bld1, %$NAME.vm.bld %bld2) {
   ret i32 -1
 }

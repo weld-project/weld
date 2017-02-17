@@ -78,7 +78,10 @@ impl fmt::Display for ScalarKind {
 pub enum BuilderKind {
     Appender(Box<Type>),
     Merger(Box<Type>, BinOpKind),
+    /// key_type, value_type, binop
     DictMerger(Box<Type>, Box<Type>, BinOpKind),
+    /// elem_type, binop
+    VecMerger(Box<Type>, BinOpKind),
 }
 
 pub trait TypeBounds: Clone + PartialEq {}
@@ -146,7 +149,7 @@ pub enum ExprKind<T: TypeBounds> {
         func: Box<Expr<T>>,
         params: Vec<Expr<T>>,
     },
-    NewBuilder, // TODO: this may need to take a parameter
+    NewBuilder(Option<Box<Expr<T>>>),
     For {
         iters: Vec<Iter<T>>,
         builder: Box<Expr<T>>,
@@ -282,8 +285,15 @@ impl<T: TypeBounds> Expr<T> {
                     res.extend(params.iter());
                     res
                 }
+                NewBuilder(ref opt) => {
+                    if let Some(ref e) = *opt {
+                        vec![e.as_ref()]
+                    } else {
+                        vec![]
+                    }
+                }
                 // Explicitly list types instead of doing _ => ... to remember to add new types.
-                Literal(_) | Ident(_) | NewBuilder => vec![],
+                Literal(_) | Ident(_) => vec![],
             }
             .into_iter()
     }
@@ -331,8 +341,15 @@ impl<T: TypeBounds> Expr<T> {
                     res.extend(params.iter_mut());
                     res
                 }
+                NewBuilder(ref mut opt) => {
+                    if let Some(ref mut e) = *opt {
+                        vec![e.as_mut()]
+                    } else {
+                        vec![]
+                    }
+                }
                 // Explicitly list types instead of doing _ => ... to remember to add new types.
-                Literal(_) | Ident(_) | NewBuilder => vec![],
+                Literal(_) | Ident(_) => vec![],
             }
             .into_iter()
     }
@@ -381,7 +398,7 @@ impl<T: TypeBounds> Expr<T> {
                         Ok(false)
                     }
                 }
-                (&NewBuilder, &NewBuilder) => Ok(true),
+                (&NewBuilder(_), &NewBuilder(_)) => Ok(true),
                 (&MakeStruct { .. }, &MakeStruct { .. }) => Ok(true),
                 (&MakeVector { .. }, &MakeVector { .. }) => Ok(true),
                 (&Zip { .. }, &Zip { .. }) => Ok(true),
