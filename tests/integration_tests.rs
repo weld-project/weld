@@ -941,11 +941,6 @@ fn serial_parlib_test() {
 
 fn main() {
     let args: Vec<String> = env::args().collect();
-
-    println!("");
-    println!("running tests");
-    let mut passed = 0;
-
     let tests: Vec<(&str, fn())> =
         vec![("mem_fns", mem_fns),
              ("merger_fns", merger_fns),
@@ -976,6 +971,9 @@ fn main() {
              ("iters_for_loop", iters_for_loop),
              ("serial_parlib_test", serial_parlib_test)];
 
+    println!("");
+    println!("running tests");
+    let mut passed = 0;
     for t in tests.iter() {
         match t.0 {
             // don't run these two, they exist only to make sure functions don't get optimized out
@@ -987,8 +985,9 @@ fn main() {
                         continue;
                     }
                 }
+                print!("{} ... ", t.0);
                 t.1();
-                println!("{} ... \x1b[0;32mok\x1b[0m", t.0);
+                println!("\x1b[0;32mok\x1b[0m");
                 passed += 1;
             }
         }
