@@ -15,21 +15,7 @@ task ordering described in parlib.h. The data arrays of the sorted pieces are
 concatenated to produce the correct output vector.
 */
 
-// Memory allocation functions for Weld.
-extern "C" void *weld_rt_malloc(int64_t run_id, size_t size);
-extern "C" void *weld_rt_realloc(int64_t run_id, void *data, size_t size);
-extern "C" void weld_rt_free(int64_t run_id, void *data);
-
 using namespace std;
-
-struct vec_piece {
-  void *data;
-  int64_t size;
-  int64_t capacity;
-  int64_t *nest_idxs;
-  int64_t *nest_task_ids;
-  int32_t nest_len;
-};
 
 struct vec_builder {
   vector<vec_piece> pieces;
@@ -38,11 +24,6 @@ struct vec_builder {
   int64_t starting_cap;
   pthread_mutex_t lock;
 };
-
-typedef struct {
-  void *data;
-  int64_t size;
-} vec_output;
 
 static inline void print_piece(vec_piece vp) {
   for (int i = 0; i < vp.nest_len; i++) {

@@ -2,6 +2,7 @@
 name = "weld"
 version = "0.1.0"
 authors = ["Matei Zaharia <matei.zaharia@gmail.com>"]
+build = "build.rs"
 
 [dependencies]
 lazy_static = "0.2.1"

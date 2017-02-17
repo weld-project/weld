@@ -1,3 +1,4 @@
+use std::env;
 extern crate weld;
 use weld::llvm::*;
 use weld::parser::*;
@@ -8,6 +9,19 @@ use weld::weld_rt_free;
 use weld::new_merger;
 use weld::get_merger_at_index;
 use weld::free_merger;
+use weld::my_id_public;
+use weld::set_result;
+use weld::get_result;
+use weld::get_nworkers;
+use weld::set_nworkers;
+use weld::get_runid;
+use weld::set_runid;
+use weld::pl_start_loop;
+use weld::execute;
+use weld::new_vb;
+use weld::new_piece;
+use weld::cur_piece;
+use weld::result_vb;
 
 fn mem_fns() {
     weld_rt_free(0, weld_rt_realloc(0, weld_rt_malloc(0, 16), 32));
@@ -18,6 +32,22 @@ fn merger_fns() {
     let ptr = new_merger(0, 4, 1);
     let merger_ptr = get_merger_at_index(ptr, 4, 0);
     free_merger(0, ptr);
+}
+
+fn parlib_fns() {
+    println!("{:p}", my_id_public as *const ());
+    println!("{:p}", set_result as *const ());
+    println!("{:p}", get_result as *const ());
+    println!("{:p}", get_nworkers as *const ());
+    println!("{:p}", set_nworkers as *const ());
+    println!("{:p}", get_runid as *const ());
+    println!("{:p}", set_runid as *const ());
+    println!("{:p}", pl_start_loop as *const ());
+    println!("{:p}", execute as *const ());
+    println!("{:p}", new_vb as *const ());
+    println!("{:p}", new_piece as *const ());
+    println!("{:p}", cur_piece as *const ());
+    println!("{:p}", result_vb as *const ());
 }
 
 fn basic_program() {
@@ -815,28 +845,49 @@ fn serial_parlib_test() {
 }
 
 fn main() {
-    mem_fns();
-    merger_fns();
-    basic_program();
-    f64_cast();
-    i32_cast();
-    program_with_args();
-    let_statement();
-    if_statement();
-    comparison();
-    simple_vector_lookup();
-    simple_for_appender_loop();
-    simple_parallel_for_appender_loop();
-    complex_parallel_for_appender_loop();
-    simple_for_merger_loop();
-    simple_for_dictmerger_loop();
-    simple_parallel_for_dictmerger_loop();
-    simple_dict_lookup();
-    simple_length();
-    filter_length();
-    flat_map_length();
-    if_for_loop();
-    map_zip_loop();
-    iters_for_loop();
-    serial_parlib_test();
+    let args: Vec<String> = env::args().collect();
+    let tests: Vec<(&str, fn())> = vec![
+        ("mem_fns", mem_fns),
+        ("merger_fns", merger_fns),
+        ("parlib_fns", parlib_fns),
+        ("basic_program", basic_program),
+        ("f64_cast", f64_cast),
+        ("i32_cast", i32_cast),
+        ("program_with_args", program_with_args),
+        ("let_statement", let_statement),
+        ("if_statement", if_statement),
+        ("comparison", comparison),
+        ("simple_vector_lookup", simple_vector_lookup),
+        ("simple_for_appender_loop", simple_for_appender_loop),
+        ("simple_parallel_for_appender_loop", simple_parallel_for_appender_loop),
+        ("complex_parallel_for_appender_loop", complex_parallel_for_appender_loop),
+        ("simple_for_merger_loop", simple_for_merger_loop),
+        ("simple_for_dictmerger_loop", simple_for_dictmerger_loop),
+        ("simple_parallel_for_dictmerger_loop", simple_parallel_for_dictmerger_loop),
+        ("simple_dict_lookup", simple_dict_lookup),
+        ("simple_length", simple_length),
+        ("filter_length", filter_length),
+        ("flat_map_length", flat_map_length),
+        ("if_for_loop", if_for_loop),
+        ("map_zip_loop", map_zip_loop),
+        ("iters_for_loop", iters_for_loop),
+        ("serial_parlib_test", serial_parlib_test)
+    ];
+
+    for t in tests.iter() {
+        match t.0 {
+            // don't run these two, they exist only to make sure functions don't get optimized out
+            "merger_fns" => {},
+            "parlib_fns" => {},
+            _ => {
+                if args.len() > 1 {
+                    if !t.0.contains(args[1].as_str()) {
+                        continue;
+                    }
+                }
+                t.1();
+                println!("{} ... ok", t.0);
+            }
+        }
+    }
 }
