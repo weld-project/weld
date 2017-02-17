@@ -941,6 +941,11 @@ fn serial_parlib_test() {
 
 fn main() {
     let args: Vec<String> = env::args().collect();
+
+    println!("");
+    println!("running tests");
+    let mut passed = 0;
+
     let tests: Vec<(&str, fn())> =
         vec![("mem_fns", mem_fns),
              ("merger_fns", merger_fns),
@@ -983,8 +988,15 @@ fn main() {
                     }
                 }
                 t.1();
-                println!("{} ... ok", t.0);
+                println!("{} ... \x1b[0;32mok\x1b[0m", t.0);
+                passed += 1;
             }
         }
     }
+
+    println!("");
+    println!("test result: \x1b[0;32mok\x1b[0m. {} passed; 0 failed; {} ignored; 0 measured",
+             passed,
+             tests.len() - passed - 2); // - 2 to ignore merger_fns and parlib_fns
+    println!("");
 }
