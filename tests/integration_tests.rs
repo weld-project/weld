@@ -846,39 +846,41 @@ fn serial_parlib_test() {
 
 fn main() {
     let args: Vec<String> = env::args().collect();
-    let tests: Vec<(&str, fn())> = vec![
-        ("mem_fns", mem_fns),
-        ("merger_fns", merger_fns),
-        ("parlib_fns", parlib_fns),
-        ("basic_program", basic_program),
-        ("f64_cast", f64_cast),
-        ("i32_cast", i32_cast),
-        ("program_with_args", program_with_args),
-        ("let_statement", let_statement),
-        ("if_statement", if_statement),
-        ("comparison", comparison),
-        ("simple_vector_lookup", simple_vector_lookup),
-        ("simple_for_appender_loop", simple_for_appender_loop),
-        ("simple_parallel_for_appender_loop", simple_parallel_for_appender_loop),
-        ("complex_parallel_for_appender_loop", complex_parallel_for_appender_loop),
-        ("simple_for_merger_loop", simple_for_merger_loop),
-        ("simple_for_dictmerger_loop", simple_for_dictmerger_loop),
-        ("simple_parallel_for_dictmerger_loop", simple_parallel_for_dictmerger_loop),
-        ("simple_dict_lookup", simple_dict_lookup),
-        ("simple_length", simple_length),
-        ("filter_length", filter_length),
-        ("flat_map_length", flat_map_length),
-        ("if_for_loop", if_for_loop),
-        ("map_zip_loop", map_zip_loop),
-        ("iters_for_loop", iters_for_loop),
-        ("serial_parlib_test", serial_parlib_test)
-    ];
+    let tests: Vec<(&str, fn())> =
+        vec![("mem_fns", mem_fns),
+             ("merger_fns", merger_fns),
+             ("parlib_fns", parlib_fns),
+             ("basic_program", basic_program),
+             ("f64_cast", f64_cast),
+             ("i32_cast", i32_cast),
+             ("program_with_args", program_with_args),
+             ("let_statement", let_statement),
+             ("if_statement", if_statement),
+             ("comparison", comparison),
+             ("simple_vector_lookup", simple_vector_lookup),
+             ("simple_for_appender_loop", simple_for_appender_loop),
+             ("simple_parallel_for_appender_loop", simple_parallel_for_appender_loop),
+             ("complex_parallel_for_appender_loop", complex_parallel_for_appender_loop),
+             ("simple_for_merger_loop", simple_for_merger_loop),
+             ("simple_for_dictmerger_loop", simple_for_dictmerger_loop),
+             ("simple_parallel_for_dictmerger_loop", simple_parallel_for_dictmerger_loop),
+             ("simple_dict_lookup", simple_dict_lookup),
+             ("simple_length", simple_length),
+             ("filter_length", filter_length),
+             ("flat_map_length", flat_map_length),
+             ("if_for_loop", if_for_loop),
+             ("map_zip_loop", map_zip_loop),
+             ("iters_for_loop", iters_for_loop),
+             ("serial_parlib_test", serial_parlib_test)];
 
+    println!("");
+    println!("running tests");
+    let mut passed = 0;
     for t in tests.iter() {
         match t.0 {
             // don't run these two, they exist only to make sure functions don't get optimized out
-            "merger_fns" => {},
-            "parlib_fns" => {},
+            "merger_fns" => {}
+            "parlib_fns" => {}
             _ => {
                 if args.len() > 1 {
                     if !t.0.contains(args[1].as_str()) {
@@ -886,8 +888,15 @@ fn main() {
                     }
                 }
                 t.1();
-                println!("{} ... ok", t.0);
+                println!("{} ... \x1b[0;32mok\x1b[0m", t.0);
+                passed += 1;
             }
         }
     }
+
+    println!("");
+    println!("test result: \x1b[0;32mok\x1b[0m. {} passed; 0 failed; {} ignored; 0 measured",
+             passed,
+             tests.len() - passed - 2); // - 2 to ignore merger_fns and parlib_fns
+    println!("");
 }
