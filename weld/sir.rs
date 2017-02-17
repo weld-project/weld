@@ -38,6 +38,10 @@ pub enum Statement {
     Merge { builder: Symbol, value: Symbol },
     Res { output: Symbol, builder: Symbol },
     NewBuilder { output: Symbol, ty: Type },
+    MakeStruct {
+        output: Symbol,
+        elems: Vec<(Symbol, Type)>,
+    },
     GetField {
         output: Symbol,
         value: Symbol,
@@ -188,6 +192,12 @@ impl fmt::Display for Statement {
             Merge { ref builder, ref value } => write!(f, "merge {} {}", builder, value),
             Res { ref output, ref builder } => write!(f, "{} = result {}", output, builder),
             NewBuilder { ref output, ref ty } => write!(f, "{} = new {}", output, print_type(ty)),
+            MakeStruct { ref output, ref elems } => {
+                write!(f,
+                       "{} = new {}",
+                       output,
+                       join("{", ",", "}", elems.iter().map(|e| e.0.name.clone())))
+            }
             GetField { ref output, ref value, index } => {
                 write!(f, "{} = {}.{}", output, value, index)
             }
@@ -330,6 +340,11 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
                 GetField { ref value, .. } => vars.push(value.clone()),
                 AssignLiteral { .. } => {}
                 NewBuilder { .. } => {}
+                MakeStruct { ref elems, .. } => {
+                    for elem in elems {
+                        vars.push(elem.0.clone());
+                    }
+                }
             }
         }
         use self::Terminator::*;
@@ -580,6 +595,26 @@ fn gen_expr(expr: &TypedExpr,
             Ok((cur_func, cur_block, res_sym))
         }
 
+        ExprKind::MakeStruct { ref elems } => {
+            let mut syms = vec![];
+            let (mut cur_func, mut cur_block, mut sym) =
+                gen_expr(&elems[0], prog, cur_func, cur_block)?;
+            syms.push((sym, elems[0].ty.clone()));
+            for elem in elems.iter().skip(1) {
+                let r = gen_expr(elem, prog, cur_func, cur_block)?;
+                cur_func = r.0;
+                cur_block = r.1;
+                sym = r.2;
+                syms.push((sym, elem.ty.clone()));
+            }
+            let res_sym = prog.add_local(&expr.ty, cur_func);
+            prog.funcs[cur_func].blocks[cur_block].add_statement(MakeStruct {
+                output: res_sym.clone(),
+                elems: syms,
+            });
+            Ok((cur_func, cur_block, res_sym))
+        }
+
         ExprKind::GetField { ref expr, index } => {
             let (cur_func, cur_block, struct_sym) = gen_expr(expr, prog, cur_func, cur_block)?;
             let field_ty = match expr.ty {
@@ -694,4 +729,17 @@ fn gen_expr(expr: &TypedExpr,
 
         _ => weld_err!("Unsupported expression: {}", print_expr(expr)),
     }
+}
+
+fn join<T: Iterator<Item = String>>(start: &str, sep: &str, end: &str, strings: T) -> String {
+    let mut res = String::new();
+    res.push_str(start);
+    for (i, s) in strings.enumerate() {
+        if i > 0 {
+            res.push_str(sep);
+        }
+        res.push_str(&s);
+    }
+    res.push_str(end);
+    res
 }
