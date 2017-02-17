@@ -1172,18 +1172,15 @@ impl LlvmGenerator {
                                         let elem_tmp = self.load_var(llvm_symbol(value).as_str(),
                                                       &elem_ty_str,
                                                       ctx)?;
-                                        let threadid_tmp =
-                                            self.load_var("%cur.threadIdPtr", "i32", ctx)?;
                                         let bld_ptr_raw = ctx.var_ids.next();
                                         let bld_ptr = ctx.var_ids.next();
                                         ctx.code
                                             .add(format!("{} = call i8* {}.merge_ptr({} {}, i32 \
-                                                          {})",
+                                                          %cur.tid)",
                                                          bld_ptr_raw,
                                                          bld_prefix,
                                                          bld_ty_str,
-                                                         bld_tmp,
-                                                         threadid_tmp));
+                                                         bld_tmp));
                                         ctx.code.add(format!("{} = bitcast i8* {} to {}*",
                                                              bld_ptr,
                                                              bld_ptr_raw,
