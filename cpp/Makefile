@@ -1,6 +1,7 @@
 OS = $(shell uname -s)
 LLVM_VERSION = 3.6
 
+CFLAGS = -Wall -fno-use-cxa-atexit
 ifeq (${OS}, Darwin)
   # OS X
   CLANG ?= /usr/local/bin/clang-${LLVM_VERSION}
@@ -11,15 +12,20 @@ else
   $(error Unsupported platform: ${OS})
 endif
 
-CFLAGS = -Wall -fno-use-cxa-atexit
 
-all: parlib.bc
+all: libpar.a 
 
-parlib.bc: parlib.cpp
-	${CLANG} ${CFLAGS} -c -emit-llvm parlib.cpp
+parlib.o: parlib.cpp
+	${CLANG} ${CFLAGS} -c $< -o $@ 
+
+vb.o: vb.cpp
+	${CLANG} ${CFLAGS} -c $< -o $@
+
+libpar.a: parlib.o vb.o
+	ar rcs $@ $^
 
 clean:
-	rm -f *.bc
+	rm -f *.bc *.a *.o
 
 .phony: all
 

@@ -4,41 +4,40 @@
 ; - NAME: name to give generated type, without % or @ prefix
 ; - ELEM: LLVM type of the element (e.g. i32 or f32).
 ; - ELEM_PREFIX: prefix for helper functions on ELEM (e.g. @i32 or @f32)
-; - OP: binary commutatitive merge operation (e.g. add or fadd)
 
-%$NAME.bld.inner = type { $ELEM }
-%$NAME.bld = type %$NAME.bld.inner*
+%$NAME.bld = type $ELEM*
+
+; Returns a pointer to builder data for index i (generally, i is the thread ID).
+define %$NAME.bld @$NAME.bld.getPtrIndexed(%$NAME.bld %bldPtr, i32 %i) alwaysinline {
+  %mergerPtr = getelementptr $ELEM* null, i32 1
+  %mergerSize = ptrtoint $ELEM* %mergerPtr to i64
+  %asPtr = bitcast %$NAME.bld %bldPtr to i8*
+  %rawPtr = call i8* @get_merger_at_index(i8* %asPtr, i64 %mergerSize, i32 %i)
+  %ptr = bitcast i8* %rawPtr to %$NAME.bld
+  ret %$NAME.bld %ptr
+}
 
 ; Initialize and return a new merger.
 define %$NAME.bld @$NAME.bld.new() {
-  %1 = insertvalue %$NAME.bld.inner undef, $ELEM 0, 0
-  %bldSizePtr = getelementptr %$NAME.bld.inner* null, i32 1
-  %bldSize = ptrtoint %$NAME.bld.inner* %bldSizePtr to i64
+  %bldSizePtr = getelementptr $ELEM* null, i32 1
+  %bldSize = ptrtoint $ELEM* %bldSizePtr to i64
   %runId = call i64 @get_runid()
-  %2 = call i8* @weld_rt_malloc(i64 %runId, i64 %bldSize)
-  %3 = bitcast i8* %2 to %$NAME.bld.inner*
-  store %$NAME.bld.inner %1, %$NAME.bld.inner* %3
-  ret %$NAME.bld %3
+  %nworkers = call i32 @get_nworkers()
+  %bldPtr = call i8* @new_merger(i64 %runId, i64 %bldSize, i32 %nworkers)
+  ; TODO(shoumik): For now, mergers can only be scalars. We may need to do some
+  ; kind of initialization here like in the dictmerger if we allow more complex
+  ; merger types.
+  %bldPtrTyped = bitcast i8* %bldPtr to %$NAME.bld
+  ret %$NAME.bld %bldPtrTyped
 }
 
-; Merge a value into a builder.
-define %$NAME.bld @$NAME.bld.merge(%$NAME.bld %bldPtr, $ELEM %value) {
-  %bld = load %$NAME.bld.inner* %bldPtr
-  %v = extractvalue %$NAME.bld.inner %bld, 0
-  %1 = $OP $ELEM %v, %value
-  %2 = insertvalue %$NAME.bld.inner %bld, $ELEM %1, 0
-  store %$NAME.bld.inner %2, %$NAME.bld.inner* %bldPtr
-  ret %$NAME.bld %bldPtr
-}
-
-; Merge a value into a builder.
-define $ELEM @$NAME.bld.result(%$NAME.bld %bldPtr) {
-  %bld = load %$NAME.bld.inner* %bldPtr
-  %v = extractvalue %$NAME.bld.inner %bld, 0
-  %toFree = bitcast %$NAME.bld.inner* %bldPtr to i8*
-  %runId = call i64 @get_runid()
-  call void @weld_rt_free(i64 %runId, i8* %toFree)
-  ret $ELEM %v
+; Returns a pointer to the value an element should be merged into.
+; The caller should perform the merge operation on the contents of this pointer
+; and then store the resulting value back.
+define i8* @$NAME.bld.merge_ptr(%$NAME.bld %bldPtr, i32 %workerId) {
+  %bldPtrLocal = call %$NAME.bld @$NAME.bld.getPtrIndexed(%$NAME.bld %bldPtr, i32 %workerId)
+  %bldPtrRaw = bitcast $ELEM* %bldPtrLocal to i8*
+  ret i8* %bldPtrRaw
 }
 
 ; Dummy hash function; this is needed for structs that use these mergers as fields.

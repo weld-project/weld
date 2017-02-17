@@ -103,7 +103,59 @@ extern "C" {
     pub fn free(ptr: *mut c_void);
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[repr(C)]
+pub struct work_t {
+    data: *mut c_void,
+    lower: i64,
+    upper: i64,
+    cur_idx: i64,
+    full_task: i32,
+    nest_idxs: *mut i64,
+    nest_task_ids: *mut i64,
+    nest_len: i32,
+    task_id: i64,
+    fp: extern fn(*mut work_t),
+    cont: *mut work_t,
+    deps: i32,
+    continued: i32
+}
+
+#[repr(C)]
+pub struct vec_piece {
+    data: *mut c_void,
+    size: i64,
+    capacity: i64,
+    nest_idxs: *mut i64,
+    nest_task_ids: *mut i64,
+    nest_len: i32
+}
+
+#[repr(C)]
+pub struct vec_output {
+    data: *mut c_void,
+    size: i64
+}
+
+#[link(name = "par", kind = "static")]
+extern "C" {
+    pub fn my_id_public() -> i32;
+    pub fn set_result(res: *mut c_void);
+    pub fn get_result() -> *mut c_void;
+    pub fn get_nworkers() -> i32;
+    pub fn set_nworkers(n: i32);
+    pub fn get_runid() -> i64;
+    pub fn set_runid(rid: i64);
+    pub fn pl_start_loop(w: *mut work_t, body_data: *mut c_void, cont_data: *mut c_void,
+        body: extern fn(*mut work_t), cont: extern fn(*mut work_t), lower: i64, upper: i64,
+        grain_size: i32);
+    pub fn execute(run: extern fn(*mut work_t), data: *mut c_void);
+
+    pub fn new_vb(elem_size: i64, starting_cap: i64) -> *mut c_void;
+    pub fn new_piece(v: *mut c_void, w: *mut work_t);
+    pub fn cur_piece(v: *mut c_void, my_id: i32) -> *mut vec_piece;
+    pub fn result_vb(v: *mut c_void) -> vec_output;
+}
+
 pub struct WeldError {
     errno: WeldRuntimeErrno,
     message: String,
@@ -215,6 +267,9 @@ pub extern "C" fn weld_module_compile(code: *const c_char,
         &mut **err
     };
 
+    if let Err(e) = easy_ll::load_library("target/debug/libweld") {
+        println!("load failed: {}", e.description());
+    }
     let module = llvm::compile_program(&parser::parse_program(code).unwrap());
     if let Err(ref e) = module {
         err.errno = WeldRuntimeErrno::CompileError;
@@ -252,6 +307,7 @@ pub extern "C" fn weld_module_run(module: *mut easy_ll::CompiledModule,
     // TODO(shoumik): Set the number of threads correctly
     let threads = 1;
     let my_run_id;
+
 
     // Put this in it's own scope so the mutexes are unlocked.
     {
@@ -468,6 +524,74 @@ pub fn weld_run_free(run_id: i64) {
         }
         guarded.remove(&run_id);
     }
+}
+
+fn num_cache_blocks(size: i64) -> i64 {
+    ((size + ((CACHE_LINE - 1) as i64)) >> CACHE_BITS) + 1
+}
+
+#[no_mangle]
+pub extern "C" fn new_merger(runid: i64, size: i64, nworkers: i32) -> *mut c_void {
+    let num_blocks = num_cache_blocks(size) as i64;
+    let total_blocks = num_blocks * (nworkers as i64) * (CACHE_LINE as i64);
+    let ptr = weld_rt_malloc(runid, total_blocks as libc::int64_t);
+    for i in 0..nworkers {
+        let merger_ptr = get_merger_at_index(ptr, size, i);
+        unsafe { libc::memset(merger_ptr, 0 as libc::c_int, size as usize) };
+    }
+    ptr
+}
+
+#[no_mangle]
+pub extern "C" fn get_merger_at_index(ptr: *mut c_void, size: i64, i: i32) -> *mut libc::c_void {
+    let ptr = ptr as *mut libc::uint8_t;
+    let ptr =
+        unsafe { (((ptr.offset((CACHE_LINE - 1) as isize)) as u64) & MASK) } as *mut libc::uint8_t;
+    let num_blocks = num_cache_blocks(size) as i64;
+    let offset = num_blocks * (i as i64) * (CACHE_LINE as i64);
+    let merger_ptr = unsafe { ptr.offset(offset as isize) } as *mut libc::c_void;
+    merger_ptr
+}
+
+#[no_mangle]
+pub extern "C" fn free_merger(runid: i64, ptr: *mut c_void) {
+    weld_rt_free(runid, ptr);
+}
+
+#[test]
+fn merger_fns() {
+    let runid = 0;
+    let nworkers = 4;
+    let size = 4;
+    let ptr = new_merger(runid, size, nworkers);
+    let ptr_u64 = ptr as u64;
+    let mut aligned_ptr = ptr_u64 >> CACHE_BITS;
+    // In case allocated ptr is not already cache-aligned, need next cache-aligned
+    // address.
+    if ptr_u64 % CACHE_LINE != 0 {
+        aligned_ptr += 1;
+    }
+    aligned_ptr = aligned_ptr << CACHE_BITS;
+    for i in 0..nworkers {
+        let offset = (num_cache_blocks(size) * (i as i64) * (CACHE_LINE as i64)) as isize;
+        let merger_ptr = unsafe { (aligned_ptr as *mut libc::uint8_t).offset(offset) };
+        unsafe { *(merger_ptr as *mut u32) = i as u32 };
+    }
+    for i in 0..nworkers {
+        let merger_ptr = get_merger_at_index(ptr, size, i);
+        let output = unsafe { *(merger_ptr as *mut u32) };
+        // Read value previously stored, make sure they match.
+        assert_eq!(output, i as u32);
+    }
+    free_merger(runid, ptr);
+}
+
+#[test]
+fn test_num_cache_blocks() {
+    assert_eq!(num_cache_blocks(4), 2);
+    assert_eq!(num_cache_blocks(8), 2);
+    assert_eq!(num_cache_blocks(64), 2);
+    assert_eq!(num_cache_blocks(65), 3);
 }
 
 #[cfg(test)]

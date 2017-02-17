@@ -30,6 +30,15 @@ define %$NAME @$NAME.new(i64 %capacity) {
   ret %$NAME %3
 }
 
+; Free dictionary
+define void @$NAME.free(%$NAME %dict) {
+  %runId = call i64 @get_runid()
+  %entries = extractvalue %$NAME %dict, 0
+  %bytes = bitcast %$NAME.entry* %entries to i8*
+  call void @weld_rt_free(i64 %runId, i8* %bytes)
+  ret void
+}
+
 ; Clone a dictionary.
 define %$NAME @$NAME.clone(%$NAME %dict) {
   %entries = extractvalue %$NAME %dict, 0

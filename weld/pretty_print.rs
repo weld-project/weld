@@ -38,6 +38,7 @@ impl PrintableType for Type {
             Builder(DictMerger(ref kt, ref vt, op)) => {
                 format!("dictmerger[{},{},{}]", kt.print(), vt.print(), op)
             }
+            Builder(VecMerger(ref elem, op)) => format!("vecmerger[{},{}]", elem.print(), op),
             Builder(Merger(ref t, op)) => format!("merger[{},{}]", t.print(), op),
         }
     }
@@ -68,6 +69,7 @@ impl PrintableType for PartialType {
             Builder(DictMerger(ref kt, ref vt, _, op)) => {
                 format!("dictmerger[{},{},{}]", kt.print(), vt.print(), op)
             }
+            Builder(VecMerger(ref elem, _, op)) => format!("vecmerger[{},{}]", elem.print(), op),
             Builder(Merger(ref t, op)) => format!("merger[{},{}]", t.print(), op),
         }
     }
@@ -189,7 +191,12 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>, typed: bool) -> String {
             res
         }
 
-        NewBuilder => expr.ty.print(),
+        NewBuilder(ref arg) => {
+            match *arg {
+                Some(ref e) => format!("{}({})", expr.ty.print(), print_expr_impl(e, typed)),
+                None => expr.ty.print(),
+            }
+        }
 
         Res { ref builder } => format!("result({})", print_expr_impl(builder, typed)),
 

@@ -23,7 +23,6 @@ pub enum Statement {
     },
     Cast {
         output: Symbol,
-        old_ty: Type,
         new_ty: Type,
         child: Symbol,
     },
@@ -32,18 +31,21 @@ pub enum Statement {
         child: Symbol,
         index: Symbol,
     },
-    ToVec {
-        output: Symbol,
-        old_ty: Type,
-        new_ty: Type,
-        child: Symbol,
-    },
+    ToVec { output: Symbol, child: Symbol },
     Length { output: Symbol, child: Symbol },
     Assign { output: Symbol, value: Symbol },
     AssignLiteral { output: Symbol, value: LiteralKind },
     Merge { builder: Symbol, value: Symbol },
     Res { output: Symbol, builder: Symbol },
-    NewBuilder { output: Symbol, ty: Type },
+    NewBuilder {
+        output: Symbol,
+        arg: Option<Symbol>,
+        ty: Type,
+    },
+    MakeStruct {
+        output: Symbol,
+        elems: Vec<(Symbol, Type)>,
+    },
     GetField {
         output: Symbol,
         value: Symbol,
@@ -68,6 +70,7 @@ pub struct ParallelForData {
     pub idx_arg: Symbol,
     pub body: FunctionId,
     pub cont: FunctionId,
+    pub innermost: bool,
 }
 
 /// A terminating statement inside a basic block.
@@ -178,13 +181,13 @@ impl fmt::Display for Statement {
                        left,
                        right)
             }
-            Cast { ref output, ref new_ty, ref child, .. } => {
+            Cast { ref output, ref new_ty, ref child } => {
                 write!(f, "{} = cast({}, {})", output, child, print_type(new_ty))
             }
             Lookup { ref output, ref child, ref index } => {
                 write!(f, "{} = lookup({}, {})", output, child, index)
             }
-            ToVec { ref output, ref child, .. } => write!(f, "{} = toVec({})", output, child),
+            ToVec { ref output, ref child } => write!(f, "{} = toVec({})", output, child),
             Length { ref output, ref child, .. } => write!(f, "{} = len({})", output, child),
             Assign { ref output, ref value } => write!(f, "{} = {}", output, value),
             AssignLiteral { ref output, ref value } => {
@@ -192,7 +195,20 @@ impl fmt::Display for Statement {
             }
             Merge { ref builder, ref value } => write!(f, "merge {} {}", builder, value),
             Res { ref output, ref builder } => write!(f, "{} = result {}", output, builder),
-            NewBuilder { ref output, ref ty } => write!(f, "{} = new {}", output, print_type(ty)),
+            NewBuilder { ref output, ref arg, ref ty } => {
+                let arg_str = if let Some(ref a) = *arg {
+                    a.to_string()
+                } else {
+                    "".to_string()
+                };
+                write!(f, "{} = new {}({})", output, print_type(ty), arg_str)
+            }
+            MakeStruct { ref output, ref elems } => {
+                write!(f,
+                       "{} = new {}",
+                       output,
+                       join("{", ",", "}", elems.iter().map(|e| e.0.name.clone())))
+            }
             GetField { ref output, ref value, index } => {
                 write!(f, "{} = {}.{}", output, value, index)
             }
@@ -214,13 +230,14 @@ impl fmt::Display for Terminator {
                 }
                 write!(f, "] ")?;
                 write!(f,
-                       "{} {} {} {} F{} F{}",
+                       "{} {} {} {} F{} F{} {}",
                        pf.builder,
                        pf.builder_arg,
                        pf.idx_arg,
                        pf.data_arg,
                        pf.body,
-                       pf.cont)?;
+                       pf.cont,
+                       pf.innermost)?;
                 Ok(())
             }
             JumpBlock(block) => write!(f, "jump B{}", block),
@@ -307,6 +324,7 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
         for statement in &block.statements {
             use self::Statement::*;
             match *statement {
+                // push any existing symbols that are used (but not assigned) by the statement
                 BinOp { ref left, ref right, .. } => {
                     vars.push(left.clone());
                     vars.push(right.clone());
@@ -332,11 +350,21 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
                 Res { ref builder, .. } => vars.push(builder.clone()),
                 GetField { ref value, .. } => vars.push(value.clone()),
                 AssignLiteral { .. } => {}
-                NewBuilder { .. } => {}
+                NewBuilder { ref arg, .. } => {
+                    if let Some(ref a) = *arg {
+                        vars.push(a.clone());
+                    }
+                }
+                MakeStruct { ref elems, .. } => {
+                    for elem in elems {
+                        vars.push(elem.0.clone());
+                    }
+                }
             }
         }
         use self::Terminator::*;
         match block.terminator {
+            // push any existing symbols that are used by the terminator
             Branch { ref cond, .. } => {
                 vars.push(cond.clone());
             }
@@ -354,7 +382,10 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
                 }
                 vars.push(pf.builder.clone());
             }
-            _ => {}
+            JumpBlock(_) => {}
+            JumpFunction(_) => {}
+            EndFunction => {}
+            Crash => {}
         }
         for var in &vars {
             if prog.funcs[func_id].locals.get(&var) == None {
@@ -364,6 +395,7 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
         }
         let mut inner_closure = HashSet::new();
         match block.terminator {
+            // make a recursive call for other functions referenced by the terminator
             ParallelFor(ref pf) => {
                 sir_param_correction_helper(prog, pf.body, env, &mut inner_closure);
                 sir_param_correction_helper(prog, pf.cont, env, &mut inner_closure);
@@ -371,7 +403,11 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
             JumpFunction(jump_func) => {
                 sir_param_correction_helper(prog, jump_func, env, &mut inner_closure);
             }
-            _ => {}       
+            Branch { .. } => {}
+            JumpBlock(_) => {}
+            ProgramReturn(_) => {}
+            EndFunction => {}
+            Crash => {}
         }
         for var in inner_closure {
             if prog.funcs[func_id].locals.get(&var) == None {
@@ -468,7 +504,6 @@ fn gen_expr(expr: &TypedExpr,
             let res_sym = prog.add_local(&expr.ty, cur_func);
             prog.funcs[cur_func].blocks[cur_block].add_statement(Cast {
                 output: res_sym.clone(),
-                old_ty: child_expr.ty.clone(),
                 new_ty: expr.ty.clone(),
                 child: child_sym,
             });
@@ -492,8 +527,6 @@ fn gen_expr(expr: &TypedExpr,
             let res_sym = prog.add_local(&expr.ty, cur_func);
             prog.funcs[cur_func].blocks[cur_block].add_statement(ToVec {
                 output: res_sym.clone(),
-                old_ty: child_expr.ty.clone(),
-                new_ty: expr.ty.clone(),
                 child: child_sym,
             });
             Ok((cur_func, cur_block, res_sym))
@@ -568,11 +601,38 @@ fn gen_expr(expr: &TypedExpr,
             Ok((cur_func, cur_block, res_sym))
         }
 
-        ExprKind::NewBuilder => {
+        ExprKind::NewBuilder(ref arg) => {
+            let (cur_func, cur_block, arg_sym) = if let Some(ref a) = *arg {
+                let (cur_func, cur_block, arg_sym) = gen_expr(a, prog, cur_func, cur_block)?;
+                (cur_func, cur_block, Some(arg_sym))
+            } else {
+                (cur_func, cur_block, None)
+            };
             let res_sym = prog.add_local(&expr.ty, cur_func);
             prog.funcs[cur_func].blocks[cur_block].add_statement(NewBuilder {
                 output: res_sym.clone(),
+                arg: arg_sym,
                 ty: expr.ty.clone(),
+            });
+            Ok((cur_func, cur_block, res_sym))
+        }
+
+        ExprKind::MakeStruct { ref elems } => {
+            let mut syms = vec![];
+            let (mut cur_func, mut cur_block, mut sym) =
+                gen_expr(&elems[0], prog, cur_func, cur_block)?;
+            syms.push((sym, elems[0].ty.clone()));
+            for elem in elems.iter().skip(1) {
+                let r = gen_expr(elem, prog, cur_func, cur_block)?;
+                cur_func = r.0;
+                cur_block = r.1;
+                sym = r.2;
+                syms.push((sym, elem.ty.clone()));
+            }
+            let res_sym = prog.add_local(&expr.ty, cur_func);
+            prog.funcs[cur_func].blocks[cur_block].add_statement(MakeStruct {
+                output: res_sym.clone(),
+                elems: syms,
             });
             Ok((cur_func, cur_block, res_sym))
         }
@@ -669,6 +729,10 @@ fn gen_expr(expr: &TypedExpr,
                 prog.funcs[body_end_func].blocks[body_end_block].terminator = EndFunction;
                 let cont_func = prog.add_func();
                 let cont_block = prog.funcs[cont_func].add_block();
+                let mut is_innermost = true;
+                body.traverse(&mut |ref e| if let ExprKind::For { .. } = e.kind {
+                    is_innermost = false;
+                });
                 prog.funcs[cur_func].blocks[cur_block].terminator = ParallelFor(ParallelForData {
                     data: pf_iters,
                     builder: builder_sym.clone(),
@@ -677,6 +741,7 @@ fn gen_expr(expr: &TypedExpr,
                     idx_arg: params[1].name.clone(),
                     body: body_func,
                     cont: cont_func,
+                    innermost: is_innermost,
                 });
                 Ok((cont_func, cont_block, builder_sym))
             } else {
@@ -686,4 +751,17 @@ fn gen_expr(expr: &TypedExpr,
 
         _ => weld_err!("Unsupported expression: {}", print_expr(expr)),
     }
+}
+
+fn join<T: Iterator<Item = String>>(start: &str, sep: &str, end: &str, strings: T) -> String {
+    let mut res = String::new();
+    res.push_str(start);
+    for (i, s) in strings.enumerate() {
+        if i > 0 {
+            res.push_str(sep);
+        }
+        res.push_str(&s);
+    }
+    res.push_str(end);
+    res
 }

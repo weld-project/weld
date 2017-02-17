@@ -145,14 +145,6 @@ pub fn compile_module(code: &str) -> Result<CompiledModule, LlvmError> {
         // Create an execution engine for the module and find its run function
         let engine = try!(create_exec_engine(module));
 
-        // TODO maybe make the set of libraries a parameter
-        #[allow(unused_must_use)]
-        {
-            Command::new("make").arg("-C").arg("cpp").output();
-        }
-        let pl_module = try!(parse_module_file(context, "cpp/parlib.bc"));
-        llvm::execution_engine::LLVMAddModule(engine, pl_module);
-
         result.engine = Some(engine);
         result.function = Some(try!(find_run_function(engine)));
 
