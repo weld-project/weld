@@ -118,7 +118,7 @@ static inline void finish_task(work_t *task) {
   // free all allocated memory as long as it is allocated with
   // `weld_rt_malloc` or `weld_rt_realloc`.
   if (weld_rt_get_errno(get_runid()) != 0) {
-    printf("Exiting upon errno value %d \n", my_id());
+    printf("%d exiting upon errno value %d \n", my_id(), weld_rt_get_errno(get_runid()));
     weld_abort_thread();
   }
 
