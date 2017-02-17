@@ -10,7 +10,7 @@
   {cond} = icmp ult i32 1, {nworkers}
   br i1 {cond}, label %{bodyLabel}, label %{doneLabel}
 {bodyLabel}:
-  {i} = phi i32 [ 0, %{entry} ], [ {i2}, %{copyDoneLabel} ]
+  {i} = phi i32 [ 1, %{entry} ], [ {i2}, %{copyDoneLabel} ]
   {vecPtr} = call {resType}* {bldPrefix}.getPtrIndexed({bldType} {typedPtr}, i32 {i})
   {curVec} = load {resType}* {vecPtr}
   br label %{copyEntryLabel}

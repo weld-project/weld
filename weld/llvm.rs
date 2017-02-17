@@ -1393,11 +1393,6 @@ impl LlvmGenerator {
                                                                  res_ty_str.replace("%", ""));
                                         // The element type
                                         let elem_ty_str = self.llvm_type(t)?.to_string();
-                                        // The merge type ({i64, elem_type})
-                                        let merge_ty = Struct(vec![Scalar(ScalarKind::I64),
-                                                                   *t.clone()]);
-                                        let merge_ty_str = self.llvm_type(&merge_ty)?
-                                            .to_string();
                                         // The builder we operate on.
                                         let bld_ptr =
                                             try!(self.load_var(llvm_symbol(builder).as_str(),
@@ -1467,7 +1462,7 @@ impl LlvmGenerator {
                                                 bldType = bld_ty_str,
                                                 bldPrefix = bld_prefix));
 
-                                        try!(self.gen_merge(elem_ptr,
+                                        try!(self.gen_merge(merge_ptr,
                                                             merge_value,
                                                             elem_ty_str,
                                                             op,
@@ -1868,68 +1863,3 @@ fn types() {
     let struct2 = parse_type("{i32,bool}").unwrap().to_type().unwrap();
     assert_eq!(gen.llvm_type(&struct2).unwrap(), "%s1");
 }
-
-#[test]
-fn simple_for_vecmerger_loop() {
-    #[derive(Clone)]
-    #[allow(dead_code)]
-    struct Vec {
-        data: *const i32,
-        len: i64,
-    }
-    let code = "|x:vec[i32]| result(for(x, vecmerger[i32,+](x), |b,i,e| b))";
-    let module = compile_program(&parse_program(code).unwrap()).unwrap();
-    let input = [1, 1, 1, 1, 1];
-    let args = Vec {
-        data: &input as *const i32,
-        len: input.len() as i64,
-    };
-    let inp = Box::new(WeldInputArgs {
-        input: &args as *const Vec as i64,
-        nworkers: 1,
-        run_id: 12,
-    });
-    let ptr = Box::into_raw(inp) as i64;
-
-    let result_raw = module.run(ptr) as *const Vec;
-    let result = unsafe { (*result_raw).clone() };
-    assert_eq!(result.len, input.len() as i64);
-    for i in 0..(result.len as isize) {
-        assert_eq!(unsafe { *result.data.offset(i) }, input[i as usize]);
-    }
-    weld_run_free(12);
-}
-
-#[test]
-fn simple_for_vecmerger_loop_2() {
-    #[derive(Clone)]
-    #[allow(dead_code)]
-    struct Vec {
-        data: *const i32,
-        len: i64,
-    }
-
-    let code = "|x:vec[i32]| result(for(x, vecmerger[i32,+](x), |b,i,e| merge(b, {i,e*7})))";
-    let module = compile_program(&parse_program(code).unwrap()).unwrap();
-    let input = [1, 1, 1, 1, 1];
-    let args = Vec {
-        data: &input as *const i32,
-        len: input.len() as i64,
-    };
-    let inp = Box::new(WeldInputArgs {
-        input: &args as *const Vec as i64,
-        nworkers: 1,
-        run_id: 25,
-    });
-    let ptr = Box::into_raw(inp) as i64;
-
-    let result_raw = module.run(ptr) as *const Vec;
-    let result = unsafe { (*result_raw).clone() };
-    assert_eq!(result.len, input.len() as i64);
-    for i in 0..(result.len as isize) {
-        assert_eq!(unsafe { *result.data.offset(i) },
-                   input[i as usize] + input[i as usize] * 7);
-    }
-    weld_run_free(25);
-}
-

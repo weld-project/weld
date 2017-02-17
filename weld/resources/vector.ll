@@ -43,7 +43,7 @@ entry:
   br i1 %cond, label %body, label %done
 
 body:
-  %i = phi i32 [ 0, %entry ], [ %i2, %body ]
+  %i = phi i32 [ 1, %entry ], [ %i2, %body ]
   %vecPtr = call %$NAME* @$NAME.vm.bld.getPtrIndexed(%$NAME.vm.bld %typedPtr, i32 %i)
   %newVec = call %$NAME @$NAME.new(i64 %capacity)
   call void @$NAME.zero(%$NAME %newVec)
