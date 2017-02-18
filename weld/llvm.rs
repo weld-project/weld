@@ -478,7 +478,7 @@ impl LlvmGenerator {
                     wrap_ctx.code
                         .add(format!("{} = add i64 {}, {}", t2, t1, start_str));
                     wrap_ctx.code
-                        .add(format!("{} = icmp ule i64 {}, {}", cond, t2, vec_size_str));
+                        .add(format!("{} = icmp ult i64 {}, {}", cond, t2, vec_size_str));
                     wrap_ctx.code
                         .add(format!("br i1 {}, label {}, label %fn.boundcheckfailed",
                                      cond,

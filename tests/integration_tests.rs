@@ -1012,7 +1012,7 @@ fn outofmemory_error_test() {
 
     let inp = Box::new(WeldInputArgs {
         input: &args as *const Args as i64,
-        nworkers: 1,
+        nworkers: 4,
         run_id: 6, // this test needs a unique run ID so we don't reset accidentally.
     });
     let ptr = Box::into_raw(inp) as i64;
