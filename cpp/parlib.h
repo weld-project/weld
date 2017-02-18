@@ -92,6 +92,7 @@ extern "C" {
   void *new_vb(int64_t elem_size, int64_t starting_cap);
   void new_piece(void *v, work_t *w);
   vec_piece *cur_piece(void *v, int32_t my_id);
+  void weld_abort_thread();
 }
 
 #ifdef __APPLE__

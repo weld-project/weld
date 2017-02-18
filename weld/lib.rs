@@ -163,6 +163,7 @@ extern "C" {
     pub fn new_piece(v: *mut c_void, w: *mut work_t);
     pub fn cur_piece(v: *mut c_void, my_id: i32) -> *mut vec_piece;
     pub fn result_vb(v: *mut c_void) -> vec_output;
+    pub fn weld_abort_thread();
 }
 
 pub struct WeldError {
@@ -408,9 +409,9 @@ pub extern "C" fn weld_rt_malloc(run_id: libc::int64_t, size: libc::int64_t) -> 
         println!("weld_rt_malloc: Exceeded memory limit: {}B > {}B",
                  mem_info.mem_allocated,
                  mem_info.mem_limit);
-        // TODO(shoumik): pthread_exit here directly.
         weld_rt_set_errno(run_id, WeldRuntimeErrno::OutOfMemory);
-        return std::ptr::null_mut();
+        unsafe { weld_abort_thread() };
+        unreachable!();
     }
     let ptr = unsafe { malloc(size as usize) };
     mem_info.mem_allocated += size;
@@ -444,7 +445,8 @@ pub extern "C" fn weld_rt_realloc(run_id: libc::int64_t,
                  mem_info.mem_limit);
         // TODO(shoumik): pthread_exit here directly.
         weld_rt_set_errno(run_id, WeldRuntimeErrno::OutOfMemory);
-        return std::ptr::null_mut();
+        unsafe { weld_abort_thread() };
+        unreachable!();
     }
     let ptr = unsafe { realloc(data, size as usize) };
     mem_info.mem_allocated += plus_bytes;
