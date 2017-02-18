@@ -9,9 +9,6 @@
 #include "assert.h"
 #include "parlib.h"
 
-// TODO(shoumik): Move these to parlib.h
-extern "C" int64_t weld_rt_get_errno(int64_t run_id);
-extern "C" void weld_rt_set_errno(int64_t run_id, int64_t errno);
 /*
 The Weld parallel runtime. When the comments refer to a "computation",
 this means a single complete execution of a Weld program.
@@ -302,6 +299,7 @@ static void *thread_func(void *data) {
         if (weld_rt_get_errno(get_runid()) != 0) {
           return NULL;
         }
+        iters = 0;
       }
     }
   }

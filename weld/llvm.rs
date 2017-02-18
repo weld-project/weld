@@ -460,21 +460,25 @@ impl LlvmGenerator {
 
                     let t0 = wrap_ctx.var_ids.next();
                     let t1 = wrap_ctx.var_ids.next();
+                    let t2 = wrap_ctx.var_ids.next();
                     let cond = wrap_ctx.var_ids.next();
                     let next_bounds_check_label = wrap_ctx.var_ids.next();
 
-                    // t0 = mul i64 stride, num_iters
-                    // t1 = add i64 t0, start
+                    // t0 = mul i64 num_iters, 1
+                    // t1 = mul i64 stride, t0
+                    // t2 = add i64 t1, start
                     // cond = icmp lte i64 t1, size
                     // br i1 cond, label %nextCheck, label %checkFailed
                     // nextCheck:
                     // (loop)
                     wrap_ctx.code
-                        .add(format!("{} = mul i64 {}, {}", t0, stride_str, num_iters_str));
+                        .add(format!("{} = sub i64 {}, 1", t0, num_iters_str));
                     wrap_ctx.code
-                        .add(format!("{} = add i64 {}, {}", t1, t0, start_str));
+                        .add(format!("{} = mul i64 {}, {}", t1, stride_str, t0));
                     wrap_ctx.code
-                        .add(format!("{} = icmp ule i64 {}, {}", cond, t1, vec_size_str));
+                        .add(format!("{} = add i64 {}, {}", t2, t1, start_str));
+                    wrap_ctx.code
+                        .add(format!("{} = icmp ule i64 {}, {}", cond, t2, vec_size_str));
                     wrap_ctx.code
                         .add(format!("br i1 {}, label {}, label %fn.boundcheckfailed",
                                      cond,

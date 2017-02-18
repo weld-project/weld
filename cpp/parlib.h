@@ -6,6 +6,10 @@ extern "C" void *weld_rt_malloc(int64_t run_id, size_t size);
 extern "C" void *weld_rt_realloc(int64_t run_id, void *data, size_t size);
 extern "C" void weld_rt_free(int64_t run_id, void *data);
 
+// Error functions.
+extern "C" int64_t weld_rt_get_errno(int64_t run_id);
+extern "C" void weld_rt_set_errno(int64_t run_id, int64_t errno);
+
 // work item
 struct work_t {
   // parameters for the task function

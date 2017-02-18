@@ -403,19 +403,26 @@ pub extern "C" fn weld_error_free(err: *mut WeldError) {
 /// This should never be called directly; it is meant to be used by the runtime directly.
 pub extern "C" fn weld_rt_malloc(run_id: libc::int64_t, size: libc::int64_t) -> *mut c_void {
     let run_id = run_id as i64;
-    let mut guarded = ALLOCATIONS.lock().unwrap();
-    let mem_info = guarded.entry(run_id).or_insert(RunMemoryInfo::new(DEFAULT_MEM));
-    if mem_info.mem_allocated + (size as i64) > mem_info.mem_limit {
-        println!("weld_rt_malloc: Exceeded memory limit: {}B > {}B",
-                 mem_info.mem_allocated,
-                 mem_info.mem_limit);
-        weld_rt_set_errno(run_id, WeldRuntimeErrno::OutOfMemory);
-        unsafe { weld_abort_thread() };
-        unreachable!();
+    let mut ptr = std::ptr::null_mut();
+    let mut do_allocation = true;
+    {
+        let mut guarded = ALLOCATIONS.lock().unwrap();
+        let mem_info = guarded.entry(run_id).or_insert(RunMemoryInfo::new(DEFAULT_MEM));
+        if mem_info.mem_allocated + (size as i64) > mem_info.mem_limit {
+            weld_rt_set_errno(run_id, WeldRuntimeErrno::OutOfMemory);
+            do_allocation = false;
+        }
+
+        if do_allocation {
+            ptr = unsafe { malloc(size as usize) };
+            mem_info.mem_allocated += size;
+            mem_info.allocations.insert(ptr as u64, size as u64);
+        }
     }
-    let ptr = unsafe { malloc(size as usize) };
-    mem_info.mem_allocated += size;
-    mem_info.allocations.insert(ptr as u64, size as u64);
+    // Release the lock before quitting by exiting the above scope.
+    if !do_allocation {
+        unsafe { weld_abort_thread() };
+    }
     ptr
 }
 
@@ -432,26 +439,32 @@ pub extern "C" fn weld_rt_realloc(run_id: libc::int64_t,
                                   size: libc::int64_t)
                                   -> *mut c_void {
     let run_id = run_id as i64;
-    let mut guarded = ALLOCATIONS.lock().unwrap();
-    if !guarded.contains_key(&run_id) {
-        panic!("Unseen run {}", run_id);
+    let mut ptr = std::ptr::null_mut();
+    let mut do_allocation = true;
+    {
+        let mut guarded = ALLOCATIONS.lock().unwrap();
+        if !guarded.contains_key(&run_id) {
+            panic!("Unseen run {}", run_id);
+        }
+        let mem_info = guarded.entry(run_id).or_insert(RunMemoryInfo::new(DEFAULT_MEM));
+        let old_size = *mem_info.allocations.get(&(data as u64)).unwrap() as i64;
+        // Number of additional bytes we'll allocate.
+        let plus_bytes = size - old_size;
+        if mem_info.mem_allocated + (plus_bytes as i64) > mem_info.mem_limit {
+            weld_rt_set_errno(run_id, WeldRuntimeErrno::OutOfMemory);
+            do_allocation = false;
+        }
+        if do_allocation {
+            ptr = unsafe { realloc(data, size as usize) };
+            mem_info.mem_allocated += plus_bytes;
+            mem_info.allocations.remove(&(data as u64));
+            mem_info.allocations.insert(ptr as u64, size as u64);
+        }
     }
-    let mem_info = guarded.entry(run_id).or_insert(RunMemoryInfo::new(DEFAULT_MEM));
-    let old_size = *mem_info.allocations.get(&(data as u64)).unwrap() as i64;
-    // Number of additional bytes we'll allocate.
-    let plus_bytes = size - old_size;
-    if mem_info.mem_allocated + (plus_bytes as i64) > mem_info.mem_limit {
-        println!("weld_rt_realloc: Exceeded memory limit: {}B",
-                 mem_info.mem_limit);
-        // TODO(shoumik): pthread_exit here directly.
-        weld_rt_set_errno(run_id, WeldRuntimeErrno::OutOfMemory);
+    // Release the lock before quitting by exiting the above scope.
+    if !do_allocation {
         unsafe { weld_abort_thread() };
-        unreachable!();
     }
-    let ptr = unsafe { realloc(data, size as usize) };
-    mem_info.mem_allocated += plus_bytes;
-    mem_info.allocations.remove(&(data as u64));
-    mem_info.allocations.insert(ptr as u64, size as u64);
     ptr
 }
 

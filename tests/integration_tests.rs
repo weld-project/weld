@@ -980,6 +980,50 @@ fn iters_outofbounds_error_test() {
     weld_run_free(5);
 }
 
+fn outofmemory_error_test() {
+    #[derive(Clone)]
+    #[allow(dead_code)]
+    struct Vec {
+        data: *const i32,
+        len: i64,
+    }
+    #[allow(dead_code)]
+    struct Args {
+        x: Vec,
+    }
+
+    // TODO(shoumik): This test (and all the other tests) can be made more robust
+    // by using the API directly, since that will test how users actually use Weld.
+    // What we do here uses unstable APIs and could cause tests to break in the
+    // future.
+    //
+    // This test tests the case where the default memory limit (1GB) is exceeded.
+    let code = "|x:vec[i32]| result(for(x, appender, |b,i,e| merge(b,e+1)))";
+    let module = compile_program(&parse_program(code).unwrap()).unwrap();
+    // 1GB of data; the appender will allocate at least this much,
+    // exceeding the 1GB default limit.
+    let x = vec![4; 1000000000 / 4 as usize];
+    let args = Args {
+        x: Vec {
+            data: x.as_ptr() as *const i32,
+            len: x.len() as i64,
+        },
+    };
+
+    let inp = Box::new(WeldInputArgs {
+        input: &args as *const Args as i64,
+        nworkers: 1,
+        run_id: 6, // this test needs a unique run ID so we don't reset accidentally.
+    });
+    let ptr = Box::into_raw(inp) as i64;
+    module.run(ptr) as *const i32;
+
+    // Get the error back for the run ID we used.
+    let errno = weld_rt_get_errno(6);
+    assert_eq!(errno, WeldRuntimeErrno::OutOfMemory);
+    weld_run_free(6);
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     let tests: Vec<(&str, fn())> =
@@ -1009,15 +1053,11 @@ fn main() {
              ("map_zip_loop", map_zip_loop),
              ("iters_for_loop", iters_for_loop),
              ("iters_outofbounds_error_test", iters_outofbounds_error_test),
+             ("outofmemory_error_test", outofmemory_error_test),
              ("serial_parlib_test", serial_parlib_test)];
 
     println!("");
-    println!("running {} tests",
-             if args.len() > 1 {
-                 args.len() - 1
-             } else {
-                 tests.len() - 1
-             });
+    println!("running tests");
     let mut passed = 0;
     for t in tests.iter() {
         match t.0 {
@@ -1040,6 +1080,6 @@ fn main() {
     println!("");
     println!("test result: \x1b[0;32mok\x1b[0m. {} passed; 0 failed; {} ignored; 0 measured",
              passed,
-             tests.len() - passed - 1); // - 2 to ignore merger_fns and parlib_fns
+             tests.len() - passed - 1); // - 1 to ignore runtime_fns
     println!("");
 }
