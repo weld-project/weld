@@ -428,12 +428,6 @@ impl LlvmGenerator {
                     let end_str = llvm_symbol(&par_for.data[0].end.clone().unwrap());
                     let stride_str = llvm_symbol(&par_for.data[0].stride.clone().unwrap());
                     let diff_tmp = wrap_ctx.var_ids.next();
-                    let vector_len = wrap_ctx.var_ids.next();
-                    wrap_ctx.code.add(format!("{} = call i64 {}.size({} {})",
-                                              vector_len,
-                                              data_prefix,
-                                              data_ty_str,
-                                              data_str));
                     wrap_ctx.code
                         .add(format!("{} = sub i64 {}, {}", diff_tmp, end_str, start_str));
                     wrap_ctx.code
@@ -455,19 +449,17 @@ impl LlvmGenerator {
                                               data_ty_str,
                                               data_str));
 
-                    let (start_str, end_str, stride_str) = if iter.start.is_none() {
+                    let (start_str, stride_str) = if iter.start.is_none() {
                         let start_str = "0".to_string();
                         let stride_str = "1".to_string();
-                        (start_str, vec_size_str.clone(), stride_str)
+                        (start_str, stride_str)
                     } else {
                         (llvm_symbol(iter.start.as_ref().unwrap()),
-                         llvm_symbol(iter.end.as_ref().unwrap()),
                          llvm_symbol(iter.stride.as_ref().unwrap()))
                     };
 
                     let t0 = wrap_ctx.var_ids.next();
                     let t1 = wrap_ctx.var_ids.next();
-                    let t2 = wrap_ctx.var_ids.next();
                     let cond = wrap_ctx.var_ids.next();
                     let next_bounds_check_label = wrap_ctx.var_ids.next();
 
@@ -1942,46 +1934,4 @@ fn types() {
 
     let struct2 = parse_type("{i32,bool}").unwrap().to_type().unwrap();
     assert_eq!(gen.llvm_type(&struct2).unwrap(), "%s1");
-}
-#[test]
-fn iters_outofbounds_error_test() {
-    use std::ptr;
-    use super::WeldRuntimeErrno;
-
-    #[derive(Clone)]
-    #[allow(dead_code)]
-    struct Vec {
-        data: *const i32,
-        len: i64,
-    }
-    #[allow(dead_code)]
-    struct Args {
-        x: Vec,
-    }
-
-    let code = "|x:vec[i32]| result(for(iter(x,0L,20000L,1L), appender, |b,i,e| \
-                merge(b,e+1)))";
-    let module = compile_program(&parse_program(code).unwrap()).unwrap();
-    let x = [4; 10000 as usize];
-    let args = Args {
-        x: Vec {
-            data: &x as *const i32,
-            len: 10000,
-        },
-    };
-
-    let inp = Box::new(WeldInputArgs {
-        input: &args as *const Args as i64,
-        nworkers: 1,
-        run_id: 0,
-    });
-    let ptr = Box::into_raw(inp) as i64;
-
-    let result_raw = module.run(ptr) as *const Vec;
-
-    // Get the error back for the run ID we used.
-    let errno = weld_rt_get_errno(0);
-    assert_eq!(errno, WeldRuntimeErrno::BadIteratorLength);
-    assert_eq!(result_raw, ptr::null_mut());
-    weld_run_free(-1);
 }

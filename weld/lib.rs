@@ -42,6 +42,10 @@ use std::sync::Mutex;
 use std::sync::RwLock;
 use std::fmt;
 
+const CACHE_BITS: i64 = 6;
+const CACHE_LINE: u64 = (1 << (CACHE_BITS as u64));
+const MASK: u64 = (!(CACHE_LINE - 1));
+
 /// Hold memory information for a run.
 #[derive(Clone, Debug)]
 struct RunMemoryInfo {
@@ -114,10 +118,10 @@ pub struct work_t {
     nest_task_ids: *mut i64,
     nest_len: i32,
     task_id: i64,
-    fp: extern fn(*mut work_t),
+    fp: extern "C" fn(*mut work_t),
     cont: *mut work_t,
     deps: i32,
-    continued: i32
+    continued: i32,
 }
 
 #[repr(C)]
@@ -127,13 +131,13 @@ pub struct vec_piece {
     capacity: i64,
     nest_idxs: *mut i64,
     nest_task_ids: *mut i64,
-    nest_len: i32
+    nest_len: i32,
 }
 
 #[repr(C)]
 pub struct vec_output {
     data: *mut c_void,
-    size: i64
+    size: i64,
 }
 
 #[link(name = "par", kind = "static")]
@@ -145,10 +149,15 @@ extern "C" {
     pub fn set_nworkers(n: i32);
     pub fn get_runid() -> i64;
     pub fn set_runid(rid: i64);
-    pub fn pl_start_loop(w: *mut work_t, body_data: *mut c_void, cont_data: *mut c_void,
-        body: extern fn(*mut work_t), cont: extern fn(*mut work_t), lower: i64, upper: i64,
-        grain_size: i32);
-    pub fn execute(run: extern fn(*mut work_t), data: *mut c_void);
+    pub fn pl_start_loop(w: *mut work_t,
+                         body_data: *mut c_void,
+                         cont_data: *mut c_void,
+                         body: extern "C" fn(*mut work_t),
+                         cont: extern "C" fn(*mut work_t),
+                         lower: i64,
+                         upper: i64,
+                         grain_size: i32);
+    pub fn execute(run: extern "C" fn(*mut work_t), data: *mut c_void);
 
     pub fn new_vb(elem_size: i64, starting_cap: i64) -> *mut c_void;
     pub fn new_piece(v: *mut c_void, w: *mut work_t);
@@ -499,30 +508,33 @@ pub extern "C" fn weld_rt_set_errno(run_id: libc::int64_t, errno: WeldRuntimeErr
 /// This is used by internal tests to free memory, as well as by the `weld_value_free` function
 /// to free a return value and all associated memory.
 pub fn weld_run_free(run_id: i64) {
-    let mut guarded = ALLOCATIONS.lock().unwrap();
-    if run_id == -1 {
-        // Free all memory from all runs.
-        let keys: Vec<_> = guarded.keys().map(|i| *i).collect();
-        for key in keys {
+    // Create a scope for the lock.
+    {
+        let mut guarded = ALLOCATIONS.lock().unwrap();
+        if run_id == -1 {
+            // Free all memory from all runs.
+            let keys: Vec<_> = guarded.keys().map(|i| *i).collect();
+            for key in keys {
+                {
+                    let mem_info = guarded.entry(run_id).or_insert(RunMemoryInfo::new(DEFAULT_MEM));
+                    for entry in mem_info.allocations.iter() {
+                        unsafe { free(*entry.0 as *mut c_void) };
+                    }
+                }
+                guarded.remove(&key);
+            }
+        } else {
+            if !guarded.contains_key(&run_id) {
+                return;
+            }
             {
                 let mem_info = guarded.entry(run_id).or_insert(RunMemoryInfo::new(DEFAULT_MEM));
                 for entry in mem_info.allocations.iter() {
                     unsafe { free(*entry.0 as *mut c_void) };
                 }
             }
-            guarded.remove(&key);
+            guarded.remove(&run_id);
         }
-    } else {
-        if !guarded.contains_key(&run_id) {
-            return;
-        }
-        {
-            let mem_info = guarded.entry(run_id).or_insert(RunMemoryInfo::new(DEFAULT_MEM));
-            for entry in mem_info.allocations.iter() {
-                unsafe { free(*entry.0 as *mut c_void) };
-            }
-        }
-        guarded.remove(&run_id);
     }
 }
 

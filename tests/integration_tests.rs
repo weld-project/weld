@@ -1,11 +1,15 @@
 use std::env;
+
 extern crate weld;
+
 use weld::llvm::*;
 use weld::parser::*;
 use weld::weld_run_free;
 use weld::weld_rt_malloc;
 use weld::weld_rt_realloc;
 use weld::weld_rt_free;
+use weld::weld_rt_get_errno;
+use weld::weld_rt_set_errno;
 use weld::new_merger;
 use weld::get_merger_at_index;
 use weld::free_merger;
@@ -22,20 +26,17 @@ use weld::new_vb;
 use weld::new_piece;
 use weld::cur_piece;
 use weld::result_vb;
-
-fn mem_fns() {
-    weld_rt_free(0, weld_rt_realloc(0, weld_rt_malloc(0, 16), 32));
-}
-
-#[allow(unused_variables)]
-fn merger_fns() {
-    let ptr = new_merger(0, 4, 1);
-    let merger_ptr = get_merger_at_index(ptr, 4, 0);
-    free_merger(0, ptr);
-}
+use weld::WeldRuntimeErrno;
 
 /// Required to prevent symbols from being optimized out during compilation.
-fn parlib_fns() {
+fn runtime_fns() {
+    // Weld Runtime.
+    println!("{:p}", weld_rt_malloc as *const ());
+    println!("{:p}", weld_rt_realloc as *const ());
+    println!("{:p}", weld_rt_free as *const ());
+    println!("{:p}", weld_rt_get_errno as *const ());
+    println!("{:p}", weld_rt_set_errno as *const ());
+    // Parlib
     println!("{:p}", my_id_public as *const ());
     println!("{:p}", set_result as *const ());
     println!("{:p}", get_result as *const ());
@@ -49,6 +50,10 @@ fn parlib_fns() {
     println!("{:p}", new_piece as *const ());
     println!("{:p}", cur_piece as *const ());
     println!("{:p}", result_vb as *const ());
+    // Builders
+    println!("{:p}", new_merger as *const ());
+    println!("{:p}", get_merger_at_index as *const ());
+    println!("{:p}", free_merger as *const ());
 }
 
 fn basic_program() {
@@ -845,7 +850,7 @@ fn map_zip_loop() {
         },
         y: Vec {
             data: &y as *const i32,
-            len: 2,
+            len: 4,
         },
     };
 
@@ -939,12 +944,46 @@ fn serial_parlib_test() {
     weld_run_free(-1);
 }
 
+fn iters_outofbounds_error_test() {
+    #[derive(Clone)]
+    #[allow(dead_code)]
+    struct Vec {
+        data: *const i32,
+        len: i64,
+    }
+    #[allow(dead_code)]
+    struct Args {
+        x: Vec,
+    }
+
+    let code = "|x:vec[i32]| result(for(iter(x,0L,20000L,1L), appender, |b,i,e| merge(b,e+1)))";
+    let module = compile_program(&parse_program(code).unwrap()).unwrap();
+    let x = [4; 1000 as usize];
+    let args = Args {
+        x: Vec {
+            data: &x as *const i32,
+            len: x.len() as i64,
+        },
+    };
+
+    let inp = Box::new(WeldInputArgs {
+        input: &args as *const Args as i64,
+        nworkers: 4,
+        run_id: 5, // this test needs a unique run ID so we don't reset accidentally.
+    });
+    let ptr = Box::into_raw(inp) as i64;
+    module.run(ptr) as *const i32;
+
+    // Get the error back for the run ID we used.
+    let errno = weld_rt_get_errno(5);
+    assert_eq!(errno, WeldRuntimeErrno::BadIteratorLength);
+    weld_run_free(5);
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     let tests: Vec<(&str, fn())> =
-        vec![("mem_fns", mem_fns),
-             ("merger_fns", merger_fns),
-             ("parlib_fns", parlib_fns),
+        vec![("runtime_fns", runtime_fns),
              ("basic_program", basic_program),
              ("f64_cast", f64_cast),
              ("i32_cast", i32_cast),
@@ -969,16 +1008,21 @@ fn main() {
              ("if_for_loop", if_for_loop),
              ("map_zip_loop", map_zip_loop),
              ("iters_for_loop", iters_for_loop),
+             ("iters_outofbounds_error_test", iters_outofbounds_error_test),
              ("serial_parlib_test", serial_parlib_test)];
 
     println!("");
-    println!("running tests");
+    println!("running {} tests",
+             if args.len() > 1 {
+                 args.len() - 1
+             } else {
+                 tests.len() - 1
+             });
     let mut passed = 0;
     for t in tests.iter() {
         match t.0 {
-            // don't run these two, they exist only to make sure functions don't get optimized out
-            "merger_fns" => {}
-            "parlib_fns" => {}
+            // don't run this, they exist only to make sure functions don't get optimized out
+            "runtime_fns" => {}
             _ => {
                 if args.len() > 1 {
                     if !t.0.contains(args[1].as_str()) {
@@ -996,6 +1040,6 @@ fn main() {
     println!("");
     println!("test result: \x1b[0;32mok\x1b[0m. {} passed; 0 failed; {} ignored; 0 measured",
              passed,
-             tests.len() - passed - 2); // - 2 to ignore merger_fns and parlib_fns
+             tests.len() - passed - 1); // - 2 to ignore merger_fns and parlib_fns
     println!("");
 }

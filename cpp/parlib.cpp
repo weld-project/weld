@@ -56,6 +56,9 @@ extern "C" void release_global_lock() {
 
 // retrieve the result of the computation
 extern "C" void *get_result() {
+  if (weld_rt_get_errno(get_runid()) != 0) {
+    return NULL;
+  }
   return (void *)result;
 }
 
@@ -81,7 +84,6 @@ extern "C" void set_runid(int64_t id) {
 }
 
 extern "C" void weld_abort_thread() {
-    printf("aborting thread %d\n", my_id());
     pthread_exit(NULL);
 }
 
@@ -152,7 +154,6 @@ static inline void finish_task(work_t *task) {
   // free all allocated memory as long as it is allocated with
   // `weld_rt_malloc` or `weld_rt_realloc`.
   if (weld_rt_get_errno(get_runid()) != 0) {
-    printf("%d exiting upon errno value %d \n", my_id(), weld_rt_get_errno(get_runid()));
     weld_abort_thread();
   }
 
@@ -286,11 +287,22 @@ static void *thread_func(void *data) {
   }
 #endif
 
+  int iters = 0;
+
   // this work_loop call is needed to complete any work items that are initially on the queue
   work_loop();
   while (!done) {
     if (try_steal()) {
+      iters = 0;
       work_loop();
+    } else {
+      // If this thread is stalling, periodically check for errors.
+      iters++;
+      if (iters > 1000000) {
+        if (weld_rt_get_errno(get_runid()) != 0) {
+          return NULL;
+        }
+      }
     }
   }
   return NULL;
@@ -338,7 +350,6 @@ extern "C" void execute(void (*run)(work_t*), void *data) {
   pthread_key_create(&id, NULL);
   pthread_mutex_init(&global_lock, NULL);
 
-  printf("Creating %d threads\n", W);
   for (int32_t i = 0; i < W; i++) {
     pthread_create(workers + i, NULL, &thread_func, reinterpret_cast<void *>(i));
   }
@@ -346,7 +357,6 @@ extern "C" void execute(void (*run)(work_t*), void *data) {
   for (int32_t i = 0; i < W; i++) {
     pthread_join(workers[i], NULL);
   }
-  printf("All threads joined\n");
 
   cleanup_computation_state();
 }
