@@ -4,6 +4,8 @@ use std::collections::BTreeMap;
 
 use easy_ll;
 
+use super::WeldRuntimeErrno;
+
 use super::ast::*;
 use super::ast::Type::*;
 use super::ast::LiteralKind::*;
@@ -404,42 +406,112 @@ impl LlvmGenerator {
                 wrap_ctx.code
                     .add(format!("define void @f{}_wrapper({}) {{", func.id, serial_arg_types));
                 wrap_ctx.code.add(format!("fn.entry:"));
-                let upper_bound = wrap_ctx.var_ids.next();
+
+                // Use the first data to compute the indexing.
+                let first_data = &par_for.data[0].data;
+                let data_str = llvm_symbol(&first_data);
+                let data_ty_str = try!(self.llvm_type(func.params.get(&first_data).unwrap()))
+                    .to_string();
+                let data_prefix = format!("@{}", data_ty_str.replace("%", ""));
+
+                let num_iters_str = wrap_ctx.var_ids.next();
                 if par_for.data[0].start.is_none() {
-                    let first_data = &par_for.data[0].data;
-                    let data_str = llvm_symbol(&first_data);
-                    let data_ty_str = try!(self.llvm_type(func.params.get(&first_data).unwrap()))
-                        .to_string();
-                    let data_prefix = format!("@{}", data_ty_str.replace("%", ""));
+                    // set num_iters_str to len(first_data)
                     wrap_ctx.code.add(format!("{} = call i64 {}.size({} {})",
-                                              upper_bound,
+                                              num_iters_str,
                                               data_prefix,
                                               data_ty_str,
                                               data_str));
                 } else {
+                    // set num_iters_str to (end - start) / stride
                     let start_str = llvm_symbol(&par_for.data[0].start.clone().unwrap());
                     let end_str = llvm_symbol(&par_for.data[0].end.clone().unwrap());
                     let stride_str = llvm_symbol(&par_for.data[0].stride.clone().unwrap());
                     let diff_tmp = wrap_ctx.var_ids.next();
-                    // TODO check for errors in the given bounds: end >= start >= 0, stride > 0,
-                    // (end - start) % stride == 0 => Crash
                     wrap_ctx.code
                         .add(format!("{} = sub i64 {}, {}", diff_tmp, end_str, start_str));
                     wrap_ctx.code
-                        .add(format!("{} = udiv i64 {}, {}", upper_bound, diff_tmp, stride_str));
+                        .add(format!("{} = udiv i64 {}, {}", num_iters_str, diff_tmp, stride_str));
                 }
+
+                // Perform a bounds check on each of the data items before launching the loop
+                for iter in par_for.data.iter() {
+                    // Vector LLVM information for the current iter.
+                    let data_str = llvm_symbol(&iter.data);
+                    let data_ty_str = try!(self.llvm_type(func.params.get(&iter.data).unwrap()))
+                        .to_string();
+                    let data_prefix = format!("@{}", data_ty_str.replace("%", ""));
+
+                    let vec_size_str = wrap_ctx.var_ids.next();
+                    wrap_ctx.code.add(format!("{} = call i64 {}.size({} {})",
+                                              vec_size_str,
+                                              data_prefix,
+                                              data_ty_str,
+                                              data_str));
+
+                    let (start_str, stride_str) = if iter.start.is_none() {
+                        let start_str = "0".to_string();
+                        let stride_str = "1".to_string();
+                        (start_str, stride_str)
+                    } else {
+                        (llvm_symbol(iter.start.as_ref().unwrap()),
+                         llvm_symbol(iter.stride.as_ref().unwrap()))
+                    };
+
+                    let t0 = wrap_ctx.var_ids.next();
+                    let t1 = wrap_ctx.var_ids.next();
+                    let t2 = wrap_ctx.var_ids.next();
+                    let cond = wrap_ctx.var_ids.next();
+                    let next_bounds_check_label = wrap_ctx.var_ids.next();
+
+                    // t0 = mul i64 num_iters, 1
+                    // t1 = mul i64 stride, t0
+                    // t2 = add i64 t1, start
+                    // cond = icmp lte i64 t1, size
+                    // br i1 cond, label %nextCheck, label %checkFailed
+                    // nextCheck:
+                    // (loop)
+                    wrap_ctx.code
+                        .add(format!("{} = sub i64 {}, 1", t0, num_iters_str));
+                    wrap_ctx.code
+                        .add(format!("{} = mul i64 {}, {}", t1, stride_str, t0));
+                    wrap_ctx.code
+                        .add(format!("{} = add i64 {}, {}", t2, t1, start_str));
+                    wrap_ctx.code
+                        .add(format!("{} = icmp ult i64 {}, {}", cond, t2, vec_size_str));
+                    wrap_ctx.code
+                        .add(format!("br i1 {}, label {}, label %fn.boundcheckfailed",
+                                     cond,
+                                     next_bounds_check_label));
+                    wrap_ctx.code.add(format!("{}:", next_bounds_check_label.replace("%", "")));
+                }
+                // If we get here, the bounds check passed.
+                wrap_ctx.code.add(format!("br label %fn.boundcheckpassed"));
+                // Handle a bounds check fail.
+                wrap_ctx.code.add(format!("fn.boundcheckfailed:"));
+                let errno = WeldRuntimeErrno::BadIteratorLength;
+                let run_id = wrap_ctx.var_ids.next();
+                wrap_ctx.code.add(format!("{} = call i64 @get_runid()", run_id));
+                wrap_ctx.code.add(format!("call void @weld_rt_set_errno(i64 {}, i64 {})",
+                                          run_id,
+                                          errno as i64));
+                wrap_ctx.code.add(format!("call void @weld_abort_thread()"));
+                wrap_ctx.code.add(format!("; Unreachable!"));
+                wrap_ctx.code.add(format!("br label %fn.end"));
+                wrap_ctx.code.add(format!("fn.boundcheckpassed:"));
+
                 let bound_cmp = wrap_ctx.var_ids.next();
                 let mut grain_size = 1024;
                 if par_for.innermost {
                     wrap_ctx.code.add(format!("{} = icmp ule i64 {}, {}",
                                               bound_cmp,
-                                              upper_bound,
+                                              num_iters_str,
                                               grain_size));
                     wrap_ctx.code
                         .add(format!("br i1 {}, label %for.ser, label %for.par", bound_cmp));
                     wrap_ctx.code.add(format!("for.ser:"));
                     let mut body_arg_types = try!(self.get_arg_str(&func.params, ""));
-                    body_arg_types.push_str(format!(", i64 0, i64 {}", upper_bound).as_str());
+                    body_arg_types.push_str(format!(", i64 0, i64 {}", num_iters_str).as_str());
                     wrap_ctx.code.add(format!("call void @f{}({})", func.id, body_arg_types));
                     let cont_arg_types =
                         try!(self.get_arg_str(&sir.funcs[par_for.cont].params, ""));
@@ -461,7 +533,7 @@ impl LlvmGenerator {
                                  cont_struct,
                                  func.id,
                                  par_for.cont,
-                                 upper_bound,
+                                 num_iters_str,
                                  grain_size));
                 wrap_ctx.code.add(format!("br label %fn.end"));
                 wrap_ctx.code.add("fn.end:");
@@ -1673,7 +1745,11 @@ impl LlvmGenerator {
                     ctx.code.add("br label %body.end");
                 }
                 Crash => {
-                    // TODO do something else here?
+                    let errno = WeldRuntimeErrno::Unknown as i64;
+                    let run_id = ctx.var_ids.next();
+                    ctx.code.add(format!("call void @weld_rt_set_errno(i64 {}, i64 {})",
+                                         run_id,
+                                         errno));
                 }
             }
         }

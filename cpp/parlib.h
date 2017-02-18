@@ -6,6 +6,10 @@ extern "C" void *weld_rt_malloc(int64_t run_id, size_t size);
 extern "C" void *weld_rt_realloc(int64_t run_id, void *data, size_t size);
 extern "C" void weld_rt_free(int64_t run_id, void *data);
 
+// Error functions.
+extern "C" int64_t weld_rt_get_errno(int64_t run_id);
+extern "C" void weld_rt_set_errno(int64_t run_id, int64_t errno);
+
 // work item
 struct work_t {
   // parameters for the task function
@@ -92,7 +96,7 @@ extern "C" {
   void *new_vb(int64_t elem_size, int64_t starting_cap);
   void new_piece(void *v, work_t *w);
   vec_piece *cur_piece(void *v, int32_t my_id);
-  
+  void weld_abort_thread();
 }
 
 #ifdef __APPLE__

@@ -24,6 +24,9 @@ use weld::sir::ast_to_sir;
 // being optimized out?
 fn runtime_functions() {
     weld_rt_free(0, weld_rt_realloc(0, weld_rt_malloc(0, 16), 32));
+    weld_rt_set_errno(-1, WeldRuntimeErrno::Success);
+    weld_rt_get_errno(-1);
+    // TODO(shoumik): just print out the function pointers, like James did in integration tests.
     let x = new_merger(0, 16, 1);
     if get_merger_at_index(x, 16, 0) != std::ptr::null_mut() {
         free_merger(0, x);

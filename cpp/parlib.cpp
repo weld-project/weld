@@ -53,6 +53,9 @@ extern "C" void release_global_lock() {
 
 // retrieve the result of the computation
 extern "C" void *get_result() {
+  if (weld_rt_get_errno(get_runid()) != 0) {
+    return NULL;
+  }
   return (void *)result;
 }
 
@@ -75,6 +78,10 @@ extern "C" int64_t get_runid() {
 
 extern "C" void set_runid(int64_t id) {
   run_id = id;
+}
+
+extern "C" void weld_abort_thread() {
+    pthread_exit(NULL);
 }
 
 static inline void set_nest(work_t *task) {
@@ -139,6 +146,14 @@ static inline bool try_steal() {
 // decrease the dependency count of the continuation, run the continuation
 // if necessary, or signal the end of the computation if we are done
 static inline void finish_task(work_t *task) {
+  // Exit the thread if there's an error.
+  // We don't need to worry about freeing here; the runtime will
+  // free all allocated memory as long as it is allocated with
+  // `weld_rt_malloc` or `weld_rt_realloc`.
+  if (weld_rt_get_errno(get_runid()) != 0) {
+    weld_abort_thread();
+  }
+
   if (task->cont == NULL) {
     if (!task->continued) {
       // if this task has no continuation and there was no for loop to end it,
@@ -265,15 +280,27 @@ static void *thread_func(void *data) {
   CPU_ZERO(&set);
   CPU_SET(tid, &set);
   if (sched_setaffinity(0, sizeof(set), &set) == -1) {
-    printf("unable to set affinitiy for thread %d\n", tid);
+    printf("unable to set affinity for thread %d\n", tid);
   }
 #endif
+
+  int iters = 0;
 
   // this work_loop call is needed to complete any work items that are initially on the queue
   work_loop();
   while (!done) {
     if (try_steal()) {
+      iters = 0;
       work_loop();
+    } else {
+      // If this thread is stalling, periodically check for errors.
+      iters++;
+      if (iters > 1000000) {
+        if (weld_rt_get_errno(get_runid()) != 0) {
+          return NULL;
+        }
+        iters = 0;
+      }
     }
   }
   return NULL;

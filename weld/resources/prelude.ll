@@ -46,6 +46,15 @@ declare i32 @get_nworkers()
 declare void @set_runid(i64)
 declare i64 @get_runid()
 
+; Errors
+
+; run_id, errno
+declare void @weld_rt_set_errno(i64, i64)
+; run_id
+declare i64 @weld_rt_get_errno(i64)
+
+declare void @weld_abort_thread()
+
 ; Hash functions
 
 ; Same as Boost's hash_combine; obtained by compiling that with clang
