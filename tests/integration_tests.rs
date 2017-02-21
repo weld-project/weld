@@ -1,261 +1,223 @@
 use std::env;
 
 extern crate weld;
+extern crate libc;
 
 use weld::llvm::*;
 use weld::parser::*;
+use weld::weld_print_function_pointers;
 use weld::weld_run_free;
-use weld::weld_rt_malloc;
-use weld::weld_rt_realloc;
-use weld::weld_rt_free;
 use weld::weld_rt_get_errno;
-use weld::weld_rt_set_errno;
-use weld::new_merger;
-use weld::get_merger_at_index;
-use weld::free_merger;
-use weld::my_id_public;
-use weld::set_result;
-use weld::get_result;
-use weld::get_nworkers;
-use weld::set_nworkers;
-use weld::get_runid;
-use weld::set_runid;
-use weld::pl_start_loop;
-use weld::execute;
-use weld::new_vb;
-use weld::new_piece;
-use weld::cur_piece;
-use weld::result_vb;
 use weld::WeldRuntimeErrno;
 
-/// Required to prevent symbols from being optimized out during compilation.
-fn runtime_fns() {
-    // Weld Runtime.
-    println!("{:p}", weld_rt_malloc as *const ());
-    println!("{:p}", weld_rt_realloc as *const ());
-    println!("{:p}", weld_rt_free as *const ());
-    println!("{:p}", weld_rt_get_errno as *const ());
-    println!("{:p}", weld_rt_set_errno as *const ());
-    // Parlib
-    println!("{:p}", my_id_public as *const ());
-    println!("{:p}", set_result as *const ());
-    println!("{:p}", get_result as *const ());
-    println!("{:p}", get_nworkers as *const ());
-    println!("{:p}", set_nworkers as *const ());
-    println!("{:p}", get_runid as *const ());
-    println!("{:p}", set_runid as *const ());
-    println!("{:p}", pl_start_loop as *const ());
-    println!("{:p}", execute as *const ());
-    println!("{:p}", new_vb as *const ());
-    println!("{:p}", new_piece as *const ());
-    println!("{:p}", cur_piece as *const ());
-    println!("{:p}", result_vb as *const ());
-    // Builders
-    println!("{:p}", new_merger as *const ());
-    println!("{:p}", get_merger_at_index as *const ());
-    println!("{:p}", free_merger as *const ());
+use weld::WeldError;
+use weld::WeldValue;
+use weld::{weld_value_new, weld_value_data, weld_value_free};
+use weld::{weld_module_compile, weld_module_run, weld_module_free};
+use weld::{weld_error_code, weld_error_message, weld_error_free};
+
+use std::ffi::{CStr, CString};
+use libc::{c_char, c_void};
+
+/// An in memory representation of a Weld vector.
+#[derive(Clone)]
+#[allow(dead_code)]
+#[repr(C)]
+struct WeldVec<T> {
+    data: *const T,
+    len: i64,
+}
+
+/// Takes a string of Weld code and a `void *` pointer to data, and compile and run the code.
+/// Panics if an error is thrown. Returns a `WeldValue` that must be freed.
+fn compile_and_run<T>(code: &str, conf: &str, ptr: &T) -> *mut WeldValue {
+    let code = CString::new(code).unwrap();
+    let conf = CString::new(conf).unwrap();
+
+    let input_value = weld_value_new(ptr as *const _ as *const c_void);
+
+    let mut err = std::ptr::null_mut();
+    let module = weld_module_compile(code.into_raw() as *const c_char,
+                                     conf.into_raw() as *const c_char,
+                                     &mut err as *mut *mut WeldError);
+
+    if weld_error_code(err) != WeldRuntimeErrno::Success {
+        panic!(format!("Compile failed: {:?}",
+                       unsafe { CStr::from_ptr(weld_error_message(err)) }));
+    }
+    weld_error_free(err);
+
+    let mut err = std::ptr::null_mut();
+    let ret_value = weld_module_run(module, input_value, &mut err as *mut *mut WeldError);
+    if weld_error_code(err) != WeldRuntimeErrno::Success {
+        panic!(format!("Run failed: {:?}",
+                       unsafe { CStr::from_ptr(weld_error_message(err)) }));
+    }
+
+    weld_module_free(module);
+    weld_error_free(err);
+    weld_value_free(input_value);
+
+    return ret_value;
 }
 
 fn basic_program() {
     let code = "|| 40 + 2";
+    let conf = "";
 
-    let module = compile_program(&parse_program(code).unwrap()).unwrap();
-    let inp = Box::new(WeldInputArgs {
-        input: 0,
-        nworkers: 1,
-        run_id: 0,
-    });
-    let ptr = Box::into_raw(inp) as i64;
+    let ref input_data = 0;
 
-    let result = module.run(ptr) as *const i32;
-    let result = unsafe { *result };
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = weld_value_data(ret_value) as *const i32;
+    let result = unsafe { *data };
     assert_eq!(result, 42);
-    weld_run_free(-1);
+
+    weld_value_free(ret_value);
 }
 
 fn f64_cast() {
     let code = "|| f64(40 + 2)";
-    let module = compile_program(&parse_program(code).unwrap()).unwrap();
+    let conf = "";
 
-    let inp = Box::new(WeldInputArgs {
-        input: 0,
-        nworkers: 1,
-        run_id: 0,
-    });
-    let ptr = Box::into_raw(inp) as i64;
+    let ref input_data = 0;
 
-    let result = module.run(ptr) as *const f64;
-    let result = unsafe { *result };
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = weld_value_data(ret_value) as *const f64;
+    let result = unsafe { *data };
     assert_eq!(result, 42.0);
-    weld_run_free(-1);
+
+    weld_value_free(ret_value);
 }
 
 fn i32_cast() {
     let code = "|| i32(0.251 * 4.0)";
-    let module = compile_program(&parse_program(code).unwrap()).unwrap();
-    let inp = Box::new(WeldInputArgs {
-        input: 0,
-        nworkers: 1,
-        run_id: 0,
-    });
-    let ptr = Box::into_raw(inp) as i64;
+    let conf = "";
 
-    let result = module.run(ptr) as *const i32;
-    let result = unsafe { *result };
+    let ref input_data = 0;
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = weld_value_data(ret_value) as *const i32;
+    let result = unsafe { *data };
     assert_eq!(result, 1);
-    weld_run_free(-1);
+
+    weld_value_free(ret_value);
 }
 
 fn program_with_args() {
     let code = "|x:i32| 40 + x";
-    let module = compile_program(&parse_program(code).unwrap()).unwrap();
-    let input: i32 = 2;
-    let inp = Box::new(WeldInputArgs {
-        input: &input as *const i32 as i64,
-        nworkers: 1,
-        run_id: 0,
-    });
-    let ptr = Box::into_raw(inp) as i64;
+    let conf = "";
 
-    let result = module.run(ptr) as *const i32;
-    let result = unsafe { *result };
+    let ref input_data: i32 = 2;
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = weld_value_data(ret_value) as *const i32;
+    let result = unsafe { *data };
     assert_eq!(result, 42);
-    weld_run_free(-1);
+
+    weld_value_free(ret_value);
 }
 
 fn let_statement() {
     let code = "|x:i32| let y = 40 + x; y + 2";
-    let module = compile_program(&parse_program(code).unwrap()).unwrap();
-    let input: i32 = 2;
-    let inp = Box::new(WeldInputArgs {
-        input: &input as *const i32 as i64,
-        nworkers: 1,
-        run_id: 0,
-    });
-    let ptr = Box::into_raw(inp) as i64;
+    let conf = "";
 
-    let result = module.run(ptr) as *const i32;
-    let result = unsafe { *result };
+    let ref input_data: i32 = 2;
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = weld_value_data(ret_value) as *const i32;
+    let result = unsafe { *data };
     assert_eq!(result, 44);
-    weld_run_free(-1);
+
+    weld_value_free(ret_value);
 }
 
 fn if_statement() {
-    let code = "|x:i32| if(true, 3, 4)";
-    let module = compile_program(&parse_program(code).unwrap()).unwrap();
-    let input: i32 = 2;
-    let inp = Box::new(WeldInputArgs {
-        input: &input as *const i32 as i64,
-        nworkers: 1,
-        run_id: 0,
-    });
+    let code = "|| if(true, 3, 4)";
+    let conf = "";
 
-    let ptr = Box::into_raw(inp) as i64;
-    let result = module.run(ptr) as *const i32;
-    let result = unsafe { *result };
+    let ref input_data: i32 = 0;
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = weld_value_data(ret_value) as *const i32;
+    let result = unsafe { *data };
     assert_eq!(result, 3);
-    weld_run_free(-1);
+
+    weld_value_free(ret_value);
 }
 
 fn comparison() {
     let code = "|x:i32| if(x>10, x, 10)";
-    let module = compile_program(&parse_program(code).unwrap()).unwrap();
-    let mut input: i32 = 2;
-    let inp = Box::new(WeldInputArgs {
-        input: &input as *const i32 as i64,
-        nworkers: 1,
-        run_id: 0,
-    });
-    let ptr = Box::into_raw(inp) as i64;
+    let conf = "";
 
-    let result = module.run(ptr) as *const i32;
-    let result = unsafe { *result };
+    let ref mut input_data: i32 = 2;
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = weld_value_data(ret_value) as *const i32;
+    let result = unsafe { *data };
     assert_eq!(result, 10);
-    weld_run_free(-1);
 
-    input = 20;
-    let result = module.run(ptr) as *const i32;
-    let result = unsafe { *result };
+    weld_value_free(ret_value);
+
+    *input_data = 20;
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = weld_value_data(ret_value) as *const i32;
+    let result = unsafe { *data };
     assert_eq!(result, 20);
-    weld_run_free(-1);
+
+    weld_value_free(ret_value);
 }
 
 fn simple_vector_lookup() {
-    #[derive(Clone)]
-    #[allow(dead_code)]
-    struct Vec {
-        data: *const i32,
-        len: i64,
-    }
-    #[allow(dead_code)]
-    struct Args {
-        x: Vec,
-    }
-
     let code = "|x:vec[i32]| lookup(x, 3L)";
-    let module = compile_program(&parse_program(code).unwrap()).unwrap();
-    let input = [1, 2, 4, 5];
-    let args = Args {
-        x: Vec {
-            data: &input as *const i32,
-            len: 4,
-        },
+    let conf = "";
+
+    let input_vec = [1, 2, 3, 4, 5];
+    let ref input_data = WeldVec {
+        data: &input_vec as *const i32,
+        len: input_vec.len() as i64,
     };
 
-    let inp = Box::new(WeldInputArgs {
-        input: &args as *const Args as i64,
-        nworkers: 1,
-        run_id: 0,
-    });
-    let ptr = Box::into_raw(inp) as i64;
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = weld_value_data(ret_value) as *const i32;
+    let result = unsafe { *data };
+    assert_eq!(result, input_vec[3]);
 
-    let result_raw = module.run(ptr) as *const i32;
-    let result = unsafe { (*result_raw).clone() };
-    let output = input[3];
-    assert_eq!(output, result);
-    weld_run_free(-1);
+    weld_value_free(ret_value);
 }
 
 fn simple_for_appender_loop() {
-    #[derive(Clone)]
-    #[allow(dead_code)]
-    struct Vec {
-        data: *const i32,
-        len: i64,
-    }
     #[allow(dead_code)]
     struct Args {
-        x: Vec,
+        x: WeldVec<i32>,
         a: i32,
     }
 
     let code = "|x:vec[i32], a:i32| let b=a+1; map(x, |e| e+b)";
-    let module = compile_program(&parse_program(code).unwrap()).unwrap();
-    let input = [1, 2];
-    let args = Args {
-        x: Vec {
-            data: &input as *const i32,
-            len: 2,
+    let conf = "";
+
+    let input_vec = [1, 2];
+    let ref input_data = Args {
+        x: WeldVec {
+            data: &input_vec as *const i32,
+            len: input_vec.len() as i64,
         },
         a: 1,
     };
 
-    let inp = Box::new(WeldInputArgs {
-        input: &args as *const Args as i64,
-        nworkers: 1,
-        run_id: 0,
-    });
-    let ptr = Box::into_raw(inp) as i64;
-
-    let result_raw = module.run(ptr) as *const Vec;
-    let result = unsafe { (*result_raw).clone() };
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = weld_value_data(ret_value) as *const WeldVec<i32>;
+    let result = unsafe { (*data).clone() };
     let output = [3, 4];
+    assert_eq!(result.len as usize, output.len());
     for i in 0..(result.len as isize) {
         assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
     }
-    weld_run_free(-1);
+
+    weld_value_free(ret_value);
 }
 
+// TODO(shoumik): Configuration parsing required for this.
 fn simple_parallel_for_appender_loop() {
     #[derive(Clone)]
     #[allow(dead_code)]
@@ -294,6 +256,7 @@ fn simple_parallel_for_appender_loop() {
     weld_run_free(-1);
 }
 
+// TODO(shoumik): Configuration parsing required for this.
 fn complex_parallel_for_appender_loop() {
     #[derive(Clone)]
     #[allow(dead_code)]
@@ -339,105 +302,74 @@ fn complex_parallel_for_appender_loop() {
 }
 
 fn simple_for_merger_loop() {
-    #[derive(Clone)]
-    #[allow(dead_code)]
-    struct Vec {
-        data: *const i32,
-        len: i64,
-    }
     #[allow(dead_code)]
     struct Args {
-        x: Vec,
+        x: WeldVec<i32>,
         a: i32,
     }
 
     let code = "|x:vec[i32], a:i32| result(for(x, merger[i32,+], |b,i,e| merge(b, e+a)))";
-    let module = compile_program(&parse_program(code).unwrap()).unwrap();
-    let input = [1, 2, 3, 4, 5];
-    let args = Args {
-        x: Vec {
-            data: &input as *const i32,
-            len: 5,
+    let conf = "";
+
+    let input_vec = [1, 2, 3, 4, 5];
+    let ref input_data = Args {
+        x: WeldVec {
+            data: &input_vec as *const i32,
+            len: input_vec.len() as i64,
         },
         a: 1,
     };
 
-    let inp = Box::new(WeldInputArgs {
-        input: &args as *const Args as i64,
-        nworkers: 1,
-        run_id: 0,
-    });
-    let ptr = Box::into_raw(inp) as i64;
-
-    let result_raw = module.run(ptr) as *const i32;
-    let result = unsafe { (*result_raw).clone() };
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = weld_value_data(ret_value) as *const i32;
+    let result = unsafe { (*data).clone() };
     let output = 20;
     assert_eq!(result, output);
-    weld_run_free(-1);
+    weld_value_free(ret_value);
 }
 
 fn simple_for_vecmerger_loop() {
-    #[derive(Clone)]
-    #[allow(dead_code)]
-    struct Vec {
-        data: *const i32,
-        len: i64,
-    }
     let code = "|x:vec[i32]| result(for(x, vecmerger[i32,+](x), |b,i,e| b))";
-    let module = compile_program(&parse_program(code).unwrap()).unwrap();
-    let input = [1, 1, 1, 1, 1];
-    let args = Vec {
-        data: &input as *const i32,
-        len: input.len() as i64,
-    };
-    let inp = Box::new(WeldInputArgs {
-        input: &args as *const Vec as i64,
-        nworkers: 1,
-        run_id: 0,
-    });
-    let ptr = Box::into_raw(inp) as i64;
+    let conf = "";
 
-    let result_raw = module.run(ptr) as *const Vec;
-    let result = unsafe { (*result_raw).clone() };
-    assert_eq!(result.len, input.len() as i64);
+    let input_vec = [1, 1, 1, 1, 1];
+    let ref input_data = WeldVec {
+        data: &input_vec as *const i32,
+        len: input_vec.len() as i64,
+    };
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = weld_value_data(ret_value) as *const WeldVec<i32>;
+    let result = unsafe { (*data).clone() };
+    assert_eq!(result.len, input_vec.len() as i64);
     for i in 0..(result.len as isize) {
-        assert_eq!(unsafe { *result.data.offset(i) }, input[i as usize]);
+        assert_eq!(unsafe { *result.data.offset(i) }, input_vec[i as usize]);
     }
-    weld_run_free(-1);
+    weld_value_free(ret_value);
 }
 
 fn simple_for_vecmerger_loop_2() {
-    #[derive(Clone)]
-    #[allow(dead_code)]
-    struct Vec {
-        data: *const i32,
-        len: i64,
-    }
-
     let code = "|x:vec[i32]| result(for(x, vecmerger[i32,+](x), |b,i,e| merge(b, {i,e*7})))";
-    let module = compile_program(&parse_program(code).unwrap()).unwrap();
-    let input = [1, 1, 1, 1, 1];
-    let args = Vec {
-        data: &input as *const i32,
-        len: input.len() as i64,
-    };
-    let inp = Box::new(WeldInputArgs {
-        input: &args as *const Vec as i64,
-        nworkers: 1,
-        run_id: 0,
-    });
-    let ptr = Box::into_raw(inp) as i64;
+    let conf = "";
 
-    let result_raw = module.run(ptr) as *const Vec;
-    let result = unsafe { (*result_raw).clone() };
-    assert_eq!(result.len, input.len() as i64);
+    let input_vec = [1, 1, 1, 1, 1];
+    let ref input_data = WeldVec {
+        data: &input_vec as *const i32,
+        len: input_vec.len() as i64,
+    };
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = weld_value_data(ret_value) as *const WeldVec<i32>;
+    let result = unsafe { (*data).clone() };
+    assert_eq!(result.len, input_vec.len() as i64);
     for i in 0..(result.len as isize) {
         assert_eq!(unsafe { *result.data.offset(i) },
-                   input[i as usize] + input[i as usize] * 7);
+                   input_vec[i as usize] + input_vec[i as usize] * 7);
     }
-    weld_run_free(-1);
+    weld_value_free(ret_value);
 }
 
+// TODO(parallelize)
 fn parallel_for_vecmerger_loop() {
     #[derive(Clone)]
     #[allow(dead_code)]
@@ -473,71 +405,58 @@ fn parallel_for_vecmerger_loop() {
 fn simple_for_dictmerger_loop() {
     #[derive(Clone)]
     #[allow(dead_code)]
-    struct Vec {
-        data: *const i32,
-        len: i64,
-    }
-    #[allow(dead_code)]
     struct Pair {
         ele1: i32,
         ele2: i32,
     }
-    #[derive(Clone)]
-    #[allow(dead_code)]
-    struct VecPrime {
-        data: *const Pair,
-        len: i64,
-    }
+
     #[allow(dead_code)]
     struct Args {
-        x: Vec,
-        y: Vec,
+        x: WeldVec<i32>,
+        y: WeldVec<i32>,
     }
 
     let code = "|x:vec[i32], y:vec[i32]| tovec(result(for(zip(x,y), dictmerger[i32,i32,+], \
                 |b,i,e| merge(b, e))))";
-    let module = compile_program(&parse_program(code).unwrap()).unwrap();
+    let conf = "";
     let keys = [1, 2, 2, 1, 3];
-    let values = [2, 3, 4, 2, 1];
-    let args = Args {
-        x: Vec {
+    let vals = [2, 3, 4, 2, 1];
+    let ref input_data = Args {
+        x: WeldVec {
             data: &keys as *const i32,
-            len: 5,
+            len: keys.len() as i64,
         },
-        y: Vec {
-            data: &values as *const i32,
-            len: 5,
+        y: WeldVec {
+            data: &vals as *const i32,
+            len: vals.len() as i64,
         },
     };
 
-    let inp = Box::new(WeldInputArgs {
-        input: &args as *const Args as i64,
-        nworkers: 1,
-        run_id: 0,
-    });
-    let ptr = Box::into_raw(inp) as i64;
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = weld_value_data(ret_value) as *const WeldVec<Pair>;
+    let result = unsafe { (*data).clone() };
 
-    let result_raw = module.run(ptr) as *const VecPrime;
-    let result = unsafe { (*result_raw).clone() };
     let output_keys = [1, 2, 3];
-    let output_values = [4, 7, 1];
+    let output_vals = [4, 7, 1];
+
+    assert_eq!(result.len, output_keys.len() as i64);
     for i in 0..(output_keys.len() as isize) {
         let mut success = false;
         let key = unsafe { (*result.data.offset(i)).ele1 };
         let value = unsafe { (*result.data.offset(i)).ele2 };
         for j in 0..(output_keys.len()) {
             if output_keys[j] == key {
-                if output_values[j] == value {
+                if output_vals[j] == value {
                     success = true;
                 }
             }
         }
         assert_eq!(success, true);
     }
-    assert_eq!(result.len, output_keys.len() as i64);
-    weld_run_free(-1);
+    weld_value_free(ret_value);
 }
 
+// TODO(parallel)
 fn simple_parallel_for_dictmerger_loop() {
     #[derive(Clone)]
     #[allow(dead_code)]
@@ -612,336 +531,215 @@ fn simple_parallel_for_dictmerger_loop() {
 }
 
 fn simple_dict_lookup() {
-    #[derive(Clone)]
-    #[allow(dead_code)]
-    struct Vec {
-        data: *const i32,
-        len: i64,
-    }
     #[allow(dead_code)]
     struct Args {
-        x: Vec,
-        y: Vec,
+        x: WeldVec<i32>,
+        y: WeldVec<i32>,
     }
 
     let code = "|x:vec[i32], y:vec[i32]| let a = result(for(zip(x,y), dictmerger[i32,i32,+], \
                 |b,i,e| merge(b, e))); lookup(a, 1)";
-    let module = compile_program(&parse_program(code).unwrap()).unwrap();
+    let conf = "";
+
     let keys = [1, 2, 2, 1, 3];
-    let values = [2, 3, 4, 2, 1];
-    let args = Args {
-        x: Vec {
+    let vals = [2, 3, 4, 2, 1];
+    let ref input_data = Args {
+        x: WeldVec {
             data: &keys as *const i32,
-            len: 5,
+            len: keys.len() as i64,
         },
-        y: Vec {
-            data: &values as *const i32,
-            len: 5,
+        y: WeldVec {
+            data: &vals as *const i32,
+            len: vals.len() as i64,
         },
     };
 
-    let inp = Box::new(WeldInputArgs {
-        input: &args as *const Args as i64,
-        nworkers: 1,
-        run_id: 0,
-    });
-    let ptr = Box::into_raw(inp) as i64;
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = weld_value_data(ret_value) as *const i32;
+    let result = unsafe { (*data).clone() };
 
-    let result_raw = module.run(ptr) as *const i32;
-    let result = unsafe { (*result_raw).clone() };
     let output = 4;
     assert_eq!(output, result);
-    weld_run_free(-1);
+    weld_value_free(ret_value);
 }
 
 fn simple_length() {
-    #[derive(Clone)]
-    #[allow(dead_code)]
-    struct Vec {
-        data: *const i32,
-        len: i64,
-    }
-    #[allow(dead_code)]
-    struct Args {
-        x: Vec,
-    }
-
     let code = "|x:vec[i32]| len(x)";
-    let module = compile_program(&parse_program(code).unwrap()).unwrap();
-    let data = [2, 3, 4, 2, 1];
-    let args = Args {
-        x: Vec {
-            data: &data as *const i32,
-            len: 5,
-        },
+    let conf = "";
+
+    let input_vec = [2, 3, 4, 2, 1];
+    let ref input_data = WeldVec {
+        data: &input_vec as *const i32,
+        len: input_vec.len() as i64,
     };
 
-    let inp = Box::new(WeldInputArgs {
-        input: &args as *const Args as i64,
-        nworkers: 1,
-        run_id: 0,
-    });
-    let ptr = Box::into_raw(inp) as i64;
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = weld_value_data(ret_value) as *const i32;
+    let result = unsafe { (*data).clone() };
 
-    let result_raw = module.run(ptr) as *const i32;
-    let result = unsafe { (*result_raw).clone() };
     let output = 5;
     assert_eq!(output, result);
-    weld_run_free(-1);
+    weld_value_free(ret_value);
 }
 
 fn filter_length() {
-    #[derive(Clone)]
-    #[allow(dead_code)]
-    struct Vec {
-        data: *const i32,
-        len: i64,
-    }
-    #[allow(dead_code)]
-    struct Args {
-        x: Vec,
-    }
-
     let code = "|x:vec[i32]| len(filter(x, |i| i < 4 && i > 1))";
-    let module = compile_program(&parse_program(code).unwrap()).unwrap();
-    let data = [2, 3, 4, 2, 1];
-    let args = Args {
-        x: Vec {
-            data: &data as *const i32,
-            len: 5,
-        },
+    let conf = "";
+
+    let input_vec = [2, 3, 4, 2, 1];
+    let ref input_data = WeldVec {
+        data: &input_vec as *const i32,
+        len: input_vec.len() as i64,
     };
 
-    let inp = Box::new(WeldInputArgs {
-        input: &args as *const Args as i64,
-        nworkers: 1,
-        run_id: 0,
-    });
-    let ptr = Box::into_raw(inp) as i64;
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = weld_value_data(ret_value) as *const i32;
+    let result = unsafe { (*data).clone() };
 
-    let result_raw = module.run(ptr) as *const i32;
-    let result = unsafe { (*result_raw).clone() };
     let output = 3;
     assert_eq!(output, result);
-    weld_run_free(-1);
+    weld_value_free(ret_value);
 }
 
 fn flat_map_length() {
-    #[derive(Clone)]
-    #[allow(dead_code)]
-    struct Vec {
-        data: *const i32,
-        len: i64,
-    }
-    #[allow(dead_code)]
-    struct Args {
-        x: Vec,
-    }
-
     let code = "|x:vec[i32]| len(flatten(map(x, |i:i32| x)))";
-    let module = compile_program(&parse_program(code).unwrap()).unwrap();
+    let conf = "";
 
-    let data = [2, 3, 4, 2, 1];
-    let args = Args {
-        x: Vec {
-            data: &data as *const i32,
-            len: 5,
-        },
+    let input_vec = [2, 3, 4, 2, 1];
+    let ref input_data = WeldVec {
+        data: &input_vec as *const i32,
+        len: input_vec.len() as i64,
     };
 
-    let inp = Box::new(WeldInputArgs {
-        input: &args as *const Args as i64,
-        nworkers: 1,
-        run_id: 0,
-    });
-    let ptr = Box::into_raw(inp) as i64;
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = weld_value_data(ret_value) as *const i32;
+    let result = unsafe { (*data).clone() };
 
-    let result_raw = module.run(ptr) as *const i32;
-    let result = unsafe { (*result_raw).clone() };
     let output = 25;
     assert_eq!(output, result);
-    weld_run_free(-1);
+    weld_value_free(ret_value);
 }
 
 fn if_for_loop() {
-    #[derive(Clone)]
-    #[allow(dead_code)]
-    struct Vec {
-        data: *const i32,
-        len: i64,
-    }
+    let code = "|x:vec[i32], a:i32| if(a > 5, map(x, |e| e+1), map(x, |e| e+2))";
+    let conf = "";
+
+    let input_vec = [1, 2];
+
     #[allow(dead_code)]
     struct Args {
-        x: Vec,
+        x: WeldVec<i32>,
         a: i32,
     }
 
-    let code = "|x:vec[i32], a:i32| if(a > 5, map(x, |e| e+1), map(x, |e| e+2))";
-    let module = compile_program(&parse_program(code).unwrap()).unwrap();
-    let input = [1, 2];
-
-    let args = Args {
-        x: Vec {
-            data: &input as *const i32,
-            len: 2,
+    let ref input_data = Args {
+        x: WeldVec {
+            data: &input_vec as *const i32,
+            len: input_vec.len() as i64,
         },
         a: 1,
     };
 
-    let inp = Box::new(WeldInputArgs {
-        input: &args as *const Args as i64,
-        nworkers: 1,
-        run_id: 0,
-    });
-    let ptr = Box::into_raw(inp) as i64;
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = weld_value_data(ret_value) as *const WeldVec<i32>;
+    let result = unsafe { (*data).clone() };
 
-    let result_raw = module.run(ptr) as *const Vec;
-    let result = unsafe { (*result_raw).clone() };
     let output = [3, 4];
     for i in 0..(result.len as isize) {
         assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
     }
-    weld_run_free(-1);
-
-    let args = Args {
-        x: Vec {
-            data: &input as *const i32,
-            len: 2,
-        },
-        a: 6,
-    };
-    let inp = Box::new(WeldInputArgs {
-        input: &args as *const Args as i64,
-        nworkers: 1,
-        run_id: 0,
-    });
-    let ptr = Box::into_raw(inp) as i64;
-
-    let result_raw = module.run(ptr) as *const Vec;
-    let result = unsafe { (*result_raw).clone() };
-    let output = [2, 3];
-    for i in 0..(result.len as isize) {
-        assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
-    }
-    weld_run_free(-1);
+    weld_value_free(ret_value);
 }
 
 fn map_zip_loop() {
-    #[derive(Clone)]
-    #[allow(dead_code)]
-    struct Vec {
-        data: *const i32,
-        len: i64,
-    }
     #[allow(dead_code)]
     struct Args {
-        x: Vec,
-        y: Vec,
+        x: WeldVec<i32>,
+        y: WeldVec<i32>,
     }
 
     let code = "|x:vec[i32], y:vec[i32]| map(zip(x,y), |e| e.$0 + e.$1)";
-    let module = compile_program(&parse_program(code).unwrap()).unwrap();
+    let conf = "";
+
     let x = [1, 2, 3, 4];
     let y = [5, 6, 7, 8];
-    let args = Args {
-        x: Vec {
+    let ref input_data = Args {
+        x: WeldVec {
             data: &x as *const i32,
-            len: 4,
+            len: x.len() as i64,
         },
-        y: Vec {
+        y: WeldVec {
             data: &y as *const i32,
-            len: 4,
+            len: y.len() as i64,
         },
     };
 
-    let inp = Box::new(WeldInputArgs {
-        input: &args as *const Args as i64,
-        nworkers: 1,
-        run_id: 0,
-    });
-    let ptr = Box::into_raw(inp) as i64;
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = weld_value_data(ret_value) as *const WeldVec<i32>;
+    let result = unsafe { (*data).clone() };
 
-    let result_raw = module.run(ptr) as *const Vec;
-    let result = unsafe { (*result_raw).clone() };
     let output = [6, 8, 10, 12];
     for i in 0..(result.len as isize) {
         assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
     }
-    weld_run_free(-1);
+
+    weld_value_free(ret_value);
 }
 
 fn iters_for_loop() {
-    #[derive(Clone)]
-    #[allow(dead_code)]
-    struct Vec {
-        data: *const i32,
-        len: i64,
-    }
     #[allow(dead_code)]
     struct Args {
-        x: Vec,
-        y: Vec,
+        x: WeldVec<i32>,
+        y: WeldVec<i32>,
     }
 
     let code = "|x:vec[i32], y:vec[i32]| result(for(zip(iter(x,0L,4L,2L), y), appender, |b,i,e| \
                 merge(b,e.$0+e.$1)))";
-    let module = compile_program(&parse_program(code).unwrap()).unwrap();
+    let conf = "";
+
     let x = [1, 2, 3, 4];
     let y = [5, 6];
-    let args = Args {
-        x: Vec {
+    let ref input_data = Args {
+        x: WeldVec {
             data: &x as *const i32,
-            len: 4,
+            len: x.len() as i64,
         },
-        y: Vec {
+        y: WeldVec {
             data: &y as *const i32,
-            len: 2,
+            len: y.len() as i64,
         },
     };
 
-    let inp = Box::new(WeldInputArgs {
-        input: &args as *const Args as i64,
-        nworkers: 1,
-        run_id: 0,
-    });
-    let ptr = Box::into_raw(inp) as i64;
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = weld_value_data(ret_value) as *const WeldVec<i32>;
+    let result = unsafe { (*data).clone() };
 
-    let result_raw = module.run(ptr) as *const Vec;
-    let result = unsafe { (*result_raw).clone() };
     let output = [6, 9];
     for i in 0..(result.len as isize) {
         assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
     }
-    weld_run_free(-1);
+
+    weld_value_free(ret_value);
 }
 
 fn serial_parlib_test() {
-    #[derive(Clone)]
-    #[allow(dead_code)]
-    struct WeldVec {
-        data: *const i32,
-        len: i64,
-    }
     let code = "|x:vec[i32]| result(for(x, merger[i32,+], |b,i,e| merge(b, e)))";
-    let module = compile_program(&parse_program(code).unwrap()).unwrap();
+    let conf = "";
+
     let size: i32 = 10000;
-    let input: Vec<i32> = vec![1; size as usize];
-    let args = WeldVec {
-        data: input.as_ptr() as *const i32,
+    let input_vec: Vec<i32> = vec![1; size as usize];
+
+    let ref input_data = WeldVec {
+        data: input_vec.as_ptr() as *const i32,
         len: size as i64,
     };
 
-    let inp = Box::new(WeldInputArgs {
-        input: &args as *const WeldVec as i64,
-        nworkers: 1,
-        run_id: 0,
-    });
-    let ptr = Box::into_raw(inp) as i64;
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = weld_value_data(ret_value) as *const i32;
+    let result = unsafe { (*data).clone() };
 
-    let result_raw = module.run(ptr) as *const i32;
-    let result = unsafe { (*result_raw).clone() };
-    assert_eq!(result, size);
-    weld_run_free(-1);
+    assert_eq!(result, size as i32);
+    weld_value_free(ret_value);
 }
 
 fn iters_outofbounds_error_test() {
@@ -969,15 +767,15 @@ fn iters_outofbounds_error_test() {
     let inp = Box::new(WeldInputArgs {
         input: &args as *const Args as i64,
         nworkers: 4,
-        run_id: 5, // this test needs a unique run ID so we don't reset accidentally.
+        run_id: 99, // this test needs a unique run ID so we don't reset accidentally.
     });
     let ptr = Box::into_raw(inp) as i64;
     module.run(ptr) as *const i32;
 
     // Get the error back for the run ID we used.
-    let errno = weld_rt_get_errno(5);
+    let errno = weld_rt_get_errno(99);
     assert_eq!(errno, WeldRuntimeErrno::BadIteratorLength);
-    weld_run_free(5);
+    weld_run_free(99);
 }
 
 fn outofmemory_error_test() {
@@ -998,7 +796,7 @@ fn outofmemory_error_test() {
     // future.
     //
     // This test tests the case where the default memory limit (1GB) is exceeded.
-    let code = "|x:vec[i32]| result(for(x, appender, |b,i,e| merge(b,e+1)))";
+    let code = "|x:vec[i32]| result(for(x, vecmerger[i32,+](x), |b,i,e| merge(b,{i,e+1})))";
     let module = compile_program(&parse_program(code).unwrap()).unwrap();
     // 1GB of data; the appender will allocate at least this much,
     // exceeding the 1GB default limit.
@@ -1013,22 +811,21 @@ fn outofmemory_error_test() {
     let inp = Box::new(WeldInputArgs {
         input: &args as *const Args as i64,
         nworkers: 4,
-        run_id: 6, // this test needs a unique run ID so we don't reset accidentally.
+        run_id: 999, // this test needs a unique run ID so we don't reset accidentally.
     });
     let ptr = Box::into_raw(inp) as i64;
-    module.run(ptr) as *const i32;
+    module.run(ptr) as *const Vec;
 
     // Get the error back for the run ID we used.
-    let errno = weld_rt_get_errno(6);
+    let errno = weld_rt_get_errno(999);
     assert_eq!(errno, WeldRuntimeErrno::OutOfMemory);
-    weld_run_free(6);
+    weld_run_free(999);
 }
 
 fn main() {
     let args: Vec<String> = env::args().collect();
     let tests: Vec<(&str, fn())> =
-        vec![("runtime_fns", runtime_fns),
-             ("basic_program", basic_program),
+        vec![("basic_program", basic_program),
              ("f64_cast", f64_cast),
              ("i32_cast", i32_cast),
              ("program_with_args", program_with_args),
@@ -1052,9 +849,9 @@ fn main() {
              ("if_for_loop", if_for_loop),
              ("map_zip_loop", map_zip_loop),
              ("iters_for_loop", iters_for_loop),
+             ("serial_parlib_test", serial_parlib_test),
              ("iters_outofbounds_error_test", iters_outofbounds_error_test),
-             ("outofmemory_error_test", outofmemory_error_test),
-             ("serial_parlib_test", serial_parlib_test)];
+             ("outofmemory_error_test", outofmemory_error_test)];
 
     println!("");
     println!("running tests");
@@ -1062,7 +859,7 @@ fn main() {
     for t in tests.iter() {
         match t.0 {
             // don't run this, they exist only to make sure functions don't get optimized out
-            "runtime_fns" => {}
+            "runtime_fns" => weld_print_function_pointers(),
             _ => {
                 if args.len() > 1 {
                     if !t.0.contains(args[1].as_str()) {
@@ -1080,6 +877,6 @@ fn main() {
     println!("");
     println!("test result: \x1b[0;32mok\x1b[0m. {} passed; 0 failed; {} ignored; 0 measured",
              passed,
-             tests.len() - passed - 1); // - 1 to ignore runtime_fns
+             tests.len() - passed);
     println!("");
 }

@@ -42,10 +42,6 @@ use std::sync::Mutex;
 use std::sync::RwLock;
 use std::fmt;
 
-const CACHE_BITS: i64 = 6;
-const CACHE_LINE: u64 = (1 << (CACHE_BITS as u64));
-const MASK: u64 = (!(CACHE_LINE - 1));
-
 /// Hold memory information for a run.
 #[derive(Clone, Debug)]
 struct RunMemoryInfo {
@@ -69,6 +65,7 @@ impl RunMemoryInfo {
 
 /// An errno set by the runtime.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd)]
+#[repr(u64)]
 pub enum WeldRuntimeErrno {
     Success = 0,
     CompileError,
@@ -100,12 +97,10 @@ lazy_static! {
 // Default memory size of 1GB.
 const DEFAULT_MEM: i64 = 1000000000;
 
-// C Functions used by the Weld runtime.
-extern "C" {
-    pub fn malloc(size: libc::size_t) -> *mut c_void;
-    pub fn realloc(ptr: *mut c_void, size: libc::size_t) -> *mut c_void;
-    pub fn free(ptr: *mut c_void);
-}
+// Cache sizes used to align mergers to a cache line.
+const CACHE_BITS: i64 = 6;
+const CACHE_LINE: u64 = (1 << (CACHE_BITS as u64));
+const MASK: u64 = (!(CACHE_LINE - 1));
 
 #[repr(C)]
 pub struct work_t {
@@ -140,6 +135,13 @@ pub struct vec_output {
     size: i64,
 }
 
+// C Functions used by the Weld runtime.
+extern "C" {
+    pub fn malloc(size: libc::size_t) -> *mut c_void;
+    pub fn realloc(ptr: *mut c_void, size: libc::size_t) -> *mut c_void;
+    pub fn free(ptr: *mut c_void);
+}
+
 #[link(name = "par", kind = "static")]
 extern "C" {
     pub fn my_id_public() -> i32;
@@ -166,11 +168,15 @@ extern "C" {
     pub fn weld_abort_thread();
 }
 
+/// An error passed as an opaque pointer using the runtime API.
 pub struct WeldError {
     errno: WeldRuntimeErrno,
     message: String,
 }
 
+/// A value passed as an opaque pointer using the runtime API. `WeldValue` encapsulates some raw
+/// data along with a `run_id` which designates the run a value is associated with. If the `run_id`
+/// is `None` the data is owned by a caller outside the runtime.
 pub struct WeldValue {
     data: *const c_void,
     run_id: Option<i64>,
@@ -192,6 +198,36 @@ impl WeldError {
             message: message,
         }
     }
+}
+
+/// Prints the address of each `extern` function.
+///
+/// Binaries should call this to prevent symbols from being optimized out.
+pub fn weld_print_function_pointers() {
+    println!("{:p}", weld_rt_malloc as *const ());
+    println!("{:p}", weld_rt_realloc as *const ());
+    println!("{:p}", weld_rt_free as *const ());
+    println!("{:p}", weld_rt_get_errno as *const ());
+    println!("{:p}", weld_rt_set_errno as *const ());
+    // Parlib
+    println!("{:p}", my_id_public as *const ());
+    println!("{:p}", set_result as *const ());
+    println!("{:p}", get_result as *const ());
+    println!("{:p}", get_nworkers as *const ());
+    println!("{:p}", set_nworkers as *const ());
+    println!("{:p}", get_runid as *const ());
+    println!("{:p}", set_runid as *const ());
+    println!("{:p}", pl_start_loop as *const ());
+    println!("{:p}", execute as *const ());
+    println!("{:p}", new_vb as *const ());
+    println!("{:p}", new_piece as *const ());
+    println!("{:p}", cur_piece as *const ());
+    println!("{:p}", result_vb as *const ());
+    println!("{:p}", weld_abort_thread as *const ());
+    // Builders
+    println!("{:p}", new_merger as *const ());
+    println!("{:p}", get_merger_at_index as *const ());
+    println!("{:p}", free_merger as *const ());
 }
 
 #[no_mangle]
@@ -363,14 +399,15 @@ pub extern "C" fn weld_module_free(ptr: *mut easy_ll::CompiledModule) {
 
 #[no_mangle]
 /// Returns an error code for a Weld error object.
-pub extern "C" fn weld_error_code(err: *mut WeldError) -> libc::int32_t {
+pub extern "C" fn weld_error_code(err: *mut WeldError) -> WeldRuntimeErrno {
     let err = unsafe {
         if err.is_null() {
-            return 1;
+            // TODO Handle this better
+            return WeldRuntimeErrno::Success;
         }
         &mut *err
     };
-    err.errno as libc::int32_t
+    err.errno
 }
 
 #[no_mangle]
@@ -498,6 +535,7 @@ pub extern "C" fn weld_rt_get_errno(run_id: libc::int64_t) -> WeldRuntimeErrno {
     let guarded = WELD_ERRNOS.read().unwrap();
     if !guarded.contains_key(&run_id) {
         // TODO(shoumik): Better behavior here.
+        // println!("No run ID found");
         return WeldRuntimeErrno::Success;
     }
     *guarded.get(&run_id).unwrap()
