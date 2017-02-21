@@ -313,9 +313,7 @@ pub extern "C" fn weld_module_compile(code: *const c_char,
         &mut **err
     };
 
-    if let Err(e) = easy_ll::load_library("target/debug/libweld") {
-        println!("load failed: {}", e.description());
-    }
+    if easy_ll::load_library("target/debug/libweld").is_err() {}
     let module = llvm::compile_program(&parser::parse_program(code).unwrap());
     if let Err(ref e) = module {
         err.errno = WeldRuntimeErrno::CompileError;

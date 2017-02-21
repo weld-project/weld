@@ -7,7 +7,6 @@ use weld::llvm::*;
 use weld::parser::*;
 use weld::weld_print_function_pointers;
 use weld::weld_run_free;
-use weld::weld_rt_get_errno;
 use weld::WeldRuntimeErrno;
 
 use weld::WeldError;
@@ -28,9 +27,10 @@ struct WeldVec<T> {
     len: i64,
 }
 
-/// Takes a string of Weld code and a `void *` pointer to data, and compile and run the code.
-/// Panics if an error is thrown. Returns a `WeldValue` that must be freed.
-fn compile_and_run<T>(code: &str, conf: &str, ptr: &T) -> *mut WeldValue {
+/// Compiles and runs some code on a configuration and input data pointer. If the run is
+/// successful, returns the resulting value. If the run fails (via a runtime error), returns an
+/// error. Both the value and error must be freed by the caller.
+fn _compile_and_run<T>(code: &str, conf: &str, ptr: &T) -> Result<*mut WeldValue, *mut WeldError> {
     let code = CString::new(code).unwrap();
     let conf = CString::new(conf).unwrap();
 
@@ -42,23 +42,42 @@ fn compile_and_run<T>(code: &str, conf: &str, ptr: &T) -> *mut WeldValue {
                                      &mut err as *mut *mut WeldError);
 
     if weld_error_code(err) != WeldRuntimeErrno::Success {
-        panic!(format!("Compile failed: {:?}",
-                       unsafe { CStr::from_ptr(weld_error_message(err)) }));
+        return Err(err);
     }
     weld_error_free(err);
 
-    let mut err = std::ptr::null_mut();
+    err = std::ptr::null_mut();
     let ret_value = weld_module_run(module, input_value, &mut err as *mut *mut WeldError);
     if weld_error_code(err) != WeldRuntimeErrno::Success {
-        panic!(format!("Run failed: {:?}",
-                       unsafe { CStr::from_ptr(weld_error_message(err)) }));
+        return Err(err);
     }
 
     weld_module_free(module);
     weld_error_free(err);
     weld_value_free(input_value);
 
-    return ret_value;
+    return Ok(ret_value);
+}
+
+/// Runs `code` with the given `conf` and input data pointer `ptr`, expecting
+/// a runtime error to be thrown. Panics if no error is thrown.
+fn compile_and_run_error<T>(code: &str, conf: &str, ptr: &T) -> *mut WeldError {
+    match _compile_and_run(code, conf, ptr) {
+        Ok(_) => panic!("Expected an error but got a value"),
+        Err(e) => e,
+    }
+}
+
+/// Runs `code` with the given `conf` and input data pointer `ptr`, expecting
+/// a succeessful result to be returned. Panics if an error is thrown by the runtime.
+fn compile_and_run<T>(code: &str, conf: &str, ptr: &T) -> *mut WeldValue {
+    match _compile_and_run(code, conf, ptr) {
+        Ok(val) => val,
+        Err(err) => {
+            panic!(format!("Compile failed: {:?}",
+                           unsafe { CStr::from_ptr(weld_error_message(err)) }))
+        }
+    }
 }
 
 fn basic_program() {
@@ -743,83 +762,36 @@ fn serial_parlib_test() {
 }
 
 fn iters_outofbounds_error_test() {
-    #[derive(Clone)]
-    #[allow(dead_code)]
-    struct Vec {
-        data: *const i32,
-        len: i64,
-    }
-    #[allow(dead_code)]
-    struct Args {
-        x: Vec,
-    }
-
     let code = "|x:vec[i32]| result(for(iter(x,0L,20000L,1L), appender, |b,i,e| merge(b,e+1)))";
-    let module = compile_program(&parse_program(code).unwrap()).unwrap();
-    let x = [4; 1000 as usize];
-    let args = Args {
-        x: Vec {
-            data: &x as *const i32,
-            len: x.len() as i64,
-        },
+    let conf = "";
+
+    let input_vec = [4; 1000 as usize];
+    let ref input_data = WeldVec {
+        data: &input_vec as *const i32,
+        len: input_vec.len() as i64,
     };
 
-    let inp = Box::new(WeldInputArgs {
-        input: &args as *const Args as i64,
-        nworkers: 4,
-        run_id: 99, // this test needs a unique run ID so we don't reset accidentally.
-    });
-    let ptr = Box::into_raw(inp) as i64;
-    module.run(ptr) as *const i32;
-
-    // Get the error back for the run ID we used.
-    let errno = weld_rt_get_errno(99);
-    assert_eq!(errno, WeldRuntimeErrno::BadIteratorLength);
-    weld_run_free(99);
+    let err_value = compile_and_run_error(code, conf, input_data);
+    assert_eq!(weld_error_code(err_value),
+               WeldRuntimeErrno::BadIteratorLength);
+    weld_error_free(err_value);
 }
 
 fn outofmemory_error_test() {
-    #[derive(Clone)]
-    #[allow(dead_code)]
-    struct Vec {
-        data: *const i32,
-        len: i64,
-    }
-    #[allow(dead_code)]
-    struct Args {
-        x: Vec,
-    }
-
-    // TODO(shoumik): This test (and all the other tests) can be made more robust
-    // by using the API directly, since that will test how users actually use Weld.
-    // What we do here uses unstable APIs and could cause tests to break in the
-    // future.
-    //
-    // This test tests the case where the default memory limit (1GB) is exceeded.
     let code = "|x:vec[i32]| result(for(x, vecmerger[i32,+](x), |b,i,e| merge(b,{i,e+1})))";
-    let module = compile_program(&parse_program(code).unwrap()).unwrap();
-    // 1GB of data; the appender will allocate at least this much,
+    let conf = "";
+
+    // 1GB of data; the vecmerger will allocate at least this much,
     // exceeding the 1GB default limit.
     let x = vec![4; 1000000000 / 4 as usize];
-    let args = Args {
-        x: Vec {
-            data: x.as_ptr() as *const i32,
-            len: x.len() as i64,
-        },
+    let ref input_data = WeldVec {
+        data: x.as_ptr() as *const i32,
+        len: x.len() as i64,
     };
 
-    let inp = Box::new(WeldInputArgs {
-        input: &args as *const Args as i64,
-        nworkers: 4,
-        run_id: 999, // this test needs a unique run ID so we don't reset accidentally.
-    });
-    let ptr = Box::into_raw(inp) as i64;
-    module.run(ptr) as *const Vec;
-
-    // Get the error back for the run ID we used.
-    let errno = weld_rt_get_errno(999);
-    assert_eq!(errno, WeldRuntimeErrno::OutOfMemory);
-    weld_run_free(999);
+    let err_value = compile_and_run_error(code, conf, input_data);
+    assert_eq!(weld_error_code(err_value), WeldRuntimeErrno::OutOfMemory);
+    weld_error_free(err_value);
 }
 
 fn main() {
