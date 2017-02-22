@@ -1,6 +1,5 @@
 
 from ctypes import *
-
 import os
 
 home = os.environ["WELD_HOME"]
@@ -9,7 +8,6 @@ if home[-1] != "/":
 
 # Load the Weld Dynamic Library.
 weld = CDLL(home + "target/debug/libweld.dylib")
-print weld
 
 weld_module_compile = weld.weld_module_compile
 # code, conf, &err

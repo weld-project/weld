@@ -12,7 +12,7 @@ extern crate libc;
 use std::collections::HashMap;
 use std::error::Error;
 use libc::{c_char, c_void};
-use std::ffi::CStr;
+use std::ffi::{CStr, CString};
 
 use std::env;
 
@@ -171,7 +171,7 @@ extern "C" {
 /// An error passed as an opaque pointer using the runtime API.
 pub struct WeldError {
     errno: WeldRuntimeErrno,
-    message: String,
+    message: CString,
 }
 
 impl WeldError {
@@ -179,7 +179,7 @@ impl WeldError {
     fn new(errno: WeldRuntimeErrno) -> WeldError {
         WeldError {
             errno: errno,
-            message: errno.to_string(),
+            message: CString::new(errno.to_string()).unwrap(),
         }
     }
 }
@@ -197,7 +197,7 @@ pub struct WeldValue {
 /// the current string value of a configuration parameter, while `set` associates a string
 /// parameter with a value.
 pub struct WeldConf {
-    dict: HashMap<String, String>,
+    dict: HashMap<CString, CString>,
 }
 
 impl WeldConf {
@@ -256,8 +256,7 @@ pub unsafe extern "C" fn weld_conf_get(ptr: *const WeldConf, key: *const c_char)
     let conf = &*ptr;
 
     let key = CStr::from_ptr(key);
-    let key = key.to_str().unwrap().to_string();
-
+    let key = key.to_owned();
     match conf.dict.get(&key) {
         Some(k) => k.as_ptr() as *const c_char,
         None => std::ptr::null_mut() as *const c_char,
@@ -273,9 +272,10 @@ pub unsafe extern "C" fn weld_conf_set(ptr: *mut WeldConf,
     let mut conf = &mut *ptr;
 
     let key = CStr::from_ptr(key);
-    let key = key.to_str().unwrap().to_string();
+    let key = key.to_owned();
     let val = CStr::from_ptr(value);
-    let val = val.to_str().unwrap().to_string();
+    let val = val.to_owned();
+
     conf.dict.insert(key, val);
 }
 
@@ -360,7 +360,7 @@ pub unsafe extern "C" fn weld_module_compile(code: *const c_char,
 
     if let Err(ref e) = module {
         err.errno = WeldRuntimeErrno::CompileError;
-        err.message = e.description().to_string();
+        err.message = CString::new(e.description().to_string()).unwrap();
         return std::ptr::null_mut();
     }
     Box::into_raw(Box::new(module.unwrap()))
@@ -387,14 +387,16 @@ pub unsafe extern "C" fn weld_module_run(module: *mut easy_ll::CompiledModule,
     let err = &mut **err;
 
     let mem_limit = conf::parse_memory_limit(conf.dict
-        .get(conf::MEMORY_LIMIT_KEY)
-        .unwrap_or(&"".to_string())
+        .get(&CString::new(conf::MEMORY_LIMIT_KEY).unwrap())
+        .unwrap_or(&CString::new("").unwrap())
         .clone());
 
     let threads = conf::parse_memory_limit(conf.dict
-        .get(conf::THREADS_KEY)
-        .unwrap_or(&"".to_string())
+        .get(&CString::new(conf::THREADS_KEY).unwrap())
+        .unwrap_or(&CString::new("").unwrap())
         .clone());
+
+    println!("about to launch work");
 
     let my_run_id;
     // Put this in it's own scope so the mutexes are unlocked.
@@ -406,6 +408,9 @@ pub unsafe extern "C" fn weld_module_run(module: *mut easy_ll::CompiledModule,
         guarded.insert(my_run_id, RunMemoryInfo::new(mem_limit));
     }
 
+    let xptr = arg.data as *const i32;
+    println!("{}", *xptr);
+
     let input = Box::new(llvm::WeldInputArgs {
         input: arg.data as i64,
         nworkers: threads as i32,
@@ -413,6 +418,7 @@ pub unsafe extern "C" fn weld_module_run(module: *mut easy_ll::CompiledModule,
     });
     let ptr = Box::into_raw(input) as i64;
 
+    println!("calling run...");
     let result = module.run(ptr) as *const c_void;
     let errno = weld_rt_get_errno(my_run_id);
     if errno != WeldRuntimeErrno::Success {
@@ -420,6 +426,7 @@ pub unsafe extern "C" fn weld_module_run(module: *mut easy_ll::CompiledModule,
         *err = WeldError::new(errno);
         return std::ptr::null_mut();
     }
+    println!("finished call to run");
 
     Box::into_raw(Box::new(WeldValue {
         data: result,
@@ -480,6 +487,7 @@ pub extern "C" fn weld_rt_malloc(run_id: libc::int64_t, size: libc::int64_t) -> 
     let run_id = run_id as i64;
     let mut ptr = std::ptr::null_mut();
     let mut do_allocation = true;
+    println!("weld_rt_malloc called");
     {
         let mut guarded = ALLOCATIONS.lock().unwrap();
         // TODO(shoumik): Throw error if run ID not found?
@@ -496,6 +504,7 @@ pub extern "C" fn weld_rt_malloc(run_id: libc::int64_t, size: libc::int64_t) -> 
             mem_info.allocations.insert(ptr as u64, size as u64);
         }
     }
+    println!("weld_rt_malloc finished");
 
     // Release the lock before quitting by exiting the above scope.
     if !do_allocation {
