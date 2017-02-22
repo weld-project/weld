@@ -5,7 +5,7 @@ import weld
 
 # Setup the Weld code we want to run.
 code = ctypes.c_char_p("|x:i64| x + 5L")
-conf = ctypes.c_char_p("configuration")
+conf = weld.weld_conf_new()
 err = ctypes.c_void_p()
 module = weld.weld_module_compile(code, conf, ctypes.byref(err))
 print weld.weld_error_message(err)
@@ -25,7 +25,7 @@ while True:
 
     # A new error handle
     err2 = ctypes.c_void_p()
-    res_obj = weld.weld_module_run(module, arg_obj, ctypes.byref(err2))
+    res_obj = weld.weld_module_run(module, conf, arg_obj, ctypes.byref(err2))
 
     data = weld.weld_value_data(res_obj)
 

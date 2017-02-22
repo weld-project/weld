@@ -14,6 +14,8 @@ use std::error::Error;
 use libc::{c_char, c_void};
 use std::ffi::CStr;
 
+use std::env;
+
 /// Utility macro to create an Err result with a WeldError from a format string.
 macro_rules! weld_err {
     ( $($arg:tt)* ) => ({
@@ -343,7 +345,17 @@ pub unsafe extern "C" fn weld_module_compile(code: *const c_char,
     *err = Box::into_raw(Box::new(WeldError::new(WeldRuntimeErrno::Success)));
     let err = &mut **err;
 
-    let _ = easy_ll::load_library("target/debug/libweld");
+    // Try the current directory if WELD_HOME isn't set.
+    let mut path = match env::var("WELD_HOME") {
+        Ok(val) => val,
+        Err(_) => ".".to_string(),
+    };
+
+    if path.chars().last().unwrap() != '/' {
+        path = path + &"/";
+    }
+
+    let _ = easy_ll::load_library(&format!("{}target/debug/libweld", path));
     let module = llvm::compile_program(&parser::parse_program(code).unwrap());
 
     if let Err(ref e) = module {
