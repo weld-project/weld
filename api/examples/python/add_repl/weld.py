@@ -1,17 +1,22 @@
 
 from ctypes import *
+import os
+
+home = os.environ["WELD_HOME"]
+if home[-1] != "/":
+    home += "/"
 
 # Load the Weld Dynamic Library.
-weld = CDLL("target/debug/libweld.dylib")
-
-print weld.weld_rt_malloc
+weld = CDLL(home + "target/debug/libweld.dylib")
 
 weld_module_compile = weld.weld_module_compile
-weld_module_compile.argtypes = [c_char_p, c_char_p, POINTER(c_void_p)]
+# code, conf, &err
+weld_module_compile.argtypes = [c_char_p, c_void_p, POINTER(c_void_p)]
 weld_module_compile.restype = c_void_p
 
 weld_module_run = weld.weld_module_run
-weld_module_run.argtypes = [c_void_p, c_void_p, POINTER(c_void_p)]
+# module, conf, arg, &err
+weld_module_run.argtypes = [c_void_p, c_void_p, c_void_p, POINTER(c_void_p)]
 weld_module_run.restype = c_void_p
 
 weld_value_new = weld.weld_value_new
@@ -37,3 +42,11 @@ weld_value_free.restype = None
 weld_module_free = weld.weld_module_free
 weld_module_free.argtypes = [c_void_p]
 weld_module_free.restype = None
+
+weld_conf_new = weld.weld_conf_new
+weld_conf_new.argtypes = []
+weld_conf_new.restype = c_void_p
+
+weld_conf_free = weld.weld_conf_free
+weld_conf_free.argtypes = [c_void_p]
+weld_conf_free.restype = None

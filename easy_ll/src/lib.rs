@@ -9,7 +9,6 @@ use std::fmt;
 use std::result::Result;
 use std::ops::Drop;
 use std::os::raw::c_char;
-use std::process::Command;
 use std::sync::{Once, ONCE_INIT};
 
 use llvm::support::LLVMLoadLibraryPermanently;
@@ -103,10 +102,13 @@ pub fn load_library(libname: &str) -> Result<(), LlvmError> {
     };
     let libname = format!("{}.{}", libname, ext);
 
-    if unsafe { LLVMLoadLibraryPermanently(libname.to_string().as_ptr() as *const c_char) } == 0 {
+    let c_string = CString::new(libname.clone()).unwrap();
+    let c_string_raw = c_string.into_raw() as *const c_char;
+
+    if unsafe { LLVMLoadLibraryPermanently(c_string_raw) } == 0 {
         Ok(())
     } else {
-        Err(LlvmError::new(format!("Couldn't load  library {}", libname).as_ref()))
+        Err(LlvmError::new(format!("Couldn't load library {}", libname).as_ref()))
     }
 }
 
