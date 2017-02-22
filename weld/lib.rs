@@ -391,7 +391,7 @@ pub unsafe extern "C" fn weld_module_run(module: *mut easy_ll::CompiledModule,
         .unwrap_or(&CString::new("").unwrap())
         .clone());
 
-    let threads = conf::parse_memory_limit(conf.dict
+    let threads = conf::parse_threads(conf.dict
         .get(&CString::new(conf::THREADS_KEY).unwrap())
         .unwrap_or(&CString::new("").unwrap())
         .clone());
