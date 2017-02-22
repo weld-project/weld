@@ -396,8 +396,6 @@ pub unsafe extern "C" fn weld_module_run(module: *mut easy_ll::CompiledModule,
         .unwrap_or(&CString::new("").unwrap())
         .clone());
 
-    println!("about to launch work");
-
     let my_run_id;
     // Put this in it's own scope so the mutexes are unlocked.
     {
@@ -408,9 +406,6 @@ pub unsafe extern "C" fn weld_module_run(module: *mut easy_ll::CompiledModule,
         guarded.insert(my_run_id, RunMemoryInfo::new(mem_limit));
     }
 
-    let xptr = arg.data as *const i32;
-    println!("{}", *xptr);
-
     let input = Box::new(llvm::WeldInputArgs {
         input: arg.data as i64,
         nworkers: threads as i32,
@@ -418,7 +413,6 @@ pub unsafe extern "C" fn weld_module_run(module: *mut easy_ll::CompiledModule,
     });
     let ptr = Box::into_raw(input) as i64;
 
-    println!("calling run...");
     let result = module.run(ptr) as *const c_void;
     let errno = weld_rt_get_errno(my_run_id);
     if errno != WeldRuntimeErrno::Success {
@@ -426,7 +420,6 @@ pub unsafe extern "C" fn weld_module_run(module: *mut easy_ll::CompiledModule,
         *err = WeldError::new(errno);
         return std::ptr::null_mut();
     }
-    println!("finished call to run");
 
     Box::into_raw(Box::new(WeldValue {
         data: result,
@@ -487,7 +480,6 @@ pub extern "C" fn weld_rt_malloc(run_id: libc::int64_t, size: libc::int64_t) -> 
     let run_id = run_id as i64;
     let mut ptr = std::ptr::null_mut();
     let mut do_allocation = true;
-    println!("weld_rt_malloc called");
     {
         let mut guarded = ALLOCATIONS.lock().unwrap();
         // TODO(shoumik): Throw error if run ID not found?
@@ -504,7 +496,6 @@ pub extern "C" fn weld_rt_malloc(run_id: libc::int64_t, size: libc::int64_t) -> 
             mem_info.allocations.insert(ptr as u64, size as u64);
         }
     }
-    println!("weld_rt_malloc finished");
 
     // Release the lock before quitting by exiting the above scope.
     if !do_allocation {
@@ -587,7 +578,6 @@ pub extern "C" fn weld_rt_get_errno(run_id: libc::int64_t) -> WeldRuntimeErrno {
     let guarded = WELD_ERRNOS.read().unwrap();
     if !guarded.contains_key(&run_id) {
         // TODO(shoumik): Better behavior here.
-        // println!("No run ID found");
         return WeldRuntimeErrno::Success;
     }
     *guarded.get(&run_id).unwrap()
