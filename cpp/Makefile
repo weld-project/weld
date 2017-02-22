@@ -1,7 +1,7 @@
 OS = $(shell uname -s)
 LLVM_VERSION = 3.6
 
-CFLAGS = -Wall -fno-use-cxa-atexit -fPIC
+CFLAGS = -O3 -Wall -fno-use-cxa-atexit -fPIC
 ifeq (${OS}, Darwin)
   # OS X
   CLANG ?= /usr/local/bin/clang-${LLVM_VERSION}
