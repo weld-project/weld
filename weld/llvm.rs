@@ -976,9 +976,8 @@ impl LlvmGenerator {
                         let elem_ll_ty = self.llvm_type(elem_ty)?.to_string();
                         let vec_ll_ty = self.llvm_type(&Vector(Box::new(elem_ty.clone())))?
                             .to_string();
-                        let vec_ll_prefix = vec_ll_ty.replace("%", "");
-                        let vec = self.load_var(llvm_symbol(&output).as_str(), &vec_ll_ty, ctx)?
-                            .to_string();
+                        let vec_ll_prefix = vec_ll_ty.replace("%", "@");
+                        let vec = ctx.var_ids.next();
                         let capacity_str = format!("{}", elems.len());
                         ctx.code
                             .add(format!("{vec} = call {vec_type} {prefix}.new(i64 {capacity})",
@@ -1004,6 +1003,10 @@ impl LlvmGenerator {
                                                  elem = e,
                                                  ptr = ptr));
                         }
+                        ctx.code.add(format!("store {vec_ty} {vec}, {vec_ty}* {output}",
+                                             vec_ty = vec_ll_ty,
+                                             vec = vec,
+                                             output = llvm_symbol(&output).as_str()));
                     }
                     BinOp { ref output, op, ref ty, ref left, ref right } => {
                         let op_name = try!(llvm_binop(op, ty));
