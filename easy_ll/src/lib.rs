@@ -211,6 +211,7 @@ unsafe fn parse_module_str(context: LLVMContextRef,
 }
 
 /// Parse a file of IR code into an `LLVMModuleRef` for the given context.
+#[allow(dead_code)]
 unsafe fn parse_module_file(context: LLVMContextRef,
                             file: &str)
                             -> Result<LLVMModuleRef, LlvmError> {
