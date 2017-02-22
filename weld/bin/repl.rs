@@ -20,28 +20,16 @@ use weld::pretty_print::*;
 use weld::type_inference::*;
 use weld::sir::ast_to_sir;
 
-// To prevent de-duplication. Really annoying to have these everywhere...how to prevent them from
-// being optimized out?
-fn runtime_functions() {
-    weld_rt_free(0, weld_rt_realloc(0, weld_rt_malloc(0, 16), 32));
-    weld_rt_set_errno(-1, WeldRuntimeErrno::Success);
-    weld_rt_get_errno(-1);
-    // TODO(shoumik): just print out the function pointers, like James did in integration tests.
-    let x = new_merger(0, 16, 1);
-    if get_merger_at_index(x, 16, 0) != std::ptr::null_mut() {
-        free_merger(0, x);
-    }
-
-}
-
 enum ReplCommands {
     LoadFile,
+    PrintFunctions,
 }
 
 impl fmt::Display for ReplCommands {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             ReplCommands::LoadFile => write!(f, "load"),
+            ReplCommands::PrintFunctions => write!(f, "print_functions"),
         }
     }
 }
@@ -85,10 +73,10 @@ fn main() {
     let history_file_path = home_path.join(".weld_history");
     let history_file_path = history_file_path.to_str().unwrap_or(".weld_history");
 
-    runtime_functions();
-
     let mut reserved_words = HashMap::new();
     reserved_words.insert(ReplCommands::LoadFile.to_string(), ReplCommands::LoadFile);
+    reserved_words.insert(ReplCommands::PrintFunctions.to_string(),
+                          ReplCommands::PrintFunctions);
 
     let mut rl = Editor::<()>::new();
     if let Err(_) = rl.load_history(&history_file_path) {}
@@ -139,6 +127,10 @@ fn main() {
                             program = parse_program(&code);
                         }
                     }
+                }
+                ReplCommands::PrintFunctions => {
+                    weld::weld_print_function_pointers();
+                    continue;
                 }
             }
         } else {
