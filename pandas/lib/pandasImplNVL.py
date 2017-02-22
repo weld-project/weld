@@ -18,8 +18,8 @@ def unique(array, type):
     nvl_template = \
     """
        map(
-         toVec(
-           res(
+         tovec(
+           result(
              for(
                map(
                  %(array)s,

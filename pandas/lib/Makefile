@@ -3,8 +3,8 @@ LLVM_VERSION=3.6
 
 ifeq (${OS}, Darwin)
   # OS X
-  CLANG ?= /usr/local/opt/llvm$(LLVM_VERSION:.)/bin/clang
-  CLANGPP ?= /usr/local/opt/llvm$(LLVM_VERSION:.)/bin/clang++
+  CLANG ?= clang
+  CLANGPP ?= clang++
   FLAGS=-march=native -O3 -flto
   DFLAGS=-dynamiclib
   DYLIB_SUFFIX=.dylib

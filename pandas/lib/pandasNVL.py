@@ -241,7 +241,6 @@ class SeriesNVL(LazyOpResult):
     def add(self, other):
         if isinstance(other, SeriesNVL):
             other = other.expr
-        print 
         return SeriesNVL(
             pandasImplNVL.element_wise_op(
                 self.expr,
@@ -257,7 +256,6 @@ class SeriesNVL(LazyOpResult):
     def sub(self, other):
         if isinstance(other, SeriesNVL):
             other = other.expr
-        print 
         return SeriesNVL(
             pandasImplNVL.element_wise_op(
                 self.expr,
@@ -273,7 +271,6 @@ class SeriesNVL(LazyOpResult):
     def mul(self, other):
         if isinstance(other, SeriesNVL):
             other = other.expr
-        print 
         return SeriesNVL(
             pandasImplNVL.element_wise_op(
                 self.expr,
@@ -289,7 +286,6 @@ class SeriesNVL(LazyOpResult):
     def div(self, other):
         if isinstance(other, SeriesNVL):
             other = other.expr
-        print 
         return SeriesNVL(
             pandasImplNVL.element_wise_op(
                 self.expr,
@@ -305,7 +301,6 @@ class SeriesNVL(LazyOpResult):
     def mod(self, other):
         if isinstance(other, SeriesNVL):
             other = other.expr
-        print 
         return SeriesNVL(
             pandasImplNVL.element_wise_op(
                 self.expr,
@@ -319,7 +314,6 @@ class SeriesNVL(LazyOpResult):
         )
 
     def __eq__(self, other):
-        print self.nvl_type
         return SeriesNVL(
             pandasImplNVL.compare(
                 self.expr,

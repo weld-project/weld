@@ -90,7 +90,6 @@ class NvlVec(NvlType):
         _fields_ = [
             ("ptr", POINTER(elemType.cTypeClass)),
             ("size", c_long),
-            ("region", POINTER(c_byte))
           ]
       return Vec
 

@@ -20,7 +20,6 @@ template<typename T>
 struct vec {
   T *ptr;
   i64 size;
-  i8 *region; /** unused **/
 };
 
 template<typename T>
@@ -28,7 +27,6 @@ vec<T> make_vec(i64 size) {
   vec<T> t;
   t.ptr = (T *)malloc(size * sizeof(T));
   t.size = size;
-  t.region = NULL;
 
   return t;
 }
@@ -38,7 +36,7 @@ vec<T> make_vec(i64 size) {
 typedef __m128i     i1x4;
 typedef __m128i     i1x8;
 typedef __m128i     i32x4;
-typedef __m256i     i32x8;
+// typedef __m256i     i32x8;
 
 // Some convinience macros for converting vectors into arrays
 
@@ -54,9 +52,9 @@ inline uint32_t *i32x4_to_ptr(i32x4 *v) {
   return (uint32_t *)v;
 }
 
-inline uint32_t *i32x8_to_ptr(i32x8 *v) {
+/* inline uint32_t *i32x8_to_ptr(i32x8 *v) {
   return (uint32_t *)v;
-}
+} */
 
 }
 

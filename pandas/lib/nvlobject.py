@@ -119,11 +119,10 @@ class NvlObject(object):
         """
         Load the runtime by compiling the NVL text and loading it as a dynamic library.
         """
-        #TODO: COMPILE AND LOAD RUNTIME
         if verbose:
             print(text)
         code = ctypes.c_char_p(text)
-        conf = ctypes.c_char_p("configuration")
+        conf = weld.weld_conf_new()
         err = ctypes.c_void_p()
         module = weld.weld_module_compile(code, conf, ctypes.byref(err))
         return module
@@ -186,7 +185,9 @@ class NvlObject(object):
 
         # The returned NVL object
         start = time.time()
-        nvl_ret = weld.weld_module_run(module, arg_obj, ctypes.byref(ctypes.c_void_p()))
+        err2 = ctypes.c_void_p()
+        conf = weld.weld_conf_new()
+        nvl_ret = weld.weld_module_run(module, conf, arg_obj, ctypes.byref(err2))
         end = time.time()
         if verbose:
             print "NVL Runtime: " + str(end - start)

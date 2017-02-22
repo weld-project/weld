@@ -9,13 +9,12 @@ using namespace std;
  * Converts numpy array to NVL vector.
  */
 extern "C"
-nvl::vec<int> numpy_to_nvl_int_arr(PyObject* in) {
+nvl::vec<int32_t> numpy_to_nvl_int_arr(PyObject* in) {
     PyArrayObject* inp = (PyArrayObject*) in;
-    int dimension = (int) inp->dimensions[0];
-    nvl::vec<int> t;
+    int64_t dimension = (int64_t) PyArray_DIMS(inp)[0];
+    nvl::vec<int32_t> t;
     t.size = dimension;
-    t.region = NULL;
-    t.ptr = (int*)inp->data;
+    t.ptr = (int32_t*) PyArray_DATA(in);
     return t;
 }
 
@@ -28,7 +27,6 @@ nvl::vec<long> numpy_to_nvl_long_arr(PyObject* in) {
     int dimension = (int) inp->dimensions[0];
     nvl::vec<long> t;
     t.size = dimension;
-    t.region = NULL;
     t.ptr = (long*)inp->data;
     return t;
 }
@@ -42,7 +40,6 @@ nvl::vec<double> numpy_to_nvl_double_arr(PyObject* in) {
     int dimension = (int) inp->dimensions[0];
     nvl::vec<double> t;
     t.size = dimension;
-    t.region = NULL;
     t.ptr = (double*)inp->data;
     return t;
 }
@@ -55,7 +52,6 @@ nvl::vec<uint8_t> numpy_to_nvl_char_arr(PyObject* in) {
     int dimension = (int) PyString_Size(in);
     nvl::vec<uint8_t> t;
     t.size = dimension;
-    t.region = NULL;
     t.ptr = (uint8_t*) PyString_AsString(in);
     return t;
 }
@@ -69,7 +65,6 @@ nvl::vec<bool> numpy_to_nvl_bool_arr(PyObject* in) {
     int dimension = (int) inp->dimensions[0];
     nvl::vec<bool> t;
     t.size = dimension;
-    t.region = NULL;
     t.ptr = (bool*)inp->data;
     return t;
 }
@@ -85,7 +80,6 @@ nvl::vec<nvl::vec<int> > numpy_to_nvl_int_arr_arr(PyObject* in) {
     t = nvl::make_vec<nvl::vec<int> >(dimension);
     for (int i = 0; i < t.size; i++) {
         t.ptr[i].size = inp->dimensions[1];
-        t.ptr[i].region = NULL;
         t.ptr[i].ptr = (int *)(inp->data + i * inp->strides[0]);
     }
 
@@ -107,7 +101,6 @@ nvl::vec<nvl::vec<long> > numpy_to_nvl_long_arr_arr(PyObject* in) {
         long *old_buffer = (long *) inp->data;
         for (int i = 0; i < t.size; i++) {
             t.ptr[i].size = inp->dimensions[1];
-            t.ptr[i].region = NULL;
             for (int j = 0; j < inp->dimensions[1]; j++) {
                 *(new_buffer + j) = old_buffer[(j*inp->dimensions[0])+i];
             }
@@ -117,7 +110,6 @@ nvl::vec<nvl::vec<long> > numpy_to_nvl_long_arr_arr(PyObject* in) {
     } else {
         for (int i = 0; i < t.size; i++) {
             t.ptr[i].size = inp->dimensions[1];
-            t.ptr[i].region = NULL;
             t.ptr[i].ptr = (long *)(inp->data + i * inp->strides[0]);
         }
     }
@@ -140,7 +132,6 @@ nvl::vec<nvl::vec<uint8_t> > numpy_to_nvl_char_arr_arr(PyObject* in) {
         if ((int) inp->dimensions[1] < t.ptr[i].size) {
             t.ptr[i].size = (int) inp->dimensions[1];
         }
-        t.ptr[i].region = NULL;
         t.ptr[i].ptr = (uint8_t *)(inp->data + i * inp->strides[0]);
         ptr += (inp->strides[0]);
     }
