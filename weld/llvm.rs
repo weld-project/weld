@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 
 use easy_ll;
 
-use super::WeldRuntimeErrno;
+use weld_common::WeldRuntimeErrno;
 
 use super::ast::*;
 use super::ast::Type::*;
