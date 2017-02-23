@@ -1,25 +1,25 @@
-# NVL Language Overview
+# Weld Language Overview
 
 ## Overview
 
-NVL is a statically typed, referentially transparent language with built-in parallel constructs.
+Weld is a statically typed, referentially transparent language with built-in parallel constructs.
 It has a number of operators similar to functional languages, but it is not truly functional, in that functions aren't first-class values and recursion is not allowed.
-As a result, NVL programs have a finite call graph that is known in advance and are straightforward to analyze.
-By "referentially transparent", we mean that each expression in NVL is a pure function of its inputs, and there are no side-effects.
+As a result, Weld programs have a finite call graph that is known in advance and are straightforward to analyze.
+By "referentially transparent", we mean that each expression in Weld is a pure function of its inputs, and there are no side-effects.
 
 The language lets users specify functions and expressions.
-A function, such as `|a: i32, b: int| a + b`, consists of a list of named arguments and an expression for the result.
-Variables in NVL are immutable, though there is a "let" statement for introducing new ones.
+A function, such as `|a: i32, b: i32| a + b`, consists of a list of named arguments and an expression for the result.
+Variables in Weld are immutable, though there is a "let" statement for introducing new ones.
 Some operators built into the language take functions (in fact closures), but functions are not first-class values (one cannot pass them to other functions or store them in variables). Types for the input arguments to a function are required, but can otherwise be inferred. 
 
-NVL contains both a "core" language and higher-level "sugar" syntax for specifying common functional operators, such as `map` and `filter`.
+Weld contains both a "core" language and higher-level "sugar" syntax for specifying common functional operators, such as `map` and `filter`.
 The core language has only one parallel construct, the `for` expression, and a set of types called *builders* used to compute various types of results (e.g. sums, vectors, etc).
 All of the sugar operators are translated to `for`s and builders through simple substitution rules.
 We will begin by describing the core language, and then describe the currently supported sugar operators.
 
 ## Data Types
 
-NVL contains "value" types that hold data, as well as "builder" types that are used to construct results in parallel from values that are "merged" into them.
+Weld contains "value" types that hold data, as well as "builder" types that are used to construct results in parallel from values that are "merged" into them.
 
 The value types are:
 
@@ -138,7 +138,7 @@ result(bs)    # returns {[1, 2, 3], [2, 4, 6]}
 ### Linearity of Builder Types
 
 We want to place a few constraints on builders to make them easier to implement and make their semantics clear.
-First, for builders to have clear semantics in NVL, we need to make sure that `result` is not called on a builder while parallel work is still happening on it.
+First, for builders to have clear semantics in Weld, we need to make sure that `result` is not called on a builder while parallel work is still happening on it.
 Otherwise, the language may have to be nondeterministic, which is not something we want for this version.
 Second, for simplicity of implementation, we will also make sure that each builder is used in a *linear* sequence of operations (`merge`s and `for`s followed by at most one `result`), which will let us update the underlying memory in place instead of having to "fork" it if one derives two builders from it.
 Likewise, we will enforce that the `update` function in a `for` always returns a builder derived from the one passed in as a parameter, and not, say, some kind of new builder it initialized inside.
@@ -156,7 +156,7 @@ It is less clear whether existing type systems capture this, but it should not b
 
 ## Sugar Operations
 
-To make programs easier to write, the NVL implementation also supports some "sugar" operations that translate into `for`s and builders.
+To make programs easier to write, the Weld implementation also supports some "sugar" operations that translate into `for`s and builders.
 These are currently represented as *macros*, which are substitution rules whose definitions are not handled by the optimizer.
 The sugar operations are commonly used functional programming operations such as `map` and `filter`.
 We list them below:
