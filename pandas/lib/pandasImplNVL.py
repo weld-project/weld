@@ -113,9 +113,8 @@ def filter(array, predicates, type):
        res(
          for(
            zip(%(array)s, %(predicates)s),
-           vecBuilder[%(type)s],
-           |b: vecBuilder[%(type)s], index: i64, element: {%(type)s, bit}|
-             if (element.$1, merge(b, element.$0), b)
+           appender[%(type)s],
+           |b, i, e| if (element.$1, merge(b, element.$0), b)
          )
        )
     """
@@ -197,8 +196,7 @@ def slice(array, start, size, type):
     """
        map(
          %(array)s,
-         |array: %(type)s|
-           slice(array, %(start)dL, %(size)dL)
+         |array: %(type)s| slice(array, %(start)dL, %(size)dL)
        )
     """
     nvl_obj.nvl = nvl_template % {"array": array_str, "start": start,
@@ -256,12 +254,16 @@ def groupby_sum(columns, column_types, grouping_column):
       result_str_list.append("elem1.%d + elem2.%d" % (i, i))
     result_str = "{%s}" % ", ".join(result_str_list)
 
+  # TODO: Fix this. Horribly broken.
   nvl_template = \
   """
-     toVec(
-       aggBy(
-         zip(%(grouping_column)s, %(columns)s),
-         (elem1: %(types)s, elem2: %(types)s) => %(result)s
+     tovec(
+       result(
+         for(
+           zip(%(grouping_column)s, %(columns)s),
+           dictmerger[%(key_type)s, %(type)s, +],
+           |b, i, e| => %(result)s
+         )
        )
      )
   """
@@ -282,6 +284,7 @@ def get_column(columns, column_types, index):
   if isinstance(columns, NvlObject):
     columns_str = columns.nvl
 
+  # TODO: Fix this. Horribly broken.
   nvl_template = \
   """
      map(
