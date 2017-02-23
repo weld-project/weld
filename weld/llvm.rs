@@ -973,25 +973,53 @@ impl LlvmGenerator {
                                              llvm_symbol(output)));
                     }
                     BinOp { ref output, op, ref ty, ref left, ref right } => {
-                        let op_name = try!(llvm_binop(op, ty));
                         let ll_ty = try!(self.llvm_type(ty)).to_string();
                         let left_tmp = try!(self.load_var(llvm_symbol(left).as_str(), &ll_ty, ctx));
                         let right_tmp = try!(self.load_var(llvm_symbol(right).as_str(),
                             &ll_ty, ctx));
                         let bin_tmp = ctx.var_ids.next();
-                        ctx.code.add(format!("{} = {} {} {}, {}",
-                                             bin_tmp,
-                                             op_name,
-                                             ll_ty,
-                                             left_tmp,
-                                             right_tmp));
                         let out_ty = try!(get_sym_ty(func, output));
                         let out_ty_str = try!(self.llvm_type(&out_ty)).to_string();
-                        ctx.code.add(format!("store {} {}, {}* {}",
-                                             out_ty_str,
-                                             bin_tmp,
-                                             out_ty_str,
-                                             llvm_symbol(output)));
+                        match *ty {
+                            Scalar(_) => {
+                                let op_name = try!(llvm_binop(op, ty));
+                                ctx.code.add(format!("{} = {} {} {}, {}",
+                                                     bin_tmp,
+                                                     op_name,
+                                                     ll_ty,
+                                                     left_tmp,
+                                                     right_tmp));
+                                ctx.code.add(format!("store {} {}, {}* {}",
+                                                     out_ty_str,
+                                                     bin_tmp,
+                                                     out_ty_str,
+                                                     llvm_symbol(output)));
+                            }
+                            Vector(_) => {
+                                // We support BinOps between vectors as long as they're comparison operators
+                                let (op_name, value) = try!(llvm_binop_vector(op, ty));
+                                let tmp = ctx.var_ids.next();
+                                let vec_prefix = format!("@{}", ll_ty.replace("%", ""));
+                                ctx.code.add(format!("{} = call i32 {}.cmp({} {}, {} {})",
+                                                     tmp,
+                                                     vec_prefix,
+                                                     ll_ty,
+                                                     left_tmp,
+                                                     ll_ty,
+                                                     right_tmp));
+                                ctx.code.add(format!("{} = icmp {} i32 {}, {}",
+                                                     bin_tmp,
+                                                     op_name,
+                                                     tmp,
+                                                     value));
+                                ctx.code.add(format!("store {} {}, {}* {}",
+                                                     out_ty_str,
+                                                     bin_tmp,
+                                                     out_ty_str,
+                                                     llvm_symbol(output)));
+                            }
+                            _ => weld_err!("Illegal type {} in BinOp", print_type(ty))?,
+                        }
                     }
                     Cast { ref output, ref new_ty, ref child } => {
                         let old_ty = try!(get_sym_ty(func, child));
@@ -1779,7 +1807,6 @@ fn llvm_symbol(symbol: &Symbol) -> String {
 /// Return the name of the LLVM instruction for a binary operation on a specific type.
 fn llvm_binop(op_kind: BinOpKind, ty: &Type) -> WeldResult<&'static str> {
     match (op_kind, ty) {
-
         (BinOpKind::Add, &Scalar(I8)) => Ok("add"),
         (BinOpKind::Add, &Scalar(I32)) => Ok("add"),
         (BinOpKind::Add, &Scalar(I64)) => Ok("add"),
@@ -1858,6 +1885,20 @@ fn llvm_binop(op_kind: BinOpKind, ty: &Type) -> WeldResult<&'static str> {
         (BinOpKind::Xor, &Scalar(I8)) => Ok("xor"),
         (BinOpKind::Xor, &Scalar(I32)) => Ok("xor"),
         (BinOpKind::Xor, &Scalar(I64)) => Ok("xor"),
+
+        _ => weld_err!("Unsupported binary op: {} on {}", op_kind, print_type(ty)),
+    }
+}
+
+/// Return the name of the LLVM instruction for a binary operation between vectors.
+fn llvm_binop_vector(op_kind: BinOpKind, ty: &Type) -> WeldResult<(&'static str, i32)> {
+    match op_kind {
+        BinOpKind::Equal => Ok(("eq", 0)),
+        BinOpKind::NotEqual => Ok(("ne", 0)),
+        BinOpKind::LessThan => Ok(("eq", -1)),
+        BinOpKind::LessThanOrEqual => Ok(("ne", 1)),
+        BinOpKind::GreaterThan => Ok(("eq", 1)),
+        BinOpKind::GreaterThanOrEqual => Ok(("ne", -1)),
 
         _ => weld_err!("Unsupported binary op: {} on {}", op_kind, print_type(ty)),
     }
