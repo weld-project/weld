@@ -211,6 +211,27 @@ fn comparison() {
     unsafe { weld_value_free(ret_value) };
 }
 
+fn map_comparison() {
+    let code = "|e0: vec[i32]| map(e0, |a: i32| a == i32(100))";
+    let conf = default_conf();
+
+    let input_vec = [100, 200, 0, 100];
+    let ref input_data = WeldVec {
+        data: &input_vec as *const i32,
+        len: input_vec.len() as i64,
+    };
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<bool> };
+    let result = unsafe { (*data).clone() };
+    assert_eq!(result.len as usize, input_vec.len());
+    for i in 0..(result.len as isize) {
+        assert_eq!(unsafe { *result.data.offset(i) }, input_vec[i as usize] == 100)
+    }
+
+    unsafe { weld_value_free(ret_value) };
+}
+
 fn simple_vector_lookup() {
     let code = "|x:vec[i32]| lookup(x, 3L)";
     let conf = default_conf();
@@ -771,6 +792,7 @@ fn main() {
              ("let_statement", let_statement),
              ("if_statement", if_statement),
              ("comparison", comparison),
+             ("map_comparison", map_comparison),
              ("simple_vector_lookup", simple_vector_lookup),
              ("simple_for_appender_loop", simple_for_appender_loop),
              ("simple_parallel_for_appender_loop", simple_parallel_for_appender_loop),

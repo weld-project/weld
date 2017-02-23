@@ -995,9 +995,9 @@ impl LlvmGenerator {
                     }
                     Cast { ref output, ref new_ty, ref child } => {
                         let old_ty = try!(get_sym_ty(func, child));
+                        let old_ll_ty = try!(self.llvm_type(&old_ty)).to_string();
                         if old_ty != new_ty {
                             let op_name = try!(llvm_castop(&old_ty, &new_ty));
-                            let old_ll_ty = try!(self.llvm_type(&old_ty)).to_string();
                             let new_ll_ty = try!(self.llvm_type(&new_ty)).to_string();
                             let child_tmp = try!(self.load_var(llvm_symbol(child).as_str(),
                                 &old_ll_ty, ctx));
@@ -1014,6 +1014,14 @@ impl LlvmGenerator {
                                                  out_ty_str,
                                                  cast_tmp,
                                                  out_ty_str,
+                                                 llvm_symbol(output)));
+                        } else {
+                            let child_tmp = try!(self.load_var(llvm_symbol(child).as_str(),
+                                &old_ll_ty, ctx));
+                            ctx.code.add(format!("store {} {}, {}* {}",
+                                                 old_ll_ty,
+                                                 child_tmp,
+                                                 old_ll_ty,
                                                  llvm_symbol(output)));
                         }
                     }
