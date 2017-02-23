@@ -4,10 +4,10 @@ LLVM_VERSION = 3.6
 CFLAGS = -O3 -Wall -fno-use-cxa-atexit -fPIC
 ifeq (${OS}, Darwin)
   # OS X
-  CLANG ?= /usr/local/bin/clang-${LLVM_VERSION}
+  CLANG ?= clang
 else ifeq (${OS}, Linux)
   # Linux
-  CLANG ?= /usr/bin/clang-${LLVM_VERSION}
+  CLANG ?= clang
 else
   $(error Unsupported platform: ${OS})
 endif
