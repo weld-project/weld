@@ -1,0 +1,2 @@
+|x:vec[i32],y:vec[i32]|
+    map(zip(x,y), |e| e.$0 + e.$1)
