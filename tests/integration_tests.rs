@@ -260,6 +260,34 @@ fn eq_between_vectors() {
     unsafe { weld_value_free(ret_value) };
 }
 
+fn eq_between_diff_length_vectors() {
+    #[allow(dead_code)]
+    struct Args {
+        x: WeldVec<i32>,
+        y: WeldVec<i32>,
+    }
+    let conf = default_conf();
+
+    let code = "|e0: vec[i32], e1: vec[i32]| e0 == e1";
+    let input_vec1 = [1, 2, 3, 4, 5];
+    let input_vec2 = [1, 2, 3, 4, 5, 6, 7];
+    let ref input_data = Args {
+        x: WeldVec {
+            data: &input_vec1 as *const i32,
+            len: input_vec1.len() as i64,
+        },
+        y: WeldVec {
+            data: &input_vec2 as *const i32,
+            len: input_vec2.len() as i64,
+        },
+    };
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const bool };
+    let result = unsafe { *data };
+    assert_eq!(result, false);
+    unsafe { weld_value_free(ret_value) };
+}
+
 fn ne_between_vectors() {
     #[allow(dead_code)]
     struct Args {
@@ -906,6 +934,7 @@ fn main() {
              ("comparison", comparison),
              ("map_comparison", map_comparison),
              ("eq_between_vectors", eq_between_vectors),
+             ("eq_between_diff_length_vectors", eq_between_diff_length_vectors),
              ("ne_between_vectors", ne_between_vectors),
              ("lt_between_vectors", lt_between_vectors),
              ("le_between_vectors", le_between_vectors),
