@@ -71,14 +71,16 @@ unsafe fn run_module<T>(module: *mut WeldModule,
     let conf = benchmark_conf();
     let mut err = std::ptr::null_mut();
 
+    // Timing information per run for debugging.
     use std::time::Instant;
-
     let s = Instant::now();
+
     let ret_value = weld_module_run(module, conf, input_value, &mut err as *mut *mut WeldError);
 
     let dur = s.elapsed();
     let dur = dur.as_secs() * 1_000_000_000 + (dur.subsec_nanos() as u64);
-    println!("{}", dur);
+    let dur = dur / 1_000_000;
+    println!("{} ms", dur);
 
     // Free the input value wrapper.
     weld_value_free(input_value);
@@ -147,6 +149,8 @@ fn bench_integer_map_reduce(bench: &mut Bencher) {
 
     let code = "|x:vec[i32]| result(for(map(x, |e| e * 4), merger[i32,+], |b,i,e| \
  merge(b, e)))";
+
+    println!("{}", code);
 
     // 100MB of data
     let data_size: usize = 2 << 26;
@@ -237,6 +241,7 @@ fn bench_integer_map_reduce(bench: &mut Bencher) {
 // }
 //
 
+
 /// Register functions that can be run with the benchmarking suite here.
 pub fn registered_benchmarks() -> HashMap<String, fn(&mut bencher::Bencher)> {
 
@@ -244,8 +249,8 @@ pub fn registered_benchmarks() -> HashMap<String, fn(&mut bencher::Bencher)> {
 
     let mut benchmarks_all: HashMap<String, fn(&mut bencher::Bencher)> = HashMap::new();
     benchmarks_all.insert("bench_vector_sum".to_string(), bench_vector_sum);
-    // benchmarks_all.insert("bench_integer_map_reduce".to_string(),
-    // bench_integer_map_reduce);
+    benchmarks_all.insert("bench_integer_map_reduce".to_string(),
+                          bench_integer_map_reduce);
     // benchmarks_all.insert("bench_tpch_q6".to_string(), bench_tpch_q6);
     //
     benchmarks_all
