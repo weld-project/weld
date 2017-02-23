@@ -38,7 +38,7 @@ struct WeldVec<T> {
 fn benchmark_conf() -> *mut WeldConf {
     let conf = weld_conf_new();
     let key = CString::new("weld.threads").unwrap().into_raw() as *const c_char;
-    let value = CString::new("4").unwrap().into_raw() as *const c_char;
+    let value = CString::new("1").unwrap().into_raw() as *const c_char;
     unsafe { weld_conf_set(conf, key, value) };
 
     let key = CString::new("weld.memory.limit").unwrap().into_raw() as *const c_char;
@@ -70,7 +70,15 @@ unsafe fn run_module<T>(module: *mut WeldModule,
     let input_value = weld_value_new(ptr as *const _ as *const c_void);
     let conf = benchmark_conf();
     let mut err = std::ptr::null_mut();
+
+    use std::time::Instant;
+
+    let s = Instant::now();
     let ret_value = weld_module_run(module, conf, input_value, &mut err as *mut *mut WeldError);
+
+    let dur = s.elapsed();
+    let dur = dur.as_secs() * 1_000_000_000 + (dur.subsec_nanos() as u64);
+    println!("{}", dur);
 
     // Free the input value wrapper.
     weld_value_free(input_value);
@@ -93,11 +101,9 @@ fn bench_vector_sum(bench: &mut Bencher) {
     let code = "|x:vec[i32],y:vec[i32]| map(zip(x,y), |e| e.$0 + e.$1)";
     let conf = benchmark_conf();
 
-    // 2GB of data
-    let data_size: usize = 2 << 30;
+    // 100MB of data
+    let data_size: usize = 2 << 26;
     let size: usize = data_size / std::mem::size_of::<i32>();
-    use self::weld::{WeldModule, WeldValue, WeldConf, WeldError};
-
 
     let x: Vec<i32> = vec![4; size as usize];
     let y: Vec<i32> = vec![5; size as usize];
@@ -137,47 +143,41 @@ fn bench_vector_sum(bench: &mut Bencher) {
     unsafe { weld_module_free(module) };
 }
 
-// fn bench_integer_map_reduce(bench: &mut Bencher) {
-//
-// #[allow(dead_code)]
-// struct Args {
-// x: WeldVec,
-// }
-//
-// let code = "|x:vec[i32]| result(for(map(x, |e| e * 4), merger[i32,+], |b,i,e| \
-// merge(b, e)))";
-// let module = compile(code);
-//
-// let size: i64 = 10000000;
-// let x: Vec<i32> = vec![4; size as usize];
-//
-// let args = Args {
-// x: WeldVec {
-// data: x.as_ptr() as *const i32,
-// len: size,
-// },
-// };
-//
-// let inp = Box::new(llvm::WeldInputArgs {
-// input: &args as *const Args as i64,
-// nworkers: 1,
-// run_id: 0,
-// });
-// let ptr = Box::into_raw(inp) as i64;
-//
-// Check correctness.
-// let expect = x[0] * 4 * (size as i32);
-// let result_raw = module.run(ptr) as *const i32;
-// let result = unsafe { *result_raw.clone() };
-// assert_eq!(expect, result);
-// weld_run_free(-1);
-//
-// bench.iter(|| {
-// module.run(ptr);
-// weld_run_free(-1);
-// })
-// }
-//
+fn bench_integer_map_reduce(bench: &mut Bencher) {
+
+    let code = "|x:vec[i32]| result(for(map(x, |e| e * 4), merger[i32,+], |b,i,e| \
+ merge(b, e)))";
+
+    // 100MB of data
+    let data_size: usize = 2 << 26;
+    let size: usize = data_size / std::mem::size_of::<i32>();
+
+    let x: Vec<i32> = vec![4; size as usize];
+
+    let ref args = WeldVec {
+        data: x.as_ptr() as *const i32,
+        len: size as i64,
+    };
+
+    let module = unsafe { compile_program(code).unwrap() };
+
+    // Run once to check correctness/warm up.
+    let ret_value = unsafe { run_module(module, args).unwrap() };
+    let data = unsafe { weld_value_data(ret_value) as *const i32 };
+    let result = unsafe { *data };
+
+    let expect = x[0] * 4 * (x.len() as i32);
+    assert_eq!(result, expect);
+    unsafe { weld_value_free(ret_value) };
+
+    bench.iter(|| {
+        match unsafe { run_module(module, args) } {
+            Ok(v) => unsafe { weld_value_free(v) },
+            Err(e) => unsafe { weld_error_free(e) },
+        }
+    });
+}
+
 // fn bench_tpch_q6(bench: &mut Bencher) {
 // let code = include_str!("benchmarks/tpch/q6.weld");
 //

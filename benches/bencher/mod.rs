@@ -132,10 +132,10 @@ impl Bencher {
             let summ5 = stats::Summary::new(samples);
             let loop_run = loop_start.elapsed();
 
-            // If we've run for 100ms and seem to have converged to a
+            // If we've run for 10s or seem to have converged to a
             // stable median.
-            if loop_run > Duration::from_millis(100) && summ.median_abs_dev_pct < 1.0 &&
-               summ.median - summ5.median < summ5.median_abs_dev {
+            if loop_run > Duration::from_millis(10000) ||
+               summ.median_abs_dev_pct < 1.0 && summ.median - summ5.median < summ5.median_abs_dev {
                 return summ5;
             }
 
