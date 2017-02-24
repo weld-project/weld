@@ -7,12 +7,15 @@
 extern crate lazy_static;
 extern crate libc;
 
+extern crate weld_common;
+
+use weld_common::WeldRuntimeErrno;
+
 use std::collections::HashMap;
 use libc::c_void;
 
 use std::sync::Mutex;
 use std::sync::RwLock;
-use std::fmt;
 
 /// Hold memory information for a run.
 #[derive(Clone, Debug)]
@@ -32,29 +35,6 @@ impl RunMemoryInfo {
             mem_limit: limit,
             mem_allocated: 0,
         }
-    }
-}
-
-// TODO(shoumik): How to share this definition?
-/// An errno set by the runtime.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd)]
-#[repr(u64)]
-pub enum WeldRuntimeErrno {
-    Success = 0,
-    CompileError,
-    ArrayOutOfBounds,
-    BadIteratorLength,
-    MismatchedZipSize,
-    OutOfMemory,
-    RunNotFound,
-    Unknown,
-    ErrnoMax,
-}
-
-impl fmt::Display for WeldRuntimeErrno {
-    /// Just return the errno name.
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self)
     }
 }
 
@@ -269,11 +249,19 @@ pub unsafe extern "C" fn weld_rt_free(run_id: libc::int64_t, data: *mut c_void) 
 pub extern "C" fn weld_rt_get_errno(run_id: libc::int64_t) -> WeldRuntimeErrno {
     let run_id = run_id as i64;
     let guarded = WELD_ERRNOS.read().unwrap();
-    if !guarded.contains_key(&run_id) {
-        WeldRuntimeErrno::RunNotFound
-    } else {
-        *guarded.get(&run_id).unwrap()
+    return *guarded.get(&run_id).unwrap_or(&WeldRuntimeErrno::RunNotFound);
+}
+
+#[no_mangle]
+/// Frees all the data from a run, given a run ID.
+pub extern "C" fn weld_rt_run_free(run_id: libc::int64_t) {
+    let mut guarded = ALLOCATIONS.lock().unwrap();
+    if let Some(mem_info) = guarded.get_mut(&run_id) {
+        for entry in mem_info.allocations.iter() {
+            unsafe { free(*entry.0 as *mut c_void) };
+        }
     }
+    guarded.remove(&run_id);
 }
 
 #[no_mangle]

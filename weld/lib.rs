@@ -171,9 +171,9 @@ pub unsafe extern "C" fn weld_value_free(obj: *mut WeldValue) {
     }
     let value = &mut *obj;
     if let Some(run_id) = value.run_id {
-        // Free all the memory associated with the run.
-        // TODO(shoumik)
-        // weld_run_free(run_id);
+        let module = llvm::generate_runtime_interface_module().unwrap();
+        let arg = run_id;
+        let _ = module.run(arg);
     }
     Box::from_raw(obj);
 }
@@ -192,20 +192,20 @@ pub unsafe extern "C" fn weld_module_compile(code: *const c_char,
     *err = Box::into_raw(Box::new(WeldError::new(WeldRuntimeErrno::Success)));
     let err = &mut **err;
 
+    // TODO(shoumik): Factor this out into a different file.
     // Try the current directory if WELD_HOME isn't set.
     let mut path = match env::var("WELD_HOME") {
         Ok(val) => val,
         Err(_) => ".".to_string(),
     };
-
     if path.chars().last().unwrap() != '/' {
         path = path + &"/";
     }
-
-    if let Err(_) = easy_ll::load_library(&format!("{}weldrt/target/release/deps/libweldrt",
-                                                   path)) {
-        println!("{}",
-                 std::ffi::CStr::from_ptr(libc::dlerror()).to_str().unwrap());
+    let path = &format!("{}weldrt/target/release/deps/libweldrt", path);
+    if let Err(_) = easy_ll::load_library(path) {
+        let err_message = std::ffi::CStr::from_ptr(libc::dlerror());
+        let err_message = err_message.to_str().unwrap();
+        println!("{}", err_message);
     }
 
     let module = llvm::compile_program(&parser::parse_program(code).unwrap());
@@ -248,7 +248,6 @@ pub unsafe extern "C" fn weld_module_run(module: *mut easy_ll::CompiledModule,
         .unwrap_or(&CString::new("").unwrap())
         .clone());
 
-    let run_id = 0;
     let input = Box::new(llvm::WeldInputArgs {
         input: arg.data as i64,
         nworkers: threads as i32,
@@ -258,18 +257,18 @@ pub unsafe extern "C" fn weld_module_run(module: *mut easy_ll::CompiledModule,
     let result_raw = module.run(ptr) as *const llvm::WeldOutputArgs;
     let result = (*result_raw).clone();
 
-    if result.errno != WeldRuntimeErrno::Success {
-        // TODO(shoumik): How do we free??
-        // weld_run_free(result.run_id);
-        *err = WeldError::new(result.errno);
-        return std::ptr::null_mut();
-    }
-
-
-    Box::into_raw(Box::new(WeldValue {
+    let ret = Box::into_raw(Box::new(WeldValue {
         data: result.output as *const c_void,
         run_id: Some(result.run_id),
-    }))
+    }));
+
+    if result.errno != WeldRuntimeErrno::Success {
+        weld_value_free(ret);
+        *err = WeldError::new(result.errno);
+        std::ptr::null_mut()
+    } else {
+        ret
+    }
 }
 
 #[no_mangle]

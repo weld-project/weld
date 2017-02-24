@@ -1956,6 +1956,13 @@ impl FunctionContext {
     }
 }
 
+/// Generates a small program which, when called with a `run_id`, frees
+/// memory associated with the run ID.
+pub fn generate_runtime_interface_module() -> WeldResult<easy_ll::CompiledModule> {
+    let program = include_str!("resources/runtime_interface_module.ll");
+    Ok(try!(easy_ll::compile_module(program)))
+}
+
 /// Generate a compiled LLVM module from a program whose body is a function.
 pub fn compile_program(program: &Program) -> WeldResult<easy_ll::CompiledModule> {
     let mut expr = try!(macro_processor::process_program(program));
