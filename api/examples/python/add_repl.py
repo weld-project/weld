@@ -29,10 +29,7 @@ while True:
         continue
 
     arg = ctypes.c_int64(inp) 
-    arg_obj = WeldValue(ctypes.byref(arg))
-
-    res_obj = module.run(WeldConf(), arg_obj, WeldError())
-
+    res_obj = module.run(WeldConf(), WeldValue(ctypes.byref(arg)), WeldError())
     data = res_obj.data()
     res_value = ctypes.cast(data, ctypes.POINTER(ctypes.c_int64)).contents.value
     print res_value

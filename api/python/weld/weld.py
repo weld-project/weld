@@ -35,9 +35,7 @@ class WeldModule(c_void_p):
         weld_module_run.argtypes = [c_weld_module, c_weld_conf, c_weld_value, POINTER(WeldError)]
         weld_module_run.restype = c_weld_value
         ret = weld_module_run(self.module, conf.conf, arg.val, byref(err))
-        value = WeldValue()
-        value.val = ret
-        return value
+        return WeldValue(ret, assign=True)
 
     def __del__(self):
         weld_module_free = weld.weld_module_free
@@ -47,12 +45,14 @@ class WeldModule(c_void_p):
 
 
 class WeldValue(c_void_p):
-    def __init__(self, value=None):
-        if value is not None:
+    def __init__(self, value, assign=False):
+        if assign is False:
             weld_value_new = weld.weld_value_new
             weld_value_new.argtypes = [c_void_p]
             weld_value_new.restype = c_weld_value
             self.val = weld_value_new(value)
+        else:
+            self.val = value
 
     def data(self):
         weld_value_data = weld.weld_value_data
