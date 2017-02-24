@@ -259,7 +259,8 @@ fn map_comparison() {
     let result = unsafe { (*data).clone() };
     assert_eq!(result.len as usize, input_vec.len());
     for i in 0..(result.len as isize) {
-        assert_eq!(unsafe { *result.data.offset(i) }, input_vec[i as usize] == 100)
+        assert_eq!(unsafe { *result.data.offset(i) },
+                   input_vec[i as usize] == 100)
     }
 
     unsafe { weld_value_free(ret_value) };
@@ -1006,6 +1007,7 @@ fn main() {
             _ => {
                 if args.len() > 1 {
                     if !t.0.contains(args[1].as_str()) {
+                        println!("{} ... \x1b[0;33mignored\x1b[0m", t.0);
                         continue;
                     }
                 }

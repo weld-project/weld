@@ -1,15 +1,11 @@
-//! Benchmarks for Weld.
-//!
-//! To use this utility, add a new benchmarking function below. Wrap the part
-//! you wish to measure in call to `bench.iter`. To register the benchmark,
-//! add it to the dictionary in `registered_benchmarks`. The string name chosen
-//! for the benchmark is the target name that will appear in the output file.
+use bencher::bench::benchmark;
+use bencher::stats::Summary;
 
+extern crate csv;
 extern crate weld;
 extern crate libc;
 
-use bencher;
-use std;
+mod bencher;
 
 use self::weld::weld_print_function_pointers;
 use self::weld::WeldRuntimeErrno;
@@ -20,10 +16,9 @@ use self::weld::{weld_value_new, weld_value_data, weld_value_free};
 use self::weld::{weld_module_compile, weld_module_run, weld_module_free};
 use self::weld::{WeldModule, WeldValue, WeldConf, WeldError};
 
+use std::env;
 use std::ffi::CString;
 use self::libc::{c_char, c_void};
-
-use std::collections::HashMap;
 
 use bencher::Bencher;
 
@@ -83,7 +78,6 @@ unsafe fn run_module<T>(module: *mut WeldModule,
     let dur = s.elapsed();
     let dur = dur.as_secs() * 1_000_000_000 + (dur.subsec_nanos() as u64);
     let dur = dur / 1_000_000;
-    println!("{} ms", dur);
 
     // Free the input value wrapper.
     weld_value_free(input_value);
@@ -253,16 +247,15 @@ fn bench_tpch_q1(bench: &mut Bencher) {
 
     let module = unsafe { compile_program(code).unwrap() };
 
-    // Run once to check correctness/warm up.
-    let ret_value = unsafe { run_module(module, args).unwrap() };
-    let data = unsafe { weld_value_data(ret_value) as *const i32 };
-    let result = unsafe { *data };
-
     // TODO(shoumik)
-    // Since all predicates pass, this is the result
-    // let expect = 0;
-    // assert_eq!(result, expect);
-    unsafe { weld_value_free(ret_value) };
+    // Run once to check correctness/warm up.
+    //
+    // let ret_value = unsafe { run_module(module, args).unwrap() };
+    // let data = unsafe { weld_value_data(ret_value) as *const i32 };
+    // let result = unsafe { *data };
+    // unsafe { weld_value_free(ret_value) };
+    //
+
 
     bench.iter(|| {
         match unsafe { run_module(module, args) } {
@@ -317,13 +310,16 @@ fn bench_tpch_q6(bench: &mut Bencher) {
 
     let module = unsafe { compile_program(code).unwrap() };
 
+    // TODO(shoumik)
     // Run once to check correctness/warm up.
-    let ret_value = unsafe { run_module(module, args).unwrap() };
-    let data = unsafe { weld_value_data(ret_value) as *const f32 };
-    let result = unsafe { *data };
+    //
+    // let ret_value = unsafe { run_module(module, args).unwrap() };
+    // let data = unsafe { weld_value_data(ret_value) as *const f32 };
+    // let result = unsafe { *data };
+    // assert_eq!(result, expect);
+    // unsafe { weld_value_free(ret_value) };
+    //
 
-    assert_eq!(result, expect);
-    unsafe { weld_value_free(ret_value) };
 
     bench.iter(|| {
         match unsafe { run_module(module, args) } {
@@ -333,17 +329,72 @@ fn bench_tpch_q6(bench: &mut Bencher) {
     });
 }
 
+// Drives the benchmarking.
 
+/// Formats a time in ns as a value in ms.
+fn format_ns(x: f64) -> String {
+    format!("{:.4}", x / 1000000_f64)
+}
 
-/// Register functions that can be run with the benchmarking suite here.
-pub fn registered_benchmarks() -> HashMap<String, fn(&mut bencher::Bencher)> {
+fn run_benchmark<W: std::io::Write>(writer: &mut csv::Writer<W>,
+                                    bench: &(&str, fn(&mut bencher::Bencher))) {
+    let Summary { min, max, mean, median, std_dev, .. } = benchmark(bench.1).ns_iter_summ;
+    let record = (bench.0,
+                  "weld",
+                  format_ns(mean),
+                  format_ns(min),
+                  format_ns(max),
+                  format_ns(median),
+                  format_ns(std_dev));
+    let result = writer.encode(record);
+    assert!(result.is_ok());
+}
 
-    weld_print_function_pointers();
+fn main() {
+    let args: Vec<String> = env::args().collect();
+    let benches: Vec<(&str, fn(&mut bencher::Bencher))> =
+        vec![("bench_vector_sum", bench_vector_sum),
+             ("bench_map_reduce", bench_map_reduce),
+             ("bench_tpch_q1", bench_tpch_q1),
+             ("bench_tpch_q6", bench_tpch_q6)];
 
-    let mut benchmarks_all: HashMap<String, fn(&mut bencher::Bencher)> = HashMap::new();
-    benchmarks_all.insert("bench_vector_sum".to_string(), bench_vector_sum);
-    benchmarks_all.insert("bench_map_reduce".to_string(), bench_map_reduce);
-    // benchmarks_all.insert("bench_tpch_q1".to_string(), bench_tpch_q1);
-    // benchmarks_all.insert("bench_tpch_q6".to_string(), bench_tpch_q6);
-    benchmarks_all
+    let ref mut wtr = csv::Writer::from_file("bench.csv").unwrap();
+    // Encode the CSV header.
+    let result =
+        wtr.encode(("name",
+                    "config",
+                    "mean(ms)",
+                    "min(ms)",
+                    "max(ms)",
+                    "median(ms)",
+                    "std_dev(ms)"));
+    assert!(result.is_ok());
+
+    println!("");
+    println!("running benchmarks");
+    let mut measured = 0;
+    for t in benches.iter() {
+        match t.0 {
+            // don't run this, they exist only to make sure functions don't get optimized out
+            "runtime_fns" => weld_print_function_pointers(),
+            _ => {
+                if args.len() > 2 {
+                    if !t.0.contains(args[2].as_str()) {
+                        println!("{} ... \x1b[0;33mignored\x1b[0m", t.0);
+                        continue;
+                    }
+                }
+                print!("{} ... ", t.0);
+                run_benchmark(wtr, t);
+                println!("\x1b[0;32mok\x1b[0m");
+                measured += 1;
+            }
+        }
+    }
+
+    println!("");
+    println!("test result: \x1b[0;32mok\x1b[0m. {} passed; 0 failed; {} ignored; {} measured",
+             benches.len() - measured,
+             measured);
+    println!("");
 }
