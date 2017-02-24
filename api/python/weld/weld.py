@@ -4,16 +4,28 @@
 
 from ctypes import *
 
+import platform
 import os
 import copy
 
 # Load the library.
-home = os.environ["WELD_HOME"]
-if home[-1] != "/":
-    home += "/"
+path = os.environ["WELD_HOME"]
+if path[-1] != "/":
+    path += "/"
+path += "target/debug/libweld"
+
+system = platform.system()
+if system == 'Linux':
+    path += ".so"
+elif system == 'Windows':
+    path += ".dll"
+elif system == 'Darwin':
+    path += ".dylib"
+else:
+    raise OSError("Unsupported platform {}", system)
 
 # Load the Weld Dynamic Library.
-weld = CDLL(home + "target/debug/libweld.dylib")
+weld = CDLL(path)
 
 # Used for some type checking carried out by ctypes
 class c_weld_module(c_void_p): pass
