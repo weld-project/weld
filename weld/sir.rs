@@ -46,6 +46,11 @@ pub enum Statement {
         output: Symbol,
         elems: Vec<(Symbol, Type)>,
     },
+    MakeVector {
+        output: Symbol,
+        elems: Vec<Symbol>,
+        elem_ty: Type,
+    },
     GetField {
         output: Symbol,
         value: Symbol,
@@ -209,6 +214,12 @@ impl fmt::Display for Statement {
                        output,
                        join("{", ",", "}", elems.iter().map(|e| e.0.name.clone())))
             }
+            MakeVector { ref output, ref elems, .. } => {
+                write!(f,
+                       "{} = new {}",
+                       output,
+                       join("[", ",", "]", elems.iter().map(|e| e.name.clone())))
+            }
             GetField { ref output, ref value, index } => {
                 write!(f, "{} = {}.{}", output, value, index)
             }
@@ -358,6 +369,11 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
                 MakeStruct { ref elems, .. } => {
                     for elem in elems {
                         vars.push(elem.0.clone());
+                    }
+                }
+                MakeVector { ref elems, .. } => {
+                    for elem in elems {
+                        vars.push(elem.clone());
                     }
                 }
             }
@@ -633,6 +649,30 @@ fn gen_expr(expr: &TypedExpr,
             prog.funcs[cur_func].blocks[cur_block].add_statement(MakeStruct {
                 output: res_sym.clone(),
                 elems: syms,
+            });
+            Ok((cur_func, cur_block, res_sym))
+        }
+
+        ExprKind::MakeVector { ref elems } => {
+            let mut syms = vec![];
+            let ty = match expr.ty {
+                super::ast::Type::Vector(ref ety) => ety.clone(),
+                _ => weld_err!("MakeVector doesn't have type Vector")?,
+            };
+            let mut cur_func = cur_func;
+            let mut cur_block = cur_block;
+            for elem in elems.iter() {
+                let r = gen_expr(elem, prog, cur_func, cur_block)?;
+                cur_func = r.0;
+                cur_block = r.1;
+                let sym = r.2;
+                syms.push(sym);
+            }
+            let res_sym = prog.add_local(&expr.ty, cur_func);
+            prog.funcs[cur_func].blocks[cur_block].add_statement(MakeVector {
+                output: res_sym.clone(),
+                elems: syms,
+                elem_ty: *ty,
             });
             Ok((cur_func, cur_block, res_sym))
         }

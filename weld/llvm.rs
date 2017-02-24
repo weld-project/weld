@@ -972,6 +972,42 @@ impl LlvmGenerator {
                                              ll_ty,
                                              llvm_symbol(output)));
                     }
+                    MakeVector { ref output, ref elems, ref elem_ty } => {
+                        let elem_ll_ty = self.llvm_type(elem_ty)?.to_string();
+                        let vec_ll_ty = self.llvm_type(&Vector(Box::new(elem_ty.clone())))?
+                            .to_string();
+                        let vec_ll_prefix = vec_ll_ty.replace("%", "@");
+                        let vec = ctx.var_ids.next();
+                        let capacity_str = format!("{}", elems.len());
+                        ctx.code
+                            .add(format!("{vec} = call {vec_type} {prefix}.new(i64 {capacity})",
+                                         vec = vec,
+                                         vec_type = vec_ll_ty,
+                                         prefix = vec_ll_prefix,
+                                         capacity = capacity_str));
+                        for (i, elem) in elems.iter().enumerate() {
+                            let e = self.load_var(llvm_symbol(&elem).as_str(), &elem_ll_ty, ctx)?
+                                .to_string();
+                            let ptr = ctx.var_ids.next();
+                            let idx_str = format!("{}", i);
+                            ctx.code.add(format!("{ptr} = call {elem_ty}* \
+                                                  {prefix}.at({vec_type} {vec}, i64 {idx})",
+                                                 ptr = ptr,
+                                                 elem_ty = elem_ll_ty,
+                                                 prefix = vec_ll_prefix,
+                                                 vec_type = vec_ll_ty,
+                                                 vec = vec,
+                                                 idx = idx_str));
+                            ctx.code.add(format!("store {elem_ty} {elem}, {elem_ty}* {ptr}",
+                                                 elem_ty = elem_ll_ty,
+                                                 elem = e,
+                                                 ptr = ptr));
+                        }
+                        ctx.code.add(format!("store {vec_ty} {vec}, {vec_ty}* {output}",
+                                             vec_ty = vec_ll_ty,
+                                             vec = vec,
+                                             output = llvm_symbol(&output).as_str()));
+                    }
                     BinOp { ref output, op, ref ty, ref left, ref right } => {
                         let ll_ty = try!(self.llvm_type(ty)).to_string();
                         let left_tmp = try!(self.load_var(llvm_symbol(left).as_str(), &ll_ty, ctx));

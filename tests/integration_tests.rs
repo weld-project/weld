@@ -159,6 +159,39 @@ fn program_with_args() {
     unsafe { weld_value_free(ret_value) };
 }
 
+/// Tests literal data structures such as vectors and structs.
+fn struct_vector_literals() {
+    #[derive(Clone)]
+    #[allow(dead_code)]
+    struct Triple {
+        a: i32,
+        b: i32,
+        c: i32,
+    }
+
+    let code = "|x:i32| [{x,x,x},{x,x,x}]";
+    let conf = default_conf();
+
+    let ref input_data: i32 = 2;
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<Triple> };
+    let result = unsafe { (*data).clone() };
+
+    assert_eq!(result.len, 2);
+
+    let triple = unsafe { (*result.data.offset(0)).clone() };
+    assert_eq!(triple.a, 2);
+    assert_eq!(triple.b, 2);
+    assert_eq!(triple.c, 2);
+    let triple = unsafe { (*result.data.offset(1)).clone() };
+    assert_eq!(triple.a, 2);
+    assert_eq!(triple.b, 2);
+    assert_eq!(triple.c, 2);
+
+    unsafe { weld_value_free(ret_value) };
+}
+
 fn let_statement() {
     let code = "|x:i32| let y = 40 + x; y + 2";
     let conf = default_conf();
@@ -929,6 +962,7 @@ fn main() {
              ("f64_cast", f64_cast),
              ("i32_cast", i32_cast),
              ("program_with_args", program_with_args),
+             ("struct_vector_literals", struct_vector_literals),
              ("let_statement", let_statement),
              ("if_statement", if_statement),
              ("comparison", comparison),
