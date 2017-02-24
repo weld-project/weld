@@ -159,6 +159,39 @@ fn program_with_args() {
     unsafe { weld_value_free(ret_value) };
 }
 
+/// Tests literal data structures such as vectors and structs.
+fn struct_vector_literals() {
+    #[derive(Clone)]
+    #[allow(dead_code)]
+    struct Triple {
+        a: i32,
+        b: i32,
+        c: i32,
+    }
+
+    let code = "|x:i32| [{x,x,x},{x,x,x}]";
+    let conf = default_conf();
+
+    let ref input_data: i32 = 2;
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<Triple> };
+    let result = unsafe { (*data).clone() };
+
+    assert_eq!(result.len, 2);
+
+    let triple = unsafe { (*result.data.offset(0)).clone() };
+    assert_eq!(triple.a, 2);
+    assert_eq!(triple.b, 2);
+    assert_eq!(triple.c, 2);
+    let triple = unsafe { (*result.data.offset(1)).clone() };
+    assert_eq!(triple.a, 2);
+    assert_eq!(triple.b, 2);
+    assert_eq!(triple.c, 2);
+
+    unsafe { weld_value_free(ret_value) };
+}
+
 fn let_statement() {
     let code = "|x:i32| let y = 40 + x; y + 2";
     let conf = default_conf();
@@ -208,6 +241,167 @@ fn comparison() {
     let result = unsafe { *data };
     assert_eq!(result, 20);
 
+    unsafe { weld_value_free(ret_value) };
+}
+
+fn map_comparison() {
+    let code = "|e0: vec[i32]| map(e0, |a: i32| a == i32(100))";
+    let conf = default_conf();
+
+    let input_vec = [100, 200, 0, 100];
+    let ref input_data = WeldVec {
+        data: &input_vec as *const i32,
+        len: input_vec.len() as i64,
+    };
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<bool> };
+    let result = unsafe { (*data).clone() };
+    assert_eq!(result.len as usize, input_vec.len());
+    for i in 0..(result.len as isize) {
+        assert_eq!(unsafe { *result.data.offset(i) }, input_vec[i as usize] == 100)
+    }
+
+    unsafe { weld_value_free(ret_value) };
+}
+
+fn eq_between_vectors() {
+    #[allow(dead_code)]
+    struct Args {
+        x: WeldVec<i32>,
+        y: WeldVec<i32>,
+    }
+    let conf = default_conf();
+
+    let code = "|e0: vec[i32], e1: vec[i32]| e0 == e1";
+    let input_vec1 = [1, 2, 3, 4, 5];
+    let input_vec2 = [1, 2, 3, 4, 5];
+    let ref input_data = Args {
+        x: WeldVec {
+            data: &input_vec1 as *const i32,
+            len: input_vec1.len() as i64,
+        },
+        y: WeldVec {
+            data: &input_vec2 as *const i32,
+            len: input_vec2.len() as i64,
+        },
+    };
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const bool };
+    let result = unsafe { *data };
+    assert_eq!(result, true);
+    unsafe { weld_value_free(ret_value) };
+}
+
+fn eq_between_diff_length_vectors() {
+    #[allow(dead_code)]
+    struct Args {
+        x: WeldVec<i32>,
+        y: WeldVec<i32>,
+    }
+    let conf = default_conf();
+
+    let code = "|e0: vec[i32], e1: vec[i32]| e0 == e1";
+    let input_vec1 = [1, 2, 3, 4, 5];
+    let input_vec2 = [1, 2, 3, 4, 5, 6, 7];
+    let ref input_data = Args {
+        x: WeldVec {
+            data: &input_vec1 as *const i32,
+            len: input_vec1.len() as i64,
+        },
+        y: WeldVec {
+            data: &input_vec2 as *const i32,
+            len: input_vec2.len() as i64,
+        },
+    };
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const bool };
+    let result = unsafe { *data };
+    assert_eq!(result, false);
+    unsafe { weld_value_free(ret_value) };
+}
+
+fn ne_between_vectors() {
+    #[allow(dead_code)]
+    struct Args {
+        x: WeldVec<i32>,
+        y: WeldVec<i32>,
+    }
+    let conf = default_conf();
+
+    let code = "|e0: vec[i32], e1: vec[i32]| e0 != e1";
+    let input_vec1 = [1, 2, 3, 4, 5];
+    let input_vec2 = [3, 2, 3, 4, 5];
+    let ref input_data = Args {
+        x: WeldVec {
+            data: &input_vec1 as *const i32,
+            len: input_vec1.len() as i64,
+        },
+        y: WeldVec {
+            data: &input_vec2 as *const i32,
+            len: input_vec2.len() as i64,
+        },
+    };
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const bool };
+    let result = unsafe { *data };
+    assert_eq!(result, true);
+    unsafe { weld_value_free(ret_value) };
+}
+
+fn lt_between_vectors() {
+    #[allow(dead_code)]
+    struct Args {
+        x: WeldVec<i32>,
+        y: WeldVec<i32>,
+    }
+    let conf = default_conf();
+
+    let code = "|e0: vec[i32], e1: vec[i32]| e0 < e1";
+    let input_vec1 = [1, 2, 3, 4, 5];
+    let input_vec2 = [2, 3, 4, 5, 6];
+    let ref input_data = Args {
+        x: WeldVec {
+            data: &input_vec1 as *const i32,
+            len: input_vec1.len() as i64,
+        },
+        y: WeldVec {
+            data: &input_vec2 as *const i32,
+            len: input_vec2.len() as i64,
+        },
+    };
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const bool };
+    let result = unsafe { *data };
+    assert_eq!(result, true);
+    unsafe { weld_value_free(ret_value) };
+}
+
+fn le_between_vectors() {
+    #[allow(dead_code)]
+    struct Args {
+        x: WeldVec<i32>,
+        y: WeldVec<i32>,
+    }
+    let conf = default_conf();
+
+    let code = "|e0: vec[i32], e1: vec[i32]| e0 <= e1";
+    let input_vec1 = [1, 2, 3, 4, 5];
+    let input_vec2 = [0, 3, 4, 5, 6];
+    let ref input_data = Args {
+        x: WeldVec {
+            data: &input_vec1 as *const i32,
+            len: input_vec1.len() as i64,
+        },
+        y: WeldVec {
+            data: &input_vec2 as *const i32,
+            len: input_vec2.len() as i64,
+        },
+    };
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const bool };
+    let result = unsafe { *data };
+    assert_eq!(result, false);
     unsafe { weld_value_free(ret_value) };
 }
 
@@ -771,9 +965,16 @@ fn main() {
              ("f64_cast", f64_cast),
              ("i32_cast", i32_cast),
              ("program_with_args", program_with_args),
+             ("struct_vector_literals", struct_vector_literals),
              ("let_statement", let_statement),
              ("if_statement", if_statement),
              ("comparison", comparison),
+             ("map_comparison", map_comparison),
+             ("eq_between_vectors", eq_between_vectors),
+             ("eq_between_diff_length_vectors", eq_between_diff_length_vectors),
+             ("ne_between_vectors", ne_between_vectors),
+             ("lt_between_vectors", lt_between_vectors),
+             ("le_between_vectors", le_between_vectors),
              ("simple_vector_lookup", simple_vector_lookup),
              ("simple_for_appender_loop", simple_for_appender_loop),
              ("simple_parallel_for_appender_loop", simple_parallel_for_appender_loop),
