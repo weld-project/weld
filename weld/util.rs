@@ -112,7 +112,8 @@ pub fn get_weld_home() -> Result<String, ()> {
 /// Loads the Weld runtime library.
 pub fn load_runtime_library() -> Result<(), String> {
     let weld_home = get_weld_home().unwrap_or(".".to_string());
-    let lib_path = "weld_rt/target/release/deps/libweldrt";
+    // TODO(shoumik): Is there a better way to do this?
+    let lib_path = "weld_rt/target/release/libweldrt";
     let path = format!("{}{}", weld_home, lib_path);
     if let Err(_) = easy_ll::load_library(&path) {
         let err_message = unsafe { std::ffi::CStr::from_ptr(libc::dlerror()) };

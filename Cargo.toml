@@ -1,7 +1,11 @@
 [package]
 name = "weld"
 version = "0.1.0"
-authors = ["Matei Zaharia <matei.zaharia@gmail.com>"]
+authors = ["Matei Zaharia <matei.zaharia@gmail.com>",
+    "Shoumik Palkar <shoumikpalkar@gmail.com>",
+    "Deepak Narayanan <deepakn94@gmail.com>",
+    "James Thomas <jamesjoethomas@gmail.com>"]
+build = "build.rs"
 
 [dependencies]
 lazy_static = "0.2.1"
@@ -15,11 +19,12 @@ csv = "0.15.0"
 
 [lib]
 path = "weld/lib.rs"
-crate-type = ["dylib", "rlib"]
+crate-type = ["cdylib", "rlib"]
 
 [[bin]]
 name = "repl"
 path = "weld/bin/repl.rs"
+bench = false
 
 [[bench]]
 name = "benches"
