@@ -11,7 +11,7 @@ fn main() {
         path = path + &"/";
     }
 
-    let cpp_path = path + &"weldrt/cpp";
+    let cpp_path = path + &"weld_rt/cpp";
 
     Command::new("make").arg("clean").arg("-C").arg(cpp_path.clone()).status().unwrap();
     Command::new("make").arg("-C").arg(cpp_path.clone()).status().unwrap();

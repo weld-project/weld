@@ -16,8 +16,6 @@ use std::error::Error;
 use libc::{c_char, c_void};
 use std::ffi::{CStr, CString};
 
-use std::env;
-
 use weld_common::WeldRuntimeErrno;
 
 /// Utility macro to create an Err result with a WeldError from a format string.
@@ -27,7 +25,6 @@ macro_rules! weld_err {
     })
 }
 
-// TODO: Not all of these should be public
 pub mod ast;
 pub mod code_builder;
 pub mod error;
@@ -41,8 +38,8 @@ pub mod sir;
 pub mod tokenizer;
 pub mod transforms;
 pub mod type_inference;
-pub mod util;
 pub mod conf;
+pub mod util;
 
 /// An error passed as an opaque pointer using the runtime API.
 pub struct WeldError {
@@ -171,6 +168,7 @@ pub unsafe extern "C" fn weld_value_free(obj: *mut WeldValue) {
     }
     let value = &mut *obj;
     if let Some(run_id) = value.run_id {
+        // TODO(shoumik): Cache this? No need to compile it each time.
         let module = llvm::generate_runtime_interface_module().unwrap();
         let arg = run_id;
         let _ = module.run(arg);
@@ -192,20 +190,8 @@ pub unsafe extern "C" fn weld_module_compile(code: *const c_char,
     *err = Box::into_raw(Box::new(WeldError::new(WeldRuntimeErrno::Success)));
     let err = &mut **err;
 
-    // TODO(shoumik): Factor this out into a different file.
-    // Try the current directory if WELD_HOME isn't set.
-    let mut path = match env::var("WELD_HOME") {
-        Ok(val) => val,
-        Err(_) => ".".to_string(),
-    };
-    if path.chars().last().unwrap() != '/' {
-        path = path + &"/";
-    }
-    let path = &format!("{}weldrt/target/release/deps/libweldrt", path);
-    if let Err(_) = easy_ll::load_library(path) {
-        let err_message = std::ffi::CStr::from_ptr(libc::dlerror());
-        let err_message = err_message.to_str().unwrap();
-        println!("{}", err_message);
+    if let Err(e) = util::load_runtime_library() {
+        println!("{}", e);
     }
 
     let module = llvm::compile_program(&parser::parse_program(code).unwrap());

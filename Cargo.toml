@@ -9,7 +9,6 @@ regex = "0.1.71"
 rustyline = "1.0.0"
 easy_ll = { path = "easy_ll", version = "^0.1.0" }
 weld_common = { path = "weld_common", version = "^0.1.0" }
-weldrt = { path = "weldrt", version = "^0.1.0" }
 libc = "0.2.0"
 getopts = "0.2.14"
 csv = "0.15.0"

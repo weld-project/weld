@@ -21,6 +21,7 @@ use weld::parser::*;
 use weld::pretty_print::*;
 use weld::type_inference::*;
 use weld::sir::ast_to_sir;
+use weld::util::load_runtime_library;
 
 enum ReplCommands {
     LoadFile,
@@ -185,21 +186,9 @@ fn main() {
                     let llvm_code = llvm_gen.result();
                     println!("LLVM code:\n{}\n", llvm_code);
 
-                    // Try the current directory if WELD_HOME isn't set.
-                    let mut path = match env::var("WELD_HOME") {
-                        Ok(val) => val,
-                        Err(_) => ".".to_string(),
-                    };
-                    if path.chars().last().unwrap() != '/' {
-                        path = path + &"/";
-                    }
-
-                    if let Err(e) = easy_ll::load_library(&format!("{}weldrt/target/release/deps/libweldrt",
-                                                                   path)) {
-                        println!("couldn't load library: {}", e.description());
-                        println!("{}", unsafe {
-                            std::ffi::CStr::from_ptr(libc::dlerror()).to_str().unwrap()
-                        })
+                    if let Err(e) = load_runtime_library() {
+                        println!("Couldn't load runtime: {}", e);
+                        continue;
                     }
 
                     if let Err(ref e) = easy_ll::compile_module(&llvm_code) {

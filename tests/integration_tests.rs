@@ -106,8 +106,6 @@ fn basic_program() {
     let code = "|| 40 + 2";
     let conf = default_conf();
 
-    println!("got conf");
-
     let ref input_data = 0;
 
     let ret_value = compile_and_run(code, conf, input_data);
