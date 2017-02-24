@@ -52,10 +52,9 @@ unsafe fn _compile_and_run<T>(code: &str,
                               conf: *mut WeldConf,
                               ptr: &T)
                               -> Result<*mut WeldValue, *mut WeldError> {
+
     let code = CString::new(code).unwrap();
-
     let input_value = weld_value_new(ptr as *const _ as *const c_void);
-
     let mut err = std::ptr::null_mut();
     let module = weld_module_compile(code.into_raw() as *const c_char,
                                      conf,
@@ -106,6 +105,8 @@ fn compile_and_run<T>(code: &str, conf: *mut WeldConf, ptr: &T) -> *mut WeldValu
 fn basic_program() {
     let code = "|| 40 + 2";
     let conf = default_conf();
+
+    println!("got conf");
 
     let ref input_data = 0;
 

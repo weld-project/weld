@@ -141,6 +141,24 @@ extern "C" {
 }
 
 #[no_mangle]
+/// Intialize a new run.
+///
+/// This function *must* be called before any other `weld_rt` functions.
+pub extern "C" fn weld_rt_init(mem_limit: i64) {
+    let my_run_id: i64;
+    // Put this in it's own scope so the mutexes are unlocked.
+    {
+        let mut guarded = ALLOCATIONS.lock().unwrap();
+        let mut run_id = RUN_ID_NEXT.lock().unwrap();
+        my_run_id = run_id.clone();
+        *run_id += 1;
+        guarded.insert(my_run_id, RunMemoryInfo::new(mem_limit));
+    }
+    unsafe { set_runid(my_run_id) };
+    weld_rt_set_errno(my_run_id, WeldRuntimeErrno::Success);
+}
+
+#[no_mangle]
 /// Weld runtime wrapper around malloc.
 ///
 /// This function tracks the pointer returned by malloc in an allocation list. The allocation list

@@ -2,7 +2,6 @@
 name = "weld"
 version = "0.1.0"
 authors = ["Matei Zaharia <matei.zaharia@gmail.com>"]
-build = "build.rs"
 
 [dependencies]
 lazy_static = "0.2.1"
@@ -10,6 +9,7 @@ regex = "0.1.71"
 rustyline = "1.0.0"
 easy_ll = { path = "easy_ll", version = "^0.1.0" }
 weld_common = { path = "weld_common", version = "^0.1.0" }
+weldrt = { path = "weldrt", version = "^0.1.0" }
 libc = "0.2.0"
 getopts = "0.2.14"
 csv = "0.15.0"
@@ -29,4 +29,5 @@ harness = false
 
 [[test]]
 name = "integration_tests"
+path = "tests/integration_tests.rs"
 harness = false

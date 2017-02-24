@@ -202,7 +202,12 @@ pub unsafe extern "C" fn weld_module_compile(code: *const c_char,
         path = path + &"/";
     }
 
-    let _ = easy_ll::load_library(&format!("{}/weldrt/target/debug/libweldrt", path));
+    if let Err(_) = easy_ll::load_library(&format!("{}weldrt/target/release/deps/libweldrt",
+                                                   path)) {
+        println!("{}",
+                 std::ffi::CStr::from_ptr(libc::dlerror()).to_str().unwrap());
+    }
+
     let module = llvm::compile_program(&parser::parse_program(code).unwrap());
 
     if let Err(ref e) = module {
@@ -243,38 +248,27 @@ pub unsafe extern "C" fn weld_module_run(module: *mut easy_ll::CompiledModule,
         .unwrap_or(&CString::new("").unwrap())
         .clone());
 
-    // let my_run_id;
-    // Put this in it's own scope so the mutexes are unlocked.
-    // {
-    // let mut guarded = ALLOCATIONS.lock().unwrap();
-    // let mut run_id = RUN_ID_NEXT.lock().unwrap();
-    // my_run_id = run_id.clone();
-    // run_id += 1;
-    // guarded.insert(my_run_id, RunMemoryInfo::new(mem_limit));
-    // }
-    //
-
     let run_id = 0;
     let input = Box::new(llvm::WeldInputArgs {
         input: arg.data as i64,
         nworkers: threads as i32,
-        run_id: run_id, // TODO(shoumik)
+        mem_limit: mem_limit as i64,
     });
     let ptr = Box::into_raw(input) as i64;
+    let result_raw = module.run(ptr) as *const llvm::WeldOutputArgs;
+    let result = (*result_raw).clone();
 
-    let result = module.run(ptr) as *const c_void;
-    // TODO(shoumik)
-    // let errno = weld_rt_get_errno(my_run_id);
-    // if errno != WeldRuntimeErrno::Success {
-    // weld_run_free(my_run_id);
-    // err = WeldError::new(errno);
-    // return std::ptr::null_mut();
-    // }
-    //
+    if result.errno != WeldRuntimeErrno::Success {
+        // TODO(shoumik): How do we free??
+        // weld_run_free(result.run_id);
+        *err = WeldError::new(result.errno);
+        return std::ptr::null_mut();
+    }
+
 
     Box::into_raw(Box::new(WeldValue {
-        data: result,
-        run_id: Some(run_id),
+        data: result.output as *const c_void,
+        run_id: Some(result.run_id),
     }))
 }
 

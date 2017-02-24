@@ -2,6 +2,8 @@ extern crate rustyline;
 extern crate easy_ll;
 extern crate weld;
 
+extern crate libc;
+
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
 use std::env;
@@ -182,6 +184,23 @@ fn main() {
                 } else {
                     let llvm_code = llvm_gen.result();
                     println!("LLVM code:\n{}\n", llvm_code);
+
+                    // Try the current directory if WELD_HOME isn't set.
+                    let mut path = match env::var("WELD_HOME") {
+                        Ok(val) => val,
+                        Err(_) => ".".to_string(),
+                    };
+                    if path.chars().last().unwrap() != '/' {
+                        path = path + &"/";
+                    }
+
+                    if let Err(e) = easy_ll::load_library(&format!("{}weldrt/target/release/deps/libweldrt",
+                                                                   path)) {
+                        println!("couldn't load library: {}", e.description());
+                        println!("{}", unsafe {
+                            std::ffi::CStr::from_ptr(libc::dlerror()).to_str().unwrap()
+                        })
+                    }
 
                     if let Err(ref e) = easy_ll::compile_module(&llvm_code) {
                         println!("Error during LLVM compilation:\n{}\n", e);
