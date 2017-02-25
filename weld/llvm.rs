@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 
 use easy_ll;
 
-use super::WeldRuntimeErrno;
+use weld_common::WeldRuntimeErrno;
 
 use super::ast::*;
 use super::ast::Type::*;
@@ -63,10 +63,21 @@ pub struct LlvmGenerator {
 }
 
 /// A wrapper for a struct passed as input to the Weld runtime.
+#[derive(Clone, Debug)]
+#[repr(C)]
 pub struct WeldInputArgs {
     pub input: i64,
     pub nworkers: i32,
+    pub mem_limit: i64,
+}
+
+/// A wrapper for outputs passed out of the Weld runtime.
+#[derive(Clone, Debug)]
+#[repr(C)]
+pub struct WeldOutputArgs {
+    pub output: i64,
     pub run_id: i64,
+    pub errno: WeldRuntimeErrno,
 }
 
 fn get_combined_params(sir: &SirProgram, par_for: &ParallelForData) -> HashMap<Symbol, Type> {
@@ -618,9 +629,9 @@ impl LlvmGenerator {
         run_ctx.code.add(format!("%r.inp_val = load %input_arg_t* %r.inp_typed"));
         run_ctx.code.add(format!("%r.args = extractvalue %input_arg_t %r.inp_val, 0"));
         run_ctx.code.add(format!("%r.nworkers = extractvalue %input_arg_t %r.inp_val, 1"));
-        run_ctx.code.add(format!("%r.rid = extractvalue %input_arg_t %r.inp_val, 2"));
+        run_ctx.code.add(format!("%r.memlimit = extractvalue %input_arg_t %r.inp_val, 2"));
         run_ctx.code.add(format!("call void @set_nworkers(i32 %r.nworkers)"));
-        run_ctx.code.add(format!("call void @set_runid(i64 %r.rid)"));
+        run_ctx.code.add(format!("call void @weld_rt_init(i64 %r.memlimit)"));
         // Code to load args and call function
         run_ctx.code.add(format!("%r.args_typed = inttoptr i64 %r.args to {args_type}*
              \
@@ -639,13 +650,46 @@ impl LlvmGenerator {
                                      idx));
         }
         let run_struct = try!(self.get_arg_struct(&sir.funcs[0].params, &mut run_ctx));
+
+        let rid = run_ctx.var_ids.next();
+        let errno = run_ctx.var_ids.next();
+        let tmp0 = run_ctx.var_ids.next();
+        let tmp1 = run_ctx.var_ids.next();
+        let tmp2 = run_ctx.var_ids.next();
+        let size_ptr = run_ctx.var_ids.next();
+        let size = run_ctx.var_ids.next();
+        let bytes = run_ctx.var_ids.next();
+        let typed_out_ptr = run_ctx.var_ids.next();
+        let final_address = run_ctx.var_ids.next();
+
         run_ctx.code.add(format!("call \
-                          void @execute(void (%work_t*)* @f0_par, i8* {})
+                          void @execute(void (%work_t*)* @f0_par, i8* {run_struct})
              %res_ptr = call i8* @get_result()
              %res_address = ptrtoint i8* %res_ptr to i64
              \
-                          ret i64 %res_address",
-                                 run_struct));
+             {rid} = call i64 @get_runid()
+             {errno} = call i64 @weld_rt_get_errno(i64 {rid})
+             {tmp0} = insertvalue %output_arg_t undef, i64 %res_address, 0
+             {tmp1} = insertvalue %output_arg_t {tmp0}, i64 {rid}, 1  
+             {tmp2} = insertvalue %output_arg_t {tmp1}, i64 {errno}, 2  
+  {size_ptr} = getelementptr %output_arg_t* null, i32 1
+  {size} = ptrtoint %output_arg_t* {size_ptr} to i64
+  {bytes} = call i8* @weld_rt_malloc(i64 {rid}, i64 {size})
+  {typed_out_ptr} = bitcast i8* {bytes} to %output_arg_t*
+  store %output_arg_t {tmp2}, %output_arg_t* {typed_out_ptr}
+  {final_address} = ptrtoint %output_arg_t* {typed_out_ptr} to i64
+                          ret i64 {final_address}",
+                                 run_struct = run_struct,
+                                 rid = rid,
+                                 errno = errno,
+                                 tmp0 = tmp0,
+                                 tmp1 = tmp1,
+                                 tmp2 = tmp2,
+                                 size_ptr = size_ptr,
+                                 size = size,
+                                 bytes = bytes,
+                                 typed_out_ptr = typed_out_ptr,
+                                 final_address = final_address));
         run_ctx.code.add("}\n\n");
 
         self.body_code.add(&run_ctx.code.result());
@@ -1987,6 +2031,13 @@ impl FunctionContext {
             Ok(())
         }
     }
+}
+
+/// Generates a small program which, when called with a `run_id`, frees
+/// memory associated with the run ID.
+pub fn generate_runtime_interface_module() -> WeldResult<easy_ll::CompiledModule> {
+    let program = include_str!("resources/runtime_interface_module.ll");
+    Ok(try!(easy_ll::compile_module(program)))
 }
 
 /// Generate a compiled LLVM module from a program whose body is a function.

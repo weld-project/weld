@@ -5,10 +5,8 @@ declare void @llvm.memcpy.p0i8.p0i8.i64(i8*, i8*, i64, i32, i1)
 declare void @llvm.memset.p0i8.i64(i8*, i8, i64, i32, i1)
 declare i64 @llvm.ctlz.i64(i64, i1)
 
-; C library functions
-declare void @qsort(i8*, i64, i64, i32 (i8*, i8*)*)
-
-; Weld library functions (new)
+; Weld library functions
+declare void    @weld_rt_init(i64)
 declare i8*     @weld_rt_malloc(i64, i64)
 declare i8*     @weld_rt_realloc(i64, i8*, i64)
 declare void    @weld_rt_free(i64, i8*)
@@ -16,6 +14,9 @@ declare i8*     @new_merger(i64, i64, i32)
 declare i8*     @get_merger_at_index(i8*, i64, i32)
 declare void    @free_merger(i64, i8*)
 declare i32     @my_id_public()
+declare void    @weld_rt_set_errno(i64, i64)
+declare i64     @weld_rt_get_errno(i64)
+declare void    @weld_abort_thread()
 
 ; Parallel runtime structures
 ; documentation in parlib.h
@@ -24,8 +25,10 @@ declare i32     @my_id_public()
 %vb.vp = type { i8*, i64, i64, i64*, i64*, i32 }
 %vb.out = type { i8*, i64 }
 
-; Input argument (input data pointer, nworkers, runId)
+; Input argument (input data pointer, nworkers, mem_limit)
 %input_arg_t = type { i64, i32, i64 }
+; Return type (output data pointer, run ID, errno)
+%output_arg_t = type { i64, i64, i64 }
 
 ; documenation in parlib.cpp
 declare void @set_result(i8*)
@@ -45,15 +48,6 @@ declare i32 @get_nworkers()
 ; Run IDs
 declare void @set_runid(i64)
 declare i64 @get_runid()
-
-; Errors
-
-; run_id, errno
-declare void @weld_rt_set_errno(i64, i64)
-; run_id
-declare i64 @weld_rt_get_errno(i64)
-
-declare void @weld_abort_thread()
 
 ; Hash functions
 

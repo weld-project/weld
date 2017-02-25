@@ -1,10 +1,10 @@
 use std::env;
 
 extern crate weld;
+extern crate weld_common;
 extern crate libc;
 
-use weld::weld_print_function_pointers;
-use weld::WeldRuntimeErrno;
+use weld_common::WeldRuntimeErrno;
 
 use weld::WeldConf;
 use weld::WeldValue;
@@ -52,10 +52,9 @@ unsafe fn _compile_and_run<T>(code: &str,
                               conf: *mut WeldConf,
                               ptr: &T)
                               -> Result<*mut WeldValue, *mut WeldError> {
+
     let code = CString::new(code).unwrap();
-
     let input_value = weld_value_new(ptr as *const _ as *const c_void);
-
     let mut err = std::ptr::null_mut();
     let module = weld_module_compile(code.into_raw() as *const c_char,
                                      conf,
@@ -259,7 +258,8 @@ fn map_comparison() {
     let result = unsafe { (*data).clone() };
     assert_eq!(result.len as usize, input_vec.len());
     for i in 0..(result.len as isize) {
-        assert_eq!(unsafe { *result.data.offset(i) }, input_vec[i as usize] == 100)
+        assert_eq!(unsafe { *result.data.offset(i) },
+                   input_vec[i as usize] == 100)
     }
 
     unsafe { weld_value_free(ret_value) };
@@ -997,21 +997,15 @@ fn main() {
     println!("running tests");
     let mut passed = 0;
     for t in tests.iter() {
-        match t.0 {
-            // don't run this, they exist only to make sure functions don't get optimized out
-            "runtime_fns" => weld_print_function_pointers(),
-            _ => {
-                if args.len() > 1 {
-                    if !t.0.contains(args[1].as_str()) {
-                        continue;
-                    }
-                }
-                print!("{} ... ", t.0);
-                t.1();
-                println!("\x1b[0;32mok\x1b[0m");
-                passed += 1;
+        if args.len() > 1 {
+            if !t.0.contains(args[1].as_str()) {
+                continue;
             }
         }
+        print!("{} ... ", t.0);
+        t.1();
+        println!("\x1b[0;32mok\x1b[0m");
+        passed += 1;
     }
 
     println!("");
