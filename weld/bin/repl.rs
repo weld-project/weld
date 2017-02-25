@@ -2,6 +2,8 @@ extern crate rustyline;
 extern crate easy_ll;
 extern crate weld;
 
+extern crate libc;
+
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
 use std::env;
@@ -19,17 +21,16 @@ use weld::parser::*;
 use weld::pretty_print::*;
 use weld::type_inference::*;
 use weld::sir::ast_to_sir;
+use weld::util::load_runtime_library;
 
 enum ReplCommands {
     LoadFile,
-    PrintFunctions,
 }
 
 impl fmt::Display for ReplCommands {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             ReplCommands::LoadFile => write!(f, "load"),
-            ReplCommands::PrintFunctions => write!(f, "print_functions"),
         }
     }
 }
@@ -75,8 +76,6 @@ fn main() {
 
     let mut reserved_words = HashMap::new();
     reserved_words.insert(ReplCommands::LoadFile.to_string(), ReplCommands::LoadFile);
-    reserved_words.insert(ReplCommands::PrintFunctions.to_string(),
-                          ReplCommands::PrintFunctions);
 
     let mut rl = Editor::<()>::new();
     if let Err(_) = rl.load_history(&history_file_path) {}
@@ -127,10 +126,6 @@ fn main() {
                             program = parse_program(&code);
                         }
                     }
-                }
-                ReplCommands::PrintFunctions => {
-                    weld::weld_print_function_pointers();
-                    continue;
                 }
             }
         } else {
@@ -190,6 +185,11 @@ fn main() {
                 } else {
                     let llvm_code = llvm_gen.result();
                     println!("LLVM code:\n{}\n", llvm_code);
+
+                    if let Err(e) = load_runtime_library() {
+                        println!("Couldn't load runtime: {}", e);
+                        continue;
+                    }
 
                     if let Err(ref e) = easy_ll::compile_module(&llvm_code) {
                         println!("Error during LLVM compilation:\n{}\n", e);

@@ -1,10 +1,10 @@
 use std::env;
 
 extern crate weld;
+extern crate weld_common;
 extern crate libc;
 
-use weld::weld_print_function_pointers;
-use weld::WeldRuntimeErrno;
+use weld_common::WeldRuntimeErrno;
 
 use weld::WeldConf;
 use weld::WeldValue;
@@ -52,10 +52,9 @@ unsafe fn _compile_and_run<T>(code: &str,
                               conf: *mut WeldConf,
                               ptr: &T)
                               -> Result<*mut WeldValue, *mut WeldError> {
+
     let code = CString::new(code).unwrap();
-
     let input_value = weld_value_new(ptr as *const _ as *const c_void);
-
     let mut err = std::ptr::null_mut();
     let module = weld_module_compile(code.into_raw() as *const c_char,
                                      conf,
@@ -159,6 +158,39 @@ fn program_with_args() {
     unsafe { weld_value_free(ret_value) };
 }
 
+/// Tests literal data structures such as vectors and structs.
+fn struct_vector_literals() {
+    #[derive(Clone)]
+    #[allow(dead_code)]
+    struct Triple {
+        a: i32,
+        b: i32,
+        c: i32,
+    }
+
+    let code = "|x:i32| [{x,x,x},{x,x,x}]";
+    let conf = default_conf();
+
+    let ref input_data: i32 = 2;
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<Triple> };
+    let result = unsafe { (*data).clone() };
+
+    assert_eq!(result.len, 2);
+
+    let triple = unsafe { (*result.data.offset(0)).clone() };
+    assert_eq!(triple.a, 2);
+    assert_eq!(triple.b, 2);
+    assert_eq!(triple.c, 2);
+    let triple = unsafe { (*result.data.offset(1)).clone() };
+    assert_eq!(triple.a, 2);
+    assert_eq!(triple.b, 2);
+    assert_eq!(triple.c, 2);
+
+    unsafe { weld_value_free(ret_value) };
+}
+
 fn let_statement() {
     let code = "|x:i32| let y = 40 + x; y + 2";
     let conf = default_conf();
@@ -226,7 +258,8 @@ fn map_comparison() {
     let result = unsafe { (*data).clone() };
     assert_eq!(result.len as usize, input_vec.len());
     for i in 0..(result.len as isize) {
-        assert_eq!(unsafe { *result.data.offset(i) }, input_vec[i as usize] == 100)
+        assert_eq!(unsafe { *result.data.offset(i) },
+                   input_vec[i as usize] == 100)
     }
 
     unsafe { weld_value_free(ret_value) };
@@ -929,6 +962,7 @@ fn main() {
              ("f64_cast", f64_cast),
              ("i32_cast", i32_cast),
              ("program_with_args", program_with_args),
+             ("struct_vector_literals", struct_vector_literals),
              ("let_statement", let_statement),
              ("if_statement", if_statement),
              ("comparison", comparison),
@@ -963,21 +997,15 @@ fn main() {
     println!("running tests");
     let mut passed = 0;
     for t in tests.iter() {
-        match t.0 {
-            // don't run this, they exist only to make sure functions don't get optimized out
-            "runtime_fns" => weld_print_function_pointers(),
-            _ => {
-                if args.len() > 1 {
-                    if !t.0.contains(args[1].as_str()) {
-                        continue;
-                    }
-                }
-                print!("{} ... ", t.0);
-                t.1();
-                println!("\x1b[0;32mok\x1b[0m");
-                passed += 1;
+        if args.len() > 1 {
+            if !t.0.contains(args[1].as_str()) {
+                continue;
             }
         }
+        print!("{} ... ", t.0);
+        t.1();
+        println!("\x1b[0;32mok\x1b[0m");
+        passed += 1;
     }
 
     println!("");
