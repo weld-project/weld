@@ -182,6 +182,13 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>, typed: bool) -> String {
                     print_expr_impl(index, typed))
         }
 
+        Slice { ref data, ref index, ref size } => {
+            format!("slice({},{},{})",
+                    print_expr_impl(data, typed),
+                    print_expr_impl(index, typed),
+                    print_expr_impl(size, typed))
+        }
+
         Lambda { ref params, ref body } => {
             let mut res = join("|",
                                ",",

@@ -654,6 +654,21 @@ impl<'t> Parser<'t> {
                 }))
             }
 
+            TSlice => {
+                try!(self.consume(TOpenParen));
+                let data = try!(self.expr());
+                try!(self.consume(TComma));
+                let index = try!(self.expr());
+                try!(self.consume(TComma));
+                let size = try!(self.expr());
+                try!(self.consume(TCloseParen));
+                Ok(expr_box(Slice {
+                    data: data,
+                    index: index,
+                    size: size,
+                }))
+            }
+
             TMerge => {
                 try!(self.consume(TOpenParen));
                 let builder = try!(self.expr());

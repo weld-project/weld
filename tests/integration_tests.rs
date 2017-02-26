@@ -423,6 +423,27 @@ fn simple_vector_lookup() {
     unsafe { weld_value_free(ret_value) };
 }
 
+fn simple_vector_slice() {
+    let code = "|x:vec[i32]| slice(x, 1L, 3L)";
+    let conf = default_conf();
+
+    let input_vec = [1, 2, 3, 4, 5];
+    let ref input_data = WeldVec {
+        data: &input_vec as *const i32,
+        len: input_vec.len() as i64,
+    };
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<i32> };
+    let result = unsafe { (*data).clone() };
+    let output = [3, 4, 5];
+    for i in 0..(result.len as isize) {
+        assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
+    }
+
+    unsafe { weld_value_free(ret_value) };
+}
+
 fn simple_for_appender_loop() {
     #[allow(dead_code)]
     struct Args {

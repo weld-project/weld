@@ -232,6 +232,18 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             push_complete_type(&mut expr.ty, Scalar(I64), "Length")
         }
 
+        Slice { ref mut data, ref mut index, ref mut size} => {
+            if let Vector(_) = data.ty {
+                let mut changed = false;
+                changed |= try!(push_complete_type(&mut index.ty, Scalar(I64), "Slice"));
+                changed |= try!(push_complete_type(&mut size.ty, Scalar(I64), "Slice"));
+                changed |= try!(push_type(&mut expr.ty, &data.ty, "Slice"));
+                Ok(changed)
+            } else {
+                weld_err!("Internal error: Slice called on {:?}, must be called on vector", data.ty)
+            }
+        }
+
         Lookup { ref mut data, ref mut index } => {
             if let Vector(ref elem_type) = data.ty {
                 let mut changed = false;
@@ -759,6 +771,10 @@ fn infer_types_let() {
     let mut e = parse_expr("let a = lookup(lookup([[1],[2],[3]], 0L), 0L); a").unwrap();
     assert!(infer_types(&mut e).is_ok());
     assert_eq!(e.ty, Scalar(I32));
+
+    let mut e = parse_expr("let a = slice([1.0f, 2.0f, 3.0f], 0L, 2L);a").unwrap();
+    assert!(infer_types(&mut e).is_ok());
+    assert_eq!(e.ty, Vector(Box::new(Scalar(F32))));
 
     let mut e = parse_expr("let a:bool = 1; a").unwrap();
     assert!(infer_types(&mut e).is_err());
