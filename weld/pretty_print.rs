@@ -131,7 +131,7 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>, typed: bool) -> String {
                     print_expr_impl(right, typed))
         }
 
-        Negate(ref e) => format!("-{}", print_expr_impl(e, typed)),
+        Negate(ref e) => format!("(-{})", print_expr_impl(e, typed)),
 
         Cast { kind, ref child_expr } => {
             format!("({}({}))", kind, print_expr_impl(child_expr, typed))
