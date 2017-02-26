@@ -436,7 +436,8 @@ fn simple_vector_slice() {
     let ret_value = compile_and_run(code, conf, input_data);
     let data = unsafe { weld_value_data(ret_value) as *const WeldVec<i32> };
     let result = unsafe { (*data).clone() };
-    let output = [3, 4, 5];
+    let output = [2, 3, 4];
+    assert_eq!(output.len() as isize, result.len as isize);
     for i in 0..(result.len as isize) {
         assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
     }
@@ -1012,7 +1013,8 @@ fn main() {
              ("iters_for_loop", iters_for_loop),
              ("serial_parlib_test", serial_parlib_test),
              ("iters_outofbounds_error_test", iters_outofbounds_error_test),
-             ("outofmemory_error_test", outofmemory_error_test)];
+             ("outofmemory_error_test", outofmemory_error_test),
+             ("simple_vector_slice", simple_vector_slice)];
 
     println!("");
     println!("running tests");
