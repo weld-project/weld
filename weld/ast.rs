@@ -131,6 +131,11 @@ pub enum ExprKind<T: TypeBounds> {
         data: Box<Expr<T>>,
         index: Box<Expr<T>>,
     },
+    Slice {
+        data: Box<Expr<T>>,
+        index: Box<Expr<T>>,
+        size: Box<Expr<T>>,
+    },
     Let {
         name: Symbol,
         value: Box<Expr<T>>,
@@ -257,6 +262,7 @@ impl<T: TypeBounds> Expr<T> {
                 GetField { ref expr, .. } => vec![expr.as_ref()],
                 Length { ref data } => vec![data.as_ref()],
                 Lookup { ref data, ref index } => vec![data.as_ref(), index.as_ref()],
+                Slice { ref data, ref index, ref size} => vec![data.as_ref(), index.as_ref(), size.as_ref()],
                 Merge { ref builder, ref value } => vec![builder.as_ref(), value.as_ref()],
                 Res { ref builder } => vec![builder.as_ref()],
                 For { ref iters, ref builder, ref func } => {
@@ -313,6 +319,8 @@ impl<T: TypeBounds> Expr<T> {
                 GetField { ref mut expr, .. } => vec![expr.as_mut()],
                 Length { ref mut data } => vec![data.as_mut()],
                 Lookup { ref mut data, ref mut index } => vec![data.as_mut(), index.as_mut()],
+                Slice { ref mut data, ref mut index, ref mut size} => 
+                    vec![data.as_mut(), index.as_mut(), size.as_mut()],
                 Merge { ref mut builder, ref mut value } => vec![builder.as_mut(), value.as_mut()],
                 Res { ref mut builder } => vec![builder.as_mut()],
                 For { ref mut iters, ref mut builder, ref mut func } => {
@@ -407,6 +415,7 @@ impl<T: TypeBounds> Expr<T> {
                 }
                 (&Length { .. }, &Length { .. }) => Ok(true),
                 (&Lookup { .. }, &Lookup { .. }) => Ok(true),
+                (&Slice { .. }, &Slice { .. }) => Ok(true),
                 (&Merge { .. }, &Merge { .. }) => Ok(true),
                 (&Res { .. }, &Res { .. }) => Ok(true),
                 (&For { .. }, &For { .. }) => Ok(true),

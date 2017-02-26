@@ -233,6 +233,14 @@ impl PartialExpr {
                 }
             }
 
+            Slice { ref data, ref index, ref size } => {
+                Slice {
+                    data: try!(typed_box(data)),
+                    index: try!(typed_box(index)),
+                    size: try!(typed_box(size)),
+                }
+            }
+
             Merge { ref builder, ref value } => {
                 Merge {
                     builder: try!(typed_box(builder)),

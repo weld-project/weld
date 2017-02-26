@@ -1202,6 +1202,42 @@ impl LlvmGenerator {
                             _ => weld_err!("Illegal type {} in Lookup", print_type(child_ty))?,
                         }
                     }
+                    Slice { ref output, ref child, ref index, ref size } => {
+                        let child_ty = try!(get_sym_ty(func, child));
+                        match *child_ty {
+                            Vector(_) => {
+                                let child_ll_ty = try!(self.llvm_type(&child_ty)).to_string();
+                                let output_ty = try!(get_sym_ty(func, output));
+                                let output_ll_ty = try!(self.llvm_type(&output_ty)).to_string();
+                                let vec_ll_ty = try!(self.llvm_type(&child_ty)).to_string();
+                                let vec_prefix = format!("@{}", vec_ll_ty.replace("%", ""));
+                                let child_tmp = try!(self.load_var(llvm_symbol(child).as_str(),
+                                                                   &child_ll_ty, ctx));
+                                let index_tmp = try!(self.load_var(llvm_symbol(index).as_str(),
+                                                                   "i64", ctx));
+                                let size_tmp = try!(self.load_var(llvm_symbol(size).as_str(),
+                                                                  "i64", ctx));
+                                let res_ptr = ctx.var_ids.next();
+                                let res_tmp = ctx.var_ids.next();
+                                ctx.code.add(format!("{} = call {}* {}.slice({} {}, i64 {}, i64{})",
+                                                     res_ptr,
+                                                     output_ll_ty,
+                                                     vec_prefix,
+                                                     vec_ll_ty,
+                                                     child_tmp,
+                                                     index_tmp,
+                                                     size_tmp));
+                                let out_ty = try!(get_sym_ty(func, output));
+                                let out_ty_str = try!(self.llvm_type(&out_ty)).to_string();
+                                ctx.code.add(format!("store {} {}, {}* {}",
+                                                     out_ty_str,
+                                                     res_tmp,
+                                                     out_ty_str,
+                                                     llvm_symbol(output)))
+                            }
+                            _ => weld_err!("Illegal type {} in Slice", print_type(child_ty))?,
+                        }
+                    }
                     ToVec { ref output, ref child } => {
                         let old_ty = try!(get_sym_ty(func, child));
                         let new_ty = try!(get_sym_ty(func, output));

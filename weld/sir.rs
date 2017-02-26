@@ -31,6 +31,12 @@ pub enum Statement {
         child: Symbol,
         index: Symbol,
     },
+    Slice {
+        output: Symbol,
+        child: Symbol,
+        index: Symbol,
+        size: Symbol,
+    },
     ToVec { output: Symbol, child: Symbol },
     Length { output: Symbol, child: Symbol },
     Assign { output: Symbol, value: Symbol },
@@ -192,6 +198,9 @@ impl fmt::Display for Statement {
             Lookup { ref output, ref child, ref index } => {
                 write!(f, "{} = lookup({}, {})", output, child, index)
             }
+            Slice { ref output, ref child, ref index , ref size } => {
+                write!(f, "{} = slice({}, {}, {})", output, child, index, size)
+            }
             ToVec { ref output, ref child } => write!(f, "{} = toVec({})", output, child),
             Length { ref output, ref child, .. } => write!(f, "{} = len({})", output, child),
             Assign { ref output, ref value } => write!(f, "{} = {}", output, value),
@@ -346,6 +355,11 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
                 Lookup { ref child, ref index, .. } => {
                     vars.push(child.clone());
                     vars.push(index.clone());
+                }
+                Slice { ref child, ref index, ref size, .. } => {
+                    vars.push(child.clone());
+                    vars.push(index.clone());
+                    vars.push(size.clone());
                 }
                 ToVec { ref child, .. } => {
                     vars.push(child.clone());
@@ -534,6 +548,20 @@ fn gen_expr(expr: &TypedExpr,
                 output: res_sym.clone(),
                 child: data_sym,
                 index: index_sym.clone(),
+            });
+            Ok((cur_func, cur_block, res_sym))
+        }
+
+        ExprKind::Slice { ref data, ref index, ref size } => {
+            let (cur_func, cur_block, data_sym) = gen_expr(data, prog, cur_func, cur_block)?;
+            let (cur_func, cur_block, index_sym) = gen_expr(index, prog, cur_func, cur_block)?;
+            let (cur_func, cur_block, size_sym) = gen_expr(size, prog, cur_func, cur_block)?;
+            let res_sym = prog.add_local(&expr.ty, cur_func);
+            prog.funcs[cur_func].blocks[cur_block].add_statement(Slice {
+                output: res_sym.clone(),
+                child: data_sym,
+                index: index_sym.clone(),
+                size: size_sym.clone(),
             });
             Ok((cur_func, cur_block, res_sym))
         }
