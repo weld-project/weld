@@ -1218,8 +1218,7 @@ impl LlvmGenerator {
                                 let size_tmp = try!(self.load_var(llvm_symbol(size).as_str(),
                                                                   "i64", ctx));
                                 let res_ptr = ctx.var_ids.next();
-                                let res_tmp = ctx.var_ids.next();
-                                ctx.code.add(format!("{} = call {}* {}.slice({} {}, i64 {}, i64{})",
+                                ctx.code.add(format!("{} = call {} {}.slice({} {}, i64 {}, i64{})",
                                                      res_ptr,
                                                      output_ll_ty,
                                                      vec_prefix,
@@ -1231,7 +1230,7 @@ impl LlvmGenerator {
                                 let out_ty_str = try!(self.llvm_type(&out_ty)).to_string();
                                 ctx.code.add(format!("store {} {}, {}* {}",
                                                      out_ty_str,
-                                                     res_tmp,
+                                                     res_ptr,
                                                      out_ty_str,
                                                      llvm_symbol(output)))
                             }

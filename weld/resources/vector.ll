@@ -108,6 +108,15 @@ define %$NAME @$NAME.clone(%$NAME %vec) {
   ret %$NAME %vec2
 }
 
+; Get a new vec object that starts at the index'th element of the existing vector, and has size size.
+define %$NAME @$NAME.slice(%$NAME %vec, i64 %index, i64 %size) {
+  %elements = extractvalue %$NAME %vec, 0
+  %newElements = getelementptr $ELEM* %elements, i64 %index
+  %1 = insertvalue %$NAME undef, $ELEM* %newElements, 0
+  %2 = insertvalue %$NAME %1, i64 %size, 1
+  ret %$NAME %2
+}
+
 ; Initialize and return a new builder, with the given initial capacity.
 define %$NAME.bld @$NAME.bld.new(i64 %capacity, %work_t* %cur.work) {
   %elemSizePtr = getelementptr $ELEM* null, i32 1
