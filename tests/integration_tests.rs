@@ -437,10 +437,32 @@ fn simple_vector_slice() {
     let data = unsafe { weld_value_data(ret_value) as *const WeldVec<i32> };
     let result = unsafe { (*data).clone() };
     let output = [2, 3, 4];
+
     assert_eq!(output.len() as isize, result.len as isize);
     for i in 0..(result.len as isize) {
         assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
     }
+
+    unsafe { weld_value_free(ret_value) };
+
+    // Test slicing out of bounds case
+    let conf = default_conf();
+
+    let input_vec = [1, 2];
+    let ref input_data = WeldVec {
+        data: &input_vec as *const i32,
+        len: input_vec.len() as i64,
+    };
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<i32> };
+    let result = unsafe { (*data).clone() };
+    let output = [2];
+
+    assert_eq!(output.len() as isize, result.len as isize);
+     for i in 0..(result.len as isize) {
+         assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
+     }
 
     unsafe { weld_value_free(ret_value) };
 }
@@ -995,6 +1017,7 @@ fn main() {
              ("lt_between_vectors", lt_between_vectors),
              ("le_between_vectors", le_between_vectors),
              ("simple_vector_lookup", simple_vector_lookup),
+             ("simple_vector_slice", simple_vector_slice),
              ("simple_for_appender_loop", simple_for_appender_loop),
              ("simple_parallel_for_appender_loop", simple_parallel_for_appender_loop),
              ("complex_parallel_for_appender_loop", complex_parallel_for_appender_loop),
@@ -1013,8 +1036,7 @@ fn main() {
              ("iters_for_loop", iters_for_loop),
              ("serial_parlib_test", serial_parlib_test),
              ("iters_outofbounds_error_test", iters_outofbounds_error_test),
-             ("outofmemory_error_test", outofmemory_error_test),
-             ("simple_vector_slice", simple_vector_slice)];
+             ("outofmemory_error_test", outofmemory_error_test)];
 
     println!("");
     println!("running tests");
