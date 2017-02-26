@@ -132,7 +132,7 @@ fn negation() {
 
 fn negated_arithmetic() {
     // In our language, - has the lowest precedence so the paraens around -3 are mandatory.
-    let code = "|| 1+2*(-3)-4/-2";
+    let code = "|| 1+2*-3-4/-2";
     let conf = default_conf();
 
     let ref input_data = 0;

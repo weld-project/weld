@@ -777,7 +777,7 @@ impl<'t> Parser<'t> {
                 Ok(expr)
             }
 
-            TMinus => Ok(expr_box(Negate(try!(self.expr())))),
+            TMinus => Ok(expr_box(Negate(try!(self.leaf_expr())))),
 
             ref other => weld_err!("Expected expression but got '{}'", other),
         }
