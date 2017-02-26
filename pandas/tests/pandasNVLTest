@@ -48,11 +48,10 @@ class PandasNVLTestMethods(unittest.TestCase):
         expected_output = ["aaaa", "eeee", "aa", "cccc"]
         self.assertSequenceEqual(expected_output, list(input.mask(predicates, "eeee").evaluate(False)))
 
-    # Thread panic
-    # def test_slice(self):
-    #     input = pd.SeriesNVL(np.array(["aaaaaa", "bbbbbb", "aaaaaaa", "cccccccc"], dtype=str), "vec[i8]")
-    #     expected_output = ["aaa", "bbb", "aaa", "ccc"]
-    #     self.assertSequenceEqual(expected_output, list(input.str.slice(1, 3).evaluate(True)))
+    def test_slice(self):
+        input = pd.SeriesNVL(np.array(["aaaaaa", "bbbbbb", "aaaaaaa", "cccccccc"], dtype=str), "vec[i8]")
+        expected_output = ["aaa", "bbb", "aaa", "ccc"]
+        self.assertSequenceEqual(expected_output, list(input.str.slice(1, 3).evaluate(False)))
 
     def test_add(self):
         input = pd.SeriesNVL(np.array([1, 2, 3, 4], dtype=np.int32), "i32")

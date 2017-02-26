@@ -119,8 +119,6 @@ class NvlObject(object):
         """
         Load the runtime by compiling the NVL text and loading it as a dynamic library.
         """
-        if verbose:
-            print(text)
         code = ctypes.c_char_p(text)
         conf = weld.weld_conf_new()
         err = ctypes.c_void_p()
