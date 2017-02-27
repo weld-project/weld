@@ -234,6 +234,13 @@ pub unsafe extern "C" fn weld_module_run(module: *mut easy_ll::CompiledModule,
         .unwrap_or(&CString::new("").unwrap())
         .clone());
 
+
+    #[derive(Clone)]
+    struct I32Vec {
+        data: *const i32,
+        one: i64,
+    }
+
     let input = Box::new(llvm::WeldInputArgs {
         input: arg.data as i64,
         nworkers: threads as i32,

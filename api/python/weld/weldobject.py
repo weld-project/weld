@@ -10,7 +10,8 @@ import os
 
 import time
 
-from weld_codetypes import *
+import weld
+from weld_types import *
 
 class WeldObjectEncoder(object):
     """
@@ -70,7 +71,6 @@ class WeldObject(object):
     _obj_id = 100
 
     def __init__(self, encoder, decoder):
-
         self.encoder = encoder
         self.decoder = decoder
 
@@ -127,19 +127,22 @@ class WeldObject(object):
 
         # Encode each input argument. This is the positional argument list which will be
         # wrapped into a Weld struct and passed to the Weld API.
+        names = self.context.keys()
+        names.sort()
         encoded = [self.encoder.encode(self.context[name]) for name in names]
         argtypes = [self.encoder.pyToWeldType(self.context[name]).cTypeClass for name in names]
         Args = args_factory(zip(names, argtypes))
-        weld_code_args = Args()
+        weld_args = Args()
         for name, value in zip(names, encoded):
-            setattr(weld_code_args, name, value)
+            setattr(weld_args, name, value)
 
-
-        # TODO Call Weld API Here.
-        weld_code_ret = None
-
+        
+        void_ptr = ctypes.cast(ctypes.byref(weld_args), ctypes.c_void_p)
+        arg = weld.WeldValue(void_ptr)
+        module = weld.WeldModule(function, weld.WeldConf(), weld.WeldError())
+        weld_ret = module.run(weld.WeldConf(), arg, weld.WeldError())
         restype = POINTER(restype.cTypeClass)
-        result = self.decoder.decode(weld_code_ret, restype)
-
+        data = ctypes.cast(weld_ret.data(), restype)
+        result = self.decoder.decode(data, restype)
         return result
 
