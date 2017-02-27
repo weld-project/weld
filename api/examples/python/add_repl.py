@@ -12,7 +12,7 @@ libpath = home + "api/python"
 sys.path.append(libpath)
 
 import ctypes
-from weld import *
+from weld.bindings import *
 
 # Setup the Weld code we want to run.
 code = "|x:i64| x + 5L"

@@ -10,8 +10,8 @@ import os
 
 import time
 
-import weld
-from weld_types import *
+import bindings as cweld
+from types import *
 
 class WeldObjectEncoder(object):
     """
@@ -37,6 +37,10 @@ class WeldObjectDecoder(object):
     is used to marshall objects from Weld types to Python types
     """
     def decode(obj, restype):
+        """
+        Decodes obj, assuming object is of type `restype`. obj's Python
+        type is ctypes.POINTER(restype.cTypeClass).
+        """
         raise NotImplementedError
 
 class WeldObject(object):
@@ -136,13 +140,12 @@ class WeldObject(object):
         for name, value in zip(names, encoded):
             setattr(weld_args, name, value)
 
-        
         void_ptr = ctypes.cast(ctypes.byref(weld_args), ctypes.c_void_p)
-        arg = weld.WeldValue(void_ptr)
-        module = weld.WeldModule(function, weld.WeldConf(), weld.WeldError())
-        weld_ret = module.run(weld.WeldConf(), arg, weld.WeldError())
-        restype = POINTER(restype.cTypeClass)
-        data = ctypes.cast(weld_ret.data(), restype)
+        arg = cweld.WeldValue(void_ptr)
+        module = cweld.WeldModule(function, cweld.WeldConf(), cweld.WeldError())
+        weld_ret = module.run(cweld.WeldConf(), arg, cweld.WeldError())
+        ptrtype = POINTER(restype.cTypeClass)
+        data = ctypes.cast(weld_ret.data(), ptrtype)
         result = self.decoder.decode(data, restype)
         return result
 

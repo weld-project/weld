@@ -10,7 +10,7 @@ if home[-1] != "/":
 libpath = home + "api/python"
 sys.path.append(libpath)
 
-import weld
+import weld.bindings as weld
 import ctypes
 
 arg = ctypes.c_int64(0) 

@@ -22,7 +22,7 @@ class WeldType(object):
     """
     raise NotImplementedError
 
-class WeldInt(WeldType):
+class WeldI32(WeldType):
   def __str__(self):
     return "i32"
 
@@ -30,7 +30,7 @@ class WeldInt(WeldType):
   def cTypeClass(self):
     return c_int32
 
-class WeldLong(WeldType):
+class WeldI64(WeldType):
   def __str__(self):
     return "i64"
 
@@ -38,7 +38,7 @@ class WeldLong(WeldType):
   def cTypeClass(self):
     return c_long
 
-class WeldFloat(WeldType):
+class WeldF32(WeldType):
   def __str__(self):
     return "f32"
 
@@ -46,7 +46,7 @@ class WeldFloat(WeldType):
   def cTypeClass(self):
     return c_float
 
-class WeldDouble(WeldType):
+class WeldF64(WeldType):
   def __str__(self):
     return "f64"
 
@@ -56,7 +56,7 @@ class WeldDouble(WeldType):
 
 class WeldVec(WeldType):
 
-  # Kind of a hack, but ctypes requires that the class instance returned is
+  # ctypes requires that the class instance returned is
   # the same object. Every time we create a new Vec instance (templatized by
   # type), we cache it here.
   _singletons = {}
