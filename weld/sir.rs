@@ -37,6 +37,7 @@ pub enum Statement {
         index: Symbol,
         size: Symbol,
     },
+    Exp { output: Symbol, child: Symbol },
     ToVec { output: Symbol, child: Symbol },
     Length { output: Symbol, child: Symbol },
     Assign { output: Symbol, value: Symbol },
@@ -201,6 +202,7 @@ impl fmt::Display for Statement {
             Slice { ref output, ref child, ref index , ref size } => {
                 write!(f, "{} = slice({}, {}, {})", output, child, index, size)
             }
+            Exp { ref output, ref child } => write!(f, "{} = exp({})", output, child),
             ToVec { ref output, ref child } => write!(f, "{} = toVec({})", output, child),
             Length { ref output, ref child, .. } => write!(f, "{} = len({})", output, child),
             Assign { ref output, ref value } => write!(f, "{} = {}", output, value),
@@ -360,6 +362,9 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
                     vars.push(child.clone());
                     vars.push(index.clone());
                     vars.push(size.clone());
+                }
+                Exp { ref child, .. } => {
+                    vars.push(child.clone());
                 }
                 ToVec { ref child, .. } => {
                     vars.push(child.clone());
@@ -562,6 +567,16 @@ fn gen_expr(expr: &TypedExpr,
                 child: data_sym,
                 index: index_sym.clone(),
                 size: size_sym.clone(),
+            });
+            Ok((cur_func, cur_block, res_sym))
+        }
+
+        ExprKind::Exp { ref value } => {
+            let (cur_func, cur_block, value_sym) = gen_expr(value, prog, cur_func, cur_block)?;
+            let res_sym = prog.add_local(&expr.ty, cur_func);
+            prog.funcs[cur_func].blocks[cur_block].add_statement(Exp {
+                output: res_sym.clone(),
+                child: value_sym,
             });
             Ok((cur_func, cur_block, res_sym))
         }

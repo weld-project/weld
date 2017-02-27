@@ -3,6 +3,8 @@
 ; LLVM intrinsic functions
 declare void @llvm.memcpy.p0i8.p0i8.i64(i8*, i8*, i64, i32, i1)
 declare void @llvm.memset.p0i8.i64(i8*, i8, i64, i32, i1)
+declare float @llvm.exp.f32(float)
+declare double @llvm.exp.f64(double)
 declare i64 @llvm.ctlz.i64(i64, i1)
 
 ; Weld library functions

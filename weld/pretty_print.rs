@@ -189,6 +189,8 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>, typed: bool) -> String {
                     print_expr_impl(size, typed))
         }
 
+        Exp { ref value } => format!("exp({})",print_expr_impl(value, typed)),
+
         Lambda { ref params, ref body } => {
             let mut res = join("|",
                                ",",

@@ -843,6 +843,51 @@ fn flat_map_length() {
     unsafe { weld_value_free(ret_value) };
 }
 
+fn simple_exp() {
+    let code = "|x:f64| exp(x)";
+    let conf = default_conf();
+    let input = 1.0f64;
+    let ret_value = compile_and_run(code, conf, &input);
+    let data = unsafe { weld_value_data(ret_value) as *const f64 };
+    let result = unsafe { (*data).clone() };
+
+    let output = 2.718281828459045;
+    assert_eq!(output, result);
+    unsafe { weld_value_free(ret_value) };
+}
+
+fn exp_error() {
+    let code = "|x:i64| exp(x)";
+    let conf = default_conf();
+    let input = 1;
+    let err_value = compile_and_run_error(code, conf, &input);
+    assert_eq!(unsafe { weld_error_code(err_value) },
+               WeldRuntimeErrno::CompileError);
+    unsafe { weld_error_free(err_value) };
+}
+
+fn map_exp() {
+    let code = "|x:vec[f32]| map(x, |a:f32| exp(a))";
+    let conf = default_conf();
+
+    let input_vec = [0.0f32, 1.0f32, 2.0f32, 3.0f32];
+    let ref input_data = WeldVec {
+        data: &input_vec as *const f32,
+        len: input_vec.len() as i64,
+    };
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<f32> };
+    let result = unsafe { (*data).clone() };
+
+    let output = [1.0, 2.7182817, 7.389056, 20.085537];
+    for i in 0..(result.len as isize) {
+        assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
+    }
+
+    unsafe { weld_value_free(ret_value) };
+}
+
 fn if_for_loop() {
     let code = "|x:vec[i32], a:i32| if(a > 5, map(x, |e| e+1), map(x, |e| e+2))";
     let conf = default_conf();
@@ -1018,6 +1063,9 @@ fn main() {
              ("le_between_vectors", le_between_vectors),
              ("simple_vector_lookup", simple_vector_lookup),
              ("simple_vector_slice", simple_vector_slice),
+             ("simple_exp", simple_exp),
+             ("exp_error", exp_error),
+             ("map_exp", map_exp),
              ("simple_for_appender_loop", simple_for_appender_loop),
              ("simple_parallel_for_appender_loop", simple_parallel_for_appender_loop),
              ("complex_parallel_for_appender_loop", complex_parallel_for_appender_loop),
