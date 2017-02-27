@@ -1,3 +1,7 @@
+"""
+Implements some common standard encoders and decoders mapping
+Python types to Weld types.
+"""
 
 from types import *
 

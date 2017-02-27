@@ -1,5 +1,7 @@
 import os
 import sys
+import ctypes
+import numpy as np
 
 home = os.environ.get("WELD_HOME")
 if home is None:
@@ -14,33 +16,30 @@ from weld.weldobject import *
 from weld.types import *
 from weld.encoders import NumpyArrayEncoder, NumpyArrayDecoder
 
-import ctypes
-
-import numpy as np
-
 _encoder = NumpyArrayEncoder()
 _decoder = NumpyArrayDecoder()
 
-def add(vector, number):
-    template = "map({0}, |e| e + {1})"
-    obj = WeldObject(_encoder, _decoder)
-    if isinstance(vector, WeldObject):
-        obj.update(vector, WeldVec(WeldI32()))
-        obj.weld_code = template.format(vector.weld_code, str(number))
-    else:
-        name = obj.update(vector, WeldVec(WeldI32()))
-        obj.weld_code = template.format(name, str(number))
-    return obj
+class HelloWeldVector:
+    def __init__(self, vector):
+        self.vector = vector
+        self.weldobj = WeldObject(_encoder, _decoder)
+        name = self.weldobj.update(vector, WeldVec(WeldI32()))
+        self.weldobj.weld_code = name
+        self.cached = None
 
-# Small Test program.
+    def add(self, number):
+        self.cached = None
+        template = "map({0}, |e| e + {1})"
+        self.weldobj.weld_code = template.format(self.weldobj.weld_code, str(number))
 
-v = np.array(range(1000000), dtype='int32')
-v = add(v, 1)
-v = add(v, 5)
-v = add(v, 10)
-print v.weld_code
+    def __str__(self):
+        v = self.weldobj.evaluate(WeldVec(WeldI32()))
+        self.cached = v
+        return str(v)
 
-# Evaluate as a numpy array
-print v.evaluate(WeldVec(WeldI32()))
-
-
+v = HelloWeldVector(np.array(range(10), dtype='int32'))
+v.add(10)
+v.add(10)
+v.add(10)
+print v.weldobj.weld_code
+print v
