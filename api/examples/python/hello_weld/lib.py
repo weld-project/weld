@@ -31,6 +31,25 @@ class HelloWeldVector:
         self.cached = None
         template = "map({0}, |e| e + {1})"
         self.weldobj.weld_code = template.format(self.weldobj.weld_code, str(number))
+        return self
+
+    def multiply(self, number):
+        self.cached = None
+        template = "map({0}, |e| e * {1})"
+        self.weldobj.weld_code = template.format(self.weldobj.weld_code, str(number))
+        return self
+
+    def subtract(self, number):
+        self.cached = None
+        template = "map({0}, |e| e - {1})"
+        self.weldobj.weld_code = template.format(self.weldobj.weld_code, str(number))
+        return self
+
+    def subtract(self, number):
+        self.cached = None
+        template = "map({0}, |e| e / {1})"
+        self.weldobj.weld_code = template.format(self.weldobj.weld_code, str(number))
+        return self
 
     def __str__(self):
         v = self.weldobj.evaluate(WeldVec(WeldI32()))
@@ -38,8 +57,5 @@ class HelloWeldVector:
         return str(v)
 
 v = HelloWeldVector(np.array(range(10), dtype='int32'))
-v.add(10)
-v.add(10)
-v.add(10)
-print v.weldobj.weld_code
+v.add(10).add(10).multiply(5)
 print v
