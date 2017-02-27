@@ -142,7 +142,10 @@ class WeldObject(object):
 
         void_ptr = ctypes.cast(ctypes.byref(weld_args), ctypes.c_void_p)
         arg = cweld.WeldValue(void_ptr)
-        module = cweld.WeldModule(function, cweld.WeldConf(), cweld.WeldError())
+        err = cweld.WeldError()
+        module = cweld.WeldModule(function, cweld.WeldConf(), err)
+        if err.code() != 0:
+            raise ValueError("Could not compile function {}: {}".format(function, err.message()))
         weld_ret = module.run(cweld.WeldConf(), arg, cweld.WeldError())
         ptrtype = POINTER(restype.cTypeClass)
         data = ctypes.cast(weld_ret.data(), ptrtype)

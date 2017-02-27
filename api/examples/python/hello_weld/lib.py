@@ -19,7 +19,7 @@ from weld.encoders import NumpyArrayEncoder, NumpyArrayDecoder
 _encoder = NumpyArrayEncoder()
 _decoder = NumpyArrayDecoder()
 
-class HelloWeldVector:
+class HelloWeldVector(object):
     def __init__(self, vector):
         self.vector = vector
         self.weldobj = WeldObject(_encoder, _decoder)
@@ -45,7 +45,7 @@ class HelloWeldVector:
         self.weldobj.weld_code = template.format(self.weldobj.weld_code, str(number))
         return self
 
-    def subtract(self, number):
+    def divide(self, number):
         self.cached = None
         template = "map({0}, |e| e / {1})"
         self.weldobj.weld_code = template.format(self.weldobj.weld_code, str(number))
