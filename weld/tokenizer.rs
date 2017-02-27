@@ -41,6 +41,7 @@ pub enum Token {
     TLen,
     TLookup,
     TSlice,
+    TExp,
     TAppender,
     TMerger,
     TDictMerger,
@@ -88,7 +89,7 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
 
         // Regular expressions for various types of tokens.
         static ref KEYWORD_RE: Regex = Regex::new(
-            "if|for|zip|len|lookup|slice|iter|merge|result|let|true|false|macro|\
+            "if|for|zip|len|lookup|slice|exp|iter|merge|result|let|true|false|macro|\
              i8|i32|i64|f32|f64|bool|vec|appender|merger|vecmerger|dictmerger|tovec").unwrap();
 
         static ref IDENT_RE: Regex = Regex::new(r"^[A-Za-z$_][A-Za-z0-9$_]*$").unwrap();
@@ -139,6 +140,7 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
                 "len" => TLen,
                 "lookup" => TLookup,
                 "slice" => TSlice,
+                "exp" => TExp,
                 "true" => TBoolLiteral(true),
                 "false" => TBoolLiteral(false),
                 _ => return weld_err!("Invalid input token: {}", text),
@@ -255,6 +257,7 @@ impl fmt::Display for Token {
                            TLen => "len",
                            TLookup => "lookup",
                            TSlice => "slice",
+                           TExp => "exp",
                            TOpenParen => "(",
                            TCloseParen => ")",
                            TOpenBracket => "[",
@@ -330,7 +333,9 @@ fn basic_tokenize() {
                vec![TBar, TIdent("a".into()), TColon, TVec, TOpenBracket, TI8, TCloseBracket,
                     TBar, TSlice, TOpenParen, TIdent("a".into()), TComma, TI64Literal(2),
                     TComma, TI64Literal(3), TCloseParen, TEndOfInput]);
-
+    assert_eq!(tokenize("|a:i8| exp(a)").unwrap(),
+               vec![TBar, TIdent("a".into()), TColon, TI8, TBar, TExp, TOpenParen,
+                    TIdent("a".into()), TCloseParen, TEndOfInput]);
     assert!(tokenize("0a").is_err());
     assert!(tokenize("#").is_err());
 

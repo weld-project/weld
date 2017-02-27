@@ -669,6 +669,15 @@ impl<'t> Parser<'t> {
                 }))
             }
 
+            TExp => {
+                try!(self.consume(TOpenParen));
+                let value = try!(self.expr());
+                try!(self.consume(TCloseParen));
+                Ok(expr_box(Exp {
+                    value: value,
+                }))
+            }
+
             TMerge => {
                 try!(self.consume(TOpenParen));
                 let builder = try!(self.expr());

@@ -241,6 +241,12 @@ impl PartialExpr {
                 }
             }
 
+            Exp { ref value } => {
+                Exp {
+                    value: try!(typed_box(value)),
+                }
+            }
+
             Merge { ref builder, ref value } => {
                 Merge {
                     builder: try!(typed_box(builder)),

@@ -244,6 +244,14 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             }
         }
 
+        Exp { ref mut value } => {
+            match value.ty {
+                Scalar(F32) => push_complete_type(&mut expr.ty, Scalar(F32), "Exp"),
+                Scalar(F64) => push_complete_type(&mut expr.ty, Scalar(F64), "Exp"),
+                _ => return weld_err!("Internal error: Exp called on non-scalar or non-float"),
+            }
+        }
+
         Lookup { ref mut data, ref mut index } => {
             if let Vector(ref elem_type) = data.ty {
                 let mut changed = false;
