@@ -248,6 +248,7 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             match value.ty {
                 Scalar(F32) => push_complete_type(&mut expr.ty, Scalar(F32), "Exp"),
                 Scalar(F64) => push_complete_type(&mut expr.ty, Scalar(F64), "Exp"),
+                Unknown => push_type(&mut expr.ty, &value.ty, "Exp"),
                 _ => return weld_err!("Internal error: Exp called on non-scalar or non-float"),
             }
         }
