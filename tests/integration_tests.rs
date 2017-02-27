@@ -867,7 +867,7 @@ fn exp_error() {
 }
 
 fn map_exp() {
-    let code = "|x:vec[f32]| map(x, |a:f32| exp(a))";
+    let code = "|x:vec[f32]| map(x, |a| exp(a))";
     let conf = default_conf();
 
     let input_vec = [0.0f32, 1.0f32, 2.0f32, 3.0f32];
