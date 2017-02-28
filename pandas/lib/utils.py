@@ -87,7 +87,7 @@ class NumPyEncoder(NvlObjectEncoder):
             elif obj.ndim == 2 and obj.dtype == 'int64':
                 numpy_to_nvl = self.utils.numpy_to_nvl_long_arr_arr
             elif obj.ndim == 2 and obj.dtype == 'float64':
-                numpy_to_nvl = self.utils.nnumpy_to_nvl_double_arr_arr
+                numpy_to_nvl = self.utils.numpy_to_nvl_double_arr_arr
             elif obj.ndim == 1 and obj.dtype == 'bool':
                 numpy_to_nvl = self.utils.numpy_to_nvl_bool_arr
             else:

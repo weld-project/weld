@@ -409,6 +409,20 @@ class SeriesNVL(LazyOpResult):
             self.column_name
         )
 
+    def filter(self, predicates):
+        if isinstance(predicates, SeriesNVL):
+            predicates = predicates.expr
+        return SeriesNVL(
+            pandasImplNVL.filter(
+                self.expr,
+                predicates,
+                self.nvl_type
+            ),
+            self.nvl_type,
+            self.df,
+            self.column_name
+        )
+
     def add(self, other):
         """Summary
 

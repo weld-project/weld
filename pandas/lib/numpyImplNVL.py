@@ -46,8 +46,7 @@ def div(array, other, type):
     """
        map(
          %(array)s,
-         (value: %(type)s) =>
-           value / %(type)s(%(other)s)
+         |value| value / %(type)s(%(other)s)
        )
     """
     nvl_obj.nvl = nvl_template % {"array": array_str, "other": other_str,
@@ -76,15 +75,15 @@ def aggr(array, op, initial_value, type):
 
     nvl_template = \
     """
-       agg(
-         %(array)s,
-         %(type)s(%(initial_value)d),
-         (x: %(type)s, y: %(type)s) => x %(op)s y,
-         (x: %(type)s, y: %(type)s) => x %(op)s y
-       )
+      result(
+        for(
+          %(array)s,
+          merger[%(type)s,%(op)s],
+          |b, i, e| merge(b, e)
+        )
+      )
     """
-    nvl_obj.nvl = nvl_template % {"array": array_str, "type": type, "op": op,
-                                  "initial_value": initial_value}
+    nvl_obj.nvl = nvl_template % {"array": array_str, "type": type, "op": op}
     return nvl_obj
 
 def dot(matrix, vector, type):
@@ -113,14 +112,16 @@ def dot(matrix, vector, type):
     """
        map(
          %(matrix)s,
-         (row: vec[%(type)s]) =>
-           agg(
-             map(
-               zip(row, %(vector)s),
-               (ele: {%(type)s, %(type)s}) => double(ele.0 * ele.1)
-             ),
-             0.0,
-             (a: double, b: double) => a + b
+         |row: vec[i64]|
+           result(
+             for(
+               map(
+                 zip(row, %(vector)s),
+                 |ele: {%(type)s, %(type)s}| f64(ele.$0 * ele.$1)
+               ),
+               merger[f64,+],
+               |b, i, e| merge(b, e)
+             )
            )
        )
     """
@@ -149,7 +150,7 @@ def exp(array, type):
     """
        map(
          %(array)s,
-         (ele: %(type)s) => exp(ele)
+         |ele: %(type)s| exp(ele)
        )
     """
     nvl_obj.nvl = nvl_template % {"array": array_str, "type": type}

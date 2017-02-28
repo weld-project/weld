@@ -42,6 +42,12 @@ class PandasNVLTestMethods(unittest.TestCase):
         expected_output = ["bbbb", "bbb", "aa", "bbbb"]
         self.assertSequenceEqual(expected_output, list(input.mask(predicates, "bbbb").evaluate(False)))
 
+    def test_filter(self):
+        input = pd.SeriesNVL(np.array(["aaaa", "bbb", "aa", "cccc"], dtype=str), "vec[i8]")
+        predicates = np.array([True, False, False, True], dtype=bool)
+        expected_output = ["aaaa", "cccc"]
+        self.assertSequenceEqual(expected_output, list(input.filter(predicates).evaluate(False)))
+
     def test_eq_and_mask(self):
         input = pd.SeriesNVL(np.array(["aaaa", "bbb", "aa", "cccc"], dtype=str), "vec[i8]")
         predicates = input == "bbb"

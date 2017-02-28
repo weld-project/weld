@@ -118,6 +118,37 @@ nvl::vec<nvl::vec<long> > numpy_to_nvl_long_arr_arr(PyObject* in) {
 }
 
 /**
+ * Converts numpy array to NVL vector, with ndim = 2.
+ */
+extern "C"
+nvl::vec<nvl::vec<double> > numpy_to_nvl_double_arr_arr(PyObject* in) {
+    PyArrayObject* inp = (PyArrayObject*) in;
+    int dimension = (int) inp->dimensions[0];
+    nvl::vec<nvl::vec<double> > t;
+    t = nvl::make_vec<nvl::vec<double> >(dimension);
+    if ((inp->dimensions[0] * 8) == inp->strides[1]) {
+        // Matrix is transposed.
+        double *new_buffer = (double *) malloc(sizeof(double) * inp->dimensions[0] * inp->dimensions[1]);
+        double *old_buffer = (double *) inp->data;
+        for (int i = 0; i < t.size; i++) {
+            t.ptr[i].size = inp->dimensions[1];
+            for (int j = 0; j < inp->dimensions[1]; j++) {
+                *(new_buffer + j) = old_buffer[(j*inp->dimensions[0])+i];
+            }
+            t.ptr[i].ptr = new_buffer;
+            new_buffer += inp->dimensions[1];
+        }
+    } else {
+        for (int i = 0; i < t.size; i++) {
+            t.ptr[i].size = inp->dimensions[1];
+            t.ptr[i].ptr = (double *)(inp->data + i * inp->strides[0]);
+        }
+    }
+
+    return t;
+}
+
+/**
  * Converts numpy array of strings to NVL vector, with ndim = 2.
  */
 extern "C"

@@ -149,11 +149,11 @@ def filter(array, predicates, type):
 
     nvl_template = \
     """
-       res(
+       result(
          for(
            zip(%(array)s, %(predicates)s),
-           appender[%(type)s],
-           |b, i, e| if (element.$1, merge(b, element.$0), b)
+           appender,
+           |b, i, e| if (e.$1, merge(b, e.$0), b)
          )
        )
     """
