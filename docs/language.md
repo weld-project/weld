@@ -52,7 +52,7 @@ Right now the implementation doesn't allow this, and we have not tried to formal
 
 The core language consists of the following expressions:
 
-* Literals, e.g. `5.0`, `{6, 7}`, and `true`.
+* Literals, e.g. `5.0`, `{6, 7}`, and `[1,2,3]`.
 
   Type | Syntax
   ------------- | -------------
@@ -69,7 +69,7 @@ The core language consists of the following expressions:
   * `lookup(dict, key)` and `lookup(vec, index)` return an element from a dictionary and vector respectively.
   * `len(vec)` return its length.
   * `struct.$0`, `struct.$1`, etc are used to access fields of a struct.
-  * `toVec(dict)` gets the entries of a dictionary as a vector of `{K, V}` pairs.
+  * `tovec(dict)` gets the entries of a dictionary as a vector of `{K, V}` pairs.
 * Three special expressions involving builders:
   * `merge(builder, value)` returns a new builder that incorporates `value` into the previous builder.
   * `result(builder)` computes the result of the builder given the values merged so far.
