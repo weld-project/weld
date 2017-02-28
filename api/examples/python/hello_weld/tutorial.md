@@ -11,6 +11,23 @@ We will also support the Python `__str__` function, which will print out the vec
 
 For pedagogical reasons our library will have some limitations. First, we will only support 1-dimensional arrays (_i.e.,_ arrays whose `ndim` field is set to `1`). Next, we will only support `ndarray` objects whose `dtype='int32'`. This just prevents some checks we have to do in our library.
 
+## Table of Contents
+
+- [Hello, Weld!](#hello-weld)
+  * [Prerequisites](#prerequisites)
+  * [Setting up the Project](#setting-up-the-project)
+  * [Weld Background](#weld-background)
+  * [Initializing](#initializing)
+  * [Implementing an Operator](#implementing-an-operator)
+  * [Forcing Evaluation](#forcing-evaluation)
+  * [Putting it all Together](#putting-it-all-together)
+  * [Going From Here](#going-from-here)
+  * [Common Issues](#common-issues)
+      - [Problem](#problem)
+      - [Potential Solution](#potential-solution)
+      - [Problem](#problem-1)
+      - [Potential Solution](#potential-solution-1)
+
 ## Prerequisites
 
 This tutorial assumes you have a Weld intallation, Rust, and a familiarity of Python. Here's a quick setup guide:
