@@ -244,3 +244,32 @@ We have a minimal working example of a Weld-enabled library now, but there is st
 * __Caching:__ Right now, we perform the entire computation each time we print the vector; not exactly very efficient. The `HelloWeldVector` can be extended so computed values can be cached.
 * __Supporting More Types:__ Supporting just the `'int32'` type is a bit limiting; extending this example to work with other types is not too difficult.
 * __Supporting Other Operators:__ Elementwise operations are useful, but they're also just one class of operations over vectors. Weld supports all kinds of operations through its IR, and `HelloWeldVector` is a good starting point for them.
+
+## Common Issues
+
+#### Problem
+
+```
+ImportError: No module named weld.weldobject
+```
+
+#### Potential Solution
+
+Make sure your `WELD_HOME` is set to the root `weld/` directory.
+
+---
+
+#### Problem
+
+```
+ValueError: Could not compile function ...
+```
+
+#### Potential Solution
+
+Take a look at the (language docs)[about:blank]; this is a compile error stating that the Weld code could not be compiled.
+
+---
+
+
+
