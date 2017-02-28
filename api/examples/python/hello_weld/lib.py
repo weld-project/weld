@@ -52,6 +52,8 @@ class HelloWeldVector(object):
         return self
 
     def __str__(self):
+        if self.cached is not None:
+            return str(v)
         v = self.weldobj.evaluate(WeldVec(WeldI32()))
         self.cached = v
         return str(v)
