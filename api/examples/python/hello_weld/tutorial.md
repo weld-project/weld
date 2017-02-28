@@ -9,7 +9,7 @@ In this tutorial, we will write a simple Python library using Weld over NumPy's 
 
 We will also support the Python `__str__` function, which will print out the vector.
 
-For pedagogical reasons our library will have some limitations. First, we will only support 1-dimensional arrays (_i.e.,_ arrays whose `ndim` field is set to `1`). Next, we will only support `ndarray` objects whose `dtype='int32'`. This just prevents some checks we have to do in our library; at the end, we will discuss how to add support for other types too.
+For pedagogical reasons our library will have some limitations. First, we will only support 1-dimensional arrays (_i.e.,_ arrays whose `ndim` field is set to `1`). Next, we will only support `ndarray` objects whose `dtype='int32'`. This just prevents some checks we have to do in our library.
 
 ## Prerequisites
 
@@ -239,7 +239,8 @@ Nice work!
 
 ## Going From Here
 
-* Caching
-* Chaining operators
-* Supporting more types
-* Supporting other operators
+We have a minimal working example of a Weld-enabled library now, but there is still a lot more we can do to make it more efficient/useful! Here are a few ideas: 
+
+* __Caching:__ Right now, we perform the entire computation each time we print the vector; not exactly very efficient. The `HelloWeldVector` can be extended so computed values can be cached.
+* __Supporting More Types:__ Supporting just the `'int32'` type is a bit limiting; extending this example to work with other types is not too difficult.
+* __Supporting Other Operators:__ Elementwise operations are useful, but they're also just one class of operations over vectors. Weld supports all kinds of operations through its IR, and `HelloWeldVector` is a good starting point for them.
