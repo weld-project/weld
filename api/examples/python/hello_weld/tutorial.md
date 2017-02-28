@@ -264,25 +264,13 @@ We have a minimal working example of a Weld-enabled library now, but there is st
 
 ## Common Issues
 
-#### Problem
-
-```
-ImportError: No module named weld.weldobject
-```
-
-#### Potential Solution
+#### ImportError: No module named weld.weldobject
 
 Make sure your `WELD_HOME` is set to the root `weld/` directory.
 
 ---
 
-#### Problem
-
-```
-ValueError: Could not compile function ...
-```
-
-#### Potential Solution
+#### ValueError: Could not compile function ...
 
 Take a look at the (language docs)[about:blank]; this is a compile error stating that the Weld code could not be compiled.
 
