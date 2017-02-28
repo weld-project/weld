@@ -131,6 +131,8 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>, typed: bool) -> String {
                     print_expr_impl(right, typed))
         }
 
+        Negate(ref e) => format!("(-{})", print_expr_impl(e, typed)),
+
         Cast { kind, ref child_expr } => {
             format!("({}({}))", kind, print_expr_impl(child_expr, typed))
         }
@@ -181,6 +183,15 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>, typed: bool) -> String {
                     print_expr_impl(data, typed),
                     print_expr_impl(index, typed))
         }
+
+        Slice { ref data, ref index, ref size } => {
+            format!("slice({},{},{})",
+                    print_expr_impl(data, typed),
+                    print_expr_impl(index, typed),
+                    print_expr_impl(size, typed))
+        }
+
+        Exp { ref value } => format!("exp({})",print_expr_impl(value, typed)),
 
         Lambda { ref params, ref body } => {
             let mut res = join("|",

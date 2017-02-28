@@ -654,6 +654,30 @@ impl<'t> Parser<'t> {
                 }))
             }
 
+            TSlice => {
+                try!(self.consume(TOpenParen));
+                let data = try!(self.expr());
+                try!(self.consume(TComma));
+                let index = try!(self.expr());
+                try!(self.consume(TComma));
+                let size = try!(self.expr());
+                try!(self.consume(TCloseParen));
+                Ok(expr_box(Slice {
+                    data: data,
+                    index: index,
+                    size: size,
+                }))
+            }
+
+            TExp => {
+                try!(self.consume(TOpenParen));
+                let value = try!(self.expr());
+                try!(self.consume(TCloseParen));
+                Ok(expr_box(Exp {
+                    value: value,
+                }))
+            }
+
             TMerge => {
                 try!(self.consume(TOpenParen));
                 let builder = try!(self.expr());
@@ -776,6 +800,8 @@ impl<'t> Parser<'t> {
                                             bin_op));
                 Ok(expr)
             }
+
+            TMinus => Ok(expr_box(Negate(try!(self.leaf_expr())))),
 
             ref other => weld_err!("Expected expression but got '{}'", other),
         }

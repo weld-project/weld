@@ -1101,6 +1101,22 @@ impl LlvmGenerator {
                             _ => weld_err!("Illegal type {} in BinOp", print_type(ty))?,
                         }
                     }
+                    Negate { ref output, ref child } => {
+                        let out_ty = try!(get_sym_ty(func, output));
+                        let ll_ty = try!(self.llvm_type(out_ty)).to_string();
+                        let child_tmp =
+                            try!(self.load_var(llvm_symbol(child).as_str(), &ll_ty, ctx));
+                        let bin_tmp = ctx.var_ids.next();
+                        let out_ty_str = try!(self.llvm_type(&out_ty)).to_string();
+                        let op_name = try!(llvm_binop(BinOpKind::Subtract, out_ty));
+                        ctx.code
+                            .add(format!("{} = {} {} 0, {}", bin_tmp, op_name, ll_ty, child_tmp));
+                        ctx.code.add(format!("store {} {}, {}* {}",
+                                             out_ty_str,
+                                             bin_tmp,
+                                             out_ty_str,
+                                             llvm_symbol(output)));
+                    }
                     Cast { ref output, ref new_ty, ref child } => {
                         let old_ty = try!(get_sym_ty(func, child));
                         let old_ll_ty = try!(self.llvm_type(&old_ty)).to_string();
@@ -1200,6 +1216,65 @@ impl LlvmGenerator {
                                                      llvm_symbol(output)));
                             }
                             _ => weld_err!("Illegal type {} in Lookup", print_type(child_ty))?,
+                        }
+                    }
+                    Slice { ref output, ref child, ref index, ref size } => {
+                        let child_ty = try!(get_sym_ty(func, child));
+                        match *child_ty {
+                            Vector(_) => {
+                                let child_ll_ty = try!(self.llvm_type(&child_ty)).to_string();
+                                let output_ty = try!(get_sym_ty(func, output));
+                                let output_ll_ty = try!(self.llvm_type(&output_ty)).to_string();
+                                let vec_ll_ty = try!(self.llvm_type(&child_ty)).to_string();
+                                let vec_prefix = format!("@{}", vec_ll_ty.replace("%", ""));
+                                let child_tmp = try!(self.load_var(llvm_symbol(child).as_str(),
+                                                                   &child_ll_ty, ctx));
+                                let index_tmp = try!(self.load_var(llvm_symbol(index).as_str(),
+                                                                   "i64", ctx));
+                                let size_tmp = try!(self.load_var(llvm_symbol(size).as_str(),
+                                                                  "i64", ctx));
+                                let res_ptr = ctx.var_ids.next();
+                                ctx.code.add(format!("{} = call {} {}.slice({} {}, i64 {}, i64{})",
+                                                     res_ptr,
+                                                     output_ll_ty,
+                                                     vec_prefix,
+                                                     vec_ll_ty,
+                                                     child_tmp,
+                                                     index_tmp,
+                                                     size_tmp));
+                                let out_ty = try!(get_sym_ty(func, output));
+                                let out_ty_str = try!(self.llvm_type(&out_ty)).to_string();
+                                ctx.code.add(format!("store {} {}, {}* {}",
+                                                     out_ty_str,
+                                                     res_ptr,
+                                                     out_ty_str,
+                                                     llvm_symbol(output)))
+                            }
+                            _ => weld_err!("Illegal type {} in Slice", print_type(child_ty))?,
+                        }
+                    }
+                    Exp { ref output, ref child } => {
+                        let child_ty = try!(get_sym_ty(func, child));
+                        if let Scalar(ref ty) = *child_ty {
+                            let child_ll_ty = try!(self.llvm_type(&child_ty)).to_string();
+                            let child_tmp = try!(self.load_var(llvm_symbol(child).as_str(),
+                                                               &child_ll_ty, ctx));
+                            let res_tmp = ctx.var_ids.next();
+                            ctx.code.add(format!("{} = call {} @llvm.exp.{}({} {})",
+                                                 res_tmp,
+                                                 child_ll_ty,
+                                                 ty,
+                                                 child_ll_ty,
+                                                 child_tmp));
+                            let out_ty = try!(get_sym_ty(func, output));
+                            let out_ty_str = try!(self.llvm_type(&out_ty)).to_string();
+                            ctx.code.add(format!("store {} {}, {}* {}",
+                                                 out_ty_str,
+                                                 res_tmp,
+                                                 out_ty_str,
+                                                 llvm_symbol(output)));
+                        } else {
+                            weld_err!("Illegal type {} in Exp", print_type(child_ty))?;
                         }
                     }
                     ToVec { ref output, ref child } => {

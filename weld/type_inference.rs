@@ -154,6 +154,8 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             }
         }
 
+        Negate(ref c) => push_type(&mut expr.ty, &c.ty, "Negate"),
+
         Let { ref mut body, .. } => sync_types(&mut expr.ty, &mut body.ty, "Let body"),
 
         MakeVector { ref mut elems } => {
@@ -236,6 +238,27 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
                 _ => return weld_err!("Internal error: Length called on non-vector"),
             }
             push_complete_type(&mut expr.ty, Scalar(I64), "Length")
+        }
+
+        Slice { ref mut data, ref mut index, ref mut size} => {
+            if let Vector(_) = data.ty {
+                let mut changed = false;
+                changed |= try!(push_complete_type(&mut index.ty, Scalar(I64), "Slice"));
+                changed |= try!(push_complete_type(&mut size.ty, Scalar(I64), "Slice"));
+                changed |= try!(push_type(&mut expr.ty, &data.ty, "Slice"));
+                Ok(changed)
+            } else {
+                weld_err!("Internal error: Slice called on {:?}, must be called on vector", data.ty)
+            }
+        }
+
+        Exp { ref mut value } => {
+            match value.ty {
+                Scalar(F32) => push_complete_type(&mut expr.ty, Scalar(F32), "Exp"),
+                Scalar(F64) => push_complete_type(&mut expr.ty, Scalar(F64), "Exp"),
+                Unknown => push_type(&mut expr.ty, &value.ty, "Exp"),
+                _ => return weld_err!("Internal error: Exp called on non-scalar or non-float"),
+            }
         }
 
         Lookup { ref mut data, ref mut index } => {
@@ -765,6 +788,10 @@ fn infer_types_let() {
     let mut e = parse_expr("let a = lookup(lookup([[1],[2],[3]], 0L), 0L); a").unwrap();
     assert!(infer_types(&mut e).is_ok());
     assert_eq!(e.ty, Scalar(I32));
+
+    let mut e = parse_expr("let a = slice([1.0f, 2.0f, 3.0f], 0L, 2L);a").unwrap();
+    assert!(infer_types(&mut e).is_ok());
+    assert_eq!(e.ty, Vector(Box::new(Scalar(F32))));
 
     let mut e = parse_expr("let a:bool = 1; a").unwrap();
     assert!(infer_types(&mut e).is_err());

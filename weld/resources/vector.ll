@@ -108,6 +108,23 @@ define %$NAME @$NAME.clone(%$NAME %vec) {
   ret %$NAME %vec2
 }
 
+; Get a new vec object that starts at the index'th element of the existing vector, and has size size.
+; If the specified size is greater than the remaining size, then the remaining size is used.
+define %$NAME @$NAME.slice(%$NAME %vec, i64 %index, i64 %size) {
+  ; Check if size greater than remaining size
+  %currSize = extractvalue %$NAME %vec, 1
+  %remSize = sub i64 %currSize, %index
+  %sgtr = icmp ugt i64 %size, %remSize
+  %finSize = select i1 %sgtr, i64 %remSize, i64 %size
+
+  %elements = extractvalue %$NAME %vec, 0
+  %newElements = getelementptr $ELEM* %elements, i64 %index
+  %1 = insertvalue %$NAME undef, $ELEM* %newElements, 0
+  %2 = insertvalue %$NAME %1, i64 %finSize, 1
+
+  ret %$NAME %2
+}
+
 ; Initialize and return a new builder, with the given initial capacity.
 define %$NAME.bld @$NAME.bld.new(i64 %capacity, %work_t* %cur.work) {
   %elemSizePtr = getelementptr $ELEM* null, i32 1

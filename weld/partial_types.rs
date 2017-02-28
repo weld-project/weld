@@ -233,6 +233,20 @@ impl PartialExpr {
                 }
             }
 
+            Slice { ref data, ref index, ref size } => {
+                Slice {
+                    data: try!(typed_box(data)),
+                    index: try!(typed_box(index)),
+                    size: try!(typed_box(size)),
+                }
+            }
+
+            Exp { ref value } => {
+                Exp {
+                    value: try!(typed_box(value)),
+                }
+            }
+
             Merge { ref builder, ref value } => {
                 Merge {
                     builder: try!(typed_box(builder)),
@@ -294,6 +308,7 @@ impl PartialExpr {
                 };
                 NewBuilder(typed_arg)
             }
+            Negate(ref expr) => Negate(try!(typed_box(expr))),
         };
 
         Ok(TypedExpr {
