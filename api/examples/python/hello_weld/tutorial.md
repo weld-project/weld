@@ -13,20 +13,18 @@ For pedagogical reasons our library will have some limitations. First, we will o
 
 ## Table of Contents
 
-- [Hello, Weld!](#hello-weld)
-  * [Prerequisites](#prerequisites)
-  * [Setting up the Project](#setting-up-the-project)
-  * [Weld Background](#weld-background)
-  * [Initializing](#initializing)
-  * [Implementing an Operator](#implementing-an-operator)
-  * [Forcing Evaluation](#forcing-evaluation)
-  * [Putting it all Together](#putting-it-all-together)
-  * [Going From Here](#going-from-here)
-  * [Common Issues](#common-issues)
-      - [Problem](#problem)
-      - [Potential Solution](#potential-solution)
-      - [Problem](#problem-1)
-      - [Potential Solution](#potential-solution-1)
+ * [Table of Contents](#table-of-contents)
+ * [Prerequisites](#prerequisites)
+ * [Setting up the Project](#setting-up-the-project)
+ * [Weld Background](#weld-background)
+ * [Initializing](#initializing)
+ * [Implementing an Operator](#implementing-an-operator)
+ * [Forcing Evaluation](#forcing-evaluation)
+ * [Putting it all Together](#putting-it-all-together)
+ * [Going From Here](#going-from-here)
+ * [Common Issues](#common-issues)
+     - [ImportError: No module named weld.weldobject](#importerror-no-module-named-weldweldobject)
+     - [ValueError: Could not compile function ...](#valueerror-could-not-compile-function-)
 
 ## Prerequisites
 
