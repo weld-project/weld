@@ -3,12 +3,12 @@ use bencher::stats::Summary;
 
 extern crate csv;
 extern crate weld;
+extern crate weld_common;
 extern crate libc;
 
 mod bencher;
 
-use self::weld::weld_print_function_pointers;
-use self::weld::WeldRuntimeErrno;
+use self::weld_common::WeldRuntimeErrno;
 
 use self::weld::{weld_conf_new, weld_conf_set, weld_conf_free};
 use self::weld::{weld_error_code, weld_error_free};
@@ -78,6 +78,7 @@ unsafe fn run_module<T>(module: *mut WeldModule,
     let dur = s.elapsed();
     let dur = dur.as_secs() * 1_000_000_000 + (dur.subsec_nanos() as u64);
     let dur = dur / 1_000_000;
+    println!("{} ms", dur);
 
     // Free the input value wrapper.
     weld_value_free(input_value);
@@ -188,6 +189,7 @@ fn bench_tpch_q1(bench: &mut Bencher) {
         l_tax: WeldVec<f32>,
     }
 
+    #[allow(dead_code)]
     struct ReturnValue {
         l_returnflag: i8,
         l_linestatus: i8,
@@ -287,7 +289,7 @@ fn bench_tpch_q6(bench: &mut Bencher) {
     let l_ep: Vec<f32> = vec![100.0; size];
 
     // Since all predicates pass, this is the result
-    let expect = l_ep[0] * l_discount[0] * (size as f32);
+    // let expect = l_ep[0] * l_discount[0] * (size as f32);
 
     let ref args = Args {
         l_shipdate: WeldVec {
@@ -374,26 +376,20 @@ fn main() {
     println!("running benchmarks");
     let mut measured = 0;
     for t in benches.iter() {
-        match t.0 {
-            // don't run this, they exist only to make sure functions don't get optimized out
-            "runtime_fns" => weld_print_function_pointers(),
-            _ => {
-                if args.len() > 2 {
-                    if !t.0.contains(args[2].as_str()) {
-                        println!("{} ... \x1b[0;33mignored\x1b[0m", t.0);
-                        continue;
-                    }
-                }
-                print!("{} ... ", t.0);
-                run_benchmark(wtr, t);
-                println!("\x1b[0;32mok\x1b[0m");
-                measured += 1;
+        if args.len() > 1 {
+            if !t.0.contains(args[1].as_str()) {
+                println!("{} ... \x1b[0;33mignored\x1b[0m", t.0);
+                continue;
             }
         }
+        print!("{} ... ", t.0);
+        run_benchmark(wtr, t);
+        println!("\x1b[0;32mok\x1b[0m");
+        measured += 1;
     }
 
     println!("");
-    println!("test result: \x1b[0;32mok\x1b[0m. {} passed; 0 failed; {} ignored; {} measured",
+    println!("test result: \x1b[0;32mok\x1b[0m. 0 passed; 0 failed; {} ignored; {} measured",
              benches.len() - measured,
              measured);
     println!("");
