@@ -184,7 +184,7 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
                     for (vec_ty, vec_expr) in vec_types.iter_mut().zip(vectors.iter_mut()) {
                         if let Vector(ref elem_type) = vec_expr.ty {
                             changed |= try!(push_type(vec_ty, elem_type, "Zip"));
-                        } else {
+                        } else if vec_expr.ty != Unknown {
                             return weld_err!("Internal error: Zip argument not a Vector");
                         }
                         types.push(vec_ty.clone());
@@ -240,7 +240,7 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             push_complete_type(&mut expr.ty, Scalar(I64), "Length")
         }
 
-        Slice { ref mut data, ref mut index, ref mut size} => {
+        Slice { ref mut data, ref mut index, ref mut size } => {
             if let Vector(_) = data.ty {
                 let mut changed = false;
                 changed |= try!(push_complete_type(&mut index.ty, Scalar(I64), "Slice"));
@@ -248,7 +248,8 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
                 changed |= try!(push_type(&mut expr.ty, &data.ty, "Slice"));
                 Ok(changed)
             } else {
-                weld_err!("Internal error: Slice called on {:?}, must be called on vector", data.ty)
+                weld_err!("Internal error: Slice called on {:?}, must be called on vector",
+                          data.ty)
             }
         }
 
