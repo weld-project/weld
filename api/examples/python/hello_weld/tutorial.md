@@ -13,7 +13,7 @@ For pedagogical reasons our library will have some limitations. First, we will o
 
 ## Prerequisites
 
-This tutorials assumes familiarity with Python and a Weld installation. It also requires Rust.
+This tutorial assumes you have a Weld intallation, Rust, and a familiarity of Python. Here's a quick setup guide:
 
 [Install Rust](https://www.rustup.rs/):
 
@@ -33,7 +33,7 @@ $ cargo test # Run tests
 
 ## Setting up the Project
 
-1. Create a new file called `hello_weld.py`
+1. Create a new file called `hello_weld.py`.
 
 2. Append the Python Path so it can find the Weld Python bindings:
 
@@ -55,15 +55,16 @@ $ cargo test # Run tests
   from weld.encoders import NumpyArrayEncoder, NumpyArrayDecoder
   ```
   
-  We will build our library on top of NumPy's `ndarray` type. The other imports come from the Weld library; we will revisit them later.
+  We need NumPy because we will build our library on top of NumPy's `ndarray` type. The other imports come from the Weld library; we will revisit them later.
   
-4. Set up a template for the `HelloWeldVector` class. We will fill this in as we go. Copy and paste the following, which defines the methods we will implement along with what they do, but provides no implementations:
+4. Set up a template for the `HelloWeldVector` class. We will fill this in as we go. Copy and paste the following, which defines the methods we will implement along with what they do, but provides no implementation:
 
   ```python
   class HelloWeldVector(object):
       def __init__(self, vector):
         """
         Create a new `HelloWeldVector`, initialized with an existing `numpy.ndarray` 'vector'.
+        vector must have ndim=1 and dtype='int32'.
         """
         pass
 
@@ -100,18 +101,20 @@ $ cargo test # Run tests
   
 ## Weld Background
 
-Weld uses a lazily evaluated API to build up a computation without actually executing. In other words, Weld does not actually execute any code until it absolutely needs to (_e.g.,_ when printing a result to the terminal). This allows Weld to perform optimizations like loop fusion, where multiple loops can be fused into a single one by analyzing a built-up expression.
+Before diving in further, let's discuss how Weld operates.
 
-The primary interface to Weld is `WeldObject`, which is a Python class which can keep track of a computation we have built so far. We will use `WeldObject` to make the operations in `HelloWeldVector` lazy, _i.e.,_ they do not produce a result except when printing the vector.
+Weld uses a lazily evaluated API to build up a computation without actually executing. In other words, Weld does not actually execute any code until it absolutely needs to (_e.g.,_ when printing a result to the terminal). This allows Weld to perform optimizations like loop fusion, where multiple loops over some data can be fused into a single loop by analyzing a built-up expression.
 
-Weld registers computations using a special _intermediate representation_ (IR); think of it as a small functional programming language that can capture parallel programs. We won't discuss the IR in depth in this tutorial, but we will need to use it in order to express what we want to do with our vector.
+The primary interface to Weld is `WeldObject`, which is a Python class which can keep track of a computation we have built so far. We will use `WeldObject` to make the operations in `HelloWeldVector` lazy, so they do not produce a result except when the a user prints the value of the vector.
+
+Weld registers computations using a special _intermediate representation_ (IR); think of it as a small functional programming language that can capture parallel programs. We won't discuss the IR in depth in this tutorial, but we will need to use it in order to express computations on our vector.
 
 ## Initializing
 
 Let's start off by initializing our vector. We need to do a few things here:
 
-1. Track the vector the user passes in as the "initial vector"
-2. Create a new `WeldObject`, which we will use to track the computations on the vector
+1. Track the vector the user passes in as the "initial vector".
+2. Create a new `WeldObject`, which we will use to track the computations on the vector.
 
 Replace the `__init__` implementation with the following:
 
@@ -135,7 +138,7 @@ Replace the `__init__` implementation with the following:
  self.weldobj = WeldObject(NumpyArrayEncoder(), NumpyArrayDecoder())
  ```
  
- Let's break this line down. We're initializing a new `WeldObject` instance and setting it as a field in our object. `WeldObject` takes two parameters: an _encoder_ class and a _decoder_ class. These classes specify how a type in Python maps over to a type in Weld (Weld expects a certain in-memory format for each type). The Weld API contains some default encoders and decoders for common types in `weld.encoders`; here, we use the built in NumPy array encoder and decoder classes. In a different tutorial we will look at how to write encoders and decoders for custom objects.
+ Let's break this line down. We are initializing a new `WeldObject` instance and setting it as a field. `WeldObject` takes two parameters: an _encoder_ class and a _decoder_ class. These classes specify how a type in Python maps over to a type in Weld (Weld expects a certain in-memory format for each type) and vice versa. The Weld API contains some default encoders and decoders for common types in the `weld.encoders` module; here, we use the included NumPy array encoder and decoder classes. In a different tutorial we will look at how to write encoders and decoders for custom objects.
  
  ```python
  name = self.weldobj.update(vector, WeldVec(WeldI32()))
@@ -143,15 +146,15 @@ Replace the `__init__` implementation with the following:
  
  This is an important line. `WeldObject` instances have an `update` method which add a _dependency_ to the object. Dependencies are just values which will be passed into Weld when we actually want to compute something. The `update` method takes two parameters (a value and a type) and returns a string name.
  
-Let's talk about these in more detail. The value is straightforward. The type warrants some discussion; it is the type the value will take on _in Weld_. Types supported by Weld are available in `weld.types`. In this example, because our value is a NumPy array of integers, the expected Weld type is a `WeldVec(WeldI32())` (a vector of `i32`, or 32-bit integer, values). The encoder object we discussed earlier is responsible for translating the NumPy array into this type in Weld.
+Let's talk about these in more detail. The value is straightforward. The type warrants some discussion; it is the type the value will take on _in Weld_. Types supported by Weld are available in the `weld.types` module. In this example, because our value is a NumPy array of integers, the expected Weld type is a `WeldVec(WeldI32())` (a vector of 32-bit integer values). The encoder object we discussed earlier is responsible for translating the NumPy array into this type so Weld's execution engine understands it.
 
-The return type of the `update` function is a string name. The name is how we refer to this value in Weld code. Names are unique; no two values will ever be assigned the same name. Here, whenever we want to refer to the vector in our Weld code, we can just use this string as a placeholder to represent the value. `WeldObject` takes care of tracking which names are mapped to which values.
+The return type of the `update` function is a string name. The name is how we refer to `value` in Weld code. Names are unique; no two values will ever be assigned the same name. Here, whenever we want to refer to the vector in our Weld code, we can just use this string as a placeholder to represent the value. `WeldObject` takes care of tracking which names are mapped to which values.
 
 ```python
 self.weldobj.weld_code = name
 ```
 
-Last line! Here, we're setting the actual Weld IR code of the `WeldObject`. The `weld_code` field is just a string which represents some Weld code (in our special Weld IR). Again, we won't discuss the IR itself here, but on this line our code is just the name we assigned to the vector. If we were to execute this code now, Weld would just return the vector we passed in as a result.
+Last line! Here, we're setting the actual Weld IR code of the `WeldObject`. The `weld_code` field is just a string which represents some Weld code (in our special Weld IR). Again, we won't discuss the IR itself here, but on this line our code is just the name we assigned to the vector. If we were to execute this code now, Weld would just return the vector we passed in as the result.
 
 ## Implementing an Operator
 
@@ -171,7 +174,7 @@ Let's take it line by line again.
 template = "map({0}, |e| e + {1})"
 ```
 
-This is some simple Python code. `template` represents some Weld IR, which performs a `map` function on some vector `{0}` (this is something we can use Python's `format` method to replace with another string). The map function adds `{1}` to each element; in short, `template` is some Weld code to implement an elementwise add operator).
+This is some simple Python code. `template` represents some Weld IR, which performs a `map` function on some vector `{0}` (this is something we can use Python's `format` method to replace with another string). The map function adds `{1}` to each element; in short, `template` is some Weld code to implement an elementwise add operator.
 
 ```python
 self.weldobj.weld_code = template.format(self.weldobj.weld_code, str(number))
@@ -187,7 +190,7 @@ And that's it! We've implemented the `add` operator. Note that we never actually
 
 ## Forcing Evaluation
 
-Eventually, we do want to compute a result. In our library, when should this happen? On sensible time to do it is when a user wants to print out a result. Python allows defining custom behavior for how a result is printed by overriding the `__str__` method; that is exactly what we will do now.
+Eventually, we do want to compute a result. In our library, where should this happen? One sensible place to do it is when a user wants to print the vector. Python allows defining custom behavior for how a result is printed by overriding the `__str__` method; that is exactly what we will do now.
 
 Copy and paste the following into the `__str__` method:
 
@@ -199,14 +202,14 @@ def __str__(self):
 
 There is only one notable line here -- the call to `evaluate`. Calling evaluate on a `WeldObject` forces it's evaluation. In other words, calling evaluate will take the dependencies and Weld IR code registered with the `WeldObject`, generate a callable Weld function, compile it to fast parallel machine code, and run it. It then calls the _decoder_ we specified when creating the `WeldObject` to marshall Weld's return value into something Python understands; in our case, it will decode a Weld vector into a NumPy array. Note that we need to specify the Weld return type of the computation so the decoder knows what it should marshall; in our case, the return type will always be a Weld vector of 32-bit integers, since that's what our initial vector is and it is also what each of our operations returns.
 
-`v` is thus a NumPy `ndarray`. To print it, we just return a string representation of it by calling `str(v)`.
+`v` is thus a NumPy `ndarray`. To get a string representation of it, we just call and return `str(v)`.
 
 ## Putting it all Together
 
-That's it! We now have a minimal implementation for Weld-enabled library. Let's try it out. Open up a Python shell and import the code you just wrote (along with NumPy):
+That's it! We now have a minimal implementation for a Weld-enabled library. Let's try it out. Open up a Python shell and import the code you just wrote (along with NumPy):
 
 ```python
->>> import numpy as np
+>>> import numpy
 >>> import hello_weld
 ```
 
@@ -232,15 +235,11 @@ Now, let's print out the vector itself. This will compile the Weld code, pass in
 [105, 105, 105, 105, 105]
 ```
 
-Nice!
+Nice work!
 
-## Enhancements
+## Going From Here
 
-### Caching
-
-TODO!
-
-### Chaining Operators
-
-TODO!
-
+* Caching
+* Chaining operators
+* Supporting more types
+* Supporting other operators
