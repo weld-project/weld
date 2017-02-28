@@ -183,9 +183,64 @@ The first argument is the `weld_code` we already had. What does this `weld_code`
 
 The second argument is just the number we want to add to each element.
 
-And that's it! We've implemented the `add` operator. Note that we never actually compute a result here; rather, we just express what we want to do without actually doing it.
+And that's it! We've implemented the `add` operator. Note that we never actually compute a result here; rather, we just express what we want to do without actually doing it. Implementing the other operators is similar; we just change the `+` in the map function to the correct binary operator.
 
 ## Forcing Evaluation
 
-Eventually, we do want to compute a result. In our library, when should this happen? On sensible time to do it is when a user wants to print out a result.
+Eventually, we do want to compute a result. In our library, when should this happen? On sensible time to do it is when a user wants to print out a result. Python allows defining custom behavior for how a result is printed by overriding the `__str__` method; that is exactly what we will do now.
+
+Copy and paste the following into the `__str__` method:
+
+```python
+def __str__(self):
+  v = self.weldobj.evaluate(WeldVec(WeldI32()))
+  return str(v)
+```
+
+There is only one notable line here -- the call to `evaluate`. Calling evaluate on a `WeldObject` forces it's evaluation. In other words, calling evaluate will take the dependencies and Weld IR code registered with the `WeldObject`, generate a callable Weld function, compile it to fast parallel machine code, and run it. It then calls the _decoder_ we specified when creating the `WeldObject` to marshall Weld's return value into something Python understands; in our case, it will decode a Weld vector into a NumPy array. Note that we need to specify the Weld return type of the computation so the decoder knows what it should marshall; in our case, the return type will always be a Weld vector of 32-bit integers, since that's what our initial vector is and it is also what each of our operations returns.
+
+`v` is thus a NumPy `ndarray`. To print it, we just return a string representation of it by calling `str(v)`.
+
+## Putting it all Together
+
+That's it! We now have a minimal implementation for Weld-enabled library. Let's try it out. Open up a Python shell and import the code you just wrote (along with NumPy):
+
+```python
+>>> import numpy as np
+>>> import hello_weld
+```
+
+Let's make a new vector initialized with all 0s, and then add some numbers to it:
+
+```python
+>>> my_vector = HelloWeldVector(numpy.array([0,0,0,0,0], dtype='int32'))
+>>> my_vector.add(5)
+>>> my_vector.add(100)
+```
+
+If you'd like, you can see what the Weld IR code looks like so far:
+
+```python
+>>> print my_vector.weldobj.weld_code
+'map(map(e0, |e| e + 5), |e| e + 100))'
+```
+
+Now, let's print out the vector itself. This will compile the Weld code, pass in our NumPy array into Weld, and compute a result:
+
+```python
+>>> print my_vector
+[105, 105, 105, 105, 105]
+```
+
+Nice!
+
+## Enhancements
+
+### Caching
+
+TODO!
+
+### Chaining Operators
+
+TODO!
 
