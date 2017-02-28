@@ -310,6 +310,7 @@ fn percentile_of_sorted(sorted_samples: &[f64], pct: f64) -> f64 {
 /// just changes the values of those that are outliers.
 ///
 /// See: http://en.wikipedia.org/wiki/Winsorising
+#[allow(dead_code)]
 pub fn winsorize(samples: &mut [f64], pct: f64) {
     let mut tmp = samples.to_vec();
     local_sort(&mut tmp);

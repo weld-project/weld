@@ -178,6 +178,7 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             let base_type = Vector(Box::new(Struct(vec![Unknown; vectors.len()])));
             changed |= try!(push_type(&mut expr.ty, &base_type, "Zip"));
 
+            let mut types = vec![];
             if let Vector(ref mut elem_type) = expr.ty {
                 if let Struct(ref mut vec_types) = **elem_type {
                     for (vec_ty, vec_expr) in vec_types.iter_mut().zip(vectors.iter_mut()) {
@@ -186,11 +187,16 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
                         } else {
                             return weld_err!("Internal error: Zip argument not a Vector");
                         }
+                        types.push(vec_ty.clone());
                     }
                 }
             } else {
                 return weld_err!("Internal error: type of Zip was not Vector(Struct(..))");
             }
+
+            let base_type = Vector(Box::new(Struct(types)));
+            changed |= try!(push_type(&mut expr.ty, &base_type, "Zip"));
+
             Ok(changed)
         }
 

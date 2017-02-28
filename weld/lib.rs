@@ -41,6 +41,9 @@ pub mod type_inference;
 pub mod conf;
 pub mod util;
 
+/// A clean alias for a compiled LLVM module.
+pub type WeldModule = easy_ll::CompiledModule;
+
 /// An error passed as an opaque pointer using the runtime API.
 pub struct WeldError {
     errno: WeldRuntimeErrno,
@@ -181,7 +184,7 @@ pub unsafe extern "C" fn weld_value_free(obj: *mut WeldValue) {
 pub unsafe extern "C" fn weld_module_compile(code: *const c_char,
                                              _: *const WeldConf,
                                              err: *mut *mut WeldError)
-                                             -> *mut easy_ll::CompiledModule {
+                                             -> *mut WeldModule {
     assert!(!code.is_null());
 
     let code = CStr::from_ptr(code);
@@ -208,7 +211,7 @@ pub unsafe extern "C" fn weld_module_compile(code: *const c_char,
 /// Runs a module.
 ///
 /// The module may write a value into the provided error pointer.
-pub unsafe extern "C" fn weld_module_run(module: *mut easy_ll::CompiledModule,
+pub unsafe extern "C" fn weld_module_run(module: *mut WeldModule,
                                          conf: *const WeldConf,
                                          arg: *const WeldValue,
                                          err: *mut *mut WeldError)

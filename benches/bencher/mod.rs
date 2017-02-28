@@ -20,9 +20,10 @@ pub mod stats;
 /// This is fed into functions marked with `#[bench]` to allow for
 /// set-up & tear-down before running a piece of code repeatedly via a
 /// call to `iter`.
-#[derive(Copy, Clone)]
+#[derive(Clone)]
 pub struct Bencher {
     iterations: u64,
+    samples: Vec<f64>,
     dur: Duration,
     pub bytes: u64,
 }
@@ -53,124 +54,72 @@ pub fn black_box<T>(dummy: T) -> T {
     }
 }
 
-
 impl Bencher {
+    /// Returns a new `Bencher`.
+    pub fn new() -> Bencher {
+        Bencher {
+            iterations: 10,
+            samples: vec![],
+            dur: Duration::new(0, 0),
+            bytes: 0,
+        }
+    }
+
     /// Callback for benchmark functions to run in their body.
+    /// This is the part that is timed.
     pub fn iter<T, F>(&mut self, mut inner: F)
         where F: FnMut() -> T
     {
-        let start = Instant::now();
-        let k = self.iterations;
-        for _ in 0..k {
+        for _ in 0..self.iterations {
+            let start = Instant::now();
             black_box(inner());
-        }
-        self.dur = start.elapsed();
-    }
-
-    pub fn ns_elapsed(&mut self) -> u64 {
-        self.dur.as_secs() * 1_000_000_000 + (self.dur.subsec_nanos() as u64)
-    }
-
-    pub fn ns_per_iter(&mut self) -> u64 {
-        if self.iterations == 0 {
-            0
-        } else {
-            self.ns_elapsed() / cmp::max(self.iterations, 1)
+            self.dur = start.elapsed();
+            let sample = self.ns_elapsed();
+            self.samples.push(sample);
         }
     }
 
-    pub fn bench_n<F>(&mut self, n: u64, f: F)
+    /// Returns the ns elapsed for the last benchmark run.
+    pub fn ns_elapsed(&self) -> f64 {
+        (self.dur.as_secs() * 1_000_000_000 + (self.dur.subsec_nanos() as u64)) as f64
+    }
+
+    pub fn bench_run<F>(&mut self, f: F)
         where F: FnOnce(&mut Bencher)
     {
-        self.iterations = n;
         f(self);
     }
 
-    // This is a more statistics-driven benchmark algorithm
     pub fn auto_bench<F>(&mut self, mut f: F) -> stats::Summary
         where F: FnMut(&mut Bencher)
     {
         // Initial bench run to get ballpark figure.
-        let mut n = 1;
-        self.bench_n(n, |x| f(x));
+        self.bench_run(|x| f(x));
 
-        // Try to estimate iter count for 1ms falling back to 1m
-        // iterations if first run took < 1ns.
-        if self.ns_per_iter() == 0 {
-            n = 1_000_000;
-        } else {
-            n = 1_000_000 / cmp::max(self.ns_per_iter(), 1);
-        }
-        // if the first run took more than 1ms we don't want to just
-        // be left doing 0 iterations on every loop. The unfortunate
-        // side effect of not being able to do as many runs is
-        // automatically handled by the statistical analysis below
-        // (i.e. larger error bars).
-        if n == 0 {
-            n = 1;
+        // If one run took more than 500 ms, just stop.
+        if self.ns_elapsed() > (500_000_000 as f64) {
+            // stats::winsorize(&mut self.samples, 5.0);
+            let summ = stats::Summary::new(self.samples.as_slice());
+            return summ;
         }
 
-        let mut total_run = Duration::new(0, 0);
-        let samples: &mut [f64] = &mut [0.0_f64; 50];
-        loop {
-            let loop_start = Instant::now();
+        // Otherwise, run to get more samples.
+        self.bench_run(|x| f(x));
 
-            for p in &mut *samples {
-                self.bench_n(n, |x| f(x));
-                *p = self.ns_per_iter() as f64;
-            }
-
-            stats::winsorize(samples, 5.0);
-            let summ = stats::Summary::new(samples);
-
-            for p in &mut *samples {
-                self.bench_n(5 * n, |x| f(x));
-                *p = self.ns_per_iter() as f64;
-            }
-
-            stats::winsorize(samples, 5.0);
-            let summ5 = stats::Summary::new(samples);
-            let loop_run = loop_start.elapsed();
-
-            // If we've run for 100ms and seem to have converged to a
-            // stable median.
-            if loop_run > Duration::from_millis(100) && summ.median_abs_dev_pct < 1.0 &&
-               summ.median - summ5.median < summ5.median_abs_dev {
-                return summ5;
-            }
-
-            total_run += loop_run;
-            // Longest we ever run for is 3s.
-            if total_run > Duration::from_secs(3) {
-                return summ5;
-            }
-
-            // If we overflow here just return the results so far. We check a
-            // multiplier of 10 because we're about to multiply by 2 and the
-            // next iteration of the loop will also multiply by 5 (to calculate
-            // the summ5 result)
-            n = match n.checked_mul(10) {
-                Some(_) => n * 2,
-                None => return summ5,
-            };
-        }
+        // stats::winsorize(&mut self.samples, 5.0);
+        let summ = stats::Summary::new(self.samples.as_slice());
+        return summ;
     }
 }
 
 pub mod bench {
     use std::cmp;
-    use std::time::Duration;
     use super::{Bencher, BenchSamples};
 
-    // TODO(shoumik): Header format.
     pub fn benchmark<F>(f: F) -> BenchSamples
         where F: FnMut(&mut Bencher)
     {
-        let mut bs = Bencher {
-            iterations: 0,
-            dur: Duration::new(0, 0),
-            bytes: 0,
-        };
+        let mut bs = Bencher::new();
 
         let ns_iter_summ = bs.auto_bench(f);
 
@@ -181,19 +130,5 @@ pub mod bench {
             ns_iter_summ: ns_iter_summ,
             mb_s: mb_s as usize,
         }
-
-        // TODO(shoumik): Write out the output here.
-    }
-
-    #[allow(dead_code)]
-    pub fn run_once<F>(f: F)
-        where F: FnOnce(&mut Bencher)
-    {
-        let mut bs = Bencher {
-            iterations: 0,
-            dur: Duration::new(0, 0),
-            bytes: 0,
-        };
-        bs.bench_n(1, f);
     }
 }

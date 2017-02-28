@@ -1059,9 +1059,12 @@ fn outofmemory_error_test() {
     let code = "|x:vec[i32]| result(for(x, vecmerger[i32,+](x), |b,i,e| merge(b,{i,e+1})))";
     let conf = default_conf();
 
-    // 1GB of data; the vecmerger will allocate at least this much,
-    // exceeding the 1GB default limit.
-    let x = vec![4; 1000000000 / 4 as usize];
+    // Set the memory to something small.
+    let key = CString::new("weld.memory.limit").unwrap().into_raw() as *const c_char;
+    let value = CString::new("50000").unwrap().into_raw() as *const c_char;
+    unsafe { weld_conf_set(conf, key, value) };
+
+    let x = vec![4; 50000 / 4 as usize];
     let ref input_data = WeldVec {
         data: x.as_ptr() as *const i32,
         len: x.len() as i64,
@@ -1123,6 +1126,7 @@ fn main() {
     for t in tests.iter() {
         if args.len() > 1 {
             if !t.0.contains(args[1].as_str()) {
+                println!("{} ... \x1b[0;33mignored\x1b[0m", t.0);
                 continue;
             }
         }

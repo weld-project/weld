@@ -1,0 +1,42 @@
+|l_returnflag: vec[i8], l_linestatus: vec[i8], l_quantity: vec[f32],
+    l_ep: vec[f32], l_discount: vec[f32], l_shipdate: vec[i32], l_tax: vec[f32]|
+    let sums = result(for(
+        filter(zip(l_returnflag, l_linestatus, l_quantity,
+            l_ep, l_discount, l_shipdate, l_tax),
+            |e| e.$5 <= 19980901
+        ),
+        vecmerger[{i8,i8,f32,f32,f32,f32,i32},+]([
+            {0c,0c,0.0f,0.0f,0.0f,0.0f,0},
+            {0c,0c,0.0f,0.0f,0.0f,0.0f,0},
+            {0c,0c,0.0f,0.0f,0.0f,0.0f,0},
+            {0c,0c,0.0f,0.0f,0.0f,0.0f,0},
+            {0c,0c,0.0f,0.0f,0.0f,0.0f,0},
+            {0c,0c,0.0f,0.0f,0.0f,0.0f,0},
+        ]),
+        |b,i,e|
+            let sum_disc_price = e.$3 * (1.0f - e.$4);
+            merge(b, { 
+            i64(e.$0*2c + e.$1),
+            {
+                e.$0,
+                e.$1,
+                e.$2,
+                sum_disc_price,
+                sum_disc_price * (1.0f - e.$6),
+                e.$4,
+                1
+            }
+        })
+    ));
+    map(sums, |s| {
+        s.$0,
+        s.$1,
+        s.$2,
+        s.$3,
+        s.$4,
+        s.$2 / f32(s.$6),
+        s.$3 / f32(s.$6),
+        s.$5 / f32(s.$6),
+        s.$6
+    })
+                

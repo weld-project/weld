@@ -94,6 +94,10 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
 
         static ref IDENT_RE: Regex = Regex::new(r"^[A-Za-z$_][A-Za-z0-9$_]*$").unwrap();
 
+        static ref I8_BASE_10_RE: Regex = Regex::new(r"^[0-9]+[cC]$").unwrap();
+        static ref I8_BASE_2_RE: Regex = Regex::new(r"^0b[0-1]+[cC]$").unwrap();
+        static ref I8_BASE_16_RE: Regex = Regex::new(r"^0x[0-9a-fA-F]+[cC]$").unwrap();
+
         static ref I32_BASE_10_RE: Regex = Regex::new(r"^[0-9]+$").unwrap();
         static ref I32_BASE_2_RE: Regex = Regex::new(r"^0b[0-1]+$").unwrap();
         static ref I32_BASE_16_RE: Regex = Regex::new(r"^0x[0-9a-fA-F]+$").unwrap();
@@ -147,6 +151,12 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
             });
         } else if IDENT_RE.is_match(text) {
             tokens.push(TIdent(text.to_string()));
+        } else if I8_BASE_10_RE.is_match(text) {
+            tokens.push(try!(parse_i8_literal(text, 10)))
+        } else if I8_BASE_2_RE.is_match(text) {
+            tokens.push(try!(parse_i8_literal(text, 2)))
+        } else if I8_BASE_16_RE.is_match(text) {
+            tokens.push(try!(parse_i8_literal(text, 16)))
         } else if I32_BASE_10_RE.is_match(text) {
             tokens.push(try!(parse_i32_literal(text, 10)))
         } else if I32_BASE_2_RE.is_match(text) {
@@ -216,8 +226,8 @@ impl fmt::Display for Token {
             TI64Literal(ref value) => write!(f, "{}L", value),
             TF32Literal(ref value) => write!(f, "{}F", value),
             TF64Literal(ref value) => write!(f, "{}", value),  // TODO: force .0?
-            TI8Literal(ref value) => write!(f, "{}", value),
-            TBoolLiteral(ref value) => write!(f, "{}", value),
+            TI8Literal(ref value) => write!(f, "{}C", value),
+            TBoolLiteral(ref value) => write!(f, "{}B", value),
             TIdent(ref value) => write!(f, "{}", value),
 
             // Cases that return fixed strings
@@ -290,6 +300,18 @@ impl fmt::Display for Token {
                        })
             }
         }
+    }
+}
+
+fn parse_i8_literal(input: &str, base: u32) -> WeldResult<Token> {
+    let slice = if base == 10 {
+        &input[..input.len() - 1]
+    } else {
+        &input[2..input.len() - 1]
+    };
+    match i8::from_str_radix(slice, base) {
+        Ok(value) => Ok(Token::TI8Literal(value)),
+        Err(_) => weld_err!("Invalid i8 literal: {}", input),
     }
 }
 

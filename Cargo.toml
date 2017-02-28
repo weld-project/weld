@@ -14,12 +14,12 @@ rustyline = "1.0.0"
 easy_ll = { path = "easy_ll", version = "^0.1.0" }
 weld_common = { path = "weld_common", version = "^0.1.0" }
 libc = "0.2.0"
-getopts = "0.2.14"
 csv = "0.15.0"
 
 [lib]
 path = "weld/lib.rs"
 crate-type = ["cdylib", "rlib"]
+bench = false
 
 [[bin]]
 name = "repl"
@@ -28,10 +28,11 @@ bench = false
 
 [[bench]]
 name = "benches"
-path = "benches/driver.rs"
+path = "benches/benches.rs"
 harness = false
 
 [[test]]
 name = "integration_tests"
 path = "tests/integration_tests.rs"
 harness = false
+bench = false
