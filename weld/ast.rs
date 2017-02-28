@@ -112,6 +112,7 @@ pub enum ExprKind<T: TypeBounds> {
     // TODO: maybe all of these should take named parameters
     Literal(LiteralKind),
     Ident(Symbol),
+    Negate(Box<Expr<T>>),
     BinOp {
         kind: BinOpKind,
         left: Box<Expr<T>>,
@@ -302,6 +303,7 @@ impl<T: TypeBounds> Expr<T> {
                         vec![]
                     }
                 }
+                Negate(ref t) => vec![t.as_ref()],
                 // Explicitly list types instead of doing _ => ... to remember to add new types.
                 Literal(_) | Ident(_) => vec![],
             }
@@ -361,6 +363,7 @@ impl<T: TypeBounds> Expr<T> {
                         vec![]
                     }
                 }
+                Negate(ref mut t) => vec![t.as_mut()],
                 // Explicitly list types instead of doing _ => ... to remember to add new types.
                 Literal(_) | Ident(_) => vec![],
             }
@@ -412,6 +415,7 @@ impl<T: TypeBounds> Expr<T> {
                     }
                 }
                 (&NewBuilder(_), &NewBuilder(_)) => Ok(true),
+                (&Negate(_), &Negate(_)) => Ok(true),
                 (&MakeStruct { .. }, &MakeStruct { .. }) => Ok(true),
                 (&MakeVector { .. }, &MakeVector { .. }) => Ok(true),
                 (&Zip { .. }, &Zip { .. }) => Ok(true),

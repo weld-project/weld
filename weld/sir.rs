@@ -21,6 +21,7 @@ pub enum Statement {
         left: Symbol,
         right: Symbol,
     },
+    Negate { output: Symbol, child: Symbol },
     Cast {
         output: Symbol,
         new_ty: Type,
@@ -193,6 +194,7 @@ impl fmt::Display for Statement {
                        left,
                        right)
             }
+            Negate { ref output, ref child } => write!(f, "{} = -{}", output, child),
             Cast { ref output, ref new_ty, ref child } => {
                 write!(f, "{} = cast({}, {})", output, child, print_type(new_ty))
             }
@@ -352,6 +354,9 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
                     vars.push(right.clone());
                 }
                 Cast { ref child, .. } => {
+                    vars.push(child.clone());
+                }
+                Negate { ref child, .. } => {
                     vars.push(child.clone());
                 }
                 Lookup { ref child, ref index, .. } => {
@@ -530,6 +535,16 @@ fn gen_expr(expr: &TypedExpr,
                 ty: left.ty.clone(),
                 left: left_sym,
                 right: right_sym,
+            });
+            Ok((cur_func, cur_block, res_sym))
+        }
+
+        ExprKind::Negate(ref child_expr) => {
+            let (cur_func, cur_block, child_sym) = gen_expr(child_expr, prog, cur_func, cur_block)?;
+            let res_sym = prog.add_local(&expr.ty, cur_func);
+            prog.funcs[cur_func].blocks[cur_block].add_statement(Negate {
+                output: res_sym.clone(),
+                child: child_sym,
             });
             Ok((cur_func, cur_block, res_sym))
         }

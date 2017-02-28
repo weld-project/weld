@@ -116,6 +116,35 @@ fn basic_program() {
     unsafe { weld_value_free(ret_value) };
 }
 
+fn negation() {
+    let code = "|| -1";
+    let conf = default_conf();
+
+    let ref input_data = 0;
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const i32 };
+    let result = unsafe { *data };
+    assert_eq!(result, -1 as i32);
+
+    unsafe { weld_value_free(ret_value) };
+}
+
+fn negated_arithmetic() {
+    // In our language, - has the lowest precedence so the paraens around -3 are mandatory.
+    let code = "|| 1+2*-3-4/-2";
+    let conf = default_conf();
+
+    let ref input_data = 0;
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const i32 };
+    let result = unsafe { *data };
+    assert_eq!(result, -3 as i32);
+
+    unsafe { weld_value_free(ret_value) };
+}
+
 fn f64_cast() {
     let code = "|| f64(40 + 2)";
     let conf = default_conf();
@@ -1048,6 +1077,8 @@ fn main() {
     let args: Vec<String> = env::args().collect();
     let tests: Vec<(&str, fn())> =
         vec![("basic_program", basic_program),
+             ("negation", negation),
+             ("negated_arithmetic", negated_arithmetic),
              ("f64_cast", f64_cast),
              ("i32_cast", i32_cast),
              ("program_with_args", program_with_args),

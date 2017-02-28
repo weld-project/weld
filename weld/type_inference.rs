@@ -154,6 +154,8 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             }
         }
 
+        Negate(ref c) => push_type(&mut expr.ty, &c.ty, "Negate"),
+
         Let { ref mut body, .. } => sync_types(&mut expr.ty, &mut body.ty, "Let body"),
 
         MakeVector { ref mut elems } => {

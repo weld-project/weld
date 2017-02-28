@@ -1101,6 +1101,22 @@ impl LlvmGenerator {
                             _ => weld_err!("Illegal type {} in BinOp", print_type(ty))?,
                         }
                     }
+                    Negate { ref output, ref child } => {
+                        let out_ty = try!(get_sym_ty(func, output));
+                        let ll_ty = try!(self.llvm_type(out_ty)).to_string();
+                        let child_tmp =
+                            try!(self.load_var(llvm_symbol(child).as_str(), &ll_ty, ctx));
+                        let bin_tmp = ctx.var_ids.next();
+                        let out_ty_str = try!(self.llvm_type(&out_ty)).to_string();
+                        let op_name = try!(llvm_binop(BinOpKind::Subtract, out_ty));
+                        ctx.code
+                            .add(format!("{} = {} {} 0, {}", bin_tmp, op_name, ll_ty, child_tmp));
+                        ctx.code.add(format!("store {} {}, {}* {}",
+                                             out_ty_str,
+                                             bin_tmp,
+                                             out_ty_str,
+                                             llvm_symbol(output)));
+                    }
                     Cast { ref output, ref new_ty, ref child } => {
                         let old_ty = try!(get_sym_ty(func, child));
                         let old_ll_ty = try!(self.llvm_type(&old_ty)).to_string();
