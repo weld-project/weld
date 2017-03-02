@@ -14,7 +14,7 @@ nvl::vec<int32_t> numpy_to_nvl_int_arr(PyObject* in) {
     int64_t dimension = (int64_t) PyArray_DIMS(inp)[0];
     nvl::vec<int32_t> t;
     t.size = dimension;
-    t.ptr = (int32_t*) PyArray_DATA(in);
+    t.ptr = (int32_t*) PyArray_DATA(inp);
     return t;
 }
 
@@ -24,10 +24,10 @@ nvl::vec<int32_t> numpy_to_nvl_int_arr(PyObject* in) {
 extern "C"
 nvl::vec<long> numpy_to_nvl_long_arr(PyObject* in) {
     PyArrayObject* inp = (PyArrayObject*) in;
-    int dimension = (int) inp->dimensions[0];
+    int64_t dimension = (int64_t) PyArray_DIMS(inp)[0];
     nvl::vec<long> t;
     t.size = dimension;
-    t.ptr = (long*)inp->data;
+    t.ptr = (long*) PyArray_DATA(inp);
     return t;
 }
 
@@ -37,10 +37,10 @@ nvl::vec<long> numpy_to_nvl_long_arr(PyObject* in) {
 extern "C"
 nvl::vec<double> numpy_to_nvl_double_arr(PyObject* in) {
     PyArrayObject* inp = (PyArrayObject*) in;
-    int dimension = (int) inp->dimensions[0];
+    int64_t dimension = (int64_t) PyArray_DIMS(inp);
     nvl::vec<double> t;
     t.size = dimension;
-    t.ptr = (double*)inp->data;
+    t.ptr = (double*) PyArray_DATA(inp);
     return t;
 }
 
@@ -49,7 +49,7 @@ nvl::vec<double> numpy_to_nvl_double_arr(PyObject* in) {
  */
 extern "C"
 nvl::vec<uint8_t> numpy_to_nvl_char_arr(PyObject* in) {
-    int dimension = (int) PyString_Size(in);
+    int64_t dimension = (int64_t) PyString_Size(in);
     nvl::vec<uint8_t> t;
     t.size = dimension;
     t.ptr = (uint8_t*) PyString_AsString(in);
@@ -62,10 +62,10 @@ nvl::vec<uint8_t> numpy_to_nvl_char_arr(PyObject* in) {
 extern "C"
 nvl::vec<bool> numpy_to_nvl_bool_arr(PyObject* in) {
     PyArrayObject* inp = (PyArrayObject*) in;
-    int dimension = (int) inp->dimensions[0];
+    int64_t dimension = (int64_t) PyArray_DIMS(inp)[0];
     nvl::vec<bool> t;
     t.size = dimension;
-    t.ptr = (bool*)inp->data;
+    t.ptr = (bool*) PyArray_DATA(inp);
     return t;
 }
 
@@ -75,11 +75,11 @@ nvl::vec<bool> numpy_to_nvl_bool_arr(PyObject* in) {
 extern "C"
 nvl::vec<nvl::vec<int> > numpy_to_nvl_int_arr_arr(PyObject* in) {
     PyArrayObject* inp = (PyArrayObject*) in;
-    int dimension = (int) inp->dimensions[0];
+    int64_t dimension = (int64_t) PyArray_DIMS(inp)[0];
     nvl::vec<nvl::vec<int> > t;
     t = nvl::make_vec<nvl::vec<int> >(dimension);
     for (int i = 0; i < t.size; i++) {
-        t.ptr[i].size = inp->dimensions[1];
+        t.ptr[i].size = (int64_t) PyArray_DIMS(inp)[1];
         t.ptr[i].ptr = (int *)(inp->data + i * inp->strides[0]);
     }
 
@@ -92,25 +92,25 @@ nvl::vec<nvl::vec<int> > numpy_to_nvl_int_arr_arr(PyObject* in) {
 extern "C"
 nvl::vec<nvl::vec<long> > numpy_to_nvl_long_arr_arr(PyObject* in) {
     PyArrayObject* inp = (PyArrayObject*) in;
-    int dimension = (int) inp->dimensions[0];
-    nvl::vec<nvl::vec<long> > t;
-    t = nvl::make_vec<nvl::vec<long> >(dimension);
-    if ((inp->dimensions[0] * 8) == inp->strides[1]) {
+    int64_t dimension1 = (int64_t) PyArray_DIMS(inp)[0];
+    int64_t dimension2 = (int64_t) PyArray_DIMS(inp)[1];
+    nvl::vec<nvl::vec<long> > t = nvl::make_vec<nvl::vec<long> >(dimension1);
+    if ((dimension1 * 8) == PyArray_STRIDES(inp)[1]) {
         // Matrix is transposed.
-        long *new_buffer = (long *) malloc(sizeof(long) * inp->dimensions[0] * inp->dimensions[1]);
+        long *new_buffer = (long *) malloc(sizeof(long) * dimension1 * dimension2);
         long *old_buffer = (long *) inp->data;
         for (int i = 0; i < t.size; i++) {
-            t.ptr[i].size = inp->dimensions[1];
-            for (int j = 0; j < inp->dimensions[1]; j++) {
-                *(new_buffer + j) = old_buffer[(j*inp->dimensions[0])+i];
+            t.ptr[i].size = dimension2;
+            for (int j = 0; j < dimension2; j++) {
+                *(new_buffer + j) = old_buffer[(j * dimension1) + i];
             }
             t.ptr[i].ptr = new_buffer;
-            new_buffer += inp->dimensions[1];
+            new_buffer += dimension2;
         }
     } else {
         for (int i = 0; i < t.size; i++) {
-            t.ptr[i].size = inp->dimensions[1];
-            t.ptr[i].ptr = (long *)(inp->data + i * inp->strides[0]);
+            t.ptr[i].size = dimension2;
+            t.ptr[i].ptr = (long *)(inp->data + i * PyArray_STRIDES(inp)[0]);
         }
     }
 
@@ -123,25 +123,25 @@ nvl::vec<nvl::vec<long> > numpy_to_nvl_long_arr_arr(PyObject* in) {
 extern "C"
 nvl::vec<nvl::vec<double> > numpy_to_nvl_double_arr_arr(PyObject* in) {
     PyArrayObject* inp = (PyArrayObject*) in;
-    int dimension = (int) inp->dimensions[0];
-    nvl::vec<nvl::vec<double> > t;
-    t = nvl::make_vec<nvl::vec<double> >(dimension);
-    if ((inp->dimensions[0] * 8) == inp->strides[1]) {
+    int64_t dimension1 = (int64_t) PyArray_DIMS(inp)[0];
+    int64_t dimension2 = (int64_t) PyArray_DIMS(inp)[1];
+    nvl::vec<nvl::vec<double> > t = nvl::make_vec<nvl::vec<double> >(dimension1);
+    if ((dimension1 * 8) == PyArray_STRIDES(inp)[1]) {
         // Matrix is transposed.
-        double *new_buffer = (double *) malloc(sizeof(double) * inp->dimensions[0] * inp->dimensions[1]);
+        double *new_buffer = (double *) malloc(sizeof(long) * dimension1 * dimension2);
         double *old_buffer = (double *) inp->data;
         for (int i = 0; i < t.size; i++) {
-            t.ptr[i].size = inp->dimensions[1];
-            for (int j = 0; j < inp->dimensions[1]; j++) {
-                *(new_buffer + j) = old_buffer[(j*inp->dimensions[0])+i];
+            t.ptr[i].size = dimension2;
+            for (int j = 0; j < dimension2; j++) {
+                *(new_buffer + j) = old_buffer[(j * dimension1) + i];
             }
             t.ptr[i].ptr = new_buffer;
-            new_buffer += inp->dimensions[1];
+            new_buffer += dimension2;
         }
     } else {
         for (int i = 0; i < t.size; i++) {
-            t.ptr[i].size = inp->dimensions[1];
-            t.ptr[i].ptr = (double *)(inp->data + i * inp->strides[0]);
+            t.ptr[i].size = dimension2;
+            t.ptr[i].ptr = (double *)(inp->data + i * PyArray_STRIDES(inp)[0]);
         }
     }
 
@@ -154,17 +154,18 @@ nvl::vec<nvl::vec<double> > numpy_to_nvl_double_arr_arr(PyObject* in) {
 extern "C"
 nvl::vec<nvl::vec<uint8_t> > numpy_to_nvl_char_arr_arr(PyObject* in) {
     PyArrayObject* inp = (PyArrayObject*) in;
-    int dimension = (int) inp->dimensions[0];
+    int64_t dimension = (int64_t) PyArray_DIMS(inp)[0];
     nvl::vec<nvl::vec<uint8_t> > t;
     t = nvl::make_vec<nvl::vec<uint8_t> >(dimension);
-    uint8_t* ptr = (uint8_t *) inp->data;
+    uint8_t* ptr = (uint8_t *) PyArray_DATA(inp);
+    uint8_t* data = ptr;
     for (int i = 0; i < t.size; i++) {
         t.ptr[i].size = strlen((char *) ptr);
         if ((int) inp->dimensions[1] < t.ptr[i].size) {
             t.ptr[i].size = (int) inp->dimensions[1];
         }
-        t.ptr[i].ptr = (uint8_t *)(inp->data + i * inp->strides[0]);
-        ptr += (inp->strides[0]);
+        t.ptr[i].ptr = (uint8_t *)(data + i * inp->strides[0]);
+        ptr += (PyArray_STRIDES(inp)[0]);
     }
 
     return t;
@@ -277,6 +278,7 @@ PyObject* nvl_to_numpy_char_arr_arr(nvl::vec< nvl::vec<uint8_t> > inp) {
 
     PyObject** ptr_array = (PyObject**) malloc(sizeof(PyObject*) * num_rows);
     _import_array();
+
     for (int i = 0; i < num_rows; i++) {
         int size = inp.ptr[i].size;
         PyObject* buffer = PyString_FromStringAndSize((const char*) inp.ptr[i].ptr, size);
