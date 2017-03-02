@@ -21,7 +21,7 @@ class DataFrameNVL:
         self.predicates = predicates
 
     def __getitem__(self, key):
-         """Summary
+        """Summary
 
         Args:
             key (TYPE): Description
@@ -136,7 +136,7 @@ class DataFrameNVL:
         return list(column_names)
 
     def groupby(self, grouping_column_name):
-         """Summary
+        """Summary
 
         Args:
             grouping_column_name (TYPE): Description
