@@ -141,9 +141,17 @@ class NumPyDecoder(NvlObjectDecoder):
             data = weld.weld_value_data(obj)
             result = ctypes.cast(data, ctypes.POINTER(c_int)).contents.value
             return result
-        if restype == NvlDouble():
+        elif restype == NvlLong():
+            data = weld.weld_value_data(obj)
+            result = ctypes.cast(data, ctypes.POINTER(c_long)).contents.value
+            return result
+        elif restype == NvlFloat():
             data = weld.weld_value_data(obj)
             result = ctypes.cast(data, ctypes.POINTER(c_float)).contents.value
+            return float(result)
+        elif restype == NvlDouble():
+            data = weld.weld_value_data(obj)
+            result = ctypes.cast(data, ctypes.POINTER(c_double)).contents.value
             return float(result)
 
         # Obj is a NvlVec(NvlInt()).cTypeClass, which is a subclass of

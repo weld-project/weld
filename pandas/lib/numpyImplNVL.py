@@ -87,7 +87,7 @@ def aggr(array, op, initial_value, type):
     return nvl_obj
 
 
-def dot(matrix, vector, type):
+def dot(matrix, vector, matrix_type, vector_type):
     """
     Computes the dot product between a matrix and a vector.
 
@@ -112,12 +112,12 @@ def dot(matrix, vector, type):
     nvl_template = """
        map(
          %(matrix)s,
-         |row: vec[%(type)s]|
+         |row: vec[%(matrix_type)s]|
            result(
              for(
                map(
                  zip(row, %(vector)s),
-                 |ele: {%(type)s, %(type)s}| f64(ele.$0 * ele.$1)
+                 |ele: {%(matrix_type)s, %(vector_type)s}| f64(ele.$0 * %(matrix_type)s(ele.$1))
                ),
                merger[f64,+],
                |b, i, e| merge(b, e)
@@ -126,7 +126,7 @@ def dot(matrix, vector, type):
        )
     """
     nvl_obj.nvl = nvl_template % {"matrix": matrix_str, "vector": vector_str,
-                                  "type": type}
+                                  "matrix_type": matrix_type, "vector_type": vector_type}
     return nvl_obj
 
 

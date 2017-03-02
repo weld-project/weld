@@ -73,19 +73,27 @@ def dot(matrix, vector):
         matrix (TYPE): Description
         vector (TYPE): Description
     """
-    nvl_type = None
+    matrix_nvl_type = None
+    vector_nvl_type = None
+
     if isinstance(matrix, LazyOpResult):
+        matrix_nvl_type = matrix.nvl_type
         matrix = matrix.expr
+    elif isinstance(matrix, np.ndarray):
+        matrix_nvl_type = numpyImplNVL.numpy_to_nvl_type_mapping[str(matrix.dtype)]
+
     if isinstance(vector, LazyOpResult):
-        nvl_type = vector.nvl_type
+        vector_nvl_type = vector.nvl_type
         vector = vector.expr
     elif isinstance(vector, np.ndarray):
-        nvl_type = numpyImplNVL.numpy_to_nvl_type_mapping[str(vector.dtype)]
+        vector_nvl_type = numpyImplNVL.numpy_to_nvl_type_mapping[str(vector.dtype)]
+
     return NumpyArrayNVL(
         numpyImplNVL.dot(
             matrix,
             vector,
-            nvl_type),
+            matrix_nvl_type,
+            vector_nvl_type),
         NvlDouble())
 
 

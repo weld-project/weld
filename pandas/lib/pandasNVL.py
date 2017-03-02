@@ -110,8 +110,6 @@ class DataFrameNVL:
                 nvl_type = pandasImplNVL.numpy_to_nvl_type_mapping[
                     str(self.df.values.dtype)]
                 dim = self.df.values.ndim
-                for i in xrange(dim - 1):
-                    nvl_type = NvlVec(nvl_type)
                 return LazyOpResult(
                     pandasImplNVL.filter(
                         self.df.values,
@@ -119,7 +117,7 @@ class DataFrameNVL:
                         nvl_type
                     ),
                     nvl_type,
-                    1
+                    dim
                 )
         raise Exception("Attr %s does not exist" % key)
 
