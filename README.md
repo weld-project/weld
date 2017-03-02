@@ -34,7 +34,28 @@ $ cargo build
 
 ### Ubuntu Installation
 
-Coming soon!
+To install LLVM on ubuntu :
+
+```bash
+$ sudo apt install llvm-3.8
+$ export PATH=$PATH:/usr/local/bin
+```
+
+Weld's dependencies require `llvm-config`, so you may need to create a symbolic link so the correct `llvm-config` is picked up:
+
+```bash
+$ ln -s /usr/bin/llvm-config-3.8 /usr/local/bin/llvm-config
+```
+
+To make sure this worked correctly, run `llvm-config --version`. You should see `3.8.x`.
+
+With LLVM and Rust installed, you can build Weld. Clone this repository and build using `cargo`:
+
+```bash
+$ git clone https://www.github.com/weld-project/weld
+$ cd weld/
+$ cargo build
+```
 
 ## Testing
 
