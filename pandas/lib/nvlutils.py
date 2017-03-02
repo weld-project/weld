@@ -1,3 +1,5 @@
+"""Summary
+"""
 #
 # Utilities for the NVL API.
 #
@@ -6,9 +8,12 @@
 import sys
 
 def to_shared_lib(name):
-  """
-  Returns the name with the platform dependent shared library extension.
-  """
+    """
+    Returns the name with the platform dependent shared library extension.
+
+    Args:
+        name (TYPE): Description
+    """
   if sys.platform.startswith('linux'):
     return name + ".so"
   elif sys.platform.startswith('darwin'):

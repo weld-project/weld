@@ -1,3 +1,10 @@
+"""Contains implementations for each ported operation in NumPy.
+
+Attributes:
+    decoder_ (TYPE): Description
+    encoder_ (TYPE): Description
+    norm_factor_id_ (int): Unique IDs given to norm factor literals
+"""
 from utils import *
 from nvlobject import *
 
@@ -8,6 +15,14 @@ decoder_ = NumPyDecoder()
 def div(array, other, type):
     """
     Normalizes the passed-in array by the passed in quantity.
+
+    Args:
+        array (NvlObject / Numpy.ndarray): Input array to normalize
+        other (NvlObject / float): Normalization factor
+        type (NvlType): Type of each element in the input array
+
+    Returns:
+        A NvlObject representing this computation
     """
     nvl_obj = NvlObject(encoder_, decoder_)
 
@@ -41,7 +56,17 @@ def div(array, other, type):
 
 def aggr(array, op, initial_value, type):
     """
-    Returns sum of elements in the array.
+    Computes the aggregate of elements in the array.
+
+    Args:
+        array (NvlObject / Numpy.ndarray): Input array to aggregate
+        op (str): Op string used to aggregate the array (+ / *)
+        initial_value (int): Initial value for aggregation
+        type (NvlType): Type of each element in the input array
+
+
+    Returns:
+        A NvlObject representing this computation
     """
     nvl_obj = NvlObject(encoder_, decoder_)
 
@@ -65,6 +90,14 @@ def aggr(array, op, initial_value, type):
 def dot(matrix, vector, type):
     """
     Computes the dot product between a matrix and a vector.
+
+    Args:
+        matrix (NvlObject / Numpy.ndarray): 2-d input matrix
+        vector (NvlObject / Numpy.ndarray): 1-d input vector
+        type (NvlType): Type of each element in the input matrix and vector
+
+    Returns:
+        A NvlObject representing this computation
     """
     nvl_obj = NvlObject(encoder_, decoder_)
 
@@ -98,6 +131,13 @@ def dot(matrix, vector, type):
 def exp(array, type):
     """
     Computes the per-element exponenet of the passed-in array.
+
+    Args:
+        array (NvlObject / Numpy.ndarray): Input array
+        type (NvlType): Type of each element in the input array
+
+    Returns:
+        A NvlObject representing this computation
     """
     nvl_obj = NvlObject(encoder_, decoder_)
 

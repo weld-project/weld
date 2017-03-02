@@ -1,3 +1,9 @@
+"""Contains implementations for each ported operation in Pandas.
+
+Attributes:
+    decoder_ (NumPyEncoder): Description
+    encoder_ (NumPyDecoder): Description
+"""
 from utils import *
 from nvlobject import *
 
@@ -8,6 +14,13 @@ decoder_ = NumPyDecoder()
 def unique(array, type):
     """
     Returns a new array-of-arrays with all duplicate arrays removed.
+
+    Args:
+        array (NvlObject / Numpy.ndarray): Input array
+        type (NvlType): Type of each element in the input array
+
+    Returns:
+        A NvlObject representing this computation
     """
     nvl_obj = NvlObject(encoder_, decoder_)
 
@@ -39,6 +52,15 @@ def unique(array, type):
 def aggr(array, op, initial_value, type):
     """
     Returns sum of elements in the array.
+
+    Args:
+        array (NvlObject / Numpy.ndarray): Input array
+        op (str): Op string used to aggregate the array (+ / *)
+        initial_value (int): Initial value for aggregation
+        type (NvlType): Type of each element in the input array
+
+    Returns:
+        A NvlObject representing this computation
     """
     nvl_obj = NvlObject(encoder_, decoder_)
 
@@ -63,6 +85,15 @@ def mask(array, predicates, new_value, type):
     """
     Returns a new array, with each element in the original array satisfying the
     passed-in predicate set to `new_value`
+
+    Args:
+        array (NvlObject / Numpy.ndarray): Input array
+        predicates (NvlObject / Numpy.ndarray<bool>): Predicate set
+        new_value (NvlObject / Numpy.ndarray / str): mask value
+        type (NvlType): Type of each element in the input array
+
+    Returns:
+        A NvlObject representing this computation
     """
     nvl_obj = NvlObject(encoder_, decoder_)
 
@@ -97,6 +128,14 @@ def filter(array, predicates, type):
     """
     Returns a new array, with each element in the original array satisfying the
     passed-in predicate set to `new_value`
+
+    Args:
+        array (NvlObject / Numpy.ndarray): Input array
+        predicates (NvlObject / Numpy.ndarray<bool>): Predicate set
+        type (NvlType): Type of each element in the input array
+
+    Returns:
+        A NvlObject representing this computation
     """
     nvl_obj = NvlObject(encoder_, decoder_)
 
@@ -126,6 +165,15 @@ def filter(array, predicates, type):
 def element_wise_op(array, other, op, type):
     """
     Operation of series and other, element-wise (binary operator add)
+
+    Args:
+        array (NvlObject / Numpy.ndarray): Input array
+        other (NvlObject / Numpy.ndarray): Second Input array
+        op (str): Op string used to compute element-wise operation (+ / *) 
+        type (NvlType): Type of each element in the input array
+
+    Returns:
+        A NvlObject representing this computation
     """
     nvl_obj = NvlObject(encoder_, decoder_)
 
@@ -153,6 +201,15 @@ def compare(array, other, op, type_str):
     """
     Performs passed-in comparison op between every element in the passed-in array and other,
     and returns an array of booleans.
+
+    Args:
+        array (NvlObject / Numpy.ndarray): Input array
+        other (NvlObject / Numpy.ndarray): Second input array
+        op (str): Op string used for element-wise comparison (== >= <= !=)
+        type (NvlType): Type of each element in the input array
+
+    Returns:
+        A NvlObject representing this computation
     """
     nvl_obj = NvlObject(encoder_, decoder_)
 
@@ -185,6 +242,15 @@ def slice(array, start, size, type):
     """
     Returns a new array-of-arrays with each array truncated, starting at
     index `start` for `length` characters.
+
+    Args:
+        array (NvlObject / Numpy.ndarray): Input array
+        start (int): starting index
+        size (int): length to truncate at
+        type (NvlType): Type of each element in the input array
+
+    Returns:
+        A NvlObject representing this computation
     """
     nvl_obj = NvlObject(encoder_, decoder_)
 
@@ -208,6 +274,13 @@ def count(array, type):
   """
   Return number of non-NA/null observations in the Series
   TODO : Filter out NaN's once Weld supports NaN's
+
+  Args:
+      array (NvlObject / Numpy.ndarray): Input array
+      type (NvlType): Type of each element in the input array
+
+  Returns:
+      A NvlObject representing this computation
   """
   nvl_obj = NvlObject(encoder_, decoder_)
 
@@ -228,6 +301,14 @@ def groupby_sum(columns, column_types, grouping_column):
   """
   Groups the given columns by the corresponding grouping column
   value, and aggregate by summing values.
+
+  Args:
+      columns (List<NvlObject>): List of columns as NvlObjects
+      column_types (List<str>): List of each column data type
+      grouping_column (NvlObject): Column to group rest of columns by
+
+  Returns:
+        A NvlObject representing this computation
   """
   nvl_obj = NvlObject(encoder_, decoder_)
 
@@ -277,6 +358,14 @@ def get_column(columns, column_types, index):
   """
   Get column corresponding to passed-in index from ptr returned
   by groupBySum.
+
+  Args:
+      columns (List<NvlObject>): List of columns as NvlObjects
+      column_types (List<str>): List of each column data type
+      index (int): index of selected column
+
+  Returns:
+      A NvlObject representing this computation
   """
   nvl_obj = NvlObject(encoder_, decoder_)
 
@@ -289,7 +378,7 @@ def get_column(columns, column_types, index):
   """
      map(
        %(columns)s,
-       (elem: %(type)s) => elem.%(index)s
+       |elem: %(type)s| => elem.%(index)s
      )
   """
 

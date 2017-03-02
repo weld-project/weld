@@ -1,3 +1,5 @@
+"""Summary
+"""
 #
 # NvlObject
 #
@@ -25,12 +27,24 @@ class NvlObjectEncoder(object):
         """
         Encodes an object. All objects encodable by this encoder should return
         a valid NVL type using pyToNvlType.
+
+        Args:
+            obj (TYPE): Description
+
+        Raises:
+            NotImplementedError: Description
         """
         raise NotImplementedError
 
     def pyToNvlType(obj):
         """
         Returns an NvlType corresponding to a Python object
+
+        Args:
+            obj (TYPE): Description
+
+        Raises:
+            NotImplementedError: Description
         """
         raise NotImplementedError
 
@@ -40,6 +54,18 @@ class NvlObjectDecoder(object):
     is used to marshall objects from NVL types to Python types
     """
     def decode(obj, restype):
+        """Summary
+
+        Args:
+            obj (TYPE): Description
+            restype (TYPE): Description
+
+        Returns:
+            TYPE: Description
+
+        Raises:
+            NotImplementedError: Description
+        """
         raise NotImplementedError
 
 class NvlObject(object):
@@ -67,6 +93,16 @@ class NvlObject(object):
     5. Run the decoder on the return value. See NvlObjectDecoder for details on how
     this works.
     6. Return the decoded value.
+
+    Attributes:
+        argtypes (dict): Description
+        constants (list): Description
+        context (dict): Description
+        dataType (TYPE): Description
+        decoder (TYPE): Description
+        encoder (TYPE): Description
+        nvl (str): Description
+        objectId (TYPE): Description
     """
 
     # Counter for assigning variable names
@@ -74,7 +110,12 @@ class NvlObject(object):
     _obj_id = 100
 
     def __init__(self, encoder, decoder):
+        """Summary
 
+        Args:
+            encoder (TYPE): Description
+            decoder (TYPE): Description
+        """
         self.encoder = encoder
         self.decoder = decoder
 
@@ -96,6 +137,11 @@ class NvlObject(object):
         self.argtypes = {}
 
     def __repr__(self):
+        """Summary
+
+        Returns:
+            TYPE: Description
+        """
         return self.nvl + " " + str(self.context)
 
     def update(self, value, argtype=None):
@@ -103,6 +149,11 @@ class NvlObject(object):
         Update this context. if value is another context,
         the names from that context are added into this one.
         Otherwise, a new name is assigned and returned.
+
+        Args:
+            value (TYPE): Description
+            argtype (None, optional): Description
+
         """
         if isinstance(value, NvlObject):
             self.context.update(value.context)
@@ -118,6 +169,13 @@ class NvlObject(object):
     def _compileAndLoadRuntimeSO(self, text, verbose):
         """
         Load the runtime by compiling the NVL text and loading it as a dynamic library.
+
+        Args:
+            text (TYPE): Description
+            verbose (TYPE): Description
+
+        Raises:
+            RuntimeError: Description
         """
         code = ctypes.c_char_p(text)
         conf = weld.weld_conf_new()
@@ -126,6 +184,11 @@ class NvlObject(object):
         return module
 
     def toNvlFunc(self):
+        """Summary
+
+        Returns:
+            TYPE: Description
+        """
         names = self.context.keys()
         names.sort()
         for name in names:
@@ -138,6 +201,17 @@ class NvlObject(object):
         return text
 
     def evaluate(self, restype, verbose=True, decode=True):
+        """Summary
+
+        Args:
+            restype (TYPE): Description
+            verbose (bool, optional): Description
+            decode (bool, optional): Description
+
+        Returns:
+            TYPE: Description
+        """
+
         names = self.context.keys()
         arg_strs = []
         for name in names:
@@ -150,7 +224,17 @@ class NvlObject(object):
 
         # Returns a wrapped ctypes Structure
         def args_factory(encoded):
+            """Summary
+
+            Args:
+                encoded (TYPE): Description
+
+            Returns:
+                TYPE: Description
+            """
             class Args(ctypes.Structure):
+                """Summary
+                """
                 _fields_ = [e for e in encoded]
             return Args
 

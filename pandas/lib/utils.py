@@ -1,3 +1,8 @@
+"""Summary
+
+Attributes:
+    numpy_to_nvl_type_mapping (TYPE): Description
+"""
 from nvlobject import *
 
 
@@ -11,12 +16,31 @@ numpy_to_nvl_type_mapping = {
 }
 
 class NumPyEncoder(NvlObjectEncoder):
+    """Summary
+
+    Attributes:
+        utils (TYPE): Description
+    """
+
     def __init__(self):
+        """Summary
+        """        
         subprocess.call("cd $PANDAS_NVL_HOME; make convertor >/dev/null 2>/dev/null", shell=True)
         pandasNVLDir = os.environ.get("PANDAS_NVL_HOME")
         self.utils = ctypes.PyDLL(utils.to_shared_lib(os.path.join(pandasNVLDir, "numpy_nvl_convertor")))
 
     def pyToNvlType(self, obj):
+        """Summary
+
+        Args:
+            obj (TYPE): Description
+
+        Returns:
+            TYPE: Description
+
+        Raises:
+            Exception: Description
+        """
         if isinstance(obj, np.ndarray):
             dtype = str(obj.dtype)
             if dtype == 'int32':
@@ -40,6 +64,17 @@ class NumPyEncoder(NvlObjectEncoder):
         return base
 
     def encode(self, obj):
+        """Summary
+
+        Args:
+            obj (TYPE): Description
+
+        Returns:
+            TYPE: Description
+
+        Raises:
+            Exception: Description
+        """
         if isinstance(obj, np.ndarray):
             if obj.ndim == 1 and obj.dtype == 'int32':
                 numpy_to_nvl = self.utils.numpy_to_nvl_int_arr
@@ -68,12 +103,32 @@ class NumPyEncoder(NvlObjectEncoder):
         return nvl_vec
 
 class NumPyDecoder(NvlObjectDecoder):
+    """Summary
+
+    Attributes:
+        utils (TYPE): Description
+    """
+
     def __init__(self):
+        """Summary
+        """
         subprocess.call("cd $PANDAS_NVL_HOME; make convertor >/dev/null 2>/dev/null", shell=True)
         pandasNVLDir = os.environ.get("PANDAS_NVL_HOME")
         self.utils = ctypes.PyDLL(utils.to_shared_lib(os.path.join(pandasNVLDir, "numpy_nvl_convertor")))
 
     def decode(self, obj, restype):
+        """Summary
+
+        Args:
+            obj (TYPE): Description
+            restype (TYPE): Description
+
+        Returns:
+            TYPE: Description
+
+        Raises:
+            Exception: Description
+        """
         if restype == NvlInt():
             data = weld.weld_value_data(obj)
             result = ctypes.cast(data, ctypes.POINTER(c_int)).contents.value
