@@ -28,23 +28,7 @@ For pedagogical reasons our library will have some limitations. First, we will o
 
 ## Prerequisites
 
-This tutorial assumes you have a Weld intallation, Rust, and a familiarity of Python. Here's a quick setup guide:
-
-[Install Rust](https://www.rustup.rs/):
-
-```
-curl https://sh.rustup.rs -sSf | sh
-```
-
-The easiest way to install Weld is by cloning the git repository:
-
-```bash
-$ git clone https://www.github.com/weld-project/weld
-$ cd weld
-$ export WELD_HOME=`pwd` # Put this in your .rc file!
-$ cargo build # Build
-$ cargo test # Run tests
-```
+This tutorial assumes you have a Weld installation and a familiarity of Python. See the [README](https://github.com/weld-project/weld/blob/master/README.md) for instructions on how to install Weld.
 
 ## Setting up the Project
 
