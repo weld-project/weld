@@ -13,7 +13,7 @@
 
 ; Returns a pointer to builder data for index i (generally, i is the thread ID).
 define %$NAME.vm.bld @$NAME.vm.bld.getPtrIndexed(%$NAME.vm.bld %bldPtr, i32 %i) alwaysinline {
-  %mergerPtr = getelementptr %$NAME* null, i32 1
+  %mergerPtr = getelementptr %$NAME, %$NAME* null, i32 1
   %mergerSize = ptrtoint %$NAME* %mergerPtr to i64
   %asPtr = bitcast %$NAME.vm.bld %bldPtr to i8*
   %rawPtr = call i8* @get_merger_at_index(i8* %asPtr, i64 %mergerSize, i32 %i)
@@ -25,7 +25,7 @@ define %$NAME.vm.bld @$NAME.vm.bld.getPtrIndexed(%$NAME.vm.bld %bldPtr, i32 %i) 
 define %$NAME.vm.bld @$NAME.vm.bld.new(%$NAME %vec) {
   %nworkers = call i32 @get_nworkers()
   %runId = call i64 @get_runid()
-  %structSizePtr = getelementptr %$NAME* null, i32 1
+  %structSizePtr = getelementptr %$NAME, %$NAME* null, i32 1
   %structSize = ptrtoint %$NAME* %structSizePtr to i64
 
   %bldPtr = call i8* @new_merger(i64 %runId, i64 %structSize, i32 %nworkers)
@@ -61,7 +61,7 @@ done:
 ; and then store the resulting value back.
 define i8* @$NAME.vm.bld.merge_ptr(%$NAME.vm.bld %bldPtr, i64 %index, i32 %workerId) {
   %bldPtrLocal = call %$NAME* @$NAME.vm.bld.getPtrIndexed(%$NAME.vm.bld %bldPtr, i32 %workerId)
-  %vec = load %$NAME* %bldPtrLocal
+  %vec = load %$NAME, %$NAME* %bldPtrLocal
   %elem = call $ELEM* @$NAME.at(%$NAME %vec, i64 %index)
   %elemPtrRaw = bitcast $ELEM* %elem to i8*
   ret i8* %elemPtrRaw
@@ -69,7 +69,7 @@ define i8* @$NAME.vm.bld.merge_ptr(%$NAME.vm.bld %bldPtr, i64 %index, i32 %worke
 
 ; Initialize and return a new vector with the given size.
 define %$NAME @$NAME.new(i64 %size) {
-  %elemSizePtr = getelementptr $ELEM* null, i32 1
+  %elemSizePtr = getelementptr $ELEM, $ELEM* null, i32 1
   %elemSize = ptrtoint $ELEM* %elemSizePtr to i64
   %allocSize = mul i64 %elemSize, %size
   %runId = call i64 @get_runid()
@@ -86,7 +86,7 @@ define void @$NAME.zero(%$NAME %v) {
   %size = extractvalue %$NAME %v, 1
   %bytes = bitcast $ELEM* %elements to i8*
 
-  %elemSizePtr = getelementptr $ELEM* null, i32 1
+  %elemSizePtr = getelementptr $ELEM, $ELEM* null, i32 1
   %elemSize = ptrtoint $ELEM* %elemSizePtr to i64
   %allocSize = mul i64 %elemSize, %size
   call void @llvm.memset.p0i8.i64(i8* %bytes, i8 0, i64 %allocSize, i32 8, i1 0)
@@ -97,7 +97,7 @@ define void @$NAME.zero(%$NAME %v) {
 define %$NAME @$NAME.clone(%$NAME %vec) {
   %elements = extractvalue %$NAME %vec, 0
   %size = extractvalue %$NAME %vec, 1
-  %entrySizePtr = getelementptr $ELEM* null, i32 1
+  %entrySizePtr = getelementptr $ELEM, $ELEM* null, i32 1
   %entrySize = ptrtoint $ELEM* %entrySizePtr to i64
   %allocSize = mul i64 %entrySize, %size
   %bytes = bitcast $ELEM* %elements to i8*
@@ -118,7 +118,7 @@ define %$NAME @$NAME.slice(%$NAME %vec, i64 %index, i64 %size) {
   %finSize = select i1 %sgtr, i64 %remSize, i64 %size
 
   %elements = extractvalue %$NAME %vec, 0
-  %newElements = getelementptr $ELEM* %elements, i64 %index
+  %newElements = getelementptr $ELEM, $ELEM* %elements, i64 %index
   %1 = insertvalue %$NAME undef, $ELEM* %newElements, 0
   %2 = insertvalue %$NAME %1, i64 %finSize, 1
 
@@ -127,7 +127,7 @@ define %$NAME @$NAME.slice(%$NAME %vec, i64 %index, i64 %size) {
 
 ; Initialize and return a new builder, with the given initial capacity.
 define %$NAME.bld @$NAME.bld.new(i64 %capacity, %work_t* %cur.work) {
-  %elemSizePtr = getelementptr $ELEM* null, i32 1
+  %elemSizePtr = getelementptr $ELEM, $ELEM* null, i32 1
   %elemSize = ptrtoint $ELEM* %elemSizePtr to i64
   %newVb = call i8* @new_vb(i64 %elemSize, i64 %capacity)
   call void @$NAME.bld.newPiece(%$NAME.bld %newVb, %work_t* %cur.work)
@@ -143,7 +143,7 @@ define void @$NAME.bld.newPiece(%$NAME.bld %bldPtr, %work_t* %cur.work) {
 define %$NAME.bld @$NAME.bld.merge(%$NAME.bld %bldPtr, $ELEM %value, i32 %myId) {
 entry:
   %curPiecePtr = call %vb.vp* @cur_piece(i8* %bldPtr, i32 %myId)
-  %curPiece = load %vb.vp* %curPiecePtr
+  %curPiece = load %vb.vp, %vb.vp* %curPiecePtr
   %size = extractvalue %vb.vp %curPiece, 1
   %capacity = extractvalue %vb.vp %curPiece, 2
   %full = icmp eq i64 %size, %capacity
@@ -151,7 +151,7 @@ entry:
 
 onFull:
   %newCapacity = mul i64 %capacity, 2
-  %elemSizePtr = getelementptr $ELEM* null, i32 1
+  %elemSizePtr = getelementptr $ELEM, $ELEM* null, i32 1
   %elemSize = ptrtoint $ELEM* %elemSizePtr to i64
   %bytes = extractvalue %vb.vp %curPiece, 0
   %allocSize = mul i64 %elemSize, %newCapacity
@@ -165,7 +165,7 @@ finish:
   %curPiece3 = phi %vb.vp [ %curPiece, %entry ], [ %curPiece2, %onFull ]
   %bytes1 = extractvalue %vb.vp %curPiece3, 0
   %elements = bitcast i8* %bytes1 to $ELEM*
-  %insertPtr = getelementptr $ELEM* %elements, i64 %size
+  %insertPtr = getelementptr $ELEM, $ELEM* %elements, i64 %size
   store $ELEM %value, $ELEM* %insertPtr
   %newSize = add i64 %size, 1
   %curPiece4 = insertvalue %vb.vp %curPiece3, i64 %newSize, 1
@@ -193,7 +193,7 @@ define i64 @$NAME.size(%$NAME %vec) {
 ; Get a pointer to the index'th element.
 define $ELEM* @$NAME.at(%$NAME %vec, i64 %index) {
   %elements = extractvalue %$NAME %vec, 0
-  %ptr = getelementptr $ELEM* %elements, i64 %index
+  %ptr = getelementptr $ELEM, $ELEM* %elements, i64 %index
   ret $ELEM* %ptr
 }
 
@@ -201,7 +201,7 @@ define $ELEM* @$NAME.at(%$NAME %vec, i64 %index) {
 ; Get the length of a VecBuilder.
 define i64 @$NAME.bld.size(%$NAME.bld %bldPtr, i32 %myId) {
   %curPiecePtr = call %vb.vp* @cur_piece(i8* %bldPtr, i32 %myId)
-  %curPiece = load %vb.vp* %curPiecePtr
+  %curPiece = load %vb.vp, %vb.vp* %curPiecePtr
   %size = extractvalue %vb.vp %curPiece, 1
   ret i64 %size
 }
@@ -209,10 +209,10 @@ define i64 @$NAME.bld.size(%$NAME.bld %bldPtr, i32 %myId) {
 ; Get a pointer to the index'th element of a VecBuilder.
 define $ELEM* @$NAME.bld.at(%$NAME.bld %bldPtr, i64 %index, i32 %myId) {
   %curPiecePtr = call %vb.vp* @cur_piece(i8* %bldPtr, i32 %myId)
-  %curPiece = load %vb.vp* %curPiecePtr
+  %curPiece = load %vb.vp, %vb.vp* %curPiecePtr
   %bytes = extractvalue %vb.vp %curPiece, 0
   %elements = bitcast i8* %bytes to $ELEM*
-  %ptr = getelementptr $ELEM* %elements, i64 %index
+  %ptr = getelementptr $ELEM, $ELEM* %elements, i64 %index
   ret $ELEM* %ptr
 }
 
@@ -228,8 +228,8 @@ entry:
 body:
   %i = phi i64 [ 0, %entry ], [ %i2, %body ]
   %prevHash = phi i64 [ 0, %entry ], [ %newHash, %body ]
-  %ptr = getelementptr $ELEM* %elements, i64 %i
-  %elem = load $ELEM* %ptr
+  %ptr = getelementptr $ELEM, $ELEM* %elements, i64 %i
+  %elem = load $ELEM, $ELEM* %ptr
   %elemHash = call i64 $ELEM_PREFIX.hash($ELEM %elem)
   %newHash = call i64 @hash_combine(i64 %prevHash, i64 %elemHash)
   %i2 = add i64 %i, 1
@@ -265,10 +265,10 @@ entry:
 
 body:
   %i = phi i64 [ 0, %entry ], [ %i2, %body2 ]
-  %ptrA = getelementptr $ELEM* %elemsA, i64 %i
-  %ptrB = getelementptr $ELEM* %elemsB, i64 %i
-  %elemA = load $ELEM* %ptrA
-  %elemB = load $ELEM* %ptrB
+  %ptrA = getelementptr $ELEM, $ELEM* %elemsA, i64 %i
+  %ptrB = getelementptr $ELEM, $ELEM* %elemsB, i64 %i
+  %elemA = load $ELEM, $ELEM* %ptrA
+  %elemB = load $ELEM, $ELEM* %ptrB
   %cmp = call i32 $ELEM_PREFIX.cmp($ELEM %elemA, $ELEM %elemB)
   %ne = icmp ne i32 %cmp, 0
   br i1 %ne, label %return, label %body2

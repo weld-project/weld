@@ -22,7 +22,7 @@ mod tests;
 
 // Helper objects to make sure we only initialize once
 static ONCE: Once = ONCE_INIT;
-static mut initialize_failed: bool = false;
+static mut INITIALIZE_FAILED: bool = false;
 
 /// Error type returned by easy_ll.
 #[derive(Debug)]
@@ -119,7 +119,7 @@ pub fn compile_module(code: &str) -> Result<CompiledModule, LlvmError> {
     unsafe {
         // Initialize LLVM
         ONCE.call_once(|| initialize());
-        if initialize_failed {
+        if INITIALIZE_FAILED {
             return Err(LlvmError::new("LLVM initialization failed"));
         }
 
@@ -154,20 +154,20 @@ pub fn compile_module(code: &str) -> Result<CompiledModule, LlvmError> {
     }
 }
 
-/// Initialize LLVM or save an error message in `initialize_failed` if this does not work.
+/// Initialize LLVM or save an error message in `INITIALIZE_FAILED` if this does not work.
 /// We call this function only once in cases some steps are expensive.
 fn initialize() {
     unsafe {
         if llvm::target::LLVM_InitializeNativeTarget() != 0 {
-            initialize_failed = true;
+            INITIALIZE_FAILED = true;
             return;
         }
         if llvm::target::LLVM_InitializeNativeAsmPrinter() != 0 {
-            initialize_failed = true;
+            INITIALIZE_FAILED = true;
             return;
         }
         if llvm::target::LLVM_InitializeNativeAsmParser() != 0 {
-            initialize_failed = true;
+            INITIALIZE_FAILED = true;
             return;
         }
         llvm::execution_engine::LLVMLinkInMCJIT();
