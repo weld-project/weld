@@ -27,7 +27,7 @@ class LazyOpResult:
             evaluated
         nvl_type (NvlType): Type of the output object
     """
-    
+
     def __init__(self, expr, nvl_type, dim):
         """Summary
 
@@ -51,5 +51,10 @@ class LazyOpResult:
             TYPE: Description
         """
         if isinstance(self.expr, NvlObject):
-            return self.expr.evaluate(to_nvl_type(self.nvl_type, self.dim), verbose, decode)
+            return self.expr.evaluate(
+                to_nvl_type(
+                    self.nvl_type,
+                    self.dim),
+                verbose,
+                decode)
         return self.expr

@@ -18,6 +18,8 @@ from nvltypes import *
 import nvlutils as utils
 
 import weld
+
+
 class NvlObjectEncoder(object):
     """
     An abstract class that must be overwridden by libraries. This class
@@ -48,6 +50,7 @@ class NvlObjectEncoder(object):
         """
         raise NotImplementedError
 
+
 class NvlObjectDecoder(object):
     """
     An abstract class that must be overwridden by libraries. This class
@@ -67,6 +70,7 @@ class NvlObjectDecoder(object):
             NotImplementedError: Description
         """
         raise NotImplementedError
+
 
 class NvlObject(object):
     """
@@ -189,15 +193,17 @@ class NvlObject(object):
         Returns:
             TYPE: Description
         """
-        names = self.context.keys()
-        names.sort()
+        names = sorted(self.context.keys())
         for name in names:
             if name in self.argtypes:
-                arg_strs.append("{0}: {1}".format(str(name), self.argtypes[name]))
+                arg_strs.append("{0}: {1}".format(
+                    str(name), self.argtypes[name]))
             else:
-                arg_strs.append("{0}: {1}".format(str(name), str(self.encoder.pyToNvlType(self.context[name]))))
+                arg_strs.append("{0}: {1}".format(str(name), str(
+                    self.encoder.pyToNvlType(self.context[name]))))
         header = "|" + ", ".join(arg_strs) + "|"
-        text = header + " => " + "\n".join(list(set(self.constants))) + "\n" + self.nvl
+        text = header + " => " + \
+            "\n".join(list(set(self.constants))) + "\n" + self.nvl
         return text
 
     def evaluate(self, restype, verbose=True, decode=True):
@@ -216,9 +222,11 @@ class NvlObject(object):
         arg_strs = []
         for name in names:
             if name in self.argtypes:
-                arg_strs.append("{0}: {1}".format(str(name), self.argtypes[name]))
+                arg_strs.append("{0}: {1}".format(
+                    str(name), self.argtypes[name]))
             else:
-                arg_strs.append("{0}: {1}".format(str(name), str(self.encoder.pyToNvlType(self.context[name]))))
+                arg_strs.append("{0}: {1}".format(str(name), str(
+                    self.encoder.pyToNvlType(self.context[name]))))
         header = "|" + ", ".join(arg_strs) + "|"
         text = header + "\n".join(list(set(self.constants))) + "\n" + self.nvl
 
@@ -251,7 +259,8 @@ class NvlObject(object):
                 argtypes.append(self.argtypes[name].cTypeClass)
                 encoded.append(self.context[name])
             else:
-                argtypes.append(self.encoder.pyToNvlType(self.context[name]).cTypeClass)
+                argtypes.append(self.encoder.pyToNvlType(
+                    self.context[name]).cTypeClass)
                 encoded.append(self.encoder.encode(self.context[name]))
         end = time.time()
         if verbose:
@@ -269,7 +278,8 @@ class NvlObject(object):
         start = time.time()
         err2 = ctypes.c_void_p()
         conf = weld.weld_conf_new()
-        nvl_ret = weld.weld_module_run(module, conf, arg_obj, ctypes.byref(err2))
+        nvl_ret = weld.weld_module_run(
+            module, conf, arg_obj, ctypes.byref(err2))
         end = time.time()
         if verbose:
             print "NVL Runtime: " + str(end - start)
@@ -278,7 +288,8 @@ class NvlObject(object):
             result = self.decoder.decode(nvl_ret, restype)
         else:
             data = weld.weld_value_data(nvl_ret)
-            result = ctypes.cast(data, ctypes.POINTER(ctypes.c_int64)).contents.value
+            result = ctypes.cast(data, ctypes.POINTER(
+                ctypes.c_int64)).contents.value
         end = time.time()
         real_end = time.time()
         if verbose:
@@ -286,4 +297,3 @@ class NvlObject(object):
             print "Total end-to-end time: " + str(real_end - real_start)
 
         return result
-

@@ -6,6 +6,7 @@ from nvlobject import *
 
 
 class NumpyArrayNVL(LazyOpResult):
+
     def __init__(self, expr, nvl_type, dim=1):
         self.expr = expr
         self.nvl_type = nvl_type
@@ -35,6 +36,7 @@ class NumpyArrayNVL(LazyOpResult):
             0
         )
 
+
 def dot(matrix, vector):
     """
     Computes the dot product between a matrix and a vector.
@@ -48,7 +50,13 @@ def dot(matrix, vector):
         vector = vector.expr
     elif isinstance(vector, np.ndarray):
         nvl_type = numpyImplNVL.numpy_to_nvl_type_mapping[str(vector.dtype)]
-    return NumpyArrayNVL(numpyImplNVL.dot(matrix, vector, nvl_type), NvlDouble())
+    return NumpyArrayNVL(
+        numpyImplNVL.dot(
+            matrix,
+            vector,
+            nvl_type),
+        NvlDouble())
+
 
 def exp(vector):
     """

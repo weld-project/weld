@@ -6,12 +6,15 @@ import lib.pandasNVL as pd
 import numpy as np
 import unittest
 
+
 class PandasNVLTestMethods(unittest.TestCase):
     # TODO: Add more tests here
 
     def test_unique(self):
-        input = pd.SeriesNVL(np.array(["aaa", "bbb", "aaa", "ccc"], dtype=str), "vec[i8]")
-        self.assertItemsEqual(["aaa", "bbb", "ccc"], input.unique().evaluate(False))
+        input = pd.SeriesNVL(
+            np.array(["aaa", "bbb", "aaa", "ccc"], dtype=str), "vec[i8]")
+        self.assertItemsEqual(["aaa", "bbb", "ccc"],
+                              input.unique().evaluate(False))
 
     def test_sum(self):
         inp = pd.SeriesNVL(np.array([1, 2, 3, 4, 5], dtype=np.int32), "i32")
@@ -27,61 +30,93 @@ class PandasNVLTestMethods(unittest.TestCase):
     #     self.assertEqual(120, input.prod().evaluate(True))
 
     def test_eq(self):
-        input = pd.SeriesNVL(np.array(["aaaa", "bbb", "aa", "cccc"], dtype=str), "vec[i8]")
+        input = pd.SeriesNVL(
+            np.array(["aaaa", "bbb", "aa", "cccc"], dtype=str), "vec[i8]")
         expected_output = [True, False, False, False]
-        self.assertSequenceEqual(expected_output, list((input == "aaaa").evaluate(False)))
+        self.assertSequenceEqual(
+            expected_output, list(
+                (input == "aaaa").evaluate(False)))
 
     def test_simpler_eq(self):
-        input = pd.SeriesNVL(np.array([1, 2, 100, 1, 2, 65], dtype=np.int32), "i32")
+        input = pd.SeriesNVL(
+            np.array([1, 2, 100, 1, 2, 65], dtype=np.int32), "i32")
         expected_output = [False, False, True, False, False, False]
-        self.assertSequenceEqual(expected_output, list((input == 100).evaluate(False)))
+        self.assertSequenceEqual(
+            expected_output, list(
+                (input == 100).evaluate(False)))
 
     def test_mask(self):
-        input = pd.SeriesNVL(np.array(["aaaa", "bbb", "aa", "cccc"], dtype=str), "vec[i8]")
+        input = pd.SeriesNVL(
+            np.array(["aaaa", "bbb", "aa", "cccc"], dtype=str), "vec[i8]")
         predicates = np.array([True, False, False, True], dtype=bool)
         expected_output = ["bbbb", "bbb", "aa", "bbbb"]
-        self.assertSequenceEqual(expected_output, list(input.mask(predicates, "bbbb").evaluate(False)))
+        self.assertSequenceEqual(
+            expected_output,
+            list(
+                input.mask(
+                    predicates,
+                    "bbbb").evaluate(False)))
 
     def test_filter(self):
-        input = pd.SeriesNVL(np.array(["aaaa", "bbb", "aa", "cccc"], dtype=str), "vec[i8]")
+        input = pd.SeriesNVL(
+            np.array(["aaaa", "bbb", "aa", "cccc"], dtype=str), "vec[i8]")
         predicates = np.array([True, False, False, True], dtype=bool)
         expected_output = ["aaaa", "cccc"]
-        self.assertSequenceEqual(expected_output, list(input.filter(predicates).evaluate(False)))
+        self.assertSequenceEqual(expected_output, list(
+            input.filter(predicates).evaluate(False)))
 
     def test_eq_and_mask(self):
-        input = pd.SeriesNVL(np.array(["aaaa", "bbb", "aa", "cccc"], dtype=str), "vec[i8]")
+        input = pd.SeriesNVL(
+            np.array(["aaaa", "bbb", "aa", "cccc"], dtype=str), "vec[i8]")
         predicates = input == "bbb"
         expected_output = ["aaaa", "eeee", "aa", "cccc"]
-        self.assertSequenceEqual(expected_output, list(input.mask(predicates, "eeee").evaluate(False)))
+        self.assertSequenceEqual(
+            expected_output,
+            list(
+                input.mask(
+                    predicates,
+                    "eeee").evaluate(False)))
 
     def test_slice(self):
-        input = pd.SeriesNVL(np.array(["aaaaaa", "bbbbbb", "aaaaaaa", "cccccccc"], dtype=str), "vec[i8]")
+        input = pd.SeriesNVL(
+            np.array(["aaaaaa", "bbbbbb", "aaaaaaa", "cccccccc"], dtype=str), "vec[i8]")
         expected_output = ["aaa", "bbb", "aaa", "ccc"]
-        self.assertSequenceEqual(expected_output, list(input.str.slice(1, 3).evaluate(False)))
+        self.assertSequenceEqual(
+            expected_output, list(
+                input.str.slice(
+                    1, 3).evaluate(False)))
 
     def test_add(self):
         input = pd.SeriesNVL(np.array([1, 2, 3, 4], dtype=np.int32), "i32")
         other = pd.SeriesNVL(np.array([1, 2, 3, 4], dtype=np.int32), "i32")
         expected_output = [2, 4, 6, 8]
-        self.assertSequenceEqual(expected_output, list(input.add(other).evaluate(False)))
+        self.assertSequenceEqual(
+            expected_output, list(
+                input.add(other).evaluate(False)))
 
     def test_sub(self):
         input = pd.SeriesNVL(np.array([1, 2, 3, 4], dtype=np.int32), "i32")
         other = pd.SeriesNVL(np.array([1, 2, 3, 4], dtype=np.int32), "i32")
         expected_output = [0, 0, 0, 0]
-        self.assertSequenceEqual(expected_output, list(input.sub(other).evaluate(False)))
+        self.assertSequenceEqual(
+            expected_output, list(
+                input.sub(other).evaluate(False)))
 
     def test_mul(self):
         input = pd.SeriesNVL(np.array([1, 2, 3, 4], dtype=np.int32), "i32")
         other = pd.SeriesNVL(np.array([1, 2, 3, 4], dtype=np.int32), "i32")
         expected_output = [1, 4, 9, 16]
-        self.assertSequenceEqual(expected_output, list(input.mul(other).evaluate(False)))
+        self.assertSequenceEqual(
+            expected_output, list(
+                input.mul(other).evaluate(False)))
 
     def test_div(self):
         input = pd.SeriesNVL(np.array([1, 2, 3, 4], dtype=np.int32), "i32")
         other = pd.SeriesNVL(np.array([1, 2, 3, 4], dtype=np.int32), "i32")
         expected_output = [1, 1, 1, 1]
-        self.assertSequenceEqual(expected_output, list(input.div(other).evaluate(False)))
+        self.assertSequenceEqual(
+            expected_output, list(
+                input.div(other).evaluate(False)))
 
     # Will probably segfault. Right now results in compile error '%' is unsupported.
     # def test_mod(self):

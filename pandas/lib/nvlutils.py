@@ -7,10 +7,11 @@
 
 import sys
 
+
 def to_shared_lib(name):
     """
     Returns the name with the platform dependent shared library extension.
-    
+
     Args:
     name (TYPE): Description
     """

@@ -16,8 +16,10 @@ data_big_cities = data[data["Total population"] > 500000]
 
 # Compute "crime index" proportional to
 # (Total population + 2*(Total adult population) - 2000*(Number of robberies)) / 100000
-data_big_cities_stats = data_big_cities[["Total population", "Total adult population", "Number of robberies"]].values
-predictions = np.dot(data_big_cities_stats, np.array([1.0, 2.0, -2000.0])) / 100000.0
+data_big_cities_stats = data_big_cities[
+    ["Total population", "Total adult population", "Number of robberies"]].values
+predictions = np.dot(data_big_cities_stats, np.array(
+    [1.0, 2.0, -2000.0])) / 100000.0
 data_big_cities["Crime index"] = predictions
 
 # Aggregate "crime index" scores by state

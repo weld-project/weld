@@ -14,7 +14,7 @@ class DataFrameNVL:
         predicates (TYPE): Description
         unmaterialized_cols (TYPE): Description
     """
-    
+
     def __init__(self, df, predicates=None):
         self.df = df
         self.unmaterialized_cols = dict()
@@ -32,7 +32,7 @@ class DataFrameNVL:
         Raises:
             Exception: Description
         """
-        if type(key) == str:  # Single-key get
+        if isinstance(key, str):  # Single-key get
             # First check if key corresponds to an un-materialized column
             if key in self.unmaterialized_cols:
                 return self.unmaterialized_cols[key]
@@ -56,7 +56,7 @@ class DataFrameNVL:
                 self,
                 key
             )
-        elif type(key) == list:  # For multi-key get, return type is a dataframe
+        elif isinstance(key, list):  # For multi-key get, return type is a dataframe
             return DataFrameNVL(self.df[key], self.predicates)
         elif isinstance(key, SeriesNVL):  # Can also apply predicate to a dataframe
             return DataFrameNVL(self.df, key)
@@ -107,9 +107,10 @@ class DataFrameNVL:
             if self.predicates is None:
                 return self.df.values
             if isinstance(self.df.values, np.ndarray):
-                nvl_type = pandasImplNVL.numpy_to_nvl_type_mapping[str(self.df.values.dtype)]
+                nvl_type = pandasImplNVL.numpy_to_nvl_type_mapping[
+                    str(self.df.values.dtype)]
                 dim = self.df.values.ndim
-                for i in xrange(dim-1):
+                for i in xrange(dim - 1):
                     nvl_type = NvlVec(nvl_type)
                 return LazyOpResult(
                     pandasImplNVL.filter(
@@ -173,7 +174,13 @@ class GroupedDataFrameNVL(LazyOpResult):
         ptr (TYPE): Description
     """
 
-    def __init__(self, expr, grouping_column_name, column_names, grouping_column_type, column_types):
+    def __init__(
+            self,
+            expr,
+            grouping_column_name,
+            column_names,
+            grouping_column_type,
+            column_types):
         """Summary
 
         Args:
@@ -255,7 +262,7 @@ class SeriesNVL(LazyOpResult):
         expr (TYPE): Description
         nvl_type (TYPE): Description
     """
-    
+
     def __init__(self, expr, nvl_type, df=None, column_name=None):
         """Summary
 
@@ -675,6 +682,7 @@ class StringSeriesNVL:
         expr (TYPE): Description
         nvl_type (TYPE): Description
     """
+
     def __init__(self, expr, nvl_type, df=None, column_name=None):
         """Summary
 
@@ -724,7 +732,7 @@ class GroupByNVL:
         grouping_column_name (TYPE): Description
         grouping_column_type (TYPE): Description
     """
-    
+
     def __init__(self, df, grouping_column_name):
         """Summary
 
@@ -739,7 +747,8 @@ class GroupByNVL:
             self.grouping_column_type = column.nvl_type
             self.grouping_column = column.expr
         elif isinstance(column, np.ndarray):
-            self.grouping_column_type = numpyImpl.numpy_to_nvl_type_mapping[str(column.dtype)]
+            self.grouping_column_type = numpyImpl.numpy_to_nvl_type_mapping[
+                str(column.dtype)]
             self.grouping_column = column
 
         self.column_names = df._get_column_names()
@@ -755,7 +764,8 @@ class GroupByNVL:
                 column_type = column.nvl_type
                 column = column.expr
             elif isinstance(column, np.ndarray):
-                column_type = numpyImpl.numpy_to_nvl_type_mapping[str(column.dtype)]
+                column_type = numpyImpl.numpy_to_nvl_type_mapping[
+                    str(column.dtype)]
             self.columns.append(column)
             self.column_types.append(column_type)
 
@@ -792,4 +802,3 @@ class GroupByNVL:
             TYPE: Description
         """
         pass
-

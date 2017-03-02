@@ -12,6 +12,7 @@ norm_factor_id_ = 1
 encoder_ = NumPyEncoder()
 decoder_ = NumPyDecoder()
 
+
 def div(array, other, type):
     """
     Normalizes the passed-in array by the passed in quantity.
@@ -42,8 +43,7 @@ def div(array, other, type):
     else:
         other_str = ("%.2f" % other)
 
-    nvl_template = \
-    """
+    nvl_template = """
        map(
          %(array)s,
          |value| value / %(type)s(%(other)s)
@@ -52,6 +52,7 @@ def div(array, other, type):
     nvl_obj.nvl = nvl_template % {"array": array_str, "other": other_str,
                                   "type": type}
     return nvl_obj
+
 
 def aggr(array, op, initial_value, type):
     """
@@ -73,8 +74,7 @@ def aggr(array, op, initial_value, type):
     if isinstance(array, NvlObject):
         array_str = array.nvl
 
-    nvl_template = \
-    """
+    nvl_template = """
       result(
         for(
           %(array)s,
@@ -85,6 +85,7 @@ def aggr(array, op, initial_value, type):
     """
     nvl_obj.nvl = nvl_template % {"array": array_str, "type": type, "op": op}
     return nvl_obj
+
 
 def dot(matrix, vector, type):
     """
@@ -108,8 +109,7 @@ def dot(matrix, vector, type):
     if isinstance(vector, NvlObject):
         vector_str = vector.nvl
 
-    nvl_template = \
-    """
+    nvl_template = """
        map(
          %(matrix)s,
          |row: vec[i64]|
@@ -129,6 +129,7 @@ def dot(matrix, vector, type):
                                   "type": type}
     return nvl_obj
 
+
 def exp(array, type):
     """
     Computes the per-element exponenet of the passed-in array.
@@ -146,8 +147,7 @@ def exp(array, type):
     if isinstance(array, NvlObject):
         array_str = array.nvl
 
-    nvl_template = \
-    """
+    nvl_template = """
        map(
          %(array)s,
          |ele: %(type)s| exp(ele)
