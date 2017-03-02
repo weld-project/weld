@@ -6,13 +6,35 @@ from nvlobject import *
 
 
 class NumpyArrayNVL(LazyOpResult):
+    """Summary
+
+    Attributes:
+        dim (TYPE): Description
+        expr (TYPE): Description
+        nvl_type (TYPE): Description
+    """
 
     def __init__(self, expr, nvl_type, dim=1):
+        """Summary
+
+        Args:
+            expr (TYPE): Description
+            nvl_type (TYPE): Description
+            dim (int, optional): Description
+        """
         self.expr = expr
         self.nvl_type = nvl_type
         self.dim = dim
 
     def __div__(self, other):
+        """Summary
+
+        Args:
+            other (TYPE): Description
+
+        Returns:
+            TYPE: Description
+        """
         if isinstance(other, LazyOpResult):
             other = other.expr
         return NumpyArrayNVL(
@@ -25,6 +47,11 @@ class NumpyArrayNVL(LazyOpResult):
         )
 
     def sum(self):
+        """Summary
+
+        Returns:
+            TYPE: Description
+        """
         return NumpyArrayNVL(
             numpyImplNVL.aggr(
                 self.expr,
@@ -41,6 +68,10 @@ def dot(matrix, vector):
     """
     Computes the dot product between a matrix and a vector.
     TODO: Make this more generic
+
+    Args:
+        matrix (TYPE): Description
+        vector (TYPE): Description
     """
     nvl_type = None
     if isinstance(matrix, LazyOpResult):
@@ -61,6 +92,9 @@ def dot(matrix, vector):
 def exp(vector):
     """
     Computes a per-element exponent of the passed-in vector.
+
+    Args:
+        vector (TYPE): Description
     """
     nvl_type = None
     if isinstance(vector, LazyOpResult):
