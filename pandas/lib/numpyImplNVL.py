@@ -112,7 +112,7 @@ def dot(matrix, vector, type):
     nvl_template = """
        map(
          %(matrix)s,
-         |row: vec[i64]|
+         |row: vec[%(type)s]|
            result(
              for(
                map(
