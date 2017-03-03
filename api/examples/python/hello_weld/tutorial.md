@@ -61,41 +61,41 @@ This tutorial assumes you have a Weld installation and a familiarity of Python. 
   ```python
   class HelloWeldVector(object):
       def __init__(self, vector):
-        """
-        Create a new `HelloWeldVector`, initialized with an existing `numpy.ndarray` 'vector'.
-        vector must have ndim=1 and dtype='int32'.
-        """
-        pass
+          """
+          Create a new `HelloWeldVector`, initialized with an existing `numpy.ndarray` 'vector'.
+          vector must have ndim=1 and dtype='int32'.
+          """
+          pass
 
       def add(self, number):
-        """
-        Add `number` to each element in this vector.
-        """
-        pass
+          """
+          Add `number` to each element in this vector.
+          """
+          pass
 
       def multiply(self, number):
-        """
-        Multiply each element in this vector by `number`.
-        """
-        pass
+          """
+          Multiply each element in this vector by `number`.
+          """
+          pass
 
       def subtract(self, number):
-        """
-        Subtract `number` from each element in this vector.
-        """
-        pass
+          """
+          Subtract `number` from each element in this vector.
+          """
+          pass
 
       def divide(self, number):
-        """
-        Divide each element in this vector by `number`.
-        """
-        pass
+          """
+          Divide each element in this vector by `number`.
+          """
+          pass
 
       def __str__(self):
-        """
-        Return a string representation of this vector.
-        """
-        return ""
+          """
+          Return a string representation of this vector.
+          """
+          return ""
   ```
   
 ## Weld Background
@@ -119,10 +119,10 @@ Replace the `__init__` implementation with the following:
 
 ```python
   def __init__(self, vector):
-    self.vector = vector
-    self.weldobj = WeldObject(NumpyArrayEncoder(), NumpyArrayDecoder())
-    name = self.weldobj.update(vector, WeldVec(WeldI32()))
-    self.weldobj.weld_code = name
+      self.vector = vector
+      self.weldobj = WeldObject(NumpyArrayEncoder(), NumpyArrayDecoder())
+      name = self.weldobj.update(vector, WeldVec(WeldI32()))
+      self.weldobj.weld_code = name
  ```
  
  Okay, there is a lot going on here, so let's take it line by line:
@@ -163,8 +163,8 @@ Let's start with `add`. Copy and paste the following code, which implements the 
 
 ```python
 def add(self, number):
-  template = "map({0}, |e| e + {1})"
-  self.weldobj.weld_code = template.format(self.weldobj.weld_code, str(number))
+    template = "map({0}, |e| e + {1})"
+    self.weldobj.weld_code = template.format(self.weldobj.weld_code, str(number))
 ```
 
 Let's take it line by line again.
@@ -195,8 +195,8 @@ Copy and paste the following into the `__str__` method:
 
 ```python
 def __str__(self):
-  v = self.weldobj.evaluate(WeldVec(WeldI32()))
-  return str(v)
+    v = self.weldobj.evaluate(WeldVec(WeldI32()))
+    return str(v)
 ```
 
 There is only one notable line here -- the call to `evaluate`. Calling evaluate on a `WeldObject` forces it's evaluation. In other words, calling evaluate will take the dependencies and Weld IR code registered with the `WeldObject`, generate a callable Weld function, compile it to fast parallel machine code, and run it. It then calls the _decoder_ we specified when creating the `WeldObject` to marshall Weld's return value into something Python understands; in our case, it will decode a Weld vector into a NumPy array. Note that we need to specify the Weld return type of the computation so the decoder knows what it should marshall; in our case, the return type will always be a Weld vector of 32-bit integers, since that's what our initial vector is and it is also what each of our operations returns.
