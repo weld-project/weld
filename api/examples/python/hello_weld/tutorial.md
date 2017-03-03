@@ -209,7 +209,7 @@ That's it! We now have a minimal implementation for a Weld-enabled library. Let'
 
 ```python
 >>> import numpy
->>> import hello_weld
+>>> from hello_weld import *
 ```
 
 Let's make a new vector initialized with all 0s, and then add some numbers to it:
