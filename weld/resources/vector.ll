@@ -24,11 +24,10 @@ define %$NAME.vm.bld @$NAME.vm.bld.getPtrIndexed(%$NAME.vm.bld %bldPtr, i32 %i) 
 ; Initialize and return a new vecmerger with the given initial vector.
 define %$NAME.vm.bld @$NAME.vm.bld.new(%$NAME %vec) {
   %nworkers = call i32 @get_nworkers()
-  %runId = call i64 @get_runid()
   %structSizePtr = getelementptr %$NAME, %$NAME* null, i32 1
   %structSize = ptrtoint %$NAME* %structSizePtr to i64
 
-  %bldPtr = call i8* @new_merger(i64 %runId, i64 %structSize, i32 %nworkers)
+  %bldPtr = call i8* @new_merger(i64 %structSize, i32 %nworkers)
   %typedPtr = bitcast i8* %bldPtr to %$NAME.vm.bld
 
   ; Copy the initial value into the first vector

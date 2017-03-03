@@ -96,6 +96,11 @@ extern "C" {
   void *new_vb(int64_t elem_size, int64_t starting_cap);
   void new_piece(void *v, work_t *w);
   vec_piece *cur_piece(void *v, int32_t my_id);
+
+  void *get_merger_at_index(void *m, int64_t size, int32_t i);
+  void *new_merger(int64_t size, int32_t nworkers);
+  void free_merger(void *m);
+
   void weld_abort_thread();
 }
 

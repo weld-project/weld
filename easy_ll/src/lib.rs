@@ -115,7 +115,9 @@ pub fn load_library(libname: &str) -> Result<(), LlvmError> {
 /// Compile a string of LLVM IR (in human readable format) into a `CompiledModule` that can then
 /// be executed. The LLVM IR should contain an entry point function called `run` that takes `i64`
 /// and returns `i64`, which will be called by `CompiledModule::run`.
-pub fn compile_module(code: &str) -> Result<CompiledModule, LlvmError> {
+pub fn compile_module(code: &str,
+                      static_lib_file: Option<&str>)
+                      -> Result<CompiledModule, LlvmError> {
     unsafe {
         // Initialize LLVM
         ONCE.call_once(|| initialize());
@@ -146,6 +148,11 @@ pub fn compile_module(code: &str) -> Result<CompiledModule, LlvmError> {
 
         // Create an execution engine for the module and find its run function
         let engine = try!(create_exec_engine(module));
+
+        if static_lib_file != None {
+            let merger_module = try!(parse_module_file(context, static_lib_file.unwrap()));
+            llvm::execution_engine::LLVMAddModule(engine, merger_module);
+        }
 
         result.engine = Some(engine);
         result.function = Some(try!(find_run_function(engine)));
@@ -180,6 +187,7 @@ unsafe fn parse_module_helper(context: LLVMContextRef,
     // Parse IR into a module
     let mut module = 0 as LLVMModuleRef;
     let mut error_str = 0 as *mut c_char;
+
     let result_code =
         llvm::ir_reader::LLVMParseIRInContext(context, buffer, &mut module, &mut error_str);
     if result_code != 0 {

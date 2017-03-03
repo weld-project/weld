@@ -23,6 +23,7 @@ use super::sir::Terminator::*;
 use super::transforms;
 use super::type_inference;
 use super::util::IdGenerator;
+use super::util::get_merger_lib_path;
 
 #[cfg(test)]
 use super::parser::*;
@@ -233,7 +234,6 @@ impl LlvmGenerator {
         let struct_size = ctx.var_ids.next();
         let struct_storage = ctx.var_ids.next();
         let struct_storage_typed = ctx.var_ids.next();
-        let run_id = ctx.var_ids.next();
         ctx.code.add(format!("{} = getelementptr {}, {}* null, i32 1",
                              struct_size_ptr,
                              ll_ty,
@@ -242,12 +242,9 @@ impl LlvmGenerator {
                              struct_size,
                              ll_ty,
                              struct_size_ptr));
-        ctx.code.add(format!("{} = call i64 @get_runid()", run_id));
+        // we use regular malloc here because this pointer will always be freed by parlib
         ctx.code
-            .add(format!("{} = call i8* @weld_rt_malloc(i64 {}, i64 {})",
-                         struct_storage,
-                         run_id,
-                         struct_size));
+            .add(format!("{} = call i8* @malloc(i64 {})", struct_storage, struct_size));
         ctx.code.add(format!("{} = bitcast i8* {} to {}*",
                              struct_storage_typed,
                              struct_storage,
@@ -1626,13 +1623,12 @@ impl LlvmGenerator {
                                                               %final = load {res_ty_str}, \
                                                               {res_ty_str}* %bldPtrFirst
                                                 \
-                                                              %runId = call i64 @get_runid()
-                                                  \
-                                                              %asPtr = bitcast {bld_ty_str} \
-                                                              {bld_tmp} to i8*
+                                                              %asPtr = bitcast \
+                                                              {bld_ty_str} {bld_tmp} to \
+                                                              i8*
                                                     \
-                                                              call void @free_merger(i64 \
-                                                              %runId, i8* %asPtr)",
+                                                              call void @free_merger(\
+                                                              i8* %asPtr)",
                                                              bld_tmp = bld_tmp,
                                                              bld_ty_str = bld_ty_str,
                                                              res_ty_str = res_ty_str.to_string()));
@@ -1713,6 +1709,7 @@ impl LlvmGenerator {
                                         let copy_body_label = label_ids.next();
                                         let copy_done_label = label_ids.next();
                                         let done_label = label_ids.next();
+                                        let raw_ptr = ctx.var_ids.next();
 
                                         ctx.code.add(format!(include_str!("resources/vecmerger/vecmerger_result_start.ll"),
                                                 nworkers = nworkers,
@@ -1767,6 +1764,9 @@ impl LlvmGenerator {
                                                              copyDoneLabel = copy_done_label,
                                                              doneLabel = done_label,
                                                              bodyLabel = body_label,
+                                                             rawPtr = raw_ptr,
+                                                             buildPtr = bld_ptr,
+                                                             bldType = bld_ty_str,
                                                              output = llvm_symbol(output)));
                                     }
                                 }
@@ -2133,7 +2133,7 @@ impl FunctionContext {
 /// memory associated with the run ID.
 pub fn generate_runtime_interface_module() -> WeldResult<easy_ll::CompiledModule> {
     let program = include_str!("resources/runtime_interface_module.ll");
-    Ok(try!(easy_ll::compile_module(program)))
+    Ok(try!(easy_ll::compile_module(program, None)))
 }
 
 /// Generate a compiled LLVM module from a program whose body is a function.
@@ -2150,7 +2150,7 @@ pub fn compile_program(program: &Program) -> WeldResult<easy_ll::CompiledModule>
     let sir_prog = try!(sir::ast_to_sir(&expr));
     let mut gen = LlvmGenerator::new();
     try!(gen.add_function_on_pointers("run", &sir_prog));
-    Ok(try!(easy_ll::compile_module(&gen.result())))
+    Ok(try!(easy_ll::compile_module(&gen.result(), Some(&get_merger_lib_path()))))
 }
 
 #[test]
