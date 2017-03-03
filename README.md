@@ -72,9 +72,8 @@ $ export WELD_HOME=/path/to/weld/directory
 $ cargo test
 ```
 
-## Testing
+## Running an Interactive REPL
 
-* `cargo test` runs unit and integration tests.
 * The `target/debug/repl` program is a simple "shell" where one can type Weld programs and see
   the results of parsing, macro substitution and type inference.
 
