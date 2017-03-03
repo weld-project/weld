@@ -32,6 +32,13 @@ $ cd weld/
 $ cargo build
 ```
 
+Set the `WELD_HOME` environment variable and run tests:
+
+```bash
+$ export WELD_HOME=/path/to/weld/directory
+$ cargo test
+```
+
 ### Ubuntu Installation
 
 To install LLVM on ubuntu :
@@ -55,6 +62,14 @@ With LLVM and Rust installed, you can build Weld. Clone this repository and buil
 $ git clone https://www.github.com/weld-project/weld
 $ cd weld/
 $ cargo build
+$ cargo test
+```
+
+Set the `WELD_HOME` environment variable and run tests:
+
+```bash
+$ export WELD_HOME=/path/to/weld/directory
+$ cargo test
 ```
 
 ## Testing
