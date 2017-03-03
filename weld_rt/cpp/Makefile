@@ -1,10 +1,10 @@
 OS = $(shell uname -s)
-LLVM_VERSION = 3.6
+LLVM_VERSION = 3.8
 
 CFLAGS = -O3 -Wall -fno-use-cxa-atexit -fPIC
 ifeq (${OS}, Darwin)
   # OS X
-  CLANG ?= clang
+  CLANG ?= clang-$(LLVM_VERSION)
 else ifeq (${OS}, Linux)
   # Linux
   CLANG ?= clang

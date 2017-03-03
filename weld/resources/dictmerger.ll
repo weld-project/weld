@@ -16,7 +16,7 @@
 define %$NAME.bld @$NAME.bld.new(i64 %capacity) {
   %nworkers = call i32 @get_nworkers()
   %runId = call i64 @get_runid()
-  %structSizePtr = getelementptr %$NAME* null, i32 1
+  %structSizePtr = getelementptr %$NAME, %$NAME* null, i32 1
   %structSize = ptrtoint %$NAME* %structSizePtr to i64
 
   %bldPtr = call i8* @new_merger(i64 %runId, i64 %structSize, i32 %nworkers)
@@ -40,7 +40,7 @@ done:
 }
 
 define %$NAME* @$NAME.bld.getptrIndexed(%$NAME.bld %bldPtr, i32 %i) alwaysinline {
-  %dictPtr = getelementptr %$NAME* null, i32 1
+  %dictPtr = getelementptr %$NAME, %$NAME* null, i32 1
   %dictSize = ptrtoint %$NAME* %dictPtr to i64
 
   %rawPtr = call i8* @get_merger_at_index(%$NAME.bld %bldPtr, i64 %dictSize, i32 %i)
@@ -52,7 +52,7 @@ define %$NAME* @$NAME.bld.getptrIndexed(%$NAME.bld %bldPtr, i32 %i) alwaysinline
 define %$NAME.bld @$NAME.bld.merge(%$NAME.bld %bldPtr, %$KV_STRUCT %keyValue, i32 %workerId) {
 entry:
   %bldPtrLocal = call %$NAME* @$NAME.bld.getptrIndexed(%$NAME.bld %bldPtr, i32 %workerId)
-  %bld = load %$NAME* %bldPtrLocal
+  %bld = load %$NAME, %$NAME* %bldPtrLocal
   %key = extractvalue %$KV_STRUCT %keyValue, 0
   %value = extractvalue %$KV_STRUCT %keyValue, 1
   %slot = call %$NAME.slot @$NAME.lookup(%$NAME %bld, $KEY %key)
@@ -89,7 +89,7 @@ entryLabel:
 bodyLabel:
   %i = phi i32 [ 0, %entryLabel ], [ %i2, %bodyEndLabel ]
   %dictPtr = call %$NAME* @$NAME.bld.getptrIndexed(%$NAME.bld %bldPtr, i32 %i)
-  %dict = load %$NAME* %dictPtr
+  %dict = load %$NAME, %$NAME* %dictPtr
   %kvVec = call $KV_VEC @$NAME.tovec(%$NAME %dict)
   %kvVecSize = call i64 $KV_VEC_PREFIX.size($KV_VEC %kvVec)
   %emptyKVVec = icmp ult i64 0, %kvVecSize
@@ -98,23 +98,23 @@ bodyLabel:
 innerBodyLabel:
   %j = phi i64 [ 0, %bodyLabel ], [ %j2, %innerBodyEndLabel ]
   %elemVarPtr = call %$KV_STRUCT* $KV_VEC_PREFIX.at($KV_VEC %kvVec, i64 %j)
-  %elemVar = load %$KV_STRUCT* %elemVarPtr
+  %elemVar = load %$KV_STRUCT, %$KV_STRUCT* %elemVarPtr
   %key = extractvalue %$KV_STRUCT %elemVar, 0
   %value = extractvalue %$KV_STRUCT %elemVar, 1
-  %finalDict = load %$NAME* %finalDictPtr
+  %finalDict = load %$NAME, %$NAME* %finalDictPtr
   %slot = call %$NAME.slot @$NAME.lookup(%$NAME %finalDict, $KEY %key)
   %filled = call i1 @$NAME.slot.filled(%$NAME.slot %slot)
   br i1 %filled, label %onFilled, label %onEmpty
 
 onFilled:
-  %finalDict2 = load %$NAME* %finalDictPtr
+  %finalDict2 = load %$NAME, %$NAME* %finalDictPtr
   %oldValue = call $VALUE @$NAME.slot.value(%$NAME.slot %slot)
   %newValue = $OP $VALUE %oldValue, %value  ; TODO: Fix this when making Op more generic
   %res1 = call %$NAME @$NAME.put(%$NAME %finalDict2, %$NAME.slot %slot, $KEY %key, $VALUE %newValue)
   br label %done
 
 onEmpty:
-  %finalDict3 = load %$NAME* %finalDictPtr
+  %finalDict3 = load %$NAME, %$NAME* %finalDictPtr
   %res2 = call %$NAME @$NAME.put(%$NAME %finalDict3, %$NAME.slot %slot, $KEY %key, $VALUE %value)
   br label %done
 
@@ -140,7 +140,7 @@ freeLabel:
 freeBody:
   %k = phi i32 [ 0, %freeLabel ], [ %k2, %freeBody ]
   %dictPtr2 = call %$NAME* @$NAME.bld.getptrIndexed(%$NAME.bld %bldPtr, i32 %k)
-  %dict2 = load %$NAME* %dictPtr2
+  %dict2 = load %$NAME, %$NAME* %dictPtr2
   call void @$NAME.free(%$NAME %dict2)
   %k2 = add i32 %k, 1
   %freeCond2 = icmp ult i32 %k2, %nworkers
@@ -149,7 +149,7 @@ freeBody:
 endLabel:
   %runId = call i64 @get_runid()
   call void @free_merger(i64 %runId, i8* %bldPtr)
-  %finalRes = load %$NAME* %finalDictPtr
+  %finalRes = load %$NAME, %$NAME* %finalDictPtr
   ret %$NAME %finalRes
 }
 

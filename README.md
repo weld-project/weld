@@ -2,13 +2,60 @@
 
 ## Building
 
-To build Weld, you need [Rust 1.13 or higher](http://rust-lang.org) and [LLVM](http://llvm.org) 3.6 or
-higher. Set `PATH` so that `llvm-config` from your installation of LLVM is on the path and then
-run `cargo build` in the root directory.
+To build Weld, you need [Rust 1.13 or higher](http://rust-lang.org) and [LLVM](http://llvm.org) 3.8 or
+higher.
 
-Note that the LLVM version included by default on Mac OS X is older than 3.6, so you will need
-to update `PATH` temporarily while building Weld. You can check the version with
-`llvm-config --version`.
+To install Rust, follow the steps [here](https://rustup.rs). You can verify that Rust was installed correctly on your system by typing `rustc` into your shell.
+
+### MacOS Installation
+
+To install LLVM on macOS, first install [brew](https://brew.sh/). Then:
+
+```bash
+$ brew install llvm38
+$ export PATH=$PATH:/usr/local/bin
+```
+
+Weld's dependencies require `llvm-config`, so you may need to create a symbolic link so the correct `llvm-config` is picked up:
+
+```bash
+$ ln -s /usr/local/bin/llvm-config-3.8 /usr/local/bin/llvm-config
+```
+
+To make sure this worked correctly, run `llvm-config --version`. You should see `3.8.x`.
+
+With LLVM and Rust installed, you can build Weld. Clone this repository and build using `cargo`:
+
+```bash
+$ git clone https://www.github.com/weld-project/weld
+$ cd weld/
+$ cargo build
+```
+
+### Ubuntu Installation
+
+To install LLVM on ubuntu :
+
+```bash
+$ sudo apt install llvm-3.8
+$ export PATH=$PATH:/usr/local/bin
+```
+
+Weld's dependencies require `llvm-config`, so you may need to create a symbolic link so the correct `llvm-config` is picked up:
+
+```bash
+$ ln -s /usr/bin/llvm-config-3.8 /usr/local/bin/llvm-config
+```
+
+To make sure this worked correctly, run `llvm-config --version`. You should see `3.8.x`.
+
+With LLVM and Rust installed, you can build Weld. Clone this repository and build using `cargo`:
+
+```bash
+$ git clone https://www.github.com/weld-project/weld
+$ cd weld/
+$ cargo build
+```
 
 ## Testing
 
