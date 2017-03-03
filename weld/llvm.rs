@@ -152,14 +152,14 @@ impl LlvmGenerator {
         let storage = ctx.var_ids.next();
         let work_data_ptr = ctx.var_ids.next();
         let work_data = ctx.var_ids.next();
-        ctx.code.add(format!("{} = getelementptr %work_t* %cur.work, i32 0, i32 0",
+        ctx.code.add(format!("{} = getelementptr %work_t, %work_t* %cur.work, i32 0, i32 0",
                              work_data_ptr));
-        ctx.code.add(format!("{} = load i8** {}", work_data, work_data_ptr));
+        ctx.code.add(format!("{} = load i8*, i8** {}", work_data, work_data_ptr));
         ctx.code.add(format!("{} = bitcast i8* {} to {}*",
                              storage_typed,
                              work_data,
                              ll_ty));
-        ctx.code.add(format!("{} = load {}* {}", storage, ll_ty, storage_typed));
+        ctx.code.add(format!("{} = load {}, {}* {}", storage, ll_ty, ll_ty, storage_typed));
         for (i, (arg, _)) in params_sorted.iter().enumerate() {
             ctx.code.add(format!("{} = extractvalue {} {}, {}",
                                  llvm_symbol(arg),
@@ -178,9 +178,9 @@ impl LlvmGenerator {
         let full_task_int = ctx.var_ids.next();
         let full_task_bit = ctx.var_ids.next();
         ctx.code
-            .add(format!("{} = getelementptr %work_t* %cur.work, i32 0, i32 4",
+            .add(format!("{} = getelementptr %work_t, %work_t* %cur.work, i32 0, i32 4",
                          full_task_ptr));
-        ctx.code.add(format!("{} = load i32* {}", full_task_int, full_task_ptr));
+        ctx.code.add(format!("{} = load i32, i32* {}", full_task_int, full_task_ptr));
         ctx.code.add(format!("{} = trunc i32 {} to i1", full_task_bit, full_task_int));
         ctx.code.add(format!("br i1 {}, label %new_pieces, label %fn_call", full_task_bit));
         ctx.code.add("new_pieces:");
@@ -234,7 +234,10 @@ impl LlvmGenerator {
         let struct_storage = ctx.var_ids.next();
         let struct_storage_typed = ctx.var_ids.next();
         let run_id = ctx.var_ids.next();
-        ctx.code.add(format!("{} = getelementptr {}* null, i32 1", struct_size_ptr, ll_ty));
+        ctx.code.add(format!("{} = getelementptr {}, {}* null, i32 1",
+                             struct_size_ptr,
+                             ll_ty,
+                             ll_ty));
         ctx.code.add(format!("{} = ptrtoint {}* {} to i64",
                              struct_size,
                              ll_ty,
@@ -310,8 +313,9 @@ impl LlvmGenerator {
                 ctx.code.add("loop.start:");
                 let idx_tmp = try!(self.load_var("%cur.idx", "i64", ctx));
                 let work_idx_ptr = ctx.var_ids.next();
-                ctx.code.add(format!("{} = getelementptr %work_t* %cur.work, i32 0, i32 3",
-                                     work_idx_ptr));
+                ctx.code
+                    .add(format!("{} = getelementptr %work_t, %work_t* %cur.work, i32 0, i32 3",
+                                 work_idx_ptr));
                 ctx.code.add(format!("store i64 {}, i64* {}", idx_tmp, work_idx_ptr));
                 let idx_cmp = ctx.var_ids.next();
                 ctx.code.add(format!("{} = icmp ult i64 {}, %upper.idx", idx_cmp, idx_tmp));
@@ -563,13 +567,15 @@ impl LlvmGenerator {
                 let upper_bound_ptr = par_body_ctx.var_ids.next();
                 let upper_bound = par_body_ctx.var_ids.next();
                 par_body_ctx.code
-                    .add(format!("{} = getelementptr %work_t* %cur.work, i32 0, i32 1",
+                    .add(format!("{} = getelementptr %work_t, %work_t* %cur.work, i32 0, i32 1",
                                  lower_bound_ptr));
-                par_body_ctx.code.add(format!("{} = load i64* {}", lower_bound, lower_bound_ptr));
                 par_body_ctx.code
-                    .add(format!("{} = getelementptr %work_t* %cur.work, i32 0, i32 2",
+                    .add(format!("{} = load i64, i64* {}", lower_bound, lower_bound_ptr));
+                par_body_ctx.code
+                    .add(format!("{} = getelementptr %work_t, %work_t* %cur.work, i32 0, i32 2",
                                  upper_bound_ptr));
-                par_body_ctx.code.add(format!("{} = load i64* {}", upper_bound, upper_bound_ptr));
+                par_body_ctx.code
+                    .add(format!("{} = load i64, i64* {}", upper_bound, upper_bound_ptr));
                 let body_arg_types = try!(self.get_arg_str(&func.params, ""));
                 try!(self.create_new_pieces(&func.params, &mut par_body_ctx));
                 par_body_ctx.code.add("fn_call:");
@@ -626,7 +632,7 @@ impl LlvmGenerator {
         run_ctx.code.add(format!("define i64 @{}(i64 %r.input) {{", name));
         // Unpack the input, which is always struct defined by the type %input_arg_t in prelude.ll.
         run_ctx.code.add(format!("%r.inp_typed = inttoptr i64 %r.input to %input_arg_t*"));
-        run_ctx.code.add(format!("%r.inp_val = load %input_arg_t* %r.inp_typed"));
+        run_ctx.code.add(format!("%r.inp_val = load %input_arg_t, %input_arg_t* %r.inp_typed"));
         run_ctx.code.add(format!("%r.args = extractvalue %input_arg_t %r.inp_val, 0"));
         run_ctx.code.add(format!("%r.nworkers = extractvalue %input_arg_t %r.inp_val, 1"));
         run_ctx.code.add(format!("%r.memlimit = extractvalue %input_arg_t %r.inp_val, 2"));
@@ -635,7 +641,7 @@ impl LlvmGenerator {
         // Code to load args and call function
         run_ctx.code.add(format!("%r.args_typed = inttoptr i64 %r.args to {args_type}*
              \
-                          %r.args_val = load {args_type}* %r.args_typed",
+                          %r.args_val = load {args_type}, {args_type}* %r.args_typed",
                                  args_type = args_type));
 
         let mut arg_pos_map: HashMap<Symbol, usize> = HashMap::new();
@@ -672,7 +678,7 @@ impl LlvmGenerator {
              {tmp0} = insertvalue %output_arg_t undef, i64 %res_address, 0
              {tmp1} = insertvalue %output_arg_t {tmp0}, i64 {rid}, 1  
              {tmp2} = insertvalue %output_arg_t {tmp1}, i64 {errno}, 2  
-  {size_ptr} = getelementptr %output_arg_t* null, i32 1
+  {size_ptr} = getelementptr %output_arg_t, %output_arg_t* null, i32 1
   {size} = ptrtoint %output_arg_t* {size_ptr} to i64
   {bytes} = call i8* @weld_rt_malloc(i64 {rid}, i64 {size})
   {typed_out_ptr} = bitcast i8* {bytes} to %output_arg_t*
@@ -901,7 +907,7 @@ impl LlvmGenerator {
 
     fn load_var(&mut self, sym: &str, ty: &str, ctx: &mut FunctionContext) -> WeldResult<String> {
         let var = ctx.var_ids.next();
-        ctx.code.add(format!("{} = load {}* {}", var, ty, sym));
+        ctx.code.add(format!("{} = load {}, {}* {}", var, ty, ty, sym));
         Ok(var)
     }
 
@@ -919,8 +925,9 @@ impl LlvmGenerator {
                  -> WeldResult<()> {
         let builder_value = ctx.var_ids.next();
         let mut res = ctx.var_ids.next();
-        ctx.code.add(format!("{} = load {}* {}",
+        ctx.code.add(format!("{} = load {}, {}* {}",
                              &builder_value,
+                             &merge_ty_str,
                              &merge_ty_str,
                              &builder_ptr));
         if let Scalar(_) = *merge_ty {
@@ -1171,8 +1178,9 @@ impl LlvmGenerator {
                                                      vec_ll_ty,
                                                      child_tmp,
                                                      index_tmp));
-                                ctx.code.add(format!("{} = load {}* {}",
+                                ctx.code.add(format!("{} = load {}, {}* {}",
                                                      res_tmp,
+                                                     output_ll_ty,
                                                      output_ll_ty,
                                                      res_ptr));
                                 ctx.code.add(format!("store {} {}, {}* {}",
@@ -1234,7 +1242,8 @@ impl LlvmGenerator {
                                 let size_tmp = try!(self.load_var(llvm_symbol(size).as_str(),
                                                                   "i64", ctx));
                                 let res_ptr = ctx.var_ids.next();
-                                ctx.code.add(format!("{} = call {} {}.slice({} {}, i64 {}, i64{})",
+                                ctx.code.add(format!("{} = call {} {}.slice({} {}, i64 {}, \
+                                                      i64{})",
                                                      res_ptr,
                                                      output_ll_ty,
                                                      vec_prefix,
@@ -1562,13 +1571,23 @@ impl LlvmGenerator {
                                                              elem_ty_str = res_ty_str.clone()));
 
                                         ctx.code.add(format!("
-                                            %first = load {elem_ty_str}* %bldPtrCasted
-                                            %nworkers = call i32 @get_nworkers()
-                                            br label %entry
-                                          entry:
-                                            %cond = icmp ult i32 1, %nworkers
-                                            br i1 %cond, label %body, label %done
-                                        ",
+                                            \
+                                                              %first = load {elem_ty_str}, \
+                                                              {elem_ty_str}* %bldPtrCasted
+                                            \
+                                                              %nworkers = call i32 \
+                                                              @get_nworkers()
+                                            \
+                                                              br label %entry
+                                          \
+                                                              entry:
+                                            \
+                                                              %cond = icmp ult i32 1, %nworkers
+                                            \
+                                                              br i1 %cond, label %body, label \
+                                                              %done
+                                        \
+                                                              ",
                                                              elem_ty_str = res_ty_str.clone()));
 
                                         ctx.code.add(format!("body:
@@ -1580,7 +1599,8 @@ impl LlvmGenerator {
                                                               getPtrIndexed({bld_ty_str} \
                                                               {bld_tmp}, i32 %i)
   %val = load \
-                                                              {elem_ty_str}* %bldPtr",
+                                                              {elem_ty_str}, {elem_ty_str}* \
+                                                              %bldPtr",
                                                              bld_prefix = bld_prefix,
                                                              bld_ty_str = bld_ty_str,
                                                              elem_ty_str = res_ty_str.clone(),
@@ -1594,6 +1614,7 @@ impl LlvmGenerator {
                                                             ctx));
 
                                         ctx.code.add(format!("%i2 = add i32 %i, 1
+                                                              \
                                                               %cond2 = icmp ult i32 %i2, \
                                                               %nworkers
                                             \
@@ -1602,14 +1623,13 @@ impl LlvmGenerator {
                                             \
                                                               done:
                                                 \
-                                                              %final = load {res_ty_str}* \
-                                                              %bldPtrFirst
+                                                              %final = load {res_ty_str}, \
+                                                              {res_ty_str}* %bldPtrFirst
                                                 \
                                                               %runId = call i64 @get_runid()
                                                   \
-                                                              %asPtr = bitcast \
-                                                              {bld_ty_str} {bld_tmp} to \
-                                                              i8*
+                                                              %asPtr = bitcast {bld_ty_str} \
+                                                              {bld_tmp} to i8*
                                                     \
                                                               call void @free_merger(i64 \
                                                               %runId, i8* %asPtr)",
@@ -1906,8 +1926,9 @@ impl LlvmGenerator {
                     let elem_storage = ctx.var_ids.next();
                     let elem_storage_typed = ctx.var_ids.next();
                     let run_id = ctx.var_ids.next();
-                    ctx.code.add(format!("{} = getelementptr {}* null, i32 1",
+                    ctx.code.add(format!("{} = getelementptr {}, {}* null, i32 1",
                                          &elem_size_ptr,
+                                         &ty_str,
                                          &ty_str));
                     ctx.code.add(format!("{} = ptrtoint {}* {} to i64",
                                          &elem_size,

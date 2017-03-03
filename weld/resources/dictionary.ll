@@ -16,7 +16,7 @@
 ; Initialize and return a new dictionary with the given initial capacity.
 ; The capacity must be a power of 2.
 define %$NAME @$NAME.new(i64 %capacity) {
-  %entrySizePtr = getelementptr %$NAME.entry* null, i32 1
+  %entrySizePtr = getelementptr %$NAME.entry, %$NAME.entry* null, i32 1
   %entrySize = ptrtoint %$NAME.entry* %entrySizePtr to i64
   %allocSize = mul i64 %entrySize, %capacity
   %runId = call i64 @get_runid()
@@ -44,7 +44,7 @@ define %$NAME @$NAME.clone(%$NAME %dict) {
   %entries = extractvalue %$NAME %dict, 0
   %size = extractvalue %$NAME %dict, 1
   %capacity = extractvalue %$NAME %dict, 2
-  %entrySizePtr = getelementptr %$NAME.entry* null, i32 1
+  %entrySizePtr = getelementptr %$NAME.entry, %$NAME.entry* null, i32 1
   %entrySize = ptrtoint %$NAME.entry* %entrySizePtr to i64
   %allocSize = mul i64 %entrySize, %capacity
   %bytes = bitcast %$NAME.entry* %entries to i8*
@@ -76,22 +76,22 @@ define i64 @$NAME.size(%$NAME %dict) {
 
 ; Check whether a slot is filled.
 define i1 @$NAME.slot.filled(%$NAME.slot %slot) {
-  %filledPtr = getelementptr %$NAME.slot %slot, i64 0, i32 0
-  %filled = load i1* %filledPtr
+  %filledPtr = getelementptr %$NAME.entry, %$NAME.slot %slot, i64 0, i32 0
+  %filled = load i1, i1* %filledPtr
   ret i1 %filled
 }
 
 ; Get the key for a slot (only valid if filled).
 define $KEY @$NAME.slot.key(%$NAME.slot %slot) {
-  %keyPtr = getelementptr %$NAME.slot %slot, i64 0, i32 1
-  %key = load $KEY* %keyPtr
+  %keyPtr = getelementptr %$NAME.entry, %$NAME.slot %slot, i64 0, i32 1
+  %key = load $KEY, $KEY* %keyPtr
   ret $KEY %key
 }
 
 ; Get the value for a slot (only valid if filled).
 define $VALUE @$NAME.slot.value(%$NAME.slot %slot) {
-  %valuePtr = getelementptr %$NAME.slot %slot, i64 0, i32 2
-  %value = load $VALUE* %valuePtr
+  %valuePtr = getelementptr %$NAME.entry, %$NAME.slot %slot, i64 0, i32 2
+  %value = load $VALUE, $VALUE* %valuePtr
   ret $VALUE %value
 }
 
@@ -110,15 +110,15 @@ entry:
 body:
   %h = phi i64 [ %hash, %entry ], [ %h2, %body2 ]
   %pos = and i64 %h, %mask
-  %ptr = getelementptr %$NAME.entry* %entries, i64 %pos
-  %filledPtr = getelementptr %$NAME.entry* %ptr, i64 0, i32 0
-  %filled = load i1* %filledPtr
+  %ptr = getelementptr %$NAME.entry, %$NAME.entry* %entries, i64 %pos
+  %filledPtr = getelementptr %$NAME.entry, %$NAME.entry* %ptr, i64 0, i32 0
+  %filled = load i1, i1* %filledPtr
   %filled32 = zext i1 %filled to i32
   br i1 %filled, label %body2, label %done
 
 body2:
-  %keyPtr = getelementptr %$NAME.entry* %ptr, i64 0, i32 1
-  %elemKey = load $KEY* %keyPtr
+  %keyPtr = getelementptr %$NAME.entry, %$NAME.entry* %ptr, i64 0, i32 1
+  %elemKey = load $KEY, $KEY* %keyPtr
   %cmp = call i32 $KEY_PREFIX.cmp($KEY %key, $KEY %elemKey)
   %eq = icmp eq i32 %cmp, 0
   %h2 = add i64 %h, 1
@@ -136,10 +136,10 @@ start:
   %entries = extractvalue %$NAME %dict, 0
   %size = extractvalue %$NAME %dict, 1
   %capacity = extractvalue %$NAME %dict, 2
-  %filledPtr = getelementptr %$NAME.entry* %slot, i64 0, i32 0
-  %filled = load i1* %filledPtr
-  %keyPtr = getelementptr %$NAME.entry* %slot, i64 0, i32 1
-  %valuePtr = getelementptr %$NAME.entry* %slot, i64 0, i32 2
+  %filledPtr = getelementptr %$NAME.entry, %$NAME.entry* %slot, i64 0, i32 0
+  %filled = load i1, i1* %filledPtr
+  %keyPtr = getelementptr %$NAME.entry, %$NAME.entry* %slot, i64 0, i32 1
+  %valuePtr = getelementptr %$NAME.entry, %$NAME.entry* %slot, i64 0, i32 2
   br i1 %filled, label %update, label %addNew
 
 update:
@@ -178,8 +178,8 @@ body:
 
 body2:
   %i2 = add i64 %i, 1
-  %entryPtr = getelementptr %$NAME.entry* %entries, i64 %i
-  %entry = load %$NAME.entry* %entryPtr
+  %entryPtr = getelementptr %$NAME.entry, %$NAME.entry* %entries, i64 %i
+  %entry = load %$NAME.entry, %$NAME.entry* %entryPtr
   %entryFilled = extractvalue %$NAME.entry %entry, 0
   br i1 %entryFilled, label %moveEntry, label %body
 
@@ -211,8 +211,8 @@ body:
   br i1 %comp, label %done, label %body2
 
 body2:
-  %entPtr = getelementptr %$NAME.entry* %entries, i64 %i
-  %ent = load %$NAME.entry* %entPtr
+  %entPtr = getelementptr %$NAME.entry, %$NAME.entry* %entries, i64 %i
+  %ent = load %$NAME.entry, %$NAME.entry* %entPtr
   %filled = extractvalue %$NAME.entry %ent, 0
   br i1 %filled, label %body3, label %body
 

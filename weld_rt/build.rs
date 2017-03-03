@@ -24,4 +24,10 @@ fn main() {
             println!("cargo:rustc-link-lib={}", lib);
         }
     }
+    else if target == "x86_64-unknown-linux-gnu" {
+        let libs = vec!["z", "stdc++"];
+        for lib in libs {
+            println!("cargo:rustc-link-lib={}", lib);
+        }
+    }
 }

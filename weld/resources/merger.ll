@@ -9,7 +9,7 @@
 
 ; Returns a pointer to builder data for index i (generally, i is the thread ID).
 define %$NAME.bld @$NAME.bld.getPtrIndexed(%$NAME.bld %bldPtr, i32 %i) alwaysinline {
-  %mergerPtr = getelementptr $ELEM* null, i32 1
+  %mergerPtr = getelementptr $ELEM, $ELEM* null, i32 1
   %mergerSize = ptrtoint $ELEM* %mergerPtr to i64
   %asPtr = bitcast %$NAME.bld %bldPtr to i8*
   %rawPtr = call i8* @get_merger_at_index(i8* %asPtr, i64 %mergerSize, i32 %i)
@@ -19,7 +19,7 @@ define %$NAME.bld @$NAME.bld.getPtrIndexed(%$NAME.bld %bldPtr, i32 %i) alwaysinl
 
 ; Initialize and return a new merger.
 define %$NAME.bld @$NAME.bld.new() {
-  %bldSizePtr = getelementptr $ELEM* null, i32 1
+  %bldSizePtr = getelementptr $ELEM, $ELEM* null, i32 1
   %bldSize = ptrtoint $ELEM* %bldSizePtr to i64
   %runId = call i64 @get_runid()
   %nworkers = call i32 @get_nworkers()
