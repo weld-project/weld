@@ -15,11 +15,9 @@
 ; The capacity must be a power of 2.
 define %$NAME.bld @$NAME.bld.new(i64 %capacity) {
   %nworkers = call i32 @get_nworkers()
-  %runId = call i64 @get_runid()
   %structSizePtr = getelementptr %$NAME, %$NAME* null, i32 1
   %structSize = ptrtoint %$NAME* %structSizePtr to i64
-
-  %bldPtr = call i8* @new_merger(i64 %runId, i64 %structSize, i32 %nworkers)
+  %bldPtr = call i8* @new_merger(i64 %structSize, i32 %nworkers)
   br label %entry
 
 entry:
@@ -147,8 +145,7 @@ freeBody:
   br i1 %freeCond2, label %freeBody, label %endLabel
 
 endLabel:
-  %runId = call i64 @get_runid()
-  call void @free_merger(i64 %runId, i8* %bldPtr)
+  call void @free_merger(i8* %bldPtr)
   %finalRes = load %$NAME, %$NAME* %finalDictPtr
   ret %$NAME %finalRes
 }

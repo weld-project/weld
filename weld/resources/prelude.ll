@@ -7,14 +7,14 @@ declare float @llvm.exp.f32(float)
 declare double @llvm.exp.f64(double)
 declare i64 @llvm.ctlz.i64(i64, i1)
 
+; std library functions
+declare i8* @malloc(i64)
+
 ; Weld library functions
 declare void    @weld_rt_init(i64)
 declare i8*     @weld_rt_malloc(i64, i64)
 declare i8*     @weld_rt_realloc(i64, i8*, i64)
 declare void    @weld_rt_free(i64, i8*)
-declare i8*     @new_merger(i64, i64, i32)
-declare i8*     @get_merger_at_index(i8*, i64, i32)
-declare void    @free_merger(i64, i8*)
 declare i32     @my_id_public()
 declare void    @weld_rt_set_errno(i64, i64)
 declare i64     @weld_rt_get_errno(i64)
@@ -42,6 +42,10 @@ declare i8* @new_vb(i64, i64)
 declare void @new_piece(i8*, %work_t*)
 declare %vb.vp* @cur_piece(i8*, i32)
 declare %vb.out @result_vb(i8*)
+; merger.cpp
+declare i8* @new_merger(i64, i32)
+declare i8* @get_merger_at_index(i8*, i64, i32)
+declare void @free_merger(i8*)
 
 ; Number of workers
 declare void @set_nworkers(i32)

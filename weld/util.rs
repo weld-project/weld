@@ -123,3 +123,10 @@ pub fn load_runtime_library() -> Result<(), String> {
         Ok(())
     }
 }
+
+pub fn get_merger_lib_path() -> String {
+    let weld_home = get_weld_home().unwrap_or(".".to_string());
+    // TODO(shoumik): Is there a better way to do this?
+    let lib_path = "weld_rt/cpp/libparbuilder.bc";
+    format!("{}{}", weld_home, lib_path)
+}

@@ -21,9 +21,8 @@ define %$NAME.bld @$NAME.bld.getPtrIndexed(%$NAME.bld %bldPtr, i32 %i) alwaysinl
 define %$NAME.bld @$NAME.bld.new() {
   %bldSizePtr = getelementptr $ELEM, $ELEM* null, i32 1
   %bldSize = ptrtoint $ELEM* %bldSizePtr to i64
-  %runId = call i64 @get_runid()
   %nworkers = call i32 @get_nworkers()
-  %bldPtr = call i8* @new_merger(i64 %runId, i64 %bldSize, i32 %nworkers)
+  %bldPtr = call i8* @new_merger(i64 %bldSize, i32 %nworkers)
   ; TODO(shoumik): For now, mergers can only be scalars. We may need to do some
   ; kind of initialization here like in the dictmerger if we allow more complex
   ; merger types.

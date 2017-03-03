@@ -100,8 +100,8 @@ static inline void set_nest(work_t *task) {
     cur = cur->cont;
     nest_len++;
   }
-  task->nest_idxs = (int64_t *)weld_rt_malloc(get_runid(), sizeof(int64_t) * nest_len);
-  task->nest_task_ids = (int64_t *)weld_rt_malloc(get_runid(), sizeof(int64_t) * nest_len);
+  task->nest_idxs = (int64_t *)malloc(sizeof(int64_t) * nest_len);
+  task->nest_task_ids = (int64_t *)malloc(sizeof(int64_t) * nest_len);
   task->nest_len = nest_len;
   // we want the outermost idxs to be the "high-order bits" when we do a comparison of task nests
   reverse_copy(idxs.begin(), idxs.end(), task->nest_idxs);
@@ -152,7 +152,7 @@ static inline void finish_task(work_t *task) {
       // the computation is over
       done = true;
     }
-    weld_rt_free(get_runid(), task->data);
+    free(task->data);
   } else {
     int32_t previous = __sync_fetch_and_sub(&task->cont->deps, 1);
     if (previous == 1) {
@@ -162,14 +162,14 @@ static inline void finish_task(work_t *task) {
       (all_work_queues + my_id())->push_front(task->cont);
       pthread_spin_unlock((all_work_queue_locks + my_id()));
       // we are the last sibling with this data, so we can free it
-      weld_rt_free(get_runid(), task->data);
+      free(task->data);
     }
     if (task->full_task) {
-      weld_rt_free(get_runid(), task->nest_idxs);
-      weld_rt_free(get_runid(), task->nest_task_ids);
+      free(task->nest_idxs);
+      free(task->nest_task_ids);
     }
   }
-  weld_rt_free(get_runid(), task);
+  free(task);
 }
 
 // set the continuation of w to cont and increment cont
@@ -185,7 +185,7 @@ static inline void set_cont(work_t *w, work_t *cont) {
 // w is the currently executing task
 extern "C" void pl_start_loop(work_t *w, void *body_data, void *cont_data, void (*body)(work_t*),
   void (*cont)(work_t*), int64_t lower, int64_t upper, int32_t grain_size) {
-  work_t *body_task = (work_t *)weld_rt_malloc(get_runid(), sizeof(work_t));
+  work_t *body_task = (work_t *)malloc(sizeof(work_t));
   memset(body_task, 0, sizeof(work_t));
   body_task->data = body_data;
   body_task->fp = body;
@@ -194,7 +194,7 @@ extern "C" void pl_start_loop(work_t *w, void *body_data, void *cont_data, void 
   body_task->cur_idx = lower;
   body_task->task_id = w->task_id + 1;
   body_task->grain_size = grain_size;
-  work_t *cont_task = (work_t *)weld_rt_malloc(get_runid(), sizeof(work_t));
+  work_t *cont_task = (work_t *)malloc(sizeof(work_t));
   memset(cont_task, 0, sizeof(work_t));
   cont_task->data = cont_data; 
   cont_task->fp = cont;
@@ -221,7 +221,7 @@ extern "C" void pl_start_loop(work_t *w, void *body_data, void *cont_data, void 
 }
 
 static inline work_t *clone_task(work_t *task) {
-  work_t *clone = (work_t *)weld_rt_malloc(get_runid(), sizeof(work_t));
+  work_t *clone = (work_t *)malloc(sizeof(work_t));
   memcpy(clone, task, sizeof(work_t));
   clone->full_task = false;
   return clone;
@@ -333,7 +333,7 @@ extern "C" void execute(void (*run)(work_t*), void *data) {
   all_work_queue_locks = new work_queue_lock[W];
   all_work_queues = new work_queue[W];
 
-  work_t *run_task = (work_t *)weld_rt_malloc(get_runid(), sizeof(work_t));
+  work_t *run_task = (work_t *)malloc(sizeof(work_t));
   memset(run_task, 0, sizeof(work_t));
   run_task->data = data;
   run_task->fp = run;

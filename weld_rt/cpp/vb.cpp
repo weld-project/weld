@@ -59,9 +59,8 @@ bool vp_compare(vec_piece one, vec_piece two) {
 }
 
 extern "C" void *new_vb(int64_t elem_size, int64_t starting_cap) {
-  // TODO set default allocator to be weld_rt_malloc
   vec_builder *vb = new vec_builder();
-  vb->thread_curs = (vec_piece *)weld_rt_malloc(get_runid(), sizeof(vec_piece) * get_nworkers());
+  vb->thread_curs = (vec_piece *)malloc(sizeof(vec_piece) * get_nworkers());
   memset(vb->thread_curs, 0, sizeof(vec_piece) * get_nworkers());
   pthread_mutex_init(&vb->lock, NULL);
   vb->elem_size = elem_size;
@@ -71,9 +70,9 @@ extern "C" void *new_vb(int64_t elem_size, int64_t starting_cap) {
 
 extern "C" void new_piece(void *v, work_t *w) {
   vec_builder *vb = (vec_builder *)v;
-  int64_t *nest_idxs = (int64_t *)weld_rt_malloc(get_runid(), sizeof(int64_t) * w->nest_len);
+  int64_t *nest_idxs = (int64_t *)malloc(sizeof(int64_t) * w->nest_len);
   memcpy(nest_idxs, w->nest_idxs, sizeof(int64_t) * w->nest_len);
-  int64_t *nest_task_ids = (int64_t *)weld_rt_malloc(get_runid(), sizeof(int64_t) * w->nest_len);
+  int64_t *nest_task_ids = (int64_t *)malloc(sizeof(int64_t) * w->nest_len);
   memcpy(nest_task_ids, w->nest_task_ids, sizeof(int64_t) * w->nest_len);
   int32_t my_id = my_id_public();
   if (vb->thread_curs[my_id].data != NULL) {
@@ -84,6 +83,8 @@ extern "C" void new_piece(void *v, work_t *w) {
   vb->thread_curs[my_id].nest_idxs = nest_idxs;
   vb->thread_curs[my_id].nest_len = w->nest_len;
   vb->thread_curs[my_id].nest_task_ids = nest_task_ids;
+  // we need weld_rt_malloc here because this data is realloc'ed by the user program and
+  // can become large
   vb->thread_curs[my_id].data = weld_rt_malloc(get_runid(), vb->elem_size * vb->starting_cap);
   vb->thread_curs[my_id].size = 0;
   vb->thread_curs[my_id].capacity = vb->starting_cap;
@@ -111,17 +112,18 @@ extern "C" vec_output result_vb(void *v) {
     output_size += vb->pieces[i].size;
   }
 
+  // also needs weld_rt_malloc because it's the final result and not freed by the runtime
   uint8_t *output = (uint8_t *)weld_rt_malloc(get_runid(), vb->elem_size * output_size);
   int64_t cur_start = 0;
   for (int64_t i = 0; i < vb->pieces.size(); i++) {
     memcpy(output + cur_start, vb->pieces[i].data, vb->elem_size * vb->pieces[i].size);
     cur_start += vb->elem_size * vb->pieces[i].size;
-    weld_rt_free(get_runid(), vb->pieces[i].nest_idxs);
-    weld_rt_free(get_runid(), vb->pieces[i].nest_task_ids);
+    free(vb->pieces[i].nest_idxs);
+    free(vb->pieces[i].nest_task_ids);
     weld_rt_free(get_runid(), vb->pieces[i].data);
   }
   pthread_mutex_destroy(&vb->lock);
-  weld_rt_free(get_runid(), vb->thread_curs);
+  free(vb->thread_curs);
   delete vb;
   vec_output vo = (vec_output) {output, output_size};
   return vo;
