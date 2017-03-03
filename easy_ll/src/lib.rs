@@ -141,6 +141,14 @@ pub fn compile_module(code: &str,
         // Parse the IR to get an LLVMModuleRef
         let module = try!(parse_module_str(context, code));
 
+        if static_lib_file != None {
+            let merger_module = try!(parse_module_file(context, static_lib_file.unwrap()));
+            llvm::linker::LLVMLinkModules(module,
+                                          merger_module,
+                                          llvm::linker::LLVMLinkerMode::LLVMLinkerDestroySource,
+                                          std::ptr::null_mut());
+        }
+
         // Validate and optimize the module
         try!(verify_module(module));
         try!(check_run_function(module));
@@ -148,11 +156,6 @@ pub fn compile_module(code: &str,
 
         // Create an execution engine for the module and find its run function
         let engine = try!(create_exec_engine(module));
-
-        if static_lib_file != None {
-            let merger_module = try!(parse_module_file(context, static_lib_file.unwrap()));
-            llvm::execution_engine::LLVMAddModule(engine, merger_module);
-        }
 
         result.engine = Some(engine);
         result.function = Some(try!(find_run_function(engine)));
