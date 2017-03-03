@@ -119,6 +119,10 @@ Replace the `__init__` implementation with the following:
 
 ```python
   def __init__(self, vector):
+      """
+      Create a new `HelloWeldVector`, initialized with an existing `numpy.ndarray` 'vector'.
+      vector must have ndim=1 and dtype='int32'.
+      """
       self.vector = vector
       self.weldobj = WeldObject(NumpyArrayEncoder(), NumpyArrayDecoder())
       name = self.weldobj.update(vector, WeldVec(WeldI32()))
@@ -131,7 +135,7 @@ Replace the `__init__` implementation with the following:
  self.vector = vector
  ```
  
- This line is straightforward; we just track the vector the user passes in. Note that we might want to perform some checks here, like making sure the vector is a NumPy `ndarray` and the `dtype` is something we can support, but we'll skip that for now.
+ This line tracks the vector the user passes in. Note that we might want to perform some checks here, like making sure the vector is a NumPy `ndarray` and the `dtype` is something we can support, but we'll skip that for now.
  
  ```python
  self.weldobj = WeldObject(NumpyArrayEncoder(), NumpyArrayDecoder())
@@ -143,9 +147,9 @@ Replace the `__init__` implementation with the following:
  name = self.weldobj.update(vector, WeldVec(WeldI32()))
  ```
  
- This is an important line. `WeldObject` instances have an `update` method which add a _dependency_ to the object. Dependencies are just values which will be passed into Weld when we actually want to compute something. The `update` method takes two parameters (a value and a type) and returns a string name.
+`WeldObject` instances have an `update` method which add a _dependency_ to the object. Dependencies are just values which will be passed into Weld when we actually want to compute something. The `update` method takes two parameters (a value and a type) and returns a string name.
  
-Let's talk about these in more detail. The value is straightforward. The type warrants some discussion; it is the type the value will take on _in Weld_. Types supported by Weld are available in the `weld.types` module. In this example, because our value is a NumPy array of integers, the expected Weld type is a `WeldVec(WeldI32())` (a vector of 32-bit integer values). The encoder object we discussed earlier is responsible for translating the NumPy array into this type so Weld's execution engine understands it.
+Let's talk about these in more detail. The value is the value to mark as a dependency. The type is the type the value will take on _in Weld_. Types supported by Weld are available in the `weld.types` module. In this example, because our value is a NumPy array of integers, the expected Weld type is a `WeldVec(WeldI32())` (a vector of 32-bit integer values). The encoder object we discussed earlier is responsible for translating the NumPy array into this type so Weld's execution engine understands it.
 
 The return type of the `update` function is a string name. The name is how we refer to `value` in Weld code. Names are unique; no two values will ever be assigned the same name. Here, whenever we want to refer to the vector in our Weld code, we can just use this string as a placeholder to represent the value. `WeldObject` takes care of tracking which names are mapped to which values.
 
@@ -159,10 +163,13 @@ Last line! Here, we're setting the actual Weld IR code of the `WeldObject`. The 
 
 It may seem like we haven't done much, but we're already 80% of the way there! Now, we need to implement an operator.
 
-Let's start with `add`. Copy and paste the following code, which implements the `add` operator:
+Let's start with `add`. Replace the current implementation with the below, which implements the `add` operator:
 
 ```python
 def add(self, number):
+    """
+    Add `number` to each element in this vector.
+    """
     template = "map({0}, |e| e + {1})"
     self.weldobj.weld_code = template.format(self.weldobj.weld_code, str(number))
 ```
@@ -173,13 +180,13 @@ Let's take it line by line again.
 template = "map({0}, |e| e + {1})"
 ```
 
-This is some simple Python code. `template` represents some Weld IR, which performs a `map` function on some vector `{0}` (this is something we can use Python's `format` method to replace with another string). The map function adds `{1}` to each element; in short, `template` is some Weld code to implement an elementwise add operator.
+`template` represents some Weld IR, which performs a `map` function on some vector `{0}` (this is something we can use Python's `format` method to replace with another string). The map function adds `{1}` to each element; in short, `template` is some Weld code to implement an elementwise add operator.
 
 ```python
 self.weldobj.weld_code = template.format(self.weldobj.weld_code, str(number))
 ```
 
-This shold look familiar now. We are updating the `weld_code` field of our `WeldObject` instance using the `template`; we substitute `{0}` with the first argument of `format`, and `{1}` with the second argument.
+Like before, we are updating the `weld_code` field of our `WeldObject` instance using the `template`; we substitute `{0}` with the first argument of `format`, and `{1}` with the second argument.
 
 The first argument is the `weld_code` we already had. What does this `weld_code` represent? Well, if each operation in our library produces a vector, the `weld_code` must represent a vector too! We are effectively passing in the computation we have done so far as the input to the `add` operator. If we haven't done any operations on the vector yet, recall that `weld_code` was initialized to the name of the initial vector from `__init__`, so we will do the `add` on that.
 
