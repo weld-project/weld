@@ -33,7 +33,7 @@ struct WeldVec<T> {
 fn benchmark_conf() -> *mut WeldConf {
     let conf = weld_conf_new();
     let key = CString::new("weld.threads").unwrap().into_raw() as *const c_char;
-    let value = CString::new("1").unwrap().into_raw() as *const c_char;
+    let value = CString::new("4").unwrap().into_raw() as *const c_char;
     unsafe { weld_conf_set(conf, key, value) };
 
     let key = CString::new("weld.memory.limit").unwrap().into_raw() as *const c_char;
@@ -376,7 +376,7 @@ fn main() {
     println!("running benchmarks");
     let mut measured = 0;
     for t in benches.iter() {
-        if args.len() > 1 {
+        if args.len() > 2 {
             if !t.0.contains(args[1].as_str()) {
                 println!("{} ... \x1b[0;33mignored\x1b[0m", t.0);
                 continue;
