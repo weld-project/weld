@@ -5,11 +5,7 @@ CFLAGS_RT = -O3 -Wall -fno-use-cxa-atexit -fPIC
 CFLAGS_BUILDER = ${CFLAGS_RT} -flto
 ifeq (${OS}, Darwin)
   # OS X
-<<<<<<< HEAD
-  CLANG ?= clang-$(LLVM_VERSION)
-=======
   CLANG ?= clang-${LLVM_VERSION}
->>>>>>> perf improvements + lto
 else ifeq (${OS}, Linux)
   # Linux
   CLANG ?= clang-${LLVM_VERSION}
