@@ -40,6 +40,8 @@ pub enum Token {
     TIter,
     TLen,
     TLookup,
+    TSlice,
+    TExp,
     TAppender,
     TMerger,
     TDictMerger,
@@ -87,10 +89,14 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
 
         // Regular expressions for various types of tokens.
         static ref KEYWORD_RE: Regex = Regex::new(
-            "if|for|zip|len|lookup|iter|merge|result|let|true|false|macro|\
+            "if|for|zip|len|lookup|slice|exp|iter|merge|result|let|true|false|macro|\
              i8|i32|i64|f32|f64|bool|vec|appender|merger|vecmerger|dictmerger|tovec").unwrap();
 
         static ref IDENT_RE: Regex = Regex::new(r"^[A-Za-z$_][A-Za-z0-9$_]*$").unwrap();
+
+        static ref I8_BASE_10_RE: Regex = Regex::new(r"^[0-9]+[cC]$").unwrap();
+        static ref I8_BASE_2_RE: Regex = Regex::new(r"^0b[0-1]+[cC]$").unwrap();
+        static ref I8_BASE_16_RE: Regex = Regex::new(r"^0x[0-9a-fA-F]+[cC]$").unwrap();
 
         static ref I32_BASE_10_RE: Regex = Regex::new(r"^[0-9]+$").unwrap();
         static ref I32_BASE_2_RE: Regex = Regex::new(r"^0b[0-1]+$").unwrap();
@@ -137,12 +143,20 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
                 "iter" => TIter,
                 "len" => TLen,
                 "lookup" => TLookup,
+                "slice" => TSlice,
+                "exp" => TExp,
                 "true" => TBoolLiteral(true),
                 "false" => TBoolLiteral(false),
                 _ => return weld_err!("Invalid input token: {}", text),
             });
         } else if IDENT_RE.is_match(text) {
             tokens.push(TIdent(text.to_string()));
+        } else if I8_BASE_10_RE.is_match(text) {
+            tokens.push(try!(parse_i8_literal(text, 10)))
+        } else if I8_BASE_2_RE.is_match(text) {
+            tokens.push(try!(parse_i8_literal(text, 2)))
+        } else if I8_BASE_16_RE.is_match(text) {
+            tokens.push(try!(parse_i8_literal(text, 16)))
         } else if I32_BASE_10_RE.is_match(text) {
             tokens.push(try!(parse_i32_literal(text, 10)))
         } else if I32_BASE_2_RE.is_match(text) {
@@ -212,8 +226,8 @@ impl fmt::Display for Token {
             TI64Literal(ref value) => write!(f, "{}L", value),
             TF32Literal(ref value) => write!(f, "{}F", value),
             TF64Literal(ref value) => write!(f, "{}", value),  // TODO: force .0?
-            TI8Literal(ref value) => write!(f, "{}", value),
-            TBoolLiteral(ref value) => write!(f, "{}", value),
+            TI8Literal(ref value) => write!(f, "{}C", value),
+            TBoolLiteral(ref value) => write!(f, "{}B", value),
             TIdent(ref value) => write!(f, "{}", value),
 
             // Cases that return fixed strings
@@ -252,6 +266,8 @@ impl fmt::Display for Token {
                            TIter => "iter",
                            TLen => "len",
                            TLookup => "lookup",
+                           TSlice => "slice",
+                           TExp => "exp",
                            TOpenParen => "(",
                            TCloseParen => ")",
                            TOpenBracket => "[",
@@ -284,6 +300,18 @@ impl fmt::Display for Token {
                        })
             }
         }
+    }
+}
+
+fn parse_i8_literal(input: &str, base: u32) -> WeldResult<Token> {
+    let slice = if base == 10 {
+        &input[..input.len() - 1]
+    } else {
+        &input[2..input.len() - 1]
+    };
+    match i8::from_str_radix(slice, base) {
+        Ok(value) => Ok(Token::TI8Literal(value)),
+        Err(_) => weld_err!("Invalid i8 literal: {}", input),
     }
 }
 
@@ -323,7 +351,13 @@ fn basic_tokenize() {
                vec![TEqual, TEqualEqual, TBar, TLogicalOr, TBitwiseAnd, TLogicalAnd, TEndOfInput]);
     assert_eq!(tokenize("|a:i8| a").unwrap(),
                vec![TBar, TIdent("a".into()), TColon, TI8, TBar, TIdent("a".into()), TEndOfInput]);
-
+    assert_eq!(tokenize("|a:vec[i8]| slice(a, 2L, 3L)").unwrap(),
+               vec![TBar, TIdent("a".into()), TColon, TVec, TOpenBracket, TI8, TCloseBracket,
+                    TBar, TSlice, TOpenParen, TIdent("a".into()), TComma, TI64Literal(2),
+                    TComma, TI64Literal(3), TCloseParen, TEndOfInput]);
+    assert_eq!(tokenize("|a:i8| exp(a)").unwrap(),
+               vec![TBar, TIdent("a".into()), TColon, TI8, TBar, TExp, TOpenParen,
+                    TIdent("a".into()), TCloseParen, TEndOfInput]);
     assert!(tokenize("0a").is_err());
     assert!(tokenize("#").is_err());
 

@@ -146,14 +146,6 @@ static inline bool try_steal() {
 // decrease the dependency count of the continuation, run the continuation
 // if necessary, or signal the end of the computation if we are done
 static inline void finish_task(work_t *task) {
-  // Exit the thread if there's an error.
-  // We don't need to worry about freeing here; the runtime will
-  // free all allocated memory as long as it is allocated with
-  // `weld_rt_malloc` or `weld_rt_realloc`.
-  if (weld_rt_get_errno(get_runid()) != 0) {
-    weld_abort_thread();
-  }
-
   if (task->cont == NULL) {
     if (!task->continued) {
       // if this task has no continuation and there was no for loop to end it,
@@ -237,7 +229,6 @@ static inline work_t *clone_task(work_t *task) {
 
 // repeatedly break off the second half of the task into a new task
 // until the task's size in iterations drops below a certain threshold
-// call with my_id() queue lock held
 static inline void split_task(work_t *task) {
   while (task->upper - task->lower > task->grain_size) {
     work_t *last_half = clone_task(task);
@@ -248,7 +239,9 @@ static inline void split_task(work_t *task) {
     // task must have non-NULL cont if it has non-zero number of iterations and therefore
     // is a loop body
     set_cont(last_half, task->cont);
+    pthread_spin_lock((all_work_queue_locks + my_id()));
     (all_work_queues + my_id())->push_front(last_half);
+    pthread_spin_unlock((all_work_queue_locks + my_id()));
   }
 }
 
@@ -262,8 +255,15 @@ static inline void work_loop() {
     } else {
       work_t *popped = (all_work_queues + my_id())->front();
       (all_work_queues + my_id())->pop_front();
-      split_task(popped);
       pthread_spin_unlock((all_work_queue_locks + my_id()));
+      split_task(popped);
+      // Exit the thread if there's an error.
+      // We don't need to worry about freeing here; the runtime will
+      // free all allocated memory as long as it is allocated with
+      // `weld_rt_malloc` or `weld_rt_realloc`.
+      if (weld_rt_get_errno(get_runid()) != 0) {
+        weld_abort_thread();
+      }
       popped->fp(popped);
       finish_task(popped);
     }

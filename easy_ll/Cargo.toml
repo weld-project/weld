@@ -5,5 +5,5 @@ authors = ["Matei Zaharia <matei.zaharia@gmail.com>"]
 build = "build.rs"
 
 [dependencies]
-llvm-sys = "0.3.0"
+llvm-sys = "38.0.1"
 libc = "0.2.0"

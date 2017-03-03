@@ -2,7 +2,7 @@
   {nworkers} = call i32 @get_nworkers()
   {t0} = call {bldType} {bldPrefix}.getPtrIndexed({bldType} {buildPtr}, i32 0)
   {typedPtr} = bitcast {bldType} {t0} to {resType}*
-  {firstVec} = load {resType}* {typedPtr}
+  {firstVec} = load {resType}, {resType}* {typedPtr}
   {size} = call i64 {resPrefix}.size({resType} {firstVec})
   {retValue} = call {resType} {resPrefix}.clone({resType} {firstVec})
   br label %{entry}
@@ -12,7 +12,7 @@
 {bodyLabel}:
   {i} = phi i32 [ 1, %{entry} ], [ {i2}, %{copyDoneLabel} ]
   {vecPtr} = call {resType}* {bldPrefix}.getPtrIndexed({bldType} {typedPtr}, i32 {i})
-  {curVec} = load {resType}* {vecPtr}
+  {curVec} = load {resType}, {resType}* {vecPtr}
   br label %{copyEntryLabel}
 {copyEntryLabel}:
   {copyCond} = icmp ult i64 0, {size}
@@ -20,7 +20,7 @@
 {copyBodyLabel}:
   {j} = phi i64 [ 0, %{copyEntryLabel} ], [ {j2}, %{copyBodyLabel} ]
   {elemPtr} = call {elemType}* {resPrefix}.at({resType} {curVec}, i64 {j})
-  {mergeValue} = load {elemType}* {elemPtr}
+  {mergeValue} = load {elemType}, {elemType}* {elemPtr}
   {mergePtr} = call {elemType}* {resPrefix}.at({resType} {retValue}, i64 {j})
 ; Insert gen_merge(mergePtr, mergeValue, ...) below.
 

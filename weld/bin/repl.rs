@@ -166,6 +166,7 @@ fn main() {
         transforms::inline_zips(&mut expr);
         println!("After inlining zips:\n{}\n", print_typed_expr(&expr));
 
+
         transforms::fuse_loops_horizontal(&mut expr);
         println!("After horizontal loop fusion:\n{}\n",
                  print_typed_expr(&expr));

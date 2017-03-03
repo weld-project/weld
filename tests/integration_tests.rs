@@ -116,6 +116,35 @@ fn basic_program() {
     unsafe { weld_value_free(ret_value) };
 }
 
+fn negation() {
+    let code = "|| -1";
+    let conf = default_conf();
+
+    let ref input_data = 0;
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const i32 };
+    let result = unsafe { *data };
+    assert_eq!(result, -1 as i32);
+
+    unsafe { weld_value_free(ret_value) };
+}
+
+fn negated_arithmetic() {
+    // In our language, - has the lowest precedence so the paraens around -3 are mandatory.
+    let code = "|| 1+2*-3-4/-2";
+    let conf = default_conf();
+
+    let ref input_data = 0;
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const i32 };
+    let result = unsafe { *data };
+    assert_eq!(result, -3 as i32);
+
+    unsafe { weld_value_free(ret_value) };
+}
+
 fn f64_cast() {
     let code = "|| f64(40 + 2)";
     let conf = default_conf();
@@ -419,6 +448,50 @@ fn simple_vector_lookup() {
     let data = unsafe { weld_value_data(ret_value) as *const i32 };
     let result = unsafe { *data };
     assert_eq!(result, input_vec[3]);
+
+    unsafe { weld_value_free(ret_value) };
+}
+
+fn simple_vector_slice() {
+    let code = "|x:vec[i32]| slice(x, 1L, 3L)";
+    let conf = default_conf();
+
+    let input_vec = [1, 2, 3, 4, 5];
+    let ref input_data = WeldVec {
+        data: &input_vec as *const i32,
+        len: input_vec.len() as i64,
+    };
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<i32> };
+    let result = unsafe { (*data).clone() };
+    let output = [2, 3, 4];
+
+    assert_eq!(output.len() as isize, result.len as isize);
+    for i in 0..(result.len as isize) {
+        assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
+    }
+
+    unsafe { weld_value_free(ret_value) };
+
+    // Test slicing out of bounds case
+    let conf = default_conf();
+
+    let input_vec = [1, 2];
+    let ref input_data = WeldVec {
+        data: &input_vec as *const i32,
+        len: input_vec.len() as i64,
+    };
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<i32> };
+    let result = unsafe { (*data).clone() };
+    let output = [2];
+
+    assert_eq!(output.len() as isize, result.len as isize);
+     for i in 0..(result.len as isize) {
+         assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
+     }
 
     unsafe { weld_value_free(ret_value) };
 }
@@ -799,6 +872,51 @@ fn flat_map_length() {
     unsafe { weld_value_free(ret_value) };
 }
 
+fn simple_exp() {
+    let code = "|x:f64| exp(x)";
+    let conf = default_conf();
+    let input = 1.0f64;
+    let ret_value = compile_and_run(code, conf, &input);
+    let data = unsafe { weld_value_data(ret_value) as *const f64 };
+    let result = unsafe { (*data).clone() };
+
+    let output = 2.718281828459045;
+    assert_eq!(output, result);
+    unsafe { weld_value_free(ret_value) };
+}
+
+fn exp_error() {
+    let code = "|x:i64| exp(x)";
+    let conf = default_conf();
+    let input = 1;
+    let err_value = compile_and_run_error(code, conf, &input);
+    assert_eq!(unsafe { weld_error_code(err_value) },
+               WeldRuntimeErrno::CompileError);
+    unsafe { weld_error_free(err_value) };
+}
+
+fn map_exp() {
+    let code = "|x:vec[f32]| map(x, |a| exp(a))";
+    let conf = default_conf();
+
+    let input_vec = [0.0f32, 1.0f32, 2.0f32, 3.0f32];
+    let ref input_data = WeldVec {
+        data: &input_vec as *const f32,
+        len: input_vec.len() as i64,
+    };
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<f32> };
+    let result = unsafe { (*data).clone() };
+
+    let output = [1.0, 2.7182817, 7.389056, 20.085537];
+    for i in 0..(result.len as isize) {
+        assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
+    }
+
+    unsafe { weld_value_free(ret_value) };
+}
+
 fn if_for_loop() {
     let code = "|x:vec[i32], a:i32| if(a > 5, map(x, |e| e+1), map(x, |e| e+2))";
     let conf = default_conf();
@@ -941,9 +1059,12 @@ fn outofmemory_error_test() {
     let code = "|x:vec[i32]| result(for(x, vecmerger[i32,+](x), |b,i,e| merge(b,{i,e+1})))";
     let conf = default_conf();
 
-    // 1GB of data; the vecmerger will allocate at least this much,
-    // exceeding the 1GB default limit.
-    let x = vec![4; 1000000000 / 4 as usize];
+    // Set the memory to something small.
+    let key = CString::new("weld.memory.limit").unwrap().into_raw() as *const c_char;
+    let value = CString::new("50000").unwrap().into_raw() as *const c_char;
+    unsafe { weld_conf_set(conf, key, value) };
+
+    let x = vec![4; 50000 / 4 as usize];
     let ref input_data = WeldVec {
         data: x.as_ptr() as *const i32,
         len: x.len() as i64,
@@ -959,6 +1080,8 @@ fn main() {
     let args: Vec<String> = env::args().collect();
     let tests: Vec<(&str, fn())> =
         vec![("basic_program", basic_program),
+             ("negation", negation),
+             ("negated_arithmetic", negated_arithmetic),
              ("f64_cast", f64_cast),
              ("i32_cast", i32_cast),
              ("program_with_args", program_with_args),
@@ -973,6 +1096,10 @@ fn main() {
              ("lt_between_vectors", lt_between_vectors),
              ("le_between_vectors", le_between_vectors),
              ("simple_vector_lookup", simple_vector_lookup),
+             ("simple_vector_slice", simple_vector_slice),
+             ("simple_exp", simple_exp),
+             ("exp_error", exp_error),
+             ("map_exp", map_exp),
              ("simple_for_appender_loop", simple_for_appender_loop),
              ("simple_parallel_for_appender_loop", simple_parallel_for_appender_loop),
              ("complex_parallel_for_appender_loop", complex_parallel_for_appender_loop),
@@ -999,6 +1126,7 @@ fn main() {
     for t in tests.iter() {
         if args.len() > 1 {
             if !t.0.contains(args[1].as_str()) {
+                println!("{} ... \x1b[0;33mignored\x1b[0m", t.0);
                 continue;
             }
         }
