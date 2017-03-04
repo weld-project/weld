@@ -37,7 +37,7 @@ nvl::vec<long> numpy_to_nvl_long_arr(PyObject* in) {
 extern "C"
 nvl::vec<double> numpy_to_nvl_double_arr(PyObject* in) {
     PyArrayObject* inp = (PyArrayObject*) in;
-    int64_t dimension = (int64_t) PyArray_DIMS(inp);
+    int64_t dimension = (int64_t) PyArray_DIMS(inp)[0];
     nvl::vec<double> t;
     t.size = dimension;
     t.ptr = (double*) PyArray_DATA(inp);
