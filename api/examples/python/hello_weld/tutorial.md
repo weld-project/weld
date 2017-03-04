@@ -110,38 +110,24 @@ Weld registers computations using a special _intermediate representation_ (IR); 
 
 ## Initializing
 
-Let's start off by initializing our vector. We need to do a few things here:
+We will start off by initializing our vector. We need to do a few things here:
 
 1. Track the vector the user passes in as the "initial vector".
 2. Create a new `WeldObject`, which we will use to track the computations on the vector.
 
-Replace the `__init__` implementation with the following:
-
-```python
-  def __init__(self, vector):
-      """
-      Create a new `HelloWeldVector`, initialized with an existing `numpy.ndarray` 'vector'.
-      vector must have ndim=1 and dtype='int32'.
-      """
-      self.vector = vector
-      self.weldobj = WeldObject(NumpyArrayEncoder(), NumpyArrayDecoder())
-      name = self.weldobj.update(vector, WeldVec(WeldI32()))
-      self.weldobj.weld_code = name
- ```
- 
- Okay, there is a lot going on here, so let's take it line by line:
- 
+Add each line described below to the `__init__` method.
+  
  ```python
  self.vector = vector
  ```
  
- This line tracks the vector the user passes in. Note that we might want to perform some checks here, like making sure the vector is a NumPy `ndarray` and the `dtype` is something we can support, but we'll skip that for now.
+This line tracks the vector the user passes in. Note that we might want to perform some checks here, like making sure the vector is a NumPy `ndarray` and the `dtype` is something we can support, but we'll skip that for now.
  
  ```python
  self.weldobj = WeldObject(NumpyArrayEncoder(), NumpyArrayDecoder())
  ```
  
- Let's break this line down. We are initializing a new `WeldObject` instance and setting it as a field. `WeldObject` takes two parameters: an _encoder_ class and a _decoder_ class. These classes specify how a type in Python maps over to a type in Weld (Weld expects a certain in-memory format for each type) and vice versa. The Weld API contains some default encoders and decoders for common types in the `weld.encoders` module; here, we use the included NumPy array encoder and decoder classes. In a different tutorial we will look at how to write encoders and decoders for custom objects.
+Here, we are initializing a new `WeldObject` instance and setting it as a field. `WeldObject` takes two parameters: an _encoder_ class and a _decoder_ class. These classes specify how a type in Python maps over to a type in Weld (Weld expects a certain in-memory format for each type) and vice versa. The Weld API contains some default encoders and decoders for common types in the `weld.encoders` module; here, we use the included NumPy array encoder and decoder classes. In a different tutorial we will look at how to write encoders and decoders for custom objects.
  
  ```python
  name = self.weldobj.update(vector, WeldVec(WeldI32()))
@@ -159,22 +145,23 @@ self.weldobj.weld_code = name
 
 Last line! Here, we're setting the actual Weld IR code of the `WeldObject`. The `weld_code` field is just a string which represents some Weld code (in our special Weld IR). Again, we won't discuss the IR itself here, but on this line our code is just the name we assigned to the vector. If we were to execute this code now, Weld would just return the vector we passed in as the result.
 
-## Implementing an Operator
-
-It may seem like we haven't done much, but we're already 80% of the way there! Now, we need to implement an operator.
-
-Let's start with `add`. Replace the current implementation with the below, which implements the `add` operator:
+Here is what you should have at the end:
 
 ```python
-def add(self, number):
-    """
-    Add `number` to each element in this vector.
-    """
-    template = "map({0}, |e| e + {1})"
-    self.weldobj.weld_code = template.format(self.weldobj.weld_code, str(number))
-```
+  def __init__(self, vector):
+      """
+      Create a new `HelloWeldVector`, initialized with an existing `numpy.ndarray` 'vector'.
+      vector must have ndim=1 and dtype='int32'.
+      """
+      self.vector = vector
+      self.weldobj = WeldObject(NumpyArrayEncoder(), NumpyArrayDecoder())
+      name = self.weldobj.update(vector, WeldVec(WeldI32()))
+      self.weldobj.weld_code = name
+ ```
 
-Let's take it line by line again.
+## Implementing an Operator
+
+We will now implement an operator. Let's start with `add`. As before, add each line below to the `add` method.
 
 ```python
 template = "map({0}, |e| e + {1})"
@@ -186,13 +173,24 @@ template = "map({0}, |e| e + {1})"
 self.weldobj.weld_code = template.format(self.weldobj.weld_code, str(number))
 ```
 
-Like before, we are updating the `weld_code` field of our `WeldObject` instance using the `template`; we substitute `{0}` with the first argument of `format`, and `{1}` with the second argument.
+We are updating the `weld_code` field of our `WeldObject` instance using the `template`; we substitute `{0}` with the first argument of `format`, and `{1}` with the second argument.
 
 The first argument is the `weld_code` we already had. What does this `weld_code` represent? Well, if each operation in our library produces a vector, the `weld_code` must represent a vector too! We are effectively passing in the computation we have done so far as the input to the `add` operator. If we haven't done any operations on the vector yet, recall that `weld_code` was initialized to the name of the initial vector from `__init__`, so we will do the `add` on that.
 
 The second argument is just the number we want to add to each element.
 
 And that's it! We've implemented the `add` operator. Note that we never actually compute a result here; rather, we just express what we want to do without actually doing it. Implementing the other operators is similar; we just change the `+` in the map function to the correct binary operator.
+
+Here's what `add` looks like at the end:
+
+```python
+def add(self, number):
+    """
+    Add `number` to each element in this vector.
+    """
+    template = "map({0}, |e| e + {1})"
+    self.weldobj.weld_code = template.format(self.weldobj.weld_code, str(number))
+```
 
 ## Forcing Evaluation
 
