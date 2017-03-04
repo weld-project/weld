@@ -65,37 +65,36 @@ This tutorial assumes you have a Weld installation and a familiarity of Python. 
           Create a new `HelloWeldVector`, initialized with an existing `numpy.ndarray` 'vector'.
           vector must have ndim=1 and dtype='int32'.
           """
-          pass
+          
 
       def add(self, number):
           """
           Add `number` to each element in this vector.
           """
-          pass
+          
 
       def multiply(self, number):
           """
           Multiply each element in this vector by `number`.
           """
-          pass
+          
 
       def subtract(self, number):
           """
           Subtract `number` from each element in this vector.
           """
-          pass
+          
 
       def divide(self, number):
           """
           Divide each element in this vector by `number`.
           """
-          pass
+          
 
       def __str__(self):
           """
           Return a string representation of this vector.
           """
-          return ""
   ```
   
 ## Weld Background
