@@ -83,41 +83,94 @@ pub fn print_type<T: PrintableType>(ty: &T) -> String {
 
 /// Print an expression concisely (without any type annotations).
 pub fn print_expr<T: PrintableType>(expr: &Expr<T>) -> String {
-    print_expr_impl(expr, false, 2)
+    print_expr_impl(expr, false, 2, true)
+}
+
+/// Print an expression concisely (without any type annotations), without indentation.
+pub fn print_expr_without_indent<T: PrintableType>(expr: &Expr<T>) -> String {
+    print_expr_impl(expr, false, 2, false)
+        .chars()
+        .map(|x| match x {
+            '\n' => "".to_string(),
+            _ => x.to_string(),
+        })
+        .collect()
 }
 
 /// Print an expression with type annotations on all symbols.
 pub fn print_typed_expr<T: PrintableType>(expr: &Expr<T>) -> String {
-    print_expr_impl(expr, true, 2)
+    print_expr_impl(expr, true, 2, true)
 }
 
-fn print_iters<T: PrintableType>(iters: &Vec<Iter<T>>, typed: bool, indent: i32) -> String {
+/// Print an expression with type annotations on all symbols, without indentation.
+pub fn print_typed_expr_without_indent<T: PrintableType>(expr: &Expr<T>) -> String {
+    print_expr_impl(expr, true, 2, false)
+        .chars()
+        .map(|x| match x {
+            '\n' => "".to_string(),
+            _ => x.to_string(),
+        })
+        .collect()
+}
+
+fn print_iters<T: PrintableType>(iters: &Vec<Iter<T>>,
+                                 typed: bool,
+                                 indent: i32,
+                                 should_indent: bool)
+                                 -> String {
     let mut iter_strs = vec![];
-    let less_indent_str: String = iter::repeat(" ").take((indent - 2) as usize).collect();
-    let indent_str: String = iter::repeat(" ").take(indent as usize).collect();
+    let mut less_indent_str: String = iter::repeat(" ").take((indent - 2) as usize).collect();
+    let mut indent_str: String = iter::repeat(" ").take(indent as usize).collect();
+    if !should_indent {
+        less_indent_str = "".to_string();
+        indent_str = "".to_string();
+    }
     for iter in iters {
         if let Some(_) = iter.start {
             iter_strs.push(format!("iter({},{},{},{})",
-                                   print_expr_impl(iter.data.as_ref(), typed, indent),
-                                   print_expr_impl(iter.start.as_ref().unwrap(), typed, indent),
-                                   print_expr_impl(iter.end.as_ref().unwrap(), typed, indent),
-                                   print_expr_impl(iter.stride.as_ref().unwrap(), typed, indent)));
+                                   print_expr_impl(iter.data.as_ref(),
+                                                   typed,
+                                                   indent,
+                                                   should_indent),
+                                   print_expr_impl(iter.start.as_ref().unwrap(),
+                                                   typed,
+                                                   indent,
+                                                   should_indent),
+                                   print_expr_impl(iter.end.as_ref().unwrap(),
+                                                   typed,
+                                                   indent,
+                                                   should_indent),
+                                   print_expr_impl(iter.stride.as_ref().unwrap(),
+                                                   typed,
+                                                   indent,
+                                                   should_indent)));
         } else {
-            iter_strs.push(print_expr_impl(iter.data.as_ref(), typed, indent + 2));
+            iter_strs.push(print_expr_impl(iter.data.as_ref(), typed, indent + 2, should_indent));
         }
     }
 
     if iters.len() > 1 {
-        format!("zip(\n{}{}\n{})", indent_str, iter_strs.join(&format!(",\n{}", indent_str)), less_indent_str)
+        format!("zip(\n{}{}\n{})",
+                indent_str,
+                iter_strs.join(&format!(",\n{}", indent_str)),
+                less_indent_str)
     } else {
         iter_strs[0].clone()
     }
 }
 
 /// Main work to print an expression.
-fn print_expr_impl<T: PrintableType>(expr: &Expr<T>, typed: bool, indent: i32) -> String {
-    let less_indent_str: String = iter::repeat(" ").take((indent - 2) as usize).collect();
-    let indent_str: String = iter::repeat(" ").take(indent as usize).collect();
+fn print_expr_impl<T: PrintableType>(expr: &Expr<T>,
+                                     typed: bool,
+                                     indent: i32,
+                                     should_indent: bool)
+                                     -> String {
+    let mut less_indent_str: String = iter::repeat(" ").take((indent - 2) as usize).collect();
+    let mut indent_str: String = iter::repeat(" ").take(indent as usize).collect();
+    if !should_indent {
+        less_indent_str = "".to_string();
+        indent_str = "".to_string();
+    }
     match expr.kind {
         Literal(ref lit) => print_literal(lit),
 
@@ -131,31 +184,36 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>, typed: bool, indent: i32) -
 
         BinOp { kind, ref left, ref right } => {
             format!("({}{}{})",
-                    print_expr_impl(left, typed, indent),
+                    print_expr_impl(left, typed, indent, should_indent),
                     kind,
-                    print_expr_impl(right, typed, indent))
+                    print_expr_impl(right, typed, indent, should_indent))
         }
 
-        Negate(ref e) => format!("(-{})", print_expr_impl(e, typed, indent)),
+        Negate(ref e) => format!("(-{})", print_expr_impl(e, typed, indent, should_indent)),
 
         Cast { kind, ref child_expr } => {
-            format!("({}({}))", kind, print_expr_impl(child_expr, typed, indent))
+            format!("({}({}))",
+                    kind,
+                    print_expr_impl(child_expr, typed, indent, should_indent))
         }
 
-        ToVec { ref child_expr } => format!("toVec({})", print_expr_impl(child_expr, typed, indent)),
+        ToVec { ref child_expr } => {
+            format!("toVec({})",
+                    print_expr_impl(child_expr, typed, indent, should_indent))
+        }
 
         Let { ref name, ref value, ref body } => {
             if typed {
                 format!("(let {}:{}=({});{})",
                         name,
                         value.ty.print(),
-                        print_expr_impl(value, typed, indent),
-                        print_expr_impl(body, typed, indent))
+                        print_expr_impl(value, typed, indent, should_indent),
+                        print_expr_impl(body, typed, indent, should_indent))
             } else {
                 format!("(let {}=({});{})",
                         name,
-                        print_expr_impl(value, typed, indent),
-                        print_expr_impl(body, typed, indent))
+                        print_expr_impl(value, typed, indent, should_indent),
+                        print_expr_impl(body, typed, indent, should_indent))
             }
         }
 
@@ -163,53 +221,69 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>, typed: bool, indent: i32) -
             join("{",
                  ",",
                  "}",
-                 elems.iter().map(|e| print_expr_impl(e, typed, indent)))
+                 elems.iter().map(|e| print_expr_impl(e, typed, indent, should_indent)))
         }
 
         MakeVector { ref elems } => {
             join("[",
                  ",",
                  "]",
-                 elems.iter().map(|e| print_expr_impl(e, typed, indent)))
+                 elems.iter().map(|e| print_expr_impl(e, typed, indent, should_indent)))
         }
 
         Zip { ref vectors } => {
             join(&format!("zip(\n{}", indent_str),
                  &format!(",\n{}", indent_str),
                  ")",
-                 vectors.iter().map(|e| print_expr_impl(e, typed, indent + 2)))
+                 vectors.iter().map(|e| print_expr_impl(e, typed, indent + 2, should_indent)))
         }
 
-        GetField { ref expr, index } => format!("{}.${}", print_expr_impl(expr, typed, indent), index),
+        GetField { ref expr, index } => {
+            format!("{}.${}",
+                    print_expr_impl(expr, typed, indent, should_indent),
+                    index)
+        }
 
-        Length { ref data } => format!("len({})", print_expr_impl(data, typed, indent)),
+        Length { ref data } => {
+            format!("len({})",
+                    print_expr_impl(data, typed, indent, should_indent))
+        }
         Lookup { ref data, ref index } => {
             format!("lookup({},{})",
-                    print_expr_impl(data, typed, indent),
-                    print_expr_impl(index, typed, indent))
+                    print_expr_impl(data, typed, indent, should_indent),
+                    print_expr_impl(index, typed, indent, should_indent))
         }
 
         Slice { ref data, ref index, ref size } => {
             format!("slice({},{},{})",
-                    print_expr_impl(data, typed, indent),
-                    print_expr_impl(index, typed, indent),
-                    print_expr_impl(size, typed, indent))
+                    print_expr_impl(data, typed, indent, should_indent),
+                    print_expr_impl(index, typed, indent, should_indent),
+                    print_expr_impl(size, typed, indent, should_indent))
         }
 
-        Exp { ref value } => format!("exp({})",print_expr_impl(value, typed, indent)),
+        Exp { ref value } => {
+            format!("exp({})",
+                    print_expr_impl(value, typed, indent, should_indent))
+        }
 
         Lambda { ref params, ref body } => {
             let mut res = join("|",
                                ",",
                                "|",
                                params.iter().map(|e| print_parameter(e, typed)));
-            res.push_str(&format!("\n{}{}", indent_str, print_expr_impl(body, typed, indent + 2)));
+            res.push_str(&format!("\n{}{}",
+                                  indent_str,
+                                  print_expr_impl(body, typed, indent + 2, should_indent)));
             res
         }
 
         NewBuilder(ref arg) => {
             match *arg {
-                Some(ref e) => format!("{}({})", expr.ty.print(), print_expr_impl(e, typed, indent)),
+                Some(ref e) => {
+                    format!("{}({})",
+                            expr.ty.print(),
+                            print_expr_impl(e, typed, indent, should_indent))
+                }
                 None => expr.ty.print(),
             }
         }
@@ -217,44 +291,45 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>, typed: bool, indent: i32) -
         Res { ref builder } => {
             format!("result(\n{}{}\n{})",
                     indent_str,
-                    print_expr_impl(builder, typed, indent + 2),
+                    print_expr_impl(builder, typed, indent + 2, should_indent),
                     less_indent_str)
         }
 
         Merge { ref builder, ref value } => {
             format!("merge({},{})",
-                    print_expr_impl(builder, typed, indent),
-                    print_expr_impl(value, typed, indent))
+                    print_expr_impl(builder, typed, indent, should_indent),
+                    print_expr_impl(value, typed, indent, should_indent))
         }
 
         For { ref iters, ref builder, ref func } => {
             format!("for(\n{}{},\n{}{},\n{}{}\n{})",
                     indent_str,
-                    print_iters(iters, typed, indent + 2),
+                    print_iters(iters, typed, indent + 2, should_indent),
                     indent_str,
-                    print_expr_impl(builder, typed, indent + 2),
+                    print_expr_impl(builder, typed, indent + 2, should_indent),
                     indent_str,
-                    print_expr_impl(func, typed, indent + 2),
+                    print_expr_impl(func, typed, indent + 2, should_indent),
                     less_indent_str)
         }
 
         If { ref cond, ref on_true, ref on_false } => {
             format!("if(\n{}{},\n{}{},\n{}{}\n{})",
                     indent_str,
-                    print_expr_impl(cond, typed, indent + 2),
+                    print_expr_impl(cond, typed, indent + 2, should_indent),
                     indent_str,
-                    print_expr_impl(on_true, typed, indent + 2),
+                    print_expr_impl(on_true, typed, indent + 2, should_indent),
                     indent_str,
-                    print_expr_impl(on_false, typed, indent + 2),
+                    print_expr_impl(on_false, typed, indent + 2, should_indent),
                     less_indent_str)
         }
 
         Apply { ref func, ref params } => {
-            let mut res = format!("({})", print_expr_impl(func, typed, indent));
+            let mut res = format!("({})", print_expr_impl(func, typed, indent, should_indent));
             res.push_str(&join("(",
                                ",",
                                ")",
-                               params.iter().map(|e| print_expr_impl(e, typed, indent))));
+                               params.iter()
+                                   .map(|e| print_expr_impl(e, typed, indent, should_indent))));
             res
         }
     }
