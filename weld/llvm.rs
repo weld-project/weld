@@ -2147,6 +2147,7 @@ pub fn compile_program(program: &Program) -> WeldResult<easy_ll::CompiledModule>
     transforms::inline_zips(&mut expr);
     transforms::fuse_loops_horizontal(&mut expr);
     transforms::fuse_loops_vertical(&mut expr);
+    transforms::uniquify(&mut expr);
     let sir_prog = try!(sir::ast_to_sir(&expr));
     let mut gen = LlvmGenerator::new();
     try!(gen.add_function_on_pointers("run", &sir_prog));

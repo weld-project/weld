@@ -173,6 +173,7 @@ fn main() {
                  print_typed_expr(&expr));
 
         transforms::fuse_loops_vertical(&mut expr);
+        transforms::uniquify(&mut expr);
         println!("After vertical loop fusion:\n{}\n", print_typed_expr(&expr));
 
         println!("final program raw: {:?}", expr);
