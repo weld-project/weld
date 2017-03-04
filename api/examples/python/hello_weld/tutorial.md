@@ -28,7 +28,7 @@ For pedagogical reasons our library will have some limitations. First, we will o
 
 ## Prerequisites
 
-This tutorial assumes you have a Weld installation and a familiarity of Python. See the [README](https://github.com/weld-project/weld/blob/master/README.md) for instructions on how to install Weld.
+This tutorial assumes you have a Weld installation and a familiarity of Python. See the [README](https://github.com/weld-project/weld/blob/master/README.md#building) for instructions on how to build Weld.
 
 ## Setting up the Project
 
