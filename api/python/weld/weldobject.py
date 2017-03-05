@@ -146,7 +146,10 @@ class WeldObject(object):
         module = cweld.WeldModule(function, cweld.WeldConf(), err)
         if err.code() != 0:
             raise ValueError("Could not compile function {}: {}".format(function, err.message()))
-        weld_ret = module.run(cweld.WeldConf(), arg, cweld.WeldError())
+
+        conf = cweld.WeldConf()
+        conf.set("weld.threads", "4")
+        weld_ret = module.run(conf, arg, cweld.WeldError())
         ptrtype = POINTER(restype.cTypeClass)
         data = ctypes.cast(weld_ret.data(), ptrtype)
         result = self.decoder.decode(data, restype)

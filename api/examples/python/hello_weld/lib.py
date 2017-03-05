@@ -14,7 +14,7 @@ sys.path.append(libpath)
 
 from weld.weldobject import *
 from weld.types import *
-from weld.encoders import NumpyArrayEncoder, NumpyArrayDecoder
+from weld.encoders import NumpyArrayEncoder, NumpyArrayDecoder, ScalarDecoder
 
 _encoder = NumpyArrayEncoder()
 _decoder = NumpyArrayDecoder()
@@ -26,6 +26,20 @@ class HelloWeldVector(object):
         name = self.weldobj.update(vector, WeldVec(WeldI32()))
         self.weldobj.weld_code = name
         self.cached = None
+
+    def sum(self):
+        self.cached = None
+        template = "result(for({0}, merger[i64,+], |b,i,e| merge(b, i64(e))))"
+        prev_code = self.weldobj.weld_code
+        self.weldobj.weld_code = template.format(self.weldobj.weld_code)
+        self.weldobj.decoder = ScalarDecoder()
+        result = self.weldobj.evaluate(WeldI64())
+        self.weldobj.decoder = _decoder
+        self.weldobj.weld_code = prev_code
+        return result
+
+    def __iadd__(self, other):
+        return self.add(other)
 
     def add(self, number):
         self.cached = None
@@ -58,6 +72,3 @@ class HelloWeldVector(object):
         self.cached = v
         return str(v)
 
-v = HelloWeldVector(np.array(range(10), dtype='int32'))
-v.add(10).add(10).multiply(5)
-print v

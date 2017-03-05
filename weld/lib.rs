@@ -245,6 +245,8 @@ pub unsafe extern "C" fn weld_module_run(module: *mut WeldModule,
         .clone());
 
 
+    println!("num threads: {}", threads);
+
     #[derive(Clone)]
     struct I32Vec {
         data: *const i32,

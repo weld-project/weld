@@ -53,3 +53,9 @@ class NumpyArrayDecoder(WeldObjectDecoder):
         dtype = restype.elemType.cTypeClass
         result = np.fromiter(data, dtype=dtype, count=size)
         return result
+
+class ScalarDecoder(WeldObjectDecoder):
+     def decode(self, obj, restype):
+         assert isinstance(restype, WeldI64)
+         result = obj.contents.value
+         return result
