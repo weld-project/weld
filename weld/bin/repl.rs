@@ -22,6 +22,7 @@ use weld::pretty_print::*;
 use weld::type_inference::*;
 use weld::sir::ast_to_sir;
 use weld::util::load_runtime_library;
+use weld::util::get_merger_lib_path;
 
 enum ReplCommands {
     LoadFile,
@@ -172,6 +173,7 @@ fn main() {
                  print_typed_expr(&expr));
 
         transforms::fuse_loops_vertical(&mut expr);
+        transforms::uniquify(&mut expr);
         println!("After vertical loop fusion:\n{}\n", print_typed_expr(&expr));
 
         println!("final program raw: {:?}", expr);
@@ -192,7 +194,8 @@ fn main() {
                         continue;
                     }
 
-                    if let Err(ref e) = easy_ll::compile_module(&llvm_code) {
+                    if let Err(ref e) = easy_ll::compile_module(&llvm_code,
+                                                                Some(&get_merger_lib_path())) {
                         println!("Error during LLVM compilation:\n{}\n", e);
                     } else {
                         println!("LLVM module compiled successfully\n");

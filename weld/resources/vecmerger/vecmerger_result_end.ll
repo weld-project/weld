@@ -8,4 +8,6 @@
   br i1 {cond2}, label %{bodyLabel}, label %{doneLabel}
 {doneLabel}:
   store {resType} {retValue}, {resType}* {output}
+  {rawPtr} = bitcast {bldType} {buildPtr} to i8*
+  call void @free_merger(i8* {rawPtr})
 ; End vecmerger merge.

@@ -1,28 +1,35 @@
 OS = $(shell uname -s)
 LLVM_VERSION = 3.8
 
-CFLAGS = -O3 -Wall -fno-use-cxa-atexit -fPIC
+CFLAGS_RT = -O3 -Wall -fno-use-cxa-atexit -fPIC
+CFLAGS_BUILDER = ${CFLAGS_RT} -flto
 ifeq (${OS}, Darwin)
   # OS X
-  CLANG ?= clang-$(LLVM_VERSION)
+  CLANG ?= clang-${LLVM_VERSION}
 else ifeq (${OS}, Linux)
   # Linux
-  CLANG ?= clang
+  CLANG ?= clang-${LLVM_VERSION}
 else
   $(error Unsupported platform: ${OS})
 endif
 
 
-all: libpar.a 
+all: libparrt.a libparbuilder.bc
 
 parlib.o: parlib.cpp
-	${CLANG} ${CFLAGS} -c $< -o $@ 
+	${CLANG} ${CFLAGS_RT} -c $< -o $@
 
 vb.o: vb.cpp
-	${CLANG} ${CFLAGS} -c $< -o $@
+	${CLANG} ${CFLAGS_BUILDER} -c $< -o $@
 
-libpar.a: parlib.o vb.o
+merger.o: merger.cpp
+	${CLANG} ${CFLAGS_BUILDER} -c $< -o $@
+
+libparrt.a: parlib.o
 	ar rcs $@ $^
+
+libparbuilder.bc: vb.o merger.o
+	llvm-link-${LLVM_VERSION} $^ -o $@
 
 clean:
 	rm -f *.bc *.a *.o

@@ -94,7 +94,7 @@ extern "C" {
     pub fn free(ptr: *mut c_void);
 }
 
-#[link(name = "par", kind = "static")]
+#[link(name = "parrt", kind = "static")]
 extern "C" {
     pub fn my_id_public() -> i32;
     pub fn set_result(res: *mut c_void);
@@ -112,11 +112,6 @@ extern "C" {
                          upper: i64,
                          grain_size: i32);
     pub fn execute(run: extern "C" fn(*mut work_t), data: *mut c_void);
-
-    pub fn new_vb(elem_size: i64, starting_cap: i64) -> *mut c_void;
-    pub fn new_piece(v: *mut c_void, w: *mut work_t);
-    pub fn cur_piece(v: *mut c_void, my_id: i32) -> *mut vec_piece;
-    pub fn result_vb(v: *mut c_void) -> vec_output;
     pub fn weld_abort_thread();
 }
 
@@ -273,74 +268,4 @@ pub extern "C" fn weld_rt_set_errno(run_id: libc::int64_t, errno: WeldRuntimeErr
     let mut guarded = WELD_ERRNOS.write().unwrap();
     let entry = guarded.entry(run_id).or_insert(errno);
     *entry = errno;
-}
-
-fn num_cache_blocks(size: i64) -> i64 {
-    ((size + ((CACHE_LINE - 1) as i64)) >> CACHE_BITS) + 1
-}
-
-#[no_mangle]
-pub extern "C" fn new_merger(runid: i64, size: i64, nworkers: i32) -> *mut c_void {
-    let num_blocks = num_cache_blocks(size) as i64;
-    let total_blocks = num_blocks * (nworkers as i64) * (CACHE_LINE as i64);
-    let ptr = weld_rt_malloc(runid, total_blocks as libc::int64_t);
-    for i in 0..nworkers {
-        let merger_ptr = unsafe { get_merger_at_index(ptr, size, i) };
-        unsafe { libc::memset(merger_ptr, 0 as libc::c_int, size as usize) };
-    }
-    ptr
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn get_merger_at_index(ptr: *mut c_void,
-                                             size: i64,
-                                             i: i32)
-                                             -> *mut libc::c_void {
-    let ptr = ptr as *mut libc::uint8_t;
-    let ptr = (((ptr.offset((CACHE_LINE - 1) as isize)) as u64) & MASK) as *mut libc::uint8_t;
-    let num_blocks = num_cache_blocks(size) as i64;
-    let offset = num_blocks * (i as i64) * (CACHE_LINE as i64);
-    let merger_ptr = ptr.offset(offset as isize) as *mut libc::c_void;
-    merger_ptr
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn free_merger(runid: i64, ptr: *mut c_void) {
-    weld_rt_free(runid, ptr);
-}
-
-#[test]
-fn merger_fns() {
-    let runid = 0;
-    let nworkers = 4;
-    let size = 4;
-    let ptr = new_merger(runid, size, nworkers);
-    let ptr_u64 = ptr as u64;
-    let mut aligned_ptr = ptr_u64 >> CACHE_BITS;
-    // In case allocated ptr is not already cache-aligned, need next cache-aligned
-    // address.
-    if ptr_u64 % CACHE_LINE != 0 {
-        aligned_ptr += 1;
-    }
-    aligned_ptr = aligned_ptr << CACHE_BITS;
-    for i in 0..nworkers {
-        let offset = (num_cache_blocks(size) * (i as i64) * (CACHE_LINE as i64)) as isize;
-        let merger_ptr = unsafe { (aligned_ptr as *mut libc::uint8_t).offset(offset) };
-        unsafe { *(merger_ptr as *mut u32) = i as u32 };
-    }
-    for i in 0..nworkers {
-        let merger_ptr = unsafe { get_merger_at_index(ptr, size, i) };
-        let output = unsafe { *(merger_ptr as *mut u32) };
-        // Read value previously stored, make sure they match.
-        assert_eq!(output, i as u32);
-    }
-    unsafe { free_merger(runid, ptr) };
-}
-
-#[test]
-fn test_num_cache_blocks() {
-    assert_eq!(num_cache_blocks(4), 2);
-    assert_eq!(num_cache_blocks(8), 2);
-    assert_eq!(num_cache_blocks(64), 2);
-    assert_eq!(num_cache_blocks(65), 3);
 }
