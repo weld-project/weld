@@ -74,6 +74,12 @@ $ cargo test
 
 ## Running an Interactive REPL
 
+* `cargo test` runs unit and integration tests. To specify which integration tests to run:
+   
+   ```
+   cargo test <comma-separated-test-names>
+   ```
+
 * The `target/debug/repl` program is a simple "shell" where one can type Weld programs and see
   the results of parsing, macro substitution and type inference.
 
@@ -107,3 +113,11 @@ result(for([1,2],appender[i32],|b:appender[i32],x:i32|merge(b:appender[i32],(x:i
 
 Expression type: vec[i32]
 ```
+
+## Benchmarking
+
+* `cargo bench` runs benchmarks under the `benches/` directory. The results of the benchmarks are written to a file called `benches.csv`. To specify specific benchmarks to run:
+
+  ```
+  cargo bench --bench benches -- -t <comma-seperated-benchmarks>
+  ```
