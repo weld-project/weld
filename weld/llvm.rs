@@ -516,7 +516,7 @@ impl LlvmGenerator {
                 wrap_ctx.code.add(format!("fn.boundcheckpassed:"));
 
                 let bound_cmp = wrap_ctx.var_ids.next();
-                let mut grain_size = 1024;
+                let mut grain_size = 4096;
                 if par_for.innermost {
                     wrap_ctx.code.add(format!("{} = icmp ule i64 {}, {}",
                                               bound_cmp,
