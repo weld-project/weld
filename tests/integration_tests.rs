@@ -1064,7 +1064,7 @@ fn outofmemory_error_test() {
     let value = CString::new("50000").unwrap().into_raw() as *const c_char;
     unsafe { weld_conf_set(conf, key, value) };
 
-    let x = vec![4; 50000 / 4 as usize];
+    let x = vec![4; 50004 / 4 as usize];
     let ref input_data = WeldVec {
         data: x.as_ptr() as *const i32,
         len: x.len() as i64,
