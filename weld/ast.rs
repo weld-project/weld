@@ -112,6 +112,7 @@ pub enum ExprKind<T: TypeBounds> {
     // TODO: maybe all of these should take named parameters
     Literal(LiteralKind),
     Ident(Symbol),
+    Negate(Box<Expr<T>>),
     BinOp {
         kind: BinOpKind,
         left: Box<Expr<T>>,
@@ -131,6 +132,12 @@ pub enum ExprKind<T: TypeBounds> {
         data: Box<Expr<T>>,
         index: Box<Expr<T>>,
     },
+    Slice {
+        data: Box<Expr<T>>,
+        index: Box<Expr<T>>,
+        size: Box<Expr<T>>,
+    },
+    Exp { value: Box<Expr<T>> },
     Let {
         name: Symbol,
         value: Box<Expr<T>>,
@@ -257,6 +264,10 @@ impl<T: TypeBounds> Expr<T> {
                 GetField { ref expr, .. } => vec![expr.as_ref()],
                 Length { ref data } => vec![data.as_ref()],
                 Lookup { ref data, ref index } => vec![data.as_ref(), index.as_ref()],
+                Slice { ref data, ref index, ref size } => {
+                    vec![data.as_ref(), index.as_ref(), size.as_ref()]
+                }
+                Exp { ref value } => vec![value.as_ref()],
                 Merge { ref builder, ref value } => vec![builder.as_ref(), value.as_ref()],
                 Res { ref builder } => vec![builder.as_ref()],
                 For { ref iters, ref builder, ref func } => {
@@ -292,6 +303,7 @@ impl<T: TypeBounds> Expr<T> {
                         vec![]
                     }
                 }
+                Negate(ref t) => vec![t.as_ref()],
                 // Explicitly list types instead of doing _ => ... to remember to add new types.
                 Literal(_) | Ident(_) => vec![],
             }
@@ -313,6 +325,10 @@ impl<T: TypeBounds> Expr<T> {
                 GetField { ref mut expr, .. } => vec![expr.as_mut()],
                 Length { ref mut data } => vec![data.as_mut()],
                 Lookup { ref mut data, ref mut index } => vec![data.as_mut(), index.as_mut()],
+                Slice { ref mut data, ref mut index, ref mut size } => {
+                    vec![data.as_mut(), index.as_mut(), size.as_mut()]
+                }
+                Exp { ref mut value } => vec![value.as_mut()],
                 Merge { ref mut builder, ref mut value } => vec![builder.as_mut(), value.as_mut()],
                 Res { ref mut builder } => vec![builder.as_mut()],
                 For { ref mut iters, ref mut builder, ref mut func } => {
@@ -348,6 +364,7 @@ impl<T: TypeBounds> Expr<T> {
                         vec![]
                     }
                 }
+                Negate(ref mut t) => vec![t.as_mut()],
                 // Explicitly list types instead of doing _ => ... to remember to add new types.
                 Literal(_) | Ident(_) => vec![],
             }
@@ -399,6 +416,7 @@ impl<T: TypeBounds> Expr<T> {
                     }
                 }
                 (&NewBuilder(_), &NewBuilder(_)) => Ok(true),
+                (&Negate(_), &Negate(_)) => Ok(true),
                 (&MakeStruct { .. }, &MakeStruct { .. }) => Ok(true),
                 (&MakeVector { .. }, &MakeVector { .. }) => Ok(true),
                 (&Zip { .. }, &Zip { .. }) => Ok(true),
@@ -407,6 +425,8 @@ impl<T: TypeBounds> Expr<T> {
                 }
                 (&Length { .. }, &Length { .. }) => Ok(true),
                 (&Lookup { .. }, &Lookup { .. }) => Ok(true),
+                (&Slice { .. }, &Slice { .. }) => Ok(true),
+                (&Exp { .. }, &Exp { .. }) => Ok(true),
                 (&Merge { .. }, &Merge { .. }) => Ok(true),
                 (&Res { .. }, &Res { .. }) => Ok(true),
                 (&For { .. }, &For { .. }) => Ok(true),
@@ -526,5 +546,18 @@ impl<T: TypeBounds> Expr<T> {
         for c in self.children_mut() {
             c.transform(func);
         }
+    }
+
+    /// Returns true if this expressions contains `other`.
+    pub fn contains(&mut self, other: &Expr<T>) -> bool {
+        if *self == *other {
+            return true;
+        }
+        for c in other.children() {
+            if self.contains(c) {
+                return true;
+            }
+        }
+        return false;
     }
 }

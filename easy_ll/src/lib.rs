@@ -22,7 +22,7 @@ mod tests;
 
 // Helper objects to make sure we only initialize once
 static ONCE: Once = ONCE_INIT;
-static mut initialize_failed: bool = false;
+static mut INITIALIZE_FAILED: bool = false;
 
 /// Error type returned by easy_ll.
 #[derive(Debug)]
@@ -115,11 +115,13 @@ pub fn load_library(libname: &str) -> Result<(), LlvmError> {
 /// Compile a string of LLVM IR (in human readable format) into a `CompiledModule` that can then
 /// be executed. The LLVM IR should contain an entry point function called `run` that takes `i64`
 /// and returns `i64`, which will be called by `CompiledModule::run`.
-pub fn compile_module(code: &str) -> Result<CompiledModule, LlvmError> {
+pub fn compile_module(code: &str,
+                      static_lib_file: Option<&str>)
+                      -> Result<CompiledModule, LlvmError> {
     unsafe {
         // Initialize LLVM
         ONCE.call_once(|| initialize());
-        if initialize_failed {
+        if INITIALIZE_FAILED {
             return Err(LlvmError::new("LLVM initialization failed"));
         }
 
@@ -139,6 +141,14 @@ pub fn compile_module(code: &str) -> Result<CompiledModule, LlvmError> {
         // Parse the IR to get an LLVMModuleRef
         let module = try!(parse_module_str(context, code));
 
+        if static_lib_file != None {
+            let merger_module = try!(parse_module_file(context, static_lib_file.unwrap()));
+            llvm::linker::LLVMLinkModules(module,
+                                          merger_module,
+                                          llvm::linker::LLVMLinkerMode::LLVMLinkerDestroySource,
+                                          std::ptr::null_mut());
+        }
+
         // Validate and optimize the module
         try!(verify_module(module));
         try!(check_run_function(module));
@@ -154,20 +164,20 @@ pub fn compile_module(code: &str) -> Result<CompiledModule, LlvmError> {
     }
 }
 
-/// Initialize LLVM or save an error message in `initialize_failed` if this does not work.
+/// Initialize LLVM or save an error message in `INITIALIZE_FAILED` if this does not work.
 /// We call this function only once in cases some steps are expensive.
 fn initialize() {
     unsafe {
         if llvm::target::LLVM_InitializeNativeTarget() != 0 {
-            initialize_failed = true;
+            INITIALIZE_FAILED = true;
             return;
         }
         if llvm::target::LLVM_InitializeNativeAsmPrinter() != 0 {
-            initialize_failed = true;
+            INITIALIZE_FAILED = true;
             return;
         }
         if llvm::target::LLVM_InitializeNativeAsmParser() != 0 {
-            initialize_failed = true;
+            INITIALIZE_FAILED = true;
             return;
         }
         llvm::execution_engine::LLVMLinkInMCJIT();
@@ -180,6 +190,7 @@ unsafe fn parse_module_helper(context: LLVMContextRef,
     // Parse IR into a module
     let mut module = 0 as LLVMModuleRef;
     let mut error_str = 0 as *mut c_char;
+
     let result_code =
         llvm::ir_reader::LLVMParseIRInContext(context, buffer, &mut module, &mut error_str);
     if result_code != 0 {

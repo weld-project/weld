@@ -1,0 +1,14 @@
+[package]
+name = "weldrt"
+version = "0.1.0"
+authors = ["Shoumik Palkar <shoumikpalkar@gmail.com>"]
+build = "build.rs"
+
+[dependencies]
+lazy_static = "0.2.1"
+libc = "0.2.0"
+weld_common = { path = "../weld_common", version = "^0.1.0" }
+
+[lib]
+path = "src/lib.rs"
+crate-type = ["dylib", "rlib"]

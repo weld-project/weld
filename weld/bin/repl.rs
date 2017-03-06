@@ -2,6 +2,8 @@ extern crate rustyline;
 extern crate easy_ll;
 extern crate weld;
 
+extern crate libc;
+
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
 use std::env;
@@ -19,17 +21,17 @@ use weld::parser::*;
 use weld::pretty_print::*;
 use weld::type_inference::*;
 use weld::sir::ast_to_sir;
+use weld::util::load_runtime_library;
+use weld::util::get_merger_lib_path;
 
 enum ReplCommands {
     LoadFile,
-    PrintFunctions,
 }
 
 impl fmt::Display for ReplCommands {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             ReplCommands::LoadFile => write!(f, "load"),
-            ReplCommands::PrintFunctions => write!(f, "print_functions"),
         }
     }
 }
@@ -75,8 +77,6 @@ fn main() {
 
     let mut reserved_words = HashMap::new();
     reserved_words.insert(ReplCommands::LoadFile.to_string(), ReplCommands::LoadFile);
-    reserved_words.insert(ReplCommands::PrintFunctions.to_string(),
-                          ReplCommands::PrintFunctions);
 
     let mut rl = Editor::<()>::new();
     if let Err(_) = rl.load_history(&history_file_path) {}
@@ -128,10 +128,6 @@ fn main() {
                         }
                     }
                 }
-                ReplCommands::PrintFunctions => {
-                    weld::weld_print_function_pointers();
-                    continue;
-                }
             }
         } else {
             program = parse_program(trimmed);
@@ -171,11 +167,13 @@ fn main() {
         transforms::inline_zips(&mut expr);
         println!("After inlining zips:\n{}\n", print_typed_expr(&expr));
 
+
         transforms::fuse_loops_horizontal(&mut expr);
         println!("After horizontal loop fusion:\n{}\n",
                  print_typed_expr(&expr));
 
         transforms::fuse_loops_vertical(&mut expr);
+        transforms::uniquify(&mut expr);
         println!("After vertical loop fusion:\n{}\n", print_typed_expr(&expr));
 
         println!("final program raw: {:?}", expr);
@@ -191,7 +189,13 @@ fn main() {
                     let llvm_code = llvm_gen.result();
                     println!("LLVM code:\n{}\n", llvm_code);
 
-                    if let Err(ref e) = easy_ll::compile_module(&llvm_code) {
+                    if let Err(e) = load_runtime_library() {
+                        println!("Couldn't load runtime: {}", e);
+                        continue;
+                    }
+
+                    if let Err(ref e) = easy_ll::compile_module(&llvm_code,
+                                                                Some(&get_merger_lib_path())) {
                         println!("Error during LLVM compilation:\n{}\n", e);
                     } else {
                         println!("LLVM module compiled successfully\n");

@@ -9,6 +9,47 @@
 #include "assert.h"
 #include "parlib.h"
 
+#ifdef __APPLE__
+#include <sched.h>
+
+typedef int pthread_spinlock_t;
+
+static int pthread_spin_init(pthread_spinlock_t *lock, int pshared) {
+    __asm__ __volatile__ ("" ::: "memory");
+    *lock = 0;
+    return 0;
+}
+
+static int pthread_spin_destroy(pthread_spinlock_t *lock) {
+    return 0;
+}
+
+static int pthread_spin_lock(pthread_spinlock_t *lock) {
+    while (1) {
+        int i;
+        for (i=0; i < 10000; i++) {
+            if (__sync_bool_compare_and_swap(lock, 0, 1)) {
+                return 0;
+            }
+        }
+        sched_yield();
+    }
+}
+
+static int pthread_spin_trylock(pthread_spinlock_t *lock) {
+    if (__sync_bool_compare_and_swap(lock, 0, 1)) {
+        return 0;
+    }
+    return 1;
+}
+
+static int pthread_spin_unlock(pthread_spinlock_t *lock) {
+    __asm__ __volatile__ ("" ::: "memory");
+    *lock = 0;
+    return 0;
+}
+#endif
+
 /*
 The Weld parallel runtime. When the comments refer to a "computation",
 this means a single complete execution of a Weld program.
@@ -100,8 +141,8 @@ static inline void set_nest(work_t *task) {
     cur = cur->cont;
     nest_len++;
   }
-  task->nest_idxs = (int64_t *)weld_rt_malloc(get_runid(), sizeof(int64_t) * nest_len);
-  task->nest_task_ids = (int64_t *)weld_rt_malloc(get_runid(), sizeof(int64_t) * nest_len);
+  task->nest_idxs = (int64_t *)malloc(sizeof(int64_t) * nest_len);
+  task->nest_task_ids = (int64_t *)malloc(sizeof(int64_t) * nest_len);
   task->nest_len = nest_len;
   // we want the outermost idxs to be the "high-order bits" when we do a comparison of task nests
   reverse_copy(idxs.begin(), idxs.end(), task->nest_idxs);
@@ -146,21 +187,13 @@ static inline bool try_steal() {
 // decrease the dependency count of the continuation, run the continuation
 // if necessary, or signal the end of the computation if we are done
 static inline void finish_task(work_t *task) {
-  // Exit the thread if there's an error.
-  // We don't need to worry about freeing here; the runtime will
-  // free all allocated memory as long as it is allocated with
-  // `weld_rt_malloc` or `weld_rt_realloc`.
-  if (weld_rt_get_errno(get_runid()) != 0) {
-    weld_abort_thread();
-  }
-
   if (task->cont == NULL) {
     if (!task->continued) {
       // if this task has no continuation and there was no for loop to end it,
       // the computation is over
       done = true;
     }
-    weld_rt_free(get_runid(), task->data);
+    free(task->data);
   } else {
     int32_t previous = __sync_fetch_and_sub(&task->cont->deps, 1);
     if (previous == 1) {
@@ -170,14 +203,14 @@ static inline void finish_task(work_t *task) {
       (all_work_queues + my_id())->push_front(task->cont);
       pthread_spin_unlock((all_work_queue_locks + my_id()));
       // we are the last sibling with this data, so we can free it
-      weld_rt_free(get_runid(), task->data);
+      free(task->data);
     }
     if (task->full_task) {
-      weld_rt_free(get_runid(), task->nest_idxs);
-      weld_rt_free(get_runid(), task->nest_task_ids);
+      free(task->nest_idxs);
+      free(task->nest_task_ids);
     }
   }
-  weld_rt_free(get_runid(), task);
+  free(task);
 }
 
 // set the continuation of w to cont and increment cont
@@ -193,7 +226,7 @@ static inline void set_cont(work_t *w, work_t *cont) {
 // w is the currently executing task
 extern "C" void pl_start_loop(work_t *w, void *body_data, void *cont_data, void (*body)(work_t*),
   void (*cont)(work_t*), int64_t lower, int64_t upper, int32_t grain_size) {
-  work_t *body_task = (work_t *)weld_rt_malloc(get_runid(), sizeof(work_t));
+  work_t *body_task = (work_t *)malloc(sizeof(work_t));
   memset(body_task, 0, sizeof(work_t));
   body_task->data = body_data;
   body_task->fp = body;
@@ -202,7 +235,7 @@ extern "C" void pl_start_loop(work_t *w, void *body_data, void *cont_data, void 
   body_task->cur_idx = lower;
   body_task->task_id = w->task_id + 1;
   body_task->grain_size = grain_size;
-  work_t *cont_task = (work_t *)weld_rt_malloc(get_runid(), sizeof(work_t));
+  work_t *cont_task = (work_t *)malloc(sizeof(work_t));
   memset(cont_task, 0, sizeof(work_t));
   cont_task->data = cont_data; 
   cont_task->fp = cont;
@@ -229,7 +262,7 @@ extern "C" void pl_start_loop(work_t *w, void *body_data, void *cont_data, void 
 }
 
 static inline work_t *clone_task(work_t *task) {
-  work_t *clone = (work_t *)weld_rt_malloc(get_runid(), sizeof(work_t));
+  work_t *clone = (work_t *)malloc(sizeof(work_t));
   memcpy(clone, task, sizeof(work_t));
   clone->full_task = false;
   return clone;
@@ -237,7 +270,6 @@ static inline work_t *clone_task(work_t *task) {
 
 // repeatedly break off the second half of the task into a new task
 // until the task's size in iterations drops below a certain threshold
-// call with my_id() queue lock held
 static inline void split_task(work_t *task) {
   while (task->upper - task->lower > task->grain_size) {
     work_t *last_half = clone_task(task);
@@ -248,7 +280,9 @@ static inline void split_task(work_t *task) {
     // task must have non-NULL cont if it has non-zero number of iterations and therefore
     // is a loop body
     set_cont(last_half, task->cont);
+    pthread_spin_lock((all_work_queue_locks + my_id()));
     (all_work_queues + my_id())->push_front(last_half);
+    pthread_spin_unlock((all_work_queue_locks + my_id()));
   }
 }
 
@@ -262,8 +296,15 @@ static inline void work_loop() {
     } else {
       work_t *popped = (all_work_queues + my_id())->front();
       (all_work_queues + my_id())->pop_front();
-      split_task(popped);
       pthread_spin_unlock((all_work_queue_locks + my_id()));
+      split_task(popped);
+      // Exit the thread if there's an error.
+      // We don't need to worry about freeing here; the runtime will
+      // free all allocated memory as long as it is allocated with
+      // `weld_rt_malloc` or `weld_rt_realloc`.
+      if (weld_rt_get_errno(get_runid()) != 0) {
+        weld_abort_thread();
+      }
       popped->fp(popped);
       finish_task(popped);
     }
@@ -333,7 +374,7 @@ extern "C" void execute(void (*run)(work_t*), void *data) {
   all_work_queue_locks = new work_queue_lock[W];
   all_work_queues = new work_queue[W];
 
-  work_t *run_task = (work_t *)weld_rt_malloc(get_runid(), sizeof(work_t));
+  work_t *run_task = (work_t *)malloc(sizeof(work_t));
   memset(run_task, 0, sizeof(work_t));
   run_task->data = data;
   run_task->fp = run;

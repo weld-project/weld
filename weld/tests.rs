@@ -44,7 +44,7 @@ fn parse_and_print_literal_expressions() {
 
     for test in tests {
         let e = parse_expr(test.0).unwrap();
-        assert_eq!(print_expr(&e).as_str(), test.1);
+        assert_eq!(print_expr_without_indent(&e).as_str(), test.1);
     }
 
     // Test overflow of integer types
@@ -56,87 +56,93 @@ fn parse_and_print_literal_expressions() {
 #[test]
 fn parse_and_print_simple_expressions() {
     let e = parse_expr("23 + 32").unwrap();
-    assert_eq!(print_expr(&e).as_str(), "(23+32)");
+    assert_eq!(print_expr_without_indent(&e).as_str(), "(23+32)");
 
     let e = parse_expr("2 - 3 - 4").unwrap();
-    assert_eq!(print_expr(&e).as_str(), "((2-3)-4)");
+    assert_eq!(print_expr_without_indent(&e).as_str(), "((2-3)-4)");
 
     let e = parse_expr("2 - (3 - 4)").unwrap();
-    assert_eq!(print_expr(&e).as_str(), "(2-(3-4))");
+    assert_eq!(print_expr_without_indent(&e).as_str(), "(2-(3-4))");
 
     let e = parse_expr("a").unwrap();
-    assert_eq!(print_expr(&e).as_str(), "a");
+    assert_eq!(print_expr_without_indent(&e).as_str(), "a");
 
     let e = parse_expr("let a = 2; a").unwrap();
-    assert_eq!(print_expr(&e).as_str(), "(let a=(2);a)");
+    assert_eq!(print_expr_without_indent(&e).as_str(), "(let a=(2);a)");
 
     let e = parse_expr("let a = 2.0; a").unwrap();
-    assert_eq!(print_expr(&e).as_str(), "(let a=(2.0);a)");
+    assert_eq!(print_expr_without_indent(&e).as_str(), "(let a=(2.0);a)");
 
     let e = parse_expr("[1, 2, 3]").unwrap();
-    assert_eq!(print_expr(&e).as_str(), "[1,2,3]");
+    assert_eq!(print_expr_without_indent(&e).as_str(), "[1,2,3]");
 
     let e = parse_expr("[1.0, 2.0, 3.0]").unwrap();
-    assert_eq!(print_expr(&e).as_str(), "[1.0,2.0,3.0]");
+    assert_eq!(print_expr_without_indent(&e).as_str(), "[1.0,2.0,3.0]");
 
     let e = parse_expr("|a, b| a + b").unwrap();
-    assert_eq!(print_expr(&e).as_str(), "|a,b|(a+b)");
+    assert_eq!(print_expr_without_indent(&e).as_str(), "|a,b|(a+b)");
 
     let e = parse_expr("for(d, appender, |e| e+1)").unwrap();
-    assert_eq!(print_expr(&e).as_str(), "for(d,appender[?],|e|(e+1))");
+    assert_eq!(print_expr_without_indent(&e).as_str(),
+               "for(d,appender[?],|e|(e+1))");
 }
 
 #[test]
 fn parse_and_print_uniquified_expressions() {
     let mut e = parse_expr("let a = 2; a").unwrap();
     uniquify(&mut e);
-    assert_eq!(print_expr(&e).as_str(), "(let a=(2);a)");
+    assert_eq!(print_expr_without_indent(&e).as_str(), "(let a=(2);a)");
 
     // Redefine a symbol.
     let mut e = parse_expr("let a = 2; let a = 3; a").unwrap();
     uniquify(&mut e);
-    assert_eq!(print_expr(&e).as_str(), "(let a=(2);(let a#1=(3);a#1))");
+    assert_eq!(print_expr_without_indent(&e).as_str(),
+               "(let a=(2);(let a#1=(3);a#1))");
 
     // Make sure Let values aren't renamed.
     let mut e = parse_expr("let a = 2; let a = a+1; a").unwrap();
     uniquify(&mut e);
-    assert_eq!(print_expr(&e).as_str(), "(let a=(2);(let a#1=((a+1));a#1))");
+    assert_eq!(print_expr_without_indent(&e).as_str(),
+               "(let a=(2);(let a#1=((a+1));a#1))");
 
     // Lambdas and proper scoping.
     let mut e = parse_expr("let a = 2; (|a,b|a+b)(1,2) + a").unwrap();
     uniquify(&mut e);
-    assert_eq!(print_expr(&e).as_str(),
+    assert_eq!(print_expr_without_indent(&e).as_str(),
                "(let a=(2);((|a#1,b|(a#1+b))(1,2)+a))");
 }
 
 #[test]
 fn parse_and_print_for_expressions() {
     let e = parse_expr("for(d, appender, |e| e+1)").unwrap();
-    assert_eq!(print_expr(&e).as_str(), "for(d,appender[?],|e|(e+1))");
+    assert_eq!(print_expr_without_indent(&e).as_str(),
+               "for(d,appender[?],|e|(e+1))");
 
     let e = parse_expr("for(iter(d), appender, |e| e+1)").unwrap();
-    assert_eq!(print_expr(&e).as_str(), "for(d,appender[?],|e|(e+1))");
+    assert_eq!(print_expr_without_indent(&e).as_str(),
+               "for(d,appender[?],|e|(e+1))");
 
     let e = parse_expr("for(iter(d,0L,4L,1L), appender, |e| e+1)").unwrap();
-    assert_eq!(print_expr(&e).as_str(),
+    assert_eq!(print_expr_without_indent(&e).as_str(),
                "for(iter(d,0L,4L,1L),appender[?],|e|(e+1))");
 
     let e = parse_expr("for(zip(d), appender, |e| e+1)").unwrap();
-    assert_eq!(print_expr(&e).as_str(), "for(d,appender[?],|e|(e+1))");
+    assert_eq!(print_expr_without_indent(&e).as_str(),
+               "for(d,appender[?],|e|(e+1))");
 
     let e = parse_expr("for(zip(d,e), appender, |e| e+1)").unwrap();
-    assert_eq!(print_expr(&e).as_str(),
+    assert_eq!(print_expr_without_indent(&e).as_str(),
                "for(zip(d,e),appender[?],|e|(e+1))");
 
     let e = parse_expr("for(zip(a,b,iter(c,0L,4L,1L),iter(d)), appender, |e| e+1)").unwrap();
-    assert_eq!(print_expr(&e).as_str(),
+    assert_eq!(print_expr_without_indent(&e).as_str(),
                "for(zip(a,b,iter(c,0L,4L,1L),d),appender[?],|e|(e+1))");
 }
 
 #[test]
-fn parse_and_print_typed_expressions() {
+fn parse_and_print_typed_expr_without_indentessions() {
     let e = parse_expr("a").unwrap();
-    assert_eq!(print_typed_expr(&e).as_str(), "a:?");
+    assert_eq!(print_typed_expr_without_indent(&e).as_str(), "a:?");
 
     let e = Expr {
         kind: ExprKind::Ident(Symbol {
@@ -145,33 +151,37 @@ fn parse_and_print_typed_expressions() {
         }),
         ty: Unknown,
     };
-    assert_eq!(print_typed_expr(&e).as_str(), "a#1:?");
+    assert_eq!(print_typed_expr_without_indent(&e).as_str(), "a#1:?");
 
     let e = parse_expr("a:i32").unwrap();
-    assert_eq!(print_typed_expr(&e).as_str(), "a:i32");
+    assert_eq!(print_typed_expr_without_indent(&e).as_str(), "a:i32");
 
     let mut e = parse_expr("let a = 2; a").unwrap();
-    assert_eq!(print_typed_expr(&e).as_str(), "(let a:?=(2);a:?)");
+    assert_eq!(print_typed_expr_without_indent(&e).as_str(),
+               "(let a:?=(2);a:?)");
     infer_types(&mut e).unwrap();
-    assert_eq!(print_typed_expr(&e).as_str(), "(let a:i32=(2);a:i32)");
+    assert_eq!(print_typed_expr_without_indent(&e).as_str(),
+               "(let a:i32=(2);a:i32)");
 
     let mut e = parse_expr("let a = 2; let a = false; a").unwrap();
     infer_types(&mut e).unwrap();
-    assert_eq!(print_typed_expr(&e).as_str(),
+    assert_eq!(print_typed_expr_without_indent(&e).as_str(),
                "(let a:i32=(2);(let a:bool=(false);a:bool))");
 
     // Types should propagate from function parameters to body
     let mut e = parse_expr("|a:i32, b:i32| a + b").unwrap();
     infer_types(&mut e).unwrap();
-    assert_eq!(print_typed_expr(&e).as_str(), "|a:i32,b:i32|(a:i32+b:i32)");
+    assert_eq!(print_typed_expr_without_indent(&e).as_str(),
+               "|a:i32,b:i32|(a:i32+b:i32)");
 
     let mut e = parse_expr("|a:f32, b:f32| a + b").unwrap();
     infer_types(&mut e).unwrap();
-    assert_eq!(print_typed_expr(&e).as_str(), "|a:f32,b:f32|(a:f32+b:f32)");
+    assert_eq!(print_typed_expr_without_indent(&e).as_str(),
+               "|a:f32,b:f32|(a:f32+b:f32)");
 
     let mut e = parse_expr("let a = [1, 2, 3]; 1").unwrap();
     infer_types(&mut e).unwrap();
-    assert_eq!(print_typed_expr(&e).as_str(),
+    assert_eq!(print_typed_expr_without_indent(&e).as_str(),
                "(let a:vec[i32]=([1,2,3]);1)");
 
     // Mismatched types in MakeVector
@@ -180,7 +190,7 @@ fn parse_and_print_typed_expressions() {
 
     let mut e = parse_expr("for([1],appender[?],|b,i,x|merge(b,x))").unwrap();
     infer_types(&mut e).unwrap();
-    assert_eq!(print_typed_expr(&e).as_str(),
+    assert_eq!(print_typed_expr_without_indent(&e).as_str(),
                "for([1],appender[i32],|b:appender[i32],i:i64,x:i32|merge(b:appender[i32],x:i32))");
 }
 
@@ -272,7 +282,7 @@ fn simple_vertical_loop_fusion() {
                                    appender, |b,h,f| merge(b, f+1))");
     fuse_loops_vertical(&mut e1);
     let e2 = typed_expression("for([1,2,3], appender, |b,i,e| merge(b, (e+2)+1))");
-    println!("{}", print_expr(&e1));
+    println!("{}", print_expr_without_indent(&e1));
     assert!(e1.compare_ignoring_symbols(&e2).unwrap());
 
     // Three loops.

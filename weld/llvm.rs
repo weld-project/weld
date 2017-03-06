@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 
 use easy_ll;
 
-use super::WeldRuntimeErrno;
+use weld_common::WeldRuntimeErrno;
 
 use super::ast::*;
 use super::ast::Type::*;
@@ -23,6 +23,7 @@ use super::sir::Terminator::*;
 use super::transforms;
 use super::type_inference;
 use super::util::IdGenerator;
+use super::util::get_merger_lib_path;
 
 #[cfg(test)]
 use super::parser::*;
@@ -63,10 +64,21 @@ pub struct LlvmGenerator {
 }
 
 /// A wrapper for a struct passed as input to the Weld runtime.
+#[derive(Clone, Debug)]
+#[repr(C)]
 pub struct WeldInputArgs {
     pub input: i64,
     pub nworkers: i32,
+    pub mem_limit: i64,
+}
+
+/// A wrapper for outputs passed out of the Weld runtime.
+#[derive(Clone, Debug)]
+#[repr(C)]
+pub struct WeldOutputArgs {
+    pub output: i64,
     pub run_id: i64,
+    pub errno: WeldRuntimeErrno,
 }
 
 fn get_combined_params(sir: &SirProgram, par_for: &ParallelForData) -> HashMap<Symbol, Type> {
@@ -141,14 +153,14 @@ impl LlvmGenerator {
         let storage = ctx.var_ids.next();
         let work_data_ptr = ctx.var_ids.next();
         let work_data = ctx.var_ids.next();
-        ctx.code.add(format!("{} = getelementptr %work_t* %cur.work, i32 0, i32 0",
+        ctx.code.add(format!("{} = getelementptr %work_t, %work_t* %cur.work, i32 0, i32 0",
                              work_data_ptr));
-        ctx.code.add(format!("{} = load i8** {}", work_data, work_data_ptr));
+        ctx.code.add(format!("{} = load i8*, i8** {}", work_data, work_data_ptr));
         ctx.code.add(format!("{} = bitcast i8* {} to {}*",
                              storage_typed,
                              work_data,
                              ll_ty));
-        ctx.code.add(format!("{} = load {}* {}", storage, ll_ty, storage_typed));
+        ctx.code.add(format!("{} = load {}, {}* {}", storage, ll_ty, ll_ty, storage_typed));
         for (i, (arg, _)) in params_sorted.iter().enumerate() {
             ctx.code.add(format!("{} = extractvalue {} {}, {}",
                                  llvm_symbol(arg),
@@ -167,9 +179,9 @@ impl LlvmGenerator {
         let full_task_int = ctx.var_ids.next();
         let full_task_bit = ctx.var_ids.next();
         ctx.code
-            .add(format!("{} = getelementptr %work_t* %cur.work, i32 0, i32 4",
+            .add(format!("{} = getelementptr %work_t, %work_t* %cur.work, i32 0, i32 4",
                          full_task_ptr));
-        ctx.code.add(format!("{} = load i32* {}", full_task_int, full_task_ptr));
+        ctx.code.add(format!("{} = load i32, i32* {}", full_task_int, full_task_ptr));
         ctx.code.add(format!("{} = trunc i32 {} to i1", full_task_bit, full_task_int));
         ctx.code.add(format!("br i1 {}, label %new_pieces, label %fn_call", full_task_bit));
         ctx.code.add("new_pieces:");
@@ -222,18 +234,17 @@ impl LlvmGenerator {
         let struct_size = ctx.var_ids.next();
         let struct_storage = ctx.var_ids.next();
         let struct_storage_typed = ctx.var_ids.next();
-        let run_id = ctx.var_ids.next();
-        ctx.code.add(format!("{} = getelementptr {}* null, i32 1", struct_size_ptr, ll_ty));
+        ctx.code.add(format!("{} = getelementptr {}, {}* null, i32 1",
+                             struct_size_ptr,
+                             ll_ty,
+                             ll_ty));
         ctx.code.add(format!("{} = ptrtoint {}* {} to i64",
                              struct_size,
                              ll_ty,
                              struct_size_ptr));
-        ctx.code.add(format!("{} = call i64 @get_runid()", run_id));
+        // we use regular malloc here because this pointer will always be freed by parlib
         ctx.code
-            .add(format!("{} = call i8* @weld_rt_malloc(i64 {}, i64 {})",
-                         struct_storage,
-                         run_id,
-                         struct_size));
+            .add(format!("{} = call i8* @malloc(i64 {})", struct_storage, struct_size));
         ctx.code.add(format!("{} = bitcast i8* {} to {}*",
                              struct_storage_typed,
                              struct_storage,
@@ -298,10 +309,14 @@ impl LlvmGenerator {
                 ctx.code.add("br label %loop.start");
                 ctx.code.add("loop.start:");
                 let idx_tmp = try!(self.load_var("%cur.idx", "i64", ctx));
-                let work_idx_ptr = ctx.var_ids.next();
-                ctx.code.add(format!("{} = getelementptr %work_t* %cur.work, i32 0, i32 3",
+                if !par_for.innermost {
+                    let work_idx_ptr = ctx.var_ids.next();
+                    ctx.code
+                        .add(format!("{} = getelementptr %work_t, %work_t* %cur.work, i32 0, \
+                                      i32 3",
                                      work_idx_ptr));
-                ctx.code.add(format!("store i64 {}, i64* {}", idx_tmp, work_idx_ptr));
+                    ctx.code.add(format!("store i64 {}, i64* {}", idx_tmp, work_idx_ptr));
+                }
                 let idx_cmp = ctx.var_ids.next();
                 ctx.code.add(format!("{} = icmp ult i64 {}, %upper.idx", idx_cmp, idx_tmp));
                 ctx.code.add(format!("br i1 {}, label %loop.body, label %loop.end", idx_cmp));
@@ -501,7 +516,7 @@ impl LlvmGenerator {
                 wrap_ctx.code.add(format!("fn.boundcheckpassed:"));
 
                 let bound_cmp = wrap_ctx.var_ids.next();
-                let mut grain_size = 1024;
+                let mut grain_size = 4096;
                 if par_for.innermost {
                     wrap_ctx.code.add(format!("{} = icmp ule i64 {}, {}",
                                               bound_cmp,
@@ -552,13 +567,15 @@ impl LlvmGenerator {
                 let upper_bound_ptr = par_body_ctx.var_ids.next();
                 let upper_bound = par_body_ctx.var_ids.next();
                 par_body_ctx.code
-                    .add(format!("{} = getelementptr %work_t* %cur.work, i32 0, i32 1",
+                    .add(format!("{} = getelementptr %work_t, %work_t* %cur.work, i32 0, i32 1",
                                  lower_bound_ptr));
-                par_body_ctx.code.add(format!("{} = load i64* {}", lower_bound, lower_bound_ptr));
                 par_body_ctx.code
-                    .add(format!("{} = getelementptr %work_t* %cur.work, i32 0, i32 2",
+                    .add(format!("{} = load i64, i64* {}", lower_bound, lower_bound_ptr));
+                par_body_ctx.code
+                    .add(format!("{} = getelementptr %work_t, %work_t* %cur.work, i32 0, i32 2",
                                  upper_bound_ptr));
-                par_body_ctx.code.add(format!("{} = load i64* {}", upper_bound, upper_bound_ptr));
+                par_body_ctx.code
+                    .add(format!("{} = load i64, i64* {}", upper_bound, upper_bound_ptr));
                 let body_arg_types = try!(self.get_arg_str(&func.params, ""));
                 try!(self.create_new_pieces(&func.params, &mut par_body_ctx));
                 par_body_ctx.code.add("fn_call:");
@@ -615,16 +632,16 @@ impl LlvmGenerator {
         run_ctx.code.add(format!("define i64 @{}(i64 %r.input) {{", name));
         // Unpack the input, which is always struct defined by the type %input_arg_t in prelude.ll.
         run_ctx.code.add(format!("%r.inp_typed = inttoptr i64 %r.input to %input_arg_t*"));
-        run_ctx.code.add(format!("%r.inp_val = load %input_arg_t* %r.inp_typed"));
+        run_ctx.code.add(format!("%r.inp_val = load %input_arg_t, %input_arg_t* %r.inp_typed"));
         run_ctx.code.add(format!("%r.args = extractvalue %input_arg_t %r.inp_val, 0"));
         run_ctx.code.add(format!("%r.nworkers = extractvalue %input_arg_t %r.inp_val, 1"));
-        run_ctx.code.add(format!("%r.rid = extractvalue %input_arg_t %r.inp_val, 2"));
+        run_ctx.code.add(format!("%r.memlimit = extractvalue %input_arg_t %r.inp_val, 2"));
         run_ctx.code.add(format!("call void @set_nworkers(i32 %r.nworkers)"));
-        run_ctx.code.add(format!("call void @set_runid(i64 %r.rid)"));
+        run_ctx.code.add(format!("call void @weld_rt_init(i64 %r.memlimit)"));
         // Code to load args and call function
         run_ctx.code.add(format!("%r.args_typed = inttoptr i64 %r.args to {args_type}*
              \
-                          %r.args_val = load {args_type}* %r.args_typed",
+                          %r.args_val = load {args_type}, {args_type}* %r.args_typed",
                                  args_type = args_type));
 
         let mut arg_pos_map: HashMap<Symbol, usize> = HashMap::new();
@@ -639,13 +656,46 @@ impl LlvmGenerator {
                                      idx));
         }
         let run_struct = try!(self.get_arg_struct(&sir.funcs[0].params, &mut run_ctx));
+
+        let rid = run_ctx.var_ids.next();
+        let errno = run_ctx.var_ids.next();
+        let tmp0 = run_ctx.var_ids.next();
+        let tmp1 = run_ctx.var_ids.next();
+        let tmp2 = run_ctx.var_ids.next();
+        let size_ptr = run_ctx.var_ids.next();
+        let size = run_ctx.var_ids.next();
+        let bytes = run_ctx.var_ids.next();
+        let typed_out_ptr = run_ctx.var_ids.next();
+        let final_address = run_ctx.var_ids.next();
+
         run_ctx.code.add(format!("call \
-                          void @execute(void (%work_t*)* @f0_par, i8* {})
+                          void @execute(void (%work_t*)* @f0_par, i8* {run_struct})
              %res_ptr = call i8* @get_result()
              %res_address = ptrtoint i8* %res_ptr to i64
              \
-                          ret i64 %res_address",
-                                 run_struct));
+             {rid} = call i64 @get_runid()
+             {errno} = call i64 @weld_rt_get_errno(i64 {rid})
+             {tmp0} = insertvalue %output_arg_t undef, i64 %res_address, 0
+             {tmp1} = insertvalue %output_arg_t {tmp0}, i64 {rid}, 1  
+             {tmp2} = insertvalue %output_arg_t {tmp1}, i64 {errno}, 2  
+  {size_ptr} = getelementptr %output_arg_t, %output_arg_t* null, i32 1
+  {size} = ptrtoint %output_arg_t* {size_ptr} to i64
+  {bytes} = call i8* @weld_rt_malloc(i64 {rid}, i64 {size})
+  {typed_out_ptr} = bitcast i8* {bytes} to %output_arg_t*
+  store %output_arg_t {tmp2}, %output_arg_t* {typed_out_ptr}
+  {final_address} = ptrtoint %output_arg_t* {typed_out_ptr} to i64
+                          ret i64 {final_address}",
+                                 run_struct = run_struct,
+                                 rid = rid,
+                                 errno = errno,
+                                 tmp0 = tmp0,
+                                 tmp1 = tmp1,
+                                 tmp2 = tmp2,
+                                 size_ptr = size_ptr,
+                                 size = size,
+                                 bytes = bytes,
+                                 typed_out_ptr = typed_out_ptr,
+                                 final_address = final_address));
         run_ctx.code.add("}\n\n");
 
         self.body_code.add(&run_ctx.code.result());
@@ -857,7 +907,7 @@ impl LlvmGenerator {
 
     fn load_var(&mut self, sym: &str, ty: &str, ctx: &mut FunctionContext) -> WeldResult<String> {
         let var = ctx.var_ids.next();
-        ctx.code.add(format!("{} = load {}* {}", var, ty, sym));
+        ctx.code.add(format!("{} = load {}, {}* {}", var, ty, ty, sym));
         Ok(var)
     }
 
@@ -875,8 +925,9 @@ impl LlvmGenerator {
                  -> WeldResult<()> {
         let builder_value = ctx.var_ids.next();
         let mut res = ctx.var_ids.next();
-        ctx.code.add(format!("{} = load {}* {}",
+        ctx.code.add(format!("{} = load {}, {}* {}",
                              &builder_value,
+                             &merge_ty_str,
                              &merge_ty_str,
                              &builder_ptr));
         if let Scalar(_) = *merge_ty {
@@ -972,21 +1023,101 @@ impl LlvmGenerator {
                                              ll_ty,
                                              llvm_symbol(output)));
                     }
+                    MakeVector { ref output, ref elems, ref elem_ty } => {
+                        let elem_ll_ty = self.llvm_type(elem_ty)?.to_string();
+                        let vec_ll_ty = self.llvm_type(&Vector(Box::new(elem_ty.clone())))?
+                            .to_string();
+                        let vec_ll_prefix = vec_ll_ty.replace("%", "@");
+                        let vec = ctx.var_ids.next();
+                        let capacity_str = format!("{}", elems.len());
+                        ctx.code
+                            .add(format!("{vec} = call {vec_type} {prefix}.new(i64 {capacity})",
+                                         vec = vec,
+                                         vec_type = vec_ll_ty,
+                                         prefix = vec_ll_prefix,
+                                         capacity = capacity_str));
+                        for (i, elem) in elems.iter().enumerate() {
+                            let e = self.load_var(llvm_symbol(&elem).as_str(), &elem_ll_ty, ctx)?
+                                .to_string();
+                            let ptr = ctx.var_ids.next();
+                            let idx_str = format!("{}", i);
+                            ctx.code.add(format!("{ptr} = call {elem_ty}* \
+                                                  {prefix}.at({vec_type} {vec}, i64 {idx})",
+                                                 ptr = ptr,
+                                                 elem_ty = elem_ll_ty,
+                                                 prefix = vec_ll_prefix,
+                                                 vec_type = vec_ll_ty,
+                                                 vec = vec,
+                                                 idx = idx_str));
+                            ctx.code.add(format!("store {elem_ty} {elem}, {elem_ty}* {ptr}",
+                                                 elem_ty = elem_ll_ty,
+                                                 elem = e,
+                                                 ptr = ptr));
+                        }
+                        ctx.code.add(format!("store {vec_ty} {vec}, {vec_ty}* {output}",
+                                             vec_ty = vec_ll_ty,
+                                             vec = vec,
+                                             output = llvm_symbol(&output).as_str()));
+                    }
                     BinOp { ref output, op, ref ty, ref left, ref right } => {
-                        let op_name = try!(llvm_binop(op, ty));
                         let ll_ty = try!(self.llvm_type(ty)).to_string();
                         let left_tmp = try!(self.load_var(llvm_symbol(left).as_str(), &ll_ty, ctx));
                         let right_tmp = try!(self.load_var(llvm_symbol(right).as_str(),
                             &ll_ty, ctx));
                         let bin_tmp = ctx.var_ids.next();
-                        ctx.code.add(format!("{} = {} {} {}, {}",
-                                             bin_tmp,
-                                             op_name,
-                                             ll_ty,
-                                             left_tmp,
-                                             right_tmp));
                         let out_ty = try!(get_sym_ty(func, output));
                         let out_ty_str = try!(self.llvm_type(&out_ty)).to_string();
+                        match *ty {
+                            Scalar(_) => {
+                                let op_name = try!(llvm_binop(op, ty));
+                                ctx.code.add(format!("{} = {} {} {}, {}",
+                                                     bin_tmp,
+                                                     op_name,
+                                                     ll_ty,
+                                                     left_tmp,
+                                                     right_tmp));
+                                ctx.code.add(format!("store {} {}, {}* {}",
+                                                     out_ty_str,
+                                                     bin_tmp,
+                                                     out_ty_str,
+                                                     llvm_symbol(output)));
+                            }
+                            Vector(_) => {
+                                // We support BinOps between vectors as long as they're comparison operators
+                                let (op_name, value) = try!(llvm_binop_vector(op, ty));
+                                let tmp = ctx.var_ids.next();
+                                let vec_prefix = format!("@{}", ll_ty.replace("%", ""));
+                                ctx.code.add(format!("{} = call i32 {}.cmp({} {}, {} {})",
+                                                     tmp,
+                                                     vec_prefix,
+                                                     ll_ty,
+                                                     left_tmp,
+                                                     ll_ty,
+                                                     right_tmp));
+                                ctx.code.add(format!("{} = icmp {} i32 {}, {}",
+                                                     bin_tmp,
+                                                     op_name,
+                                                     tmp,
+                                                     value));
+                                ctx.code.add(format!("store {} {}, {}* {}",
+                                                     out_ty_str,
+                                                     bin_tmp,
+                                                     out_ty_str,
+                                                     llvm_symbol(output)));
+                            }
+                            _ => weld_err!("Illegal type {} in BinOp", print_type(ty))?,
+                        }
+                    }
+                    Negate { ref output, ref child } => {
+                        let out_ty = try!(get_sym_ty(func, output));
+                        let ll_ty = try!(self.llvm_type(out_ty)).to_string();
+                        let child_tmp =
+                            try!(self.load_var(llvm_symbol(child).as_str(), &ll_ty, ctx));
+                        let bin_tmp = ctx.var_ids.next();
+                        let out_ty_str = try!(self.llvm_type(&out_ty)).to_string();
+                        let op_name = try!(llvm_binop(BinOpKind::Subtract, out_ty));
+                        ctx.code
+                            .add(format!("{} = {} {} 0, {}", bin_tmp, op_name, ll_ty, child_tmp));
                         ctx.code.add(format!("store {} {}, {}* {}",
                                              out_ty_str,
                                              bin_tmp,
@@ -1047,8 +1178,9 @@ impl LlvmGenerator {
                                                      vec_ll_ty,
                                                      child_tmp,
                                                      index_tmp));
-                                ctx.code.add(format!("{} = load {}* {}",
+                                ctx.code.add(format!("{} = load {}, {}* {}",
                                                      res_tmp,
+                                                     output_ll_ty,
                                                      output_ll_ty,
                                                      res_ptr));
                                 ctx.code.add(format!("store {} {}, {}* {}",
@@ -1092,6 +1224,66 @@ impl LlvmGenerator {
                                                      llvm_symbol(output)));
                             }
                             _ => weld_err!("Illegal type {} in Lookup", print_type(child_ty))?,
+                        }
+                    }
+                    Slice { ref output, ref child, ref index, ref size } => {
+                        let child_ty = try!(get_sym_ty(func, child));
+                        match *child_ty {
+                            Vector(_) => {
+                                let child_ll_ty = try!(self.llvm_type(&child_ty)).to_string();
+                                let output_ty = try!(get_sym_ty(func, output));
+                                let output_ll_ty = try!(self.llvm_type(&output_ty)).to_string();
+                                let vec_ll_ty = try!(self.llvm_type(&child_ty)).to_string();
+                                let vec_prefix = format!("@{}", vec_ll_ty.replace("%", ""));
+                                let child_tmp = try!(self.load_var(llvm_symbol(child).as_str(),
+                                                                   &child_ll_ty, ctx));
+                                let index_tmp = try!(self.load_var(llvm_symbol(index).as_str(),
+                                                                   "i64", ctx));
+                                let size_tmp = try!(self.load_var(llvm_symbol(size).as_str(),
+                                                                  "i64", ctx));
+                                let res_ptr = ctx.var_ids.next();
+                                ctx.code.add(format!("{} = call {} {}.slice({} {}, i64 {}, \
+                                                      i64{})",
+                                                     res_ptr,
+                                                     output_ll_ty,
+                                                     vec_prefix,
+                                                     vec_ll_ty,
+                                                     child_tmp,
+                                                     index_tmp,
+                                                     size_tmp));
+                                let out_ty = try!(get_sym_ty(func, output));
+                                let out_ty_str = try!(self.llvm_type(&out_ty)).to_string();
+                                ctx.code.add(format!("store {} {}, {}* {}",
+                                                     out_ty_str,
+                                                     res_ptr,
+                                                     out_ty_str,
+                                                     llvm_symbol(output)))
+                            }
+                            _ => weld_err!("Illegal type {} in Slice", print_type(child_ty))?,
+                        }
+                    }
+                    Exp { ref output, ref child } => {
+                        let child_ty = try!(get_sym_ty(func, child));
+                        if let Scalar(ref ty) = *child_ty {
+                            let child_ll_ty = try!(self.llvm_type(&child_ty)).to_string();
+                            let child_tmp = try!(self.load_var(llvm_symbol(child).as_str(),
+                                                               &child_ll_ty, ctx));
+                            let res_tmp = ctx.var_ids.next();
+                            ctx.code.add(format!("{} = call {} @llvm.exp.{}({} {})",
+                                                 res_tmp,
+                                                 child_ll_ty,
+                                                 ty,
+                                                 child_ll_ty,
+                                                 child_tmp));
+                            let out_ty = try!(get_sym_ty(func, output));
+                            let out_ty_str = try!(self.llvm_type(&out_ty)).to_string();
+                            ctx.code.add(format!("store {} {}, {}* {}",
+                                                 out_ty_str,
+                                                 res_tmp,
+                                                 out_ty_str,
+                                                 llvm_symbol(output)));
+                        } else {
+                            weld_err!("Illegal type {} in Exp", print_type(child_ty))?;
                         }
                     }
                     ToVec { ref output, ref child } => {
@@ -1379,13 +1571,23 @@ impl LlvmGenerator {
                                                              elem_ty_str = res_ty_str.clone()));
 
                                         ctx.code.add(format!("
-                                            %first = load {elem_ty_str}* %bldPtrCasted
-                                            %nworkers = call i32 @get_nworkers()
-                                            br label %entry
-                                          entry:
-                                            %cond = icmp ult i32 1, %nworkers
-                                            br i1 %cond, label %body, label %done
-                                        ",
+                                            \
+                                                              %first = load {elem_ty_str}, \
+                                                              {elem_ty_str}* %bldPtrCasted
+                                            \
+                                                              %nworkers = call i32 \
+                                                              @get_nworkers()
+                                            \
+                                                              br label %entry
+                                          \
+                                                              entry:
+                                            \
+                                                              %cond = icmp ult i32 1, %nworkers
+                                            \
+                                                              br i1 %cond, label %body, label \
+                                                              %done
+                                        \
+                                                              ",
                                                              elem_ty_str = res_ty_str.clone()));
 
                                         ctx.code.add(format!("body:
@@ -1397,7 +1599,8 @@ impl LlvmGenerator {
                                                               getPtrIndexed({bld_ty_str} \
                                                               {bld_tmp}, i32 %i)
   %val = load \
-                                                              {elem_ty_str}* %bldPtr",
+                                                              {elem_ty_str}, {elem_ty_str}* \
+                                                              %bldPtr",
                                                              bld_prefix = bld_prefix,
                                                              bld_ty_str = bld_ty_str,
                                                              elem_ty_str = res_ty_str.clone(),
@@ -1411,6 +1614,7 @@ impl LlvmGenerator {
                                                             ctx));
 
                                         ctx.code.add(format!("%i2 = add i32 %i, 1
+                                                              \
                                                               %cond2 = icmp ult i32 %i2, \
                                                               %nworkers
                                             \
@@ -1419,17 +1623,15 @@ impl LlvmGenerator {
                                             \
                                                               done:
                                                 \
-                                                              %final = load {res_ty_str}* \
-                                                              %bldPtrFirst
+                                                              %final = load {res_ty_str}, \
+                                                              {res_ty_str}* %bldPtrFirst
                                                 \
-                                                              %runId = call i64 @get_runid()
-                                                  \
                                                               %asPtr = bitcast \
                                                               {bld_ty_str} {bld_tmp} to \
                                                               i8*
                                                     \
-                                                              call void @free_merger(i64 \
-                                                              %runId, i8* %asPtr)",
+                                                              call void @free_merger(\
+                                                              i8* %asPtr)",
                                                              bld_tmp = bld_tmp,
                                                              bld_ty_str = bld_ty_str,
                                                              res_ty_str = res_ty_str.to_string()));
@@ -1510,6 +1712,7 @@ impl LlvmGenerator {
                                         let copy_body_label = label_ids.next();
                                         let copy_done_label = label_ids.next();
                                         let done_label = label_ids.next();
+                                        let raw_ptr = ctx.var_ids.next();
 
                                         ctx.code.add(format!(include_str!("resources/vecmerger/vecmerger_result_start.ll"),
                                                 nworkers = nworkers,
@@ -1564,6 +1767,9 @@ impl LlvmGenerator {
                                                              copyDoneLabel = copy_done_label,
                                                              doneLabel = done_label,
                                                              bodyLabel = body_label,
+                                                             rawPtr = raw_ptr,
+                                                             buildPtr = bld_ptr,
+                                                             bldType = bld_ty_str,
                                                              output = llvm_symbol(output)));
                                     }
                                 }
@@ -1723,8 +1929,9 @@ impl LlvmGenerator {
                     let elem_storage = ctx.var_ids.next();
                     let elem_storage_typed = ctx.var_ids.next();
                     let run_id = ctx.var_ids.next();
-                    ctx.code.add(format!("{} = getelementptr {}* null, i32 1",
+                    ctx.code.add(format!("{} = getelementptr {}, {}* null, i32 1",
                                          &elem_size_ptr,
+                                         &ty_str,
                                          &ty_str));
                     ctx.code.add(format!("{} = ptrtoint {}* {} to i64",
                                          &elem_size,
@@ -1779,7 +1986,6 @@ fn llvm_symbol(symbol: &Symbol) -> String {
 /// Return the name of the LLVM instruction for a binary operation on a specific type.
 fn llvm_binop(op_kind: BinOpKind, ty: &Type) -> WeldResult<&'static str> {
     match (op_kind, ty) {
-
         (BinOpKind::Add, &Scalar(I8)) => Ok("add"),
         (BinOpKind::Add, &Scalar(I32)) => Ok("add"),
         (BinOpKind::Add, &Scalar(I64)) => Ok("add"),
@@ -1863,6 +2069,20 @@ fn llvm_binop(op_kind: BinOpKind, ty: &Type) -> WeldResult<&'static str> {
     }
 }
 
+/// Return the name of the LLVM instruction for a binary operation between vectors.
+fn llvm_binop_vector(op_kind: BinOpKind, ty: &Type) -> WeldResult<(&'static str, i32)> {
+    match op_kind {
+        BinOpKind::Equal => Ok(("eq", 0)),
+        BinOpKind::NotEqual => Ok(("ne", 0)),
+        BinOpKind::LessThan => Ok(("eq", -1)),
+        BinOpKind::LessThanOrEqual => Ok(("ne", 1)),
+        BinOpKind::GreaterThan => Ok(("eq", 1)),
+        BinOpKind::GreaterThanOrEqual => Ok(("ne", -1)),
+
+        _ => weld_err!("Unsupported binary op: {} on {}", op_kind, print_type(ty)),
+    }
+}
+
 /// Return the name of hte LLVM instruction for a cast operation between specific types.
 fn llvm_castop(ty1: &Type, ty2: &Type) -> WeldResult<&'static str> {
     match (ty1, ty2) {
@@ -1912,6 +2132,13 @@ impl FunctionContext {
     }
 }
 
+/// Generates a small program which, when called with a `run_id`, frees
+/// memory associated with the run ID.
+pub fn generate_runtime_interface_module() -> WeldResult<easy_ll::CompiledModule> {
+    let program = include_str!("resources/runtime_interface_module.ll");
+    Ok(try!(easy_ll::compile_module(program, None)))
+}
+
 /// Generate a compiled LLVM module from a program whose body is a function.
 pub fn compile_program(program: &Program) -> WeldResult<easy_ll::CompiledModule> {
     let mut expr = try!(macro_processor::process_program(program));
@@ -1923,10 +2150,11 @@ pub fn compile_program(program: &Program) -> WeldResult<easy_ll::CompiledModule>
     transforms::inline_zips(&mut expr);
     transforms::fuse_loops_horizontal(&mut expr);
     transforms::fuse_loops_vertical(&mut expr);
+    transforms::uniquify(&mut expr);
     let sir_prog = try!(sir::ast_to_sir(&expr));
     let mut gen = LlvmGenerator::new();
     try!(gen.add_function_on_pointers("run", &sir_prog));
-    Ok(try!(easy_ll::compile_module(&gen.result())))
+    Ok(try!(easy_ll::compile_module(&gen.result(), Some(&get_merger_lib_path()))))
 }
 
 #[test]

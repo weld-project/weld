@@ -21,6 +21,7 @@ pub enum Statement {
         left: Symbol,
         right: Symbol,
     },
+    Negate { output: Symbol, child: Symbol },
     Cast {
         output: Symbol,
         new_ty: Type,
@@ -31,6 +32,13 @@ pub enum Statement {
         child: Symbol,
         index: Symbol,
     },
+    Slice {
+        output: Symbol,
+        child: Symbol,
+        index: Symbol,
+        size: Symbol,
+    },
+    Exp { output: Symbol, child: Symbol },
     ToVec { output: Symbol, child: Symbol },
     Length { output: Symbol, child: Symbol },
     Assign { output: Symbol, value: Symbol },
@@ -45,6 +53,11 @@ pub enum Statement {
     MakeStruct {
         output: Symbol,
         elems: Vec<(Symbol, Type)>,
+    },
+    MakeVector {
+        output: Symbol,
+        elems: Vec<Symbol>,
+        elem_ty: Type,
     },
     GetField {
         output: Symbol,
@@ -181,12 +194,17 @@ impl fmt::Display for Statement {
                        left,
                        right)
             }
+            Negate { ref output, ref child } => write!(f, "{} = -{}", output, child),
             Cast { ref output, ref new_ty, ref child } => {
                 write!(f, "{} = cast({}, {})", output, child, print_type(new_ty))
             }
             Lookup { ref output, ref child, ref index } => {
                 write!(f, "{} = lookup({}, {})", output, child, index)
             }
+            Slice { ref output, ref child, ref index , ref size } => {
+                write!(f, "{} = slice({}, {}, {})", output, child, index, size)
+            }
+            Exp { ref output, ref child } => write!(f, "{} = exp({})", output, child),
             ToVec { ref output, ref child } => write!(f, "{} = toVec({})", output, child),
             Length { ref output, ref child, .. } => write!(f, "{} = len({})", output, child),
             Assign { ref output, ref value } => write!(f, "{} = {}", output, value),
@@ -208,6 +226,12 @@ impl fmt::Display for Statement {
                        "{} = new {}",
                        output,
                        join("{", ",", "}", elems.iter().map(|e| e.0.name.clone())))
+            }
+            MakeVector { ref output, ref elems, .. } => {
+                write!(f,
+                       "{} = new {}",
+                       output,
+                       join("[", ",", "]", elems.iter().map(|e| e.name.clone())))
             }
             GetField { ref output, ref value, index } => {
                 write!(f, "{} = {}.{}", output, value, index)
@@ -332,9 +356,20 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
                 Cast { ref child, .. } => {
                     vars.push(child.clone());
                 }
+                Negate { ref child, .. } => {
+                    vars.push(child.clone());
+                }
                 Lookup { ref child, ref index, .. } => {
                     vars.push(child.clone());
                     vars.push(index.clone());
+                }
+                Slice { ref child, ref index, ref size, .. } => {
+                    vars.push(child.clone());
+                    vars.push(index.clone());
+                    vars.push(size.clone());
+                }
+                Exp { ref child, .. } => {
+                    vars.push(child.clone());
                 }
                 ToVec { ref child, .. } => {
                     vars.push(child.clone());
@@ -358,6 +393,11 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
                 MakeStruct { ref elems, .. } => {
                     for elem in elems {
                         vars.push(elem.0.clone());
+                    }
+                }
+                MakeVector { ref elems, .. } => {
+                    for elem in elems {
+                        vars.push(elem.clone());
                     }
                 }
             }
@@ -499,6 +539,16 @@ fn gen_expr(expr: &TypedExpr,
             Ok((cur_func, cur_block, res_sym))
         }
 
+        ExprKind::Negate(ref child_expr) => {
+            let (cur_func, cur_block, child_sym) = gen_expr(child_expr, prog, cur_func, cur_block)?;
+            let res_sym = prog.add_local(&expr.ty, cur_func);
+            prog.funcs[cur_func].blocks[cur_block].add_statement(Negate {
+                output: res_sym.clone(),
+                child: child_sym,
+            });
+            Ok((cur_func, cur_block, res_sym))
+        }
+
         ExprKind::Cast { ref child_expr, .. } => {
             let (cur_func, cur_block, child_sym) = gen_expr(child_expr, prog, cur_func, cur_block)?;
             let res_sym = prog.add_local(&expr.ty, cur_func);
@@ -518,6 +568,30 @@ fn gen_expr(expr: &TypedExpr,
                 output: res_sym.clone(),
                 child: data_sym,
                 index: index_sym.clone(),
+            });
+            Ok((cur_func, cur_block, res_sym))
+        }
+
+        ExprKind::Slice { ref data, ref index, ref size } => {
+            let (cur_func, cur_block, data_sym) = gen_expr(data, prog, cur_func, cur_block)?;
+            let (cur_func, cur_block, index_sym) = gen_expr(index, prog, cur_func, cur_block)?;
+            let (cur_func, cur_block, size_sym) = gen_expr(size, prog, cur_func, cur_block)?;
+            let res_sym = prog.add_local(&expr.ty, cur_func);
+            prog.funcs[cur_func].blocks[cur_block].add_statement(Slice {
+                output: res_sym.clone(),
+                child: data_sym,
+                index: index_sym.clone(),
+                size: size_sym.clone(),
+            });
+            Ok((cur_func, cur_block, res_sym))
+        }
+
+        ExprKind::Exp { ref value } => {
+            let (cur_func, cur_block, value_sym) = gen_expr(value, prog, cur_func, cur_block)?;
+            let res_sym = prog.add_local(&expr.ty, cur_func);
+            prog.funcs[cur_func].blocks[cur_block].add_statement(Exp {
+                output: res_sym.clone(),
+                child: value_sym,
             });
             Ok((cur_func, cur_block, res_sym))
         }
@@ -633,6 +707,30 @@ fn gen_expr(expr: &TypedExpr,
             prog.funcs[cur_func].blocks[cur_block].add_statement(MakeStruct {
                 output: res_sym.clone(),
                 elems: syms,
+            });
+            Ok((cur_func, cur_block, res_sym))
+        }
+
+        ExprKind::MakeVector { ref elems } => {
+            let mut syms = vec![];
+            let ty = match expr.ty {
+                super::ast::Type::Vector(ref ety) => ety.clone(),
+                _ => weld_err!("MakeVector doesn't have type Vector")?,
+            };
+            let mut cur_func = cur_func;
+            let mut cur_block = cur_block;
+            for elem in elems.iter() {
+                let r = gen_expr(elem, prog, cur_func, cur_block)?;
+                cur_func = r.0;
+                cur_block = r.1;
+                let sym = r.2;
+                syms.push(sym);
+            }
+            let res_sym = prog.add_local(&expr.ty, cur_func);
+            prog.funcs[cur_func].blocks[cur_block].add_statement(MakeVector {
+                output: res_sym.clone(),
+                elems: syms,
+                elem_ty: *ty,
             });
             Ok((cur_func, cur_block, res_sym))
         }

@@ -96,48 +96,12 @@ extern "C" {
   void *new_vb(int64_t elem_size, int64_t starting_cap);
   void new_piece(void *v, work_t *w);
   vec_piece *cur_piece(void *v, int32_t my_id);
+
+  void *get_merger_at_index(void *m, int64_t size, int32_t i);
+  void *new_merger(int64_t size, int32_t nworkers);
+  void free_merger(void *m);
+
   void weld_abort_thread();
 }
-
-#ifdef __APPLE__
-#include <sched.h>
-
-typedef int pthread_spinlock_t;
-
-static int pthread_spin_init(pthread_spinlock_t *lock, int pshared) {
-    __asm__ __volatile__ ("" ::: "memory");
-    *lock = 0;
-    return 0;
-}
-
-static int pthread_spin_destroy(pthread_spinlock_t *lock) {
-    return 0;
-}
-
-static int pthread_spin_lock(pthread_spinlock_t *lock) {
-    while (1) {
-        int i;
-        for (i=0; i < 10000; i++) {
-            if (__sync_bool_compare_and_swap(lock, 0, 1)) {
-                return 0;
-            }
-        }
-        sched_yield();
-    }
-}
-
-static int pthread_spin_trylock(pthread_spinlock_t *lock) {
-    if (__sync_bool_compare_and_swap(lock, 0, 1)) {
-        return 0;
-    }
-    return 1;
-}
-
-static int pthread_spin_unlock(pthread_spinlock_t *lock) {
-    __asm__ __volatile__ ("" ::: "memory");
-    *lock = 0;
-    return 0;
-}
-#endif
 
 #endif
