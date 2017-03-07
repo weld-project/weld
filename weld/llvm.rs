@@ -309,11 +309,14 @@ impl LlvmGenerator {
                 ctx.code.add("br label %loop.start");
                 ctx.code.add("loop.start:");
                 let idx_tmp = try!(self.load_var("%cur.idx", "i64", ctx));
-                let work_idx_ptr = ctx.var_ids.next();
-                ctx.code
-                    .add(format!("{} = getelementptr %work_t, %work_t* %cur.work, i32 0, i32 3",
-                                 work_idx_ptr));
-                ctx.code.add(format!("store i64 {}, i64* {}", idx_tmp, work_idx_ptr));
+                if !par_for.innermost {
+                    let work_idx_ptr = ctx.var_ids.next();
+                    ctx.code
+                        .add(format!("{} = getelementptr %work_t, %work_t* %cur.work, i32 0, \
+                                      i32 3",
+                                     work_idx_ptr));
+                    ctx.code.add(format!("store i64 {}, i64* {}", idx_tmp, work_idx_ptr));
+                }
                 let idx_cmp = ctx.var_ids.next();
                 ctx.code.add(format!("{} = icmp ult i64 {}, %upper.idx", idx_cmp, idx_tmp));
                 ctx.code.add(format!("br i1 {}, label %loop.body, label %loop.end", idx_cmp));
@@ -513,7 +516,7 @@ impl LlvmGenerator {
                 wrap_ctx.code.add(format!("fn.boundcheckpassed:"));
 
                 let bound_cmp = wrap_ctx.var_ids.next();
-                let mut grain_size = 1024;
+                let mut grain_size = 4096;
                 if par_for.innermost {
                     wrap_ctx.code.add(format!("{} = icmp ule i64 {}, {}",
                                               bound_cmp,
