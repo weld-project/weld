@@ -1,13 +1,22 @@
 # Weld C API
 
-This document describes the C API for interfacing with Weld. Developers interact with Weld using typed _handles_.
+This document describes the C API for interfacing with Weld.
 
 ## Values
 
 A value is a piece of data which can be consumed by Weld. Data wrapped using the API's value type must be marshalled
-into a format which Weld understands. The table below describes the format for each type.
+into a format which Weld understands. The table below describes how each type in Weld is represented in C. `(...)` represents a C struct with fields in the specified order (e.g., `(uint8_t, uint16_t)` is a struct where the first byte is a `uint8_t` and the second two bytes is a `uint16_t`.
 
-TODO
+
+  Type | C Representation | Explanation
+  ------------- | ------------- | -------------
+  `i8` | `int8_t` |
+  `i32` | `int32_t` |
+  `i64` | `int64_t` |
+  `f32` | `float` |
+  `f64` | `double` |
+  `{T1, T2 ... }` | `(T1,T2,...)`|
+  `vec[T]` | `(*T,int64_t)` | pointer to data, size of vector
 
 Values can be initialized using user data using the `weld_value_new` call. After its use, a value must be freed using the `weld_value_free` call. Note that
 a value initialized by `weld_value_new` must have its data freed by the caller as well (e.g., by calling C's `free` function explicitly).
@@ -159,7 +168,11 @@ A configuration specifies tunable parameters when generating and running code. T
 specifies some _runtime_ options that can be tuned by using configurations. Right now,
 configurations are not used during compile time.
 
-TODO
+  Configuration | Value
+  ------------- | -------------
+  `weld.threads` | A string value, e.g., `"1"`
+  `weld.memory.limit` | A memory limit for Weld in bytes
+
 
 ### API
 
