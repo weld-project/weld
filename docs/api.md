@@ -8,8 +8,9 @@ This document describes the C API for interfacing with Weld.
   * [Module](#module)
     + [API](#api-1)
   * [Errors](#errors)
-  * [Configurations](#configurations)
     + [API](#api-2)
+  * [Configurations](#configurations)
+    + [API](#api-3)
 
 ## Values
 
@@ -140,6 +141,8 @@ weld_module_free(weld_module_t);
 
 Errors are returned by the Weld runtime, and may signify either runtime errors (e.g., array out of bounds)
 or compilation errors.
+
+### API
 
 ```C
 
