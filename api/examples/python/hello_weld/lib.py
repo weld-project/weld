@@ -27,6 +27,12 @@ class HelloWeldVector(object):
         self.weldobj.weld_code = name
         self.cached = None
 
+    def add(self, number):
+        self.cached = None
+        template = "map({0}, |e| e + {1})"
+        self.weldobj.weld_code = template.format(self.weldobj.weld_code, str(number))
+        return self
+
     def sum(self):
         self.cached = None
         template = "result(for({0}, merger[i64,+], |b,i,e| merge(b, i64(e))))"
@@ -40,12 +46,6 @@ class HelloWeldVector(object):
 
     def __iadd__(self, other):
         return self.add(other)
-
-    def add(self, number):
-        self.cached = None
-        template = "map({0}, |e| e + {1})"
-        self.weldobj.weld_code = template.format(self.weldobj.weld_code, str(number))
-        return self
 
     def multiply(self, number):
         self.cached = None
