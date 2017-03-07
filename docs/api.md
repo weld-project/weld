@@ -2,6 +2,15 @@
 
 This document describes the C API for interfacing with Weld.
 
+- [Weld C API](#weld-c-api)
+  * [Values](#values)
+    + [API](#api)
+  * [Module](#module)
+    + [API](#api-1)
+  * [Errors](#errors)
+  * [Configurations](#configurations)
+    + [API](#api-2)
+
 ## Values
 
 A value is a piece of data which can be consumed by Weld. Data wrapped using the API's value type must be marshalled
