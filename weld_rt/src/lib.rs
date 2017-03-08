@@ -159,13 +159,7 @@ pub extern "C" fn weld_rt_malloc(run_id: libc::int64_t, size: libc::int64_t) -> 
             }
         } else {
             weld_rt_set_errno(run_id, WeldRuntimeErrno::RunNotFound);
-            do_allocation = false;
         }
-    }
-
-    // Release the lock before quitting by exiting the above scope.
-    if !do_allocation {
-        unsafe { weld_abort_thread() };
     }
     ptr
 }
@@ -202,12 +196,7 @@ pub extern "C" fn weld_rt_realloc(run_id: libc::int64_t,
             }
         } else {
             weld_rt_set_errno(run_id, WeldRuntimeErrno::RunNotFound);
-            do_allocation = false;
         }
-    }
-    // Release the lock before quitting by exiting the above scope.
-    if !do_allocation {
-        unsafe { weld_abort_thread() };
     }
     ptr
 }
@@ -218,7 +207,6 @@ pub extern "C" fn weld_rt_realloc(run_id: libc::int64_t,
 /// This function removes the pointer from the list of allocated pointers.
 pub unsafe extern "C" fn weld_rt_free(run_id: libc::int64_t, data: *mut c_void) {
     let run_id = run_id as i64;
-    let mut abort = false;
     {
         let mut guarded = ALLOCATIONS.lock().unwrap();
         if let Some(mem_info) = guarded.get_mut(&run_id) {
@@ -228,11 +216,7 @@ pub unsafe extern "C" fn weld_rt_free(run_id: libc::int64_t, data: *mut c_void) 
             mem_info.allocations.remove(&(data as u64));
         } else {
             weld_rt_set_errno(run_id, WeldRuntimeErrno::RunNotFound);
-            abort = true;
         }
-    }
-    if abort {
-        weld_abort_thread();
     }
 }
 

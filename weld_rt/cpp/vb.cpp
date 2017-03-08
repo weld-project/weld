@@ -73,7 +73,7 @@ extern "C" void new_piece(void *v, work_t *w) {
   cur_piece->nest_task_ids = nest_task_ids;
   // we need weld_rt_malloc here because this data is realloc'ed by the user program and
   // can become large
-  cur_piece->data = weld_rt_malloc(get_runid(), vb->elem_size * vb->starting_cap);
+  cur_piece->data = weld_rt_malloc_wrap(get_runid(), vb->elem_size * vb->starting_cap);
   cur_piece->size = 0;
   cur_piece->capacity = vb->starting_cap;
 }
@@ -102,7 +102,7 @@ extern "C" vec_output result_vb(void *v) {
   }
 
   // also needs weld_rt_malloc because it's the final result and not freed by the runtime
-  uint8_t *output = (uint8_t *)weld_rt_malloc(get_runid(), vb->elem_size * output_size);
+  uint8_t *output = (uint8_t *)weld_rt_malloc_wrap(get_runid(), vb->elem_size * output_size);
   int64_t cur_start = 0;
   // TODO probably want to parallelize this
   for (int64_t i = 0; i < vb->pieces.size(); i++) {
@@ -110,7 +110,7 @@ extern "C" vec_output result_vb(void *v) {
     cur_start += vb->elem_size * vb->pieces[i].size;
     free(vb->pieces[i].nest_idxs);
     free(vb->pieces[i].nest_task_ids);
-    weld_rt_free(get_runid(), vb->pieces[i].data);
+    weld_rt_free_wrap(get_runid(), vb->pieces[i].data);
   }
   pthread_mutex_destroy(&vb->lock);
   free_merger(vb->thread_curs);

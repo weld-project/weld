@@ -125,6 +125,29 @@ extern "C" void weld_abort_thread() {
     pthread_exit(NULL);
 }
 
+extern "C" void *weld_rt_malloc_wrap(int64_t run_id, size_t size) {
+  void *result = weld_rt_malloc(run_id, size);
+  if (weld_rt_get_errno(run_id) != 0) {
+    weld_abort_thread();
+  }
+  return result;
+}
+
+extern "C" void *weld_rt_realloc_wrap(int64_t run_id, void *data, size_t size) {
+  void *result = weld_rt_realloc(run_id, data, size);
+  if (weld_rt_get_errno(run_id) != 0) {
+    weld_abort_thread();
+  }
+  return result;
+}
+
+extern "C" void weld_rt_free_wrap(int64_t run_id, void *data) {
+  weld_rt_free(run_id, data);
+  if (weld_rt_get_errno(run_id) != 0) {
+    weld_abort_thread();
+  }
+}
+
 static inline void set_nest(work_t *task) {
   assert(task->full_task);
   vector<int64_t> idxs;

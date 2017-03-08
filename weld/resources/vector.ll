@@ -72,7 +72,7 @@ define %$NAME @$NAME.new(i64 %size) {
   %elemSize = ptrtoint $ELEM* %elemSizePtr to i64
   %allocSize = mul i64 %elemSize, %size
   %runId = call i64 @get_runid()
-  %bytes = call i8* @weld_rt_malloc(i64 %runId, i64 %allocSize)
+  %bytes = call i8* @weld_rt_malloc_wrap(i64 %runId, i64 %allocSize)
   %elements = bitcast i8* %bytes to $ELEM*
   %1 = insertvalue %$NAME undef, $ELEM* %elements, 0
   %2 = insertvalue %$NAME %1, i64 %size, 1
@@ -155,7 +155,7 @@ onFull:
   %bytes = extractvalue %vb.vp %curPiece, 0
   %allocSize = mul i64 %elemSize, %newCapacity
   %runId = call i64 @get_runid()
-  %newBytes = call i8* @weld_rt_realloc(i64 %runId, i8* %bytes, i64 %allocSize)
+  %newBytes = call i8* @weld_rt_realloc_wrap(i64 %runId, i8* %bytes, i64 %allocSize)
   %curPiece1 = insertvalue %vb.vp %curPiece, i8* %newBytes, 0
   %curPiece2 = insertvalue %vb.vp %curPiece1, i64 %newCapacity, 2
   br label %finish
