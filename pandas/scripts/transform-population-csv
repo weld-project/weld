@@ -15,7 +15,7 @@ def transformCSV(inputFile, outputFile, replicationFactor):
                 line.extend(["Total population",
                              "Total adult population",
                              "Number of robberies"])
-                f2.write(','.join([str(line_ele) for line_ele in line]))
+                f2.write('|'.join([str(line_ele) for line_ele in line]))
                 f2.write('\n')
             else:
                 totalPopulation = random.randint(10000, 1000000)
@@ -28,7 +28,7 @@ def transformCSV(inputFile, outputFile, replicationFactor):
                     line[-3] = totalPopulation
                     line[-2] = random.randint(0, totalPopulation)
                     line[-1] = random.randint(0, 1000)
-                    f2.write(','.join([str(line_ele) for line_ele in line]))
+                    f2.write('|'.join([str(line_ele) for line_ele in line]))
                     f2.write('\n')
             lineId += 1
 

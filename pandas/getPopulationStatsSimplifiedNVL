@@ -8,7 +8,7 @@ import lib.pandasNVL as pdNVL
 import time
 
 # Get data (NYC 311 service request dataset) and start cleanup
-raw_data = pd.read_csv('data/us_cities_states_counties.csv')
+raw_data = pd.read_csv('data/us_cities_states_counties.csv', delimiter='|')
 raw_data.dropna(inplace=True)
 data = pdNVL.DataFrameNVL(raw_data)
 print "Done reading input file..."

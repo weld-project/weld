@@ -6,7 +6,7 @@ import pandas as pd
 import time
 
 # Get data (NYC 311 service request dataset) and start cleanup
-data = pd.read_csv('data/us_cities_states_counties.csv')
+data = pd.read_csv('data/us_cities_states_counties.csv', delimiter='|')
 data.dropna(inplace=True)
 print "Done reading input file..."
 
