@@ -18,7 +18,10 @@ typedef void* weld_module_t;
 /** A handle to a Weld error. */
 typedef void* weld_error_t;
 
-// ************* Objects ****************
+/** A hanlde to a Weld configuration. */
+typedef void* weld_conf_t;
+
+// ************* Values ****************
 
 /** Returns a Weld-readable value with the given input buffer.
  *
@@ -45,7 +48,7 @@ weld_value_new(void *data);
  * @return 1 if owned, 0 otherwise.
  */
 extern "C" int 
-weld_value_owned(weld_value_t obj);
+weld_value_run(weld_value_t obj);
 
 /** Returns this value's data buffer.
  *
@@ -79,7 +82,7 @@ weld_value_free(weld_value_t);
  * @return a runnable module.
  */
 extern "C" weld_module_t 
-weld_module_compile(const char *code, const char *conf, weld_error_t *err);
+weld_module_compile(const char *code, weld_conf_t, weld_error_t *err);
 
 /** Runs a module using the given argument.
  *
@@ -88,6 +91,7 @@ weld_module_compile(const char *code, const char *conf, weld_error_t *err);
  * represents the ith argument of the Weld function.
  *
  * @param module the module to run.
+ * @param conf a configuration for this run.
  * @param arg the argument for the module's function.
  * @param err a NULL handle to a Weld error.
  * @return an owned Weld value representing the return value. The caller
@@ -95,7 +99,7 @@ weld_module_compile(const char *code, const char *conf, weld_error_t *err);
  * the module she runs.
  */
 extern "C" weld_value_t 
-weld_module_run(weld_module_t, weld_value_t arg, weld_error_t *err);
+weld_module_run(weld_module_t, weld_conf_t, weld_value_t, weld_error_t *err);
 
 /** Garbage collects a module.
  *
@@ -129,10 +133,29 @@ weld_error_message(weld_error_t);
 extern "C" void 
 weld_error_free(weld_error_t);
 
-// Weld memory management.
+// ************* Configuration ****************
 
-extern "C" void*
-weld_run_free(int64_t run_id);
+/** Return a new Weld configuraiton.
+ *
+ */
+extern "C" weld_conf_t
+weld_conf_new();
+
+/** Returns a value for a Weld configuration key.
+ *
+ * @param key the key to look up.
+ * @return the string value for the key, or NULL if the key does not exist.
+ */
+const char *
+extern "C" weld_conf_get(weld_conf_t, const char *key);
+
+/** Set a value for a Weld configuration key.
+ *
+ * @param key the key
+ * @param key the value
+ */
+void
+extern "C" weld_conf_get(weld_conf_t, const char *key, const char *value);
 
 #endif
 

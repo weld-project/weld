@@ -201,7 +201,7 @@ impl fmt::Display for Statement {
             Lookup { ref output, ref child, ref index } => {
                 write!(f, "{} = lookup({}, {})", output, child, index)
             }
-            Slice { ref output, ref child, ref index , ref size } => {
+            Slice { ref output, ref child, ref index, ref size } => {
                 write!(f, "{} = slice({}, {}, {})", output, child, index, size)
             }
             Exp { ref output, ref child } => write!(f, "{} = exp({})", output, child),

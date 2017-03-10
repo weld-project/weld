@@ -197,7 +197,14 @@ pub unsafe extern "C" fn weld_module_compile(code: *const c_char,
         println!("{}", e);
     }
 
-    let module = llvm::compile_program(&parser::parse_program(code).unwrap());
+    let parsed = parser::parse_program(code);
+    if let Err(e) = parsed {
+        err.errno = WeldRuntimeErrno::CompileError;
+        err.message = CString::new(e.description().to_string()).unwrap();
+        return std::ptr::null_mut();
+    }
+
+    let module = llvm::compile_program(&parsed.unwrap());
 
     if let Err(ref e) = module {
         err.errno = WeldRuntimeErrno::CompileError;
@@ -236,6 +243,13 @@ pub unsafe extern "C" fn weld_module_run(module: *mut WeldModule,
         .get(&CString::new(conf::THREADS_KEY).unwrap())
         .unwrap_or(&CString::new("").unwrap())
         .clone());
+
+
+    #[derive(Clone)]
+    struct I32Vec {
+        data: *const i32,
+        one: i64,
+    }
 
     let input = Box::new(llvm::WeldInputArgs {
         input: arg.data as i64,
