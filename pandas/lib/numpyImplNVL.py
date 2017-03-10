@@ -36,7 +36,7 @@ def div(array, other, type):
         nvl_obj.update(other)
         global norm_factor_id_
         constant_name = "norm_factor%d" % norm_factor_id_
-        constant = "%s := (%s);" % (constant_name, other.nvl)
+        constant = "let %s = (%s);" % (constant_name, other.nvl)
         norm_factor_id_ += 1
         nvl_obj.constants.append(constant)
         other_str = constant_name

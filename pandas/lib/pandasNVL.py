@@ -214,7 +214,7 @@ class GroupedDataFrameNVL(LazyOpResult):
         """
         return LazyOpResult(
             pandasImplNVL.get_column(
-                self.ptr,
+                self.expr,
                 self.nvl_type,
                 index
             ),

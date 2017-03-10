@@ -332,8 +332,9 @@ def groupby_sum(columns, column_types, grouping_column):
     if len(columns_str_list) == 1:
         columns_str = columns_str_list[0]
         types_str = column_types[0]
-        result_str = "elem1 + elem2"
+        result_str = "merge(b, e)"
     else:
+        # TODO Support Multicolumn
         columns_str = "zip(%s)" % ", ".join(columns_str_list)
         types_str = "{%s}" % ", ".join(column_types)
         result_str_list = []
@@ -341,14 +342,13 @@ def groupby_sum(columns, column_types, grouping_column):
             result_str_list.append("elem1.%d + elem2.%d" % (i, i))
         result_str = "{%s}" % ", ".join(result_str_list)
 
-    # TODO: Fix this. Horribly broken.
     nvl_template = """
      tovec(
        result(
          for(
            zip(%(grouping_column)s, %(columns)s),
-           dictmerger[%(key_type)s, %(type)s, +],
-           |b, i, e| => %(result)s
+           dictmerger[vec[i8], %(type)s, +],
+           |b, i, e| %(result)s
          )
        )
      )
@@ -356,7 +356,7 @@ def groupby_sum(columns, column_types, grouping_column):
 
     nvl_obj.nvl = nvl_template % {"grouping_column": grouping_column_str,
                                   "columns": columns_str, "result": result_str,
-                                  "types": types_str}
+                                  "type": types_str}
     return nvl_obj
 
 
@@ -374,7 +374,6 @@ def get_column(columns, column_types, index):
         A NvlObject representing this computation
     """
     nvl_obj = NvlObject(encoder_, decoder_)
-
     columns_str = nvl_obj.update(columns, argtype=NvlVec(column_types))
     if isinstance(columns, NvlObject):
         columns_str = columns.nvl
@@ -383,7 +382,7 @@ def get_column(columns, column_types, index):
     nvl_template = """
      map(
        %(columns)s,
-       |elem: %(type)s| => elem.%(index)s
+       |elem: %(type)s| elem.$%(index)s
      )
   """
 
