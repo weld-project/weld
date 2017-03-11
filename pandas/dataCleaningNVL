@@ -13,7 +13,6 @@ requests = pdNVL.DataFrameNVL(raw_requests)
 print "Done reading input file..."
 
 start = time.time()
-print len(requests['Incident Zip'].unique().evaluate())
 
 # Fix requests with extra digits
 requests['Incident Zip'] = requests['Incident Zip'].str.slice(0, 5)
@@ -23,7 +22,7 @@ zero_zips = requests['Incident Zip'] == '00000'
 requests['Incident Zip'][zero_zips] = "nan"
 
 # Display unique incident zips again (this time cleaned)
-print len(requests['Incident Zip'].unique().evaluate())
+print sorted(requests['Incident Zip'].unique().evaluate())
 end = time.time()
 
 print "Total end-to-end time: %.2f" % (end - start)
