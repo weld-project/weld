@@ -5,7 +5,7 @@ from lazyOp import LazyOpResult
 from weldobject import *
 
 
-class NumpyArrayNVL(LazyOpResult):
+class NumpyArrayWeld(LazyOpResult):
     """Summary
 
     Attributes:
@@ -37,7 +37,7 @@ class NumpyArrayNVL(LazyOpResult):
         """
         if isinstance(other, LazyOpResult):
             other = other.expr
-        return NumpyArrayNVL(
+        return NumpyArrayWeld(
             numpyImplWeld.div(
                 self.expr,
                 other,
@@ -52,7 +52,7 @@ class NumpyArrayNVL(LazyOpResult):
         Returns:
             TYPE: Description
         """
-        return NumpyArrayNVL(
+        return NumpyArrayWeld(
             numpyImplWeld.aggr(
                 self.expr,
                 "+",
@@ -88,7 +88,7 @@ def dot(matrix, vector):
     elif isinstance(vector, np.ndarray):
         vector_weld_type = numpyImplWeld.numpy_to_weld_type_mapping[str(vector.dtype)]
 
-    return NumpyArrayNVL(
+    return NumpyArrayWeld(
         numpyImplWeld.dot(
             matrix,
             vector,
@@ -110,4 +110,4 @@ def exp(vector):
         vector = vector.expr
     elif isinstance(vector, np.ndarray):
         weld_type = numpyImplWeld.numpy_to_weld_type_mapping[str(vector.dtype)]
-    return NumpyArrayNVL(numpyImplWeld.exp(vector, weld_type), WeldDouble())
+    return NumpyArrayWeld(numpyImplWeld.exp(vector, weld_type), WeldDouble())
