@@ -12,12 +12,12 @@ class NumPyWeldTestMethods(unittest.TestCase):
 
     def test_div(self):
         input = npWeld.NumpyArrayWeld(
-            np.array([3, 6, 12, 15, 14], dtype=np.int32), "i32")
+            np.array([3, 6, 12, 15, 14], dtype=np.int32), npWeld.WeldInt())
         self.assertItemsEqual([1, 2, 4, 5, 4], (input / 3).evaluate(False))
 
     def test_sum(self):
         input = npWeld.NumpyArrayWeld(
-            np.array([1, 2, 3, 4, 5], dtype=np.int32), "i32")
+            np.array([1, 2, 3, 4, 5], dtype=np.int32), npWeld.WeldInt())
         self.assertEqual(15, input.sum().evaluate(False))
 
     def test_dot(self):
