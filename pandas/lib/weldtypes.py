@@ -8,7 +8,7 @@
 from ctypes import *
 
 
-class NvlType(object):
+class WeldType(object):
     """Summary
     """
 
@@ -51,7 +51,7 @@ class NvlType(object):
         raise NotImplementedError
 
 
-class NvlChar(NvlType):
+class WeldChar(WeldType):
     """Summary
     """
 
@@ -73,7 +73,7 @@ class NvlChar(NvlType):
         return c_wchar_p
 
 
-class NvlBit(NvlType):
+class WeldBit(WeldType):
     """Summary
     """
     
@@ -95,7 +95,7 @@ class NvlBit(NvlType):
         return c_bool
 
 
-class NvlInt(NvlType):
+class WeldInt(WeldType):
     """Summary
     """
 
@@ -117,7 +117,7 @@ class NvlInt(NvlType):
         return c_int
 
 
-class NvlLong(NvlType):
+class WeldLong(WeldType):
     """Summary
     """
     
@@ -139,7 +139,7 @@ class NvlLong(NvlType):
         return c_long
 
 
-class NvlFloat(NvlType):
+class WeldFloat(WeldType):
     """Summary
     """
     
@@ -156,7 +156,7 @@ class NvlFloat(NvlType):
         return c_float
 
 
-class NvlDouble(NvlType):
+class WeldDouble(WeldType):
     """Summary
     """
     
@@ -178,7 +178,7 @@ class NvlDouble(NvlType):
         return c_double
 
 
-class NvlVec(NvlType):
+class WeldVec(WeldType):
     """Summary
 
     Attributes:
@@ -230,12 +230,12 @@ class NvlVec(NvlType):
                 ]
             return Vec
 
-        if self.elemType not in NvlVec._singletons:
-            NvlVec._singletons[self.elemType] = vec_factory(self.elemType)
-        return NvlVec._singletons[self.elemType]
+        if self.elemType not in WeldVec._singletons:
+            WeldVec._singletons[self.elemType] = vec_factory(self.elemType)
+        return WeldVec._singletons[self.elemType]
 
 
-class NvlStruct(NvlType):
+class WeldStruct(WeldType):
     """Summary
 
     Attributes:
@@ -249,7 +249,7 @@ class NvlStruct(NvlType):
         Args:
             fieldTypes (TYPE): Description
         """
-        assert False not in [isinstance(e, NvlType) for e in fieldTypes]
+        assert False not in [isinstance(e, WeldType) for e in fieldTypes]
         self.fieldTypes = fieldTypes
 
     def __str__(self):
@@ -283,7 +283,7 @@ class NvlStruct(NvlType):
                             for i, t in enumerate(fieldTypes)]
             return Struct
 
-        if frozenset(self.fieldTypes) not in NvlVec._singletons:
-            NvlStruct._singletons[
+        if frozenset(self.fieldTypes) not in WeldVec._singletons:
+            WeldStruct._singletons[
                 frozenset(self.fieldTypes)] = struct_factory(self.fieldTypes)
-        return NvlStruct._singletons[frozenset(self.fieldTypes)]
+        return WeldStruct._singletons[frozenset(self.fieldTypes)]

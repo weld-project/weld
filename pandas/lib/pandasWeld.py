@@ -1,12 +1,12 @@
 import numpy as np
 import pandas as pd
 
-import pandasImplNVL
+import pandasImplWeld
 from lazyOp import LazyOpResult
-from nvlobject import *
+from weldobject import *
 
 
-class DataFrameNVL:
+class DataFrameWeld:
     """Summary
 
     Attributes:
@@ -38,28 +38,28 @@ class DataFrameNVL:
                 return self.unmaterialized_cols[key]
             raw_column = self.df[key].values
             dtype = str(raw_column.dtype)
-            # If column type is "object", then cast as "vec[char]" in NVL
+            # If column type is "object", then cast as "vec[char]" in Weld
             if raw_column.dtype == object:
                 raw_column = np.array(self.df[key], dtype=str)
-                nvl_type = NvlVec(NvlChar())
+                weld_type = WeldVec(WeldChar())
             else:
-                nvl_type = pandasImplNVL.numpy_to_nvl_type_mapping[dtype]
+                weld_type = pandasImplWeld.numpy_to_weld_type_mapping[dtype]
             if self.predicates is None:
-                return SeriesNVL(raw_column, nvl_type, self, key)
-            return SeriesNVL(
-                pandasImplNVL.filter(
+                return SeriesWeld(raw_column, weld_type, self, key)
+            return SeriesWeld(
+                pandasImplWeld.filter(
                     raw_column,
                     self.predicates.expr,
-                    nvl_type
+                    weld_type
                 ),
-                nvl_type,
+                weld_type,
                 self,
                 key
             )
         elif isinstance(key, list):  # For multi-key get, return type is a dataframe
-            return DataFrameNVL(self.df[key], self.predicates)
-        elif isinstance(key, SeriesNVL):  # Can also apply predicate to a dataframe
-            return DataFrameNVL(self.df, key)
+            return DataFrameWeld(self.df[key], self.predicates)
+        elif isinstance(key, SeriesWeld):  # Can also apply predicate to a dataframe
+            return DataFrameWeld(self.df, key)
         raise Exception("Invalid type in __getitem__")
 
     def __setitem__(self, key, value):
@@ -74,19 +74,19 @@ class DataFrameNVL:
         """
         if isinstance(value, np.ndarray):
             dtype = str(value.dtype)
-            nvl_type = pandasImplNVL.numpy_to_nvl_type_mapping[dtype]
-            self.unmaterialized_cols[key] = SeriesNVL(
+            weld_type = pandasImplWeld.numpy_to_weld_type_mapping[dtype]
+            self.unmaterialized_cols[key] = SeriesWeld(
                 value,
-                nvl_type,
+                weld_type,
                 self,
                 key
             )
-        elif isinstance(value, SeriesNVL):
+        elif isinstance(value, SeriesWeld):
             self.unmaterialized_cols[key] = value
         elif isinstance(value, LazyOpResult):
-            self.unmaterialized_cols[key] = SeriesNVL(
+            self.unmaterialized_cols[key] = SeriesWeld(
                 value.expr,
-                value.nvl_type,
+                value.weld_type,
                 self,
                 key
             )
@@ -107,16 +107,16 @@ class DataFrameNVL:
             if self.predicates is None:
                 return self.df.values
             if isinstance(self.df.values, np.ndarray):
-                nvl_type = pandasImplNVL.numpy_to_nvl_type_mapping[
+                weld_type = pandasImplWeld.numpy_to_weld_type_mapping[
                     str(self.df.values.dtype)]
                 dim = self.df.values.ndim
                 return LazyOpResult(
-                    pandasImplNVL.filter(
+                    pandasImplWeld.filter(
                         self.df.values,
                         self.predicates.expr,
-                        nvl_type
+                        weld_type
                     ),
-                    nvl_type,
+                    weld_type,
                     dim
                 )
         raise Exception("Attr %s does not exist" % key)
@@ -143,7 +143,7 @@ class DataFrameNVL:
         Returns:
             TYPE: Description
         """
-        return GroupByNVL(
+        return GroupByWeld(
             self,
             grouping_column_name
         )
@@ -158,7 +158,7 @@ class DataFrameNVL:
         return self.df
 
 
-class GroupedDataFrameNVL(LazyOpResult):
+class GroupedDataFrameWeld(LazyOpResult):
     """Summary
 
     Attributes:
@@ -168,7 +168,7 @@ class GroupedDataFrameNVL(LazyOpResult):
         expr (TYPE): Description
         grouping_column_name (TYPE): Description
         grouping_column_type (TYPE): Description
-        nvl_type (TYPE): Description
+        weld_type (TYPE): Description
         ptr (TYPE): Description
     """
 
@@ -198,8 +198,8 @@ class GroupedDataFrameNVL(LazyOpResult):
         self.dim = 1
         column_types = self.column_types[0]
         if len(self.column_types) > 1:
-            column_types = NvlStruct(self.column_types)
-        self.nvl_type = NvlStruct([self.grouping_column_type, column_types])
+            column_types = WeldStruct(self.column_types)
+        self.weld_type = WeldStruct([self.grouping_column_type, column_types])
 
     def get_column(self, column_name, column_type, index):
         """Summary
@@ -213,9 +213,9 @@ class GroupedDataFrameNVL(LazyOpResult):
             TYPE: Description
         """
         return LazyOpResult(
-            pandasImplNVL.get_column(
+            pandasImplWeld.get_column(
                 self.expr,
-                self.nvl_type,
+                self.weld_type,
                 index
             ),
             column_type,
@@ -247,10 +247,10 @@ class GroupedDataFrameNVL(LazyOpResult):
                 index
             )
             i += 1
-        return DataFrameNVL(df)
+        return DataFrameWeld(df)
 
 
-class SeriesNVL(LazyOpResult):
+class SeriesWeld(LazyOpResult):
     """Summary
 
     Attributes:
@@ -258,20 +258,20 @@ class SeriesNVL(LazyOpResult):
         df (TYPE): Description
         dim (int): Description
         expr (TYPE): Description
-        nvl_type (TYPE): Description
+        weld_type (TYPE): Description
     """
 
-    def __init__(self, expr, nvl_type, df=None, column_name=None):
+    def __init__(self, expr, weld_type, df=None, column_name=None):
         """Summary
 
         Args:
             expr (TYPE): Description
-            nvl_type (TYPE): Description
+            weld_type (TYPE): Description
             df (None, optional): Description
             column_name (None, optional): Description
         """
         self.expr = expr
-        self.nvl_type = nvl_type
+        self.weld_type = weld_type
         self.dim = 1
         self.df = df
         self.column_name = column_name
@@ -301,10 +301,10 @@ class SeriesNVL(LazyOpResult):
         Raises:
             Exception: Description
         """
-        if key == 'str' and self.nvl_type == NvlVec(NvlChar()):
-            return StringSeriesNVL(
+        if key == 'str' and self.weld_type == WeldVec(WeldChar()):
+            return StringSeriesWeld(
                 self.expr,
-                self.nvl_type,
+                self.weld_type,
                 self.df,
                 self.column_name
             )
@@ -317,11 +317,11 @@ class SeriesNVL(LazyOpResult):
             TYPE: Description
         """
         return LazyOpResult(
-            pandasImplNVL.unique(
+            pandasImplWeld.unique(
                 self.expr,
-                self.nvl_type
+                self.weld_type
             ),
-            self.nvl_type,
+            self.weld_type,
             self.dim
         )
 
@@ -332,13 +332,13 @@ class SeriesNVL(LazyOpResult):
             TYPE: Description
         """
         return LazyOpResult(
-            pandasImplNVL.aggr(
+            pandasImplWeld.aggr(
                 self.expr,
                 "*",
                 1,
-                self.nvl_type
+                self.weld_type
             ),
-            self.nvl_type,
+            self.weld_type,
             0
         )
 
@@ -349,13 +349,13 @@ class SeriesNVL(LazyOpResult):
             TYPE: Description
         """
         return LazyOpResult(
-            pandasImplNVL.aggr(
+            pandasImplWeld.aggr(
                 self.expr,
                 "+",
                 0,
-                self.nvl_type
+                self.weld_type
             ),
-            self.nvl_type,
+            self.weld_type,
             0
         )
 
@@ -382,11 +382,11 @@ class SeriesNVL(LazyOpResult):
             TYPE: Description
         """
         return LazyOpResult(
-            pandasImplNVL.count(
+            pandasImplWeld.count(
                 self.expr,
-                self.nvl_type
+                self.weld_type
             ),
-            NvlInt(),
+            WeldInt(),
             0
         )
 
@@ -400,30 +400,30 @@ class SeriesNVL(LazyOpResult):
         Returns:
             TYPE: Description
         """
-        if isinstance(predicates, SeriesNVL):
+        if isinstance(predicates, SeriesWeld):
             predicates = predicates.expr
-        return SeriesNVL(
-            pandasImplNVL.mask(
+        return SeriesWeld(
+            pandasImplWeld.mask(
                 self.expr,
                 predicates,
                 new_value,
-                self.nvl_type
+                self.weld_type
             ),
-            self.nvl_type,
+            self.weld_type,
             self.df,
             self.column_name
         )
 
     def filter(self, predicates):
-        if isinstance(predicates, SeriesNVL):
+        if isinstance(predicates, SeriesWeld):
             predicates = predicates.expr
-        return SeriesNVL(
-            pandasImplNVL.filter(
+        return SeriesWeld(
+            pandasImplWeld.filter(
                 self.expr,
                 predicates,
-                self.nvl_type
+                self.weld_type
             ),
-            self.nvl_type,
+            self.weld_type,
             self.df,
             self.column_name
         )
@@ -437,16 +437,16 @@ class SeriesNVL(LazyOpResult):
         Returns:
             TYPE: Description
         """
-        if isinstance(other, SeriesNVL):
+        if isinstance(other, SeriesWeld):
             other = other.expr
-        return SeriesNVL(
-            pandasImplNVL.element_wise_op(
+        return SeriesWeld(
+            pandasImplWeld.element_wise_op(
                 self.expr,
                 other,
                 "+",
-                self.nvl_type
+                self.weld_type
             ),
-            self.nvl_type,
+            self.weld_type,
             self.df,
             self.column_name
         )
@@ -460,16 +460,16 @@ class SeriesNVL(LazyOpResult):
         Returns:
             TYPE: Description
         """
-        if isinstance(other, SeriesNVL):
+        if isinstance(other, SeriesWeld):
             other = other.expr
-        return SeriesNVL(
-            pandasImplNVL.element_wise_op(
+        return SeriesWeld(
+            pandasImplWeld.element_wise_op(
                 self.expr,
                 other,
                 "-",
-                self.nvl_type
+                self.weld_type
             ),
-            self.nvl_type,
+            self.weld_type,
             self.df,
             self.column_name
         )
@@ -483,16 +483,16 @@ class SeriesNVL(LazyOpResult):
         Returns:
             TYPE: Description
         """
-        if isinstance(other, SeriesNVL):
+        if isinstance(other, SeriesWeld):
             other = other.expr
-        return SeriesNVL(
-            pandasImplNVL.element_wise_op(
+        return SeriesWeld(
+            pandasImplWeld.element_wise_op(
                 self.expr,
                 other,
                 "*",
-                self.nvl_type
+                self.weld_type
             ),
-            self.nvl_type,
+            self.weld_type,
             self.df,
             self.column_name
         )
@@ -506,16 +506,16 @@ class SeriesNVL(LazyOpResult):
         Returns:
             TYPE: Description
         """
-        if isinstance(other, SeriesNVL):
+        if isinstance(other, SeriesWeld):
             other = other.expr
-        return SeriesNVL(
-            pandasImplNVL.element_wise_op(
+        return SeriesWeld(
+            pandasImplWeld.element_wise_op(
                 self.expr,
                 other,
                 "/",
-                self.nvl_type
+                self.weld_type
             ),
-            self.nvl_type,
+            self.weld_type,
             self.df,
             self.column_name
         )
@@ -529,16 +529,16 @@ class SeriesNVL(LazyOpResult):
         Returns:
             TYPE: Description
         """
-        if isinstance(other, SeriesNVL):
+        if isinstance(other, SeriesWeld):
             other = other.expr
-        return SeriesNVL(
-            pandasImplNVL.element_wise_op(
+        return SeriesWeld(
+            pandasImplWeld.element_wise_op(
                 self.expr,
                 other,
                 "%",
-                self.nvl_type
+                self.weld_type
             ),
-            self.nvl_type,
+            self.weld_type,
             self.df,
             self.column_name
         )
@@ -552,14 +552,14 @@ class SeriesNVL(LazyOpResult):
         Returns:
             TYPE: Description
         """
-        return SeriesNVL(
-            pandasImplNVL.compare(
+        return SeriesWeld(
+            pandasImplWeld.compare(
                 self.expr,
                 other,
                 "==",
-                self.nvl_type
+                self.weld_type
             ),
-            NvlBit(),
+            WeldBit(),
             self.df,
             self.column_name
         )
@@ -573,14 +573,14 @@ class SeriesNVL(LazyOpResult):
         Returns:
             TYPE: Description
         """
-        return SeriesNVL(
-            pandasImplNVL.compare(
+        return SeriesWeld(
+            pandasImplWeld.compare(
                 self.expr,
                 other,
                 "!=",
-                self.nvl_type
+                self.weld_type
             ),
-            NvlBit(),
+            WeldBit(),
             self.df,
             self.column_name
         )
@@ -594,14 +594,14 @@ class SeriesNVL(LazyOpResult):
         Returns:
             TYPE: Description
         """
-        return SeriesNVL(
-            pandasImplNVL.compare(
+        return SeriesWeld(
+            pandasImplWeld.compare(
                 self.expr,
                 other,
                 ">",
-                self.nvl_type
+                self.weld_type
             ),
-            NvlBit(),
+            WeldBit(),
             self.df,
             self.column_name
         )
@@ -615,14 +615,14 @@ class SeriesNVL(LazyOpResult):
         Returns:
             TYPE: Description
         """
-        return SeriesNVL(
-            pandasImplNVL.compare(
+        return SeriesWeld(
+            pandasImplWeld.compare(
                 self.expr,
                 other,
                 ">=",
-                self.nvl_type
+                self.weld_type
             ),
-            NvlBit(),
+            WeldBit(),
             self.df,
             self.column_name
         )
@@ -636,14 +636,14 @@ class SeriesNVL(LazyOpResult):
         Returns:
             TYPE: Description
         """
-        return SeriesNVL(
-            pandasImplNVL.compare(
+        return SeriesWeld(
+            pandasImplWeld.compare(
                 self.expr,
                 other,
                 "<",
-                self.nvl_type
+                self.weld_type
             ),
-            NvlBit(),
+            WeldBit(),
             self.df,
             self.column_name
         )
@@ -657,20 +657,20 @@ class SeriesNVL(LazyOpResult):
         Returns:
             TYPE: Description
         """
-        return SeriesNVL(
-            pandasImplNVL.compare(
+        return SeriesWeld(
+            pandasImplWeld.compare(
                 self.expr,
                 other,
                 "<=",
-                self.nvl_type
+                self.weld_type
             ),
-            NvlBit(),
+            WeldBit(),
             self.df,
             self.column_name
         )
 
 
-class StringSeriesNVL:
+class StringSeriesWeld:
     """Summary
 
     Attributes:
@@ -678,20 +678,20 @@ class StringSeriesNVL:
         df (TYPE): Description
         dim (int): Description
         expr (TYPE): Description
-        nvl_type (TYPE): Description
+        weld_type (TYPE): Description
     """
 
-    def __init__(self, expr, nvl_type, df=None, column_name=None):
+    def __init__(self, expr, weld_type, df=None, column_name=None):
         """Summary
 
         Args:
             expr (TYPE): Description
-            nvl_type (TYPE): Description
+            weld_type (TYPE): Description
             df (None, optional): Description
             column_name (None, optional): Description
         """
         self.expr = expr
-        self.nvl_type = nvl_type
+        self.weld_type = weld_type
         self.dim = 1
         self.df = df
         self.column_name = column_name
@@ -706,20 +706,20 @@ class StringSeriesNVL:
         Returns:
             TYPE: Description
         """
-        return SeriesNVL(
-            pandasImplNVL.slice(
+        return SeriesWeld(
+            pandasImplWeld.slice(
                 self.expr,
                 start,
                 size,
-                self.nvl_type
+                self.weld_type
             ),
-            self.nvl_type,
+            self.weld_type,
             self.df,
             self.column_name
         )
 
 
-class GroupByNVL:
+class GroupByWeld:
     """Summary
 
     Attributes:
@@ -742,10 +742,10 @@ class GroupByNVL:
         self.grouping_column_type = None
         column = df[grouping_column_name]
         if isinstance(column, LazyOpResult):
-            self.grouping_column_type = column.nvl_type
+            self.grouping_column_type = column.weld_type
             self.grouping_column = column.expr
         elif isinstance(column, np.ndarray):
-            self.grouping_column_type = numpyImpl.numpy_to_nvl_type_mapping[
+            self.grouping_column_type = numpyImpl.numpy_to_weld_type_mapping[
                 str(column.dtype)]
             self.grouping_column = column
 
@@ -759,10 +759,10 @@ class GroupByNVL:
             column = df[column_name]
             column_type = None
             if isinstance(column, LazyOpResult):
-                column_type = column.nvl_type
+                column_type = column.weld_type
                 column = column.expr
             elif isinstance(column, np.ndarray):
-                column_type = numpyImpl.numpy_to_nvl_type_mapping[
+                column_type = numpyImpl.numpy_to_weld_type_mapping[
                     str(column.dtype)]
             self.columns.append(column)
             self.column_types.append(column_type)
@@ -773,8 +773,8 @@ class GroupByNVL:
         Returns:
             TYPE: Description
         """
-        return GroupedDataFrameNVL(
-            pandasImplNVL.groupby_sum(
+        return GroupedDataFrameWeld(
+            pandasImplWeld.groupby_sum(
                 self.columns,
                 self.column_types,
                 self.grouping_column

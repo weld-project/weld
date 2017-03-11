@@ -8,7 +8,7 @@ import copy
 path = os.environ["WELD_HOME"]
 if path[-1] != "/":
     path += "/"
-path += "target/debug/libweld"
+path += "target/release/libweld"
     
 system = platform.system()
 if system == 'Linux':

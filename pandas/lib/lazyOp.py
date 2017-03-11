@@ -1,21 +1,21 @@
 """Summary
 """
-from nvlobject import *
+from weldobject import *
 
 
-def to_nvl_type(nvl_type, dim):
+def to_weld_type(weld_type, dim):
     """Summary
 
     Args:
-        nvl_type (TYPE): Description
+        weld_type (TYPE): Description
         dim (TYPE): Description
 
     Returns:
         TYPE: Description
     """
     for i in xrange(dim):
-        nvl_type = NvlVec(nvl_type)
-    return nvl_type
+        weld_type = WeldVec(weld_type)
+    return weld_type
 
 
 class LazyOpResult:
@@ -23,21 +23,21 @@ class LazyOpResult:
 
     Attributes:
         dim (int): Dimensionality of the output
-        expr (NvlObject / Numpy.ndarray): The expression that needs to be
+        expr (WeldObject / Numpy.ndarray): The expression that needs to be
             evaluated
-        nvl_type (NvlType): Type of the output object
+        weld_type (WeldType): Type of the output object
     """
 
-    def __init__(self, expr, nvl_type, dim):
+    def __init__(self, expr, weld_type, dim):
         """Summary
 
         Args:
             expr (TYPE): Description
-            nvl_type (TYPE): Description
+            weld_type (TYPE): Description
             dim (TYPE): Description
         """
         self.expr = expr
-        self.nvl_type = nvl_type
+        self.weld_type = weld_type
         self.dim = dim
 
     def evaluate(self, verbose=True, decode=True):
@@ -50,10 +50,10 @@ class LazyOpResult:
         Returns:
             TYPE: Description
         """
-        if isinstance(self.expr, NvlObject):
+        if isinstance(self.expr, WeldObject):
             return self.expr.evaluate(
-                to_nvl_type(
-                    self.nvl_type,
+                to_weld_type(
+                    self.weld_type,
                     self.dim),
                 verbose,
                 decode)
