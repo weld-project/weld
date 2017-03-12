@@ -374,11 +374,10 @@ def get_column(columns, column_types, index):
         A WeldObject representing this computation
     """
     weld_obj = WeldObject(encoder_, decoder_)
-    columns_str = weld_obj.update(columns, argtype=WeldVec(column_types))
+    columns_str = weld_obj.update(columns, types=WeldVec(column_types))
     if isinstance(columns, WeldObject):
         columns_str = columns.weld_code
 
-    # TODO: Fix this. Horribly broken.
     weld_template = """
      map(
        %(columns)s,

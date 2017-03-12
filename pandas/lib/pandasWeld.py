@@ -228,13 +228,7 @@ class GroupedDataFrameWeld(LazyOpResult):
         Returns:
             TYPE: Description
         """
-        self.ptr = LazyOpResult.evaluate(self, decode=False)
         df = pd.DataFrame(columns=[])
-        df[self.grouping_column_name] = self.get_column(
-            self.grouping_column_name,
-            self.grouping_column_type,
-            "0"
-        )
         i = 0
         for column_name in self.column_names:
             if len(self.column_names) > 1:

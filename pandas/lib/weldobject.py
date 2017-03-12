@@ -99,7 +99,7 @@ class WeldObject(object):
     def __repr__(self):
         return self.weld_code + " " + str(self.context)
 
-    def update(self, value, ty=None):
+    def update(self, value, types=None):
         """
         Update this context. if value is another context,
         the names from that context are added into this one.
@@ -114,8 +114,8 @@ class WeldObject(object):
             name = "e" + str(WeldObject._var_num)
             WeldObject._var_num += 1
             self.context[name] = value
-            if ty is not None:
-                self.argtypes[name] = ty
+            if types is not None:
+                self.argtypes[name] = types
             return name
 
     def toWeldFunc(self):
