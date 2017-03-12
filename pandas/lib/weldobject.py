@@ -171,7 +171,8 @@ class WeldObject(object):
             raise ValueError("Could not compile function {}: {}".format(function, err.message()))
 
         conf = cweld.WeldConf()
-        conf.set("weld.threads", "1")
+        conf.set("weld.threads", "16")
+        conf.set("weld.memory.limit", "100000000000")
         weld_ret = module.run(conf, arg, cweld.WeldError())
         ptrtype = POINTER(restype.cTypeClass)
         data = ctypes.cast(weld_ret.data(), ptrtype)
