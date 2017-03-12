@@ -173,7 +173,11 @@ class WeldObject(object):
         conf = cweld.WeldConf()
         conf.set("weld.threads", "16")
         conf.set("weld.memory.limit", "100000000000")
-        weld_ret = module.run(conf, arg, cweld.WeldError())
+        err = cweld.WeldError()
+        weld_ret = module.run(conf, arg, err)
+        if err.code() != 0:
+            raise ValueError("Error while running function,\n{}\n\nError message: {}".format(
+                function, err.message()))
         ptrtype = POINTER(restype.cTypeClass)
         data = ctypes.cast(weld_ret.data(), ptrtype)
         end = time.time()
