@@ -22,7 +22,7 @@ else
 endif
 
 convertor:
-	${CLANGPP} ${DFLAGS} -w -march=native -lpython2.7 numpy_nvl_convertor.cpp -o numpy_nvl_convertor${DYLIB_SUFFIX}  ${PYTHON_INCLUDES}
+	${CLANGPP} ${DFLAGS} -w -march=native -lpython2.7 numpy_weld_convertor.cpp -o numpy_weld_convertor${DYLIB_SUFFIX}  ${PYTHON_INCLUDES}
 
 clean:
-	rm -rf run numpy_nvl_convertor${DYLIB_SUFFIX} *.pyc
+	rm -rf run numpy_weld_convertor${DYLIB_SUFFIX} *.pyc

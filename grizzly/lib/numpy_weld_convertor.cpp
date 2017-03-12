@@ -6,78 +6,78 @@
 using namespace std;
 
 /**
- * Converts numpy array to NVL vector.
+ * Converts numpy array to Weld vector.
  */
 extern "C"
-nvl::vec<int32_t> numpy_to_nvl_int_arr(PyObject* in) {
+weld::vec<int32_t> numpy_to_weld_int_arr(PyObject* in) {
     PyArrayObject* inp = (PyArrayObject*) in;
     int64_t dimension = (int64_t) PyArray_DIMS(inp)[0];
-    nvl::vec<int32_t> t;
+    weld::vec<int32_t> t;
     t.size = dimension;
     t.ptr = (int32_t*) PyArray_DATA(inp);
     return t;
 }
 
 /**
- * Converts numpy array to NVL vector.
+ * Converts numpy array to Weld vector.
  */
 extern "C"
-nvl::vec<long> numpy_to_nvl_long_arr(PyObject* in) {
+weld::vec<long> numpy_to_weld_long_arr(PyObject* in) {
     PyArrayObject* inp = (PyArrayObject*) in;
     int64_t dimension = (int64_t) PyArray_DIMS(inp)[0];
-    nvl::vec<long> t;
+    weld::vec<long> t;
     t.size = dimension;
     t.ptr = (long*) PyArray_DATA(inp);
     return t;
 }
 
 /**
- * Converts numpy array to NVL vector.
+ * Converts numpy array to Weld vector.
  */
 extern "C"
-nvl::vec<double> numpy_to_nvl_double_arr(PyObject* in) {
+weld::vec<double> numpy_to_weld_double_arr(PyObject* in) {
     PyArrayObject* inp = (PyArrayObject*) in;
     int64_t dimension = (int64_t) PyArray_DIMS(inp)[0];
-    nvl::vec<double> t;
+    weld::vec<double> t;
     t.size = dimension;
     t.ptr = (double*) PyArray_DATA(inp);
     return t;
 }
 
 /**
- * Converts numpy array to NVL char vector.
+ * Converts numpy array to Weld char vector.
  */
 extern "C"
-nvl::vec<uint8_t> numpy_to_nvl_char_arr(PyObject* in) {
+weld::vec<uint8_t> numpy_to_weld_char_arr(PyObject* in) {
     int64_t dimension = (int64_t) PyString_Size(in);
-    nvl::vec<uint8_t> t;
+    weld::vec<uint8_t> t;
     t.size = dimension;
     t.ptr = (uint8_t*) PyString_AsString(in);
     return t;
 }
 
 /**
- * Converts numpy array to NVL bit vector.
+ * Converts numpy array to Weld bit vector.
   */
 extern "C"
-nvl::vec<bool> numpy_to_nvl_bool_arr(PyObject* in) {
+weld::vec<bool> numpy_to_weld_bool_arr(PyObject* in) {
     PyArrayObject* inp = (PyArrayObject*) in;
     int64_t dimension = (int64_t) PyArray_DIMS(inp)[0];
-    nvl::vec<bool> t;
+    weld::vec<bool> t;
     t.size = dimension;
     t.ptr = (bool*) PyArray_DATA(inp);
     return t;
 }
 
 /**
- * Converts numpy array to NVL vector, with ndim = 2.
+ * Converts numpy array to Weld vector, with ndim = 2.
  */
 extern "C"
-nvl::vec<nvl::vec<int> > numpy_to_nvl_int_arr_arr(PyObject* in) {
+weld::vec<weld::vec<int> > numpy_to_weld_int_arr_arr(PyObject* in) {
     PyArrayObject* inp = (PyArrayObject*) in;
     int64_t dimension = (int64_t) PyArray_DIMS(inp)[0];
-    nvl::vec<nvl::vec<int> > t;
-    t = nvl::make_vec<nvl::vec<int> >(dimension);
+    weld::vec<weld::vec<int> > t;
+    t = weld::make_vec<weld::vec<int> >(dimension);
     for (int i = 0; i < t.size; i++) {
         t.ptr[i].size = (int64_t) PyArray_DIMS(inp)[1];
         t.ptr[i].ptr = (int *)(inp->data + i * inp->strides[0]);
@@ -87,14 +87,14 @@ nvl::vec<nvl::vec<int> > numpy_to_nvl_int_arr_arr(PyObject* in) {
 }
 
 /**
- * Converts numpy array to NVL vector, with ndim = 2.
+ * Converts numpy array to Weld vector, with ndim = 2.
  */
 extern "C"
-nvl::vec<nvl::vec<long> > numpy_to_nvl_long_arr_arr(PyObject* in) {
+weld::vec<weld::vec<long> > numpy_to_weld_long_arr_arr(PyObject* in) {
     PyArrayObject* inp = (PyArrayObject*) in;
     int64_t dimension1 = (int64_t) PyArray_DIMS(inp)[0];
     int64_t dimension2 = (int64_t) PyArray_DIMS(inp)[1];
-    nvl::vec<nvl::vec<long> > t = nvl::make_vec<nvl::vec<long> >(dimension1);
+    weld::vec<weld::vec<long> > t = weld::make_vec<weld::vec<long> >(dimension1);
     if ((dimension1 * 8) == PyArray_STRIDES(inp)[1]) {
         // Matrix is transposed.
         long *new_buffer = (long *) malloc(sizeof(long) * dimension1 * dimension2);
@@ -118,14 +118,14 @@ nvl::vec<nvl::vec<long> > numpy_to_nvl_long_arr_arr(PyObject* in) {
 }
 
 /**
- * Converts numpy array to NVL vector, with ndim = 2.
+ * Converts numpy array to Weld vector, with ndim = 2.
  */
 extern "C"
-nvl::vec<nvl::vec<double> > numpy_to_nvl_double_arr_arr(PyObject* in) {
+weld::vec<weld::vec<double> > numpy_to_weld_double_arr_arr(PyObject* in) {
     PyArrayObject* inp = (PyArrayObject*) in;
     int64_t dimension1 = (int64_t) PyArray_DIMS(inp)[0];
     int64_t dimension2 = (int64_t) PyArray_DIMS(inp)[1];
-    nvl::vec<nvl::vec<double> > t = nvl::make_vec<nvl::vec<double> >(dimension1);
+    weld::vec<weld::vec<double> > t = weld::make_vec<weld::vec<double> >(dimension1);
     if ((dimension1 * 8) == PyArray_STRIDES(inp)[1]) {
         // Matrix is transposed.
         double *new_buffer = (double *) malloc(sizeof(long) * dimension1 * dimension2);
@@ -149,14 +149,14 @@ nvl::vec<nvl::vec<double> > numpy_to_nvl_double_arr_arr(PyObject* in) {
 }
 
 /**
- * Converts numpy array of strings to NVL vector, with ndim = 2.
+ * Converts numpy array of strings to Weld vector, with ndim = 2.
  */
 extern "C"
-nvl::vec<nvl::vec<uint8_t> > numpy_to_nvl_char_arr_arr(PyObject* in) {
+weld::vec<weld::vec<uint8_t> > numpy_to_weld_char_arr_arr(PyObject* in) {
     PyArrayObject* inp = (PyArrayObject*) in;
     int64_t dimension = (int64_t) PyArray_DIMS(inp)[0];
-    nvl::vec<nvl::vec<uint8_t> > t;
-    t = nvl::make_vec<nvl::vec<uint8_t> >(dimension);
+    weld::vec<weld::vec<uint8_t> > t;
+    t = weld::make_vec<weld::vec<uint8_t> >(dimension);
     uint8_t* ptr = (uint8_t *) PyArray_DATA(inp);
     uint8_t* data = ptr;
     for (int i = 0; i < t.size; i++) {
@@ -172,10 +172,10 @@ nvl::vec<nvl::vec<uint8_t> > numpy_to_nvl_char_arr_arr(PyObject* in) {
 }
 
 /**
- * Converts NVL vector to numpy array.
+ * Converts Weld vector to numpy array.
  */
 extern "C"
-PyObject* nvl_to_numpy_int_arr(nvl::vec<int> inp) {
+PyObject* weld_to_numpy_int_arr(weld::vec<int> inp) {
     Py_Initialize();
     npy_intp size = {inp.size};
     _import_array();
@@ -184,10 +184,10 @@ PyObject* nvl_to_numpy_int_arr(nvl::vec<int> inp) {
 }
 
 /**
- * Converts NVL vector to numpy array.
+ * Converts Weld vector to numpy array.
  */
 extern "C"
-PyObject* nvl_to_numpy_long_arr(nvl::vec<long> inp) {
+PyObject* weld_to_numpy_long_arr(weld::vec<long> inp) {
     Py_Initialize();
     npy_intp size = {inp.size};
     _import_array();
@@ -196,10 +196,10 @@ PyObject* nvl_to_numpy_long_arr(nvl::vec<long> inp) {
 }
 
 /**
- * Converts NVL vector to numpy float array.
+ * Converts Weld vector to numpy float array.
  */
 extern "C"
-PyObject* nvl_to_numpy_double_arr(nvl::vec<double> inp) {
+PyObject* weld_to_numpy_double_arr(weld::vec<double> inp) {
     Py_Initialize();
     npy_intp size = {inp.size};
     _import_array();
@@ -208,10 +208,10 @@ PyObject* nvl_to_numpy_double_arr(nvl::vec<double> inp) {
 }
 
 /**
- * Converts NVL vector to (bool) numpy array.
+ * Converts Weld vector to (bool) numpy array.
  */
 extern "C"
-PyObject* nvl_to_numpy_bool_arr(nvl::vec<bool> inp) {
+PyObject* weld_to_numpy_bool_arr(weld::vec<bool> inp) {
     Py_Initialize();
     npy_intp size = {inp.size};
     _import_array();
@@ -220,10 +220,10 @@ PyObject* nvl_to_numpy_bool_arr(nvl::vec<bool> inp) {
 }
 
 /**
- * Converts NVL vector-of-int-vectors to two-dimensional numpy array.
+ * Converts Weld vector-of-int-vectors to two-dimensional numpy array.
  */
 extern "C"
-PyObject* nvl_to_numpy_int_arr_arr(nvl::vec< nvl::vec<int> > inp) {
+PyObject* weld_to_numpy_int_arr_arr(weld::vec< weld::vec<int> > inp) {
     Py_Initialize();
 
     int num_rows = inp.size;
@@ -244,10 +244,10 @@ PyObject* nvl_to_numpy_int_arr_arr(nvl::vec< nvl::vec<int> > inp) {
 }
 
 /**
- * Converts NVL vector-of-long-vectors to two-dimensional numpy array.
+ * Converts Weld vector-of-long-vectors to two-dimensional numpy array.
  */
 extern "C"
-PyObject* nvl_to_numpy_long_arr_arr(nvl::vec< nvl::vec<long> > inp) {
+PyObject* weld_to_numpy_long_arr_arr(weld::vec< weld::vec<long> > inp) {
     Py_Initialize();
 
     int num_rows = inp.size;
@@ -268,10 +268,10 @@ PyObject* nvl_to_numpy_long_arr_arr(nvl::vec< nvl::vec<long> > inp) {
 }
 
 /**
- * Converts NVL vector-of-char-vectors to NumPy vector-of-strings.
+ * Converts Weld vector-of-char-vectors to NumPy vector-of-strings.
  */
 extern "C"
-PyObject* nvl_to_numpy_char_arr_arr(nvl::vec< nvl::vec<uint8_t> > inp) {
+PyObject* weld_to_numpy_char_arr_arr(weld::vec< weld::vec<uint8_t> > inp) {
     Py_Initialize();
 
     int num_rows = inp.size;

@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-import pandasImplWeld
+import grizzlyImpl
 from lazyOp import LazyOpResult
 from weldobject import *
 
@@ -43,11 +43,11 @@ class DataFrameWeld:
                 raw_column = np.array(self.df[key], dtype=str)
                 weld_type = WeldVec(WeldChar())
             else:
-                weld_type = pandasImplWeld.numpy_to_weld_type_mapping[dtype]
+                weld_type = grizzlyImpl.numpy_to_weld_type_mapping[dtype]
             if self.predicates is None:
                 return SeriesWeld(raw_column, weld_type, self, key)
             return SeriesWeld(
-                pandasImplWeld.filter(
+                grizzlyImpl.filter(
                     raw_column,
                     self.predicates.expr,
                     weld_type
@@ -74,7 +74,7 @@ class DataFrameWeld:
         """
         if isinstance(value, np.ndarray):
             dtype = str(value.dtype)
-            weld_type = pandasImplWeld.numpy_to_weld_type_mapping[dtype]
+            weld_type = grizzlyImpl.numpy_to_weld_type_mapping[dtype]
             self.unmaterialized_cols[key] = SeriesWeld(
                 value,
                 weld_type,
@@ -107,11 +107,11 @@ class DataFrameWeld:
             if self.predicates is None:
                 return self.df.values
             if isinstance(self.df.values, np.ndarray):
-                weld_type = pandasImplWeld.numpy_to_weld_type_mapping[
+                weld_type = grizzlyImpl.numpy_to_weld_type_mapping[
                     str(self.df.values.dtype)]
                 dim = self.df.values.ndim
                 return LazyOpResult(
-                    pandasImplWeld.filter(
+                    grizzlyImpl.filter(
                         self.df.values,
                         self.predicates.expr,
                         weld_type
@@ -213,7 +213,7 @@ class GroupedDataFrameWeld(LazyOpResult):
             TYPE: Description
         """
         return LazyOpResult(
-            pandasImplWeld.get_column(
+            grizzlyImpl.get_column(
                 self.expr,
                 self.weld_type,
                 index
@@ -311,7 +311,7 @@ class SeriesWeld(LazyOpResult):
             TYPE: Description
         """
         return LazyOpResult(
-            pandasImplWeld.unique(
+            grizzlyImpl.unique(
                 self.expr,
                 self.weld_type
             ),
@@ -326,7 +326,7 @@ class SeriesWeld(LazyOpResult):
             TYPE: Description
         """
         return LazyOpResult(
-            pandasImplWeld.aggr(
+            grizzlyImpl.aggr(
                 self.expr,
                 "*",
                 1,
@@ -343,7 +343,7 @@ class SeriesWeld(LazyOpResult):
             TYPE: Description
         """
         return LazyOpResult(
-            pandasImplWeld.aggr(
+            grizzlyImpl.aggr(
                 self.expr,
                 "+",
                 0,
@@ -376,7 +376,7 @@ class SeriesWeld(LazyOpResult):
             TYPE: Description
         """
         return LazyOpResult(
-            pandasImplWeld.count(
+            grizzlyImpl.count(
                 self.expr,
                 self.weld_type
             ),
@@ -397,7 +397,7 @@ class SeriesWeld(LazyOpResult):
         if isinstance(predicates, SeriesWeld):
             predicates = predicates.expr
         return SeriesWeld(
-            pandasImplWeld.mask(
+            grizzlyImpl.mask(
                 self.expr,
                 predicates,
                 new_value,
@@ -412,7 +412,7 @@ class SeriesWeld(LazyOpResult):
         if isinstance(predicates, SeriesWeld):
             predicates = predicates.expr
         return SeriesWeld(
-            pandasImplWeld.filter(
+            grizzlyImpl.filter(
                 self.expr,
                 predicates,
                 self.weld_type
@@ -434,7 +434,7 @@ class SeriesWeld(LazyOpResult):
         if isinstance(other, SeriesWeld):
             other = other.expr
         return SeriesWeld(
-            pandasImplWeld.element_wise_op(
+            grizzlyImpl.element_wise_op(
                 self.expr,
                 other,
                 "+",
@@ -457,7 +457,7 @@ class SeriesWeld(LazyOpResult):
         if isinstance(other, SeriesWeld):
             other = other.expr
         return SeriesWeld(
-            pandasImplWeld.element_wise_op(
+            grizzlyImpl.element_wise_op(
                 self.expr,
                 other,
                 "-",
@@ -480,7 +480,7 @@ class SeriesWeld(LazyOpResult):
         if isinstance(other, SeriesWeld):
             other = other.expr
         return SeriesWeld(
-            pandasImplWeld.element_wise_op(
+            grizzlyImpl.element_wise_op(
                 self.expr,
                 other,
                 "*",
@@ -503,7 +503,7 @@ class SeriesWeld(LazyOpResult):
         if isinstance(other, SeriesWeld):
             other = other.expr
         return SeriesWeld(
-            pandasImplWeld.element_wise_op(
+            grizzlyImpl.element_wise_op(
                 self.expr,
                 other,
                 "/",
@@ -526,7 +526,7 @@ class SeriesWeld(LazyOpResult):
         if isinstance(other, SeriesWeld):
             other = other.expr
         return SeriesWeld(
-            pandasImplWeld.element_wise_op(
+            grizzlyImpl.element_wise_op(
                 self.expr,
                 other,
                 "%",
@@ -547,7 +547,7 @@ class SeriesWeld(LazyOpResult):
             TYPE: Description
         """
         return SeriesWeld(
-            pandasImplWeld.compare(
+            grizzlyImpl.compare(
                 self.expr,
                 other,
                 "==",
@@ -568,7 +568,7 @@ class SeriesWeld(LazyOpResult):
             TYPE: Description
         """
         return SeriesWeld(
-            pandasImplWeld.compare(
+            grizzlyImpl.compare(
                 self.expr,
                 other,
                 "!=",
@@ -589,7 +589,7 @@ class SeriesWeld(LazyOpResult):
             TYPE: Description
         """
         return SeriesWeld(
-            pandasImplWeld.compare(
+            grizzlyImpl.compare(
                 self.expr,
                 other,
                 ">",
@@ -610,7 +610,7 @@ class SeriesWeld(LazyOpResult):
             TYPE: Description
         """
         return SeriesWeld(
-            pandasImplWeld.compare(
+            grizzlyImpl.compare(
                 self.expr,
                 other,
                 ">=",
@@ -631,7 +631,7 @@ class SeriesWeld(LazyOpResult):
             TYPE: Description
         """
         return SeriesWeld(
-            pandasImplWeld.compare(
+            grizzlyImpl.compare(
                 self.expr,
                 other,
                 "<",
@@ -652,7 +652,7 @@ class SeriesWeld(LazyOpResult):
             TYPE: Description
         """
         return SeriesWeld(
-            pandasImplWeld.compare(
+            grizzlyImpl.compare(
                 self.expr,
                 other,
                 "<=",
@@ -701,7 +701,7 @@ class StringSeriesWeld:
             TYPE: Description
         """
         return SeriesWeld(
-            pandasImplWeld.slice(
+            grizzlyImpl.slice(
                 self.expr,
                 start,
                 size,
@@ -768,7 +768,7 @@ class GroupByWeld:
             TYPE: Description
         """
         return GroupedDataFrameWeld(
-            pandasImplWeld.groupby_sum(
+            grizzlyImpl.groupby_sum(
                 self.columns,
                 self.column_types,
                 self.grouping_column

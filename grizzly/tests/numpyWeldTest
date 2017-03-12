@@ -1,7 +1,7 @@
 #!/usr/bin/python
 
 import sys
-sys.path.append("pandas/")
+sys.path.append("grizzly/")
 import lib.numpyWeld as npWeld
 import numpy as np
 import unittest

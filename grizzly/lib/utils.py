@@ -1,7 +1,7 @@
 """Summary
 
 Attributes:
-    numpy_to_nvl_type_mapping (TYPE): Description
+    numpy_to_weld_type_mapping (TYPE): Description
 """
 import subprocess
 
@@ -33,7 +33,7 @@ class NumPyEncoder(WeldObjectEncoder):
             shell=True)
         pandasNVLDir = os.environ.get("PANDAS_NVL_HOME")
         self.utils = ctypes.PyDLL(utils.to_shared_lib(
-            os.path.join(pandasNVLDir, "numpy_nvl_convertor")))
+            os.path.join(pandasNVLDir, "numpy_weld_convertor")))
 
     def pyToWeldType(self, obj):
         """Summary
@@ -83,30 +83,30 @@ class NumPyEncoder(WeldObjectEncoder):
         """
         if isinstance(obj, np.ndarray):
             if obj.ndim == 1 and obj.dtype == 'int32':
-                numpy_to_nvl = self.utils.numpy_to_nvl_int_arr
+                numpy_to_weld = self.utils.numpy_to_weld_int_arr
             elif obj.ndim == 1 and obj.dtype == 'int64':
-                numpy_to_nvl = self.utils.numpy_to_nvl_long_arr
+                numpy_to_weld = self.utils.numpy_to_weld_long_arr
             elif obj.ndim == 1 and obj.dtype == 'float64':
-                numpy_to_nvl = self.utils.numpy_to_nvl_double_arr
+                numpy_to_weld = self.utils.numpy_to_weld_double_arr
             elif obj.ndim == 2 and obj.dtype == 'int32':
-                numpy_to_nvl = self.utils.numpy_to_nvl_int_arr_arr
+                numpy_to_weld = self.utils.numpy_to_weld_int_arr_arr
             elif obj.ndim == 2 and obj.dtype == 'int64':
-                numpy_to_nvl = self.utils.numpy_to_nvl_long_arr_arr
+                numpy_to_weld = self.utils.numpy_to_weld_long_arr_arr
             elif obj.ndim == 2 and obj.dtype == 'float64':
-                numpy_to_nvl = self.utils.numpy_to_nvl_double_arr_arr
+                numpy_to_weld = self.utils.numpy_to_weld_double_arr_arr
             elif obj.ndim == 1 and obj.dtype == 'bool':
-                numpy_to_nvl = self.utils.numpy_to_nvl_bool_arr
+                numpy_to_weld = self.utils.numpy_to_weld_bool_arr
             else:
-                numpy_to_nvl = self.utils.numpy_to_nvl_char_arr_arr
+                numpy_to_weld = self.utils.numpy_to_weld_char_arr_arr
         elif isinstance(obj, str):
-            numpy_to_nvl = self.utils.numpy_to_nvl_char_arr
+            numpy_to_weld = self.utils.numpy_to_weld_char_arr
         else:
             raise Exception("Unable to encode; invalid object type")
 
-        numpy_to_nvl.restype = self.pyToWeldType(obj).cTypeClass
-        numpy_to_nvl.argtypes = [py_object]
-        nvl_vec = numpy_to_nvl(obj)
-        return nvl_vec
+        numpy_to_weld.restype = self.pyToWeldType(obj).cTypeClass
+        numpy_to_weld.argtypes = [py_object]
+        weld_vec = numpy_to_weld(obj)
+        return weld_vec
 
 
 class NumPyDecoder(WeldObjectDecoder):
@@ -124,7 +124,7 @@ class NumPyDecoder(WeldObjectDecoder):
             shell=True)
         pandasNVLDir = os.environ.get("PANDAS_NVL_HOME")
         self.utils = ctypes.PyDLL(utils.to_shared_lib(
-            os.path.join(pandasNVLDir, "numpy_nvl_convertor")))
+            os.path.join(pandasNVLDir, "numpy_weld_convertor")))
 
     def decode(self, obj, restype):
         """Summary
@@ -159,24 +159,24 @@ class NumPyDecoder(WeldObjectDecoder):
         # Obj is a WeldVec(WeldInt()).cTypeClass, which is a subclass of
         # ctypes._structure
         if restype == WeldVec(WeldBit()):
-            nvl_to_numpy = self.utils.nvl_to_numpy_bool_arr
+            weld_to_numpy = self.utils.weld_to_numpy_bool_arr
         elif restype == WeldVec(WeldDouble()):
-            nvl_to_numpy = self.utils.nvl_to_numpy_double_arr
+            weld_to_numpy = self.utils.weld_to_numpy_double_arr
         elif restype == WeldVec(WeldVec(WeldChar())):
-            nvl_to_numpy = self.utils.nvl_to_numpy_char_arr_arr
+            weld_to_numpy = self.utils.weld_to_numpy_char_arr_arr
         elif restype == WeldVec(WeldVec(WeldInt())):
-            nvl_to_numpy = self.utils.nvl_to_numpy_int_arr_arr
+            weld_to_numpy = self.utils.weld_to_numpy_int_arr_arr
         elif restype == WeldVec(WeldVec(WeldLong())):
-            nvl_to_numpy = self.utils.nvl_to_numpy_long_arr_arr
+            weld_to_numpy = self.utils.weld_to_numpy_long_arr_arr
         elif restype == WeldVec(WeldInt()):
-            nvl_to_numpy = self.utils.nvl_to_numpy_int_arr
+            weld_to_numpy = self.utils.weld_to_numpy_int_arr
         else:
             raise Exception("Unable to decode; invalid return type")
 
-        nvl_to_numpy.restype = py_object
-        nvl_to_numpy.argtypes = [restype.cTypeClass]
+        weld_to_numpy.restype = py_object
+        weld_to_numpy.argtypes = [restype.cTypeClass]
 
         data = cweld.WeldValue(obj).data()
         result = ctypes.cast(data, ctypes.POINTER(restype.cTypeClass)).contents
-        ret_vec = nvl_to_numpy(result)
+        ret_vec = weld_to_numpy(result)
         return ret_vec

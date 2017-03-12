@@ -7,7 +7,7 @@
 
 // This is how the vec type is represented in LLVM
 
-namespace nvl {
+namespace weld {
 
 // Typedefs matching LLVM types.
 typedef bool       i1;
@@ -36,7 +36,6 @@ vec<T> make_vec(i64 size) {
 typedef __m128i     i1x4;
 typedef __m128i     i1x8;
 typedef __m128i     i32x4;
-// typedef __m256i     i32x8;
 
 // Some convinience macros for converting vectors into arrays
 
@@ -51,10 +50,6 @@ inline uint32_t *i1x4_to_ptr(i1x4 *v) {
 inline uint32_t *i32x4_to_ptr(i32x4 *v) {
   return (uint32_t *)v;
 }
-
-/* inline uint32_t *i32x8_to_ptr(i32x8 *v) {
-  return (uint32_t *)v;
-} */
 
 }
 
