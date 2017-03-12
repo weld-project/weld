@@ -72,11 +72,9 @@ class WeldValue(c_void_p):
         weld_value_data.restype = c_void_p
         return weld_value_data(self.val)
 
-    # def __del__(self):
-    #     weld_value_free = weld.weld_value_free
-    #     weld_value_free.argtypes = [c_weld_value]
-    #     weld_value_free.restype = None
-    #     weld_value_free(self.val)
+    def __del__(self):
+        # TODO : Garbage Collection still needs to be done
+        return
 
 
 class WeldConf(c_void_p):
