@@ -1,16 +1,19 @@
 Build instructions
 ==================
 
-- Download Boost from [SourceForge](http://www.boost.org/users/history/version_1_61_0.html)
-- In the directory you want to put the Boost installation, execute
-`tar --bzip2 -xf /path/to/boost_1_61_0.tar.bz2`
-- Now, add the following environment variable definition,
-`BOOST_HOME=/directory/where/boost/was/extracted`
-- Now, `cd c++; make`
-- In addition, add the following two environment variable definitions
-  to run the various benchmark scripts,
-  ```export PANDAS_TEST_HOME=~/path/to/nvl/root/llvmrunner/tests/pandastest
-  export PANDAS_NVL_HOME=$PANDAS_TEST_HOME/lib```
+- Follow the instructions in `../README.md` to build Weld (don't forget
+  to set the `WELD_HOME` environment variable)
+- In addition, add the following two environment variables
+  ```export GRIZZLY_HOME=~/path/to/grizzly
+  export GRIZZLY_LIB_HOME=$GRIZZLY_HOME/lib```
+
+
+How to run unit tests
+=====================
+
+From the parent Weld directory, run `python grizzly/tests/grizzlyTest` and
+`python grizzly/tests/numpyWeldTest` to run unit tests for our Grizzly and
+NumPy ports respectively
 
 
 How to get data
