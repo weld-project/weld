@@ -1,3 +1,6 @@
+This README file assumes for convenience that `$WELD_HOME` is set to the `weld` root directory.
+
+
 Prerequisites
 =============
 
