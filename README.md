@@ -4,6 +4,17 @@ Weld is a language and runtime for improving the performance of data-intensive a
 
 Modern analytics applications combine multiple functions from different libraries and frameworks to build complex workflows. Even though individual functions can achieve high performance in isolation, the performance of the combined workflow is often an order of magnitude below hardware limits due to extensive data movement across the functions. Weld’s take on solving this problem is to lazily build up a computation for the entire workflow, and then optimizing and evaluating it only when a result is needed.
 
+## Contents
+
+  * [Building](#building)
+      - [MacOS LLVM Installation](#macos-llvm-installation)
+      - [Ubuntu LLVM Installation](#ubuntu-llvm-installation)
+      - [Building Weld](#building-weld)
+  * [Documentation](#documentation)
+  * [Grizzly](#grizzly)
+  * [Running an Interactive REPL](#running-an-interactive-repl)
+  * [Benchmarking](#benchmarking)
+
 ## Building
 
 To build Weld, you need [Rust 1.13 or higher](http://rust-lang.org) and [LLVM](http://llvm.org) 3.8.
