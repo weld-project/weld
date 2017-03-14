@@ -1,30 +1,3 @@
-Prerequisites
-=============
-
-Build and run tests for Weld (the instructions for this are in  `$WELD_HOME/README.md`).
-Don't forget to set the `WELD_HOME` environment variable to the root Weld directory.
-
-
-Setup
-=====
-
-To setup Grizzly, set the following environment variables:
-```bash
->> export GRIZZLY_HOME=/path/to/grizzly   # by default, $WELD_HOME/grizzly
->> export GRIZZLY_LIB_HOME=$GRIZZLY_HOME/lib
-```
-
-Running Unit Tests
-==================
-
-To run unit tests, run the following:
-
-```bash
->> cd $WELD_HOME
->> python grizzly/tests/grizzlyTest    # For Grizzly tests
->> python grizzly/tests/numpyWeldTest  # For NumPy tests
-```
-
 Acquire Data for Demo Workloads
 ===============================
 
@@ -52,15 +25,14 @@ To get data for `getPopulationStats` and other related scripts, run:
 Running the Demo Workloads
 ==========================
 
-The demo workloads are in `$GRIZZLY_HOME`.
+The demo workloads are in `weld/examples/python/grizzly`.
 
-Each workload has a corresponding `Grizzly` version. For example, the native Pandas/NumPy data cleaning workload is in `$GRIZZLY_HOME/dataCleaning`, while the corresponding Grizzly workload is in `$GRIZZLY_HOME/dataCleaningGrizzly`.
+Each workload has a corresponding `Grizzly` version. For example, the native Pandas/NumPy data cleaning workload is `dataCleaning`, while the corresponding Grizzly workload is `dataCleaningGrizzly`.
 
 
 As an example, to compare performance between the native Pandas data cleaning workload and the Weld-ified Pandas data cleaning workload, run:
 
 ```bash
->> cd $GRIZZLY_HOME
 >> ./dataCleaning         # Native
 >> ./dataCleaningGrizzly  # Grizzly
 ```
