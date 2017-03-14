@@ -16,7 +16,7 @@ else ifeq (${OS}, Linux)
   FLAGS=-mavx2 -fuse-ld=gold -flto
   DFLAGS=-shared -fPIC
   DYLIB_SUFFIX=.so
-  PYTHON_INCLUDES=-I/usr/include/python2.7 -I/home/rpalamut/anaconda2/python2.7 -I/home/rpalamut/anaconda2/lib/python2.7/site-packages/numpy/core/include
+  PYTHON_INCLUDES=-I/usr/include/python2.7 -I${HOME}/.local/lib/python2.7/site-packages/numpy/core/include
 else
   $(error Unsupported platform: ${OS})
 endif
