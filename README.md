@@ -135,11 +135,11 @@ Expression type: vec[i32]
 
 ## Benchmarking
 
-* `cargo bench` runs benchmarks under the `benches/` directory. The results of the benchmarks are written to a file called `benches.csv`. To specify specific benchmarks to run:
+`cargo bench` runs benchmarks under the `benches/` directory. The results of the benchmarks are written to a file called `benches.csv`. To specify specific benchmarks to run:
 
-  ```
-  cargo bench [benchmark-name]
-  ```
-  
-  If a benchmark name is not provided, all benchmarks are run.
+```
+$ cargo bench [benchmark-name]
+```
+
+If a benchmark name is not provided, all benchmarks are run.
 
