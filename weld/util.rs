@@ -10,8 +10,6 @@ use std::collections::HashMap;
 use super::ast::*;
 use super::ast::ExprKind::*;
 
-use std::env;
-
 pub const MERGER_BC: &'static [u8] = include_bytes!("../weld_rt/cpp/libparbuilder.bc");
 
 /// Utility struct that can track and generate unique IDs and symbols for use in an expression.
