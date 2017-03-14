@@ -73,9 +73,12 @@ The `docs/` directory contains documentation for the different components of Wel
 
 * [language.md](https://github.com/weld-project/weld/blob/master/docs/language.md) describes the syntax of the Weld IR.
 * [api.md](https://github.com/weld-project/weld/blob/master/docs/api.md) describes the low-level C API for interfacing with Weld.
-* [python.md](https://github.com/weld-project/weld/blob/master/docs/python.md) describes how to setup the Python API.
-* [grizzly.md](https://github.com/weld-project/weld/blob/master/docs/grizzly.md) describes how to setup **Grizzly**, a port of the [Pandas](pandas.pydata.org/) framework.
+* [python.md](https://github.com/weld-project/weld/blob/master/docs/python.md) gives an overview of the Python API.
 * [tutorial.md](https://github.com/weld-project/weld/blob/master/docs/tutorial.md) contains a tutorial for how to build a small vector library using Weld.
+
+## Grizzly
+
+**Grizzly** is a port of the [Pandas](pandas.pydata.org/) framework. Details on how to use Grizzly are under `python/grizzly`. 
 
 ## Running an Interactive REPL
 
