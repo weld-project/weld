@@ -89,7 +89,9 @@ The `docs/` directory contains documentation for the different components of Wel
 
 ## Grizzly
 
-**Grizzly** is a port of the [Pandas](pandas.pydata.org/) framework. Details on how to use Grizzly are under `python/grizzly`. 
+**Grizzly** is a port of the [Pandas](pandas.pydata.org/) framework. Details on how to use Grizzly are in
+[`python/grizzly`](https://github.com/weld-project/weld/tree/master/python/grizzly).
+Some example workloads that make use of Grizzly are in [`examples/python/grizzly`](https://github.com/weld-project/weld/tree/master/examples/python/grizzly).
 
 ## Running an Interactive REPL
 
