@@ -1,5 +1,5 @@
 OS=$(shell uname -s)
-LLVM_VERSION=3.6
+LLVM_VERSION=3.8
 
 ifeq (${OS}, Darwin)
   # OS X
