@@ -141,7 +141,6 @@ class WeldObject(object):
         names = self.context.keys()
         names.sort()
 
-        real_start = time.time()
         start = time.time()
         encoded = []
         argtypes = []
@@ -192,10 +191,8 @@ class WeldObject(object):
             result = ctypes.cast(data, ctypes.POINTER(
                 ctypes.c_int64)).contents.value
         end = time.time()
-        real_end = time.time()
         if verbose:
             print "Total time decoding:", end - start
-            print "Total end-to-end time: " + str(real_end - real_start)
 
         return result
 
