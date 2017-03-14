@@ -8,14 +8,13 @@ import platform
 import os
 import copy
 
-
 system = platform.system()
 if system == 'Linux':
-    path += "libweld.so"
+    path = "libweld.so"
 elif system == 'Windows':
-    path += "libweld.dll"
+    path = "libweld.dll"
 elif system == 'Darwin':
-    path += "libweld.dylib"
+    path = "libweld.dylib"
 else:
     raise OSError("Unsupported platform {}", system)
 

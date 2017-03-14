@@ -11,3 +11,6 @@ rusty-tags.vi
 run
 notes
 bench.csv
+*.dylib
+*.so
+*.dll
