@@ -41,11 +41,11 @@ $ cargo test
 
 ### Ubuntu Installation
 
-To install LLVM on ubuntu :
+To install LLVM on Ubuntu :
 
 ```bash
 $ sudo apt install llvm-3.8
-$ export PATH=$PATH:/usr/local/bin
+$ sudo apt install clang-3.8
 ```
 
 Weld's dependencies require `llvm-config`, so you may need to create a symbolic link so the correct `llvm-config` is picked up:
@@ -61,8 +61,7 @@ With LLVM and Rust installed, you can build Weld. Clone this repository and buil
 ```bash
 $ git clone https://www.github.com/weld-project/weld
 $ cd weld/
-$ cargo build
-$ cargo test
+$ cargo build --release
 ```
 
 Set the `WELD_HOME` environment variable and run tests:
@@ -74,13 +73,13 @@ $ cargo test
 
 ## Running an Interactive REPL
 
-* `cargo test` runs unit and integration tests. To specify which integration tests to run:
+* `cargo test` runs unit and integration tests. A test name substring filter can be used to run a subset of the tests:
    
    ```
-   cargo test <comma-separated-test-names>
+   cargo test <substring to match in test name>
    ```
 
-* The `target/debug/repl` program is a simple "shell" where one can type Weld programs and see
+* The `target/release/repl` program is a simple "shell" where one can type Weld programs and see
   the results of parsing, macro substitution and type inference.
 
 Example `repl` session:
