@@ -4,7 +4,6 @@ Acquire Data for Demo Workloads
 To get data for `dataCleaning` and other related scripts, run:
 
 ```bash
->> cd $GRIZZLY_HOME
 >> mkdir -p data
 >> wget https://raw.githubusercontent.com/jvns/pandas-cookbook/master/data/311-service-requests.csv
 >> mv 311-service-requests.csv data/311-service-requests-raw.csv
@@ -15,7 +14,6 @@ To get data for `dataCleaning` and other related scripts, run:
 To get data for `getPopulationStats` and other related scripts, run:
 
 ```bash
->> cd $GRIZZLY_HOME
 >> mkdir -p data
 >> wget https://raw.githubusercontent.com/grammakov/USA-cities-and-states/master/us_cities_states_counties.csv
 >> mv us_cities_states_counties.csv data/us_cities_states_counties_raw.csv

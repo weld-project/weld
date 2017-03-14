@@ -28,12 +28,10 @@ class NumPyEncoder(WeldObjectEncoder):
     def __init__(self):
         """Summary
         """
-        subprocess.call(
-            "cd $GRIZZLY_LIB_HOME; make convertor >/dev/null 2>/dev/null",
-            shell=True)
-        grizzlyLibDir = os.environ.get("GRIZZLY_LIB_HOME")
+        # Hack: Ideally, don't do os.path.dirname(__file__).
         self.utils = ctypes.PyDLL(utils.to_shared_lib(
-            os.path.join(grizzlyLibDir, "numpy_weld_convertor")))
+            os.path.join(os.path.dirname(__file__),
+            "numpy_weld_convertor")))
 
     def pyToWeldType(self, obj):
         """Summary
@@ -119,12 +117,10 @@ class NumPyDecoder(WeldObjectDecoder):
     def __init__(self):
         """Summary
         """
-        subprocess.call(
-            "cd $GRIZZLY_LIB_HOME; make convertor >/dev/null 2>/dev/null",
-            shell=True)
-        grizzlyLibDir = os.environ.get("GRIZZLY_LIB_HOME")
+        # Hack: Ideally, don't do os.path.dirname(__file__).
         self.utils = ctypes.PyDLL(utils.to_shared_lib(
-            os.path.join(grizzlyLibDir, "numpy_weld_convertor")))
+            os.path.join(os.path.dirname(__file__),
+            "numpy_weld_convertor")))
 
     def decode(self, obj, restype):
         """Summary
