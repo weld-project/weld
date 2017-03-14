@@ -8,11 +8,10 @@ Build and run tests for Weld (the instructions for this are in the main `README.
 
 ## Setup
 
-To setup Weld's Python API, add `$WELD_HOME/python` to the `$PYTHONPATH`,like:
+To setup Weld's Python API, add the following to the `PYTHONPATH`:
 ```bash
 $ export PYTHONPATH=$PYTHONPATH:/path/to/python  # by default, $WELD_HOME/python
 ```
-
 ## Running Grizzly's Unit Tests
 
 To run unit tests, run the following:
