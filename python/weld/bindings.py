@@ -8,19 +8,14 @@ import platform
 import os
 import copy
 
-# Load the library.
-path = os.environ["WELD_HOME"]
-if path[-1] != "/":
-    path += "/"
-path += "target/release/libweld"
 
 system = platform.system()
 if system == 'Linux':
-    path += ".so"
+    path += "libweld.so"
 elif system == 'Windows':
-    path += ".dll"
+    path += "libweld.dll"
 elif system == 'Darwin':
-    path += ".dylib"
+    path += "libweld.dylib"
 else:
     raise OSError("Unsupported platform {}", system)
 

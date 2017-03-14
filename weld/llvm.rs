@@ -23,7 +23,7 @@ use super::sir::Terminator::*;
 use super::transforms;
 use super::type_inference;
 use super::util::IdGenerator;
-use super::util::get_merger_lib_path;
+use super::util::MERGER_BC;
 
 #[cfg(test)]
 use super::parser::*;
@@ -2154,7 +2154,7 @@ pub fn compile_program(program: &Program) -> WeldResult<easy_ll::CompiledModule>
     let sir_prog = try!(sir::ast_to_sir(&expr));
     let mut gen = LlvmGenerator::new();
     try!(gen.add_function_on_pointers("run", &sir_prog));
-    Ok(try!(easy_ll::compile_module(&gen.result(), Some(&get_merger_lib_path()))))
+    Ok(try!(easy_ll::compile_module(&gen.result(), Some(MERGER_BC))))
 }
 
 #[test]
