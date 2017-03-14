@@ -6,7 +6,8 @@ Attributes:
 import subprocess
 
 from weld.weldobject import *
-import weldutils as utils
+import sys
+
 
 numpy_to_weld_type_mapping = {
     'str': WeldVec(WeldChar()),
@@ -16,6 +17,20 @@ numpy_to_weld_type_mapping = {
     'float64': WeldDouble(),
     'bool': WeldBit()
 }
+
+def to_shared_lib(name):
+    """
+    Returns the name with the platform dependent shared library extension.
+
+    Args:
+    name (TYPE): Description
+    """
+    if sys.platform.startswith('linux'):
+        return name + ".so"
+    elif sys.platform.startswith('darwin'):
+        return name + ".dylib"
+    else:
+        sys.exit(1)
 
 
 class NumPyEncoder(WeldObjectEncoder):
@@ -29,7 +44,7 @@ class NumPyEncoder(WeldObjectEncoder):
         """Summary
         """
         # Hack: Ideally, don't do os.path.dirname(__file__).
-        self.utils = ctypes.PyDLL(utils.to_shared_lib(
+        self.utils = ctypes.PyDLL(to_shared_lib(
             os.path.join(os.path.dirname(__file__),
             "numpy_weld_convertor")))
 
@@ -118,7 +133,7 @@ class NumPyDecoder(WeldObjectDecoder):
         """Summary
         """
         # Hack: Ideally, don't do os.path.dirname(__file__).
-        self.utils = ctypes.PyDLL(utils.to_shared_lib(
+        self.utils = ctypes.PyDLL(to_shared_lib(
             os.path.join(os.path.dirname(__file__),
             "numpy_weld_convertor")))
 
