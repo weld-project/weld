@@ -19,6 +19,12 @@ class DataFrameWeld:
         self.df = df
         self.unmaterialized_cols = dict()
         self.predicates = predicates
+        self.raw_columns = dict()
+        for key in self.df:
+            raw_column = self.df[key].values
+            if raw_column.dtype == object:
+                raw_column = np.array(self.df[key], dtype=str)
+            self.raw_columns[key] = raw_column
 
     def __getitem__(self, key):
         """Summary
@@ -39,8 +45,8 @@ class DataFrameWeld:
             raw_column = self.df[key].values
             dtype = str(raw_column.dtype)
             # If column type is "object", then cast as "vec[char]" in Weld
-            if raw_column.dtype == object:
-                raw_column = np.array(self.df[key], dtype=str)
+            if dtype == 'object':
+                raw_column = self.raw_columns[key]
                 weld_type = WeldVec(WeldChar())
             else:
                 weld_type = grizzlyImpl.numpy_to_weld_type_mapping[dtype]
