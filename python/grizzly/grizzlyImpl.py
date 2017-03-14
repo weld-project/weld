@@ -4,7 +4,7 @@ Attributes:
     decoder_ (NumPyEncoder): Description
     encoder_ (NumPyDecoder): Description
 """
-from utils import *
+from encoders import *
 from weld.weldobject import *
 
 
