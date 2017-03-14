@@ -10,9 +10,7 @@ use std::collections::HashMap;
 use super::ast::*;
 use super::ast::ExprKind::*;
 
-use std::env;
-
-const WELD_HOME: &'static str = "WELD_HOME";
+pub const MERGER_BC: &'static [u8] = include_bytes!("../weld_rt/cpp/libparbuilder.bc");
 
 /// Utility struct that can track and generate unique IDs and symbols for use in an expression.
 /// Each SymbolGenerator tracks the maximum ID used for every symbol name, and can be used to
@@ -91,42 +89,13 @@ impl IdGenerator {
     }
 }
 
-/// Returns the value of the WELD_HOME environment variable,
-/// or an error if the variable is not set.
-///
-/// The returned path has a trailing `/`.
-pub fn get_weld_home() -> Result<String, ()> {
-    match env::var(WELD_HOME) {
-        Ok(path) => {
-            let path = if path.chars().last().unwrap() != '/' {
-                path + &"/"
-            } else {
-                path
-            };
-            Ok(path)
-        }
-        Err(_) => Err(()),
-    }
-}
-
 /// Loads the Weld runtime library.
 pub fn load_runtime_library() -> Result<(), String> {
-    let weld_home = get_weld_home().unwrap_or(".".to_string());
-    // TODO(shoumik): Is there a better way to do this?
-    let lib_path = "weld_rt/target/release/libweldrt";
-    let path = format!("{}{}", weld_home, lib_path);
-    if let Err(_) = easy_ll::load_library(&path) {
+    if let Err(_) = easy_ll::load_library(&"libweldrt") {
         let err_message = unsafe { std::ffi::CStr::from_ptr(libc::dlerror()) };
         let err_message = err_message.to_owned().into_string().unwrap();
         Err(err_message)
     } else {
         Ok(())
     }
-}
-
-pub fn get_merger_lib_path() -> String {
-    let weld_home = get_weld_home().unwrap_or(".".to_string());
-    // TODO(shoumik): Is there a better way to do this?
-    let lib_path = "weld_rt/cpp/libparbuilder.bc";
-    format!("{}{}", weld_home, lib_path)
 }

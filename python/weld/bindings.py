@@ -8,19 +8,13 @@ import platform
 import os
 import copy
 
-# Load the library.
-path = os.environ["WELD_HOME"]
-if path[-1] != "/":
-    path += "/"
-path += "target/release/libweld"
-
 system = platform.system()
 if system == 'Linux':
-    path += ".so"
+    path = "libweld.so"
 elif system == 'Windows':
-    path += ".dll"
+    path = "libweld.dll"
 elif system == 'Darwin':
-    path += ".dylib"
+    path = "libweld.dylib"
 else:
     raise OSError("Unsupported platform {}", system)
 
@@ -65,16 +59,26 @@ class WeldValue(c_void_p):
             self.val = weld_value_new(value)
         else:
             self.val = value
+        self.freed = False
+
+    def _check(self):
+        if self.freed:
+            raise ValueError("Attempted to use freed WeldValue")
 
     def data(self):
+        self._check()
         weld_value_data = weld.weld_value_data
         weld_value_data.argtypes = [c_weld_value]
         weld_value_data.restype = c_void_p
         return weld_value_data(self.val)
 
-    def __del__(self):
-        # TODO : Garbage Collection still needs to be done
-        return
+    def free(self):
+        self._check()
+        weld_value_free = weld.weld_value_free
+        weld_value_free.argtypes = [c_weld_value]
+        weld_value_free.restype = None
+        self.freed = True
+        return weld_value_free(self.val)
 
 
 class WeldConf(c_void_p):

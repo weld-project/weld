@@ -115,9 +115,7 @@ pub fn load_library(libname: &str) -> Result<(), LlvmError> {
 /// Compile a string of LLVM IR (in human readable format) into a `CompiledModule` that can then
 /// be executed. The LLVM IR should contain an entry point function called `run` that takes `i64`
 /// and returns `i64`, which will be called by `CompiledModule::run`.
-pub fn compile_module(code: &str,
-                      static_lib_file: Option<&str>)
-                      -> Result<CompiledModule, LlvmError> {
+pub fn compile_module(code: &str, bc_file: Option<&[u8]>) -> Result<CompiledModule, LlvmError> {
     unsafe {
         // Initialize LLVM
         ONCE.call_once(|| initialize());
@@ -141,10 +139,10 @@ pub fn compile_module(code: &str,
         // Parse the IR to get an LLVMModuleRef
         let module = try!(parse_module_str(context, code));
 
-        if static_lib_file != None {
-            let merger_module = try!(parse_module_file(context, static_lib_file.unwrap()));
+        if let Some(s) = bc_file {
+            let bc_module = try!(parse_module_bytes(context, s));
             llvm::linker::LLVMLinkModules(module,
-                                          merger_module,
+                                          bc_module,
                                           llvm::linker::LLVMLinkerMode::LLVMLinkerDestroySource,
                                           std::ptr::null_mut());
         }
@@ -200,6 +198,25 @@ unsafe fn parse_module_helper(context: LLVMContextRef,
     }
 
     Ok(module)
+}
+
+/// Parse a buffer of IR bytecode into an `LLVMModuleRef` for the given context.
+unsafe fn parse_module_bytes(context: LLVMContextRef,
+                             code: &[u8])
+                             -> Result<LLVMModuleRef, LlvmError> {
+    // Create an LLVM memory buffer around the code
+    let code_len = code.len();
+    let name = try!(CString::new("module"));
+    let buffer = llvm::core::LLVMCreateMemoryBufferWithMemoryRange(code.as_ptr() as *const i8,
+                                                                   code_len,
+                                                                   name.as_ptr(),
+                                                                   0);
+
+    if buffer.is_null() {
+        return Err(LlvmError::new("LLVMCreateMemoryBufferWithMemoryRange failed"));
+    }
+
+    parse_module_helper(context, buffer)
 }
 
 /// Parse a string of IR code into an `LLVMModuleRef` for the given context.
@@ -264,7 +281,6 @@ unsafe fn check_run_function(module: LLVMModuleRef) -> Result<(), LlvmError> {
     let run = CString::new("run").unwrap();
     let func = llvm::core::LLVMGetNamedFunction(module, run.as_ptr());
     if func.is_null() {
-        println!("EEEK");
         return Err(LlvmError::new("No run function in module"));
     }
     let c_str = llvm::core::LLVMPrintTypeToString(llvm::core::LLVMTypeOf(func));

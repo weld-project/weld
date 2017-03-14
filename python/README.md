@@ -1,16 +1,14 @@
-This README file assumes for convenience that `WELD_HOME` is set to the `weld` root directory.
+# Weld Python API
 
+This directory contains the Weld Python API and the Grizzly implementation.
 
-Prerequisites
-=============
+### Prerequisites
 
-Build and run tests for Weld (the instructions for this are in  `$WELD_HOME/README.md`).
+Build and run tests for Weld (the instructions for this are in the main `README.md`).
 
-
-Setup
-=====
+### Setup
 
 To setup Weld's Python API, add the following to the `PYTHONPATH`:
 ```bash
->> export PYTHONPATH=$PYTHONPATH:/path/to/python  # by default, $WELD_HOME/python
+$ export PYTHONPATH=$PYTHONPATH:/path/to/python  # by default, $WELD_HOME/python
 ```

@@ -1,12 +1,27 @@
 # Weld
 
+Weld is a language and runtime for improving the performance of data-intensive applications. It optimizes across libraries and functions by expressing the core computations in libraries using a common intermediate representation, and optimizing across each framework.
+
+Modern analytics applications combine multiple functions from different libraries and frameworks to build complex workflows. Even though individual functions can achieve high performance in isolation, the performance of the combined workflow is often an order of magnitude below hardware limits due to extensive data movement across the functions. Weld’s take on solving this problem is to lazily build up a computation for the entire workflow, and then optimizing and evaluating it only when a result is needed.
+
+## Contents
+
+  * [Building](#building)
+      - [MacOS LLVM Installation](#macos-llvm-installation)
+      - [Ubuntu LLVM Installation](#ubuntu-llvm-installation)
+      - [Building Weld](#building-weld)
+  * [Documentation](#documentation)
+  * [Grizzly](#grizzly)
+  * [Running an Interactive REPL](#running-an-interactive-repl)
+  * [Benchmarking](#benchmarking)
+
 ## Building
 
 To build Weld, you need [Rust 1.13 or higher](http://rust-lang.org) and [LLVM](http://llvm.org) 3.8.
 
 To install Rust, follow the steps [here](https://rustup.rs). You can verify that Rust was installed correctly on your system by typing `rustc` into your shell.
 
-### MacOS Installation
+#### MacOS LLVM Installation
 
 To install LLVM on macOS, first install [brew](https://brew.sh/). Then:
 
@@ -23,22 +38,7 @@ $ ln -s /usr/local/bin/llvm-config-3.8 /usr/local/bin/llvm-config
 
 To make sure this worked correctly, run `llvm-config --version`. You should see `3.8.x`.
 
-With LLVM and Rust installed, you can build Weld. Clone this repository and build using `cargo`:
-
-```bash
-$ git clone https://www.github.com/weld-project/weld
-$ cd weld/
-$ cargo build
-```
-
-Set the `WELD_HOME` environment variable and run tests:
-
-```bash
-$ export WELD_HOME=/path/to/weld/directory
-$ cargo test
-```
-
-### Ubuntu Installation
+#### Ubuntu LLVM Installation
 
 To install LLVM on Ubuntu :
 
@@ -55,20 +55,41 @@ $ ln -s /usr/bin/llvm-config-3.8 /usr/local/bin/llvm-config
 
 To make sure this worked correctly, run `llvm-config --version`. You should see `3.8.x`.
 
-With LLVM and Rust installed, you can build Weld. Clone this repository and build using `cargo`:
+#### Building Weld
+
+With LLVM and Rust installed, you can build Weld. Clone this repository, set the `WELD_HOME` environment variable, and build using `cargo`:
 
 ```bash
 $ git clone https://www.github.com/weld-project/weld
 $ cd weld/
+$ export WELD_HOME=`pwd`
 $ cargo build --release
 ```
 
-Set the `WELD_HOME` environment variable and run tests:
+Weld builds two dynamically linked libraries (`.so` files on Linux and `.dylib` files on macOS): `libweld` and `libweldrt`. Both of these libraries must be on the `LD_LIBRARY_PATH`. By default, the libraries are in `$WELD_HOME/target/release` and `$WELD_HOME/weld_rt/target/release`. Set up the `LD_LIBRARY_PATH` as follows:
 
 ```bash
-$ export WELD_HOME=/path/to/weld/directory
+$ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$WELD_HOME/weld_rt/target/release:$WELD_HOME/target/release
+```
+
+Finally, run the unit and integration tests:
+
+```bash
 $ cargo test
 ```
+
+## Documentation
+
+The `docs/` directory contains documentation for the different components of Weld.
+
+* [language.md](https://github.com/weld-project/weld/blob/master/docs/language.md) describes the syntax of the Weld IR.
+* [api.md](https://github.com/weld-project/weld/blob/master/docs/api.md) describes the low-level C API for interfacing with Weld.
+* [python.md](https://github.com/weld-project/weld/blob/master/docs/python.md) gives an overview of the Python API.
+* [tutorial.md](https://github.com/weld-project/weld/blob/master/docs/tutorial.md) contains a tutorial for how to build a small vector library using Weld.
+
+## Grizzly
+
+**Grizzly** is a port of the [Pandas](pandas.pydata.org/) framework. Details on how to use Grizzly are under `python/grizzly`. 
 
 ## Running an Interactive REPL
 
@@ -117,5 +138,8 @@ Expression type: vec[i32]
 * `cargo bench` runs benchmarks under the `benches/` directory. The results of the benchmarks are written to a file called `benches.csv`. To specify specific benchmarks to run:
 
   ```
-  cargo bench --bench benches -- -t <comma-seperated-benchmarks>
+  cargo bench [benchmark-name]
   ```
+  
+  If a benchmark name is not provided, all benchmarks are run.
+
