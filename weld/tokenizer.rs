@@ -352,12 +352,34 @@ fn basic_tokenize() {
     assert_eq!(tokenize("|a:i8| a").unwrap(),
                vec![TBar, TIdent("a".into()), TColon, TI8, TBar, TIdent("a".into()), TEndOfInput]);
     assert_eq!(tokenize("|a:vec[i8]| slice(a, 2L, 3L)").unwrap(),
-               vec![TBar, TIdent("a".into()), TColon, TVec, TOpenBracket, TI8, TCloseBracket,
-                    TBar, TSlice, TOpenParen, TIdent("a".into()), TComma, TI64Literal(2),
-                    TComma, TI64Literal(3), TCloseParen, TEndOfInput]);
+               vec![TBar,
+                    TIdent("a".into()),
+                    TColon,
+                    TVec,
+                    TOpenBracket,
+                    TI8,
+                    TCloseBracket,
+                    TBar,
+                    TSlice,
+                    TOpenParen,
+                    TIdent("a".into()),
+                    TComma,
+                    TI64Literal(2),
+                    TComma,
+                    TI64Literal(3),
+                    TCloseParen,
+                    TEndOfInput]);
     assert_eq!(tokenize("|a:i8| exp(a)").unwrap(),
-               vec![TBar, TIdent("a".into()), TColon, TI8, TBar, TExp, TOpenParen,
-                    TIdent("a".into()), TCloseParen, TEndOfInput]);
+               vec![TBar,
+                    TIdent("a".into()),
+                    TColon,
+                    TI8,
+                    TBar,
+                    TExp,
+                    TOpenParen,
+                    TIdent("a".into()),
+                    TCloseParen,
+                    TEndOfInput]);
     assert!(tokenize("0a").is_err());
     assert!(tokenize("#").is_err());
 

@@ -1,0 +1,54 @@
+#!/usr/bin/python
+
+import argparse
+import csv
+import random
+
+
+def transformCSV(inputFile, outputFile, replicationFactor):
+    with open(inputFile, 'r') as f1, open(outputFile, 'w') as f2:
+        lineId = 0
+        numCols = 0
+        for line in csv.reader(f1):
+            if lineId == 0:
+                numCols = len(line)
+                line.extend(["Total population",
+                             "Total adult population",
+                             "Number of robberies"])
+                f2.write('|'.join([str(line_ele) for line_ele in line]))
+                f2.write('\n')
+            else:
+                totalPopulation = random.randint(10000, 1000000)
+                if len(line) != numCols:
+                    continue
+                line.extend([totalPopulation, random.randint(
+                    0, totalPopulation), random.randint(0, 1000)])
+                for i in xrange(replicationFactor):
+                    totalPopulation = random.randint(10000, 1000000)
+                    line[-3] = totalPopulation
+                    line[-2] = random.randint(0, totalPopulation)
+                    line[-1] = random.randint(0, 1000)
+                    f2.write('|'.join([str(line_ele) for line_ele in line]))
+                    f2.write('\n')
+            lineId += 1
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(
+        description=("Produce plot of data dumped in provided data file")
+    )
+    parser.add_argument('-i', "--inputFile", required=True,
+                        help="Input CSV file")
+    parser.add_argument('-o', "--outputFile", required=True,
+                        help="Output CSV file")
+    parser.add_argument(
+        '-r',
+        "--replicationFactor",
+        default=1,
+        type=int,
+        help="Number of times to replicate input row in output file")
+
+    cmdLineArgs = parser.parse_args()
+    optDict = vars(cmdLineArgs)
+
+    transformCSV(optDict["inputFile"], optDict["outputFile"],
+                 optDict["replicationFactor"])

@@ -11,6 +11,20 @@ fn main() {
         path = path + &"/";
     }
 
+    Command::new("make")
+        .arg("clean")
+        .arg("-C")
+        .arg("python/grizzly/")
+        .status()
+        .unwrap();
+
+    Command::new("make")
+        .arg("convertor")
+        .arg("-C")
+        .arg("python/grizzly/")
+        .status()
+        .unwrap();
+
     // NOTE this is pretty hacky...better way?
     let weldrt_path = path + &"weld_rt/Cargo.toml";
     Command::new("cargo")

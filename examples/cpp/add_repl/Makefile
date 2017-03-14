@@ -1,5 +1,5 @@
 CC=clang++
-LDFLAGS=-L../../../../target/debug/
+LDFLAGS=-L../../../target/debug/
 LIBS=-lweld
 
 .PHONY: all clean

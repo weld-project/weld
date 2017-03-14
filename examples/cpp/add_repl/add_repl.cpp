@@ -5,7 +5,7 @@
 #include <string.h>
 
 // Include the Weld API.
-#include "../../../weld.h"
+#include "../../../api/c/weld.h"
 
 int main() {
     // Compile Weld module.
