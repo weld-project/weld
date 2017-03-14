@@ -1,5 +1,7 @@
 # Weld Python API
 
+This directory contains the Weld Python API and the Grizzly implementation.
+
 ## Prerequisites
 
 Build and run tests for Weld (the instructions for this are in the main `README.md`).

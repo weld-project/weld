@@ -1,7 +1,7 @@
 [package]
 name = "weldrt"
 version = "0.1.0"
-authors = ["Shoumik Palkar <shoumikpalkar@gmail.com>"]
+authors = ["Weld Developers <weld-group@lists.stanford.edu>"]
 build = "build.rs"
 
 [dependencies]
