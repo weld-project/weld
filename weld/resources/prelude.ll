@@ -12,9 +12,9 @@ declare i8* @malloc(i64)
 
 ; Weld library functions
 declare void    @weld_rt_init(i64)
-declare i8*     @weld_rt_malloc(i64, i64)
-declare i8*     @weld_rt_realloc(i64, i8*, i64)
-declare void    @weld_rt_free(i64, i8*)
+declare i8*     @weld_rt_malloc_wrap(i64, i64)
+declare i8*     @weld_rt_realloc_wrap(i64, i8*, i64)
+declare void    @weld_rt_free_wrap(i64, i8*)
 declare i32     @my_id_public()
 declare void    @weld_rt_set_errno(i64, i64)
 declare i64     @weld_rt_get_errno(i64)

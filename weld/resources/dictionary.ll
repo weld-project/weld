@@ -20,7 +20,7 @@ define %$NAME @$NAME.new(i64 %capacity) {
   %entrySize = ptrtoint %$NAME.entry* %entrySizePtr to i64
   %allocSize = mul i64 %entrySize, %capacity
   %runId = call i64 @get_runid()
-  %bytes = call i8* @weld_rt_malloc(i64 %runId, i64 %allocSize)
+  %bytes = call i8* @weld_rt_malloc_wrap(i64 %runId, i64 %allocSize)
   ; Memset all the bytes to 0 to set the isFilled fields to 0
   call void @llvm.memset.p0i8.i64(i8* %bytes, i8 0, i64 %allocSize, i32 8, i1 0)
   %entries = bitcast i8* %bytes to %$NAME.entry*
@@ -35,7 +35,7 @@ define void @$NAME.free(%$NAME %dict) {
   %runId = call i64 @get_runid()
   %entries = extractvalue %$NAME %dict, 0
   %bytes = bitcast %$NAME.entry* %entries to i8*
-  call void @weld_rt_free(i64 %runId, i8* %bytes)
+  call void @weld_rt_free_wrap(i64 %runId, i8* %bytes)
   ret void
 }
 

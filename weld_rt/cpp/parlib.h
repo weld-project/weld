@@ -102,6 +102,12 @@ extern "C" {
   void free_merger(void *m);
 
   void weld_abort_thread();
+  // the following functions are needed so that pthread_exit can safely be called
+  // from C code (and not Rust) in the event of a memory failure
+  void *weld_rt_malloc_wrap(int64_t run_id, size_t size);
+  void *weld_rt_realloc_wrap(int64_t run_id, void *data, size_t size);
+  void weld_rt_free_wrap(int64_t run_id, void *data);
+
 }
 
 #endif
