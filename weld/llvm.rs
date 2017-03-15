@@ -1801,7 +1801,10 @@ impl LlvmGenerator {
                                                              bld_ty_str,
                                                              llvm_symbol(output)));
                                     }
-                                    Merger(_, _) => {
+                                    Merger(_, ref op) => {
+                                        if *op != BinOpKind::Add {
+                                            return weld_err!("Merger only supports +");
+                                        }
                                         let bld_ty_str = try!(self.llvm_type(ty));
                                         let bld_prefix = format!("@{}",
                                                                  bld_ty_str.replace("%", ""));
@@ -1831,8 +1834,10 @@ impl LlvmGenerator {
                                                              bld_ty_str,
                                                              llvm_symbol(output)));
                                     }
-                                    VecMerger(ref elem, _) => {
-                                        // TODO(shoumik): Generate code.
+                                    VecMerger(ref elem, ref op) => {
+                                        if *op != BinOpKind::Add {
+                                            return weld_err!("VecMerger only supports +");
+                                        }
                                         match *arg {
                                             Some(ref s) => {
                                                 let bld_ty_str = try!(self.llvm_type(ty))
