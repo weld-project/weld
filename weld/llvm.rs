@@ -680,7 +680,7 @@ impl LlvmGenerator {
              {tmp2} = insertvalue %output_arg_t {tmp1}, i64 {errno}, 2  
   {size_ptr} = getelementptr %output_arg_t, %output_arg_t* null, i32 1
   {size} = ptrtoint %output_arg_t* {size_ptr} to i64
-  {bytes} = call i8* @weld_rt_malloc(i64 {rid}, i64 {size})
+  {bytes} = call i8* @malloc(i64 {size})
   {typed_out_ptr} = bitcast i8* {bytes} to %output_arg_t*
   store %output_arg_t {tmp2}, %output_arg_t* {typed_out_ptr}
   {final_address} = ptrtoint %output_arg_t* {typed_out_ptr} to i64
