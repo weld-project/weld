@@ -69,3 +69,5 @@ Note that `unique` returns a `LazyOp` object. To convert to a standard NumPy arr
 ```bash
 >>> print result.evaluate()
 ```
+
+More examples of workloads that make use of Grizzly are in the [examples/python/grizzly directory](https://github.com/weld-project/weld/tree/master/examples/python/grizzly).
