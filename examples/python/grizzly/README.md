@@ -1,7 +1,11 @@
 # Grizzly demo workloads
 
 This directory contains example workloads that make use of Grizzly and a Weld-ified NumPy.
-This README file assumes for convenience that `WELD_HOME` is set to the `weld` root directory.
+This README file assumes for convenience that `WELD_HOME` is set to the root `weld/` directory.
+
+```bash
+$ export WELD_HOME=/path/to/weld/root/directory
+```
 
 
 ### Acquire Data for Demo Workloads
