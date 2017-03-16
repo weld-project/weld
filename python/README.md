@@ -28,7 +28,7 @@ $ $WELD_HOME/examples/python/grizzly/scripts/replicate-csv -i 311-service-reques
 
 ### Using Grizzly in a Python REPL
 
-Import the pandas library and grizzly.
+Import the Pandas library and Grizzly.
 
 ```bash
 $ python
@@ -37,9 +37,9 @@ $ python
 > import time
 ```
 
-We first use pandas for reading CSV.
+We first use Pandas for reading CSV.
 
-Then we use the DataFrameWeld wrapper to use grizzly. 
+Then we use the DataFrameWeld wrapper to use Grizzly. 
 
 ```bash
 > na_values = ['NO CLUE', 'N/A', '0']
@@ -47,7 +47,7 @@ Then we use the DataFrameWeld wrapper to use grizzly.
 > requests = gr.DataFrameWeld(raw_requests)
 ```
 
-Next we use common pandas expressions for data cleaning.
+Next we use common Pandas expressions for data cleaning.
 
 ```bash
 > zero_zips = requests['Incident Zip'] == '00000'
@@ -55,7 +55,7 @@ Next we use common pandas expressions for data cleaning.
 > result = requests['Incident Zip'].unique()
 ```
 
-Note that unlike pandas, grizzly performs these operations lazily.
+Note that unlike Pandas, Grizzly performs these operations lazily.
 
 We need to call evaluate() to materialize the result.
 
