@@ -1,6 +1,6 @@
 # Grizzly
 
-Grizzly is a port of the Pandas data analytics library. This document describes how to run the tests for Grizzly and walks through a simple example of how to use it.
+Grizzly is a subset of the Pandas data analytics library integrated with Weld. This document walks through a simple example of how to use Grizzly in an application.
 
 ## Prerequisites
 
@@ -18,7 +18,7 @@ $ python $WELD_HOME/python/grizzly/tests/grizzlyTest    # For Grizzly tests
 $ python $WELD_HOME/python/grizzly/tests/numpyWeldTest  # For NumPy tests
 ```
 
-## Using Grizzly in a real workload
+## Using Grizzly in an application
 
 ### Data acquisition
 
