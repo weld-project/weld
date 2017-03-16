@@ -12,5 +12,3 @@ To setup Weld's Python API, add the following to the `PYTHONPATH`:
 ```bash
 $ export PYTHONPATH=$PYTHONPATH:/path/to/python  # by default, $WELD_HOME/python
 ```
-
-
