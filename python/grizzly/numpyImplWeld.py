@@ -50,7 +50,7 @@ def div(array, other, type):
        )
     """
     weld_obj.weld_code = weld_template % {"array": array_str, "other": other_str,
-                                  "type": type}
+                                          "type": type}
     return weld_obj
 
 
@@ -83,7 +83,8 @@ def aggr(array, op, initial_value, type):
         )
       )
     """
-    weld_obj.weld_code = weld_template % {"array": array_str, "type": type, "op": op}
+    weld_obj.weld_code = weld_template % {
+        "array": array_str, "type": type, "op": op}
     return weld_obj
 
 
@@ -126,7 +127,7 @@ def dot(matrix, vector, matrix_type, vector_type):
        )
     """
     weld_obj.weld_code = weld_template % {"matrix": matrix_str, "vector": vector_str,
-                                  "matrix_type": matrix_type, "vector_type": vector_type}
+                                          "matrix_type": matrix_type, "vector_type": vector_type}
     return weld_obj
 
 

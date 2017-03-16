@@ -3,7 +3,6 @@
 Attributes:
     numpy_to_weld_type_mapping (TYPE): Description
 """
-import subprocess
 
 from weld.weldobject import *
 import sys
@@ -17,6 +16,7 @@ numpy_to_weld_type_mapping = {
     'float64': WeldDouble(),
     'bool': WeldBit()
 }
+
 
 def to_shared_lib(name):
     """
@@ -46,7 +46,7 @@ class NumPyEncoder(WeldObjectEncoder):
         # Hack: Ideally, don't do os.path.dirname(__file__).
         self.utils = ctypes.PyDLL(to_shared_lib(
             os.path.join(os.path.dirname(__file__),
-            "numpy_weld_convertor")))
+                         "numpy_weld_convertor")))
 
     def pyToWeldType(self, obj):
         """Summary
@@ -135,7 +135,7 @@ class NumPyDecoder(WeldObjectDecoder):
         # Hack: Ideally, don't do os.path.dirname(__file__).
         self.utils = ctypes.PyDLL(to_shared_lib(
             os.path.join(os.path.dirname(__file__),
-            "numpy_weld_convertor")))
+                         "numpy_weld_convertor")))
 
     def decode(self, obj, restype):
         """Summary

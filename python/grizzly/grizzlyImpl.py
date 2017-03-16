@@ -78,7 +78,8 @@ def aggr(array, op, initial_value, type):
         )
       )
     """
-    weld_obj.weld_code = weld_template % {"array": array_str, "type": type, "op": op}
+    weld_obj.weld_code = weld_template % {
+        "array": array_str, "type": type, "op": op}
     return weld_obj
 
 
@@ -199,7 +200,7 @@ def element_wise_op(array, other, op, type):
     """
 
     weld_obj.weld_code = weld_template % {"array": array_str, "other": other_str,
-                                  "type": type, "op": op}
+                                          "type": type, "op": op}
     return weld_obj
 
 
@@ -239,7 +240,7 @@ def compare(array, other, op, type_str):
        )
     """
     weld_obj.weld_code = weld_template % {"array": array_str, "other": other_str,
-                                  "op": op, "type": type_str}
+                                          "op": op, "type": type_str}
 
     return weld_obj
 
@@ -271,7 +272,7 @@ def slice(array, start, size, type):
        )
     """
     weld_obj.weld_code = weld_template % {"array": array_str, "start": start,
-                                  "type": type, "size": size}
+                                          "type": type, "size": size}
 
     return weld_obj
 
@@ -355,8 +356,8 @@ def groupby_sum(columns, column_types, grouping_column):
   """
 
     weld_obj.weld_code = weld_template % {"grouping_column": grouping_column_str,
-                                  "columns": columns_str, "result": result_str,
-                                  "type": types_str}
+                                          "columns": columns_str, "result": result_str,
+                                          "type": types_str}
     return weld_obj
 
 
