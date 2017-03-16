@@ -33,38 +33,38 @@ First, import the Pandas library and Grizzly like,
 
 ```bash
 $ python
-> import pandas as pd
-> import grizzly.grizzly as gr
+>>> import pandas as pd
+>>> import grizzly.grizzly as gr
 ```
 
 Grizzly depends on native Pandas for file I/O, so to read from a file, call Pandas' `read_csv` function. For the purposes of this tutorial, let's read from a CSV file called `311-service-requests.csv`,
 
 ```bash
-> na_values = ['NO CLUE', 'N/A', '0']
-> raw_requests = pd.read_csv('311-service-requests.csv', na_values=na_values, dtype={'Incident Zip': str})
+>>> na_values = ['NO CLUE', 'N/A', '0']
+>>> raw_requests = pd.read_csv('311-service-requests.csv', na_values=na_values, dtype={'Incident Zip': str})
 ```
 
 Grizzly exposes a `DataFrameWeld` object that serves as a wrapper around the native Pandas `DataFrame` object; all of `DataFrameWeld`'s exposed methods are lazily-evaluated (that is, execution is only forced when the `evaluate()` method is called). To create a `DataFrameWeld` object from the `DataFrame` we just read,
 
 ```bash
-> requests = gr.DataFrameWeld(raw_requests)
+>>> requests = gr.DataFrameWeld(raw_requests)
 ```
 
 We can then use standard Pandas operators on this `DataFrameWeld` object. `requests` has a column of zipcodes; some of these are "00000". To convert them all to `nan`s, we can first compute a predicate using the `==` operator (which returns a `SeriesWeld` object that wraps a native Pandas `Series` object), and then subsequently mask,
 
 ```bash
-> zero_zips = requests['Incident Zip'] == '00000'
-> requests['Incident Zip'][zero_zips] = "nan"
+>>> zero_zips = requests['Incident Zip'] == '00000'
+>>> requests['Incident Zip'][zero_zips] = "nan"
 ```
 
 To see all resulting unique zipcodes, we could do,
 
 ```bash
-> result = requests['Incident Zip'].unique()
+>>> result = requests['Incident Zip'].unique()
 ```
 
 Note that `unique` returns a `LazyOp` object. To convert to a standard NumPy array (that is, to force execution), call
 
 ```bash
-> print result.evaluate()
+>>> print result.evaluate()
 ```
