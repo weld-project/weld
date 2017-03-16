@@ -3,15 +3,6 @@ import sys
 import ctypes
 import numpy as np
 
-home = os.environ.get("WELD_HOME")
-if home is None:
-    home = "../../../python/"
-if home[-1] != "/":
-    home += "/"
-
-libpath = home + "api/python"
-sys.path.append(libpath)
-
 from weld.weldobject import *
 from weld.types import *
 from weld.encoders import NumpyArrayEncoder, NumpyArrayDecoder, ScalarDecoder

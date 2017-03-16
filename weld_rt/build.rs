@@ -4,7 +4,7 @@ use std::env;
 fn main() {
     let mut path = match env::var("WELD_HOME") {
         Ok(val) => val,
-        Err(_) => "..".to_string(),
+        Err(_) => ".".to_string(),
     };
 
     if path.chars().last().unwrap() != '/' {
