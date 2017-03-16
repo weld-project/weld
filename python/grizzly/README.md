@@ -4,7 +4,11 @@ Grizzly is a subset of the Pandas data analytics library integrated with Weld. T
 
 ## Prerequisites
 
-This README file assumes for convenience that `WELD_HOME` is set to the `weld` root directory.
+This README file assumes for convenience that `WELD_HOME` is set to the root `weld/` root directory.
+
+```bash
+$ export WELD_HOME=/path/to/weld/root/directory
+```
 
 Build and run tests for Weld (the instructions for this are in `$WELD_HOME/README.md`).  Make sure the `PYTHONPATH` is set correctly as detailed in `$WELD_HOME/python/README.md`.
 
@@ -51,7 +55,7 @@ Grizzly exposes a `DataFrameWeld` object that serves as a wrapper around the nat
 >>> requests = gr.DataFrameWeld(raw_requests)
 ```
 
-We can then use standard Pandas operators on this `DataFrameWeld` object. `requests` has a column of zipcodes; some of these are "00000". To convert them all to `nan`s, we can first compute a predicate using the `==` operator (which returns a `SeriesWeld` object that wraps a native Pandas `Series` object), and then subsequently mask:
+We can then use standard Pandas operators on this `DataFrameWeld` object. `requests` has a column of zipcodes; some of these are "00000". To convert them all to `nan`, we can first compute a predicate using the `==` operator (which returns a `SeriesWeld` object that wraps a native Pandas `Series` object), and then subsequently mask:
 
 ```bash
 >>> zero_zips = requests['Incident Zip'] == '00000'
