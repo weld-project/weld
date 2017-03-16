@@ -11,7 +11,7 @@ Modern analytics applications combine multiple functions from different librarie
       - [Ubuntu LLVM Installation](#ubuntu-llvm-installation)
       - [Building Weld](#building-weld)
   * [Documentation](#documentation)
-  * [Grizzly](#grizzly)
+  * [Grizzly (Pandas on Weld)](#grizzly)
   * [Running an Interactive REPL](#running-an-interactive-repl)
   * [Benchmarking](#benchmarking)
 
