@@ -1,15 +1,6 @@
 import os
 import sys
 
-home = os.environ.get("WELD_HOME")
-if home is None:
-    home = "../../python/"
-if home[-1] != "/":
-    home += "/"
-
-libpath = home + "api/python"
-sys.path.append(libpath)
-
 import weld.bindings as weld
 import ctypes
 
