@@ -1,6 +1,5 @@
 #!/usr/bin/python
 
-import sys
 import grizzly.numpy_weld as npw
 import numpy as np
 import unittest

@@ -5,6 +5,8 @@ Attributes:
 """
 
 from weld.weldobject import *
+import numpy as np
+import os
 import sys
 
 

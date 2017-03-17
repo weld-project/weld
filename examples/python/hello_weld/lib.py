@@ -1,7 +1,3 @@
-import os
-import sys
-import ctypes
-import numpy as np
 
 from weld.weldobject import *
 from weld.types import *

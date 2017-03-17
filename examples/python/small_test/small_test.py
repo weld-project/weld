@@ -1,5 +1,3 @@
-import os
-import sys
 
 import weld.bindings as weld
 import ctypes

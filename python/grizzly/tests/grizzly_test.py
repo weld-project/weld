@@ -1,6 +1,5 @@
 #!/usr/bin/python
 
-import sys
 import grizzly.grizzly as gr
 import numpy as np
 import unittest
