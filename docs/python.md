@@ -2,10 +2,16 @@
 
 The Python API is found under the `python/` directory. It provides convinient wrapper objects for the low-level C API, as well as utilities for building Weld computations and composing Python libraries.
 
-To use the Python API, set the `PYTHONPATH` environment variable so it can find the `weld` Python package:
+To use the Python API in 'development' mode, run the following from `$WELD_HOME/python`:
 
 ```bash
-$ export PYTHONPATH=$PYTHONPATH:$WELD_HOME/python
+$ python setup.py develop
+```
+
+Otherwise, run the following from `$WELD_HOME/python`:
+
+```bash
+$ python setup.py install
 ```
 
 You should also follow the setup instructions [here](https://github.com/weld-project/weld/blob/master/README.md) (in particular, build Weld and make sure its dynamic libraries are on the `LD_LIBRARY_PATH`). 

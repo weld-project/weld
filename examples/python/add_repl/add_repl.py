@@ -2,7 +2,6 @@
 
 import ctypes
 
-# PYTHONPATH must contain $WELD_HOME/python
 from weld.bindings import *
 
 # Setup the Weld code we want to run.

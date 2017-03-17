@@ -45,9 +45,11 @@ class NumPyEncoder(WeldObjectEncoder):
     def __init__(self):
         """Summary
         """
-        # Hack: Ideally, don't do os.path.dirname(__file__).
+        # TODO: Remove dependency on WELD_HOME environment variable.
+        if "WELD_HOME" not in os.environ:
+            raise Exception("WELD_HOME environment variable not set!")
         self.utils = ctypes.PyDLL(to_shared_lib(
-            os.path.join(os.path.dirname(__file__),
+            os.path.join(os.environ["WELD_HOME"] + "/python/grizzly/",
                          "numpy_weld_convertor")))
 
     def pyToWeldType(self, obj):
@@ -134,9 +136,11 @@ class NumPyDecoder(WeldObjectDecoder):
     def __init__(self):
         """Summary
         """
-        # Hack: Ideally, don't do os.path.dirname(__file__).
+        # TODO: Remove dependency on WELD_HOME environment variable.
+        if "WELD_HOME" not in os.environ:
+            raise Exception("WELD_HOME environment variable not set!")
         self.utils = ctypes.PyDLL(to_shared_lib(
-            os.path.join(os.path.dirname(__file__),
+            os.path.join(os.environ["WELD_HOME"] + "/python/grizzly",
                          "numpy_weld_convertor")))
 
     def decode(self, obj, restype):

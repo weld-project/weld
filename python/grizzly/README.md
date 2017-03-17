@@ -10,7 +10,7 @@ This README file assumes for convenience that `WELD_HOME` is set to the root `we
 $ export WELD_HOME=/path/to/weld/root/directory
 ```
 
-Build and run tests for Weld (the instructions for this are in `$WELD_HOME/README.md`).  Make sure the `PYTHONPATH` is set correctly as detailed in `$WELD_HOME/python/README.md`.
+Build and run tests for Weld (the instructions for this are in `$WELD_HOME/README.md`).  Make sure that `weld` and `grizzly` are correctly setup as detailed in `$WELD_HOME/python/README.md`.
 
 
 ## Running Grizzly's Unit Tests
