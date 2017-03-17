@@ -5,7 +5,7 @@ import numpy as np
 import time
 
 # Input data size
-size = (2 << 15)
+size = (2 << 28)
 
 a = np.zeros((size), dtype='int32')
 

@@ -30,7 +30,7 @@ class HelloWeldVector(object):
         prev_code = self.weldobj.weld_code
         self.weldobj.weld_code = template.format(self.weldobj.weld_code)
         self.weldobj.decoder = ScalarDecoder()
-        result = self.weldobj.evaluate(WeldLong())
+        result = self.weldobj.evaluate(WeldLong(), verbose=False)
         self.weldobj.decoder = _decoder
         self.weldobj.weld_code = prev_code
         return result

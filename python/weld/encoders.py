@@ -35,9 +35,9 @@ class NumpyArrayEncoder(WeldObjectEncoder):
         elem_type = dtype_to_weld_type(obj.dtype)
         c_class = WeldVec(elem_type).cTypeClass
         elem_class = elem_type.cTypeClass
-        data = obj.ctypes.data_as(POINTER(elem_class))
+        ptr = obj.ctypes.data_as(POINTER(elem_class))
         size = ctypes.c_int64(len(obj))
-        return c_class(data=data, size=size)
+        return c_class(ptr=ptr, size=size)
 
     def pyToWeldType(self, obj):
         self._check(obj)
