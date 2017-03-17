@@ -18,8 +18,8 @@ Build and run tests for Weld (the instructions for this are in `$WELD_HOME/READM
 To run unit tests, run the following:
 
 ```bash
-$ python $WELD_HOME/python/grizzly/tests/grizzlyTest    # For Grizzly tests
-$ python $WELD_HOME/python/grizzly/tests/numpyWeldTest  # For NumPy tests
+$ python $WELD_HOME/python/grizzly/tests/grizzly_test.py     # For Grizzly tests
+$ python $WELD_HOME/python/grizzly/tests/numpy_weld_test.py  # For NumPy tests
 ```
 
 ## Using Grizzly in an application

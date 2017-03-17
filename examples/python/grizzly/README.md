@@ -10,7 +10,7 @@ $ export WELD_HOME=/path/to/weld/root/directory
 
 ### Acquire Data for Demo Workloads
 
-To get data for `dataCleaning` and other related workloads, run:
+To get data for `data_cleaning` and other related workloads, run:
 
 ```bash
 $ cd $WELD_HOME/examples/python/grizzly
@@ -21,7 +21,7 @@ $ scripts/prune-csv -i data/311-service-requests-raw.csv -l "Incident Zip"
 $ scripts/replicate-csv -i data/311-service-requests-raw-pruned.csv -o data/311-service-requests.csv -r 30
 ```
 
-To get data for `getPopulationStats` and other related workloads, run:
+To get data for `get_population_stats` and other related workloads, run:
 
 ```bash
 $ cd $WELD_HOME/examples/python/grizzly
@@ -35,14 +35,14 @@ $ scripts/transform-population-csv -i data/us_cities_states_counties_raw.csv -o 
 
 The demo workloads are in `$WELD_HOME/examples/python/grizzly`.
 
-Each workload has a corresponding `Grizzly` version. For example, the native Pandas/NumPy data cleaning workload is `dataCleaning.py`, while the corresponding Grizzly workload is `dataCleaningGrizzly.py`.
+Each workload has a corresponding `Grizzly` version. For example, the native Pandas/NumPy data cleaning workload is `data_cleaning.py`, while the corresponding Grizzly workload is `data_cleaning_grizzly.py`.
 
 
 As an example, to compare performance between the native Pandas data cleaning workload and the Weld-ified Pandas data cleaning workload, run:
 
 ```bash
-$ python dataCleaning.py         # Native
-$ python dataCleaningGrizzly.py  # Grizzly
+$ python data_cleaning.py          # Native
+$ python data_cleaning_grizzly.py  # Grizzly
 ```
 
 These scripts print out timing information.

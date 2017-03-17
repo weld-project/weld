@@ -1,7 +1,7 @@
 import numpy as np
 
-import numpyImplWeld
-from lazyOp import LazyOpResult
+import numpy_weld_impl
+from lazy_op import LazyOpResult
 from weld.weldobject import *
 
 
@@ -38,7 +38,7 @@ class NumpyArrayWeld(LazyOpResult):
         if isinstance(other, LazyOpResult):
             other = other.expr
         return NumpyArrayWeld(
-            numpyImplWeld.div(
+            numpy_weld_impl.div(
                 self.expr,
                 other,
                 self.weld_type
@@ -53,7 +53,7 @@ class NumpyArrayWeld(LazyOpResult):
             TYPE: Description
         """
         return NumpyArrayWeld(
-            numpyImplWeld.aggr(
+            numpy_weld_impl.aggr(
                 self.expr,
                 "+",
                 0,
@@ -80,18 +80,18 @@ def dot(matrix, vector):
         matrix_weld_type = matrix.weld_type
         matrix = matrix.expr
     elif isinstance(matrix, np.ndarray):
-        matrix_weld_type = numpyImplWeld.numpy_to_weld_type_mapping[
+        matrix_weld_type = numpy_weld_impl.numpy_to_weld_type_mapping[
             str(matrix.dtype)]
 
     if isinstance(vector, LazyOpResult):
         vector_weld_type = vector.weld_type
         vector = vector.expr
     elif isinstance(vector, np.ndarray):
-        vector_weld_type = numpyImplWeld.numpy_to_weld_type_mapping[
+        vector_weld_type = numpy_weld_impl.numpy_to_weld_type_mapping[
             str(vector.dtype)]
 
     return NumpyArrayWeld(
-        numpyImplWeld.dot(
+        numpy_weld_impl.dot(
             matrix,
             vector,
             matrix_weld_type,
@@ -111,5 +111,5 @@ def exp(vector):
         weld_type = vector.weld_type
         vector = vector.expr
     elif isinstance(vector, np.ndarray):
-        weld_type = numpyImplWeld.numpy_to_weld_type_mapping[str(vector.dtype)]
-    return NumpyArrayWeld(numpyImplWeld.exp(vector, weld_type), WeldDouble())
+        weld_type = numpy_weld_impl.numpy_to_weld_type_mapping[str(vector.dtype)]
+    return NumpyArrayWeld(numpy_weld_impl.exp(vector, weld_type), WeldDouble())
