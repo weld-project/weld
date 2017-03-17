@@ -111,5 +111,6 @@ def exp(vector):
         weld_type = vector.weld_type
         vector = vector.expr
     elif isinstance(vector, np.ndarray):
-        weld_type = numpy_weld_impl.numpy_to_weld_type_mapping[str(vector.dtype)]
+        weld_type = numpy_weld_impl.numpy_to_weld_type_mapping[
+            str(vector.dtype)]
     return NumpyArrayWeld(numpy_weld_impl.exp(vector, weld_type), WeldDouble())

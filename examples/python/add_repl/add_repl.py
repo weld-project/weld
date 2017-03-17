@@ -19,12 +19,13 @@ while True:
         print "nope, try again."
         continue
 
-    arg = ctypes.c_int64(inp) 
+    arg = ctypes.c_int64(inp)
     res_obj = module.run(WeldConf(), WeldValue(ctypes.byref(arg)), WeldError())
     data = res_obj.data()
-    res_value = ctypes.cast(data, ctypes.POINTER(ctypes.c_int64)).contents.value
+    res_value = ctypes.cast(data, ctypes.POINTER(
+        ctypes.c_int64)).contents.value
     print res_value
 
-    # Free the object and its underlying data. If we want python to track the 
+    # Free the object and its underlying data. If we want python to track the
     # data, we should first copy it's value out.
     res_obj.free()

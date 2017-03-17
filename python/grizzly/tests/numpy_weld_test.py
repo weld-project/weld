@@ -24,5 +24,6 @@ class NumPyWeldTestMethods(unittest.TestCase):
         self.assertItemsEqual([8, 11, 14], npw.dot(
             matrix, vector).evaluate(False))
 
+
 if __name__ == '__main__':
     unittest.main()

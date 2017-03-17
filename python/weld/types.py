@@ -14,7 +14,7 @@ class WeldType(object):
 
     def __str__(self):
         """Summary
-    
+
         Returns:
             TYPE: Description
         """
@@ -31,7 +31,7 @@ class WeldType(object):
 
     def __eq__(self, other):
         """Summary
-        
+
         Args:
             other (TYPE): Description
 
@@ -57,7 +57,7 @@ class WeldChar(WeldType):
 
     def __str__(self):
         """Summary
-        
+
         Returns:
             TYPE: Description
         """
@@ -76,7 +76,7 @@ class WeldChar(WeldType):
 class WeldBit(WeldType):
     """Summary
     """
-    
+
     def __str__(self):
         """Summary
 
@@ -120,7 +120,7 @@ class WeldInt(WeldType):
 class WeldLong(WeldType):
     """Summary
     """
-    
+
     def __str__(self):
         """Summary
 
@@ -142,7 +142,7 @@ class WeldLong(WeldType):
 class WeldFloat(WeldType):
     """Summary
     """
-    
+
     def __str__(self):
         """Summary
 
@@ -159,7 +159,7 @@ class WeldFloat(WeldType):
 class WeldDouble(WeldType):
     """Summary
     """
-    
+
     def __str__(self):
         """Summary
 

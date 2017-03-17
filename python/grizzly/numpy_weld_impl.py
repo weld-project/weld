@@ -49,7 +49,8 @@ def div(array, other, type):
          |value| value / %(type)s(%(other)s)
        )
     """
-    weld_obj.weld_code = weld_template % {"array": array_str, "other": other_str,
+    weld_obj.weld_code = weld_template % {"array": array_str,
+                                          "other": other_str,
                                           "type": type}
     return weld_obj
 
@@ -118,7 +119,8 @@ def dot(matrix, vector, matrix_type, vector_type):
              for(
                map(
                  zip(row, %(vector)s),
-                 |ele: {%(matrix_type)s, %(vector_type)s}| f64(ele.$0 * %(matrix_type)s(ele.$1))
+                 |ele: {%(matrix_type)s, %(vector_type)s}|
+                   f64(ele.$0 * %(matrix_type)s(ele.$1))
                ),
                merger[f64,+],
                |b, i, e| merge(b, e)
@@ -126,8 +128,10 @@ def dot(matrix, vector, matrix_type, vector_type):
            )
        )
     """
-    weld_obj.weld_code = weld_template % {"matrix": matrix_str, "vector": vector_str,
-                                          "matrix_type": matrix_type, "vector_type": vector_type}
+    weld_obj.weld_code = weld_template % {"matrix": matrix_str,
+                                          "vector": vector_str,
+                                          "matrix_type": matrix_type,
+                                          "vector_type": vector_type}
     return weld_obj
 
 

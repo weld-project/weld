@@ -3,36 +3,37 @@
 import argparse
 import csv
 
+
 def transformCSV(inputFile, outputFile, labelsOfInterest):
-  labelsOfInterest = labelsOfInterest.split(",")
-  with open(inputFile, 'r') as f1, open(outputFile, 'w') as f2:
-    rowId = 0
-    columnIdsOfInterest = list()
-    for line in csv.reader(f1):
-      if rowId == 0:
-        for labelOfInterest in labelsOfInterest:
-          columnIdOfInterest = line.index(labelOfInterest)
-          columnIdsOfInterest.append(columnIdOfInterest)
-      row = []
-      for columnIdOfInterest in columnIdsOfInterest:
-        row.append(line[columnIdOfInterest])
-      f2.write("%s\n" % "\t".join(row))
-      rowId += 1
+    labelsOfInterest = labelsOfInterest.split(",")
+    with open(inputFile, 'r') as f1, open(outputFile, 'w') as f2:
+        rowId = 0
+        columnIdsOfInterest = list()
+        for line in csv.reader(f1):
+            if rowId == 0:
+                for labelOfInterest in labelsOfInterest:
+                    columnIdOfInterest = line.index(labelOfInterest)
+                    columnIdsOfInterest.append(columnIdOfInterest)
+            row = []
+            for columnIdOfInterest in columnIdsOfInterest:
+                row.append(line[columnIdOfInterest])
+            f2.write("%s\n" % "\t".join(row))
+            rowId += 1
 
 if __name__ == '__main__':
-  parser = argparse.ArgumentParser(
-    description=("Produce plot of data dumped in provided data file")
-  )
-  parser.add_argument('-i', "--inputFile", required=True,
-    help="Input CSV file")
-  parser.add_argument('-l', "--labelsOfInterest", required=True,
-    help="Columns to extract from larger CSV file")
+    parser = argparse.ArgumentParser(
+        description=("Produce plot of data dumped in provided data file")
+    )
+    parser.add_argument('-i', "--inputFile", required=True,
+                        help="Input CSV file")
+    parser.add_argument('-l', "--labelsOfInterest", required=True,
+                        help="Columns to extract from larger CSV file")
 
-  cmdLineArgs = parser.parse_args()
-  optDict = vars(cmdLineArgs)
+    cmdLineArgs = parser.parse_args()
+    optDict = vars(cmdLineArgs)
 
-  inputFile = optDict["inputFile"]
-  outputFile = inputFile.replace(".csv", "-pruned.csv")
-  labelsOfInterest = optDict["labelsOfInterest"]
+    inputFile = optDict["inputFile"]
+    outputFile = inputFile.replace(".csv", "-pruned.csv")
+    labelsOfInterest = optDict["labelsOfInterest"]
 
-  transformCSV(inputFile, outputFile, labelsOfInterest)
+    transformCSV(inputFile, outputFile, labelsOfInterest)

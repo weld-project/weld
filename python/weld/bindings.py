@@ -5,7 +5,6 @@
 from ctypes import *
 
 import platform
-import os
 import copy
 
 system = platform.system()
@@ -22,14 +21,26 @@ else:
 weld = CDLL(path)
 
 # Used for some type checking carried out by ctypes
-class c_weld_module(c_void_p): pass
-class c_weld_conf(c_void_p): pass
-class c_weld_value(c_void_p): pass
+
+
+class c_weld_module(c_void_p):
+    pass
+
+
+class c_weld_conf(c_void_p):
+    pass
+
+
+class c_weld_value(c_void_p):
+    pass
+
 
 class WeldModule(c_void_p):
+
     def __init__(self, code, conf, err):
         weld_module_compile = weld.weld_module_compile
-        weld_module_compile.argtypes = [c_char_p, c_weld_conf, POINTER(WeldError)]
+        weld_module_compile.argtypes = [
+            c_char_p, c_weld_conf, POINTER(WeldError)]
         weld_module_compile.restype = c_weld_module
 
         code = c_char_p(code)
@@ -38,7 +49,8 @@ class WeldModule(c_void_p):
     def run(self, conf, arg, err):
         weld_module_run = weld.weld_module_run
         # module, conf, arg, &err
-        weld_module_run.argtypes = [c_weld_module, c_weld_conf, c_weld_value, POINTER(WeldError)]
+        weld_module_run.argtypes = [
+            c_weld_module, c_weld_conf, c_weld_value, POINTER(WeldError)]
         weld_module_run.restype = c_weld_value
         ret = weld_module_run(self.module, conf.conf, arg.val, byref(err))
         return WeldValue(ret, assign=True)
@@ -51,6 +63,7 @@ class WeldModule(c_void_p):
 
 
 class WeldValue(c_void_p):
+
     def __init__(self, value, assign=False):
         if assign is False:
             weld_value_new = weld.weld_value_new
@@ -82,6 +95,7 @@ class WeldValue(c_void_p):
 
 
 class WeldConf(c_void_p):
+
     def __init__(self):
         weld_conf_new = weld.weld_conf_new
         weld_conf_new.argtypes = []
@@ -112,6 +126,7 @@ class WeldConf(c_void_p):
 
 
 class WeldError(c_void_p):
+
     def code(self):
         weld_error_code = weld.weld_error_code
         weld_error_code.argtypes = [WeldError]

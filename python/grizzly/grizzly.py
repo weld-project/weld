@@ -62,9 +62,11 @@ class DataFrameWeld:
                 self,
                 key
             )
-        elif isinstance(key, list):  # For multi-key get, return type is a dataframe
+        elif isinstance(key, list):
+            # For multi-key get, return type is a dataframe
             return DataFrameWeld(self.df[key], self.predicates)
-        elif isinstance(key, SeriesWeld):  # Can also apply predicate to a dataframe
+        elif isinstance(key, SeriesWeld):
+            # Can also apply predicate to a dataframe
             return DataFrameWeld(self.df, key)
         raise Exception("Invalid type in __getitem__")
 

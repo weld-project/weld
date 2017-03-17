@@ -11,6 +11,7 @@ import time
 import bindings as cweld
 from types import *
 
+
 class WeldObjectEncoder(object):
     """
     An abstract class that must be overwridden by libraries. This class
@@ -29,6 +30,7 @@ class WeldObjectEncoder(object):
         """
         raise NotImplementedError
 
+
 class WeldObjectDecoder(object):
     """
     An abstract class that must be overwridden by libraries. This class
@@ -40,6 +42,7 @@ class WeldObjectDecoder(object):
         type is ctypes.POINTER(restype.cTypeClass).
         """
         raise NotImplementedError
+
 
 class WeldObject(object):
     """
@@ -55,16 +58,16 @@ class WeldObject(object):
     The context maps names in the Weld program to concrete values.
 
     When a WeldObject is evaluated, it uses its encode and decode functions to
-    marshall native library types into types that Weld understands. The basic flow
-    of evaluating a Weld expression is thus:
+    marshall native library types into types that Weld understands. The basic
+    flow of evaluating a Weld expression is thus:
 
     1. "Finish" the Weld program by adding a function header
     2. Compile the Weld program and load it as a dynamic library
-    3. For each argument, run object.encoder on each argument. See WeldObjectEncoder
-    for details on how this works
+    3. For each argument, run object.encoder on each argument. See
+       WeldObjectEncoder for details on how this works
     4. Pass the encoded arguments to Weld
-    5. Run the decoder on the return value. See WeldObjectDecoder for details on how
-    this works.
+    5. Run the decoder on the return value. See WeldObjectDecoder for details
+       on how this works.
     6. Return the decoded value.
     """
 
@@ -118,10 +121,12 @@ class WeldObject(object):
     def toWeldFunc(self):
         names = self.context.keys()
         names.sort()
-        arg_strs = ["{0}: {1}".format(str(name), str(self.encoder.pyToWeldType(self.context[name])))
-                for name in names]
+        arg_strs = ["{0}: {1}".format(str(name),
+                                      str(self.encoder.pyToWeldType(self.context[name])))
+                    for name in names]
         header = "|" + ", ".join(arg_strs) + "|"
-        text = header + " " + "\n".join(list(set(self.constants))) + "\n" + self.weld_code
+        text = header + " " + \
+            "\n".join(list(set(self.constants))) + "\n" + self.weld_code
         return text
 
     def evaluate(self, restype, verbose=True, decode=True):
@@ -133,8 +138,8 @@ class WeldObject(object):
                 _fields_ = [e for e in encoded]
             return Args
 
-        # Encode each input argument. This is the positional argument list which will be
-        # wrapped into a Weld struct and passed to the Weld API.
+        # Encode each input argument. This is the positional argument list
+        # which will be wrapped into a Weld struct and passed to the Weld API.
         names = self.context.keys()
         names.sort()
 
@@ -164,7 +169,8 @@ class WeldObject(object):
         err = cweld.WeldError()
         module = cweld.WeldModule(function, cweld.WeldConf(), err)
         if err.code() != 0:
-            raise ValueError("Could not compile function {}: {}".format(function, err.message()))
+            raise ValueError("Could not compile function {}: {}".format(
+                function, err.message()))
 
         conf = cweld.WeldConf()
         conf.set("weld.threads", "16")
@@ -172,7 +178,8 @@ class WeldObject(object):
         err = cweld.WeldError()
         weld_ret = module.run(conf, arg, err)
         if err.code() != 0:
-            raise ValueError("Error while running function,\n{}\n\nError message: {}".format(
+            raise ValueError(("Error while running function,\n{}\n\n"
+                              "Error message: {}").format(
                 function, err.message()))
         ptrtype = POINTER(restype.cTypeClass)
         data = ctypes.cast(weld_ret.data(), ptrtype)
@@ -192,4 +199,3 @@ class WeldObject(object):
             print "Total time decoding:", end - start
 
         return result
-

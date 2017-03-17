@@ -6,7 +6,9 @@ from weld.encoders import NumpyArrayEncoder, NumpyArrayDecoder, ScalarDecoder
 _encoder = NumpyArrayEncoder()
 _decoder = NumpyArrayDecoder()
 
+
 class HelloWeldVector(object):
+
     def __init__(self, vector):
         self.vector = vector
         self.weldobj = WeldObject(_encoder, _decoder)
@@ -17,7 +19,8 @@ class HelloWeldVector(object):
     def add(self, number):
         self.cached = None
         template = "map({0}, |e| e + {1})"
-        self.weldobj.weld_code = template.format(self.weldobj.weld_code, str(number))
+        self.weldobj.weld_code = template.format(
+            self.weldobj.weld_code, str(number))
         return self
 
     def sum(self):
@@ -37,19 +40,22 @@ class HelloWeldVector(object):
     def multiply(self, number):
         self.cached = None
         template = "map({0}, |e| e * {1})"
-        self.weldobj.weld_code = template.format(self.weldobj.weld_code, str(number))
+        self.weldobj.weld_code = template.format(
+            self.weldobj.weld_code, str(number))
         return self
 
     def subtract(self, number):
         self.cached = None
         template = "map({0}, |e| e - {1})"
-        self.weldobj.weld_code = template.format(self.weldobj.weld_code, str(number))
+        self.weldobj.weld_code = template.format(
+            self.weldobj.weld_code, str(number))
         return self
 
     def divide(self, number):
         self.cached = None
         template = "map({0}, |e| e / {1})"
-        self.weldobj.weld_code = template.format(self.weldobj.weld_code, str(number))
+        self.weldobj.weld_code = template.format(
+            self.weldobj.weld_code, str(number))
         return self
 
     def __str__(self):
@@ -58,4 +64,3 @@ class HelloWeldVector(object):
         v = self.weldobj.evaluate(WeldVec(WeldInt()), verbose=False)
         self.cached = v
         return str(v)
-
