@@ -19,7 +19,7 @@ else:
     raise OSError("Unsupported platform {}", system)
 
 # Load the Weld Dynamic Library.
-weld = CDLL(os.environ["WELD_HOME"] + "/target/release/" + path)
+weld = CDLL(path)
 
 # Used for some type checking carried out by ctypes
 class c_weld_module(c_void_p): pass
