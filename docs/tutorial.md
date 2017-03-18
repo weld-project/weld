@@ -30,17 +30,26 @@ For pedagogical reasons our library will have some limitations. First, we will o
 
 This tutorial assumes you have a Weld installation and a familiarity of Python. See the [README](https://github.com/weld-project/weld/blob/master/README.md#building) for instructions on how to build Weld.
 
-For convinience, we assume in this tutorial that the `$WELD_HOME` environment variable is set to the Weld root directory.
+We assume in this tutorial that the `$WELD_HOME` environment variable is set to the Weld root directory.
 
 ## Setting up the Project
 
-1. Append the Python Path in your shell so it can find the Weld Python bindings:
+ 1. Create a new file called `hello_weld.py`.
 
 ```bash
 $ export PYTHONPATH=$PYTHONPATH:$WELD_HOME/python
 ```
 
-2. Create a new file called `hello_weld.py`.
+2. Append the Python Path so it can find the Weld Python bindings. Make sure you set the correct "WELD_HOME" environment variable:
+  
+    ```python
+    import os
+    import sys
+    
+    home = os.environ.get("WELD_HOME")
+    libpath = home + "/python"
+    sys.path.append(libpath)
+    ```
   
 3. Import dependencies:
 
@@ -249,7 +258,7 @@ We have a minimal working example of a Weld-enabled library now, but there is st
 
 #### ImportError: No module named weld.weldobject
 
-Make sure `$WELD_HOME/python` is on the `PYTHONPATH`.
+Make sure `$WELD_HOME` is set to the root Weld directory.
 
 ---
 
