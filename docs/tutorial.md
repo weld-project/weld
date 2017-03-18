@@ -30,24 +30,17 @@ For pedagogical reasons our library will have some limitations. First, we will o
 
 This tutorial assumes you have a Weld installation and a familiarity of Python. See the [README](https://github.com/weld-project/weld/blob/master/README.md#building) for instructions on how to build Weld.
 
-We assume in this tutorial that the `$WELD_HOME` environment variable is set to the Weld root directory.
+The tutorial also assumes you've installed the Weld Python package, as described [here](https://github.com/weld-project/weld/blob/master/docs/python.md). In particular, make sure you install the Weld packages by running:
+
+```bash
+$ python $WELD_HOME/python/setup.py install
+```
 
 ## Setting up the Project
 
- 1. Create a new file called `hello_weld.py`.
-
-2. Append the Python Path so it can find the Weld Python bindings. Make sure you set the correct "WELD_HOME" environment variable:
+1. Create a new file called `hello_weld.py`.
   
-    ```python
-    import os
-    import sys
-    
-    home = os.environ.get("WELD_HOME")
-    libpath = home + "/python"
-    sys.path.append(libpath)
-    ```
-  
-3. Import dependencies:
+2. Import dependencies:
 
   ```python
   import numpy as np
@@ -58,7 +51,7 @@ We assume in this tutorial that the `$WELD_HOME` environment variable is set to 
   
   We need NumPy because we will build our library on top of NumPy's `ndarray` type. The other imports come from the Weld library; we will revisit them later.
   
-4. Set up a template for the `HelloWeldVector` class. We will fill this in as we go. Copy and paste the following, which defines the methods we will implement along with what they do, but provides no implementation:
+3. Set up a template for the `HelloWeldVector` class. We will fill this in as we go. Copy and paste the following, which defines the methods we will implement along with what they do, but provides no implementation:
 
   ```python
   class HelloWeldVector(object):
@@ -254,7 +247,11 @@ We have a minimal working example of a Weld-enabled library now, but there is st
 
 #### ImportError: No module named weld.weldobject
 
-Make sure `$WELD_HOME` is set to the root Weld directory.
+Make sure the Weld modules are installed:
+
+```bash
+$ python $WELD_HOME/python/setup.py install
+```
 
 ---
 
