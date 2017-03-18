@@ -36,10 +36,6 @@ We assume in this tutorial that the `$WELD_HOME` environment variable is set to 
 
  1. Create a new file called `hello_weld.py`.
 
-```bash
-$ export PYTHONPATH=$PYTHONPATH:$WELD_HOME/python
-```
-
 2. Append the Python Path so it can find the Weld Python bindings. Make sure you set the correct "WELD_HOME" environment variable:
   
     ```python
