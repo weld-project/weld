@@ -34,14 +34,14 @@ This tutorial assumes you have a Weld installation and a familiarity of Python. 
 
 1. Create a new file called `hello_weld.py`.
 
-2. Append the Python Path so it can find the Weld Python bindings:
+2. Append the Python Path so it can find the Weld Python bindings. Make sure you set the correct "WELD_HOME" environment variable:
 
   ```python
   import os
   import sys
   
   home = os.environ.get("WELD_HOME")
-  libpath = home + "api/python"
+  libpath = home + "/python"
   sys.path.append(libpath)
   ```
   
