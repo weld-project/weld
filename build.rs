@@ -26,6 +26,13 @@ fn main() {
         .unwrap();
 
     Command::new("make")
+        .arg("clean")
+        .arg("-C")
+        .arg("weld_rt/cpp/")
+        .status()
+        .unwrap();
+
+    Command::new("make")
         .arg("-C")
         .arg("weld_rt/cpp/")
         .status()
