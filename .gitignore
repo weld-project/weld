@@ -14,3 +14,6 @@ bench.csv
 *.dylib
 *.so
 *.dll
+python/build/
+python/dist
+python/grizzly.egg-info/
