@@ -187,15 +187,14 @@ pub unsafe extern "C" fn weld_value_free(obj: *mut WeldValue) {
 /// Given some Weld code and a configuration, returns a runnable Weld module.
 pub unsafe extern "C" fn weld_module_compile(code: *const c_char,
                                              _: *const WeldConf,
-                                             err: *mut *mut WeldError)
+                                             err_ptr: *mut WeldError)
                                              -> *mut WeldModule {
     assert!(!code.is_null());
+    assert!(!err_ptr.is_null());
 
     let code = CStr::from_ptr(code);
     let code = code.to_str().unwrap().trim();
-
-    *err = Box::into_raw(Box::new(WeldError::new(WeldRuntimeErrno::Success)));
-    let err = &mut **err;
+    let mut err = &mut *err_ptr;
 
     if let Err(e) = util::load_runtime_library() {
         println!("{}", e);
@@ -225,18 +224,17 @@ pub unsafe extern "C" fn weld_module_compile(code: *const c_char,
 pub unsafe extern "C" fn weld_module_run(module: *mut WeldModule,
                                          conf: *const WeldConf,
                                          arg: *const WeldValue,
-                                         err: *mut *mut WeldError)
+                                         err_ptr: *mut WeldError)
                                          -> *mut WeldValue {
     assert!(!module.is_null());
     assert!(!conf.is_null());
     assert!(!arg.is_null());
+    assert!(!err_ptr.is_null());
 
     let module = &mut *module;
     let arg = &*arg;
     let conf = &*conf;
-
-    *err = Box::into_raw(Box::new(WeldError::new(WeldRuntimeErrno::Success)));
-    let err = &mut **err;
+    let mut err = &mut *err_ptr;
 
     let mem_limit = conf::parse_memory_limit(conf.dict
         .get(&CString::new(conf::MEMORY_LIMIT_KEY).unwrap())
@@ -272,7 +270,8 @@ pub unsafe extern "C" fn weld_module_run(module: *mut WeldModule,
 
     if result.errno != WeldRuntimeErrno::Success {
         weld_value_free(ret);
-        *err = WeldError::new(result.errno);
+        err.errno = result.errno;
+        err.message = CString::new(result.errno.to_string()).unwrap();
         free(result_raw as *mut c_void);
         std::ptr::null_mut()
     } else {
@@ -291,6 +290,12 @@ pub unsafe extern "C" fn weld_module_free(ptr: *mut easy_ll::CompiledModule) {
         return;
     }
     Box::from_raw(ptr);
+}
+
+#[no_mangle]
+/// Return a new Weld error object.
+pub extern "C" fn weld_error_new() -> *mut WeldError {
+    Box::into_raw(Box::new(WeldError::new(WeldRuntimeErrno::Success)))
 }
 
 #[no_mangle]
