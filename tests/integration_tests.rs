@@ -11,7 +11,7 @@ use weld::WeldValue;
 use weld::WeldError;
 use weld::{weld_value_new, weld_value_data, weld_value_free};
 use weld::{weld_module_compile, weld_module_run, weld_module_free};
-use weld::{weld_error_code, weld_error_message, weld_error_free};
+use weld::{weld_error_new, weld_error_code, weld_error_message, weld_error_free};
 use weld::{weld_conf_new, weld_conf_set, weld_conf_free};
 
 use std::ffi::{CStr, CString};
@@ -55,10 +55,10 @@ unsafe fn _compile_and_run<T>(code: &str,
 
     let code = CString::new(code).unwrap();
     let input_value = weld_value_new(ptr as *const _ as *const c_void);
-    let mut err = std::ptr::null_mut();
+    let err = weld_error_new();
     let module = weld_module_compile(code.into_raw() as *const c_char,
                                      conf,
-                                     &mut err as *mut *mut WeldError);
+                                     err);
 
     if weld_error_code(err) != WeldRuntimeErrno::Success {
         weld_conf_free(conf);
@@ -66,8 +66,8 @@ unsafe fn _compile_and_run<T>(code: &str,
     }
     weld_error_free(err);
 
-    err = std::ptr::null_mut();
-    let ret_value = weld_module_run(module, conf, input_value, &mut err as *mut *mut WeldError);
+    let err = weld_error_new();
+    let ret_value = weld_module_run(module, conf, input_value, err);
     if weld_error_code(err) != WeldRuntimeErrno::Success {
         weld_conf_free(conf);
         return Err(err);

@@ -11,7 +11,7 @@ mod bencher;
 use self::weld_common::WeldRuntimeErrno;
 
 use self::weld::{weld_conf_new, weld_conf_set, weld_conf_free};
-use self::weld::{weld_error_code, weld_error_free};
+use self::weld::{weld_error_new, weld_error_code, weld_error_free};
 use self::weld::{weld_value_new, weld_value_data, weld_value_free};
 use self::weld::{weld_module_compile, weld_module_run, weld_module_free};
 use self::weld::{WeldModule, WeldValue, WeldConf, WeldError};
@@ -47,10 +47,10 @@ unsafe fn compile_program(code: &str) -> Result<*mut WeldModule, ()> {
     let code = CString::new(code).unwrap();
     let conf = benchmark_conf();
 
-    let mut err = std::ptr::null_mut();
+    let err = weld_error_new();
     let module = weld_module_compile(code.into_raw() as *const c_char,
                                      conf,
-                                     &mut err as *mut *mut WeldError);
+                                     err);
 
     if weld_error_code(err) != WeldRuntimeErrno::Success {
         weld_conf_free(conf);
@@ -67,13 +67,13 @@ unsafe fn run_module<T>(module: *mut WeldModule,
                         -> Result<*mut WeldValue, *mut WeldError> {
     let input_value = weld_value_new(ptr as *const _ as *const c_void);
     let conf = benchmark_conf();
-    let mut err = std::ptr::null_mut();
+    let err = weld_error_new();
 
     // Timing information per run for debugging.
     use std::time::Instant;
     let s = Instant::now();
 
-    let ret_value = weld_module_run(module, conf, input_value, &mut err as *mut *mut WeldError);
+    let ret_value = weld_module_run(module, conf, input_value, err);
 
     let dur = s.elapsed();
     let dur = dur.as_secs() * 1_000_000_000 + (dur.subsec_nanos() as u64);
