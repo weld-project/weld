@@ -1,5 +1,6 @@
 use std::process::Command;
 use std::env;
+use std::process;
 
 fn main() {
     let mut path = match env::var("WELD_HOME") {
@@ -13,18 +14,24 @@ fn main() {
 
     let cpp_path = path + &"weld_rt/cpp";
 
-    Command::new("make")
+    let status = Command::new("make")
         .arg("clean")
         .arg("-C")
         .arg(cpp_path.clone())
         .status()
         .unwrap();
+    if !status.success() {
+        process::exit(status.code().unwrap_or(1));
+    }
 
-    Command::new("make")
+    let status = Command::new("make")
         .arg("-C")
         .arg(cpp_path.clone())
         .status()
         .unwrap();
+    if !status.success() {
+        process::exit(status.code().unwrap_or(1));
+    }
 
     println!("{}", format!("cargo:rustc-link-search=native={}", cpp_path));
 
