@@ -15,7 +15,14 @@ before_script:
   - sudo rm -rf `which llvm-config`
   - sudo ln -s /usr/bin/llvm-config-3.8 /usr/bin/llvm-config
   - export WELD_HOME=`pwd`
+  - sudo apt-get install python-pip
+  - virtualenv py; source py/bin/activate
+  - pip install numpy
+  - pip install pandas
+  - cd python; python setup.py install; cd ..
 
 script:
   - cargo build --release
   - cargo test
+  - python python/grizzly/tests/grizzly_test.py
+  - python python/grizzly/tests/numpy_weld_test.py
