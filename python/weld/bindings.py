@@ -23,6 +23,7 @@ if "WELD_HOME" not in os.environ:
 home = os.environ["WELD_HOME"]
 if home[-1] != "/":
     home += "/"
+
 path = home + "target/debug/" + path
 
 # Load the Weld Dynamic Library.
