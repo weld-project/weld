@@ -20,8 +20,6 @@ Otherwise, run:
 $ python setup.py install
 ```
 
-Also, make sure that `libweld` and `libweldrt` are on  the `LD_LIBRARY_PATH`.
-
 ### Updating Weld and Grizzly
 
 If you installed Weld's Python API and Grizzly in 'development' mode, run:
