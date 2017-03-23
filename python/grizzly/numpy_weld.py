@@ -80,15 +80,13 @@ def dot(matrix, vector):
         matrix_weld_type = matrix.weld_type
         matrix = matrix.expr
     elif isinstance(matrix, np.ndarray):
-        matrix_weld_type = numpy_weld_impl.numpy_to_weld_type_mapping[
-            str(matrix.dtype)]
+        matrix_weld_type = numpy_weld_impl.dtype_to_weld_type(str(matrix.dtype))
 
     if isinstance(vector, LazyOpResult):
         vector_weld_type = vector.weld_type
         vector = vector.expr
     elif isinstance(vector, np.ndarray):
-        vector_weld_type = numpy_weld_impl.numpy_to_weld_type_mapping[
-            str(vector.dtype)]
+        vector_weld_type = numpy_weld_impl.dtype_to_weld_type(str(vector.dtype))
 
     return NumpyArrayWeld(
         numpy_weld_impl.dot(
@@ -111,6 +109,5 @@ def exp(vector):
         weld_type = vector.weld_type
         vector = vector.expr
     elif isinstance(vector, np.ndarray):
-        weld_type = numpy_weld_impl.numpy_to_weld_type_mapping[
-            str(vector.dtype)]
+        weld_type = numpy_weld_impl.dtype_to_weld_type(str(vector.dtype))
     return NumpyArrayWeld(numpy_weld_impl.exp(vector, weld_type), WeldDouble())

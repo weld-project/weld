@@ -49,7 +49,7 @@ class DataFrameWeld:
                 raw_column = self.raw_columns[key]
                 weld_type = WeldVec(WeldChar())
             else:
-                weld_type = grizzly_impl.numpy_to_weld_type_mapping[dtype]
+                weld_type = grizzly_impl.dtype_to_weld_type(dtype)
             if self.predicates is None:
                 return SeriesWeld(raw_column, weld_type, self, key)
             return SeriesWeld(
@@ -82,7 +82,7 @@ class DataFrameWeld:
         """
         if isinstance(value, np.ndarray):
             dtype = str(value.dtype)
-            weld_type = grizzly_impl.numpy_to_weld_type_mapping[dtype]
+            weld_type = grizzly_impl.dtype_to_weld_type(dtype)
             self.unmaterialized_cols[key] = SeriesWeld(
                 value,
                 weld_type,
@@ -115,8 +115,8 @@ class DataFrameWeld:
             if self.predicates is None:
                 return self.df.values
             if isinstance(self.df.values, np.ndarray):
-                weld_type = grizzly_impl.numpy_to_weld_type_mapping[
-                    str(self.df.values.dtype)]
+                weld_type = grizzly_impl.dtype_to_weld_type(
+                    str(self.df.values.dtype))
                 dim = self.df.values.ndim
                 return LazyOpResult(
                     grizzly_impl.filter(
@@ -747,8 +747,9 @@ class GroupByWeld:
             self.grouping_column_type = column.weld_type
             self.grouping_column = column.expr
         elif isinstance(column, np.ndarray):
-            self.grouping_column_type = numpyImpl.numpy_to_weld_type_mapping[
-                str(column.dtype)]
+            self.grouping_column_type = numpyImpl.dtype_to_weld_type(
+                str(column.dtype)
+            )
             self.grouping_column = column
 
         self.column_names = df._get_column_names()
@@ -764,8 +765,8 @@ class GroupByWeld:
                 column_type = column.weld_type
                 column = column.expr
             elif isinstance(column, np.ndarray):
-                column_type = numpyImpl.numpy_to_weld_type_mapping[
-                    str(column.dtype)]
+                column_type = numpyImpl.dtype_to_weld_type(
+                    str(column.dtype))
             self.columns.append(column)
             self.column_types.append(column_type)
 

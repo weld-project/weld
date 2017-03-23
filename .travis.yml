@@ -16,7 +16,16 @@ before_script:
   - sudo ln -s /usr/bin/llvm-config-3.8 /usr/bin/llvm-config
   - export WELD_HOME=`pwd`
   - export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:`pwd`/target/release:`pwd`/weld_rt/target/release
+  - sudo apt-get install python-pip
+  - virtualenv py; source py/bin/activate
+  - pip install numpy
+  - pip install pandas
+  - cd python; python setup.py install; cd ..
+  - python -c "import grizzly; print grizzly"
+  - python -c "import weld; print weld"
 
 script:
   - cargo build --release
   - cargo test
+  - python python/grizzly/tests/grizzly_test.py
+  - python python/grizzly/tests/numpy_weld_test.py

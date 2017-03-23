@@ -70,11 +70,7 @@ $ export WELD_HOME=`pwd`
 $ cargo build --release
 ```
 
-Weld builds two dynamically linked libraries (`.so` files on Linux and `.dylib` files on macOS): `libweld` and `libweldrt`. Both of these libraries must be on the `LD_LIBRARY_PATH`. By default, the libraries are in `$WELD_HOME/target/release` and `$WELD_HOME/weld_rt/target/release`. Set up the `LD_LIBRARY_PATH` as follows:
-
-```bash
-$ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$WELD_HOME/weld_rt/target/release:$WELD_HOME/target/release
-```
+Weld builds two dynamically linked libraries (`.so` files on Linux and `.dylib` files on macOS): `libweld` and `libweldrt`. Both of these libraries are found using `WELD_HOME`. By default, the libraries are in `$WELD_HOME/target/release` and `$WELD_HOME/weld_rt/target/release`.
 
 Finally, run the unit and integration tests:
 

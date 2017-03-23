@@ -1,15 +1,15 @@
 """Contains implementations for each ported operation in Pandas.
 
 Attributes:
-    decoder_ (NumPyEncoder): Description
-    encoder_ (NumPyDecoder): Description
+    decoder_ (GrizzlyEncoder): Description
+    encoder_ (GrizzlyDecoder): Description
 """
 from encoders import *
 from weld.weldobject import *
 
 
-encoder_ = NumPyEncoder()
-decoder_ = NumPyDecoder()
+encoder_ = GrizzlyEncoder()
+decoder_ = GrizzlyDecoder()
 
 
 def unique(array, type):
