@@ -15,7 +15,6 @@ before_script:
   - sudo rm -rf `which llvm-config`
   - sudo ln -s /usr/bin/llvm-config-3.8 /usr/bin/llvm-config
   - export WELD_HOME=`pwd`
-  - export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:`pwd`/target/release:`pwd`/weld_rt/target/release
 
 script:
   - cargo build --release

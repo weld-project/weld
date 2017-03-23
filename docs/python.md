@@ -14,8 +14,7 @@ Otherwise, run the following from `$WELD_HOME/python`:
 $ python setup.py install
 ```
 
-You should also follow the setup instructions [here](https://github.com/weld-project/weld/blob/master/README.md) (in particular, build Weld and make sure its dynamic libraries are on the `LD_LIBRARY_PATH`). 
-
+You should also follow the setup instructions [here](https://github.com/weld-project/weld/blob/master/README.md) (in particular, make sure `WELD_HOME` is set so the libraries Weld uses can be found). 
 ### Bindings
 
 The `weld.bindings` module contains bindings for the [C API](https://github.com/weld-project/weld/blob/master/docs/api.md). Each type in the C API is wrapped as a Python object. Methods on the Python objects call the corresponding C API functions.

@@ -7,10 +7,13 @@ use std;
 use std::cmp::max;
 use std::collections::HashMap;
 
+use std::env;
+
 use super::ast::*;
 use super::ast::ExprKind::*;
 
 pub const MERGER_BC: &'static [u8] = include_bytes!("../weld_rt/cpp/libparbuilder.bc");
+const WELD_HOME: &'static str = "WELD_HOME";
 
 /// Utility struct that can track and generate unique IDs and symbols for use in an expression.
 /// Each SymbolGenerator tracks the maximum ID used for every symbol name, and can be used to
@@ -89,9 +92,29 @@ impl IdGenerator {
     }
 }
 
+/// Returns the value of the WELD_HOME environment variable,
+/// or an error if the variable is not set.
+///
+/// The returned path has a trailing `/`.
+pub fn get_weld_home() -> Result<String, ()> {
+    match env::var(WELD_HOME) {
+        Ok(path) => {
+            let path = if path.chars().last().unwrap() != '/' {
+                path + &"/"
+            } else {
+                path
+            };
+            Ok(path)
+        }
+        Err(_) => Err(()),
+    }
+}
+
 /// Loads the Weld runtime library.
 pub fn load_runtime_library() -> Result<(), String> {
-    if let Err(_) = easy_ll::load_library(&"libweldrt") {
+    let weld_home = get_weld_home().unwrap_or("./".to_string());
+    let path = format!("{}{}", weld_home, "weld_rt/target/release/libweldrt");
+    if let Err(_) = easy_ll::load_library(&path) {
         let err_message = unsafe { std::ffi::CStr::from_ptr(libc::dlerror()) };
         let err_message = err_message.to_owned().into_string().unwrap();
         Err(err_message)

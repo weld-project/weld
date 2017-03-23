@@ -4,6 +4,7 @@
 
 from ctypes import *
 
+import os
 import platform
 import copy
 
@@ -17,23 +18,27 @@ elif system == 'Darwin':
 else:
     raise OSError("Unsupported platform {}", system)
 
+if "WELD_HOME" not in os.environ:
+    raise Exception("Set the WELD_HOME environment variable")
+home = os.environ["WELD_HOME"]
+if home[-1] != "/":
+    home += "/"
+
+path = home + "target/debug/" + path
+
 # Load the Weld Dynamic Library.
 weld = CDLL(path)
 
 # Used for some type checking carried out by ctypes
 
-
 class c_weld_module(c_void_p):
     pass
-
 
 class c_weld_conf(c_void_p):
     pass
 
-
 class c_weld_value(c_void_p):
     pass
-
 
 class WeldModule(c_void_p):
 
