@@ -113,7 +113,7 @@ pub fn get_weld_home() -> Result<String, ()> {
 /// Loads the Weld runtime library.
 pub fn load_runtime_library() -> Result<(), String> {
     let weld_home = get_weld_home().unwrap_or("./".to_string());
-    let path = format!("{}{}", weld_home, lib_path);
+    let path = format!("{}{}", weld_home, "weld_rt/target/release/libweldrt");
     if let Err(_) = easy_ll::load_library(&path) {
         let err_message = unsafe { std::ffi::CStr::from_ptr(libc::dlerror()) };
         let err_message = err_message.to_owned().into_string().unwrap();
