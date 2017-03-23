@@ -2,7 +2,7 @@
 
 # The usual preamble
 import numpy as np
-import grizzly.numpyWeld as npWeld
+import grizzly.numpy_weld as npw
 import pandas as pd
 import grizzly.grizzly as gr
 import time
@@ -24,7 +24,7 @@ data_big_cities_new_df = data_big_cities[["State short"]]
 # robberies)) / 100000)
 data_big_cities_stats = data_big_cities[
     ["Total population", "Total adult population", "Number of robberies"]].values
-predictions = npWeld.exp(npWeld.dot(data_big_cities_stats, np.array(
+predictions = npw.exp(npw.dot(data_big_cities_stats, np.array(
     [1, 2, -2000], dtype=np.int64)) / 100000.0)
 predictions = predictions / predictions.sum()
 data_big_cities_new_df["Crime index"] = predictions

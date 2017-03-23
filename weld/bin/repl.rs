@@ -22,7 +22,7 @@ use weld::pretty_print::*;
 use weld::type_inference::*;
 use weld::sir::ast_to_sir;
 use weld::util::load_runtime_library;
-use weld::util::get_merger_lib_path;
+use weld::util::MERGER_BC;
 
 enum ReplCommands {
     LoadFile,
@@ -194,8 +194,7 @@ fn main() {
                         continue;
                     }
 
-                    if let Err(ref e) = easy_ll::compile_module(&llvm_code,
-                                                                Some(&get_merger_lib_path())) {
+                    if let Err(ref e) = easy_ll::compile_module(&llvm_code, Some(MERGER_BC)) {
                         println!("Error during LLVM compilation:\n{}\n", e);
                     } else {
                         println!("LLVM module compiled successfully\n");

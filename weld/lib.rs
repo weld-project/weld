@@ -41,6 +41,10 @@ pub mod type_inference;
 pub mod conf;
 pub mod util;
 
+extern "C" {
+    pub fn free(ptr: *mut c_void);
+}
+
 /// A clean alias for a compiled LLVM module.
 pub type WeldModule = easy_ll::CompiledModule;
 
@@ -257,6 +261,7 @@ pub unsafe extern "C" fn weld_module_run(module: *mut WeldModule,
         mem_limit: mem_limit as i64,
     });
     let ptr = Box::into_raw(input) as i64;
+    // result_raw is allocated with ordinary malloc, hence the free below
     let result_raw = module.run(ptr) as *const llvm::WeldOutputArgs;
     let result = (*result_raw).clone();
 
@@ -268,8 +273,10 @@ pub unsafe extern "C" fn weld_module_run(module: *mut WeldModule,
     if result.errno != WeldRuntimeErrno::Success {
         weld_value_free(ret);
         *err = WeldError::new(result.errno);
+        free(result_raw as *mut c_void);
         std::ptr::null_mut()
     } else {
+        free(result_raw as *mut c_void);
         ret
     }
 }

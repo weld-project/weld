@@ -5,7 +5,7 @@ import numpy as np
 import time
 
 # Input data size
-size = (2 << 15)
+size = (2 << 28)
 
 a = np.zeros((size), dtype='int32')
 
@@ -15,7 +15,7 @@ for i in range(40):
     a += i
 end = time.time()
 print "NumPy result:", a.sum()
-np_time = end -start
+np_time = (end - start)
 print "({:.3} seconds)".format(np_time)
 
 # Reset

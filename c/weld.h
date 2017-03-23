@@ -146,16 +146,22 @@ weld_conf_new();
  * @param key the key to look up.
  * @return the string value for the key, or NULL if the key does not exist.
  */
-const char *
-extern "C" weld_conf_get(weld_conf_t, const char *key);
+extern "C" const char*
+weld_conf_get(weld_conf_t, const char *key);
 
 /** Set a value for a Weld configuration key.
  *
  * @param key the key
  * @param key the value
  */
-void
-extern "C" weld_conf_get(weld_conf_t, const char *key, const char *value);
+extern "C" void
+weld_conf_set(weld_conf_t, const char *key, const char *value);
+
+/** Free a Weld configuration.
+ *
+ */
+extern "C" weld_conf_t
+weld_conf_free(weld_conf_t);
 
 #endif
 

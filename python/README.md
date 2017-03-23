@@ -1,26 +1,36 @@
-This README file assumes for convenience that `$WELD_HOME` is set to the `weld` root directory.
+# Weld Python API
 
+This directory contains the Weld Python API and the Grizzly implementation.
 
-Prerequisites
-=============
+### Prerequisites
 
-Build and run tests for Weld (the instructions for this are in  `$WELD_HOME/README.md`).
+Build and run tests for Weld (the instructions for this are in the main `README.md`).
+Make sure the `WELD_HOME` environment variable is set as detailed in the main
+`README.md`.
 
+### Setup
 
-Setup
-=====
-
-To setup Weld's Python API, add `$WELD_HOME/python` to the `$PYTHONPATH`,like:
+If you want to install Weld's Python API and Grizzly in 'development' mode, run:
 ```bash
->> export PYTHONPATH=$PYTHONPATH:/path/to/python  # by default, $WELD_HOME/python
+$ python setup.py develop
 ```
 
-Running Grizzly's Unit Tests
-============================
-
-To run unit tests, run the following:
-
+Otherwise, run:
 ```bash
->> python $WELD_HOME/python/grizzly/tests/grizzlyTest    # For Grizzly tests
->> python $WELD_HOME/python/grizzly/tests/numpyWeldTest  # For NumPy tests
+$ python setup.py install
+```
+
+Also, make sure that `libweld` and `libweldrt` are on  the `LD_LIBRARY_PATH`.
+
+### Updating Weld and Grizzly
+
+If you installed Weld's Python API and Grizzly in 'development' mode, run:
+```bash
+$ git pull
+```
+
+If you installed Weld's Python API and Grizzly in 'install' mode, run:
+```bash
+$ git pull
+$ python setup.py install
 ```

@@ -10,6 +10,7 @@ from weldobject import WeldObjectEncoder, WeldObjectDecoder
 import numpy as np
 import ctypes
 
+
 def dtype_to_weld_type(dtype):
     if dtype == 'int32':
         return WeldInt()
@@ -22,7 +23,9 @@ def dtype_to_weld_type(dtype):
     else:
         raise ValueError("unsupported dtype {}".format(dtype))
 
+
 class NumpyArrayEncoder(WeldObjectEncoder):
+
     def _check(self, obj):
         """
         Checks whether this NumPy array is supported by Weld.
@@ -35,9 +38,9 @@ class NumpyArrayEncoder(WeldObjectEncoder):
         elem_type = dtype_to_weld_type(obj.dtype)
         c_class = WeldVec(elem_type).cTypeClass
         elem_class = elem_type.cTypeClass
-        data = obj.ctypes.data_as(POINTER(elem_class))
+        ptr = obj.ctypes.data_as(POINTER(elem_class))
         size = ctypes.c_int64(len(obj))
-        return c_class(data=data, size=size)
+        return c_class(ptr=ptr, size=size)
 
     def pyToWeldType(self, obj):
         self._check(obj)
@@ -45,6 +48,7 @@ class NumpyArrayEncoder(WeldObjectEncoder):
 
 
 class NumpyArrayDecoder(WeldObjectDecoder):
+
     def decode(self, obj, restype):
         assert isinstance(restype, WeldVec)
         obj = obj.contents
@@ -54,8 +58,10 @@ class NumpyArrayDecoder(WeldObjectDecoder):
         result = np.fromiter(data, dtype=dtype, count=size)
         return result
 
+
 class ScalarDecoder(WeldObjectDecoder):
-     def decode(self, obj, restype):
-         assert isinstance(restype, WeldLong)
-         result = obj.contents.value
-         return result
+
+    def decode(self, obj, restype):
+        assert isinstance(restype, WeldLong)
+        result = obj.contents.value
+        return result

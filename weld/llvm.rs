@@ -23,7 +23,7 @@ use super::sir::Terminator::*;
 use super::transforms;
 use super::type_inference;
 use super::util::IdGenerator;
-use super::util::get_merger_lib_path;
+use super::util::MERGER_BC;
 
 #[cfg(test)]
 use super::parser::*;
@@ -680,7 +680,7 @@ impl LlvmGenerator {
              {tmp2} = insertvalue %output_arg_t {tmp1}, i64 {errno}, 2  
   {size_ptr} = getelementptr %output_arg_t, %output_arg_t* null, i32 1
   {size} = ptrtoint %output_arg_t* {size_ptr} to i64
-  {bytes} = call i8* @weld_rt_malloc(i64 {rid}, i64 {size})
+  {bytes} = call i8* @malloc(i64 {size})
   {typed_out_ptr} = bitcast i8* {bytes} to %output_arg_t*
   store %output_arg_t {tmp2}, %output_arg_t* {typed_out_ptr}
   {final_address} = ptrtoint %output_arg_t* {typed_out_ptr} to i64
@@ -1811,7 +1811,10 @@ impl LlvmGenerator {
                                                              bld_ty_str,
                                                              llvm_symbol(output)));
                                     }
-                                    Merger(_, _) => {
+                                    Merger(_, ref op) => {
+                                        if *op != BinOpKind::Add {
+                                            return weld_err!("Merger only supports +");
+                                        }
                                         let bld_ty_str = try!(self.llvm_type(ty));
                                         let bld_prefix = format!("@{}",
                                                                  bld_ty_str.replace("%", ""));
@@ -1841,8 +1844,10 @@ impl LlvmGenerator {
                                                              bld_ty_str,
                                                              llvm_symbol(output)));
                                     }
-                                    VecMerger(ref elem, _) => {
-                                        // TODO(shoumik): Generate code.
+                                    VecMerger(ref elem, ref op) => {
+                                        if *op != BinOpKind::Add {
+                                            return weld_err!("VecMerger only supports +");
+                                        }
                                         match *arg {
                                             Some(ref s) => {
                                                 let bld_ty_str = try!(self.llvm_type(ty))
@@ -2164,7 +2169,7 @@ pub fn compile_program(program: &Program) -> WeldResult<easy_ll::CompiledModule>
     let sir_prog = try!(sir::ast_to_sir(&expr));
     let mut gen = LlvmGenerator::new();
     try!(gen.add_function_on_pointers("run", &sir_prog));
-    Ok(try!(easy_ll::compile_module(&gen.result(), Some(&get_merger_lib_path()))))
+    Ok(try!(easy_ll::compile_module(&gen.result(), Some(MERGER_BC))))
 }
 
 #[test]

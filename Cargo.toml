@@ -1,10 +1,7 @@
 [package]
 name = "weld"
 version = "0.1.0"
-authors = ["Matei Zaharia <matei.zaharia@gmail.com>",
-    "Shoumik Palkar <shoumikpalkar@gmail.com>",
-    "Deepak Narayanan <deepakn94@gmail.com>",
-    "James Thomas <jamesjoethomas@gmail.com>"]
+authors = ["Weld Developers <weld-group@lists.stanford.edu>"]
 build = "build.rs"
 
 [dependencies]

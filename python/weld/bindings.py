@@ -5,22 +5,15 @@
 from ctypes import *
 
 import platform
-import os
 import copy
-
-# Load the library.
-path = os.environ["WELD_HOME"]
-if path[-1] != "/":
-    path += "/"
-path += "target/release/libweld"
 
 system = platform.system()
 if system == 'Linux':
-    path += ".so"
+    path = "libweld.so"
 elif system == 'Windows':
-    path += ".dll"
+    path = "libweld.dll"
 elif system == 'Darwin':
-    path += ".dylib"
+    path = "libweld.dylib"
 else:
     raise OSError("Unsupported platform {}", system)
 
@@ -28,14 +21,26 @@ else:
 weld = CDLL(path)
 
 # Used for some type checking carried out by ctypes
-class c_weld_module(c_void_p): pass
-class c_weld_conf(c_void_p): pass
-class c_weld_value(c_void_p): pass
+
+
+class c_weld_module(c_void_p):
+    pass
+
+
+class c_weld_conf(c_void_p):
+    pass
+
+
+class c_weld_value(c_void_p):
+    pass
+
 
 class WeldModule(c_void_p):
+
     def __init__(self, code, conf, err):
         weld_module_compile = weld.weld_module_compile
-        weld_module_compile.argtypes = [c_char_p, c_weld_conf, POINTER(WeldError)]
+        weld_module_compile.argtypes = [
+            c_char_p, c_weld_conf, POINTER(WeldError)]
         weld_module_compile.restype = c_weld_module
 
         code = c_char_p(code)
@@ -44,7 +49,8 @@ class WeldModule(c_void_p):
     def run(self, conf, arg, err):
         weld_module_run = weld.weld_module_run
         # module, conf, arg, &err
-        weld_module_run.argtypes = [c_weld_module, c_weld_conf, c_weld_value, POINTER(WeldError)]
+        weld_module_run.argtypes = [
+            c_weld_module, c_weld_conf, c_weld_value, POINTER(WeldError)]
         weld_module_run.restype = c_weld_value
         ret = weld_module_run(self.module, conf.conf, arg.val, byref(err))
         return WeldValue(ret, assign=True)
@@ -57,6 +63,7 @@ class WeldModule(c_void_p):
 
 
 class WeldValue(c_void_p):
+
     def __init__(self, value, assign=False):
         if assign is False:
             weld_value_new = weld.weld_value_new
@@ -65,19 +72,30 @@ class WeldValue(c_void_p):
             self.val = weld_value_new(value)
         else:
             self.val = value
+        self.freed = False
+
+    def _check(self):
+        if self.freed:
+            raise ValueError("Attempted to use freed WeldValue")
 
     def data(self):
+        self._check()
         weld_value_data = weld.weld_value_data
         weld_value_data.argtypes = [c_weld_value]
         weld_value_data.restype = c_void_p
         return weld_value_data(self.val)
 
-    def __del__(self):
-        # TODO : Garbage Collection still needs to be done
-        return
+    def free(self):
+        self._check()
+        weld_value_free = weld.weld_value_free
+        weld_value_free.argtypes = [c_weld_value]
+        weld_value_free.restype = None
+        self.freed = True
+        return weld_value_free(self.val)
 
 
 class WeldConf(c_void_p):
+
     def __init__(self):
         weld_conf_new = weld.weld_conf_new
         weld_conf_new.argtypes = []
@@ -108,6 +126,7 @@ class WeldConf(c_void_p):
 
 
 class WeldError(c_void_p):
+
     def code(self):
         weld_error_code = weld.weld_error_code
         weld_error_code.argtypes = [WeldError]

@@ -25,6 +25,19 @@ fn main() {
         .status()
         .unwrap();
 
+    Command::new("make")
+        .arg("clean")
+        .arg("-C")
+        .arg("weld_rt/cpp/")
+        .status()
+        .unwrap();
+
+    Command::new("make")
+        .arg("-C")
+        .arg("weld_rt/cpp/")
+        .status()
+        .unwrap();
+
     // NOTE this is pretty hacky...better way?
     let weldrt_path = path + &"weld_rt/Cargo.toml";
     Command::new("cargo")
