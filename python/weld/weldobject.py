@@ -191,7 +191,6 @@ class WeldObject(object):
         if decode:
             result = self.decoder.decode(data, restype)
         else:
-            data = cweld.WeldValue(weld_ret).data()
             result = ctypes.cast(data, ctypes.POINTER(
                 ctypes.c_int64)).contents.value
         end = time.time()

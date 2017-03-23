@@ -14,20 +14,6 @@ fn main() {
     Command::new("make")
         .arg("clean")
         .arg("-C")
-        .arg("python/grizzly/")
-        .status()
-        .unwrap();
-
-    Command::new("make")
-        .arg("convertor")
-        .arg("-C")
-        .arg("python/grizzly/")
-        .status()
-        .unwrap();
-
-    Command::new("make")
-        .arg("clean")
-        .arg("-C")
         .arg("weld_rt/cpp/")
         .status()
         .unwrap();

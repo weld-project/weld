@@ -1,4 +1,4 @@
-"""Contains implementations for each ported operation in NumPy.
+"""Contains implementations for each ported operation in Grizzly.
 
 Attributes:
     decoder_ (TYPE): Description
@@ -9,8 +9,8 @@ from encoders import *
 from weld.weldobject import *
 
 norm_factor_id_ = 1
-encoder_ = NumPyEncoder()
-decoder_ = NumPyDecoder()
+encoder_ = GrizzlyEncoder()
+decoder_ = GrizzlyDecoder()
 
 
 def div(array, other, type):
