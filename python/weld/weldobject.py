@@ -173,7 +173,7 @@ class WeldObject(object):
                 function, err.message()))
 
         conf = cweld.WeldConf()
-        conf.set("weld.threads", "16")
+        conf.set("weld.threads", "1")
         conf.set("weld.memory.limit", "100000000000")
         err = cweld.WeldError()
         weld_ret = module.run(conf, arg, err)
