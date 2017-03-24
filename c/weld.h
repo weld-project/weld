@@ -78,11 +78,11 @@ weld_value_free(weld_value_t);
  *
  * @param code a Weld program to compile
  * @param conf a configuration for the module.
- * @param err a NULL handle to a Weld error.
+ * @param err a Weld erro for this compilation.
  * @return a runnable module.
  */
 extern "C" weld_module_t 
-weld_module_compile(const char *code, weld_conf_t, weld_error_t *err);
+weld_module_compile(const char *code, weld_conf_t, weld_error_t);
 
 /** Runs a module using the given argument.
  *
@@ -93,13 +93,13 @@ weld_module_compile(const char *code, weld_conf_t, weld_error_t *err);
  * @param module the module to run.
  * @param conf a configuration for this run.
  * @param arg the argument for the module's function.
- * @param err a NULL handle to a Weld error.
+ * @param err a Weld error for this run.
  * @return an owned Weld value representing the return value. The caller
  * is responsible for knowing what the type of the return value is based on
  * the module she runs.
  */
 extern "C" weld_value_t 
-weld_module_run(weld_module_t, weld_conf_t, weld_value_t, weld_error_t *err);
+weld_module_run(weld_module_t, weld_conf_t, weld_value_t, weld_error_t);
 
 /** Garbage collects a module.
  *
@@ -109,6 +109,12 @@ extern "C" void
 weld_module_free(weld_module_t);
 
 // ************* Errors ****************
+
+/** Return a new Weld error.
+ *
+ */
+extern "C" weld_error_t
+weld_error_new();
 
 /** Returns an error code, or 0 if there was no error.
  *

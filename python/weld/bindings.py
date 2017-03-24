@@ -37,6 +37,9 @@ class c_weld_module(c_void_p):
 class c_weld_conf(c_void_p):
     pass
 
+class c_weld_err(c_void_p):
+    pass
+
 class c_weld_value(c_void_p):
     pass
 
@@ -45,19 +48,19 @@ class WeldModule(c_void_p):
     def __init__(self, code, conf, err):
         weld_module_compile = weld.weld_module_compile
         weld_module_compile.argtypes = [
-            c_char_p, c_weld_conf, POINTER(WeldError)]
+            c_char_p, c_weld_conf, c_weld_err]
         weld_module_compile.restype = c_weld_module
 
         code = c_char_p(code)
-        self.module = weld_module_compile(code, conf.conf, byref(err))
+        self.module = weld_module_compile(code, conf.conf, err.error)
 
     def run(self, conf, arg, err):
         weld_module_run = weld.weld_module_run
         # module, conf, arg, &err
         weld_module_run.argtypes = [
-            c_weld_module, c_weld_conf, c_weld_value, POINTER(WeldError)]
+            c_weld_module, c_weld_conf, c_weld_value, c_weld_err]
         weld_module_run.restype = c_weld_value
-        ret = weld_module_run(self.module, conf.conf, arg.val, byref(err))
+        ret = weld_module_run(self.module, conf.conf, arg.val, err.error)
         return WeldValue(ret, assign=True)
 
     def __del__(self):
@@ -132,21 +135,27 @@ class WeldConf(c_void_p):
 
 class WeldError(c_void_p):
 
+    def __init__(self):
+        weld_error_new = weld.weld_error_new
+        weld_error_new.argtypes = []
+        weld_error_new.restype = c_weld_err
+        self.error = weld_error_new()
+
     def code(self):
         weld_error_code = weld.weld_error_code
-        weld_error_code.argtypes = [WeldError]
+        weld_error_code.argtypes = [c_weld_err]
         weld_error_code.restype = c_uint64
-        return weld_error_code(self)
+        return weld_error_code(self.error)
 
     def message(self):
         weld_error_message = weld.weld_error_message
-        weld_error_message.argtypes = [WeldError]
+        weld_error_message.argtypes = [c_weld_err]
         weld_error_message.restype = c_char_p
-        val = weld_error_message(self)
+        val = weld_error_message(self.error)
         return copy.copy(val)
 
     def __del__(self):
         weld_error_free = weld.weld_error_free
-        weld_error_free.argtypes = [WeldError]
+        weld_error_free.argtypes = [c_weld_err]
         weld_error_free.restype = None
-        weld_error_free(self)
+        weld_error_free(self.error)
