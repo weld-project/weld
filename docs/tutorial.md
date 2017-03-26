@@ -257,7 +257,7 @@ $ python $WELD_HOME/python/setup.py install
 
 #### ValueError: Could not compile function ...
 
-Take a look at the (language docs)[https://github.com/sppalkia/weld/blob/master/docs/language.md]; this is a compile error stating that the Weld code could not be compiled.
+Take a look at the [language docs](https://github.com/sppalkia/weld/blob/master/docs/language.md); this is a compile error stating that the Weld code could not be compiled.
 
 ---
 
