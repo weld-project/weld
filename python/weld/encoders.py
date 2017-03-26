@@ -53,7 +53,7 @@ class NumpyArrayDecoder(WeldObjectDecoder):
         assert isinstance(restype, WeldVec)
         obj = obj.contents
         size = obj.size
-        data = obj.data
+        data = obj.ptr
         dtype = restype.elemType.cTypeClass
         result = np.fromiter(data, dtype=dtype, count=size)
         return result
