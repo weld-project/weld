@@ -151,7 +151,7 @@ In particular, we will do the following:
 * In any `for` expression's `update` function, the builder returned by the function is *derived* from the one that it got as an argument. By *derived*, we mean that there is a sequence of `for` and `merge` expressions that produces the resulting builder from the argument on any control flow path through the function.
 
 The one place where the situation is trickier is with structs of builders.
-Here, we require that each field of the resulting struct is derived from the corresponding field of the struct passed as an argument, but differnet fields may pass through different expressions through the function.
+Here, we require that each field of the resulting struct is derived from the corresponding field of the struct passed as an argument, but different fields may pass through different expressions through the function.
 It is less clear whether existing type systems capture this, but it should not be difficult to define one for it.
 
 ## Sugar Operations
