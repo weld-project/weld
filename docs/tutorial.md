@@ -124,12 +124,12 @@ This line tracks the vector the user passes in. Note that we might want to perfo
 Here, we are initializing a new `WeldObject` instance and setting it as a field. `WeldObject` takes two parameters: an _encoder_ class and a _decoder_ class. These classes specify how a type in Python maps over to a type in Weld (Weld expects a certain in-memory format for each type) and vice versa. The Weld API contains some default encoders and decoders for common types in the `weld.encoders` module; here, we use the included NumPy array encoder and decoder classes. In a different tutorial we will look at how to write encoders and decoders for custom objects.
  
  ```python
- name = self.weldobj.update(vector, WeldVec(WeldI32()))
+ name = self.weldobj.update(vector, WeldVec(WeldInt()))
  ```
  
 `WeldObject` instances have an `update` method which add a _dependency_ to the object. Dependencies are just values which will be passed into Weld when we actually want to compute something. The `update` method takes two parameters (a value and a type) and returns a string name.
  
-Let's talk about these in more detail. The value is the value to mark as a dependency. The type is the type the value will take on _in Weld_. Types supported by Weld are available in the `weld.types` module. In this example, because our value is a NumPy array of integers, the expected Weld type is a `WeldVec(WeldI32())` (a vector of 32-bit integer values). The encoder object we discussed earlier is responsible for translating the NumPy array into this type so Weld's execution engine understands it.
+Let's talk about these in more detail. The value is the value to mark as a dependency. The type is the type the value will take on _in Weld_. Types supported by Weld are available in the `weld.types` module. In this example, because our value is a NumPy array of integers, the expected Weld type is a `WeldVec(WeldInt())` (a vector of 32-bit integer values). The encoder object we discussed earlier is responsible for translating the NumPy array into this type so Weld's execution engine understands it.
 
 The return type of the `update` function is a string name. The name is how we refer to `value` in Weld code. Names are unique; no two values will ever be assigned the same name. Here, whenever we want to refer to the vector in our Weld code, we can just use this string as a placeholder to represent the value. `WeldObject` takes care of tracking which names are mapped to which values.
 
@@ -149,7 +149,7 @@ Here is what you should have at the end:
       """
       self.vector = vector
       self.weldobj = WeldObject(NumpyArrayEncoder(), NumpyArrayDecoder())
-      name = self.weldobj.update(vector, WeldVec(WeldI32()))
+      name = self.weldobj.update(vector, WeldVec(WeldInt()))
       self.weldobj.weld_code = name
  ```
 
@@ -194,7 +194,7 @@ Copy and paste the following into the `__str__` method:
 
 ```python
 def __str__(self):
-    v = self.weldobj.evaluate(WeldVec(WeldI32()))
+    v = self.weldobj.evaluate(WeldVec(WeldInt()))
     return str(v)
 ```
 
