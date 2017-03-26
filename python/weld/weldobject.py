@@ -6,6 +6,7 @@
 
 import ctypes
 
+import os
 import time
 
 import bindings as cweld
@@ -173,7 +174,8 @@ class WeldObject(object):
                 function, err.message()))
 
         conf = cweld.WeldConf()
-        conf.set("weld.threads", "1")
+        weld_num_threads = os.environ.get("WELD_NUM_THREADS", "1")
+        conf.set("weld.threads", weld_num_threads)
         conf.set("weld.memory.limit", "100000000000")
         err = cweld.WeldError()
         weld_ret = module.run(conf, arg, err)

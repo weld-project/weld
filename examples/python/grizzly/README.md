@@ -41,8 +41,10 @@ Each workload has a corresponding `Grizzly` version. For example, the native Pan
 As an example, to compare performance between the native Pandas data cleaning workload and the Weld-ified Pandas data cleaning workload, run:
 
 ```bash
-$ python data_cleaning.py          # Native
-$ python data_cleaning_grizzly.py  # Grizzly
+$ python data_cleaning.py                                         # Native
+$ WELD_NUM_THREADS=<num_threads> python data_cleaning_grizzly.py  # Grizzly
 ```
+
+By default, `data_cleaning_grizzly.py` will run with 1 thread.
 
 These scripts print out timing information.
