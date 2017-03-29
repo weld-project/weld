@@ -24,7 +24,7 @@ home = os.environ["WELD_HOME"]
 if home[-1] != "/":
     home += "/"
 
-path = home + "target/debug/" + path
+path = home + "target/release/" + path
 
 # Load the Weld Dynamic Library.
 weld = CDLL(path)
