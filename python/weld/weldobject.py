@@ -100,7 +100,7 @@ class WeldObject(object):
     def __repr__(self):
         return self.weld_code + " " + str(self.context)
 
-    def update(self, value, types=None, override=False):
+    def update(self, value, types=None, override=True):
         """
         Update this context. if value is another context,
         the names from that context are added into this one.

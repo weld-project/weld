@@ -12,7 +12,7 @@ class HelloWeldVector(object):
     def __init__(self, vector):
         self.vector = vector
         self.weldobj = WeldObject(_encoder, _decoder)
-        name = self.weldobj.update(vector, WeldVec(WeldInt()), override=True)
+        name = self.weldobj.update(vector, WeldVec(WeldInt()))
         self.weldobj.weld_code = name
         self.cached = None
 
