@@ -54,7 +54,7 @@ $ sudo apt install clang-3.8
 Weld's dependencies require `llvm-config`, so you may need to create a symbolic link so the correct `llvm-config` is picked up:
 
 ```bash
-$ ln -s /usr/bin/llvm-config-3.8 /usr/local/bin/llvm-config
+$ sudo ln -s /usr/bin/llvm-config-3.8 /usr/local/bin/llvm-config
 ```
 
 To make sure this worked correctly, run `llvm-config --version`. You should see `3.8.x`.
