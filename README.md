@@ -34,7 +34,7 @@ $ brew install llvm38
 $ export PATH=$PATH:/usr/local/bin
 ```
 
-Weld's dependencies require `llvm-config`, so you may need to create a symbolic link so the correct `llvm-config` is picked up:
+Weld's dependencies require `llvm-config`, so you may need to create a symbolic link so the correct `llvm-config` is picked up (note that you might need to add `sudo` at the start of this command):
 
 ```bash
 $ ln -s /usr/local/bin/llvm-config-3.8 /usr/local/bin/llvm-config
