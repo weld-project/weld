@@ -93,7 +93,7 @@ Here are a few simple examples using builder expressions:
 # basic use of appender
 let b = appender[i32];
 let b2 = merge(b, 5);
-let b3 = merge(b, 6);
+let b3 = merge(b2, 6);
 result(b3)    # returns [5, 6]
 ```
 
@@ -101,7 +101,7 @@ result(b3)    # returns [5, 6]
 # basic use of merger
 let b = merger[i32,+];
 let b2 = merge(b, 5);
-let b3 = merge(b, 6);
+let b3 = merge(b2, 6);
 result(b3)    # returns 11
 ```
 
