@@ -1,7 +1,7 @@
 import numpy as np
 
-import numpy_weld_impl
-from lazy_op import LazyOpResult
+from . import numpy_weld_impl
+from .lazy_op import LazyOpResult
 from weld.weldobject import *
 
 

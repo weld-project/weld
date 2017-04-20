@@ -4,8 +4,9 @@ Attributes:
     decoder_ (NumPyEncoder): Description
     encoder_ (NumPyDecoder): Description
 """
-from encoders import *
+from .encoders import *
 from weld.weldobject import *
+from six.moves import xrange
 
 
 encoder_ = NumPyEncoder()

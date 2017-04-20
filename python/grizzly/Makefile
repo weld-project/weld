@@ -2,7 +2,7 @@ OS=$(shell uname -s)
 LLVM_VERSION=$(shell llvm-config --version | cut -d . -f 1,2)
 
 PYTHON_HEADER_INCLUDE = $(shell python-config --includes)
-NUMPY_HEADER_INCLUDE = -I$(shell python -c "import numpy; print numpy.get_include()")
+NUMPY_HEADER_INCLUDE = -I$(shell python -c "from __future__ import print_function; import numpy; print(numpy.get_include())")
 PYTHON_LDFLAGS = $(shell python-config --ldflags)
 ifeq (${OS}, Darwin)
   # OS X

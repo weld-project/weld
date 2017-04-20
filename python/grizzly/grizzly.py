@@ -1,8 +1,8 @@
 import numpy as np
 import pandas as pd
 
-import grizzly_impl
-from lazy_op import LazyOpResult
+from . import grizzly_impl
+from .lazy_op import LazyOpResult
 from weld.weldobject import *
 
 

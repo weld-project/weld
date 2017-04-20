@@ -8,7 +8,8 @@ from weld.weldobject import *
 import numpy as np
 import os
 import sys
-
+import six
+from six.moves import xrange
 
 numpy_to_weld_type_mapping = {
     'str': WeldVec(WeldChar()),
@@ -80,7 +81,7 @@ class NumPyEncoder(WeldObjectEncoder):
                 base = WeldVec(WeldChar())  # TODO: Fix this
             for i in xrange(obj.ndim):
                 base = WeldVec(base)
-        elif isinstance(obj, str):
+        elif isinstance(obj, six.binary_type) or isinstance(obj, six.text_type):
             base = WeldVec(WeldChar())
         else:
             raise Exception("Invalid object type: unable to infer NVL type")
@@ -115,7 +116,10 @@ class NumPyEncoder(WeldObjectEncoder):
                 numpy_to_weld = self.utils.numpy_to_weld_bool_arr
             else:
                 numpy_to_weld = self.utils.numpy_to_weld_char_arr_arr
-        elif isinstance(obj, str):
+        elif isinstance(obj, six.binary_type):
+            numpy_to_weld = self.utils.numpy_to_weld_char_arr
+        elif isinstance(obj, six.text_type):
+            obj = obj.encode()
             numpy_to_weld = self.utils.numpy_to_weld_char_arr
         else:
             raise Exception("Unable to encode; invalid object type")
