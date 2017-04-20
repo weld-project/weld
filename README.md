@@ -21,7 +21,7 @@ You can join the discussion on Weld on our [Google Group](https://groups.google.
 
 ## Building
 
-To build Weld, you need [Rust 1.13 or higher](http://rust-lang.org) and [LLVM](http://llvm.org) 3.8.
+To build Weld, you need [Rust 1.13 or higher](http://rust-lang.org) and [LLVM](http://llvm.org) 3.8 or newer.
 
 To install Rust, follow the steps [here](https://rustup.rs). You can verify that Rust was installed correctly on your system by typing `rustc` into your shell.
 
@@ -30,34 +30,34 @@ To install Rust, follow the steps [here](https://rustup.rs). You can verify that
 To install LLVM on macOS, first install [brew](https://brew.sh/). Then:
 
 ```bash
-$ brew install llvm38
+$ brew install llvm
 $ export PATH=$PATH:/usr/local/bin
 ```
 
 Weld's dependencies require `llvm-config`, so you may need to create a symbolic link so the correct `llvm-config` is picked up (note that you might need to add `sudo` at the start of this command):
 
 ```bash
-$ ln -s /usr/local/bin/llvm-config-3.8 /usr/local/bin/llvm-config
+$ ln -s /usr/local/opt/llvm/bin/llvm-config /usr/local/bin/llvm-config
 ```
 
-To make sure this worked correctly, run `llvm-config --version`. You should see `3.8.x`.
+To make sure this worked correctly, run `llvm-config --version`. You should see `3.8.x` or newer.
 
 #### Ubuntu LLVM Installation
 
 To install LLVM on Ubuntu :
 
 ```bash
-$ sudo apt install llvm-3.8
-$ sudo apt install clang-3.8
+$ sudo apt install llvm
+$ sudo apt install clang
 ```
 
 Weld's dependencies require `llvm-config`, so you may need to create a symbolic link so the correct `llvm-config` is picked up:
 
 ```bash
-$ ln -s /usr/bin/llvm-config-3.8 /usr/local/bin/llvm-config
+$ ln -s /usr/bin/llvm-config /usr/local/bin/llvm-config
 ```
 
-To make sure this worked correctly, run `llvm-config --version`. You should see `3.8.x`.
+To make sure this worked correctly, run `llvm-config --version`. You should see `3.8.x` or newer.
 
 #### Building Weld
 
@@ -96,7 +96,7 @@ Some example workloads that make use of Grizzly are in [`examples/python/grizzly
 ## Running an Interactive REPL
 
 * `cargo test` runs unit and integration tests. A test name substring filter can be used to run a subset of the tests:
-   
+
    ```
    cargo test <substring to match in test name>
    ```

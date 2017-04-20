@@ -141,10 +141,7 @@ pub fn compile_module(code: &str, bc_file: Option<&[u8]>) -> Result<CompiledModu
 
         if let Some(s) = bc_file {
             let bc_module = try!(parse_module_bytes(context, s));
-            llvm::linker::LLVMLinkModules(module,
-                                          bc_module,
-                                          llvm::linker::LLVMLinkerMode::LLVMLinkerDestroySource,
-                                          std::ptr::null_mut());
+            llvm::linker::LLVMLinkModules2(module, bc_module);
         }
 
         // Validate and optimize the module

@@ -1,5 +1,5 @@
 OS = $(shell uname -s)
-LLVM_VERSION = 3.8
+LLVM_VERSION = $(shell llvm-config --version | cut -d . -f 1,2)
 
 CFLAGS_RT = -O3 -Wall -fno-use-cxa-atexit -fPIC
 CFLAGS_BUILDER = ${CFLAGS_RT} -flto
