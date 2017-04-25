@@ -2153,6 +2153,7 @@ pub fn compile_program(program: &Program) -> WeldResult<easy_ll::CompiledModule>
     transforms::inline_apply(&mut expr);
     transforms::inline_let(&mut expr);
     transforms::inline_zips(&mut expr);
+    transforms::fuse_loops_vertical(&mut expr);
     transforms::fuse_loops_horizontal(&mut expr);
     transforms::fuse_loops_vertical(&mut expr);
     transforms::uniquify(&mut expr);
