@@ -70,6 +70,8 @@ $ export WELD_HOME=`pwd`
 $ cargo build --release
 ```
 
+**Note:** You may have to change the `llvm-sys` dependency in `easy_ll/Cargo.toml` to match the version of LLVM you are using, e.g. `38.0.1` for LLVM 3.8.1.
+
 Weld builds two dynamically linked libraries (`.so` files on Linux and `.dylib` files on macOS): `libweld` and `libweldrt`. Both of these libraries are found using `WELD_HOME`. By default, the libraries are in `$WELD_HOME/target/release` and `$WELD_HOME/weld_rt/target/release`.
 
 Finally, run the unit and integration tests:
