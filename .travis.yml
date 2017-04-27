@@ -8,19 +8,22 @@ python:
 addons:
   apt:
     sources:
+      - sourceline: 'deb http://llvm.org/apt/trusty/ llvm-toolchain-trusty-3.8 main'
+        key_url: 'http://llvm.org/apt/llvm-snapshot.gpg.key'
       - llvm-toolchain-trusty-4.0
     packages:
       - gcc
+      - make
+      - llvm-3.8
+      - llvm-3.8-dev
+      - clang-3.8
       - llvm-4.0
       - llvm-4.0-dev
       - clang-4.0
-      - make
       - lib32z1-dev
 
 install:
-  - sudo rm -rf /usr/bin/llvm-config
-  - sudo rm -rf `which llvm-config`
-  - sudo ln -s /usr/bin/llvm-config-4.0 /usr/bin/llvm-config
+  - sudo rm -f `which llvm-config`
   - export WELD_HOME=`pwd`
   - cd python
   - pip install --upgrade pip setuptools wheel
@@ -29,7 +32,5 @@ install:
   - cd ..
 
 script:
-  - cargo build --release
-  - cargo test
-  - python python/grizzly/tests/grizzly_test.py
-  - python python/grizzly/tests/numpy_weld_test.py
+  - bash build_tools/travis/test_llvm_version.sh 3.8 38.0.1
+  - bash build_tools/travis/test_llvm_version.sh 4.0 40.0.0
