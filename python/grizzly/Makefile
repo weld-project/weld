@@ -1,5 +1,5 @@
 OS=$(shell uname -s)
-LLVM_VERSION=3.8
+LLVM_VERSION=$(shell llvm-config --version | cut -d . -f 1,2)
 
 PYTHON_HEADER_INCLUDE = $(shell python-config --includes)
 NUMPY_HEADER_INCLUDE = -I$(shell python -c "import numpy; print numpy.get_include()")

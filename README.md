@@ -21,17 +21,16 @@ You can join the discussion on Weld on our [Google Group](https://groups.google.
 
 ## Building
 
-To build Weld, you need [Rust 1.13 or higher](http://rust-lang.org) and [LLVM](http://llvm.org) 3.8.
+To build Weld, you need [Rust 1.13 or higher](http://rust-lang.org) and [LLVM](http://llvm.org) 3.8 or newer.
 
 To install Rust, follow the steps [here](https://rustup.rs). You can verify that Rust was installed correctly on your system by typing `rustc` into your shell.
 
 #### MacOS LLVM Installation
 
-To install LLVM on macOS, first install [brew](https://brew.sh/). Then:
+To install LLVM on macOS, first install [Homebrew](https://brew.sh/). Then:
 
 ```bash
-$ brew install llvm38
-$ export PATH=$PATH:/usr/local/bin
+$ brew install llvm@3.8
 ```
 
 Weld's dependencies require `llvm-config`, so you may need to create a symbolic link so the correct `llvm-config` is picked up (note that you might need to add `sudo` at the start of this command):
@@ -40,15 +39,16 @@ Weld's dependencies require `llvm-config`, so you may need to create a symbolic 
 $ ln -s /usr/local/bin/llvm-config-3.8 /usr/local/bin/llvm-config
 ```
 
-To make sure this worked correctly, run `llvm-config --version`. You should see `3.8.x`.
+To make sure this worked correctly, run `llvm-config --version`. You should see `3.8.x` or newer.
 
 #### Ubuntu LLVM Installation
 
 To install LLVM on Ubuntu :
 
 ```bash
-$ sudo apt install llvm-3.8
-$ sudo apt install clang-3.8
+$ sudo apt-get install llvm-3.8
+$ sudo apt-get install llvm-3.8-dev
+$ sudo apt-get install clang-3.8
 ```
 
 Weld's dependencies require `llvm-config`, so you may need to create a symbolic link so the correct `llvm-config` is picked up:
@@ -57,7 +57,7 @@ Weld's dependencies require `llvm-config`, so you may need to create a symbolic 
 $ ln -s /usr/bin/llvm-config-3.8 /usr/local/bin/llvm-config
 ```
 
-To make sure this worked correctly, run `llvm-config --version`. You should see `3.8.x`.
+To make sure this worked correctly, run `llvm-config --version`. You should see `3.8.x` or newer.
 
 #### Building Weld
 
@@ -68,6 +68,13 @@ $ git clone https://www.github.com/weld-project/weld
 $ cd weld/
 $ export WELD_HOME=`pwd`
 $ cargo build --release
+```
+
+**Note:** If you are using a version of LLVM newer than 3.8, you will have to change the `llvm-sys` crate dependency in `easy_ll/Cargo.toml` to match (e.g. `40.0.0` for LLVM 4.0.0). You may also need to create additional symlinks for some packages that omit the version suffix when installing the latest version, e.g. for LLVM 4.0:
+
+```bash
+$ ln -s /usr/local/bin/clang /usr/local/bin/clang-4.0
+$ ln -s /usr/local/bin/llvm-link /usr/local/bin/llvm-link-4.0
 ```
 
 Weld builds two dynamically linked libraries (`.so` files on Linux and `.dylib` files on macOS): `libweld` and `libweldrt`. Both of these libraries are found using `WELD_HOME`. By default, the libraries are in `$WELD_HOME/target/release` and `$WELD_HOME/weld_rt/target/release`.
@@ -96,7 +103,7 @@ Some example workloads that make use of Grizzly are in [`examples/python/grizzly
 ## Running an Interactive REPL
 
 * `cargo test` runs unit and integration tests. A test name substring filter can be used to run a subset of the tests:
-   
+
    ```
    cargo test <substring to match in test name>
    ```

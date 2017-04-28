@@ -2,27 +2,35 @@ language: rust
 sudo: required
 dist: trusty
 
-before_script:
-  - wget -O - http://llvm.org/apt/llvm-snapshot.gpg.key|sudo apt-key add -
-  - echo 'deb http://llvm.org/apt/trusty/ llvm-toolchain-trusty-3.8 main' | sudo tee --append /etc/apt/sources.list
-  - sudo apt-get update
-  - sudo apt-get install gcc
-  - sudo apt-get install llvm-3.8
-  - sudo apt-get install clang-3.8
-  - sudo apt-get install make
-  - sudo apt-get install lib32z1-dev
-  - sudo rm -rf /usr/bin/llvm-config
-  - sudo rm -rf `which llvm-config`
-  - sudo ln -s /usr/bin/llvm-config-3.8 /usr/bin/llvm-config
+python:
+  - 2.7
+
+addons:
+  apt:
+    sources:
+      - sourceline: 'deb http://llvm.org/apt/trusty/ llvm-toolchain-trusty-3.8 main'
+        key_url: 'http://llvm.org/apt/llvm-snapshot.gpg.key'
+      - llvm-toolchain-trusty-4.0
+    packages:
+      - gcc
+      - make
+      - llvm-3.8
+      - llvm-3.8-dev
+      - clang-3.8
+      - llvm-4.0
+      - llvm-4.0-dev
+      - clang-4.0
+      - lib32z1-dev
+
+install:
+  - sudo rm -f `which llvm-config`
   - export WELD_HOME=`pwd`
-  - sudo apt-get install python-pip
-  - virtualenv py; source py/bin/activate
-  - pip install numpy
-  - pip install pandas
-  - cd python; python setup.py install; cd ..
+  - cd python
+  - pip install --upgrade pip setuptools wheel
+  - pip install --only-binary=numpy,pandas -r requirements.txt
+  - python setup.py install
+  - cd ..
 
 script:
-  - cargo build --release
-  - cargo test
-  - python python/grizzly/tests/grizzly_test.py
-  - python python/grizzly/tests/numpy_weld_test.py
+  - bash build_tools/travis/test_llvm_version.sh 3.8 38.0.1
+  - bash build_tools/travis/test_llvm_version.sh 4.0 40.0.0
