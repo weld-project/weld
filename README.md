@@ -36,7 +36,7 @@ $ brew install llvm@3.8
 Weld's dependencies require `llvm-config`, so you may need to create a symbolic link so the correct `llvm-config` is picked up (note that you might need to add `sudo` at the start of this command):
 
 ```bash
-$ ln -s /usr/local/opt/llvm/bin/llvm-config-3.8 /usr/local/bin/llvm-config
+$ ln -s /usr/local/bin/llvm-config-3.8 /usr/local/bin/llvm-config
 ```
 
 To make sure this worked correctly, run `llvm-config --version`. You should see `3.8.x` or newer.
@@ -70,7 +70,12 @@ $ export WELD_HOME=`pwd`
 $ cargo build --release
 ```
 
-**Note:** If you are using a version of LLVM newer than 3.8, you will have to change the `llvm-sys` crate dependency in `easy_ll/Cargo.toml` to match (e.g. `40.0.0` for LLVM 4.0.0).
+**Note:** If you are using a version of LLVM newer than 3.8, you will have to change the `llvm-sys` crate dependency in `easy_ll/Cargo.toml` to match (e.g. `40.0.0` for LLVM 4.0.0). You may also need to create additional symlinks for some packages that omit the version suffix when installing the latest version, e.g. for LLVM 4.0:
+
+```bash
+$ ln -s /usr/local/bin/clang /usr/local/bin/clang-4.0
+$ ln -s /usr/local/bin/llvm-link /usr/local/bin/llvm-link-4.0
+```
 
 Weld builds two dynamically linked libraries (`.so` files on Linux and `.dylib` files on macOS): `libweld` and `libweldrt`. Both of these libraries are found using `WELD_HOME`. By default, the libraries are in `$WELD_HOME/target/release` and `$WELD_HOME/weld_rt/target/release`.
 
