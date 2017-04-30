@@ -253,8 +253,8 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>,
                     print_expr_impl(data, typed, indent, should_indent),
                     print_expr_impl(index, typed, indent, should_indent))
         }
-        Exists { ref data, ref key } => {
-            format!("exists({},{})",
+        KeyExists { ref data, ref key } => {
+            format!("keyexists({},{})",
                     print_expr_impl(data, typed, indent, should_indent),
                     print_expr_impl(key, typed, indent, should_indent))
         }

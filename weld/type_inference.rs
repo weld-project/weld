@@ -280,16 +280,16 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             }
         }
 
-        Exists { ref mut data, ref mut key } => {
+        KeyExists { ref mut data, ref mut key } => {
             if let Dict(ref key_type, _) = data.ty {
                 let mut changed = false;
-                changed |= try!(push_type(&mut key.ty, &key_type, "Exists"));
-                changed |= try!(push_complete_type(&mut expr.ty, Scalar(Bool), "Exists"));
+                changed |= try!(push_type(&mut key.ty, &key_type, "KeyExists"));
+                changed |= try!(push_complete_type(&mut expr.ty, Scalar(Bool), "KeyExists"));
                 Ok(changed)
             } else if data.ty == Unknown {
                 Ok(false)
             } else {
-                weld_err!("Internal error: Exists called on {:?}", data.ty)
+                weld_err!("Internal error: KeyExists called on {:?}", data.ty)
             }
         }
 
@@ -804,7 +804,7 @@ fn infer_types_let() {
     assert_eq!(e.ty, Scalar(I32));
 
     let code = "let a = result(for([1,2,3], dictmerger[i32,i32,+], \
-                |b,i,e| merge(b, {e,e}))); exists(a, 1)";
+                |b,i,e| merge(b, {e,e}))); keyexists(a, 1)";
 
     let mut e = parse_expr(code).unwrap();
     assert!(infer_types(&mut e).is_ok());

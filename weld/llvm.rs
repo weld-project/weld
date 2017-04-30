@@ -1226,7 +1226,7 @@ impl LlvmGenerator {
                             _ => weld_err!("Illegal type {} in Lookup", print_type(child_ty))?,
                         }
                     }
-                    Exists { ref output, ref child, ref key } => {
+                    KeyExists { ref output, ref child, ref key } => {
                         let child_ty = try!(get_sym_ty(func, child));
                         match *child_ty {
                             Dict(_, _) => {
@@ -1258,7 +1258,7 @@ impl LlvmGenerator {
                                                      res_tmp,
                                                      llvm_symbol(output)));
                             }
-                            _ => weld_err!("Illegal type {} in Exists", print_type(child_ty))?,
+                            _ => weld_err!("Illegal type {} in KeyExists", print_type(child_ty))?,
                         }
                     }
                     Slice { ref output, ref child, ref index, ref size } => {

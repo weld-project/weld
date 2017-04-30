@@ -232,8 +232,8 @@ impl PartialExpr {
                     index: try!(typed_box(index)),
                 }
             }
-            Exists { ref data, ref key } => {
-                Exists {
+            KeyExists { ref data, ref key } => {
+                KeyExists {
                     data: try!(typed_box(data)),
                     key: try!(typed_box(key)),
                 }

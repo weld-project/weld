@@ -654,13 +654,13 @@ impl<'t> Parser<'t> {
                 }))
             }
 
-            TExists => {
+            TKeyExists => {
                 try!(self.consume(TOpenParen));
                 let data = try!(self.expr());
                 try!(self.consume(TComma));
                 let key = try!(self.expr());
                 try!(self.consume(TCloseParen));
-                Ok(expr_box(Exists {
+                Ok(expr_box(KeyExists {
                     data: data,
                     key: key,
                 }))

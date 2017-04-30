@@ -826,9 +826,9 @@ fn simple_dict_exists() {
     let vals = [2, 3, 4, 2, 1];
 
     let code_true = "|x:vec[i32], y:vec[i32]| let a = result(for(zip(x,y), dictmerger[i32,i32,+], \
-                |b,i,e| merge(b, e))); exists(a, 1)";
+                |b,i,e| merge(b, e))); keyexists(a, 1)";
     let code_false = "|x:vec[i32], y:vec[i32]| let a = result(for(zip(x,y), dictmerger[i32,i32,+], \
-                |b,i,e| merge(b, e))); exists(a, 4)";
+                |b,i,e| merge(b, e))); keyexists(a, 4)";
     let conf = default_conf();
 
     let ref input_data = Args {

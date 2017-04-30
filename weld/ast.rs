@@ -132,7 +132,7 @@ pub enum ExprKind<T: TypeBounds> {
         data: Box<Expr<T>>,
         index: Box<Expr<T>>,
     },
-    Exists {
+    KeyExists {
         data: Box<Expr<T>>,
         key: Box<Expr<T>>,
     },
@@ -268,7 +268,7 @@ impl<T: TypeBounds> Expr<T> {
                 GetField { ref expr, .. } => vec![expr.as_ref()],
                 Length { ref data } => vec![data.as_ref()],
                 Lookup { ref data, ref index } => vec![data.as_ref(), index.as_ref()],
-                Exists { ref data, ref key } => vec![data.as_ref(), key.as_ref()],
+                KeyExists { ref data, ref key } => vec![data.as_ref(), key.as_ref()],
                 Slice { ref data, ref index, ref size } => {
                     vec![data.as_ref(), index.as_ref(), size.as_ref()]
                 }
@@ -330,7 +330,7 @@ impl<T: TypeBounds> Expr<T> {
                 GetField { ref mut expr, .. } => vec![expr.as_mut()],
                 Length { ref mut data } => vec![data.as_mut()],
                 Lookup { ref mut data, ref mut index } => vec![data.as_mut(), index.as_mut()],
-                Exists { ref mut data, ref mut key } => vec![data.as_mut(), key.as_mut()],
+                KeyExists { ref mut data, ref mut key } => vec![data.as_mut(), key.as_mut()],
                 Slice { ref mut data, ref mut index, ref mut size } => {
                     vec![data.as_mut(), index.as_mut(), size.as_mut()]
                 }
@@ -431,7 +431,7 @@ impl<T: TypeBounds> Expr<T> {
                 }
                 (&Length { .. }, &Length { .. }) => Ok(true),
                 (&Lookup { .. }, &Lookup { .. }) => Ok(true),
-                (&Exists { .. }, &Exists { .. }) => Ok(true),
+                (&KeyExists { .. }, &KeyExists { .. }) => Ok(true),
                 (&Slice { .. }, &Slice { .. }) => Ok(true),
                 (&Exp { .. }, &Exp { .. }) => Ok(true),
                 (&Merge { .. }, &Merge { .. }) => Ok(true),

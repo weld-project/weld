@@ -32,7 +32,7 @@ pub enum Statement {
         child: Symbol,
         index: Symbol,
     },
-    Exists {
+    KeyExists {
         output: Symbol,
         child: Symbol,
         key: Symbol,
@@ -206,8 +206,8 @@ impl fmt::Display for Statement {
             Lookup { ref output, ref child, ref index } => {
                 write!(f, "{} = lookup({}, {})", output, child, index)
             }
-            Exists { ref output, ref child, ref key } => {
-                write!(f, "{} = exists({}, {})", output, child, key)
+            KeyExists { ref output, ref child, ref key } => {
+                write!(f, "{} = keyexists({}, {})", output, child, key)
             }
             Slice { ref output, ref child, ref index, ref size } => {
                 write!(f, "{} = slice({}, {}, {})", output, child, index, size)
@@ -371,7 +371,7 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
                     vars.push(child.clone());
                     vars.push(index.clone());
                 }
-                Exists { ref child, ref key, .. } => {
+                KeyExists { ref child, ref key, .. } => {
                     vars.push(child.clone());
                     vars.push(key.clone());
                 }
@@ -584,11 +584,11 @@ fn gen_expr(expr: &TypedExpr,
             Ok((cur_func, cur_block, res_sym))
         }
 
-        ExprKind::Exists { ref data, ref key } => {
+        ExprKind::KeyExists { ref data, ref key } => {
             let (cur_func, cur_block, data_sym) = gen_expr(data, prog, cur_func, cur_block)?;
             let (cur_func, cur_block, key_sym) = gen_expr(key, prog, cur_func, cur_block)?;
             let res_sym = prog.add_local(&expr.ty, cur_func);
-            prog.funcs[cur_func].blocks[cur_block].add_statement(Exists {
+            prog.funcs[cur_func].blocks[cur_block].add_statement(KeyExists {
                 output: res_sym.clone(),
                 child: data_sym,
                 key: key_sym.clone(),
