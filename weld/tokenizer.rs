@@ -40,6 +40,7 @@ pub enum Token {
     TIter,
     TLen,
     TLookup,
+    TKeyExists,
     TSlice,
     TExp,
     TAppender,
@@ -89,7 +90,7 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
 
         // Regular expressions for various types of tokens.
         static ref KEYWORD_RE: Regex = Regex::new(
-            "if|for|zip|len|lookup|slice|exp|iter|merge|result|let|true|false|macro|\
+            "if|for|zip|len|lookup|keyexists|slice|exp|iter|merge|result|let|true|false|macro|\
              i8|i32|i64|f32|f64|bool|vec|appender|merger|vecmerger|dictmerger|tovec").unwrap();
 
         static ref IDENT_RE: Regex = Regex::new(r"^[A-Za-z$_][A-Za-z0-9$_]*$").unwrap();
@@ -143,6 +144,7 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
                 "iter" => TIter,
                 "len" => TLen,
                 "lookup" => TLookup,
+                "keyexists" => TKeyExists,
                 "slice" => TSlice,
                 "exp" => TExp,
                 "true" => TBoolLiteral(true),
@@ -266,6 +268,7 @@ impl fmt::Display for Token {
                            TIter => "iter",
                            TLen => "len",
                            TLookup => "lookup",
+                           TKeyExists => "keyexists",
                            TSlice => "slice",
                            TExp => "exp",
                            TOpenParen => "(",
@@ -378,6 +381,14 @@ fn basic_tokenize() {
                     TExp,
                     TOpenParen,
                     TIdent("a".into()),
+                    TCloseParen,
+                    TEndOfInput]);
+    assert_eq!(tokenize("keyexists(a, 1)").unwrap(),
+               vec![TKeyExists,
+                    TOpenParen,
+                    TIdent("a".into()),
+                    TComma,
+                    TI32Literal(1),
                     TCloseParen,
                     TEndOfInput]);
     assert!(tokenize("0a").is_err());

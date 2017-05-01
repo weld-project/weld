@@ -654,6 +654,18 @@ impl<'t> Parser<'t> {
                 }))
             }
 
+            TKeyExists => {
+                try!(self.consume(TOpenParen));
+                let data = try!(self.expr());
+                try!(self.consume(TComma));
+                let key = try!(self.expr());
+                try!(self.consume(TCloseParen));
+                Ok(expr_box(KeyExists {
+                    data: data,
+                    key: key,
+                }))
+            }
+
             TSlice => {
                 try!(self.consume(TOpenParen));
                 let data = try!(self.expr());

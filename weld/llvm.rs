@@ -1226,6 +1226,41 @@ impl LlvmGenerator {
                             _ => weld_err!("Illegal type {} in Lookup", print_type(child_ty))?,
                         }
                     }
+                    KeyExists { ref output, ref child, ref key } => {
+                        let child_ty = try!(get_sym_ty(func, child));
+                        match *child_ty {
+                            Dict(_, _) => {
+                                let child_ll_ty = try!(self.llvm_type(&child_ty)).to_string();
+                                let dict_ll_ty = try!(self.llvm_type(&child_ty)).to_string();
+                                let key_ty = try!(get_sym_ty(func, key));
+                                let key_ll_ty = try!(self.llvm_type(&key_ty)).to_string();
+                                let dict_prefix = format!("@{}", dict_ll_ty.replace("%", ""));
+                                let child_tmp = try!(self.load_var(llvm_symbol(child).as_str(),
+                                    &child_ll_ty, ctx));
+                                let key_tmp = try!(self.load_var(llvm_symbol(key).as_str(),
+                                    &key_ll_ty, ctx));
+                                let slot = ctx.var_ids.next();
+                                let res_tmp = ctx.var_ids.next();
+                                ctx.code.add(format!("{} = call {}.slot {}.lookup({} {}, {} {})",
+                                                     slot,
+                                                     dict_ll_ty,
+                                                     dict_prefix,
+                                                     dict_ll_ty,
+                                                     child_tmp,
+                                                     key_ll_ty,
+                                                     key_tmp));
+                                ctx.code.add(format!("{} = call i1 {}.slot.filled({}.slot {})",
+                                                     res_tmp,
+                                                     dict_prefix,
+                                                     dict_ll_ty,
+                                                     slot));
+                                ctx.code.add(format!("store i1 {}, i1* {}",
+                                                     res_tmp,
+                                                     llvm_symbol(output)));
+                            }
+                            _ => weld_err!("Illegal type {} in KeyExists", print_type(child_ty))?,
+                        }
+                    }
                     Slice { ref output, ref child, ref index, ref size } => {
                         let child_ty = try!(get_sym_ty(func, child));
                         match *child_ty {

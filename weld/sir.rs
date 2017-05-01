@@ -32,6 +32,11 @@ pub enum Statement {
         child: Symbol,
         index: Symbol,
     },
+    KeyExists {
+        output: Symbol,
+        child: Symbol,
+        key: Symbol,
+    },
     Slice {
         output: Symbol,
         child: Symbol,
@@ -201,6 +206,9 @@ impl fmt::Display for Statement {
             Lookup { ref output, ref child, ref index } => {
                 write!(f, "{} = lookup({}, {})", output, child, index)
             }
+            KeyExists { ref output, ref child, ref key } => {
+                write!(f, "{} = keyexists({}, {})", output, child, key)
+            }
             Slice { ref output, ref child, ref index, ref size } => {
                 write!(f, "{} = slice({}, {}, {})", output, child, index, size)
             }
@@ -362,6 +370,10 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
                 Lookup { ref child, ref index, .. } => {
                     vars.push(child.clone());
                     vars.push(index.clone());
+                }
+                KeyExists { ref child, ref key, .. } => {
+                    vars.push(child.clone());
+                    vars.push(key.clone());
                 }
                 Slice { ref child, ref index, ref size, .. } => {
                     vars.push(child.clone());
@@ -568,6 +580,18 @@ fn gen_expr(expr: &TypedExpr,
                 output: res_sym.clone(),
                 child: data_sym,
                 index: index_sym.clone(),
+            });
+            Ok((cur_func, cur_block, res_sym))
+        }
+
+        ExprKind::KeyExists { ref data, ref key } => {
+            let (cur_func, cur_block, data_sym) = gen_expr(data, prog, cur_func, cur_block)?;
+            let (cur_func, cur_block, key_sym) = gen_expr(key, prog, cur_func, cur_block)?;
+            let res_sym = prog.add_local(&expr.ty, cur_func);
+            prog.funcs[cur_func].blocks[cur_block].add_statement(KeyExists {
+                output: res_sym.clone(),
+                child: data_sym,
+                key: key_sym.clone(),
             });
             Ok((cur_func, cur_block, res_sym))
         }

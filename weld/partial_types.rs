@@ -232,6 +232,12 @@ impl PartialExpr {
                     index: try!(typed_box(index)),
                 }
             }
+            KeyExists { ref data, ref key } => {
+                KeyExists {
+                    data: try!(typed_box(data)),
+                    key: try!(typed_box(key)),
+                }
+            }
 
             Slice { ref data, ref index, ref size } => {
                 Slice {
