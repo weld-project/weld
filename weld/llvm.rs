@@ -2150,13 +2150,27 @@ pub fn compile_program(program: &Program) -> WeldResult<easy_ll::CompiledModule>
     transforms::uniquify(&mut expr);
     try!(type_inference::infer_types(&mut expr));
     let mut expr = try!(expr.to_typed());
-    transforms::inline_apply(&mut expr);
-    transforms::inline_let(&mut expr);
-    transforms::inline_zips(&mut expr);
-    transforms::fuse_loops_vertical(&mut expr);
-    transforms::fuse_loops_horizontal(&mut expr);
-    transforms::fuse_loops_vertical(&mut expr);
-    transforms::uniquify(&mut expr);
+
+    let pass1: Vec<fn(&mut Expr<Type>)> = vec![transforms::inline_apply];
+    let pass2: Vec<fn(&mut Expr<Type>)> = vec![transforms::inline_let];
+    let pass3: Vec<fn(&mut Expr<Type>)> = vec![transforms::inline_zips];
+    let pass4: Vec<fn(&mut Expr<Type>)> = vec![transforms::fuse_loops_horizontal,
+                                               transforms::fuse_loops_vertical];
+    let pass5: Vec<fn(&mut Expr<Type>)> = vec![transforms::uniquify];
+    let passes: Vec<Vec<fn(&mut Expr<Type>)>> = vec![pass1, pass2, pass3, pass4, pass5];
+
+    for i in 0..passes.len() {
+        let mut expr_copy = expr.clone();
+        let mut continue_pass = true;
+        while continue_pass {
+            for transform in &passes[i] {
+                transform(&mut expr);
+            }
+            continue_pass = !try!(expr.compare_ignoring_symbols(&expr_copy));
+            expr_copy = expr.clone();
+        }
+    }
+
     let sir_prog = try!(sir::ast_to_sir(&expr));
     let mut gen = LlvmGenerator::new();
     try!(gen.add_function_on_pointers("run", &sir_prog));
