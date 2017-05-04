@@ -14,6 +14,7 @@ use super::ast::BuilderKind::*;
 use super::code_builder::CodeBuilder;
 use super::error::*;
 use super::macro_processor;
+use super::passes::*;
 use super::pretty_print::*;
 use super::program::Program;
 use super::sir;
@@ -2151,24 +2152,16 @@ pub fn compile_program(program: &Program) -> WeldResult<easy_ll::CompiledModule>
     try!(type_inference::infer_types(&mut expr));
     let mut expr = try!(expr.to_typed());
 
-    let pass1: Vec<fn(&mut Expr<Type>)> = vec![transforms::inline_apply];
-    let pass2: Vec<fn(&mut Expr<Type>)> = vec![transforms::inline_let];
-    let pass3: Vec<fn(&mut Expr<Type>)> = vec![transforms::inline_zips];
-    let pass4: Vec<fn(&mut Expr<Type>)> = vec![transforms::fuse_loops_horizontal,
-                                               transforms::fuse_loops_vertical];
-    let pass5: Vec<fn(&mut Expr<Type>)> = vec![transforms::uniquify];
-    let passes: Vec<Vec<fn(&mut Expr<Type>)>> = vec![pass1, pass2, pass3, pass4, pass5];
+    let passes: Vec<Pass> = vec![
+        try!(get_pass(String::from("inline-apply"))),
+        try!(get_pass(String::from("inline-let"))),
+        try!(get_pass(String::from("inline-zip"))),
+        try!(get_pass(String::from("loop-fusion"))),
+        try!(get_pass(String::from("uniquify")))
+    ];
 
     for i in 0..passes.len() {
-        let mut expr_copy = expr.clone();
-        let mut continue_pass = true;
-        while continue_pass {
-            for transform in &passes[i] {
-                transform(&mut expr);
-            }
-            continue_pass = !try!(expr.compare_ignoring_symbols(&expr_copy));
-            expr_copy = expr.clone();
-        }
+        try!(passes[i].transform(&mut expr));
     }
 
     let sir_prog = try!(sir::ast_to_sir(&expr));

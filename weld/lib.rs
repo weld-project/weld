@@ -30,6 +30,7 @@ pub mod code_builder;
 pub mod error;
 pub mod llvm;
 pub mod macro_processor;
+pub mod passes;
 pub mod parser;
 pub mod partial_types;
 pub mod pretty_print;
