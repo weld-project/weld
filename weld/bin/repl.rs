@@ -16,6 +16,8 @@ use std::fmt;
 use std::collections::HashMap;
 
 use weld::*;
+use weld::ast::Expr;
+use weld::ast::Type;
 use weld::llvm::LlvmGenerator;
 use weld::parser::*;
 use weld::pretty_print::*;
@@ -148,12 +150,6 @@ fn main() {
         let mut expr = expr.unwrap();
         println!("After macro substitution:\n{}\n", print_expr(&expr));
 
-        transforms::inline_apply(&mut expr);
-        println!("After inline_apply:\n{}\n", print_expr(&expr));
-
-        transforms::uniquify(&mut expr);
-        println!("After uniquify :\n{}\n", print_expr(&expr));
-
         if let Err(ref e) = infer_types(&mut expr) {
             println!("Error during type inference: {}\n", e);
             println!("Partially inferred types:\n{}\n", print_typed_expr(&expr));
@@ -164,17 +160,27 @@ fn main() {
 
         let mut expr = expr.to_typed().unwrap();
 
-        transforms::inline_zips(&mut expr);
-        println!("After inlining zips:\n{}\n", print_typed_expr(&expr));
+        let pass1: Vec<fn(&mut Expr<Type>)> = vec![transforms::inline_apply];
+        let pass2: Vec<fn(&mut Expr<Type>)> = vec![transforms::inline_let];
+        let pass3: Vec<fn(&mut Expr<Type>)> = vec![transforms::inline_zips];
+        let pass4: Vec<fn(&mut Expr<Type>)> = vec![transforms::fuse_loops_horizontal,
+                                                   transforms::fuse_loops_vertical];
+        let pass5: Vec<fn(&mut Expr<Type>)> = vec![transforms::uniquify];
+        let passes: Vec<Vec<fn(&mut Expr<Type>)>> = vec![pass1, pass2, pass3, pass4, pass5];
+        let pass_names = vec!["inline apply", "inline let", "inline zips", "fusion", "uniquify"];
 
-
-        transforms::fuse_loops_horizontal(&mut expr);
-        println!("After horizontal loop fusion:\n{}\n",
-                 print_typed_expr(&expr));
-
-        transforms::fuse_loops_vertical(&mut expr);
-        transforms::uniquify(&mut expr);
-        println!("After vertical loop fusion:\n{}\n", print_typed_expr(&expr));
+        for i in 0..passes.len() {
+            let mut expr_copy = expr.clone();
+            let mut continue_pass: bool = true;
+            while continue_pass {
+                for transform in &passes[i] {
+                    transform(&mut expr);
+                }
+                continue_pass = !expr.compare_ignoring_symbols(&expr_copy).unwrap();
+                expr_copy = expr.clone();
+            }
+            println!("After {} pass:\n{}\n", pass_names[i], print_expr(&expr));
+        }
 
         println!("final program raw: {:?}", expr);
 
