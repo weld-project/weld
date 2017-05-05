@@ -1116,8 +1116,19 @@ impl LlvmGenerator {
                         let bin_tmp = ctx.var_ids.next();
                         let out_ty_str = try!(self.llvm_type(&out_ty)).to_string();
                         let op_name = try!(llvm_binop(BinOpKind::Subtract, out_ty));
+
+                        let zero_str = match *out_ty {
+                            Scalar(F32) | Scalar(F64) => "0.0",
+                            _ => "0",
+                        };
+
                         ctx.code
-                            .add(format!("{} = {} {} 0, {}", bin_tmp, op_name, ll_ty, child_tmp));
+                            .add(format!("{} = {} {} {}, {}",
+                                         bin_tmp,
+                                         op_name,
+                                         ll_ty,
+                                         zero_str,
+                                         child_tmp));
                         ctx.code.add(format!("store {} {}, {}* {}",
                                              out_ty_str,
                                              bin_tmp,
