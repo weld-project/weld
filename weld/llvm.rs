@@ -2146,19 +2146,16 @@ pub fn generate_runtime_interface_module() -> WeldResult<easy_ll::CompiledModule
 }
 
 /// Generate a compiled LLVM module from a program whose body is a function.
-pub fn compile_program(program: &Program) -> WeldResult<easy_ll::CompiledModule> {
+pub fn compile_program(program: &Program, opt_passes: Vec<String>) -> WeldResult<easy_ll::CompiledModule> {
     let mut expr = try!(macro_processor::process_program(program));
     transforms::uniquify(&mut expr);
     try!(type_inference::infer_types(&mut expr));
     let mut expr = try!(expr.to_typed());
 
-    let passes: Vec<Pass> = vec![
-        try!(get_pass(String::from("inline-apply"))),
-        try!(get_pass(String::from("inline-let"))),
-        try!(get_pass(String::from("inline-zip"))),
-        try!(get_pass(String::from("loop-fusion"))),
-        try!(get_pass(String::from("uniquify")))
-    ];
+    let mut passes: Vec<Pass> = vec![];
+    for opt_pass in &opt_passes {
+        passes.push(try!(get_pass(opt_pass.clone())));
+    }
 
     for i in 0..passes.len() {
         try!(passes[i].transform(&mut expr));
