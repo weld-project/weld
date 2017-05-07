@@ -2,10 +2,11 @@ use super::ast::*;
 use super::error::*;
 use super::transforms;
 
+use std::collections::HashMap;
+
 
 pub struct Pass {
     transform_fns: Vec<fn(&mut Expr<Type>)>,
-    transform_names: Vec<String>,
     pass_name: String
 }
 
@@ -28,40 +29,30 @@ impl Pass {
     }
 }
 
-pub fn get_pass(pass_name: String) -> WeldResult<Pass> {
-    match pass_name.as_ref() {
-        "inline-apply" =>
-            Ok(Pass {
-                transform_fns: vec![transforms::inline_apply],
-                transform_names: vec![String::from("Inline apply")],
-                pass_name: String::from("inline-apply")
-            }),
-        "inline-let" =>
-            Ok(Pass {
-                transform_fns: vec![transforms::inline_let],
-                transform_names: vec![String::from("Inline let")],
-                pass_name: String::from("inline-let")
-            }),
-        "inline-zip" =>
-            Ok(Pass {
-                transform_fns: vec![transforms::inline_zips],
-                transform_names: vec![String::from("Inline zip")],
-                pass_name: String::from("inline-zip")
-            }),
-        "loop-fusion" =>
-            Ok(Pass {
-                transform_fns: vec![transforms::fuse_loops_horizontal,
-                                    transforms::fuse_loops_vertical],
-                transform_names: vec![String::from("Horizontal loop fusion"),
-                                    String::from("Vertical loop fusion")],
-                pass_name: String::from("loop-fusion")
-            }),
-        "uniquify" =>
-            Ok(Pass {
-                transform_fns: vec![transforms::uniquify],
-                transform_names: vec![String::from("Uniquify")],
-                pass_name: String::from("uniquify")
-            }),
-        _ => weld_err!("Undefined pass: {}", pass_name)
-    }
+lazy_static! {
+    pub static ref OPTIMIZATION_PASSES: HashMap<&'static str, Pass> = {
+        let mut m = HashMap::new();
+        m.insert("inline-apply", Pass {
+            transform_fns: vec![transforms::inline_apply],
+            pass_name: String::from("inline-apply")
+        });
+        m.insert("inline-let", Pass {
+            transform_fns: vec![transforms::inline_let],
+            pass_name: String::from("inline-let")
+        });
+        m.insert("inline-zip", Pass {
+            transform_fns: vec![transforms::inline_zips],
+            pass_name: String::from("inline-zip")
+        });
+        m.insert("loop-fusion", Pass {
+            transform_fns: vec![transforms::fuse_loops_horizontal,
+                                transforms::fuse_loops_vertical],
+            pass_name: String::from("loop-fusion")
+        });
+        m.insert("uniquify", Pass {
+            transform_fns: vec![transforms::uniquify],
+            pass_name: String::from("uniquify")
+        });
+        m
+    };
 }

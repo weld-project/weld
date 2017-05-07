@@ -2152,9 +2152,13 @@ pub fn compile_program(program: &Program, opt_passes: Vec<String>) -> WeldResult
     try!(type_inference::infer_types(&mut expr));
     let mut expr = try!(expr.to_typed());
 
-    let mut passes: Vec<Pass> = vec![];
+    let mut passes: Vec<&Pass> = vec![];
     for opt_pass in &opt_passes {
-        passes.push(try!(get_pass(opt_pass.clone())));
+        let opt_pass_name: &str = &opt_pass;
+        match OPTIMIZATION_PASSES.get(opt_pass_name) {
+            Some(pass) => passes.push(pass),
+            None => return weld_err!("Invalid optimization pass name")
+        }
     }
 
     for i in 0..passes.len() {

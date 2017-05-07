@@ -159,12 +159,12 @@ fn main() {
 
         let mut expr = expr.to_typed().unwrap();
 
-        let passes: Vec<Pass> = vec![
-            get_pass(String::from("inline-apply")).unwrap(),
-            get_pass(String::from("inline-let")).unwrap(),
-            get_pass(String::from("inline-zip")).unwrap(),
-            get_pass(String::from("loop-fusion")).unwrap(),
-            get_pass(String::from("uniquify")).unwrap()
+        let passes: Vec<&Pass> = vec![
+            OPTIMIZATION_PASSES.get("inline-apply").unwrap(),
+            OPTIMIZATION_PASSES.get("inline-let").unwrap(),
+            OPTIMIZATION_PASSES.get("inline-zip").unwrap(),
+            OPTIMIZATION_PASSES.get("loop-fusion").unwrap(),
+            OPTIMIZATION_PASSES.get("uniquify").unwrap()
         ];
 
         for i in 0..passes.len() {
