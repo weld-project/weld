@@ -209,7 +209,7 @@ class GroupedDataFrameWeld(LazyOpResult):
             column_types = WeldStruct(self.column_types)
         self.weld_type = WeldStruct([self.grouping_column_type, column_types])
 
-    def get_column(self, column_name, column_type, index):
+    def get_column(self, column_name, column_type, index, verbose=True):
         """Summary
 
         Args:
@@ -228,9 +228,9 @@ class GroupedDataFrameWeld(LazyOpResult):
             ),
             column_type,
             1
-        ).evaluate()
+        ).evaluate(verbose=verbose)
 
-    def evaluate(self):
+    def evaluate(self, verbose=True):
         """Summary
 
         Returns:
@@ -246,7 +246,8 @@ class GroupedDataFrameWeld(LazyOpResult):
             df[column_name] = self.get_column(
                 column_name,
                 self.column_types[i],
-                index
+                index,
+                verbose=verbose
             )
             i += 1
         return DataFrameWeld(df)
