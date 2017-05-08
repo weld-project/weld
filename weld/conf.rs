@@ -10,8 +10,12 @@ pub const OPTIMIZATION_PASSES_KEY: &'static str = "weld.optimization.passes";
 // Defaults
 pub const DEFAULT_MEMORY_LIMIT: i64 = 1000000000;
 pub const DEFAULT_THREADS: i64 = 1;
-pub const DEFAULT_OPTIMIZATION_PASSES: [&'static str; 5] = [
-    "inline-apply", "inline-let", "inline-zip", "loop-fusion", "uniquify"];
+lazy_static! {
+    pub static ref DEFAULT_OPTIMIZATION_PASSES: Vec<String> = {
+        let m = ["inline-apply", "inline-let", "inline-zip", "loop-fusion", "uniquify"];
+        m.to_vec().iter().map(|e| e.to_string()).collect()
+    };
+}
 
 /// Parses the number of threads. Returns the default if the string cannot be parsed.
 pub fn parse_threads(s: CString) -> i64 {
@@ -35,7 +39,7 @@ pub fn parse_memory_limit(s: CString) -> i64 {
 pub fn parse_optimization_passes(s: CString) -> Vec<String> {
     let s = s.into_string().unwrap();
     match s.as_ref() {
-        "" => DEFAULT_OPTIMIZATION_PASSES.to_vec().iter().map(|e| e.to_string()).collect(),
+        "" => DEFAULT_OPTIMIZATION_PASSES.clone(),
         _ => s.split(",").map(|e| e.to_string()).collect(),
     }
 }
