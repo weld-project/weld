@@ -30,6 +30,7 @@ pub mod code_builder;
 pub mod error;
 pub mod llvm;
 pub mod macro_processor;
+pub mod passes;
 pub mod parser;
 pub mod partial_types;
 pub mod pretty_print;
@@ -186,11 +187,17 @@ pub unsafe extern "C" fn weld_value_free(obj: *mut WeldValue) {
 #[no_mangle]
 /// Given some Weld code and a configuration, returns a runnable Weld module.
 pub unsafe extern "C" fn weld_module_compile(code: *const c_char,
-                                             _: *const WeldConf,
+                                             conf: *const WeldConf,
                                              err_ptr: *mut WeldError)
                                              -> *mut WeldModule {
     assert!(!code.is_null());
     assert!(!err_ptr.is_null());
+
+    let conf = &*conf;
+    let opt_passes = conf::parse_optimization_passes(conf.dict
+        .get(&CString::new(conf::OPTIMIZATION_PASSES_KEY).unwrap())
+        .unwrap_or(&CString::new("").unwrap())
+        .clone());
 
     let code = CStr::from_ptr(code);
     let code = code.to_str().unwrap().trim();
@@ -207,7 +214,7 @@ pub unsafe extern "C" fn weld_module_compile(code: *const c_char,
         return std::ptr::null_mut();
     }
 
-    let module = llvm::compile_program(&parsed.unwrap());
+    let module = llvm::compile_program(&parsed.unwrap(), opt_passes);
 
     if let Err(ref e) = module {
         err.errno = WeldRuntimeErrno::CompileError;
