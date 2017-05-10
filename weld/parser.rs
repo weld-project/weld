@@ -802,6 +802,22 @@ impl<'t> Parser<'t> {
                 Ok(expr)
             }
 
+            TGroupMerger => {
+                let key_type: PartialType;
+                let value_type: PartialType;
+                try!(self.consume(TOpenBracket));
+                key_type = try!(self.type_());
+                try!(self.consume(TComma));
+                value_type = try!(self.type_());
+                try!(self.consume(TCloseBracket));
+                let mut expr = expr_box(NewBuilder(None));
+                expr.ty = Builder(GroupMerger(Box::new(key_type.clone()),
+                                              Box::new(value_type.clone()),
+                                              Box::new(Struct(vec![key_type.clone(),
+                                                                  value_type.clone()]))));
+                Ok(expr)
+            }
+
             TVecMerger => {
                 let elem_type: PartialType;
                 let bin_op: _;
