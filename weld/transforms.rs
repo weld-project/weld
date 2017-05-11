@@ -5,6 +5,7 @@ use super::ast::ExprKind::*;
 use super::ast::Type::*;
 use super::ast::BuilderKind::*;
 use super::ast::LiteralKind::*;
+use super::error::*;
 
 use std::collections::HashMap;
 
@@ -49,18 +50,21 @@ pub fn inline_zips(expr: &mut Expr<Type>) {
 /// Modifies symbol names so each symbol is unique in the AST. This transform should be applied
 /// "up front" and downstream transforms shoud then use SymbolGenerator to generate new unique
 /// symbols.
-pub fn uniquify<T: TypeBounds>(expr: &mut Expr<T>) {
+///
+/// Returns an error if an undeclared symbol appears in the program.
+pub fn uniquify<T: TypeBounds>(expr: &mut Expr<T>) -> WeldResult<()> {
     // Maps a string name to its current integer ID in the current scope.
     let mut id_map: HashMap<Symbol, i32> = HashMap::new();
     // Maps a symbol name to the the maximum ID observed for it.
     let mut max_ids: HashMap<String, i32> = HashMap::new();
-    _uniquify(expr, &mut id_map, &mut max_ids);
+    _uniquify(expr, &mut id_map, &mut max_ids)
 }
 
 /// Helper function for uniquify.
 fn _uniquify<T: TypeBounds>(expr: &mut Expr<T>,
                             id_map: &mut HashMap<Symbol, i32>,
-                            max_ids: &mut HashMap<String, i32>) {
+                            max_ids: &mut HashMap<String, i32>)
+                            -> WeldResult<()> {
 
     // Given a newly defined Symbol sym, increments the symbol's ID and returns a new symbol.
     let push_id =
@@ -85,9 +89,16 @@ fn _uniquify<T: TypeBounds>(expr: &mut Expr<T>,
     // Returns the current ID for a given defined symbol. If the symbol is not found, it was
     // undefined in the expression.
     let get_id = |id_map: &mut HashMap<Symbol, i32>, sym: &Symbol| {
-        let id = id_map.get(sym).unwrap();
-        Symbol::new(&sym.name.clone(), *id)
+        let id = match id_map.get(sym) {
+            Some(e) => e,
+            _ => {
+                return weld_err!("Undefined symbol {} in uniquify", sym.name);
+            }
+        };
+        Ok(Symbol::new(&sym.name.clone(), *id))
     };
+
+    let mut retval = Ok(());
 
     // Walk the expression tree, maintaining a map of the highest ID seen for a given
     // symbol. The ID is incremented when a symbol is redefined in a new scope, and
@@ -95,9 +106,16 @@ fn _uniquify<T: TypeBounds>(expr: &mut Expr<T>,
     // are tracked as keys.
     expr.transform_and_continue(&mut |ref mut e| {
         if let Ident(ref sym) = e.kind {
+            let gid = match get_id(id_map, sym) {
+                Ok(e) => e,
+                Err(err) => {
+                    retval = Err(err);
+                    return Some((e.clone(), false));
+                }
+            };
             return Some((Expr {
                              ty: e.ty.clone(),
-                             kind: Ident(get_id(id_map, sym)),
+                             kind: Ident(gid),
                          },
                          false));
         } else if let Lambda { ref mut params, ref mut body } = e.kind {
@@ -111,7 +129,7 @@ fn _uniquify<T: TypeBounds>(expr: &mut Expr<T>,
                 })
                 .collect::<Vec<_>>();
 
-            _uniquify(body, id_map, max_ids);
+            let _ = _uniquify(body, id_map, max_ids);
             for param in params.iter() {
                 pop_id(id_map, &param.name);
             }
@@ -125,9 +143,9 @@ fn _uniquify<T: TypeBounds>(expr: &mut Expr<T>,
                          },
                          false));
         } else if let Let { ref mut name, ref mut value, ref mut body } = e.kind {
-            _uniquify(value, id_map, max_ids);
+            let _ = _uniquify(value, id_map, max_ids);
             let new_sym = push_id(id_map, max_ids, &name);
-            _uniquify(body, id_map, max_ids);
+            let _ = _uniquify(body, id_map, max_ids);
             return Some((Expr {
                              ty: e.ty.clone(),
                              kind: Let {
@@ -140,6 +158,7 @@ fn _uniquify<T: TypeBounds>(expr: &mut Expr<T>,
         }
         None
     });
+    retval
 }
 
 /// Inlines Apply nodes whose argument is a Lambda expression. These often arise during macro

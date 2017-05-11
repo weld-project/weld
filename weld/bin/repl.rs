@@ -151,7 +151,10 @@ fn main() {
         transforms::inline_apply(&mut expr);
         println!("After inline_apply:\n{}\n", print_expr(&expr));
 
-        transforms::uniquify(&mut expr);
+        if let Err(ref e) = transforms::uniquify(&mut expr) {
+            println!("Error during uniquify: {}\n", e);
+            continue;
+        }
         println!("After uniquify :\n{}\n", print_expr(&expr));
 
         if let Err(ref e) = infer_types(&mut expr) {
@@ -173,7 +176,10 @@ fn main() {
                  print_typed_expr(&expr));
 
         transforms::fuse_loops_vertical(&mut expr);
-        transforms::uniquify(&mut expr);
+        if let Err(ref e) = transforms::uniquify(&mut expr) {
+            println!("Error during type uniquify: {}\n", e);
+            continue;
+        }
         println!("After vertical loop fusion:\n{}\n", print_typed_expr(&expr));
 
         println!("final program raw: {:?}", expr);
