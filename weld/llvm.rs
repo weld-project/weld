@@ -2182,7 +2182,7 @@ pub fn generate_runtime_interface_module() -> WeldResult<easy_ll::CompiledModule
 /// Generate a compiled LLVM module from a program whose body is a function.
 pub fn compile_program(program: &Program) -> WeldResult<easy_ll::CompiledModule> {
     let mut expr = try!(macro_processor::process_program(program));
-    let _ = try!(transforms::uniquify(&mut expr));
+    transforms::uniquify(&mut expr);
     try!(type_inference::infer_types(&mut expr));
     let mut expr = try!(expr.to_typed());
     transforms::inline_apply(&mut expr);
@@ -2191,7 +2191,7 @@ pub fn compile_program(program: &Program) -> WeldResult<easy_ll::CompiledModule>
     transforms::fuse_loops_vertical(&mut expr);
     transforms::fuse_loops_horizontal(&mut expr);
     transforms::fuse_loops_vertical(&mut expr);
-    let _ = try!(transforms::uniquify(&mut expr));
+    transforms::uniquify(&mut expr);
     let sir_prog = try!(sir::ast_to_sir(&expr));
     let mut gen = LlvmGenerator::new();
     try!(gen.add_function_on_pointers("run", &sir_prog));
