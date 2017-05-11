@@ -56,9 +56,7 @@ unsafe fn _compile_and_run<T>(code: &str,
     let code = CString::new(code).unwrap();
     let input_value = weld_value_new(ptr as *const _ as *const c_void);
     let err = weld_error_new();
-    let module = weld_module_compile(code.into_raw() as *const c_char,
-                                     conf,
-                                     err);
+    let module = weld_module_compile(code.into_raw() as *const c_char, conf, err);
 
     if weld_error_code(err) != WeldRuntimeErrno::Success {
         weld_conf_free(conf);
@@ -126,6 +124,20 @@ fn negation() {
     let data = unsafe { weld_value_data(ret_value) as *const i32 };
     let result = unsafe { *data };
     assert_eq!(result, -1 as i32);
+
+    unsafe { weld_value_free(ret_value) };
+}
+
+fn negation_double() {
+    let code = "|| -1.0";
+    let conf = default_conf();
+
+    let ref input_data = 0;
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const f64 };
+    let result = unsafe { *data };
+    assert_eq!(result, -1.0 as f64);
 
     unsafe { weld_value_free(ret_value) };
 }
@@ -489,9 +501,9 @@ fn simple_vector_slice() {
     let output = [2];
 
     assert_eq!(output.len() as isize, result.len as isize);
-     for i in 0..(result.len as isize) {
-         assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
-     }
+    for i in 0..(result.len as isize) {
+        assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
+    }
 
     unsafe { weld_value_free(ret_value) };
 }
@@ -827,8 +839,8 @@ fn simple_dict_exists() {
 
     let code_true = "|x:vec[i32], y:vec[i32]| let a = result(for(zip(x,y), dictmerger[i32,i32,+], \
                 |b,i,e| merge(b, e))); keyexists(a, 1)";
-    let code_false = "|x:vec[i32], y:vec[i32]| let a = result(for(zip(x,y), dictmerger[i32,i32,+], \
-                |b,i,e| merge(b, e))); keyexists(a, 4)";
+    let code_false = "|x:vec[i32], y:vec[i32]| let a = result(for(zip(x,y), \
+                      dictmerger[i32,i32,+], |b,i,e| merge(b, e))); keyexists(a, 4)";
     let conf = default_conf();
 
     let ref input_data = Args {
@@ -1125,6 +1137,7 @@ fn main() {
     let tests: Vec<(&str, fn())> =
         vec![("basic_program", basic_program),
              ("negation", negation),
+             ("negation_double", negation_double),
              ("negated_arithmetic", negated_arithmetic),
              ("f64_cast", f64_cast),
              ("i32_cast", i32_cast),

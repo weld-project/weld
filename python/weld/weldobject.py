@@ -167,8 +167,9 @@ class WeldObject(object):
 
         void_ptr = ctypes.cast(ctypes.byref(weld_args), ctypes.c_void_p)
         arg = cweld.WeldValue(void_ptr)
+        conf = cweld.WeldConf()
         err = cweld.WeldError()
-        module = cweld.WeldModule(function, cweld.WeldConf(), err)
+        module = cweld.WeldModule(function, conf, err)
         if err.code() != 0:
             raise ValueError("Could not compile function {}: {}".format(
                 function, err.message()))

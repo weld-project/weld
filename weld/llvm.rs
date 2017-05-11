@@ -14,6 +14,7 @@ use super::ast::BuilderKind::*;
 use super::code_builder::CodeBuilder;
 use super::error::*;
 use super::macro_processor;
+use super::passes::*;
 use super::pretty_print::*;
 use super::program::Program;
 use super::sir;
@@ -1116,8 +1117,19 @@ impl LlvmGenerator {
                         let bin_tmp = ctx.var_ids.next();
                         let out_ty_str = try!(self.llvm_type(&out_ty)).to_string();
                         let op_name = try!(llvm_binop(BinOpKind::Subtract, out_ty));
+
+                        let zero_str = match *out_ty {
+                            Scalar(F32) | Scalar(F64) => "0.0",
+                            _ => "0",
+                        };
+
                         ctx.code
-                            .add(format!("{} = {} {} 0, {}", bin_tmp, op_name, ll_ty, child_tmp));
+                            .add(format!("{} = {} {} {}, {}",
+                                         bin_tmp,
+                                         op_name,
+                                         ll_ty,
+                                         zero_str,
+                                         child_tmp));
                         ctx.code.add(format!("store {} {}, {}* {}",
                                              out_ty_str,
                                              bin_tmp,
@@ -2180,18 +2192,25 @@ pub fn generate_runtime_interface_module() -> WeldResult<easy_ll::CompiledModule
 }
 
 /// Generate a compiled LLVM module from a program whose body is a function.
-pub fn compile_program(program: &Program) -> WeldResult<easy_ll::CompiledModule> {
+pub fn compile_program(program: &Program, opt_passes: Vec<String>) -> WeldResult<easy_ll::CompiledModule> {
     let mut expr = try!(macro_processor::process_program(program));
     transforms::uniquify(&mut expr);
     try!(type_inference::infer_types(&mut expr));
     let mut expr = try!(expr.to_typed());
-    transforms::inline_apply(&mut expr);
-    transforms::inline_let(&mut expr);
-    transforms::inline_zips(&mut expr);
-    transforms::fuse_loops_vertical(&mut expr);
-    transforms::fuse_loops_horizontal(&mut expr);
-    transforms::fuse_loops_vertical(&mut expr);
-    transforms::uniquify(&mut expr);
+
+    let mut passes: Vec<&Pass> = vec![];
+    for opt_pass in &opt_passes {
+        let opt_pass_name: &str = &opt_pass;
+        match OPTIMIZATION_PASSES.get(opt_pass_name) {
+            Some(pass) => passes.push(pass),
+            None => return weld_err!("Invalid optimization pass name")
+        }
+    }
+
+    for i in 0..passes.len() {
+        try!(passes[i].transform(&mut expr));
+    }
+
     let sir_prog = try!(sir::ast_to_sir(&expr));
     let mut gen = LlvmGenerator::new();
     try!(gen.add_function_on_pointers("run", &sir_prog));
