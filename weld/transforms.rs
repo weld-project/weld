@@ -110,14 +110,14 @@ fn _uniquify<T: TypeBounds>(expr: &mut Expr<T>,
                 Ok(e) => e,
                 Err(err) => {
                     retval = Err(err);
-                    return Some((e.clone(), false));
+                    return (None, false);
                 }
             };
-            return Some((Expr {
-                             ty: e.ty.clone(),
-                             kind: Ident(gid),
-                         },
-                         false));
+            return (Some(Expr {
+                        ty: e.ty.clone(),
+                        kind: Ident(gid),
+                    }),
+                    false);
         } else if let Lambda { ref mut params, ref mut body } = e.kind {
             // Create new parameters for the lambda that will replace this one.
             let new_params = params.iter()
@@ -129,34 +129,44 @@ fn _uniquify<T: TypeBounds>(expr: &mut Expr<T>,
                 })
                 .collect::<Vec<_>>();
 
-            let _ = _uniquify(body, id_map, max_ids);
+            if let Err(err) = _uniquify(body, id_map, max_ids) {
+                retval = Err(err);
+                return (None, false);
+            }
             for param in params.iter() {
                 pop_id(id_map, &param.name);
             }
 
-            return Some((Expr {
-                             ty: e.ty.clone(),
-                             kind: Lambda {
-                                 params: new_params,
-                                 body: body.clone(),
-                             },
-                         },
-                         false));
+            return (Some(Expr {
+                        ty: e.ty.clone(),
+                        kind: Lambda {
+                            params: new_params,
+                            body: body.clone(),
+                        },
+                    }),
+                    false);
         } else if let Let { ref mut name, ref mut value, ref mut body } = e.kind {
-            let _ = _uniquify(value, id_map, max_ids);
+
+            if let Err(err) = _uniquify(value, id_map, max_ids) {
+                retval = Err(err);
+                return (None, false);
+            }
             let new_sym = push_id(id_map, max_ids, &name);
-            let _ = _uniquify(body, id_map, max_ids);
-            return Some((Expr {
-                             ty: e.ty.clone(),
-                             kind: Let {
-                                 name: new_sym,
-                                 value: value.clone(),
-                                 body: body.clone(),
-                             },
-                         },
-                         false));
+            if let Err(err) = _uniquify(body, id_map, max_ids) {
+                retval = Err(err);
+                return (None, false);
+            }
+            return (Some(Expr {
+                        ty: e.ty.clone(),
+                        kind: Let {
+                            name: new_sym,
+                            value: value.clone(),
+                            body: body.clone(),
+                        },
+                    }),
+                    false);
         }
-        None
+        (None, true)
     });
     retval
 }
@@ -492,27 +502,27 @@ fn replace_builder(lambda: &Expr<Type>,
                             },
                         };
                         inline_apply(&mut expr);
-                        Some((expr, false))
+                        (Some(expr), true)
                     }
                     For { iters: ref data, builder: ref bldr, ref func }
                         if same_iden(&(*bldr).kind, &old_bldr.name) => {
-                        Some((Expr {
-                                  ty: e.ty.clone(),
-                                  kind: For {
-                                      iters: data.clone(),
-                                      builder: Box::new(new_bldr.clone()),
-                                      func: Box::new(replace_builder(func, nested, sym_gen)),
-                                  },
-                              },
-                              false))
+                        (Some(Expr {
+                             ty: e.ty.clone(),
+                             kind: For {
+                                 iters: data.clone(),
+                                 builder: Box::new(new_bldr.clone()),
+                                 func: Box::new(replace_builder(func, nested, sym_gen)),
+                             },
+                         }),
+                         false)
                     }
                     Ident(ref mut symbol) if *symbol == old_bldr.name => {
-                        Some((new_bldr.clone(), false))
+                        (Some(new_bldr.clone()), false)
                     }
                     Ident(ref mut symbol) if *symbol == old_index.name => {
-                        Some((new_index.clone(), false))
+                        (Some(new_index.clone()), false)
                     }
-                    _ => None,
+                    _ => (None, true),
                 }
             });
             let new_params = vec![Parameter {

@@ -12,7 +12,7 @@ pub const DEFAULT_MEMORY_LIMIT: i64 = 1000000000;
 pub const DEFAULT_THREADS: i64 = 1;
 lazy_static! {
     pub static ref DEFAULT_OPTIMIZATION_PASSES: Vec<String> = {
-        let m = ["inline-apply", "inline-let", "inline-zip", "loop-fusion", "uniquify"];
+        let m = ["inline-apply", "inline-let", "inline-zip", "loop-fusion"];
         m.to_vec().iter().map(|e| e.to_string()).collect()
     };
 }
