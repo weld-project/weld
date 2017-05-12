@@ -268,6 +268,30 @@ PyObject* weld_to_numpy_long_arr_arr(weld::vec< weld::vec<long> > inp) {
 }
 
 /**
+ * Converts Weld vector-of-double-vectors to two-dimensional numpy array.
+ */
+extern "C"
+PyObject* weld_to_numpy_double_arr_arr(weld::vec< weld::vec<double> > inp) {
+    Py_Initialize();
+
+    int num_rows = inp.size;
+    int num_cols = inp.ptr[0].size;
+
+    npy_intp size[2] = {num_rows, num_cols};
+    double *ptr_array = (double *) malloc(sizeof(double) * num_rows * num_cols);
+
+    for (int i = 0; i < num_rows; i++) {
+        for (int j = 0; j < num_cols; j++) {
+            ptr_array[i * num_cols + j] = *((double *) inp.ptr[i].ptr + j);
+        }
+    }
+
+    _import_array();
+    PyObject* out = PyArray_SimpleNewFromData(2, size, NPY_FLOAT64, (char*)ptr_array);
+    return out;
+}
+
+/**
  * Converts Weld vector-of-char-vectors to NumPy vector-of-strings.
  */
 extern "C"

@@ -185,6 +185,8 @@ class NumPyDecoder(WeldObjectDecoder):
             weld_to_numpy = self.utils.weld_to_numpy_int_arr_arr
         elif restype == WeldVec(WeldVec(WeldLong())):
             weld_to_numpy = self.utils.weld_to_numpy_long_arr_arr
+        elif restype == WeldVec(WeldVec(WeldDouble())):
+            weld_to_numpy = self.utils.weld_to_numpy_double_arr_arr
         elif restype == WeldVec(WeldInt()):
             weld_to_numpy = self.utils.weld_to_numpy_int_arr
         else:
