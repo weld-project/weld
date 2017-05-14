@@ -217,9 +217,11 @@ impl LlvmGenerator {
                       -> WeldResult<String> {
         let params_sorted: BTreeMap<&Symbol, &Type> = params.iter().collect();
         let mut prev_ref = String::from("undef");
+        println!("some type {:?}", &Struct(params_sorted.iter().map(|p| p.1.clone()).cloned().collect()));
         let ll_ty = try!(self.llvm_type(
             &Struct(params_sorted.iter().map(|p| p.1.clone()).cloned().collect())))
             .to_string();
+        println!("ll ty {}", ll_ty);
         for (i, (arg, ty)) in params_sorted.iter().enumerate() {
             let next_ref = ctx.var_ids.next();
             ctx.code.add(format!("{} = insertvalue {} {}, {} {}, {}",
@@ -233,6 +235,7 @@ impl LlvmGenerator {
             prev_ref.push_str(&next_ref);
         }
         let struct_size_ptr = ctx.var_ids.next();
+        println!("struct size ptr {}", struct_size_ptr);
         let struct_size = ctx.var_ids.next();
         let struct_storage = ctx.var_ids.next();
         let struct_storage_typed = ctx.var_ids.next();
@@ -882,7 +885,8 @@ impl LlvmGenerator {
                             let key_ty_replaced = name_replaced.replace("$KEY", &key_ty);
                             let value_ty_replaced = key_ty_replaced.replace("$VALUE", &value_ty);
                             let kv_struct_replaced = value_ty_replaced.replace("$KV_STRUCT",
-                                &kv_struct_ty.replace("%", ""));
+                                                                               &kv_struct_ty.replace("%", ""));
+                            println!("{}", kv_struct_replaced);
                             let op_replaced =
                                 kv_struct_replaced.replace("$OP", &llvm_binop(*op, vt)?);
                             let kv_vec_prefix_replaced =
@@ -894,29 +898,62 @@ impl LlvmGenerator {
                             self.bld_names.insert(bk.clone(), format!("{}.bld", bld_ty_str));
                         }
                         GroupMerger(ref kt, ref vt) => {
-                            let bld_ty = Dict(kt.clone(), vt.clone());
-                            let bld_ty_str = try!(self.llvm_type(&bld_ty)).to_string();
+                            let mut func_gen = IdGenerator::new("%func");
+                            let function_id = func_gen.next();
+                            let bld_ty = Dict(kt.clone(), Box::new(Vector(vt.clone())));
                             let elem = Box::new(Struct(vec![*kt.clone(), *vt.clone()]));
+                            let bld_ty_str = try!(self.llvm_type(&bld_ty)).to_string();
+                            
                             let kv_struct_ty = try!(self.llvm_type(&elem)).to_string();
+                            println!("Kev value struct type {:?}", kv_struct_ty);
                             let key_ty = try!(self.llvm_type(kt)).to_string();
                             let value_ty = try!(self.llvm_type(vt)).to_string();
+                            let value_vec_ty = try!(self.llvm_type(&Box::new(Vector(vt.clone())))).to_string();
                             let kv_vec = Box::new(Vector(elem.clone()));
                             let kv_vec_ty = try!(self.llvm_type(&kv_vec)).to_string();
+                            let key_prefix = format!("@{}", &key_ty.replace("%", ""));
                             let kv_vec_prefix = format!("@{}", &kv_vec_ty.replace("%", ""));
+                            let value_vec_prefix = format!("@{}", &value_vec_ty.replace("%", ""));
+                            let dict_prefix = format!("@{}", &bld_ty_str.replace("%", ""));
+
+                            println!("KEY_PREFIX {}", &key_prefix);
+                            
+                            println!("KEY {}", &key_ty);
+                            println!("VALUE_VEC_PREFIX {}", &value_vec_prefix);
+                            println!("VALUE_VEC {}", &value_vec_ty);
+                            println!("VALUE {}", &value_ty);
+                            println!("KV_STRUCT {}", &kv_struct_ty);
+                            println!("KV_VEC_PREFIX {}", &kv_vec_prefix);
+                            println!("KV_VEC {}", &kv_vec_ty);
+                            println!("DICT_PREFIX {}", &dict_prefix);
+                            println!("DICT {}", &bld_ty_str); 
+                            
                             let name_replaced =
-                                GROUPMERGER_CODE.replace("$NAME", &bld_ty_str.replace("%", ""));
-                            let key_ty_replaced = name_replaced.replace("$KEY", &key_ty);
-                            let value_ty_replaced = key_ty_replaced.replace("$VALUE", &value_ty);
-                            let kv_struct_replaced = value_ty_replaced.replace("$KV_STRUCT",
-                                &kv_struct_ty.replace("%", ""));
-                            // let op_replaced =
-                            //     kv_struct_replaced.replace("$OP", &llvm_binop(*op, vt)?);
+                                GROUPMERGER_CODE.replace("$NAME", &function_id.replace("%", ""));
+                            let key_prefix_replaced =
+                                name_replaced.replace("$KEY_PREFIX", &key_prefix);
+                            let key_ty_replaced = key_prefix_replaced.replace("$KEY", &key_ty);
+                            let value_vec_prefix_ty_replaced =
+                                key_ty_replaced.replace("$VALUE_VEC_PREFIX", &value_vec_prefix);
+                            let value_vec_ty_replaced =
+                                value_vec_prefix_ty_replaced.replace("$VALUE_VEC", &value_vec_ty);
+                            let value_ty_replaced =
+                                value_vec_ty_replaced.replace("$VALUE", &value_ty);
+                            let kv_struct_replaced =
+                                value_ty_replaced.replace("$KV_STRUCT", &kv_struct_ty.replace("%", ""));
                             let kv_vec_prefix_replaced =
                                 kv_struct_replaced.replace("$KV_VEC_PREFIX", &kv_vec_prefix);
                             let kv_vec_ty_replaced =
                                 kv_vec_prefix_replaced.replace("$KV_VEC", &kv_vec_ty);
-                            self.prelude_code.add(&kv_vec_ty_replaced);
+                            let dict_ty_prefix_replaced =
+                                kv_vec_ty_replaced.replace("$DICT_PREFIX", &dict_prefix);
+                            let dict_ty_replaced =
+                                dict_ty_prefix_replaced.replace("$DICT", &bld_ty_str);
+                            //let expr_ty = try!(self.llvm_type(ty.clone())).to_string();
+                            
+                            self.prelude_code.add(&dict_ty_replaced);
                             self.prelude_code.add("\n");
+//                            println!("{}", &self.prelude_code.result());
                             self.bld_names.insert(bk.clone(), format!("{}.bld", bld_ty_str));
                         }
                         VecMerger(ref elem, _) => {

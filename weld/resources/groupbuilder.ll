@@ -19,13 +19,13 @@
 
 define $DICT @$NAME($KV_VEC.bld %pairs, i8* %region) {
 entry:
-  %size = call i64 $KV_VEC_PREFIX.bld.size($KV_VEC.bld %pairs)
-  %elements = call $KV_STRUCT* $KV_VEC_PREFIX.bld.at($KV_VEC.bld %pairs, i64 0)
-  %elementsRaw = bitcast $KV_STRUCT* %elements to i8*
-  %elemPtr = getelementptr $KV_STRUCT* null, i64 1
-  %elemSize = ptrtoint $KV_STRUCT* %elemPtr to i64
+  %size = call i64 $KV_VEC_PREFIX.bld.size($KV_VEC.bld %pairs, i32 0)
+  %elements = call %$KV_STRUCT* $KV_VEC_PREFIX.bld.at($KV_VEC.bld %pairs, i64 0, i32 0)
+  %elementsRaw = bitcast %$KV_STRUCT* %elements to i8*
+  %elemPtr = getelementptr %$KV_STRUCT, %$KV_STRUCT* null, i64 1
+  %elemSize = ptrtoint %$KV_STRUCT* %elemPtr to i64
   call void @qsort(i8* %elementsRaw, i64 %size, i64 %elemSize, i32 (i8*, i8*)* @$NAME.helper)
-  %dict = call $DICT $DICT_PREFIX.new(i64 16, i8* %region)
+  %dict = call $DICT $DICT_PREFIX.new(i64 16)
   br label %outerLoop
 
   ; We have two loops: for each element, we check how many of the ones after have the same key,
@@ -37,8 +37,8 @@ outerLoop:
   br i1 %cond, label %done, label %outerLoop2
 
 outerLoop2:
-  %keyPtr = getelementptr $KV_STRUCT* %elements, i64 %startPos, i32 0
-  %key = load $KEY* %keyPtr
+  %keyPtr = getelementptr %$KV_STRUCT, %$KV_STRUCT* %elements, i64 %startPos, i32 0
+  %key = load $KEY, $KEY* %keyPtr
   %endPos = add i64 %startPos, 1
   br label %innerLoop
 
@@ -48,8 +48,8 @@ innerLoop:
   br i1 %cond2, label %innerLoopDone, label %innerLoop2
 
 innerLoop2:
-  %keyPtr2 = getelementptr $KV_STRUCT* %elements, i64 %endPos2, i32 0
-  %key2 = load $KEY* %keyPtr2
+  %keyPtr2 = getelementptr %$KV_STRUCT, %$KV_STRUCT* %elements, i64 %endPos2, i32 0
+  %key2 = load $KEY, $KEY* %keyPtr2
   %cmp = call i32 $KEY_PREFIX.cmp($KEY %key, $KEY %key2)
   %ne = icmp ne i32 %cmp, 0
   %endPos3 = add i64 %endPos2, 1
@@ -57,8 +57,8 @@ innerLoop2:
 
 innerLoopDone:
   %groupSize = sub i64 %endPos2, %startPos
-  %startPtr = getelementptr $KV_STRUCT* %elements, i64 %startPos
-  %newVec = call $VALUE_VEC $VALUE_VEC_PREFIX.new(i64 %groupSize, i8* %region)
+  %startPtr = getelementptr %$KV_STRUCT, %$KV_STRUCT* %elements, i64 %startPos
+  %newVec = call $VALUE_VEC $VALUE_VEC_PREFIX.new(i64 %groupSize)
   ; Decref since vector.new created a new vector, but we don't really want a reference count of 2
   call void @nvl_region_decref(i8* %region)
   br label %copyLoop
@@ -70,8 +70,8 @@ copyLoop:
 
 copyLoop2:
   %pos = add i64 %startPos, %j
-  %valuePtr = getelementptr $KV_STRUCT* %elements, i64 %pos, i32 1
-  %value = load $VALUE* %valuePtr
+  %valuePtr = getelementptr %$KV_STRUCT, %$KV_STRUCT* %elements, i64 %pos, i32 1
+  %value = load $VALUE, $VALUE* %valuePtr
   %destPtr = call $VALUE* $VALUE_VEC_PREFIX.at($VALUE_VEC %newVec, i64 %j)
   store $VALUE %value, $VALUE* %destPtr
   %j2 = add i64 %j, 1
@@ -94,12 +94,12 @@ done:
 
 ; Helper function that compares two $KV_STRUCT* by key (but takes i8* for use with qsort).
 define i32 @$NAME.helper(i8* %p1, i8* %p2) {
-  %kv1 = bitcast i8* %p1 to $KV_STRUCT*
-  %kv2 = bitcast i8* %p2 to $KV_STRUCT*
-  %kPtr1 = getelementptr $KV_STRUCT* %kv1, i64 0, i32 0
-  %kPtr2 = getelementptr $KV_STRUCT* %kv2, i64 0, i32 0
-  %k1 = load $KEY* %kPtr1
-  %k2 = load $KEY* %kPtr2
+  %kv1 = bitcast i8* %p1 to %$KV_STRUCT*
+  %kv2 = bitcast i8* %p2 to %$KV_STRUCT*
+  %kPtr1 = getelementptr %$KV_STRUCT, %$KV_STRUCT* %kv1, i64 0, i32 0
+  %kPtr2 = getelementptr %$KV_STRUCT, %$KV_STRUCT* %kv2, i64 0, i32 0
+  %k1 = load $KEY, $KEY* %kPtr1
+  %k2 = load $KEY, $KEY* %kPtr2
   %res = call i32 $KEY_PREFIX.cmp($KEY %k1, $KEY %k2)
   ret i32 %res
 }
