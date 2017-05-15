@@ -2192,9 +2192,11 @@ pub fn generate_runtime_interface_module() -> WeldResult<easy_ll::CompiledModule
 }
 
 /// Generate a compiled LLVM module from a program whose body is a function.
-pub fn compile_program(program: &Program, opt_passes: Vec<String>) -> WeldResult<easy_ll::CompiledModule> {
+pub fn compile_program(program: &Program,
+                       opt_passes: Vec<String>)
+                       -> WeldResult<easy_ll::CompiledModule> {
     let mut expr = try!(macro_processor::process_program(program));
-    transforms::uniquify(&mut expr);
+    let _ = try!(transforms::uniquify(&mut expr));
     try!(type_inference::infer_types(&mut expr));
     let mut expr = try!(expr.to_typed());
 
@@ -2203,13 +2205,15 @@ pub fn compile_program(program: &Program, opt_passes: Vec<String>) -> WeldResult
         let opt_pass_name: &str = &opt_pass;
         match OPTIMIZATION_PASSES.get(opt_pass_name) {
             Some(pass) => passes.push(pass),
-            None => return weld_err!("Invalid optimization pass name")
+            None => return weld_err!("Invalid optimization pass name"),
         }
     }
 
     for i in 0..passes.len() {
         try!(passes[i].transform(&mut expr));
     }
+
+    try!(transforms::uniquify(&mut expr));
 
     let sir_prog = try!(sir::ast_to_sir(&expr));
     let mut gen = LlvmGenerator::new();

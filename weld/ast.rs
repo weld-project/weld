@@ -444,8 +444,7 @@ impl<T: TypeBounds> Expr<T> {
                     if let Some(lv) = sym_map.get(l) {
                         Ok(**lv == *r)
                     } else {
-                        Err(WeldError::new("undefined symbol when comparing expressions"
-                            .to_string()))
+                        weld_err!("undefined symbol {} when comparing expressions", l)
                     }
                 }
                 _ => Ok(false), // all else fail.
@@ -523,21 +522,22 @@ impl<T: TypeBounds> Expr<T> {
 
     /// Recursively transforms an expression in place by running a function on it and optionally replacing it with another expression.
     pub fn transform_and_continue<F>(&mut self, func: &mut F)
-        where F: FnMut(&mut Expr<T>) -> Option<(Expr<T>, bool)>
+        where F: FnMut(&mut Expr<T>) -> (Option<Expr<T>>, bool)
     {
         match func(self) {
-            Some((e, true)) => {
+            (Some(e), true) => {
                 *self = e;
                 return self.transform_and_continue(func);
             }
-            Some((e, false)) => {
+            (Some(e), false) => {
                 *self = e;
             }
-            None => {
+            (None, true) => {
                 for c in self.children_mut() {
                     c.transform_and_continue(func);
                 }
             }
+            (None, false) => {}
         }
     }
 

@@ -90,24 +90,24 @@ fn parse_and_print_simple_expressions() {
 #[test]
 fn parse_and_print_uniquified_expressions() {
     let mut e = parse_expr("let a = 2; a").unwrap();
-    uniquify(&mut e);
+    let _ = uniquify(&mut e);
     assert_eq!(print_expr_without_indent(&e).as_str(), "(let a=(2);a)");
 
     // Redefine a symbol.
     let mut e = parse_expr("let a = 2; let a = 3; a").unwrap();
-    uniquify(&mut e);
+    let _ = uniquify(&mut e);
     assert_eq!(print_expr_without_indent(&e).as_str(),
                "(let a=(2);(let a#1=(3);a#1))");
 
     // Make sure Let values aren't renamed.
     let mut e = parse_expr("let a = 2; let a = a+1; a").unwrap();
-    uniquify(&mut e);
+    let _ = uniquify(&mut e);
     assert_eq!(print_expr_without_indent(&e).as_str(),
                "(let a=(2);(let a#1=((a+1));a#1))");
 
     // Lambdas and proper scoping.
     let mut e = parse_expr("let a = 2; (|a,b|a+b)(1,2) + a").unwrap();
-    uniquify(&mut e);
+    let _ = uniquify(&mut e);
     assert_eq!(print_expr_without_indent(&e).as_str(),
                "(let a=(2);((|a#1,b|(a#1+b))(1,2)+a))");
 }

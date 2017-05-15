@@ -7,15 +7,15 @@ use std::collections::HashMap;
 
 pub struct Pass {
     transforms: Vec<fn(&mut Expr<Type>)>,
-    pass_name: String
+    pass_name: String,
 }
 
 impl Pass {
     pub fn new(transforms: Vec<fn(&mut Expr<Type>)>, pass_name: &'static str) -> Pass {
         return Pass {
             transforms: transforms,
-            pass_name: String::from(pass_name)
-        }
+            pass_name: String::from(pass_name),
+        };
     }
 
     pub fn transform(&self, mut expr: &mut Expr<Type>) -> WeldResult<()> {
@@ -25,6 +25,7 @@ impl Pass {
             for transform in &self.transforms {
                 transform(&mut expr);
             }
+
             continue_pass = !try!(expr.compare_ignoring_symbols(&expr_copy));
             expr_copy = expr.clone();
         }
@@ -49,8 +50,6 @@ lazy_static! {
                  Pass::new(vec![transforms::fuse_loops_horizontal,
                                 transforms::fuse_loops_vertical],
                  "loop-fusion"));
-        m.insert("uniquify",
-                 Pass::new(vec![transforms::uniquify], "uniquify"));
         m
     };
 }
