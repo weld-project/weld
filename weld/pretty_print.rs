@@ -35,15 +35,25 @@ impl PrintableType for Type {
                 res.push_str(")");
                 res
             }
-            Builder(Appender(ref t)) => format!("appender[{}]", t.print()),
-            Builder(DictMerger(ref kt, ref vt, op)) => {
-                format!("dictmerger[{},{},{}]", kt.print(), vt.print(), op)
+            Builder(Appender(ref t), ref annotations) => {
+                format!("{}appender[{}]", annotations, t.print())
             }
-            Builder(GroupMerger(ref kt, ref vt)) => {
-                format!("groupmerger[{},{}]", kt.print(), vt.print())
+            Builder(DictMerger(ref kt, ref vt, op), ref annotations) => {
+                format!("{}dictmerger[{},{},{}]",
+                        annotations,
+                        kt.print(),
+                        vt.print(),
+                        op)
             }
-            Builder(VecMerger(ref elem, op)) => format!("vecmerger[{},{}]", elem.print(), op),
-            Builder(Merger(ref t, op)) => format!("merger[{},{}]", t.print(), op),
+            Builder(GroupMerger(ref kt, ref vt), ref annotations) => {
+                format!("{}groupmerger[{},{}]", annotations, kt.print(), vt.print())
+            }
+            Builder(VecMerger(ref elem, op), ref annotations) => {
+                format!("{}vecmerger[{},{}]", annotations, elem.print(), op)
+            }
+            Builder(Merger(ref t, op), ref annotations) => {
+                format!("{}merger[{},{}]", annotations, t.print(), op)
+            }
         }
     }
 }
@@ -69,15 +79,25 @@ impl PrintableType for PartialType {
                 res.push_str(&ret.print());
                 res
             }
-            Builder(Appender(ref elem)) => format!("appender[{}]", elem.print()),
-            Builder(DictMerger(ref kt, ref vt, _, op)) => {
-                format!("dictmerger[{},{},{}]", kt.print(), vt.print(), op)
+            Builder(Appender(ref elem), ref annotations) => {
+                format!("{}appender[{}]", annotations, elem.print())
             }
-            Builder(GroupMerger(ref kt, ref vt, _)) => {
-                format!("groupmerger[{},{}]", kt.print(), vt.print())
+            Builder(DictMerger(ref kt, ref vt, _, op), ref annotations) => {
+                format!("{}dictmerger[{},{},{}]",
+                        annotations,
+                        kt.print(),
+                        vt.print(),
+                        op)
             }
-            Builder(VecMerger(ref elem, _, op)) => format!("vecmerger[{},{}]", elem.print(), op),
-            Builder(Merger(ref t, op)) => format!("merger[{},{}]", t.print(), op),
+            Builder(VecMerger(ref elem, _, op), ref annotations) => {
+                format!("{}vecmerger[{},{}]", annotations, elem.print(), op)
+            }
+            Builder(Merger(ref t, op), ref annotations) => {
+                format!("{}merger[{},{}]", t.print(), annotations, op)
+            }
+            Builder(GroupMerger(ref kt, ref vt, _), ref annotations) => {
+                format!("{}groupmerger[{},{}]", annotations, kt.print(), vt.print())
+            }
         }
     }
 }

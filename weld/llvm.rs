@@ -190,7 +190,7 @@ impl LlvmGenerator {
         let params_sorted: BTreeMap<&Symbol, &Type> = params.iter().collect();
         for (arg, ty) in params_sorted.iter() {
             match **ty {
-                Builder(ref bk) => {
+                Builder(ref bk, _) => {
                     match *bk {
                         Appender(_) => {
                             let bld_ty_str = try!(self.llvm_type(ty)).to_string();
@@ -840,7 +840,8 @@ impl LlvmGenerator {
                 Ok(self.dict_names.get(&elem).unwrap())
             }
 
-            Builder(ref bk) => {
+            Builder(ref bk, _) => {
+                // TODO(Deepak): Do something with annotations here...
                 if self.bld_names.get(bk) == None {
                     match *bk {
                         Appender(ref t) => {
@@ -1484,7 +1485,8 @@ impl LlvmGenerator {
                     Merge { ref builder, ref value } => {
                         let bld_ty = try!(get_sym_ty(func, builder));
                         match *bld_ty {
-                            Builder(ref bk) => {
+                            Builder(ref bk, _) => {
+                                // TODO(Deepak): Do something with annotations here...
                                 match *bk {
                                     Appender(ref t) => {
                                         let bld_ty_str = try!(self.llvm_type(&bld_ty)).to_string();
@@ -1637,7 +1639,8 @@ impl LlvmGenerator {
                         let bld_ty = try!(get_sym_ty(func, builder));
                         let res_ty = try!(get_sym_ty(func, output));
                         match *bld_ty {
-                            Builder(ref bk) => {
+                            Builder(ref bk, _) => {
+                                // TODO(Deepak): Do something with annotations here...
                                 match *bk {
                                     Appender(_) => {
                                         let bld_ty_str = try!(self.llvm_type(&bld_ty)).to_string();
@@ -1962,7 +1965,8 @@ impl LlvmGenerator {
                     }
                     NewBuilder { ref output, ref arg, ref ty } => {
                         match *ty {
-                            Builder(ref bk) => {
+                            Builder(ref bk, _) => {
+                                // TODO(Deepak): Do something with annotations here...
                                 match *bk {
                                     Appender(_) => {
                                         let bld_ty_str = try!(self.llvm_type(ty));

@@ -64,6 +64,7 @@ pub enum Token {
     TModulo,
     TEqual,
     TBar, // |
+    TAtMark, // @
     TDot,
     TColon,
     TSemicolon,
@@ -87,7 +88,7 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
         // Regular expression for splitting up tokens.
         static ref TOKEN_RE: Regex = Regex::new(concat!(
             r"[0-9]+\.[0-9]+([eE]-?[0-9]+)?[fF]?|[0-9]+[eE]-?[0-9]+[fF]?|",
-            r"[A-Za-z0-9$_]+|==|!=|>=|<=|&&|\|\||[-+/*%,=()[\]{}|&\.:;?&\|^<>]|\S+"
+            r"[A-Za-z0-9$_]+|==|!=|>=|<=|&&|\|\||[-+/*%,=()[\]{}|@&\.:;?&\|^<>]|\S+"
         )).unwrap();
 
         // Regular expressions for various types of tokens.
@@ -200,6 +201,7 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
                 "{" => TOpenBrace,
                 "}" => TCloseBrace,
                 "|" => TBar,
+                "@" => TAtMark,
                 "," => TComma,
                 "=" => TEqual,
                 "." => TDot,
@@ -292,6 +294,7 @@ impl fmt::Display for Token {
                            TModulo => "%",
                            TEqual => "=",
                            TBar => "|",
+                           TAtMark => "@",
                            TDot => ".",
                            TColon => ":",
                            TSemicolon => ";",
@@ -407,7 +410,6 @@ fn basic_tokenize() {
                     TCloseParen,
                     TEndOfInput]);
     assert!(tokenize("0a").is_err());
-    assert!(tokenize("#").is_err());
 
     assert_eq!(tokenize("0b10").unwrap(), vec![TI32Literal(2), TEndOfInput]);
     assert_eq!(tokenize("0x10").unwrap(),
@@ -417,4 +419,17 @@ fn basic_tokenize() {
                vec![TF32Literal(1e-5f32), TEndOfInput]);
     assert_eq!(tokenize("1e-5").unwrap(),
                vec![TF64Literal(1e-5), TEndOfInput]);
+    assert_eq!(tokenize("dictmerger[i32,i32,+] @[]").unwrap(),
+               vec![TDictMerger,
+                    TOpenBracket,
+                    TI32,
+                    TComma,
+                    TI32,
+                    TComma,
+                    TPlus,
+                    TCloseBracket,
+                    TAtMark,
+                    TOpenBracket,
+                    TCloseBracket,
+                    TEndOfInput]);
 }
