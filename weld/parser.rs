@@ -586,6 +586,27 @@ impl<'t> Parser<'t> {
                 }))
             }
 
+            TCUDF => {
+                let mut arg_tys = vec![];
+                try!(self.consume(TOpenBracket));
+                let sym_name = try!(self.symbol());
+                try!(self.consume(TComma));
+                let return_ty = try!(self.type_());
+                try!(self.consume(TCloseBracket));
+                try!(self.consume(TOpenParen));
+                while *self.peek() != TCloseParen {
+                    let arg_ty = try!(self.type_());
+                    arg_tys.push(arg_ty);
+                    try!(self.consume(TComma));
+                }
+                try!(self.consume(TCloseParen));
+                Ok(expr_box(CUDF {
+                    sym_name: sym_name.name,
+                    return_ty: Box::new(return_ty),
+                    arg_tys: arg_tys,
+                }))
+            }
+
             TZip => {
                 try!(self.consume(TOpenParen));
                 let mut vectors = vec![];

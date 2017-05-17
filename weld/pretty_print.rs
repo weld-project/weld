@@ -191,6 +191,13 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>,
 
         Negate(ref e) => format!("(-{})", print_expr_impl(e, typed, indent, should_indent)),
 
+        CUDF { ref sym_name, ref arg_tys, ref return_ty } => {
+            format!("cudf[{},{}]{}",
+                    sym_name,
+                    return_ty.print(),
+                    join("(", ",", ")", arg_tys.iter().map(|t| t.print())))
+        }
+
         Cast { kind, ref child_expr } => {
             format!("({}({}))",
                     kind,

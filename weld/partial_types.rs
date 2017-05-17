@@ -170,6 +170,26 @@ impl PartialExpr {
             Literal(F64Literal(v)) => Literal(F64Literal(v)),
             Ident(ref name) => Ident(name.clone()),
 
+            CUDF { ref sym_name, ref arg_tys, ref return_ty } => {
+                let sym_name: String = sym_name.clone();
+                let return_ty: Box<Type> = Box::new(try!(return_ty.to_type()));
+                let mut arg_tys_new = vec![];
+                for ref partial_ty in arg_tys {
+                    if let Ok(t) = partial_ty.to_type() {
+                        arg_tys_new.push(t);
+                    }
+                }
+                if arg_tys.len() != arg_tys_new.len() {
+                    return weld_err!("to_typed failed for CUDF");
+                } else {
+                    CUDF {
+                        sym_name: sym_name,
+                        arg_tys: arg_tys_new,
+                        return_ty: return_ty,
+                    }
+                }
+            }
+
             BinOp { kind, ref left, ref right } => {
                 BinOp {
                     kind: kind,
