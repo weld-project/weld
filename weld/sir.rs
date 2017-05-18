@@ -44,6 +44,11 @@ pub enum Statement {
         size: Symbol,
     },
     Exp { output: Symbol, child: Symbol },
+    CUDF {
+        output: Symbol,
+        symbol_name: String,
+        args: Vec<Symbol>,
+    },
     ToVec { output: Symbol, child: Symbol },
     Length { output: Symbol, child: Symbol },
     Assign { output: Symbol, value: Symbol },
@@ -241,6 +246,13 @@ impl fmt::Display for Statement {
                        output,
                        join("[", ",", "]", elems.iter().map(|e| e.name.clone())))
             }
+            CUDF { ref output, ref args, ref symbol_name, .. } => {
+                write!(f,
+                       "{} = cudf[{}]{}",
+                       output,
+                       symbol_name,
+                       join("(", ",", ")", args.iter().map(|e| e.name.clone())))
+            }
             GetField { ref output, ref value, index } => {
                 write!(f, "{} = {}.{}", output, value, index)
             }
@@ -410,6 +422,11 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
                 MakeVector { ref elems, .. } => {
                     for elem in elems {
                         vars.push(elem.clone());
+                    }
+                }
+                CUDF { ref args, .. } => {
+                    for arg in args {
+                        vars.push(arg.clone());
                     }
                 }
             }
@@ -755,6 +772,26 @@ fn gen_expr(expr: &TypedExpr,
                 output: res_sym.clone(),
                 elems: syms,
                 elem_ty: *ty,
+            });
+            Ok((cur_func, cur_block, res_sym))
+        }
+
+        ExprKind::CUDF { ref sym_name, ref args, .. } => {
+            let mut syms = vec![];
+            let mut cur_func = cur_func;
+            let mut cur_block = cur_block;
+            for arg in args.iter() {
+                let r = gen_expr(arg, prog, cur_func, cur_block)?;
+                cur_func = r.0;
+                cur_block = r.1;
+                let sym = r.2;
+                syms.push(sym);
+            }
+            let res_sym = prog.add_local(&expr.ty, cur_func);
+            prog.funcs[cur_func].blocks[cur_block].add_statement(CUDF {
+                output: res_sym.clone(),
+                args: syms,
+                symbol_name: sym_name.clone(),
             });
             Ok((cur_func, cur_block, res_sym))
         }

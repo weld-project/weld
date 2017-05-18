@@ -1024,6 +1024,7 @@ impl LlvmGenerator {
                                              ll_ty,
                                              llvm_symbol(output)));
                     }
+                    CUDF { .. } => panic!("unimplemented"),
                     MakeVector { ref output, ref elems, ref elem_ty } => {
                         let elem_ll_ty = self.llvm_type(elem_ty)?.to_string();
                         let vec_ll_ty = self.llvm_type(&Vector(Box::new(elem_ty.clone())))?
