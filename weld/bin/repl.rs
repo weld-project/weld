@@ -197,7 +197,7 @@ fn main() {
                     println!("Error during LLVM code gen:\n{}\n", e);
                 } else {
                     let llvm_code = llvm_gen.result();
-                    // println!("LLVM code:\n{}\n", llvm_code);
+                    println!("LLVM code:\n{}\n", llvm_code);
 
                     if let Err(e) = load_runtime_library() {
                         println!("Couldn't load runtime: {}", e);
