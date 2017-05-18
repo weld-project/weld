@@ -162,7 +162,7 @@ pub enum ExprKind<T: TypeBounds> {
     },
     CUDF {
         sym_name: String,
-        arg_tys: Vec<T>,
+        args: Vec<Expr<T>>,
         return_ty: Box<T>,
     },
     NewBuilder(Option<Box<Expr<T>>>),
@@ -313,7 +313,7 @@ impl<T: TypeBounds> Expr<T> {
                         vec![]
                     }
                 }
-                CUDF { .. } => vec![],
+                CUDF { ref args, .. } => args.iter().collect(),
                 Negate(ref t) => vec![t.as_ref()],
                 // Explicitly list types instead of doing _ => ... to remember to add new types.
                 Literal(_) | Ident(_) => vec![],
@@ -376,7 +376,7 @@ impl<T: TypeBounds> Expr<T> {
                         vec![]
                     }
                 }
-                CUDF { .. } => vec![],
+                CUDF { ref mut args, .. } => args.iter_mut().collect(),
                 Negate(ref mut t) => vec![t.as_mut()],
                 // Explicitly list types instead of doing _ => ... to remember to add new types.
                 Literal(_) | Ident(_) => vec![],
@@ -446,14 +446,9 @@ impl<T: TypeBounds> Expr<T> {
                 (&For { .. }, &For { .. }) => Ok(true),
                 (&If { .. }, &If { .. }) => Ok(true),
                 (&Apply { .. }, &Apply { .. }) => Ok(true),
-                (&CUDF { sym_name: ref sym_name1,
-                         arg_tys: ref arg_tys1,
-                         return_ty: ref return_ty1 },
-                 &CUDF { sym_name: ref sym_name2,
-                         arg_tys: ref arg_tys2,
-                         return_ty: ref return_ty2 }) => {
+                (&CUDF { sym_name: ref sym_name1, return_ty: ref return_ty1, .. },
+                 &CUDF { sym_name: ref sym_name2, return_ty: ref return_ty2, .. }) => {
                     let mut matches = sym_name1 == sym_name2;
-                    matches = matches && arg_tys1 == arg_tys2;
                     matches = matches && return_ty1 == return_ty2;
                     Ok(matches)
                 }
