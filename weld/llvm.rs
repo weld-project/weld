@@ -1039,8 +1039,6 @@ impl LlvmGenerator {
                                                      .to_string()));
                             let arg_sig = arg_tys.join(", ");
 
-                            println!("{}", arg_sig);
-
                             self.prelude_code
                                 .add(format!("declare void @{name}({arg_sig});",
                                              name = symbol_name,
