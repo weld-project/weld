@@ -26,6 +26,12 @@ impl PrintableType for Type {
             Scalar(I64) => "i64".to_string(),
             Scalar(F32) => "f32".to_string(),
             Scalar(F64) => "f64".to_string(),
+            VectorizedScalar(Bool) => "<bool x V>".to_string(),
+            VectorizedScalar(I8) => "<i8 x V>".to_string(),
+            VectorizedScalar(I32) => "<i32 x V>".to_string(),
+            VectorizedScalar(I64) => "<i64 x V>".to_string(),
+            VectorizedScalar(F32) => "<f32 x V>".to_string(),
+            VectorizedScalar(F64) => "<f64 x V>".to_string(),
             Vector(ref elem) => format!("vec[{}]", elem.print()),
             Dict(ref kt, ref vt) => format!("dict[{},{}]", kt.print(), vt.print()),
             Struct(ref elems) => join("{", ",", "}", elems.iter().map(|e| e.print())),
@@ -41,6 +47,7 @@ impl PrintableType for Type {
             }
             Builder(VecMerger(ref elem, op)) => format!("vecmerger[{},{}]", elem.print(), op),
             Builder(Merger(ref t, op)) => format!("merger[{},{}]", t.print(), op),
+            VectorizedBuilder(_) => "vectorizedBuilder".to_string(), // TODO
         }
     }
 }

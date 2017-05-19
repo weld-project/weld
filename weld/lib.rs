@@ -38,6 +38,7 @@ pub mod program;
 pub mod sir;
 pub mod tokenizer;
 pub mod transforms;
+pub mod vectorizer;
 pub mod type_inference;
 pub mod conf;
 pub mod util;

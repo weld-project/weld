@@ -42,9 +42,11 @@ impl fmt::Display for Symbol {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Type {
     Scalar(ScalarKind),
+    VectorizedScalar(ScalarKind),
     Vector(Box<Type>),
     Dict(Box<Type>, Box<Type>),
     Builder(BuilderKind),
+    VectorizedBuilder(BuilderKind),
     Struct(Vec<Type>),
     Function(Vec<Type>, Box<Type>),
 }
