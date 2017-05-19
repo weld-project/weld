@@ -9,6 +9,15 @@ use super::ast::ExprKind::*;
 use super::ast::Type::*;
 use super::error::*;
 
+// Attempts to vectorize a scalar
+macro_rules! try_vectorize_scalar {
+   ($x:expr) => {
+        if let Scalar(kind) = $x.ty {
+            $x.ty = VectorizedScalar(kind);
+        }
+    };
+}
+
 /// Vectorize an expression.
 pub fn vectorize(expr: &mut Expr<Type>) -> WeldResult<()> {
     // Step 1. Check each loop to see if it can be vectorized.
@@ -34,13 +43,9 @@ pub fn vectorize(expr: &mut Expr<Type>) -> WeldResult<()> {
     //      merge(B, x + 1)
     expr.transform(&mut |ref mut e| {
         if let BinOp { .. } = e.kind {
-            if let Scalar(kind) = e.ty {
-                e.ty = VectorizedScalar(kind);
-            }
+            try_vectorize_scalar!(e);
         } else if let Literal(_) = e.kind {
-            if let Scalar(kind) = e.ty {
-                e.ty = VectorizedScalar(kind);
-            }
+            try_vectorize_scalar!(e);
         }
         None
     });
