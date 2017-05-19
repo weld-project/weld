@@ -10,11 +10,17 @@ use super::ast::Type::*;
 use super::error::*;
 
 // Attempts to vectorize a scalar
-macro_rules! try_vectorize_scalar {
-   ($x:expr) => {
+macro_rules! vectorize {
+    ($x:expr) => {
+        let mut vectorized = false;
         if let Scalar(kind) = $x.ty {
             $x.ty = VectorizedScalar(kind);
+            vectorized = true;
+        } else if let Builder(kind) = $x.ty.clone() {
+            $x.ty = VectorizedBuilder(kind);
+            vectorized = true;
         }
+        vectorized
     };
 }
 
@@ -43,9 +49,11 @@ pub fn vectorize(expr: &mut Expr<Type>) -> WeldResult<()> {
     //      merge(B, x + 1)
     expr.transform(&mut |ref mut e| {
         if let BinOp { .. } = e.kind {
-            try_vectorize_scalar!(e);
+            vectorize!(e);
         } else if let Literal(_) = e.kind {
-            try_vectorize_scalar!(e);
+            vectorize!(e);
+        } else if let Ident(_) = e.kind {
+            vectorize!(e);
         }
         None
     });
