@@ -156,6 +156,8 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
 
         Negate(ref c) => push_type(&mut expr.ty, &c.ty, "Negate"),
 
+        CUDF { ref return_ty, .. } => push_complete_type(&mut expr.ty, *return_ty.clone(), "CUDF"),
+
         Let { ref mut body, .. } => sync_types(&mut expr.ty, &mut body.ty, "Let body"),
 
         MakeVector { ref mut elems } => {
@@ -808,7 +810,7 @@ fn infer_types_let() {
 
     let mut e = parse_expr(code).unwrap();
     assert!(infer_types(&mut e).is_ok());
-    assert_eq!(e.ty,  Scalar(Bool));
+    assert_eq!(e.ty, Scalar(Bool));
 
     let mut e = parse_expr("let a = slice([1.0f, 2.0f, 3.0f], 0L, 2L);a").unwrap();
     assert!(infer_types(&mut e).is_ok());

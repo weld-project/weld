@@ -1024,6 +1024,45 @@ impl LlvmGenerator {
                                              ll_ty,
                                              llvm_symbol(output)));
                     }
+                    CUDF { ref output, ref symbol_name, ref args } => {
+                        // TODO If function not declared
+                        if true {
+                            // First, declare the function.
+                            let mut arg_tys = vec![];
+                            for ref arg in args {
+                                arg_tys.push(format!("{}*",
+                                                     self.llvm_type(get_sym_ty(func, arg)?)?
+                                                         .to_string()));
+                            }
+                            arg_tys.push(format!("{}*",
+                                                 self.llvm_type(get_sym_ty(func, output)?)?
+                                                     .to_string()));
+                            let arg_sig = arg_tys.join(", ");
+
+                            self.prelude_code
+                                .add(format!("declare void @{name}({arg_sig});",
+                                             name = symbol_name,
+                                             arg_sig = arg_sig));
+                        }
+
+                        // Prepare the parameter list for the function
+                        let mut arg_tys = vec![];
+                        for ref arg in args {
+                            let ll_ty = self.llvm_type(get_sym_ty(func, arg)?)?.to_string();
+                            let arg_str =
+                                format!("{ll_ty}* {arg}", arg = llvm_symbol(arg), ll_ty = ll_ty);
+                            arg_tys.push(arg_str);
+                        }
+                        arg_tys.push(format!("{}* {}",
+                                             self.llvm_type(get_sym_ty(func, output)?)?
+                                                 .to_string(),
+                                             llvm_symbol(output)));
+                        let param_sig = arg_tys.join(", ");
+
+                        ctx.code.add(format!("call void @{name}({param_sig})",
+                                             name = symbol_name,
+                                             param_sig = param_sig));
+                    }
                     MakeVector { ref output, ref elems, ref elem_ty } => {
                         let elem_ll_ty = self.llvm_type(elem_ty)?.to_string();
                         let vec_ll_ty = self.llvm_type(&Vector(Box::new(elem_ty.clone())))?

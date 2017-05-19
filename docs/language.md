@@ -65,6 +65,7 @@ The core language consists of the following expressions:
 * Arithmetic expressions, e.g. `a + b`, `a - b`, `-a`, `a & b`, etc.
 * `if(condition, on_true, on_false)`, which evaluates `on_true` or `on_false` based on the value of `condition`.
 * Let expressions, which introduce a new variable. The syntax for these is `let name = expr; body`. This evaluates `expr`, assigns it to the variable `name`, and then evaluates `body` with that binding and returns its result.
+* `cudf[name,ty](args)` to call arbitrary C-style functions (see a discussion of UDFs [below](#user-defined-functions)).
 * Collection expressions:
   * `lookup(dict, key)` and `lookup(vec, index)` return an element from a dictionary and vector respectively.
   * `len(vec)` return its length.
@@ -182,3 +183,41 @@ macro filter(data, func) = (
   result(for(data, appender, |b, i, x| if(func(x), merge(b, x), b)))
 );
 ```
+
+## User Defined Functions
+
+Weld supports invoking C-style UDFs from a Weld program. The `cudf[name,ty](arg1, arg2,...argN)` node enables this; `name` is a C symbol name which refers to a function in the same address space (e.g., a function in a dynamically loaded library), `ty` is the Weld return type of the UDF, and `arg1, arg2,...,argN` is a list of zero or more argument expressions.
+
+C UDFs require a special format within C code. In particular, a valid C UDF must meet the following requirements:
+ * The function has a `void` return type
+ * Each argument passed to the C UDF is a pointer. For example, A UDF which takes one argument `arg1: T1` must have its first argument be `T1*`.
+ * The last argument is a pointer to the return type. Weld allocates space for the return type struct; the UDF just needs to write data back to this pointer. However, buffers which the return type itself contains *are not managed by Weld*. For example, if UDF returns a vector, the `{T*, int64_t}` struct representing the vector is owned by Weld, but the `T*` buffer is not.
+ 
+ Note that C UDFs must take as input types understood by the Weld runtime; see the [API documentation](https://github.com/weld-project/weld/master/docs/api.md) for how each type looks in memory.
+ 
+ ### Examples
+  
+The UDF `cudf[add_five,i64](x:i64)` takes one argument of type `i64` and returns an `i64`:
+
+```c
+extern "C" void add_five(int64_t *x, int64_t *result) {
+  *result = *x + 5;
+}
+```
+
+The UDF `cudf[fast_matmul,vec[f32]](a:vec[f32], b:vec[f32])` takes two arguments of type `vec[f32]` and returns an `vec[f32]`:
+
+```c
+typedef struct float_vec {
+  float *data;
+  int64_t length;
+} float_vec_t;
+
+extern "C" void fast_matmul(float_vec_t *a, float_vec_t *b, float_vec_t *result) {
+  // this malloc'd memory is owned by the caller, but can be passed to Weld.
+  // Weld treats the memory as "read-only".
+  result->data = malloc(sizeof(float) * a->length);
+  result->length = a->length;
+  // can call any arbitrary C code in a UDF.
+  my_fast_matrix_multiply(a->data, b->data, result->data, a->length);
+}

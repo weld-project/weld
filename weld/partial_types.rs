@@ -170,6 +170,17 @@ impl PartialExpr {
             Literal(F64Literal(v)) => Literal(F64Literal(v)),
             Ident(ref name) => Ident(name.clone()),
 
+            CUDF { ref sym_name, ref args, ref return_ty } => {
+                let sym_name: String = sym_name.clone();
+                let args: WeldResult<Vec<_>> = args.iter().map(|e| e.to_typed()).collect();
+                let return_ty: Box<Type> = Box::new(try!(return_ty.to_type()));
+                CUDF {
+                    sym_name: sym_name,
+                    args: try!(args),
+                    return_ty: return_ty,
+                }
+            }
+
             BinOp { kind, ref left, ref right } => {
                 BinOp {
                     kind: kind,
