@@ -186,7 +186,7 @@ macro filter(data, func) = (
 
 ## User Defined Functions
 
-Weld supports invoking C-style UDFs from a Weld program. The `cudf[name,ty](arg1, arg2,...argN)` node enables this; `name` is a C symbol name which points to a function (e.g., a function in a dynamically loaded library), `ty` is the Weld return type of the UDF, and `arg1, arg2,...,argN` is a list of zero or more argument expressions.
+Weld supports invoking C-style UDFs from a Weld program. The `cudf[name,ty](arg1, arg2,...argN)` node enables this; `name` is a C symbol name which refers to a function in the same address space (e.g., a function in a dynamically loaded library), `ty` is the Weld return type of the UDF, and `arg1, arg2,...,argN` is a list of zero or more argument expressions.
 
 C UDFs require a special format within C code. In particular, a valid C UDF must meet the following requirements:
  * The function has a `void` return type
