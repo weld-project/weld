@@ -1,8 +1,6 @@
 ; Templated function for the finalization step of GroupBuilder. We implement GroupBuilder using
 ; a VecBuilder of {key, value} structs, and we need to turn it into a dict[key, vec[value]].
 ; We do this by sorting the elements by key and then inserting them into a dictionary.
-; We take as an argument a memory region to store the new vectors and dict in, which will
-; allow us to free the memory used by the vecBuilder of key-value pairs.
 ;
 ; Parameters:
 ; - NAME: name of generated function
@@ -59,8 +57,6 @@ innerLoopDone:
   %groupSize = sub i64 %endPos2, %startPos
   %startPtr = getelementptr %$KV_STRUCT, %$KV_STRUCT* %elements, i64 %startPos
   %newVec = call $VALUE_VEC $VALUE_VEC_PREFIX.new(i64 %groupSize)
-  ; Decref since vector.new created a new vector, but we don't really want a reference count of 2
-  ; call void @nvl_region_decref(i8* %region)
   br label %copyLoop
 
 copyLoop:
@@ -83,12 +79,6 @@ copyLoopDone:
   br label %outerLoop
 
 done:
-  ; Make sure the new region references the same other regions that the key-value pair array did,
-  ; since we kept the keys and values
-  ; %oldRegion = call i8* $KV_VEC_PREFIX.bld.region($KV_VEC.bld %pairs)
-  ; call i32 @nvl_region_copy_nested_refs(i8* %region, i8* %oldRegion)
-  ; ; Decref the old region because we will no longer use the vecBuilder we created there
-  ; call void @nvl_region_decref(i8* %oldRegion)
   ret $DICT %dict2
 }
 
