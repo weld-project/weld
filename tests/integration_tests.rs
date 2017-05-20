@@ -762,9 +762,9 @@ fn simple_for_dictmerger_loop() {
 fn simple_groupmerger() {
     #[derive(Clone)]
     #[allow(dead_code)]
-    struct Pair {
+    struct VecPair {
         ele1: i32,
-        ele2: i32,
+        ele2: WeldVec<i32>,
     }
 
     #[allow(dead_code)]
@@ -777,8 +777,8 @@ fn simple_groupmerger() {
                 |b,i,e| merge(b, e))))";
 
     let conf = default_conf();
-    let keys = [1, 2, 2, 1, 3];
-    let vals = [2, 3, 4, 2, 1];
+    let keys = [1, 2, 2, 1, 3, 3];
+    let vals = [2, 3, 4, 2, 1, 0];
     let ref input_data = Args {
         x: WeldVec {
             data: &keys as *const i32,
@@ -791,21 +791,21 @@ fn simple_groupmerger() {
     };
 
     let ret_value = compile_and_run(code, conf, input_data);
-    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<Pair> };
+    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<VecPair> };
     let result = unsafe { (*data).clone() };
 
     let output_keys = [1, 2, 3];
-    let output_vals = [4, 7, 1];
+    let output_vals = [[2,2], [3,4], [1, 0]];
 
     assert_eq!(result.len, output_keys.len() as i64);
     for i in 0..(output_keys.len() as isize) {
         let mut success = false;
         let key = unsafe { (*result.data.offset(i)).ele1 };
-        let value = unsafe { (*result.data.offset(i)).ele2 };
-        for j in 0..(output_keys.len()) {
-            println!("({}, {})({},{})\n", output_keys[j], output_vals[j], key, value); 
-            if output_keys[j] == key {
-                if output_vals[j] == value {
+        let value_vec = unsafe { ((*result.data.offset(i)).ele2).clone() };
+        for j in 0..(output_vals[i as usize].len() as isize) {
+            let value = unsafe { *value_vec.data.offset(j) };
+            if output_keys[i as usize] == key {
+                if output_vals[i as usize][j as usize] == value {
                     success = true;
                 }
             }

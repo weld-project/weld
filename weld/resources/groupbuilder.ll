@@ -17,7 +17,7 @@
 ; - DICT: name of generated dictionary (of (key, vec[value]))
 ; - DICT_PREFIX: prefix for helper functions of DICT
 
-define $DICT @$NAME($KV_VEC.bld %pairs, i8* %region) {
+define $DICT @$NAME($KV_VEC.bld %pairs) {
 entry:
   %size = call i64 $KV_VEC_PREFIX.bld.size($KV_VEC.bld %pairs, i32 0)
   %elements = call %$KV_STRUCT* $KV_VEC_PREFIX.bld.at($KV_VEC.bld %pairs, i64 0, i32 0)
@@ -60,7 +60,7 @@ innerLoopDone:
   %startPtr = getelementptr %$KV_STRUCT, %$KV_STRUCT* %elements, i64 %startPos
   %newVec = call $VALUE_VEC $VALUE_VEC_PREFIX.new(i64 %groupSize)
   ; Decref since vector.new created a new vector, but we don't really want a reference count of 2
-  call void @nvl_region_decref(i8* %region)
+  ; call void @nvl_region_decref(i8* %region)
   br label %copyLoop
 
 copyLoop:
@@ -85,10 +85,10 @@ copyLoopDone:
 done:
   ; Make sure the new region references the same other regions that the key-value pair array did,
   ; since we kept the keys and values
-  %oldRegion = call i8* $KV_VEC_PREFIX.bld.region($KV_VEC.bld %pairs)
-  call i32 @nvl_region_copy_nested_refs(i8* %region, i8* %oldRegion)
-  ; Decref the old region because we will no longer use the vecBuilder we created there
-  call void @nvl_region_decref(i8* %oldRegion)
+  ; %oldRegion = call i8* $KV_VEC_PREFIX.bld.region($KV_VEC.bld %pairs)
+  ; call i32 @nvl_region_copy_nested_refs(i8* %region, i8* %oldRegion)
+  ; ; Decref the old region because we will no longer use the vecBuilder we created there
+  ; call void @nvl_region_decref(i8* %oldRegion)
   ret $DICT %dict2
 }
 
