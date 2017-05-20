@@ -24,8 +24,9 @@ pub enum PartialBuilderKind {
     Appender(Box<PartialType>),
     // Key type, value type, merge type (struct of <key,value> pairs)
     DictMerger(Box<PartialType>, Box<PartialType>, Box<PartialType>, BinOpKind),
+    // Key type, value type, merge type (struct of <key,value> pairs)
     GroupMerger(Box<PartialType>, Box<PartialType>, Box<PartialType>),
-    // elem typ5Ae, merge type (struct of <index, value> pairs
+    // elem type, merge type (struct of <index, value> pairs
     VecMerger(Box<PartialType>, Box<PartialType>, BinOpKind),
     Merger(Box<PartialType>, BinOpKind),
 }

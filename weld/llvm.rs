@@ -882,7 +882,7 @@ impl LlvmGenerator {
                             let key_ty_replaced = name_replaced.replace("$KEY", &key_ty);
                             let value_ty_replaced = key_ty_replaced.replace("$VALUE", &value_ty);
                             let kv_struct_replaced = value_ty_replaced.replace("$KV_STRUCT",
-                                                                               &kv_struct_ty.replace("%", ""));
+                                &kv_struct_ty.replace("%", ""));
                             let op_replaced =
                                 kv_struct_replaced.replace("$OP", &llvm_binop(*op, vt)?);
                             let kv_vec_prefix_replaced =
@@ -1970,7 +1970,7 @@ impl LlvmGenerator {
                                                                  bld_ty_str.replace("%", ""));
                                         let bld_tmp = ctx.var_ids.next();
                                         ctx.code
-                                            .add(format!("{} = call {} {}.new(i64 16, %work_t* \
+                                           .add(format!("{} = call {} {}.new(i64 16, %work_t* \
                                                           %cur.work)",
                                                          bld_tmp,
                                                          bld_ty_str,
