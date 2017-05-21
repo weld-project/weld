@@ -799,18 +799,79 @@ fn simple_groupmerger() {
 
     assert_eq!(result.len, output_keys.len() as i64);
     for i in 0..(output_keys.len() as isize) {
-        let mut success = false;
         let key = unsafe { (*result.data.offset(i)).ele1 };
         let value_vec = unsafe { ((*result.data.offset(i)).ele2).clone() };
+        assert_eq!(output_keys[i as usize], key);
         for j in 0..(output_vals[i as usize].len() as isize) {
             let value = unsafe { *value_vec.data.offset(j) };
-            if output_keys[i as usize] == key {
-                if output_vals[i as usize][j as usize] == value {
-                    success = true;
-                }
-            }
+            assert_eq!(output_vals[i as usize][j as usize], value);
         }
-        assert_eq!(success, true);
+    }
+    unsafe { weld_value_free(ret_value) };
+}
+
+fn complex_groupmerger_with_struct_key() {
+    #[derive(Clone)]
+    #[allow(dead_code)]
+    struct Pair {
+        ele1:i32,
+        ele2:i32
+    }
+    #[derive(Clone)]
+    #[allow(dead_code)]
+    struct VecPair {
+        ele1: Pair,
+        ele2: WeldVec<i32>,
+    }
+    #[allow(dead_code)]
+    struct Args {
+        x: WeldVec<i32>,
+        y: WeldVec<i32>,
+        z: WeldVec<i32>
+    }
+
+    let code = "|x:vec[i32], y:vec[i32], z:vec[i32]| \
+                tovec(result(for(zip(x,y,z), groupmerger[{i32,i32}, i32], \
+                |b,i,e| merge(b, {{e.$0, e.$1}, e.$2}))))";
+
+    let conf = default_conf();
+    let keys1 = [1, 1, 2, 2, 3, 3];
+    let keys2 = [1, 1, 2, 2, 3, 3];
+    let vals =  [2, 3, 4, 2, 1, 0];
+    let ref input_data = Args {
+        x: WeldVec {
+            data: &keys1 as *const i32,
+            len: keys1.len() as i64,
+        },
+        y: WeldVec {
+            data: &keys2 as *const i32,
+            len: keys2.len() as i64,
+        },
+        z: WeldVec {
+            data: &vals as *const i32,
+            len: vals.len() as i64,
+        },
+    };
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<VecPair> };
+    let result = unsafe { (*data).clone() };
+
+    let output_keys = [[1, 1], [2, 2], [3, 3]];
+    let output_vals = [[2,3], [4,2], [1, 0]];
+
+    assert_eq!(result.len, output_keys.len() as i64);
+    for i in 0..(output_keys.len() as isize) {
+        let key = unsafe { (*result.data.offset(i)).clone().ele1 };
+        let key1 = key.ele1;
+        let key2 = key.ele2;
+        let value_vec = unsafe { ((*result.data.offset(i)).ele2).clone() };
+        assert_eq!(output_keys[i as usize][0], key1);
+        assert_eq!(output_keys[i as usize][1], key2);
+        for j in 0..(output_vals[i as usize].len() as isize) {
+            let value = unsafe { *value_vec.data.offset(j) };
+            assert_eq!(output_vals[i as usize][j as usize], value)
+        }
     }
     unsafe { weld_value_free(ret_value) };
 }
@@ -1247,6 +1308,7 @@ fn main() {
              ("parallel_for_vecmerger_loop", parallel_for_vecmerger_loop),
              ("simple_for_dictmerger_loop", simple_for_dictmerger_loop),
              ("simple_groupmerger", simple_groupmerger),
+             ("complex_groupmerger_with_struct_key", complex_groupmerger_with_struct_key),
              ("simple_parallel_for_dictmerger_loop", simple_parallel_for_dictmerger_loop),
              ("simple_dict_lookup", simple_dict_lookup),
              ("simple_dict_exists", simple_dict_exists),
