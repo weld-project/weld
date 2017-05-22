@@ -438,6 +438,16 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
                             }
                         }
                     }
+                    Appender(_) => {
+                        match *e {
+                            Some(ref mut arg) => {
+                                changed |= push_complete_type(&mut arg.ty,
+                                                              Scalar(I64),
+                                                              "NewBuilder(Appender)")?;
+                            }
+                            _ => {}
+                        }
+                    }
                     _ => {} // No arguments for the builder.
                 }
             }

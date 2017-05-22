@@ -1871,16 +1871,26 @@ impl LlvmGenerator {
                             Builder(ref bk) => {
                                 match *bk {
                                     Appender(_) => {
+                                        let size_str = if let Some(ref sz) = *arg {
+                                            let arg_ty = get_sym_ty(func, sz)?;
+                                            let arg_ty_str = self.llvm_type(&arg_ty)?.to_string();
+                                            self.load_var(llvm_symbol(sz).as_str(),
+                                                          &arg_ty_str,
+                                                          ctx)?
+                                        } else {
+                                            "16".to_string()
+                                        };
                                         let bld_ty_str = try!(self.llvm_type(ty));
                                         let bld_prefix = format!("@{}",
                                                                  bld_ty_str.replace("%", ""));
                                         let bld_tmp = ctx.var_ids.next();
                                         ctx.code
-                                            .add(format!("{} = call {} {}.new(i64 16, %work_t* \
+                                            .add(format!("{} = call {} {}.new(i64 {}, %work_t* \
                                                           %cur.work)",
                                                          bld_tmp,
                                                          bld_ty_str,
-                                                         bld_prefix));
+                                                         bld_prefix,
+                                                         size_str));
                                         ctx.code.add(format!("store {} {}, {}* {}",
                                                              bld_ty_str,
                                                              bld_tmp,

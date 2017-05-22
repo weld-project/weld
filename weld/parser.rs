@@ -732,12 +732,18 @@ impl<'t> Parser<'t> {
 
             TAppender => {
                 let mut elem_type = Unknown;
+                let mut arg = None;
                 if *self.peek() == TOpenBracket {
                     try!(self.consume(TOpenBracket));
                     elem_type = try!(self.type_());
                     try!(self.consume(TCloseBracket));
+                    if *self.peek() == TOpenParen {
+                        try!(self.consume(TOpenParen));
+                        arg = Some(try!(self.expr()));
+                        try!(self.consume(TCloseParen));
+                    }
                 }
-                let mut expr = expr_box(NewBuilder(None));
+                let mut expr = expr_box(NewBuilder(arg));
                 expr.ty = Builder(Appender(Box::new(elem_type)));
                 Ok(expr)
             }

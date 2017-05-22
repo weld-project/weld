@@ -236,6 +236,32 @@ fn symbol_usage_count(sym: &Symbol, expr: &Expr<Type>) -> u32 {
     usage_count
 }
 
+/// Infers the size of an appender used in a For loop if the loop's function only merges one value
+/// into the builder.
+pub fn infer_appender_size(expr: &mut Expr<Type>) {
+    expr.transform(&mut |ref mut expr| {
+        if let For { ref mut builder, ref mut func, .. } = expr.kind {
+            if let NewBuilder(ref mut arg) = builder.kind {
+                if let Builder(Appender(_)) = builder.ty {
+                    if is_simple_merge(func) {
+                        // TODO(shoumik)
+                        *arg = Some(Box::new(Expr {
+                            kind: Literal(I64Literal(0)),
+                            ty: Scalar(ScalarKind::I64),
+                        }));
+                    }
+                }
+            }
+        }
+        None
+    });
+}
+
+/// Returns true if this function merges into its builder exactly once.
+pub fn is_simple_merge(func: &mut Expr<Type>) -> bool {
+    true
+}
+
 /// Fuses for loops over the same vector in a zip into a single for loop which produces a vector of
 /// structs directly.
 ///
