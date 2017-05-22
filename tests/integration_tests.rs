@@ -799,13 +799,20 @@ fn simple_groupmerger() {
 
     assert_eq!(result.len, output_keys.len() as i64);
     for i in 0..(output_keys.len() as isize) {
+        let mut success = false;
         let key = unsafe { (*result.data.offset(i)).ele1 };
         let value_vec = unsafe { ((*result.data.offset(i)).ele2).clone() };
-        assert_eq!(output_keys[i as usize], key);
-        for j in 0..(output_vals[i as usize].len() as isize) {
-            let value = unsafe { *value_vec.data.offset(j) };
-            assert_eq!(output_vals[i as usize][j as usize], value);
+        for j in 0..(output_keys.len()) {
+            if output_keys[j] == key {
+                assert_eq!(value_vec.len, output_vals[j].len() as i64);
+                success = true;
+                for k in 0..(output_vals[j].len()) {
+                    let value = unsafe { *value_vec.data.offset(k as isize) };
+                    assert_eq!(output_vals[j][k], value)
+                }
+            }
         }
+        assert_eq!(success, true);
     }
     unsafe { weld_value_free(ret_value) };
 }
@@ -835,9 +842,9 @@ fn complex_groupmerger_with_struct_key() {
                 |b,i,e| merge(b, {{e.$0, e.$1}, e.$2}))))";
 
     let conf = default_conf();
-    let keys1 = [1, 1, 2, 2, 3, 3];
-    let keys2 = [1, 1, 2, 2, 3, 3];
-    let vals =  [2, 3, 4, 2, 1, 0];
+    let keys1 = [1, 1, 2, 2, 3, 3, 3, 3];
+    let keys2 = [1, 1, 2, 2, 3, 3, 4, 4];
+    let vals =  [2, 3, 4, 2, 1, 0, 4, 7];
     let ref input_data = Args {
         x: WeldVec {
             data: &keys1 as *const i32,
@@ -857,21 +864,27 @@ fn complex_groupmerger_with_struct_key() {
     let data = unsafe { weld_value_data(ret_value) as *const WeldVec<VecPair> };
     let result = unsafe { (*data).clone() };
 
-    let output_keys = [[1, 1], [2, 2], [3, 3]];
-    let output_vals = [[2,3], [4,2], [1, 0]];
+    let output_keys = [[1, 1], [2, 2], [3, 3], [3, 4]];
+    let output_vals = [[2,3], [4,2], [1, 0], [4, 7]];
 
     assert_eq!(result.len, output_keys.len() as i64);
     for i in 0..(output_keys.len() as isize) {
+        let mut success = false;
         let key = unsafe { (*result.data.offset(i)).clone().ele1 };
         let key1 = key.ele1;
         let key2 = key.ele2;
         let value_vec = unsafe { ((*result.data.offset(i)).ele2).clone() };
-        assert_eq!(output_keys[i as usize][0], key1);
-        assert_eq!(output_keys[i as usize][1], key2);
-        for j in 0..(output_vals[i as usize].len() as isize) {
-            let value = unsafe { *value_vec.data.offset(j) };
-            assert_eq!(output_vals[i as usize][j as usize], value)
+        for j in 0..(output_keys.len()) {
+            if output_keys[j][0] == key1 && output_keys[j][1] == key2 {
+                assert_eq!(value_vec.len, output_vals[j].len() as i64);
+                success = true;
+                for k in 0..(output_vals[j].len()) {
+                    let value = unsafe { *value_vec.data.offset(k as isize) };
+                    assert_eq!(output_vals[j][k], value)
+                }
+            }
         }
+        assert_eq!(success, true);
     }
     unsafe { weld_value_free(ret_value) };
 }
