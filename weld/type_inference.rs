@@ -264,6 +264,15 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             }
         }
 
+        Log { ref mut value } => {
+            match value.ty {
+                Scalar(F32) => push_complete_type(&mut expr.ty, Scalar(F32), "Log"),
+                Scalar(F64) => push_complete_type(&mut expr.ty, Scalar(F64), "Log"),
+                Unknown => push_type(&mut expr.ty, &value.ty, "Log"),
+                _ => return weld_err!("Internal error: Log called on non-scalar or non-float"),
+            }
+        }
+
         Lookup { ref mut data, ref mut index } => {
             if let Vector(ref elem_type) = data.ty {
                 let mut changed = false;

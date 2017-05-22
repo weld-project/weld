@@ -282,6 +282,11 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>,
                     print_expr_impl(value, typed, indent, should_indent))
         }
 
+        Log { ref value } => {
+            format!("exp({})",
+                    print_expr_impl(value, typed, indent, should_indent))
+        }
+
         Lambda { ref params, ref body } => {
             let mut res = join("|",
                                ",",

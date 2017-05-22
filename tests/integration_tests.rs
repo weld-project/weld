@@ -950,6 +950,29 @@ fn flat_map_length() {
     unsafe { weld_value_free(ret_value) };
 }
 
+fn simple_log() {
+    let code = "|x:f64| log(x)";
+    let conf = default_conf();
+    let input = 2.718281828459045;
+    let ret_value = compile_and_run(code, conf, &input);
+    let data = unsafe { weld_value_data(ret_value) as *const f64 };
+    let result = unsafe { (*data).clone() };
+    let output = 1.0f64;
+    assert_eq!(output, result);
+    unsafe { weld_value_free(ret_value) };
+}
+
+fn log_error() {
+    let code = "|x:i64| log(x)";
+    let conf = default_conf();
+    let input = 1;
+    let err_value = compile_and_run_error(code, conf, &input);
+    assert_eq!(unsafe { weld_error_code(err_value) },
+               WeldRuntimeErrno::CompileError);
+    unsafe { weld_error_free(err_value) };
+}
+
+
 fn simple_exp() {
     let code = "|x:f64| exp(x)";
     let conf = default_conf();
@@ -1199,7 +1222,9 @@ fn main() {
              ("iters_for_loop", iters_for_loop),
              ("serial_parlib_test", serial_parlib_test),
              ("iters_outofbounds_error_test", iters_outofbounds_error_test),
-             ("outofmemory_error_test", outofmemory_error_test)];
+             ("outofmemory_error_test", outofmemory_error_test),
+             ("simple_log", simple_log)];
+
 
     println!("");
     println!("running tests");
