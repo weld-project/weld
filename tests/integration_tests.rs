@@ -26,6 +26,14 @@ struct WeldVec<T> {
     len: i64,
 }
 
+#[derive(Clone)]
+#[allow(dead_code)]
+#[repr(C)]
+struct Pair<K, V> {
+    ele1: K,
+    ele2: V,
+}
+
 /// Returns a default configuration which uses a single thread.
 fn default_conf() -> *mut WeldConf {
     let conf = weld_conf_new();
@@ -760,13 +768,6 @@ fn simple_for_dictmerger_loop() {
 }
 
 fn simple_groupmerger() {
-    #[derive(Clone)]
-    #[allow(dead_code)]
-    struct VecPair {
-        ele1: i32,
-        ele2: WeldVec<i32>,
-    }
-
     #[allow(dead_code)]
     struct Args {
         x: WeldVec<i32>,
@@ -777,8 +778,8 @@ fn simple_groupmerger() {
                 |b,i,e| merge(b, e))))";
 
     let conf = default_conf();
-    let keys = [1, 2, 2, 1, 3, 3];
-    let vals = [2, 3, 4, 2, 1, 0];
+    let keys = [1, 2, 2, 3, 3, 1];
+    let vals = [2, 3, 4, 1, 0, 2];
     let ref input_data = Args {
         x: WeldVec {
             data: &keys as *const i32,
@@ -791,45 +792,29 @@ fn simple_groupmerger() {
     };
 
     let ret_value = compile_and_run(code, conf, input_data);
-    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<VecPair> };
+    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<Pair<i32, WeldVec<i32>>> };
     let result = unsafe { (*data).clone() };
+    let output : Vec<(i32, Vec<i32>)> = vec![(1, vec![2,2]), (2, vec![3,4]), (3, vec![1,0])];
 
-    let output_keys = [1, 2, 3];
-    let output_vals = [[2,2], [3,4], [1, 0]];
+    let mut res : Vec<(i32, Vec<i32>)> = (0..result.len)
+        .into_iter()
+        .map(|x| {
+            let key = unsafe { (*result.data.offset(x as isize)).ele1 };
+            let val = unsafe { ((*result.data.offset(x as isize)).ele2).clone() };
+            let vec : Vec<i32> = (0..val.len)
+                .into_iter()
+                .map(|y| unsafe { *val.data.offset(y as isize) })
+                .collect();
+            (key, vec)
+        })
+        .collect();
+    res.sort_by_key(|a| a.0);
 
-    assert_eq!(result.len, output_keys.len() as i64);
-    for i in 0..(output_keys.len() as isize) {
-        let mut success = false;
-        let key = unsafe { (*result.data.offset(i)).ele1 };
-        let value_vec = unsafe { ((*result.data.offset(i)).ele2).clone() };
-        for j in 0..(output_keys.len()) {
-            if output_keys[j] == key {
-                assert_eq!(value_vec.len, output_vals[j].len() as i64);
-                success = true;
-                for k in 0..(output_vals[j].len()) {
-                    let value = unsafe { *value_vec.data.offset(k as isize) };
-                    assert_eq!(output_vals[j][k], value)
-                }
-            }
-        }
-        assert_eq!(success, true);
-    }
+    assert_eq!(res, output);
     unsafe { weld_value_free(ret_value) };
 }
 
 fn complex_groupmerger_with_struct_key() {
-    #[derive(Clone)]
-    #[allow(dead_code)]
-    struct Pair {
-        ele1:i32,
-        ele2:i32
-    }
-    #[derive(Clone)]
-    #[allow(dead_code)]
-    struct VecPair {
-        ele1: Pair,
-        ele2: WeldVec<i32>,
-    }
     #[allow(dead_code)]
     struct Args {
         x: WeldVec<i32>,
@@ -844,7 +829,7 @@ fn complex_groupmerger_with_struct_key() {
     let conf = default_conf();
     let keys1 = [1, 1, 2, 2, 3, 3, 3, 3];
     let keys2 = [1, 1, 2, 2, 3, 3, 4, 4];
-    let vals =  [2, 3, 4, 2, 1, 0, 4, 7];
+    let vals =  [2, 3, 4, 2, 1, 0, 3, 2];
     let ref input_data = Args {
         x: WeldVec {
             data: &keys1 as *const i32,
@@ -861,31 +846,31 @@ fn complex_groupmerger_with_struct_key() {
     };
 
     let ret_value = compile_and_run(code, conf, input_data);
-    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<VecPair> };
+    let data = unsafe { weld_value_data(ret_value)
+                        as *const WeldVec<Pair<Pair<i32, i32>, WeldVec<i32>>> };
     let result = unsafe { (*data).clone() };
+    let output = vec![
+        ((1, 1), vec![2,3]),
+        ((2, 2), vec![4,2]),
+        ((3, 3), vec![1,0]),
+        ((3, 4), vec![3,2]),
+    ];
 
-    let output_keys = [[1, 1], [2, 2], [3, 3], [3, 4]];
-    let output_vals = [[2,3], [4,2], [1, 0], [4, 7]];
+    let mut res : Vec<((i32, i32), Vec<i32>)> = (0..result.len)
+        .into_iter()
+        .map(|x| {
+            let key = unsafe { ((*result.data.offset(x as isize)).ele1).clone() };
+            let val = unsafe { ((*result.data.offset(x as isize)).ele2).clone() };
+            let vec : Vec<i32> = (0..val.len)
+                .into_iter()
+                .map(|y| unsafe { *val.data.offset(y as isize) })
+                .collect();
+            ((key.ele1, key.ele2), vec)
+        })
+        .collect();
+    res.sort_by_key(|a| a.0);
 
-    assert_eq!(result.len, output_keys.len() as i64);
-    for i in 0..(output_keys.len() as isize) {
-        let mut success = false;
-        let key = unsafe { (*result.data.offset(i)).clone().ele1 };
-        let key1 = key.ele1;
-        let key2 = key.ele2;
-        let value_vec = unsafe { ((*result.data.offset(i)).ele2).clone() };
-        for j in 0..(output_keys.len()) {
-            if output_keys[j][0] == key1 && output_keys[j][1] == key2 {
-                assert_eq!(value_vec.len, output_vals[j].len() as i64);
-                success = true;
-                for k in 0..(output_vals[j].len()) {
-                    let value = unsafe { *value_vec.data.offset(k as isize) };
-                    assert_eq!(output_vals[j][k], value)
-                }
-            }
-        }
-        assert_eq!(success, true);
-    }
+    assert_eq!(res, output);
     unsafe { weld_value_free(ret_value) };
 }
 
