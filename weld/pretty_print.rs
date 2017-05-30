@@ -39,6 +39,9 @@ impl PrintableType for Type {
             Builder(DictMerger(ref kt, ref vt, op)) => {
                 format!("dictmerger[{},{},{}]", kt.print(), vt.print(), op)
             }
+            Builder(GroupMerger(ref kt, ref vt)) => {
+                format!("groupmerger[{},{}]", kt.print(), vt.print())
+            }
             Builder(VecMerger(ref elem, op)) => format!("vecmerger[{},{}]", elem.print(), op),
             Builder(Merger(ref t, op)) => format!("merger[{},{}]", t.print(), op),
         }
@@ -69,6 +72,9 @@ impl PrintableType for PartialType {
             Builder(Appender(ref elem)) => format!("appender[{}]", elem.print()),
             Builder(DictMerger(ref kt, ref vt, _, op)) => {
                 format!("dictmerger[{},{},{}]", kt.print(), vt.print(), op)
+            }
+            Builder(GroupMerger(ref kt, ref vt, _)) => {
+                format!("groupmerger[{},{}]", kt.print(), vt.print())
             }
             Builder(VecMerger(ref elem, _, op)) => format!("vecmerger[{},{}]", elem.print(), op),
             Builder(Merger(ref t, op)) => format!("merger[{},{}]", t.print(), op),

@@ -47,6 +47,7 @@ pub enum Token {
     TAppender,
     TMerger,
     TDictMerger,
+    TGroupMerger,
     TVecMerger,
     TToVec,
     TOpenParen, // (
@@ -92,7 +93,8 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
         // Regular expressions for various types of tokens.
         static ref KEYWORD_RE: Regex = Regex::new(
             "if|for|zip|len|lookup|keyexists|slice|exp|cudf|iter|merge|result|let|true|false|macro|\
-             i8|i32|i64|f32|f64|bool|vec|appender|merger|vecmerger|dictmerger|tovec").unwrap();
+             i8|i32|i64|f32|f64|bool|vec|appender|merger|vecmerger|dictmerger|groupmerger|\
+             tovec").unwrap();
 
         static ref IDENT_RE: Regex = Regex::new(r"^[A-Za-z$_][A-Za-z0-9$_]*$").unwrap();
 
@@ -139,6 +141,7 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
                 "appender" => TAppender,
                 "merger" => TMerger,
                 "dictmerger" => TDictMerger,
+                "groupmerger" => TGroupMerger,
                 "vecmerger" => TVecMerger,
                 "tovec" => TToVec,
                 "zip" => TZip,
@@ -264,6 +267,7 @@ impl fmt::Display for Token {
                            TAppender => "appender",
                            TMerger => "merger",
                            TDictMerger => "dictmerger",
+                           TGroupMerger => "groupmerger",
                            TVecMerger => "vecmerger",
                            TToVec => "tovec",
                            TZip => "zip",
@@ -351,6 +355,14 @@ fn basic_tokenize() {
                     TI32Literal(23),
                     TPlus,
                     TIdent("z0".into()),
+                    TEndOfInput]);
+    assert_eq!(tokenize("groupmerger[i32, i32]").unwrap(),
+               vec![TGroupMerger,
+                    TOpenBracket,
+                    TI32,
+                    TComma,
+                    TI32,
+                    TCloseBracket,
                     TEndOfInput]);
 
     assert_eq!(tokenize("= == | || & &&").unwrap(),

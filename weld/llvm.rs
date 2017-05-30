@@ -34,6 +34,7 @@ static VECTOR_CODE: &'static str = include_str!("resources/vector.ll");
 static MERGER_CODE: &'static str = include_str!("resources/merger.ll");
 static DICTIONARY_CODE: &'static str = include_str!("resources/dictionary.ll");
 static DICTMERGER_CODE: &'static str = include_str!("resources/dictmerger.ll");
+static GROUPMERGER_CODE: &'static str = include_str!("resources/groupbuilder.ll");
 
 /// Generates LLVM code for one or more modules.
 pub struct LlvmGenerator {
@@ -892,6 +893,12 @@ impl LlvmGenerator {
                             self.prelude_code.add("\n");
                             self.bld_names.insert(bk.clone(), format!("{}.bld", bld_ty_str));
                         }
+                        GroupMerger(ref kt, ref vt) => {
+                            let elem = Box::new(Struct(vec![*kt.clone(), *vt.clone()]));
+                            let bld_ty = Vector(elem.clone());
+                            let bld_ty_str = try!(self.llvm_type(&bld_ty)).to_string();
+                            self.bld_names.insert(bk.clone(), format!("{}.bld", bld_ty_str));
+                        }
                         VecMerger(ref elem, _) => {
                             let bld_ty = Vector(elem.clone());
                             let bld_ty_str = try!(self.llvm_type(&bld_ty)).to_string();
@@ -1526,6 +1533,31 @@ impl LlvmGenerator {
                                                          elem_ty_str,
                                                          elem_tmp));
                                     }
+                                    GroupMerger(ref kt, ref vt) => {
+                                        let bld_ty_str = try!(self.llvm_type(&bld_ty)).to_string();
+                                        let bld_prefix = format!("@{}",
+                                                                 bld_ty_str.replace("%", ""));
+                                        let bld_tmp =
+                                            try!(self.load_var(llvm_symbol(builder).as_str(),
+                                                               &bld_ty_str,
+                                                               ctx));
+                                        let elem_ty = Struct(vec![*kt.clone(), *vt.clone()]);
+                                        let elem_ty_str = try!(self.llvm_type(&elem_ty))
+                                            .to_string();
+                                        let elem_tmp =
+                                            try!(self.load_var(llvm_symbol(value).as_str(),
+                                                               &elem_ty_str,
+                                                               ctx));
+                                        ctx.code
+                                            .add(format!("call {} {}.merge({} {}, {} {}, i32 \
+                                                          %cur.tid)",
+                                                         bld_ty_str,
+                                                         bld_prefix,
+                                                         bld_ty_str,
+                                                         bld_tmp,
+                                                         elem_ty_str,
+                                                         elem_tmp));
+                                    }
                                     Merger(ref t, ref op) => {
                                         let bld_ty_str = self.llvm_type(&bld_ty)?.to_string();
                                         let bld_prefix = format!("@{}",
@@ -1750,6 +1782,68 @@ impl LlvmGenerator {
                                                              res_ty_str,
                                                              llvm_symbol(output)));
                                     }
+                                    GroupMerger(ref kt, ref vt) => {
+                                        let mut func_gen = IdGenerator::new("%func");
+                                        let function_id = func_gen.next();
+                                        let func_str = format!("@{}", &function_id.replace("%", ""));
+                                        let bld_ty = Dict(kt.clone(), Box::new(Vector(vt.clone())));
+                                        let elem = Box::new(Struct(vec![*kt.clone(), *vt.clone()]));
+                                        let bld_ty_str = try!(self.llvm_type(&bld_ty)).to_string();
+                                        let kv_struct_ty = try!(self.llvm_type(&elem)).to_string();
+                                        let key_ty = try!(self.llvm_type(kt)).to_string();
+                                        let value_ty = try!(self.llvm_type(vt)).to_string();
+                                        let value_vec_ty = try!(self.llvm_type(&Box::new(Vector(vt.clone())))).to_string();
+                                        let kv_vec = Box::new(Vector(elem.clone()));
+                                        let kv_vec_ty = try!(self.llvm_type(&kv_vec)).to_string();
+                                        let kv_vec_builder_ty = format!("{}.bld", &kv_vec_ty);
+                                        let key_prefix = format!("@{}", &key_ty.replace("%", ""));
+                                        let kv_vec_prefix = format!("@{}", &kv_vec_ty.replace("%", ""));
+                                        let value_vec_prefix = format!("@{}", &value_vec_ty.replace("%", ""));
+                                        let dict_prefix = format!("@{}", &bld_ty_str.replace("%", ""));
+
+                                        let name_replaced =
+                                            GROUPMERGER_CODE.replace("$NAME", &function_id.replace("%", ""));
+                                        let key_prefix_replaced =
+                                            name_replaced.replace("$KEY_PREFIX", &key_prefix);
+                                        let key_ty_replaced = key_prefix_replaced.replace("$KEY", &key_ty);
+                                        let value_vec_prefix_ty_replaced =
+                                            key_ty_replaced.replace("$VALUE_VEC_PREFIX", &value_vec_prefix);
+                                        let value_vec_ty_replaced =
+                                            value_vec_prefix_ty_replaced.replace("$VALUE_VEC", &value_vec_ty);
+                                        let value_ty_replaced =
+                                            value_vec_ty_replaced.replace("$VALUE", &value_ty);
+                                        let kv_struct_replaced =
+                                            value_ty_replaced.replace("$KV_STRUCT", &kv_struct_ty.replace("%", ""));
+                                        let kv_vec_prefix_replaced =
+                                            kv_struct_replaced.replace("$KV_VEC_PREFIX", &kv_vec_prefix);
+                                        let kv_vec_ty_replaced =
+                                            kv_vec_prefix_replaced.replace("$KV_VEC", &kv_vec_ty);
+                                        let dict_ty_prefix_replaced =
+                                            kv_vec_ty_replaced.replace("$DICT_PREFIX", &dict_prefix);
+                                        let dict_ty_replaced =
+                                            dict_ty_prefix_replaced.replace("$DICT", &bld_ty_str);
+                                        self.prelude_code.add(&dict_ty_replaced);
+
+                                        let res_ty_str = try!(self.llvm_type(&res_ty)).to_string();
+
+                                        let bld_tmp =
+                                            try!(self.load_var(llvm_symbol(builder).as_str(),
+                                                               &kv_vec_builder_ty,
+                                                               ctx));
+                                        let res_tmp = ctx.var_ids.next();
+
+                                        ctx.code.add(format!("{} = call {} {}({} {})",
+                                                             res_tmp,
+                                                             bld_ty_str,
+                                                             func_str,
+                                                             kv_vec_builder_ty,
+                                                             bld_tmp));
+                                        ctx.code.add(format!("store {} {}, {}* {}",
+                                                             res_ty_str,
+                                                             res_tmp,
+                                                             res_ty_str,
+                                                             llvm_symbol(output)));
+                                    }
                                     VecMerger(ref t, ref op) => {
                                         // The builder type (special internal type).
                                         let bld_ty_str = try!(self.llvm_type(&bld_ty)).to_string();
@@ -1876,7 +1970,7 @@ impl LlvmGenerator {
                                                                  bld_ty_str.replace("%", ""));
                                         let bld_tmp = ctx.var_ids.next();
                                         ctx.code
-                                            .add(format!("{} = call {} {}.new(i64 16, %work_t* \
+                                           .add(format!("{} = call {} {}.new(i64 16, %work_t* \
                                                           %cur.work)",
                                                          bld_tmp,
                                                          bld_ty_str,
@@ -1914,6 +2008,24 @@ impl LlvmGenerator {
                                                              bld_tmp,
                                                              bld_ty_str,
                                                              bld_prefix));
+                                        ctx.code.add(format!("store {} {}, {}* {}",
+                                                             bld_ty_str,
+                                                             bld_tmp,
+                                                             bld_ty_str,
+                                                             llvm_symbol(output)));
+                                    }
+                                    GroupMerger(_, _) => {
+                                        let bld_ty_str = try!(self.llvm_type(ty))
+                                            .to_string();
+                                        let bld_prefix = format!("@{}",
+                                                                 bld_ty_str.replace("%", ""));
+                                        let bld_tmp = ctx.var_ids.next();
+                                        ctx.code
+                                            .add(format!("{} = call {} {}.new(i64 16, %work_t* \
+                                                          %cur.work)",
+                                                         bld_tmp,
+                                                         bld_ty_str,
+                                                         bld_prefix));
                                         ctx.code.add(format!("store {} {}, {}* {}",
                                                              bld_ty_str,
                                                              bld_tmp,
