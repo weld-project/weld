@@ -66,6 +66,10 @@ pub fn vectorize(expr: &mut Expr<Type>) -> WeldResult<()> {
                                     e.ty = vectorized_type(&e.ty);
                                     None
                                 }
+                                BinOp { .. } => {
+                                    e.ty = vectorized_type(&e.ty);
+                                    None
+                                }
                                 _ => None,
                             };
                             return (vectorized, true);
