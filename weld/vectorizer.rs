@@ -9,19 +9,14 @@ use super::ast::ExprKind::*;
 use super::ast::Type::*;
 use super::error::*;
 
-// Attempts to vectorize a scalar
-macro_rules! vectorize {
-    ($x:expr) => {
-        let mut vectorized = false;
-        if let Scalar(kind) = $x.ty {
-            $x.ty = VectorizedScalar(kind);
-            vectorized = true;
-        } else if let Builder(kind) = $x.ty.clone() {
-            $x.ty = VectorizedBuilder(kind);
-            vectorized = true;
-        }
-        vectorized
-    };
+/// Vectorizes a type.
+fn vectorized_type(ty: &Type) -> Type {
+    if let Scalar(kind) = *ty {
+        return VectorizedScalar(kind);
+    } else if let Builder(ref kind) = *ty {
+        return VectorizedBuilder(kind.clone());
+    }
+    ty.clone()
 }
 
 /// Vectorize an expression.
@@ -46,16 +41,80 @@ pub fn vectorize(expr: &mut Expr<Type>) -> WeldResult<()> {
     //
     // B = appender
     // for x in V
-    //      merge(B, x + 1)
-    expr.transform(&mut |ref mut e| {
-        if let BinOp { .. } = e.kind {
-            vectorize!(e);
-        } else if let Literal(_) = e.kind {
-            vectorize!(e);
-        } else if let Ident(_) = e.kind {
-            vectorize!(e);
+    //      merge(B, x)
+    expr.transform_and_continue(&mut |ref mut expr| {
+        //  The Res is a stricter-than-necessary check, but prevents us from having to check nested
+        //  loops for now.
+        if let Res { builder: ref for_loop } = expr.kind {
+            if let For { ref iters, builder: ref init_builder, ref func } = for_loop.kind {
+                if let NewBuilder(_) = init_builder.kind {
+                    if let Lambda { ref params, ref body } = func.kind {
+                        let mut vectorized_body = body.clone();
+                        vectorized_body.transform_and_continue(&mut |ref mut e| {
+                            let vectorized = match e.kind {
+                                // TODO - for readability, might want to factor this out into a
+                                // function.
+                                Literal(_) => {
+                                    e.ty = vectorized_type(&e.ty);
+                                    None
+                                }
+                                Merge { .. } => {
+                                    e.ty = vectorized_type(&e.ty);
+                                    None
+                                }
+                                Ident(_) => {
+                                    e.ty = vectorized_type(&e.ty);
+                                    None
+                                }
+                                _ => None,
+                            };
+                            return (vectorized, true);
+                        });
+
+                        // Replace the loop with a vectorized version.
+                        // TODO add a fringe loop!
+
+                        let vectorized_builder = Expr {
+                            kind: init_builder.kind.clone(),
+                            ty: vectorized_type(&init_builder.ty),
+                        };
+
+                        let vectorized_params = params.iter()
+                            .map(|ref p| {
+                                Parameter {
+                                    name: p.name.clone(),
+                                    ty: vectorized_type(&p.ty),
+                                }
+                            })
+                            .collect::<Vec<_>>();
+
+                        let vectorized_func_ty =
+                            Function(vectorized_params.iter().map(|ref p| p.ty.clone()).collect(),
+                                     Box::new(vectorized_body.ty.clone()));
+                        let vectorized_func = Expr {
+                            kind: Lambda {
+                                params: vectorized_params.clone(),
+                                body: vectorized_body,
+                            },
+                            ty: vectorized_func_ty,
+                        };
+
+                        let vectorized_loop = Expr {
+                            kind: For {
+                                iters: iters.clone(),
+                                builder: Box::new(vectorized_builder),
+                                func: Box::new(vectorized_func),
+                            },
+                            ty: vectorized_type(&for_loop.ty),
+                        };
+
+                        return (Some(vectorized_loop), false);
+                    }
+                }
+            }
         }
-        None
+        // Check other expressions.
+        (None, true)
     });
     Ok(())
 }

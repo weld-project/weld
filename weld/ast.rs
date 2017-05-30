@@ -111,8 +111,8 @@ pub struct Iter<T: TypeBounds> {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ExprKind<T: TypeBounds> {
-    // TODO: maybe all of these should take named parameters
     Literal(LiteralKind),
+    // CompileTimeConstant(ConstantKind),
     Ident(Symbol),
     Negate(Box<Expr<T>>),
     BinOp {
