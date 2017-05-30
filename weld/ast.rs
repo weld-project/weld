@@ -80,6 +80,7 @@ pub enum BuilderKind {
     Merger(Box<Type>, BinOpKind),
     /// key_type, value_type, binop
     DictMerger(Box<Type>, Box<Type>, BinOpKind),
+    GroupMerger(Box<Type>, Box<Type>),
     /// elem_type, binop
     VecMerger(Box<Type>, BinOpKind),
 }

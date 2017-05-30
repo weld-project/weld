@@ -618,6 +618,43 @@ fn push_type(dest: &mut PartialType, src: &PartialType, context: &str) -> WeldRe
             }
         }
 
+        Builder(GroupMerger(ref mut dest_key_ty,
+                            ref mut dest_value_ty,
+                            ref mut dest_merge_ty)) => {
+            match *src {
+                Builder(GroupMerger(ref src_key_ty, ref src_value_ty, ref src_merge_ty)) => {
+                    let mut changed = false;
+                    changed |= try!(push_type(dest_key_ty.as_mut(), src_key_ty.as_ref(), context));
+                    changed |=
+                        try!(push_type(dest_value_ty.as_mut(), src_value_ty.as_ref(), context));
+                    changed |=
+                        try!(push_type(dest_merge_ty.as_mut(), src_merge_ty.as_ref(), context));
+                    // For now, any commutative-merge builder only supports either a single scalar
+                    // or a struct of scalars.
+                    match **dest_value_ty {
+                        Struct(ref tys) => {
+                            for ty in tys {
+                                match *ty {
+                                    Scalar(_) => {}
+                                    _ => {
+                                        return weld_err!("Commutatitive merge builders only \
+                                                          support structs with scalars");
+                                    }
+                                }
+                            }
+                        }
+                        Scalar(_) => {}
+                        _ => {
+                            return weld_err!("Commutatitive merge builders only support scalars \
+                                              or structs of scalars");
+                        }
+                    }
+                    Ok(changed)
+                }
+                _ => weld_err!("Mismatched types in GroupMerger, {}", context),
+            }
+        }
+
         Builder(VecMerger(ref mut dest_elem_ty, ref mut dest_merge_ty, _)) => {
             match *src {
                 Builder(VecMerger(ref src_elem_ty, ref src_merge_ty, _)) => {

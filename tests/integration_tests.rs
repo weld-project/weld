@@ -26,6 +26,14 @@ struct WeldVec<T> {
     len: i64,
 }
 
+#[derive(Clone)]
+#[allow(dead_code)]
+#[repr(C)]
+struct Pair<K, V> {
+    ele1: K,
+    ele2: V,
+}
+
 /// Returns a default configuration which uses a single thread.
 fn default_conf() -> *mut WeldConf {
     let conf = weld_conf_new();
@@ -759,6 +767,113 @@ fn simple_for_dictmerger_loop() {
     unsafe { weld_value_free(ret_value) };
 }
 
+fn simple_groupmerger() {
+    #[allow(dead_code)]
+    struct Args {
+        x: WeldVec<i32>,
+        y: WeldVec<i32>,
+    }
+
+    let code = "|x:vec[i32], y:vec[i32]| tovec(result(for(zip(x,y), groupmerger[i32,i32], \
+                |b,i,e| merge(b, e))))";
+
+    let conf = default_conf();
+    let keys = [1, 2, 2, 3, 3, 1];
+    let vals = [2, 3, 4, 1, 0, 2];
+    let ref input_data = Args {
+        x: WeldVec {
+            data: &keys as *const i32,
+            len: keys.len() as i64,
+        },
+        y: WeldVec {
+            data: &vals as *const i32,
+            len: vals.len() as i64,
+        },
+    };
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<Pair<i32, WeldVec<i32>>> };
+    let result = unsafe { (*data).clone() };
+    let output : Vec<(i32, Vec<i32>)> = vec![(1, vec![2,2]), (2, vec![3,4]), (3, vec![1,0])];
+
+    let mut res : Vec<(i32, Vec<i32>)> = (0..result.len)
+        .into_iter()
+        .map(|x| {
+            let key = unsafe { (*result.data.offset(x as isize)).ele1 };
+            let val = unsafe { ((*result.data.offset(x as isize)).ele2).clone() };
+            let vec : Vec<i32> = (0..val.len)
+                .into_iter()
+                .map(|y| unsafe { *val.data.offset(y as isize) })
+                .collect();
+            (key, vec)
+        })
+        .collect();
+    res.sort_by_key(|a| a.0);
+
+    assert_eq!(res, output);
+    unsafe { weld_value_free(ret_value) };
+}
+
+fn complex_groupmerger_with_struct_key() {
+    #[allow(dead_code)]
+    struct Args {
+        x: WeldVec<i32>,
+        y: WeldVec<i32>,
+        z: WeldVec<i32>
+    }
+
+    let code = "|x:vec[i32], y:vec[i32], z:vec[i32]| \
+                tovec(result(for(zip(x,y,z), groupmerger[{i32,i32}, i32], \
+                |b,i,e| merge(b, {{e.$0, e.$1}, e.$2}))))";
+
+    let conf = default_conf();
+    let keys1 = [1, 1, 2, 2, 3, 3, 3, 3];
+    let keys2 = [1, 1, 2, 2, 3, 3, 4, 4];
+    let vals =  [2, 3, 4, 2, 1, 0, 3, 2];
+    let ref input_data = Args {
+        x: WeldVec {
+            data: &keys1 as *const i32,
+            len: keys1.len() as i64,
+        },
+        y: WeldVec {
+            data: &keys2 as *const i32,
+            len: keys2.len() as i64,
+        },
+        z: WeldVec {
+            data: &vals as *const i32,
+            len: vals.len() as i64,
+        },
+    };
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value)
+                        as *const WeldVec<Pair<Pair<i32, i32>, WeldVec<i32>>> };
+    let result = unsafe { (*data).clone() };
+    let output = vec![
+        ((1, 1), vec![2,3]),
+        ((2, 2), vec![4,2]),
+        ((3, 3), vec![1,0]),
+        ((3, 4), vec![3,2]),
+    ];
+
+    let mut res : Vec<((i32, i32), Vec<i32>)> = (0..result.len)
+        .into_iter()
+        .map(|x| {
+            let key = unsafe { ((*result.data.offset(x as isize)).ele1).clone() };
+            let val = unsafe { ((*result.data.offset(x as isize)).ele2).clone() };
+            let vec : Vec<i32> = (0..val.len)
+                .into_iter()
+                .map(|y| unsafe { *val.data.offset(y as isize) })
+                .collect();
+            ((key.ele1, key.ele2), vec)
+        })
+        .collect();
+    res.sort_by_key(|a| a.0);
+
+    assert_eq!(res, output);
+    unsafe { weld_value_free(ret_value) };
+}
+
 fn simple_parallel_for_dictmerger_loop() {
     #[derive(Clone)]
     #[allow(dead_code)]
@@ -1190,6 +1305,8 @@ fn main() {
              ("simple_for_vecmerger_loop_2", simple_for_vecmerger_loop_2),
              ("parallel_for_vecmerger_loop", parallel_for_vecmerger_loop),
              ("simple_for_dictmerger_loop", simple_for_dictmerger_loop),
+             ("simple_groupmerger", simple_groupmerger),
+             ("complex_groupmerger_with_struct_key", complex_groupmerger_with_struct_key),
              ("simple_parallel_for_dictmerger_loop", simple_parallel_for_dictmerger_loop),
              ("simple_dict_lookup", simple_dict_lookup),
              ("simple_dict_exists", simple_dict_exists),
