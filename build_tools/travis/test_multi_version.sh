@@ -2,10 +2,18 @@
 
 LLVM_VERSION=$1
 LLVM_SYS_VERSION=$2
+PYTHON_VERSION=$3
 
 # create llvm-config symlink
+sudo rm -f `which llvm-config`
 sudo rm -f /usr/bin/llvm-config
 sudo ln -s /usr/bin/llvm-config-$LLVM_VERSION /usr/bin/llvm-config
+export WELD_HOME=`pwd`
+
+source $VENV_HOME/py$PYTHON_VERSION/bin/activate
+cd python
+python setup.py install
+cd ..
 
 # set llvm-sys crate version
 sed -i "s/llvm-sys = \".*\"/llvm-sys = \"$LLVM_SYS_VERSION\"/g" easy_ll/Cargo.toml
@@ -14,5 +22,7 @@ sed -i "s/llvm-sys = \".*\"/llvm-sys = \"$LLVM_SYS_VERSION\"/g" easy_ll/Cargo.to
 cargo clean
 cargo build --release
 cargo test
+
+
 python python/grizzly/tests/grizzly_test.py
 python python/grizzly/tests/numpy_weld_test.py
