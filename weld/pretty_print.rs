@@ -47,7 +47,11 @@ impl PrintableType for Type {
             }
             Builder(VecMerger(ref elem, op)) => format!("vecmerger[{},{}]", elem.print(), op),
             Builder(Merger(ref t, op)) => format!("merger[{},{}]", t.print(), op),
-            VectorizedBuilder(_) => "vectorizedBuilder".to_string(), // TODO
+            VectorizedBuilder(ref b) => {
+                let builder_ty = Builder(b.clone());
+                let ty_str = builder_ty.print();
+                format!("{}(vectorized)", ty_str)
+            }
         }
     }
 }
@@ -65,6 +69,12 @@ impl PrintableType for PartialType {
             Scalar(I64) => "i64".to_string(),
             Scalar(F32) => "f32".to_string(),
             Scalar(F64) => "f64".to_string(),
+            VectorizedScalar(Bool) => "<bool x V>".to_string(),
+            VectorizedScalar(I8) => "<i8 x V>".to_string(),
+            VectorizedScalar(I32) => "<i32 x V>".to_string(),
+            VectorizedScalar(I64) => "<i64 x V>".to_string(),
+            VectorizedScalar(F32) => "<f32 x V>".to_string(),
+            VectorizedScalar(F64) => "<f64 x V>".to_string(),
             Vector(ref elem) => format!("vec[{}]", elem.print()),
             Dict(ref kt, ref vt) => format!("dict[{},{}]", kt.print(), vt.print()),
             Struct(ref elems) => join("{", ",", "}", elems.iter().map(|e| e.print())),
@@ -79,6 +89,11 @@ impl PrintableType for PartialType {
             }
             Builder(VecMerger(ref elem, _, op)) => format!("vecmerger[{},{}]", elem.print(), op),
             Builder(Merger(ref t, op)) => format!("merger[{},{}]", t.print(), op),
+            VectorizedBuilder(ref b) => {
+                let builder_ty = Builder(b.clone());
+                let ty_str = builder_ty.print();
+                format!("{}(vectorized)", ty_str)
+            }
         }
     }
 }
@@ -181,6 +196,8 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>,
     match expr.kind {
         Literal(ref lit) => print_literal(lit),
 
+        CompileTimeConstant(ref e) => print_compile_constant(e),
+
         Ident(ref symbol) => {
             if typed {
                 format!("{}:{}", symbol, expr.ty.print())
@@ -197,6 +214,8 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>,
         }
 
         Negate(ref e) => format!("(-{})", print_expr_impl(e, typed, indent, should_indent)),
+
+        Ramp(ref e) => format!("ramp({})", print_expr_impl(e, typed, indent, should_indent)),
 
         CUDF { ref sym_name, ref args, ref return_ty } => {
             format!("cudf[{},{}]{}",
@@ -382,6 +401,13 @@ pub fn print_literal(lit: &LiteralKind) -> String {
             }
             res
         }
+    }
+}
+
+/// Print a compile time constant.
+pub fn print_compile_constant(kind: &CompileTimeConstantKind) -> String {
+    match *kind {
+        CompileTimeConstantKind::VectorWidth => "VECWIDTH".to_string(),
     }
 }
 

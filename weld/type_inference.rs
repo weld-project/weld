@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use super::ast::CompileTimeConstantKind::*;
 use super::ast::ExprKind::*;
 use super::ast::LiteralKind::*;
 use super::ast::ScalarKind::*;
@@ -100,6 +101,12 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
 
         Literal(BoolLiteral(_)) => push_complete_type(&mut expr.ty, Scalar(Bool), "BoolLiteral"),
 
+        CompileTimeConstant(VectorWidth) => {
+            push_complete_type(&mut expr.ty,
+                               Scalar(I64),
+                               "CompileTimeConstant(VectorWidth)")
+        }
+
         BinOp { kind: op, ref mut left, ref mut right } => {
             let mut elem_type = Unknown;
             try!(push_type(&mut elem_type, &left.ty, "BinOp"));
@@ -155,6 +162,14 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
         }
 
         Negate(ref c) => push_type(&mut expr.ty, &c.ty, "Negate"),
+
+        Ramp(ref c) => {
+            if let Scalar(ref kind) = c.ty {
+                push_type(&mut expr.ty, &VectorizedScalar(*kind), "Ramp")
+            } else {
+                weld_err!("Expected Scalar type for Ramp")
+            }
+        }
 
         CUDF { ref return_ty, .. } => push_complete_type(&mut expr.ty, *return_ty.clone(), "CUDF"),
 
@@ -517,6 +532,13 @@ fn push_type(dest: &mut PartialType, src: &PartialType, context: &str) -> WeldRe
             }
         }
 
+        VectorizedScalar(ref d) => {
+            match *src {
+                Scalar(ref s) if d == s => Ok(false),
+                _ => weld_err!("Mismatched types in VectorizedScalar, {}", context),
+            }
+        }
+
         Vector(ref mut dest_elem) => {
             match *src {
                 Vector(ref src_elem) => push_type(dest_elem, src_elem, context),
@@ -684,6 +706,11 @@ fn push_type(dest: &mut PartialType, src: &PartialType, context: &str) -> WeldRe
                 _ => weld_err!("Mismatched types in {}", context),
             }
         }
+
+        // TODO(shoumik): Hmm... we might need a better way of doing this. Partial types with builders are super
+        // clunky right now since `Builder` and `PartialBuilder` are treated as two disjoint
+        // entities.
+        VectorizedBuilder(_) => weld_err!("Type inference not supported for vectorized builders"),
     }
 }
 
