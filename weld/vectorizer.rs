@@ -14,7 +14,14 @@ fn vectorized_type(ty: &Type) -> Type {
     if let Scalar(kind) = *ty {
         return VectorizedScalar(kind);
     } else if let Builder(ref kind) = *ty {
-        return VectorizedBuilder(kind.clone());
+        let vectorized_kind = match *kind {
+            BuilderKind::Merger(ref t, ref op) => {
+                BuilderKind::Merger(Box::new(vectorized_type(t)), *op)
+            }
+            // TODO(shoumik): need to throw an error here...
+            _ => panic!("unsupported type"),
+        };
+        return VectorizedBuilder(vectorized_kind);
     }
     ty.clone()
 }
@@ -55,7 +62,7 @@ pub fn vectorize(expr: &mut Expr<Type>) -> WeldResult<()> {
         //  loops for now.
         if let Res { builder: ref for_loop } = expr.kind {
             if let For { ref iters, builder: ref init_builder, ref func } = for_loop.kind {
-                // TODO Check NewBuilder type - just support Merger.
+                // TODO(shoumik): Check NewBuilder type - just support Merger.
                 if let NewBuilder(_) = init_builder.kind {
                     if vectorizable_builder(&init_builder.ty) {
                         if let Lambda { ref params, ref body } = func.kind {
@@ -89,14 +96,14 @@ pub fn vectorize(expr: &mut Expr<Type>) -> WeldResult<()> {
                         });
 
                             // Replace the loop with a vectorized version.
-                            // TODO add a fringe loop!
+                            // TODO(shoumik): add a fringe loop!
 
                             let vectorized_builder = Expr {
                                 kind: init_builder.kind.clone(),
                                 ty: vectorized_type(&init_builder.ty),
                             };
 
-                            let vectorized_params = params.iter()
+                            let mut vectorized_params = params.iter()
                                 .map(|ref p| {
                                     Parameter {
                                         name: p.name.clone(),
@@ -104,6 +111,8 @@ pub fn vectorize(expr: &mut Expr<Type>) -> WeldResult<()> {
                                     }
                                 })
                                 .collect::<Vec<_>>();
+                            // Don't vectorize the index...
+                            vectorized_params[1] = params[1].clone();
 
                             let vectorized_func_ty = Function(vectorized_params.iter()
                                                                   .map(|ref p| p.ty.clone())

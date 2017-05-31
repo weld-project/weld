@@ -62,6 +62,12 @@ pub struct LlvmGenerator {
     /// A CodeBuilder for body functions in the module.
     body_code: CodeBuilder,
     visited: HashSet<sir::FunctionId>,
+
+    /// Vector types.
+    vector_types: HashMap<Type, String>,
+
+    /// Compile time constants.
+    vector_width: u64,
 }
 
 /// A wrapper for a struct passed as input to the Weld runtime.
@@ -116,6 +122,8 @@ impl LlvmGenerator {
             prelude_var_ids: IdGenerator::new("%p.p"),
             body_code: CodeBuilder::new(),
             visited: HashSet::new(),
+            vector_types: HashMap::new(),
+            vector_width: 4,
         };
         generator.prelude_code.add(PRELUDE_CODE);
         generator.prelude_code.add("\n");
@@ -356,7 +364,7 @@ impl LlvmGenerator {
                     } else {
                         idx_tmp.clone()
                     };
-                    ctx.code.add(format!("{} = call {}* {}.at({} {}, i64 {})",
+                    ctx.code.add(format!("{} = call {}* {}.vat({} {}, i64 {})",
                                          inner_elem_tmp_ptr,
                                          &inner_elem_ty_str,
                                          data_prefix,
@@ -713,6 +721,23 @@ impl LlvmGenerator {
             Scalar(F32) => Ok("float"),
             Scalar(F64) => Ok("double"),
 
+            VectorizedScalar(ref e) => {
+                if self.vector_types.get(ty) == None {
+                    let width = self.vector_width;
+                    let ty_str = match *e {
+                        // TODO(shoumik): just call llvm_type...getting some borrow checker
+                        // error though.
+                        I32 => "i32",
+                        I64 => "i64",
+                        _ => {
+                            return weld_err!("unsupported scalar vector type at code generation");
+                        }
+                    };
+                    self.vector_types.insert(ty.clone(), format!("<{} x {}>", width, ty_str));
+                }
+                Ok(self.vector_types.get(ty).unwrap())
+            }
+
             Struct(ref fields) => {
                 if self.struct_names.get(fields) == None {
                     // Declare the struct in prelude_code
@@ -801,12 +826,14 @@ impl LlvmGenerator {
                 if self.vec_names.get(elem) == None {
                     let elem_ty = try!(self.llvm_type(elem)).to_string();
                     let elem_prefix = format!("@{}", elem_ty.replace("%", ""));
+                    let vecsize_str = format!("{}", self.vector_width);
                     let name = self.vec_ids.next();
                     self.vec_names.insert(*elem.clone(), name.clone());
                     let prefix_replaced = VECTOR_CODE.replace("$ELEM_PREFIX", &elem_prefix);
                     let elem_replaced = prefix_replaced.replace("$ELEM", &elem_ty);
                     let name_replaced = elem_replaced.replace("$NAME", &name.replace("%", ""));
-                    self.prelude_code.add(&name_replaced);
+                    let vecsize_replaced = name_replaced.replace("$VECSIZE", &vecsize_str);
+                    self.prelude_code.add(&vecsize_replaced);
                     self.prelude_code.add("\n");
                 }
                 Ok(self.vec_names.get(elem).unwrap())
@@ -839,6 +866,8 @@ impl LlvmGenerator {
                 Ok(self.dict_names.get(&elem).unwrap())
             }
 
+            // TODO disable for everything but merger
+            VectorizedBuilder(ref bk) |
             Builder(ref bk) => {
                 if self.bld_names.get(bk) == None {
                     match *bk {
@@ -931,50 +960,55 @@ impl LlvmGenerator {
                              &merge_ty_str,
                              &merge_ty_str,
                              &builder_ptr));
-        if let Scalar(_) = *merge_ty {
-            ctx.code.add(format!("{} = {} {} {}, {}",
-                                 &res,
-                                 try!(llvm_binop(*bin_op, merge_ty)),
-                                 &merge_ty_str,
-                                 builder_value,
-                                 merge_value));
-        } else if let Struct(ref tys) = *merge_ty {
-            let mut cur = "undef".to_string();
-            for (i, ty) in tys.iter().enumerate() {
-                let merge_elem = ctx.var_ids.next();
-                let builder_elem = ctx.var_ids.next();
-                let struct_name = ctx.var_ids.next();
-                let binop_value = ctx.var_ids.next();
-                let elem_ty_str = try!(self.llvm_type(ty)).to_string();
-                ctx.code.add(format!("{} = extractvalue {} {}, {}",
-                                     &merge_elem,
-                                     &merge_ty_str,
-                                     &merge_value,
-                                     i));
-                ctx.code.add(format!("{} = extractvalue {} {}, {}",
-                                     &builder_elem,
-                                     &merge_ty_str,
-                                     &builder_value,
-                                     i));
+        match *merge_ty {
+            VectorizedScalar(_) |
+            Scalar(_) => {
                 ctx.code.add(format!("{} = {} {} {}, {}",
-                                     &binop_value,
-                                     try!(llvm_binop(*bin_op, ty)),
-                                     &elem_ty_str,
-                                     &merge_elem,
-                                     &builder_elem));
-                ctx.code.add(format!("{} = insertvalue {} {}, {} {}, {}",
-                                     &struct_name,
+                                     &res,
+                                     try!(llvm_binop(*bin_op, merge_ty)),
                                      &merge_ty_str,
-                                     &cur,
-                                     &elem_ty_str,
-                                     &binop_value,
-                                     i));
-                res = struct_name.clone();
-                cur = struct_name.clone();
+                                     builder_value,
+                                     merge_value));
             }
-        } else {
-            unreachable!();
-        }
+            Struct(ref tys) => {
+                let mut cur = "undef".to_string();
+                for (i, ty) in tys.iter().enumerate() {
+                    let merge_elem = ctx.var_ids.next();
+                    let builder_elem = ctx.var_ids.next();
+                    let struct_name = ctx.var_ids.next();
+                    let binop_value = ctx.var_ids.next();
+                    let elem_ty_str = try!(self.llvm_type(ty)).to_string();
+                    ctx.code.add(format!("{} = extractvalue {} {}, {}",
+                                         &merge_elem,
+                                         &merge_ty_str,
+                                         &merge_value,
+                                         i));
+                    ctx.code.add(format!("{} = extractvalue {} {}, {}",
+                                         &builder_elem,
+                                         &merge_ty_str,
+                                         &builder_value,
+                                         i));
+                    ctx.code.add(format!("{} = {} {} {}, {}",
+                                         &binop_value,
+                                         try!(llvm_binop(*bin_op, ty)),
+                                         &elem_ty_str,
+                                         &merge_elem,
+                                         &builder_elem));
+                    ctx.code.add(format!("{} = insertvalue {} {}, {} {}, {}",
+                                         &struct_name,
+                                         &merge_ty_str,
+                                         &cur,
+                                         &elem_ty_str,
+                                         &binop_value,
+                                         i));
+                    res = struct_name.clone();
+                    cur = struct_name.clone();
+                }
+            }
+            _ => {
+                unreachable!();
+            }
+        };
 
         // Store the resulting merge value back into the builder pointer.
         ctx.code.add(format!("store {} {}, {}* {}",
@@ -1477,6 +1511,8 @@ impl LlvmGenerator {
                     Merge { ref builder, ref value } => {
                         let bld_ty = try!(get_sym_ty(func, builder));
                         match *bld_ty {
+                            // TODO disable for everything but merger
+                            VectorizedBuilder(ref bk) |
                             Builder(ref bk) => {
                                 match *bk {
                                     Appender(ref t) => {
@@ -1605,6 +1641,115 @@ impl LlvmGenerator {
                         let bld_ty = try!(get_sym_ty(func, builder));
                         let res_ty = try!(get_sym_ty(func, output));
                         match *bld_ty {
+                            VectorizedBuilder(ref bk) => {
+                                match *bk {
+                                    // TODO again copied from below...
+                                    Merger(ref t, ref op) => {
+                                        let bld_ty_str = try!(self.llvm_type(&bld_ty)).to_string();
+                                        let bld_prefix = format!("@{}",
+                                                                 bld_ty_str.replace("%", ""));
+                                        let res_ty_str = try!(self.llvm_type(&res_ty)).to_string();
+                                        let bld_tmp =
+                                            try!(self.load_var(llvm_symbol(builder).as_str(),
+                                                               &bld_ty_str,
+                                                               ctx));
+
+                                        // Get the first builder.
+                                        ctx.code
+                                            .add(format!("%bldPtrFirst = call {elem_ty_str}* \
+                                                          {bld_prefix}.\
+                                                          getPtrIndexed({bld_ty_str} \
+                                                          {bld_tmp}, i32 0)",
+                                                         elem_ty_str = res_ty_str.clone(),
+                                                         bld_ty_str = bld_ty_str,
+                                                         bld_prefix = bld_prefix,
+                                                         bld_tmp = bld_tmp));
+                                        ctx.code.add(format!("
+                                        \
+                                                              %bldPtrCasted = bitcast \
+                                                              {bld_ty_str} %bldPtrFirst to \
+                                                              {elem_ty_str}*",
+                                                             bld_ty_str = bld_ty_str,
+                                                             elem_ty_str = res_ty_str.clone()));
+
+                                        ctx.code.add(format!("
+                                            \
+                                                              %first = load {elem_ty_str}, \
+                                                              {elem_ty_str}* %bldPtrCasted
+                                            \
+                                                              %nworkers = call i32 \
+                                                              @get_nworkers()
+                                            \
+                                                              br label %entry
+                                          \
+                                                              entry:
+                                            \
+                                                              %cond = icmp ult i32 1, %nworkers
+                                            \
+                                                              br i1 %cond, label %body, label \
+                                                              %done
+                                        \
+                                                              ",
+                                                             elem_ty_str = res_ty_str.clone()));
+
+                                        ctx.code.add(format!("body:
+  %i = phi i32 [ 1, %entry  \
+                                                              ], [ %i2, %body ]
+  %bldPtr = \
+                                                              call {elem_ty_str}* \
+                                                              {bld_prefix}.\
+                                                              getPtrIndexed({bld_ty_str} \
+                                                              {bld_tmp}, i32 %i)
+  %val = load \
+                                                              {elem_ty_str}, {elem_ty_str}* \
+                                                              %bldPtr",
+                                                             bld_prefix = bld_prefix,
+                                                             bld_ty_str = bld_ty_str,
+                                                             elem_ty_str = res_ty_str.clone(),
+                                                             bld_tmp = bld_tmp));
+
+                                        try!(self.gen_merge("%bldPtrFirst".to_string(),
+                                                            "%val".to_string(),
+                                                            res_ty_str.to_string(),
+                                                            op,
+                                                            t,
+                                                            ctx));
+
+                                        ctx.code.add(format!("%i2 = add i32 %i, 1
+                                                              \
+                                                              %cond2 = icmp ult i32 %i2, \
+                                                              %nworkers
+                                            \
+                                                              br i1 %cond2, label %body, label \
+                                                              %done
+                                            \
+                                                              done:
+                                                \
+                                                              %final = load {res_ty_str}, \
+                                                              {res_ty_str}* %bldPtrFirst
+                                                \
+                                                              %asPtr = bitcast \
+                                                              {bld_ty_str} {bld_tmp} to \
+                                                              i8*
+                                                    \
+                                                              call void @free_merger(\
+                                                              i8* %asPtr)",
+                                                             bld_tmp = bld_tmp,
+                                                             bld_ty_str = bld_ty_str,
+                                                             res_ty_str = res_ty_str.to_string()));
+
+                                        ctx.code.add(format!("store {} {}, {}* {}",
+                                                             res_ty_str,
+                                                             "%final".to_string(),
+                                                             res_ty_str,
+                                                             llvm_symbol(output)));
+                                    }
+                                    _ => {
+                                        return weld_err!("unsupported vectorized builder in \
+                                                          codegen for Res");
+                                    }
+                                }
+                            }
                             Builder(ref bk) => {
                                 match *bk {
                                     Appender(_) => {
@@ -1641,10 +1786,11 @@ impl LlvmGenerator {
 
                                         // Get the first builder.
                                         ctx.code
-                                            .add(format!("%bldPtrFirst = call {bld_ty_str} \
+                                            .add(format!("%bldPtrFirst = call {elem_ty_str}* \
                                                           {bld_prefix}.\
                                                           getPtrIndexed({bld_ty_str} \
                                                           {bld_tmp}, i32 0)",
+                                                         elem_ty_str = res_ty_str.clone(),
                                                          bld_ty_str = bld_ty_str,
                                                          bld_prefix = bld_prefix,
                                                          bld_tmp = bld_tmp));
@@ -1680,7 +1826,7 @@ impl LlvmGenerator {
   %i = phi i32 [ 1, %entry  \
                                                               ], [ %i2, %body ]
   %bldPtr = \
-                                                              call {bld_ty_str} \
+                                                              call {elem_ty_str}* \
                                                               {bld_prefix}.\
                                                               getPtrIndexed({bld_ty_str} \
                                                               {bld_tmp}, i32 %i)
@@ -1868,6 +2014,8 @@ impl LlvmGenerator {
                     }
                     NewBuilder { ref output, ref arg, ref ty } => {
                         match *ty {
+                            // TODO disable for everything but merger
+                            VectorizedBuilder(ref bk) |
                             Builder(ref bk) => {
                                 match *bk {
                                     Appender(_) => {
@@ -2077,6 +2225,12 @@ fn llvm_symbol(symbol: &Symbol) -> String {
 /// Return the name of the LLVM instruction for a binary operation on a specific type.
 fn llvm_binop(op_kind: BinOpKind, ty: &Type) -> WeldResult<&'static str> {
     match (op_kind, ty) {
+
+        (BinOpKind::Add, &VectorizedScalar(I32)) => Ok("add"),
+        (BinOpKind::Multiply, &VectorizedScalar(I32)) => Ok("mul"),
+        (BinOpKind::Divide, &VectorizedScalar(I32)) => Ok("div"),
+        (BinOpKind::Subtract, &VectorizedScalar(I32)) => Ok("sub"),
+
         (BinOpKind::Add, &Scalar(I8)) => Ok("add"),
         (BinOpKind::Add, &Scalar(I32)) => Ok("add"),
         (BinOpKind::Add, &Scalar(I64)) => Ok("add"),
