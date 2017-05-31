@@ -20,7 +20,7 @@ define $ELEM* @$NAME.bld.getPtrIndexed(%$NAME.bld %bldInp, i32 %i) alwaysinline 
 
 ; Returns a raw pointer to the builder which can be passed to the builder functions.
 define i8* @$NAME.bld.getRawPtr(%$NAME.bld %bldInp) alwaysinline {
-  %ptr = call $ELEM* @$NAME.bld.getPtrIndexed(%$NAME.bld %bldInp, i32 0)
+  %ptr = extractvalue %$NAME.bld %bldInp, 0
   %ret = bitcast $ELEM* %ptr to i8*
   ret i8* %ret
 }
