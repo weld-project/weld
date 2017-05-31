@@ -1644,6 +1644,9 @@ impl LlvmGenerator {
                             VectorizedBuilder(ref bk) => {
                                 match *bk {
                                     Merger(ref t, ref op) => {
+
+                                        let output_str = format!("%{}", output);
+
                                         // Type of element to merge.
                                         let elem_ty_str = self.llvm_type(t)?.to_string();
                                         // Builder type.
@@ -1736,9 +1739,9 @@ impl LlvmGenerator {
                                                 entry_v=entry_label_v,
                                                 body_v=body_label_v,
                                                 done_v=done_label_v,
-                                                output=output));
+                                                output=output_str));
 
-                                        try!(self.gen_merge(output.to_string(),
+                                        try!(self.gen_merge(output_str.to_string(),
                                                             val_v.to_string(),
                                                             res_ty_str.to_string(),
                                                             op,
