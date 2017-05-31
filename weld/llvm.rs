@@ -1643,106 +1643,121 @@ impl LlvmGenerator {
                         match *bld_ty {
                             VectorizedBuilder(ref bk) => {
                                 match *bk {
-                                    // TODO again copied from below...
                                     Merger(ref t, ref op) => {
+                                        // Type of element to merge.
+                                        let elem_ty_str = self.llvm_type(t)?.to_string();
+                                        // Builder type.
                                         let bld_ty_str = try!(self.llvm_type(&bld_ty)).to_string();
+                                        // Prefix of the builder.
                                         let bld_prefix = format!("@{}",
                                                                  bld_ty_str.replace("%", ""));
+                                        // Result type.
                                         let res_ty_str = try!(self.llvm_type(&res_ty)).to_string();
+                                        // Temporary builder variable.
                                         let bld_tmp =
                                             try!(self.load_var(llvm_symbol(builder).as_str(),
                                                                &bld_ty_str,
                                                                ctx));
 
-                                        // Get the first builder.
-                                        ctx.code
-                                            .add(format!("%bldPtrFirst = call {elem_ty_str}* \
-                                                          {bld_prefix}.\
-                                                          getPtrIndexed({bld_ty_str} \
-                                                          {bld_tmp}, i32 0)",
-                                                         elem_ty_str = res_ty_str.clone(),
-                                                         bld_ty_str = bld_ty_str,
-                                                         bld_prefix = bld_prefix,
-                                                         bld_tmp = bld_tmp));
-                                        ctx.code.add(format!("
-                                        \
-                                                              %bldPtrCasted = bitcast \
-                                                              {bld_ty_str} %bldPtrFirst to \
-                                                              {elem_ty_str}*",
-                                                             bld_ty_str = bld_ty_str,
-                                                             elem_ty_str = res_ty_str.clone()));
+                                        // Generate names for all temporaries.
+                                        let t0 = ctx.var_ids.next();
+                                        let first = ctx.var_ids.next();
+                                        let nworkers = ctx.var_ids.next();
+                                        let cond = ctx.var_ids.next();
+                                        let i = ctx.var_ids.next();
+                                        let bld_ptr = ctx.var_ids.next();
+                                        let val = ctx.var_ids.next();
+                                        let i2 = ctx.var_ids.next();
+                                        let cond2 = ctx.var_ids.next();
+                                        let as_ptr = ctx.var_ids.next();
 
-                                        ctx.code.add(format!("
-                                            \
-                                                              %first = load {elem_ty_str}, \
-                                                              {elem_ty_str}* %bldPtrCasted
-                                            \
-                                                              %nworkers = call i32 \
-                                                              @get_nworkers()
-                                            \
-                                                              br label %entry
-                                          \
-                                                              entry:
-                                            \
-                                                              %cond = icmp ult i32 1, %nworkers
-                                            \
-                                                              br i1 %cond, label %body, label \
-                                                              %done
-                                        \
-                                                              ",
-                                                             elem_ty_str = res_ty_str.clone()));
+                                        // Generate label names.
+                                        let label_base = ctx.var_ids.next();
+                                        let mut label_ids =
+                                            IdGenerator::new(&label_base.replace("%", ""));
+                                        let entry_label = label_ids.next();
+                                        let body_label = label_ids.next();
+                                        let done_label = label_ids.next();
 
-                                        ctx.code.add(format!("body:
-  %i = phi i32 [ 1, %entry  \
-                                                              ], [ %i2, %body ]
-  %bldPtr = \
-                                                              call {elem_ty_str}* \
-                                                              {bld_prefix}.\
-                                                              getPtrIndexed({bld_ty_str} \
-                                                              {bld_tmp}, i32 %i)
-  %val = load \
-                                                              {elem_ty_str}, {elem_ty_str}* \
-                                                              %bldPtr",
-                                                             bld_prefix = bld_prefix,
-                                                             bld_ty_str = bld_ty_str,
-                                                             elem_ty_str = res_ty_str.clone(),
-                                                             bld_tmp = bld_tmp));
+                                        // state for the vector collapse
+                                        let i_v = ctx.var_ids.next();
+                                        let val_v = ctx.var_ids.next();
+                                        let first_v = ctx.var_ids.next();
+                                        let i2_v = ctx.var_ids.next();
+                                        let cond_v = ctx.var_ids.next();
+                                        let cond2_v = ctx.var_ids.next();
+                                        let final_val_vec = ctx.var_ids.next();
+                                        let entry_label_v = label_ids.next();
+                                        let body_label_v = label_ids.next();
+                                        let done_label_v = label_ids.next();
+                                        let vector_width = format!("{}", self.vector_width);
 
-                                        try!(self.gen_merge("%bldPtrFirst".to_string(),
-                                                            "%val".to_string(),
+                                        ctx.code.add(format!(include_str!("resources/merger/merger_result_start.ll"),
+                                                t0 = t0,
+                                                nworkers = nworkers,
+                                                first=first,
+                                                bld_tmp=bld_tmp,
+                                                cond=cond,
+                                                i=i,
+                                                bld_ptr=bld_ptr,
+                                                val=val,
+                                                i2=i2,
+                                                elem_ty_str=elem_ty_str,
+                                                bld_ty_str=bld_ty_str,
+                                                bld_prefix=bld_prefix,
+                                                entry=entry_label,
+                                                body=body_label,
+                                                done=done_label));
+
+                                        try!(self.gen_merge(t0.to_string(),
+                                                            val.to_string(),
+                                                            elem_ty_str.to_string(),
+                                                            op,
+                                                            t,
+                                                            ctx));
+
+                                        ctx.code.add(format!(include_str!("resources/merger/merger_result_end_vectorized_1.ll"),
+                                                t0 = t0,
+                                                nworkers = nworkers,
+                                                i=i,
+                                                i2=i2,
+                                                cond2=cond2,
+                                                i_v=i_v,
+                                                i2_v=i2_v,
+                                                cond_v=cond_v,
+                                                res_ty_str=res_ty_str,
+                                                final_val_vec=final_val_vec,
+                                                vector_width=vector_width,
+                                                first_v=first_v,
+                                                elem_ty_str=elem_ty_str,
+                                                val_v=val_v,
+                                                body=body_label,
+                                                done=done_label,
+                                                entry_v=entry_label_v,
+                                                body_v=body_label_v,
+                                                done_v=done_label_v,
+                                                output=output));
+
+                                        try!(self.gen_merge(output.to_string(),
+                                                            val_v.to_string(),
                                                             res_ty_str.to_string(),
                                                             op,
                                                             t,
                                                             ctx));
 
-                                        ctx.code.add(format!("%i2 = add i32 %i, 1
-                                                              \
-                                                              %cond2 = icmp ult i32 %i2, \
-                                                              %nworkers
-                                            \
-                                                              br i1 %cond2, label %body, label \
-                                                              %done
-                                            \
-                                                              done:
-                                                \
-                                                              %final = load {res_ty_str}, \
-                                                              {res_ty_str}* %bldPtrFirst
-                                                \
-                                                              %asPtr = bitcast \
-                                                              {bld_ty_str} {bld_tmp} to \
-                                                              i8*
-                                                    \
-                                                              call void @free_merger(\
-                                                              i8* %asPtr)",
-                                                             bld_tmp = bld_tmp,
-                                                             bld_ty_str = bld_ty_str,
-                                                             res_ty_str = res_ty_str.to_string()));
+                                        ctx.code.add(format!(include_str!("resources/merger/merger_result_end_vectorized_2.ll"),
+                                                i_v=i_v,
+                                                i2_v=i2_v,
+                                                cond2_v=cond2_v,
+                                                as_ptr=as_ptr,
+                                                bld_ty_str=bld_ty_str,
+                                                bld_tmp=bld_tmp,
+                                                bld_prefix=bld_prefix,
+                                                body_v=body_label_v,
+                                                vector_width=vector_width,
+                                                done_v=done_label_v));
 
-                                        ctx.code.add(format!("store {} {}, {}* {}",
-                                                             res_ty_str,
-                                                             "%final".to_string(),
-                                                             res_ty_str,
-                                                             llvm_symbol(output)));
+
                                     }
                                     _ => {
                                         return weld_err!("unsupported vectorized builder in \
@@ -1775,104 +1790,82 @@ impl LlvmGenerator {
                                                              llvm_symbol(output)));
                                     }
                                     Merger(ref t, ref op) => {
+                                        // Type of element to merge.
+                                        let elem_ty_str = self.llvm_type(t)?.to_string();
+                                        // Builder type.
                                         let bld_ty_str = try!(self.llvm_type(&bld_ty)).to_string();
+                                        // Prefix of the builder.
                                         let bld_prefix = format!("@{}",
                                                                  bld_ty_str.replace("%", ""));
+                                        // Result type.
                                         let res_ty_str = try!(self.llvm_type(&res_ty)).to_string();
+                                        // Temporary builder variable.
                                         let bld_tmp =
                                             try!(self.load_var(llvm_symbol(builder).as_str(),
                                                                &bld_ty_str,
                                                                ctx));
 
-                                        // Get the first builder.
-                                        ctx.code
-                                            .add(format!("%bldPtrFirst = call {elem_ty_str}* \
-                                                          {bld_prefix}.\
-                                                          getPtrIndexed({bld_ty_str} \
-                                                          {bld_tmp}, i32 0)",
-                                                         elem_ty_str = res_ty_str.clone(),
-                                                         bld_ty_str = bld_ty_str,
-                                                         bld_prefix = bld_prefix,
-                                                         bld_tmp = bld_tmp));
-                                        ctx.code.add(format!("
-                                        \
-                                                              %bldPtrCasted = bitcast \
-                                                              {bld_ty_str} %bldPtrFirst to \
-                                                              {elem_ty_str}*",
-                                                             bld_ty_str = bld_ty_str,
-                                                             elem_ty_str = res_ty_str.clone()));
+                                        // Generate names for all temporaries.
+                                        let t0 = ctx.var_ids.next();
+                                        let first = ctx.var_ids.next();
+                                        let nworkers = ctx.var_ids.next();
+                                        let cond = ctx.var_ids.next();
+                                        let i = ctx.var_ids.next();
+                                        let bld_ptr = ctx.var_ids.next();
+                                        let val = ctx.var_ids.next();
+                                        let i2 = ctx.var_ids.next();
+                                        let cond2 = ctx.var_ids.next();
+                                        let final_val = ctx.var_ids.next();
+                                        let as_ptr = ctx.var_ids.next();
 
-                                        ctx.code.add(format!("
-                                            \
-                                                              %first = load {elem_ty_str}, \
-                                                              {elem_ty_str}* %bldPtrCasted
-                                            \
-                                                              %nworkers = call i32 \
-                                                              @get_nworkers()
-                                            \
-                                                              br label %entry
-                                          \
-                                                              entry:
-                                            \
-                                                              %cond = icmp ult i32 1, %nworkers
-                                            \
-                                                              br i1 %cond, label %body, label \
-                                                              %done
-                                        \
-                                                              ",
-                                                             elem_ty_str = res_ty_str.clone()));
+                                        // Generate label names.
+                                        let label_base = ctx.var_ids.next();
+                                        let mut label_ids =
+                                            IdGenerator::new(&label_base.replace("%", ""));
+                                        let entry_label = label_ids.next();
+                                        let body_label = label_ids.next();
+                                        let done_label = label_ids.next();
 
-                                        ctx.code.add(format!("body:
-  %i = phi i32 [ 1, %entry  \
-                                                              ], [ %i2, %body ]
-  %bldPtr = \
-                                                              call {elem_ty_str}* \
-                                                              {bld_prefix}.\
-                                                              getPtrIndexed({bld_ty_str} \
-                                                              {bld_tmp}, i32 %i)
-  %val = load \
-                                                              {elem_ty_str}, {elem_ty_str}* \
-                                                              %bldPtr",
-                                                             bld_prefix = bld_prefix,
-                                                             bld_ty_str = bld_ty_str,
-                                                             elem_ty_str = res_ty_str.clone(),
-                                                             bld_tmp = bld_tmp));
+                                        ctx.code.add(format!(include_str!("resources/merger/merger_result_start.ll"),
+                                                t0 = t0,
+                                                nworkers = nworkers,
+                                                first=first,
+                                                bld_tmp=bld_tmp,
+                                                cond=cond,
+                                                i=i,
+                                                bld_ptr=bld_ptr,
+                                                val=val,
+                                                i2=i2,
+                                                elem_ty_str=elem_ty_str,
+                                                bld_ty_str=bld_ty_str,
+                                                bld_prefix=bld_prefix,
+                                                entry=entry_label,
+                                                body=body_label,
+                                                done=done_label));
 
-                                        try!(self.gen_merge("%bldPtrFirst".to_string(),
-                                                            "%val".to_string(),
+                                        try!(self.gen_merge(t0.to_string(),
+                                                            val.to_string(),
                                                             res_ty_str.to_string(),
                                                             op,
                                                             t,
                                                             ctx));
 
-                                        ctx.code.add(format!("%i2 = add i32 %i, 1
-                                                              \
-                                                              %cond2 = icmp ult i32 %i2, \
-                                                              %nworkers
-                                            \
-                                                              br i1 %cond2, label %body, label \
-                                                              %done
-                                            \
-                                                              done:
-                                                \
-                                                              %final = load {res_ty_str}, \
-                                                              {res_ty_str}* %bldPtrFirst
-                                                \
-                                                              %asPtr = bitcast \
-                                                              {bld_ty_str} {bld_tmp} to \
-                                                              i8*
-                                                    \
-                                                              call void @free_merger(\
-                                                              i8* %asPtr)",
-                                                             bld_tmp = bld_tmp,
-                                                             bld_ty_str = bld_ty_str,
-                                                             res_ty_str = res_ty_str.to_string()));
+                                        ctx.code.add(format!(include_str!("resources/merger/merger_result_end.ll"),
+                                                t0 = t0,
+                                                nworkers = nworkers,
+                                                i=i,
+                                                i2=i2,
+                                                cond2=cond2,
+                                                final_val=final_val,
+                                                as_ptr=as_ptr,
+                                                bld_ty_str=bld_ty_str,
+                                                res_ty_str=res_ty_str,
+                                                bld_tmp=bld_tmp,
+                                                bld_prefix=bld_prefix,
+                                                body=body_label,
+                                                done=done_label,
+                                                output=output));
 
-                                        ctx.code.add(format!("store {} {}, {}* {}",
-                                                             res_ty_str,
-                                                             "%final".to_string(),
-                                                             res_ty_str,
-                                                             llvm_symbol(output)));
                                     }
                                     DictMerger(_, _, _) => {
                                         let bld_ty_str = try!(self.llvm_type(&bld_ty)).to_string();

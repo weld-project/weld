@@ -190,6 +190,7 @@ fn main() {
             println!("Vectorization failed!");
         }
 
+
         println!("final program : {}", print_typed_expr(&expr));
         println!("final program raw: {:?}", expr);
 

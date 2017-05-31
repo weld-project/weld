@@ -18,6 +18,13 @@ define $ELEM* @$NAME.bld.getPtrIndexed(%$NAME.bld %bldInp, i32 %i) alwaysinline 
   ret $ELEM* %ptr
 }
 
+; Returns a raw pointer to the builder which can be passed to the builder functions.
+define i8* @$NAME.bld.getRawPtr(%$NAME.bld %bldInp) alwaysinline {
+  %ptr = call $ELEM* @$NAME.bld.getPtrIndexed(%$NAME.bld %bldInp, i32 0)
+  %ret = bitcast $ELEM* %ptr to i8*
+  ret i8* %ret
+}
+
 ; Initialize and return a new merger.
 define %$NAME.bld @$NAME.bld.new() {
   %bldSizePtr = getelementptr $ELEM, $ELEM* null, i32 1
