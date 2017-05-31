@@ -7,5 +7,3 @@
   {as_ptr} = call i8* {bld_prefix}.getRawPtr({bld_ty_str} {bld_tmp})
   call void @free_merger(i8* {as_ptr})
   store {res_ty_str} {final_val}, {res_ty_str}*  %{output}
-
-

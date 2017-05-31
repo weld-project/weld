@@ -351,6 +351,7 @@ impl LlvmGenerator {
                             }
                         }
                     };
+                    // TODO(shoumik): For now, vectorization only supported with no stride, etc.
                     let arr_idx = if iter.start.is_some() {
                         let offset = ctx.var_ids.next();
                         let stride_str = try!(self.load_var(
@@ -364,13 +365,27 @@ impl LlvmGenerator {
                     } else {
                         idx_tmp.clone()
                     };
-                    ctx.code.add(format!("{} = call {}* {}.vat({} {}, i64 {})",
-                                         inner_elem_tmp_ptr,
-                                         &inner_elem_ty_str,
-                                         data_prefix,
-                                         &data_ty_str,
-                                         data_str,
-                                         arr_idx));
+
+                    // TODO(shoumik): Lots of redundancy here...we specify vectorization in many
+                    // different ways. How to resolve?
+                    if par_for.vectorized {
+                        ctx.code.add(format!("{} = call {}* {}.vat({} {}, i64 {})",
+                                             inner_elem_tmp_ptr,
+                                             &inner_elem_ty_str,
+                                             data_prefix,
+                                             &data_ty_str,
+                                             data_str,
+                                             arr_idx));
+                    } else {
+                        ctx.code.add(format!("{} = call {}* {}.at({} {}, i64 {})",
+                                             inner_elem_tmp_ptr,
+                                             &inner_elem_ty_str,
+                                             data_prefix,
+                                             &data_ty_str,
+                                             data_str,
+                                             arr_idx));
+
+                    }
                     let inner_elem_tmp =
                         try!(self.load_var(&inner_elem_tmp_ptr, &inner_elem_ty_str, ctx));
                     if par_for.data.len() == 1 {
@@ -409,7 +424,13 @@ impl LlvmGenerator {
                 ctx.code.add("loop.terminator:");
                 let idx_tmp = try!(self.load_var("%cur.idx", "i64", ctx));
                 let idx_inc = ctx.var_ids.next();
-                ctx.code.add(format!("{} = add i64 {}, 1", idx_inc, idx_tmp));
+                let par_for = containing_loop.as_ref().unwrap();
+                if par_for.vectorized {
+                    ctx.code
+                        .add(format!("{} = add i64 {}, {}", idx_inc, idx_tmp, self.vector_width));
+                } else {
+                    ctx.code.add(format!("{} = add i64 {}, 1", idx_inc, idx_tmp));
+                }
                 ctx.code.add(format!("store i64 {}, i64* %cur.idx", idx_inc));
                 ctx.code.add("br label %loop.start");
                 ctx.code.add("loop.end:");

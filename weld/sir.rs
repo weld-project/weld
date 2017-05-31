@@ -94,6 +94,7 @@ pub struct ParallelForData {
     pub body: FunctionId,
     pub cont: FunctionId,
     pub innermost: bool,
+    pub vectorized: bool,
 }
 
 /// A terminating statement inside a basic block.
@@ -901,6 +902,11 @@ fn gen_expr(expr: &TypedExpr,
                     body: body_func,
                     cont: cont_func,
                     innermost: is_innermost,
+                    vectorized: if let Type::VectorizedBuilder(_) = builder.ty {
+                        true
+                    } else {
+                        false
+                    },
                 });
                 Ok((cont_func, cont_block, builder_sym))
             } else {

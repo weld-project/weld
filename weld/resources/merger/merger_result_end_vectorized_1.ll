@@ -15,6 +15,3 @@
   {i_v} = phi i32 [ 1, %{entry_v} ], [ {i2_v}, %{body_v} ]
   {val_v} = extractelement {elem_ty_str} {final_val_vec}, i32 {i_v}
 ; begin generate vector collapse
-
-
-

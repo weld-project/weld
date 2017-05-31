@@ -109,8 +109,6 @@ pub fn vectorize(expr: &mut Expr<Type>) -> WeldResult<()> {
                                 // Replace the loop with a vectorized version.
                                 // TODO(shoumik): add a fringe loop!
 
-                                // TODO Replace each iterator with a stride.
-
                                 let vectorized_builder = Expr {
                                     kind: init_builder.kind.clone(),
                                     ty: vectorized_type(&init_builder.ty),
