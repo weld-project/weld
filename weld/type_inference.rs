@@ -438,6 +438,16 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
                             }
                         }
                     }
+                    Merger(ref elem, _) => {
+                        match *e {
+                            Some(ref mut arg) => {
+                                changed |= try!(push_type(&mut arg.ty,
+                                                          &elem.clone(),
+                                                          "NewBuilder(Merger)"));
+                            }
+                            None => {}
+                        }
+                    }
                     _ => {} // No arguments for the builder.
                 }
             }
@@ -618,9 +628,7 @@ fn push_type(dest: &mut PartialType, src: &PartialType, context: &str) -> WeldRe
             }
         }
 
-        Builder(GroupMerger(ref mut dest_key_ty,
-                            ref mut dest_value_ty,
-                            ref mut dest_merge_ty)) => {
+        Builder(GroupMerger(ref mut dest_key_ty, ref mut dest_value_ty, ref mut dest_merge_ty)) => {
             match *src {
                 Builder(GroupMerger(ref src_key_ty, ref src_value_ty, ref src_merge_ty)) => {
                     let mut changed = false;

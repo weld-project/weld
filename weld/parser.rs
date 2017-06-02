@@ -764,7 +764,15 @@ impl<'t> Parser<'t> {
                     }
                 };
                 self.consume(TCloseBracket)?;
-                let mut expr = expr_box(NewBuilder(None));
+
+                let mut value = None;
+                if *self.peek() == TOpenParen {
+                    self.consume(TOpenParen)?;
+                    value = Some(self.expr()?);
+                    self.consume(TCloseParen)?;
+                }
+
+                let mut expr = expr_box(NewBuilder(value));
                 expr.ty = Builder(Merger(Box::new(elem_type), bin_op));
                 Ok(expr)
             }
@@ -814,7 +822,7 @@ impl<'t> Parser<'t> {
                 expr.ty = Builder(GroupMerger(Box::new(key_type.clone()),
                                               Box::new(value_type.clone()),
                                               Box::new(Struct(vec![key_type.clone(),
-                                                                  value_type.clone()]))));
+                                                                   value_type.clone()]))));
                 Ok(expr)
             }
 
