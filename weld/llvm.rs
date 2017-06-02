@@ -887,8 +887,34 @@ impl LlvmGenerator {
                 Ok(self.dict_names.get(&elem).unwrap())
             }
 
-            // TODO disable for everything but merger
-            VectorizedBuilder(ref bk) |
+            VectorizedBuilder(ref bk) => {
+                if self.bld_names.get(bk) == None {
+                    match *bk {
+                        Merger(ref t, _) => {
+                            if self.merger_names.get(t) == None {
+                                let elem_ty = self.llvm_type(t)?.to_string();
+                                let elem_prefix = format!("@{}", elem_ty.replace("%", ""));
+                                let name = self.merger_ids.next();
+                                self.merger_names
+                                    .insert(*t.clone(), name.clone());
+                                let prefix_replaced =
+                                    MERGER_CODE.replace("$ELEM_PREFIX", &elem_prefix);
+                                let elem_replaced = prefix_replaced.replace("$ELEM", &elem_ty);
+                                let name_replaced =
+                                    elem_replaced.replace("$NAME", &name.replace("%", ""));
+                                self.prelude_code.add(&name_replaced);
+                                self.prelude_code.add("\n");
+                            }
+                            let bld_ty_str = self.merger_names.get(t).unwrap();
+                            self.bld_names
+                                .insert(bk.clone(), format!("{}.bld", bld_ty_str));
+                        }
+                        _ => weld_err!("Code generation for vectorized builder not supported.")?,
+                    }
+                }
+                Ok(self.bld_names.get(bk).unwrap())
+            }
+
             Builder(ref bk) => {
                 if self.bld_names.get(bk) == None {
                     match *bk {
@@ -1542,8 +1568,37 @@ impl LlvmGenerator {
                     Merge { ref builder, ref value } => {
                         let bld_ty = try!(get_sym_ty(func, builder));
                         match *bld_ty {
-                            // TODO disable for everything but merger
-                            VectorizedBuilder(ref bk) |
+                            VectorizedBuilder(ref bk) => {
+                                match *bk {
+                                    Merger(ref t, ref op) => {
+                                        let bld_ty_str = self.llvm_type(&bld_ty)?.to_string();
+                                        let bld_prefix = format!("@{}",
+                                                                 bld_ty_str.replace("%", ""));
+                                        let elem_ty_str = self.llvm_type(t)?.to_string();
+                                        let bld_tmp = self.load_var(llvm_symbol(builder).as_str(),
+                                                      &bld_ty_str,
+                                                      ctx)?;
+                                        let elem_tmp = self.load_var(llvm_symbol(value).as_str(),
+                                                      &elem_ty_str,
+                                                      ctx)?;
+                                        let bld_ptr_raw = ctx.var_ids.next();
+                                        let bld_ptr = ctx.var_ids.next();
+                                        ctx.code
+                                            .add(format!("{} = call i8* {}.merge_ptr({} {}, i32 \
+                                                          %cur.tid)",
+                                                         bld_ptr_raw,
+                                                         bld_prefix,
+                                                         bld_ty_str,
+                                                         bld_tmp));
+                                        ctx.code.add(format!("{} = bitcast i8* {} to {}*",
+                                                             bld_ptr,
+                                                             bld_ptr_raw,
+                                                             elem_ty_str));
+                                        try!(self.gen_merge(bld_ptr, elem_tmp, elem_ty_str, op, t, ctx));
+                                    }
+                                    _ => weld_err!("Merge for vectorized builder not supported")?,
+                                }
+                            }
                             Builder(ref bk) => {
                                 match *bk {
                                     Appender(ref t) => {
@@ -2041,8 +2096,35 @@ impl LlvmGenerator {
                     }
                     NewBuilder { ref output, ref arg, ref ty } => {
                         match *ty {
-                            // TODO disable for everything but merger
-                            VectorizedBuilder(ref bk) |
+                            VectorizedBuilder(ref bk) => {
+                                match *bk {
+                                    Merger(_, ref op) => {
+                                        if *op != BinOpKind::Add {
+                                            // This check is here because we don't yet support
+                                            // initialization for mergers...
+                                            return weld_err!("Merger only supports +");
+                                        }
+                                        let bld_ty_str = try!(self.llvm_type(ty));
+                                        let bld_prefix = format!("@{}",
+                                                                 bld_ty_str.replace("%", ""));
+                                        let bld_tmp = ctx.var_ids.next();
+                                        ctx.code.add(format!("{} = call {} {}.new()",
+                                                             bld_tmp,
+                                                             bld_ty_str,
+                                                             bld_prefix));
+                                        ctx.code.add(format!("store {} {}, {}* {}",
+                                                             bld_ty_str,
+                                                             bld_tmp,
+                                                             bld_ty_str,
+                                                             llvm_symbol(output)));
+                                    }
+                                    _ => {
+                                        weld_err!("NewBuilder not supported for \
+                                                   VectorizedBuilder {}",
+                                                  print_type(ty))?
+                                    }
+                                }
+                            }
                             Builder(ref bk) => {
                                 match *bk {
                                     Appender(_) => {
@@ -2064,6 +2146,8 @@ impl LlvmGenerator {
                                     }
                                     Merger(_, ref op) => {
                                         if *op != BinOpKind::Add {
+                                            // This check is here because we don't yet support
+                                            // initialization for mergers...
                                             return weld_err!("Merger only supports +");
                                         }
                                         let bld_ty_str = try!(self.llvm_type(ty));
