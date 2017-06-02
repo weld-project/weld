@@ -58,6 +58,7 @@ pub fn vectorize(expr: &mut Expr<Type>) -> WeldResult<()> {
                             if let Lambda { ref params, ref body } = func.kind {
                                 let mut vectorized_body = body.clone();
                                 vectorized_body.transform_and_continue(&mut |ref mut e| {
+
                             let vectorized = match e.kind {
                                 // TODO - for readability, might want to factor this out into a
                                 // function.

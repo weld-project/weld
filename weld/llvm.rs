@@ -1499,6 +1499,16 @@ impl LlvmGenerator {
                                              field_ty,
                                              llvm_symbol(output)));
                     }
+                    CompileTimeConstant { ref output, ref kind } => {
+                        match *kind {
+                            CompileTimeConstantKind::VectorWidth => {
+                                ctx.code.add(format!("store i64 {}, i64* {}",
+                                                     self.vector_width,
+                                                     llvm_symbol(output)))
+                            }
+
+                        }
+                    }
                     AssignLiteral { ref output, ref value } => {
                         match *value {
                             BoolLiteral(l) => {
