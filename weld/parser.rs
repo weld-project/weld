@@ -5,9 +5,11 @@
 
 use std::vec::Vec;
 
+use super::ast::Annotations;
 use super::ast::Symbol;
 use super::ast::Iter;
 use super::ast::BinOpKind::*;
+use super::ast::BuilderImplementationKind::*;
 use super::ast::ExprKind::*;
 use super::ast::LiteralKind::*;
 use super::ast::ScalarKind;
@@ -485,8 +487,115 @@ impl<'t> Parser<'t> {
         Ok(cast_expr)
     }
 
+    /// Parses annotations in the format "@(<annotation name>: <annotation value>,...)".
+    fn parse_annotations(&mut self, annotations: &mut Annotations) -> WeldResult<()> {
+        if *self.peek() == TAtMark {
+            self.consume(TAtMark)?;
+            try!(self.consume(TOpenParen));
+            while *self.peek() != TCloseParen {
+                match *self.peek() {
+                    TIdent(ref value) => {
+                        match value.as_ref() {
+                            "impl" => {
+                                self.consume(TIdent("impl".to_string()))?;
+                                try!(self.consume(TColon));
+                                let implementation = match *self.next() {
+                                    TIdent(ref inner_value) => {
+                                        match inner_value.as_ref() {
+                                            "global" => Global,
+                                            "local" => Local,
+                                            _ => return weld_err!("Invalid implementation type"),
+                                        }
+                                    }
+                                    _ => return weld_err!("Invalid implementation type"),
+                                };
+                                annotations.set_builder_implementation(implementation);
+                            }
+                            "predicate" => {
+                                self.consume(TIdent("predicate".to_string()))?;
+                                try!(self.consume(TColon));
+                                if let TBoolLiteral(l) = *self.next() {
+                                    annotations.set_predicate(l);
+                                } else {
+                                    return weld_err!("Invalid predicate type (must be a bool)");
+                                }
+                            }
+                            "vectorize" => {
+                                self.consume(TIdent("vectorize".to_string()))?;
+                                try!(self.consume(TColon));
+                                if let TBoolLiteral(l) = *self.next() {
+                                    annotations.set_vectorize(l);
+                                } else {
+                                    return weld_err!("Invalid vectorize type (must be a bool)");
+                                }
+                            }
+                            "tile_size" => {
+                                self.consume(TIdent("tile_size".to_string()))?;
+                                try!(self.consume(TColon));
+                                if let TI32Literal(l) = *self.next() {
+                                    annotations.set_tile_size(l);
+                                } else {
+                                    return weld_err!("Invalid tile size (must be a i32)");
+                                }
+                            }
+                            "grain_size" => {
+                                self.consume(TIdent("grain_size".to_string()))?;
+                                try!(self.consume(TColon));
+                                if let TI32Literal(l) = *self.next() {
+                                    annotations.set_grain_size(l);
+                                } else {
+                                    return weld_err!("Invalid tile size (must be a i32)");
+                                }
+                            }
+                            "size" => {
+                                self.consume(TIdent("size".to_string()))?;
+                                try!(self.consume(TColon));
+                                if let TI64Literal(l) = *self.next() {
+                                    annotations.set_size(l);
+                                } else {
+                                    return weld_err!("Invalid vector size (must be a i32)");
+                                }
+                            }
+                            "selectivity" => {
+                                self.consume(TIdent("selectivity".to_string()))?;
+                                try!(self.consume(TColon));
+                                if let TF32Literal(l) = *self.next() {
+                                    annotations.set_selectivity((l * 100000.0) as i32);
+                                } else {
+                                    return weld_err!("Invalid selectivity (must be a f32)");
+                                }
+                            }
+                            "num_keys" => {
+                                self.consume(TIdent("num_keys".to_string()))?;
+                                try!(self.consume(TColon));
+                                if let TI64Literal(l) = *self.next() {
+                                    annotations.set_num_keys(l);
+                                } else {
+                                    return weld_err!("Invalid number of keys (must be a i32)");
+                                }
+                            }
+                            _ => return weld_err!("Invalid annotation type"),
+                        }
+                    }
+                    _ => return weld_err!("Invalid annotation type -- expected an identifier"),
+                }
+
+                if *self.peek() == TComma {
+                    self.next();
+                } else if *self.peek() != TCloseParen {
+                    return weld_err!("Expected ',' or ')'");
+                }
+            }
+            try!(self.consume(TCloseParen));
+        }
+        Ok(())
+    }
+
     /// Parse a terminal expression at the bottom of the precedence chain.
     fn leaf_expr(&mut self) -> WeldResult<Box<PartialExpr>> {
+        let mut annotations = Annotations::new();
+        try!(self.parse_annotations(&mut annotations));
+
         match *self.next() {
             TI32Literal(v) => Ok(expr_box(Literal(I32Literal(v)))),
             TI64Literal(v) => Ok(expr_box(Literal(I64Literal(v)))),
@@ -737,8 +846,9 @@ impl<'t> Parser<'t> {
                     elem_type = try!(self.type_());
                     try!(self.consume(TCloseBracket));
                 }
+
                 let mut expr = expr_box(NewBuilder(None));
-                expr.ty = Builder(Appender(Box::new(elem_type)));
+                expr.ty = Builder(Appender(Box::new(elem_type)), annotations);
                 Ok(expr)
             }
 
@@ -764,8 +874,9 @@ impl<'t> Parser<'t> {
                     }
                 };
                 self.consume(TCloseBracket)?;
+
                 let mut expr = expr_box(NewBuilder(None));
-                expr.ty = Builder(Merger(Box::new(elem_type), bin_op));
+                expr.ty = Builder(Merger(Box::new(elem_type), bin_op), annotations);
                 Ok(expr)
             }
 
@@ -793,12 +904,14 @@ impl<'t> Parser<'t> {
                     }
                 }
                 try!(self.consume(TCloseBracket));
+
                 let mut expr = expr_box(NewBuilder(None));
                 expr.ty = Builder(DictMerger(Box::new(key_type.clone()),
                                              Box::new(value_type.clone()),
                                              Box::new(Struct(vec![key_type.clone(),
                                                                   value_type.clone()])),
-                                             bin_op));
+                                             bin_op),
+                                  annotations);
                 Ok(expr)
             }
 
@@ -814,7 +927,8 @@ impl<'t> Parser<'t> {
                 expr.ty = Builder(GroupMerger(Box::new(key_type.clone()),
                                               Box::new(value_type.clone()),
                                               Box::new(Struct(vec![key_type.clone(),
-                                                                  value_type.clone()]))));
+                                                                   value_type.clone()]))),
+                                  annotations);
                 Ok(expr)
             }
 
@@ -835,18 +949,20 @@ impl<'t> Parser<'t> {
                         bin_op = Multiply;
                     }
                     _ => {
-                        return weld_err!("expected commutative binary op in vecmerger");
+                        return weld_err!("Expected commutative binary op in vecmerger");
                     }
                 }
                 try!(self.consume(TCloseBracket));
                 try!(self.consume(TOpenParen));
                 let expr = try!(self.expr());
                 try!(self.consume(TCloseParen));
+
                 let mut expr = expr_box(NewBuilder(Some(expr)));
                 expr.ty = Builder(VecMerger(Box::new(elem_type.clone()),
                                             Box::new(Struct(vec![Scalar(ScalarKind::I64),
                                                                  elem_type.clone()])),
-                                            bin_op));
+                                            bin_op),
+                                  annotations);
                 Ok(expr)
             }
 
@@ -882,6 +998,9 @@ impl<'t> Parser<'t> {
 
     /// Parse a PartialType starting at the current input position.
     fn type_(&mut self) -> WeldResult<PartialType> {
+        let mut annotations = Annotations::new();
+        try!(self.parse_annotations(&mut annotations));
+
         match *self.next() {
             TI32 => Ok(Scalar(ScalarKind::I32)),
             TI64 => Ok(Scalar(ScalarKind::I64)),
@@ -901,7 +1020,95 @@ impl<'t> Parser<'t> {
                 try!(self.consume(TOpenBracket));
                 let elem_type = try!(self.type_());
                 try!(self.consume(TCloseBracket));
-                Ok(Builder(Appender(Box::new(elem_type))))
+
+                Ok(Builder(Appender(Box::new(elem_type)), annotations))
+            }
+
+            TMerger => {
+                let elem_type: PartialType;
+                let bin_op: _;
+                self.consume(TOpenBracket)?;
+                elem_type = self.type_()?;
+                self.consume(TComma)?;
+                // Basic merger supports Plus and Times right now.
+                match *self.peek() {
+                    TPlus => {
+                        self.consume(TPlus)?;
+                        bin_op = Add;
+                    }
+                    TTimes => {
+                        self.consume(TTimes)?;
+                        bin_op = Multiply;
+                    }
+                    ref t => {
+                        return weld_err!("expected commutative binary op in merger but got '{}'",
+                                         t);
+                    }
+                };
+                self.consume(TCloseBracket)?;
+
+                Ok(Builder(Merger(Box::new(elem_type), bin_op), annotations))
+            }
+
+            TDictMerger => {
+                let key_type: PartialType;
+                let value_type: PartialType;
+                let bin_op: _;
+                try!(self.consume(TOpenBracket));
+                key_type = try!(self.type_());
+                try!(self.consume(TComma));
+                value_type = try!(self.type_());
+                try!(self.consume(TComma));
+                // DictMerger right now supports Plus and Times only.
+                match *self.peek() {
+                    TPlus => {
+                        self.consume(TPlus)?;
+                        bin_op = Add;
+                    }
+                    TTimes => {
+                        self.consume(TTimes)?;
+                        bin_op = Multiply;
+                    }
+                    _ => {
+                        return weld_err!("expected commutative binary op in dictmerger");
+                    }
+                }
+                try!(self.consume(TCloseBracket));
+                Ok(Builder(DictMerger(Box::new(key_type.clone()),
+                                      Box::new(value_type.clone()),
+                                      Box::new(Struct(vec![key_type.clone(),
+                                                           value_type.clone()])),
+                                      bin_op),
+                           annotations))
+            }
+
+            TVecMerger => {
+                let elem_type: PartialType;
+                let bin_op: _;
+                try!(self.consume(TOpenBracket));
+                elem_type = try!(self.type_());
+                try!(self.consume(TComma));
+                // VecMerger right now supports Plus and Times only.
+                match *self.peek() {
+                    TPlus => {
+                        self.consume(TPlus)?;
+                        bin_op = Add;
+                    }
+                    TTimes => {
+                        self.consume(TTimes)?;
+                        bin_op = Multiply;
+                    }
+                    _ => {
+                        return weld_err!("Expected commutative binary op in vecmerger");
+                    }
+                }
+                try!(self.consume(TCloseBracket));
+
+                Ok(Builder(VecMerger(Box::new(elem_type.clone()),
+                                     Box::new(Struct(vec![Scalar(ScalarKind::I64),
+                                                          elem_type.clone()])),
+                                     bin_op),
+                           annotations))
             }
 
             TOpenBrace => {
@@ -985,6 +1192,16 @@ fn basic_parsing() {
 
     let e = parse_expr("appender[i32]").unwrap();
     assert_eq!(print_expr_without_indent(&e), "appender[i32]");
+
+    let e = parse_expr("@(impl:local) dictmerger[i32,i32,+]").unwrap();
+    assert_eq!(print_expr_without_indent(&e),
+               "@(impl:local)dictmerger[i32,i32,+]");
+
+    let e = parse_expr("@(impl:local, num_keys:12l) dictmerger[i32,i32,+]").unwrap();
+    assert_eq!(print_expr_without_indent(&e),
+               "@(impl:local,num_keys:12)dictmerger[i32,i32,+]");
+
+    assert!(parse_expr("@(impl:local, num_keys:12) dictmerger[i32,i32,+]").is_err());
 
     let e = parse_expr("a: i32 + b").unwrap();
     assert_eq!(print_typed_expr_without_indent(&e), "(a:i32+b:?)");

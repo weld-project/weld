@@ -95,6 +95,7 @@ fn update_defined_ids(expr: &mut PartialExpr, sym_gen: &mut SymbolGenerator) {
             let new_ident = PartialExpr {
                 kind: Ident(new_sym.clone()),
                 ty: value.ty.clone(),
+                annotations: Annotations::new(),
             };
             body.substitute(sym, &new_ident);
             sym.id = new_sym.id;
@@ -108,6 +109,7 @@ fn update_defined_ids(expr: &mut PartialExpr, sym_gen: &mut SymbolGenerator) {
                 let new_ident = PartialExpr {
                     kind: Ident(new_sym.clone()),
                     ty: param.ty.clone(),
+                    annotations: Annotations::new(),
                 };
                 body.substitute(sym, &new_ident);
                 sym.id = new_sym.id;

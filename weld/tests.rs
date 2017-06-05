@@ -1,4 +1,4 @@
-use super::ast::{Expr, Type, ExprKind, Symbol};
+use super::ast::{Annotations, Expr, Type, ExprKind, Symbol};
 use super::partial_types::PartialType::Unknown;
 use super::parser::parse_expr;
 use super::pretty_print::*;
@@ -150,6 +150,7 @@ fn parse_and_print_typed_expr_without_indentessions() {
             id: 1,
         }),
         ty: Unknown,
+        annotations: Annotations::new(),
     };
     assert_eq!(print_typed_expr_without_indent(&e).as_str(), "a#1:?");
 

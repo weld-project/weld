@@ -221,3 +221,23 @@ extern "C" void fast_matmul(float_vec_t *a, float_vec_t *b, float_vec_t *result)
   // can call any arbitrary C code in a UDF.
   my_fast_matrix_multiply(a->data, b->data, result->data, a->length);
 }
+
+## Annotations
+
+In addition, it's possible to specify annotations on both builder types and expressions: these could for example specify an implementation strategy for a builder. To specify an annotation on a `dictmerger`, one can use syntax like
+
+```
+@(name1:value1, name2:value2, ...) dictmerger[K,V,bin_op]
+```
+
+Annotations need to be specified before the builder type or expression, and multiple annotations need to be comma-separated. Currently, we support the following annotations on builder types:
+* `impl`: Specifies the builder's implementation strategy -- permitted values are `global` and `local`.
+
+In addition, we support the following annotations on generic expressions:
+* `predicate`: Specifies whether the expression should be predicated or not -- value must be a `bool`.
+* `vectorize`: Specifies whether the expression should be vectorized or not -- value must be a `bool`.
+* `tile_size`: Specifies the tile size to be used to tile the expression -- value must be a `i32`.
+* `grain_size`: Specifies the grain size for the expression -- value must be a `i32`.
+* `size`: Specifies the size of the expression -- value must be a `i64`.
+* `branch_selectivity`: Specifies the selectivity of a branch in the expression -- value must be a `i32` (fraction of `10,000`).
+* `num_keys`: Specifies the number of keys in the expression -- value must be a `i64`.

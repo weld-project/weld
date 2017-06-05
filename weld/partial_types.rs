@@ -12,7 +12,7 @@ pub enum PartialType {
     Scalar(ScalarKind),
     Vector(Box<PartialType>),
     Dict(Box<PartialType>, Box<PartialType>),
-    Builder(PartialBuilderKind),
+    Builder(PartialBuilderKind, Annotations),
     Struct(Vec<PartialType>),
     Function(Vec<PartialType>, Box<PartialType>),
 }
@@ -42,6 +42,7 @@ pub fn expr_box(kind: ExprKind<PartialType>) -> Box<PartialExpr> {
     Box::new(PartialExpr {
         ty: PartialType::Unknown,
         kind: kind,
+        annotations: Annotations::new(),
     })
 }
 
@@ -57,23 +58,28 @@ impl PartialType {
             Dict(ref kt, ref vt) => {
                 Ok(Type::Dict(Box::new(try!(kt.to_type())), Box::new(try!(vt.to_type()))))
             }
-            Builder(Appender(ref elem)) => {
-                Ok(Type::Builder(BuilderKind::Appender(Box::new(try!(elem.to_type())))))
+            Builder(Appender(ref elem), ref annotations) => {
+                Ok(Type::Builder(BuilderKind::Appender(Box::new(try!(elem.to_type()))),
+                                 annotations.clone()))
             }
-            Builder(DictMerger(ref kt, ref vt, _, op)) => {
+            Builder(DictMerger(ref kt, ref vt, _, op), ref annotations) => {
                 Ok(Type::Builder(BuilderKind::DictMerger(Box::new(try!(kt.to_type())),
                                                          Box::new(try!(vt.to_type())),
-                                                         op)))
+                                                         op),
+                                 annotations.clone()))
             }
-            Builder(GroupMerger(ref kt, ref vt, _)) => {
+            Builder(GroupMerger(ref kt, ref vt, _), ref annotations) => {
                 Ok(Type::Builder(BuilderKind::GroupMerger(Box::new(try!(kt.to_type())),
-                                                         Box::new(try!(vt.to_type())))))
+                                                          Box::new(try!(vt.to_type()))),
+                                 annotations.clone()))
             }
-            Builder(VecMerger(ref elem, _, op)) => {
-                Ok(Type::Builder(BuilderKind::VecMerger(Box::new(try!(elem.to_type())), op)))
+            Builder(VecMerger(ref elem, _, op), ref annotations) => {
+                Ok(Type::Builder(BuilderKind::VecMerger(Box::new(try!(elem.to_type())), op),
+                                 annotations.clone()))
             }
-            Builder(Merger(ref elem, op)) => {
-                Ok(Type::Builder(BuilderKind::Merger(Box::new(try!(elem.to_type())), op)))
+            Builder(Merger(ref elem, op), ref annotations) => {
+                Ok(Type::Builder(BuilderKind::Merger(Box::new(try!(elem.to_type())), op),
+                                 annotations.clone()))
             }
             Struct(ref elems) => {
                 let mut new_elems = Vec::with_capacity(elems.len());
@@ -102,11 +108,11 @@ impl PartialType {
             Scalar(_) => true,
             Vector(ref elem) => elem.is_complete(),
             Dict(ref kt, ref vt) => kt.is_complete() && vt.is_complete(),
-            Builder(Appender(ref elem)) => elem.is_complete(),
-            Builder(DictMerger(ref kt, ref vt, _, _)) => kt.is_complete() && vt.is_complete(),
-            Builder(GroupMerger(ref kt, ref vt, _)) => kt.is_complete() && vt.is_complete(),
-            Builder(VecMerger(ref elem, _, _)) => elem.is_complete(),
-            Builder(Merger(ref elem, _)) => elem.is_complete(),
+            Builder(Appender(ref elem), _) => elem.is_complete(),
+            Builder(DictMerger(ref kt, ref vt, _, _), _) => kt.is_complete() && vt.is_complete(),
+            Builder(GroupMerger(ref kt, ref vt, _), _) => kt.is_complete() && vt.is_complete(),
+            Builder(VecMerger(ref elem, _, _), _) => elem.is_complete(),
+            Builder(Merger(ref elem, _), _) => elem.is_complete(),
             Struct(ref elems) => elems.iter().all(|e| e.is_complete()),
             Function(ref params, ref res) => {
                 params.iter().all(|p| p.is_complete()) && res.is_complete()
@@ -337,6 +343,7 @@ impl PartialExpr {
         Ok(TypedExpr {
             ty: try!(self.ty.to_type()),
             kind: new_kind,
+            annotations: Annotations::new(),
         })
     }
 }
