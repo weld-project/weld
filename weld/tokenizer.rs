@@ -360,13 +360,7 @@ fn basic_tokenize() {
                     TIdent("z0".into()),
                     TEndOfInput]);
     assert_eq!(tokenize("groupmerger[i32, i32]").unwrap(),
-               vec![TGroupMerger,
-                    TOpenBracket,
-                    TI32,
-                    TComma,
-                    TI32,
-                    TCloseBracket,
-                    TEndOfInput]);
+               vec![TGroupMerger, TOpenBracket, TI32, TComma, TI32, TCloseBracket, TEndOfInput]);
 
     assert_eq!(tokenize("= == | || & &&").unwrap(),
                vec![TEqual, TEqualEqual, TBar, TLogicalOr, TBitwiseAnd, TLogicalAnd, TEndOfInput]);

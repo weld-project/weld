@@ -70,7 +70,7 @@ impl PartialType {
             }
             Builder(GroupMerger(ref kt, ref vt, _), ref annotations) => {
                 Ok(Type::Builder(BuilderKind::GroupMerger(Box::new(try!(kt.to_type())),
-                                                         Box::new(try!(vt.to_type()))),
+                                                          Box::new(try!(vt.to_type()))),
                                  annotations.clone()))
             }
             Builder(VecMerger(ref elem, _, op), ref annotations) => {

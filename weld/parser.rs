@@ -927,7 +927,7 @@ impl<'t> Parser<'t> {
                 expr.ty = Builder(GroupMerger(Box::new(key_type.clone()),
                                               Box::new(value_type.clone()),
                                               Box::new(Struct(vec![key_type.clone(),
-                                                                  value_type.clone()]))),
+                                                                   value_type.clone()]))),
                                   annotations);
                 Ok(expr)
             }

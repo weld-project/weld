@@ -102,7 +102,7 @@ pub struct Annotations {
 
     size: Option<i64>,
     branch_selectivity: Option<i32>, // Fractions of 10,000.
-    num_keys: Option<i64>,
+    num_keys: Option<i64>, 
 
     // If additional fields are added, remember to add a getter / setter
     // as well as necessary logic in fmt::Display and is_empty below.

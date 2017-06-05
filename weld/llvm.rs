@@ -1788,27 +1788,34 @@ impl LlvmGenerator {
                                     GroupMerger(ref kt, ref vt) => {
                                         let mut func_gen = IdGenerator::new("%func");
                                         let function_id = func_gen.next();
-                                        let func_str = format!("@{}", &function_id.replace("%", ""));
+                                        let func_str = format!("@{}",
+                                                               &function_id.replace("%", ""));
                                         let bld_ty = Dict(kt.clone(), Box::new(Vector(vt.clone())));
                                         let elem = Box::new(Struct(vec![*kt.clone(), *vt.clone()]));
                                         let bld_ty_str = try!(self.llvm_type(&bld_ty)).to_string();
                                         let kv_struct_ty = try!(self.llvm_type(&elem)).to_string();
                                         let key_ty = try!(self.llvm_type(kt)).to_string();
                                         let value_ty = try!(self.llvm_type(vt)).to_string();
-                                        let value_vec_ty = try!(self.llvm_type(&Box::new(Vector(vt.clone())))).to_string();
+                                        let value_vec_ty =
+                                            try!(self.llvm_type(&Box::new(Vector(vt.clone()))))
+                                                .to_string();
                                         let kv_vec = Box::new(Vector(elem.clone()));
                                         let kv_vec_ty = try!(self.llvm_type(&kv_vec)).to_string();
                                         let kv_vec_builder_ty = format!("{}.bld", &kv_vec_ty);
                                         let key_prefix = format!("@{}", &key_ty.replace("%", ""));
-                                        let kv_vec_prefix = format!("@{}", &kv_vec_ty.replace("%", ""));
-                                        let value_vec_prefix = format!("@{}", &value_vec_ty.replace("%", ""));
-                                        let dict_prefix = format!("@{}", &bld_ty_str.replace("%", ""));
+                                        let kv_vec_prefix = format!("@{}",
+                                                                    &kv_vec_ty.replace("%", ""));
+                                        let value_vec_prefix =
+                                            format!("@{}", &value_vec_ty.replace("%", ""));
+                                        let dict_prefix = format!("@{}",
+                                                                  &bld_ty_str.replace("%", ""));
 
                                         let name_replaced =
                                             GROUPMERGER_CODE.replace("$NAME", &function_id.replace("%", ""));
                                         let key_prefix_replaced =
                                             name_replaced.replace("$KEY_PREFIX", &key_prefix);
-                                        let key_ty_replaced = key_prefix_replaced.replace("$KEY", &key_ty);
+                                        let key_ty_replaced =
+                                            key_prefix_replaced.replace("$KEY", &key_ty);
                                         let value_vec_prefix_ty_replaced =
                                             key_ty_replaced.replace("$VALUE_VEC_PREFIX", &value_vec_prefix);
                                         let value_vec_ty_replaced =
@@ -1816,7 +1823,8 @@ impl LlvmGenerator {
                                         let value_ty_replaced =
                                             value_vec_ty_replaced.replace("$VALUE", &value_ty);
                                         let kv_struct_replaced =
-                                            value_ty_replaced.replace("$KV_STRUCT", &kv_struct_ty.replace("%", ""));
+                                            value_ty_replaced.replace("$KV_STRUCT",
+                                                         &kv_struct_ty.replace("%", ""));
                                         let kv_vec_prefix_replaced =
                                             kv_struct_replaced.replace("$KV_VEC_PREFIX", &kv_vec_prefix);
                                         let kv_vec_ty_replaced =
@@ -1974,7 +1982,7 @@ impl LlvmGenerator {
                                                                  bld_ty_str.replace("%", ""));
                                         let bld_tmp = ctx.var_ids.next();
                                         ctx.code
-                                           .add(format!("{} = call {} {}.new(i64 16, %work_t* \
+                                            .add(format!("{} = call {} {}.new(i64 16, %work_t* \
                                                           %cur.work)",
                                                          bld_tmp,
                                                          bld_ty_str,
@@ -2019,8 +2027,7 @@ impl LlvmGenerator {
                                                              llvm_symbol(output)));
                                     }
                                     GroupMerger(_, _) => {
-                                        let bld_ty_str = try!(self.llvm_type(ty))
-                                            .to_string();
+                                        let bld_ty_str = try!(self.llvm_type(ty)).to_string();
                                         let bld_prefix = format!("@{}",
                                                                  bld_ty_str.replace("%", ""));
                                         let bld_tmp = ctx.var_ids.next();

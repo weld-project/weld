@@ -636,18 +636,18 @@ fn push_type(dest: &mut PartialType, src: &PartialType, context: &str) -> WeldRe
             }
         }
 
-        Builder(GroupMerger(ref mut dest_key_ty,
-                            ref mut dest_value_ty,
-                            ref mut dest_merge_ty), ref mut dest_annotations) => {
+        Builder(GroupMerger(ref mut dest_key_ty, ref mut dest_value_ty, ref mut dest_merge_ty),
+                ref mut dest_annotations) => {
             match *src {
-                Builder(GroupMerger(ref src_key_ty, ref src_value_ty, ref src_merge_ty), ref src_annotations) => {
+                Builder(GroupMerger(ref src_key_ty, ref src_value_ty, ref src_merge_ty),
+                        ref src_annotations) => {
                     let mut changed = false;
                     changed |= try!(push_type(dest_key_ty.as_mut(), src_key_ty.as_ref(), context));
                     changed |=
                         try!(push_type(dest_value_ty.as_mut(), src_value_ty.as_ref(), context));
                     changed |=
                         try!(push_type(dest_merge_ty.as_mut(), src_merge_ty.as_ref(), context));
-                     if *dest_annotations != *src_annotations {
+                    if *dest_annotations != *src_annotations {
                         if !src_annotations.is_empty() {
                             *dest_annotations = src_annotations.clone();
                             changed |= true;
