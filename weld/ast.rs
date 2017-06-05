@@ -44,7 +44,7 @@ pub enum Type {
     Scalar(ScalarKind),
     Vector(Box<Type>),
     Dict(Box<Type>, Box<Type>),
-    Builder(BuilderKind),
+    Builder(BuilderKind, Annotations),
     Struct(Vec<Type>),
     Function(Vec<Type>, Box<Type>),
 }
@@ -75,6 +75,184 @@ impl fmt::Display for ScalarKind {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum BuilderImplementationKind {
+    Local,
+    Global,
+}
+
+impl fmt::Display for BuilderImplementationKind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use ast::BuilderImplementationKind::*;
+        let text = match *self {
+            Local => "local",
+            Global => "global",
+        };
+        f.write_str(text)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Annotations {
+    builder_implementation: Option<BuilderImplementationKind>,
+
+    predicate: Option<bool>,
+    vectorize: Option<bool>,
+    tile_size: Option<i32>,
+    grain_size: Option<i32>,
+
+    size: Option<i64>,
+    branch_selectivity: Option<i32>, // Fractions of 10,000.
+    num_keys: Option<i64>, 
+
+    // If additional fields are added, remember to add a getter / setter
+    // as well as necessary logic in fmt::Display and is_empty below.
+}
+
+impl Annotations {
+    pub fn new() -> Annotations {
+        return Annotations {
+            builder_implementation: None,
+            predicate: None,
+            vectorize: None,
+            tile_size: None,
+            grain_size: None,
+            size: None,
+            branch_selectivity: None,
+            num_keys: None,
+        };
+    }
+
+    pub fn builder_implementation(&self) -> &Option<BuilderImplementationKind> {
+        &self.builder_implementation
+    }
+
+    pub fn set_builder_implementation(&mut self,
+                                      builder_implementation: BuilderImplementationKind) {
+        self.builder_implementation = Some(builder_implementation);
+    }
+
+    pub fn predicate(&self) -> &Option<bool> {
+        &self.predicate
+    }
+
+    pub fn set_predicate(&mut self, predicate: bool) {
+        self.predicate = Some(predicate)
+    }
+
+    pub fn vectorize(&self) -> &Option<bool> {
+        &self.vectorize
+    }
+
+    pub fn set_vectorize(&mut self, vectorize: bool) {
+        self.vectorize = Some(vectorize)
+    }
+
+    pub fn tile_size(&self) -> &Option<i32> {
+        &self.tile_size
+    }
+
+    pub fn set_tile_size(&mut self, tile_size: i32) {
+        self.tile_size = Some(tile_size)
+    }
+
+    pub fn grain_size(&self) -> &Option<i32> {
+        &self.grain_size
+    }
+
+    pub fn set_grain_size(&mut self, grain_size: i32) {
+        self.grain_size = Some(grain_size)
+    }
+
+    pub fn size(&self) -> &Option<i64> {
+        &self.size
+    }
+
+    pub fn set_size(&mut self, size: i64) {
+        self.size = Some(size)
+    }
+
+    pub fn selectivity(&self) -> &Option<i32> {
+        &self.branch_selectivity
+    }
+
+    pub fn set_selectivity(&mut self, selectivity: i32) {
+        self.branch_selectivity = Some(selectivity)
+    }
+
+    pub fn num_keys(&self) -> &Option<i64> {
+        &self.num_keys
+    }
+
+    pub fn set_num_keys(&mut self, num_keys: i64) {
+        self.num_keys = Some(num_keys)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        let mut is_empty = true;
+        if let Some(_) = self.builder_implementation {
+            is_empty = false;
+        }
+        if let Some(_) = self.predicate {
+            is_empty = false;
+        }
+        if let Some(_) = self.vectorize {
+            is_empty = false;
+        }
+        if let Some(_) = self.tile_size {
+            is_empty = false;
+        }
+        if let Some(_) = self.grain_size {
+            is_empty = false;
+        }
+        if let Some(_) = self.size {
+            is_empty = false;
+        }
+        if let Some(_) = self.branch_selectivity {
+            is_empty = false;
+        }
+        if let Some(_) = self.num_keys {
+            is_empty = false;
+        }
+        is_empty
+    }
+}
+
+impl fmt::Display for Annotations {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut annotations = Vec::new();
+        if let Some(ref e) = self.builder_implementation {
+            annotations.push(format!("impl:{}", e));
+        }
+        if let Some(ref e) = self.predicate {
+            annotations.push(format!("predicate:{}", e));
+        }
+        if let Some(ref e) = self.vectorize {
+            annotations.push(format!("vectorize:{}", e));
+        }
+        if let Some(ref e) = self.tile_size {
+            annotations.push(format!("tile_size:{}", e));
+        }
+        if let Some(ref e) = self.grain_size {
+            annotations.push(format!("grain_size:{}", e));
+        }
+        if let Some(ref e) = self.size {
+            annotations.push(format!("size:{}", e));
+        }
+        if let Some(ref e) = self.branch_selectivity {
+            annotations.push(format!("selectivity:{}", e));
+        }
+        if let Some(ref e) = self.num_keys {
+            annotations.push(format!("num_keys:{}", e));
+        }
+
+        if annotations.len() == 0 {
+            return write!(f, "");
+        }
+        return write!(f, "@({})", annotations.join(","));
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum BuilderKind {
     Appender(Box<Type>),
     Merger(Box<Type>, BinOpKind),
@@ -96,6 +274,7 @@ impl TypeBounds for Type {}
 pub struct Expr<T: TypeBounds> {
     pub ty: T,
     pub kind: ExprKind<T>,
+    pub annotations: Annotations,
 }
 
 /// An iterator, which specifies a vector to iterate over and optionally a start index,
