@@ -2002,8 +2002,19 @@ impl LlvmGenerator {
 
                                         // Generate code to initialize the builder.
                                         let iden_elem = match *op {
-                                            BinOpKind::Add => "0".to_string(),
-                                            BinOpKind::Multiply => "1".to_string(),
+                                            BinOpKind::Add => {
+                                                match **elem_ty {
+                                                    Scalar(F32) | Scalar(F64) => "0.0".to_string(),
+                                                    _ => "0".to_string(),
+                                                }
+                                            }
+                                            BinOpKind::Multiply => {
+                                                match **elem_ty {
+                                                    Scalar(F32) | Scalar(F64) => "1.0".to_string(),
+                                                    _ => "1".to_string(),
+                                                }
+                                            }
+
                                             _ => {
                                                 return weld_err!("Invalid merger binary op in \
                                                                   codegen")
