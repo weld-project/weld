@@ -100,6 +100,10 @@ impl PartialType {
             VectorizedBuilder(Merger(ref elem, op)) => {
                 Ok(Type::VectorizedBuilder(BuilderKind::Merger(Box::new(try!(elem.to_type())), op)))
             }
+            VectorizedBuilder(GroupMerger(ref kt, ref vt, _)) => {
+                Ok(Type::VectorizedBuilder(BuilderKind::GroupMerger(Box::new(try!(kt.to_type())),
+                                                                    Box::new(try!(vt.to_type())))))
+            }
             Struct(ref elems) => {
                 let mut new_elems = Vec::with_capacity(elems.len());
                 for e in elems {
@@ -134,6 +138,9 @@ impl PartialType {
             }
             VectorizedBuilder(VecMerger(ref elem, _, _)) => elem.is_complete(),
             VectorizedBuilder(Merger(ref elem, _)) => elem.is_complete(),
+            VectorizedBuilder(GroupMerger(ref kt, ref vt, _)) => {
+                kt.is_complete() && vt.is_complete()
+            }
             Builder(Appender(ref elem), _) => elem.is_complete(),
             Builder(DictMerger(ref kt, ref vt, _, _), _) => kt.is_complete() && vt.is_complete(),
             Builder(GroupMerger(ref kt, ref vt, _), _) => kt.is_complete() && vt.is_complete(),

@@ -13,7 +13,7 @@ use super::error::*;
 fn vectorized_type(ty: &Type) -> Type {
     if let Scalar(kind) = *ty {
         return VectorizedScalar(kind);
-    } else if let Builder(ref kind) = *ty {
+    } else if let Builder(ref kind, _) = *ty {
         let vectorized_kind = match *kind {
             BuilderKind::Merger(ref t, ref op) => {
                 BuilderKind::Merger(Box::new(vectorized_type(t)), *op)
@@ -29,7 +29,7 @@ fn vectorized_type(ty: &Type) -> Type {
 /// Returns `true` if the type is a vectorizable builder and `false` otherwise.
 fn vectorizable_builder(ty: &Type) -> bool {
     match *ty {
-        Builder(BuilderKind::Merger(_, _)) => true,
+        Builder(BuilderKind::Merger(_, _), _) => true,
         _ => false,
     }
 }
@@ -92,6 +92,7 @@ pub fn vectorize(expr: &mut Expr<Type>) -> WeldResult<()> {
                                 let vectorized_builder = Expr {
                                     kind: init_builder.kind.clone(),
                                     ty: vectorized_type(&init_builder.ty),
+                                    annotations: Annotations::new(),
                                 };
 
                                 let mut vectorized_params = params.iter()
@@ -116,6 +117,7 @@ pub fn vectorize(expr: &mut Expr<Type>) -> WeldResult<()> {
                                         body: vectorized_body,
                                     },
                                     ty: vectorized_func_ty,
+                                    annotations: Annotations::new(),
                                 };
 
                                 let vectorized_loop = Expr {
@@ -125,11 +127,13 @@ pub fn vectorize(expr: &mut Expr<Type>) -> WeldResult<()> {
                                         func: Box::new(vectorized_func),
                                     },
                                     ty: vectorized_type(&for_loop.ty),
+                                    annotations: Annotations::new(),
                                 };
 
                                 return (Some(Expr {
                                             kind: Res { builder: Box::new(vectorized_loop) },
                                             ty: expr.ty.clone(),
+                                            annotations: Annotations::new(),
                                         }),
                                         false);
                             }
