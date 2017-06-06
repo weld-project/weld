@@ -81,14 +81,13 @@ pub fn vectorize(expr: &mut Expr<Type>) -> WeldResult<()> {
                                     e.ty = vectorized_type(&e.ty);
                                     None
                                 }
+                                // TODO abort if not vectorizable?
                                 _ => None,
                             };
                             return (vectorized, true);
                         });
 
                                 // Replace the loop with a vectorized version.
-                                // TODO(shoumik): add a fringe loop!
-
                                 let vectorized_builder = Expr {
                                     kind: init_builder.kind.clone(),
                                     ty: vectorized_type(&init_builder.ty),
@@ -103,6 +102,7 @@ pub fn vectorize(expr: &mut Expr<Type>) -> WeldResult<()> {
                                         }
                                     })
                                     .collect::<Vec<_>>();
+
                                 // Don't vectorize the index...
                                 vectorized_params[1] = params[1].clone();
 
@@ -122,7 +122,7 @@ pub fn vectorize(expr: &mut Expr<Type>) -> WeldResult<()> {
 
                                 let vectorized_loop = Expr {
                                     kind: For {
-                                        iters: iters.clone(),
+                                        iters: iters.clone(), // TODO! Modify the iter extent.
                                         builder: Box::new(vectorized_builder),
                                         func: Box::new(vectorized_func),
                                     },
@@ -130,12 +130,36 @@ pub fn vectorize(expr: &mut Expr<Type>) -> WeldResult<()> {
                                     annotations: Annotations::new(),
                                 };
 
-                                return (Some(Expr {
-                                            kind: Res { builder: Box::new(vectorized_loop) },
-                                            ty: expr.ty.clone(),
+                                // The vectorized result, which we pass as the initializer for the
+                                // serial loop.
+                                let vectorized_result = Expr {
+                                    kind: Res { builder: Box::new(vectorized_loop) },
+                                    ty: expr.ty.clone(),
+                                    annotations: Annotations::new(),
+                                };
+
+                                let scalar_loop = Expr {
+                                    kind: For {
+                                        // TODO! Modify the iter extent.
+                                        iters: iters.clone(),
+                                        builder: Box::new(Expr {
+                                            kind: NewBuilder(Some(Box::new(vectorized_result))),
+                                            ty: for_loop.ty.clone(),
                                             annotations: Annotations::new(),
                                         }),
-                                        false);
+                                        func: func.clone(),
+                                    },
+                                    ty: for_loop.ty.clone(),
+                                    annotations: Annotations::new(),
+                                };
+
+                                let final_result = Expr {
+                                    kind: Res { builder: Box::new(scalar_loop) },
+                                    ty: expr.ty.clone(),
+                                    annotations: Annotations::new(),
+                                };
+
+                                return (Some(final_result), false);
                             }
                         }
                     }
