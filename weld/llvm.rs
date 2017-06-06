@@ -1993,11 +1993,9 @@ impl LlvmGenerator {
                                                              bld_ty_str,
                                                              llvm_symbol(output)));
                                     }
-                                    Merger(_, ref op) => {
-                                        if *op != BinOpKind::Add {
-                                            return weld_err!("Merger only supports +");
-                                        }
-                                        let bld_ty_str = try!(self.llvm_type(ty));
+                                    Merger(ref elem_ty, ref op) => {
+                                        let bld_ty_str = self.llvm_type(ty)?.to_string();
+                                        let elem_type = (self.llvm_type(elem_ty)?).to_string();
                                         let bld_prefix = format!("@{}",
                                                                  bld_ty_str.replace("%", ""));
                                         let bld_tmp = ctx.var_ids.next();
@@ -2005,6 +2003,73 @@ impl LlvmGenerator {
                                                              bld_tmp,
                                                              bld_ty_str,
                                                              bld_prefix));
+
+                                        // Generate code to initialize the builder.
+                                        let iden_elem = match *op {
+                                            BinOpKind::Add => {
+                                                match **elem_ty {
+                                                    Scalar(F32) | Scalar(F64) => "0.0".to_string(),
+                                                    _ => "0".to_string(),
+                                                }
+                                            }
+                                            BinOpKind::Multiply => {
+                                                match **elem_ty {
+                                                    Scalar(F32) | Scalar(F64) => "1.0".to_string(),
+                                                    _ => "1".to_string(),
+                                                }
+                                            }
+
+                                            _ => {
+                                                return weld_err!("Invalid merger binary op in \
+                                                                  codegen")
+                                            }
+                                        };
+
+                                        let init_elem = match *arg {
+                                            Some(ref s) => {
+                                                let arg_str = self.load_var(llvm_symbol(s).as_str(),
+                                                              &elem_type,
+                                                              ctx)?;
+                                                arg_str
+                                            }
+                                            _ => iden_elem.clone(),
+                                        };
+
+                                        let first = ctx.var_ids.next();
+                                        let nworkers = ctx.var_ids.next();
+                                        let i = ctx.var_ids.next();
+                                        let cur_ptr = ctx.var_ids.next();
+                                        let i2 = ctx.var_ids.next();
+                                        let cond = ctx.var_ids.next();
+                                        let cond2 = ctx.var_ids.next();
+
+                                        // Generate label names.
+                                        let label_base = ctx.var_ids.next();
+                                        let mut label_ids =
+                                            IdGenerator::new(&label_base.replace("%", ""));
+                                        let entry = label_ids.next();
+                                        let body = label_ids.next();
+                                        let done = label_ids.next();
+
+
+                                        ctx.code.add(format!(include_str!("resources/merger/init_merger.ll"),
+                                        first=first,
+                                        nworkers=nworkers,
+                                        bld_ty_str=bld_ty_str,
+                                        bld_prefix=bld_prefix,
+                                        init_elem=init_elem,
+                                        elem_type=elem_type,
+                                        cond=cond,
+                                        iden_elem=iden_elem,
+                                        bld_inp=bld_tmp,
+                                        i=i,
+                                        cur_ptr=cur_ptr,
+                                        i2=i2,
+                                        cond2=cond2,
+                                        entry=entry,
+                                        body=body,
+                                        done=done));
+
                                         ctx.code.add(format!("store {} {}, {}* {}",
                                                              bld_ty_str,
                                                              bld_tmp,

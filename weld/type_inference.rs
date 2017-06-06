@@ -440,6 +440,16 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
                             }
                         }
                     }
+                    Merger(ref elem, _) => {
+                        match *e {
+                            Some(ref mut arg) => {
+                                changed |= try!(push_type(&mut arg.ty,
+                                                          &elem.clone(),
+                                                          "NewBuilder(Merger)"));
+                            }
+                            None => {}
+                        }
+                    }
                     _ => {} // No arguments for the builder.
                 }
             }
