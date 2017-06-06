@@ -32,5 +32,5 @@ install:
   - cd ..
 
 script:
-  - bash build_tools/travis/test_llvm_version.sh 3.8 38.0.1
-  - bash build_tools/travis/test_llvm_version.sh 4.0 40.0.0
+  - bash -e build_tools/travis/test_llvm_version.sh 3.8 38.0.1
+  - bash -e build_tools/travis/test_llvm_version.sh 4.0 40.0.0

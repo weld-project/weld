@@ -17,6 +17,8 @@ use super::ast::BinOpKind::*;
 use super::parser::*;
 #[cfg(test)]
 use super::partial_types::expr_box;
+#[cfg(test)]
+use super::pretty_print::*;
 
 type TypeMap = HashMap<Symbol, PartialType>;
 
@@ -331,14 +333,14 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
         Merge { ref mut builder, ref mut value } => {
             let mut changed = false;
             match builder.ty {
-                Builder(ref mut b) => {
+                Builder(ref mut b, _) => {
                     let mty = b.merge_type_mut();
                     changed |= try!(sync_types(mty, &mut value.ty, "Merge"));
                 }
                 Struct(ref mut tys) => {
                     let mut rtys = vec![];
                     for ty in tys.iter_mut() {
-                        if let &mut Builder(ref mut b) = ty {
+                        if let &mut Builder(ref mut b, _) = ty {
                             let rty = b.merge_type();
                             rtys.push(rty);
                         }
@@ -349,7 +351,7 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
                     if let Struct(ref value_tys) = value.ty {
                         for (i, ty) in tys.iter_mut().enumerate() {
                             let ref val_ty = value_tys[i];
-                            if let &mut Builder(ref mut b) = ty {
+                            if let &mut Builder(ref mut b, _) = ty {
                                 let mty = b.merge_type_mut();
                                 changed |= try!(push_type(mty, val_ty, "Merge"));
                             }
@@ -366,14 +368,14 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
         Res { ref mut builder } => {
             let mut changed = false;
             match builder.ty {
-                Builder(ref mut b) => {
+                Builder(ref mut b, _) => {
                     let rty = b.result_type();
                     changed |= try!(push_type(&mut expr.ty, &rty, "Res"));
                 }
                 Struct(ref mut tys) => {
                     let mut rtys = vec![];
                     for ty in tys {
-                        if let &mut Builder(ref mut b) = ty {
+                        if let &mut Builder(ref mut b, _) = ty {
                             let rty = b.result_type();
                             rtys.push(rty);
                         }
@@ -434,11 +436,11 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
 
         NewBuilder(ref mut e) => {
             let mut changed = match expr.ty {
-                Unknown | Builder(_) => false,
+                Unknown | Builder(_, _) => false,
                 _ => return weld_err!("Wrong type ascribed to NewBuilder"),
             };
             // For builders with arguments (Just VecMerger for now).
-            if let Builder(ref bty) = expr.ty {
+            if let Builder(ref bty, _) = expr.ty {
                 match *bty {
                     VecMerger(ref elem, _, _) => {
                         match *e {
@@ -451,6 +453,16 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
                                                           &Vector(elem.clone()),
                                                           "NewBuilder(VecMerger)"));
                             }
+                        }
+                    }
+                    Merger(ref elem, _) => {
+                        match *e {
+                            Some(ref mut arg) => {
+                                changed |= try!(push_type(&mut arg.ty,
+                                                          &elem.clone(),
+                                                          "NewBuilder(Merger)"));
+                            }
+                            None => {}
                         }
                     }
                     _ => {} // No arguments for the builder.
@@ -592,10 +604,18 @@ fn push_type(dest: &mut PartialType, src: &PartialType, context: &str) -> WeldRe
             }
         }
 
-        Builder(Appender(ref mut dest_elem)) => {
+        Builder(Appender(ref mut dest_elem), ref mut dest_annotations) => {
             match *src {
-                Builder(Appender(ref src_elem)) => {
-                    push_type(dest_elem.as_mut(), src_elem.as_ref(), context)
+                Builder(Appender(ref src_elem), ref src_annotations) => {
+                    let mut changed = false;
+                    changed |= try!(push_type(dest_elem.as_mut(), src_elem.as_ref(), context));
+                    if *dest_annotations != *src_annotations {
+                        if !src_annotations.is_empty() {
+                            *dest_annotations = src_annotations.clone();
+                            changed |= true;
+                        }
+                    }
+                    Ok(changed)
                 }
                 _ => weld_err!("Mismatched types in Appender, {}", context),
             }
@@ -604,15 +624,23 @@ fn push_type(dest: &mut PartialType, src: &PartialType, context: &str) -> WeldRe
         Builder(DictMerger(ref mut dest_key_ty,
                            ref mut dest_value_ty,
                            ref mut dest_merge_ty,
-                           _)) => {
+                           _),
+                ref mut dest_annotations) => {
             match *src {
-                Builder(DictMerger(ref src_key_ty, ref src_value_ty, ref src_merge_ty, _)) => {
+                Builder(DictMerger(ref src_key_ty, ref src_value_ty, ref src_merge_ty, _),
+                        ref src_annotations) => {
                     let mut changed = false;
                     changed |= try!(push_type(dest_key_ty.as_mut(), src_key_ty.as_ref(), context));
                     changed |=
                         try!(push_type(dest_value_ty.as_mut(), src_value_ty.as_ref(), context));
                     changed |=
                         try!(push_type(dest_merge_ty.as_mut(), src_merge_ty.as_ref(), context));
+                    if *dest_annotations != *src_annotations {
+                        if !src_annotations.is_empty() {
+                            *dest_annotations = src_annotations.clone();
+                            changed |= true;
+                        }
+                    }
 
                     // For now, any commutative-merge builder only supports either a single scalar
                     // or a struct of scalars.
@@ -640,14 +668,65 @@ fn push_type(dest: &mut PartialType, src: &PartialType, context: &str) -> WeldRe
             }
         }
 
-        Builder(VecMerger(ref mut dest_elem_ty, ref mut dest_merge_ty, _)) => {
+        Builder(GroupMerger(ref mut dest_key_ty, ref mut dest_value_ty, ref mut dest_merge_ty),
+                ref mut dest_annotations) => {
             match *src {
-                Builder(VecMerger(ref src_elem_ty, ref src_merge_ty, _)) => {
+                Builder(GroupMerger(ref src_key_ty, ref src_value_ty, ref src_merge_ty),
+                        ref src_annotations) => {
+                    let mut changed = false;
+                    changed |= try!(push_type(dest_key_ty.as_mut(), src_key_ty.as_ref(), context));
+                    changed |=
+                        try!(push_type(dest_value_ty.as_mut(), src_value_ty.as_ref(), context));
+                    changed |=
+                        try!(push_type(dest_merge_ty.as_mut(), src_merge_ty.as_ref(), context));
+                    if *dest_annotations != *src_annotations {
+                        if !src_annotations.is_empty() {
+                            *dest_annotations = src_annotations.clone();
+                            changed |= true;
+                        }
+                    }
+
+                    // For now, any commutative-merge builder only supports either a single scalar
+                    // or a struct of scalars.
+                    match **dest_value_ty {
+                        Struct(ref tys) => {
+                            for ty in tys {
+                                match *ty {
+                                    Scalar(_) => {}
+                                    _ => {
+                                        return weld_err!("Commutatitive merge builders only \
+                                                          support structs with scalars");
+                                    }
+                                }
+                            }
+                        }
+                        Scalar(_) => {}
+                        _ => {
+                            return weld_err!("Commutatitive merge builders only support scalars \
+                                              or structs of scalars");
+                        }
+                    }
+                    Ok(changed)
+                }
+                _ => weld_err!("Mismatched types in GroupMerger, {}", context),
+            }
+        }
+
+        Builder(VecMerger(ref mut dest_elem_ty, ref mut dest_merge_ty, _),
+                ref mut dest_annotations) => {
+            match *src {
+                Builder(VecMerger(ref src_elem_ty, ref src_merge_ty, _), ref src_annotations) => {
                     let mut changed = false;
                     changed |=
                         try!(push_type(dest_elem_ty.as_mut(), src_elem_ty.as_ref(), context));
                     changed |=
                         try!(push_type(dest_merge_ty.as_mut(), src_merge_ty.as_ref(), context));
+                    if *dest_annotations != *src_annotations {
+                        if !src_annotations.is_empty() {
+                            *dest_annotations = src_annotations.clone();
+                            changed |= true;
+                        }
+                    }
 
                     // For now, any commutative-merge builder only supports either a single scalar
                     // or a struct of scalars.
@@ -677,10 +756,16 @@ fn push_type(dest: &mut PartialType, src: &PartialType, context: &str) -> WeldRe
             }
         }
 
-        Builder(Merger(ref mut dest_elem, _)) => {
+        Builder(Merger(ref mut dest_elem, _), ref mut dest_annotations) => {
             match *src {
-                Builder(Merger(ref src_elem, _)) => {
-                    let changed = push_type(dest_elem.as_mut(), src_elem.as_ref(), context)?;
+                Builder(Merger(ref src_elem, _), ref src_annotations) => {
+                    let mut changed = push_type(dest_elem.as_mut(), src_elem.as_ref(), context)?;
+                    if *dest_annotations != *src_annotations {
+                        if !src_annotations.is_empty() {
+                            *dest_annotations = src_annotations.clone();
+                            changed |= true;
+                        }
+                    }
                     // For now, any commutative-merge builder only supports either a single scalar
                     // or a struct of scalars. TODO(shoumik): Factor into function.
                     match **dest_elem {
@@ -789,6 +874,7 @@ fn infer_types_simple() {
     let mut e = *boolcast.clone();
     assert!(infer_types(&mut e).is_ok());
     assert_eq!(e.ty, Scalar(Bool));
+
 }
 
 #[test]
@@ -849,4 +935,28 @@ fn infer_types_let() {
     let mut e = parse_expr("let a = 1; a:bool").unwrap();
     assert!(infer_types(&mut e).is_err());
 
+}
+
+#[test]
+fn infer_annotations() {
+    // Check if annotations are correctly inferred.
+    let code = "result(for([1,2,3], @(impl:local)dictmerger[i32,i32,+], \
+                |b,i,e| merge(b, {e,e})))";
+    let mut e = parse_expr(code).unwrap();
+    assert!(infer_types(&mut e).is_ok());
+    assert_eq!(print_typed_expr_without_indent(&e).as_str(),
+               "result(for([1,2,3],@(impl:local)dictmerger[i32,i32,+],\
+                |b:@(impl:local)dictmerger[i32,i32,+],i:i64,e:i32|\
+                merge(b:@(impl:local)dictmerger[i32,i32,+],{e:i32,e:i32})))");
+
+    // Perform same check as above, but with builder type explicitly specified (check
+    // if annotations are still propagated correctly).
+    let code = "result(for([1,2,3], @(impl:local)dictmerger[i32,i32,+], \
+                |b:dictmerger[i32,i32,+],i,e| merge(b, {e,e})))";
+    let mut e = parse_expr(code).unwrap();
+    assert!(infer_types(&mut e).is_ok());
+    assert_eq!(print_typed_expr_without_indent(&e).as_str(),
+               "result(for([1,2,3],@(impl:local)dictmerger[i32,i32,+],\
+                |b:@(impl:local)dictmerger[i32,i32,+],i:i64,e:i32|\
+                merge(b:@(impl:local)dictmerger[i32,i32,+],{e:i32,e:i32})))");
 }

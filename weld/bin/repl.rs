@@ -27,7 +27,6 @@ use weld::util::MERGER_BC;
 
 use weld::transforms;
 use weld::vectorizer;
-
 enum ReplCommands {
     LoadFile,
 }

@@ -13,7 +13,7 @@ pub enum PartialType {
     VectorizedScalar(ScalarKind),
     Vector(Box<PartialType>),
     Dict(Box<PartialType>, Box<PartialType>),
-    Builder(PartialBuilderKind),
+    Builder(PartialBuilderKind, Annotations),
     VectorizedBuilder(PartialBuilderKind),
     Struct(Vec<PartialType>),
     Function(Vec<PartialType>, Box<PartialType>),
@@ -26,6 +26,8 @@ pub enum PartialBuilderKind {
     Appender(Box<PartialType>),
     // Key type, value type, merge type (struct of <key,value> pairs)
     DictMerger(Box<PartialType>, Box<PartialType>, Box<PartialType>, BinOpKind),
+    // Key type, value type, merge type (struct of <key,value> pairs)
+    GroupMerger(Box<PartialType>, Box<PartialType>, Box<PartialType>),
     // elem type, merge type (struct of <index, value> pairs
     VecMerger(Box<PartialType>, Box<PartialType>, BinOpKind),
     Merger(Box<PartialType>, BinOpKind),
@@ -42,6 +44,7 @@ pub fn expr_box(kind: ExprKind<PartialType>) -> Box<PartialExpr> {
     Box::new(PartialExpr {
         ty: PartialType::Unknown,
         kind: kind,
+        annotations: Annotations::new(),
     })
 }
 
@@ -58,19 +61,28 @@ impl PartialType {
             Dict(ref kt, ref vt) => {
                 Ok(Type::Dict(Box::new(try!(kt.to_type())), Box::new(try!(vt.to_type()))))
             }
-            Builder(Appender(ref elem)) => {
-                Ok(Type::Builder(BuilderKind::Appender(Box::new(try!(elem.to_type())))))
+            Builder(Appender(ref elem), ref annotations) => {
+                Ok(Type::Builder(BuilderKind::Appender(Box::new(try!(elem.to_type()))),
+                                 annotations.clone()))
             }
-            Builder(DictMerger(ref kt, ref vt, _, op)) => {
+            Builder(DictMerger(ref kt, ref vt, _, op), ref annotations) => {
                 Ok(Type::Builder(BuilderKind::DictMerger(Box::new(try!(kt.to_type())),
                                                          Box::new(try!(vt.to_type())),
-                                                         op)))
+                                                         op),
+                                 annotations.clone()))
             }
-            Builder(VecMerger(ref elem, _, op)) => {
-                Ok(Type::Builder(BuilderKind::VecMerger(Box::new(try!(elem.to_type())), op)))
+            Builder(GroupMerger(ref kt, ref vt, _), ref annotations) => {
+                Ok(Type::Builder(BuilderKind::GroupMerger(Box::new(try!(kt.to_type())),
+                                                          Box::new(try!(vt.to_type()))),
+                                 annotations.clone()))
             }
-            Builder(Merger(ref elem, op)) => {
-                Ok(Type::Builder(BuilderKind::Merger(Box::new(try!(elem.to_type())), op)))
+            Builder(VecMerger(ref elem, _, op), ref annotations) => {
+                Ok(Type::Builder(BuilderKind::VecMerger(Box::new(try!(elem.to_type())), op),
+                                 annotations.clone()))
+            }
+            Builder(Merger(ref elem, op), ref annotations) => {
+                Ok(Type::Builder(BuilderKind::Merger(Box::new(try!(elem.to_type())), op),
+                                 annotations.clone()))
             }
             // TODO repeated from above, factor into a function?
             VectorizedBuilder(Appender(ref elem)) => {
@@ -116,16 +128,17 @@ impl PartialType {
             VectorizedScalar(_) => true,
             Vector(ref elem) => elem.is_complete(),
             Dict(ref kt, ref vt) => kt.is_complete() && vt.is_complete(),
-            Builder(Appender(ref elem)) => elem.is_complete(),
-            Builder(DictMerger(ref kt, ref vt, _, _)) => kt.is_complete() && vt.is_complete(),
-            Builder(VecMerger(ref elem, _, _)) => elem.is_complete(),
-            Builder(Merger(ref elem, _)) => elem.is_complete(),
             VectorizedBuilder(Appender(ref elem)) => elem.is_complete(),
             VectorizedBuilder(DictMerger(ref kt, ref vt, _, _)) => {
                 kt.is_complete() && vt.is_complete()
             }
             VectorizedBuilder(VecMerger(ref elem, _, _)) => elem.is_complete(),
             VectorizedBuilder(Merger(ref elem, _)) => elem.is_complete(),
+            Builder(Appender(ref elem), _) => elem.is_complete(),
+            Builder(DictMerger(ref kt, ref vt, _, _), _) => kt.is_complete() && vt.is_complete(),
+            Builder(GroupMerger(ref kt, ref vt, _), _) => kt.is_complete() && vt.is_complete(),
+            Builder(VecMerger(ref elem, _, _), _) => elem.is_complete(),
+            Builder(Merger(ref elem, _), _) => elem.is_complete(),
             Struct(ref elems) => elems.iter().all(|e| e.is_complete()),
             Function(ref params, ref res) => {
                 params.iter().all(|p| p.is_complete()) && res.is_complete()
@@ -140,6 +153,7 @@ impl PartialBuilderKind {
         match *self {
             Appender(ref elem) => *elem.clone(),
             DictMerger(_, _, ref mt, _) => *mt.clone(),
+            GroupMerger(_, _, ref mt) => *mt.clone(),
             VecMerger(_, ref mt, _) => *mt.clone(),
             Merger(ref elem, _) => *elem.clone(),
         }
@@ -150,6 +164,7 @@ impl PartialBuilderKind {
         match *self {
             Appender(ref mut elem) => elem.as_mut(),
             DictMerger(_, _, ref mut mt, _) => mt.as_mut(),
+            GroupMerger(_, _, ref mut mt) => mt.as_mut(),
             VecMerger(_, ref mut mt, _) => mt.as_mut(),
             Merger(ref mut elem, _) => elem.as_mut(),
         }
@@ -161,6 +176,7 @@ impl PartialBuilderKind {
         match *self {
             Appender(ref elem) => Vector((*elem).clone()),
             DictMerger(ref kt, ref vt, _, _) => Dict((*kt).clone(), (*vt).clone()),
+            GroupMerger(ref kt, ref vt, _) => Dict((*kt).clone(), Box::new(Vector((*vt).clone()))),
             VecMerger(ref elem, _, _) => Vector((*elem).clone()),
             Merger(ref elem, _) => *elem.clone(),
         }
@@ -354,6 +370,7 @@ impl PartialExpr {
         Ok(TypedExpr {
             ty: try!(self.ty.to_type()),
             kind: new_kind,
+            annotations: Annotations::new(),
         })
     }
 }

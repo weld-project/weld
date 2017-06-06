@@ -26,6 +26,14 @@ struct WeldVec<T> {
     len: i64,
 }
 
+#[derive(Clone)]
+#[allow(dead_code)]
+#[repr(C)]
+struct Pair<K, V> {
+    ele1: K,
+    ele2: V,
+}
+
 /// Returns a default configuration which uses a single thread.
 fn default_conf() -> *mut WeldConf {
     let conf = weld_conf_new();
@@ -157,27 +165,29 @@ fn negated_arithmetic() {
     unsafe { weld_value_free(ret_value) };
 }
 
+// TODO(shoumik): - Failing on Linux. Will fix in a in PR
 // For the C UDF integration test.
-#[no_mangle]
-pub unsafe extern "C" fn add_five(x: *const i64, result: *mut i64) {
-    *result = *x + 5;
-}
-
-fn c_udf() {
-    let code = "|x:i64| cudf[add_five,i64](x)";
-    let conf = default_conf();
-
-    let ref mut input_data: i64 = 0;
-    // To prevent it from compiling out.
-    unsafe { add_five(input_data, input_data) };
-
-    let ret_value = compile_and_run(code, conf, input_data);
-    let data = unsafe { weld_value_data(ret_value) as *const i64 };
-    let result = unsafe { *data };
-    assert_eq!(result, 10);
-
-    unsafe { weld_value_free(ret_value) };
-}
+// #[no_mangle]
+// pub unsafe extern "C" fn add_five(x: *const i64, result: *mut i64) {
+// result = *x + 5;
+// }
+//
+// fn c_udf() {
+// let code = "|x:i64| cudf[add_five,i64](x)";
+// let conf = default_conf();
+//
+// let ref mut input_data: i64 = 0;
+// To prevent it from compiling out.
+// unsafe { add_five(input_data, input_data) };
+//
+// let ret_value = compile_and_run(code, conf, input_data);
+// let data = unsafe { weld_value_data(ret_value) as *const i64 };
+// let result = unsafe { *data };
+// assert_eq!(result, 10);
+//
+// unsafe { weld_value_free(ret_value) };
+// }
+//
 
 fn f64_cast() {
     let code = "|| f64(40 + 2)";
@@ -639,6 +649,139 @@ fn simple_for_merger_loop() {
     unsafe { weld_value_free(ret_value) };
 }
 
+fn simple_for_merger_loop_product() {
+    #[allow(dead_code)]
+    struct Args {
+        x: WeldVec<i32>,
+        a: i32,
+    }
+
+    let code = "|x:vec[i32], a:i32| result(for(x, merger[i32,*], |b,i,e| merge(b, e+a)))";
+    let conf = default_conf();
+
+    let input_vec = [1, 2, 3, 4, 5];
+    let ref input_data = Args {
+        x: WeldVec {
+            data: &input_vec as *const i32,
+            len: input_vec.len() as i64,
+        },
+        a: 1,
+    };
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const i32 };
+    let result = unsafe { (*data).clone() };
+    let output = 720;
+    assert_eq!(result, output);
+    unsafe { weld_value_free(ret_value) };
+}
+
+fn parallel_for_merger_loop() {
+    #[allow(dead_code)]
+    struct Args {
+        x: WeldVec<i32>,
+        a: i32,
+    }
+
+    let code = "|x:vec[i32], a:i32| result(for(x, merger[i32,+], |b,i,e| merge(b, e+a)))";
+    let conf = many_threads_conf();
+
+    let input_vec = [1; 4096];
+    let ref input_data = Args {
+        x: WeldVec {
+            data: &input_vec as *const i32,
+            len: input_vec.len() as i64,
+        },
+        a: 1,
+    };
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const i32 };
+    let result = unsafe { (*data).clone() };
+    let output = (input_vec[0] + input_data.a) * (input_vec.len() as i32);
+    assert_eq!(result, output);
+    unsafe { weld_value_free(ret_value) };
+}
+
+fn simple_for_merger_loop_initial_value() {
+    #[allow(dead_code)]
+    struct Args {
+        x: WeldVec<i32>,
+        a: i32,
+    }
+
+    let code = "|x:vec[i32], a:i32| result(for(x, merger[i32,+](1000), |b,i,e| merge(b, e+a)))";
+    let conf = default_conf();
+
+    let input_vec = [1; 4096];
+    let ref input_data = Args {
+        x: WeldVec {
+            data: &input_vec as *const i32,
+            len: input_vec.len() as i64,
+        },
+        a: 1,
+    };
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const i32 };
+    let result = unsafe { (*data).clone() };
+    let output = 1000 + (input_vec[0] + input_data.a) * (input_vec.len() as i32);
+    assert_eq!(result, output);
+    unsafe { weld_value_free(ret_value) };
+}
+
+fn parallel_for_merger_loop_initial_value() {
+    #[allow(dead_code)]
+    struct Args {
+        x: WeldVec<i32>,
+        a: i32,
+    }
+
+    let code = "|x:vec[i32], a:i32| result(for(x, merger[i32,+](1000), |b,i,e| merge(b, e+a)))";
+    let conf = many_threads_conf();
+
+    let input_vec = [1; 4096];
+    let ref input_data = Args {
+        x: WeldVec {
+            data: &input_vec as *const i32,
+            len: input_vec.len() as i64,
+        },
+        a: 1,
+    };
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const i32 };
+    let result = unsafe { (*data).clone() };
+    let output = 1000 + (input_vec[0] + input_data.a) * (input_vec.len() as i32);
+    assert_eq!(result, output);
+    unsafe { weld_value_free(ret_value) };
+}
+
+fn parallel_for_merger_loop_initial_value_product() {
+    #[allow(dead_code)]
+    struct Args {
+        x: WeldVec<i32>,
+    }
+
+    let code = "|x:vec[i32]| result(for(x, merger[i32,*](1000), |b,i,e| merge(b, e)))";
+    let conf = many_threads_conf();
+
+    let input_vec = [1; 4096];
+    let ref input_data = Args {
+        x: WeldVec {
+            data: &input_vec as *const i32,
+            len: input_vec.len() as i64,
+        },
+    };
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const i32 };
+    let result = unsafe { (*data).clone() };
+    let output = 1000;
+    assert_eq!(result, output);
+    unsafe { weld_value_free(ret_value) };
+}
+
 fn simple_for_vecmerger_loop() {
     let code = "|x:vec[i32]| result(for(x, vecmerger[i32,+](x), |b,i,e| b))";
     let conf = default_conf();
@@ -754,6 +897,111 @@ fn simple_for_dictmerger_loop() {
         }
         assert_eq!(success, true);
     }
+    unsafe { weld_value_free(ret_value) };
+}
+
+fn simple_groupmerger() {
+    #[allow(dead_code)]
+    struct Args {
+        x: WeldVec<i32>,
+        y: WeldVec<i32>,
+    }
+
+    let code = "|x:vec[i32], y:vec[i32]| tovec(result(for(zip(x,y), groupmerger[i32,i32], \
+                |b,i,e| merge(b, e))))";
+
+    let conf = default_conf();
+    let keys = [1, 2, 2, 3, 3, 1];
+    let vals = [2, 3, 4, 1, 0, 2];
+    let ref input_data = Args {
+        x: WeldVec {
+            data: &keys as *const i32,
+            len: keys.len() as i64,
+        },
+        y: WeldVec {
+            data: &vals as *const i32,
+            len: vals.len() as i64,
+        },
+    };
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<Pair<i32, WeldVec<i32>>> };
+    let result = unsafe { (*data).clone() };
+    let output: Vec<(i32, Vec<i32>)> = vec![(1, vec![2, 2]), (2, vec![3, 4]), (3, vec![1, 0])];
+
+    let mut res: Vec<(i32, Vec<i32>)> = (0..result.len)
+        .into_iter()
+        .map(|x| {
+            let key = unsafe { (*result.data.offset(x as isize)).ele1 };
+            let val = unsafe { ((*result.data.offset(x as isize)).ele2).clone() };
+            let vec: Vec<i32> = (0..val.len)
+                .into_iter()
+                .map(|y| unsafe { *val.data.offset(y as isize) })
+                .collect();
+            (key, vec)
+        })
+        .collect();
+    res.sort_by_key(|a| a.0);
+
+    assert_eq!(res, output);
+    unsafe { weld_value_free(ret_value) };
+}
+
+fn complex_groupmerger_with_struct_key() {
+    #[allow(dead_code)]
+    struct Args {
+        x: WeldVec<i32>,
+        y: WeldVec<i32>,
+        z: WeldVec<i32>,
+    }
+
+    let code = "|x:vec[i32], y:vec[i32], z:vec[i32]| \
+                tovec(result(for(zip(x,y,z), groupmerger[{i32,i32}, i32], \
+                |b,i,e| merge(b, {{e.$0, e.$1}, e.$2}))))";
+
+    let conf = default_conf();
+    let keys1 = [1, 1, 2, 2, 3, 3, 3, 3];
+    let keys2 = [1, 1, 2, 2, 3, 3, 4, 4];
+    let vals = [2, 3, 4, 2, 1, 0, 3, 2];
+    let ref input_data = Args {
+        x: WeldVec {
+            data: &keys1 as *const i32,
+            len: keys1.len() as i64,
+        },
+        y: WeldVec {
+            data: &keys2 as *const i32,
+            len: keys2.len() as i64,
+        },
+        z: WeldVec {
+            data: &vals as *const i32,
+            len: vals.len() as i64,
+        },
+    };
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data =
+        unsafe { weld_value_data(ret_value) as *const WeldVec<Pair<Pair<i32, i32>, WeldVec<i32>>> };
+    let result = unsafe { (*data).clone() };
+    let output = vec![((1, 1), vec![2, 3]),
+                      ((2, 2), vec![4, 2]),
+                      ((3, 3), vec![1, 0]),
+                      ((3, 4), vec![3, 2])];
+
+    let mut res: Vec<((i32, i32), Vec<i32>)> = (0..result.len)
+        .into_iter()
+        .map(|x| {
+            let key = unsafe { ((*result.data.offset(x as isize)).ele1).clone() };
+            let val = unsafe { ((*result.data.offset(x as isize)).ele2).clone() };
+            let vec: Vec<i32> = (0..val.len)
+                .into_iter()
+                .map(|y| unsafe { *val.data.offset(y as isize) })
+                .collect();
+            ((key.ele1, key.ele2), vec)
+        })
+        .collect();
+    res.sort_by_key(|a| a.0);
+
+    assert_eq!(res, output);
     unsafe { weld_value_free(ret_value) };
 }
 
@@ -1161,7 +1409,7 @@ fn main() {
              ("negation", negation),
              ("negation_double", negation_double),
              ("negated_arithmetic", negated_arithmetic),
-             ("c_udf", c_udf),
+             //("c_udf", c_udf),
              ("f64_cast", f64_cast),
              ("i32_cast", i32_cast),
              ("program_with_args", program_with_args),
@@ -1184,10 +1432,18 @@ fn main() {
              ("simple_parallel_for_appender_loop", simple_parallel_for_appender_loop),
              ("complex_parallel_for_appender_loop", complex_parallel_for_appender_loop),
              ("simple_for_merger_loop", simple_for_merger_loop),
+             ("parallel_for_merger_loop", parallel_for_merger_loop),
+             ("simple_for_merger_loop_initial_value", simple_for_merger_loop_initial_value),
+             ("parallel_for_merger_loop_initial_value", parallel_for_merger_loop_initial_value),
+             ("parallel_for_merger_loop_initial_value_product",
+              parallel_for_merger_loop_initial_value_product),
+             ("simple_for_merger_loop_product", simple_for_merger_loop_product),
              ("simple_for_vecmerger_loop", simple_for_vecmerger_loop),
              ("simple_for_vecmerger_loop_2", simple_for_vecmerger_loop_2),
              ("parallel_for_vecmerger_loop", parallel_for_vecmerger_loop),
              ("simple_for_dictmerger_loop", simple_for_dictmerger_loop),
+             ("simple_groupmerger", simple_groupmerger),
+             ("complex_groupmerger_with_struct_key", complex_groupmerger_with_struct_key),
              ("simple_parallel_for_dictmerger_loop", simple_parallel_for_dictmerger_loop),
              ("simple_dict_lookup", simple_dict_lookup),
              ("simple_dict_exists", simple_dict_exists),

@@ -47,6 +47,7 @@ pub enum Token {
     TAppender,
     TMerger,
     TDictMerger,
+    TGroupMerger,
     TVecMerger,
     TToVec,
     TOpenParen, // (
@@ -63,6 +64,7 @@ pub enum Token {
     TModulo,
     TEqual,
     TBar, // |
+    TAtMark, // @
     TDot,
     TColon,
     TSemicolon,
@@ -86,13 +88,14 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
         // Regular expression for splitting up tokens.
         static ref TOKEN_RE: Regex = Regex::new(concat!(
             r"[0-9]+\.[0-9]+([eE]-?[0-9]+)?[fF]?|[0-9]+[eE]-?[0-9]+[fF]?|",
-            r"[A-Za-z0-9$_]+|==|!=|>=|<=|&&|\|\||[-+/*%,=()[\]{}|&\.:;?&\|^<>]|\S+"
+            r"[A-Za-z0-9$_]+|==|!=|>=|<=|&&|\|\||[-+/*%,=()[\]{}|@&\.:;?&\|^<>]|\S+"
         )).unwrap();
 
         // Regular expressions for various types of tokens.
         static ref KEYWORD_RE: Regex = Regex::new(
             "if|for|zip|len|lookup|keyexists|slice|exp|cudf|iter|merge|result|let|true|false|macro|\
-             i8|i32|i64|f32|f64|bool|vec|appender|merger|vecmerger|dictmerger|tovec").unwrap();
+             i8|i32|i64|f32|f64|bool|vec|appender|merger|vecmerger|dictmerger|groupmerger|\
+             tovec").unwrap();
 
         static ref IDENT_RE: Regex = Regex::new(r"^[A-Za-z$_][A-Za-z0-9$_]*$").unwrap();
 
@@ -139,6 +142,7 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
                 "appender" => TAppender,
                 "merger" => TMerger,
                 "dictmerger" => TDictMerger,
+                "groupmerger" => TGroupMerger,
                 "vecmerger" => TVecMerger,
                 "tovec" => TToVec,
                 "zip" => TZip,
@@ -197,6 +201,7 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
                 "{" => TOpenBrace,
                 "}" => TCloseBrace,
                 "|" => TBar,
+                "@" => TAtMark,
                 "," => TComma,
                 "=" => TEqual,
                 "." => TDot,
@@ -264,6 +269,7 @@ impl fmt::Display for Token {
                            TAppender => "appender",
                            TMerger => "merger",
                            TDictMerger => "dictmerger",
+                           TGroupMerger => "groupmerger",
                            TVecMerger => "vecmerger",
                            TToVec => "tovec",
                            TZip => "zip",
@@ -288,6 +294,7 @@ impl fmt::Display for Token {
                            TModulo => "%",
                            TEqual => "=",
                            TBar => "|",
+                           TAtMark => "@",
                            TDot => ".",
                            TColon => ":",
                            TSemicolon => ";",
@@ -352,6 +359,8 @@ fn basic_tokenize() {
                     TPlus,
                     TIdent("z0".into()),
                     TEndOfInput]);
+    assert_eq!(tokenize("groupmerger[i32, i32]").unwrap(),
+               vec![TGroupMerger, TOpenBracket, TI32, TComma, TI32, TCloseBracket, TEndOfInput]);
 
     assert_eq!(tokenize("= == | || & &&").unwrap(),
                vec![TEqual, TEqualEqual, TBar, TLogicalOr, TBitwiseAnd, TLogicalAnd, TEndOfInput]);
@@ -395,7 +404,6 @@ fn basic_tokenize() {
                     TCloseParen,
                     TEndOfInput]);
     assert!(tokenize("0a").is_err());
-    assert!(tokenize("#").is_err());
 
     assert_eq!(tokenize("0b10").unwrap(), vec![TI32Literal(2), TEndOfInput]);
     assert_eq!(tokenize("0x10").unwrap(),
@@ -405,4 +413,17 @@ fn basic_tokenize() {
                vec![TF32Literal(1e-5f32), TEndOfInput]);
     assert_eq!(tokenize("1e-5").unwrap(),
                vec![TF64Literal(1e-5), TEndOfInput]);
+    assert_eq!(tokenize("dictmerger[i32,i32,+] @[]").unwrap(),
+               vec![TDictMerger,
+                    TOpenBracket,
+                    TI32,
+                    TComma,
+                    TI32,
+                    TComma,
+                    TPlus,
+                    TCloseBracket,
+                    TAtMark,
+                    TOpenBracket,
+                    TCloseBracket,
+                    TEndOfInput]);
 }
