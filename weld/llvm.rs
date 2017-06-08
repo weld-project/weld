@@ -352,7 +352,7 @@ impl LlvmGenerator {
                             }
                         }
                     };
-                    // TODO(shoumik): For now, vectorization only supported with no stride, etc.
+
                     let arr_idx = if iter.start.is_some() {
                         let offset = ctx.var_ids.next();
                         let stride_str = try!(self.load_var(
