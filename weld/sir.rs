@@ -53,6 +53,10 @@ pub enum Statement {
     Length { output: Symbol, child: Symbol },
     Assign { output: Symbol, value: Symbol },
     AssignLiteral { output: Symbol, value: LiteralKind },
+    CompileTimeConstant {
+        output: Symbol,
+        kind: CompileTimeConstantKind,
+    },
     Merge { builder: Symbol, value: Symbol },
     Res { output: Symbol, builder: Symbol },
     NewBuilder {
@@ -94,6 +98,7 @@ pub struct ParallelForData {
     pub body: FunctionId,
     pub cont: FunctionId,
     pub innermost: bool,
+    pub vectorized: bool,
 }
 
 /// A terminating statement inside a basic block.
@@ -223,6 +228,9 @@ impl fmt::Display for Statement {
             Assign { ref output, ref value } => write!(f, "{} = {}", output, value),
             AssignLiteral { ref output, ref value } => {
                 write!(f, "{} = {}", output, print_literal(value))
+            }
+            CompileTimeConstant { ref output, ref kind } => {
+                write!(f, "{} = {}", output, print_compile_constant(kind))
             }
             Merge { ref builder, ref value } => write!(f, "merge {} {}", builder, value),
             Res { ref output, ref builder } => write!(f, "{} = result {}", output, builder),
@@ -409,6 +417,7 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
                 Res { ref builder, .. } => vars.push(builder.clone()),
                 GetField { ref value, .. } => vars.push(value.clone()),
                 AssignLiteral { .. } => {}
+                CompileTimeConstant { .. } => {}
                 NewBuilder { ref arg, .. } => {
                     if let Some(ref a) = *arg {
                         vars.push(a.clone());
@@ -539,6 +548,15 @@ fn gen_expr(expr: &TypedExpr,
             prog.funcs[cur_func].blocks[cur_block].add_statement(AssignLiteral {
                 output: res_sym.clone(),
                 value: lit,
+            });
+            Ok((cur_func, cur_block, res_sym))
+        }
+
+        ExprKind::CompileTimeConstant(kind) => {
+            let res_sym = prog.add_local(&expr.ty, cur_func);
+            prog.funcs[cur_func].blocks[cur_block].add_statement(CompileTimeConstant {
+                output: res_sym.clone(),
+                kind: kind,
             });
             Ok((cur_func, cur_block, res_sym))
         }
@@ -901,6 +919,11 @@ fn gen_expr(expr: &TypedExpr,
                     body: body_func,
                     cont: cont_func,
                     innermost: is_innermost,
+                    vectorized: if let Type::VectorizedBuilder(_) = builder.ty {
+                        true
+                    } else {
+                        false
+                    },
                 });
                 Ok((cont_func, cont_block, builder_sym))
             } else {

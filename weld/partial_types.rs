@@ -10,9 +10,11 @@ use super::error::*;
 pub enum PartialType {
     Unknown,
     Scalar(ScalarKind),
+    VectorizedScalar(ScalarKind),
     Vector(Box<PartialType>),
     Dict(Box<PartialType>, Box<PartialType>),
     Builder(PartialBuilderKind, Annotations),
+    VectorizedBuilder(PartialBuilderKind),
     Struct(Vec<PartialType>),
     Function(Vec<PartialType>, Box<PartialType>),
 }
@@ -54,6 +56,7 @@ impl PartialType {
         match *self {
             Unknown => weld_err!("Incomplete partial type"),
             Scalar(kind) => Ok(Type::Scalar(kind)),
+            VectorizedScalar(kind) => Ok(Type::VectorizedScalar(kind)),
             Vector(ref elem) => Ok(Type::Vector(Box::new(try!(elem.to_type())))),
             Dict(ref kt, ref vt) => {
                 Ok(Type::Dict(Box::new(try!(kt.to_type())), Box::new(try!(vt.to_type()))))
@@ -81,6 +84,26 @@ impl PartialType {
                 Ok(Type::Builder(BuilderKind::Merger(Box::new(try!(elem.to_type())), op),
                                  annotations.clone()))
             }
+            // TODO repeated from above, factor into a function?
+            VectorizedBuilder(Appender(ref elem)) => {
+                Ok(Type::VectorizedBuilder(BuilderKind::Appender(Box::new(try!(elem.to_type())))))
+            }
+            VectorizedBuilder(DictMerger(ref kt, ref vt, _, op)) => {
+                Ok(Type::VectorizedBuilder(BuilderKind::DictMerger(Box::new(try!(kt.to_type())),
+                                                                   Box::new(try!(vt.to_type())),
+                                                                   op)))
+            }
+            VectorizedBuilder(VecMerger(ref elem, _, op)) => {
+                Ok(Type::VectorizedBuilder(BuilderKind::VecMerger(Box::new(try!(elem.to_type())),
+                                                                  op)))
+            }
+            VectorizedBuilder(Merger(ref elem, op)) => {
+                Ok(Type::VectorizedBuilder(BuilderKind::Merger(Box::new(try!(elem.to_type())), op)))
+            }
+            VectorizedBuilder(GroupMerger(ref kt, ref vt, _)) => {
+                Ok(Type::VectorizedBuilder(BuilderKind::GroupMerger(Box::new(try!(kt.to_type())),
+                                                                    Box::new(try!(vt.to_type())))))
+            }
             Struct(ref elems) => {
                 let mut new_elems = Vec::with_capacity(elems.len());
                 for e in elems {
@@ -106,8 +129,18 @@ impl PartialType {
         match *self {
             Unknown => false,
             Scalar(_) => true,
+            VectorizedScalar(_) => true,
             Vector(ref elem) => elem.is_complete(),
             Dict(ref kt, ref vt) => kt.is_complete() && vt.is_complete(),
+            VectorizedBuilder(Appender(ref elem)) => elem.is_complete(),
+            VectorizedBuilder(DictMerger(ref kt, ref vt, _, _)) => {
+                kt.is_complete() && vt.is_complete()
+            }
+            VectorizedBuilder(VecMerger(ref elem, _, _)) => elem.is_complete(),
+            VectorizedBuilder(Merger(ref elem, _)) => elem.is_complete(),
+            VectorizedBuilder(GroupMerger(ref kt, ref vt, _)) => {
+                kt.is_complete() && vt.is_complete()
+            }
             Builder(Appender(ref elem), _) => elem.is_complete(),
             Builder(DictMerger(ref kt, ref vt, _, _), _) => kt.is_complete() && vt.is_complete(),
             Builder(GroupMerger(ref kt, ref vt, _), _) => kt.is_complete() && vt.is_complete(),
@@ -185,7 +218,7 @@ impl PartialExpr {
             Literal(F32Literal(v)) => Literal(F32Literal(v)),
             Literal(F64Literal(v)) => Literal(F64Literal(v)),
             Ident(ref name) => Ident(name.clone()),
-
+            CompileTimeConstant(ref k) => CompileTimeConstant(k.clone()),
             CUDF { ref sym_name, ref args, ref return_ty } => {
                 let sym_name: String = sym_name.clone();
                 let args: WeldResult<Vec<_>> = args.iter().map(|e| e.to_typed()).collect();
@@ -338,6 +371,7 @@ impl PartialExpr {
                 NewBuilder(typed_arg)
             }
             Negate(ref expr) => Negate(try!(typed_box(expr))),
+            Ramp(ref expr) => Ramp(try!(typed_box(expr))),
         };
 
         Ok(TypedExpr {

@@ -63,6 +63,12 @@ pub struct LlvmGenerator {
     /// A CodeBuilder for body functions in the module.
     body_code: CodeBuilder,
     visited: HashSet<sir::FunctionId>,
+
+    /// Vector types.
+    vector_types: HashMap<Type, String>,
+
+    /// Compile time constants.
+    vector_width: u64,
 }
 
 /// A wrapper for a struct passed as input to the Weld runtime.
@@ -117,6 +123,8 @@ impl LlvmGenerator {
             prelude_var_ids: IdGenerator::new("%p.p"),
             body_code: CodeBuilder::new(),
             visited: HashSet::new(),
+            vector_types: HashMap::new(),
+            vector_width: 4,
         };
         generator.prelude_code.add(PRELUDE_CODE);
         generator.prelude_code.add("\n");
@@ -344,6 +352,7 @@ impl LlvmGenerator {
                             }
                         }
                     };
+
                     let arr_idx = if iter.start.is_some() {
                         let offset = ctx.var_ids.next();
                         let stride_str = try!(self.load_var(
@@ -357,13 +366,27 @@ impl LlvmGenerator {
                     } else {
                         idx_tmp.clone()
                     };
-                    ctx.code.add(format!("{} = call {}* {}.at({} {}, i64 {})",
-                                         inner_elem_tmp_ptr,
-                                         &inner_elem_ty_str,
-                                         data_prefix,
-                                         &data_ty_str,
-                                         data_str,
-                                         arr_idx));
+
+                    // TODO(shoumik): Lots of redundancy here...we specify vectorization in many
+                    // different ways. How to resolve?
+                    if par_for.vectorized {
+                        ctx.code.add(format!("{} = call {}* {}.vat({} {}, i64 {})",
+                                             inner_elem_tmp_ptr,
+                                             &inner_elem_ty_str,
+                                             data_prefix,
+                                             &data_ty_str,
+                                             data_str,
+                                             arr_idx));
+                    } else {
+                        ctx.code.add(format!("{} = call {}* {}.at({} {}, i64 {})",
+                                             inner_elem_tmp_ptr,
+                                             &inner_elem_ty_str,
+                                             data_prefix,
+                                             &data_ty_str,
+                                             data_str,
+                                             arr_idx));
+
+                    }
                     let inner_elem_tmp =
                         try!(self.load_var(&inner_elem_tmp_ptr, &inner_elem_ty_str, ctx));
                     if par_for.data.len() == 1 {
@@ -402,7 +425,13 @@ impl LlvmGenerator {
                 ctx.code.add("loop.terminator:");
                 let idx_tmp = try!(self.load_var("%cur.idx", "i64", ctx));
                 let idx_inc = ctx.var_ids.next();
-                ctx.code.add(format!("{} = add i64 {}, 1", idx_inc, idx_tmp));
+                let par_for = containing_loop.as_ref().unwrap();
+                if par_for.vectorized {
+                    ctx.code
+                        .add(format!("{} = add i64 {}, {}", idx_inc, idx_tmp, self.vector_width));
+                } else {
+                    ctx.code.add(format!("{} = add i64 {}, 1", idx_inc, idx_tmp));
+                }
                 ctx.code.add(format!("store i64 {}, i64* %cur.idx", idx_inc));
                 ctx.code.add("br label %loop.start");
                 ctx.code.add("loop.end:");
@@ -714,6 +743,23 @@ impl LlvmGenerator {
             Scalar(F32) => Ok("float"),
             Scalar(F64) => Ok("double"),
 
+            VectorizedScalar(ref e) => {
+                if self.vector_types.get(ty) == None {
+                    let width = self.vector_width;
+                    let ty_str = match *e {
+                        // TODO(shoumik): just call llvm_type...getting some borrow checker
+                        // error though.
+                        I32 => "i32",
+                        I64 => "i64",
+                        _ => {
+                            return weld_err!("unsupported scalar vector type at code generation");
+                        }
+                    };
+                    self.vector_types.insert(ty.clone(), format!("<{} x {}>", width, ty_str));
+                }
+                Ok(self.vector_types.get(ty).unwrap())
+            }
+
             Struct(ref fields) => {
                 if self.struct_names.get(fields) == None {
                     // Declare the struct in prelude_code
@@ -802,12 +848,14 @@ impl LlvmGenerator {
                 if self.vec_names.get(elem) == None {
                     let elem_ty = try!(self.llvm_type(elem)).to_string();
                     let elem_prefix = format!("@{}", elem_ty.replace("%", ""));
+                    let vecsize_str = format!("{}", self.vector_width);
                     let name = self.vec_ids.next();
                     self.vec_names.insert(*elem.clone(), name.clone());
                     let prefix_replaced = VECTOR_CODE.replace("$ELEM_PREFIX", &elem_prefix);
                     let elem_replaced = prefix_replaced.replace("$ELEM", &elem_ty);
                     let name_replaced = elem_replaced.replace("$NAME", &name.replace("%", ""));
-                    self.prelude_code.add(&name_replaced);
+                    let vecsize_replaced = name_replaced.replace("$VECSIZE", &vecsize_str);
+                    self.prelude_code.add(&vecsize_replaced);
                     self.prelude_code.add("\n");
                 }
                 Ok(self.vec_names.get(elem).unwrap())
@@ -838,6 +886,34 @@ impl LlvmGenerator {
                     self.prelude_code.add("\n");
                 }
                 Ok(self.dict_names.get(&elem).unwrap())
+            }
+
+            VectorizedBuilder(ref bk) => {
+                if self.bld_names.get(bk) == None {
+                    match *bk {
+                        Merger(ref t, _) => {
+                            if self.merger_names.get(t) == None {
+                                let elem_ty = self.llvm_type(t)?.to_string();
+                                let elem_prefix = format!("@{}", elem_ty.replace("%", ""));
+                                let name = self.merger_ids.next();
+                                self.merger_names
+                                    .insert(*t.clone(), name.clone());
+                                let prefix_replaced =
+                                    MERGER_CODE.replace("$ELEM_PREFIX", &elem_prefix);
+                                let elem_replaced = prefix_replaced.replace("$ELEM", &elem_ty);
+                                let name_replaced =
+                                    elem_replaced.replace("$NAME", &name.replace("%", ""));
+                                self.prelude_code.add(&name_replaced);
+                                self.prelude_code.add("\n");
+                            }
+                            let bld_ty_str = self.merger_names.get(t).unwrap();
+                            self.bld_names
+                                .insert(bk.clone(), format!("{}.bld", bld_ty_str));
+                        }
+                        _ => weld_err!("Code generation for vectorized builder not supported.")?,
+                    }
+                }
+                Ok(self.bld_names.get(bk).unwrap())
             }
 
             Builder(ref bk, _) => {
@@ -939,50 +1015,55 @@ impl LlvmGenerator {
                              &merge_ty_str,
                              &merge_ty_str,
                              &builder_ptr));
-        if let Scalar(_) = *merge_ty {
-            ctx.code.add(format!("{} = {} {} {}, {}",
-                                 &res,
-                                 try!(llvm_binop(*bin_op, merge_ty)),
-                                 &merge_ty_str,
-                                 builder_value,
-                                 merge_value));
-        } else if let Struct(ref tys) = *merge_ty {
-            let mut cur = "undef".to_string();
-            for (i, ty) in tys.iter().enumerate() {
-                let merge_elem = ctx.var_ids.next();
-                let builder_elem = ctx.var_ids.next();
-                let struct_name = ctx.var_ids.next();
-                let binop_value = ctx.var_ids.next();
-                let elem_ty_str = try!(self.llvm_type(ty)).to_string();
-                ctx.code.add(format!("{} = extractvalue {} {}, {}",
-                                     &merge_elem,
-                                     &merge_ty_str,
-                                     &merge_value,
-                                     i));
-                ctx.code.add(format!("{} = extractvalue {} {}, {}",
-                                     &builder_elem,
-                                     &merge_ty_str,
-                                     &builder_value,
-                                     i));
+        match *merge_ty {
+            VectorizedScalar(_) |
+            Scalar(_) => {
                 ctx.code.add(format!("{} = {} {} {}, {}",
-                                     &binop_value,
-                                     try!(llvm_binop(*bin_op, ty)),
-                                     &elem_ty_str,
-                                     &merge_elem,
-                                     &builder_elem));
-                ctx.code.add(format!("{} = insertvalue {} {}, {} {}, {}",
-                                     &struct_name,
+                                     &res,
+                                     try!(llvm_binop(*bin_op, merge_ty)),
                                      &merge_ty_str,
-                                     &cur,
-                                     &elem_ty_str,
-                                     &binop_value,
-                                     i));
-                res = struct_name.clone();
-                cur = struct_name.clone();
+                                     builder_value,
+                                     merge_value));
             }
-        } else {
-            unreachable!();
-        }
+            Struct(ref tys) => {
+                let mut cur = "undef".to_string();
+                for (i, ty) in tys.iter().enumerate() {
+                    let merge_elem = ctx.var_ids.next();
+                    let builder_elem = ctx.var_ids.next();
+                    let struct_name = ctx.var_ids.next();
+                    let binop_value = ctx.var_ids.next();
+                    let elem_ty_str = try!(self.llvm_type(ty)).to_string();
+                    ctx.code.add(format!("{} = extractvalue {} {}, {}",
+                                         &merge_elem,
+                                         &merge_ty_str,
+                                         &merge_value,
+                                         i));
+                    ctx.code.add(format!("{} = extractvalue {} {}, {}",
+                                         &builder_elem,
+                                         &merge_ty_str,
+                                         &builder_value,
+                                         i));
+                    ctx.code.add(format!("{} = {} {} {}, {}",
+                                         &binop_value,
+                                         try!(llvm_binop(*bin_op, ty)),
+                                         &elem_ty_str,
+                                         &merge_elem,
+                                         &builder_elem));
+                    ctx.code.add(format!("{} = insertvalue {} {}, {} {}, {}",
+                                         &struct_name,
+                                         &merge_ty_str,
+                                         &cur,
+                                         &elem_ty_str,
+                                         &binop_value,
+                                         i));
+                    res = struct_name.clone();
+                    cur = struct_name.clone();
+                }
+            }
+            _ => {
+                unreachable!();
+            }
+        };
 
         // Store the resulting merge value back into the builder pointer.
         ctx.code.add(format!("store {} {}, {}* {}",
@@ -1452,6 +1533,16 @@ impl LlvmGenerator {
                                              field_ty,
                                              llvm_symbol(output)));
                     }
+                    CompileTimeConstant { ref output, ref kind } => {
+                        match *kind {
+                            CompileTimeConstantKind::VectorWidth => {
+                                ctx.code.add(format!("store i64 {}, i64* {}",
+                                                     self.vector_width,
+                                                     llvm_symbol(output)))
+                            }
+
+                        }
+                    }
                     AssignLiteral { ref output, ref value } => {
                         match *value {
                             BoolLiteral(l) => {
@@ -1485,6 +1576,37 @@ impl LlvmGenerator {
                     Merge { ref builder, ref value } => {
                         let bld_ty = try!(get_sym_ty(func, builder));
                         match *bld_ty {
+                            VectorizedBuilder(ref bk) => {
+                                match *bk {
+                                    Merger(ref t, ref op) => {
+                                        let bld_ty_str = self.llvm_type(&bld_ty)?.to_string();
+                                        let bld_prefix = format!("@{}",
+                                                                 bld_ty_str.replace("%", ""));
+                                        let elem_ty_str = self.llvm_type(t)?.to_string();
+                                        let bld_tmp = self.load_var(llvm_symbol(builder).as_str(),
+                                                      &bld_ty_str,
+                                                      ctx)?;
+                                        let elem_tmp = self.load_var(llvm_symbol(value).as_str(),
+                                                      &elem_ty_str,
+                                                      ctx)?;
+                                        let bld_ptr_raw = ctx.var_ids.next();
+                                        let bld_ptr = ctx.var_ids.next();
+                                        ctx.code
+                                            .add(format!("{} = call i8* {}.merge_ptr({} {}, i32 \
+                                                          %cur.tid)",
+                                                         bld_ptr_raw,
+                                                         bld_prefix,
+                                                         bld_ty_str,
+                                                         bld_tmp));
+                                        ctx.code.add(format!("{} = bitcast i8* {} to {}*",
+                                                             bld_ptr,
+                                                             bld_ptr_raw,
+                                                             elem_ty_str));
+                                        try!(self.gen_merge(bld_ptr, elem_tmp, elem_ty_str, op, t, ctx));
+                                    }
+                                    _ => weld_err!("Merge for vectorized builder not supported")?,
+                                }
+                            }
                             Builder(ref bk, _) => {
                                 // TODO(Deepak): Do something with annotations here...
                                 match *bk {
@@ -1639,6 +1761,133 @@ impl LlvmGenerator {
                         let bld_ty = try!(get_sym_ty(func, builder));
                         let res_ty = try!(get_sym_ty(func, output));
                         match *bld_ty {
+                            VectorizedBuilder(ref bk) => {
+                                match *bk {
+                                    Merger(ref t, ref op) => {
+
+                                        let output_str = format!("%{}", output);
+
+                                        // Type of element to merge.
+                                        let elem_ty_str = self.llvm_type(t)?.to_string();
+                                        // Builder type.
+                                        let bld_ty_str = try!(self.llvm_type(&bld_ty)).to_string();
+                                        // Prefix of the builder.
+                                        let bld_prefix = format!("@{}",
+                                                                 bld_ty_str.replace("%", ""));
+                                        // Result type.
+                                        let res_ty_str = try!(self.llvm_type(&res_ty)).to_string();
+                                        // Temporary builder variable.
+                                        let bld_tmp =
+                                            try!(self.load_var(llvm_symbol(builder).as_str(),
+                                                               &bld_ty_str,
+                                                               ctx));
+
+                                        // Generate names for all temporaries.
+                                        let t0 = ctx.var_ids.next();
+                                        let first = ctx.var_ids.next();
+                                        let nworkers = ctx.var_ids.next();
+                                        let cond = ctx.var_ids.next();
+                                        let i = ctx.var_ids.next();
+                                        let bld_ptr = ctx.var_ids.next();
+                                        let val = ctx.var_ids.next();
+                                        let i2 = ctx.var_ids.next();
+                                        let cond2 = ctx.var_ids.next();
+                                        let as_ptr = ctx.var_ids.next();
+
+                                        // Generate label names.
+                                        let label_base = ctx.var_ids.next();
+                                        let mut label_ids =
+                                            IdGenerator::new(&label_base.replace("%", ""));
+                                        let entry_label = label_ids.next();
+                                        let body_label = label_ids.next();
+                                        let done_label = label_ids.next();
+
+                                        // state for the vector collapse
+                                        let i_v = ctx.var_ids.next();
+                                        let val_v = ctx.var_ids.next();
+                                        let first_v = ctx.var_ids.next();
+                                        let i2_v = ctx.var_ids.next();
+                                        let cond_v = ctx.var_ids.next();
+                                        let cond2_v = ctx.var_ids.next();
+                                        let final_val_vec = ctx.var_ids.next();
+                                        let entry_label_v = label_ids.next();
+                                        let body_label_v = label_ids.next();
+                                        let done_label_v = label_ids.next();
+                                        let vector_width = format!("{}", self.vector_width);
+
+                                        ctx.code.add(format!(include_str!("resources/merger/merger_result_start.ll"),
+                                                t0 = t0,
+                                                nworkers = nworkers,
+                                                first=first,
+                                                bld_tmp=bld_tmp,
+                                                cond=cond,
+                                                i=i,
+                                                bld_ptr=bld_ptr,
+                                                val=val,
+                                                i2=i2,
+                                                elem_ty_str=elem_ty_str,
+                                                bld_ty_str=bld_ty_str,
+                                                bld_prefix=bld_prefix,
+                                                entry=entry_label,
+                                                body=body_label,
+                                                done=done_label));
+
+                                        try!(self.gen_merge(t0.to_string(),
+                                                            val.to_string(),
+                                                            elem_ty_str.to_string(),
+                                                            op,
+                                                            t,
+                                                            ctx));
+
+                                        ctx.code.add(format!(include_str!("resources/merger/merger_result_end_vectorized_1.ll"),
+                                                t0 = t0,
+                                                nworkers = nworkers,
+                                                i=i,
+                                                i2=i2,
+                                                cond2=cond2,
+                                                i_v=i_v,
+                                                i2_v=i2_v,
+                                                cond_v=cond_v,
+                                                res_ty_str=res_ty_str,
+                                                final_val_vec=final_val_vec,
+                                                vector_width=vector_width,
+                                                first_v=first_v,
+                                                elem_ty_str=elem_ty_str,
+                                                val_v=val_v,
+                                                body=body_label,
+                                                done=done_label,
+                                                entry_v=entry_label_v,
+                                                body_v=body_label_v,
+                                                done_v=done_label_v,
+                                                output=output_str));
+
+                                        try!(self.gen_merge(output_str.to_string(),
+                                                            val_v.to_string(),
+                                                            res_ty_str.to_string(),
+                                                            op,
+                                                            t,
+                                                            ctx));
+
+                                        ctx.code.add(format!(include_str!("resources/merger/merger_result_end_vectorized_2.ll"),
+                                                i_v=i_v,
+                                                i2_v=i2_v,
+                                                cond2_v=cond2_v,
+                                                as_ptr=as_ptr,
+                                                bld_ty_str=bld_ty_str,
+                                                bld_tmp=bld_tmp,
+                                                bld_prefix=bld_prefix,
+                                                body_v=body_label_v,
+                                                vector_width=vector_width,
+                                                done_v=done_label_v));
+
+
+                                    }
+                                    _ => {
+                                        return weld_err!("unsupported vectorized builder in \
+                                                          codegen for Res");
+                                    }
+                                }
+                            }
                             Builder(ref bk, _) => {
                                 // TODO(Deepak): Do something with annotations here...
                                 match *bk {
@@ -1665,103 +1914,82 @@ impl LlvmGenerator {
                                                              llvm_symbol(output)));
                                     }
                                     Merger(ref t, ref op) => {
+                                        // Type of element to merge.
+                                        let elem_ty_str = self.llvm_type(t)?.to_string();
+                                        // Builder type.
                                         let bld_ty_str = try!(self.llvm_type(&bld_ty)).to_string();
+                                        // Prefix of the builder.
                                         let bld_prefix = format!("@{}",
                                                                  bld_ty_str.replace("%", ""));
+                                        // Result type.
                                         let res_ty_str = try!(self.llvm_type(&res_ty)).to_string();
+                                        // Temporary builder variable.
                                         let bld_tmp =
                                             try!(self.load_var(llvm_symbol(builder).as_str(),
                                                                &bld_ty_str,
                                                                ctx));
 
-                                        // Get the first builder.
-                                        ctx.code
-                                            .add(format!("%bldPtrFirst = call {bld_ty_str} \
-                                                          {bld_prefix}.\
-                                                          getPtrIndexed({bld_ty_str} \
-                                                          {bld_tmp}, i32 0)",
-                                                         bld_ty_str = bld_ty_str,
-                                                         bld_prefix = bld_prefix,
-                                                         bld_tmp = bld_tmp));
-                                        ctx.code.add(format!("
-                                        \
-                                                              %bldPtrCasted = bitcast \
-                                                              {bld_ty_str} %bldPtrFirst to \
-                                                              {elem_ty_str}*",
-                                                             bld_ty_str = bld_ty_str,
-                                                             elem_ty_str = res_ty_str.clone()));
+                                        // Generate names for all temporaries.
+                                        let t0 = ctx.var_ids.next();
+                                        let first = ctx.var_ids.next();
+                                        let nworkers = ctx.var_ids.next();
+                                        let cond = ctx.var_ids.next();
+                                        let i = ctx.var_ids.next();
+                                        let bld_ptr = ctx.var_ids.next();
+                                        let val = ctx.var_ids.next();
+                                        let i2 = ctx.var_ids.next();
+                                        let cond2 = ctx.var_ids.next();
+                                        let final_val = ctx.var_ids.next();
+                                        let as_ptr = ctx.var_ids.next();
 
-                                        ctx.code.add(format!("
-                                            \
-                                                              %first = load {elem_ty_str}, \
-                                                              {elem_ty_str}* %bldPtrCasted
-                                            \
-                                                              %nworkers = call i32 \
-                                                              @get_nworkers()
-                                            \
-                                                              br label %entry
-                                          \
-                                                              entry:
-                                            \
-                                                              %cond = icmp ult i32 1, %nworkers
-                                            \
-                                                              br i1 %cond, label %body, label \
-                                                              %done
-                                        \
-                                                              ",
-                                                             elem_ty_str = res_ty_str.clone()));
+                                        // Generate label names.
+                                        let label_base = ctx.var_ids.next();
+                                        let mut label_ids =
+                                            IdGenerator::new(&label_base.replace("%", ""));
+                                        let entry_label = label_ids.next();
+                                        let body_label = label_ids.next();
+                                        let done_label = label_ids.next();
 
-                                        ctx.code.add(format!("body:
-  %i = phi i32 [ 1, %entry  \
-                                                              ], [ %i2, %body ]
-  %bldPtr = \
-                                                              call {bld_ty_str} \
-                                                              {bld_prefix}.\
-                                                              getPtrIndexed({bld_ty_str} \
-                                                              {bld_tmp}, i32 %i)
-  %val = load \
-                                                              {elem_ty_str}, {elem_ty_str}* \
-                                                              %bldPtr",
-                                                             bld_prefix = bld_prefix,
-                                                             bld_ty_str = bld_ty_str,
-                                                             elem_ty_str = res_ty_str.clone(),
-                                                             bld_tmp = bld_tmp));
+                                        ctx.code.add(format!(include_str!("resources/merger/merger_result_start.ll"),
+                                                t0 = t0,
+                                                nworkers = nworkers,
+                                                first=first,
+                                                bld_tmp=bld_tmp,
+                                                cond=cond,
+                                                i=i,
+                                                bld_ptr=bld_ptr,
+                                                val=val,
+                                                i2=i2,
+                                                elem_ty_str=elem_ty_str,
+                                                bld_ty_str=bld_ty_str,
+                                                bld_prefix=bld_prefix,
+                                                entry=entry_label,
+                                                body=body_label,
+                                                done=done_label));
 
-                                        try!(self.gen_merge("%bldPtrFirst".to_string(),
-                                                            "%val".to_string(),
+                                        try!(self.gen_merge(t0.to_string(),
+                                                            val.to_string(),
                                                             res_ty_str.to_string(),
                                                             op,
                                                             t,
                                                             ctx));
 
-                                        ctx.code.add(format!("%i2 = add i32 %i, 1
-                                                              \
-                                                              %cond2 = icmp ult i32 %i2, \
-                                                              %nworkers
-                                            \
-                                                              br i1 %cond2, label %body, label \
-                                                              %done
-                                            \
-                                                              done:
-                                                \
-                                                              %final = load {res_ty_str}, \
-                                                              {res_ty_str}* %bldPtrFirst
-                                                \
-                                                              %asPtr = bitcast \
-                                                              {bld_ty_str} {bld_tmp} to \
-                                                              i8*
-                                                    \
-                                                              call void @free_merger(\
-                                                              i8* %asPtr)",
-                                                             bld_tmp = bld_tmp,
-                                                             bld_ty_str = bld_ty_str,
-                                                             res_ty_str = res_ty_str.to_string()));
+                                        ctx.code.add(format!(include_str!("resources/merger/merger_result_end.ll"),
+                                                t0 = t0,
+                                                nworkers = nworkers,
+                                                i=i,
+                                                i2=i2,
+                                                cond2=cond2,
+                                                final_val=final_val,
+                                                as_ptr=as_ptr,
+                                                bld_ty_str=bld_ty_str,
+                                                res_ty_str=res_ty_str,
+                                                bld_tmp=bld_tmp,
+                                                bld_prefix=bld_prefix,
+                                                body=body_label,
+                                                done=done_label,
+                                                output=output));
 
-                                        ctx.code.add(format!("store {} {}, {}* {}",
-                                                             res_ty_str,
-                                                             "%final".to_string(),
-                                                             res_ty_str,
-                                                             llvm_symbol(output)));
                                     }
                                     DictMerger(_, _, _) => {
                                         let bld_ty_str = try!(self.llvm_type(&bld_ty)).to_string();
@@ -1973,6 +2201,35 @@ impl LlvmGenerator {
                     }
                     NewBuilder { ref output, ref arg, ref ty } => {
                         match *ty {
+                            VectorizedBuilder(ref bk) => {
+                                match *bk {
+                                    Merger(_, ref op) => {
+                                        if *op != BinOpKind::Add {
+                                            // This check is here because we don't yet support
+                                            // initialization for mergers...
+                                            return weld_err!("Merger only supports +");
+                                        }
+                                        let bld_ty_str = try!(self.llvm_type(ty));
+                                        let bld_prefix = format!("@{}",
+                                                                 bld_ty_str.replace("%", ""));
+                                        let bld_tmp = ctx.var_ids.next();
+                                        ctx.code.add(format!("{} = call {} {}.new()",
+                                                             bld_tmp,
+                                                             bld_ty_str,
+                                                             bld_prefix));
+                                        ctx.code.add(format!("store {} {}, {}* {}",
+                                                             bld_ty_str,
+                                                             bld_tmp,
+                                                             bld_ty_str,
+                                                             llvm_symbol(output)));
+                                    }
+                                    _ => {
+                                        weld_err!("NewBuilder not supported for \
+                                                   VectorizedBuilder {}",
+                                                  print_type(ty))?
+                                    }
+                                }
+                            }
                             Builder(ref bk, _) => {
                                 // TODO(Deepak): Do something with annotations here...
                                 match *bk {
@@ -2265,6 +2522,12 @@ fn llvm_symbol(symbol: &Symbol) -> String {
 /// Return the name of the LLVM instruction for a binary operation on a specific type.
 fn llvm_binop(op_kind: BinOpKind, ty: &Type) -> WeldResult<&'static str> {
     match (op_kind, ty) {
+
+        (BinOpKind::Add, &VectorizedScalar(I32)) => Ok("add"),
+        (BinOpKind::Multiply, &VectorizedScalar(I32)) => Ok("mul"),
+        (BinOpKind::Divide, &VectorizedScalar(I32)) => Ok("div"),
+        (BinOpKind::Subtract, &VectorizedScalar(I32)) => Ok("sub"),
+
         (BinOpKind::Add, &Scalar(I8)) => Ok("add"),
         (BinOpKind::Add, &Scalar(I32)) => Ok("add"),
         (BinOpKind::Add, &Scalar(I64)) => Ok("add"),

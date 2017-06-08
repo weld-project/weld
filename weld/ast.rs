@@ -42,11 +42,19 @@ impl fmt::Display for Symbol {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Type {
     Scalar(ScalarKind),
+    VectorizedScalar(ScalarKind),
     Vector(Box<Type>),
     Dict(Box<Type>, Box<Type>),
     Builder(BuilderKind, Annotations),
+    VectorizedBuilder(BuilderKind),
     Struct(Vec<Type>),
     Function(Vec<Type>, Box<Type>),
+}
+
+/// Compile time constant types for `CompileTimeConstant`.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub enum CompileTimeConstantKind {
+    VectorWidth,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -102,10 +110,8 @@ pub struct Annotations {
 
     size: Option<i64>,
     branch_selectivity: Option<i32>, // Fractions of 10,000.
-    num_keys: Option<i64>, 
-
-    // If additional fields are added, remember to add a getter / setter
-    // as well as necessary logic in fmt::Display and is_empty below.
+    num_keys: Option<i64>, /* If additional fields are added, remember to add a getter / setter
+                            * as well as necessary logic in fmt::Display and is_empty below. */
 }
 
 impl Annotations {
@@ -289,8 +295,9 @@ pub struct Iter<T: TypeBounds> {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ExprKind<T: TypeBounds> {
-    // TODO: maybe all of these should take named parameters
     Literal(LiteralKind),
+    CompileTimeConstant(CompileTimeConstantKind),
+    Ramp(Box<Expr<T>>),
     Ident(Symbol),
     Negate(Box<Expr<T>>),
     BinOp {
@@ -495,8 +502,12 @@ impl<T: TypeBounds> Expr<T> {
                 }
                 CUDF { ref args, .. } => args.iter().collect(),
                 Negate(ref t) => vec![t.as_ref()],
+                Ramp(ref e) => vec![e.as_ref()],
+
                 // Explicitly list types instead of doing _ => ... to remember to add new types.
-                Literal(_) | Ident(_) => vec![],
+                Literal(_) |
+                Ident(_) |
+                CompileTimeConstant(_) => vec![],
             }
             .into_iter()
     }
@@ -558,8 +569,11 @@ impl<T: TypeBounds> Expr<T> {
                 }
                 CUDF { ref mut args, .. } => args.iter_mut().collect(),
                 Negate(ref mut t) => vec![t.as_mut()],
+                Ramp(ref mut e) => vec![e.as_mut()],
                 // Explicitly list types instead of doing _ => ... to remember to add new types.
-                Literal(_) | Ident(_) => vec![],
+                Literal(_) |
+                Ident(_) |
+                CompileTimeConstant(_) => vec![],
             }
             .into_iter()
     }
@@ -633,6 +647,8 @@ impl<T: TypeBounds> Expr<T> {
                     Ok(matches)
                 }
                 (&Literal(ref l), &Literal(ref r)) if l == r => Ok(true),
+                (&CompileTimeConstant(ref l), &CompileTimeConstant(ref r)) if l == r => Ok(true),
+                (&Ramp(_), &Ramp(_)) => Ok(true),
                 (&Ident(ref l), &Ident(ref r)) => {
                     if let Some(lv) = sym_map.get(l) {
                         Ok(**lv == *r)

@@ -4,6 +4,7 @@
 ; - NAME: name to give generated type, without % or @ prefix
 ; - ELEM: LLVM type of the element (e.g. i32 or %MyStruct)
 ; - ELEM_PREFIX: prefix for helper functions on ELEM (e.g. @i32 or @MyStruct)
+; - VECSIZE: Vector width for computation.
 
 %$NAME = type { $ELEM*, i64 }           ; elements, size
 %$NAME.bld = type i8*
@@ -213,6 +214,14 @@ define $ELEM* @$NAME.bld.at(%$NAME.bld %bldPtr, i64 %index, i32 %myId) {
   %elements = bitcast i8* %bytes to $ELEM*
   %ptr = getelementptr $ELEM, $ELEM* %elements, i64 %index
   ret $ELEM* %ptr
+}
+
+; Get a pointer to the index'th element, fetching a vector
+define <$VECSIZE x $ELEM>* @$NAME.vat(%$NAME %vec, i64 %index) {
+  %elements = extractvalue %$NAME %vec, 0
+  %ptr = getelementptr $ELEM, $ELEM* %elements, i64 %index
+  %retPtr = bitcast $ELEM* %ptr to <$VECSIZE x $ELEM>*
+  ret <$VECSIZE x $ELEM>* %retPtr
 }
 
 ; Compute the hash code of a vector.
