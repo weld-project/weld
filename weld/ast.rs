@@ -102,24 +102,22 @@ pub struct Annotations {
 
     size: Option<i64>,
     branch_selectivity: Option<i32>, // Fractions of 10,000.
-    num_keys: Option<i64>, 
-
-    // If additional fields are added, remember to add a getter / setter
-    // as well as necessary logic in fmt::Display and is_empty below.
+    num_keys: Option<i64>, /* If additional fields are added, remember to add a getter / setter
+                            * as well as necessary logic in fmt::Display and is_empty below. */
 }
 
 impl Annotations {
     pub fn new() -> Annotations {
         return Annotations {
-            builder_implementation: None,
-            predicate: None,
-            vectorize: None,
-            tile_size: None,
-            grain_size: None,
-            size: None,
-            branch_selectivity: None,
-            num_keys: None,
-        };
+                   builder_implementation: None,
+                   predicate: None,
+                   vectorize: None,
+                   tile_size: None,
+                   grain_size: None,
+                   size: None,
+                   branch_selectivity: None,
+                   num_keys: None,
+               };
     }
 
     pub fn builder_implementation(&self) -> &Option<BuilderImplementationKind> {
@@ -442,25 +440,45 @@ impl<T: TypeBounds> Expr<T> {
     pub fn children(&self) -> vec::IntoIter<&Expr<T>> {
         use self::ExprKind::*;
         match self.kind {
-                BinOp { ref left, ref right, .. } => vec![left.as_ref(), right.as_ref()],
+                BinOp {
+                    ref left,
+                    ref right,
+                    ..
+                } => vec![left.as_ref(), right.as_ref()],
                 Cast { ref child_expr, .. } => vec![child_expr.as_ref()],
                 ToVec { ref child_expr } => vec![child_expr.as_ref()],
-                Let { ref value, ref body, .. } => vec![value.as_ref(), body.as_ref()],
+                Let {
+                    ref value,
+                    ref body,
+                    ..
+                } => vec![value.as_ref(), body.as_ref()],
                 Lambda { ref body, .. } => vec![body.as_ref()],
                 MakeStruct { ref elems } => elems.iter().collect(),
                 MakeVector { ref elems } => elems.iter().collect(),
                 Zip { ref vectors } => vectors.iter().collect(),
                 GetField { ref expr, .. } => vec![expr.as_ref()],
                 Length { ref data } => vec![data.as_ref()],
-                Lookup { ref data, ref index } => vec![data.as_ref(), index.as_ref()],
+                Lookup {
+                    ref data,
+                    ref index,
+                } => vec![data.as_ref(), index.as_ref()],
                 KeyExists { ref data, ref key } => vec![data.as_ref(), key.as_ref()],
-                Slice { ref data, ref index, ref size } => {
-                    vec![data.as_ref(), index.as_ref(), size.as_ref()]
-                }
+                Slice {
+                    ref data,
+                    ref index,
+                    ref size,
+                } => vec![data.as_ref(), index.as_ref(), size.as_ref()],
                 Exp { ref value } => vec![value.as_ref()],
-                Merge { ref builder, ref value } => vec![builder.as_ref(), value.as_ref()],
+                Merge {
+                    ref builder,
+                    ref value,
+                } => vec![builder.as_ref(), value.as_ref()],
                 Res { ref builder } => vec![builder.as_ref()],
-                For { ref iters, ref builder, ref func } => {
+                For {
+                    ref iters,
+                    ref builder,
+                    ref func,
+                } => {
                     let mut res: Vec<&Expr<T>> = vec![];
                     for iter in iters {
                         res.push(iter.data.as_ref());
@@ -478,10 +496,15 @@ impl<T: TypeBounds> Expr<T> {
                     res.push(func.as_ref());
                     res
                 }
-                If { ref cond, ref on_true, ref on_false } => {
-                    vec![cond.as_ref(), on_true.as_ref(), on_false.as_ref()]
-                }
-                Apply { ref func, ref params } => {
+                If {
+                    ref cond,
+                    ref on_true,
+                    ref on_false,
+                } => vec![cond.as_ref(), on_true.as_ref(), on_false.as_ref()],
+                Apply {
+                    ref func,
+                    ref params,
+                } => {
                     let mut res = vec![func.as_ref()];
                     res.extend(params.iter());
                     res
@@ -505,25 +528,48 @@ impl<T: TypeBounds> Expr<T> {
     pub fn children_mut(&mut self) -> vec::IntoIter<&mut Expr<T>> {
         use self::ExprKind::*;
         match self.kind {
-                BinOp { ref mut left, ref mut right, .. } => vec![left.as_mut(), right.as_mut()],
+                BinOp {
+                    ref mut left,
+                    ref mut right,
+                    ..
+                } => vec![left.as_mut(), right.as_mut()],
                 Cast { ref mut child_expr, .. } => vec![child_expr.as_mut()],
                 ToVec { ref mut child_expr } => vec![child_expr.as_mut()],
-                Let { ref mut value, ref mut body, .. } => vec![value.as_mut(), body.as_mut()],
+                Let {
+                    ref mut value,
+                    ref mut body,
+                    ..
+                } => vec![value.as_mut(), body.as_mut()],
                 Lambda { ref mut body, .. } => vec![body.as_mut()],
                 MakeStruct { ref mut elems } => elems.iter_mut().collect(),
                 MakeVector { ref mut elems } => elems.iter_mut().collect(),
                 Zip { ref mut vectors } => vectors.iter_mut().collect(),
                 GetField { ref mut expr, .. } => vec![expr.as_mut()],
                 Length { ref mut data } => vec![data.as_mut()],
-                Lookup { ref mut data, ref mut index } => vec![data.as_mut(), index.as_mut()],
-                KeyExists { ref mut data, ref mut key } => vec![data.as_mut(), key.as_mut()],
-                Slice { ref mut data, ref mut index, ref mut size } => {
-                    vec![data.as_mut(), index.as_mut(), size.as_mut()]
-                }
+                Lookup {
+                    ref mut data,
+                    ref mut index,
+                } => vec![data.as_mut(), index.as_mut()],
+                KeyExists {
+                    ref mut data,
+                    ref mut key,
+                } => vec![data.as_mut(), key.as_mut()],
+                Slice {
+                    ref mut data,
+                    ref mut index,
+                    ref mut size,
+                } => vec![data.as_mut(), index.as_mut(), size.as_mut()],
                 Exp { ref mut value } => vec![value.as_mut()],
-                Merge { ref mut builder, ref mut value } => vec![builder.as_mut(), value.as_mut()],
+                Merge {
+                    ref mut builder,
+                    ref mut value,
+                } => vec![builder.as_mut(), value.as_mut()],
                 Res { ref mut builder } => vec![builder.as_mut()],
-                For { ref mut iters, ref mut builder, ref mut func } => {
+                For {
+                    ref mut iters,
+                    ref mut builder,
+                    ref mut func,
+                } => {
                     let mut res: Vec<&mut Expr<T>> = vec![];
                     for iter in iters {
                         res.push(iter.data.as_mut());
@@ -541,10 +587,15 @@ impl<T: TypeBounds> Expr<T> {
                     res.push(func.as_mut());
                     res
                 }
-                If { ref mut cond, ref mut on_true, ref mut on_false } => {
-                    vec![cond.as_mut(), on_true.as_mut(), on_false.as_mut()]
-                }
-                Apply { ref mut func, ref mut params } => {
+                If {
+                    ref mut cond,
+                    ref mut on_true,
+                    ref mut on_false,
+                } => vec![cond.as_mut(), on_true.as_mut(), on_false.as_mut()],
+                Apply {
+                    ref mut func,
+                    ref mut params,
+                } => {
                     let mut res = vec![func.as_mut()];
                     res.extend(params.iter_mut());
                     res
@@ -626,8 +677,16 @@ impl<T: TypeBounds> Expr<T> {
                 (&For { .. }, &For { .. }) => Ok(true),
                 (&If { .. }, &If { .. }) => Ok(true),
                 (&Apply { .. }, &Apply { .. }) => Ok(true),
-                (&CUDF { sym_name: ref sym_name1, return_ty: ref return_ty1, .. },
-                 &CUDF { sym_name: ref sym_name2, return_ty: ref return_ty2, .. }) => {
+                (&CUDF {
+                     sym_name: ref sym_name1,
+                     return_ty: ref return_ty1,
+                     ..
+                 },
+                 &CUDF {
+                     sym_name: ref sym_name2,
+                     return_ty: ref return_ty2,
+                     ..
+                 }) => {
                     let mut matches = sym_name1 == sym_name2;
                     matches = matches && return_ty1 == return_ty2;
                     Ok(matches)
@@ -682,14 +741,21 @@ impl<T: TypeBounds> Expr<T> {
 
         // Otherwise, replace any relevant children, unless we redefine the symbol.
         match self.kind {
-            Let { ref name, ref mut value, ref mut body } => {
+            Let {
+                ref name,
+                ref mut value,
+                ref mut body,
+            } => {
                 value.substitute(symbol, replacement);
                 if name != symbol {
                     body.substitute(symbol, replacement);
                 }
             }
 
-            Lambda { ref params, ref mut body } => {
+            Lambda {
+                ref params,
+                ref mut body,
+            } => {
                 if params.iter().all(|p| p.name != *symbol) {
                     body.substitute(symbol, replacement);
                 }

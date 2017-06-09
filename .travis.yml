@@ -25,6 +25,8 @@ addons:
 install:
   - sudo rm -f `which llvm-config`
   - export WELD_HOME=`pwd`
+  - (cargo install rustfmt || true)
+  - PATH=$PATH:/home/travis/.cargo/bin
   - cd python
   - pip install --upgrade pip setuptools wheel
   - pip install --only-binary=numpy,pandas -r requirements.txt
@@ -32,5 +34,6 @@ install:
   - cd ..
 
 script:
+  - bash -e build_tools/travis/test_format.sh
   - bash -e build_tools/travis/test_llvm_version.sh 3.8 38.0.1
   - bash -e build_tools/travis/test_llvm_version.sh 4.0 40.0.0

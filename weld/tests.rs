@@ -146,9 +146,9 @@ fn parse_and_print_typed_expr_without_indentessions() {
 
     let e = Expr {
         kind: ExprKind::Ident(Symbol {
-            name: "a".to_string(),
-            id: 1,
-        }),
+                                  name: "a".to_string(),
+                                  id: 1,
+                              }),
         ty: Unknown,
         annotations: Annotations::new(),
     };

@@ -195,7 +195,13 @@ impl fmt::Display for Statement {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use self::Statement::*;
         match *self {
-            BinOp { ref output, ref op, ref ty, ref left, ref right } => {
+            BinOp {
+                ref output,
+                ref op,
+                ref ty,
+                ref left,
+                ref right,
+            } => {
                 write!(f,
                        "{} = {} {} {} {}",
                        output,
@@ -204,29 +210,65 @@ impl fmt::Display for Statement {
                        left,
                        right)
             }
-            Negate { ref output, ref child } => write!(f, "{} = -{}", output, child),
-            Cast { ref output, ref new_ty, ref child } => {
-                write!(f, "{} = cast({}, {})", output, child, print_type(new_ty))
-            }
-            Lookup { ref output, ref child, ref index } => {
-                write!(f, "{} = lookup({}, {})", output, child, index)
-            }
-            KeyExists { ref output, ref child, ref key } => {
-                write!(f, "{} = keyexists({}, {})", output, child, key)
-            }
-            Slice { ref output, ref child, ref index, ref size } => {
-                write!(f, "{} = slice({}, {}, {})", output, child, index, size)
-            }
-            Exp { ref output, ref child } => write!(f, "{} = exp({})", output, child),
-            ToVec { ref output, ref child } => write!(f, "{} = toVec({})", output, child),
-            Length { ref output, ref child, .. } => write!(f, "{} = len({})", output, child),
-            Assign { ref output, ref value } => write!(f, "{} = {}", output, value),
-            AssignLiteral { ref output, ref value } => {
-                write!(f, "{} = {}", output, print_literal(value))
-            }
-            Merge { ref builder, ref value } => write!(f, "merge {} {}", builder, value),
-            Res { ref output, ref builder } => write!(f, "{} = result {}", output, builder),
-            NewBuilder { ref output, ref arg, ref ty } => {
+            Negate {
+                ref output,
+                ref child,
+            } => write!(f, "{} = -{}", output, child),
+            Cast {
+                ref output,
+                ref new_ty,
+                ref child,
+            } => write!(f, "{} = cast({}, {})", output, child, print_type(new_ty)),
+            Lookup {
+                ref output,
+                ref child,
+                ref index,
+            } => write!(f, "{} = lookup({}, {})", output, child, index),
+            KeyExists {
+                ref output,
+                ref child,
+                ref key,
+            } => write!(f, "{} = keyexists({}, {})", output, child, key),
+            Slice {
+                ref output,
+                ref child,
+                ref index,
+                ref size,
+            } => write!(f, "{} = slice({}, {}, {})", output, child, index, size),
+            Exp {
+                ref output,
+                ref child,
+            } => write!(f, "{} = exp({})", output, child),
+            ToVec {
+                ref output,
+                ref child,
+            } => write!(f, "{} = toVec({})", output, child),
+            Length {
+                ref output,
+                ref child,
+                ..
+            } => write!(f, "{} = len({})", output, child),
+            Assign {
+                ref output,
+                ref value,
+            } => write!(f, "{} = {}", output, value),
+            AssignLiteral {
+                ref output,
+                ref value,
+            } => write!(f, "{} = {}", output, print_literal(value)),
+            Merge {
+                ref builder,
+                ref value,
+            } => write!(f, "merge {} {}", builder, value),
+            Res {
+                ref output,
+                ref builder,
+            } => write!(f, "{} = result {}", output, builder),
+            NewBuilder {
+                ref output,
+                ref arg,
+                ref ty,
+            } => {
                 let arg_str = if let Some(ref a) = *arg {
                     a.to_string()
                 } else {
@@ -234,28 +276,42 @@ impl fmt::Display for Statement {
                 };
                 write!(f, "{} = new {}({})", output, print_type(ty), arg_str)
             }
-            MakeStruct { ref output, ref elems } => {
+            MakeStruct {
+                ref output,
+                ref elems,
+            } => {
                 write!(f,
                        "{} = new {}",
                        output,
                        join("{", ",", "}", elems.iter().map(|e| e.0.name.clone())))
             }
-            MakeVector { ref output, ref elems, .. } => {
+            MakeVector {
+                ref output,
+                ref elems,
+                ..
+            } => {
                 write!(f,
                        "{} = new {}",
                        output,
                        join("[", ",", "]", elems.iter().map(|e| e.name.clone())))
             }
-            CUDF { ref output, ref args, ref symbol_name, .. } => {
+            CUDF {
+                ref output,
+                ref args,
+                ref symbol_name,
+                ..
+            } => {
                 write!(f,
                        "{} = cudf[{}]{}",
                        output,
                        symbol_name,
                        join("(", ",", ")", args.iter().map(|e| e.name.clone())))
             }
-            GetField { ref output, ref value, index } => {
-                write!(f, "{} = {}.{}", output, value, index)
-            }
+            GetField {
+                ref output,
+                ref value,
+                index,
+            } => write!(f, "{} = {}.{}", output, value, index),
         }
     }
 }
@@ -264,9 +320,11 @@ impl fmt::Display for Terminator {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use self::Terminator::*;
         match *self {
-            Branch { ref cond, ref on_true, ref on_false } => {
-                write!(f, "branch {} B{} B{}", cond, on_true, on_false)
-            }
+            Branch {
+                ref cond,
+                ref on_true,
+                ref on_false,
+            } => write!(f, "branch {} B{} B{}", cond, on_true, on_false),
             ParallelFor(ref pf) => {
                 write!(f, "for [")?;
                 for iter in &pf.data {
@@ -369,7 +427,11 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
             use self::Statement::*;
             match *statement {
                 // push any existing symbols that are used (but not assigned) by the statement
-                BinOp { ref left, ref right, .. } => {
+                BinOp {
+                    ref left,
+                    ref right,
+                    ..
+                } => {
                     vars.push(left.clone());
                     vars.push(right.clone());
                 }
@@ -379,7 +441,11 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
                 Negate { ref child, .. } => {
                     vars.push(child.clone());
                 }
-                Lookup { ref child, ref index, .. } => {
+                Lookup {
+                    ref child,
+                    ref index,
+                    ..
+                } => {
                     vars.push(child.clone());
                     vars.push(index.clone());
                 }
@@ -387,7 +453,12 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
                     vars.push(child.clone());
                     vars.push(key.clone());
                 }
-                Slice { ref child, ref index, ref size, .. } => {
+                Slice {
+                    ref child,
+                    ref index,
+                    ref size,
+                    ..
+                } => {
                     vars.push(child.clone());
                     vars.push(index.clone());
                     vars.push(size.clone());
@@ -402,7 +473,10 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
                     vars.push(child.clone());
                 }
                 Assign { ref value, .. } => vars.push(value.clone()),
-                Merge { ref builder, ref value } => {
+                Merge {
+                    ref builder,
+                    ref value,
+                } => {
                     vars.push(builder.clone());
                     vars.push(value.clone());
                 }
@@ -458,7 +532,9 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
         }
         for var in &vars {
             if prog.funcs[func_id].locals.get(&var) == None {
-                prog.funcs[func_id].params.insert(var.clone(), env.get(&var).unwrap().clone());
+                prog.funcs[func_id]
+                    .params
+                    .insert(var.clone(), env.get(&var).unwrap().clone());
                 closure.insert(var.clone());
             }
         }
@@ -480,7 +556,9 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
         }
         for var in inner_closure {
             if prog.funcs[func_id].locals.get(&var) == None {
-                prog.funcs[func_id].params.insert(var.clone(), env.get(&var).unwrap().clone());
+                prog.funcs[func_id]
+                    .params
+                    .insert(var.clone(), env.get(&var).unwrap().clone());
                 closure.insert(var.clone());
             }
         }
@@ -505,7 +583,10 @@ fn sir_param_correction(prog: &mut SirProgram) -> WeldResult<()> {
 
 /// Convert an AST to a SIR program. Symbols must be unique in expr.
 pub fn ast_to_sir(expr: &TypedExpr) -> WeldResult<SirProgram> {
-    if let ExprKind::Lambda { ref params, ref body } = expr.kind {
+    if let ExprKind::Lambda {
+               ref params,
+               ref body,
+           } = expr.kind {
         let mut prog = SirProgram::new(&expr.ty, params);
         prog.sym_gen = SymbolGenerator::from_expression(expr);
         for tp in params {
@@ -537,34 +618,42 @@ fn gen_expr(expr: &TypedExpr,
         ExprKind::Literal(lit) => {
             let res_sym = prog.add_local(&expr.ty, cur_func);
             prog.funcs[cur_func].blocks[cur_block].add_statement(AssignLiteral {
-                output: res_sym.clone(),
-                value: lit,
-            });
+                                                                     output: res_sym.clone(),
+                                                                     value: lit,
+                                                                 });
             Ok((cur_func, cur_block, res_sym))
         }
 
-        ExprKind::Let { ref name, ref value, ref body } => {
+        ExprKind::Let {
+            ref name,
+            ref value,
+            ref body,
+        } => {
             let (cur_func, cur_block, val_sym) = gen_expr(value, prog, cur_func, cur_block)?;
             prog.add_local_named(&value.ty, name, cur_func);
             prog.funcs[cur_func].blocks[cur_block].add_statement(Assign {
-                output: name.clone(),
-                value: val_sym,
-            });
+                                                                     output: name.clone(),
+                                                                     value: val_sym,
+                                                                 });
             let (cur_func, cur_block, res_sym) = gen_expr(body, prog, cur_func, cur_block)?;
             Ok((cur_func, cur_block, res_sym))
         }
 
-        ExprKind::BinOp { kind, ref left, ref right } => {
+        ExprKind::BinOp {
+            kind,
+            ref left,
+            ref right,
+        } => {
             let (cur_func, cur_block, left_sym) = gen_expr(left, prog, cur_func, cur_block)?;
             let (cur_func, cur_block, right_sym) = gen_expr(right, prog, cur_func, cur_block)?;
             let res_sym = prog.add_local(&expr.ty, cur_func);
             prog.funcs[cur_func].blocks[cur_block].add_statement(BinOp {
-                output: res_sym.clone(),
-                op: kind,
-                ty: left.ty.clone(),
-                left: left_sym,
-                right: right_sym,
-            });
+                                                                     output: res_sym.clone(),
+                                                                     op: kind,
+                                                                     ty: left.ty.clone(),
+                                                                     left: left_sym,
+                                                                     right: right_sym,
+                                                                 });
             Ok((cur_func, cur_block, res_sym))
         }
 
@@ -572,9 +661,9 @@ fn gen_expr(expr: &TypedExpr,
             let (cur_func, cur_block, child_sym) = gen_expr(child_expr, prog, cur_func, cur_block)?;
             let res_sym = prog.add_local(&expr.ty, cur_func);
             prog.funcs[cur_func].blocks[cur_block].add_statement(Negate {
-                output: res_sym.clone(),
-                child: child_sym,
-            });
+                                                                     output: res_sym.clone(),
+                                                                     child: child_sym,
+                                                                 });
             Ok((cur_func, cur_block, res_sym))
         }
 
@@ -582,22 +671,25 @@ fn gen_expr(expr: &TypedExpr,
             let (cur_func, cur_block, child_sym) = gen_expr(child_expr, prog, cur_func, cur_block)?;
             let res_sym = prog.add_local(&expr.ty, cur_func);
             prog.funcs[cur_func].blocks[cur_block].add_statement(Cast {
-                output: res_sym.clone(),
-                new_ty: expr.ty.clone(),
-                child: child_sym,
-            });
+                                                                     output: res_sym.clone(),
+                                                                     new_ty: expr.ty.clone(),
+                                                                     child: child_sym,
+                                                                 });
             Ok((cur_func, cur_block, res_sym))
         }
 
-        ExprKind::Lookup { ref data, ref index } => {
+        ExprKind::Lookup {
+            ref data,
+            ref index,
+        } => {
             let (cur_func, cur_block, data_sym) = gen_expr(data, prog, cur_func, cur_block)?;
             let (cur_func, cur_block, index_sym) = gen_expr(index, prog, cur_func, cur_block)?;
             let res_sym = prog.add_local(&expr.ty, cur_func);
             prog.funcs[cur_func].blocks[cur_block].add_statement(Lookup {
-                output: res_sym.clone(),
-                child: data_sym,
-                index: index_sym.clone(),
-            });
+                                                                     output: res_sym.clone(),
+                                                                     child: data_sym,
+                                                                     index: index_sym.clone(),
+                                                                 });
             Ok((cur_func, cur_block, res_sym))
         }
 
@@ -606,24 +698,28 @@ fn gen_expr(expr: &TypedExpr,
             let (cur_func, cur_block, key_sym) = gen_expr(key, prog, cur_func, cur_block)?;
             let res_sym = prog.add_local(&expr.ty, cur_func);
             prog.funcs[cur_func].blocks[cur_block].add_statement(KeyExists {
-                output: res_sym.clone(),
-                child: data_sym,
-                key: key_sym.clone(),
-            });
+                                                                     output: res_sym.clone(),
+                                                                     child: data_sym,
+                                                                     key: key_sym.clone(),
+                                                                 });
             Ok((cur_func, cur_block, res_sym))
         }
 
-        ExprKind::Slice { ref data, ref index, ref size } => {
+        ExprKind::Slice {
+            ref data,
+            ref index,
+            ref size,
+        } => {
             let (cur_func, cur_block, data_sym) = gen_expr(data, prog, cur_func, cur_block)?;
             let (cur_func, cur_block, index_sym) = gen_expr(index, prog, cur_func, cur_block)?;
             let (cur_func, cur_block, size_sym) = gen_expr(size, prog, cur_func, cur_block)?;
             let res_sym = prog.add_local(&expr.ty, cur_func);
             prog.funcs[cur_func].blocks[cur_block].add_statement(Slice {
-                output: res_sym.clone(),
-                child: data_sym,
-                index: index_sym.clone(),
-                size: size_sym.clone(),
-            });
+                                                                     output: res_sym.clone(),
+                                                                     child: data_sym,
+                                                                     index: index_sym.clone(),
+                                                                     size: size_sym.clone(),
+                                                                 });
             Ok((cur_func, cur_block, res_sym))
         }
 
@@ -631,9 +727,9 @@ fn gen_expr(expr: &TypedExpr,
             let (cur_func, cur_block, value_sym) = gen_expr(value, prog, cur_func, cur_block)?;
             let res_sym = prog.add_local(&expr.ty, cur_func);
             prog.funcs[cur_func].blocks[cur_block].add_statement(Exp {
-                output: res_sym.clone(),
-                child: value_sym,
-            });
+                                                                     output: res_sym.clone(),
+                                                                     child: value_sym,
+                                                                 });
             Ok((cur_func, cur_block, res_sym))
         }
 
@@ -641,9 +737,9 @@ fn gen_expr(expr: &TypedExpr,
             let (cur_func, cur_block, child_sym) = gen_expr(child_expr, prog, cur_func, cur_block)?;
             let res_sym = prog.add_local(&expr.ty, cur_func);
             prog.funcs[cur_func].blocks[cur_block].add_statement(ToVec {
-                output: res_sym.clone(),
-                child: child_sym,
-            });
+                                                                     output: res_sym.clone(),
+                                                                     child: child_sym,
+                                                                 });
             Ok((cur_func, cur_block, res_sym))
         }
 
@@ -651,13 +747,17 @@ fn gen_expr(expr: &TypedExpr,
             let (cur_func, cur_block, data_sym) = gen_expr(data, prog, cur_func, cur_block)?;
             let res_sym = prog.add_local(&expr.ty, cur_func);
             prog.funcs[cur_func].blocks[cur_block].add_statement(Length {
-                output: res_sym.clone(),
-                child: data_sym,
-            });
+                                                                     output: res_sym.clone(),
+                                                                     child: data_sym,
+                                                                 });
             Ok((cur_func, cur_block, res_sym))
         }
 
-        ExprKind::If { ref cond, ref on_true, ref on_false } => {
+        ExprKind::If {
+            ref cond,
+            ref on_true,
+            ref on_false,
+        } => {
             let (cur_func, cur_block, cond_sym) = gen_expr(cond, prog, cur_func, cur_block)?;
             let true_block = prog.funcs[cur_func].add_block();
             let false_block = prog.funcs[cur_func].add_block();
@@ -671,13 +771,13 @@ fn gen_expr(expr: &TypedExpr,
                 gen_expr(on_false, prog, cur_func, false_block)?;
             let res_sym = prog.add_local(&expr.ty, true_func);
             prog.funcs[true_func].blocks[true_block].add_statement(Assign {
-                output: res_sym.clone(),
-                value: true_sym,
-            });
+                                                                       output: res_sym.clone(),
+                                                                       value: true_sym,
+                                                                   });
             prog.funcs[false_func].blocks[false_block].add_statement(Assign {
-                output: res_sym.clone(),
-                value: false_sym,
-            });
+                                                                         output: res_sym.clone(),
+                                                                         value: false_sym,
+                                                                     });
             if true_func != cur_func || false_func != cur_func {
                 // TODO we probably want a better for name for this symbol than whatever res_sym is
                 prog.add_local_named(&expr.ty, &res_sym, false_func);
@@ -696,13 +796,16 @@ fn gen_expr(expr: &TypedExpr,
             }
         }
 
-        ExprKind::Merge { ref builder, ref value } => {
+        ExprKind::Merge {
+            ref builder,
+            ref value,
+        } => {
             let (cur_func, cur_block, builder_sym) = gen_expr(builder, prog, cur_func, cur_block)?;
             let (cur_func, cur_block, elem_sym) = gen_expr(value, prog, cur_func, cur_block)?;
             prog.funcs[cur_func].blocks[cur_block].add_statement(Merge {
-                builder: builder_sym.clone(),
-                value: elem_sym,
-            });
+                                                                     builder: builder_sym.clone(),
+                                                                     value: elem_sym,
+                                                                 });
             Ok((cur_func, cur_block, builder_sym))
         }
 
@@ -710,9 +813,9 @@ fn gen_expr(expr: &TypedExpr,
             let (cur_func, cur_block, builder_sym) = gen_expr(builder, prog, cur_func, cur_block)?;
             let res_sym = prog.add_local(&expr.ty, cur_func);
             prog.funcs[cur_func].blocks[cur_block].add_statement(Res {
-                output: res_sym.clone(),
-                builder: builder_sym,
-            });
+                                                                     output: res_sym.clone(),
+                                                                     builder: builder_sym,
+                                                                 });
             Ok((cur_func, cur_block, res_sym))
         }
 
@@ -725,10 +828,10 @@ fn gen_expr(expr: &TypedExpr,
             };
             let res_sym = prog.add_local(&expr.ty, cur_func);
             prog.funcs[cur_func].blocks[cur_block].add_statement(NewBuilder {
-                output: res_sym.clone(),
-                arg: arg_sym,
-                ty: expr.ty.clone(),
-            });
+                                                                     output: res_sym.clone(),
+                                                                     arg: arg_sym,
+                                                                     ty: expr.ty.clone(),
+                                                                 });
             Ok((cur_func, cur_block, res_sym))
         }
 
@@ -746,9 +849,9 @@ fn gen_expr(expr: &TypedExpr,
             }
             let res_sym = prog.add_local(&expr.ty, cur_func);
             prog.funcs[cur_func].blocks[cur_block].add_statement(MakeStruct {
-                output: res_sym.clone(),
-                elems: syms,
-            });
+                                                                     output: res_sym.clone(),
+                                                                     elems: syms,
+                                                                 });
             Ok((cur_func, cur_block, res_sym))
         }
 
@@ -769,14 +872,18 @@ fn gen_expr(expr: &TypedExpr,
             }
             let res_sym = prog.add_local(&expr.ty, cur_func);
             prog.funcs[cur_func].blocks[cur_block].add_statement(MakeVector {
-                output: res_sym.clone(),
-                elems: syms,
-                elem_ty: *ty,
-            });
+                                                                     output: res_sym.clone(),
+                                                                     elems: syms,
+                                                                     elem_ty: *ty,
+                                                                 });
             Ok((cur_func, cur_block, res_sym))
         }
 
-        ExprKind::CUDF { ref sym_name, ref args, .. } => {
+        ExprKind::CUDF {
+            ref sym_name,
+            ref args,
+            ..
+        } => {
             let mut syms = vec![];
             let mut cur_func = cur_func;
             let mut cur_block = cur_block;
@@ -789,10 +896,10 @@ fn gen_expr(expr: &TypedExpr,
             }
             let res_sym = prog.add_local(&expr.ty, cur_func);
             prog.funcs[cur_func].blocks[cur_block].add_statement(CUDF {
-                output: res_sym.clone(),
-                args: syms,
-                symbol_name: sym_name.clone(),
-            });
+                                                                     output: res_sym.clone(),
+                                                                     args: syms,
+                                                                     symbol_name: sym_name.clone(),
+                                                                 });
             Ok((cur_func, cur_block, res_sym))
         }
 
@@ -807,15 +914,22 @@ fn gen_expr(expr: &TypedExpr,
             };
             let res_sym = prog.add_local(&field_ty, cur_func);
             prog.funcs[cur_func].blocks[cur_block].add_statement(GetField {
-                output: res_sym.clone(),
-                value: struct_sym,
-                index: index,
-            });
+                                                                     output: res_sym.clone(),
+                                                                     value: struct_sym,
+                                                                     index: index,
+                                                                 });
             Ok((cur_func, cur_block, res_sym))
         }
 
-        ExprKind::For { ref iters, ref builder, ref func } => {
-            if let ExprKind::Lambda { ref params, ref body } = func.kind {
+        ExprKind::For {
+            ref iters,
+            ref builder,
+            ref func,
+        } => {
+            if let ExprKind::Lambda {
+                       ref params,
+                       ref body,
+                   } = func.kind {
                 let (cur_func, cur_block, builder_sym) =
                     gen_expr(builder, prog, cur_func, cur_block)?;
                 let body_func = prog.add_func();
@@ -823,7 +937,9 @@ fn gen_expr(expr: &TypedExpr,
                 prog.add_local_named(&params[0].ty, &params[0].name, body_func);
                 prog.add_local_named(&params[1].ty, &params[1].name, body_func);
                 prog.add_local_named(&params[2].ty, &params[2].name, body_func);
-                prog.funcs[body_func].params.insert(builder_sym.clone(), builder.ty.clone());
+                prog.funcs[body_func]
+                    .params
+                    .insert(builder_sym.clone(), builder.ty.clone());
                 let mut cur_func = cur_func;
                 let mut cur_block = cur_block;
                 let mut pf_iters: Vec<ParallelForIter> = Vec::new();
@@ -831,7 +947,9 @@ fn gen_expr(expr: &TypedExpr,
                     let data_res = gen_expr(&iter.data, prog, cur_func, cur_block)?;
                     cur_func = data_res.0;
                     cur_block = data_res.1;
-                    prog.funcs[body_func].params.insert(data_res.2.clone(), iter.data.ty.clone());
+                    prog.funcs[body_func]
+                        .params
+                        .insert(data_res.2.clone(), iter.data.ty.clone());
                     let start_sym = if iter.start.is_some() {
                         // TODO is there a cleaner way to do this?
                         let start_expr = match iter.start {
@@ -856,7 +974,9 @@ fn gen_expr(expr: &TypedExpr,
                         let end_res = gen_expr(&end_expr, prog, cur_func, cur_block)?;
                         cur_func = end_res.0;
                         cur_block = end_res.1;
-                        prog.funcs[body_func].params.insert(end_res.2.clone(), end_expr.ty.clone());
+                        prog.funcs[body_func]
+                            .params
+                            .insert(end_res.2.clone(), end_expr.ty.clone());
                         Some(end_res.2)
                     } else {
                         None
@@ -877,11 +997,11 @@ fn gen_expr(expr: &TypedExpr,
                         None
                     };
                     pf_iters.push(ParallelForIter {
-                        data: data_res.2,
-                        start: start_sym,
-                        end: end_sym,
-                        stride: stride_sym,
-                    });
+                                      data: data_res.2,
+                                      start: start_sym,
+                                      end: end_sym,
+                                      stride: stride_sym,
+                                  });
                 }
                 let (body_end_func, body_end_block, _) =
                     gen_expr(body, prog, body_func, body_block)?;
@@ -890,18 +1010,19 @@ fn gen_expr(expr: &TypedExpr,
                 let cont_block = prog.funcs[cont_func].add_block();
                 let mut is_innermost = true;
                 body.traverse(&mut |ref e| if let ExprKind::For { .. } = e.kind {
-                    is_innermost = false;
-                });
-                prog.funcs[cur_func].blocks[cur_block].terminator = ParallelFor(ParallelForData {
-                    data: pf_iters,
-                    builder: builder_sym.clone(),
-                    data_arg: params[2].name.clone(),
-                    builder_arg: params[0].name.clone(),
-                    idx_arg: params[1].name.clone(),
-                    body: body_func,
-                    cont: cont_func,
-                    innermost: is_innermost,
-                });
+                                       is_innermost = false;
+                                   });
+                prog.funcs[cur_func].blocks[cur_block].terminator =
+                    ParallelFor(ParallelForData {
+                                    data: pf_iters,
+                                    builder: builder_sym.clone(),
+                                    data_arg: params[2].name.clone(),
+                                    builder_arg: params[0].name.clone(),
+                                    idx_arg: params[1].name.clone(),
+                                    body: body_func,
+                                    cont: cont_func,
+                                    innermost: is_innermost,
+                                });
                 Ok((cont_func, cont_block, builder_sym))
             } else {
                 weld_err!("Argument to For was not a Lambda: {}", print_expr(func))
