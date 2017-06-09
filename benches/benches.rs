@@ -48,9 +48,7 @@ unsafe fn compile_program(code: &str) -> Result<*mut WeldModule, ()> {
     let conf = benchmark_conf();
 
     let err = weld_error_new();
-    let module = weld_module_compile(code.into_raw() as *const c_char,
-                                     conf,
-                                     err);
+    let module = weld_module_compile(code.into_raw() as *const c_char, conf, err);
 
     if weld_error_code(err) != WeldRuntimeErrno::Success {
         weld_conf_free(conf);
