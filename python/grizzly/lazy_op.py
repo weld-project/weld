@@ -1,6 +1,7 @@
 """Summary
 """
 from weld.weldobject import *
+from six.moves import xrange
 
 
 def to_weld_type(weld_type, dim):

@@ -4,13 +4,15 @@
 # Holds an object that can be evaluated.
 #
 
+from __future__ import print_function
+
 import ctypes
 
 import os
 import time
 
-import bindings as cweld
-from types import *
+from . import bindings as cweld
+from .types import *
 
 
 class WeldObjectEncoder(object):
@@ -121,7 +123,7 @@ class WeldObject(object):
 
     def toWeldFunc(self):
         names = self.context.keys()
-        names.sort()
+        names = sorted(names)
         arg_strs = ["{0}: {1}".format(str(name),
                                       str(self.encoder.pyToWeldType(self.context[name])))
                     for name in names]
@@ -142,7 +144,7 @@ class WeldObject(object):
         # Encode each input argument. This is the positional argument list
         # which will be wrapped into a Weld struct and passed to the Weld API.
         names = self.context.keys()
-        names.sort()
+        names = sorted(names)
 
         start = time.time()
         encoded = []
@@ -157,7 +159,7 @@ class WeldObject(object):
                 encoded.append(self.encoder.encode(self.context[name]))
         end = time.time()
         if verbose:
-            print "Total time encoding:", end - start
+            print("Total time encoding:", end - start)
 
         start = time.time()
         Args = args_factory(zip(names, argtypes))
@@ -188,7 +190,7 @@ class WeldObject(object):
         data = ctypes.cast(weld_ret.data(), ptrtype)
         end = time.time()
         if verbose:
-            print "Total time running:", end - start
+            print("Total time running:", end - start)
 
         start = time.time()
         if decode:
@@ -199,6 +201,6 @@ class WeldObject(object):
                 ctypes.c_int64)).contents.value
         end = time.time()
         if verbose:
-            print "Total time decoding:", end - start
+            print("Total time decoding:", end - start)
 
         return result

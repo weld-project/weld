@@ -6,4 +6,4 @@ setup(name='grizzly',
       author='Weld Developers',
       author_email='weld-group@lists.stanford.edu',
       packages=['grizzly', 'weld'],
-      install_requires=['pandas', 'numpy'])
+      install_requires=['pandas', 'numpy', 'six'])
