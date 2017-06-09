@@ -28,14 +28,7 @@ install:
   - (cargo install rustfmt || true)
   - PATH=$PATH:/home/travis/.cargo/bin
   - pip install virtualenv==15.1.0
-  - mkdir -p .virtualenv
-  - export VENV_HOME=`pwd`/.virtualenv
-  - virtualenv $VENV_HOME/py2.7
-  - virtualenv $VENV_HOME/py3.6 --python=`which python3.6`
-  - cd python
-  - source $VENV_HOME/py2.7/bin/activate; pip install --upgrade pip setuptools wheel; pip install --only-binary=numpy,pandas -r requirements.txt
-  - source $VENV_HOME/py3.6/bin/activate; pip install --upgrade pip setuptools wheel; pip install --only-binary=numpy,pandas -r requirements.txt
-  - cd ..
+  - bash -e build_tools/travis/init_virtualenvs.sh 2.7 3.6
 
 script:
   - bash -e build_tools/travis/test_format.sh
