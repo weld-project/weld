@@ -34,6 +34,6 @@ install:
   - cd ..
 
 script:
-  - cargo fmt -- --write-mode=diff
+  - cargo fmt -- --write-mode=diff 2> /dev/null
   - bash -e build_tools/travis/test_llvm_version.sh 3.8 38.0.1
   - bash -e build_tools/travis/test_llvm_version.sh 4.0 40.0.0
