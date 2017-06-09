@@ -13,9 +13,9 @@ pub struct Pass {
 impl Pass {
     pub fn new(transforms: Vec<fn(&mut Expr<Type>)>, pass_name: &'static str) -> Pass {
         return Pass {
-            transforms: transforms,
-            pass_name: String::from(pass_name),
-        };
+                   transforms: transforms,
+                   pass_name: String::from(pass_name),
+               };
     }
 
     pub fn transform(&self, mut expr: &mut Expr<Type>) -> WeldResult<()> {

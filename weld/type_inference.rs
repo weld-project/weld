@@ -54,7 +54,11 @@ fn infer_up(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> {
     // For Lets and Lambdas, add the identifiers they (re-)define to env
     let mut old_bindings: Vec<(Symbol, Option<PartialType>)> = Vec::new();
     match expr.kind {
-        Let { ref name, ref value, .. } => {
+        Let {
+            ref name,
+            ref value,
+            ..
+        } => {
             old_bindings.push((name.clone(), env.insert(name.clone(), value.ty.clone())));
         }
 
@@ -102,7 +106,11 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
 
         Literal(BoolLiteral(_)) => push_complete_type(&mut expr.ty, Scalar(Bool), "BoolLiteral"),
 
-        BinOp { kind: op, ref mut left, ref mut right } => {
+        BinOp {
+            kind: op,
+            ref mut left,
+            ref mut right,
+        } => {
             let mut elem_type = Unknown;
             try!(push_type(&mut elem_type, &left.ty, "BinOp"));
             try!(push_type(&mut elem_type, &right.ty, "BinOp"));
@@ -132,7 +140,8 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
                 if let Struct(ref mut field_types) = **elem_type {
                     if let Dict(ref key_type, ref value_type) = child_expr.ty {
                         for (field_ty, child_expr_field) in
-                            field_types.iter_mut()
+                            field_types
+                                .iter_mut()
                                 .zip(vec![key_type.clone(), value_type.clone()].iter_mut()) {
                             changed |= try!(push_type(field_ty, child_expr_field, "ToVec"));
                         }
@@ -221,7 +230,10 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             Ok(changed)
         }
 
-        GetField { expr: ref mut param, index } => {
+        GetField {
+            expr: ref mut param,
+            index,
+        } => {
             if let Struct(ref mut elem_types) = param.ty {
                 let index = index as usize;
                 if index >= elem_types.len() {
@@ -244,7 +256,11 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             push_complete_type(&mut expr.ty, Scalar(I64), "Length")
         }
 
-        Slice { ref mut data, ref mut index, ref mut size } => {
+        Slice {
+            ref mut data,
+            ref mut index,
+            ref mut size,
+        } => {
             if let Vector(_) = data.ty {
                 let mut changed = false;
                 changed |= try!(push_complete_type(&mut index.ty, Scalar(I64), "Slice"));
@@ -266,7 +282,10 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             }
         }
 
-        Lookup { ref mut data, ref mut index } => {
+        Lookup {
+            ref mut data,
+            ref mut index,
+        } => {
             if let Vector(ref elem_type) = data.ty {
                 let mut changed = false;
                 changed |= try!(push_complete_type(&mut index.ty, Scalar(I64), "Lookup"));
@@ -284,7 +303,10 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             }
         }
 
-        KeyExists { ref mut data, ref mut key } => {
+        KeyExists {
+            ref mut data,
+            ref mut key,
+        } => {
             if let Dict(ref key_type, _) = data.ty {
                 let mut changed = false;
                 changed |= try!(push_type(&mut key.ty, &key_type, "KeyExists"));
@@ -297,7 +319,10 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             }
         }
 
-        Lambda { ref mut params, ref mut body } => {
+        Lambda {
+            ref mut params,
+            ref mut body,
+        } => {
             let mut changed = false;
 
             let base_type = Function(vec![Unknown; params.len()], Box::new(Unknown));
@@ -315,7 +340,10 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             Ok(changed)
         }
 
-        Merge { ref mut builder, ref mut value } => {
+        Merge {
+            ref mut builder,
+            ref mut value,
+        } => {
             let mut changed = false;
             match builder.ty {
                 Builder(ref mut b, _) => {
@@ -373,7 +401,11 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             Ok(changed)
         }
 
-        For { ref mut iters, ref mut builder, ref mut func } => {
+        For {
+            ref mut iters,
+            ref mut builder,
+            ref mut func,
+        } => {
             let mut changed = false;
             // Push iters and builder type into func
             let mut elem_types = vec![];
@@ -456,7 +488,11 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             Ok(changed)
         }
 
-        If { ref mut cond, ref mut on_true, ref mut on_false } => {
+        If {
+            ref mut cond,
+            ref mut on_true,
+            ref mut on_false,
+        } => {
             let mut changed = false;
             changed |= try!(push_complete_type(&mut cond.ty, Scalar(Bool), "If"));
             changed |= try!(sync_types(&mut expr.ty, &mut on_true.ty, "If"));
@@ -464,7 +500,10 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             Ok(changed)
         }
 
-        Apply { ref mut func, ref mut params } => {
+        Apply {
+            ref mut func,
+            ref mut params,
+        } => {
             let mut changed = false;
 
             let func_type = Function(vec![Unknown; params.len()], Box::new(Unknown));
@@ -784,33 +823,33 @@ fn infer_types_simple() {
     let float_lit = expr_box(Literal(F32Literal(1.0)));
     let bool_lit = expr_box(Literal(BoolLiteral(false)));
     let sum = expr_box(BinOp {
-        kind: Add,
-        left: int_lit.clone(),
-        right: int_lit.clone(),
-    });
+                           kind: Add,
+                           left: int_lit.clone(),
+                           right: int_lit.clone(),
+                       });
     let prod = expr_box(BinOp {
-        kind: Multiply,
-        left: sum.clone(),
-        right: sum.clone(),
-    });
+                            kind: Multiply,
+                            left: sum.clone(),
+                            right: sum.clone(),
+                        });
     let fsum = expr_box(BinOp {
-        kind: Add,
-        left: float_lit.clone(),
-        right: float_lit.clone(),
-    });
+                            kind: Add,
+                            left: float_lit.clone(),
+                            right: float_lit.clone(),
+                        });
     let fprod = expr_box(BinOp {
-        kind: Add,
-        left: float_lit.clone(),
-        right: float_lit.clone(),
-    });
+                             kind: Add,
+                             left: float_lit.clone(),
+                             right: float_lit.clone(),
+                         });
     let f64cast = expr_box(Cast {
-        kind: F64,
-        child_expr: fprod.clone(),
-    });
+                               kind: F64,
+                               child_expr: fprod.clone(),
+                           });
     let boolcast = expr_box(Cast {
-        kind: Bool,
-        child_expr: f64cast.clone(),
-    });
+                                kind: Bool,
+                                child_expr: f64cast.clone(),
+                            });
 
     let mut e = *int_lit.clone();
     assert!(infer_types(&mut e).is_ok());

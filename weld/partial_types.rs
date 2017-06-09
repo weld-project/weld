@@ -40,10 +40,10 @@ pub type PartialParameter = Parameter<PartialType>;
 /// Create a box containing an untyped expression of the given kind.
 pub fn expr_box(kind: ExprKind<PartialType>) -> Box<PartialExpr> {
     Box::new(PartialExpr {
-        ty: PartialType::Unknown,
-        kind: kind,
-        annotations: Annotations::new(),
-    })
+                 ty: PartialType::Unknown,
+                 kind: kind,
+                 annotations: Annotations::new(),
+             })
 }
 
 impl PartialType {
@@ -161,9 +161,9 @@ impl PartialParameter {
     pub fn to_typed(&self) -> WeldResult<TypedParameter> {
         let t = try!(self.ty.to_type());
         Ok(TypedParameter {
-            name: self.name.clone(),
-            ty: t,
-        })
+               name: self.name.clone(),
+               ty: t,
+           })
     }
 }
 
@@ -186,7 +186,11 @@ impl PartialExpr {
             Literal(F64Literal(v)) => Literal(F64Literal(v)),
             Ident(ref name) => Ident(name.clone()),
 
-            CUDF { ref sym_name, ref args, ref return_ty } => {
+            CUDF {
+                ref sym_name,
+                ref args,
+                ref return_ty,
+            } => {
                 let sym_name: String = sym_name.clone();
                 let args: WeldResult<Vec<_>> = args.iter().map(|e| e.to_typed()).collect();
                 let return_ty: Box<Type> = Box::new(try!(return_ty.to_type()));
@@ -197,7 +201,11 @@ impl PartialExpr {
                 }
             }
 
-            BinOp { kind, ref left, ref right } => {
+            BinOp {
+                kind,
+                ref left,
+                ref right,
+            } => {
                 BinOp {
                     kind: kind,
                     left: try!(typed_box(left)),
@@ -205,7 +213,10 @@ impl PartialExpr {
                 }
             }
 
-            Cast { kind, ref child_expr } => {
+            Cast {
+                kind,
+                ref child_expr,
+            } => {
                 Cast {
                     kind: kind,
                     child_expr: try!(typed_box(child_expr)),
@@ -214,7 +225,11 @@ impl PartialExpr {
 
             ToVec { ref child_expr } => ToVec { child_expr: try!(typed_box(child_expr)) },
 
-            Let { ref name, ref value, ref body } => {
+            Let {
+                ref name,
+                ref value,
+                ref body,
+            } => {
                 Let {
                     name: name.clone(),
                     value: try!(typed_box(value)),
@@ -222,7 +237,10 @@ impl PartialExpr {
                 }
             }
 
-            Lambda { ref params, ref body } => {
+            Lambda {
+                ref params,
+                ref body,
+            } => {
                 let params: WeldResult<Vec<_>> = params.iter().map(|p| p.to_typed()).collect();
                 Lambda {
                     params: try!(params),
@@ -253,7 +271,10 @@ impl PartialExpr {
             }
 
             Length { ref data } => Length { data: try!(typed_box(data)) },
-            Lookup { ref data, ref index } => {
+            Lookup {
+                ref data,
+                ref index,
+            } => {
                 Lookup {
                     data: try!(typed_box(data)),
                     index: try!(typed_box(index)),
@@ -266,7 +287,11 @@ impl PartialExpr {
                 }
             }
 
-            Slice { ref data, ref index, ref size } => {
+            Slice {
+                ref data,
+                ref index,
+                ref size,
+            } => {
                 Slice {
                     data: try!(typed_box(data)),
                     index: try!(typed_box(index)),
@@ -276,7 +301,10 @@ impl PartialExpr {
 
             Exp { ref value } => Exp { value: try!(typed_box(value)) },
 
-            Merge { ref builder, ref value } => {
+            Merge {
+                ref builder,
+                ref value,
+            } => {
                 Merge {
                     builder: try!(typed_box(builder)),
                     value: try!(typed_box(value)),
@@ -285,7 +313,11 @@ impl PartialExpr {
 
             Res { ref builder } => Res { builder: try!(typed_box(builder)) },
 
-            For { ref iters, ref builder, ref func } => {
+            For {
+                ref iters,
+                ref builder,
+                ref func,
+            } => {
                 let mut typed_iters = vec![];
                 for iter in iters {
                     let start = match iter.start {
@@ -315,7 +347,11 @@ impl PartialExpr {
                 }
             }
 
-            If { ref cond, ref on_true, ref on_false } => {
+            If {
+                ref cond,
+                ref on_true,
+                ref on_false,
+            } => {
                 If {
                     cond: try!(typed_box(cond)),
                     on_true: try!(typed_box(on_true)),
@@ -323,7 +359,10 @@ impl PartialExpr {
                 }
             }
 
-            Apply { ref func, ref params } => {
+            Apply {
+                ref func,
+                ref params,
+            } => {
                 let params: WeldResult<Vec<_>> = params.iter().map(|p| p.to_typed()).collect();
                 Apply {
                     func: try!(typed_box(func)),
@@ -341,9 +380,9 @@ impl PartialExpr {
         };
 
         Ok(TypedExpr {
-            ty: try!(self.ty.to_type()),
-            kind: new_kind,
-            annotations: Annotations::new(),
-        })
+               ty: try!(self.ty.to_type()),
+               kind: new_kind,
+               annotations: Annotations::new(),
+           })
     }
 }

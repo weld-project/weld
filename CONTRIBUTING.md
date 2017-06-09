@@ -4,4 +4,5 @@ When you contribute code, you affirm that the contribution is your original work
 
 * Please format your code with `cargo fmt` before sending a pull request! Travis CI will fail
   without this. See [this](https://github.com/rust-lang-nursery/rustfmt) for instructions on how to
-  auto-format rust code. 
+  auto-format rust code. In particular, make sure you have the *latest* version of `rustfmt`
+  installed on your machine!
