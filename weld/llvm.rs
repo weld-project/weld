@@ -34,6 +34,7 @@ static VECTOR_CODE: &'static str = include_str!("resources/vector.ll");
 static MERGER_CODE: &'static str = include_str!("resources/merger.ll");
 static DICTIONARY_CODE: &'static str = include_str!("resources/dictionary.ll");
 static DICTMERGER_CODE: &'static str = include_str!("resources/dictmerger.ll");
+static DICTMERGER_GLOBAL_CODE: &'static str = include_str!("resources/dictmerger_global.ll");
 static GROUPMERGER_CODE: &'static str = include_str!("resources/groupbuilder.ll");
 
 /// Generates LLVM code for one or more modules.
@@ -949,8 +950,7 @@ impl LlvmGenerator {
                 Ok(self.dict_names.get(&elem).unwrap())
             }
 
-            Builder(ref bk, _) => {
-                // TODO(Deepak): Do something with annotations here...
+            Builder(ref bk, ref annotations) => {
                 if self.bld_names.get(bk) == None {
                     match *bk {
                         Appender(ref t) => {
@@ -987,7 +987,22 @@ impl LlvmGenerator {
                             let kv_vec = Box::new(Vector(elem.clone()));
                             let kv_vec_ty = try!(self.llvm_type(&kv_vec)).to_string();
                             let kv_vec_prefix = format!("@{}", &kv_vec_ty.replace("%", ""));
-                            let name_replaced = DICTMERGER_CODE
+
+                            let mut builder_impl = BuilderImplementationKind::Local;
+                            if let Some(ref e) = *annotations.builder_implementation() {
+                                builder_impl = e.clone();
+                            }
+
+                            let mut dict_template = "";
+                            if builder_impl == BuilderImplementationKind::Local {
+                                dict_template = DICTMERGER_CODE;
+                            } else if builder_impl == BuilderImplementationKind::Global {
+                                dict_template = DICTMERGER_GLOBAL_CODE;
+                            } else {
+                                return weld_err!("Illegal implementation choice");
+                            }
+
+                            let name_replaced = dict_template
                                 .replace("$NAME", &bld_ty_str.replace("%", ""));
                             let key_ty_replaced = name_replaced.replace("$KEY", &key_ty);
                             let value_ty_replaced = key_ty_replaced.replace("$VALUE", &value_ty);
