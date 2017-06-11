@@ -2,12 +2,10 @@ language: rust
 sudo: required
 dist: trusty
 
-python:
-  - 2.7
-
 addons:
   apt:
     sources:
+      - deadsnakes
       - sourceline: 'deb http://llvm.org/apt/trusty/ llvm-toolchain-trusty-3.8 main'
         key_url: 'http://llvm.org/apt/llvm-snapshot.gpg.key'
       - llvm-toolchain-trusty-4.0
@@ -21,19 +19,18 @@ addons:
       - llvm-4.0-dev
       - clang-4.0
       - lib32z1-dev
+      - python2.7
+      - python3.6
 
 install:
   - sudo rm -f `which llvm-config`
   - export WELD_HOME=`pwd`
   - (cargo install rustfmt || true)
   - PATH=$PATH:/home/travis/.cargo/bin
-  - cd python
-  - pip install --upgrade pip setuptools wheel
-  - pip install --only-binary=numpy,pandas -r requirements.txt
-  - python setup.py install
-  - cd ..
+  - pip install virtualenv==15.1.0
+  - bash -e build_tools/travis/init_virtualenvs.sh 2.7 3.6
 
 script:
   - bash -e build_tools/travis/test_format.sh
-  - bash -e build_tools/travis/test_llvm_version.sh 3.8 38.0.1
-  - bash -e build_tools/travis/test_llvm_version.sh 4.0 40.0.0
+  - bash -e -x build_tools/travis/test_multi_version.sh 3.8 38.0.1 2.7
+  - bash -e -x build_tools/travis/test_multi_version.sh 4.0 40.0.0 2.7
