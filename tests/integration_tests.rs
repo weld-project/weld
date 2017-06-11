@@ -846,7 +846,8 @@ fn parallel_for_vecmerger_loop() {
     unsafe { weld_value_free(ret_value) };
 }
 
-fn simple_for_dictmerger_loop() {
+fn simple_for_dictmerger_loop_helper(code: &str, input_keys: &[i32; 5], input_vals: &[i32; 5],
+                                     output_keys: &[i32], output_vals: &[i32]) {
     #[derive(Clone)]
     #[allow(dead_code)]
     struct Pair {
@@ -860,28 +861,21 @@ fn simple_for_dictmerger_loop() {
         y: WeldVec<i32>,
     }
 
-    let code = "|x:vec[i32], y:vec[i32]| tovec(result(for(zip(x,y), dictmerger[i32,i32,+], \
-                |b,i,e| merge(b, e))))";
     let conf = default_conf();
-    let keys = [1, 2, 2, 1, 3];
-    let vals = [2, 3, 4, 2, 1];
     let ref input_data = Args {
         x: WeldVec {
-            data: &keys as *const i32,
-            len: keys.len() as i64,
+            data: input_keys as *const i32,
+            len: input_keys.len() as i64,
         },
         y: WeldVec {
-            data: &vals as *const i32,
-            len: vals.len() as i64,
+            data: input_vals as *const i32,
+            len: input_vals.len() as i64,
         },
     };
 
     let ret_value = compile_and_run(code, conf, input_data);
     let data = unsafe { weld_value_data(ret_value) as *const WeldVec<Pair> };
     let result = unsafe { (*data).clone() };
-
-    let output_keys = [1, 2, 3];
-    let output_vals = [4, 7, 1];
 
     assert_eq!(result.len, output_keys.len() as i64);
     for i in 0..(output_keys.len() as isize) {
@@ -900,58 +894,24 @@ fn simple_for_dictmerger_loop() {
     unsafe { weld_value_free(ret_value) };
 }
 
+fn simple_for_dictmerger_loop() {
+    let code = "|x:vec[i32], y:vec[i32]| tovec(result(for(zip(x,y), dictmerger[i32,i32,+], \
+                |b,i,e| merge(b, e))))";
+    let input_keys: [i32; 5] = [1, 2, 2, 1, 3];
+    let input_vals: [i32; 5] = [2, 3, 4, 2, 1];
+    let output_keys: [i32; 3] = [1, 2, 3];
+    let output_vals: [i32; 3] = [4, 7, 1];
+    simple_for_dictmerger_loop_helper(code, &input_keys, &input_vals, &output_keys, &output_vals);
+}
+
 fn simple_for_global_dictmerger_loop() {
-    #[derive(Clone)]
-    #[allow(dead_code)]
-    struct Pair {
-        ele1: i32,
-        ele2: i32,
-    }
-
-    #[allow(dead_code)]
-    struct Args {
-        x: WeldVec<i32>,
-        y: WeldVec<i32>,
-    }
-
     let code = "|x:vec[i32], y:vec[i32]| tovec(result(for(zip(x,y), @(impl:global) dictmerger[i32,i32,+], \
                 |b,i,e| merge(b, e))))";
-    let conf = default_conf();
-    let keys = [1, 2, 2, 1, 3];
-    let vals = [2, 3, 4, 2, 1];
-    let ref input_data = Args {
-        x: WeldVec {
-            data: &keys as *const i32,
-            len: keys.len() as i64,
-        },
-        y: WeldVec {
-            data: &vals as *const i32,
-            len: vals.len() as i64,
-        },
-    };
-
-    let ret_value = compile_and_run(code, conf, input_data);
-    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<Pair> };
-    let result = unsafe { (*data).clone() };
-
-    let output_keys = [1, 2, 3];
-    let output_vals = [4, 7, 1];
-
-    assert_eq!(result.len, output_keys.len() as i64);
-    for i in 0..(output_keys.len() as isize) {
-        let mut success = false;
-        let key = unsafe { (*result.data.offset(i)).ele1 };
-        let value = unsafe { (*result.data.offset(i)).ele2 };
-        for j in 0..(output_keys.len()) {
-            if output_keys[j] == key {
-                if output_vals[j] == value {
-                    success = true;
-                }
-            }
-        }
-        assert_eq!(success, true);
-    }
-    unsafe { weld_value_free(ret_value) };
+    let input_keys: [i32; 5] = [1, 2, 2, 1, 3];
+    let input_vals: [i32; 5] = [2, 3, 4, 2, 1];
+    let output_keys: [i32; 3] = [1, 2, 3];
+    let output_vals: [i32; 3] = [4, 7, 1];
+    simple_for_dictmerger_loop_helper(code, &input_keys, &input_vals, &output_keys, &output_vals);
 }
 
 fn simple_groupmerger() {
