@@ -9,15 +9,16 @@
 ; - KV_VEC_PREFIX: prefix for helper functions of KV_VEC
 ; - OP: binary commutative merge operation (example: add or fadd)
 
-%$NAME.bld = type i8* ; the dictmerger is a pointer to the corresponding dictionary
+%$NAME.bld = type %$NAME* ; the dictmerger is a pointer to the corresponding dictionary
 
 ; Initialize and return a new dictionary with the given initial capacity.
 ; The capacity must be a power of 2.
 define %$NAME.bld @$NAME.bld.new(i64 %capacity) {
   %structSizePtr = getelementptr %$NAME, %$NAME* null, i32 1
   %structSize = ptrtoint %$NAME* %structSizePtr to i64
-  %bldPtr = call i8* @new_merger(i64 %structSize, i32 1)
+  %rawPtr = call i8* @new_merger(i64 %structSize, i32 1)
   %newDict = call %$NAME @$NAME.new(i64 %capacity)
+  %bldPtr = bitcast i8* %rawPtr to %$NAME*
   store %$NAME %newDict, %$NAME* %bldPtr, align 1
   ret %$NAME.bld %bldPtr
 }
