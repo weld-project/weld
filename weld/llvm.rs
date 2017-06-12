@@ -1397,11 +1397,62 @@ impl LlvmGenerator {
                         }
                     }
 
+                    Erf { ref output, ref child } => {
+                        let child_ty = try!(get_sym_ty(func, child));
+                        if let Scalar(ref ty) = *child_ty {
+                            let child_ll_ty = try!(self.llvm_type(&child_ty)).to_string();
+                            let child_tmp = try!(self.load_var(llvm_symbol(child).as_str(),
+                                                               &child_ll_ty, ctx));
+                            let res_tmp = ctx.var_ids.next();
+                            ctx.code.add(format!("{} = call {} @llvm.erf.{}({} {})",
+                                                 res_tmp,
+                                                 child_ll_ty,
+                                                 ty,
+                                                 child_ll_ty,
+                                                 child_tmp));
+                            let out_ty = try!(get_sym_ty(func, output));
+                            let out_ty_str = try!(self.llvm_type(&out_ty)).to_string();
+                            ctx.code.add(format!("store {} {}, {}* {}",
+                                                 out_ty_str,
+                                                 res_tmp,
+                                                 out_ty_str,
+                                                 llvm_symbol(output)));
+                        } else {
+                            weld_err!("Illegal type {} in Erf", print_type(child_ty))?;
+                        }
+                    }
+
+                    Sqrt { ref output, ref child } => {
+                        let child_ty = try!(get_sym_ty(func, child));
+                        if let Scalar(ref ty) = *child_ty {
+                            let child_ll_ty = try!(self.llvm_type(&child_ty)).to_string();
+                            let child_tmp = try!(self.load_var(llvm_symbol(child).as_str(),
+                                                               &child_ll_ty, ctx));
+                            let res_tmp = ctx.var_ids.next();
+                            ctx.code.add(format!("{} = call {} @llvm.sqrt.{}({} {})",
+                                                 res_tmp,
+                                                 child_ll_ty,
+                                                 ty,
+                                                 child_ll_ty,
+                                                 child_tmp));
+                            let out_ty = try!(get_sym_ty(func, output));
+                            let out_ty_str = try!(self.llvm_type(&out_ty)).to_string();
+                            ctx.code.add(format!("store {} {}, {}* {}",
+                                                 out_ty_str,
+                                                 res_tmp,
+                                                 out_ty_str,
+                                                 llvm_symbol(output)));
+                        } else {
+                            weld_err!("Illegal type {} in Sqrt", print_type(child_ty))?;
+                        }
+                    }
+
                     ToVec { ref output, ref child } => {
                         let old_ty = try!(get_sym_ty(func, child));
                         let new_ty = try!(get_sym_ty(func, output));
                         let old_ll_ty = try!(self.llvm_type(&old_ty)).to_string();
                         let new_ll_ty = try!(self.llvm_type(&new_ty)).to_string();
+
                         let dict_prefix = format!("@{}", old_ll_ty.replace("%", ""));
                         let child_tmp = try!(self.load_var(llvm_symbol(child).as_str(),
                             &old_ll_ty, ctx));

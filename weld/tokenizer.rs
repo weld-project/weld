@@ -43,6 +43,9 @@ pub enum Token {
     TKeyExists,
     TSlice,
     TExp,
+    TLog,
+    TErf,
+    TSqrt,
     TCUDF,
     TAppender,
     TMerger,
@@ -78,7 +81,6 @@ pub enum Token {
     TBitwiseAnd,
     TXor,
     TEndOfInput,
-    TLog,
 }
 
 /// Break up a string into tokens.
@@ -92,8 +94,8 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
 
         // Regular expressions for various types of tokens.
         static ref KEYWORD_RE: Regex = Regex::new(
-            "if|for|zip|len|lookup|keyexists|slice|exp|cudf|iter|merge|result|let|true|false|macro|\
-             i8|i32|i64|f32|f64|bool|vec|appender|merger|vecmerger|dictmerger|tovec|log").unwrap();
+            "if|for|zip|len|lookup|keyexists|slice|exp|log|erf|sqrt|cudf|iter|merge|result|let|true|false|macro|\
+             i8|i32|i64|f32|f64|bool|vec|appender|merger|vecmerger|dictmerger|tovec").unwrap();
 
         static ref IDENT_RE: Regex = Regex::new(r"^[A-Za-z$_][A-Za-z0-9$_]*$").unwrap();
 
@@ -149,8 +151,10 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
                 "keyexists" => TKeyExists,
                 "slice" => TSlice,
                 "exp" => TExp,
-                "cudf" => TCUDF,
                 "log" => TLog,
+                "erf" => TErf,
+                "sqrt" => TSqrt,
+                "cudf" => TCUDF,
                 "true" => TBoolLiteral(true),
                 "false" => TBoolLiteral(false),
                 _ => return weld_err!("Invalid input token: {}", text),
@@ -276,6 +280,8 @@ impl fmt::Display for Token {
                            TSlice => "slice",
                            TExp => "exp",
                            TLog => "log",
+                           TErf => "erf",
+                           TSqrt => "sqrt",
                            TCUDF => "cudf",
                            TOpenParen => "(",
                            TCloseParen => ")",
@@ -396,6 +402,28 @@ fn basic_tokenize() {
                     TI8,
                     TBar,
                     TLog,
+                    TOpenParen,
+                    TIdent("a".into()),
+                    TCloseParen,
+                    TEndOfInput]);
+    assert_eq!(tokenize("|a:i8| erf(a)").unwrap(),
+               vec![TBar,
+                    TIdent("a".into()),
+                    TColon,
+                    TI8,
+                    TBar,
+                    TErf,
+                    TOpenParen,
+                    TIdent("a".into()),
+                    TCloseParen,
+                    TEndOfInput]);
+    assert_eq!(tokenize("|a:i8| sqrt(a)").unwrap(),
+               vec![TBar,
+                    TIdent("a".into()),
+                    TColon,
+                    TI8,
+                    TBar,
+                    TSqrt,
                     TOpenParen,
                     TIdent("a".into()),
                     TCloseParen,

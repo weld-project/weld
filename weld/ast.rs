@@ -143,6 +143,8 @@ pub enum ExprKind<T: TypeBounds> {
     },
     Exp { value: Box<Expr<T>> },
     Log { value: Box<Expr<T>> },
+    Erf { value: Box<Expr<T>> },
+    Sqrt { value: Box<Expr<T>> },
     Let {
         name: Symbol,
         value: Box<Expr<T>>,
@@ -280,6 +282,8 @@ impl<T: TypeBounds> Expr<T> {
                 }
                 Exp { ref value } => vec![value.as_ref()],
                 Log { ref value } => vec![value.as_ref()],
+                Erf { ref value } => vec![value.as_ref()],
+                Sqrt { ref value } => vec![value.as_ref()],
                 Merge { ref builder, ref value } => vec![builder.as_ref(), value.as_ref()],
                 Res { ref builder } => vec![builder.as_ref()],
                 For { ref iters, ref builder, ref func } => {
@@ -344,6 +348,8 @@ impl<T: TypeBounds> Expr<T> {
                 }
                 Exp { ref mut value } => vec![value.as_mut()],
                 Log { ref mut value } => vec![value.as_mut()],
+                Erf { ref mut value } => vec![value.as_mut()],
+                Sqrt { ref mut value } => vec![value.as_mut()],
                 Merge { ref mut builder, ref mut value } => vec![builder.as_mut(), value.as_mut()],
                 Res { ref mut builder } => vec![builder.as_mut()],
                 For { ref mut iters, ref mut builder, ref mut func } => {
@@ -445,6 +451,8 @@ impl<T: TypeBounds> Expr<T> {
                 (&Slice { .. }, &Slice { .. }) => Ok(true),
                 (&Exp { .. }, &Exp { .. }) => Ok(true),
                 (&Log { .. }, &Log { .. }) => Ok(true),
+                (&Erf { .. }, &Erf { .. }) => Ok(true),
+                (&Sqrt { .. }, &Sqrt { .. }) => Ok(true),
                 (&Merge { .. }, &Merge { .. }) => Ok(true),
                 (&Res { .. }, &Res { .. }) => Ok(true),
                 (&For { .. }, &For { .. }) => Ok(true),

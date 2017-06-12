@@ -718,6 +718,20 @@ impl<'t> Parser<'t> {
                 Ok(expr_box(Log { value: value }))
             }
 
+            TErf => {
+                try!(self.consume(TOpenParen));
+                let value = try!(self.expr());
+                try!(self.consume(TCloseParen));
+                Ok(expr_box(Erf { value: value }))
+            }
+
+            TSqrt => {
+                try!(self.consume(TOpenParen));
+                let value = try!(self.expr());
+                try!(self.consume(TCloseParen));
+                Ok(expr_box(Sqrt { value: value }))
+            }
+
             TMerge => {
                 try!(self.consume(TOpenParen));
                 let builder = try!(self.expr());

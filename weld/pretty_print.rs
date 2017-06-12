@@ -283,7 +283,17 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>,
         }
 
         Log { ref value } => {
-            format!("exp({})",
+            format!("log({})",
+                    print_expr_impl(value, typed, indent, should_indent))
+        }
+
+        Erf { ref value } => {
+            format!("erf({})",
+                    print_expr_impl(value, typed, indent, should_indent))
+        }
+
+        Sqrt { ref value } => {
+            format!("sqrt({})",
                     print_expr_impl(value, typed, indent, should_indent))
         }
 

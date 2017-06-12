@@ -996,6 +996,33 @@ fn exp_error() {
     unsafe { weld_error_free(err_value) };
 }
 
+fn simple_erf() {
+    let code = "|x:f64| erf(x)";
+    let conf = default_conf();
+    let input = 2.718281828459045;
+    let ret_value = compile_and_run(code, conf, &input);
+    let data = unsafe { weld_value_data(ret_value) as *const f64 };
+
+    // fixme: test with a real value
+    let result = unsafe { (*data).clone() };
+    let output = 1.0f64;
+    //assert_eq!(output, result);
+    unsafe { weld_value_free(ret_value) };
+}
+
+fn simple_sqrt() {
+    let code = "|x:f64| sqrt(x)";
+    let conf = default_conf();
+    let input = 4.0;
+    let ret_value = compile_and_run(code, conf, &input);
+    let data = unsafe { weld_value_data(ret_value) as *const f64 };
+
+    let result = unsafe { (*data).clone() };
+    let output = 2.0f64;
+    assert_eq!(output, result);
+    unsafe { weld_value_free(ret_value) };
+}
+
 fn map_exp() {
     let code = "|x:vec[f32]| map(x, |a| exp(a))";
     let conf = default_conf();
@@ -1200,8 +1227,12 @@ fn main() {
              ("le_between_vectors", le_between_vectors),
              ("simple_vector_lookup", simple_vector_lookup),
              ("simple_vector_slice", simple_vector_slice),
+             ("simple_log", simple_log),
+             ("log_error", log_error),
              ("simple_exp", simple_exp),
              ("exp_error", exp_error),
+             ("simple_erf", simple_erf),
+             ("simple_sqrt", simple_sqrt),
              ("map_exp", map_exp),
              ("simple_for_appender_loop", simple_for_appender_loop),
              ("simple_parallel_for_appender_loop", simple_parallel_for_appender_loop),
@@ -1222,8 +1253,7 @@ fn main() {
              ("iters_for_loop", iters_for_loop),
              ("serial_parlib_test", serial_parlib_test),
              ("iters_outofbounds_error_test", iters_outofbounds_error_test),
-             ("outofmemory_error_test", outofmemory_error_test),
-             ("simple_log", simple_log)];
+             ("outofmemory_error_test", outofmemory_error_test)];
 
 
     println!("");

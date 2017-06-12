@@ -259,8 +259,9 @@ impl PartialExpr {
             }
 
             Exp { ref value } => Exp { value: try!(typed_box(value)) },
-
             Log { ref value } => Log { value: try!(typed_box(value)) },
+            Erf { ref value } => Erf { value: try!(typed_box(value)) },
+            Sqrt { ref value } => Sqrt { value: try!(typed_box(value)) },
 
             Merge { ref builder, ref value } => {
                 Merge {

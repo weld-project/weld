@@ -9,6 +9,12 @@ declare double @llvm.exp.f64(double)
 declare float @llvm.log.f32(float)
 declare double @llvm.log.f64(double)
 
+declare float @llvm.erf.f32(float)
+declare double @llvm.erf.f64(double)
+
+declare float @llvm.sqrt.f32(float)
+declare double @llvm.sqrt.f64(double)
+
 declare i64 @llvm.ctlz.i64(i64, i1)
 
 ; std library functions

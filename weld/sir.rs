@@ -45,6 +45,8 @@ pub enum Statement {
     },
     Exp { output: Symbol, child: Symbol },
     Log { output: Symbol, child: Symbol },
+    Erf { output: Symbol, child: Symbol },
+    Sqrt { output: Symbol, child: Symbol },
     CUDF {
         output: Symbol,
         symbol_name: String,
@@ -220,6 +222,8 @@ impl fmt::Display for Statement {
             }
             Exp { ref output, ref child } => write!(f, "{} = exp({})", output, child),
             Log { ref output, ref child } => write!(f, "{} = log({})", output, child),
+            Erf { ref output, ref child } => write!(f, "{} = erf({})", output, child),
+            Sqrt { ref output, ref child } => write!(f, "{} = sqrt({})", output, child),
             ToVec { ref output, ref child } => write!(f, "{} = toVec({})", output, child),
             Length { ref output, ref child, .. } => write!(f, "{} = len({})", output, child),
             Assign { ref output, ref value } => write!(f, "{} = {}", output, value),
@@ -398,6 +402,12 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
                     vars.push(child.clone());
                 }
                 Log { ref child, .. } => {
+                    vars.push(child.clone());
+                }
+                Erf { ref child, .. } => {
+                    vars.push(child.clone());
+                }
+                Sqrt { ref child, .. } => {
                     vars.push(child.clone());
                 }
                 ToVec { ref child, .. } => {
@@ -646,6 +656,26 @@ fn gen_expr(expr: &TypedExpr,
             let (cur_func, cur_block, value_sym) = gen_expr(value, prog, cur_func, cur_block)?;
             let res_sym = prog.add_local(&expr.ty, cur_func);
             prog.funcs[cur_func].blocks[cur_block].add_statement(Log {
+                output: res_sym.clone(),
+                child: value_sym,
+            });
+            Ok((cur_func, cur_block, res_sym))
+        }
+
+        ExprKind::Erf { ref value } => {
+            let (cur_func, cur_block, value_sym) = gen_expr(value, prog, cur_func, cur_block)?;
+            let res_sym = prog.add_local(&expr.ty, cur_func);
+            prog.funcs[cur_func].blocks[cur_block].add_statement(Erf {
+                output: res_sym.clone(),
+                child: value_sym,
+            });
+            Ok((cur_func, cur_block, res_sym))
+        }
+
+        ExprKind::Sqrt { ref value } => {
+            let (cur_func, cur_block, value_sym) = gen_expr(value, prog, cur_func, cur_block)?;
+            let res_sym = prog.add_local(&expr.ty, cur_func);
+            prog.funcs[cur_func].blocks[cur_block].add_statement(Sqrt {
                 output: res_sym.clone(),
                 child: value_sym,
             });
