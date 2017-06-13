@@ -84,23 +84,9 @@ fn infer_up(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> {
     Ok(changed)
 }
 
-//fn infer_common(expr: &mut PartialExpr, Box<Result>, name: &str)   {
-//fn infer_common(expr: &mut PartialExpr, name: &str) -> WeldResult<bool>  {
-    //push_complete_type(&mut expr.ty, Scalar(F32), "Log")
-    //expr.kind { ref mut value } => {
-        //match value.ty {
-            //Scalar(F32) => push_complete_type(&mut expr.ty, Scalar(F32), "Exp"),
-            //Scalar(F64) => push_complete_type(&mut expr.ty, Scalar(F64), "Exp"),
-            //Unknown => push_type(&mut expr.ty, &value.ty, "Exp"),
-            //_ => return weld_err!("Internal error: Exp called on non-scalar or non-float"),
-        //}
-    //}
-//}
-
-
 /// Infer the type of expr or its children locally based on what is known about some of them.
 /// Return true if any new expression's type was inferred, or an error if types are inconsistent.
-fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> {
+fn infer_locally(mut expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> {
     match expr.kind {
         Literal(I32Literal(_)) => push_complete_type(&mut expr.ty, Scalar(I32), "I32Literal"),
 
@@ -270,6 +256,7 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
         }
 
         Exp { ref mut value } => {
+            //return _unary_op(&mut expr, "Exp");
             match value.ty {
                 Scalar(F32) => push_complete_type(&mut expr.ty, Scalar(F32), "Exp"),
                 Scalar(F64) => push_complete_type(&mut expr.ty, Scalar(F64), "Exp"),

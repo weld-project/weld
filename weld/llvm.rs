@@ -35,6 +35,10 @@ static MERGER_CODE: &'static str = include_str!("resources/merger.ll");
 static DICTIONARY_CODE: &'static str = include_str!("resources/dictionary.ll");
 static DICTMERGER_CODE: &'static str = include_str!("resources/dictmerger.ll");
 
+//fn test(ctx: &mut FunctionContext) {
+
+//}
+
 /// Generates LLVM code for one or more modules.
 pub struct LlvmGenerator {
     /// Track a unique name of the form %s0, %s1, etc for each struct generated.
@@ -1404,10 +1408,9 @@ impl LlvmGenerator {
                             let child_tmp = try!(self.load_var(llvm_symbol(child).as_str(),
                                                                &child_ll_ty, ctx));
                             let res_tmp = ctx.var_ids.next();
-                            ctx.code.add(format!("{} = call {} @llvm.erf.{}({} {})",
+                            ctx.code.add(format!("{} = call {} @erf({} {})",
                                                  res_tmp,
                                                  child_ll_ty,
-                                                 ty,
                                                  child_ll_ty,
                                                  child_tmp));
                             let out_ty = try!(get_sym_ty(func, output));

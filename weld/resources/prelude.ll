@@ -9,8 +9,8 @@ declare double @llvm.exp.f64(double)
 declare float @llvm.log.f32(float)
 declare double @llvm.log.f64(double)
 
-declare float @llvm.erf.f32(float)
-declare double @llvm.erf.f64(double)
+declare float @erff(float)
+declare double @erf(double)
 
 declare float @llvm.sqrt.f32(float)
 declare double @llvm.sqrt.f64(double)
