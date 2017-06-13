@@ -48,9 +48,7 @@ unsafe fn compile_program(code: &str) -> Result<*mut WeldModule, ()> {
     let conf = benchmark_conf();
 
     let err = weld_error_new();
-    let module = weld_module_compile(code.into_raw() as *const c_char,
-                                     conf,
-                                     err);
+    let module = weld_module_compile(code.into_raw() as *const c_char, conf, err);
 
     if weld_error_code(err) != WeldRuntimeErrno::Success {
         weld_conf_free(conf);
@@ -132,12 +130,10 @@ fn bench_vector_sum(bench: &mut Bencher) {
     }
     unsafe { weld_value_free(ret_value) };
 
-    bench.iter(|| {
-        match unsafe { run_module(module, args) } {
-            Ok(v) => unsafe { weld_value_free(v) },
-            Err(e) => unsafe { weld_error_free(e) },
-        }
-    });
+    bench.iter(|| match unsafe { run_module(module, args) } {
+                   Ok(v) => unsafe { weld_value_free(v) },
+                   Err(e) => unsafe { weld_error_free(e) },
+               });
 
     unsafe { weld_module_free(module) };
 }
@@ -167,12 +163,10 @@ fn bench_map_reduce(bench: &mut Bencher) {
     assert_eq!(result, expect);
     unsafe { weld_value_free(ret_value) };
 
-    bench.iter(|| {
-        match unsafe { run_module(module, args) } {
-            Ok(v) => unsafe { weld_value_free(v) },
-            Err(e) => unsafe { weld_error_free(e) },
-        }
-    });
+    bench.iter(|| match unsafe { run_module(module, args) } {
+                   Ok(v) => unsafe { weld_value_free(v) },
+                   Err(e) => unsafe { weld_error_free(e) },
+               });
 }
 
 fn bench_tpch_q1(bench: &mut Bencher) {
@@ -259,12 +253,10 @@ fn bench_tpch_q1(bench: &mut Bencher) {
     //
 
 
-    bench.iter(|| {
-        match unsafe { run_module(module, args) } {
-            Ok(v) => unsafe { weld_value_free(v) },
-            Err(e) => unsafe { weld_error_free(e) },
-        }
-    });
+    bench.iter(|| match unsafe { run_module(module, args) } {
+                   Ok(v) => unsafe { weld_value_free(v) },
+                   Err(e) => unsafe { weld_error_free(e) },
+               });
 }
 
 fn bench_tpch_q6(bench: &mut Bencher) {
@@ -323,12 +315,10 @@ fn bench_tpch_q6(bench: &mut Bencher) {
     //
 
 
-    bench.iter(|| {
-        match unsafe { run_module(module, args) } {
-            Ok(v) => unsafe { weld_value_free(v) },
-            Err(e) => unsafe { weld_error_free(e) },
-        }
-    });
+    bench.iter(|| match unsafe { run_module(module, args) } {
+                   Ok(v) => unsafe { weld_value_free(v) },
+                   Err(e) => unsafe { weld_error_free(e) },
+               });
 }
 
 // Drives the benchmarking.
@@ -340,7 +330,14 @@ fn format_ns(x: f64) -> String {
 
 fn run_benchmark<W: std::io::Write>(writer: &mut csv::Writer<W>,
                                     bench: &(&str, fn(&mut bencher::Bencher))) {
-    let Summary { min, max, mean, median, std_dev, .. } = benchmark(bench.1).ns_iter_summ;
+    let Summary {
+        min,
+        max,
+        mean,
+        median,
+        std_dev,
+        ..
+    } = benchmark(bench.1).ns_iter_summ;
     let record = (bench.0,
                   "weld",
                   format_ns(mean),
@@ -362,14 +359,13 @@ fn main() {
 
     let ref mut wtr = csv::Writer::from_file("bench.csv").unwrap();
     // Encode the CSV header.
-    let result =
-        wtr.encode(("name",
-                    "config",
-                    "mean(ms)",
-                    "min(ms)",
-                    "max(ms)",
-                    "median(ms)",
-                    "std_dev(ms)"));
+    let result = wtr.encode(("name",
+                             "config",
+                             "mean(ms)",
+                             "min(ms)",
+                             "max(ms)",
+                             "median(ms)",
+                             "std_dev(ms)"));
     assert!(result.is_ok());
 
     println!("");

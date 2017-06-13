@@ -5,9 +5,11 @@
 
 use std::vec::Vec;
 
+use super::ast::Annotations;
 use super::ast::Symbol;
 use super::ast::Iter;
 use super::ast::BinOpKind::*;
+use super::ast::BuilderImplementationKind::*;
 use super::ast::ExprKind::*;
 use super::ast::LiteralKind::*;
 use super::ast::ScalarKind;
@@ -112,9 +114,9 @@ impl<'t> Parser<'t> {
         let macros = try!(self.macros());
         let body = try!(self.expr());
         Ok(Program {
-            macros: macros,
-            body: *body,
-        })
+               macros: macros,
+               body: *body,
+           })
     }
 
     /// Parse a list of macros starting at the current position.
@@ -145,10 +147,10 @@ impl<'t> Parser<'t> {
         let body = try!(self.expr());
         try!(self.consume(TSemicolon));
         Ok(Macro {
-            name: name,
-            parameters: params,
-            body: *body,
-        })
+               name: name,
+               parameters: params,
+               body: *body,
+           })
     }
 
     /// Parse an expression starting at the current position.
@@ -172,10 +174,10 @@ impl<'t> Parser<'t> {
         try!(self.consume(TSemicolon));
         let body = try!(self.expr());
         let mut expr = expr_box(Let {
-            name: name,
-            value: value,
-            body: body,
-        });
+                                    name: name,
+                                    value: value,
+                                    body: body,
+                                });
         expr.ty = ty;
         Ok(expr)
     }
@@ -189,10 +191,7 @@ impl<'t> Parser<'t> {
             while *self.peek() != TBar {
                 let name = try!(self.symbol());
                 let ty = try!(self.optional_type());
-                params.push(PartialParameter {
-                    name: name,
-                    ty: ty,
-                });
+                params.push(PartialParameter { name: name, ty: ty });
                 if *self.peek() == TComma {
                     self.next();
                 } else if *self.peek() != TBar {
@@ -205,9 +204,9 @@ impl<'t> Parser<'t> {
         }
         let body = try!(self.expr());
         Ok(expr_box(Lambda {
-            params: params,
-            body: body,
-        }))
+                        params: params,
+                        body: body,
+                    }))
     }
 
     /// Parse an expression involving operators (||, &&, +, -, etc down the precedence chain)
@@ -222,10 +221,10 @@ impl<'t> Parser<'t> {
             self.consume(TLogicalOr)?;
             let right = try!(self.logical_and_expr());
             res = expr_box(BinOp {
-                kind: LogicalOr,
-                left: res,
-                right: right,
-            })
+                               kind: LogicalOr,
+                               left: res,
+                               right: right,
+                           })
         }
         Ok(res)
     }
@@ -237,10 +236,10 @@ impl<'t> Parser<'t> {
             self.consume(TLogicalAnd)?;
             let right = try!(self.bitwise_or_expr());
             res = expr_box(BinOp {
-                kind: LogicalAnd,
-                left: res,
-                right: right,
-            })
+                               kind: LogicalAnd,
+                               left: res,
+                               right: right,
+                           })
         }
         Ok(res)
     }
@@ -252,10 +251,10 @@ impl<'t> Parser<'t> {
             self.consume(TBar)?;
             let right = try!(self.xor_expr());
             res = expr_box(BinOp {
-                kind: BitwiseOr,
-                left: res,
-                right: right,
-            })
+                               kind: BitwiseOr,
+                               left: res,
+                               right: right,
+                           })
         }
         Ok(res)
     }
@@ -267,10 +266,10 @@ impl<'t> Parser<'t> {
             self.consume(TXor)?;
             let right = try!(self.bitwise_and_expr());
             res = expr_box(BinOp {
-                kind: Xor,
-                left: res,
-                right: right,
-            })
+                               kind: Xor,
+                               left: res,
+                               right: right,
+                           })
         }
         Ok(res)
     }
@@ -282,10 +281,10 @@ impl<'t> Parser<'t> {
             self.consume(TBitwiseAnd)?;
             let right = try!(self.equality_expr());
             res = expr_box(BinOp {
-                kind: BitwiseAnd,
-                left: res,
-                right: right,
-            })
+                               kind: BitwiseAnd,
+                               left: res,
+                               right: right,
+                           })
         }
         Ok(res)
     }
@@ -299,16 +298,16 @@ impl<'t> Parser<'t> {
             let right = try!(self.comparison_expr());
             if *token == TEqualEqual {
                 res = expr_box(BinOp {
-                    kind: Equal,
-                    left: res,
-                    right: right,
-                })
+                                   kind: Equal,
+                                   left: res,
+                                   right: right,
+                               })
             } else {
                 res = expr_box(BinOp {
-                    kind: NotEqual,
-                    left: res,
-                    right: right,
-                })
+                                   kind: NotEqual,
+                                   left: res,
+                                   right: right,
+                               })
             }
         }
         Ok(res)
@@ -328,10 +327,10 @@ impl<'t> Parser<'t> {
             };
             let right = try!(self.sum_expr());
             res = expr_box(BinOp {
-                kind: op,
-                left: res,
-                right: right,
-            })
+                               kind: op,
+                               left: res,
+                               right: right,
+                           })
         }
         Ok(res)
     }
@@ -344,16 +343,16 @@ impl<'t> Parser<'t> {
             let right = try!(self.product_expr());
             if *token == TPlus {
                 res = expr_box(BinOp {
-                    kind: Add,
-                    left: res,
-                    right: right,
-                })
+                                   kind: Add,
+                                   left: res,
+                                   right: right,
+                               })
             } else {
                 res = expr_box(BinOp {
-                    kind: Subtract,
-                    left: res,
-                    right: right,
-                })
+                                   kind: Subtract,
+                                   left: res,
+                                   right: right,
+                               })
             }
         }
         Ok(res)
@@ -370,10 +369,10 @@ impl<'t> Parser<'t> {
             };
             let right = try!(self.ascribe_expr());
             res = expr_box(BinOp {
-                kind: op,
-                left: res,
-                right: right,
-            })
+                               kind: op,
+                               left: res,
+                               right: right,
+                           })
         }
         Ok(res)
     }
@@ -398,9 +397,9 @@ impl<'t> Parser<'t> {
                             match u32::from_str_radix(&value[1..], 10) {
                                 Ok(index) => {
                                     expr = expr_box(GetField {
-                                        expr: expr,
-                                        index: index,
-                                    })
+                                                        expr: expr,
+                                                        index: index,
+                                                    })
                                 }
                                 _ => return weld_err!("Expected field index but got '{}'", value),
                             }
@@ -423,9 +422,9 @@ impl<'t> Parser<'t> {
                 }
                 try!(self.consume(TCloseParen));
                 expr = expr_box(Apply {
-                    func: expr,
-                    params: params,
-                })
+                                    func: expr,
+                                    params: params,
+                                })
             }
         }
         Ok(expr)
@@ -479,14 +478,121 @@ impl<'t> Parser<'t> {
             return weld_err!("Expected ')");
         }
         let cast_expr = expr_box(Cast {
-            kind: kind,
-            child_expr: expr,
-        });
+                                     kind: kind,
+                                     child_expr: expr,
+                                 });
         Ok(cast_expr)
+    }
+
+    /// Parses annotations in the format "@(<annotation name>: <annotation value>,...)".
+    fn parse_annotations(&mut self, annotations: &mut Annotations) -> WeldResult<()> {
+        if *self.peek() == TAtMark {
+            self.consume(TAtMark)?;
+            try!(self.consume(TOpenParen));
+            while *self.peek() != TCloseParen {
+                match *self.peek() {
+                    TIdent(ref value) => {
+                        match value.as_ref() {
+                            "impl" => {
+                                self.consume(TIdent("impl".to_string()))?;
+                                try!(self.consume(TColon));
+                                let implementation = match *self.next() {
+                                    TIdent(ref inner_value) => {
+                                        match inner_value.as_ref() {
+                                            "global" => Global,
+                                            "local" => Local,
+                                            _ => return weld_err!("Invalid implementation type"),
+                                        }
+                                    }
+                                    _ => return weld_err!("Invalid implementation type"),
+                                };
+                                annotations.set_builder_implementation(implementation);
+                            }
+                            "predicate" => {
+                                self.consume(TIdent("predicate".to_string()))?;
+                                try!(self.consume(TColon));
+                                if let TBoolLiteral(l) = *self.next() {
+                                    annotations.set_predicate(l);
+                                } else {
+                                    return weld_err!("Invalid predicate type (must be a bool)");
+                                }
+                            }
+                            "vectorize" => {
+                                self.consume(TIdent("vectorize".to_string()))?;
+                                try!(self.consume(TColon));
+                                if let TBoolLiteral(l) = *self.next() {
+                                    annotations.set_vectorize(l);
+                                } else {
+                                    return weld_err!("Invalid vectorize type (must be a bool)");
+                                }
+                            }
+                            "tile_size" => {
+                                self.consume(TIdent("tile_size".to_string()))?;
+                                try!(self.consume(TColon));
+                                if let TI32Literal(l) = *self.next() {
+                                    annotations.set_tile_size(l);
+                                } else {
+                                    return weld_err!("Invalid tile size (must be a i32)");
+                                }
+                            }
+                            "grain_size" => {
+                                self.consume(TIdent("grain_size".to_string()))?;
+                                try!(self.consume(TColon));
+                                if let TI32Literal(l) = *self.next() {
+                                    annotations.set_grain_size(l);
+                                } else {
+                                    return weld_err!("Invalid tile size (must be a i32)");
+                                }
+                            }
+                            "size" => {
+                                self.consume(TIdent("size".to_string()))?;
+                                try!(self.consume(TColon));
+                                if let TI64Literal(l) = *self.next() {
+                                    annotations.set_size(l);
+                                } else {
+                                    return weld_err!("Invalid vector size (must be a i32)");
+                                }
+                            }
+                            "selectivity" => {
+                                self.consume(TIdent("selectivity".to_string()))?;
+                                try!(self.consume(TColon));
+                                if let TF32Literal(l) = *self.next() {
+                                    annotations.set_selectivity((l * 100000.0) as i32);
+                                } else {
+                                    return weld_err!("Invalid selectivity (must be a f32)");
+                                }
+                            }
+                            "num_keys" => {
+                                self.consume(TIdent("num_keys".to_string()))?;
+                                try!(self.consume(TColon));
+                                if let TI64Literal(l) = *self.next() {
+                                    annotations.set_num_keys(l);
+                                } else {
+                                    return weld_err!("Invalid number of keys (must be a i32)");
+                                }
+                            }
+                            _ => return weld_err!("Invalid annotation type"),
+                        }
+                    }
+                    _ => return weld_err!("Invalid annotation type -- expected an identifier"),
+                }
+
+                if *self.peek() == TComma {
+                    self.next();
+                } else if *self.peek() != TCloseParen {
+                    return weld_err!("Expected ',' or ')'");
+                }
+            }
+            try!(self.consume(TCloseParen));
+        }
+        Ok(())
     }
 
     /// Parse a terminal expression at the bottom of the precedence chain.
     fn leaf_expr(&mut self) -> WeldResult<Box<PartialExpr>> {
+        let mut annotations = Annotations::new();
+        try!(self.parse_annotations(&mut annotations));
+
         match *self.next() {
             TI32Literal(v) => Ok(expr_box(Literal(I32Literal(v)))),
             TI64Literal(v) => Ok(expr_box(Literal(I64Literal(v)))),
@@ -528,9 +634,9 @@ impl<'t> Parser<'t> {
 
             TIdent(ref name) => {
                 Ok(expr_box(Ident(Symbol {
-                    name: name.clone(),
-                    id: 0,
-                })))
+                                      name: name.clone(),
+                                      id: 0,
+                                  })))
             }
 
             TOpenParen => {
@@ -580,10 +686,10 @@ impl<'t> Parser<'t> {
                 let on_false = try!(self.expr());
                 try!(self.consume(TCloseParen));
                 Ok(expr_box(If {
-                    cond: cond,
-                    on_true: on_true,
-                    on_false: on_false,
-                }))
+                                cond: cond,
+                                on_true: on_true,
+                                on_false: on_false,
+                            }))
             }
 
             TCUDF => {
@@ -603,10 +709,10 @@ impl<'t> Parser<'t> {
                 }
                 try!(self.consume(TCloseParen));
                 Ok(expr_box(CUDF {
-                    sym_name: sym_name.name,
-                    return_ty: Box::new(return_ty),
-                    args: args,
-                }))
+                                sym_name: sym_name.name,
+                                return_ty: Box::new(return_ty),
+                                args: args,
+                            }))
             }
 
             TZip => {
@@ -652,10 +758,10 @@ impl<'t> Parser<'t> {
                 let body = try!(self.expr());
                 try!(self.consume(TCloseParen));
                 Ok(expr_box(For {
-                    iters: iters,
-                    builder: builders,
-                    func: body,
-                }))
+                                iters: iters,
+                                builder: builders,
+                                func: body,
+                            }))
             }
 
             TLen => {
@@ -672,9 +778,9 @@ impl<'t> Parser<'t> {
                 let index = try!(self.expr());
                 try!(self.consume(TCloseParen));
                 Ok(expr_box(Lookup {
-                    data: data,
-                    index: index,
-                }))
+                                data: data,
+                                index: index,
+                            }))
             }
 
             TKeyExists => {
@@ -684,9 +790,9 @@ impl<'t> Parser<'t> {
                 let key = try!(self.expr());
                 try!(self.consume(TCloseParen));
                 Ok(expr_box(KeyExists {
-                    data: data,
-                    key: key,
-                }))
+                                data: data,
+                                key: key,
+                            }))
             }
 
             TSlice => {
@@ -698,10 +804,10 @@ impl<'t> Parser<'t> {
                 let size = try!(self.expr());
                 try!(self.consume(TCloseParen));
                 Ok(expr_box(Slice {
-                    data: data,
-                    index: index,
-                    size: size,
-                }))
+                                data: data,
+                                index: index,
+                                size: size,
+                            }))
             }
 
             TExp => {
@@ -739,9 +845,9 @@ impl<'t> Parser<'t> {
                 let value = try!(self.expr());
                 try!(self.consume(TCloseParen));
                 Ok(expr_box(Merge {
-                    builder: builder,
-                    value: value,
-                }))
+                                builder: builder,
+                                value: value,
+                            }))
             }
 
             TResult => {
@@ -758,8 +864,9 @@ impl<'t> Parser<'t> {
                     elem_type = try!(self.type_());
                     try!(self.consume(TCloseBracket));
                 }
+
                 let mut expr = expr_box(NewBuilder(None));
-                expr.ty = Builder(Appender(Box::new(elem_type)));
+                expr.ty = Builder(Appender(Box::new(elem_type)), annotations);
                 Ok(expr)
             }
 
@@ -785,8 +892,16 @@ impl<'t> Parser<'t> {
                     }
                 };
                 self.consume(TCloseBracket)?;
-                let mut expr = expr_box(NewBuilder(None));
-                expr.ty = Builder(Merger(Box::new(elem_type), bin_op));
+
+                let mut value = None;
+                if *self.peek() == TOpenParen {
+                    self.consume(TOpenParen)?;
+                    value = Some(self.expr()?);
+                    self.consume(TCloseParen)?;
+                }
+
+                let mut expr = expr_box(NewBuilder(value));
+                expr.ty = Builder(Merger(Box::new(elem_type), bin_op), annotations);
                 Ok(expr)
             }
 
@@ -814,12 +929,31 @@ impl<'t> Parser<'t> {
                     }
                 }
                 try!(self.consume(TCloseBracket));
+
                 let mut expr = expr_box(NewBuilder(None));
                 expr.ty = Builder(DictMerger(Box::new(key_type.clone()),
                                              Box::new(value_type.clone()),
                                              Box::new(Struct(vec![key_type.clone(),
                                                                   value_type.clone()])),
-                                             bin_op));
+                                             bin_op),
+                                  annotations);
+                Ok(expr)
+            }
+
+            TGroupMerger => {
+                let key_type: PartialType;
+                let value_type: PartialType;
+                try!(self.consume(TOpenBracket));
+                key_type = try!(self.type_());
+                try!(self.consume(TComma));
+                value_type = try!(self.type_());
+                try!(self.consume(TCloseBracket));
+                let mut expr = expr_box(NewBuilder(None));
+                expr.ty = Builder(GroupMerger(Box::new(key_type.clone()),
+                                              Box::new(value_type.clone()),
+                                              Box::new(Struct(vec![key_type.clone(),
+                                                                   value_type.clone()]))),
+                                  annotations);
                 Ok(expr)
             }
 
@@ -840,18 +974,20 @@ impl<'t> Parser<'t> {
                         bin_op = Multiply;
                     }
                     _ => {
-                        return weld_err!("expected commutative binary op in vecmerger");
+                        return weld_err!("Expected commutative binary op in vecmerger");
                     }
                 }
                 try!(self.consume(TCloseBracket));
                 try!(self.consume(TOpenParen));
                 let expr = try!(self.expr());
                 try!(self.consume(TCloseParen));
+
                 let mut expr = expr_box(NewBuilder(Some(expr)));
                 expr.ty = Builder(VecMerger(Box::new(elem_type.clone()),
                                             Box::new(Struct(vec![Scalar(ScalarKind::I64),
                                                                  elem_type.clone()])),
-                                            bin_op));
+                                            bin_op),
+                                  annotations);
                 Ok(expr)
             }
 
@@ -866,9 +1002,9 @@ impl<'t> Parser<'t> {
         match *self.next() {
             TIdent(ref name) => {
                 Ok(Symbol {
-                    name: name.clone(),
-                    id: 0,
-                })
+                       name: name.clone(),
+                       id: 0,
+                   })
             }
             ref other => weld_err!("Expected identifier but got '{}'", other),
         }
@@ -887,6 +1023,9 @@ impl<'t> Parser<'t> {
 
     /// Parse a PartialType starting at the current input position.
     fn type_(&mut self) -> WeldResult<PartialType> {
+        let mut annotations = Annotations::new();
+        try!(self.parse_annotations(&mut annotations));
+
         match *self.next() {
             TI32 => Ok(Scalar(ScalarKind::I32)),
             TI64 => Ok(Scalar(ScalarKind::I64)),
@@ -906,7 +1045,95 @@ impl<'t> Parser<'t> {
                 try!(self.consume(TOpenBracket));
                 let elem_type = try!(self.type_());
                 try!(self.consume(TCloseBracket));
-                Ok(Builder(Appender(Box::new(elem_type))))
+
+                Ok(Builder(Appender(Box::new(elem_type)), annotations))
+            }
+
+            TMerger => {
+                let elem_type: PartialType;
+                let bin_op: _;
+                self.consume(TOpenBracket)?;
+                elem_type = self.type_()?;
+                self.consume(TComma)?;
+                // Basic merger supports Plus and Times right now.
+                match *self.peek() {
+                    TPlus => {
+                        self.consume(TPlus)?;
+                        bin_op = Add;
+                    }
+                    TTimes => {
+                        self.consume(TTimes)?;
+                        bin_op = Multiply;
+                    }
+                    ref t => {
+                        return weld_err!("expected commutative binary op in merger but got '{}'",
+                                         t);
+                    }
+                };
+                self.consume(TCloseBracket)?;
+
+                Ok(Builder(Merger(Box::new(elem_type), bin_op), annotations))
+            }
+
+            TDictMerger => {
+                let key_type: PartialType;
+                let value_type: PartialType;
+                let bin_op: _;
+                try!(self.consume(TOpenBracket));
+                key_type = try!(self.type_());
+                try!(self.consume(TComma));
+                value_type = try!(self.type_());
+                try!(self.consume(TComma));
+                // DictMerger right now supports Plus and Times only.
+                match *self.peek() {
+                    TPlus => {
+                        self.consume(TPlus)?;
+                        bin_op = Add;
+                    }
+                    TTimes => {
+                        self.consume(TTimes)?;
+                        bin_op = Multiply;
+                    }
+                    _ => {
+                        return weld_err!("expected commutative binary op in dictmerger");
+                    }
+                }
+                try!(self.consume(TCloseBracket));
+                Ok(Builder(DictMerger(Box::new(key_type.clone()),
+                                      Box::new(value_type.clone()),
+                                      Box::new(Struct(vec![key_type.clone(),
+                                                           value_type.clone()])),
+                                      bin_op),
+                           annotations))
+            }
+
+            TVecMerger => {
+                let elem_type: PartialType;
+                let bin_op: _;
+                try!(self.consume(TOpenBracket));
+                elem_type = try!(self.type_());
+                try!(self.consume(TComma));
+                // VecMerger right now supports Plus and Times only.
+                match *self.peek() {
+                    TPlus => {
+                        self.consume(TPlus)?;
+                        bin_op = Add;
+                    }
+                    TTimes => {
+                        self.consume(TTimes)?;
+                        bin_op = Multiply;
+                    }
+                    _ => {
+                        return weld_err!("Expected commutative binary op in vecmerger");
+                    }
+                }
+                try!(self.consume(TCloseBracket));
+
+                Ok(Builder(VecMerger(Box::new(elem_type.clone()),
+                                     Box::new(Struct(vec![Scalar(ScalarKind::I64),
+                                                          elem_type.clone()])),
+                                     bin_op),
+                           annotations))
             }
 
             TOpenBrace => {
@@ -990,6 +1217,16 @@ fn basic_parsing() {
 
     let e = parse_expr("appender[i32]").unwrap();
     assert_eq!(print_expr_without_indent(&e), "appender[i32]");
+
+    let e = parse_expr("@(impl:local) dictmerger[i32,i32,+]").unwrap();
+    assert_eq!(print_expr_without_indent(&e),
+               "@(impl:local)dictmerger[i32,i32,+]");
+
+    let e = parse_expr("@(impl:local, num_keys:12l) dictmerger[i32,i32,+]").unwrap();
+    assert_eq!(print_expr_without_indent(&e),
+               "@(impl:local,num_keys:12)dictmerger[i32,i32,+]");
+
+    assert!(parse_expr("@(impl:local, num_keys:12) dictmerger[i32,i32,+]").is_err());
 
     let e = parse_expr("a: i32 + b").unwrap();
     assert_eq!(print_typed_expr_without_indent(&e), "(a:i32+b:?)");

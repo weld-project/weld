@@ -137,9 +137,9 @@ pub unsafe extern "C" fn weld_conf_set(ptr: *mut WeldConf,
 /// to must be managed by the caller.
 pub extern "C" fn weld_value_new(data: *const c_void) -> *mut WeldValue {
     Box::into_raw(Box::new(WeldValue {
-        data: data,
-        run_id: None,
-    }))
+                               data: data,
+                               run_id: None,
+                           }))
 }
 
 #[no_mangle]
@@ -194,10 +194,12 @@ pub unsafe extern "C" fn weld_module_compile(code: *const c_char,
     assert!(!err_ptr.is_null());
 
     let conf = &*conf;
-    let opt_passes = conf::parse_optimization_passes(conf.dict
-        .get(&CString::new(conf::OPTIMIZATION_PASSES_KEY).unwrap())
-        .unwrap_or(&CString::new("").unwrap())
-        .clone());
+    let opt_passes =
+        conf::parse_optimization_passes(conf.dict
+                                            .get(&CString::new(conf::OPTIMIZATION_PASSES_KEY)
+                                                      .unwrap())
+                                            .unwrap_or(&CString::new("").unwrap())
+                                            .clone());
 
     let code = CStr::from_ptr(code);
     let code = code.to_str().unwrap().trim();
@@ -244,14 +246,15 @@ pub unsafe extern "C" fn weld_module_run(module: *mut WeldModule,
     let mut err = &mut *err_ptr;
 
     let mem_limit = conf::parse_memory_limit(conf.dict
-        .get(&CString::new(conf::MEMORY_LIMIT_KEY).unwrap())
-        .unwrap_or(&CString::new("").unwrap())
-        .clone());
+                                                 .get(&CString::new(conf::MEMORY_LIMIT_KEY)
+                                                           .unwrap())
+                                                 .unwrap_or(&CString::new("").unwrap())
+                                                 .clone());
 
     let threads = conf::parse_threads(conf.dict
-        .get(&CString::new(conf::THREADS_KEY).unwrap())
-        .unwrap_or(&CString::new("").unwrap())
-        .clone());
+                                          .get(&CString::new(conf::THREADS_KEY).unwrap())
+                                          .unwrap_or(&CString::new("").unwrap())
+                                          .clone());
 
 
     #[derive(Clone)]
@@ -261,19 +264,19 @@ pub unsafe extern "C" fn weld_module_run(module: *mut WeldModule,
     }
 
     let input = Box::new(llvm::WeldInputArgs {
-        input: arg.data as i64,
-        nworkers: threads as i32,
-        mem_limit: mem_limit as i64,
-    });
+                             input: arg.data as i64,
+                             nworkers: threads as i32,
+                             mem_limit: mem_limit as i64,
+                         });
     let ptr = Box::into_raw(input) as i64;
     // result_raw is allocated with ordinary malloc, hence the free below
     let result_raw = module.run(ptr) as *const llvm::WeldOutputArgs;
     let result = (*result_raw).clone();
 
     let ret = Box::into_raw(Box::new(WeldValue {
-        data: result.output as *const c_void,
-        run_id: Some(result.run_id),
-    }));
+                                         data: result.output as *const c_void,
+                                         run_id: Some(result.run_id),
+                                     }));
 
     if result.errno != WeldRuntimeErrno::Success {
         weld_value_free(ret);

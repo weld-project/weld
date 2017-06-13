@@ -18,28 +18,34 @@ use super::util::SymbolGenerator;
 /// TODO(shoumik): Perhaps Zip should just be a macro? Then macros need to be ordered.
 pub fn inline_zips(expr: &mut Expr<Type>) {
     expr.transform(&mut |ref mut e| {
-        if let For { ref mut iters, ref builder, ref func } = e.kind {
+        if let For {
+                   ref mut iters,
+                   ref builder,
+                   ref func,
+               } = e.kind {
             if iters.len() == 1 {
                 let ref first_iter = iters[0];
                 if let Zip { ref vectors } = first_iter.data.kind {
-                    let new_iters = vectors.iter()
+                    let new_iters = vectors
+                        .iter()
                         .map(|v| {
-                            Iter {
-                                data: Box::new(v.clone()),
-                                start: None,
-                                end: None,
-                                stride: None,
-                            }
-                        })
+                                 Iter {
+                                     data: Box::new(v.clone()),
+                                     start: None,
+                                     end: None,
+                                     stride: None,
+                                 }
+                             })
                         .collect::<Vec<_>>();
                     return Some(Expr {
-                        ty: e.ty.clone(),
-                        kind: For {
-                            iters: new_iters,
-                            builder: builder.clone(),
-                            func: func.clone(),
-                        },
-                    });
+                                    ty: e.ty.clone(),
+                                    kind: For {
+                                        iters: new_iters,
+                                        builder: builder.clone(),
+                                        func: func.clone(),
+                                    },
+                                    annotations: Annotations::new(),
+                                });
                 }
             }
         }
@@ -114,19 +120,24 @@ fn _uniquify<T: TypeBounds>(expr: &mut Expr<T>,
                 }
             };
             return (Some(Expr {
-                        ty: e.ty.clone(),
-                        kind: Ident(gid),
-                    }),
+                             ty: e.ty.clone(),
+                             kind: Ident(gid),
+                             annotations: Annotations::new(),
+                         }),
                     false);
-        } else if let Lambda { ref mut params, ref mut body } = e.kind {
+        } else if let Lambda {
+                          ref mut params,
+                          ref mut body,
+                      } = e.kind {
             // Create new parameters for the lambda that will replace this one.
-            let new_params = params.iter()
+            let new_params = params
+                .iter()
                 .map(|ref p| {
-                    Parameter {
-                        ty: p.ty.clone(),
-                        name: push_id(id_map, max_ids, &p.name),
-                    }
-                })
+                         Parameter {
+                             ty: p.ty.clone(),
+                             name: push_id(id_map, max_ids, &p.name),
+                         }
+                     })
                 .collect::<Vec<_>>();
 
             if let Err(err) = _uniquify(body, id_map, max_ids) {
@@ -138,15 +149,19 @@ fn _uniquify<T: TypeBounds>(expr: &mut Expr<T>,
             }
 
             return (Some(Expr {
-                        ty: e.ty.clone(),
-                        kind: Lambda {
-                            params: new_params,
-                            body: body.clone(),
-                        },
-                    }),
+                             ty: e.ty.clone(),
+                             kind: Lambda {
+                                 params: new_params,
+                                 body: body.clone(),
+                             },
+                             annotations: Annotations::new(),
+                         }),
                     false);
-        } else if let Let { ref mut name, ref mut value, ref mut body } = e.kind {
-
+        } else if let Let {
+                          ref mut name,
+                          ref mut value,
+                          ref mut body,
+                      } = e.kind {
             if let Err(err) = _uniquify(value, id_map, max_ids) {
                 retval = Err(err);
                 return (None, false);
@@ -157,13 +172,14 @@ fn _uniquify<T: TypeBounds>(expr: &mut Expr<T>,
                 return (None, false);
             }
             return (Some(Expr {
-                        ty: e.ty.clone(),
-                        kind: Let {
-                            name: new_sym,
-                            value: value.clone(),
-                            body: body.clone(),
-                        },
-                    }),
+                             ty: e.ty.clone(),
+                             kind: Let {
+                                 name: new_sym,
+                                 value: value.clone(),
+                                 body: body.clone(),
+                             },
+                             annotations: Annotations::new(),
+                         }),
                     false);
         }
         (None, true)
@@ -183,8 +199,14 @@ fn _uniquify<T: TypeBounds>(expr: &mut Expr<T>,
 ///   case, the expressions after inlining may lead to more inlining).
 pub fn inline_apply<T: TypeBounds>(expr: &mut Expr<T>) {
     expr.transform(&mut |ref mut expr| {
-        if let Apply { ref func, params: ref args } = expr.kind {
-            if let Lambda { ref params, ref body } = func.kind {
+        if let Apply {
+                   ref func,
+                   params: ref args,
+               } = expr.kind {
+            if let Lambda {
+                       ref params,
+                       ref body,
+                   } = func.kind {
                 let mut new = *body.clone();
                 for (param, arg) in params.iter().zip(args) {
                     new.substitute(&param.name, &arg);
@@ -200,7 +222,11 @@ pub fn inline_apply<T: TypeBounds>(expr: &mut Expr<T>) {
 /// less than one time.
 pub fn inline_let(expr: &mut Expr<Type>) {
     expr.transform(&mut |ref mut expr| {
-        if let Let { ref mut name, ref mut value, ref mut body } = expr.kind {
+        if let Let {
+                   ref mut name,
+                   ref mut value,
+                   ref mut body,
+               } = expr.kind {
             if symbol_usage_count(name, body) <= 1 {
                 body.transform(&mut |ref mut expr| {
                     // TODO(shoumik): What about symbol redefinitions?
@@ -276,7 +302,7 @@ pub fn fuse_loops_horizontal(expr: &mut Expr<Type>) {
                                 }
                                 if iters2 == common_data.as_ref().unwrap() { 
                                     if let NewBuilder(_) = bldr2.kind {
-                                        if let Builder(ref kind) = bldr2.ty {
+                                        if let Builder(ref kind, _) = bldr2.ty {
                                             if let Appender(_) = *kind {
                                                 if let Lambda{params: ref args, ref body} = lambda.kind {
                                                     if let Merge{ref builder, ref value} = body.kind {
@@ -306,7 +332,8 @@ pub fn fuse_loops_horizontal(expr: &mut Expr<Type>) {
  
                     // Zip the expressions to create an appender whose merge (value) type is a struct.
                     let merge_type = Struct(lambdas.iter().map(|ref e| e.1.ty.clone()).collect::<Vec<_>>());
-                    let builder_type = Builder(Appender(Box::new(merge_type.clone())));
+                    // TODO(Deepak): Fix this to something meaningful.
+                    let builder_type = Builder(Appender(Box::new(merge_type.clone())), Annotations::new());
                     // The element type remains unchanged.
                     let func_elem_type = lambdas[0].0[2].ty.clone();
 
@@ -322,15 +349,18 @@ pub fn fuse_loops_horizontal(expr: &mut Expr<Type>) {
                     // functions' merge expressions.
                     let new_bldr_expr = Expr {
                         ty: builder_type.clone(),
-                        kind: Ident(new_params[0].name.clone())
+                        kind: Ident(new_params[0].name.clone()),
+                        annotations: Annotations::new(),
                     };
                     let new_index_expr = Expr {
                         ty: Scalar(ScalarKind::I64),
-                        kind: Ident(new_params[1].name.clone())
+                        kind: Ident(new_params[1].name.clone()),
+                        annotations: Annotations::new(),
                     };
                     let new_elem_expr = Expr {
                         ty: func_elem_type.clone(),
-                        kind: Ident(new_params[2].name.clone())
+                        kind: Ident(new_params[2].name.clone()),
+                        annotations: Annotations::new(),
                     };
                     for &mut (ref mut args, ref mut expr) in lambdas.iter_mut() {
                         expr.substitute(&args[0].name, &new_bldr_expr);
@@ -352,20 +382,25 @@ pub fn fuse_loops_horizontal(expr: &mut Expr<Type>) {
                             builder: Box::new(new_bldr_expr),
                             value: Box::new(Expr{
                                 ty: merge_type.clone(),
-                                kind: MakeStruct{elems: lambdas.iter().map(|ref lambda| *lambda.1.clone()).collect::<Vec<_>>()}
+                                kind: MakeStruct{elems: lambdas.iter().map(|ref lambda| *lambda.1.clone()).collect::<Vec<_>>()},
+                                annotations: Annotations::new(),
                             })
-                            }
+                        },
+                        annotations: Annotations::new(),
                     };
                     let new_func = Expr{
                         ty: Function(new_params.iter().map(|ref p| p.ty.clone()).collect::<Vec<_>>(), Box::new(builder_type.clone())),
-                        kind: Lambda{params: new_params, body: Box::new(new_merge_expr)}
+                        kind: Lambda{params: new_params, body: Box::new(new_merge_expr)},
+                        annotations: Annotations::new(),
                     };
                     let new_iter_expr = Expr{
                         ty: Vector(Box::new(merge_type.clone())),
                         kind: Res{builder: Box::new(Expr{
                             ty: builder_type.clone(),
-                            kind: For{iters: common_data.unwrap(), builder: Box::new(Expr{ty: builder_type.clone(), kind: NewBuilder(None)}), func: Box::new(new_func)}
+                            kind: For{iters: common_data.unwrap(), builder: Box::new(Expr{ty: builder_type.clone(), kind: NewBuilder(None), annotations: Annotations::new()}), func: Box::new(new_func)},
+                            annotations: Annotations::new(),
                         })},
+                        annotations: Annotations::new(),
                     };
 
                     // TODO(shoumik): Any way to avoid the clones here?
@@ -376,7 +411,8 @@ pub fn fuse_loops_horizontal(expr: &mut Expr<Type>) {
                             start: all_iters[0].start.clone(),
                             end: all_iters[0].end.clone(),
                             stride: all_iters[0].stride.clone()
-                        }], builder: outer_bldr.clone(), func: outer_func.clone()}
+                        }], builder: outer_bldr.clone(), func: outer_func.clone()},
+                        annotations: Annotations::new(),
                     });
                 }
             }
@@ -390,15 +426,22 @@ pub fn fuse_loops_horizontal(expr: &mut Expr<Type>) {
 pub fn fuse_loops_vertical(expr: &mut Expr<Type>) {
     expr.transform(&mut |ref mut expr| {
         let mut sym_gen = SymbolGenerator::from_expression(expr);
-        if let For { iters: ref all_iters, builder: ref bldr1, func: ref nested } = expr.kind {
+        if let For {
+                   iters: ref all_iters,
+                   builder: ref bldr1,
+                   func: ref nested,
+               } = expr.kind {
             if all_iters.len() == 1 {
                 let ref iter1 = all_iters[0];
                 if let Res { builder: ref res_bldr } = iter1.data.kind {
-                    if let For { iters: ref iters2, builder: ref bldr2, func: ref lambda } =
-                        res_bldr.kind {
+                    if let For {
+                               iters: ref iters2,
+                               builder: ref bldr2,
+                               func: ref lambda,
+                           } = res_bldr.kind {
                         if iters2.iter().all(|ref i| consumes_all(&i)) {
                             if let NewBuilder(_) = bldr2.kind {
-                                if let Builder(ref kind) = bldr2.ty {
+                                if let Builder(ref kind, _) = bldr2.ty {
                                     if let Appender(_) = *kind {
                                         let e = Expr {
                                             ty: expr.ty.clone(),
@@ -409,6 +452,7 @@ pub fn fuse_loops_vertical(expr: &mut Expr<Type>) {
                                                                                nested,
                                                                                &mut sym_gen)),
                                             },
+                                            annotations: Annotations::new(),
                                         };
                                         return Some(e);
                                     }
@@ -425,12 +469,19 @@ pub fn fuse_loops_vertical(expr: &mut Expr<Type>) {
 
 /// Given an iterator, returns whether the iterator consumes every element of its data vector.
 fn consumes_all(iter: &Iter<Type>) -> bool {
-    if let &Iter { start: None, end: None, stride: None, .. } = iter {
+    if let &Iter {
+               start: None,
+               end: None,
+               stride: None,
+               ..
+           } = iter {
         return true;
-    } else if let &Iter { ref data,
-                          start: Some(ref start),
-                          end: Some(ref end),
-                          stride: Some(ref stride) } = iter {
+    } else if let &Iter {
+                      ref data,
+                      start: Some(ref start),
+                      end: Some(ref end),
+                      stride: Some(ref stride),
+                  } = iter {
         // Checks if the stride is 1 and an entire vector represented by a symbol is consumed.
         if let (&Literal(I64Literal(1)),
                 &Literal(I64Literal(0)),
@@ -471,7 +522,10 @@ fn replace_builder(lambda: &Expr<Type>,
     }
 
     let mut new_func = None;
-    if let Lambda { params: ref args, ref body } = lambda.kind {
+    if let Lambda {
+               params: ref args,
+               ref body,
+           } = lambda.kind {
         if let Lambda { params: ref nested_args, .. } = nested.kind {
             let mut new_body = *body.clone();
             let ref old_bldr = args[0];
@@ -482,48 +536,49 @@ fn replace_builder(lambda: &Expr<Type>,
             let new_bldr = Expr {
                 ty: nested_args[0].ty.clone(),
                 kind: Ident(new_bldr_sym.clone()),
+                annotations: Annotations::new(),
             };
             let new_index = Expr {
                 ty: nested_args[1].ty.clone(),
                 kind: Ident(new_index_sym.clone()),
+                annotations: Annotations::new(),
             };
             new_body.ty = new_bldr.ty.clone();
-            new_body.transform_and_continue(&mut |ref mut e| {
-                match e.kind {
-                    Merge { ref builder, ref value } if same_iden(&(*builder).kind,
-                                                                  &old_bldr.name) => {
-                        let params: Vec<Expr<Type>> =
-                            vec![new_bldr.clone(), new_index.clone(), *value.clone()];
-                        let mut expr = Expr {
-                            ty: e.ty.clone(),
-                            kind: Apply {
-                                func: Box::new(nested.clone()),
-                                params: params,
-                            },
-                        };
-                        inline_apply(&mut expr);
-                        (Some(expr), true)
-                    }
-                    For { iters: ref data, builder: ref bldr, ref func }
-                        if same_iden(&(*bldr).kind, &old_bldr.name) => {
-                        (Some(Expr {
-                             ty: e.ty.clone(),
-                             kind: For {
-                                 iters: data.clone(),
-                                 builder: Box::new(new_bldr.clone()),
-                                 func: Box::new(replace_builder(func, nested, sym_gen)),
-                             },
-                         }),
-                         false)
-                    }
-                    Ident(ref mut symbol) if *symbol == old_bldr.name => {
-                        (Some(new_bldr.clone()), false)
-                    }
-                    Ident(ref mut symbol) if *symbol == old_index.name => {
-                        (Some(new_index.clone()), false)
-                    }
-                    _ => (None, true),
+            new_body.transform_and_continue(&mut |ref mut e| match e.kind {
+                Merge { ref builder, ref value } if same_iden(&(*builder).kind, &old_bldr.name) => {
+                    let params: Vec<Expr<Type>> =
+                        vec![new_bldr.clone(), new_index.clone(), *value.clone()];
+                    let mut expr = Expr {
+                        ty: e.ty.clone(),
+                        kind: Apply {
+                            func: Box::new(nested.clone()),
+                            params: params,
+                        },
+                        annotations: Annotations::new(),
+                    };
+                    inline_apply(&mut expr);
+                    (Some(expr), true)
                 }
+                For { iters: ref data, builder: ref bldr, ref func }
+                    if same_iden(&(*bldr).kind, &old_bldr.name) => {
+                    (Some(Expr {
+                         ty: e.ty.clone(),
+                         kind: For {
+                             iters: data.clone(),
+                             builder: Box::new(new_bldr.clone()),
+                             func: Box::new(replace_builder(func, nested, sym_gen)),
+                         },
+                         annotations: Annotations::new(),
+                     }),
+                     false)
+                }
+                Ident(ref mut symbol) if *symbol == old_bldr.name => {
+                    (Some(new_bldr.clone()), false)
+                }
+                Ident(ref mut symbol) if *symbol == old_index.name => {
+                    (Some(new_index.clone()), false)
+                }
+                _ => (None, true),
             });
             let new_params = vec![Parameter {
                                       ty: new_bldr.ty.clone(),
@@ -543,12 +598,13 @@ fn replace_builder(lambda: &Expr<Type>,
                     Function(new_params.iter().map(|e| e.ty.clone()).collect::<Vec<_>>(),
                              ret_ty.clone());
                 new_func = Some(Expr {
-                    ty: new_func_type,
-                    kind: Lambda {
-                        params: new_params,
-                        body: Box::new(new_body),
-                    },
-                })
+                                    ty: new_func_type,
+                                    kind: Lambda {
+                                        params: new_params,
+                                        body: Box::new(new_body),
+                                    },
+                                    annotations: Annotations::new(),
+                                })
             }
         }
     }

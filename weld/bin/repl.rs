@@ -25,8 +25,6 @@ use weld::sir::ast_to_sir;
 use weld::util::load_runtime_library;
 use weld::util::MERGER_BC;
 
-use weld::transforms;
-
 enum ReplCommands {
     LoadFile,
 }
