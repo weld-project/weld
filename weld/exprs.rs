@@ -45,25 +45,35 @@ pub fn binop_expr(kind: BinOpKind, left: Expr<Type>, right: Expr<Type>) -> WeldR
     }
 }
 
-pub fn cast_expr(kind: ScalarKind, expr: &Expr<Type>) -> WeldResult<Expr<Type>> {
-    if let Scalar(_) = expr.ty {
-        new_expr(Cast {
-                     kind: kind,
-                     child_expr: Box::new(expr.clone()),
-                 },
-                 Scalar(kind))
+pub fn cast_expr(kind: ScalarKind, expr: Expr<Type>) -> WeldResult<Expr<Type>> {
+    let ty = if let Scalar(_) = expr.ty {
+        Scalar(kind)
     } else {
-        weld_err!("Internal error: Mismatched types in cast_expr")
-    }
+        return weld_err!("Internal error: Mismatched types in cast_expr");
+    };
+    new_expr(Cast {
+                 kind: kind,
+                 child_expr: Box::new(expr),
+             },
+             ty)
 }
 
-pub fn tovec_expr(expr: &Expr<Type>) -> WeldResult<Expr<Type>> {
-    if let Dict(ref kt, ref vt) = expr.ty {
-        let ty = Struct(vec![*kt.clone(), *vt.clone()]);
-        new_expr(ToVec { child_expr: Box::new(expr.clone()) }, ty)
+pub fn negate_expr(expr: Expr<Type>) -> WeldResult<Expr<Type>> {
+    let ty = if let Scalar(ref k) = expr.ty {
+        Scalar(k.clone())
     } else {
-        weld_err!("Internal error: Mistmatched types in tovec_expr")
-    }
+        return weld_err!("Internal error: Mismatched types in negate_expr");
+    };
+    new_expr(Negate(Box::new(expr)), ty)
+}
+
+pub fn tovec_expr(expr: Expr<Type>) -> WeldResult<Expr<Type>> {
+    let ty = if let Dict(ref kt, ref vt) = expr.ty {
+        Struct(vec![*kt.clone(), *vt.clone()])
+    } else {
+        return weld_err!("Internal error: Mismatched types in tovec_expr");
+    };
+    new_expr(ToVec { child_expr: Box::new(expr.clone()) }, ty)
 }
 
 pub fn makestruct_expr(exprs: Vec<Expr<Type>>) -> WeldResult<Expr<Type>> {
@@ -76,7 +86,7 @@ pub fn makevector_expr(exprs: Vec<Expr<Type>>) -> WeldResult<Expr<Type>> {
     if exprs.iter().all(|e| e.ty == ty) {
         new_expr(MakeVector { elems: exprs }, Vector(Box::new(ty)))
     } else {
-        weld_err!("Internal error: Mistmatched types in makevector_expr")
+        weld_err!("Internal error: Mismatched types in makevector_expr")
     }
 }
 
@@ -84,7 +94,7 @@ pub fn getfield_expr(expr: Expr<Type>, index: u32) -> WeldResult<Expr<Type>> {
     let ty = if let Struct(ref tys) = expr.ty {
         tys[index as usize].clone()
     } else {
-        return weld_err!("Internal error: Mistmatched types in makevector_expr");
+        return weld_err!("Internal error: Mismatched types in getfield_expr");
     };
     new_expr(GetField {
                  expr: Box::new(expr),
@@ -97,12 +107,12 @@ pub fn length_expr(expr: Expr<Type>) -> WeldResult<Expr<Type>> {
     if let Vector(_) = expr.ty {
         new_expr(Length { data: Box::new(expr) }, Scalar(ScalarKind::I64))
     } else {
-        weld_err!("Internal error: Mistmatched types in length_expr")
+        weld_err!("Internal error: Mismatched types in length_expr")
     }
 }
 
 pub fn lookup_expr(data: Expr<Type>, index: Expr<Type>) -> WeldResult<Expr<Type>> {
-    let err = weld_err!("Internal error: Mistmatched types in lookup_expr");
+    let err = weld_err!("Internal error: Mismatched types in lookup_expr");
     let ty = if let Vector(ref ty) = data.ty {
         *ty.clone()
     } else {
@@ -373,6 +383,7 @@ pub fn result_expr(builder: Expr<Type>) -> WeldResult<Expr<Type>> {
         match *bk {
             Appender(ref elem_ty) => Vector(elem_ty.clone()),
             Merger(ref elem_ty, _) => *elem_ty.clone(),
+            // TODO handle other builders...
             _ => {
                 return err;
             }
@@ -387,11 +398,20 @@ pub fn result_expr(builder: Expr<Type>) -> WeldResult<Expr<Type>> {
 use super::pretty_print::*;
 
 #[test]
-/// Checks if a constructor for each expression kind exists.
-fn check_constructor_exists() {}
-
-#[test]
 fn literal_test() {
     let expr = literal_expr(LiteralKind::I32Literal(1)).unwrap();
     assert_eq!(print_expr_without_indent(&expr), "1");
+    let expr = literal_expr(LiteralKind::F32Literal(1.0)).unwrap();
+    assert_eq!(print_expr_without_indent(&expr), "1.0F");
+
+}
+
+#[test]
+fn binop_test() {
+    let right = literal_expr(LiteralKind::I32Literal(1)).unwrap();
+    let left = literal_expr(LiteralKind::I32Literal(1)).unwrap();
+    let expr = binop_expr(BinOpKind::Add, left, right).unwrap();
+
+    assert_eq!(print_expr_without_indent(&expr), "(1+1)");
+    assert_eq!(expr.ty, Scalar(ScalarKind::I32));
 }
