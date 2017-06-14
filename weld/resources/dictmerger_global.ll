@@ -37,11 +37,11 @@ entry:
 onFilled:
   %oldValue = call $VALUE @$NAME.slot.value(%$NAME.slot %slot)
   %newValue = $OP $VALUE %oldValue, %value  ; TODO: Fix this when making Op more generic
-  %res1 = call %$NAME @$NAME.put(%$NAME %bld, %$NAME.slot %slot, $KEY %key, $VALUE %newValue)
+  %res1 = call %$NAME @$NAME.put_thread_safe(%$NAME %bld, %$NAME.slot %slot, $KEY %key, $VALUE %newValue)
   br label %done
 
 onEmpty:
-  %res2 = call %$NAME @$NAME.put(%$NAME %bld, %$NAME.slot %slot, $KEY %key, $VALUE %value)
+  %res2 = call %$NAME @$NAME.put_thread_safe(%$NAME %bld, %$NAME.slot %slot, $KEY %key, $VALUE %value)
   br label %done
 
 done:

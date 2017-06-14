@@ -194,6 +194,36 @@ done:
   ret %$NAME %newDict2
 }
 
+; Set the key and value at a given slot. The slot is assumed to have been
+; returned by a lookup() on the same key provided here, and any old value for
+; the key will be replaced. A new %$NAME is returned reusing the same storage.
+define %$NAME @$NAME.put_thread_safe(%$NAME %dict, %$NAME.slot %slot, $KEY %key, $VALUE %value) {
+start:
+  %entries = extractvalue %$NAME %dict, 0
+  %size = extractvalue %$NAME %dict, 1
+  %capacity = extractvalue %$NAME %dict, 2
+  %filledPtr = getelementptr %$NAME.entry, %$NAME.entry* %slot, i64 0, i32 0
+  %filled = load i1, i1* %filledPtr
+  %keyPtr = getelementptr %$NAME.entry, %$NAME.entry* %slot, i64 0, i32 1
+  %valuePtr = getelementptr %$NAME.entry, %$NAME.entry* %slot, i64 0, i32 2
+  br i1 %filled, label %update, label %addNew
+
+update:
+  store i1 1, i1* %filledPtr
+  store $KEY %key, $KEY* %keyPtr
+  store $VALUE %value, $VALUE* %valuePtr
+  ret %$NAME %dict
+
+addNew:
+  ; Add the entry into the empty slot
+  store i1 1, i1* %filledPtr
+  store $KEY %key, $KEY* %keyPtr
+  store $VALUE %value, $VALUE* %valuePtr
+  %incSize = add i64 %size, 1
+  %dict2 = insertvalue %$NAME %dict, i64 %incSize, 1
+  ret %$NAME %dict2
+}
+
 ; Get the entries of a dictionary as a vector.
 define $KV_VEC @$NAME.tovec(%$NAME %dict) {
 entry:

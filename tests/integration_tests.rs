@@ -1078,6 +1078,66 @@ fn simple_parallel_for_dictmerger_loop() {
     unsafe { weld_value_free(ret_value) };
 }
 
+fn simple_parallel_for_global_dictmerger_loop() {
+    #[derive(Clone)]
+    #[allow(dead_code)]
+    struct Pair {
+        ele1: i32,
+        ele2: i32,
+    }
+    #[allow(dead_code)]
+    struct Args {
+        x: WeldVec<i32>,
+        y: WeldVec<i32>,
+    }
+
+    let code = "|x:vec[i32], y:vec[i32]| tovec(result(for(zip(x,y), @global(impl:global) \
+                dictmerger[i32,i32,+](8192), |b,i,e| merge(b, e))))";
+    let conf = many_threads_conf();
+
+    const DICT_SIZE: usize = 8192;
+    let mut keys = [0; DICT_SIZE];
+    let mut vals = [0; DICT_SIZE];
+
+    for i in 0..DICT_SIZE {
+        keys[i] = i as i32;
+        vals[i] = i as i32;
+    }
+    let ref input_data = Args {
+        x: WeldVec {
+            data: &keys as *const i32,
+            len: DICT_SIZE as i64,
+        },
+        y: WeldVec {
+            data: &vals as *const i32,
+            len: DICT_SIZE as i64,
+        },
+    };
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<Pair> };
+    let result = unsafe { (*data).clone() };
+
+    let output_keys = keys;
+    let output_values = vals;
+    for i in 0..(output_keys.len() as isize) {
+        let mut success = false;
+        let key = unsafe { (*result.data.offset(i)).ele1 };
+        let value = unsafe { (*result.data.offset(i)).ele2 };
+        for j in 0..(output_keys.len()) {
+            if output_keys[j] == key {
+                if output_values[j] == value {
+                    success = true;
+                }
+            }
+        }
+        assert_eq!(success, true);
+    }
+    assert_eq!(result.len, output_keys.len() as i64);
+    unsafe { weld_value_free(ret_value) };
+}
+
+
 fn simple_dict_lookup() {
     #[allow(dead_code)]
     struct Args {
@@ -1460,6 +1520,7 @@ fn main() {
              ("simple_groupmerger", simple_groupmerger),
              ("complex_groupmerger_with_struct_key", complex_groupmerger_with_struct_key),
              ("simple_parallel_for_dictmerger_loop", simple_parallel_for_dictmerger_loop),
+             ("simple_parallel_for_global_dictmerger_loop", simple_parallel_for_global_dictmerger_loop),
              ("simple_dict_lookup", simple_dict_lookup),
              ("simple_dict_exists", simple_dict_exists),
              ("simple_length", simple_length),
