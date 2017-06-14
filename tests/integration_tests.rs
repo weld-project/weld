@@ -1091,8 +1091,8 @@ fn simple_parallel_for_global_dictmerger_loop() {
         y: WeldVec<i32>,
     }
 
-    let code = "|x:vec[i32], y:vec[i32]| tovec(result(for(zip(x,y), @global(impl:global) \
-                dictmerger[i32,i32,+](8192), |b,i,e| merge(b, e))))";
+    let code = "|x:vec[i32], y:vec[i32]| tovec(result(for(zip(x,y), @(impl:global, size:8192l) \
+                dictmerger[i32,i32,+], |b,i,e| merge(b, e))))";
     let conf = many_threads_conf();
 
     const DICT_SIZE: usize = 8192;
