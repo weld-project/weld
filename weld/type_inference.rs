@@ -568,6 +568,13 @@ fn push_type(dest: &mut PartialType, src: &PartialType, context: &str) -> WeldRe
             }
         }
 
+        Vectorized(ref d) => {
+            match *src {
+                Vectorized(ref s) if d == s => Ok(false),
+                _ => weld_err!("Mismatched types in Vectorized, {}", context),
+            }
+        }
+
         Vector(ref mut dest_elem) => {
             match *src {
                 Vector(ref src_elem) => push_type(dest_elem, src_elem, context),

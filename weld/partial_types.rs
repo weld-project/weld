@@ -10,6 +10,7 @@ use super::error::*;
 pub enum PartialType {
     Unknown,
     Scalar(ScalarKind),
+    Vectorized(ScalarKind),
     Vector(Box<PartialType>),
     Dict(Box<PartialType>, Box<PartialType>),
     Builder(PartialBuilderKind, Annotations),
@@ -54,6 +55,7 @@ impl PartialType {
         match *self {
             Unknown => weld_err!("Incomplete partial type"),
             Scalar(kind) => Ok(Type::Scalar(kind)),
+            Vectorized(kind) => Ok(Type::Vectorized(kind)),
             Vector(ref elem) => Ok(Type::Vector(Box::new(try!(elem.to_type())))),
             Dict(ref kt, ref vt) => {
                 Ok(Type::Dict(Box::new(try!(kt.to_type())), Box::new(try!(vt.to_type()))))
@@ -106,6 +108,7 @@ impl PartialType {
         match *self {
             Unknown => false,
             Scalar(_) => true,
+            Vectorized(_) => true,
             Vector(ref elem) => elem.is_complete(),
             Dict(ref kt, ref vt) => kt.is_complete() && vt.is_complete(),
             Builder(Appender(ref elem), _) => elem.is_complete(),

@@ -26,6 +26,12 @@ impl PrintableType for Type {
             Scalar(I64) => "i64".to_string(),
             Scalar(F32) => "f32".to_string(),
             Scalar(F64) => "f64".to_string(),
+            Vectorized(Bool) => "<? x bool>".to_string(),
+            Vectorized(I8) => "<? x i8>".to_string(),
+            Vectorized(I32) => "<? x i32>".to_string(),
+            Vectorized(I64) => "<? x i64>".to_string(),
+            Vectorized(F32) => "<? x f32>".to_string(),
+            Vectorized(F64) => "<? x f64>".to_string(),
             Vector(ref elem) => format!("vec[{}]", elem.print()),
             Dict(ref kt, ref vt) => format!("dict[{},{}]", kt.print(), vt.print()),
             Struct(ref elems) => join("{", ",", "}", elems.iter().map(|e| e.print())),
@@ -71,6 +77,12 @@ impl PrintableType for PartialType {
             Scalar(I64) => "i64".to_string(),
             Scalar(F32) => "f32".to_string(),
             Scalar(F64) => "f64".to_string(),
+            Vectorized(Bool) => "<? x bool>".to_string(),
+            Vectorized(I8) => "<? x i8>".to_string(),
+            Vectorized(I32) => "<? x i32>".to_string(),
+            Vectorized(I64) => "<? x i64>".to_string(),
+            Vectorized(F32) => "<? x f32>".to_string(),
+            Vectorized(F64) => "<? x f64>".to_string(),
             Vector(ref elem) => format!("vec[{}]", elem.print()),
             Dict(ref kt, ref vt) => format!("dict[{},{}]", kt.print(), vt.print()),
             Struct(ref elems) => join("{", ",", "}", elems.iter().map(|e| e.print())),
@@ -345,8 +357,8 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>,
                                "|",
                                params.iter().map(|e| print_parameter(e, typed)));
             res.push_str(&format!("\n{}{}",
-                                 indent_str,
-                                 print_expr_impl(body, typed, indent + 2, should_indent)));
+                                  indent_str,
+                                  print_expr_impl(body, typed, indent + 2, should_indent)));
             res
         }
 
