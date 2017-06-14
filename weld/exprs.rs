@@ -269,6 +269,9 @@ pub fn newbuilder_expr(kind: BuilderKind, expr: Option<Expr<Type>>) -> WeldResul
                 if &e.ty == ty.as_ref() {
                     passed = true;
                 }
+            } else {
+                // Argument is optional.
+                passed = true;
             }
             passed
         }
@@ -300,6 +303,17 @@ pub fn for_expr(iters: Vec<Iter<Type>>,
                 -> WeldResult<Expr<Type>> {
 
     let vec_tys = iters.iter().map(|i| i.data.ty.clone()).collect::<Vec<_>>();
+    let mut vec_elem_tys = vec![];
+    for ty in vec_tys.iter() {
+        if let Vector(ref elem_ty) = *ty {
+            vec_elem_tys.push(*elem_ty.clone())
+        }
+    }
+
+    if vec_tys.len() != vec_elem_tys.len() {
+        return weld_err!("Internal error: Mismatched types in for_expr - non vector type in iter");
+    }
+
     let builder_ty = builder.ty.clone();
 
     if let Function(ref params, ref ret_ty) = func.ty {
@@ -308,20 +322,9 @@ pub fn for_expr(iters: Vec<Iter<Type>>,
         let ref param_1_ty = params[1];
         let ref param_2_ty = params[2];
 
-        if iters.len() != vec_tys.len() {
-            return weld_err!("Internal error: Mismatched types in for_expr - iters and vec_tys length",);
-        }
-
-        // Check the first function parameter type.
-        if iters.len() == 1 {
-            if *param_0_ty != vec_tys[0] {
-                return weld_err!("Internal error: Mismatched types in for_expr - function elem type",);
-            }
-        } else {
-            let composite_ty = Struct(vec_tys.clone());
-            if *param_0_ty != composite_ty {
-                return weld_err!("Internal error: Mismatched types in for_expr - function zipped elem type",);
-            }
+        // Check builder.
+        if param_0_ty != &builder_ty {
+            return weld_err!("Internal error: Mismatched types in for_expr - function builder type",);
         }
 
         // Check the index.
@@ -329,9 +332,20 @@ pub fn for_expr(iters: Vec<Iter<Type>>,
             return weld_err!("Internal error: Mismatched types in for_expr - function index type");
         }
 
-        // Check builder.
-        if param_2_ty != &builder_ty {
-            return weld_err!("Internal error: Mismatched types in for_expr - function builder type",);
+        if iters.len() != vec_elem_tys.len() {
+            return weld_err!("Internal error: Mismatched types in for_expr - iters and vec_tys length",);
+        }
+
+        // Check the element type.
+        if iters.len() == 1 {
+            if *param_2_ty != vec_elem_tys[0] {
+                return weld_err!("Internal error: Mismatched types in for_expr - function elem type",);
+            }
+        } else {
+            let composite_ty = Struct(vec_elem_tys.clone());
+            if *param_2_ty != composite_ty {
+                return weld_err!("Internal error: Mismatched types in for_expr - function zipped elem type",);
+            }
         }
 
         // Function return type should match builder type.
@@ -383,10 +397,9 @@ pub fn result_expr(builder: Expr<Type>) -> WeldResult<Expr<Type>> {
         match *bk {
             Appender(ref elem_ty) => Vector(elem_ty.clone()),
             Merger(ref elem_ty, _) => *elem_ty.clone(),
-            // TODO handle other builders...
-            _ => {
-                return err;
-            }
+            DictMerger(ref kt, ref vt, _) => Dict(kt.clone(), vt.clone()),
+            GroupMerger(ref kt, ref vt) => Dict(kt.clone(), Box::new(Vector(vt.clone()))),
+            VecMerger(ref elem_ty, _) => Vector(elem_ty.clone()),
         }
     } else {
         return err;
@@ -414,4 +427,60 @@ fn binop_test() {
 
     assert_eq!(print_expr_without_indent(&expr), "(1+1)");
     assert_eq!(expr.ty, Scalar(ScalarKind::I32));
+}
+
+#[test]
+fn builder_exprs_test() {
+    let bk = BuilderKind::Merger(Box::new(Scalar(ScalarKind::I32)), BinOpKind::Add);
+    let builder_type = Builder(bk.clone(), Annotations::new());
+
+    let builder = newbuilder_expr(bk.clone(), None).unwrap();
+    assert_eq!(builder.ty, builder_type);
+
+    let i32_literal = literal_expr(LiteralKind::I32Literal(5)).unwrap();
+    let f32_literal = literal_expr(LiteralKind::F32Literal(5.0)).unwrap();
+
+    // Construct a Merge expression.
+    let merge = merge_expr(builder.clone(), i32_literal.clone()).unwrap();
+    assert_eq!(merge.ty, builder_type);
+
+    // Wrong type merged - should fail.
+    assert!(merge_expr(builder.clone(), f32_literal.clone()).is_err());
+
+    // Now, create a for loop.
+    let vector = makevector_expr(vec![i32_literal.clone()]).unwrap();
+
+    let iter = Iter {
+        data: Box::new(vector),
+        start: None,
+        end: None,
+        stride: None,
+    };
+
+    // Create a list of params for the for loop's function.
+    let params = vec![Parameter {
+                          name: Symbol::new("b", 0),
+                          ty: builder_type.clone(),
+                      },
+                      Parameter {
+                          name: Symbol::new("i", 0),
+                          ty: Scalar(ScalarKind::I64),
+                      },
+                      Parameter {
+                          name: Symbol::new("e", 0),
+                          ty: i32_literal.ty.clone(),
+                      }];
+
+    let builder_iden = ident_expr(params[0].name.clone(), params[0].ty.clone()).unwrap();
+    let elem_iden = ident_expr(params[2].name.clone(), params[2].ty.clone()).unwrap();
+    let for_body = merge_expr(builder_iden.clone(), elem_iden.clone()).unwrap();
+
+    let for_func = lambda_expr(params, for_body.clone()).unwrap();
+    let for_loop = for_expr(vec![iter], builder.clone(), for_func).unwrap();
+
+    assert_eq!(print_expr_without_indent(&for_loop),
+               "for([5],merger[i32,+],|b,i,e|merge(b,e))");
+
+    let result = result_expr(for_loop).unwrap();
+    assert_eq!(result.ty, i32_literal.ty);
 }
