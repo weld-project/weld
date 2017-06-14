@@ -382,3 +382,16 @@ pub fn result_expr(builder: Expr<Type>) -> WeldResult<Expr<Type>> {
     };
     new_expr(Res { builder: Box::new(builder) }, ty)
 }
+
+#[cfg(test)]
+use super::pretty_print::*;
+
+#[test]
+/// Checks if a constructor for each expression kind exists.
+fn check_constructor_exists() {}
+
+#[test]
+fn literal_test() {
+    let expr = literal_expr(LiteralKind::I32Literal(1)).unwrap();
+    assert_eq!(print_expr_without_indent(&expr), "1");
+}
