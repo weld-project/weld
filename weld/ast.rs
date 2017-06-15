@@ -280,8 +280,20 @@ pub struct Expr<T: TypeBounds> {
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum IterKind {
     ScalarIter, // A standard scalar iterator.
-    VectorIter(u32), // A vector iterator, loading `size` elements at a time.
+    VectorIter, // A vector iterator.
     FringeIter, // A fringe iterator, handling the fringe of a vector iter.
+}
+
+impl fmt::Display for IterKind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use ast::IterKind::*;
+        let text = match *self {
+            ScalarIter => "scalar",
+            VectorIter => "vectorized",
+            FringeIter => "fringe",
+        };
+        f.write_str(text)
+    }
 }
 
 /// An iterator, which specifies a vector to iterate over and optionally a start index,

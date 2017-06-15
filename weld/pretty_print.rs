@@ -165,7 +165,7 @@ fn print_iters<T: PrintableType>(iters: &Vec<Iter<T>>,
     }
     for iter in iters {
         if let Some(_) = iter.start {
-            iter_strs.push(format!("iter({},{},{},{})",
+            iter_strs.push(format!("iter({},{},{},{},{})",
                                    print_expr_impl(iter.data.as_ref(),
                                                    typed,
                                                    indent,
@@ -181,7 +181,8 @@ fn print_iters<T: PrintableType>(iters: &Vec<Iter<T>>,
                                    print_expr_impl(iter.stride.as_ref().unwrap(),
                                                    typed,
                                                    indent,
-                                                   should_indent)));
+                                                   should_indent),
+                                    iter.kind));
         } else {
             iter_strs.push(print_expr_impl(iter.data.as_ref(), typed, indent + 2, should_indent));
         }
@@ -431,6 +432,33 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>,
                                    .iter()
                                    .map(|e| print_expr_impl(e, typed, indent, should_indent))));
             res
+        }
+    }
+}
+
+/// Print a vector literal value.
+pub fn print_vector_literal(lit: &LiteralKind) -> String {
+    match *lit {
+        BoolLiteral(v) => format!("<{}, {}, ..>", v, v),
+        I8Literal(v) => format!("<{}, {}, ..>", v, v),
+        I32Literal(v) => format!("<{}, {}, ..>", v, v),
+        I64Literal(v) => format!("<{}L, {}L, ..>", v, v),
+        F32Literal(v) => {
+            let mut res = format!("{}", v);
+            // Hack to disambiguate from integers.
+            if !res.contains(".") {
+                res.push_str(".0");
+            }
+            res.push_str("F");
+            format!("<{}, {}, ..>", &res, &res)
+        }
+        F64Literal(v) => {
+            let mut res = format!("{}", v);
+            // Hack to disambiguate from integers.
+            if !res.contains(".") {
+                res.push_str(".0");
+            }
+            format!("<{}, {}, ..>", &res, &res)
         }
     }
 }

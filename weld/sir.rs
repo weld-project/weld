@@ -82,6 +82,7 @@ pub struct ParallelForIter {
     pub start: Option<Symbol>,
     pub end: Option<Symbol>,
     pub stride: Option<Symbol>,
+    pub kind: IterKind,
 }
 
 #[derive(Clone)]
@@ -355,11 +356,12 @@ impl fmt::Display for ParallelForIter {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if self.start.is_some() {
             write!(f,
-                   "iter({}, {}, {}, {})",
+                   "iter({}, {}, {}, {}, {})",
                    self.data,
                    self.start.clone().unwrap(),
                    self.end.clone().unwrap(),
-                   self.stride.clone().unwrap())
+                   self.stride.clone().unwrap(),
+                   self.kind)
         } else {
             write!(f, "{}", self.data)
         }
@@ -1001,6 +1003,7 @@ fn gen_expr(expr: &TypedExpr,
                                       start: start_sym,
                                       end: end_sym,
                                       stride: stride_sym,
+                                      kind: iter.kind.clone(),
                                   });
                 }
                 let (body_end_func, body_end_block, _) =

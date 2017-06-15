@@ -147,7 +147,7 @@ pub fn vectorize(expr: &mut Expr<Type>) -> WeldResult<()> {
                                         start: e.start.clone(),
                                         end: e.end.clone(),
                                         stride: e.stride.clone(),
-                                        kind: IterKind::VectorIter(4),
+                                        kind: IterKind::VectorIter,
                                     });
                             }
 
