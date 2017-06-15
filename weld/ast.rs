@@ -799,6 +799,30 @@ impl<T: TypeBounds> Expr<T> {
         }
     }
 
+    /// Recursively transforms an expression in place by running a function on it and optionally replacing it with another expression.
+    /// Supports returning an error, which is treated as returning (None, false)
+    pub fn transform_and_continue_res<F>(&mut self, func: &mut F)
+        where F: FnMut(&mut Expr<T>) -> WeldResult<(Option<Expr<T>>, bool)>
+        {
+            if let Ok(result) = func(self) {
+                match result {
+                    (Some(e), true) => {
+                        *self = e;
+                        return self.transform_and_continue_res(func);
+                    }
+                    (Some(e), false) => {
+                        *self = e;
+                    }
+                    (None, true) => {
+                        for c in self.children_mut() {
+                            c.transform_and_continue_res(func);
+                        }
+                    }
+                    (None, false) => {}
+                }
+            }
+        }
+
 
     /// Recursively transforms an expression in place by running a function on it and optionally replacing it with another expression.
     pub fn transform<F>(&mut self, func: &mut F)

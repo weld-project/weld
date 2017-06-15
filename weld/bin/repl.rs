@@ -25,6 +25,8 @@ use weld::sir::ast_to_sir;
 use weld::util::load_runtime_library;
 use weld::util::MERGER_BC;
 
+use weld::vectorizer;
+
 enum ReplCommands {
     LoadFile,
 }
@@ -180,6 +182,11 @@ fn main() {
 
         if let Err(ref e) = transforms::uniquify(&mut expr) {
             println!("Error during uniquify: {}\n", e);
+            continue;
+        }
+
+        if let Err(ref e) = vectorizer::vectorize(&mut expr) {
+            println!("Error during vectorize: {}\n", e);
             continue;
         }
 

@@ -43,6 +43,9 @@ pub mod conf;
 pub mod util;
 pub mod exprs;
 
+// TODO not the right place for this.
+pub mod vectorizer;
+
 extern "C" {
     pub fn free(ptr: *mut c_void);
 }

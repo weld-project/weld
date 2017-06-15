@@ -297,9 +297,10 @@ pub fn newbuilder_expr(kind: BuilderKind, expr: Option<Expr<Type>>) -> WeldResul
              Builder(kind, Annotations::new()))
 }
 
+// TODO - the vectorized flag is temporary!
 pub fn for_expr(iters: Vec<Iter<Type>>,
                 builder: Expr<Type>,
-                func: Expr<Type>)
+                func: Expr<Type>, vectorized: bool)
                 -> WeldResult<Expr<Type>> {
 
     let vec_tys = iters.iter().map(|i| i.data.ty.clone()).collect::<Vec<_>>();
@@ -338,7 +339,16 @@ pub fn for_expr(iters: Vec<Iter<Type>>,
 
         // Check the element type.
         if iters.len() == 1 {
-            if *param_2_ty != vec_elem_tys[0] {
+            let elem_ty = if vectorized {
+                if let Scalar(ref sk) = vec_elem_tys[0] {
+                    Vectorized(sk.clone())
+                } else {
+                    return weld_err!("Internal error: Mismatched types in for_expr - bad vector",);
+                }
+            } else {
+                vec_elem_tys[0].clone()
+            };
+            if *param_2_ty != elem_ty {
                 return weld_err!("Internal error: Mismatched types in for_expr - function elem type",);
             }
         } else {
