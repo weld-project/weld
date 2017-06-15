@@ -34,7 +34,7 @@ fn vectorizable_iters(iters: &Vec<Iter<Type>>) -> bool {
 }
 
 /// Vectorizes the expression by changing it's type if the expression is a scalar.
-fn vectorize_expr(e: &mut Expr<Type>) -> () {
+fn vectorize_expr(e: &mut Expr<Type>) {
     match e.kind {
         Literal(_) => {
             e.ty = vectorized_type(&e.ty);
@@ -49,6 +49,62 @@ fn vectorize_expr(e: &mut Expr<Type>) -> () {
     }
 }
 
+
+/// Checks basic vectorizability for a loop - this is a strong check which ensure that the only expressions
+/// which appear in a function body are arithmetic, identifiers, literals,and Let statements, and
+/// builder merges.
+/// 
+fn vectorizable(for_loop: &Expr<Type>) -> bool {
+    if let For { ref iters, builder: ref init_builder, ref func } = for_loop.kind {
+        // Check if the iterators are consumed.
+        if vectorizable_iters(&iters) {
+            // Check if the builder is newly initialized.
+            if let NewBuilder(_) = init_builder.kind {
+                // Check the builder.
+                if let Builder(ref bk, _) = init_builder.ty {
+                    match *bk {
+                        BuilderKind::Merger(ref ty, _) => {
+                            if let Scalar(_) = **ty {} else { return false; }
+                        }
+                        BuilderKind::Appender(ref ty) => {
+                            if let Scalar(_) = **ty {} else { return false; }
+                        }
+                        _ => {
+                            return false;
+                        }
+                    };
+                }
+
+                if let Lambda { ref params, ref body } = func.kind {
+                    let mut passed = true;
+                    body.traverse(&mut |f| {
+                        match f.kind {
+                            Literal(_) => {},
+                            Ident(_) => {},
+                            BinOp{ .. } => {},
+                            Let{ .. } => {},
+                            Merge{ .. } => {},
+                            _ => {
+                                passed = false;
+                            }
+                        }
+                    });
+                    
+                    // Check if the index is used anywhere to do any kind of random access,
+                    // index computation, etc.
+                    let index_iden = exprs::ident_expr(params[1].name.clone(), params[1].ty.clone()).unwrap();
+                    if body.contains(&index_iden) {
+                        passed = false;
+                    }
+
+                    return passed;
+                }
+            }
+        }
+    }
+    return false;
+}
+
 /// Vectorize an expression.
 pub fn vectorize(expr: &mut Expr<Type>) -> WeldResult<()> {
     let mut vectorized = false;
@@ -56,8 +112,8 @@ pub fn vectorize(expr: &mut Expr<Type>) -> WeldResult<()> {
         //  The Res is a stricter-than-necessary check, but prevents us from having to check nested
         //  loops for now.
         if let Res { builder: ref for_loop } = expr.kind {
-            if let For { ref iters, builder: ref init_builder, ref func } = for_loop.kind {
-                if vectorizable_iters(&iters) {
+            if vectorizable(for_loop) {
+                if let For { ref iters, builder: ref init_builder, ref func } = for_loop.kind {
                     if let NewBuilder(_) = init_builder.kind {
                         if let Lambda { ref params, ref body } = func.kind {
                             // This is the vectorized body.
@@ -87,7 +143,7 @@ pub fn vectorize(expr: &mut Expr<Type>) -> WeldResult<()> {
                             // Iterators for the vectorized loop.
                             let mut vec_iters = vec![];
                             for (e, n) in iters.iter().zip(&data_names) {
-                            println!("iters expr");
+                                println!("iters expr");
                                 vec_iters.push(
                                     Iter {
                                         data: Box::new(exprs::ident_expr(n.clone(), e.data.ty.clone())?),
@@ -115,7 +171,7 @@ pub fn vectorize(expr: &mut Expr<Type>) -> WeldResult<()> {
 
                             let mut prev_expr = result;
                             for (iter, name) in iters.iter().zip(data_names).rev() {
-                            println!("let expr");
+                                println!("let expr");
                                 prev_expr = exprs::let_expr(name.clone(), *iter.data.clone(), prev_expr)?;
                             }
 

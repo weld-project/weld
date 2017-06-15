@@ -838,7 +838,7 @@ impl<T: TypeBounds> Expr<T> {
     }
 
     /// Returns true if this expressions contains `other`.
-    pub fn contains(&mut self, other: &Expr<T>) -> bool {
+    pub fn contains(&self, other: &Expr<T>) -> bool {
         if *self == *other {
             return true;
         }
