@@ -31,20 +31,22 @@ entry:
   %key = extractvalue %$KV_STRUCT %keyValue, 0
   %value = extractvalue %$KV_STRUCT %keyValue, 1
   %slot = call %$NAME.slot @$NAME.lookup(%$NAME %bld, $KEY %key)
+  call void @$NAME.slot.lock(%$NAME.slot %slot)
   %filled = call i1 @$NAME.slot.filled(%$NAME.slot %slot)
   br i1 %filled, label %onFilled, label %onEmpty
 
 onFilled:
   %oldValue = call $VALUE @$NAME.slot.value(%$NAME.slot %slot)
   %newValue = $OP $VALUE %oldValue, %value  ; TODO: Fix this when making Op more generic
-  %res1 = call %$NAME @$NAME.put_thread_safe(%$NAME %bld, %$NAME.slot %slot, $KEY %key, $VALUE %newValue)
+  %res1 = call %$NAME @$NAME.put(%$NAME %bld, %$NAME.slot %slot, $KEY %key, $VALUE %newValue)
   br label %done
 
 onEmpty:
-  %res2 = call %$NAME @$NAME.put_thread_safe(%$NAME %bld, %$NAME.slot %slot, $KEY %key, $VALUE %value)
+  %res2 = call %$NAME @$NAME.put(%$NAME %bld, %$NAME.slot %slot, $KEY %key, $VALUE %value)
   br label %done
 
 done:
+  call void @$NAME.slot.unlock(%$NAME.slot %slot)
   %res = phi %$NAME [ %res1, %onFilled ], [ %res2, %onEmpty ]
   store %$NAME %res, %$NAME* %bldPtr
   ret %$NAME.bld %bldPtr

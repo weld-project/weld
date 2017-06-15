@@ -9,7 +9,7 @@
 ; - KV_VEC: name of vector of KV_STRUCTs (should be generated outside)
 ; - KV_VEC_PREFIX: prefix for helper functions of KV_VEC
 
-%$NAME.entry = type { i1, $KEY, $VALUE }        ; isFilled, key, value
+%$NAME.entry = type { i1, $KEY, $VALUE, i1i* }        ; isFilled, key, value, is_locked
 %$NAME.slot = type %$NAME.entry*                ; handle to an entry in the API
 %$NAME = type { %$NAME.entry*, i64, i64 }  ; entries, size, capacity
 
@@ -72,6 +72,31 @@ define i32 @$NAME.cmp(%$NAME %dict1, %$NAME %dict2) {
 define i64 @$NAME.size(%$NAME %dict) {
   %size = extractvalue %$NAME %dict, 1
   ret i64 %size
+}
+
+; Try to lock the slot.
+define i1 @$NAME.slot.try_lock(%$NAME.slot %slot) {
+  %ptr = getelementptr %$NAME.entry, %$NAME.slot %slot, i64 0, i32 3
+  %val_success = cmpxchg i1* %ptr, i32 0, i32 1 acq_rel acq_rel
+  %success = extractvalue { i1, i1 } %val_success, 1
+  ret i1 %success
+}
+
+; Lock the slot.
+define void @$NAME.slot.lock(%$NAME.slot %slot) {
+start:
+  %success = call i1 @$NAME.slot.try_lock(%$NAME.slot %slot)
+  br i1 %success, label %end, label %start
+
+end:
+  ret void
+}
+
+; Unlock the slot.
+define void @$NAME.slot.unlock(%$NAME.slot %slot) {
+  %ptr = getelementptr %$NAME.entry, %$NAME.slot %slot, i64 0, i32 3
+  cmpxchg i1* %ptr, i32 1, i32 0 acq_rel acq_rel
+  ret void
 }
 
 ; Check whether a slot is filled.
@@ -154,44 +179,8 @@ addNew:
   store $KEY %key, $KEY* %keyPtr
   store $VALUE %value, $VALUE* %valuePtr
   %incSize = add i64 %size, 1
-  ; Check whether table is at least 70% full; this means 10 * size >= 7 * capacity
-  %v1 = mul i64 %size, 10
-  %v2 = mul i64 %capacity, 7
-  %full = icmp sge i64 %v1, %v2
-  br i1 %full, label %onFull, label %returnCurrent
-
-returnCurrent:
   %dict2 = insertvalue %$NAME %dict, i64 %incSize, 1
   ret %$NAME %dict2
-
-onFull:
-  %newCapacity = mul i64 %capacity, 2
-  %newDict = call %$NAME @$NAME.new(i64 %newCapacity)
-  ; Loop over old elements and insert them into newDict
-  br label %body
-
-body:
-  %i = phi i64 [ 0, %onFull ], [ %i2, %body2 ], [ %i2, %moveEntry ]
-  %newDict2 = phi %$NAME [ %newDict, %onFull ], [ %newDict2, %body2 ], [ %newDict3, %moveEntry ]
-  %comp = icmp eq i64 %i, %capacity
-  br i1 %comp, label %done, label %body2
-
-body2:
-  %i2 = add i64 %i, 1
-  %entryPtr = getelementptr %$NAME.entry, %$NAME.entry* %entries, i64 %i
-  %entry = load %$NAME.entry, %$NAME.entry* %entryPtr
-  %entryFilled = extractvalue %$NAME.entry %entry, 0
-  br i1 %entryFilled, label %moveEntry, label %body
-
-moveEntry:
-  %entryKey = extractvalue %$NAME.entry %entry, 1
-  %entryValue = extractvalue %$NAME.entry %entry, 2
-  %newSlot = call %$NAME.slot @$NAME.lookup(%$NAME %newDict, $KEY %entryKey)
-  %newDict3 = call %$NAME @$NAME.put(%$NAME %newDict2, %$NAME.slot %newSlot, $KEY %entryKey, $VALUE %entryValue)
-  br label %body
-
-done:
-  ret %$NAME %newDict2
 }
 
 ; Get the entries of a dictionary as a vector.

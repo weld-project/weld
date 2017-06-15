@@ -1093,7 +1093,7 @@ fn simple_parallel_for_global_dictmerger_loop() {
 
     let code = "|x:vec[i32], y:vec[i32]| tovec(result(for(zip(x,y), @(impl:global, size:8192l) \
                 dictmerger[i32,i32,+], |b,i,e| merge(b, e))))";
-    let conf = many_threads_conf();
+    let conf = default_conf();
 
     const DICT_SIZE: usize = 8192;
     let mut keys = [0; DICT_SIZE];
