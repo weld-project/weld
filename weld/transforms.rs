@@ -4,6 +4,7 @@ use super::ast::*;
 use super::ast::ExprKind::*;
 use super::ast::Type::*;
 use super::ast::BuilderKind::*;
+use super::ast::IterKind::*;
 use super::ast::LiteralKind::*;
 use super::error::*;
 
@@ -34,6 +35,7 @@ pub fn inline_zips(expr: &mut Expr<Type>) {
                                      start: None,
                                      end: None,
                                      stride: None,
+                                     kind: ScalarIter,
                                  }
                              })
                         .collect::<Vec<_>>();
@@ -410,7 +412,8 @@ pub fn fuse_loops_horizontal(expr: &mut Expr<Type>) {
                             data: Box::new(new_iter_expr),
                             start: all_iters[0].start.clone(),
                             end: all_iters[0].end.clone(),
-                            stride: all_iters[0].stride.clone()
+                            stride: all_iters[0].stride.clone(),
+                            kind: all_iters[0].kind.clone(),
                         }], builder: outer_bldr.clone(), func: outer_func.clone()},
                         annotations: Annotations::new(),
                     });
@@ -481,6 +484,7 @@ fn consumes_all(iter: &Iter<Type>) -> bool {
                       start: Some(ref start),
                       end: Some(ref end),
                       stride: Some(ref stride),
+                      ..
                   } = iter {
         // Checks if the stride is 1 and an entire vector represented by a symbol is consumed.
         if let (&Literal(I64Literal(1)),

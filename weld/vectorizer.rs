@@ -119,7 +119,6 @@ pub fn vectorize(expr: &mut Expr<Type>) -> WeldResult<()> {
                             // This is the vectorized body.
                             let mut vectorized_body = body.clone();
                             vectorized_body.transform_and_continue(&mut |ref mut e| {
-                                // TODO this obviously needs to be stricter...
                                 vectorize_expr(e);
                                 (None, true)
                             });
@@ -127,7 +126,6 @@ pub fn vectorize(expr: &mut Expr<Type>) -> WeldResult<()> {
                             let mut vectorized_params = params.clone();
                             vectorized_params[2].ty = vectorized_type(&vectorized_params[2].ty);
 
-                            println!("lambda expr");
                             let vec_func = exprs::lambda_expr(vectorized_params, *vectorized_body)?;
 
                             // Pull out the iter into a let statement. This lets us repeat the
@@ -143,35 +141,30 @@ pub fn vectorize(expr: &mut Expr<Type>) -> WeldResult<()> {
                             // Iterators for the vectorized loop.
                             let mut vec_iters = vec![];
                             for (e, n) in iters.iter().zip(&data_names) {
-                                println!("iters expr");
                                 vec_iters.push(
                                     Iter {
                                         data: Box::new(exprs::ident_expr(n.clone(), e.data.ty.clone())?),
                                         start: e.start.clone(),
                                         end: e.end.clone(),
                                         stride: e.stride.clone(),
+                                        kind: IterKind::VectorIter(4),
                                     });
                             }
 
                             // Iterators for the fringe loop. This is the same set of iterators, but with the
                             // IteratorKind changed to Fringe.
-                            let fringe_iters = vec_iters.clone();
+                            let fringe_iters = vec_iters.iter_mut().map(|i| {
+                                let mut i = i.clone();
+                                i.kind = IterKind::FringeIter;
+                                i
+                            }).collect();
 
-                            println!("for expr");
-                            let vectorized_loop = exprs::for_expr(vec_iters, *init_builder.clone(), vec_func, true);
-                            if vectorized_loop.is_err() {
-                                println!("{}", vectorized_loop.unwrap_err());
-                                panic!("lol");
-                            }
-                            let vectorized_loop = vectorized_loop.unwrap();
-                            println!("for expr");
+                            let vectorized_loop = exprs::for_expr(vec_iters, *init_builder.clone(), vec_func, true)?;
                             let scalar_loop = exprs::for_expr(fringe_iters, vectorized_loop, *func.clone(), false)?;
-                            println!("resultt expr");
                             let result = exprs::result_expr(scalar_loop)?;
 
                             let mut prev_expr = result;
                             for (iter, name) in iters.iter().zip(data_names).rev() {
-                                println!("let expr");
                                 prev_expr = exprs::let_expr(name.clone(), *iter.data.clone(), prev_expr)?;
                             }
 

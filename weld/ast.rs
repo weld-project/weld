@@ -276,6 +276,14 @@ pub struct Expr<T: TypeBounds> {
     pub annotations: Annotations,
 }
 
+/// An iterator kind, which specifies how data should be loaded and passed to a `For` loop.
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+pub enum IterKind {
+    ScalarIter, // A standard scalar iterator.
+    VectorIter(u32), // A vector iterator, loading `size` elements at a time.
+    FringeIter, // A fringe iterator, handling the fringe of a vector iter.
+}
+
 /// An iterator, which specifies a vector to iterate over and optionally a start index,
 /// end index, and stride.
 #[derive(Clone, Debug, PartialEq)]
@@ -284,6 +292,7 @@ pub struct Iter<T: TypeBounds> {
     pub start: Option<Box<Expr<T>>>,
     pub end: Option<Box<Expr<T>>>,
     pub stride: Option<Box<Expr<T>>>,
+    pub kind: IterKind,
 }
 
 #[derive(Clone, Debug, PartialEq)]

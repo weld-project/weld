@@ -13,6 +13,7 @@ use super::ast::BuilderImplementationKind::*;
 use super::ast::ExprKind::*;
 use super::ast::LiteralKind::*;
 use super::ast::ScalarKind;
+use super::ast::IterKind::*;
 use super::error::*;
 use super::partial_types::*;
 use super::partial_types::PartialBuilderKind::*;
@@ -453,6 +454,7 @@ impl<'t> Parser<'t> {
                 start: start,
                 end: end,
                 stride: stride,
+                kind: ScalarIter,
             };
             try!(self.consume(TCloseParen));
             Ok(iter)
@@ -463,6 +465,7 @@ impl<'t> Parser<'t> {
                 start: None,
                 end: None,
                 stride: None,
+                kind: ScalarIter,
             };
             Ok(iter)
         }
