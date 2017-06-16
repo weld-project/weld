@@ -46,8 +46,8 @@ onEmpty:
   br label %done
 
 done:
-  call void @$NAME.slot.unlock(%$NAME.slot %slot)
   %res = phi %$NAME [ %res1, %onFilled ], [ %res2, %onEmpty ]
+  call void @$NAME.slot.unlock(%$NAME.slot %slot)
   store %$NAME %res, %$NAME* %bldPtr
   ret %$NAME.bld %bldPtr
 }

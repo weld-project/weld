@@ -9,7 +9,7 @@
 ; - KV_VEC: name of vector of KV_STRUCTs (should be generated outside)
 ; - KV_VEC_PREFIX: prefix for helper functions of KV_VEC
 
-%$NAME.entry = type { i1, $KEY, $VALUE, i1i* }        ; isFilled, key, value, is_locked
+%$NAME.entry = type { i1, $KEY, $VALUE, i32 }        ; isFilled, key, value, is_locked
 %$NAME.slot = type %$NAME.entry*                ; handle to an entry in the API
 %$NAME = type { %$NAME.entry*, i64, i64 }  ; entries, size, capacity
 
@@ -77,16 +77,19 @@ define i64 @$NAME.size(%$NAME %dict) {
 ; Try to lock the slot.
 define i1 @$NAME.slot.try_lock(%$NAME.slot %slot) {
   %ptr = getelementptr %$NAME.entry, %$NAME.slot %slot, i64 0, i32 3
-  %val_success = cmpxchg i1* %ptr, i32 0, i32 1 acq_rel acq_rel
-  %success = extractvalue { i1, i1 } %val_success, 1
+  %val_success = cmpxchg i32* %ptr, i32 0, i32 1 acq_rel monotonic
+  %success = extractvalue { i32, i1 } %val_success, 1
   ret i1 %success
 }
 
 ; Lock the slot.
 define void @$NAME.slot.lock(%$NAME.slot %slot) {
-start:
   %success = call i1 @$NAME.slot.try_lock(%$NAME.slot %slot)
   br i1 %success, label %end, label %start
+
+start:
+  %success2 = call i1 @$NAME.slot.try_lock(%$NAME.slot %slot)
+  br i1 %success2, label %end, label %start
 
 end:
   ret void
@@ -95,7 +98,7 @@ end:
 ; Unlock the slot.
 define void @$NAME.slot.unlock(%$NAME.slot %slot) {
   %ptr = getelementptr %$NAME.entry, %$NAME.slot %slot, i64 0, i32 3
-  cmpxchg i1* %ptr, i32 1, i32 0 acq_rel acq_rel
+  cmpxchg i32* %ptr, i32 1, i32 0 acq_rel monotonic
   ret void
 }
 

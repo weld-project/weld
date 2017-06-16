@@ -33,6 +33,7 @@ static PRELUDE_CODE: &'static str = include_str!("resources/prelude.ll");
 static VECTOR_CODE: &'static str = include_str!("resources/vector.ll");
 static MERGER_CODE: &'static str = include_str!("resources/merger.ll");
 static DICTIONARY_CODE: &'static str = include_str!("resources/dictionary.ll");
+static DICTIONARY_GLOBAL_CODE: &'static str = include_str!("resources/dictionary_global.ll");
 static DICTMERGER_CODE: &'static str = include_str!("resources/dictmerger.ll");
 static DICTMERGER_GLOBAL_CODE: &'static str = include_str!("resources/dictmerger_global.ll");
 static GROUPMERGER_CODE: &'static str = include_str!("resources/groupbuilder.ll");
@@ -52,6 +53,7 @@ pub struct LlvmGenerator {
 
     /// Tracks a unique name of the form %d0, %d1, etc for each dict generated.
     dict_names: HashMap<Type, String>,
+    global_dict_names: HashMap<Type, String>,
     dict_ids: IdGenerator,
 
     /// TODO This is unnecessary but satisfies the compiler for now.
@@ -112,6 +114,7 @@ impl LlvmGenerator {
             merger_names: HashMap::new(),
             merger_ids: IdGenerator::new("%m"),
             dict_names: HashMap::new(),
+            global_dict_names: HashMap::new(),
             dict_ids: IdGenerator::new("%d"),
             bld_names: HashMap::new(),
             prelude_code: CodeBuilder::new(),
@@ -923,7 +926,7 @@ impl LlvmGenerator {
                 Ok(self.vec_names.get(elem).unwrap())
             }
 
-            Dict(ref key, ref value) => {
+            Dict(ref key, ref value, ref annotations) => {
                 let elem = Box::new(Struct(vec![*key.clone(), *value.clone()]));
                 if self.dict_names.get(&elem) == None {
                     let key_ty = try!(self.llvm_type(key)).to_string();
@@ -935,6 +938,8 @@ impl LlvmGenerator {
                     let kv_vec = Box::new(Vector(elem.clone()));
                     let kv_vec_ty = try!(self.llvm_type(&kv_vec)).to_string();
                     let kv_vec_prefix = format!("@{}", &kv_vec_ty.replace("%", ""));
+
+                    // Add local dictionary code to prelude.
                     let key_prefix_replaced = DICTIONARY_CODE.replace("$KEY_PREFIX", &key_prefix);
                     let name_replaced =
                         key_prefix_replaced.replace("$NAME", &name.replace("%", ""));
@@ -946,6 +951,29 @@ impl LlvmGenerator {
                     let kv_vec_ty_replaced = kv_vec_prefix_replaced.replace("$KV_VEC", &kv_vec_ty);
                     self.prelude_code.add(&kv_vec_ty_replaced);
                     self.prelude_code.add("\n");
+
+                    // Add global dictionary code to prelude.
+                    let global_name = format!("{}.global", name);
+                    self.global_dict_names.insert(*elem.clone(), global_name.clone());
+                    let key_prefix_replaced = DICTIONARY_GLOBAL_CODE.replace("$KEY_PREFIX", &key_prefix);
+                    let name_replaced =
+                        key_prefix_replaced.replace("$NAME", &global_name.replace("%", ""));
+                    let key_ty_replaced = name_replaced.replace("$KEY", &key_ty);
+                    let value_ty_replaced = key_ty_replaced.replace("$VALUE", &value_ty);
+                    let kv_struct_replaced = value_ty_replaced.replace("$KV_STRUCT", &kv_struct_ty);
+                    let kv_vec_prefix_replaced =
+                        kv_struct_replaced.replace("$KV_VEC_PREFIX", &kv_vec_prefix);
+                    let kv_vec_ty_replaced = kv_vec_prefix_replaced.replace("$KV_VEC", &kv_vec_ty);
+                    self.prelude_code.add(&kv_vec_ty_replaced);
+                    self.prelude_code.add("\n");
+                }
+                let mut dict_impl = BuilderImplementationKind::Local;
+                if let Some(ref e) = *annotations.builder_implementation() {
+                    dict_impl = e.clone();
+                }
+
+                if dict_impl == BuilderImplementationKind::Global {
+                    return Ok(self.global_dict_names.get(&elem).unwrap());
                 }
                 Ok(self.dict_names.get(&elem).unwrap())
             }
@@ -978,7 +1006,7 @@ impl LlvmGenerator {
                                 .insert(bk.clone(), format!("{}.bld", bld_ty_str));
                         }
                         DictMerger(ref kt, ref vt, ref op) => {
-                            let bld_ty = Dict(kt.clone(), vt.clone());
+                            let bld_ty = Dict(kt.clone(), vt.clone(), annotations.clone());
                             let bld_ty_str = try!(self.llvm_type(&bld_ty)).to_string();
                             let elem = Box::new(Struct(vec![*kt.clone(), *vt.clone()]));
                             let kv_struct_ty = try!(self.llvm_type(&elem)).to_string();
@@ -1432,7 +1460,7 @@ impl LlvmGenerator {
                                                  output_ll_ty,
                                                  llvm_symbol(output)));
                             }
-                            Dict(_, _) => {
+                            Dict(_, _, _) => {
                                 let child_ll_ty = try!(self.llvm_type(&child_ty)).to_string();
                                 let output_ty = try!(get_sym_ty(func, output));
                                 let output_ll_ty = try!(self.llvm_type(&output_ty)).to_string();
@@ -1481,7 +1509,7 @@ impl LlvmGenerator {
                     } => {
                         let child_ty = try!(get_sym_ty(func, child));
                         match *child_ty {
-                            Dict(_, _) => {
+                            Dict(_, _, _) => {
                                 let child_ll_ty = try!(self.llvm_type(&child_ty)).to_string();
                                 let dict_ll_ty = try!(self.llvm_type(&child_ty)).to_string();
                                 let key_ty = try!(get_sym_ty(func, key));
@@ -2056,7 +2084,7 @@ impl LlvmGenerator {
                                         let function_id = func_gen.next();
                                         let func_str = format!("@{}",
                                                                &function_id.replace("%", ""));
-                                        let bld_ty = Dict(kt.clone(), Box::new(Vector(vt.clone())));
+                                        let bld_ty = Dict(kt.clone(), Box::new(Vector(vt.clone())), Annotations::new());
                                         let elem = Box::new(Struct(vec![*kt.clone(), *vt.clone()]));
                                         let bld_ty_str = try!(self.llvm_type(&bld_ty)).to_string();
                                         let kv_struct_ty = try!(self.llvm_type(&elem)).to_string();

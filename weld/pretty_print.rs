@@ -27,7 +27,9 @@ impl PrintableType for Type {
             Scalar(F32) => "f32".to_string(),
             Scalar(F64) => "f64".to_string(),
             Vector(ref elem) => format!("vec[{}]", elem.print()),
-            Dict(ref kt, ref vt) => format!("dict[{},{}]", kt.print(), vt.print()),
+            Dict(ref kt, ref vt, ref annotations) => {
+                format!("{}dict[{},{}]", annotations, kt.print(), vt.print())
+            }
             Struct(ref elems) => join("{", ",", "}", elems.iter().map(|e| e.print())),
             Function(ref params, ref ret) => {
                 let mut res = join("|", ",", "|(", params.iter().map(|e| e.print()));
@@ -72,7 +74,9 @@ impl PrintableType for PartialType {
             Scalar(F32) => "f32".to_string(),
             Scalar(F64) => "f64".to_string(),
             Vector(ref elem) => format!("vec[{}]", elem.print()),
-            Dict(ref kt, ref vt) => format!("dict[{},{}]", kt.print(), vt.print()),
+            Dict(ref kt, ref vt, ref annotations) => {
+                format!("{}dict[{},{}]", annotations, kt.print(), vt.print())
+            }
             Struct(ref elems) => join("{", ",", "}", elems.iter().map(|e| e.print())),
             Function(ref params, ref ret) => {
                 let mut res = join("(", ",", ")=>", params.iter().map(|e| e.print()));
