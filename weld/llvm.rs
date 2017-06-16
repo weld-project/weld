@@ -31,7 +31,7 @@ use super::parser::*;
 
 static PRELUDE_CODE: &'static str = include_str!("resources/prelude.ll");
 static VECTOR_CODE: &'static str = include_str!("resources/vector.ll");
-static MERGER_CODE: &'static str = include_str!("resources/merger.ll");
+static MERGER_CODE: &'static str = include_str!("resources/merger/merger.ll");
 static DICTIONARY_CODE: &'static str = include_str!("resources/dictionary.ll");
 static DICTMERGER_CODE: &'static str = include_str!("resources/dictmerger.ll");
 static GROUPMERGER_CODE: &'static str = include_str!("resources/groupbuilder.ll");
@@ -998,8 +998,10 @@ impl LlvmGenerator {
                                 let prefix_replaced =
                                     MERGER_CODE.replace("$ELEM_PREFIX", &elem_prefix);
                                 let elem_replaced = prefix_replaced.replace("$ELEM", &elem_ty);
+                                // TODO!
+                                let vecsize_replaced = elem_replaced.replace("$VECSIZE", "1");
                                 let name_replaced =
-                                    elem_replaced.replace("$NAME", &name.replace("%", ""));
+                                    vecsize_replaced.replace("$NAME", &name.replace("%", ""));
                                 self.prelude_code.add(&name_replaced);
                                 self.prelude_code.add("\n");
                             }
@@ -1948,15 +1950,18 @@ impl LlvmGenerator {
                                                                          &bld_ty_str,
                                                                          ctx));
 
+                                        // TODO - see test.ll, grep for "new!!" need those things
+                                        // to match. Copy and paste this stuff into a template...
                                         // Get the first builder.
                                         ctx.code
-                                            .add(format!("%bldPtrFirst = call {bld_ty_str} \
+                                            .add(format!("%bldPtrFirst1 = call {bld_ty_str} \
                                                           {bld_prefix}.\
                                                           getPtrIndexed({bld_ty_str} \
                                                           {bld_tmp}, i32 0)",
                                                          bld_ty_str = bld_ty_str,
                                                          bld_prefix = bld_prefix,
                                                          bld_tmp = bld_tmp));
+
                                         ctx.code
                                             .add(format!("
                                         \
@@ -2295,8 +2300,7 @@ impl LlvmGenerator {
                                     Merger(ref elem_ty, ref op) => {
                                         let bld_ty_str = self.llvm_type(ty)?.to_string();
                                         let elem_type = (self.llvm_type(elem_ty)?).to_string();
-                                        let bld_prefix = format!("@{}",
-                                                                 bld_ty_str.replace("%", ""));
+                                        let bld_prefix = format!("@{}", bld_ty_str.replace("%", ""));
                                         let bld_tmp = ctx.var_ids.next();
                                         ctx.code
                                             .add(format!("{} = call {} {}.new()",
@@ -2305,26 +2309,7 @@ impl LlvmGenerator {
                                                          bld_prefix));
 
                                         // Generate code to initialize the builder.
-                                        let iden_elem = match *op {
-                                            BinOpKind::Add => {
-                                                match **elem_ty {
-                                                    Scalar(F32) | Scalar(F64) => "0.0".to_string(),
-                                                    _ => "0".to_string(),
-                                                }
-                                            }
-                                            BinOpKind::Multiply => {
-                                                match **elem_ty {
-                                                    Scalar(F32) | Scalar(F64) => "1.0".to_string(),
-                                                    _ => "1".to_string(),
-                                                }
-                                            }
-
-                                            _ => {
-                                                return weld_err!("Invalid merger binary op in \
-                                                                  codegen")
-                                            }
-                                        };
-
+                                        let iden_elem = binop_identity(*op, elem_ty.as_ref())?;
                                         let init_elem = match *arg {
                                             Some(ref s) => {
                                                 let arg_str = self.load_var(llvm_symbol(s)
@@ -2337,9 +2322,11 @@ impl LlvmGenerator {
                                         };
 
                                         let first = ctx.var_ids.next();
+                                        let first_raw = ctx.var_ids.next();
                                         let nworkers = ctx.var_ids.next();
                                         let i = ctx.var_ids.next();
                                         let cur_ptr = ctx.var_ids.next();
+                                        let cur_bld_ptr = ctx.var_ids.next();
                                         let i2 = ctx.var_ids.next();
                                         let cond = ctx.var_ids.next();
                                         let cond2 = ctx.var_ids.next();
@@ -2355,6 +2342,7 @@ impl LlvmGenerator {
 
                                         ctx.code.add(format!(include_str!("resources/merger/init_merger.ll"),
                                         first=first,
+                                        first_raw=first_raw,
                                         nworkers=nworkers,
                                         bld_ty_str=bld_ty_str,
                                         bld_prefix=bld_prefix,
@@ -2365,6 +2353,7 @@ impl LlvmGenerator {
                                         bld_inp=bld_tmp,
                                         i=i,
                                         cur_ptr=cur_ptr,
+                                        cur_bld_ptr=cur_bld_ptr,
                                         i2=i2,
                                         cond2=cond2,
                                         entry=entry,
@@ -2582,7 +2571,23 @@ fn llvm_symbol(symbol: &Symbol) -> String {
     }
 }
 
+fn binop_identity(op_kind: BinOpKind, ty: &Type) -> WeldResult<String> {
+    match (op_kind, ty) {
+        (BinOpKind::Add, &Scalar(I8)) => Ok("0".to_string()),
+        (BinOpKind::Add, &Scalar(I32)) => Ok("0".to_string()),
+        (BinOpKind::Add, &Scalar(I64)) => Ok("0".to_string()),
+        (BinOpKind::Add, &Scalar(F32)) => Ok("0".to_string()),
+        (BinOpKind::Add, &Scalar(F64)) => Ok("0".to_string()),
 
+        (BinOpKind::Multiply, &Scalar(I8)) => Ok("0.0".to_string()),
+        (BinOpKind::Multiply, &Scalar(I32)) => Ok("0.0".to_string()),
+        (BinOpKind::Multiply, &Scalar(I64)) => Ok("0.0".to_string()),
+        (BinOpKind::Multiply, &Scalar(F32)) => Ok("0.0".to_string()),
+        (BinOpKind::Multiply, &Scalar(F64)) => Ok("0.0".to_string()),
+
+        _ => weld_err!("Unsupported identity for binary op: {} on {}", op_kind, print_type(ty)),
+    }
+}
 
 /// Return the name of the LLVM instruction for a binary operation on a specific type.
 fn llvm_binop(op_kind: BinOpKind, ty: &Type) -> WeldResult<&'static str> {

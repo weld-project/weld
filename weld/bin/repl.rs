@@ -185,10 +185,12 @@ fn main() {
             continue;
         }
 
+        /*
         if let Err(ref e) = vectorizer::vectorize(&mut expr) {
             println!("Error during vectorize: {}\n", e);
             continue;
         }
+        */
 
         println!("final program : {}", print_typed_expr(&expr));
         println!("final program raw: {:?}", expr);
