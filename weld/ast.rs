@@ -694,7 +694,7 @@ impl<T: TypeBounds> Expr<T> {
                 (&Exp { .. }, &Exp { .. }) => Ok(true),
                 (&Merge { .. }, &Merge { .. }) => Ok(true),
                 (&Res { .. }, &Res { .. }) => Ok(true),
-                (&For { .. }, &For { .. }) => Ok(true),
+                (&For { .. }, &For { .. }) => Ok(true), // TODO need to check Iters?
                 (&If { .. }, &If { .. }) => Ok(true),
                 (&Apply { .. }, &Apply { .. }) => Ok(true),
                 (&CUDF {

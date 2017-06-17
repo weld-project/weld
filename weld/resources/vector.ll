@@ -4,6 +4,7 @@
 ; - NAME: name to give generated type, without % or @ prefix
 ; - ELEM: LLVM type of the element (e.g. i32 or %MyStruct)
 ; - ELEM_PREFIX: prefix for helper functions on ELEM (e.g. @i32 or @MyStruct)
+; - VECSIZE: Size of vectors.
 
 %$NAME = type { $ELEM*, i64 }           ; elements, size
 %$NAME.bld = type i8*
@@ -188,6 +189,15 @@ define i64 @$NAME.size(%$NAME %vec) {
   %size = extractvalue %$NAME %vec, 1
   ret i64 %size
 }
+
+; Get a pointer to the index'th element, fetching a vector
+define <$VECSIZE x $ELEM>* @$NAME.vat(%$NAME %vec, i64 %index) {
+  %elements = extractvalue %$NAME %vec, 0
+  %ptr = getelementptr $ELEM, $ELEM* %elements, i64 %index
+  %retPtr = bitcast $ELEM* %ptr to <$VECSIZE x $ELEM>*
+  ret <$VECSIZE x $ELEM>* %retPtr
+}
+
 
 ; Get a pointer to the index'th element.
 define $ELEM* @$NAME.at(%$NAME %vec, i64 %index) {

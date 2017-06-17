@@ -465,6 +465,7 @@ fn builder_exprs_test() {
         start: None,
         end: None,
         stride: None,
+        kind: IterKind::ScalarIter,
     };
 
     // Create a list of params for the for loop's function.
@@ -486,7 +487,7 @@ fn builder_exprs_test() {
     let for_body = merge_expr(builder_iden.clone(), elem_iden.clone()).unwrap();
 
     let for_func = lambda_expr(params, for_body.clone()).unwrap();
-    let for_loop = for_expr(vec![iter], builder.clone(), for_func).unwrap();
+    let for_loop = for_expr(vec![iter], builder.clone(), for_func, false).unwrap();
 
     assert_eq!(print_expr_without_indent(&for_loop),
                "for([5],merger[i32,+],|b,i,e|merge(b,e))");
