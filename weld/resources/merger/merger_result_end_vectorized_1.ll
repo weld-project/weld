@@ -11,6 +11,6 @@
   {cond_v} = icmp ult i32 0, {vector_width}
   br i1 {cond_v}, label %{body_v}, label %{done_v}
 {body_v}:
-  {i_v} = phi i32 [ 1, %{entry_v} ], [ {i2_v}, %{body_v} ]
+  {i_v} = phi i32 [ 0, %{entry_v} ], [ {i2_v}, %{body_v} ]
   {val_v} = extractelement {elem_vec_ty_str} {final_val_vec}, i32 {i_v}
 ; begin generate vector collapse
