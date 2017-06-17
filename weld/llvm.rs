@@ -26,6 +26,8 @@ use super::type_inference;
 use super::util::IdGenerator;
 use super::util::MERGER_BC;
 
+use super::vectorizer;
+
 #[cfg(test)]
 use super::parser::*;
 
@@ -2908,6 +2910,7 @@ pub fn compile_program(program: &Program,
     }
 
     try!(transforms::uniquify(&mut expr));
+    try!(vectorizer::vectorize(&mut expr));
 
     let sir_prog = try!(sir::ast_to_sir(&expr));
     let mut gen = LlvmGenerator::new();
