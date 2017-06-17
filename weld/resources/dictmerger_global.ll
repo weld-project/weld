@@ -8,6 +8,7 @@
 ; - KV_VEC: name of vector of KV_STRUCTs (should be generated outside)
 ; - KV_VEC_PREFIX: prefix for helper functions of KV_VEC
 ; - OP: binary commutative merge operation (example: add or fadd)
+; - SLOT_STRUCT: struct of (i1, key, value) tuples
 
 %$NAME.bld = type %$NAME* ; the dictmerger is a pointer to the corresponding dictionary
 
@@ -30,24 +31,22 @@ entry:
   %bld = load %$NAME, %$NAME* %bldPtr
   %key = extractvalue %$KV_STRUCT %keyValue, 0
   %value = extractvalue %$KV_STRUCT %keyValue, 1
-  %slot = call %$NAME.slot @$NAME.lookup(%$NAME %bld, $KEY %key)
-  call void @$NAME.slot.lock(%$NAME.slot %slot)
-  %filled = call i1 @$NAME.slot.filled(%$NAME.slot %slot)
+  %slot = call $SLOT_STRUCT* @$NAME.lookup(%$NAME %bld, $KEY %key)
+  %filled = call i1 @$NAME.slot.filled($SLOT_STRUCT* %slot)
   br i1 %filled, label %onFilled, label %onEmpty
 
 onFilled:
-  %oldValue = call $VALUE @$NAME.slot.value(%$NAME.slot %slot)
+  %oldValue = call $VALUE @$NAME.slot.value($SLOT_STRUCT* %slot)
   %newValue = $OP $VALUE %oldValue, %value  ; TODO: Fix this when making Op more generic
-  %res1 = call %$NAME @$NAME.put(%$NAME %bld, %$NAME.slot %slot, $KEY %key, $VALUE %newValue)
+  %res1 = call %$NAME @$NAME.put(%$NAME %bld, $SLOT_STRUCT* %slot, $KEY %key, $VALUE %newValue)
   br label %done
 
 onEmpty:
-  %res2 = call %$NAME @$NAME.put(%$NAME %bld, %$NAME.slot %slot, $KEY %key, $VALUE %value)
+  %res2 = call %$NAME @$NAME.put(%$NAME %bld, $SLOT_STRUCT* %slot, $KEY %key, $VALUE %value)
   br label %done
 
 done:
   %res = phi %$NAME [ %res1, %onFilled ], [ %res2, %onEmpty ]
-  call void @$NAME.slot.unlock(%$NAME.slot %slot)
   store %$NAME %res, %$NAME* %bldPtr
   ret %$NAME.bld %bldPtr
 }

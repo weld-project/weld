@@ -953,6 +953,11 @@ impl LlvmGenerator {
                     self.prelude_code.add("\n");
 
                     // Add global dictionary code to prelude.
+                    let global_elem = Box::new(Struct(vec![Scalar(Bool), *key.clone(), *value.clone()]));
+                    let slot_struct_ty = try!(self.llvm_type(&global_elem)).to_string();
+                    let slot_vec = Box::new(Vector(global_elem.clone()));
+                    let slot_vec_ty = try!(self.llvm_type(&slot_vec)).to_string();
+                    let slot_vec_prefix = format!("@{}", &slot_vec_ty.replace("%", ""));
                     let global_name = format!("{}.global", name);
                     self.global_dict_names.insert(*elem.clone(), global_name.clone());
                     let key_prefix_replaced = DICTIONARY_GLOBAL_CODE.replace("$KEY_PREFIX", &key_prefix);
@@ -964,7 +969,10 @@ impl LlvmGenerator {
                     let kv_vec_prefix_replaced =
                         kv_struct_replaced.replace("$KV_VEC_PREFIX", &kv_vec_prefix);
                     let kv_vec_ty_replaced = kv_vec_prefix_replaced.replace("$KV_VEC", &kv_vec_ty);
-                    self.prelude_code.add(&kv_vec_ty_replaced);
+                    let slot_struct_replaced = kv_vec_ty_replaced.replace("$SLOT_STRUCT", &slot_struct_ty);
+                    let slot_vec_prefix_replaced = slot_struct_replaced.replace("$SLOT_VEC_PREFIX", &slot_vec_prefix);
+                    let slot_vec_ty_replaced = slot_vec_prefix_replaced.replace("$SLOT_VEC", &slot_vec_ty);
+                    self.prelude_code.add(&slot_vec_ty_replaced);
                     self.prelude_code.add("\n");
                 }
                 let mut dict_impl = BuilderImplementationKind::Local;
@@ -1015,6 +1023,8 @@ impl LlvmGenerator {
                             let kv_vec = Box::new(Vector(elem.clone()));
                             let kv_vec_ty = try!(self.llvm_type(&kv_vec)).to_string();
                             let kv_vec_prefix = format!("@{}", &kv_vec_ty.replace("%", ""));
+                            let global_elem = Box::new(Struct(vec![Scalar(Bool), *kt.clone(), *vt.clone()]));
+                            let slot_struct_ty = try!(self.llvm_type(&global_elem)).to_string();
 
                             let mut builder_impl = BuilderImplementationKind::Local;
                             if let Some(ref e) = *annotations.builder_implementation() {
@@ -1043,7 +1053,9 @@ impl LlvmGenerator {
                                 op_replaced.replace("$KV_VEC_PREFIX", &kv_vec_prefix);
                             let kv_vec_ty_replaced =
                                 kv_vec_prefix_replaced.replace("$KV_VEC", &kv_vec_ty);
-                            self.prelude_code.add(&kv_vec_ty_replaced);
+                            let slot_struct_ty_replaced =
+                                kv_vec_ty_replaced.replace("$SLOT_STRUCT", &slot_struct_ty);
+                            self.prelude_code.add(&slot_struct_ty_replaced);
                             self.prelude_code.add("\n");
                             self.bld_names
                                 .insert(bk.clone(), format!("{}.bld", bld_ty_str));
@@ -1460,7 +1472,7 @@ impl LlvmGenerator {
                                                  output_ll_ty,
                                                  llvm_symbol(output)));
                             }
-                            Dict(_, _, _) => {
+                            Dict(ref kt, ref vt, ref annotations) => {
                                 let child_ll_ty = try!(self.llvm_type(&child_ty)).to_string();
                                 let output_ty = try!(get_sym_ty(func, output));
                                 let output_ll_ty = try!(self.llvm_type(&output_ty)).to_string();
@@ -1476,28 +1488,38 @@ impl LlvmGenerator {
                                                                    ctx));
                                 let slot = ctx.var_ids.next();
                                 let res_tmp = ctx.var_ids.next();
+
+                                let mut dict_impl = BuilderImplementationKind::Local;
+                                if let Some(ref e) = *annotations.builder_implementation() {
+                                    dict_impl = e.clone();
+                                }
+                                let mut lookup_ret_ty = format!("{}.slot", dict_ll_ty);
+                                if dict_impl == BuilderImplementationKind::Global {
+                                    let slot_struct_ty = Box::new(Struct(vec![Scalar(Bool), *kt.clone(), *vt.clone()]));
+                                    lookup_ret_ty = format!("{}*", try!(self.llvm_type(&slot_struct_ty)).to_string());
+                                }
                                 ctx.code
-                                    .add(format!("{} = call {}.slot {}.lookup({} {}, {} {})",
-                                                 slot,
-                                                 dict_ll_ty,
-                                                 dict_prefix,
-                                                 dict_ll_ty,
-                                                 child_tmp,
-                                                 index_ll_ty,
-                                                 index_tmp));
+                                    .add(format!("{} = call {} {}.lookup({} {}, {} {})",
+                                                slot,
+                                                lookup_ret_ty,
+                                                dict_prefix,
+                                                dict_ll_ty,
+                                                child_tmp,
+                                                index_ll_ty,
+                                                index_tmp));
                                 ctx.code
-                                    .add(format!("{} = call {} {}.slot.value({}.slot {})",
-                                                 res_tmp,
-                                                 output_ll_ty,
-                                                 dict_prefix,
-                                                 dict_ll_ty,
-                                                 slot));
+                                    .add(format!("{} = call {} {}.slot.value({} {})",
+                                                res_tmp,
+                                                output_ll_ty,
+                                                dict_prefix,
+                                                lookup_ret_ty,
+                                                slot));
                                 ctx.code
                                     .add(format!("store {} {}, {}* {}",
-                                                 output_ll_ty,
-                                                 res_tmp,
-                                                 output_ll_ty,
-                                                 llvm_symbol(output)));
+                                                output_ll_ty,
+                                                res_tmp,
+                                                output_ll_ty,
+                                                llvm_symbol(output)));
                             }
                             _ => weld_err!("Illegal type {} in Lookup", print_type(child_ty))?,
                         }
@@ -1509,7 +1531,7 @@ impl LlvmGenerator {
                     } => {
                         let child_ty = try!(get_sym_ty(func, child));
                         match *child_ty {
-                            Dict(_, _, _) => {
+                            Dict(ref kt, ref vt, ref annotations) => {
                                 let child_ll_ty = try!(self.llvm_type(&child_ty)).to_string();
                                 let dict_ll_ty = try!(self.llvm_type(&child_ty)).to_string();
                                 let key_ty = try!(get_sym_ty(func, key));
@@ -1522,20 +1544,31 @@ impl LlvmGenerator {
                                     try!(self.load_var(llvm_symbol(key).as_str(), &key_ll_ty, ctx));
                                 let slot = ctx.var_ids.next();
                                 let res_tmp = ctx.var_ids.next();
+
+                                let mut dict_impl = BuilderImplementationKind::Local;
+                                if let Some(ref e) = *annotations.builder_implementation() {
+                                    dict_impl = e.clone();
+                                }
+                                let mut lookup_ret_ty = format!("{}.slot", dict_ll_ty);
+                                if dict_impl == BuilderImplementationKind::Global {
+                                    let slot_struct_ty = Box::new(Struct(vec![Scalar(Bool), *kt.clone(), *vt.clone()]));
+                                    lookup_ret_ty = format!("{}*", try!(self.llvm_type(&slot_struct_ty)).to_string());
+                                }
+
                                 ctx.code
-                                    .add(format!("{} = call {}.slot {}.lookup({} {}, {} {})",
+                                    .add(format!("{} = call {} {}.lookup({} {}, {} {})",
                                                  slot,
-                                                 dict_ll_ty,
+                                                 lookup_ret_ty,
                                                  dict_prefix,
                                                  dict_ll_ty,
                                                  child_tmp,
                                                  key_ll_ty,
                                                  key_tmp));
                                 ctx.code
-                                    .add(format!("{} = call i1 {}.slot.filled({}.slot {})",
+                                    .add(format!("{} = call i1 {}.slot.filled({} {})",
                                                  res_tmp,
                                                  dict_prefix,
-                                                 dict_ll_ty,
+                                                 lookup_ret_ty,
                                                  slot));
                                 ctx.code
                                     .add(format!("store i1 {}, i1* {}",
