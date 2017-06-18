@@ -40,6 +40,7 @@ body:
   store i32 16, i32* %chain_size_ptr
   %vec_ptr = getelementptr %$NAME.entry, %$NAME.entry* %ptr, i64 0, i32 2
   %vec = call $SLOT_VEC $SLOT_VEC_PREFIX.new(i64 16)
+  call void $SLOT_VEC_PREFIX.zero($SLOT_VEC %vec)
   store $SLOT_VEC %vec, $SLOT_VEC* %vec_ptr
   %i2 = add i64 %i, 1
   %cond2 = icmp ult i64 %i2, %num_buckets
@@ -245,7 +246,7 @@ body2:
   %entPtr = getelementptr %$NAME.entry, %$NAME.entry* %entries, i64 %i
   %ent = load %$NAME.entry, %$NAME.entry* %entPtr
   %chain_vec = extractvalue %$NAME.entry %ent, 2
-  %chain_size = extractvalue %$NAME.entry %ent, 0
+  %chain_size = extractvalue %$NAME.entry %ent, 1
   %chain_size_i64 = zext i32 %chain_size to i64
   br label %body3
 
