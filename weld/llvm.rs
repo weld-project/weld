@@ -1498,15 +1498,27 @@ impl LlvmGenerator {
                                     let slot_struct_ty = Box::new(Struct(vec![Scalar(Bool), *kt.clone(), *vt.clone()]));
                                     lookup_ret_ty = format!("{}*", try!(self.llvm_type(&slot_struct_ty)).to_string());
                                 }
-                                ctx.code
-                                    .add(format!("{} = call {} {}.lookup({} {}, {} {})",
-                                                slot,
-                                                lookup_ret_ty,
-                                                dict_prefix,
-                                                dict_ll_ty,
-                                                child_tmp,
-                                                index_ll_ty,
-                                                index_tmp));
+                                if dict_impl == BuilderImplementationKind::Global {
+                                    ctx.code
+                                        .add(format!("{} = call {} {}.lookup({} {}, {} {}, i1 0)",
+                                                    slot,
+                                                    lookup_ret_ty,
+                                                    dict_prefix,
+                                                    dict_ll_ty,
+                                                    child_tmp,
+                                                    index_ll_ty,
+                                                    index_tmp));
+                                } else {
+                                    ctx.code
+                                        .add(format!("{} = call {} {}.lookup({} {}, {} {})",
+                                                    slot,
+                                                    lookup_ret_ty,
+                                                    dict_prefix,
+                                                    dict_ll_ty,
+                                                    child_tmp,
+                                                    index_ll_ty,
+                                                    index_tmp));
+                                }
                                 ctx.code
                                     .add(format!("{} = call {} {}.slot.value({} {})",
                                                 res_tmp,
@@ -1555,15 +1567,27 @@ impl LlvmGenerator {
                                     lookup_ret_ty = format!("{}*", try!(self.llvm_type(&slot_struct_ty)).to_string());
                                 }
 
-                                ctx.code
-                                    .add(format!("{} = call {} {}.lookup({} {}, {} {})",
-                                                 slot,
-                                                 lookup_ret_ty,
-                                                 dict_prefix,
-                                                 dict_ll_ty,
-                                                 child_tmp,
-                                                 key_ll_ty,
-                                                 key_tmp));
+                                if dict_impl == BuilderImplementationKind::Global {
+                                    ctx.code
+                                        .add(format!("{} = call {} {}.lookup({} {}, {} {}, i1 1)",
+                                                        slot,
+                                                        lookup_ret_ty,
+                                                        dict_prefix,
+                                                        dict_ll_ty,
+                                                        child_tmp,
+                                                        key_ll_ty,
+                                                        key_tmp));
+                                } else {
+                                    ctx.code
+                                        .add(format!("{} = call {} {}.lookup({} {}, {} {})",
+                                                        slot,
+                                                        lookup_ret_ty,
+                                                        dict_prefix,
+                                                        dict_ll_ty,
+                                                        child_tmp,
+                                                        key_ll_ty,
+                                                        key_tmp));
+                                }
                                 ctx.code
                                     .add(format!("{} = call i1 {}.slot.filled({} {})",
                                                  res_tmp,

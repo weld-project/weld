@@ -80,23 +80,6 @@ done:
   ret void
 }
 
-; Clone a dictionary.
-define %$NAME @$NAME.clone(%$NAME %dict) {
-  %entries = extractvalue %$NAME %dict, 0
-  %size = extractvalue %$NAME %dict, 1
-  %num_buckets = extractvalue %$NAME %dict, 2
-  %entrySizePtr = getelementptr %$NAME.entry, %$NAME.entry* null, i32 1
-  %entrySize = ptrtoint %$NAME.entry* %entrySizePtr to i64
-  %allocSize = mul i64 %entrySize, %num_buckets
-  %bytes = bitcast %$NAME.entry* %entries to i8*
-  %dict2 = call %$NAME @$NAME.new(i64 %num_buckets)
-  %entries2 = extractvalue %$NAME %dict2, 0
-  %bytes2 = bitcast %$NAME.entry* %entries2 to i8*
-  call void @llvm.memcpy.p0i8.p0i8.i64(i8* %bytes2, i8* %bytes, i64 %allocSize, i32 8, i1 0)
-  %dict3 = insertvalue %$NAME %dict2, i64 %size, 1
-  ret %$NAME %dict3
-}
-
 ; Dummy hash function; this is needed for structs that use these dictionaries as fields,
 ; but it doesn't yet work! (Or technically it does, but is a very poor function.)
 define i64 @$NAME.hash(%$NAME %dict) {
@@ -137,9 +120,21 @@ end:
 }
 
 ; Unlock the slot.
-define void @$NAME.slot.unlock(%$NAME.slot %slot) {
+define void @$NAME.slot.unlock_helper(%$NAME.slot %slot) {
   %ptr = getelementptr %$NAME.entry, %$NAME.slot %slot, i64 0, i32 0
   cmpxchg i32* %ptr, i32 1, i32 0 acq_rel monotonic
+  ret void
+}
+
+; Unlock the slot.
+define void @$NAME.slot.unlock(%$NAME %dict, $KEY %key) {
+  %entries = extractvalue %$NAME %dict, 0
+  %num_buckets = extractvalue %$NAME %dict, 2
+  %mask = sub i64 %num_buckets, 1
+  %hash = call i64 $KEY_PREFIX.hash($KEY %key)
+  %pos = and i64 %hash, %mask
+  %slot = getelementptr %$NAME.entry, %$NAME.entry* %entries, i64 %pos
+  call void @$NAME.slot.unlock_helper(%$NAME.slot %slot)
   ret void
 }
 
@@ -166,8 +161,9 @@ define $VALUE @$NAME.slot.value($SLOT_STRUCT* %slot) {
 
 ; Look up the given key, returning a slot for it. The slot functions may be
 ; used to tell whether the entry is filled, get its value, etc, and the put()
-; function may be used to put a new value into the slot.
-define $SLOT_STRUCT* @$NAME.lookup(%$NAME %dict, $KEY %key) {
+; function may be used to put a new value into the slot. Acquires the lock on
+; the slot.
+define $SLOT_STRUCT* @$NAME.lookup(%$NAME %dict, $KEY %key, i1 %should_lock) {
 entry:
   %entries = extractvalue %$NAME %dict, 0
   %num_buckets = extractvalue %$NAME %dict, 2
@@ -175,6 +171,13 @@ entry:
   %hash = call i64 $KEY_PREFIX.hash($KEY %key)
   %pos = and i64 %hash, %mask
   %slot = getelementptr %$NAME.entry, %$NAME.entry* %entries, i64 %pos
+  br i1 %should_lock, label %lock, label %continuation
+
+lock:
+  call void @$NAME.slot.lock(%$NAME.slot %slot)
+  br label %continuation
+
+continuation:
   %vec_ptr = getelementptr %$NAME.entry, %$NAME.entry* %slot, i64 0, i32 2
   %vec = load $SLOT_VEC, $SLOT_VEC* %vec_ptr
   %chain_size_ptr = getelementptr %$NAME.entry, %$NAME.entry* %slot, i64 0, i32 1
@@ -182,7 +185,7 @@ entry:
   br label %body
 
 body:
-  %i = phi i64 [ 0, %entry ], [ %i2, %true_cond ]
+  %i = phi i64 [ 0, %continuation ], [ %i2, %true_cond ]
   %element = call $SLOT_STRUCT* $SLOT_VEC_PREFIX.at($SLOT_VEC %vec, i64 %i)
   %is_filled = call i1 @$NAME.slot.filled($SLOT_STRUCT* %element)
   br i1 %is_filled, label %true_cond, label %false_cond

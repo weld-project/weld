@@ -31,7 +31,7 @@ entry:
   %bld = load %$NAME, %$NAME* %bldPtr
   %key = extractvalue %$KV_STRUCT %keyValue, 0
   %value = extractvalue %$KV_STRUCT %keyValue, 1
-  %slot = call $SLOT_STRUCT* @$NAME.lookup(%$NAME %bld, $KEY %key)
+  %slot = call $SLOT_STRUCT* @$NAME.lookup(%$NAME %bld, $KEY %key, i1 1)
   %filled = call i1 @$NAME.slot.filled($SLOT_STRUCT* %slot)
   br i1 %filled, label %onFilled, label %onEmpty
 
@@ -47,6 +47,7 @@ onEmpty:
 
 done:
   %res = phi %$NAME [ %res1, %onFilled ], [ %res2, %onEmpty ]
+  call void @$NAME.slot.unlock(%$NAME %bld, $KEY %key)
   store %$NAME %res, %$NAME* %bldPtr
   ret %$NAME.bld %bldPtr
 }

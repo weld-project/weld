@@ -1079,7 +1079,6 @@ fn simple_parallel_for_dictmerger_loop() {
 }
 
 fn simple_parallel_for_global_dictmerger_loop() {
-    /*
     #[derive(Clone)]
     #[allow(dead_code)]
     struct Pair {
@@ -1135,7 +1134,7 @@ fn simple_parallel_for_global_dictmerger_loop() {
         assert_eq!(success, true);
     }
     assert_eq!(result.len, output_keys.len() as i64);
-    unsafe { weld_value_free(ret_value) }; */
+    unsafe { weld_value_free(ret_value) };
 }
 
 fn simple_dict_lookup_helper(code: &str, input_keys: &[i32; 5], input_vals: &[i32; 5],
