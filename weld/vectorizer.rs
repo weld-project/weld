@@ -50,10 +50,9 @@ fn vectorize_expr(e: &mut Expr<Type>) {
 }
 
 
-/// Checks basic vectorizability for a loop - this is a strong check which ensure that the only expressions
-/// which appear in a function body are arithmetic, identifiers, literals,and Let statements, and
-/// builder merges.
-/// 
+/// Checks basic vectorizability for a loop - this is a strong check which ensure that the only
+/// expressions which appear in a function body are arithmetic, identifiers, literals,and Let
+/// statements, and builder merges.
 fn vectorizable(for_loop: &Expr<Type>) -> bool {
     if let For { ref iters, builder: ref init_builder, ref func } = for_loop.kind {
         // Check if the iterators are consumed.
