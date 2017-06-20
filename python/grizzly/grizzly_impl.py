@@ -7,10 +7,6 @@ Attributes:
 from encoders import *
 from weld.weldobject import *
 
-
-encoder_ = NumPyEncoder()
-decoder_ = NumPyDecoder()
-
 class GrizzlyImpl(object):
     def __init__(self, encoder_, decoder_, type_mapping):
         self.encoder_ = encoder_
@@ -399,5 +395,5 @@ class GrizzlyImpl(object):
                                               "index": index}
         return weld_obj
 
-
+grizzly_arrow_impl = GrizzlyImpl(ArrowEncoder(), ArrowDecoder(), arrow_to_weld_type_mapping)
 grizzly_numpy_impl = GrizzlyImpl(NumPyEncoder(), NumPyDecoder(), numpy_to_weld_type_mapping)

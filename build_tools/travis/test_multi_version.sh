@@ -26,5 +26,6 @@ cargo build --release
 cargo test
 
 python python/grizzly/tests/grizzly_test.py
+python python/grizzly/tests/grizzly_test_arrow.py
 python python/grizzly/tests/numpy_weld_test.py
 deactivate

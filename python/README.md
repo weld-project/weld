@@ -10,13 +10,18 @@ Make sure the `WELD_HOME` environment variable is set as detailed in the main
 
 ### Setup
 
+
 If you want to install Weld's Python API and Grizzly in 'development' mode, run:
 ```bash
+$ pip install --upgrade pip setuptools wheel
+$ pip install --only-binary=numpy,pandas,pyarrow,cython -r requirements.txt
 $ python setup.py develop
 ```
 
 Otherwise, run:
 ```bash
+$ pip install --upgrade pip setuptools wheel
+$ pip install --only-binary=numpy,pandas,pyarrow,cython -r requirements.txt
 $ python setup.py install
 ```
 
@@ -25,6 +30,7 @@ $ python setup.py install
 If you installed Weld's Python API and Grizzly in 'development' mode, run:
 ```bash
 $ git pull
+$ python setup.py develop
 ```
 
 If you installed Weld's Python API and Grizzly in 'install' mode, run:
