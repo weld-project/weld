@@ -27,10 +27,14 @@ setup(name='grizzly',
               extra_compile_args=['-std=c++11',
                 '-I' + pjoin(dirname(pyarrow.__file__), 'include'),
                 '-I' + numpy.get_include()],
-
-              extra_link_args=['-std=c++11', '-stdlib=libc++'],
               include_dirs=['.'],
-              language='c++')
+              language='c++'),
+        Extension('grizzly.numpy_weld_convertor',
+              sources=['grizzly/numpy_weld_convertor.cpp'],
+              extra_compile_args=['-std=c++11', '-Wno-c++11-narrowing',
+                '-I' + numpy.get_include()],
+              include_dirs=['.'],
+              language='c++'),
         ]),
       cmdclass={
             'build_ext': build_ext

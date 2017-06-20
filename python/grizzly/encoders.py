@@ -47,10 +47,8 @@ def to_shared_lib(name):
     Args:
     name (TYPE): Description
     """
-    if sys.platform.startswith('linux'):
+    if sys.platform.startswith('linux') or sys.platform.startswith('darwin'):
         return name + ".so"
-    elif sys.platform.startswith('darwin'):
-        return name + ".dylib"
     else:
         sys.exit(1)
 
@@ -65,12 +63,8 @@ class NumPyEncoder(WeldObjectEncoder):
     def __init__(self):
         """Summary
         """
-        # TODO: Remove dependency on WELD_HOME environment variable.
-        if "WELD_HOME" not in os.environ:
-            raise Exception("WELD_HOME environment variable not set!")
         self.utils = ctypes.PyDLL(to_shared_lib(
-            os.path.join(os.environ["WELD_HOME"] + "/python/grizzly/",
-                         "numpy_weld_convertor")))
+            os.path.join(os.path.dirname(__file__), "numpy_weld_convertor")))
 
     def pyToWeldType(self, obj):
         """Summary
@@ -199,12 +193,8 @@ class NumPyDecoder(WeldObjectDecoder):
     def __init__(self):
         """Summary
         """
-        # TODO: Remove dependency on WELD_HOME environment variable.
-        if "WELD_HOME" not in os.environ:
-            raise Exception("WELD_HOME environment variable not set!")
         self.utils = ctypes.PyDLL(to_shared_lib(
-            os.path.join(os.environ["WELD_HOME"] + "/python/grizzly",
-                         "numpy_weld_convertor")))
+            os.path.join(os.path.dirname(__file__), "numpy_weld_convertor")))
 
     def decode(self, obj, restype):
         """Summary
