@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-import grizzly_impl
+from grizzly_impl import grizzly_numpy_impl
 from lazy_op import LazyOpResult
 from weld.weldobject import *
 
@@ -49,11 +49,11 @@ class DataFrameWeld:
                 raw_column = self.raw_columns[key]
                 weld_type = WeldVec(WeldChar())
             else:
-                weld_type = grizzly_impl.numpy_to_weld_type_mapping[dtype]
+                weld_type = grizzly_numpy_impl.type_mapping[dtype]
             if self.predicates is None:
                 return SeriesWeld(raw_column, weld_type, self, key)
             return SeriesWeld(
-                grizzly_impl.filter(
+                grizzly_numpy_impl.filter(
                     raw_column,
                     self.predicates.expr,
                     weld_type
@@ -82,7 +82,7 @@ class DataFrameWeld:
         """
         if isinstance(value, np.ndarray):
             dtype = str(value.dtype)
-            weld_type = grizzly_impl.numpy_to_weld_type_mapping[dtype]
+            weld_type = grizzly_numpy_impl.type_mapping[dtype]
             self.unmaterialized_cols[key] = SeriesWeld(
                 value,
                 weld_type,
@@ -115,11 +115,11 @@ class DataFrameWeld:
             if self.predicates is None:
                 return self.df.values
             if isinstance(self.df.values, np.ndarray):
-                weld_type = grizzly_impl.numpy_to_weld_type_mapping[
+                weld_type = grizzly_numpy_impl.type_mapping[
                     str(self.df.values.dtype)]
                 dim = self.df.values.ndim
                 return LazyOpResult(
-                    grizzly_impl.filter(
+                    grizzly_numpy_impl.filter(
                         self.df.values,
                         self.predicates.expr,
                         weld_type
@@ -221,7 +221,7 @@ class GroupedDataFrameWeld(LazyOpResult):
             TYPE: Description
         """
         return LazyOpResult(
-            grizzly_impl.get_column(
+            grizzly_numpy_impl.get_column(
                 self.expr,
                 self.weld_type,
                 index
@@ -320,7 +320,7 @@ class SeriesWeld(LazyOpResult):
             TYPE: Description
         """
         return LazyOpResult(
-            grizzly_impl.unique(
+            grizzly_numpy_impl.unique(
                 self.expr,
                 self.weld_type
             ),
@@ -335,7 +335,7 @@ class SeriesWeld(LazyOpResult):
             TYPE: Description
         """
         return LazyOpResult(
-            grizzly_impl.aggr(
+            grizzly_numpy_impl.aggr(
                 self.expr,
                 "*",
                 1,
@@ -352,7 +352,7 @@ class SeriesWeld(LazyOpResult):
             TYPE: Description
         """
         return LazyOpResult(
-            grizzly_impl.aggr(
+            grizzly_numpy_impl.aggr(
                 self.expr,
                 "+",
                 0,
@@ -385,7 +385,7 @@ class SeriesWeld(LazyOpResult):
             TYPE: Description
         """
         return LazyOpResult(
-            grizzly_impl.count(
+            grizzly_numpy_impl.count(
                 self.expr,
                 self.weld_type
             ),
@@ -406,7 +406,7 @@ class SeriesWeld(LazyOpResult):
         if isinstance(predicates, SeriesWeld):
             predicates = predicates.expr
         return SeriesWeld(
-            grizzly_impl.mask(
+            grizzly_numpy_impl.mask(
                 self.expr,
                 predicates,
                 new_value,
@@ -421,7 +421,7 @@ class SeriesWeld(LazyOpResult):
         if isinstance(predicates, SeriesWeld):
             predicates = predicates.expr
         return SeriesWeld(
-            grizzly_impl.filter(
+            grizzly_numpy_impl.filter(
                 self.expr,
                 predicates,
                 self.weld_type
@@ -443,7 +443,7 @@ class SeriesWeld(LazyOpResult):
         if isinstance(other, SeriesWeld):
             other = other.expr
         return SeriesWeld(
-            grizzly_impl.element_wise_op(
+            grizzly_numpy_impl.element_wise_op(
                 self.expr,
                 other,
                 "+",
@@ -466,7 +466,7 @@ class SeriesWeld(LazyOpResult):
         if isinstance(other, SeriesWeld):
             other = other.expr
         return SeriesWeld(
-            grizzly_impl.element_wise_op(
+            grizzly_numpy_impl.element_wise_op(
                 self.expr,
                 other,
                 "-",
@@ -489,7 +489,7 @@ class SeriesWeld(LazyOpResult):
         if isinstance(other, SeriesWeld):
             other = other.expr
         return SeriesWeld(
-            grizzly_impl.element_wise_op(
+            grizzly_numpy_impl.element_wise_op(
                 self.expr,
                 other,
                 "*",
@@ -512,7 +512,7 @@ class SeriesWeld(LazyOpResult):
         if isinstance(other, SeriesWeld):
             other = other.expr
         return SeriesWeld(
-            grizzly_impl.element_wise_op(
+            grizzly_numpy_impl.element_wise_op(
                 self.expr,
                 other,
                 "/",
@@ -535,7 +535,7 @@ class SeriesWeld(LazyOpResult):
         if isinstance(other, SeriesWeld):
             other = other.expr
         return SeriesWeld(
-            grizzly_impl.element_wise_op(
+            grizzly_numpy_impl.element_wise_op(
                 self.expr,
                 other,
                 "%",
@@ -556,7 +556,7 @@ class SeriesWeld(LazyOpResult):
             TYPE: Description
         """
         return SeriesWeld(
-            grizzly_impl.compare(
+            grizzly_numpy_impl.compare(
                 self.expr,
                 other,
                 "==",
@@ -577,7 +577,7 @@ class SeriesWeld(LazyOpResult):
             TYPE: Description
         """
         return SeriesWeld(
-            grizzly_impl.compare(
+            grizzly_numpy_impl.compare(
                 self.expr,
                 other,
                 "!=",
@@ -598,7 +598,7 @@ class SeriesWeld(LazyOpResult):
             TYPE: Description
         """
         return SeriesWeld(
-            grizzly_impl.compare(
+            grizzly_numpy_impl.compare(
                 self.expr,
                 other,
                 ">",
@@ -619,7 +619,7 @@ class SeriesWeld(LazyOpResult):
             TYPE: Description
         """
         return SeriesWeld(
-            grizzly_impl.compare(
+            grizzly_numpy_impl.compare(
                 self.expr,
                 other,
                 ">=",
@@ -640,7 +640,7 @@ class SeriesWeld(LazyOpResult):
             TYPE: Description
         """
         return SeriesWeld(
-            grizzly_impl.compare(
+            grizzly_numpy_impl.compare(
                 self.expr,
                 other,
                 "<",
@@ -661,7 +661,7 @@ class SeriesWeld(LazyOpResult):
             TYPE: Description
         """
         return SeriesWeld(
-            grizzly_impl.compare(
+            grizzly_numpy_impl.compare(
                 self.expr,
                 other,
                 "<=",
@@ -710,7 +710,7 @@ class StringSeriesWeld:
             TYPE: Description
         """
         return SeriesWeld(
-            grizzly_impl.slice(
+            grizzly_numpy_impl.slice(
                 self.expr,
                 start,
                 size,
@@ -748,7 +748,7 @@ class GroupByWeld:
             self.grouping_column_type = column.weld_type
             self.grouping_column = column.expr
         elif isinstance(column, np.ndarray):
-            self.grouping_column_type = numpyImpl.numpy_to_weld_type_mapping[
+            self.grouping_column_type = numpyImpl.type_mapping[
                 str(column.dtype)]
             self.grouping_column = column
 
@@ -765,7 +765,7 @@ class GroupByWeld:
                 column_type = column.weld_type
                 column = column.expr
             elif isinstance(column, np.ndarray):
-                column_type = numpyImpl.numpy_to_weld_type_mapping[
+                column_type = numpyImpl.type_mapping[
                     str(column.dtype)]
             self.columns.append(column)
             self.column_types.append(column_type)
@@ -777,7 +777,7 @@ class GroupByWeld:
             TYPE: Description
         """
         return GroupedDataFrameWeld(
-            grizzly_impl.groupby_sum(
+            grizzly_numpy_impl.groupby_sum(
                 self.columns,
                 self.column_types,
                 self.grouping_column

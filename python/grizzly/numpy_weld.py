@@ -1,6 +1,6 @@
 import numpy as np
 
-import numpy_weld_impl
+from weld_impl import numpy_weld_impl
 from lazy_op import LazyOpResult
 from weld.weldobject import *
 
@@ -80,14 +80,14 @@ def dot(matrix, vector):
         matrix_weld_type = matrix.weld_type
         matrix = matrix.expr
     elif isinstance(matrix, np.ndarray):
-        matrix_weld_type = numpy_weld_impl.numpy_to_weld_type_mapping[
+        matrix_weld_type = numpy_weld_impl.type_mapping[
             str(matrix.dtype)]
 
     if isinstance(vector, LazyOpResult):
         vector_weld_type = vector.weld_type
         vector = vector.expr
     elif isinstance(vector, np.ndarray):
-        vector_weld_type = numpy_weld_impl.numpy_to_weld_type_mapping[
+        vector_weld_type = numpy_weld_impl.type_mapping[
             str(vector.dtype)]
 
     return NumpyArrayWeld(
@@ -111,6 +111,6 @@ def exp(vector):
         weld_type = vector.weld_type
         vector = vector.expr
     elif isinstance(vector, np.ndarray):
-        weld_type = numpy_weld_impl.numpy_to_weld_type_mapping[
+        weld_type = numpy_weld_impl.type_mapping[
             str(vector.dtype)]
     return NumpyArrayWeld(numpy_weld_impl.exp(vector, weld_type), WeldDouble())
