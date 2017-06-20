@@ -620,9 +620,6 @@ impl LlvmGenerator {
                         .code
                         .add(format!("{} = sub i64 {}, {}", num_iters_str, arr_len, tmp2));
 
-
-                    //wrap_ctx.code.add(format!("%unused = call i32 (i8*, ...)* @printf(i8* getelementptr ([6 x i8], [6 x i8]* @longprinter, i32 0, i32 0), i64 {})", &tmp2));
-
                     fringe_start_str = Some(tmp2);
                 }
 
@@ -3080,9 +3077,7 @@ pub fn compile_program(program: &Program,
     try!(transforms::uniquify(&mut expr));
 
     // This is "allowed" to fail; the return value signifies whether the transform succeeded.
-    if let Ok(_) = vectorizer::vectorize(&mut expr) {
-        println!("Vectorization succeeded!");
-    }
+    let _ = vectorizer::vectorize(&mut expr);
 
     let sir_prog = try!(sir::ast_to_sir(&expr));
     let mut gen = LlvmGenerator::new();
