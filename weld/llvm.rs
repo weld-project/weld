@@ -33,6 +33,7 @@ use super::parser::*;
 
 static PRELUDE_CODE: &'static str = include_str!("resources/prelude.ll");
 static VECTOR_CODE: &'static str = include_str!("resources/vector.ll");
+static VVECTOR_CODE: &'static str = include_str!("resources/vvector.ll");
 static MERGER_CODE: &'static str = include_str!("resources/merger/merger.ll");
 static DICTIONARY_CODE: &'static str = include_str!("resources/dictionary.ll");
 static DICTMERGER_CODE: &'static str = include_str!("resources/dictmerger.ll");
@@ -364,10 +365,11 @@ impl LlvmGenerator {
                 if par_for.data[0].kind == IterKind::VectorIter {
                     let check_with_vec = ctx.var_ids.next();
                     let vector_len = format!("{}", vec_size(&elem_ty)?);
+                    // Would need to compute stride, etc. here.
                     ctx.code
                         .add(format!("{} = add i64 {}, {}", check_with_vec, idx_tmp, vector_len));
                     ctx.code
-                        .add(format!("{} = icmp ult i64 {}, %upper.idx", idx_cmp, check_with_vec));
+                        .add(format!("{} = icmp ule i64 {}, %upper.idx", idx_cmp, check_with_vec));
                 } else {
                     ctx.code
                         .add(format!("{} = icmp ult i64 {}, %upper.idx", idx_cmp, idx_tmp));
@@ -1070,10 +1072,19 @@ impl LlvmGenerator {
                     self.vec_names.insert(*elem.clone(), name.clone());
                     let prefix_replaced = VECTOR_CODE.replace("$ELEM_PREFIX", &elem_prefix);
                     let elem_replaced = prefix_replaced.replace("$ELEM", &elem_ty);
-                    let elem_replaced = elem_replaced.replace("$VECSIZE", &format!("{}", vec_size(elem)?));
                     let name_replaced = elem_replaced.replace("$NAME", &name.replace("%", ""));
                     self.prelude_code.add(&name_replaced);
                     self.prelude_code.add("\n");
+
+                    // Supports vectorization, so splice in the vector extensions.
+                    if let Scalar(_) = *elem.as_ref() {
+                        let replaced = VVECTOR_CODE.replace("$ELEM_PREFIX", &elem_prefix);
+                        let replaced = replaced.replace("$ELEM", &elem_ty);
+                        let replaced = replaced.replace("$VECSIZE", &format!("{}", vec_size(elem)?));
+                        let replaced = replaced.replace("$NAME", &name.replace("%", ""));
+                        self.prelude_code.add(&replaced);
+                        self.prelude_code.add("\n");
+                    }
                 }
                 Ok(self.vec_names.get(elem).unwrap())
             }
@@ -3009,7 +3020,11 @@ pub fn compile_program(program: &Program,
     }
 
     try!(transforms::uniquify(&mut expr));
-    try!(vectorizer::vectorize(&mut expr));
+
+    // This is "allowed" to fail; the return value signifies whether the transform succeeded.
+    if let Ok(_) = vectorizer::vectorize(&mut expr) {
+        println!("Vectorization succeeded!");
+    }
 
     let sir_prog = try!(sir::ast_to_sir(&expr));
     let mut gen = LlvmGenerator::new();

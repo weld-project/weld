@@ -10,6 +10,8 @@ use super::ast::Type::*;
 use super::error::*;
 use super::util::SymbolGenerator;
 
+use std::collections::HashSet;
+
 use super::exprs;
 
 /// Vectorizes a type.
@@ -69,9 +71,6 @@ fn vectorizable(for_loop: &Expr<Type>) -> bool {
                         BuilderKind::Merger(ref ty, _) => {
                             if let Scalar(_) = **ty {} else { return false; }
                         }
-                        BuilderKind::Appender(ref ty) => {
-                            if let Scalar(_) = **ty {} else { return false; }
-                        }
                         _ => {
                             return false;
                         }
@@ -80,19 +79,28 @@ fn vectorizable(for_loop: &Expr<Type>) -> bool {
 
                 if let Lambda { ref params, ref body } = func.kind {
                     let mut passed = true;
+
+                    // Identifiers defined within the loop.
+                    let mut defined_in_loop = HashSet::new();
+                    for param in params.iter() {
+                        defined_in_loop.insert(param.name.clone());
+                    }
+
                     body.traverse(&mut |f| {
                         match f.kind {
                             Literal(_) => {},
                             Ident(_) => {},
                             BinOp{ .. } => {},
-                            Let{ .. } => {},
+                            Let{ ref name, .. } => {
+                                defined_in_loop.insert(name.clone()); 
+                            },
                             Merge{ .. } => {},
                             _ => {
                                 passed = false;
                             }
                         }
                     });
-                    
+
                     // Check if the index is used anywhere to do any kind of random access,
                     // index computation, etc.
                     let index_iden = exprs::ident_expr(params[1].name.clone(), params[1].ty.clone()).unwrap();
@@ -104,6 +112,17 @@ fn vectorizable(for_loop: &Expr<Type>) -> bool {
                     if let Scalar(_) = params[2].ty {} else {
                         passed = false;
                     }
+
+                    // Check if there are identifiers defined outside the loop. If so, we need to
+                    // broadcast them to vectorize them. We ignore this case for now and just bail!
+                    body.traverse(&mut |e| {
+                        match e.kind {
+                            Ident(ref name) if !defined_in_loop.contains(name) => {
+                                passed = false;
+                            }
+                            _ => {}
+                        }
+                    });
 
                     return passed;
                 }

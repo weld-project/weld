@@ -190,15 +190,6 @@ define i64 @$NAME.size(%$NAME %vec) {
   ret i64 %size
 }
 
-; Get a pointer to the index'th element, fetching a vector
-define <$VECSIZE x $ELEM>* @$NAME.vat(%$NAME %vec, i64 %index) {
-  %elements = extractvalue %$NAME %vec, 0
-  %ptr = getelementptr $ELEM, $ELEM* %elements, i64 %index
-  %retPtr = bitcast $ELEM* %ptr to <$VECSIZE x $ELEM>*
-  ret <$VECSIZE x $ELEM>* %retPtr
-}
-
-
 ; Get a pointer to the index'th element.
 define $ELEM* @$NAME.at(%$NAME %vec, i64 %index) {
   %elements = extractvalue %$NAME %vec, 0
