@@ -44,7 +44,7 @@ The vectorizer performs the following steps:
 
 1. Check if the all the constraints for performing vectorization are met. See [this section](#current-limitations-and-to-dos).
 2. Copy the loop being vectorized an call it `vectorized_body`.
-3. For each expression in `vectorized_body`: Change the type of `Scalar` expressions to `Vector`
+3. For each expression in `vectorized_body`: Change the type of `Scalar` expressions to `Vectorized`
    expressions.
 4. Change the loop's iterator type to `VectorIter`. This directs the code generation to stop
    iterating at a multiple of the vector size.
