@@ -1203,6 +1203,59 @@ impl LlvmGenerator {
         Ok(var)
     }
 
+    fn generate_vector_literal(&mut self,
+                               output: String,
+                               value: &LiteralKind,
+                               vec_ty: &Type,
+                               ctx: &mut FunctionContext) -> WeldResult<()> {
+        let size = vec_size(vec_ty)?;
+        let vec_ty_str = self.llvm_type(vec_ty)?.to_string();
+        let size_str = format!("{}", size);
+        let insert_str = match *value {
+            BoolLiteral(l) => {
+                format!("insertelement <{} x i1> $NAME, i1 {}, i32 $INDEX",
+                                    size_str,
+                                    if l { 1 } else { 0 })
+            }
+            I8Literal(l) => {
+                format!("insertelement <{} x i8> $NAME, i8 {}, i32 $INDEX",
+                                    size_str, l)
+            }
+            I32Literal(l) => {
+                format!("insertelement <{} x i32> $NAME, i32 {}, i32 $INDEX",
+                                    size_str, l)
+            }
+            I64Literal(l) => {
+                format!("insertelement <{} x i64> $NAME, i64 {}, i32 $INDEX",
+                                    size_str, l)
+            }
+            F32Literal(l) => {
+                format!("insertelement <{} x float> $NAME, float {:.3}, i32 $INDEX",
+                                    size_str, l)
+            }
+            F64Literal(l) => {
+                format!("insertelement <{} x double> $NAME, double {:.3}, i32 $INDEX",
+                                    size_str, l)
+            }
+        };
+
+        let mut prev_name = "undef".to_string();
+        for i in 0..size {
+            let replaced = insert_str.replace("$NAME", &prev_name);
+            let replaced = replaced.replace("$INDEX", &format!("{}", i));
+            let name = ctx.var_ids.next().to_string();
+            ctx.code.add(format!("{} = {}", name, replaced));
+            prev_name = name;
+        }
+
+        ctx.code.add(format!("store {vec_ty_str} {prev_name}, {vec_ty_str}* {output}", 
+            vec_ty_str=vec_ty_str,
+            output=output,
+            prev_name=prev_name));
+
+        Ok(())
+    }
+
     /// Given a pointer to a some data retrieved from a builder, generates code to merge a value
     /// into the builder. The result should be stored back into the pointer to complete the merge.
     /// `builder_ptr` is the pointer into which the original value is read and the new value will
@@ -1840,36 +1893,41 @@ impl LlvmGenerator {
                         ref output,
                         ref value,
                     } => {
-                        match *value {
-                            BoolLiteral(l) => {
-                                ctx.code
-                                    .add(format!("store i1 {}, i1* {}",
-                                                 if l { 1 } else { 0 },
-                                                 llvm_symbol(output)))
-                            }
-                            I8Literal(l) => {
-                                ctx.code
-                                    .add(format!("store i8 {}, i8* {}", l, llvm_symbol(output)))
-                            }
-                            I32Literal(l) => {
-                                ctx.code
-                                    .add(format!("store i32 {}, i32* {}", l, llvm_symbol(output)))
-                            }
-                            I64Literal(l) => {
-                                ctx.code
-                                    .add(format!("store i64 {}, i64* {}", l, llvm_symbol(output)))
-                            }
-                            F32Literal(l) => {
-                                ctx.code
-                                    .add(format!("store float {:.3}, float* {}",
-                                                 l,
-                                                 llvm_symbol(output)))
-                            }
-                            F64Literal(l) => {
-                                ctx.code
-                                    .add(format!("store double {:.3}, double* {}",
-                                                 l,
-                                                 llvm_symbol(output)))
+                        let ty = get_sym_ty(func, output)?;
+                        if let Vectorized(_) = *ty {
+                            self.generate_vector_literal(llvm_symbol(output), value, ty, ctx)?;
+                        } else {
+                            match *value {
+                                BoolLiteral(l) => {
+                                    ctx.code
+                                        .add(format!("store i1 {}, i1* {}",
+                                                     if l { 1 } else { 0 },
+                                                     llvm_symbol(output)))
+                                }
+                                I8Literal(l) => {
+                                    ctx.code
+                                        .add(format!("store i8 {}, i8* {}", l, llvm_symbol(output)))
+                                }
+                                I32Literal(l) => {
+                                    ctx.code
+                                        .add(format!("store i32 {}, i32* {}", l, llvm_symbol(output)))
+                                }
+                                I64Literal(l) => {
+                                    ctx.code
+                                        .add(format!("store i64 {}, i64* {}", l, llvm_symbol(output)))
+                                }
+                                F32Literal(l) => {
+                                    ctx.code
+                                        .add(format!("store float {:.3}, float* {}",
+                                                     l,
+                                                     llvm_symbol(output)))
+                                }
+                                F64Literal(l) => {
+                                    ctx.code
+                                        .add(format!("store double {:.3}, double* {}",
+                                                     l,
+                                                     llvm_symbol(output)))
+                                }
                             }
                         }
                     }
