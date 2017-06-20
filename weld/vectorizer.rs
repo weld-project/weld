@@ -25,6 +25,10 @@ fn vectorized_type(ty: &Type) -> Type {
 /// 
 /// We can vectorize an iterator if all of its iterators consume the entire collection.
 fn vectorizable_iters(iters: &Vec<Iter<Type>>) -> bool {
+    // Since we don't handle vectorizing Zips yet.
+    if iters.len() > 1 {
+        return false;
+    }
     for ref iter in iters {
         if iter.start.is_some() || iter.end.is_some() || iter.stride.is_some() {
             return false;
@@ -93,6 +97,11 @@ fn vectorizable(for_loop: &Expr<Type>) -> bool {
                     // index computation, etc.
                     let index_iden = exprs::ident_expr(params[1].name.clone(), params[1].ty.clone()).unwrap();
                     if body.contains(&index_iden) {
+                        passed = false;
+                    }
+
+                    // If the data in the vector is not a Scalar, we can't vectorize it.
+                    if let Scalar(_) = params[2].ty {} else {
                         passed = false;
                     }
 

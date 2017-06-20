@@ -56,6 +56,10 @@ declare i32 @get_nworkers()
 declare void @set_runid(i64)
 declare i64 @get_runid()
 
+; DEBUG.
+@longprinter = private constant [6 x i8] c"e%lld\0A"
+declare i32 @printf(i8*, ...)
+
 ; Hash functions
 
 ; Same as Boost's hash_combine; obtained by compiling that with clang

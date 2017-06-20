@@ -26,10 +26,13 @@ int main() {
     }
 
     weld_vector v;
-    const uint64_t length = 1000;
-    int32_t *data = (int32_t *)malloc(sizeof(int32_t) * length);
-    for (int i = 0; i < length; i++) {
+    const uint64_t length = 1002;
+    int32_t *data = (int32_t *)malloc(sizeof(int32_t) * length * 2);
+    for (int i = 0; i < length*2; i++) {
         data[i] = 1;
+        if (i >= length) {
+            data[i] = 1;
+        }
     }
 
     v.data = data;
@@ -40,6 +43,11 @@ int main() {
     // Run the module and get the result.
     conf = weld_conf_new();
     weld_value_t result = weld_module_run(m, conf, arg, e);
+    if (weld_error_code(e)) {
+        const char *err = weld_error_message(e);
+        printf("Error message: %s\n", err);
+        exit(1);
+    }
     void *result_data = weld_value_data(result);
     printf("Answer: %d\n", *(int32_t *)result_data);
 
