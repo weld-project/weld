@@ -381,6 +381,7 @@ impl PartialExpr {
                 NewBuilder(typed_arg)
             }
             Negate(ref expr) => Negate(try!(typed_box(expr))),
+            Broadcast(ref expr) => Broadcast(try!(typed_box(expr))),
         };
 
         Ok(TypedExpr {

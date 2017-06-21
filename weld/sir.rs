@@ -22,6 +22,7 @@ pub enum Statement {
         right: Symbol,
     },
     Negate { output: Symbol, child: Symbol },
+    Broadcast { output: Symbol, child: Symbol },
     Cast {
         output: Symbol,
         new_ty: Type,
@@ -215,6 +216,10 @@ impl fmt::Display for Statement {
                 ref output,
                 ref child,
             } => write!(f, "{} = -{}", output, child),
+            Broadcast {
+                ref output,
+                ref child,
+            } => write!(f, "{} = broadcast({})", output, child),
             Cast {
                 ref output,
                 ref new_ty,
@@ -443,6 +448,9 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
                 Negate { ref child, .. } => {
                     vars.push(child.clone());
                 }
+                Broadcast { ref child, .. } => {
+                    vars.push(child.clone());
+                }
                 Lookup {
                     ref child,
                     ref index,
@@ -663,6 +671,16 @@ fn gen_expr(expr: &TypedExpr,
             let (cur_func, cur_block, child_sym) = gen_expr(child_expr, prog, cur_func, cur_block)?;
             let res_sym = prog.add_local(&expr.ty, cur_func);
             prog.funcs[cur_func].blocks[cur_block].add_statement(Negate {
+                                                                     output: res_sym.clone(),
+                                                                     child: child_sym,
+                                                                 });
+            Ok((cur_func, cur_block, res_sym))
+        }
+
+        ExprKind::Broadcast(ref child_expr) => {
+            let (cur_func, cur_block, child_sym) = gen_expr(child_expr, prog, cur_func, cur_block)?;
+            let res_sym = prog.add_local(&expr.ty, cur_func);
+            prog.funcs[cur_func].blocks[cur_block].add_statement(Broadcast {
                                                                      output: res_sym.clone(),
                                                                      child: child_sym,
                                                                  });

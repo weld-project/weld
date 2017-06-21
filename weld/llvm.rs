@@ -1525,6 +1525,9 @@ impl LlvmGenerator {
                             _ => weld_err!("Illegal type {} in BinOp", print_type(ty))?,
                         }
                     }
+                    Broadcast { .. } => {
+                        return weld_err!("Broadcast not implemented");
+                    }
                     Negate {
                         ref output,
                         ref child,

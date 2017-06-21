@@ -67,6 +67,15 @@ pub fn negate_expr(expr: Expr<Type>) -> WeldResult<Expr<Type>> {
     new_expr(Negate(Box::new(expr)), ty)
 }
 
+pub fn broadcast_expr(expr: Expr<Type>) -> WeldResult<Expr<Type>> {
+    let ty = if let Scalar(ref k) = expr.ty {
+        Vectorized(k.clone())
+    } else {
+        return weld_err!("Internal error: Mismatched types in negate_expr");
+    };
+    new_expr(Broadcast(Box::new(expr)), ty)
+}
+
 pub fn tovec_expr(expr: Expr<Type>) -> WeldResult<Expr<Type>> {
     let ty = if let Dict(ref kt, ref vt) = expr.ty {
         Struct(vec![*kt.clone(), *vt.clone()])

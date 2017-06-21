@@ -40,26 +40,43 @@ fn vectorizable_iters(iters: &Vec<Iter<Type>>) -> bool {
 }
 
 /// Vectorizes the expression by changing it's type if the expression is a scalar.
-fn vectorize_expr(e: &mut Expr<Type>) {
+fn vectorize_expr(e: &mut Expr<Type>, broadcast_idens: &HashSet<Symbol>) -> WeldResult<bool> {
+    let mut new_expr = None;
+    let mut cont = true;
+
     match e.kind {
         Literal(_) => {
             e.ty = vectorized_type(&e.ty);
         }
-        Ident(_) => {
-            e.ty = vectorized_type(&e.ty);
+        Ident(ref name) => {
+            //  The identifier is a scalar defined outside the loop body, so we need to broadcast
+            //  it into a vector.
+            if broadcast_idens.contains(&name) {
+                // Don't continue if we replace this expression.
+                new_expr = Some(exprs::broadcast_expr(e.clone())?);
+                cont = false;
+            } else {
+                e.ty = vectorized_type(&e.ty);
+            }
         }
         BinOp { .. } => {
             e.ty = vectorized_type(&e.ty);
         }
         _ => {},
     }
+    
+    if new_expr.is_some() {
+        *e = new_expr.unwrap();
+    }
+
+    Ok(cont)
 }
 
 
 /// Checks basic vectorizability for a loop - this is a strong check which ensure that the only
 /// expressions which appear in a function body are arithmetic, identifiers, literals,and Let
 /// statements, and builder merges.
-fn vectorizable(for_loop: &Expr<Type>) -> bool {
+fn vectorizable(for_loop: &Expr<Type>) -> WeldResult<HashSet<Symbol>> {
     if let For { ref iters, builder: ref init_builder, ref func } = for_loop.kind {
         // Check if the iterators are consumed.
         if vectorizable_iters(&iters) {
@@ -69,14 +86,15 @@ fn vectorizable(for_loop: &Expr<Type>) -> bool {
                 if let Builder(ref bk, _) = init_builder.ty {
                     match *bk {
                         BuilderKind::Merger(ref ty, _) => {
-                            if let Scalar(_) = **ty {} else { return false; }
+                            if let Scalar(_) = **ty {} else { return weld_err!("Unsupported builder"); }
                         }
                         _ => {
-                            return false;
+                            return weld_err!("Unsupported builder");
                         }
                     };
                 }
 
+                // Check the loop function.
                 if let Lambda { ref params, ref body } = func.kind {
                     let mut passed = true;
 
@@ -101,35 +119,40 @@ fn vectorizable(for_loop: &Expr<Type>) -> bool {
                         }
                     });
 
+                    if !passed {
+                        return weld_err!("Unsupported pattern");
+                    }
+
                     // Check if the index is used anywhere to do any kind of random access,
                     // index computation, etc.
                     let index_iden = exprs::ident_expr(params[1].name.clone(), params[1].ty.clone()).unwrap();
                     if body.contains(&index_iden) {
-                        passed = false;
+                        return weld_err!("Unsupported pattern");
                     }
 
                     // If the data in the vector is not a Scalar, we can't vectorize it.
                     if let Scalar(_) = params[2].ty {} else {
-                        passed = false;
+                        return weld_err!("Unsupported type");
                     }
 
+                    let mut idens = HashSet::new();
+
                     // Check if there are identifiers defined outside the loop. If so, we need to
-                    // broadcast them to vectorize them. We ignore this case for now and just bail!
+                    // broadcast them to vectorize them.
                     body.traverse(&mut |e| {
                         match e.kind {
                             Ident(ref name) if !defined_in_loop.contains(name) => {
-                                passed = false;
+                                idens.insert(name.clone());
                             }
                             _ => {}
                         }
                     });
-
-                    return passed;
+                    return Ok(idens);
                 }
             }
         }
     }
-    return false;
+    return weld_err!("Unsupported pattern");
 }
 
 /// Vectorize an expression.
@@ -139,15 +162,15 @@ pub fn vectorize(expr: &mut Expr<Type>) -> WeldResult<()> {
         //  The Res is a stricter-than-necessary check, but prevents us from having to check nested
         //  loops for now.
         if let Res { builder: ref for_loop } = expr.kind {
-            if vectorizable(for_loop) {
+            if let Ok(ref broadcast_idens) = vectorizable(for_loop) {
                 if let For { ref iters, builder: ref init_builder, ref func } = for_loop.kind {
                     if let NewBuilder(_) = init_builder.kind {
                         if let Lambda { ref params, ref body } = func.kind {
                             // This is the vectorized body.
                             let mut vectorized_body = body.clone();
                             vectorized_body.transform_and_continue(&mut |ref mut e| {
-                                vectorize_expr(e);
-                                (None, true)
+                                let cont = vectorize_expr(e, broadcast_idens).unwrap();
+                                (None, cont)
                             });
 
                             let mut vectorized_params = params.clone();

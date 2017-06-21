@@ -105,7 +105,7 @@ impl PrintableType for PartialType {
                 format!("{}vecmerger[{},{}]", annotations, elem.print(), op)
             }
             Builder(Merger(ref t, op), ref annotations) => {
-                format!("{}merger[{},{}]", t.print(), annotations, op)
+                format!("{}merger[{},{}]", annotations, t.print(), op)
             }
             Builder(GroupMerger(ref kt, ref vt, _), ref annotations) => {
                 format!("{}groupmerger[{},{}]", annotations, kt.print(), vt.print())
@@ -233,6 +233,8 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>,
         }
 
         Negate(ref e) => format!("(-{})", print_expr_impl(e, typed, indent, should_indent)),
+
+        Broadcast(ref e) => format!("broadcast({})", print_expr_impl(e, typed, indent, should_indent)),
 
         CUDF {
             ref sym_name,

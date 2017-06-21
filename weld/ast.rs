@@ -313,6 +313,7 @@ pub enum ExprKind<T: TypeBounds> {
     Literal(LiteralKind),
     Ident(Symbol),
     Negate(Box<Expr<T>>),
+    Broadcast(Box<Expr<T>>),
     BinOp {
         kind: BinOpKind,
         left: Box<Expr<T>>,
@@ -540,6 +541,7 @@ impl<T: TypeBounds> Expr<T> {
             }
             CUDF { ref args, .. } => args.iter().collect(),
             Negate(ref t) => vec![t.as_ref()],
+            Broadcast(ref t) => vec![t.as_ref()],
             // Explicitly list types instead of doing _ => ... to remember to add new types.
             Literal(_) | Ident(_) => vec![],
         }.into_iter()
@@ -630,6 +632,7 @@ impl<T: TypeBounds> Expr<T> {
             }
             CUDF { ref mut args, .. } => args.iter_mut().collect(),
             Negate(ref mut t) => vec![t.as_mut()],
+            Broadcast(ref mut t) => vec![t.as_mut()],
             // Explicitly list types instead of doing _ => ... to remember to add new types.
             Literal(_) | Ident(_) => vec![],
         }.into_iter()
@@ -681,6 +684,7 @@ impl<T: TypeBounds> Expr<T> {
                 }
                 (&NewBuilder(_), &NewBuilder(_)) => Ok(true),
                 (&Negate(_), &Negate(_)) => Ok(true),
+                (&Broadcast(_), &Broadcast(_)) => Ok(true),
                 (&MakeStruct { .. }, &MakeStruct { .. }) => Ok(true),
                 (&MakeVector { .. }, &MakeVector { .. }) => Ok(true),
                 (&Zip { .. }, &Zip { .. }) => Ok(true),
