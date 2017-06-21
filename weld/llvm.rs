@@ -1195,8 +1195,14 @@ impl LlvmGenerator {
 
     fn load_var(&mut self, sym: &str, ty: &str, ctx: &mut FunctionContext) -> WeldResult<String> {
         let var = ctx.var_ids.next();
-        ctx.code
-            .add(format!("{} = load {}, {}* {}", var, ty, ty, sym));
+        // Hacky...but need an aligned load for vectors to prevent strange segfaults.
+        let is_vector = ty.contains("<") && ty.contains(">") && ty.contains("x");
+        if is_vector { 
+            ctx.code .add(format!("{} = load {}, {}* {}, align 1", var, ty, ty, sym)); 
+        }
+        else {
+            ctx.code .add(format!("{} = load {}, {}* {}", var, ty, ty, sym));
+        }
         Ok(var)
     }
 
@@ -1525,8 +1531,32 @@ impl LlvmGenerator {
                             _ => weld_err!("Illegal type {} in BinOp", print_type(ty))?,
                         }
                     }
-                    Broadcast { .. } => {
-                        return weld_err!("Broadcast not implemented");
+                    Broadcast { ref output, ref child } => {
+                        let ty = get_sym_ty(func, output)?;
+                        let elem_ty = get_sym_ty(func, child)?;
+
+                        let elem_ty_str = self.llvm_type(&elem_ty)?.to_string();
+                        let vec_ty_str = self.llvm_type(&ty)?.to_string();
+
+                        let elem = try!(self.load_var(llvm_symbol(child).as_str(), &elem_ty_str, ctx));
+                        let size = vec_size(&elem_ty)?;
+
+                        let mut prev_name = "undef".to_string();
+                        for i in 0..size {
+                            let next = ctx.var_ids.next();
+                            ctx.code.add(format!("{next} = insertelement {vec_ty_str} {prev_name}, {elem_ty_str} {elem}, i32 {i}",
+                                                 next=next,
+                                                 vec_ty_str=vec_ty_str,
+                                                 prev_name=prev_name,
+                                                 elem_ty_str=elem_ty_str,
+                                                 elem=elem,
+                                                 i=i));
+                            prev_name = next;
+                        }
+                        ctx.code.add(format!("store {vec_ty_str} {prev_name}, {vec_ty_str}* {output}, align 1", 
+                                             vec_ty_str=vec_ty_str,
+                                             output=llvm_symbol(output).as_str(),
+                                             prev_name=prev_name));
                     }
                     Negate {
                         ref output,
@@ -3080,7 +3110,9 @@ pub fn compile_program(program: &Program,
     try!(transforms::uniquify(&mut expr));
 
     // This is "allowed" to fail; the return value signifies whether the transform succeeded.
-    let _ = vectorizer::vectorize(&mut expr);
+    if let Ok(_) = vectorizer::vectorize(&mut expr) {
+        println!("Vectorization succeeded!");
+    }
 
     let sir_prog = try!(sir::ast_to_sir(&expr));
     let mut gen = LlvmGenerator::new();

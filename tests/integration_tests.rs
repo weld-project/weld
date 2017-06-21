@@ -658,10 +658,10 @@ fn simple_for_merger_loop() {
     let code = "|x:vec[i32], a:i32| result(for(x, merger[i32,+], |b,i,e| merge(b, e+a)))";
     let conf = default_conf();
 
-    let input_vec = [1, 2, 3, 4, 5];
+    let input_vec = vec![1, 2, 3, 4, 5];
     let ref input_data = Args {
         x: WeldVec {
-            data: &input_vec as *const i32,
+            data: input_vec.as_ptr(),
             len: input_vec.len() as i64,
         },
         a: 1,
