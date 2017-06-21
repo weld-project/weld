@@ -54,19 +54,16 @@ The vectorizer performs the following steps:
 6. Code generation. Most of the added complexity comes from computing index bounds for the fringe
    iterator and vector iterator.
 
+#### New Expressions
+
+* `broadcast(s)` broadcasts the scalar value in `s` to a vector.
+
 ### Current Limitations and To Dos
 
 * Only the `merger` builder is supported
 * Vectorization fails if more than one iterator is present
 * Scatters and gathers are not supported (iterators must look at all elements), and index
   computations are disallowed in the for loop body)
-* Broadcast of variables defined outside the loop body not currently supported. For example, the
-  following example will fail to vectorize because `a` must be broadcast into a vector:
-
-  ```
-  |v: vec[i32], a: i32| for(v, merger[i32,+], |b,i,e| merge(b, e+a))
-  ```
-
 * Predication not yet implemented.
 * Nested loops not allowed. Indeed, only loops whose bodies contain the following expression kinds
   are allowed: `Literal`, `Ident`, `BinOp`, `Let`, `Merge`.
