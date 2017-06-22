@@ -363,6 +363,18 @@ impl PartialExpr {
                 }
             }
 
+            Select {
+                ref cond,
+                ref on_true,
+                ref on_false,
+            } => {
+                Select {
+                    cond: try!(typed_box(cond)),
+                    on_true: try!(typed_box(on_true)),
+                    on_false: try!(typed_box(on_false)),
+                }
+            }
+
             Apply {
                 ref func,
                 ref params,

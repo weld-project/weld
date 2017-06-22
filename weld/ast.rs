@@ -353,6 +353,11 @@ pub enum ExprKind<T: TypeBounds> {
         on_true: Box<Expr<T>>,
         on_false: Box<Expr<T>>,
     },
+    Select {
+        cond: Box<Expr<T>>,
+        on_true: Box<Expr<T>>,
+        on_false: Box<Expr<T>>,
+    },
     Lambda {
         params: Vec<Parameter<T>>,
         body: Box<Expr<T>>,
@@ -524,6 +529,11 @@ impl<T: TypeBounds> Expr<T> {
                 ref on_true,
                 ref on_false,
             } => vec![cond.as_ref(), on_true.as_ref(), on_false.as_ref()],
+            Select {
+                ref cond,
+                ref on_true,
+                ref on_false,
+            } => vec![cond.as_ref(), on_true.as_ref(), on_false.as_ref()],
             Apply {
                 ref func,
                 ref params,
@@ -615,6 +625,12 @@ impl<T: TypeBounds> Expr<T> {
                 ref mut on_true,
                 ref mut on_false,
             } => vec![cond.as_mut(), on_true.as_mut(), on_false.as_mut()],
+            Select {
+                ref mut cond,
+                ref mut on_true,
+                ref mut on_false,
+            } => vec![cond.as_mut(), on_true.as_mut(), on_false.as_mut()],
+
             Apply {
                 ref mut func,
                 ref mut params,
@@ -700,6 +716,7 @@ impl<T: TypeBounds> Expr<T> {
                 (&Res { .. }, &Res { .. }) => Ok(true),
                 (&For { .. }, &For { .. }) => Ok(true), // TODO need to check Iters?
                 (&If { .. }, &If { .. }) => Ok(true),
+                (&Select { .. }, &Select { .. }) => Ok(true),
                 (&Apply { .. }, &Apply { .. }) => Ok(true),
                 (&CUDF {
                      sym_name: ref sym_name1,

@@ -509,6 +509,18 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             Ok(changed)
         }
 
+        Select {
+            ref mut cond,
+            ref mut on_true,
+            ref mut on_false,
+        } => {
+            let mut changed = false;
+            changed |= try!(push_complete_type(&mut cond.ty, Scalar(Bool), "Select"));
+            changed |= try!(sync_types(&mut expr.ty, &mut on_true.ty, "Select"));
+            changed |= try!(sync_types(&mut expr.ty, &mut on_false.ty, "Select"));
+            Ok(changed)
+        }
+
         Apply {
             ref mut func,
             ref mut params,

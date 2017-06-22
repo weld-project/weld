@@ -422,6 +422,21 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>,
                     less_indent_str)
         }
 
+        Select {
+            ref cond,
+            ref on_true,
+            ref on_false,
+        } => {
+            format!("select(\n{}{},\n{}{},\n{}{}\n{})",
+                    indent_str,
+                    print_expr_impl(cond, typed, indent + 2, should_indent),
+                    indent_str,
+                    print_expr_impl(on_true, typed, indent + 2, should_indent),
+                    indent_str,
+                    print_expr_impl(on_false, typed, indent + 2, should_indent),
+                    less_indent_str)
+        }
+
         Apply {
             ref func,
             ref params,

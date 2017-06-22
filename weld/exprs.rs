@@ -226,6 +226,28 @@ pub fn if_expr(cond: Expr<Type>,
              ty)
 }
 
+pub fn select_expr(cond: Expr<Type>,
+               on_true: Expr<Type>,
+               on_false: Expr<Type>)
+               -> WeldResult<Expr<Type>> {
+    let err = weld_err!("Internal error: Mismatched types in select_expr");
+    if cond.ty != Scalar(ScalarKind::Bool) && cond.ty != Vectorized(ScalarKind::Bool) {
+        return err;
+    }
+
+    if on_true.ty != on_false.ty {
+        return err;
+    }
+
+    let ty = on_true.ty.clone();
+    new_expr(Select {
+                 cond: Box::new(cond),
+                 on_true: Box::new(on_true),
+                 on_false: Box::new(on_false),
+             },
+             ty)
+}
+
 pub fn lambda_expr(params: Vec<Parameter<Type>>, body: Expr<Type>) -> WeldResult<Expr<Type>> {
     let ty = Function(params.iter().map(|p| p.ty.clone()).collect(),
                       Box::new(body.ty.clone()));

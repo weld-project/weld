@@ -1798,6 +1798,35 @@ impl LlvmGenerator {
                             _ => weld_err!("Illegal type {} in Slice", print_type(child_ty))?,
                         }
                     }
+                    Select {
+                        ref output,
+                        ref cond,
+                        ref on_true,
+                        ref on_false,
+                    } => {
+                        
+                        let cond_ty_str = self.llvm_type(get_sym_ty(func, cond)?)?.to_string();
+                        let res_ty_str = self.llvm_type(get_sym_ty(func, on_true)?)?.to_string();
+
+                        let output_str = llvm_symbol(output).to_string();
+                        let cond_str = self.load_var(llvm_symbol(cond).as_str(), &cond_ty_str, ctx)?;
+                        let true_str = self.load_var(llvm_symbol(on_true).as_str(), &res_ty_str, ctx)?;
+                        let false_str = self.load_var(llvm_symbol(on_false).as_str(), &res_ty_str, ctx)?;
+
+
+                        let tmp = ctx.var_ids.next();
+                        ctx.code.add(format!("{tmp} = select {cond_ty_str} {cond_str}, {res_ty_str} {true_str}, {res_ty_str} {false_str}",
+                                             tmp=tmp,
+                                             cond_ty_str=cond_ty_str,
+                                             cond_str=cond_str,
+                                             res_ty_str=res_ty_str,
+                                             true_str=true_str,
+                                             false_str=false_str));
+                         ctx.code.add(format!("store {res_ty_str} {tmp}, {res_ty_str}* {output_str}",
+                                             res_ty_str=res_ty_str,
+                                             tmp=tmp,
+                                             output_str=output_str));
+                    }
                     Exp {
                         ref output,
                         ref child,

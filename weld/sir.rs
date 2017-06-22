@@ -44,6 +44,12 @@ pub enum Statement {
         index: Symbol,
         size: Symbol,
     },
+    Select {
+        output: Symbol,
+        cond: Symbol,
+        on_true: Symbol,
+        on_false: Symbol,
+    },
     Exp { output: Symbol, child: Symbol },
     CUDF {
         output: Symbol,
@@ -241,6 +247,13 @@ impl fmt::Display for Statement {
                 ref index,
                 ref size,
             } => write!(f, "{} = slice({}, {}, {})", output, child, index, size),
+            Select {
+                ref output,
+                ref cond,
+                ref on_true,
+                ref on_false,
+            } => write!(f, "{} = select({}, {}, {})", output, cond, on_true, on_false),
+
             Exp {
                 ref output,
                 ref child,
@@ -472,6 +485,16 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
                     vars.push(child.clone());
                     vars.push(index.clone());
                     vars.push(size.clone());
+                }
+                Select {
+                    ref cond,
+                    ref on_true,
+                    ref on_false,
+                    ..
+                } => {
+                    vars.push(cond.clone());
+                    vars.push(on_true.clone());
+                    vars.push(on_false.clone());
                 }
                 Exp { ref child, .. } => {
                     vars.push(child.clone());
@@ -739,6 +762,24 @@ fn gen_expr(expr: &TypedExpr,
                                                                      child: data_sym,
                                                                      index: index_sym.clone(),
                                                                      size: size_sym.clone(),
+                                                                 });
+            Ok((cur_func, cur_block, res_sym))
+        }
+
+        ExprKind::Select {
+            ref cond,
+            ref on_true,
+            ref on_false,
+        } => {
+            let (cur_func, cur_block, cond_sym) = gen_expr(cond, prog, cur_func, cur_block)?;
+            let (cur_func, cur_block, true_sym) = gen_expr(on_true, prog, cur_func, cur_block)?;
+            let (cur_func, cur_block, false_sym) = gen_expr(on_false, prog, cur_func, cur_block)?;
+            let res_sym = prog.add_local(&expr.ty, cur_func);
+            prog.funcs[cur_func].blocks[cur_block].add_statement(Select {
+                                                                     output: res_sym.clone(),
+                                                                     cond: cond_sym,
+                                                                     on_true: true_sym.clone(),
+                                                                     on_false: false_sym.clone(),
                                                                  });
             Ok((cur_func, cur_block, res_sym))
         }
