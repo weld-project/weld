@@ -57,6 +57,8 @@ The vectorizer performs the following steps:
 #### New Expressions
 
 * `broadcast(s)` broadcasts the scalar value in `s` to a vector.
+* `select(cond, on_true, on_false)` evaluates `cond`, `on_true`, and `on_false` and returns a value
+  based on whether `cond` is `true` or `false`.
 
 ### Current Limitations and To Dos
 
@@ -64,6 +66,5 @@ The vectorizer performs the following steps:
 * Vectorization fails if more than one iterator is present
 * Scatters and gathers are not supported (iterators must look at all elements), and index
   computations are disallowed in the for loop body)
-* Predication not yet implemented.
 * Nested loops not allowed. Indeed, only loops whose bodies contain the following expression kinds
-  are allowed: `Literal`, `Ident`, `BinOp`, `Let`, `Merge`.
+  are allowed: `Literal`, `Ident`, `BinOp`, `Let`, `Merge`, `If`, `Select`.
