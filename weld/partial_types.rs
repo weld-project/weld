@@ -340,7 +340,7 @@ impl PartialExpr {
                         start: start,
                         end: end,
                         stride: stride,
-                        kind: IterKind::ScalarIter,
+                        kind: iter.kind.clone(),
                     };
                     typed_iters.push(typed_iter);
                 }

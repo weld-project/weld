@@ -383,7 +383,20 @@ pub fn for_expr(iters: Vec<Iter<Type>>,
                 return weld_err!("Internal error: Mismatched types in for_expr - function elem type",);
             }
         } else {
-            let composite_ty = Struct(vec_elem_tys.clone());
+            let composite_ty = if vectorized {
+                let mut vec_elem_tys_simd = vec![];
+                for ty in vec_elem_tys {
+                    if let Scalar(ref sk) = ty {
+                        vec_elem_tys_simd.push(Simd(sk.clone()))
+                    } else {
+                        return weld_err!("Internal error: Mismatched types in for_expr - bad vector",);
+                    }
+                }
+                Struct(vec_elem_tys_simd)
+            } else {
+                Struct(vec_elem_tys.clone())
+            };
+
             if *param_2_ty != composite_ty {
                 return weld_err!("Internal error: Mismatched types in for_expr - function zipped elem type",);
             }

@@ -138,6 +138,14 @@ pub fn print_typed_expr_without_indent<T: PrintableType>(expr: &Expr<T>) -> Stri
         .collect()
 }
 
+fn print_iter_kind<T: PrintableType>(iter: &Iter<T>) -> &str {
+    match iter.kind {
+        IterKind::ScalarIter => "",
+        IterKind::SimdIter => "simd",
+        IterKind::FringeIter => "fringe",
+    }
+}
+
 fn print_iters<T: PrintableType>(iters: &Vec<Iter<T>>,
                                  typed: bool,
                                  indent: i32,
@@ -152,7 +160,8 @@ fn print_iters<T: PrintableType>(iters: &Vec<Iter<T>>,
     }
     for iter in iters {
         if let Some(_) = iter.start {
-            iter_strs.push(format!("iter({},{},{},{},{})",
+            iter_strs.push(format!("{}iter({},{},{},{})",
+                                   print_iter_kind(iter),
                                    print_expr_impl(iter.data.as_ref(),
                                                    typed,
                                                    indent,
@@ -169,7 +178,12 @@ fn print_iters<T: PrintableType>(iters: &Vec<Iter<T>>,
                                                    typed,
                                                    indent,
                                                    should_indent),
-                                    iter.kind));
+                                    ));
+        } else if iter.kind != IterKind::ScalarIter {
+            iter_strs.push(format!("{}iter({})",
+                print_iter_kind(iter),
+                print_expr_impl(iter.data.as_ref(), typed, indent, should_indent)
+            ));
         } else {
             iter_strs.push(print_expr_impl(iter.data.as_ref(), typed, indent + 2, should_indent));
         }

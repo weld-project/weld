@@ -4,7 +4,6 @@ use super::ast::*;
 use super::ast::ExprKind::*;
 use super::ast::Type::*;
 use super::ast::BuilderKind::*;
-use super::ast::IterKind::*;
 use super::ast::LiteralKind::*;
 use super::error::*;
 
@@ -35,7 +34,7 @@ pub fn inline_zips(expr: &mut Expr<Type>) {
                                      start: None,
                                      end: None,
                                      stride: None,
-                                     kind: ScalarIter,
+                                     kind: first_iter.kind.clone(),
                                  }
                              })
                         .collect::<Vec<_>>();

@@ -434,8 +434,9 @@ impl<'t> Parser<'t> {
     /// Parses a for loop iterator expression starting at the current position. This could also be
     /// a vector expression (i.e., without an explicit iter(..).
     fn parse_iter(&mut self) -> WeldResult<Iter<PartialType>> {
-        if *self.peek() == TIter {
-            try!(self.consume(TIter));
+        let iter: Token = self.peek().clone();
+        if *self.peek() == TScalarIter || *self.peek() == TSimdIter || *self.peek() == TFringeIter {
+            try!(self.consume(iter.clone()));
             try!(self.consume(TOpenParen));
             let data = try!(self.expr());
             let mut start = None;
@@ -454,7 +455,11 @@ impl<'t> Parser<'t> {
                 start: start,
                 end: end,
                 stride: stride,
-                kind: ScalarIter,
+                kind: match iter {
+                    TSimdIter => SimdIter,
+                    TFringeIter => FringeIter,
+                    _ => ScalarIter,
+                },
             };
             try!(self.consume(TCloseParen));
             Ok(iter)
@@ -465,7 +470,11 @@ impl<'t> Parser<'t> {
                 start: None,
                 end: None,
                 stride: None,
-                kind: ScalarIter,
+                kind: match iter {
+                    TSimdIter => SimdIter,
+                    TFringeIter => FringeIter,
+                    _ => ScalarIter,
+                },
             };
             Ok(iter)
         }

@@ -187,7 +187,6 @@ fn main() {
 
         if let Err(ref e) = vectorizer::vectorize(&mut expr) {
             println!("Error during vectorize: {}\n", e);
-            continue;
         }
 
         println!("final program : {}", print_typed_expr(&expr));
@@ -202,7 +201,7 @@ fn main() {
                     println!("Error during LLVM code gen:\n{}\n", e);
                 } else {
                     let llvm_code = llvm_gen.result();
-                    println!("LLVM code:\n{}\n", llvm_code);
+                    //println!("LLVM code:\n{}\n", llvm_code);
 
                     if let Err(e) = load_runtime_library() {
                         println!("Couldn't load runtime: {}", e);

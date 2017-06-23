@@ -362,7 +362,7 @@ impl LlvmGenerator {
 
                 let idx_cmp = ctx.var_ids.next();
 
-                if par_for.data[0].kind == IterKind::VectorIter {
+                if par_for.data[0].kind == IterKind::SimdIter {
                     let check_with_vec = ctx.var_ids.next();
                     let vector_len = format!("{}", vec_size(&elem_ty)?);
                     // Would need to compute stride, etc. here.
@@ -401,7 +401,7 @@ impl LlvmGenerator {
                     let arr_idx = if iter.start.is_some() {
                         // TODO(shoumik) implement. This needs to be a gather instead of a
                         // sequential load.
-                        if iter.kind == IterKind::VectorIter {
+                        if iter.kind == IterKind::SimdIter {
                             return weld_err!("Unimplemented: vectorized iterators do not support non-unit stride.");
                         }
                         let offset = ctx.var_ids.next();
@@ -464,7 +464,7 @@ impl LlvmGenerator {
                                 data_str,
                                 arr_idx));
                         }
-                        IterKind::VectorIter => {
+                        IterKind::SimdIter => {
                             ctx.code
                                 .add(format!("{} = call {}* {}.vat({} {}, i64 {})",
                                 inner_elem_tmp_ptr,
@@ -513,7 +513,7 @@ impl LlvmGenerator {
             ctx.code.add("body.end:");
             if containing_loop.is_some() {
                 // TODO - should take the minimum vector size of all elements here?
-                let vectorized = containing_loop.as_ref().unwrap().data[0].kind == IterKind::VectorIter;
+                let vectorized = containing_loop.as_ref().unwrap().data[0].kind == IterKind::SimdIter;
                 let fetch_width = if vectorized {
                     vec_size(func.locals.get(&containing_loop.as_ref().unwrap().data_arg).unwrap())?
                 } else {
@@ -559,7 +559,7 @@ impl LlvmGenerator {
                 let num_iters_str = wrap_ctx.var_ids.next();
                 let mut fringe_start_str = None;
 
-                if par_for.data[0].kind == IterKind::VectorIter || par_for.data[0].kind == IterKind::ScalarIter {
+                if par_for.data[0].kind == IterKind::SimdIter || par_for.data[0].kind == IterKind::ScalarIter {
                     if par_for.data[0].start.is_none() {
                         // set num_iters_str to len(first_data)
                         wrap_ctx
@@ -571,7 +571,7 @@ impl LlvmGenerator {
                             data_str));
                     } else {
                         // TODO(shoumik): Don't support non-unit stride right now.
-                        if par_for.data[0].kind == IterKind::VectorIter {
+                        if par_for.data[0].kind == IterKind::SimdIter {
                             return weld_err!("vector iterator does not support non-unit stride");
                         }
                         // set num_iters_str to (end - start) / stride
@@ -987,6 +987,10 @@ impl LlvmGenerator {
                                           name));
                     let mut res = "0".to_string();
                     for i in 0..field_types.len() {
+                        // TODO(shoumik): hack to prevent incorrect code gen for vectors.
+                        if let Simd(_) = fields[i] {
+                            continue;
+                        }
                         let field = self.prelude_var_ids.next();
                         let hash = self.prelude_var_ids.next();
                         let new_res = self.prelude_var_ids.next();
@@ -1018,6 +1022,10 @@ impl LlvmGenerator {
                                           name));
                     let mut label_ids = IdGenerator::new("%l");
                     for i in 0..field_types.len() {
+                        // TODO(shoumik): hack to prevent incorrect code gen for vectors.
+                        if let Simd(_) = fields[i] {
+                            continue;
+                        }
                         let a_field = self.prelude_var_ids.next();
                         let b_field = self.prelude_var_ids.next();
                         let cmp = self.prelude_var_ids.next();

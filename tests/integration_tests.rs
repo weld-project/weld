@@ -701,6 +701,39 @@ fn simple_for_merger_loop() {
     unsafe { weld_value_free(ret_value) };
 }
 
+fn simple_zipped_for_merger_loop() {
+    #[allow(dead_code)]
+    struct Args {
+        x: WeldVec<i32>,
+        y: WeldVec<i32>,
+    }
+
+    let code = "|x:vec[i32], y:vec[i32]| result(for(zip(x,y), merger[i32,+], |b,i,e| merge(b, e.$0+e.$1)))";
+    let conf = default_conf();
+
+    let size = 2000;
+    let x_data = vec![1; size as usize];
+    let y_data = vec![1; size as usize];
+
+    let ref input_data = Args {
+        x: WeldVec {
+            data: x_data.as_ptr(),
+            len: x_data.len() as i64,
+        },
+        y: WeldVec {
+            data: x_data.as_ptr(),
+            len: x_data.len() as i64,
+        },
+    };
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const i32 };
+    let result = unsafe { (*data).clone() };
+    let output = size * 2;
+    assert_eq!(result, output);
+    unsafe { weld_value_free(ret_value) };
+}
+
 fn simple_for_merger_loop_product() {
     #[allow(dead_code)]
     struct Args {
@@ -1486,6 +1519,7 @@ fn main() {
              ("simple_for_vectorizable_loop", simple_for_vectorizable_loop),
              ("for_predicated_vectorizable_loop", for_predicated_vectorizable_loop),
              ("simple_for_merger_loop", simple_for_merger_loop),
+             ("simple_zipped_for_merger_loop", simple_zipped_for_merger_loop),
              ("parallel_for_merger_loop", parallel_for_merger_loop),
              ("simple_for_merger_loop_initial_value", simple_for_merger_loop_initial_value),
              ("parallel_for_merger_loop_initial_value", parallel_for_merger_loop_initial_value),

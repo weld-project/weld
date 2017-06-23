@@ -27,12 +27,17 @@ fn vectorized_type(ty: &Type) -> Type {
 /// 
 /// We can vectorize an iterator if all of its iterators consume the entire collection.
 fn vectorizable_iters(iters: &Vec<Iter<Type>>) -> bool {
-    // Since we don't handle vectorizing Zips yet.
-    if iters.len() > 1 {
-        return false;
-    }
     for ref iter in iters {
         if iter.start.is_some() || iter.end.is_some() || iter.stride.is_some() {
+            return false;
+        }
+        if let Vector(ref elem_ty) = iter.data.ty {
+            if let Scalar(_) = *elem_ty.as_ref() {}
+            else {
+                return false;
+            }
+        }
+        if iter.kind != IterKind::ScalarIter {
             return false;
         }
     }
@@ -49,15 +54,24 @@ fn vectorize_expr(e: &mut Expr<Type>, broadcast_idens: &HashSet<Symbol>) -> Weld
             e.ty = vectorized_type(&e.ty);
         }
         Ident(ref name) => {
-            //  The identifier is a scalar defined outside the loop body, so we need to broadcast
-            //  it into a vector.
-            if broadcast_idens.contains(&name) {
-                // Don't continue if we replace this expression.
-                new_expr = Some(exprs::broadcast_expr(e.clone())?);
-                cont = false;
-            } else {
-                e.ty = vectorized_type(&e.ty);
+            if let Scalar(_) = e.ty {
+                //  The identifier is a scalar defined outside the loop body, so we need to broadcast
+                //  it into a vector.
+                if broadcast_idens.contains(&name) {
+                    // Don't continue if we replace this expression.
+                    new_expr = Some(exprs::broadcast_expr(e.clone())?);
+                    cont = false;
+                } else {
+                    e.ty = vectorized_type(&e.ty);
+                }
+            } else if let Struct(ref mut field_tys) = e.ty {
+                for ty in field_tys.iter_mut() {
+                    *ty = vectorized_type(&ty);
+                }
             }
+        }
+        GetField { .. } => {
+            e.ty = vectorized_type(&e.ty);
         }
         BinOp { .. } => {
             e.ty = vectorized_type(&e.ty);
@@ -100,7 +114,7 @@ fn vectorize_expr(e: &mut Expr<Type>, broadcast_idens: &HashSet<Symbol>) -> Weld
                                                 }
                                             }
                                             _ => {
-                                                return weld_err!("Internal error: invalid type in merger");
+                                                return weld_err!("Merger type not vectorizable.");
                                             }
                                         };
                                         // Change if(cond, merge(b, e), b) => 
@@ -171,6 +185,19 @@ fn vectorizable(for_loop: &Expr<Type>) -> WeldResult<HashSet<Symbol>> {
                             Let{ ref name, .. } => {
                                 defined_in_loop.insert(name.clone()); 
                             },
+                            // GetField is allowed if the only fields we fetch are the ones from
+                            // the argument (in case the input was Zipped). At this point, it's
+                            // already guaranteed that each input vector is a scalar.
+                            GetField { ref expr, .. } => {
+                                let mut getfield_passed = false;
+                                let ref elem_param = params[2];
+                                if let Ident(ref name) = expr.kind {
+                                    if elem_param.name == *name {
+                                       getfield_passed = true; 
+                                    }
+                                }
+                                passed = getfield_passed;
+                            }
                             Merge{ .. } => {},
                             If { ref on_true, ref on_false, .. } => {
                                 let mut can_predicate = false;
@@ -209,7 +236,20 @@ fn vectorizable(for_loop: &Expr<Type>) -> WeldResult<HashSet<Symbol>> {
                     }
 
                     // If the data in the vector is not a Scalar, we can't vectorize it.
-                    if let Scalar(_) = params[2].ty {} else {
+                    let mut check_arg_ty = false;
+                    if let Scalar(_) = params[2].ty {
+                        check_arg_ty = true; 
+                    } 
+                    else if let Struct(ref field_tys) = params[2].ty {
+                        if field_tys.iter().all(|t| match *t {
+                            Scalar(_) => true,
+                            _ => false
+                        }) {
+                            check_arg_ty = true;
+                        }
+                    } 
+                    
+                    if !check_arg_ty {
                         return weld_err!("Unsupported type");
                     }
 
@@ -252,7 +292,15 @@ pub fn vectorize(expr: &mut Expr<Type>) -> WeldResult<()> {
                         });
 
                         let mut vectorized_params = params.clone();
-                        vectorized_params[2].ty = vectorized_type(&vectorized_params[2].ty);
+
+                        let new_ty = if let Scalar(_) = vectorized_params[2].ty {
+                            vectorized_type(&vectorized_params[2].ty)
+                        } else if let Struct(ref field_tys) = vectorized_params[2].ty {
+                            Struct(field_tys.iter().map(|ref t| vectorized_type(t)).collect())
+                        } else {
+                            unreachable!();
+                        };
+                        vectorized_params[2].ty = new_ty;
 
                         let vec_func = exprs::lambda_expr(vectorized_params, *vectorized_body)?;
 
@@ -275,7 +323,7 @@ pub fn vectorize(expr: &mut Expr<Type>) -> WeldResult<()> {
                                     start: e.start.clone(),
                                     end: e.end.clone(),
                                     stride: e.stride.clone(),
-                                    kind: IterKind::VectorIter,
+                                    kind: IterKind::SimdIter,
                                 });
                         }
 

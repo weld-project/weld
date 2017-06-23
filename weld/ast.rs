@@ -280,7 +280,7 @@ pub struct Expr<T: TypeBounds> {
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum IterKind {
     ScalarIter, // A standard scalar iterator.
-    VectorIter, // A vector iterator.
+    SimdIter, // A vector iterator.
     FringeIter, // A fringe iterator, handling the fringe of a vector iter.
 }
 
@@ -289,7 +289,7 @@ impl fmt::Display for IterKind {
         use ast::IterKind::*;
         let text = match *self {
             ScalarIter => "scalar",
-            VectorIter => "vectorized",
+            SimdIter => "vectorized",
             FringeIter => "fringe",
         };
         f.write_str(text)

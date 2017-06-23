@@ -124,7 +124,7 @@ fn parse_and_print_for_expressions() {
 
     let e = parse_expr("for(iter(d,0L,4L,1L), appender, |e| e+1)").unwrap();
     assert_eq!(print_expr_without_indent(&e).as_str(),
-               "for(iter(d,0L,4L,1L,scalar),appender[?],|e|(e+1))");
+               "for(iter(d,0L,4L,1L),appender[?],|e|(e+1))");
 
     let e = parse_expr("for(zip(d), appender, |e| e+1)").unwrap();
     assert_eq!(print_expr_without_indent(&e).as_str(),
@@ -136,7 +136,7 @@ fn parse_and_print_for_expressions() {
 
     let e = parse_expr("for(zip(a,b,iter(c,0L,4L,1L),iter(d)), appender, |e| e+1)").unwrap();
     assert_eq!(print_expr_without_indent(&e).as_str(),
-               "for(zip(a,b,iter(c,0L,4L,1L,scalar),d),appender[?],|e|(e+1))");
+               "for(zip(a,b,iter(c,0L,4L,1L),d),appender[?],|e|(e+1))");
 }
 
 #[test]

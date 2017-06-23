@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use super::ast::ExprKind::*;
 use super::ast::LiteralKind::*;
 use super::ast::ScalarKind::*;
+use super::ast::IterKind;
 use super::ast::Symbol;
 use super::partial_types::PartialExpr;
 use super::partial_types::PartialType;
@@ -121,7 +122,11 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             changed |= try!(push_type(&mut left.ty, &elem_type, "BinOp"));
             changed |= try!(push_type(&mut right.ty, &elem_type, "BinOp"));
             if op.is_comparison() {
-                changed |= try!(push_type(&mut expr.ty, &Scalar(Bool), "BinOp"));
+                if let Simd(_) = left.ty {
+                    changed |= try!(push_type(&mut expr.ty, &Simd(Bool), "BinOp"));
+                } else {
+                    changed |= try!(push_type(&mut expr.ty, &Scalar(Bool), "BinOp"));
+                }
             } else {
                 changed |= try!(push_type(&mut expr.ty, &elem_type, "BinOp"));
             }
@@ -356,8 +361,17 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             let mut changed = false;
             match builder.ty {
                 Builder(ref mut b, _) => {
-                    let mty = b.merge_type_mut();
-                    changed |= try!(sync_types(mty, &mut value.ty, "Merge"));
+                    if let Simd(kind) = value.ty {
+                        let mut simd_mty = Simd(kind);
+                        changed |= try!(sync_types(&mut simd_mty, &mut value.ty, "Merge"));
+                        let mty = b.merge_type_mut();
+                        if let Simd(kind) = simd_mty {
+                            *mty = Scalar(kind);
+                        }
+                    } else {
+                        let mty = b.merge_type_mut();
+                        changed |= try!(sync_types(mty, &mut value.ty, "Merge"));
+                    }
                 }
                 Struct(ref mut tys) => {
                     let mut rtys = vec![];
@@ -436,11 +450,48 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
                     }
                 }
             }
-            let elem_types = if elem_types.len() == 1 {
+
+            // The type could also be vectorized.
+            let mut elem_types = if elem_types.len() == 1 {
                 elem_types[0].clone()
             } else {
                 Struct(elem_types)
             };
+
+            // Check if the argument to the function is a vector.
+            if let Lambda{ref params, .. } = func.kind {
+                let mut vector_param = false;
+                if let Simd(ref kind) = params[2].ty {
+                    elem_types = Simd(kind.clone());
+                    vector_param = true;
+                } else if let Struct(ref field_tys) = params[2].ty {
+                    if field_tys.iter().all(|t| {
+                        match *t {
+                            Simd(_) => true,
+                            _ => false,
+                        }
+                    }) {
+                        elem_types = Struct(field_tys.iter().map(|t| {
+                            match *t {
+                                Scalar(ref kind) => Simd(kind.clone()),
+                                ref a => a.clone()
+                            } 
+                        }).collect());
+                        vector_param = true;
+                    }
+                }
+
+                if vector_param {
+                    if !iters.iter().all(|i| i.kind == IterKind::SimdIter) {
+                        return weld_err!("For with vector arguments requires a Simd iterator");
+                    }
+                } else {
+                    if iters.iter().any(|i| i.kind == IterKind::SimdIter) {
+                        return weld_err!("For without vector arguments requires a Scalar or Fringe iterator");
+                    }
+                }
+            }
+
             let bldr_type = builder.ty.clone();
             let func_type = Function(vec![bldr_type.clone(), Scalar(I64), elem_types],
                                      Box::new(bldr_type));
@@ -491,7 +542,7 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
                             None => {}
                         }
                     }
-                    _ => {} // No arguments for the builder.
+                    _ => {}
                 }
             }
             Ok(changed)
