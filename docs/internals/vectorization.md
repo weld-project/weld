@@ -36,7 +36,7 @@ Builders which support vectorization need not support vectorization for types ot
 not need to support vectorization.
 
 Builders *do not* support vector types as their explicit merge types. For example, a builder of type
-`merger[<? x i32>,+]` is invalid. It is therefore currently impossible to build a vector type in Weld.
+`merger[simd[i32],+]` is invalid. It is therefore currently impossible to build a vector type in Weld.
 
 ### Vectorization Internals 
 
@@ -59,12 +59,15 @@ The vectorizer performs the following steps:
 * `broadcast(s)` broadcasts the scalar value in `s` to a vector.
 * `select(cond, on_true, on_false)` evaluates `cond`, `on_true`, and `on_false` and returns a value
   based on whether `cond` is `true` or `false`.
+* The `simd[T]` type is used to specify SIMD vectors.
 
 ### Current Limitations and To Dos
 
 * Only the `merger` builder is supported
-* Vectorization fails if more than one iterator is present
 * Scatters and gathers are not supported (iterators must look at all elements), and index
   computations are disallowed in the for loop body)
 * Nested loops not allowed. Indeed, only loops whose bodies contain the following expression kinds
   are allowed: `Literal`, `Ident`, `BinOp`, `Let`, `Merge`, `If`, `Select`.
+* Since the AST does not encode vector lengths, there is no way to express arbitrary vector literals
+  at the moment. For example, there is way to express a vector with the value `<1, 2, 3, 4>:simd[i32]`.
+  Vectors composed of a single constant can be expressed using `broadcast`, however.
