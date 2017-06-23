@@ -695,6 +695,28 @@ impl<'t> Parser<'t> {
                             }))
             }
 
+            TSelect => {
+                try!(self.consume(TOpenParen));
+                let cond = try!(self.expr());
+                try!(self.consume(TComma));
+                let on_true = try!(self.expr());
+                try!(self.consume(TComma));
+                let on_false = try!(self.expr());
+                try!(self.consume(TCloseParen));
+                Ok(expr_box(Select {
+                                cond: cond,
+                                on_true: on_true,
+                                on_false: on_false,
+                            }))
+            }
+
+            TBroadcast => {
+                try!(self.consume(TOpenParen));
+                let expr = try!(self.expr());
+                try!(self.consume(TCloseParen));
+                Ok(expr_box(Broadcast(expr)))
+            }
+
             TCUDF => {
                 let mut args = vec![];
                 try!(self.consume(TOpenBracket));
@@ -1021,6 +1043,17 @@ impl<'t> Parser<'t> {
                 let elem_type = try!(self.type_());
                 try!(self.consume(TCloseBracket));
                 Ok(Vector(Box::new(elem_type)))
+            }
+
+            TSimd => {
+                try!(self.consume(TOpenBracket));
+                let elem_type = try!(self.type_());
+                try!(self.consume(TCloseBracket));
+                if let Scalar(ref kind) = elem_type {
+                    Ok(Vectorized(kind.clone()))
+                } else {
+                    weld_err!("Expected Scalar type in simd")
+                }
             }
 
             TAppender => {

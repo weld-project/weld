@@ -3,7 +3,6 @@ use std::iter::Iterator;
 
 use super::ast::*;
 use super::ast::BuilderKind::*;
-use super::ast::ScalarKind::*;
 use super::ast::Type::*;
 use super::ast::ExprKind::*;
 use super::ast::LiteralKind::*;
@@ -20,18 +19,12 @@ pub trait PrintableType: TypeBounds {
 impl PrintableType for Type {
     fn print(&self) -> String {
         match *self {
-            Scalar(Bool) => "bool".to_string(),
-            Scalar(I8) => "i8".to_string(),
-            Scalar(I32) => "i32".to_string(),
-            Scalar(I64) => "i64".to_string(),
-            Scalar(F32) => "f32".to_string(),
-            Scalar(F64) => "f64".to_string(),
-            Vectorized(Bool) => "<? x bool>".to_string(),
-            Vectorized(I8) => "<? x i8>".to_string(),
-            Vectorized(I32) => "<? x i32>".to_string(),
-            Vectorized(I64) => "<? x i64>".to_string(),
-            Vectorized(F32) => "<? x f32>".to_string(),
-            Vectorized(F64) => "<? x f64>".to_string(),
+            Scalar(ref kind) => {
+                format!("{}", kind)
+            }
+            Vectorized(ref kind) => {
+                format!("simd[{}]", kind)
+            }
             Vector(ref elem) => format!("vec[{}]", elem.print()),
             Dict(ref kt, ref vt) => format!("dict[{},{}]", kt.print(), vt.print()),
             Struct(ref elems) => join("{", ",", "}", elems.iter().map(|e| e.print())),
@@ -71,18 +64,12 @@ impl PrintableType for PartialType {
         use partial_types::PartialBuilderKind::*;
         match *self {
             Unknown => "?".to_string(),
-            Scalar(Bool) => "bool".to_string(),
-            Scalar(I8) => "i8".to_string(),
-            Scalar(I32) => "i32".to_string(),
-            Scalar(I64) => "i64".to_string(),
-            Scalar(F32) => "f32".to_string(),
-            Scalar(F64) => "f64".to_string(),
-            Vectorized(Bool) => "<? x bool>".to_string(),
-            Vectorized(I8) => "<? x i8>".to_string(),
-            Vectorized(I32) => "<? x i32>".to_string(),
-            Vectorized(I64) => "<? x i64>".to_string(),
-            Vectorized(F32) => "<? x f32>".to_string(),
-            Vectorized(F64) => "<? x f64>".to_string(),
+            Scalar(ref kind) => {
+                format!("{}", kind)
+            }
+            Vectorized(ref kind) => {
+                format!("simd[{}]", kind)
+            }
             Vector(ref elem) => format!("vec[{}]", elem.print()),
             Dict(ref kt, ref vt) => format!("dict[{},{}]", kt.print(), vt.print()),
             Struct(ref elems) => join("{", ",", "}", elems.iter().map(|e| e.print())),

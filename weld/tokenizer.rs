@@ -43,6 +43,9 @@ pub enum Token {
     TKeyExists,
     TSlice,
     TExp,
+    TSimd,
+    TSelect,
+    TBroadcast,
     TCUDF,
     TAppender,
     TMerger,
@@ -93,7 +96,7 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
 
         // Regular expressions for various types of tokens.
         static ref KEYWORD_RE: Regex = Regex::new(
-            "if|for|zip|len|lookup|keyexists|slice|exp|cudf|iter|merge|result|let|true|false|macro|\
+            "if|for|zip|len|lookup|keyexists|slice|exp|simd|select|broadcast|cudf|iter|merge|result|let|true|false|macro|\
              i8|i32|i64|f32|f64|bool|vec|appender|merger|vecmerger|dictmerger|groupmerger|\
              tovec").unwrap();
 
@@ -153,6 +156,9 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
                             "slice" => TSlice,
                             "exp" => TExp,
                             "cudf" => TCUDF,
+                            "simd" => TSimd,
+                            "select" => TSelect,
+                            "broadcast" => TBroadcast,
                             "true" => TBoolLiteral(true),
                             "false" => TBoolLiteral(false),
                             _ => return weld_err!("Invalid input token: {}", text),
@@ -278,6 +284,9 @@ impl fmt::Display for Token {
                     TSlice => "slice",
                     TExp => "exp",
                     TCUDF => "cudf",
+                    TSimd => "simd",
+                    TSelect => "select",
+                    TBroadcast => "broadcast",
                     TOpenParen => "(",
                     TCloseParen => ")",
                     TOpenBracket => "[",
