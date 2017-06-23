@@ -22,7 +22,7 @@ impl PrintableType for Type {
             Scalar(ref kind) => {
                 format!("{}", kind)
             }
-            Vectorized(ref kind) => {
+            Simd(ref kind) => {
                 format!("simd[{}]", kind)
             }
             Vector(ref elem) => format!("vec[{}]", elem.print()),
@@ -67,7 +67,7 @@ impl PrintableType for PartialType {
             Scalar(ref kind) => {
                 format!("{}", kind)
             }
-            Vectorized(ref kind) => {
+            Simd(ref kind) => {
                 format!("simd[{}]", kind)
             }
             Vector(ref elem) => format!("vec[{}]", elem.print()),

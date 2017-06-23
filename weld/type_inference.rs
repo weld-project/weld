@@ -170,7 +170,7 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
         Broadcast(ref c) => {
             match c.ty {
                 Scalar(ref kind) => {
-                    push_type(&mut expr.ty, &Vectorized(kind.clone()), "Broadcast")
+                    push_type(&mut expr.ty, &Simd(kind.clone()), "Broadcast")
                 }
                 _ => weld_err!("Broadcast only works with Scalar(_)")
             }
@@ -589,10 +589,10 @@ fn push_type(dest: &mut PartialType, src: &PartialType, context: &str) -> WeldRe
             }
         }
 
-        Vectorized(ref d) => {
+        Simd(ref d) => {
             match *src {
-                Vectorized(ref s) if d == s => Ok(false),
-                _ => weld_err!("Mismatched types in Vectorized, {}", context),
+                Simd(ref s) if d == s => Ok(false),
+                _ => weld_err!("Mismatched types in Simd, {}", context),
             }
         }
 

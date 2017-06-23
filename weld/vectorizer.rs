@@ -1,7 +1,7 @@
 //! Vectorizes expressions in the AST.
 //!
 //! This transform marks expressions as vectorizable by converting expressions of type `Scalar`
-//! into expressions of type `Vectorized`. It also modifies loops and builders to accept vector
+//! into expressions of type `Simd`. It also modifies loops and builders to accept vector
 //! arguments instead of scalar arguments.
 
 use super::ast::*;
@@ -17,7 +17,7 @@ use super::exprs;
 /// Vectorizes a type.
 fn vectorized_type(ty: &Type) -> Type {
     if let Scalar(kind) = *ty {
-        Vectorized(kind)
+        Simd(kind)
     } else {
         ty.clone()
     }

@@ -949,22 +949,22 @@ impl LlvmGenerator {
             Scalar(F32) => Ok("float"),
             Scalar(F64) => Ok("double"),
 
-            Vectorized(Bool) => {
+            Simd(Bool) => {
                 Ok(self.vectorized_names.entry(Bool).or_insert(format!("<{} x i1>", vec_size(&Scalar(Bool))?)))
             }
-            Vectorized(I8) => {
+            Simd(I8) => {
                 Ok(self.vectorized_names.entry(I8).or_insert(format!("<{} x i8>", vec_size(&Scalar(I8))?)))
             }
-            Vectorized(I32) => {
+            Simd(I32) => {
                 Ok(self.vectorized_names.entry(I32).or_insert(format!("<{} x i32>", vec_size(&Scalar(I32))?)))
             }
-            Vectorized(I64) => {
+            Simd(I64) => {
                 Ok(self.vectorized_names.entry(I64).or_insert(format!("<{} x i64>", vec_size(&Scalar(I64))?)))
             }
-            Vectorized(F32) => {
+            Simd(F32) => {
                 Ok(self.vectorized_names.entry(F32).or_insert(format!("<{} x float>", vec_size(&Scalar(F32))?)))
             }
-            Vectorized(F64) => {
+            Simd(F64) => {
                 Ok(self.vectorized_names.entry(F64).or_insert(format!("<{} x double>", vec_size(&Scalar(F64))?)))
             }
 
@@ -1486,7 +1486,7 @@ impl LlvmGenerator {
                         let out_ty = try!(get_sym_ty(func, output));
                         let out_ty_str = try!(self.llvm_type(&out_ty)).to_string();
                         match *ty {
-                            Scalar(_) | Vectorized(_) => {
+                            Scalar(_) | Simd(_) => {
                                 let op_name = try!(llvm_binop(op, ty));
                                 ctx.code
                                     .add(format!("{} = {} {} {}, {}",
@@ -1953,7 +1953,7 @@ impl LlvmGenerator {
                         ref value,
                     } => {
                         let ty = get_sym_ty(func, output)?;
-                        if let Vectorized(_) = *ty {
+                        if let Simd(_) = *ty {
                             self.generate_vector_literal(llvm_symbol(output), value, ty, ctx)?;
                         } else {
                             match *value {
@@ -2096,7 +2096,7 @@ impl LlvmGenerator {
                                                          bld_tmp=bld_tmp));
 
                                         // If the argument is vectorized, load the vector element.
-                                        if let Vectorized(_) = *value_ty {
+                                        if let Simd(_) = *value_ty {
                                             ctx.code
                                                 .add(format!("{bld_ptr} = call {elem_ty_str}* {bld_prefix}.vectorMergePtr({bld_ty_str} {bld_ptr_raw})",
                                                 bld_ptr=bld_ptr,
@@ -2220,7 +2220,7 @@ impl LlvmGenerator {
 
                                         // Vector type.
                                         let ref vec_type = if let Scalar(ref k) = **t {
-                                            Vectorized(k.clone())
+                                            Simd(k.clone())
                                         } else {
                                             return weld_err!("Invalid non-scalar type in merger");
                                         };
@@ -2908,44 +2908,44 @@ fn llvm_binop(op_kind: BinOpKind, ty: &Type) -> WeldResult<&'static str> {
         (BinOpKind::Add, &Scalar(I64)) => Ok("add"),
         (BinOpKind::Add, &Scalar(F32)) => Ok("fadd"),
         (BinOpKind::Add, &Scalar(F64)) => Ok("fadd"),
-        (BinOpKind::Add, &Vectorized(I8)) => Ok("add"),
-        (BinOpKind::Add, &Vectorized(I32)) => Ok("add"),
-        (BinOpKind::Add, &Vectorized(I64)) => Ok("add"),
-        (BinOpKind::Add, &Vectorized(F32)) => Ok("fadd"),
-        (BinOpKind::Add, &Vectorized(F64)) => Ok("fadd"),
+        (BinOpKind::Add, &Simd(I8)) => Ok("add"),
+        (BinOpKind::Add, &Simd(I32)) => Ok("add"),
+        (BinOpKind::Add, &Simd(I64)) => Ok("add"),
+        (BinOpKind::Add, &Simd(F32)) => Ok("fadd"),
+        (BinOpKind::Add, &Simd(F64)) => Ok("fadd"),
 
         (BinOpKind::Subtract, &Scalar(I8)) => Ok("sub"),
         (BinOpKind::Subtract, &Scalar(I32)) => Ok("sub"),
         (BinOpKind::Subtract, &Scalar(I64)) => Ok("sub"),
         (BinOpKind::Subtract, &Scalar(F32)) => Ok("fsub"),
         (BinOpKind::Subtract, &Scalar(F64)) => Ok("fsub"),
-        (BinOpKind::Subtract, &Vectorized(I8)) => Ok("sub"),
-        (BinOpKind::Subtract, &Vectorized(I32)) => Ok("sub"),
-        (BinOpKind::Subtract, &Vectorized(I64)) => Ok("sub"),
-        (BinOpKind::Subtract, &Vectorized(F32)) => Ok("fsub"),
-        (BinOpKind::Subtract, &Vectorized(F64)) => Ok("fsub"),
+        (BinOpKind::Subtract, &Simd(I8)) => Ok("sub"),
+        (BinOpKind::Subtract, &Simd(I32)) => Ok("sub"),
+        (BinOpKind::Subtract, &Simd(I64)) => Ok("sub"),
+        (BinOpKind::Subtract, &Simd(F32)) => Ok("fsub"),
+        (BinOpKind::Subtract, &Simd(F64)) => Ok("fsub"),
 
         (BinOpKind::Multiply, &Scalar(I8)) => Ok("mul"),
         (BinOpKind::Multiply, &Scalar(I32)) => Ok("mul"),
         (BinOpKind::Multiply, &Scalar(I64)) => Ok("mul"),
         (BinOpKind::Multiply, &Scalar(F32)) => Ok("fmul"),
         (BinOpKind::Multiply, &Scalar(F64)) => Ok("fmul"),
-        (BinOpKind::Multiply, &Vectorized(I8)) => Ok("mul"),
-        (BinOpKind::Multiply, &Vectorized(I32)) => Ok("mul"),
-        (BinOpKind::Multiply, &Vectorized(I64)) => Ok("mul"),
-        (BinOpKind::Multiply, &Vectorized(F32)) => Ok("fmul"),
-        (BinOpKind::Multiply, &Vectorized(F64)) => Ok("fmul"),
+        (BinOpKind::Multiply, &Simd(I8)) => Ok("mul"),
+        (BinOpKind::Multiply, &Simd(I32)) => Ok("mul"),
+        (BinOpKind::Multiply, &Simd(I64)) => Ok("mul"),
+        (BinOpKind::Multiply, &Simd(F32)) => Ok("fmul"),
+        (BinOpKind::Multiply, &Simd(F64)) => Ok("fmul"),
 
         (BinOpKind::Divide, &Scalar(I8)) => Ok("sdiv"),
         (BinOpKind::Divide, &Scalar(I32)) => Ok("sdiv"),
         (BinOpKind::Divide, &Scalar(I64)) => Ok("sdiv"),
         (BinOpKind::Divide, &Scalar(F32)) => Ok("fdiv"),
         (BinOpKind::Divide, &Scalar(F64)) => Ok("fdiv"),
-        (BinOpKind::Divide, &Vectorized(I8)) => Ok("sdiv"),
-        (BinOpKind::Divide, &Vectorized(I32)) => Ok("sdiv"),
-        (BinOpKind::Divide, &Vectorized(I64)) => Ok("sdiv"),
-        (BinOpKind::Divide, &Vectorized(F32)) => Ok("fdiv"),
-        (BinOpKind::Divide, &Vectorized(F64)) => Ok("fdiv"),
+        (BinOpKind::Divide, &Simd(I8)) => Ok("sdiv"),
+        (BinOpKind::Divide, &Simd(I32)) => Ok("sdiv"),
+        (BinOpKind::Divide, &Simd(I64)) => Ok("sdiv"),
+        (BinOpKind::Divide, &Simd(F32)) => Ok("fdiv"),
+        (BinOpKind::Divide, &Simd(F64)) => Ok("fdiv"),
 
         (BinOpKind::Equal, &Scalar(Bool)) => Ok("icmp eq"),
         (BinOpKind::Equal, &Scalar(I8)) => Ok("icmp eq"),
@@ -2953,12 +2953,12 @@ fn llvm_binop(op_kind: BinOpKind, ty: &Type) -> WeldResult<&'static str> {
         (BinOpKind::Equal, &Scalar(I64)) => Ok("icmp eq"),
         (BinOpKind::Equal, &Scalar(F32)) => Ok("fcmp oeq"),
         (BinOpKind::Equal, &Scalar(F64)) => Ok("fcmp oeq"),
-        (BinOpKind::Equal, &Vectorized(Bool)) => Ok("icmp eq"),
-        (BinOpKind::Equal, &Vectorized(I8)) => Ok("icmp eq"),
-        (BinOpKind::Equal, &Vectorized(I32)) => Ok("icmp eq"),
-        (BinOpKind::Equal, &Vectorized(I64)) => Ok("icmp eq"),
-        (BinOpKind::Equal, &Vectorized(F32)) => Ok("fcmp oeq"),
-        (BinOpKind::Equal, &Vectorized(F64)) => Ok("fcmp oeq"),
+        (BinOpKind::Equal, &Simd(Bool)) => Ok("icmp eq"),
+        (BinOpKind::Equal, &Simd(I8)) => Ok("icmp eq"),
+        (BinOpKind::Equal, &Simd(I32)) => Ok("icmp eq"),
+        (BinOpKind::Equal, &Simd(I64)) => Ok("icmp eq"),
+        (BinOpKind::Equal, &Simd(F32)) => Ok("fcmp oeq"),
+        (BinOpKind::Equal, &Simd(F64)) => Ok("fcmp oeq"),
 
         (BinOpKind::NotEqual, &Scalar(Bool)) => Ok("icmp ne"),
         (BinOpKind::NotEqual, &Scalar(I8)) => Ok("icmp ne"),
@@ -2972,73 +2972,73 @@ fn llvm_binop(op_kind: BinOpKind, ty: &Type) -> WeldResult<&'static str> {
         (BinOpKind::LessThan, &Scalar(I64)) => Ok("icmp slt"),
         (BinOpKind::LessThan, &Scalar(F32)) => Ok("fcmp olt"),
         (BinOpKind::LessThan, &Scalar(F64)) => Ok("fcmp olt"),
-        (BinOpKind::LessThan, &Vectorized(I8)) => Ok("icmp slt"),
-        (BinOpKind::LessThan, &Vectorized(I32)) => Ok("icmp slt"),
-        (BinOpKind::LessThan, &Vectorized(I64)) => Ok("icmp slt"),
-        (BinOpKind::LessThan, &Vectorized(F32)) => Ok("fcmp olt"),
-        (BinOpKind::LessThan, &Vectorized(F64)) => Ok("fcmp olt"),
+        (BinOpKind::LessThan, &Simd(I8)) => Ok("icmp slt"),
+        (BinOpKind::LessThan, &Simd(I32)) => Ok("icmp slt"),
+        (BinOpKind::LessThan, &Simd(I64)) => Ok("icmp slt"),
+        (BinOpKind::LessThan, &Simd(F32)) => Ok("fcmp olt"),
+        (BinOpKind::LessThan, &Simd(F64)) => Ok("fcmp olt"),
 
         (BinOpKind::LessThanOrEqual, &Scalar(I8)) => Ok("icmp sle"),
         (BinOpKind::LessThanOrEqual, &Scalar(I32)) => Ok("icmp sle"),
         (BinOpKind::LessThanOrEqual, &Scalar(I64)) => Ok("icmp sle"),
         (BinOpKind::LessThanOrEqual, &Scalar(F32)) => Ok("fcmp ole"),
         (BinOpKind::LessThanOrEqual, &Scalar(F64)) => Ok("fcmp ole"),
-        (BinOpKind::LessThanOrEqual, &Vectorized(I8)) => Ok("icmp sle"),
-        (BinOpKind::LessThanOrEqual, &Vectorized(I32)) => Ok("icmp sle"),
-        (BinOpKind::LessThanOrEqual, &Vectorized(I64)) => Ok("icmp sle"),
-        (BinOpKind::LessThanOrEqual, &Vectorized(F32)) => Ok("fcmp ole"),
-        (BinOpKind::LessThanOrEqual, &Vectorized(F64)) => Ok("fcmp ole"),
+        (BinOpKind::LessThanOrEqual, &Simd(I8)) => Ok("icmp sle"),
+        (BinOpKind::LessThanOrEqual, &Simd(I32)) => Ok("icmp sle"),
+        (BinOpKind::LessThanOrEqual, &Simd(I64)) => Ok("icmp sle"),
+        (BinOpKind::LessThanOrEqual, &Simd(F32)) => Ok("fcmp ole"),
+        (BinOpKind::LessThanOrEqual, &Simd(F64)) => Ok("fcmp ole"),
 
         (BinOpKind::GreaterThan, &Scalar(I8)) => Ok("icmp sgt"),
         (BinOpKind::GreaterThan, &Scalar(I32)) => Ok("icmp sgt"),
         (BinOpKind::GreaterThan, &Scalar(I64)) => Ok("icmp sgt"),
         (BinOpKind::GreaterThan, &Scalar(F32)) => Ok("fcmp ogt"),
         (BinOpKind::GreaterThan, &Scalar(F64)) => Ok("fcmp ogt"),
-        (BinOpKind::GreaterThan, &Vectorized(I8)) => Ok("icmp sgt"),
-        (BinOpKind::GreaterThan, &Vectorized(I32)) => Ok("icmp sgt"),
-        (BinOpKind::GreaterThan, &Vectorized(I64)) => Ok("icmp sgt"),
-        (BinOpKind::GreaterThan, &Vectorized(F32)) => Ok("fcmp ogt"),
-        (BinOpKind::GreaterThan, &Vectorized(F64)) => Ok("fcmp ogt"),
+        (BinOpKind::GreaterThan, &Simd(I8)) => Ok("icmp sgt"),
+        (BinOpKind::GreaterThan, &Simd(I32)) => Ok("icmp sgt"),
+        (BinOpKind::GreaterThan, &Simd(I64)) => Ok("icmp sgt"),
+        (BinOpKind::GreaterThan, &Simd(F32)) => Ok("fcmp ogt"),
+        (BinOpKind::GreaterThan, &Simd(F64)) => Ok("fcmp ogt"),
 
         (BinOpKind::GreaterThanOrEqual, &Scalar(I8)) => Ok("icmp sge"),
         (BinOpKind::GreaterThanOrEqual, &Scalar(I32)) => Ok("icmp sge"),
         (BinOpKind::GreaterThanOrEqual, &Scalar(I64)) => Ok("icmp sge"),
         (BinOpKind::GreaterThanOrEqual, &Scalar(F32)) => Ok("fcmp oge"),
         (BinOpKind::GreaterThanOrEqual, &Scalar(F64)) => Ok("fcmp oge"),
-        (BinOpKind::GreaterThanOrEqual, &Vectorized(I8)) => Ok("icmp sge"),
-        (BinOpKind::GreaterThanOrEqual, &Vectorized(I32)) => Ok("icmp sge"),
-        (BinOpKind::GreaterThanOrEqual, &Vectorized(I64)) => Ok("icmp sge"),
-        (BinOpKind::GreaterThanOrEqual, &Vectorized(F32)) => Ok("fcmp oge"),
-        (BinOpKind::GreaterThanOrEqual, &Vectorized(F64)) => Ok("fcmp oge"),
+        (BinOpKind::GreaterThanOrEqual, &Simd(I8)) => Ok("icmp sge"),
+        (BinOpKind::GreaterThanOrEqual, &Simd(I32)) => Ok("icmp sge"),
+        (BinOpKind::GreaterThanOrEqual, &Simd(I64)) => Ok("icmp sge"),
+        (BinOpKind::GreaterThanOrEqual, &Simd(F32)) => Ok("fcmp oge"),
+        (BinOpKind::GreaterThanOrEqual, &Simd(F64)) => Ok("fcmp oge"),
 
         (BinOpKind::LogicalAnd, &Scalar(Bool)) => Ok("and"),
         (BinOpKind::BitwiseAnd, &Scalar(Bool)) => Ok("and"),
         (BinOpKind::BitwiseAnd, &Scalar(I8)) => Ok("and"),
         (BinOpKind::BitwiseAnd, &Scalar(I32)) => Ok("and"),
         (BinOpKind::BitwiseAnd, &Scalar(I64)) => Ok("and"),
-        (BinOpKind::BitwiseAnd, &Vectorized(Bool)) => Ok("and"),
-        (BinOpKind::BitwiseAnd, &Vectorized(I8)) => Ok("and"),
-        (BinOpKind::BitwiseAnd, &Vectorized(I32)) => Ok("and"),
-        (BinOpKind::BitwiseAnd, &Vectorized(I64)) => Ok("and"),
+        (BinOpKind::BitwiseAnd, &Simd(Bool)) => Ok("and"),
+        (BinOpKind::BitwiseAnd, &Simd(I8)) => Ok("and"),
+        (BinOpKind::BitwiseAnd, &Simd(I32)) => Ok("and"),
+        (BinOpKind::BitwiseAnd, &Simd(I64)) => Ok("and"),
 
         (BinOpKind::LogicalOr, &Scalar(Bool)) => Ok("or"),
         (BinOpKind::BitwiseOr, &Scalar(Bool)) => Ok("or"),
         (BinOpKind::BitwiseOr, &Scalar(I8)) => Ok("or"),
         (BinOpKind::BitwiseOr, &Scalar(I32)) => Ok("or"),
         (BinOpKind::BitwiseOr, &Scalar(I64)) => Ok("or"),
-        (BinOpKind::BitwiseOr, &Vectorized(Bool)) => Ok("or"),
-        (BinOpKind::BitwiseOr, &Vectorized(I8)) => Ok("or"),
-        (BinOpKind::BitwiseOr, &Vectorized(I32)) => Ok("or"),
-        (BinOpKind::BitwiseOr, &Vectorized(I64)) => Ok("or"),
+        (BinOpKind::BitwiseOr, &Simd(Bool)) => Ok("or"),
+        (BinOpKind::BitwiseOr, &Simd(I8)) => Ok("or"),
+        (BinOpKind::BitwiseOr, &Simd(I32)) => Ok("or"),
+        (BinOpKind::BitwiseOr, &Simd(I64)) => Ok("or"),
 
         (BinOpKind::Xor, &Scalar(Bool)) => Ok("xor"),
         (BinOpKind::Xor, &Scalar(I8)) => Ok("xor"),
         (BinOpKind::Xor, &Scalar(I32)) => Ok("xor"),
         (BinOpKind::Xor, &Scalar(I64)) => Ok("xor"),
-        (BinOpKind::Xor, &Vectorized(Bool)) => Ok("xor"),
-        (BinOpKind::Xor, &Vectorized(I8)) => Ok("xor"),
-        (BinOpKind::Xor, &Vectorized(I32)) => Ok("xor"),
-        (BinOpKind::Xor, &Vectorized(I64)) => Ok("xor"),
+        (BinOpKind::Xor, &Simd(Bool)) => Ok("xor"),
+        (BinOpKind::Xor, &Simd(I8)) => Ok("xor"),
+        (BinOpKind::Xor, &Simd(I32)) => Ok("xor"),
+        (BinOpKind::Xor, &Simd(I64)) => Ok("xor"),
 
         _ => weld_err!("Unsupported binary op: {} on {}", op_kind, print_type(ty)),
     }

@@ -1,6 +1,6 @@
 ## Vectorization in Weld
 
-Weld represents vector (SIMD) operations via the `Vectorized` type. Any scalar type can be
+Weld represents vector (SIMD) operations via the `Simd` type. Any scalar type can be
 vectorized; vectorization for other types is not supported.
 
 Vectorization occurs in the context of a `For` loop. If a loop is vectorized, each iteration of the
@@ -21,12 +21,12 @@ following builders have vectorization support:
 
 * `merger`
 
-When a loop is vectorized, its function may merge elements of type `Vectorized` into the builder.
+When a loop is vectorized, its function may merge elements of type `Simd` into the builder.
 The builder contract for supporting vectorization is as follows:
 
 If the builder supports vectorization for a type `Scalar(T)`:
 
-* It must support merges of type `Vectorized(T)`
+* It must support merges of type `Simd(T)`
 * It must support merges of type `Scalar(T)` (in the same builder)
 * The `Result` operation must assume that any preceding operations on the builder could have
   involved both vectors and scalars.
@@ -44,7 +44,7 @@ The vectorizer performs the following steps:
 
 1. Check if the all the constraints for performing vectorization are met. See [this section](#current-limitations-and-to-dos).
 2. Copy the loop being vectorized an call it `vectorized_body`.
-3. For each expression in `vectorized_body`: Change the type of `Scalar` expressions to `Vectorized`
+3. For each expression in `vectorized_body`: Change the type of `Scalar` expressions to `Simd`
    expressions.
 4. Change the loop's iterator type to `VectorIter`. This directs the code generation to stop
    iterating at a multiple of the vector size.

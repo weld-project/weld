@@ -69,7 +69,7 @@ pub fn negate_expr(expr: Expr<Type>) -> WeldResult<Expr<Type>> {
 
 pub fn broadcast_expr(expr: Expr<Type>) -> WeldResult<Expr<Type>> {
     let ty = if let Scalar(ref k) = expr.ty {
-        Vectorized(k.clone())
+        Simd(k.clone())
     } else {
         return weld_err!("Internal error: Mismatched types in negate_expr");
     };
@@ -231,7 +231,7 @@ pub fn select_expr(cond: Expr<Type>,
                on_false: Expr<Type>)
                -> WeldResult<Expr<Type>> {
     let err = weld_err!("Internal error: Mismatched types in select_expr");
-    if cond.ty != Scalar(ScalarKind::Bool) && cond.ty != Vectorized(ScalarKind::Bool) {
+    if cond.ty != Scalar(ScalarKind::Bool) && cond.ty != Simd(ScalarKind::Bool) {
         return err;
     }
 
@@ -372,7 +372,7 @@ pub fn for_expr(iters: Vec<Iter<Type>>,
         if iters.len() == 1 {
             let elem_ty = if vectorized {
                 if let Scalar(ref sk) = vec_elem_tys[0] {
-                    Vectorized(sk.clone())
+                    Simd(sk.clone())
                 } else {
                     return weld_err!("Internal error: Mismatched types in for_expr - bad vector",);
                 }

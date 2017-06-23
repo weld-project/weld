@@ -1050,7 +1050,7 @@ impl<'t> Parser<'t> {
                 let elem_type = try!(self.type_());
                 try!(self.consume(TCloseBracket));
                 if let Scalar(ref kind) = elem_type {
-                    Ok(Vectorized(kind.clone()))
+                    Ok(Simd(kind.clone()))
                 } else {
                     weld_err!("Expected Scalar type in simd")
                 }

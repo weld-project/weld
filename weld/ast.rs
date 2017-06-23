@@ -42,7 +42,7 @@ impl fmt::Display for Symbol {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Type {
     Scalar(ScalarKind),
-    Vectorized(ScalarKind),
+    Simd(ScalarKind),
     Vector(Box<Type>),
     Dict(Box<Type>, Box<Type>),
     Builder(BuilderKind, Annotations),
