@@ -1247,14 +1247,13 @@ fn exp_error() {
 fn simple_erf() {
     let code = "|x:f64| erf(x)";
     let conf = default_conf();
-    let input = 2.718281828459045;
+    let input = 1.00;
     let ret_value = compile_and_run(code, conf, &input);
     let data = unsafe { weld_value_data(ret_value) as *const f64 };
-
-    // fixme: test with a real value
     let result = unsafe { (*data).clone() };
-    let output = 1.0f64;
-    //assert_eq!(output, result);
+
+    let output = 0.84270079294971478;
+    assert_eq!(output, result);
     unsafe { weld_value_free(ret_value) };
 }
 

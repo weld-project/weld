@@ -132,7 +132,6 @@ class WeldObject(object):
         return text
 
     def evaluate(self, restype, verbose=True, decode=True):
-        print("in evaluate!")
         sys.stdout.flush()
         function = self.toWeldFunc()
 

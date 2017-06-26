@@ -92,7 +92,7 @@ fn infer_up(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> {
 
 /// Infer the type of expr or its children locally based on what is known about some of them.
 /// Return true if any new expression's type was inferred, or an error if types are inconsistent.
-fn infer_locally(mut expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> {
+fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> {
     match expr.kind {
         Literal(I32Literal(_)) => push_complete_type(&mut expr.ty, Scalar(I32), "I32Literal"),
 

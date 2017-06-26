@@ -36,10 +36,6 @@ static DICTIONARY_CODE: &'static str = include_str!("resources/dictionary.ll");
 static DICTMERGER_CODE: &'static str = include_str!("resources/dictmerger.ll");
 static GROUPMERGER_CODE: &'static str = include_str!("resources/groupbuilder.ll");
 
-//fn test(ctx: &mut FunctionContext) {
-
-//}
-
 /// Generates LLVM code for one or more modules.
 pub struct LlvmGenerator {
     /// Track a unique name of the form %s0, %s1, etc for each struct generated.
