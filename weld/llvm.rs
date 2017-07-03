@@ -778,8 +778,8 @@ impl LlvmGenerator {
              {rid} = call i64 @get_runid()
              {errno} = call i64 @weld_rt_get_errno(i64 {rid})
              {tmp0} = insertvalue %output_arg_t undef, i64 %res_address, 0
-             {tmp1} = insertvalue %output_arg_t {tmp0}, i64 {rid}, 1  
-             {tmp2} = insertvalue %output_arg_t {tmp1}, i64 {errno}, 2  
+             {tmp1} = insertvalue %output_arg_t {tmp0}, i64 {rid}, 1
+             {tmp2} = insertvalue %output_arg_t {tmp1}, i64 {errno}, 2
   {size_ptr} = getelementptr %output_arg_t, %output_arg_t* null, i32 1
   {size} = ptrtoint %output_arg_t* {size_ptr} to i64
   {bytes} = call i8* @malloc(i64 {size})
@@ -1114,6 +1114,58 @@ impl LlvmGenerator {
         Ok(())
     }
 
+    fn unary_op(&mut self, ctx: &mut FunctionContext, func: &SirFunction,
+            output: &Symbol, child: &Symbol, llvm_func :&str) -> WeldResult<()> {
+        let child_ty = try!(get_sym_ty(func, child));
+        if let Scalar(ref ty) = *child_ty {
+            let child_ll_ty = try!(self.llvm_type(&child_ty)).to_string();
+            let child_tmp = try!(self.load_var(
+                llvm_symbol(child).as_str(),
+                &child_ll_ty,
+                ctx
+            ));
+            let res_tmp = ctx.var_ids.next();
+
+            if llvm_func.contains("llvm") {
+                ctx.code.add(format!(
+                    "{} = call {} @{}.{}({} {})",
+                    res_tmp,
+                    child_ll_ty,
+                    llvm_func,
+                    ty,
+                    child_ll_ty,
+                    child_tmp
+                ));
+            } else {
+                let suffix = match ty.to_string().as_ref() {
+                    "f32" => "f",
+                    "f64" => "",
+                    _ => weld_err!("Only f32 or f64 types supported for erf")?,
+                };
+                ctx.code.add(format!(
+                    "{} = call {} @erf{}({} {})",
+                    res_tmp,
+                    child_ll_ty,
+                    suffix,
+                    child_ll_ty,
+                    child_tmp
+                ));
+            }
+
+            let out_ty = try!(get_sym_ty(func, output));
+            let out_ty_str = try!(self.llvm_type(&out_ty)).to_string();
+            ctx.code.add(format!(
+                "store {} {}, {}* {}",
+                out_ty_str,
+                res_tmp,
+                out_ty_str,
+                llvm_symbol(output)
+            ));
+        } else {
+            weld_err!("Illegal type {} in {}", print_type(child_ty), llvm_func)?;
+        }
+        Ok(())
+    }
 
     /// Add an expression to a CodeBuilder, possibly generating prelude code earlier, and return
     /// a string that can be used to represent its result later (e.g. %var if introducing a local
@@ -1306,6 +1358,15 @@ impl LlvmGenerator {
                             _ => weld_err!("Illegal type {} in BinOp", print_type(ty))?,
                         }
                     }
+                    UnaryOp {
+                        ref output,
+                        op,
+                        ref child,
+                    } => {
+                        // FIXME: Refactor this better.
+                        let op_name = try!(llvm_unaryop(op));
+                        try!(self.unary_op(ctx, func, output, child, op_name))
+                    }
                     Negate {
                         ref output,
                         ref child,
@@ -1323,19 +1384,21 @@ impl LlvmGenerator {
                             _ => "0",
                         };
 
-                        ctx.code
-                            .add(format!("{} = {} {} {}, {}",
-                                         bin_tmp,
-                                         op_name,
-                                         ll_ty,
-                                         zero_str,
-                                         child_tmp));
-                        ctx.code
-                            .add(format!("store {} {}, {}* {}",
-                                         out_ty_str,
-                                         bin_tmp,
-                                         out_ty_str,
-                                         llvm_symbol(output)));
+                        ctx.code.add(format!(
+                            "{} = {} {} {}, {}",
+                            bin_tmp,
+                            op_name,
+                            ll_ty,
+                            zero_str,
+                            child_tmp
+                        ));
+                        ctx.code.add(format!(
+                            "store {} {}, {}* {}",
+                            out_ty_str,
+                            bin_tmp,
+                            out_ty_str,
+                            llvm_symbol(output)
+                        ));
                     }
                     Cast {
                         ref output,
@@ -1546,110 +1609,6 @@ impl LlvmGenerator {
                             _ => weld_err!("Illegal type {} in Slice", print_type(child_ty))?,
                         }
                     }
-                    Exp {
-                        ref output,
-                        ref child,
-                    } => {
-                        let child_ty = try!(get_sym_ty(func, child));
-                        if let Scalar(ref ty) = *child_ty {
-                            let child_ll_ty = try!(self.llvm_type(&child_ty)).to_string();
-                            let child_tmp =
-                                try!(self.load_var(llvm_symbol(child).as_str(), &child_ll_ty, ctx));
-                            let res_tmp = ctx.var_ids.next();
-                            ctx.code
-                                .add(format!("{} = call {} @llvm.exp.{}({} {})",
-                                             res_tmp,
-                                             child_ll_ty,
-                                             ty,
-                                             child_ll_ty,
-                                             child_tmp));
-                            let out_ty = try!(get_sym_ty(func, output));
-                            let out_ty_str = try!(self.llvm_type(&out_ty)).to_string();
-                            ctx.code
-                                .add(format!("store {} {}, {}* {}",
-                                             out_ty_str,
-                                             res_tmp,
-                                             out_ty_str,
-                                             llvm_symbol(output)));
-                        } else {
-                            weld_err!("Illegal type {} in Exp", print_type(child_ty))?;
-                        }
-                    }
-
-                    Log { ref output, ref child } => {
-                        let child_ty = try!(get_sym_ty(func, child));
-                        if let Scalar(ref ty) = *child_ty {
-                            let child_ll_ty = try!(self.llvm_type(&child_ty)).to_string();
-                            let child_tmp = try!(self.load_var(llvm_symbol(child).as_str(),
-                                                               &child_ll_ty, ctx));
-                            let res_tmp = ctx.var_ids.next();
-                            ctx.code.add(format!("{} = call {} @llvm.log.{}({} {})",
-                                                 res_tmp,
-                                                 child_ll_ty,
-                                                 ty,
-                                                 child_ll_ty,
-                                                 child_tmp));
-                            let out_ty = try!(get_sym_ty(func, output));
-                            let out_ty_str = try!(self.llvm_type(&out_ty)).to_string();
-                            ctx.code.add(format!("store {} {}, {}* {}",
-                                                 out_ty_str,
-                                                 res_tmp,
-                                                 out_ty_str,
-                                                 llvm_symbol(output)));
-                        } else {
-                            weld_err!("Illegal type {} in Log", print_type(child_ty))?;
-                        }
-                    }
-
-                    Erf { ref output, ref child } => {
-                        let child_ty = try!(get_sym_ty(func, child));
-                        if let Scalar(ref ty) = *child_ty {
-                            let child_ll_ty = try!(self.llvm_type(&child_ty)).to_string();
-                            let child_tmp = try!(self.load_var(llvm_symbol(child).as_str(),
-                                                               &child_ll_ty, ctx));
-                            let res_tmp = ctx.var_ids.next();
-                            ctx.code.add(format!("{} = call {} @erf({} {})",
-                                                 res_tmp,
-                                                 child_ll_ty,
-                                                 child_ll_ty,
-                                                 child_tmp));
-                            let out_ty = try!(get_sym_ty(func, output));
-                            let out_ty_str = try!(self.llvm_type(&out_ty)).to_string();
-                            ctx.code.add(format!("store {} {}, {}* {}",
-                                                 out_ty_str,
-                                                 res_tmp,
-                                                 out_ty_str,
-                                                 llvm_symbol(output)));
-                        } else {
-                            weld_err!("Illegal type {} in Erf", print_type(child_ty))?;
-                        }
-                    }
-
-                    Sqrt { ref output, ref child } => {
-                        let child_ty = try!(get_sym_ty(func, child));
-                        if let Scalar(ref ty) = *child_ty {
-                            let child_ll_ty = try!(self.llvm_type(&child_ty)).to_string();
-                            let child_tmp = try!(self.load_var(llvm_symbol(child).as_str(),
-                                                               &child_ll_ty, ctx));
-                            let res_tmp = ctx.var_ids.next();
-                            ctx.code.add(format!("{} = call {} @llvm.sqrt.{}({} {})",
-                                                 res_tmp,
-                                                 child_ll_ty,
-                                                 ty,
-                                                 child_ll_ty,
-                                                 child_tmp));
-                            let out_ty = try!(get_sym_ty(func, output));
-                            let out_ty_str = try!(self.llvm_type(&out_ty)).to_string();
-                            ctx.code.add(format!("store {} {}, {}* {}",
-                                                 out_ty_str,
-                                                 res_tmp,
-                                                 out_ty_str,
-                                                 llvm_symbol(output)));
-                        } else {
-                            weld_err!("Illegal type {} in Sqrt", print_type(child_ty))?;
-                        }
-                    }
-
                     ToVec {
                         ref output,
                         ref child,
@@ -2706,6 +2665,16 @@ fn llvm_binop(op_kind: BinOpKind, ty: &Type) -> WeldResult<&'static str> {
         (BinOpKind::Xor, &Scalar(I64)) => Ok("xor"),
 
         _ => weld_err!("Unsupported binary op: {} on {}", op_kind, print_type(ty)),
+    }
+}
+
+/// Return the name of the base LLVM instruction for the given operation.
+fn llvm_unaryop(op_kind: UnaryOpKind) -> WeldResult<&'static str> {
+    match op_kind {
+        UnaryOpKind::Exp => Ok("llvm.exp"),
+        UnaryOpKind::Log => Ok("llvm.log"),
+        UnaryOpKind::Sqrt => Ok("llvm.sqrt"),
+        UnaryOpKind::Erf => Ok("erf"),
     }
 }
 

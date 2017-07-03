@@ -7,7 +7,6 @@
 import ctypes
 
 import os
-import sys
 import time
 
 import bindings as cweld
@@ -132,7 +131,6 @@ class WeldObject(object):
         return text
 
     def evaluate(self, restype, verbose=True, decode=True):
-        sys.stdout.flush()
         function = self.toWeldFunc()
 
         # Returns a wrapped ctypes Structure

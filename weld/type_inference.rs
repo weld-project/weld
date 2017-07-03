@@ -128,6 +128,18 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             Ok(changed)
         }
 
+        UnaryOp {
+            kind: op,
+            ref mut value,
+        } => {
+            match value.ty {
+                Scalar(F32) => push_complete_type(&mut expr.ty, Scalar(F32), "UnaryOp"),
+                Scalar(F64) => push_complete_type(&mut expr.ty, Scalar(F64), "UnaryOp"),
+                Unknown => push_type(&mut expr.ty, &value.ty, "UnaryOp"),
+                _ => return weld_err!("Internal error: {} called on non-scalar or non-float", op),
+            }
+        }
+
         Cast { kind, .. } => Ok(try!(push_complete_type(&mut expr.ty, Scalar(kind), "Cast"))),
 
         ToVec { ref mut child_expr } => {
@@ -270,43 +282,6 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             } else {
                 weld_err!("Internal error: Slice called on {:?}, must be called on vector",
                           data.ty)
-            }
-        }
-
-        Exp { ref mut value } => {
-            //return _unary_op(&mut expr, "Exp");
-            match value.ty {
-                Scalar(F32) => push_complete_type(&mut expr.ty, Scalar(F32), "Exp"),
-                Scalar(F64) => push_complete_type(&mut expr.ty, Scalar(F64), "Exp"),
-                Unknown => push_type(&mut expr.ty, &value.ty, "Exp"),
-                _ => return weld_err!("Internal error: Exp called on non-scalar or non-float"),
-            }
-        }
-
-        Log { ref mut value } => {
-            match value.ty {
-                Scalar(F32) => push_complete_type(&mut expr.ty, Scalar(F32), "Log"),
-                Scalar(F64) => push_complete_type(&mut expr.ty, Scalar(F64), "Log"),
-                Unknown => push_type(&mut expr.ty, &value.ty, "Log"),
-                _ => return weld_err!("Internal error: Log called on non-scalar or non-float"),
-            }
-        }
-
-        Erf { ref mut value } => {
-            match value.ty {
-                Scalar(F32) => push_complete_type(&mut expr.ty, Scalar(F32), "Erf"),
-                Scalar(F64) => push_complete_type(&mut expr.ty, Scalar(F64), "Erf"),
-                Unknown => push_type(&mut expr.ty, &value.ty, "Erf"),
-                _ => return weld_err!("Internal error: Erf called on non-scalar or non-float"),
-            }
-        }
-
-        Sqrt { ref mut value } => {
-            match value.ty {
-                Scalar(F32) => push_complete_type(&mut expr.ty, Scalar(F32), "Sqrt"),
-                Scalar(F64) => push_complete_type(&mut expr.ty, Scalar(F64), "Sqrt"),
-                Unknown => push_type(&mut expr.ty, &value.ty, "Sqrt"),
-                _ => return weld_err!("Internal error: Sqrt called on non-scalar or non-float"),
             }
         }
 
