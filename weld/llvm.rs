@@ -1114,8 +1114,13 @@ impl LlvmGenerator {
         Ok(())
     }
 
-    fn unary_op(&mut self, ctx: &mut FunctionContext, func: &SirFunction,
-            output: &Symbol, child: &Symbol, llvm_func :&str) -> WeldResult<()> {
+    fn unary_op(&mut self,
+                ctx: &mut FunctionContext,
+                func: &SirFunction,
+                output: &Symbol,
+                child: &Symbol,
+                op_kind :UnaryOpKind)
+                -> WeldResult<()> {
         let child_ty = try!(get_sym_ty(func, child));
         if let Scalar(ref ty) = *child_ty {
             let child_ll_ty = try!(self.llvm_type(&child_ty)).to_string();
@@ -1125,33 +1130,15 @@ impl LlvmGenerator {
                 ctx
             ));
             let res_tmp = ctx.var_ids.next();
-
-            if llvm_func.contains("llvm") {
-                ctx.code.add(format!(
-                    "{} = call {} @{}.{}({} {})",
-                    res_tmp,
-                    child_ll_ty,
-                    llvm_func,
-                    ty,
-                    child_ll_ty,
-                    child_tmp
-                ));
-            } else {
-                let suffix = match ty.to_string().as_ref() {
-                    "f32" => "f",
-                    "f64" => "",
-                    _ => weld_err!("Only f32 or f64 types supported for erf")?,
-                };
-                ctx.code.add(format!(
-                    "{} = call {} @erf{}({} {})",
-                    res_tmp,
-                    child_ll_ty,
-                    suffix,
-                    child_ll_ty,
-                    child_tmp
-                ));
-            }
-
+            let op_name = try!(llvm_unaryop(op_kind, ty));
+            ctx.code.add(format!(
+                "{} = call {} {} ({} {})",
+                res_tmp,
+                child_ll_ty,
+                op_name,
+                child_ll_ty,
+                child_tmp
+            ));
             let out_ty = try!(get_sym_ty(func, output));
             let out_ty_str = try!(self.llvm_type(&out_ty)).to_string();
             ctx.code.add(format!(
@@ -1162,7 +1149,7 @@ impl LlvmGenerator {
                 llvm_symbol(output)
             ));
         } else {
-            weld_err!("Illegal type {} in {}", print_type(child_ty), llvm_func)?;
+            weld_err!("Illegal type {} in {}", print_type(child_ty), op_kind)?;
         }
         Ok(())
     }
@@ -1363,9 +1350,7 @@ impl LlvmGenerator {
                         op,
                         ref child,
                     } => {
-                        // FIXME: Refactor this better.
-                        let op_name = try!(llvm_unaryop(op));
-                        try!(self.unary_op(ctx, func, output, child, op_name))
+                        try!(self.unary_op(ctx, func, output, child, op))
                     }
                     Negate {
                         ref output,
@@ -2668,13 +2653,22 @@ fn llvm_binop(op_kind: BinOpKind, ty: &Type) -> WeldResult<&'static str> {
     }
 }
 
-/// Return the name of the base LLVM instruction for the given operation.
-fn llvm_unaryop(op_kind: UnaryOpKind) -> WeldResult<&'static str> {
-    match op_kind {
-        UnaryOpKind::Exp => Ok("llvm.exp"),
-        UnaryOpKind::Log => Ok("llvm.log"),
-        UnaryOpKind::Sqrt => Ok("llvm.sqrt"),
-        UnaryOpKind::Erf => Ok("erf"),
+/// Return the name of the LLVM instruction for the given operation and type.
+fn llvm_unaryop(op_kind: UnaryOpKind, ty: &ScalarKind) -> WeldResult<&'static str> {
+    match (op_kind, ty) {
+        (UnaryOpKind::Log, &F32) => Ok("@llvm.log.f32"),
+        (UnaryOpKind::Log, &F64) => Ok("@llvm.log.f64"),
+
+        (UnaryOpKind::Exp, &F32) => Ok("@llvm.exp.f64"),
+        (UnaryOpKind::Exp, &F64) => Ok("@llvm.exp.f64"),
+
+        (UnaryOpKind::Sqrt, &F32) => Ok("@llvm.sqrt.f64"),
+        (UnaryOpKind::Sqrt, &F64) => Ok("@llvm.sqrt.f64"),
+
+        (UnaryOpKind::Erf, &F32) => Ok("@erff"),
+        (UnaryOpKind::Erf, &F64) => Ok("@erf"),
+
+        _ => weld_err!("Unsupported unary op: {} on {}", op_kind, ty),
     }
 }
 
