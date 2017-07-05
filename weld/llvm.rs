@@ -2659,10 +2659,10 @@ fn llvm_unaryop(op_kind: UnaryOpKind, ty: &ScalarKind) -> WeldResult<&'static st
         (UnaryOpKind::Log, &F32) => Ok("@llvm.log.f32"),
         (UnaryOpKind::Log, &F64) => Ok("@llvm.log.f64"),
 
-        (UnaryOpKind::Exp, &F32) => Ok("@llvm.exp.f64"),
+        (UnaryOpKind::Exp, &F32) => Ok("@llvm.exp.f32"),
         (UnaryOpKind::Exp, &F64) => Ok("@llvm.exp.f64"),
 
-        (UnaryOpKind::Sqrt, &F32) => Ok("@llvm.sqrt.f64"),
+        (UnaryOpKind::Sqrt, &F32) => Ok("@llvm.sqrt.f32"),
         (UnaryOpKind::Sqrt, &F64) => Ok("@llvm.sqrt.f64"),
 
         (UnaryOpKind::Erf, &F32) => Ok("@erff"),
