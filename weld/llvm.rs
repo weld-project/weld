@@ -2256,7 +2256,11 @@ impl LlvmGenerator {
                         ref ty,
                     } => {
                         match *ty {
-                            Builder(ref bk, _) => {
+                            Builder(ref bk, ref annotations) => {
+                                let mut builder_size = 16;
+                                if let Some(ref e) = *annotations.size() {
+                                    builder_size = e.clone();
+                                }
                                 // TODO(Deepak): Do something with annotations here...
                                 match *bk {
                                     Appender(_) => {
@@ -2265,11 +2269,12 @@ impl LlvmGenerator {
                                                                  bld_ty_str.replace("%", ""));
                                         let bld_tmp = ctx.var_ids.next();
                                         ctx.code
-                                            .add(format!("{} = call {} {}.new(i64 16, %work_t* \
+                                            .add(format!("{} = call {} {}.new(i64 {}, %work_t* \
                                                           %cur.work)",
                                                          bld_tmp,
                                                          bld_ty_str,
-                                                         bld_prefix));
+                                                         bld_prefix,
+                                                         builder_size));
                                         ctx.code
                                             .add(format!("store {} {}, {}* {}",
                                                          bld_ty_str,
@@ -2369,10 +2374,11 @@ impl LlvmGenerator {
                                                                  bld_ty_str.replace("%", ""));
                                         let bld_tmp = ctx.var_ids.next();
                                         ctx.code
-                                            .add(format!("{} = call {} {}.new(i64 16)",
+                                            .add(format!("{} = call {} {}.new(i64 {})",
                                                          bld_tmp,
                                                          bld_ty_str,
-                                                         bld_prefix));
+                                                         bld_prefix,
+                                                         builder_size));
                                         ctx.code
                                             .add(format!("store {} {}, {}* {}",
                                                          bld_ty_str,
@@ -2386,11 +2392,12 @@ impl LlvmGenerator {
                                                                  bld_ty_str.replace("%", ""));
                                         let bld_tmp = ctx.var_ids.next();
                                         ctx.code
-                                            .add(format!("{} = call {} {}.new(i64 16, %work_t* \
+                                            .add(format!("{} = call {} {}.new(i64 {}, %work_t* \
                                                           %cur.work)",
                                                          bld_tmp,
                                                          bld_ty_str,
-                                                         bld_prefix));
+                                                         bld_prefix,
+                                                         builder_size));
                                         ctx.code
                                             .add(format!("store {} {}, {}* {}",
                                                          bld_ty_str,

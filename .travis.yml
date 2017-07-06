@@ -31,6 +31,5 @@ install:
   - bash -e build_tools/travis/init_virtualenvs.sh 2.7 3.6
 
 script:
-  - bash -e build_tools/travis/test_format.sh
   - bash -e -x build_tools/travis/test_multi_version.sh 3.8 38.0.1 2.7
   - bash -e -x build_tools/travis/test_multi_version.sh 4.0 40.0.0 2.7

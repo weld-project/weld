@@ -41,6 +41,7 @@ pub mod transforms;
 pub mod type_inference;
 pub mod conf;
 pub mod util;
+pub mod exprs;
 
 extern "C" {
     pub fn free(ptr: *mut c_void);
