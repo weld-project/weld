@@ -123,17 +123,17 @@ result(b2)    # returns [2, 4, 6]
 ```
 
 ```
-# for expression with composite builder
-let b0 = appender[i32];
+# for with composite builder
 let b1 = appender[i32];
+let b2 = appender[i32];
 let data = [1, 2, 3];
 let bs = for(
   data,
   {b1, b2},
-  (bs: {appender[i32], appender[i32]}, i: i64, n: i32) =>
+  |bs: {appender[i32], appender[i32]}, i: i64, n: i32|
     {merge(bs.$0, n), merge(bs.$1, 2 * n)}
 );
-result(bs)    # returns {[1, 2, 3], [2, 4, 6]}
+{result(bs.$0), result(bs.$1)} # returns {[1, 2, 3], [2, 4, 6]}
 ```
 
 ### Linearity of Builder Types
