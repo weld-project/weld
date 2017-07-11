@@ -110,6 +110,12 @@ fn parse_and_print_uniquified_expressions() {
     let _ = uniquify(&mut e);
     assert_eq!(print_expr_without_indent(&e).as_str(),
                "(let a=(2);((|a#1,b|(a#1+b))(1,2)+a))");
+
+    // Lambdas and Lets
+    let mut e = parse_expr("let b = for([1], appender[i32], |b,i,e| merge(b, e)); b").unwrap();
+    let _ = uniquify(&mut e);
+    assert_eq!(print_expr_without_indent(&e).as_str(),
+               "(let b#1=(for([1],appender[i32],|b,i,e|merge(b,e)));b#1)");
 }
 
 #[test]

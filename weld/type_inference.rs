@@ -350,27 +350,6 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
                     let mty = b.merge_type_mut();
                     changed |= try!(sync_types(mty, &mut value.ty, "Merge"));
                 }
-                Struct(ref mut tys) => {
-                    let mut rtys = vec![];
-                    for ty in tys.iter_mut() {
-                        if let &mut Builder(ref mut b, _) = ty {
-                            let rty = b.merge_type();
-                            rtys.push(rty);
-                        }
-                    }
-                    let ref mut mty = Struct(rtys);
-                    changed |= try!(sync_types(&mut value.ty, mty, "Merge"));
-                    // Now sync back the type to the actual builder.
-                    if let Struct(ref value_tys) = value.ty {
-                        for (i, ty) in tys.iter_mut().enumerate() {
-                            let ref val_ty = value_tys[i];
-                            if let &mut Builder(ref mut b, _) = ty {
-                                let mty = b.merge_type_mut();
-                                changed |= try!(push_type(mty, val_ty, "Merge"));
-                            }
-                        }
-                    }
-                }
                 Unknown => (),
                 _ => return weld_err!("Internal error: Merge called on non-builder"),
             }
@@ -384,16 +363,6 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
                 Builder(ref mut b, _) => {
                     let rty = b.result_type();
                     changed |= try!(push_type(&mut expr.ty, &rty, "Res"));
-                }
-                Struct(ref mut tys) => {
-                    let mut rtys = vec![];
-                    for ty in tys {
-                        if let &mut Builder(ref mut b, _) = ty {
-                            let rty = b.result_type();
-                            rtys.push(rty);
-                        }
-                    }
-                    changed |= try!(push_type(&mut expr.ty, &Struct(rtys), "Res"));
                 }
                 Unknown => (),
                 _ => return weld_err!("Internal error: Result called on non-builder"),

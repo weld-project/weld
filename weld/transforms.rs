@@ -77,8 +77,10 @@ fn _uniquify<T: TypeBounds>(expr: &mut Expr<T>,
         |id_map: &mut HashMap<Symbol, i32>, max_ids: &mut HashMap<String, i32>, sym: &Symbol| {
             let max_id = max_ids.entry(sym.name.clone()).or_insert(-1);
             let id = id_map.entry(sym.clone()).or_insert(*max_id);
-            *id += 1;
-            if *id > *max_id {
+            *max_id += 1;
+            if *id < *max_id {
+                *id = *max_id;
+            } else {
                 *max_id = *id;
             }
             Symbol::new(&sym.name.clone(), *id)
@@ -221,27 +223,28 @@ pub fn inline_apply<T: TypeBounds>(expr: &mut Expr<T>) {
 /// Inlines Let calls if the symbol defined by the Let statement is used
 /// less than one time.
 pub fn inline_let(expr: &mut Expr<Type>) {
-    expr.transform(&mut |ref mut expr| {
-        if let Let {
-                   ref mut name,
-                   ref mut value,
-                   ref mut body,
-               } = expr.kind {
-            if symbol_usage_count(name, body) <= 1 {
-                body.transform(&mut |ref mut expr| {
-                    // TODO(shoumik): What about symbol redefinitions?
-                    if let Ident(ref symbol) = expr.kind {
-                        if symbol == name {
-                            return Some(*value.clone());
+    if let Ok(_) = uniquify(expr) { 
+        expr.transform(&mut |ref mut expr| {
+            if let Let {
+                ref mut name,
+                ref mut value,
+                ref mut body,
+            } = expr.kind {
+                if symbol_usage_count(name, body) <= 1 {
+                    body.transform(&mut |ref mut expr| {
+                        if let Ident(ref symbol) = expr.kind {
+                            if symbol == name {
+                                return Some(*value.clone());
+                            }
                         }
-                    }
-                    return None;
-                });
-                return Some(*body.clone());
+                        return None;
+                    });
+                    return Some(*body.clone());
+                }
             }
-        }
-        return None;
-    });
+            return None;
+        });
+    }
 }
 
 fn symbol_usage_count(sym: &Symbol, expr: &Expr<Type>) -> u32 {
