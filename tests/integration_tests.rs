@@ -17,6 +17,13 @@ use weld::{weld_conf_new, weld_conf_set, weld_conf_free};
 use std::ffi::{CStr, CString};
 use libc::{c_char, c_void};
 
+/// Compares a and b, and returns true if their difference is less than 0.000...1 (cmp_decimals)
+fn approx_equal(a: f64, b: f64, cmp_decimals: u32) -> bool {
+    let thresh = 0.1 / ((10i32.pow(cmp_decimals)) as f64);
+    let diff = (a - b).abs();
+    diff <= thresh
+}
+
 /// An in memory representation of a Weld vector.
 #[derive(Clone)]
 #[allow(dead_code)]
@@ -1206,7 +1213,7 @@ fn simple_log() {
     let data = unsafe { weld_value_data(ret_value) as *const f64 };
     let result = unsafe { (*data).clone() };
     let output = 1.0f64;
-    assert_eq!(output, result);
+    assert!(approx_equal(output, result, 5));
     unsafe { weld_value_free(ret_value) };
 }
 
@@ -1228,9 +1235,8 @@ fn simple_exp() {
     let ret_value = compile_and_run(code, conf, &input);
     let data = unsafe { weld_value_data(ret_value) as *const f64 };
     let result = unsafe { (*data).clone() };
-
     let output = 2.718281828459045;
-    assert_eq!(output, result);
+    assert!(approx_equal(output, result, 5));
     unsafe { weld_value_free(ret_value) };
 }
 
@@ -1251,9 +1257,8 @@ fn simple_erf() {
     let ret_value = compile_and_run(code, conf, &input);
     let data = unsafe { weld_value_data(ret_value) as *const f64 };
     let result = unsafe { (*data).clone() };
-
     let output = 0.84270079294971478;
-    assert_eq!(output, result);
+    assert!(approx_equal(output, result, 5));
     unsafe { weld_value_free(ret_value) };
 }
 
@@ -1266,7 +1271,7 @@ fn simple_sqrt() {
 
     let result = unsafe { (*data).clone() };
     let output = 2.0f64;
-    assert_eq!(output, result);
+    assert!(approx_equal(output, result, 5));
     unsafe { weld_value_free(ret_value) };
 }
 
