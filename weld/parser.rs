@@ -9,6 +9,7 @@ use super::ast::Annotations;
 use super::ast::Symbol;
 use super::ast::Iter;
 use super::ast::BinOpKind::*;
+use super::ast::UnaryOpKind::*;
 use super::ast::BuilderImplementationKind::*;
 use super::ast::ExprKind::*;
 use super::ast::LiteralKind::*;
@@ -588,6 +589,21 @@ impl<'t> Parser<'t> {
         Ok(())
     }
 
+    /// Helper function for leaf_expr as all functions with unary args follow same pattern.
+    fn unary_leaf_expr(&mut self, func_name : &str) -> WeldResult<Box<PartialExpr>> {
+        try!(self.consume(TOpenParen));
+        let value = try!(self.expr());
+        try!(self.consume(TCloseParen));
+
+        match func_name {
+            "Exp" => Ok(expr_box(UnaryOp { kind: Exp, value: value })),
+            "Log" => Ok(expr_box(UnaryOp { kind: Log, value: value })),
+            "Sqrt" => Ok(expr_box(UnaryOp { kind: Sqrt, value: value })),
+            "Erf" => Ok(expr_box(UnaryOp { kind: Erf, value: value })),
+            "Res" => Ok(expr_box(Res { builder: value })),
+            _ => weld_err!("Expr type {} is not a unary leaf expr", func_name)
+        }
+    }
     /// Parse a terminal expression at the bottom of the precedence chain.
     fn leaf_expr(&mut self) -> WeldResult<Box<PartialExpr>> {
         let mut annotations = Annotations::new();
@@ -811,10 +827,19 @@ impl<'t> Parser<'t> {
             }
 
             TExp => {
-                try!(self.consume(TOpenParen));
-                let value = try!(self.expr());
-                try!(self.consume(TCloseParen));
-                Ok(expr_box(Exp { value: value }))
+                self.unary_leaf_expr("Exp")
+            }
+
+            TLog => {
+                self.unary_leaf_expr("Log")
+            }
+
+            TErf => {
+                self.unary_leaf_expr("Erf")
+            }
+
+            TSqrt => {
+                self.unary_leaf_expr("Sqrt")
             }
 
             TMerge => {
@@ -830,10 +855,7 @@ impl<'t> Parser<'t> {
             }
 
             TResult => {
-                try!(self.consume(TOpenParen));
-                let builder = try!(self.expr());
-                try!(self.consume(TCloseParen));
-                Ok(expr_box(Res { builder: builder }))
+                self.unary_leaf_expr("Res")
             }
 
             TAppender => {

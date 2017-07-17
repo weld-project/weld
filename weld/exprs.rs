@@ -45,6 +45,14 @@ pub fn binop_expr(kind: BinOpKind, left: Expr<Type>, right: Expr<Type>) -> WeldR
     }
 }
 
+pub fn unaryop_expr(kind: UnaryOpKind, value: Expr<Type>) -> WeldResult<Expr<Type>> {
+    let ty = value.ty.clone();
+    new_expr(UnaryOp {
+                 kind: kind,
+                 value: Box::new(value),
+             }, ty)
+}
+
 pub fn cast_expr(kind: ScalarKind, expr: Expr<Type>) -> WeldResult<Expr<Type>> {
     let ty = if let Scalar(_) = expr.ty {
         Scalar(kind)
@@ -174,15 +182,6 @@ pub fn slice_expr(data: Expr<Type>, index: Expr<Type>, size: Expr<Type>) -> Weld
                  size: Box::new(size),
              },
              ty)
-}
-
-pub fn exp_expr(expr: Expr<Type>) -> WeldResult<Expr<Type>> {
-    if expr.ty != Scalar(ScalarKind::F32) && expr.ty != Scalar(ScalarKind::F64) {
-        weld_err!("Internal error: Mismatched types in exp_expr")
-    } else {
-        let ty = expr.ty.clone();
-        new_expr(Exp { value: Box::new(expr) }, ty)
-    }
 }
 
 pub fn let_expr(name: Symbol, value: Expr<Type>, body: Expr<Type>) -> WeldResult<Expr<Type>> {

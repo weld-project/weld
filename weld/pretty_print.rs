@@ -219,6 +219,17 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>,
                     print_expr_impl(right, typed, indent, should_indent))
         }
 
+        UnaryOp {
+            kind,
+            ref value,
+        } => {
+            format!(
+                "({}{})",
+                kind,
+                print_expr_impl(value, typed, indent, should_indent)
+            )
+        }
+
         Negate(ref e) => format!("(-{})", print_expr_impl(e, typed, indent, should_indent)),
 
         CUDF {
@@ -329,11 +340,6 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>,
                     print_expr_impl(data, typed, indent, should_indent),
                     print_expr_impl(index, typed, indent, should_indent),
                     print_expr_impl(size, typed, indent, should_indent))
-        }
-
-        Exp { ref value } => {
-            format!("exp({})",
-                    print_expr_impl(value, typed, indent, should_indent))
         }
 
         Lambda {

@@ -128,6 +128,18 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             Ok(changed)
         }
 
+        UnaryOp {
+            kind: op,
+            ref mut value,
+        } => {
+            match value.ty {
+                Scalar(F32) => push_complete_type(&mut expr.ty, Scalar(F32), "UnaryOp"),
+                Scalar(F64) => push_complete_type(&mut expr.ty, Scalar(F64), "UnaryOp"),
+                Unknown => push_type(&mut expr.ty, &value.ty, "UnaryOp"),
+                _ => return weld_err!("Internal error: {} called on non-scalar or non-float", op),
+            }
+        }
+
         Cast { kind, .. } => Ok(try!(push_complete_type(&mut expr.ty, Scalar(kind), "Cast"))),
 
         ToVec { ref mut child_expr } => {
@@ -270,15 +282,6 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             } else {
                 weld_err!("Internal error: Slice called on {:?}, must be called on vector",
                           data.ty)
-            }
-        }
-
-        Exp { ref mut value } => {
-            match value.ty {
-                Scalar(F32) => push_complete_type(&mut expr.ty, Scalar(F32), "Exp"),
-                Scalar(F64) => push_complete_type(&mut expr.ty, Scalar(F64), "Exp"),
-                Unknown => push_type(&mut expr.ty, &value.ty, "Exp"),
-                _ => return weld_err!("Internal error: Exp called on non-scalar or non-float"),
             }
         }
 

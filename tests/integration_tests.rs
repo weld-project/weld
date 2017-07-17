@@ -17,6 +17,13 @@ use weld::{weld_conf_new, weld_conf_set, weld_conf_free};
 use std::ffi::{CStr, CString};
 use libc::{c_char, c_void};
 
+/// Compares a and b, and returns true if their difference is less than 0.000...1 (cmp_decimals)
+fn approx_equal(a: f64, b: f64, cmp_decimals: u32) -> bool {
+    let thresh = 0.1 / ((10i32.pow(cmp_decimals)) as f64);
+    let diff = (a - b).abs();
+    diff <= thresh
+}
+
 /// An in memory representation of a Weld vector.
 #[derive(Clone)]
 #[allow(dead_code)]
@@ -1198,6 +1205,29 @@ fn flat_map_length() {
     unsafe { weld_value_free(ret_value) };
 }
 
+fn simple_log() {
+    let code = "|x:f64| log(x)";
+    let conf = default_conf();
+    let input = 2.718281828459045;
+    let ret_value = compile_and_run(code, conf, &input);
+    let data = unsafe { weld_value_data(ret_value) as *const f64 };
+    let result = unsafe { (*data).clone() };
+    let output = 1.0f64;
+    assert!(approx_equal(output, result, 5));
+    unsafe { weld_value_free(ret_value) };
+}
+
+fn log_error() {
+    let code = "|x:i64| log(x)";
+    let conf = default_conf();
+    let input = 1;
+    let err_value = compile_and_run_error(code, conf, &input);
+    assert_eq!(unsafe { weld_error_code(err_value) },
+               WeldRuntimeErrno::CompileError);
+    unsafe { weld_error_free(err_value) };
+}
+
+
 fn simple_exp() {
     let code = "|x:f64| exp(x)";
     let conf = default_conf();
@@ -1205,9 +1235,8 @@ fn simple_exp() {
     let ret_value = compile_and_run(code, conf, &input);
     let data = unsafe { weld_value_data(ret_value) as *const f64 };
     let result = unsafe { (*data).clone() };
-
     let output = 2.718281828459045;
-    assert_eq!(output, result);
+    assert!(approx_equal(output, result, 5));
     unsafe { weld_value_free(ret_value) };
 }
 
@@ -1219,6 +1248,31 @@ fn exp_error() {
     assert_eq!(unsafe { weld_error_code(err_value) },
                WeldRuntimeErrno::CompileError);
     unsafe { weld_error_free(err_value) };
+}
+
+fn simple_erf() {
+    let code = "|x:f64| erf(x)";
+    let conf = default_conf();
+    let input = 1.00;
+    let ret_value = compile_and_run(code, conf, &input);
+    let data = unsafe { weld_value_data(ret_value) as *const f64 };
+    let result = unsafe { (*data).clone() };
+    let output = 0.84270079294971478;
+    assert!(approx_equal(output, result, 5));
+    unsafe { weld_value_free(ret_value) };
+}
+
+fn simple_sqrt() {
+    let code = "|x:f64| sqrt(x)";
+    let conf = default_conf();
+    let input = 4.0;
+    let ret_value = compile_and_run(code, conf, &input);
+    let data = unsafe { weld_value_data(ret_value) as *const f64 };
+
+    let result = unsafe { (*data).clone() };
+    let output = 2.0f64;
+    assert!(approx_equal(output, result, 5));
+    unsafe { weld_value_free(ret_value) };
 }
 
 fn map_exp() {
@@ -1425,8 +1479,12 @@ fn main() {
              ("le_between_vectors", le_between_vectors),
              ("simple_vector_lookup", simple_vector_lookup),
              ("simple_vector_slice", simple_vector_slice),
+             ("simple_log", simple_log),
+             ("log_error", log_error),
              ("simple_exp", simple_exp),
              ("exp_error", exp_error),
+             ("simple_erf", simple_erf),
+             ("simple_sqrt", simple_sqrt),
              ("map_exp", map_exp),
              ("simple_for_appender_loop", simple_for_appender_loop),
              ("simple_parallel_for_appender_loop", simple_parallel_for_appender_loop),
@@ -1456,6 +1514,7 @@ fn main() {
              ("serial_parlib_test", serial_parlib_test),
              ("iters_outofbounds_error_test", iters_outofbounds_error_test),
              ("outofmemory_error_test", outofmemory_error_test)];
+
 
     println!("");
     println!("running tests");

@@ -21,6 +21,11 @@ pub enum Statement {
         left: Symbol,
         right: Symbol,
     },
+    UnaryOp {
+        output: Symbol,
+        op: UnaryOpKind,
+        child: Symbol,
+    },
     Negate { output: Symbol, child: Symbol },
     Cast {
         output: Symbol,
@@ -43,7 +48,6 @@ pub enum Statement {
         index: Symbol,
         size: Symbol,
     },
-    Exp { output: Symbol, child: Symbol },
     CUDF {
         output: Symbol,
         symbol_name: String,
@@ -210,6 +214,11 @@ impl fmt::Display for Statement {
                        left,
                        right)
             }
+            UnaryOp {
+                ref output,
+                ref op,
+                ref child,
+            } => write!(f, "{} = {}({})", output, op, child),
             Negate {
                 ref output,
                 ref child,
@@ -235,10 +244,6 @@ impl fmt::Display for Statement {
                 ref index,
                 ref size,
             } => write!(f, "{} = slice({}, {}, {})", output, child, index, size),
-            Exp {
-                ref output,
-                ref child,
-            } => write!(f, "{} = exp({})", output, child),
             ToVec {
                 ref output,
                 ref child,
@@ -435,6 +440,12 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
                     vars.push(left.clone());
                     vars.push(right.clone());
                 }
+                UnaryOp {
+                    ref child,
+                    ..
+                } => {
+                    vars.push(child.clone());
+                }
                 Cast { ref child, .. } => {
                     vars.push(child.clone());
                 }
@@ -462,9 +473,6 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
                     vars.push(child.clone());
                     vars.push(index.clone());
                     vars.push(size.clone());
-                }
-                Exp { ref child, .. } => {
-                    vars.push(child.clone());
                 }
                 ToVec { ref child, .. } => {
                     vars.push(child.clone());
@@ -657,6 +665,20 @@ fn gen_expr(expr: &TypedExpr,
             Ok((cur_func, cur_block, res_sym))
         }
 
+        ExprKind::UnaryOp {
+            kind,
+            ref value,
+        } => {
+            let (cur_func, cur_block, value_sym) = gen_expr(value, prog, cur_func, cur_block)?;
+            let res_sym = prog.add_local(&expr.ty, cur_func);
+            prog.funcs[cur_func].blocks[cur_block].add_statement(UnaryOp {
+                output: res_sym.clone(),
+                op: kind,
+                child: value_sym,
+            });
+            Ok((cur_func, cur_block, res_sym))
+        }
+
         ExprKind::Negate(ref child_expr) => {
             let (cur_func, cur_block, child_sym) = gen_expr(child_expr, prog, cur_func, cur_block)?;
             let res_sym = prog.add_local(&expr.ty, cur_func);
@@ -719,16 +741,6 @@ fn gen_expr(expr: &TypedExpr,
                                                                      child: data_sym,
                                                                      index: index_sym.clone(),
                                                                      size: size_sym.clone(),
-                                                                 });
-            Ok((cur_func, cur_block, res_sym))
-        }
-
-        ExprKind::Exp { ref value } => {
-            let (cur_func, cur_block, value_sym) = gen_expr(value, prog, cur_func, cur_block)?;
-            let res_sym = prog.add_local(&expr.ty, cur_func);
-            prog.funcs[cur_func].blocks[cur_block].add_statement(Exp {
-                                                                     output: res_sym.clone(),
-                                                                     child: value_sym,
                                                                  });
             Ok((cur_func, cur_block, res_sym))
         }

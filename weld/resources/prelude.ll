@@ -5,6 +5,16 @@ declare void @llvm.memcpy.p0i8.p0i8.i64(i8*, i8*, i64, i32, i1)
 declare void @llvm.memset.p0i8.i64(i8*, i8, i64, i32, i1)
 declare float @llvm.exp.f32(float)
 declare double @llvm.exp.f64(double)
+
+declare float @llvm.log.f32(float)
+declare double @llvm.log.f64(double)
+
+declare float @erff(float)
+declare double @erf(double)
+
+declare float @llvm.sqrt.f32(float)
+declare double @llvm.sqrt.f64(double)
+
 declare i64 @llvm.ctlz.i64(i64, i1)
 
 ; std library functions

@@ -43,6 +43,9 @@ pub enum Token {
     TKeyExists,
     TSlice,
     TExp,
+    TLog,
+    TErf,
+    TSqrt,
     TCUDF,
     TAppender,
     TMerger,
@@ -93,7 +96,7 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
 
         // Regular expressions for various types of tokens.
         static ref KEYWORD_RE: Regex = Regex::new(
-            "if|for|zip|len|lookup|keyexists|slice|exp|cudf|iter|merge|result|let|true|false|macro|\
+            "if|for|zip|len|lookup|keyexists|slice|exp|log|erf|sqrt|cudf|iter|merge|result|let|true|false|macro|\
              i8|i32|i64|f32|f64|bool|vec|appender|merger|vecmerger|dictmerger|groupmerger|\
              tovec").unwrap();
 
@@ -152,11 +155,15 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
                             "keyexists" => TKeyExists,
                             "slice" => TSlice,
                             "exp" => TExp,
+                            "log" => TLog,
+                            "erf" => TErf,
+                            "sqrt" => TSqrt,
                             "cudf" => TCUDF,
                             "true" => TBoolLiteral(true),
                             "false" => TBoolLiteral(false),
                             _ => return weld_err!("Invalid input token: {}", text),
                         });
+
         } else if IDENT_RE.is_match(text) {
             tokens.push(TIdent(text.to_string()));
         } else if I8_BASE_10_RE.is_match(text) {
@@ -277,6 +284,9 @@ impl fmt::Display for Token {
                     TKeyExists => "keyexists",
                     TSlice => "slice",
                     TExp => "exp",
+                    TLog => "log",
+                    TErf => "erf",
+                    TSqrt => "sqrt",
                     TCUDF => "cudf",
                     TOpenParen => "(",
                     TCloseParen => ")",
@@ -411,6 +421,40 @@ fn basic_tokenize() {
                     TIdent("a".into()),
                     TCloseParen,
                     TEndOfInput]);
+    assert_eq!(tokenize("|a:i8| log(a)").unwrap(),
+               vec![TBar,
+                    TIdent("a".into()),
+                    TColon,
+                    TI8,
+                    TBar,
+                    TLog,
+                    TOpenParen,
+                    TIdent("a".into()),
+                    TCloseParen,
+                    TEndOfInput]);
+    assert_eq!(tokenize("|a:i8| erf(a)").unwrap(),
+               vec![TBar,
+                    TIdent("a".into()),
+                    TColon,
+                    TI8,
+                    TBar,
+                    TErf,
+                    TOpenParen,
+                    TIdent("a".into()),
+                    TCloseParen,
+                    TEndOfInput]);
+    assert_eq!(tokenize("|a:i8| sqrt(a)").unwrap(),
+               vec![TBar,
+                    TIdent("a".into()),
+                    TColon,
+                    TI8,
+                    TBar,
+                    TSqrt,
+                    TOpenParen,
+                    TIdent("a".into()),
+                    TCloseParen,
+                    TEndOfInput]);
+
     assert_eq!(tokenize("keyexists(a, 1)").unwrap(),
                vec![TKeyExists,
                     TOpenParen,
