@@ -41,6 +41,8 @@ $ ln -s /usr/local/bin/llvm-config-3.8 /usr/local/bin/llvm-config
 
 To make sure this worked correctly, run `llvm-config --version`. You should see `3.8.x` or newer.
 
+Enter the `weld_rt/cpp` directory and try running `make`. If the command fails with errors related to missing header files, you may need to install XCode and/or XCode Command Line Tools. Run `xcode-select --install` to do this.
+
 #### Ubuntu LLVM Installation
 
 To install LLVM on Ubuntu :
