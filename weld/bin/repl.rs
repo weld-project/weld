@@ -16,14 +16,7 @@ use std::fmt;
 use std::collections::HashMap;
 
 use weld::*;
-use weld::llvm::LlvmGenerator;
 use weld::parser::*;
-use weld::passes::*;
-use weld::pretty_print::*;
-use weld::type_inference::*;
-use weld::sir::ast_to_sir;
-use weld::util::load_runtime_library;
-use weld::util::MERGER_BC;
 
 enum ReplCommands {
     LoadFile,
@@ -111,7 +104,7 @@ fn main() {
 
         let program;
 
-        // Do some basic token parsing here.
+        // Check whether the command is to load a file; if not, treat it as a program to run.
         let mut tokens = trimmed.splitn(2, " ");
         let command = tokens.next().unwrap();
         let arg = tokens.next().unwrap_or("");
@@ -138,80 +131,14 @@ fn main() {
             println!("Error during parsing: {:?}", e);
             continue;
         }
-        let program = program.unwrap();
-        println!("Raw structure:\n{:?}\n", program);
 
-        let expr = macro_processor::process_program(&program);
-        if let Err(ref e) = expr {
-            println!("Error during macro substitution: {}", e);
-            continue;
-        }
-        let mut expr = expr.unwrap();
-        println!("After macro substitution:\n{}\n", print_expr(&expr));
-
-        if let Err(ref e) = transforms::uniquify(&mut expr) {
-            println!("Error during uniquify: {}\n", e);
-            continue;
-        }
-        println!("After uniquify:\n{}\n", print_expr(&expr));
-
-        if let Err(ref e) = infer_types(&mut expr) {
-            println!("Error during type inference: {}\n", e);
-            println!("Partially inferred types:\n{}\n", print_typed_expr(&expr));
-            continue;
-        }
-        println!("After type inference:\n{}\n", print_typed_expr(&expr));
-        println!("Expression type: {}\n", print_type(&expr.ty));
-
-        let mut expr = expr.to_typed().unwrap();
-
-        let passes: Vec<&Pass> = vec![OPTIMIZATION_PASSES.get("inline-apply").unwrap(),
-                                      OPTIMIZATION_PASSES.get("inline-let").unwrap(),
-                                      OPTIMIZATION_PASSES.get("inline-zip").unwrap(),
-                                      OPTIMIZATION_PASSES.get("loop-fusion").unwrap()];
-
-        for i in 0..passes.len() {
-            println!("Applying pass {}", passes[i].pass_name());
-            passes[i].transform(&mut expr).unwrap();
-            println!("After {} pass:\n{}\n",
-                     passes[i].pass_name(),
-                     print_expr(&expr));
-        }
-
-        if let Err(ref e) = transforms::uniquify(&mut expr) {
-            println!("Error during uniquify: {}\n", e);
-            continue;
-        }
-
-        println!("final program : {}", print_typed_expr(&expr));
-        println!("final program raw: {:?}", expr);
-
-        let sir_result = ast_to_sir(&expr);
-        match sir_result {
-            Ok(sir) => {
-                println!("SIR representation:\n{}\n", &sir);
-                let mut llvm_gen = LlvmGenerator::new();
-                if let Err(ref e) = llvm_gen.add_function_on_pointers("run", &sir) {
-                    println!("Error during LLVM code gen:\n{}\n", e);
-                } else {
-                    let llvm_code = llvm_gen.result();
-                    println!("LLVM code:\n{}\n", llvm_code);
-
-                    if let Err(e) = load_runtime_library() {
-                        println!("Couldn't load runtime: {}", e);
-                        continue;
-                    }
-
-                    if let Err(ref e) = easy_ll::compile_module(&llvm_code, Some(MERGER_BC)) {
-                        println!("Error during LLVM compilation:\n{}\n", e);
-                    } else {
-                        println!("LLVM module compiled successfully\n");
-                    }
-                }
-            }
-            Err(ref e) => {
-                println!("Error during SIR code gen:\n{}\n", e);
-            }
+        let result = llvm::compile_program(
+            &program.unwrap(),
+            &conf::DEFAULT_OPTIMIZATION_PASSES,
+            conf::LogLevel::Debug);
+        match result {
+            Err(e) => println!("Error during compilation:\n{}\n", e),
+            Ok(_) => println!("Program compiled successfully to LLVM")
         }
     }
     rl.save_history(&history_file_path).unwrap();

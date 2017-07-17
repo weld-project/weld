@@ -193,21 +193,23 @@ pub unsafe extern "C" fn weld_module_compile(code: *const c_char,
                                              -> *mut WeldModule {
     assert!(!code.is_null());
     assert!(!err_ptr.is_null());
+    let mut err = &mut *err_ptr;
 
-    let conf = &*conf;
-    let opt_passes =
-        conf::parse_optimization_passes(conf.dict
-                                            .get(&CString::new(conf::OPTIMIZATION_PASSES_KEY)
-                                                      .unwrap())
-                                            .unwrap_or(&CString::new("").unwrap())
-                                            .clone());
+    let conf = conf::parse(&*conf);
+    if let Err(e) = conf {
+        err.errno = WeldRuntimeErrno::ConfigurationError;
+        err.message = CString::new(e.description().to_string()).unwrap();
+        return std::ptr::null_mut();
+    }
+    let conf = conf.unwrap();
 
     let code = CStr::from_ptr(code);
     let code = code.to_str().unwrap().trim();
-    let mut err = &mut *err_ptr;
 
     if let Err(e) = util::load_runtime_library() {
-        println!("{}", e);
+        err.errno = WeldRuntimeErrno::RuntimeLibraryError;
+        err.message = CString::new(e).unwrap();
+        return std::ptr::null_mut();
     }
 
     let parsed = parser::parse_program(code);
@@ -217,7 +219,8 @@ pub unsafe extern "C" fn weld_module_compile(code: *const c_char,
         return std::ptr::null_mut();
     }
 
-    let module = llvm::compile_program(&parsed.unwrap(), opt_passes);
+    let module = llvm::compile_program(
+        &parsed.unwrap(), &conf.optimization_passes, conf.log_level);
 
     if let Err(ref e) = module {
         err.errno = WeldRuntimeErrno::CompileError;
@@ -243,20 +246,15 @@ pub unsafe extern "C" fn weld_module_run(module: *mut WeldModule,
 
     let module = &mut *module;
     let arg = &*arg;
-    let conf = &*conf;
     let mut err = &mut *err_ptr;
 
-    let mem_limit = conf::parse_memory_limit(conf.dict
-                                                 .get(&CString::new(conf::MEMORY_LIMIT_KEY)
-                                                           .unwrap())
-                                                 .unwrap_or(&CString::new("").unwrap())
-                                                 .clone());
-
-    let threads = conf::parse_threads(conf.dict
-                                          .get(&CString::new(conf::THREADS_KEY).unwrap())
-                                          .unwrap_or(&CString::new("").unwrap())
-                                          .clone());
-
+    let conf = conf::parse(&*conf);
+    if let Err(e) = conf {
+        err.errno = WeldRuntimeErrno::ConfigurationError;
+        err.message = CString::new(e.description().to_string()).unwrap();
+        return std::ptr::null_mut();
+    }
+    let conf = conf.unwrap();
 
     #[derive(Clone)]
     struct I32Vec {
@@ -266,8 +264,8 @@ pub unsafe extern "C" fn weld_module_run(module: *mut WeldModule,
 
     let input = Box::new(llvm::WeldInputArgs {
                              input: arg.data as i64,
-                             nworkers: threads as i32,
-                             mem_limit: mem_limit as i64,
+                             nworkers: conf.threads as i32,
+                             mem_limit: conf.memory_limit,
                          });
     let ptr = Box::into_raw(input) as i64;
     // result_raw is allocated with ordinary malloc, hence the free below
