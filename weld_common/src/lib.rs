@@ -7,6 +7,7 @@ use std::fmt;
 pub enum WeldRuntimeErrno {
     Success = 0,
     ConfigurationError,
+    RuntimeLibraryError,
     CompileError,
     ArrayOutOfBounds,
     BadIteratorLength,

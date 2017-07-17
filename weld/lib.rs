@@ -207,8 +207,9 @@ pub unsafe extern "C" fn weld_module_compile(code: *const c_char,
     let code = code.to_str().unwrap().trim();
 
     if let Err(e) = util::load_runtime_library() {
-        // TODO: should this set err_ptr?
-        println!("{}", e);
+        err.errno = WeldRuntimeErrno::RuntimeLibraryError;
+        err.message = CString::new(e.description().to_string()).unwrap();
+        return std::ptr::null_mut();
     }
 
     let parsed = parser::parse_program(code);
