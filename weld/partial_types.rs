@@ -216,6 +216,16 @@ impl PartialExpr {
                 }
             }
 
+            UnaryOp {
+                kind,
+                ref value,
+            } => {
+                UnaryOp {
+                    kind: kind,
+                    value: try!(typed_box(value)),
+                }
+            }
+
             Cast {
                 kind,
                 ref child_expr,
@@ -301,8 +311,6 @@ impl PartialExpr {
                     size: try!(typed_box(size)),
                 }
             }
-
-            Exp { ref value } => Exp { value: try!(typed_box(value)) },
 
             Merge {
                 ref builder,

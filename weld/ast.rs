@@ -320,6 +320,10 @@ pub enum ExprKind<T: TypeBounds> {
         left: Box<Expr<T>>,
         right: Box<Expr<T>>,
     },
+    UnaryOp {
+        kind: UnaryOpKind,
+        value: Box<Expr<T>>,
+    },
     Cast {
         kind: ScalarKind,
         child_expr: Box<Expr<T>>,
@@ -343,7 +347,6 @@ pub enum ExprKind<T: TypeBounds> {
         index: Box<Expr<T>>,
         size: Box<Expr<T>>,
     },
-    Exp { value: Box<Expr<T>> },
     Let {
         name: Symbol,
         value: Box<Expr<T>>,
@@ -415,6 +418,14 @@ pub enum BinOpKind {
     Xor,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum UnaryOpKind {
+    Exp,
+    Log,
+    Sqrt,
+    Erf,
+}
+
 impl BinOpKind {
     pub fn is_comparison(&self) -> bool {
         use ast::BinOpKind::*;
@@ -452,6 +463,19 @@ impl fmt::Display for BinOpKind {
     }
 }
 
+impl fmt::Display for UnaryOpKind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use ast::UnaryOpKind::*;
+        let text = match *self {
+            Exp => "exp",
+            Log => "log",
+            Sqrt => "sqrt",
+            Erf => "erf",
+        };
+        f.write_str(text)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Parameter<T: TypeBounds> {
     pub name: Symbol,
@@ -474,6 +498,7 @@ impl<T: TypeBounds> Expr<T> {
                 ref right,
                 ..
             } => vec![left.as_ref(), right.as_ref()],
+            UnaryOp {ref value, ..} => vec![value.as_ref()],
             Cast { ref child_expr, .. } => vec![child_expr.as_ref()],
             ToVec { ref child_expr } => vec![child_expr.as_ref()],
             Let {
@@ -497,7 +522,6 @@ impl<T: TypeBounds> Expr<T> {
                 ref index,
                 ref size,
             } => vec![data.as_ref(), index.as_ref(), size.as_ref()],
-            Exp { ref value } => vec![value.as_ref()],
             Merge {
                 ref builder,
                 ref value,
@@ -567,6 +591,7 @@ impl<T: TypeBounds> Expr<T> {
                 ref mut right,
                 ..
             } => vec![left.as_mut(), right.as_mut()],
+            UnaryOp { ref mut value, .. } => vec![value.as_mut()],
             Cast { ref mut child_expr, .. } => vec![child_expr.as_mut()],
             ToVec { ref mut child_expr } => vec![child_expr.as_mut()],
             Let {
@@ -593,7 +618,6 @@ impl<T: TypeBounds> Expr<T> {
                 ref mut index,
                 ref mut size,
             } => vec![data.as_mut(), index.as_mut(), size.as_mut()],
-            Exp { ref mut value } => vec![value.as_mut()],
             Merge {
                 ref mut builder,
                 ref mut value,
@@ -680,6 +704,7 @@ impl<T: TypeBounds> Expr<T> {
                                                                                     kind2 => {
                     Ok(true)
                 }
+                (&UnaryOp { .. }, &UnaryOp { .. }) => Ok(true),
                 (&Cast { kind: ref kind1, .. }, &Cast { kind: ref kind2, .. }) if kind1 ==
                                                                                   kind2 => Ok(true),
                 (&ToVec { .. }, &ToVec { .. }) => Ok(true),
@@ -712,7 +737,6 @@ impl<T: TypeBounds> Expr<T> {
                 (&Lookup { .. }, &Lookup { .. }) => Ok(true),
                 (&KeyExists { .. }, &KeyExists { .. }) => Ok(true),
                 (&Slice { .. }, &Slice { .. }) => Ok(true),
-                (&Exp { .. }, &Exp { .. }) => Ok(true),
                 (&Merge { .. }, &Merge { .. }) => Ok(true),
                 (&Res { .. }, &Res { .. }) => Ok(true),
                 (&For { .. }, &For { .. }) => Ok(true), // TODO need to check Iters?
