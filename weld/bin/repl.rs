@@ -16,14 +16,7 @@ use std::fmt;
 use std::collections::HashMap;
 
 use weld::*;
-use weld::llvm::LlvmGenerator;
 use weld::parser::*;
-use weld::passes::*;
-use weld::pretty_print::*;
-use weld::type_inference::*;
-use weld::sir::ast_to_sir;
-use weld::util::load_runtime_library;
-use weld::util::MERGER_BC;
 
 enum ReplCommands {
     LoadFile,
@@ -139,8 +132,9 @@ fn main() {
             continue;
         }
 
-        let result = llvm::compile_program(&program.unwrap(),
-            conf::DEFAULT_OPTIMIZATION_PASSES.clone(),
+        let result = llvm::compile_program(
+            &program.unwrap(),
+            &conf::DEFAULT_OPTIMIZATION_PASSES,
             conf::LogLevel::Debug);
         match result {
             Err(e) => println!("Error during compilation:\n{}\n", e),

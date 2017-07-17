@@ -4,10 +4,19 @@ use super::transforms;
 
 use std::collections::HashMap;
 
-
 pub struct Pass {
     transforms: Vec<fn(&mut Expr<Type>)>,
     pass_name: String,
+}
+
+/// Manually implement Clone for Pass because it cannot be #derived due to the fn type inside it.
+impl Clone for Pass {
+    fn clone(&self) -> Pass {
+        Pass {
+            transforms: self.transforms.iter().map(|p| *p).collect::<Vec<_>>(),
+            pass_name: self.pass_name.clone()
+        }
+    }
 }
 
 impl Pass {
