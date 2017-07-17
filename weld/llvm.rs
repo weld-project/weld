@@ -2717,12 +2717,15 @@ pub fn compile_program(program: &Program,
                        log_level: LogLevel)
                        -> WeldResult<easy_ll::CompiledModule> {
     let mut expr = try!(macro_processor::process_program(program));
+    if log_level >= LogLevel::Debug {
+        println!("After macro substitution:\n{}\n", print_expr(&expr));
+    }
+
     let _ = try!(transforms::uniquify(&mut expr));
     try!(type_inference::infer_types(&mut expr));
     let mut expr = try!(expr.to_typed());
-
     if log_level >= LogLevel::Debug {
-        println!("Compiling with optimization passes: {:?}\n", opt_passes);
+        println!("After type inference:\n{}\n", print_expr(&expr));
     }
 
     let mut passes: Vec<&Pass> = vec![];
@@ -2737,7 +2740,7 @@ pub fn compile_program(program: &Program,
     for i in 0..passes.len() {
         try!(passes[i].transform(&mut expr));
         if log_level >= LogLevel::Debug {
-            println!("After pass {}:\n{}", passes[i].pass_name(), print_expr(&expr));
+            println!("After {} pass:\n{}", passes[i].pass_name(), print_expr(&expr));
         }
     }
 
