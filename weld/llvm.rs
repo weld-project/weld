@@ -12,6 +12,7 @@ use super::ast::LiteralKind::*;
 use super::ast::ScalarKind::*;
 use super::ast::BuilderKind::*;
 use super::code_builder::CodeBuilder;
+use super::conf::LogLevel;
 use super::error::*;
 use super::macro_processor;
 use super::passes::*;
@@ -2712,12 +2713,17 @@ pub fn generate_runtime_interface_module() -> WeldResult<easy_ll::CompiledModule
 
 /// Generate a compiled LLVM module from a program whose body is a function.
 pub fn compile_program(program: &Program,
-                       opt_passes: Vec<String>)
+                       opt_passes: Vec<String>,
+                       log_level: LogLevel)
                        -> WeldResult<easy_ll::CompiledModule> {
     let mut expr = try!(macro_processor::process_program(program));
     let _ = try!(transforms::uniquify(&mut expr));
     try!(type_inference::infer_types(&mut expr));
     let mut expr = try!(expr.to_typed());
+
+    if log_level >= LogLevel::Debug {
+        println!("Compiling with optimization passes: {:?}\n", opt_passes);
+    }
 
     let mut passes: Vec<&Pass> = vec![];
     for opt_pass in &opt_passes {
@@ -2730,14 +2736,29 @@ pub fn compile_program(program: &Program,
 
     for i in 0..passes.len() {
         try!(passes[i].transform(&mut expr));
+        if log_level >= LogLevel::Debug {
+            println!("After pass {}:\n{}", passes[i].pass_name(), print_expr(&expr));
+        }
     }
 
     try!(transforms::uniquify(&mut expr));
+    if log_level >= LogLevel::Debug {
+        println!("After uniquify:\n{}\n", print_expr(&expr));
+    }
 
     let sir_prog = try!(sir::ast_to_sir(&expr));
+    if log_level >= LogLevel::Debug {
+        println!("SIR program:\n{}\n", &sir_prog);
+    }
+
     let mut gen = LlvmGenerator::new();
     try!(gen.add_function_on_pointers("run", &sir_prog));
-    Ok(try!(easy_ll::compile_module(&gen.result(), Some(MERGER_BC))))
+    let llvm_code = gen.result();
+    if log_level >= LogLevel::Debug {
+        println!("LLVM program:\n{}\n", &llvm_code);
+    }
+
+    Ok(try!(easy_ll::compile_module(&llvm_code, Some(MERGER_BC))))
 }
 
 #[test]

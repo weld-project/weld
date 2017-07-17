@@ -195,6 +195,10 @@ pub unsafe extern "C" fn weld_module_compile(code: *const c_char,
     assert!(!err_ptr.is_null());
 
     let conf = &*conf;
+    let log_level = conf::parse_log_level(conf.dict
+                                              .get(&CString::new(conf::LOG_LEVEL_KEY).unwrap())
+                                              .unwrap_or(&CString::new("").unwrap())
+                                              .clone());
     let opt_passes =
         conf::parse_optimization_passes(conf.dict
                                             .get(&CString::new(conf::OPTIMIZATION_PASSES_KEY)
@@ -217,7 +221,7 @@ pub unsafe extern "C" fn weld_module_compile(code: *const c_char,
         return std::ptr::null_mut();
     }
 
-    let module = llvm::compile_program(&parsed.unwrap(), opt_passes);
+    let module = llvm::compile_program(&parsed.unwrap(), opt_passes, log_level);
 
     if let Err(ref e) = module {
         err.errno = WeldRuntimeErrno::CompileError;
