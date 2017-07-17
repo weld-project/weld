@@ -44,7 +44,7 @@ fn vectorizable_iters(iters: &Vec<Iter<Type>>) -> bool {
     true
 }
 
-/// Vectorizes the expression by changing it's type if the expression is a scalar.
+/// Vectorizes the expression by changing its type if the expression is a scalar.
 fn vectorize_expr(e: &mut Expr<Type>, broadcast_idens: &HashSet<Symbol>) -> WeldResult<bool> {
     let mut new_expr = None;
     let mut cont = true;
@@ -147,8 +147,8 @@ fn vectorize_expr(e: &mut Expr<Type>, broadcast_idens: &HashSet<Symbol>) -> Weld
 
 
 /// Checks basic vectorizability for a loop - this is a strong check which ensure that the only
-/// expressions which appear in a function body are arithmetic, identifiers, literals,and Let
-/// statements, and builder merges.
+/// expressions which appear in a function body are vectorizable expressions (see
+/// `docs/vectorization.md` for details) 
 fn vectorizable(for_loop: &Expr<Type>) -> WeldResult<HashSet<Symbol>> {
     if let For { ref iters, builder: ref init_builder, ref func } = for_loop.kind {
         // Check if the iterators are consumed.
@@ -180,13 +180,18 @@ fn vectorizable(for_loop: &Expr<Type>) -> WeldResult<HashSet<Symbol>> {
                     body.traverse(&mut |f| {
                         match f.kind {
                             Literal(_) => {},
-                            Ident(_) => {},
+                            Ident(ref name) => {
+                                if f.ty == params[1].ty && *name == params[1].name {
+                                    // Used an index expression in the loop body.
+                                    passed = false;
+                                }
+                            },
                             BinOp{ .. } => {},
                             Let{ ref name, .. } => {
                                 defined_in_loop.insert(name.clone()); 
                             },
                             // GetField is allowed if the only fields we fetch are the ones from
-                            // the argument (in case the input was Zipped). At this point, it's
+                            // the argument (in case the input was Zipped). At this point, it is
                             // already guaranteed that each input vector is a scalar.
                             GetField { ref expr, .. } => {
                                 let mut getfield_passed = false;
@@ -228,13 +233,6 @@ fn vectorizable(for_loop: &Expr<Type>) -> WeldResult<HashSet<Symbol>> {
                         return weld_err!("Unsupported pattern");
                     }
 
-                    // Check if the index is used anywhere to do any kind of random access,
-                    // index computation, etc.
-                    let index_iden = exprs::ident_expr(params[1].name.clone(), params[1].ty.clone()).unwrap();
-                    if body.contains(&index_iden) {
-                        return weld_err!("Unsupported pattern");
-                    }
-
                     // If the data in the vector is not a Scalar, we can't vectorize it.
                     let mut check_arg_ty = false;
                     if let Scalar(_) = params[2].ty {
@@ -257,14 +255,23 @@ fn vectorizable(for_loop: &Expr<Type>) -> WeldResult<HashSet<Symbol>> {
 
                     // Check if there are identifiers defined outside the loop. If so, we need to
                     // broadcast them to vectorize them.
+                    let mut passed = true;
                     body.traverse(&mut |e| {
                         match e.kind {
                             Ident(ref name) if !defined_in_loop.contains(name) => {
-                                idens.insert(name.clone());
+                                if let Scalar(_) = e.ty {
+                                    idens.insert(name.clone());
+                                } else {
+                                    passed = false;
+                                }
                             }
                             _ => {}
                         }
                     });
+
+                    if !passed {
+                        return weld_err!("Unsupporte pattern: non-scalar identifier that must be broadcast");
+                    }
                     return Ok(idens);
                 }
             }
@@ -274,7 +281,7 @@ fn vectorizable(for_loop: &Expr<Type>) -> WeldResult<HashSet<Symbol>> {
 }
 
 /// Vectorize an expression.
-pub fn vectorize(expr: &mut Expr<Type>) -> WeldResult<()> {
+pub fn vectorize(expr: &mut Expr<Type>) {
     let mut vectorized = false;
     expr.transform_and_continue_res(&mut |ref mut expr| {
         //  The Res is a stricter-than-necessary check, but prevents us from having to check nested
@@ -355,8 +362,7 @@ pub fn vectorize(expr: &mut Expr<Type>) -> WeldResult<()> {
     });
 
     if vectorized {
-        Ok(())
-    } else {
-        weld_err!("could not vectorize expression")
+        println!("Successfully vectorized");
     }
 }
+

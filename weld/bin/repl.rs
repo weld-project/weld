@@ -25,8 +25,6 @@ use weld::sir::ast_to_sir;
 use weld::util::load_runtime_library;
 use weld::util::MERGER_BC;
 
-use weld::vectorizer;
-
 enum ReplCommands {
     LoadFile,
 }
@@ -170,7 +168,8 @@ fn main() {
         let passes: Vec<&Pass> = vec![OPTIMIZATION_PASSES.get("inline-apply").unwrap(),
                                       OPTIMIZATION_PASSES.get("inline-let").unwrap(),
                                       OPTIMIZATION_PASSES.get("inline-zip").unwrap(),
-                                      OPTIMIZATION_PASSES.get("loop-fusion").unwrap()];
+                                      OPTIMIZATION_PASSES.get("loop-fusion").unwrap(),
+                                      OPTIMIZATION_PASSES.get("vectorize").unwrap()];
 
         for i in 0..passes.len() {
             println!("Applying pass {}", passes[i].pass_name());
@@ -178,15 +177,6 @@ fn main() {
             println!("After {} pass:\n{}\n",
                      passes[i].pass_name(),
                      print_expr(&expr));
-        }
-
-        if let Err(ref e) = transforms::uniquify(&mut expr) {
-            println!("Error during uniquify: {}\n", e);
-            continue;
-        }
-
-        if let Err(ref e) = vectorizer::vectorize(&mut expr) {
-            println!("Error during vectorize: {}\n", e);
         }
 
         println!("final program : {}", print_typed_expr(&expr));

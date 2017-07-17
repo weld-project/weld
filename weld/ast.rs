@@ -313,6 +313,7 @@ pub enum ExprKind<T: TypeBounds> {
     Literal(LiteralKind),
     Ident(Symbol),
     Negate(Box<Expr<T>>),
+    // Broadcasts a scalar into a vector, e.g., 1 -> <1, 1, 1, 1>
     Broadcast(Box<Expr<T>>),
     BinOp {
         kind: BinOpKind,

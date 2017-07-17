@@ -372,14 +372,23 @@ impl fmt::Display for Terminator {
 
 impl fmt::Display for ParallelForIter {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+
+        let iterkind = match self.kind {
+            IterKind::ScalarIter => "iter",
+            IterKind::SimdIter => "simditer",
+            IterKind::FringeIter => "fringeiter"
+        };
+
         if self.start.is_some() {
             write!(f,
-                   "iter({}, {}, {}, {}, {})",
+                   "{}({}, {}, {}, {})",
+                   iterkind,
                    self.data,
                    self.start.clone().unwrap(),
                    self.end.clone().unwrap(),
-                   self.stride.clone().unwrap(),
-                   self.kind)
+                   self.stride.clone().unwrap())
+        } else if self.kind != IterKind::ScalarIter {
+            write!(f, "{}({})", iterkind, self.data)
         } else {
             write!(f, "{}", self.data)
         }

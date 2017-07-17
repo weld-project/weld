@@ -535,7 +535,11 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             ref mut on_false,
         } => {
             let mut changed = false;
-            changed |= try!(push_complete_type(&mut cond.ty, Scalar(Bool), "Select"));
+            if let Simd(_) = on_true.ty {
+                changed |= try!(push_complete_type(&mut cond.ty, Simd(Bool), "Select"));
+            } else {
+                changed |= try!(push_complete_type(&mut cond.ty, Scalar(Bool), "Select"));
+            }
             changed |= try!(sync_types(&mut expr.ty, &mut on_true.ty, "Select"));
             changed |= try!(sync_types(&mut expr.ty, &mut on_false.ty, "Select"));
             Ok(changed)
@@ -572,7 +576,7 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
 /// type. Return a Result indicating whether the option has changed (i.e. a new type as added).
 fn push_complete_type(dest: &mut PartialType, src: PartialType, context: &str) -> WeldResult<bool> {
     match src {
-        Scalar(_) => {
+        Scalar(_) | Simd(_) => {
             if *dest == Unknown {
                 *dest = src;
                 Ok(true)

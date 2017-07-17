@@ -26,8 +26,6 @@ use super::type_inference;
 use super::util::IdGenerator;
 use super::util::MERGER_BC;
 
-use super::vectorizer;
-
 #[cfg(test)]
 use super::parser::*;
 
@@ -3142,13 +3140,6 @@ pub fn compile_program(program: &Program,
 
     for i in 0..passes.len() {
         try!(passes[i].transform(&mut expr));
-    }
-
-    try!(transforms::uniquify(&mut expr));
-
-    // This is "allowed" to fail; the return value signifies whether the transform succeeded.
-    if let Ok(_) = vectorizer::vectorize(&mut expr) {
-        println!("Vectorization succeeded!");
     }
 
     let sir_prog = try!(sir::ast_to_sir(&expr));

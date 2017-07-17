@@ -628,10 +628,46 @@ fn simple_for_vectorizable_loop() {
         x: WeldVec<i32>,
     }
 
-    let code = "|x:vec[i32]| result(for(x, merger[i32,+], |b,i,e| let a = 1; let a2 = a + 1; merge(b, e+a2)))";
+    let code = "|x:vec[i32]| result(for(simditer(x), merger[i32,+], |b,i,e:simd[i32]| let a = broadcast(1); let a2 = a +\
+                    broadcast(1); merge(b, e+a2)))";
     let conf = default_conf();
 
     let size = 1000;
+    let input_vec = vec![1 as i32; size as usize];
+    let ref input_data = Args {
+        x: WeldVec {
+            data: input_vec.as_ptr() as *const i32,
+            len: input_vec.len() as i64,
+        },
+    };
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const i32 };
+    let result = unsafe { (*data).clone() };
+    let output = size * 3;
+    assert_eq!(result, output);
+    unsafe { weld_value_free(ret_value) };
+}
+
+fn fringed_for_vectorizable_loop() {
+    #[allow(dead_code)]
+    struct Args {
+        x: WeldVec<i32>,
+    }
+
+	let code = "|x:vec[i32]|\
+	let b1 = for(\
+		simditer(x),\
+		merger[i32,+],\
+		|b,i,e:simd[i32]| let a = broadcast(1); let a2 = a + broadcast(1); merge(b, e+a2));\
+	result(for(fringeiter(x),\
+		b1,\
+		|b,i,e| let a = 1; let a2 = a + 1; merge(b, e+a2)\
+	))";
+
+    let conf = default_conf();
+
+    let size = 1002;
     let input_vec = vec![1 as i32; size as usize];
     let ref input_data = Args {
         x: WeldVec {
@@ -654,7 +690,18 @@ fn for_predicated_vectorizable_loop() {
         x: WeldVec<i32>,
     }
 
-    let code = "|x:vec[i32]| result(for(x, merger[i32,+], |b,i,e| if(e > 0, merge(b, e), b)))";
+    let code = "|x:vec[i32]| 
+	result(for(
+			simditer(x:vec[i32]),
+			merger[i32,+],
+			|b:merger[i32,+],i:i64,e:simd[i32]|
+			  merge(b:merger[i32,+],select(
+				(e:simd[i32]>broadcast(0)),
+				e:simd[i32],
+				broadcast(0):simd[i32]
+			  ))
+	))
+	";
     let conf = default_conf();
 
     let size = 1000;
@@ -713,7 +760,7 @@ fn simple_zipped_for_merger_loop() {
 
     let size = 2000;
     let x_data = vec![1; size as usize];
-    let y_data = vec![1; size as usize];
+    let y_data = vec![5; size as usize];
 
     let ref input_data = Args {
         x: WeldVec {
@@ -721,15 +768,15 @@ fn simple_zipped_for_merger_loop() {
             len: x_data.len() as i64,
         },
         y: WeldVec {
-            data: x_data.as_ptr(),
-            len: x_data.len() as i64,
+            data: y_data.as_ptr(),
+            len: y_data.len() as i64,
         },
     };
 
     let ret_value = compile_and_run(code, conf, input_data);
     let data = unsafe { weld_value_data(ret_value) as *const i32 };
     let result = unsafe { (*data).clone() };
-    let output = size * 2;
+    let output = size * (x_data[0] + y_data[0]);
     assert_eq!(result, output);
     unsafe { weld_value_free(ret_value) };
 }
@@ -1517,6 +1564,7 @@ fn main() {
              ("simple_parallel_for_appender_loop", simple_parallel_for_appender_loop),
              ("complex_parallel_for_appender_loop", complex_parallel_for_appender_loop),
              ("simple_for_vectorizable_loop", simple_for_vectorizable_loop),
+             ("fringed_for_vectorizable_loop", fringed_for_vectorizable_loop),
              ("for_predicated_vectorizable_loop", for_predicated_vectorizable_loop),
              ("simple_for_merger_loop", simple_for_merger_loop),
              ("simple_zipped_for_merger_loop", simple_zipped_for_merger_loop),

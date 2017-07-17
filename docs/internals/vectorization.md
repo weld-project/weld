@@ -46,11 +46,11 @@ The vectorizer performs the following steps:
 2. Copy the loop being vectorized an call it `vectorized_body`.
 3. For each expression in `vectorized_body`: Change the type of `Scalar` expressions to `Simd`
    expressions.
-4. Change the loop's iterator type to `VectorIter`. This directs the code generation to stop
+4. Change the loop's iterator type to `SimdIter`. This directs the code generation to stop
    iterating at a multiple of the vector size.
 5. Use the original (scalar) loop body to create a new "fringe" loop. Change the iterator type to
    `FringeIter`, which directs the code generation to only handle elements from where the
-   `VectorIter` would have stopped to the end of the iterator.
+   `SimdIter` would have stopped to the end of the iterator.
 6. Code generation. Most of the added complexity comes from computing index bounds for the fringe
    iterator and vector iterator.
 
@@ -60,6 +60,24 @@ The vectorizer performs the following steps:
 * `select(cond, on_true, on_false)` evaluates `cond`, `on_true`, and `on_false` and returns a value
   based on whether `cond` is `true` or `false`.
 * The `simd[T]` type is used to specify SIMD vectors.
+
+#### Iterators
+
+Fringing is handled via iterators, which specify which elements in a `for` loop to load. There are
+now three kinds of iterators:
+
+* `ScalarIter`: The grammar for this is `iter(x, ...)`. This is the usual iterator, and it load
+  every element specified by the iterator ([start, end) with the given stride).
+
+* `SimdIter`: The grammar for this is `simditer(x, ...)`. This loads all elements in chunks of the
+  vector size, up until the point where elements would not fill the vector. As an example:
+
+   `for(simditer([1,2,3,4,5]), ...)` will load a single `simd[i32]` with the elements `[1,2,3,4]`
+   (assuming the vector length is 4).
+
+* `FringeIter: The grammar for this is `fringeiter(x, ...)`. This loads the fringe of the
+  corresponding `SimdIter`. From the example above, this would load the single scalar `5` (assuming
+  a vector length of 4).
 
 ### Current Limitations and To Dos
 

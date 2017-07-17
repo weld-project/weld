@@ -71,7 +71,7 @@ pub fn broadcast_expr(expr: Expr<Type>) -> WeldResult<Expr<Type>> {
     let ty = if let Scalar(ref k) = expr.ty {
         Simd(k.clone())
     } else {
-        return weld_err!("Internal error: Mismatched types in negate_expr");
+        return weld_err!("Internal error: Mismatched types in broadcast_expr");
     };
     new_expr(Broadcast(Box::new(expr)), ty)
 }
