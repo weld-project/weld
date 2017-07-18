@@ -183,9 +183,28 @@ pub unsafe extern "C" fn weld_value_free(obj: *mut WeldValue) {
         // TODO(shoumik): Cache this? No need to compile it each time.
         let module = llvm::generate_runtime_interface_module().unwrap();
         let arg = run_id;
-        let _ = module.run(arg);
+        let _ = module.run_named("rt_run_free", arg);
     }
     Box::from_raw(obj);
+}
+
+#[no_mangle]
+/// Gets the memory allocated to a Weld value, which generally includes all memory allocated during
+/// the execution of the module that created it (Weld does not currently free intermediate values
+/// while running a module). Returns -1 if the value is not part of a valid Weld run.
+pub unsafe extern "C" fn weld_value_memory_usage(obj: *mut WeldValue) -> libc::int64_t {
+    if obj.is_null() {
+        return -1 as libc::int64_t;
+    }
+    let value = &mut *obj;
+    if let Some(run_id) = value.run_id {
+        // TODO: Cache this? No need to compile it each time.
+        let module = llvm::generate_runtime_interface_module().unwrap();
+        let arg = run_id;
+        return module.run_named("rt_memory_usage", arg).unwrap_or(-1) as libc::int64_t;
+    } else {
+        return -1 as libc::int64_t;
+    }
 }
 
 #[no_mangle]

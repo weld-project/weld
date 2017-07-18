@@ -60,8 +60,8 @@ impl From<NulError> for LlvmError {
     }
 }
 
-/// The type of our "run" function pointer.
-type RunFunc = extern "C" fn(i64) -> i64;
+/// The type of function pointer we'll return. We only support functions that take and return i64.
+type I64Func = extern "C" fn(i64) -> i64;
 
 /// A compiled module returned by `compile_module`, wrapping a `run` function that takes `i64`
 /// and returns `i64`. This structure includes (and manages) an LLVM execution engine, which is
@@ -70,13 +70,19 @@ type RunFunc = extern "C" fn(i64) -> i64;
 pub struct CompiledModule {
     context: LLVMContextRef,
     engine: Option<LLVMExecutionEngineRef>,
-    function: Option<RunFunc>,
+    run_function: Option<I64Func>,
 }
 
 impl CompiledModule {
-    /// Call the module's `run` function.
+    /// Call the module's `run` function, which must take and return i64.
     pub fn run(&self, arg: i64) -> i64 {
-        (self.function.unwrap())(arg)
+        (self.run_function.unwrap())(arg)
+    }
+
+    /// Call a named function in the module. The function must take and return i64.
+    pub fn run_named(&self, function_name: &str, arg: i64) -> Result<i64, LlvmError> {
+        let func = unsafe { find_function(self.engine.unwrap(), function_name)? };
+        Ok(func(arg))
     }
 }
 
@@ -133,27 +139,27 @@ pub fn compile_module(code: &str, bc_file: Option<&[u8]>) -> Result<CompiledModu
         let mut result = CompiledModule {
             context: context,
             engine: None,
-            function: None,
+            run_function: None,
         };
 
         // Parse the IR to get an LLVMModuleRef
-        let module = try!(parse_module_str(context, code));
+        let module = parse_module_str(context, code)?;
 
         if let Some(s) = bc_file {
-            let bc_module = try!(parse_module_bytes(context, s));
+            let bc_module = parse_module_bytes(context, s)?;
             llvm::linker::LLVMLinkModules2(module, bc_module);
         }
 
         // Validate and optimize the module
-        try!(verify_module(module));
-        try!(check_run_function(module));
-        try!(optimize_module(module));
+        verify_module(module)?;
+        check_run_function(module)?;
+        optimize_module(module)?;
 
         // Create an execution engine for the module and find its run function
-        let engine = try!(create_exec_engine(module));
+        let engine = create_exec_engine(module)?;
 
         result.engine = Some(engine);
-        result.function = Some(try!(find_run_function(engine)));
+        result.run_function = Some(find_function(engine, "run")?);
 
         Ok(result)
     }
@@ -203,7 +209,7 @@ unsafe fn parse_module_bytes(context: LLVMContextRef,
                              -> Result<LLVMModuleRef, LlvmError> {
     // Create an LLVM memory buffer around the code
     let code_len = code.len();
-    let name = try!(CString::new("module"));
+    let name = CString::new("module")?;
     let buffer = llvm::core::LLVMCreateMemoryBufferWithMemoryRange(code.as_ptr() as *const i8,
                                                                    code_len,
                                                                    name.as_ptr(),
@@ -222,8 +228,8 @@ unsafe fn parse_module_str(context: LLVMContextRef,
                            -> Result<LLVMModuleRef, LlvmError> {
     // Create an LLVM memory buffer around the code
     let code_len = code.len();
-    let name = try!(CString::new("module"));
-    let code = try!(CString::new(code));
+    let name = CString::new("module")?;
+    let code = CString::new(code)?;
     let buffer = llvm::core::LLVMCreateMemoryBufferWithMemoryRange(code.as_ptr(),
                                                                    code_len,
                                                                    name.as_ptr(),
@@ -329,13 +335,13 @@ unsafe fn create_exec_engine(module: LLVMModuleRef) -> Result<LLVMExecutionEngin
     Ok(engine)
 }
 
-/// Get a pointer to the "run" function in an execution engine.
-unsafe fn find_run_function(engine: LLVMExecutionEngineRef) -> Result<RunFunc, LlvmError> {
-    let run = CString::new("run").unwrap();
-    let func_addr = llvm::execution_engine::LLVMGetFunctionAddress(engine, run.as_ptr());
+/// Get a pointer to a named function in an execution engine.
+unsafe fn find_function(engine: LLVMExecutionEngineRef, name: &str) -> Result<I64Func, LlvmError> {
+    let c_name = CString::new(name).unwrap();
+    let func_addr = llvm::execution_engine::LLVMGetFunctionAddress(engine, c_name.as_ptr());
     if func_addr == 0 {
-        return Err(LlvmError::new("No run function in module"));
+        return Err(LlvmError(format!("No function named {} in module", name)));
     }
-    let function: RunFunc = std::mem::transmute(func_addr);
+    let function: I64Func = std::mem::transmute(func_addr);
     Ok(function)
 }
