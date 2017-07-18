@@ -81,12 +81,13 @@ now three kinds of iterators:
 
 ### Current Limitations and To Dos
 
-* Only the `merger` builder is supported
+* Only the `merger` builder is supported.
 * Scatters and gathers are not supported (iterators must look at all elements), and index
-  computations are disallowed in the for loop body)
+  computations are disallowed in the for loop body).
 * Nested loops not allowed. Indeed, only loops whose bodies contain the following expression kinds
   are allowed: `Literal`, `Ident`, `BinOp`, `Let`, `Merge`, `If`, `Select`, `GetField` (if its on
   the argument to the function).
+* Unary math operators are not yet supported.
 * Since the AST does not encode vector lengths, there is no way to express arbitrary vector literals
   at the moment. For example, there is no way to express a vector with the value `<1, 2, 3, 4>:simd[i32]`.
   Vectors composed of a single constant can be expressed using `broadcast`, however.
