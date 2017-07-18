@@ -1,15 +1,6 @@
 #ifndef _PARLIB_H_
 #define _PARLIB_H_
 
-// Memory allocation functions for Weld.
-extern "C" void *weld_rt_malloc(int64_t run_id, size_t size);
-extern "C" void *weld_rt_realloc(int64_t run_id, void *data, size_t size);
-extern "C" void weld_rt_free(int64_t run_id, void *data);
-
-// Error functions.
-extern "C" int64_t weld_rt_get_errno(int64_t run_id);
-extern "C" void weld_rt_set_errno(int64_t run_id, int64_t errno);
-
 // work item
 struct work_t {
   // parameters for the task function
@@ -102,6 +93,15 @@ extern "C" {
   void free_merger(void *m);
 
   void weld_abort_thread();
+
+  // Memory allocation functions for Weld.
+  void *weld_rt_malloc(int64_t run_id, size_t size);
+  void *weld_rt_realloc(int64_t run_id, void *data, size_t size);
+  void weld_rt_free(int64_t run_id, void *data);
+
+  // Error functions.
+  int64_t weld_rt_get_errno(int64_t run_id);
+  void weld_rt_set_errno(int64_t run_id, int64_t errno);
 }
 
 #endif

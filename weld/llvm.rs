@@ -25,7 +25,7 @@ use super::sir::Terminator::*;
 use super::transforms;
 use super::type_inference;
 use super::util::IdGenerator;
-use super::util::MERGER_BC;
+use super::util::LIB_WELD_RT;
 
 #[cfg(test)]
 use super::parser::*;
@@ -2574,13 +2574,6 @@ impl FunctionContext {
     }
 }
 
-/// Generates a small program which, when called with a `run_id`, frees
-/// memory associated with the run ID.
-pub fn generate_runtime_interface_module() -> WeldResult<easy_ll::CompiledModule> {
-    let program = include_str!("resources/runtime_interface_module.ll");
-    Ok(try!(easy_ll::compile_module(program, None)))
-}
-
 /// Generate a compiled LLVM module from a program whose body is a function.
 pub fn compile_program(program: &Program,
                        opt_passes: &Vec<Pass>,
@@ -2622,7 +2615,7 @@ pub fn compile_program(program: &Program,
         println!("LLVM program:\n{}\n", &llvm_code);
     }
 
-    Ok(try!(easy_ll::compile_module(&llvm_code, Some(MERGER_BC))))
+    Ok(try!(easy_ll::compile_module(&llvm_code, Some(LIB_WELD_RT))))
 }
 
 #[test]

@@ -175,17 +175,7 @@ pub unsafe extern "C" fn weld_value_data(obj: *const WeldValue) -> *const c_void
 /// Weld values which are not owned by the runtime only free the structure used
 /// to wrap the data; the actual data itself is owned by the caller.
 pub unsafe extern "C" fn weld_value_free(obj: *mut WeldValue) {
-    if obj.is_null() {
-        return;
-    }
-    let value = &mut *obj;
-    if let Some(run_id) = value.run_id {
-        // TODO(shoumik): Cache this? No need to compile it each time.
-        let module = llvm::generate_runtime_interface_module().unwrap();
-        let arg = run_id;
-        let _ = module.run_named("rt_run_free", arg);
-    }
-    Box::from_raw(obj);
+    // TODO implement
 }
 
 #[no_mangle]
@@ -193,18 +183,8 @@ pub unsafe extern "C" fn weld_value_free(obj: *mut WeldValue) {
 /// the execution of the module that created it (Weld does not currently free intermediate values
 /// while running a module). Returns -1 if the value is not part of a valid Weld run.
 pub unsafe extern "C" fn weld_value_memory_usage(obj: *mut WeldValue) -> libc::int64_t {
-    if obj.is_null() {
-        return -1 as libc::int64_t;
-    }
-    let value = &mut *obj;
-    if let Some(run_id) = value.run_id {
-        // TODO: Cache this? No need to compile it each time.
-        let module = llvm::generate_runtime_interface_module().unwrap();
-        let arg = run_id;
-        return module.run_named("rt_memory_usage", arg).unwrap_or(-1) as libc::int64_t;
-    } else {
-        return -1 as libc::int64_t;
-    }
+    // TODO implement
+    return 0;
 }
 
 #[no_mangle]
@@ -227,12 +207,6 @@ pub unsafe extern "C" fn weld_module_compile(code: *const c_char,
 
     let code = CStr::from_ptr(code);
     let code = code.to_str().unwrap().trim();
-
-    if let Err(e) = util::load_runtime_library() {
-        err.errno = WeldRuntimeErrno::RuntimeLibraryError;
-        err.message = CString::new(e).unwrap();
-        return std::ptr::null_mut();
-    }
 
     let parsed = parser::parse_program(code);
     if let Err(e) = parsed {
@@ -312,14 +286,28 @@ pub unsafe extern "C" fn weld_module_run(module: *mut WeldModule,
 }
 
 #[no_mangle]
+/// Returns memory usage of a Weld module.
+pub unsafe extern "C" fn weld_module_memory_usage(module: *mut WeldModule) -> libc::int64_t {
+    let module = &mut *module;
+    module.run_named("rt_memory_usage", 0).unwrap()
+}
+
+#[no_mangle]
+/// Frees all memory this module may have allocated.
+pub unsafe extern "C" fn weld_module_mem_free(module: *mut WeldModule) {
+    let module = &mut *module;
+    module.run_named("rt_run_free", 0).unwrap();
+}
+
+#[no_mangle]
 /// Frees a module.
 ///
-/// Freeing a module does not free the memory it may have allocated. Values returned by the module
-/// must be freed explicitly using `weld_value_free`.
+/// Freeing a module frees all memory it may have allocated.
 pub unsafe extern "C" fn weld_module_free(ptr: *mut easy_ll::CompiledModule) {
     if ptr.is_null() {
         return;
     }
+    weld_module_mem_free(ptr);
     Box::from_raw(ptr);
 }
 

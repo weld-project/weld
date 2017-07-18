@@ -26,6 +26,8 @@ declare void    @weld_rt_init(i64)
 declare i8*     @weld_rt_malloc(i64, i64)
 declare i8*     @weld_rt_realloc(i64, i8*, i64)
 declare void    @weld_rt_free(i64, i8*)
+declare void    @weld_rt_run_free(i64)
+declare i64     @weld_rt_memory_usage(i64)
 declare i32     @my_id_public()
 declare void    @weld_rt_set_errno(i64, i64)
 declare i64     @weld_rt_get_errno(i64)
@@ -65,6 +67,16 @@ declare i32 @get_nworkers()
 ; Run IDs
 declare void @set_runid(i64)
 declare i64 @get_runid()
+
+define i64 @rt_run_free(i64 %run_id) {
+    call void @weld_rt_run_free(i64 %run_id)
+    ret i64 0
+}
+
+define i64 @rt_memory_usage(i64 %run_id) {
+    %res = call i64 @weld_rt_memory_usage(i64 %run_id)
+    ret i64 %res
+}
 
 ; Hash functions
 
