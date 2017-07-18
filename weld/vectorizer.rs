@@ -360,9 +360,5 @@ pub fn vectorize(expr: &mut Expr<Type>) {
         // Check other expressions.
         Ok((None, true))
     });
-
-    if vectorized {
-        println!("Successfully vectorized");
-    }
 }
 
