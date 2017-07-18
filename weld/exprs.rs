@@ -75,6 +75,15 @@ pub fn negate_expr(expr: Expr<Type>) -> WeldResult<Expr<Type>> {
     new_expr(Negate(Box::new(expr)), ty)
 }
 
+pub fn broadcast_expr(expr: Expr<Type>) -> WeldResult<Expr<Type>> {
+    let ty = if let Scalar(ref k) = expr.ty {
+        Simd(k.clone())
+    } else {
+        return weld_err!("Internal error: Mismatched types in broadcast_expr");
+    };
+    new_expr(Broadcast(Box::new(expr)), ty)
+}
+
 pub fn tovec_expr(expr: Expr<Type>) -> WeldResult<Expr<Type>> {
     let ty = if let Dict(ref kt, ref vt) = expr.ty {
         Struct(vec![*kt.clone(), *vt.clone()])
@@ -216,6 +225,28 @@ pub fn if_expr(cond: Expr<Type>,
              ty)
 }
 
+pub fn select_expr(cond: Expr<Type>,
+               on_true: Expr<Type>,
+               on_false: Expr<Type>)
+               -> WeldResult<Expr<Type>> {
+    let err = weld_err!("Internal error: Mismatched types in select_expr");
+    if cond.ty != Scalar(ScalarKind::Bool) && cond.ty != Simd(ScalarKind::Bool) {
+        return err;
+    }
+
+    if on_true.ty != on_false.ty {
+        return err;
+    }
+
+    let ty = on_true.ty.clone();
+    new_expr(Select {
+                 cond: Box::new(cond),
+                 on_true: Box::new(on_true),
+                 on_false: Box::new(on_false),
+             },
+             ty)
+}
+
 pub fn lambda_expr(params: Vec<Parameter<Type>>, body: Expr<Type>) -> WeldResult<Expr<Type>> {
     let ty = Function(params.iter().map(|p| p.ty.clone()).collect(),
                       Box::new(body.ty.clone()));
@@ -296,9 +327,10 @@ pub fn newbuilder_expr(kind: BuilderKind, expr: Option<Expr<Type>>) -> WeldResul
              Builder(kind, Annotations::new()))
 }
 
+// TODO - the vectorized flag is temporary!
 pub fn for_expr(iters: Vec<Iter<Type>>,
                 builder: Expr<Type>,
-                func: Expr<Type>)
+                func: Expr<Type>, vectorized: bool)
                 -> WeldResult<Expr<Type>> {
 
     let vec_tys = iters.iter().map(|i| i.data.ty.clone()).collect::<Vec<_>>();
@@ -337,11 +369,33 @@ pub fn for_expr(iters: Vec<Iter<Type>>,
 
         // Check the element type.
         if iters.len() == 1 {
-            if *param_2_ty != vec_elem_tys[0] {
+            let elem_ty = if vectorized {
+                if let Scalar(ref sk) = vec_elem_tys[0] {
+                    Simd(sk.clone())
+                } else {
+                    return weld_err!("Internal error: Mismatched types in for_expr - bad vector",);
+                }
+            } else {
+                vec_elem_tys[0].clone()
+            };
+            if *param_2_ty != elem_ty {
                 return weld_err!("Internal error: Mismatched types in for_expr - function elem type",);
             }
         } else {
-            let composite_ty = Struct(vec_elem_tys.clone());
+            let composite_ty = if vectorized {
+                let mut vec_elem_tys_simd = vec![];
+                for ty in vec_elem_tys {
+                    if let Scalar(ref sk) = ty {
+                        vec_elem_tys_simd.push(Simd(sk.clone()))
+                    } else {
+                        return weld_err!("Internal error: Mismatched types in for_expr - bad vector",);
+                    }
+                }
+                Struct(vec_elem_tys_simd)
+            } else {
+                Struct(vec_elem_tys.clone())
+            };
+
             if *param_2_ty != composite_ty {
                 return weld_err!("Internal error: Mismatched types in for_expr - function zipped elem type",);
             }
@@ -454,6 +508,7 @@ fn builder_exprs_test() {
         start: None,
         end: None,
         stride: None,
+        kind: IterKind::ScalarIter,
     };
 
     // Create a list of params for the for loop's function.
@@ -475,7 +530,7 @@ fn builder_exprs_test() {
     let for_body = merge_expr(builder_iden.clone(), elem_iden.clone()).unwrap();
 
     let for_func = lambda_expr(params, for_body.clone()).unwrap();
-    let for_loop = for_expr(vec![iter], builder.clone(), for_func).unwrap();
+    let for_loop = for_expr(vec![iter], builder.clone(), for_func, false).unwrap();
 
     assert_eq!(print_expr_without_indent(&for_loop),
                "for([5],merger[i32,+],|b,i,e|merge(b,e))");

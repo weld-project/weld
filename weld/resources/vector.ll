@@ -4,6 +4,7 @@
 ; - NAME: name to give generated type, without % or @ prefix
 ; - ELEM: LLVM type of the element (e.g. i32 or %MyStruct)
 ; - ELEM_PREFIX: prefix for helper functions on ELEM (e.g. @i32 or @MyStruct)
+; - VECSIZE: Size of vectors.
 
 %$NAME = type { $ELEM*, i64 }           ; elements, size
 %$NAME.bld = type i8*

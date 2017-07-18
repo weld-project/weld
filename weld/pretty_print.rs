@@ -3,7 +3,6 @@ use std::iter::Iterator;
 
 use super::ast::*;
 use super::ast::BuilderKind::*;
-use super::ast::ScalarKind::*;
 use super::ast::Type::*;
 use super::ast::ExprKind::*;
 use super::ast::LiteralKind::*;
@@ -20,12 +19,12 @@ pub trait PrintableType: TypeBounds {
 impl PrintableType for Type {
     fn print(&self) -> String {
         match *self {
-            Scalar(Bool) => "bool".to_string(),
-            Scalar(I8) => "i8".to_string(),
-            Scalar(I32) => "i32".to_string(),
-            Scalar(I64) => "i64".to_string(),
-            Scalar(F32) => "f32".to_string(),
-            Scalar(F64) => "f64".to_string(),
+            Scalar(ref kind) => {
+                format!("{}", kind)
+            }
+            Simd(ref kind) => {
+                format!("simd[{}]", kind)
+            }
             Vector(ref elem) => format!("vec[{}]", elem.print()),
             Dict(ref kt, ref vt) => format!("dict[{},{}]", kt.print(), vt.print()),
             Struct(ref elems) => join("{", ",", "}", elems.iter().map(|e| e.print())),
@@ -65,12 +64,12 @@ impl PrintableType for PartialType {
         use partial_types::PartialBuilderKind::*;
         match *self {
             Unknown => "?".to_string(),
-            Scalar(Bool) => "bool".to_string(),
-            Scalar(I8) => "i8".to_string(),
-            Scalar(I32) => "i32".to_string(),
-            Scalar(I64) => "i64".to_string(),
-            Scalar(F32) => "f32".to_string(),
-            Scalar(F64) => "f64".to_string(),
+            Scalar(ref kind) => {
+                format!("{}", kind)
+            }
+            Simd(ref kind) => {
+                format!("simd[{}]", kind)
+            }
             Vector(ref elem) => format!("vec[{}]", elem.print()),
             Dict(ref kt, ref vt) => format!("dict[{},{}]", kt.print(), vt.print()),
             Struct(ref elems) => join("{", ",", "}", elems.iter().map(|e| e.print())),
@@ -93,7 +92,7 @@ impl PrintableType for PartialType {
                 format!("{}vecmerger[{},{}]", annotations, elem.print(), op)
             }
             Builder(Merger(ref t, op), ref annotations) => {
-                format!("{}merger[{},{}]", t.print(), annotations, op)
+                format!("{}merger[{},{}]", annotations, t.print(), op)
             }
             Builder(GroupMerger(ref kt, ref vt, _), ref annotations) => {
                 format!("{}groupmerger[{},{}]", annotations, kt.print(), vt.print())
@@ -139,6 +138,14 @@ pub fn print_typed_expr_without_indent<T: PrintableType>(expr: &Expr<T>) -> Stri
         .collect()
 }
 
+fn print_iter_kind<T: PrintableType>(iter: &Iter<T>) -> &str {
+    match iter.kind {
+        IterKind::ScalarIter => "",
+        IterKind::SimdIter => "simd",
+        IterKind::FringeIter => "fringe",
+    }
+}
+
 fn print_iters<T: PrintableType>(iters: &Vec<Iter<T>>,
                                  typed: bool,
                                  indent: i32,
@@ -153,7 +160,8 @@ fn print_iters<T: PrintableType>(iters: &Vec<Iter<T>>,
     }
     for iter in iters {
         if let Some(_) = iter.start {
-            iter_strs.push(format!("iter({},{},{},{})",
+            iter_strs.push(format!("{}iter({},{},{},{})",
+                                   print_iter_kind(iter),
                                    print_expr_impl(iter.data.as_ref(),
                                                    typed,
                                                    indent,
@@ -169,7 +177,13 @@ fn print_iters<T: PrintableType>(iters: &Vec<Iter<T>>,
                                    print_expr_impl(iter.stride.as_ref().unwrap(),
                                                    typed,
                                                    indent,
-                                                   should_indent)));
+                                                   should_indent),
+                                    ));
+        } else if iter.kind != IterKind::ScalarIter {
+            iter_strs.push(format!("{}iter({})",
+                print_iter_kind(iter),
+                print_expr_impl(iter.data.as_ref(), typed, indent, should_indent)
+            ));
         } else {
             iter_strs.push(print_expr_impl(iter.data.as_ref(), typed, indent + 2, should_indent));
         }
@@ -231,6 +245,8 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>,
         }
 
         Negate(ref e) => format!("(-{})", print_expr_impl(e, typed, indent, should_indent)),
+
+        Broadcast(ref e) => format!("broadcast({})", print_expr_impl(e, typed, indent, should_indent)),
 
         CUDF {
             ref sym_name,
@@ -351,8 +367,8 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>,
                                "|",
                                params.iter().map(|e| print_parameter(e, typed)));
             res.push_str(&format!("\n{}{}",
-                                 indent_str,
-                                 print_expr_impl(body, typed, indent + 2, should_indent)));
+                                  indent_str,
+                                  print_expr_impl(body, typed, indent + 2, should_indent)));
             res
         }
 
@@ -413,6 +429,21 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>,
                     less_indent_str)
         }
 
+        Select {
+            ref cond,
+            ref on_true,
+            ref on_false,
+        } => {
+            format!("select(\n{}{},\n{}{},\n{}{}\n{})",
+                    indent_str,
+                    print_expr_impl(cond, typed, indent + 2, should_indent),
+                    indent_str,
+                    print_expr_impl(on_true, typed, indent + 2, should_indent),
+                    indent_str,
+                    print_expr_impl(on_false, typed, indent + 2, should_indent),
+                    less_indent_str)
+        }
+
         Apply {
             ref func,
             ref params,
@@ -425,6 +456,33 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>,
                                    .iter()
                                    .map(|e| print_expr_impl(e, typed, indent, should_indent))));
             res
+        }
+    }
+}
+
+/// Print a vector literal value.
+pub fn print_vector_literal(lit: &LiteralKind) -> String {
+    match *lit {
+        BoolLiteral(v) => format!("<{}, {}, ..>", v, v),
+        I8Literal(v) => format!("<{}, {}, ..>", v, v),
+        I32Literal(v) => format!("<{}, {}, ..>", v, v),
+        I64Literal(v) => format!("<{}L, {}L, ..>", v, v),
+        F32Literal(v) => {
+            let mut res = format!("{}", v);
+            // Hack to disambiguate from integers.
+            if !res.contains(".") {
+                res.push_str(".0");
+            }
+            res.push_str("F");
+            format!("<{}, {}, ..>", &res, &res)
+        }
+        F64Literal(v) => {
+            let mut res = format!("{}", v);
+            // Hack to disambiguate from integers.
+            if !res.contains(".") {
+                res.push_str(".0");
+            }
+            format!("<{}, {}, ..>", &res, &res)
         }
     }
 }

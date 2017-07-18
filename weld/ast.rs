@@ -42,6 +42,7 @@ impl fmt::Display for Symbol {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Type {
     Scalar(ScalarKind),
+    Simd(ScalarKind),
     Vector(Box<Type>),
     Dict(Box<Type>, Box<Type>),
     Builder(BuilderKind, Annotations),
@@ -109,15 +110,15 @@ pub struct Annotations {
 impl Annotations {
     pub fn new() -> Annotations {
         return Annotations {
-                   builder_implementation: None,
-                   predicate: None,
-                   vectorize: None,
-                   tile_size: None,
-                   grain_size: None,
-                   size: None,
-                   branch_selectivity: None,
-                   num_keys: None,
-               };
+            builder_implementation: None,
+            predicate: None,
+            vectorize: None,
+            tile_size: None,
+            grain_size: None,
+            size: None,
+            branch_selectivity: None,
+            num_keys: None,
+        };
     }
 
     pub fn builder_implementation(&self) -> &Option<BuilderImplementationKind> {
@@ -275,6 +276,26 @@ pub struct Expr<T: TypeBounds> {
     pub annotations: Annotations,
 }
 
+/// An iterator kind, which specifies how data should be loaded and passed to a `For` loop.
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+pub enum IterKind {
+    ScalarIter, // A standard scalar iterator.
+    SimdIter, // A vector iterator.
+    FringeIter, // A fringe iterator, handling the fringe of a vector iter.
+}
+
+impl fmt::Display for IterKind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use ast::IterKind::*;
+        let text = match *self {
+            ScalarIter => "scalar",
+            SimdIter => "vectorized",
+            FringeIter => "fringe",
+        };
+        f.write_str(text)
+    }
+}
+
 /// An iterator, which specifies a vector to iterate over and optionally a start index,
 /// end index, and stride.
 #[derive(Clone, Debug, PartialEq)]
@@ -283,6 +304,7 @@ pub struct Iter<T: TypeBounds> {
     pub start: Option<Box<Expr<T>>>,
     pub end: Option<Box<Expr<T>>>,
     pub stride: Option<Box<Expr<T>>>,
+    pub kind: IterKind,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -291,6 +313,8 @@ pub enum ExprKind<T: TypeBounds> {
     Literal(LiteralKind),
     Ident(Symbol),
     Negate(Box<Expr<T>>),
+    // Broadcasts a scalar into a vector, e.g., 1 -> <1, 1, 1, 1>
+    Broadcast(Box<Expr<T>>),
     BinOp {
         kind: BinOpKind,
         left: Box<Expr<T>>,
@@ -329,6 +353,11 @@ pub enum ExprKind<T: TypeBounds> {
         body: Box<Expr<T>>,
     },
     If {
+        cond: Box<Expr<T>>,
+        on_true: Box<Expr<T>>,
+        on_false: Box<Expr<T>>,
+    },
+    Select {
         cond: Box<Expr<T>>,
         on_true: Box<Expr<T>>,
         on_false: Box<Expr<T>>,
@@ -464,179 +493,190 @@ impl<T: TypeBounds> Expr<T> {
     pub fn children(&self) -> vec::IntoIter<&Expr<T>> {
         use self::ExprKind::*;
         match self.kind {
-                BinOp {
-                    ref left,
-                    ref right,
-                    ..
-                } => vec![left.as_ref(), right.as_ref()],
-                UnaryOp {ref value, ..} => vec![value.as_ref()],
-                Cast { ref child_expr, .. } => vec![child_expr.as_ref()],
-                ToVec { ref child_expr } => vec![child_expr.as_ref()],
-                Let {
-                    ref value,
-                    ref body,
-                    ..
-                } => vec![value.as_ref(), body.as_ref()],
-                Lambda { ref body, .. } => vec![body.as_ref()],
-                MakeStruct { ref elems } => elems.iter().collect(),
-                MakeVector { ref elems } => elems.iter().collect(),
-                Zip { ref vectors } => vectors.iter().collect(),
-                GetField { ref expr, .. } => vec![expr.as_ref()],
-                Length { ref data } => vec![data.as_ref()],
-                Lookup {
-                    ref data,
-                    ref index,
-                } => vec![data.as_ref(), index.as_ref()],
-                KeyExists { ref data, ref key } => vec![data.as_ref(), key.as_ref()],
-                Slice {
-                    ref data,
-                    ref index,
-                    ref size,
-                } => vec![data.as_ref(), index.as_ref(), size.as_ref()],
-                Merge {
-                    ref builder,
-                    ref value,
-                } => vec![builder.as_ref(), value.as_ref()],
-                Res { ref builder } => vec![builder.as_ref()],
-                For {
-                    ref iters,
-                    ref builder,
-                    ref func,
-                } => {
-                    let mut res: Vec<&Expr<T>> = vec![];
-                    for iter in iters {
-                        res.push(iter.data.as_ref());
-                        if let Some(ref s) = iter.start {
-                            res.push(s);
-                        }
-                        if let Some(ref e) = iter.end {
-                            res.push(e);
-                        }
-                        if let Some(ref s) = iter.stride {
-                            res.push(s);
-                        }
+            BinOp {
+                ref left,
+                ref right,
+                ..
+            } => vec![left.as_ref(), right.as_ref()],
+            UnaryOp {ref value, ..} => vec![value.as_ref()],
+            Cast { ref child_expr, .. } => vec![child_expr.as_ref()],
+            ToVec { ref child_expr } => vec![child_expr.as_ref()],
+            Let {
+                ref value,
+                ref body,
+                ..
+            } => vec![value.as_ref(), body.as_ref()],
+            Lambda { ref body, .. } => vec![body.as_ref()],
+            MakeStruct { ref elems } => elems.iter().collect(),
+            MakeVector { ref elems } => elems.iter().collect(),
+            Zip { ref vectors } => vectors.iter().collect(),
+            GetField { ref expr, .. } => vec![expr.as_ref()],
+            Length { ref data } => vec![data.as_ref()],
+            Lookup {
+                ref data,
+                ref index,
+            } => vec![data.as_ref(), index.as_ref()],
+            KeyExists { ref data, ref key } => vec![data.as_ref(), key.as_ref()],
+            Slice {
+                ref data,
+                ref index,
+                ref size,
+            } => vec![data.as_ref(), index.as_ref(), size.as_ref()],
+            Merge {
+                ref builder,
+                ref value,
+            } => vec![builder.as_ref(), value.as_ref()],
+            Res { ref builder } => vec![builder.as_ref()],
+            For {
+                ref iters,
+                ref builder,
+                ref func,
+            } => {
+                let mut res: Vec<&Expr<T>> = vec![];
+                for iter in iters {
+                    res.push(iter.data.as_ref());
+                    if let Some(ref s) = iter.start {
+                        res.push(s);
                     }
-                    res.push(builder.as_ref());
-                    res.push(func.as_ref());
-                    res
-                }
-                If {
-                    ref cond,
-                    ref on_true,
-                    ref on_false,
-                } => vec![cond.as_ref(), on_true.as_ref(), on_false.as_ref()],
-                Apply {
-                    ref func,
-                    ref params,
-                } => {
-                    let mut res = vec![func.as_ref()];
-                    res.extend(params.iter());
-                    res
-                }
-                NewBuilder(ref opt) => {
-                    if let Some(ref e) = *opt {
-                        vec![e.as_ref()]
-                    } else {
-                        vec![]
+                    if let Some(ref e) = iter.end {
+                        res.push(e);
+                    }
+                    if let Some(ref s) = iter.stride {
+                        res.push(s);
                     }
                 }
-                CUDF { ref args, .. } => args.iter().collect(),
-                Negate(ref t) => vec![t.as_ref()],
-                // Explicitly list types instead of doing _ => ... to remember to add new types.
-                Literal(_) | Ident(_) => vec![],
+                res.push(builder.as_ref());
+                res.push(func.as_ref());
+                res
             }
-            .into_iter()
+            If {
+                ref cond,
+                ref on_true,
+                ref on_false,
+            } => vec![cond.as_ref(), on_true.as_ref(), on_false.as_ref()],
+            Select {
+                ref cond,
+                ref on_true,
+                ref on_false,
+            } => vec![cond.as_ref(), on_true.as_ref(), on_false.as_ref()],
+            Apply {
+                ref func,
+                ref params,
+            } => {
+                let mut res = vec![func.as_ref()];
+                res.extend(params.iter());
+                res
+            }
+            NewBuilder(ref opt) => {
+                if let Some(ref e) = *opt {
+                    vec![e.as_ref()]
+                } else {
+                    vec![]
+                }
+            }
+            CUDF { ref args, .. } => args.iter().collect(),
+            Negate(ref t) => vec![t.as_ref()],
+            Broadcast(ref t) => vec![t.as_ref()],
+            // Explicitly list types instead of doing _ => ... to remember to add new types.
+            Literal(_) | Ident(_) => vec![],
+        }.into_iter()
     }
 
     /// Get an iterator of mutable references to the children of this expression.
     pub fn children_mut(&mut self) -> vec::IntoIter<&mut Expr<T>> {
         use self::ExprKind::*;
         match self.kind {
-                BinOp {
-                    ref mut left,
-                    ref mut right,
-                    ..
-                } => vec![left.as_mut(), right.as_mut()],
-                UnaryOp { ref mut value, .. } => vec![value.as_mut()],
-                Cast { ref mut child_expr, .. } => vec![child_expr.as_mut()],
-                ToVec { ref mut child_expr } => vec![child_expr.as_mut()],
-                Let {
-                    ref mut value,
-                    ref mut body,
-                    ..
-                } => vec![value.as_mut(), body.as_mut()],
-                Lambda { ref mut body, .. } => vec![body.as_mut()],
-                MakeStruct { ref mut elems } => elems.iter_mut().collect(),
-                MakeVector { ref mut elems } => elems.iter_mut().collect(),
-                Zip { ref mut vectors } => vectors.iter_mut().collect(),
-                GetField { ref mut expr, .. } => vec![expr.as_mut()],
-                Length { ref mut data } => vec![data.as_mut()],
-                Lookup {
-                    ref mut data,
-                    ref mut index,
-                } => vec![data.as_mut(), index.as_mut()],
-                KeyExists {
-                    ref mut data,
-                    ref mut key,
-                } => vec![data.as_mut(), key.as_mut()],
-                Slice {
-                    ref mut data,
-                    ref mut index,
-                    ref mut size,
-                } => vec![data.as_mut(), index.as_mut(), size.as_mut()],
-                Merge {
-                    ref mut builder,
-                    ref mut value,
-                } => vec![builder.as_mut(), value.as_mut()],
-                Res { ref mut builder } => vec![builder.as_mut()],
-                For {
-                    ref mut iters,
-                    ref mut builder,
-                    ref mut func,
-                } => {
-                    let mut res: Vec<&mut Expr<T>> = vec![];
-                    for iter in iters {
-                        res.push(iter.data.as_mut());
-                        if let Some(ref mut s) = iter.start {
-                            res.push(s);
-                        }
-                        if let Some(ref mut e) = iter.end {
-                            res.push(e);
-                        }
-                        if let Some(ref mut s) = iter.stride {
-                            res.push(s);
-                        }
+            BinOp {
+                ref mut left,
+                ref mut right,
+                ..
+            } => vec![left.as_mut(), right.as_mut()],
+            UnaryOp { ref mut value, .. } => vec![value.as_mut()],
+            Cast { ref mut child_expr, .. } => vec![child_expr.as_mut()],
+            ToVec { ref mut child_expr } => vec![child_expr.as_mut()],
+            Let {
+                ref mut value,
+                ref mut body,
+                ..
+            } => vec![value.as_mut(), body.as_mut()],
+            Lambda { ref mut body, .. } => vec![body.as_mut()],
+            MakeStruct { ref mut elems } => elems.iter_mut().collect(),
+            MakeVector { ref mut elems } => elems.iter_mut().collect(),
+            Zip { ref mut vectors } => vectors.iter_mut().collect(),
+            GetField { ref mut expr, .. } => vec![expr.as_mut()],
+            Length { ref mut data } => vec![data.as_mut()],
+            Lookup {
+                ref mut data,
+                ref mut index,
+            } => vec![data.as_mut(), index.as_mut()],
+            KeyExists {
+                ref mut data,
+                ref mut key,
+            } => vec![data.as_mut(), key.as_mut()],
+            Slice {
+                ref mut data,
+                ref mut index,
+                ref mut size,
+            } => vec![data.as_mut(), index.as_mut(), size.as_mut()],
+            Merge {
+                ref mut builder,
+                ref mut value,
+            } => vec![builder.as_mut(), value.as_mut()],
+            Res { ref mut builder } => vec![builder.as_mut()],
+            For {
+                ref mut iters,
+                ref mut builder,
+                ref mut func,
+            } => {
+                let mut res: Vec<&mut Expr<T>> = vec![];
+                for iter in iters {
+                    res.push(iter.data.as_mut());
+                    if let Some(ref mut s) = iter.start {
+                        res.push(s);
                     }
-                    res.push(builder.as_mut());
-                    res.push(func.as_mut());
-                    res
-                }
-                If {
-                    ref mut cond,
-                    ref mut on_true,
-                    ref mut on_false,
-                } => vec![cond.as_mut(), on_true.as_mut(), on_false.as_mut()],
-                Apply {
-                    ref mut func,
-                    ref mut params,
-                } => {
-                    let mut res = vec![func.as_mut()];
-                    res.extend(params.iter_mut());
-                    res
-                }
-                NewBuilder(ref mut opt) => {
-                    if let Some(ref mut e) = *opt {
-                        vec![e.as_mut()]
-                    } else {
-                        vec![]
+                    if let Some(ref mut e) = iter.end {
+                        res.push(e);
+                    }
+                    if let Some(ref mut s) = iter.stride {
+                        res.push(s);
                     }
                 }
-                CUDF { ref mut args, .. } => args.iter_mut().collect(),
-                Negate(ref mut t) => vec![t.as_mut()],
-                // Explicitly list types instead of doing _ => ... to remember to add new types.
-                Literal(_) | Ident(_) => vec![],
+                res.push(builder.as_mut());
+                res.push(func.as_mut());
+                res
             }
-            .into_iter()
+            If {
+                ref mut cond,
+                ref mut on_true,
+                ref mut on_false,
+            } => vec![cond.as_mut(), on_true.as_mut(), on_false.as_mut()],
+            Select {
+                ref mut cond,
+                ref mut on_true,
+                ref mut on_false,
+            } => vec![cond.as_mut(), on_true.as_mut(), on_false.as_mut()],
+
+            Apply {
+                ref mut func,
+                ref mut params,
+            } => {
+                let mut res = vec![func.as_mut()];
+                res.extend(params.iter_mut());
+                res
+            }
+            NewBuilder(ref mut opt) => {
+                if let Some(ref mut e) = *opt {
+                    vec![e.as_mut()]
+                } else {
+                    vec![]
+                }
+            }
+            CUDF { ref mut args, .. } => args.iter_mut().collect(),
+            Negate(ref mut t) => vec![t.as_mut()],
+            Broadcast(ref mut t) => vec![t.as_mut()],
+            // Explicitly list types instead of doing _ => ... to remember to add new types.
+            Literal(_) | Ident(_) => vec![],
+        }.into_iter()
     }
 
     /// Compares two expression trees, returning true if they are the same modulo symbol names.
@@ -686,6 +726,7 @@ impl<T: TypeBounds> Expr<T> {
                 }
                 (&NewBuilder(_), &NewBuilder(_)) => Ok(true),
                 (&Negate(_), &Negate(_)) => Ok(true),
+                (&Broadcast(_), &Broadcast(_)) => Ok(true),
                 (&MakeStruct { .. }, &MakeStruct { .. }) => Ok(true),
                 (&MakeVector { .. }, &MakeVector { .. }) => Ok(true),
                 (&Zip { .. }, &Zip { .. }) => Ok(true),
@@ -698,8 +739,9 @@ impl<T: TypeBounds> Expr<T> {
                 (&Slice { .. }, &Slice { .. }) => Ok(true),
                 (&Merge { .. }, &Merge { .. }) => Ok(true),
                 (&Res { .. }, &Res { .. }) => Ok(true),
-                (&For { .. }, &For { .. }) => Ok(true),
+                (&For { .. }, &For { .. }) => Ok(true), // TODO need to check Iters?
                 (&If { .. }, &If { .. }) => Ok(true),
+                (&Select { .. }, &Select { .. }) => Ok(true),
                 (&Apply { .. }, &Apply { .. }) => Ok(true),
                 (&CUDF {
                      sym_name: ref sym_name1,
@@ -824,6 +866,30 @@ impl<T: TypeBounds> Expr<T> {
         }
     }
 
+    /// Recursively transforms an expression in place by running a function on it and optionally replacing it with another expression.
+    /// Supports returning an error, which is treated as returning (None, false)
+    pub fn transform_and_continue_res<F>(&mut self, func: &mut F)
+        where F: FnMut(&mut Expr<T>) -> WeldResult<(Option<Expr<T>>, bool)>
+        {
+            if let Ok(result) = func(self) {
+                match result {
+                    (Some(e), true) => {
+                        *self = e;
+                        return self.transform_and_continue_res(func);
+                    }
+                    (Some(e), false) => {
+                        *self = e;
+                    }
+                    (None, true) => {
+                        for c in self.children_mut() {
+                            c.transform_and_continue_res(func);
+                        }
+                    }
+                    (None, false) => {}
+                }
+            }
+        }
+
 
     /// Recursively transforms an expression in place by running a function on it and optionally replacing it with another expression.
     pub fn transform<F>(&mut self, func: &mut F)
@@ -839,7 +905,7 @@ impl<T: TypeBounds> Expr<T> {
     }
 
     /// Returns true if this expressions contains `other`.
-    pub fn contains(&mut self, other: &Expr<T>) -> bool {
+    pub fn contains(&self, other: &Expr<T>) -> bool {
         if *self == *other {
             return true;
         }

@@ -14,6 +14,7 @@ use super::ast::BuilderImplementationKind::*;
 use super::ast::ExprKind::*;
 use super::ast::LiteralKind::*;
 use super::ast::ScalarKind;
+use super::ast::IterKind::*;
 use super::error::*;
 use super::partial_types::*;
 use super::partial_types::PartialBuilderKind::*;
@@ -434,8 +435,9 @@ impl<'t> Parser<'t> {
     /// Parses a for loop iterator expression starting at the current position. This could also be
     /// a vector expression (i.e., without an explicit iter(..).
     fn parse_iter(&mut self) -> WeldResult<Iter<PartialType>> {
-        if *self.peek() == TIter {
-            try!(self.consume(TIter));
+        let iter: Token = self.peek().clone();
+        if *self.peek() == TScalarIter || *self.peek() == TSimdIter || *self.peek() == TFringeIter {
+            try!(self.consume(iter.clone()));
             try!(self.consume(TOpenParen));
             let data = try!(self.expr());
             let mut start = None;
@@ -454,6 +456,11 @@ impl<'t> Parser<'t> {
                 start: start,
                 end: end,
                 stride: stride,
+                kind: match iter {
+                    TSimdIter => SimdIter,
+                    TFringeIter => FringeIter,
+                    _ => ScalarIter,
+                },
             };
             try!(self.consume(TCloseParen));
             Ok(iter)
@@ -464,6 +471,11 @@ impl<'t> Parser<'t> {
                 start: None,
                 end: None,
                 stride: None,
+                kind: match iter {
+                    TSimdIter => SimdIter,
+                    TFringeIter => FringeIter,
+                    _ => ScalarIter,
+                },
             };
             Ok(iter)
         }
@@ -706,6 +718,28 @@ impl<'t> Parser<'t> {
                                 on_true: on_true,
                                 on_false: on_false,
                             }))
+            }
+
+            TSelect => {
+                try!(self.consume(TOpenParen));
+                let cond = try!(self.expr());
+                try!(self.consume(TComma));
+                let on_true = try!(self.expr());
+                try!(self.consume(TComma));
+                let on_false = try!(self.expr());
+                try!(self.consume(TCloseParen));
+                Ok(expr_box(Select {
+                                cond: cond,
+                                on_true: on_true,
+                                on_false: on_false,
+                            }))
+            }
+
+            TBroadcast => {
+                try!(self.consume(TOpenParen));
+                let expr = try!(self.expr());
+                try!(self.consume(TCloseParen));
+                Ok(expr_box(Broadcast(expr)))
             }
 
             TCUDF => {
@@ -1040,6 +1074,17 @@ impl<'t> Parser<'t> {
                 let elem_type = try!(self.type_());
                 try!(self.consume(TCloseBracket));
                 Ok(Vector(Box::new(elem_type)))
+            }
+
+            TSimd => {
+                try!(self.consume(TOpenBracket));
+                let elem_type = try!(self.type_());
+                try!(self.consume(TCloseBracket));
+                if let Scalar(ref kind) = elem_type {
+                    Ok(Simd(kind.clone()))
+                } else {
+                    weld_err!("Expected Scalar type in simd")
+                }
             }
 
             TAppender => {

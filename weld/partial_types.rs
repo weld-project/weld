@@ -10,6 +10,7 @@ use super::error::*;
 pub enum PartialType {
     Unknown,
     Scalar(ScalarKind),
+    Simd(ScalarKind),
     Vector(Box<PartialType>),
     Dict(Box<PartialType>, Box<PartialType>),
     Builder(PartialBuilderKind, Annotations),
@@ -54,6 +55,7 @@ impl PartialType {
         match *self {
             Unknown => weld_err!("Incomplete partial type"),
             Scalar(kind) => Ok(Type::Scalar(kind)),
+            Simd(kind) => Ok(Type::Simd(kind)),
             Vector(ref elem) => Ok(Type::Vector(Box::new(try!(elem.to_type())))),
             Dict(ref kt, ref vt) => {
                 Ok(Type::Dict(Box::new(try!(kt.to_type())), Box::new(try!(vt.to_type()))))
@@ -106,6 +108,7 @@ impl PartialType {
         match *self {
             Unknown => false,
             Scalar(_) => true,
+            Simd(_) => true,
             Vector(ref elem) => elem.is_complete(),
             Dict(ref kt, ref vt) => kt.is_complete() && vt.is_complete(),
             Builder(Appender(ref elem), _) => elem.is_complete(),
@@ -345,6 +348,7 @@ impl PartialExpr {
                         start: start,
                         end: end,
                         stride: stride,
+                        kind: iter.kind.clone(),
                     };
                     typed_iters.push(typed_iter);
                 }
@@ -361,6 +365,18 @@ impl PartialExpr {
                 ref on_false,
             } => {
                 If {
+                    cond: try!(typed_box(cond)),
+                    on_true: try!(typed_box(on_true)),
+                    on_false: try!(typed_box(on_false)),
+                }
+            }
+
+            Select {
+                ref cond,
+                ref on_true,
+                ref on_false,
+            } => {
+                Select {
                     cond: try!(typed_box(cond)),
                     on_true: try!(typed_box(on_true)),
                     on_false: try!(typed_box(on_false)),
@@ -385,6 +401,7 @@ impl PartialExpr {
                 NewBuilder(typed_arg)
             }
             Negate(ref expr) => Negate(try!(typed_box(expr))),
+            Broadcast(ref expr) => Broadcast(try!(typed_box(expr))),
         };
 
         Ok(TypedExpr {

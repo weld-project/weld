@@ -26,7 +26,7 @@ pub const DEFAULT_THREADS: i64 = 1;
 pub const DEFAULT_LOG_LEVEL: LogLevel = LogLevel::None;
 lazy_static! {
     pub static ref DEFAULT_OPTIMIZATION_PASSES: Vec<Pass> = {
-        let m = ["inline-apply", "inline-let", "inline-zip", "loop-fusion"];
+        let m = ["inline-apply", "inline-let", "inline-zip", "loop-fusion", "vectorize"];
         m.iter().map(|e| (*OPTIMIZATION_PASSES.get(e).unwrap()).clone()).collect()
     };
 }

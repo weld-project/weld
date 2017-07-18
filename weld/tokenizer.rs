@@ -37,12 +37,17 @@ pub enum Token {
     TBool,
     TVec,
     TZip,
-    TIter,
+    TScalarIter,
+    TSimdIter,
+    TFringeIter,
     TLen,
     TLookup,
     TKeyExists,
     TSlice,
     TExp,
+    TSimd,
+    TSelect,
+    TBroadcast,
     TLog,
     TErf,
     TSqrt,
@@ -96,7 +101,7 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
 
         // Regular expressions for various types of tokens.
         static ref KEYWORD_RE: Regex = Regex::new(
-            "if|for|zip|len|lookup|keyexists|slice|exp|log|erf|sqrt|cudf|iter|merge|result|let|true|false|macro|\
+            "if|for|zip|len|lookup|keyexists|slice|exp|log|erf|sqrt|simd|select|broadcast|cudf|simditer|fringeiter|iter|merge|result|let|true|false|macro|\
              i8|i32|i64|f32|f64|bool|vec|appender|merger|vecmerger|dictmerger|groupmerger|\
              tovec").unwrap();
 
@@ -149,7 +154,9 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
                             "vecmerger" => TVecMerger,
                             "tovec" => TToVec,
                             "zip" => TZip,
-                            "iter" => TIter,
+                            "iter" => TScalarIter,
+                            "simditer" => TSimdIter,
+                            "fringeiter" => TFringeIter,
                             "len" => TLen,
                             "lookup" => TLookup,
                             "keyexists" => TKeyExists,
@@ -159,6 +166,9 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
                             "erf" => TErf,
                             "sqrt" => TSqrt,
                             "cudf" => TCUDF,
+                            "simd" => TSimd,
+                            "select" => TSelect,
+                            "broadcast" => TBroadcast,
                             "true" => TBoolLiteral(true),
                             "false" => TBoolLiteral(false),
                             _ => return weld_err!("Invalid input token: {}", text),
@@ -278,7 +288,9 @@ impl fmt::Display for Token {
                     TVecMerger => "vecmerger",
                     TToVec => "tovec",
                     TZip => "zip",
-                    TIter => "iter",
+                    TScalarIter => "iter",
+                    TSimdIter => "simditer",
+                    TFringeIter => "fringeiter",
                     TLen => "len",
                     TLookup => "lookup",
                     TKeyExists => "keyexists",
@@ -288,6 +300,9 @@ impl fmt::Display for Token {
                     TErf => "erf",
                     TSqrt => "sqrt",
                     TCUDF => "cudf",
+                    TSimd => "simd",
+                    TSelect => "select",
+                    TBroadcast => "broadcast",
                     TOpenParen => "(",
                     TCloseParen => ")",
                     TOpenBracket => "[",

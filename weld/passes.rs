@@ -1,6 +1,7 @@
 use super::ast::*;
 use super::error::*;
 use super::transforms;
+use super::vectorizer;
 
 use std::collections::HashMap;
 
@@ -59,6 +60,9 @@ lazy_static! {
                  Pass::new(vec![transforms::fuse_loops_horizontal,
                                 transforms::fuse_loops_vertical],
                  "loop-fusion"));
+        m.insert("vectorize",
+                 Pass::new(vec![vectorizer::vectorize],
+                 "vectorize"));
         m
     };
 }
