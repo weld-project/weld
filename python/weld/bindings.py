@@ -93,6 +93,13 @@ class WeldValue(c_void_p):
         weld_value_data.restype = c_void_p
         return weld_value_data(self.val)
 
+    def memory_usage(self):
+        self._check()
+        weld_value_memory_usage = weld.weld_value_memory_usage
+        weld_value_memory_usage.argtypes = [c_weld_value]
+        weld_value_memory_usage.restype = c_int64
+        return weld_value_memory_usage(self.val)
+
     def free(self):
         self._check()
         weld_value_free = weld.weld_value_free

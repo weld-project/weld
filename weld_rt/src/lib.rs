@@ -269,3 +269,14 @@ pub extern "C" fn weld_rt_set_errno(run_id: libc::int64_t, errno: WeldRuntimeErr
     let entry = guarded.entry(run_id).or_insert(errno);
     *entry = errno;
 }
+
+#[no_mangle]
+/// Returns the current memory allocated to a run ID, or -1 if it is an invalid ID.
+pub extern "C" fn weld_rt_memory_usage(run_id: libc::int64_t) -> i64 {
+    let mut guarded = ALLOCATIONS.lock().unwrap();
+    if let Some(mem_info) = guarded.get(&run_id) {
+        return mem_info.mem_allocated;
+    } else {
+        return -1;
+    }
+}
