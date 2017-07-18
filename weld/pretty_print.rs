@@ -26,7 +26,9 @@ impl PrintableType for Type {
                 format!("simd[{}]", kind)
             }
             Vector(ref elem) => format!("vec[{}]", elem.print()),
-            Dict(ref kt, ref vt) => format!("dict[{},{}]", kt.print(), vt.print()),
+            Dict(ref kt, ref vt, ref annotations) => {
+                format!("{}dict[{},{}]", annotations, kt.print(), vt.print())
+            }
             Struct(ref elems) => join("{", ",", "}", elems.iter().map(|e| e.print())),
             Function(ref params, ref ret) => {
                 let mut res = join("|", ",", "|(", params.iter().map(|e| e.print()));
@@ -71,7 +73,9 @@ impl PrintableType for PartialType {
                 format!("simd[{}]", kind)
             }
             Vector(ref elem) => format!("vec[{}]", elem.print()),
-            Dict(ref kt, ref vt) => format!("dict[{},{}]", kt.print(), vt.print()),
+            Dict(ref kt, ref vt, ref annotations) => {
+                format!("{}dict[{},{}]", annotations, kt.print(), vt.print())
+            }
             Struct(ref elems) => join("{", ",", "}", elems.iter().map(|e| e.print())),
             Function(ref params, ref ret) => {
                 let mut res = join("(", ",", ")=>", params.iter().map(|e| e.print()));

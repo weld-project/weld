@@ -44,7 +44,7 @@ pub enum Type {
     Scalar(ScalarKind),
     Simd(ScalarKind),
     Vector(Box<Type>),
-    Dict(Box<Type>, Box<Type>),
+    Dict(Box<Type>, Box<Type>, Annotations),
     Builder(BuilderKind, Annotations),
     Struct(Vec<Type>),
     Function(Vec<Type>, Box<Type>),

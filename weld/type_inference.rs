@@ -155,7 +155,7 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
 
             if let Vector(ref mut elem_type) = expr.ty {
                 if let Struct(ref mut field_types) = **elem_type {
-                    if let Dict(ref key_type, ref value_type) = child_expr.ty {
+                    if let Dict(ref key_type, ref value_type, _) = child_expr.ty {
                         for (field_ty, child_expr_field) in
                             field_types
                                 .iter_mut()
@@ -308,7 +308,7 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
                 changed |= try!(push_complete_type(&mut index.ty, Scalar(I64), "Lookup"));
                 changed |= try!(push_type(&mut expr.ty, &elem_type, "Lookup"));
                 Ok(changed)
-            } else if let Dict(ref key_type, ref value_type) = data.ty {
+            } else if let Dict(ref key_type, ref value_type, _) = data.ty {
                 let mut changed = false;
                 changed |= try!(push_type(&mut index.ty, &key_type, "Lookup"));
                 changed |= try!(push_type(&mut expr.ty, &value_type, "Lookup"));
@@ -324,7 +324,7 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             ref mut data,
             ref mut key,
         } => {
-            if let Dict(ref key_type, _) = data.ty {
+            if let Dict(ref key_type, _, _) = data.ty {
                 let mut changed = false;
                 changed |= try!(push_type(&mut key.ty, &key_type, "KeyExists"));
                 changed |= try!(push_complete_type(&mut expr.ty, Scalar(Bool), "KeyExists"));
@@ -386,9 +386,17 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
         Res { ref mut builder } => {
             let mut changed = false;
             match builder.ty {
-                Builder(ref mut b, _) => {
+                Builder(ref b, ref src_annotations) => {
                     let rty = b.result_type();
                     changed |= try!(push_type(&mut expr.ty, &rty, "Res"));
+                    if let Dict(_, _, ref mut dest_annotations) = expr.ty {
+                        if *dest_annotations != *src_annotations {
+                            if !src_annotations.is_empty() {
+                                *dest_annotations = src_annotations.clone();
+                                changed |= true;
+                            }
+                        }
+                    }
                 }
                 Unknown => (),
                 _ => return weld_err!("Internal error: Result called on non-builder"),
@@ -630,13 +638,19 @@ fn push_type(dest: &mut PartialType, src: &PartialType, context: &str) -> WeldRe
             }
         }
 
-        Dict(ref mut dest_key_ty, ref mut dest_value_ty) => {
+        Dict(ref mut dest_key_ty, ref mut dest_value_ty, ref mut dest_annotations) => {
             match *src {
-                Dict(ref src_key_ty, ref src_value_ty) => {
+                Dict(ref src_key_ty, ref src_value_ty, ref src_annotations) => {
                     let mut changed = false;
                     changed |= try!(push_type(dest_key_ty.as_mut(), src_key_ty.as_ref(), context));
                     changed |=
                         try!(push_type(dest_value_ty.as_mut(), src_value_ty.as_ref(), context));
+                    if *dest_annotations != *src_annotations {
+                        if !src_annotations.is_empty() {
+                            *dest_annotations = src_annotations.clone();
+                            changed |= true;
+                        }
+                    }
                     Ok(changed)
                 }
                 _ => weld_err!("Mismatched types in Dict, {}", context),

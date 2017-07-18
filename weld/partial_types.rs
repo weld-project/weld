@@ -12,7 +12,7 @@ pub enum PartialType {
     Scalar(ScalarKind),
     Simd(ScalarKind),
     Vector(Box<PartialType>),
-    Dict(Box<PartialType>, Box<PartialType>),
+    Dict(Box<PartialType>, Box<PartialType>, Annotations),
     Builder(PartialBuilderKind, Annotations),
     Struct(Vec<PartialType>),
     Function(Vec<PartialType>, Box<PartialType>),
@@ -57,8 +57,9 @@ impl PartialType {
             Scalar(kind) => Ok(Type::Scalar(kind)),
             Simd(kind) => Ok(Type::Simd(kind)),
             Vector(ref elem) => Ok(Type::Vector(Box::new(try!(elem.to_type())))),
-            Dict(ref kt, ref vt) => {
-                Ok(Type::Dict(Box::new(try!(kt.to_type())), Box::new(try!(vt.to_type()))))
+            Dict(ref kt, ref vt, ref annotations) => {
+                Ok(Type::Dict(Box::new(try!(kt.to_type())), Box::new(try!(vt.to_type())),
+                              annotations.clone()))
             }
             Builder(Appender(ref elem), ref annotations) => {
                 Ok(Type::Builder(BuilderKind::Appender(Box::new(try!(elem.to_type()))),
@@ -110,7 +111,7 @@ impl PartialType {
             Scalar(_) => true,
             Simd(_) => true,
             Vector(ref elem) => elem.is_complete(),
-            Dict(ref kt, ref vt) => kt.is_complete() && vt.is_complete(),
+            Dict(ref kt, ref vt, _) => kt.is_complete() && vt.is_complete(),
             Builder(Appender(ref elem), _) => elem.is_complete(),
             Builder(DictMerger(ref kt, ref vt, _, _), _) => kt.is_complete() && vt.is_complete(),
             Builder(GroupMerger(ref kt, ref vt, _), _) => kt.is_complete() && vt.is_complete(),
@@ -152,8 +153,8 @@ impl PartialBuilderKind {
         use self::PartialBuilderKind::*;
         match *self {
             Appender(ref elem) => Vector((*elem).clone()),
-            DictMerger(ref kt, ref vt, _, _) => Dict((*kt).clone(), (*vt).clone()),
-            GroupMerger(ref kt, ref vt, _) => Dict((*kt).clone(), Box::new(Vector((*vt).clone()))),
+            DictMerger(ref kt, ref vt, _, _) => Dict((*kt).clone(), (*vt).clone(), Annotations::new()),
+            GroupMerger(ref kt, ref vt, _) => Dict((*kt).clone(), Box::new(Vector((*vt).clone())), Annotations::new()),
             VecMerger(ref elem, _, _) => Vector((*elem).clone()),
             Merger(ref elem, _) => *elem.clone(),
         }

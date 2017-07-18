@@ -85,7 +85,7 @@ pub fn broadcast_expr(expr: Expr<Type>) -> WeldResult<Expr<Type>> {
 }
 
 pub fn tovec_expr(expr: Expr<Type>) -> WeldResult<Expr<Type>> {
-    let ty = if let Dict(ref kt, ref vt) = expr.ty {
+    let ty = if let Dict(ref kt, ref vt, _) = expr.ty {
         Struct(vec![*kt.clone(), *vt.clone()])
     } else {
         return weld_err!("Internal error: Mismatched types in tovec_expr");
@@ -149,7 +149,7 @@ pub fn lookup_expr(data: Expr<Type>, index: Expr<Type>) -> WeldResult<Expr<Type>
 
 pub fn keyexists_expr(data: Expr<Type>, key: Expr<Type>) -> WeldResult<Expr<Type>> {
     let err = weld_err!("Internal error: Mismatched types in keyexists_expr");
-    let kt = if let Dict(ref kt, _) = data.ty {
+    let kt = if let Dict(ref kt, _, _) = data.ty {
         *kt.clone()
     } else {
         return err;
@@ -446,12 +446,12 @@ pub fn merge_expr(builder: Expr<Type>, value: Expr<Type>) -> WeldResult<Expr<Typ
 
 pub fn result_expr(builder: Expr<Type>) -> WeldResult<Expr<Type>> {
     let err = weld_err!("Internal error: Mismatched types in result_expr");
-    let ty = if let Builder(ref bk, _) = builder.ty {
+    let ty = if let Builder(ref bk, ref annotations) = builder.ty {
         match *bk {
             Appender(ref elem_ty) => Vector(elem_ty.clone()),
             Merger(ref elem_ty, _) => *elem_ty.clone(),
-            DictMerger(ref kt, ref vt, _) => Dict(kt.clone(), vt.clone()),
-            GroupMerger(ref kt, ref vt) => Dict(kt.clone(), Box::new(Vector(vt.clone()))),
+            DictMerger(ref kt, ref vt, _) => Dict(kt.clone(), vt.clone(), annotations.clone()),
+            GroupMerger(ref kt, ref vt) => Dict(kt.clone(), Box::new(Vector(vt.clone())), annotations.clone()),
             VecMerger(ref elem_ty, _) => Vector(elem_ty.clone()),
         }
     } else {
