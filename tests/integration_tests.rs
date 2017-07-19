@@ -14,6 +14,7 @@ use weld::{weld_module_compile, weld_module_run, weld_module_free};
 use weld::{weld_error_new, weld_error_code, weld_error_message, weld_error_free};
 use weld::{weld_conf_new, weld_conf_set, weld_conf_free};
 
+use std::f64::consts::PI;
 use std::ffi::{CStr, CString};
 use libc::{c_char, c_void};
 
@@ -129,8 +130,33 @@ fn basic_program() {
     unsafe { weld_value_free(ret_value) };
 }
 
+fn float_literals() {
+    let values = vec![0.0, PI, -PI, 1.2e20, -1.2e-20];
+    for v in values {
+        // Try parsing the value as a double
+        let code = format!("|| {:e}", v);
+        let conf = default_conf();
+        let ref input_data = 0;
+        let ret_value = compile_and_run(&code, conf, input_data);
+        let data = unsafe { weld_value_data(ret_value) as *const f64 };
+        let result = unsafe { *data };
+        assert_eq!(result, v);
+        unsafe { weld_value_free(ret_value) };
+
+        // Try parsing the value as a float
+        let code = format!("|| {:e}f", v);
+        let conf = default_conf();
+        let ref input_data = 0;
+        let ret_value = compile_and_run(&code, conf, input_data);
+        let data = unsafe { weld_value_data(ret_value) as *const f32 };
+        let result = unsafe { *data };
+        assert_eq!(result, v as f32);
+        unsafe { weld_value_free(ret_value) };
+    }
+}
+
 fn negation() {
-    let code = "|| -1";
+    let code = "|| -(1)";
     let conf = default_conf();
 
     let ref input_data = 0;
@@ -144,7 +170,7 @@ fn negation() {
 }
 
 fn negation_double() {
-    let code = "|| -1.0";
+    let code = "|| -(1.0)";
     let conf = default_conf();
 
     let ref input_data = 0;
@@ -1592,6 +1618,7 @@ fn main() {
     let args: Vec<String> = env::args().collect();
     let tests: Vec<(&str, fn())> =
         vec![("basic_program", basic_program),
+             ("float_literals", float_literals),
              ("negation", negation),
              ("negation_double", negation_double),
              ("negated_arithmetic", negated_arithmetic),
