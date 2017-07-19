@@ -994,7 +994,7 @@ impl LlvmGenerator {
     }
 
     fn generate_vector_literal(&mut self,
-                               output: String,
+                               output: &str,
                                value: &LiteralKind,
                                vec_ty: &Type,
                                ctx: &mut FunctionContext)
@@ -1034,14 +1034,14 @@ impl LlvmGenerator {
     /// into the builder using a binary operation. The result will be stored back into the
     /// pointer to complete the merge. `builder_ptr` is the pointer into which the original value
     /// is read and the new value will be stored. `merge_value` is the value to merge in.
-    fn gen_bin_op_merge(&mut self,
-                        builder_ptr: String,
-                        merge_value: String,
-                        merge_ty_str: String,
-                        bin_op: &BinOpKind,
-                        merge_ty: &Type,
-                        ctx: &mut FunctionContext)
-                        -> WeldResult<()> {
+    fn gen_merge_op(&mut self,
+                    builder_ptr: &str,
+                    merge_value: &str,
+                    merge_ty_str: &str,
+                    bin_op: &BinOpKind,
+                    merge_ty: &Type,
+                    ctx: &mut FunctionContext)
+                    -> WeldResult<()> {
         let builder_value = ctx.var_ids.next();
         let mut res = ctx.var_ids.next();
         ctx.code.add(format!("{} = load {}, {}* {}", &builder_value, &merge_ty_str, &merge_ty_str, &builder_ptr));
@@ -1539,7 +1539,7 @@ impl LlvmGenerator {
             AssignLiteral { ref output, ref value } => {
                 let ty = get_sym_ty(func, output)?;
                 if let Simd(_) = *ty {
-                    self.generate_vector_literal(llvm_symbol(output), value, ty, ctx)?;
+                    self.generate_vector_literal(&llvm_symbol(output), value, ty, ctx)?;
                 } else {
                     match *value {
                         BoolLiteral(l) => {
@@ -1573,161 +1573,10 @@ impl LlvmGenerator {
             }
 
             NewBuilder { ref output, ref arg, ref ty } => {
-                match *ty {
-                    Builder(ref bk, ref annotations) => {
-                        let mut builder_size = 16;
-                        if let Some(ref e) = *annotations.size() {
-                            builder_size = e.clone();
-                        }
-                        // TODO(Deepak): Do something with annotations here...
-                        match *bk {
-                            Appender(_) => {
-                                let bld_ty_str = try!(self.llvm_type(ty));
-                                let bld_prefix = format!("@{}", bld_ty_str.replace("%", ""));
-                                let bld_tmp = ctx.var_ids.next();
-                                ctx.code.add(format!(
-                                    "{} = call {} {}.new(i64 {}, %work_t* \
-                                                    %cur.work)",
-                                    bld_tmp,
-                                    bld_ty_str,
-                                    bld_prefix,
-                                    builder_size
-                                ));
-                                ctx.code.add(format!("store {} {}, {}* {}",
-                                                        bld_ty_str,
-                                                        bld_tmp,
-                                                        bld_ty_str,
-                                                        llvm_symbol(output)));
-                            }
-                            Merger(ref elem_ty, ref op) => {
-                                let bld_ty_str = self.llvm_type(ty)?.to_string();
-                                let elem_type = (self.llvm_type(elem_ty)?).to_string();
-                                let bld_prefix = format!("@{}", bld_ty_str.replace("%", ""));
-                                let bld_tmp = ctx.var_ids.next();
-                                ctx.code.add(format!("{} = call {} {}.new()", bld_tmp, bld_ty_str, bld_prefix));
-
-                                // Generate code to initialize the builder.
-                                let iden_elem = binop_identity(*op, elem_ty.as_ref())?;
-                                let init_elem = match *arg {
-                                    Some(ref s) => {
-                                        let arg_str = self.load_var(llvm_symbol(s).as_str(), &elem_type, ctx)?;
-                                        arg_str
-                                    }
-                                    _ => iden_elem.clone(),
-                                };
-
-                                let first = ctx.var_ids.next();
-                                let first_raw = ctx.var_ids.next();
-                                let nworkers = ctx.var_ids.next();
-                                let i = ctx.var_ids.next();
-                                let cur_ptr = ctx.var_ids.next();
-                                let cur_bld_ptr = ctx.var_ids.next();
-                                let i2 = ctx.var_ids.next();
-                                let cond = ctx.var_ids.next();
-                                let cond2 = ctx.var_ids.next();
-
-                                // Generate label names.
-                                let label_base = ctx.var_ids.next();
-                                let mut label_ids = IdGenerator::new(&label_base.replace("%", ""));
-                                let entry = label_ids.next();
-                                let body = label_ids.next();
-                                let done = label_ids.next();
-
-
-                                ctx.code.add(format!(include_str!("resources/merger/init_merger.ll"),
-                                                        first = first,
-                                                        first_raw = first_raw,
-                                                        nworkers = nworkers,
-                                                        bld_ty_str = bld_ty_str,
-                                                        bld_prefix = bld_prefix,
-                                                        init_elem = init_elem,
-                                                        elem_type = elem_type,
-                                                        cond = cond,
-                                                        iden_elem = iden_elem,
-                                                        bld_inp = bld_tmp,
-                                                        i = i,
-                                                        cur_ptr = cur_ptr,
-                                                        cur_bld_ptr = cur_bld_ptr,
-                                                        i2 = i2,
-                                                        cond2 = cond2,
-                                                        entry = entry,
-                                                        body = body,
-                                                        done = done));
-
-                                ctx.code.add(format!("store {} {}, {}* {}",
-                                                        bld_ty_str,
-                                                        bld_tmp,
-                                                        bld_ty_str,
-                                                        llvm_symbol(output)));
-                            }
-                            DictMerger(_, _, _) => {
-                                let bld_ty_str = try!(self.llvm_type(ty));
-                                let bld_prefix = format!("@{}", bld_ty_str.replace("%", ""));
-                                let bld_tmp = ctx.var_ids.next();
-                                ctx.code.add(format!("{} = call {} {}.new(i64 {})",
-                                                        bld_tmp,
-                                                        bld_ty_str,
-                                                        bld_prefix,
-                                                        builder_size));
-                                ctx.code.add(format!("store {} {}, {}* {}",
-                                                        bld_ty_str,
-                                                        bld_tmp,
-                                                        bld_ty_str,
-                                                        llvm_symbol(output)));
-                            }
-                            GroupMerger(_, _) => {
-                                let bld_ty_str = try!(self.llvm_type(ty)).to_string();
-                                let bld_prefix = format!("@{}", bld_ty_str.replace("%", ""));
-                                let bld_tmp = ctx.var_ids.next();
-                                ctx.code.add(format!(
-                                    "{} = call {} {}.new(i64 {}, %work_t* \
-                                                    %cur.work)",
-                                    bld_tmp,
-                                    bld_ty_str,
-                                    bld_prefix,
-                                    builder_size
-                                ));
-                                ctx.code.add(format!("store {} {}, {}* {}",
-                                                        bld_ty_str,
-                                                        bld_tmp,
-                                                        bld_ty_str,
-                                                        llvm_symbol(output)));
-                            }
-                            VecMerger(ref elem, ref op) => {
-                                if *op != BinOpKind::Add {
-                                    return weld_err!("VecMerger only supports +");
-                                }
-                                match *arg {
-                                    Some(ref s) => {
-                                        let bld_ty_str = try!(self.llvm_type(ty)).to_string();
-                                        let bld_prefix = format!("@{}", bld_ty_str.replace("%", ""));
-                                        let arg_ty = try!(self.llvm_type(&Vector(elem.clone()))).to_string();
-                                        let arg_ty_str = arg_ty.to_string();
-                                        let arg_str = self.load_var(llvm_symbol(s).as_str(), &arg_ty_str, ctx)?;
-
-                                        let bld_tmp = ctx.var_ids.next();
-                                        ctx.code.add(format!("{} = call {} {}.new({} \
-                                                                {})",
-                                                                bld_tmp,
-                                                                bld_ty_str,
-                                                                bld_prefix,
-                                                                arg_ty_str,
-                                                                arg_str));
-                                        ctx.code.add(format!("store {} {}, {}* {}",
-                                                                bld_ty_str,
-                                                                bld_tmp,
-                                                                bld_ty_str,
-                                                                llvm_symbol(output)));
-                                    }
-                                    None => {
-                                        weld_err!("Internal error: NewBuilder(VecMerger) \
-                                                    expected argument in LLVM codegen")?
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    _ => weld_err!("Non builder type {} found in NewBuilder", print_type(ty))?,
+                if let Builder(ref bld_kind, ref annotations) = *ty {
+                    self.gen_new_builder(bld_kind, annotations, arg, output, func, ctx)?;
+                } else {
+                    return weld_err!("Non builder type {} found in NewBuilder", print_type(ty))
                 }
             }
         }
@@ -1747,7 +1596,7 @@ impl LlvmGenerator {
         let bld_ty_str = self.llvm_type(&bld_ty)?.to_string();
         let bld_prefix = format!("@{}", bld_ty_str.replace("%", ""));
 
-        // TODO(Deepak): Do something with annotations here...
+        // TODO(Deepak): Do something with annotations here too...
         match *builder_kind {
             Appender(ref t) => {
                 let bld_tmp = try!(self.load_var(llvm_symbol(builder).as_str(), &bld_ty_str, ctx));
@@ -1827,7 +1676,7 @@ impl LlvmGenerator {
                         bld_ptr_raw=bld_ptr_raw));
                 }
 
-                self.gen_bin_op_merge(bld_ptr, elem_tmp, elem_ty_str, op, t, ctx)?;
+                self.gen_merge_op(&bld_ptr, &elem_tmp, &elem_ty_str, op, t, ctx)?;
             }
 
             VecMerger(ref t, ref op) => {
@@ -1852,7 +1701,7 @@ impl LlvmGenerator {
                                         bld_ptr,
                                         bld_ptr_raw,
                                         elem_ty_str));
-                self.gen_bin_op_merge(bld_ptr, elem_var, elem_ty_str, op, t, ctx)?;
+                self.gen_merge_op(&bld_ptr, &elem_var, &elem_ty_str, op, t, ctx)?;
             }
         }
         
@@ -1978,18 +1827,8 @@ impl LlvmGenerator {
                                         done = done_label));
 
                 // Add the scalar and vector values to the aggregate result.
-                self.gen_bin_op_merge(scalar_ptr.to_string(),
-                                      val_scalar.to_string(),
-                                      elem_ty_str.to_string(),
-                                      op,
-                                      t,
-                                      ctx)?;
-                self.gen_bin_op_merge(vector_ptr.to_string(),
-                                      val_vector.to_string(),
-                                      elem_vec_ty_str.to_string(),
-                                      op,
-                                      t,
-                                      ctx)?;
+                self.gen_merge_op(&scalar_ptr, &val_scalar, &elem_ty_str, op, t, ctx)?;
+                self.gen_merge_op(&vector_ptr, &val_vector, &elem_vec_ty_str, op, t, ctx)?;
 
                 ctx.code.add(format!(include_str!("resources/merger/merger_result_end_vectorized_1.ll"),
                         nworkers = nworkers,
@@ -2014,12 +1853,7 @@ impl LlvmGenerator {
                         done_v=done_label_v,
                         output=output_str));
 
-                try!(self.gen_bin_op_merge(output_str.to_string(),
-                                           val_v.to_string(),
-                                           res_ty_str.to_string(),
-                                           op,
-                                           t,
-                                           ctx));
+                self.gen_merge_op(&output_str, &val_v, &res_ty_str, op, t, ctx)?;
 
                 ctx.code.add(format!(include_str!("resources/merger/merger_result_end_vectorized_2.ll"),
                         i_v=i_v,
@@ -2180,7 +2014,7 @@ impl LlvmGenerator {
                                     bldType = bld_ty_str,
                                     bldPrefix = bld_prefix));
 
-                self.gen_bin_op_merge(merge_ptr, merge_value, elem_ty_str, op, t, ctx)?;
+                self.gen_merge_op(&merge_ptr, &merge_value, &elem_ty_str, op, t, ctx)?;
 
                 ctx.code.add(format!(include_str!("resources/vecmerger/vecmerger_result_end.ll"),
                                     j2 = j2,
@@ -2201,6 +2035,164 @@ impl LlvmGenerator {
                                     buildPtr = bld_ptr,
                                     bldType = bld_ty_str,
                                     output = llvm_symbol(output)));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Generate code for a NewBuilder statement, creating a builder of the given type with a given `arg` and
+    /// storing the result in an `output` symbol. Appends the code to a given FunctionContext.
+    fn gen_new_builder(&mut self,
+                       builder_kind: &BuilderKind,
+                       annotations: &Annotations,
+                       arg: &Option<Symbol>,
+                       output: &Symbol,
+                       func: &SirFunction,
+                       ctx: &mut FunctionContext)
+                       -> WeldResult<()> {
+        let bld_ty = get_sym_ty(func, output)?;
+        let bld_ty_str = self.llvm_type(bld_ty)?.to_string();
+        let bld_prefix = format!("@{}", bld_ty_str.replace("%", ""));
+
+        let mut builder_size = 16;
+        if let Some(ref e) = *annotations.size() {
+            builder_size = e.clone();
+        }
+
+        // TODO(Deepak): Do more with annotations here...
+        match *builder_kind {
+            Appender(_) => {
+                let bld_tmp = ctx.var_ids.next();
+                ctx.code.add(format!(
+                    "{} = call {} {}.new(i64 {}, %work_t* \
+                                    %cur.work)",
+                    bld_tmp,
+                    bld_ty_str,
+                    bld_prefix,
+                    builder_size
+                ));
+                ctx.code.add(format!("store {} {}, {}* {}",
+                                        bld_ty_str,
+                                        bld_tmp,
+                                        bld_ty_str,
+                                        llvm_symbol(output)));
+            }
+            Merger(ref elem_ty, ref op) => {
+                let elem_type = (self.llvm_type(elem_ty)?).to_string();
+                let bld_tmp = ctx.var_ids.next();
+                ctx.code.add(format!("{} = call {} {}.new()", bld_tmp, bld_ty_str, bld_prefix));
+
+                // Generate code to initialize the builder.
+                let iden_elem = binop_identity(*op, elem_ty.as_ref())?;
+                let init_elem = match *arg {
+                    Some(ref s) => {
+                        let arg_str = self.load_var(llvm_symbol(s).as_str(), &elem_type, ctx)?;
+                        arg_str
+                    }
+                    _ => iden_elem.clone(),
+                };
+
+                let first = ctx.var_ids.next();
+                let first_raw = ctx.var_ids.next();
+                let nworkers = ctx.var_ids.next();
+                let i = ctx.var_ids.next();
+                let cur_ptr = ctx.var_ids.next();
+                let cur_bld_ptr = ctx.var_ids.next();
+                let i2 = ctx.var_ids.next();
+                let cond = ctx.var_ids.next();
+                let cond2 = ctx.var_ids.next();
+
+                // Generate label names.
+                let label_base = ctx.var_ids.next();
+                let mut label_ids = IdGenerator::new(&label_base.replace("%", ""));
+                let entry = label_ids.next();
+                let body = label_ids.next();
+                let done = label_ids.next();
+
+                ctx.code.add(format!(include_str!("resources/merger/init_merger.ll"),
+                                        first = first,
+                                        first_raw = first_raw,
+                                        nworkers = nworkers,
+                                        bld_ty_str = bld_ty_str,
+                                        bld_prefix = bld_prefix,
+                                        init_elem = init_elem,
+                                        elem_type = elem_type,
+                                        cond = cond,
+                                        iden_elem = iden_elem,
+                                        bld_inp = bld_tmp,
+                                        i = i,
+                                        cur_ptr = cur_ptr,
+                                        cur_bld_ptr = cur_bld_ptr,
+                                        i2 = i2,
+                                        cond2 = cond2,
+                                        entry = entry,
+                                        body = body,
+                                        done = done));
+
+                ctx.code.add(format!("store {} {}, {}* {}",
+                                        bld_ty_str,
+                                        bld_tmp,
+                                        bld_ty_str,
+                                        llvm_symbol(output)));
+            }
+            DictMerger(_, _, _) => {
+                let bld_tmp = ctx.var_ids.next();
+                ctx.code.add(format!("{} = call {} {}.new(i64 {})",
+                                        bld_tmp,
+                                        bld_ty_str,
+                                        bld_prefix,
+                                        builder_size));
+                ctx.code.add(format!("store {} {}, {}* {}",
+                                        bld_ty_str,
+                                        bld_tmp,
+                                        bld_ty_str,
+                                        llvm_symbol(output)));
+            }
+            GroupMerger(_, _) => {
+                let bld_tmp = ctx.var_ids.next();
+                ctx.code.add(format!(
+                    "{} = call {} {}.new(i64 {}, %work_t* \
+                                    %cur.work)",
+                    bld_tmp,
+                    bld_ty_str,
+                    bld_prefix,
+                    builder_size
+                ));
+                ctx.code.add(format!("store {} {}, {}* {}",
+                                        bld_ty_str,
+                                        bld_tmp,
+                                        bld_ty_str,
+                                        llvm_symbol(output)));
+            }
+            VecMerger(ref elem, ref op) => {
+                if *op != BinOpKind::Add {
+                    return weld_err!("VecMerger only supports +");
+                }
+                match *arg {
+                    Some(ref s) => {
+                        let arg_ty = try!(self.llvm_type(&Vector(elem.clone()))).to_string();
+                        let arg_ty_str = arg_ty.to_string();
+                        let arg_str = self.load_var(llvm_symbol(s).as_str(), &arg_ty_str, ctx)?;
+                        let bld_tmp = ctx.var_ids.next();
+                        ctx.code.add(format!("{} = call {} {}.new({} \
+                                                {})",
+                                                bld_tmp,
+                                                bld_ty_str,
+                                                bld_prefix,
+                                                arg_ty_str,
+                                                arg_str));
+                        ctx.code.add(format!("store {} {}, {}* {}",
+                                                bld_ty_str,
+                                                bld_tmp,
+                                                bld_ty_str,
+                                                llvm_symbol(output)));
+                    }
+                    None => {
+                        weld_err!("Internal error: NewBuilder(VecMerger) \
+                                    expected argument in LLVM codegen")?
+                    }
+                }
             }
         }
 
