@@ -5,6 +5,7 @@
 from ctypes import *
 
 import os
+from os.path import join as pjoin, dirname
 import platform
 import copy
 
@@ -18,13 +19,7 @@ elif system == 'Darwin':
 else:
     raise OSError("Unsupported platform {}", system)
 
-if "WELD_HOME" not in os.environ:
-    raise Exception("Set the WELD_HOME environment variable")
-home = os.environ["WELD_HOME"]
-if home[-1] != "/":
-    home += "/"
-
-path = home + "target/release/" + path
+path = pjoin(dirname(dirname(dirname(__file__))), "target", "release", path)
 
 # Load the Weld Dynamic Library.
 weld = CDLL(path)
