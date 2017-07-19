@@ -1925,16 +1925,16 @@ impl LlvmGenerator {
                 let res_tmp = ctx.var_ids.next();
 
                 ctx.code.add(format!("{} = call {} {}({} {})",
-                                        res_tmp,
-                                        bld_ty_str,
-                                        func_str,
-                                        kv_vec_builder_ty,
-                                        bld_tmp));
+                                      res_tmp,
+                                      bld_ty_str,
+                                      func_str,
+                                      kv_vec_builder_ty,
+                                      bld_tmp));
                 ctx.code.add(format!("store {} {}, {}* {}",
-                                        res_ty_str,
-                                        res_tmp,
-                                        res_ty_str,
-                                        llvm_symbol(output)));
+                                     res_ty_str,
+                                     res_tmp,
+                                     res_ty_str,
+                                     llvm_symbol(output)));
             }
 
             VecMerger(ref t, ref op) => {
@@ -1982,8 +1982,7 @@ impl LlvmGenerator {
                 let done_label = label_ids.next();
                 let raw_ptr = ctx.var_ids.next();
 
-                ctx.code
-                    .add(format!(include_str!("resources/vecmerger/vecmerger_result_start.ll"),
+                ctx.code.add(format!(include_str!("resources/vecmerger/vecmerger_result_start.ll"),
                                     nworkers = nworkers,
                                     t0 = t0,
                                     buildPtr = bld_ptr,
