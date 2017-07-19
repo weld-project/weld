@@ -179,9 +179,8 @@ pub unsafe extern "C" fn weld_value_free(obj: *mut WeldValue) {
 }
 
 #[no_mangle]
-/// Gets the memory allocated to a Weld value, which generally includes all memory allocated during
-/// the execution of the module that created it (Weld does not currently free intermediate values
-/// while running a module). Returns -1 if the value is not part of a valid Weld run.
+/// Gets the memory allocated to a Weld value, including memory for objects this value contains.
+/// Returns -1 if the value is not part of a valid Weld run.
 pub unsafe extern "C" fn weld_value_memory_usage(obj: *mut WeldValue) -> libc::int64_t {
     // TODO implement
     return 0;
@@ -286,14 +285,15 @@ pub unsafe extern "C" fn weld_module_run(module: *mut WeldModule,
 }
 
 #[no_mangle]
-/// Returns memory usage of a Weld module.
+/// Returns memory usage of a Weld module. This includes unfreed memory allocated over
+/// all prior runs of the module.
 pub unsafe extern "C" fn weld_module_memory_usage(module: *mut WeldModule) -> libc::int64_t {
     let module = &mut *module;
     module.run_named("rt_memory_usage", 0).unwrap()
 }
 
 #[no_mangle]
-/// Frees all memory this module may have allocated.
+/// Frees all unfreed memory allocated by this module over all prior runs.
 pub unsafe extern "C" fn weld_module_mem_free(module: *mut WeldModule) {
     let module = &mut *module;
     module.run_named("rt_run_free", 0).unwrap();
@@ -302,7 +302,7 @@ pub unsafe extern "C" fn weld_module_mem_free(module: *mut WeldModule) {
 #[no_mangle]
 /// Frees a module.
 ///
-/// Freeing a module frees all memory it may have allocated.
+/// Freeing a module frees all unfreed memory it has allocated over all prior runs.
 pub unsafe extern "C" fn weld_module_free(ptr: *mut easy_ll::CompiledModule) {
     if ptr.is_null() {
         return;
