@@ -156,7 +156,7 @@ fn float_literals() {
 }
 
 fn negation() {
-    let code = "|| -1";
+    let code = "|| -(1)";
     let conf = default_conf();
 
     let ref input_data = 0;
@@ -170,7 +170,7 @@ fn negation() {
 }
 
 fn negation_double() {
-    let code = "|| -1.0";
+    let code = "|| -(1.0)";
     let conf = default_conf();
 
     let ref input_data = 0;

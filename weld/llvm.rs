@@ -38,6 +38,75 @@ static DICTIONARY_CODE: &'static str = include_str!("resources/dictionary.ll");
 static DICTMERGER_CODE: &'static str = include_str!("resources/dictmerger.ll");
 static GROUPMERGER_CODE: &'static str = include_str!("resources/groupbuilder.ll");
 
+/// A wrapper for a struct passed as input to the Weld runtime.
+#[derive(Clone, Debug)]
+#[repr(C)]
+pub struct WeldInputArgs {
+    pub input: i64,
+    pub nworkers: i32,
+    pub mem_limit: i64,
+}
+
+/// A wrapper for outputs passed out of the Weld runtime.
+#[derive(Clone, Debug)]
+#[repr(C)]
+pub struct WeldOutputArgs {
+    pub output: i64,
+    pub run_id: i64,
+    pub errno: WeldRuntimeErrno,
+}
+
+/// Generate a compiled LLVM module from a program whose body is a function.
+pub fn compile_program(program: &Program,
+                       opt_passes: &Vec<Pass>,
+                       log_level: LogLevel)
+                       -> WeldResult<easy_ll::CompiledModule> {
+    let mut expr = try!(macro_processor::process_program(program));
+    if log_level >= LogLevel::Debug {
+        println!("After macro substitution:\n{}\n", print_expr(&expr));
+    }
+
+    let _ = try!(transforms::uniquify(&mut expr));
+    try!(type_inference::infer_types(&mut expr));
+    let mut expr = try!(expr.to_typed());
+    if log_level >= LogLevel::Debug {
+        println!("After type inference:\n{}\n", print_expr(&expr));
+    }
+
+    for pass in opt_passes {
+        try!(pass.transform(&mut expr));
+        if log_level >= LogLevel::Debug {
+            println!("After {} pass:\n{}", pass.pass_name(), print_expr(&expr));
+        }
+    }
+
+    try!(transforms::uniquify(&mut expr));
+    if log_level >= LogLevel::Debug {
+        println!("After uniquify:\n{}\n", print_expr(&expr));
+    }
+
+    let sir_prog = try!(sir::ast_to_sir(&expr));
+    if log_level >= LogLevel::Debug {
+        println!("SIR program:\n{}\n", &sir_prog);
+    }
+
+    let mut gen = LlvmGenerator::new();
+    try!(gen.add_function_on_pointers("run", &sir_prog));
+    let llvm_code = gen.result();
+    if log_level >= LogLevel::Debug {
+        println!("LLVM program:\n{}\n", &llvm_code);
+    }
+
+    Ok(try!(easy_ll::compile_module(&llvm_code, Some(MERGER_BC))))
+}
+
+/// Generates a small program which, when called with a `run_id`, frees
+/// memory associated with the run ID.
+pub fn generate_runtime_interface_module() -> WeldResult<easy_ll::CompiledModule> {
+    let program = include_str!("resources/runtime_interface_module.ll");
+    Ok(try!(easy_ll::compile_module(program, None)))
+}
+
 /// Generates LLVM code for one or more modules.
 pub struct LlvmGenerator {
     /// LLVM type name of the form %s0, %s1, etc for each struct generated.
@@ -71,50 +140,6 @@ pub struct LlvmGenerator {
 
     /// Functions we have already visited when generating code.
     visited: HashSet<sir::FunctionId>,
-}
-
-/// A wrapper for a struct passed as input to the Weld runtime.
-#[derive(Clone, Debug)]
-#[repr(C)]
-pub struct WeldInputArgs {
-    pub input: i64,
-    pub nworkers: i32,
-    pub mem_limit: i64,
-}
-
-/// A wrapper for outputs passed out of the Weld runtime.
-#[derive(Clone, Debug)]
-#[repr(C)]
-pub struct WeldOutputArgs {
-    pub output: i64,
-    pub run_id: i64,
-    pub errno: WeldRuntimeErrno,
-}
-
-fn get_combined_params(sir: &SirProgram, par_for: &ParallelForData) -> HashMap<Symbol, Type> {
-    let mut body_params = sir.funcs[par_for.body].params.clone();
-    for (arg, ty) in sir.funcs[par_for.cont].params.iter() {
-        body_params.insert(arg.clone(), ty.clone());
-    }
-    body_params
-}
-
-fn get_sym_ty<'a>(func: &'a SirFunction, sym: &Symbol) -> WeldResult<&'a Type> {
-    if func.locals.get(sym).is_some() {
-        Ok(func.locals.get(sym).unwrap())
-    } else if func.params.get(sym).is_some() {
-        Ok(func.params.get(sym).unwrap())
-    } else {
-        weld_err!("Can't find symbol {}#{}", sym.name, sym.id)
-    }
-}
-
-/// Returns a vector size for a type. If a Vetor is passed in, returns the vector size of the
-/// element type.
-///
-/// TODO for now just returning 4 for all types.
-fn vec_size(_: &Type) -> WeldResult<u32> {
-    Ok(4)
 }
 
 impl LlvmGenerator {
@@ -2186,7 +2211,6 @@ impl LlvmGenerator {
         Ok(())
     }
 
-
     /// Generate code for a basic block's terminator, appending it to the given FunctionContext.
     fn gen_terminator(&mut self,
                       terminator: &Terminator,
@@ -2524,55 +2548,30 @@ impl FunctionContext {
     }
 }
 
-/// Generates a small program which, when called with a `run_id`, frees
-/// memory associated with the run ID.
-pub fn generate_runtime_interface_module() -> WeldResult<easy_ll::CompiledModule> {
-    let program = include_str!("resources/runtime_interface_module.ll");
-    Ok(try!(easy_ll::compile_module(program, None)))
+fn get_combined_params(sir: &SirProgram, par_for: &ParallelForData) -> HashMap<Symbol, Type> {
+    let mut body_params = sir.funcs[par_for.body].params.clone();
+    for (arg, ty) in sir.funcs[par_for.cont].params.iter() {
+        body_params.insert(arg.clone(), ty.clone());
+    }
+    body_params
 }
 
-/// Generate a compiled LLVM module from a program whose body is a function.
-pub fn compile_program(program: &Program,
-                       opt_passes: &Vec<Pass>,
-                       log_level: LogLevel)
-                       -> WeldResult<easy_ll::CompiledModule> {
-    let mut expr = try!(macro_processor::process_program(program));
-    if log_level >= LogLevel::Debug {
-        println!("After macro substitution:\n{}\n", print_expr(&expr));
+fn get_sym_ty<'a>(func: &'a SirFunction, sym: &Symbol) -> WeldResult<&'a Type> {
+    if func.locals.get(sym).is_some() {
+        Ok(func.locals.get(sym).unwrap())
+    } else if func.params.get(sym).is_some() {
+        Ok(func.params.get(sym).unwrap())
+    } else {
+        weld_err!("Can't find symbol {}#{}", sym.name, sym.id)
     }
+}
 
-    let _ = try!(transforms::uniquify(&mut expr));
-    try!(type_inference::infer_types(&mut expr));
-    let mut expr = try!(expr.to_typed());
-    if log_level >= LogLevel::Debug {
-        println!("After type inference:\n{}\n", print_expr(&expr));
-    }
-
-    for pass in opt_passes {
-        try!(pass.transform(&mut expr));
-        if log_level >= LogLevel::Debug {
-            println!("After {} pass:\n{}", pass.pass_name(), print_expr(&expr));
-        }
-    }
-
-    try!(transforms::uniquify(&mut expr));
-    if log_level >= LogLevel::Debug {
-        println!("After uniquify:\n{}\n", print_expr(&expr));
-    }
-
-    let sir_prog = try!(sir::ast_to_sir(&expr));
-    if log_level >= LogLevel::Debug {
-        println!("SIR program:\n{}\n", &sir_prog);
-    }
-
-    let mut gen = LlvmGenerator::new();
-    try!(gen.add_function_on_pointers("run", &sir_prog));
-    let llvm_code = gen.result();
-    if log_level >= LogLevel::Debug {
-        println!("LLVM program:\n{}\n", &llvm_code);
-    }
-
-    Ok(try!(easy_ll::compile_module(&llvm_code, Some(MERGER_BC))))
+/// Returns a vector size for a type. If a Vetor is passed in, returns the vector size of the
+/// element type.
+///
+/// TODO for now just returning 4 for all types.
+fn vec_size(_: &Type) -> WeldResult<u32> {
+    Ok(4)
 }
 
 #[test]
