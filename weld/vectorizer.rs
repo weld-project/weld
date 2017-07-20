@@ -18,45 +18,6 @@ use super::parser::*;
 #[cfg(test)]
 use super::type_inference::*;
 
-/// Get the vectorized version of a type.
-fn vectorized_type(ty: &Type) -> Type {
-    match *ty {
-        Scalar(kind) => Simd(kind),
-        Struct(ref fields) => Struct(fields.iter().map(|ref f| vectorized_type(f)).collect()),
-        _ => ty.clone()
-    }
-}
-
-/// Return true if a given type is SIMD vectorized, which concretely means that it is
-/// either a simd[T] or a struct of SIMD types.
-///
-/// TODO: we should investigate just using simd[struct[T]] for structs to turn this into
-/// a much simpler pattern match.
-pub fn is_simd(ty: &Type) -> bool {
-    match *ty {
-        Simd(_) => true,
-        Struct(ref fields) => fields.iter().all(is_simd),
-        _ => false
-    }
-}
-
-/// Get the scalar type corresponding to a SIMD type.
-pub fn scalar_type(simd_type: &Type) -> WeldResult<Type> {
-    match *simd_type {
-        Simd(kind) => Ok(Scalar(kind)),
-
-        Struct(ref fields) => {
-            let mut new_fields = vec![];
-            for f in fields {
-                new_fields.push(scalar_type(f)?)
-            }
-            Ok(Struct(new_fields))
-        }
-
-        _ => weld_err!("scalar_type called on non-SIMD type {:?}", simd_type)
-    }
-}
-
 /// Returns `true` if this is a set of iterators we can vectorize, `false` otherwise.
 /// 
 /// We can vectorize an iterator if all of its iterators consume the entire collection.
@@ -85,7 +46,7 @@ fn vectorize_expr(e: &mut Expr<Type>, broadcast_idens: &HashSet<Symbol>) -> Weld
 
     match e.kind {
         Literal(_) => {
-            e.ty = vectorized_type(&e.ty);
+            e.ty = e.ty.simd_type()?;
         }
         Ident(ref name) => {
             if let Scalar(_) = e.ty {
@@ -96,23 +57,23 @@ fn vectorize_expr(e: &mut Expr<Type>, broadcast_idens: &HashSet<Symbol>) -> Weld
                     new_expr = Some(exprs::broadcast_expr(e.clone())?);
                     cont = false;
                 } else {
-                    e.ty = vectorized_type(&e.ty);
+                    e.ty = e.ty.simd_type()?;
                 }
             } else if let Struct(_) = e.ty {
-                e.ty = vectorized_type(&e.ty);
+                e.ty = e.ty.simd_type()?;
             }
         }
         GetField { .. } => {
-            e.ty = vectorized_type(&e.ty);
+            e.ty = e.ty.simd_type()?;
         }
         BinOp { .. } => {
-            e.ty = vectorized_type(&e.ty);
+            e.ty = e.ty.simd_type()?;
         }
         Select { .. } => {
-            e.ty = vectorized_type(&e.ty);
+            e.ty = e.ty.simd_type()?;
         }
         MakeStruct { .. } => {
-            e.ty = vectorized_type(&e.ty);
+            e.ty = e.ty.simd_type()?;
         }
         // Predication for a value merged into a merger. This pattern checks for if(cond, merge(b, e), b).
         If { ref cond, ref on_true, ref on_false } => {
@@ -320,7 +281,7 @@ pub fn vectorize(expr: &mut Expr<Type>) {
                         });
 
                         let mut vectorized_params = params.clone();
-                        vectorized_params[2].ty = vectorized_type(&vectorized_params[2].ty);
+                        vectorized_params[2].ty = vectorized_params[2].ty.simd_type()?;
 
                         let vec_func = exprs::lambda_expr(vectorized_params, *vectorized_body)?;
 
@@ -390,7 +351,7 @@ fn has_vectorized_merge(expr: &TypedExpr) -> bool {
     let mut found = false;
     expr.traverse(&mut |ref e| {
         if let Merge { ref value, .. } = e.kind {
-            found |= is_simd(&value.ty);
+            found |= value.ty.is_simd();
         }
     });
     found
@@ -425,6 +386,24 @@ fn predicated_appender() {
     // This code should NOT be vectorized because we can't predicate merges into vecbuilder.
     let mut e = typed_expr(
         "|v:vec[i32]| result(for(v, appender[i32], |b,i,e| if(e>0, merge(b,e), b)))");
+    vectorize(&mut e);
+    assert!(!has_vectorized_merge(&e));
+}
+
+#[test]
+fn non_vectorizable_type() {
+    // This code should NOT be vectorized because we can't vectorize merges of vectors.
+    let mut e = typed_expr(
+        "|v:vec[i32]| result(for(v, appender[vec[i32]], |b,i,e| merge(b,v)))");
+    vectorize(&mut e);
+    assert!(!has_vectorized_merge(&e));
+}
+
+#[test]
+fn non_vectorizable_expr() {
+    // This code should NOT be vectorized because we can't vectorize lookup().
+    let mut e = typed_expr(
+        "|v:vec[i32]| result(for(v, appender[i32], |b,i,e| merge(b,lookup(v,i))))");
     vectorize(&mut e);
     assert!(!has_vectorized_merge(&e));
 }

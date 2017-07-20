@@ -1593,7 +1593,7 @@ impl LlvmGenerator {
         // Special case: if the value is a SIMD vector, we need to merge each element separately (because the final
         // builder will still operate on scalars). We have specialized functions to merge all of them together for
         // some builders, such as Merger, but for others we just call the merge operation multiple times.
-        if vectorizer::is_simd(value_ty) {
+        if value_ty.is_simd() {
             match *builder_kind {
                 Merger(ref t, ref op) => {
                     // For Merger, call the vectorMergePtr function to get a pointer to a vector we can merge into.
@@ -1622,7 +1622,7 @@ impl LlvmGenerator {
                     // For all other builders, extract each value in the vector and merge it separately
                     let value_ty_str = self.llvm_type(value_ty)?.to_string();
                     let value_tmp = self.load_var(llvm_symbol(value).as_str(), &value_ty_str, ctx)?;
-                    let item_ty = vectorizer::scalar_type(value_ty)?;
+                    let item_ty = value_ty.scalar_type()?;
                     let item_ty_str = self.llvm_type(&item_ty)?.to_string();
                     for i in 0..vec_size(&item_ty)? {
                         // Extract the item to a register
@@ -2326,7 +2326,7 @@ impl LlvmGenerator {
                         -> WeldResult<String> {
 
         let simd_type_llvm = self.llvm_type(simd_type)?.to_string();
-        let item_type = vectorizer::scalar_type(simd_type)?;
+        let item_type = simd_type.scalar_type()?;
         let item_type_llvm = self.llvm_type(&item_type)?.to_string();
 
         match *simd_type {
@@ -2347,7 +2347,7 @@ impl LlvmGenerator {
 
                     // Call ourselves recursively to extract the right item from this sub-vector
                     let item_reg = self.gen_simd_extract(field_type, &field_reg, index, ctx)?;
-                    let item_type = vectorizer::scalar_type(field_type)?;
+                    let item_type = field_type.scalar_type()?;
 
                     // Insert this into our result struct
                     let new_struct = ctx.var_ids.next();
