@@ -2227,53 +2227,6 @@ impl LlvmGenerator {
         Ok(())
     }
 
-    /// Generate code to extract the index'th element of a SIMD value, returning a register name for it.
-    /// This is slightly tricky because the SIMD value may be a struct, in which case we need to recurse into each of
-    /// its elements. `simd_reg` must be the name of an LLVM register containing the SIMD value.
-    fn gen_simd_extract(&mut self,
-                        simd_type: &Type,
-                        simd_reg: &str,
-                        index: u32,
-                        ctx: &mut FunctionContext)
-                        -> WeldResult<String> {
-
-        let simd_type_llvm = self.llvm_type(simd_type)?.to_string();
-        let item_type = vectorizer::scalar_type(simd_type)?;
-        let item_type_llvm = self.llvm_type(&item_type)?.to_string();
-
-        match *simd_type {
-            Simd(_) => {
-                // Simple case: extract the element using an extractelement instruction
-                let item_reg = ctx.var_ids.next();
-                ctx.code.add(format!("{} = extractelement {} {}, i32 {}", item_reg, simd_type_llvm, simd_reg, index));
-                Ok(item_reg)
-            }
-
-            Struct(ref fields) => {
-                // Complex case: build up a struct with each item
-                let mut current_struct = "undef".to_string();
-                for (i, field_type) in fields.iter().enumerate() {
-                    // First, extract the i'th field of our SIMD struct into a register
-                    let field_reg = ctx.var_ids.next();
-                    ctx.code.add(format!("{} = extractvalue {} {}, {}", field_reg, simd_type_llvm, simd_reg, i));
-
-                    // Call ourselves recursively to extract the right item from this sub-vector
-                    let item_reg = self.gen_simd_extract(field_type, &field_reg, index, ctx)?;
-                    let item_type = vectorizer::scalar_type(field_type)?;
-
-                    // Insert this into our result struct
-                    let new_struct = ctx.var_ids.next();
-                    ctx.code.add(format!("{} = insertvalue {} {}, {} {}, {}",
-                        new_struct, item_type_llvm, current_struct, self.llvm_type(&item_type)?, item_reg, i));
-                    current_struct = new_struct;
-                }
-                Ok(current_struct)
-            }
-
-            _ => weld_err!("Invalid type for gen_simd_extract: {:?}", simd_type)
-        }
-    }
-
     /// Generate code for a basic block's terminator, appending it to the given FunctionContext.
     fn gen_terminator(&mut self,
                       terminator: &Terminator,
@@ -2360,6 +2313,53 @@ impl LlvmGenerator {
         }
 
         Ok(())
+    }
+
+    /// Generate code to extract the index'th element of a SIMD value, returning a register name for it.
+    /// This is slightly tricky because the SIMD value may be a struct, in which case we need to recurse into each of
+    /// its elements. `simd_reg` must be the name of an LLVM register containing the SIMD value.
+    fn gen_simd_extract(&mut self,
+                        simd_type: &Type,
+                        simd_reg: &str,
+                        index: u32,
+                        ctx: &mut FunctionContext)
+                        -> WeldResult<String> {
+
+        let simd_type_llvm = self.llvm_type(simd_type)?.to_string();
+        let item_type = vectorizer::scalar_type(simd_type)?;
+        let item_type_llvm = self.llvm_type(&item_type)?.to_string();
+
+        match *simd_type {
+            Simd(_) => {
+                // Simple case: extract the element using an extractelement instruction
+                let item_reg = ctx.var_ids.next();
+                ctx.code.add(format!("{} = extractelement {} {}, i32 {}", item_reg, simd_type_llvm, simd_reg, index));
+                Ok(item_reg)
+            }
+
+            Struct(ref fields) => {
+                // Complex case: build up a struct with each item
+                let mut current_struct = "undef".to_string();
+                for (i, field_type) in fields.iter().enumerate() {
+                    // First, extract the i'th field of our SIMD struct into a register
+                    let field_reg = ctx.var_ids.next();
+                    ctx.code.add(format!("{} = extractvalue {} {}, {}", field_reg, simd_type_llvm, simd_reg, i));
+
+                    // Call ourselves recursively to extract the right item from this sub-vector
+                    let item_reg = self.gen_simd_extract(field_type, &field_reg, index, ctx)?;
+                    let item_type = vectorizer::scalar_type(field_type)?;
+
+                    // Insert this into our result struct
+                    let new_struct = ctx.var_ids.next();
+                    ctx.code.add(format!("{} = insertvalue {} {}, {} {}, {}",
+                        new_struct, item_type_llvm, current_struct, self.llvm_type(&item_type)?, item_reg, i));
+                    current_struct = new_struct;
+                }
+                Ok(current_struct)
+            }
+
+            _ => weld_err!("Invalid type for gen_simd_extract: {:?}", simd_type)
+        }
     }
 }
 
