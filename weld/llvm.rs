@@ -1108,7 +1108,6 @@ impl LlvmGenerator {
     fn gen_function(&mut self, sir: &SirProgram, func: &SirFunction, ctx: &mut FunctionContext) -> WeldResult<()> {
         for b in func.blocks.iter() {
             ctx.code.add(format!("b.b{}:", b.id));
-            //self.gen_puts(&format!("F{} b.b{}:", func.id, b.id), ctx);
             for s in b.statements.iter() {
                 self.gen_statement(s, func, ctx)?
             }
@@ -1119,7 +1118,6 @@ impl LlvmGenerator {
 
     /// Generate code for a single statement, appending it to the code in a FunctionContext.
     fn gen_statement(&mut self, statement: &Statement, func: &SirFunction, ctx: &mut FunctionContext) -> WeldResult<()> {
-        //self.gen_puts(&format!("  {}", statement), ctx);
         ctx.code.add(format!("; {}", statement));
         match *statement {
             MakeStruct { ref output, ref elems } => {
@@ -2200,7 +2198,6 @@ impl LlvmGenerator {
                       func: &SirFunction,
                       ctx: &mut FunctionContext)
                       -> WeldResult<()> {
-        //self.gen_puts(&format!("  {}", terminator), ctx);
         ctx.code.add(format!("; {}", terminator));
         match *terminator {
             Branch { ref cond, on_true, on_false } => {
@@ -2280,21 +2277,6 @@ impl LlvmGenerator {
         }
 
         Ok(())
-    }
-
-    /// Generate a puts() call for debugging
-    fn gen_puts(&mut self, text: &str, ctx: &mut FunctionContext) {
-        let global = self.prelude_var_ids.next().replace("%", "@");
-        let text = text.replace("\\", "\\\\").replace("\"", "\\\"");
-        let len = text.len() + 1;
-        self.prelude_code.add(format!(
-            "{} = private unnamed_addr constant [{} x i8] c\"{}\\00\"",
-            global, len, text));
-        let local = ctx.var_ids.next();
-        ctx.code.add(format!(
-            "{} = getelementptr [{} x i8], [{} x i8]* {}, i32 0, i32 0",
-            local, len, len, global));
-        ctx.code.add(format!("call i32 @puts(i8* {})", local));
     }
 }
 
