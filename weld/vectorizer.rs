@@ -4,15 +4,19 @@
 //! into expressions of type `Simd`. It also modifies loops and builders to accept vector
 //! arguments instead of scalar arguments.
 
+use std::collections::HashSet;
+
 use super::ast::*;
 use super::ast::ExprKind::*;
 use super::ast::Type::*;
 use super::error::*;
+use super::exprs;
 use super::util::SymbolGenerator;
 
-use std::collections::HashSet;
-
-use super::exprs;
+#[cfg(test)]
+use super::parser::*;
+#[cfg(test)]
+use super::type_inference::*;
 
 /// Get the vectorized version of a type.
 fn vectorized_type(ty: &Type) -> Type {
@@ -371,3 +375,72 @@ pub fn vectorize(expr: &mut Expr<Type>) {
     });
 }
 
+/// Parse and perform type inference on an expression.
+#[cfg(test)]
+fn typed_expr(code: &str) -> TypedExpr {
+    let mut e = parse_expr(code).unwrap();
+    assert!(infer_types(&mut e).is_ok());
+    e.to_typed().unwrap()
+}
+
+/// Check whether a function has a vectorized Merge call. We'll use this to check whether function
+/// bodies got vectorized.
+#[cfg(test)]
+fn has_vectorized_merge(expr: &TypedExpr) -> bool {
+    let mut found = false;
+    expr.traverse(&mut |ref e| {
+        if let Merge { ref value, .. } = e.kind {
+            found |= is_simd(&value.ty);
+        }
+    });
+    found
+}
+
+#[test]
+fn simple_merger() {
+    let mut e = typed_expr(
+        "|v:vec[i32]| result(for(v, merger[i32,+], |b,i,e| merge(b,e+1)))");
+    vectorize(&mut e);
+    assert!(has_vectorized_merge(&e));
+}
+
+#[test]
+fn predicated_merger() {
+    let mut e = typed_expr(
+        "|v:vec[i32]| result(for(v, merger[i32,+], |b,i,e| if(e>0, merge(b,e), b)))");
+    vectorize(&mut e);
+    assert!(has_vectorized_merge(&e));
+}
+
+#[test]
+fn simple_appender() {
+    let mut e = typed_expr(
+        "|v:vec[i32]| result(for(v, appender[i32], |b,i,e| merge(b,e+1)))");
+    vectorize(&mut e);
+    assert!(has_vectorized_merge(&e));
+}
+
+#[test]
+fn predicated_appender() {
+    // This code should NOT be vectorized because we can't predicate merges into vecbuilder.
+    let mut e = typed_expr(
+        "|v:vec[i32]| result(for(v, appender[i32], |b,i,e| if(e>0, merge(b,e), b)))");
+    vectorize(&mut e);
+    assert!(!has_vectorized_merge(&e));
+}
+
+#[test]
+fn zipped_input() {
+    let mut e = typed_expr(
+        "|v:vec[i32]| result(for(zip(v,v), appender[i32], |b,i,e| merge(b,e.$0+e.$1)))");
+    vectorize(&mut e);
+    assert!(has_vectorized_merge(&e));
+}
+
+#[test]
+fn zips_in_body() {
+    let mut e = typed_expr(
+        "|v:vec[i32]| result(for(v, dictmerger[{i32,i32},i32,+], |b,i,e| merge(b,{{e,e},e})))");
+    vectorize(&mut e);
+    assert!(has_vectorized_merge(&e));
+}
