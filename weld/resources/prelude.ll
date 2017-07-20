@@ -20,7 +20,6 @@ declare i64 @llvm.ctlz.i64(i64, i1)
 ; std library functions
 declare i8* @malloc(i64)
 declare void @qsort(i8*, i64, i64, i32 (i8*, i8*)*)
-declare i32 @puts(i8* nocapture) nounwind
 
 ; Weld runtime functions
 declare void    @weld_runtime_init()
