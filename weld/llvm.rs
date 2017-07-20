@@ -128,9 +128,6 @@ pub struct LlvmGenerator {
     /// LLVM type names for various builder types
     bld_names: HashMap<BuilderKind, String>,
 
-    /// LLVM SIMD vector names for various scalar types.
-    simd_names: HashMap<ScalarKind, String>,
-
     /// A CodeBuilder and ID generator for prelude functions such as type and struct definitions.
     prelude_code: CodeBuilder,
     prelude_var_ids: IdGenerator,
@@ -153,7 +150,6 @@ impl LlvmGenerator {
             merger_ids: IdGenerator::new("%m"),
             dict_names: HashMap::new(),
             dict_ids: IdGenerator::new("%d"),
-            simd_names: HashMap::new(),
             bld_names: HashMap::new(),
             prelude_code: CodeBuilder::new(),
             prelude_var_ids: IdGenerator::new("%p.p"),
@@ -773,17 +769,66 @@ impl LlvmGenerator {
         Ok(())
     }
 
-    /// Returns the LLVM formatted String for a LiteralKind.
-    fn llvm_literal(&mut self, k: LiteralKind) -> String {
-        match k {
-            BoolLiteral(l) => format!("{}", if l { 1 } else { 0 }),
-            I8Literal(l) => format!("{}", l),
-            I32Literal(l) =>  format!("{}", l),
-            I64Literal(l) => format!("{}", l),
-            F32Literal(l) => format!("{:.30e}", l),
-            F64Literal(l) => format!("{:.30e}", l),
-        }.to_string()
+    /*********************************************************************************************
+    //
+    //
+    //
+    // TODO(shoumik): Refactor code above this point!
+    //
+    //
+    //
+    ********************************************************************************************/
+
+    /// Return the LLVM type name corresponding to a Weld type.
+    fn llvm_type(&mut self, ty: &Type) -> WeldResult<String> {
+        Ok(match *ty {
+            Scalar(kind) => llvm_scalarkind(kind).to_string(),
+            Simd(kind) => format!("<{} x {}>", vec_size(&Scalar(kind))?, llvm_scalarkind(kind)),
+
+            Struct(ref fields) => {
+                if self.struct_names.get(fields) == None {
+                    self.gen_struct_definition(fields)?
+                }
+                self.struct_names.get(fields).unwrap().to_string()
+            }
+
+            Vector(ref elem) => {
+                if self.vec_names.get(elem) == None {
+                    self.gen_vector_definition(elem)? 
+                }
+                self.vec_names.get(elem).unwrap().to_string()
+            }
+
+            Dict(ref key, ref value) => {
+                let elem = Box::new(Struct(vec![*key.clone(), *value.clone()]));
+                if self.dict_names.get(&elem) == None {
+                    self.gen_dict_definition(key, value)?
+                }
+                self.dict_names.get(&elem).unwrap().to_string()
+            }
+
+            Builder(ref bk, _) => {
+                if self.bld_names.get(bk) == None {
+                    self.gen_builder_definition(bk)? 
+                }
+                self.bld_names.get(bk).unwrap().to_string()
+            }
+
+            _ => {
+                return weld_err!("Unsupported type {}", print_type(ty))?
+            }
+        })
     }
+
+    /*********************************************************************************************
+    //
+    //
+    //
+    // Routines for Code Generation of Statements and Blocks.
+    //
+    //
+    //
+    ********************************************************************************************/
 
     /// Generates a struct definition for the given field types.
     fn gen_struct_definition(&mut self, fields: &Vec<Type>) -> WeldResult<()> {
@@ -973,63 +1018,6 @@ impl LlvmGenerator {
         Ok(())
     }
 
-    /// Returns the LLVM name for the `ScalarKind` `k`.
-    fn llvm_scalarkind(&self, k: ScalarKind) -> &str {
-         match k {
-            Bool => "i1",
-            I8 => "i8",
-            I32 => "i32",
-            I64 => "i64",
-            F32 => "float",
-            F64 => "double",       
-         }
-    }
-
-    /// Return the LLVM type name corresponding to a Weld type.
-    fn llvm_type(&mut self, ty: &Type) -> WeldResult<String> {
-        Ok(match *ty {
-            Scalar(kind) => self.llvm_scalarkind(kind),
-
-            Simd(kind) => {
-                let llvm_kind_str = self.llvm_scalarkind(kind).to_string();
-                self.simd_names.entry(kind).or_insert(format!("<{} x {}>", vec_size(&Scalar(kind))?, llvm_kind_str))   
-            }
-
-            Struct(ref fields) => {
-                if self.struct_names.get(fields) == None {
-                    self.gen_struct_definition(fields)?
-                }
-                self.struct_names.get(fields).unwrap()
-            }
-
-            Vector(ref elem) => {
-                if self.vec_names.get(elem) == None {
-                    self.gen_vector_definition(elem)? 
-                }
-                self.vec_names.get(elem).unwrap()
-            }
-
-            Dict(ref key, ref value) => {
-                let elem = Box::new(Struct(vec![*key.clone(), *value.clone()]));
-                if self.dict_names.get(&elem) == None {
-                    self.gen_dict_definition(key, value)?
-                }
-                self.dict_names.get(&elem).unwrap()
-            }
-
-            Builder(ref bk, _) => {
-                if self.bld_names.get(bk) == None {
-                    self.gen_builder_definition(bk)? 
-                }
-                self.bld_names.get(bk).unwrap()
-            }
-
-            _ => {
-                return weld_err!("Unsupported type {}", print_type(ty))?
-            }
-        }.to_string())
-    }
-
     /// Generate code to load a symbol sym with LLVM type ty into a local variable, and return the variable's name.
     fn gen_load_var(&mut self, sym: &str, ty: &str, ctx: &mut FunctionContext) -> WeldResult<String> {
         let var = ctx.var_ids.next();
@@ -1061,7 +1049,7 @@ impl LlvmGenerator {
         let vec_ty_str = self.llvm_type(vec_ty)?;
         let size_str = format!("{}", size);
 
-        let value_str = self.llvm_literal(*kind);
+        let value_str = llvm_literal(*kind);
         let elem_ty_str = match *kind {
             BoolLiteral(_) => "bool",
             I8Literal(_) => "i8",
@@ -1071,7 +1059,8 @@ impl LlvmGenerator {
             F64Literal(_) => "double",
         }.to_string();
 
-        let insert_str = format!("insertelement <{size} x {elem}> $NAME, {elem} {value}, i32 $INDEX", size=size_str, elem=elem_ty_str, value=value_str);
+        let insert_str = format!("insertelement <{size} x {elem}> $NAME, {elem} {value}, i32 $INDEX",
+                                 size=size_str, elem=elem_ty_str, value=value_str);
 
         let mut prev_name = "undef".to_string();
         for i in 0..size {
@@ -1082,10 +1071,7 @@ impl LlvmGenerator {
             prev_name = name;
         }
 
-        ctx.code.add(format!("store {vec_ty_str} {prev_name}, {vec_ty_str}* {output}",
-                             vec_ty_str = vec_ty_str,
-                             output = output,
-                             prev_name = prev_name));
+        self.gen_store_var(&prev_name, output, &vec_ty_str, ctx);
         Ok(())
     }
 
@@ -1101,9 +1087,8 @@ impl LlvmGenerator {
                     merge_ty: &Type,
                     ctx: &mut FunctionContext)
                     -> WeldResult<()> {
-        let builder_value = ctx.var_ids.next();
+        let builder_value = self.gen_load_var(builder_ptr, merge_ty_str, ctx)?;
         let mut res = ctx.var_ids.next();
-        ctx.code.add(format!("{} = load {}, {}* {}", &builder_value, &merge_ty_str, &merge_ty_str, &builder_ptr));
         if let Scalar(_) = *merge_ty {
             ctx.code.add(format!("{} = {} {} {}, {}",
                                  &res,
@@ -1142,7 +1127,7 @@ impl LlvmGenerator {
         }
 
         // Store the resulting merge value back into the builder pointer.
-        ctx.code.add(format!("store {} {}, {}* {}", &merge_ty_str, &res, &merge_ty_str, &builder_ptr));
+        self.gen_store_var(&res, builder_ptr, merge_ty_str, ctx);
         Ok(())
     }
 
@@ -1164,7 +1149,7 @@ impl LlvmGenerator {
             ctx.code.add(format!("{} = call {} {} ({} {})", res_tmp, child_ll_ty, op_name, child_ll_ty, child_tmp));
             let out_ty = try!(func.symbol_type(output));
             let out_ty_str = try!(self.llvm_type(&out_ty));
-            ctx.code.add(format!("store {} {}, {}* {}", out_ty_str, res_tmp, out_ty_str, llvm_symbol(output)));
+            self.gen_store_var(&res_tmp, &llvm_symbol(output), &out_ty_str, ctx);
         } else {
             weld_err!("Illegal type {} in {}", print_type(child_ty), op_kind)?;
         }
@@ -1203,7 +1188,7 @@ impl LlvmGenerator {
                                             i));
                     cur = struct_name.clone();
                 }
-                ctx.code.add(format!("store {} {}, {}* {}", ll_ty, cur, ll_ty, llvm_symbol(output)));
+                self.gen_store_var(&cur, &llvm_symbol(output), &ll_ty, ctx);
             }
 
             CUDF { ref output, ref symbol_name, ref args } => {
@@ -1261,15 +1246,9 @@ impl LlvmGenerator {
                                             vec_type = vec_ll_ty,
                                             vec = vec,
                                             idx = idx_str));
-                    ctx.code.add(format!("store {elem_ty} {elem}, {elem_ty}* {ptr}",
-                                            elem_ty = elem_ll_ty,
-                                            elem = e,
-                                            ptr = ptr));
+                    self.gen_store_var(&e, &ptr, &elem_ll_ty, ctx);
                 }
-                ctx.code.add(format!("store {vec_ty} {vec}, {vec_ty}* {output}",
-                                        vec_ty = vec_ll_ty,
-                                        vec = vec,
-                                        output = llvm_symbol(&output).as_str()));
+                self.gen_store_var(&vec, &llvm_symbol(output), &vec_ll_ty, ctx);
             }
 
             BinOp { ref output, op, ref ty, ref left, ref right } => {
@@ -1284,11 +1263,7 @@ impl LlvmGenerator {
                         let op_name = llvm_binop(op, ty)?;
                         ctx.code
                             .add(format!("{} = {} {} {}, {}", bin_tmp, op_name, ll_ty, left_tmp, right_tmp));
-                        ctx.code.add(format!("store {} {}, {}* {}",
-                                                out_ty_str,
-                                                bin_tmp,
-                                                out_ty_str,
-                                                llvm_symbol(output)));
+                        self.gen_store_var(&bin_tmp, &llvm_symbol(output), &out_ty_str, ctx);
                     }
                     Vector(_) => {
                         // We support BinOps between vectors as long as they're comparison operators
@@ -1303,11 +1278,7 @@ impl LlvmGenerator {
                                                 ll_ty,
                                                 right_tmp));
                         ctx.code.add(format!("{} = icmp {} i32 {}, {}", bin_tmp, op_name, tmp, value));
-                        ctx.code.add(format!("store {} {}, {}* {}",
-                                                out_ty_str,
-                                                bin_tmp,
-                                                out_ty_str,
-                                                llvm_symbol(output)));
+                        self.gen_store_var(&bin_tmp, &llvm_symbol(output), &out_ty_str, ctx);
                     }
                     _ => weld_err!("Illegal type {} in BinOp", print_type(ty))?,
                 }
@@ -1335,10 +1306,7 @@ impl LlvmGenerator {
                                             i=i));
                     prev_name = next;
                 }
-                ctx.code.add(format!("store {vec_ty_str} {prev_name}, {vec_ty_str}* {output}, align 1",
-                                        vec_ty_str = vec_ty_str,
-                                        output = llvm_symbol(output).as_str(),
-                                        prev_name = prev_name));
+                self.gen_store_var(&prev_name, &llvm_symbol(output), &vec_ty_str, ctx);
             }
 
             UnaryOp { ref output, op, ref child, } => {
@@ -1359,7 +1327,7 @@ impl LlvmGenerator {
                 };
 
                 ctx.code.add(format!("{} = {} {} {}, {}", bin_tmp, op_name, ll_ty, zero_str, child_tmp));
-                ctx.code.add(format!("store {} {}, {}* {}", out_ty_str, bin_tmp, out_ty_str, llvm_symbol(output)));
+                self.gen_store_var(&bin_tmp, &llvm_symbol(output), &out_ty_str, ctx);
             }
 
             Cast { ref output, ref new_ty, ref child } => {
@@ -1378,18 +1346,10 @@ impl LlvmGenerator {
                                             new_ll_ty));
                     let out_ty = try!(func.symbol_type(output));
                     let out_ty_str = try!(self.llvm_type(&out_ty));
-                    ctx.code.add(format!("store {} {}, {}* {}",
-                                            out_ty_str,
-                                            cast_tmp,
-                                            out_ty_str,
-                                            llvm_symbol(output)));
+                    self.gen_store_var(&cast_tmp, &llvm_symbol(output), &out_ty_str, ctx);
                 } else {
                     let child_tmp = try!(self.gen_load_var(llvm_symbol(child).as_str(), &old_ll_ty, ctx));
-                    ctx.code.add(format!("store {} {}, {}* {}",
-                                            old_ll_ty,
-                                            child_tmp,
-                                            old_ll_ty,
-                                            llvm_symbol(output)));
+                    self.gen_store_var(&child_tmp, &llvm_symbol(output), &old_ll_ty, ctx);
                 }
             }
 
@@ -1413,13 +1373,8 @@ impl LlvmGenerator {
                                                 vec_ll_ty,
                                                 child_tmp,
                                                 index_tmp));
-                        ctx.code
-                            .add(format!("{} = load {}, {}* {}", res_tmp, output_ll_ty, output_ll_ty, res_ptr));
-                        ctx.code.add(format!("store {} {}, {}* {}",
-                                                output_ll_ty,
-                                                res_tmp,
-                                                output_ll_ty,
-                                                llvm_symbol(output)));
+                        ctx.code.add(format!("{} = load {}, {}* {}", res_tmp, output_ll_ty, output_ll_ty, res_ptr));
+                        self.gen_store_var(&res_tmp, &llvm_symbol(output), &output_ll_ty, ctx);
                     }
                     Dict(_, _) => {
                         let child_ll_ty = try!(self.llvm_type(&child_ty));
@@ -1447,11 +1402,8 @@ impl LlvmGenerator {
                                                 dict_prefix,
                                                 dict_ll_ty,
                                                 slot));
-                        ctx.code.add(format!("store {} {}, {}* {}",
-                                                output_ll_ty,
-                                                res_tmp,
-                                                output_ll_ty,
-                                                llvm_symbol(output)));
+
+                        self.gen_store_var(&res_tmp, &llvm_symbol(output), &output_ll_ty, ctx);
                     }
                     _ => weld_err!("Illegal type {} in Lookup", print_type(child_ty))?,
                 }
@@ -1483,7 +1435,7 @@ impl LlvmGenerator {
                                                 dict_prefix,
                                                 dict_ll_ty,
                                                 slot));
-                        ctx.code.add(format!("store i1 {}, i1* {}", res_tmp, llvm_symbol(output)));
+                        self.gen_store_var(&res_tmp, &llvm_symbol(output), "i1", ctx);
                     }
                     _ => weld_err!("Illegal type {} in KeyExists", print_type(child_ty))?,
                 }
@@ -1513,11 +1465,7 @@ impl LlvmGenerator {
                                                 size_tmp));
                         let out_ty = try!(func.symbol_type(output));
                         let out_ty_str = try!(self.llvm_type(&out_ty));
-                        ctx.code.add(format!("store {} {}, {}* {}",
-                                                out_ty_str,
-                                                res_ptr,
-                                                out_ty_str,
-                                                llvm_symbol(output)))
+                        self.gen_store_var(&res_ptr, &llvm_symbol(output), &out_ty_str, ctx);
                     }
                     _ => weld_err!("Illegal type {} in Slice", print_type(child_ty))?,
                 }
@@ -1541,10 +1489,7 @@ impl LlvmGenerator {
                                         res_ty_str=res_ty_str,
                                         true_str=true_str,
                                         false_str=false_str));
-                ctx.code.add(format!("store {res_ty_str} {tmp}, {res_ty_str}* {output_str}",
-                                        res_ty_str = res_ty_str,
-                                        tmp = tmp,
-                                        output_str = output_str));
+                self.gen_store_var(&tmp, &output_str, &res_ty_str, ctx);
             }
 
             ToVec { ref output, ref child } => {
@@ -1564,7 +1509,7 @@ impl LlvmGenerator {
                                         child_tmp));
                 let out_ty = try!(func.symbol_type(output));
                 let out_ty_str = try!(self.llvm_type(&out_ty));
-                ctx.code.add(format!("store {} {}, {}* {}", out_ty_str, res_tmp, out_ty_str, llvm_symbol(output)));
+                self.gen_store_var(&res_tmp, &llvm_symbol(output), &out_ty_str, ctx);
             }
 
             Length { ref output, ref child } => {
@@ -1576,14 +1521,14 @@ impl LlvmGenerator {
                 ctx.code.add(format!("{} = call i64 {}.size({} {})", res_tmp, vec_prefix, child_ll_ty, child_tmp));
                 let out_ty = try!(func.symbol_type(output));
                 let out_ty_str = try!(self.llvm_type(&out_ty));
-                ctx.code.add(format!("store {} {}, {}* {}", out_ty_str, res_tmp, out_ty_str, llvm_symbol(output)));
+                self.gen_store_var(&res_tmp, &llvm_symbol(output), &out_ty_str, ctx);
             }
 
             Assign { ref output, ref value } => {
                 let ty = try!(func.symbol_type(output));
                 let ll_ty = try!(self.llvm_type(&ty));
                 let val_tmp = try!(self.gen_load_var(llvm_symbol(value).as_str(), &ll_ty, ctx));
-                ctx.code.add(format!("store {} {}, {}* {}", ll_ty, val_tmp, ll_ty, llvm_symbol(output)));
+                self.gen_store_var(&val_tmp, &llvm_symbol(output), &ll_ty, ctx);
             }
 
             GetField { ref output, ref value, index } => {
@@ -1592,7 +1537,7 @@ impl LlvmGenerator {
                 let struct_tmp = try!(self.gen_load_var(llvm_symbol(value).as_str(), &struct_ty, ctx));
                 let res_tmp = ctx.var_ids.next();
                 ctx.code.add(format!("{} = extractvalue {} {}, {}", res_tmp, struct_ty, struct_tmp, index));
-                ctx.code.add(format!("store {} {}, {}* {}", field_ty, res_tmp, field_ty, llvm_symbol(output)));
+                self.gen_store_var(&res_tmp, &llvm_symbol(output), &field_ty, ctx);
             }
 
             AssignLiteral { ref output, ref value } => {
@@ -1600,7 +1545,7 @@ impl LlvmGenerator {
                 if let Simd(_) = *output_ty {
                     self.gen_simd_literal(&output_llvm_sym, value, output_ty, ctx)?;
                 } else {
-                    let ref value = self.llvm_literal(*value);
+                    let ref value = llvm_literal(*value);
                     self.gen_store_var(value, &output_llvm_sym, &output_llvm_ty, ctx);
                 }
             }
@@ -1784,11 +1729,7 @@ impl LlvmGenerator {
                                      bld_prefix,
                                      bld_ty_str,
                                      bld_tmp));
-                ctx.code.add(format!("store {} {}, {}* {}",
-                                     res_ty_str,
-                                     res_tmp,
-                                     res_ty_str,
-                                     llvm_symbol(output)));
+                self.gen_store_var(&res_tmp, &llvm_symbol(output), &res_ty_str, ctx);
             }
 
             Merger(ref t, ref op) => {
@@ -1931,11 +1872,8 @@ impl LlvmGenerator {
                                         bld_prefix,
                                         bld_ty_str,
                                         bld_tmp));
-                ctx.code.add(format!("store {} {}, {}* {}",
-                                        res_ty_str,
-                                        res_tmp,
-                                        res_ty_str,
-                                        llvm_symbol(output)));
+
+                self.gen_store_var(&res_tmp, &llvm_symbol(output), &res_ty_str, ctx);
             }
 
             GroupMerger(ref kt, ref vt) => {
@@ -1981,11 +1919,7 @@ impl LlvmGenerator {
                                       func_str,
                                       kv_vec_builder_ty,
                                       bld_tmp));
-                ctx.code.add(format!("store {} {}, {}* {}",
-                                     res_ty_str,
-                                     res_tmp,
-                                     res_ty_str,
-                                     llvm_symbol(output)));
+                self.gen_store_var(&res_tmp, &llvm_symbol(output), &res_ty_str, ctx);
             }
 
             VecMerger(ref t, ref op) => {
@@ -2122,11 +2056,7 @@ impl LlvmGenerator {
                     bld_prefix,
                     builder_size
                 ));
-                ctx.code.add(format!("store {} {}, {}* {}",
-                                        bld_ty_str,
-                                        bld_tmp,
-                                        bld_ty_str,
-                                        llvm_symbol(output)));
+                self.gen_store_var(&bld_tmp, &llvm_symbol(output), &bld_ty_str, ctx);
             }
             Merger(ref elem_ty, ref op) => {
                 let elem_type = self.llvm_type(elem_ty)?;
@@ -2179,12 +2109,7 @@ impl LlvmGenerator {
                                         entry = entry,
                                         body = body,
                                         done = done));
-
-                ctx.code.add(format!("store {} {}, {}* {}",
-                                        bld_ty_str,
-                                        bld_tmp,
-                                        bld_ty_str,
-                                        llvm_symbol(output)));
+                self.gen_store_var(&bld_tmp, &llvm_symbol(output), &bld_ty_str, ctx);
             }
             DictMerger(_, _, _) => {
                 let bld_tmp = ctx.var_ids.next();
@@ -2193,11 +2118,7 @@ impl LlvmGenerator {
                                         bld_ty_str,
                                         bld_prefix,
                                         builder_size));
-                ctx.code.add(format!("store {} {}, {}* {}",
-                                        bld_ty_str,
-                                        bld_tmp,
-                                        bld_ty_str,
-                                        llvm_symbol(output)));
+                self.gen_store_var(&bld_tmp, &llvm_symbol(output), &bld_ty_str, ctx);
             }
             GroupMerger(_, _) => {
                 let bld_tmp = ctx.var_ids.next();
@@ -2209,11 +2130,7 @@ impl LlvmGenerator {
                     bld_prefix,
                     builder_size
                 ));
-                ctx.code.add(format!("store {} {}, {}* {}",
-                                        bld_ty_str,
-                                        bld_tmp,
-                                        bld_ty_str,
-                                        llvm_symbol(output)));
+                self.gen_store_var(&bld_tmp, &llvm_symbol(output), &bld_ty_str, ctx);
             }
             VecMerger(ref elem, ref op) => {
                 if *op != BinOpKind::Add {
@@ -2232,11 +2149,7 @@ impl LlvmGenerator {
                                                 bld_prefix,
                                                 arg_ty_str,
                                                 arg_str));
-                        ctx.code.add(format!("store {} {}, {}* {}",
-                                                bld_ty_str,
-                                                bld_tmp,
-                                                bld_ty_str,
-                                                llvm_symbol(output)));
+                        self.gen_store_var(&bld_tmp, &llvm_symbol(output), &bld_ty_str, ctx);
                     }
                     None => {
                         weld_err!("Internal error: NewBuilder(VecMerger) \
@@ -2317,7 +2230,7 @@ impl LlvmGenerator {
                                         &run_id,
                                         &elem_size));
                 ctx.code.add(format!("{} = bitcast i8* {} to {}*", &elem_storage_typed, &elem_storage, &ty_str));
-                ctx.code.add(format!("store {} {}, {}* {}", &ty_str, res_tmp, &ty_str, &elem_storage_typed));
+                self.gen_store_var(&res_tmp, &elem_storage_typed, &ty_str, ctx);
                 ctx.code.add(format!("call void @set_result(i8* {})", elem_storage));
                 ctx.code.add("br label %body.end");
             }
@@ -2335,6 +2248,30 @@ impl LlvmGenerator {
 
         Ok(())
     }
+}
+
+/// Returns the LLVM name for the `ScalarKind` `k`.
+fn llvm_scalarkind(k: ScalarKind) -> &'static str {
+    match k {
+        Bool => "i1",
+        I8 => "i8",
+        I32 => "i32",
+        I64 => "i64",
+        F32 => "float",
+        F64 => "double",       
+    }
+}
+
+/// Returns an LLVM formatted String for a literal.
+fn llvm_literal(k: LiteralKind) -> String {
+    match k {
+        BoolLiteral(l) => format!("{}", if l { 1 } else { 0 }),
+        I8Literal(l) => format!("{}", l),
+        I32Literal(l) =>  format!("{}", l),
+        I64Literal(l) => format!("{}", l),
+        F32Literal(l) => format!("{:.30e}", l),
+        F64Literal(l) => format!("{:.30e}", l),
+    }.to_string()
 }
 
 /// Return the LLVM version of a Weld symbol (encoding any special characters for LLVM).
