@@ -14,12 +14,44 @@ use std::collections::HashSet;
 
 use super::exprs;
 
-/// Vectorizes a type.
+/// Get the vectorized version of a type.
 fn vectorized_type(ty: &Type) -> Type {
     if let Scalar(kind) = *ty {
         Simd(kind)
+    } else if let Struct(ref elems) = *ty {
+        Struct(elems.iter().map(|ref e| vectorized_type(e)).collect())
     } else {
         ty.clone()
+    }
+}
+
+/// Return true if a given type is SIMD vectorized, which concretely means that it is
+/// either a simd[T] or a struct of SIMD types.
+///
+/// TODO: we should investigate just using simd[struct[T]] for structs to turn this into
+/// a much simpler pattern match.
+pub fn is_simd(ty: &Type) -> bool {
+    match *ty {
+        Simd(_) => true,
+        Struct(ref elems) => elems.iter().all(is_simd),
+        _ => false
+    }
+}
+
+/// Get the scalar type corresponding to a SIMD type.
+pub fn scalar_type(simd_type: &Type) -> WeldResult<Type> {
+    match *simd_type {
+        Simd(kind) => Ok(Scalar(kind)),
+
+        Struct(ref elems) => {
+            let mut new_elems = vec![];
+            for e in elems {
+                new_elems.push(scalar_type(e)?)
+            }
+            Ok(Struct(new_elems))
+        }
+
+        _ => weld_err!("scalar_type called on non-SIMD type {:?}", simd_type)
     }
 }
 
@@ -44,7 +76,7 @@ fn vectorizable_iters(iters: &Vec<Iter<Type>>) -> bool {
     true
 }
 
-/// Vectorizes the expression by changing its type if the expression is a scalar.
+/// Vectorizes an expression in-place, also changing its type if needed.
 fn vectorize_expr(e: &mut Expr<Type>, broadcast_idens: &HashSet<Symbol>) -> WeldResult<bool> {
     let mut new_expr = None;
     let mut cont = true;
@@ -64,10 +96,8 @@ fn vectorize_expr(e: &mut Expr<Type>, broadcast_idens: &HashSet<Symbol>) -> Weld
                 } else {
                     e.ty = vectorized_type(&e.ty);
                 }
-            } else if let Struct(ref mut field_tys) = e.ty {
-                for ty in field_tys.iter_mut() {
-                    *ty = vectorized_type(&ty);
-                }
+            } else if let Struct(_) = e.ty {
+                e.ty = vectorized_type(&e.ty);
             }
         }
         GetField { .. } => {
@@ -77,6 +107,9 @@ fn vectorize_expr(e: &mut Expr<Type>, broadcast_idens: &HashSet<Symbol>) -> Weld
             e.ty = vectorized_type(&e.ty);
         }
         Select { .. } => {
+            e.ty = vectorized_type(&e.ty);
+        }
+        MakeStruct { .. } => {
             e.ty = vectorized_type(&e.ty);
         }
         // Predication for a value merged into a merger. This pattern checks for if(cond, merge(b, e), b).
@@ -287,15 +320,7 @@ pub fn vectorize(expr: &mut Expr<Type>) {
                         });
 
                         let mut vectorized_params = params.clone();
-
-                        let new_ty = if let Scalar(_) = vectorized_params[2].ty {
-                            vectorized_type(&vectorized_params[2].ty)
-                        } else if let Struct(ref field_tys) = vectorized_params[2].ty {
-                            Struct(field_tys.iter().map(|ref t| vectorized_type(t)).collect())
-                        } else {
-                            unreachable!();
-                        };
-                        vectorized_params[2].ty = new_ty;
+                        vectorized_params[2].ty = vectorized_type(&vectorized_params[2].ty);
 
                         let vec_func = exprs::lambda_expr(vectorized_params, *vectorized_body)?;
 

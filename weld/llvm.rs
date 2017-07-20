@@ -1593,7 +1593,7 @@ impl LlvmGenerator {
         // Special case: if the value is a SIMD vector, we need to merge each element separately (because the final
         // builder will still operate on scalars). We have specialized functions to merge all of them together for
         // some builders, such as Merger, but for others we just call the merge operation multiple times.
-        if let Simd(ref item) = *value_ty {
+        if vectorizer::is_simd(value_ty) {
             match *builder_kind {
                 Merger(ref t, ref op) => {
                     // For Merger, call the vectorMergePtr function to get a pointer to a vector we can merge into.
@@ -1622,15 +1622,16 @@ impl LlvmGenerator {
                     // For all other builders, extract each value in the vector and merge it separately
                     let value_ty_str = self.llvm_type(value_ty)?.to_string();
                     let value_tmp = self.load_var(llvm_symbol(value).as_str(), &value_ty_str, ctx)?;
-                    let item_ty = Scalar(*item);
+                    let item_ty = vectorizer::scalar_type(value_ty)?;
                     let item_ty_str = self.llvm_type(&item_ty)?.to_string();
                     for i in 0..vec_size(&item_ty)? {
+                        // Extract the item to a register
+                        let item_tmp = self.gen_simd_extract(value_ty, &value_tmp, i, ctx)?;
+                        // Put it into a stack variable so we can call gen)merge
                         let item_stack = ctx.var_ids.next();
-                        let item_reg = ctx.var_ids.next();
-                        let item_stack_sym = Symbol::new(&item_stack.replace("%", ""), 0);
                         ctx.add_alloca(&item_stack, &item_ty_str)?;
-                        ctx.code.add(format!("{} = extractelement {} {}, i32 {}", item_reg, value_ty_str, value_tmp, i));
-                        ctx.code.add(format!("store {} {}, {}* {}", item_ty_str, item_reg, item_ty_str, item_stack));
+                        let item_stack_sym = Symbol::new(&item_stack.replace("%", ""), 0);
+                        ctx.code.add(format!("store {} {}, {}* {}", item_ty_str, item_tmp, item_ty_str, item_stack));
                         self.gen_merge(builder_kind, builder, &item_ty, &item_stack_sym, func, ctx)?;
                     }
                 }
@@ -1639,7 +1640,7 @@ impl LlvmGenerator {
             return Ok(())
         }
 
-        // TODO(Deepak): Do something with annotations here too...
+        // For non-vectorized elements, just switch on the builder type. TODO: Use annotations here too.
         match *builder_kind {
             Appender(ref t) => {
                 let bld_tmp = try!(self.load_var(llvm_symbol(builder).as_str(), &bld_ty_str, ctx));
@@ -1697,27 +1698,13 @@ impl LlvmGenerator {
                     bld_ty_str=bld_ty_str,
                     bld_prefix=bld_prefix,
                     bld_tmp=bld_tmp));
-
-                // If the argument is vectorized, load the vector element.
-                if let Simd(_) = *value_ty {
-                    ctx.code.add(format!(
-                        "{bld_ptr} = call {elem_ty_str}* {bld_prefix}.vectorMergePtr({bld_ty_str} {bld_ptr_raw})",
-                        bld_ptr=bld_ptr,
-                        elem_ty_str=elem_ty_str,
-                        bld_prefix=bld_prefix,
-                        bld_ty_str=bld_ty_str,
-                        bld_ptr_raw=bld_ptr_raw));
-
-                } else {
-                    ctx.code.add(format!(
-                        "{bld_ptr} = call {elem_ty_str}* {bld_prefix}.scalarMergePtr({bld_ty_str} {bld_ptr_raw})",
-                        bld_ptr=bld_ptr,
-                        elem_ty_str=elem_ty_str,
-                        bld_prefix=bld_prefix,
-                        bld_ty_str=bld_ty_str,
-                        bld_ptr_raw=bld_ptr_raw));
-                }
-
+                ctx.code.add(format!(
+                    "{bld_ptr} = call {elem_ty_str}* {bld_prefix}.scalarMergePtr({bld_ty_str} {bld_ptr_raw})",
+                    bld_ptr=bld_ptr,
+                    elem_ty_str=elem_ty_str,
+                    bld_prefix=bld_prefix,
+                    bld_ty_str=bld_ty_str,
+                    bld_ptr_raw=bld_ptr_raw));
                 self.gen_merge_op(&bld_ptr, &elem_tmp, &elem_ty_str, op, t, ctx)?;
             }
 
@@ -2238,6 +2225,53 @@ impl LlvmGenerator {
         }
 
         Ok(())
+    }
+
+    /// Generate code to extract the index'th element of a SIMD value, returning a register name for it.
+    /// This is slightly tricky because the SIMD value may be a struct, in which case we need to recurse into each of
+    /// its elements. `simd_reg` must be the name of an LLVM register containing the SIMD value.
+    fn gen_simd_extract(&mut self,
+                        simd_type: &Type,
+                        simd_reg: &str,
+                        index: u32,
+                        ctx: &mut FunctionContext)
+                        -> WeldResult<String> {
+
+        let simd_type_llvm = self.llvm_type(simd_type)?.to_string();
+        let item_type = vectorizer::scalar_type(simd_type)?;
+        let item_type_llvm = self.llvm_type(&item_type)?.to_string();
+
+        match *simd_type {
+            Simd(_) => {
+                // Simple case: extract the element using an extractelement instruction
+                let item_reg = ctx.var_ids.next();
+                ctx.code.add(format!("{} = extractelement {} {}, i32 {}", item_reg, simd_type_llvm, simd_reg, index));
+                Ok(item_reg)
+            }
+
+            Struct(ref fields) => {
+                // Complex case: build up a struct with each item
+                let mut current_struct = "undef".to_string();
+                for (i, field_type) in fields.iter().enumerate() {
+                    // First, extract the i'th field of our SIMD struct into a register
+                    let field_reg = ctx.var_ids.next();
+                    ctx.code.add(format!("{} = extractvalue {} {}, {}", field_reg, simd_type_llvm, simd_reg, i));
+
+                    // Call ourselves recursively to extract the right item from this sub-vector
+                    let item_reg = self.gen_simd_extract(field_type, &field_reg, index, ctx)?;
+                    let item_type = vectorizer::scalar_type(field_type)?;
+
+                    // Insert this into our result struct
+                    let new_struct = ctx.var_ids.next();
+                    ctx.code.add(format!("{} = insertvalue {} {}, {} {}, {}",
+                        new_struct, item_type_llvm, current_struct, self.llvm_type(&item_type)?, item_reg, i));
+                    current_struct = new_struct;
+                }
+                Ok(current_struct)
+            }
+
+            _ => weld_err!("Invalid type for gen_simd_extract: {:?}", simd_type)
+        }
     }
 
     /// Generate code for a basic block's terminator, appending it to the given FunctionContext.
