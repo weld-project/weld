@@ -24,6 +24,7 @@ pub enum Token {
     TBoolLiteral(bool),
     TIdent(String),
     TIf,
+    TIterate,
     TFor,
     TMerge,
     TResult,
@@ -101,7 +102,8 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
 
         // Regular expressions for various types of tokens.
         static ref KEYWORD_RE: Regex = Regex::new(
-            "if|for|zip|len|lookup|keyexists|slice|exp|log|erf|sqrt|simd|select|broadcast|cudf|simditer|fringeiter|iter|merge|result|let|true|false|macro|\
+            "if|for|zip|len|lookup|keyexists|slice|exp|log|erf|sqrt|simd|select|broadcast|\
+             iterate|cudf|simditer|fringeiter|iter|merge|result|let|true|false|macro|\
              i8|i32|i64|f32|f64|bool|vec|appender|merger|vecmerger|dictmerger|groupmerger|\
              tovec").unwrap();
 
@@ -135,6 +137,7 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
         if KEYWORD_RE.is_match(text) {
             tokens.push(match text {
                             "if" => TIf,
+                            "iterate" => TIterate,
                             "let" => TLet,
                             "for" => TFor,
                             "merge" => TMerge,
@@ -269,6 +272,7 @@ impl fmt::Display for Token {
                     TIdent(_) => "",
                     // Other cases that return fixed strings
                     TIf => "if",
+                    TIterate => "iterate",
                     TFor => "for",
                     TMerge => "merge",
                     TResult => "result",

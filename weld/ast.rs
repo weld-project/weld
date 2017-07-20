@@ -357,6 +357,11 @@ pub enum ExprKind<T: TypeBounds> {
         on_true: Box<Expr<T>>,
         on_false: Box<Expr<T>>,
     },
+    /// Sequential loop
+    Iterate {
+        initial: Box<Expr<T>>,
+        update_func: Box<Expr<T>>,
+    },
     Select {
         cond: Box<Expr<T>>,
         on_true: Box<Expr<T>>,
@@ -554,6 +559,10 @@ impl<T: TypeBounds> Expr<T> {
                 ref on_true,
                 ref on_false,
             } => vec![cond.as_ref(), on_true.as_ref(), on_false.as_ref()],
+            Iterate {
+                ref initial,
+                ref update_func,
+            } => vec![initial.as_ref(), update_func.as_ref()],
             Select {
                 ref cond,
                 ref on_true,
@@ -650,6 +659,10 @@ impl<T: TypeBounds> Expr<T> {
                 ref mut on_true,
                 ref mut on_false,
             } => vec![cond.as_mut(), on_true.as_mut(), on_false.as_mut()],
+            Iterate {
+                ref mut initial,
+                ref mut update_func,
+            } => vec![initial.as_mut(), update_func.as_mut()],
             Select {
                 ref mut cond,
                 ref mut on_true,
@@ -741,6 +754,7 @@ impl<T: TypeBounds> Expr<T> {
                 (&Res { .. }, &Res { .. }) => Ok(true),
                 (&For { .. }, &For { .. }) => Ok(true), // TODO need to check Iters?
                 (&If { .. }, &If { .. }) => Ok(true),
+                (&Iterate { .. }, &Iterate { .. }) => Ok(true),
                 (&Select { .. }, &Select { .. }) => Ok(true),
                 (&Apply { .. }, &Apply { .. }) => Ok(true),
                 (&CUDF {

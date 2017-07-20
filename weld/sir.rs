@@ -4,6 +4,7 @@ use std::fmt;
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use super::ast::*;
+use super::ast::Type::*;
 use super::error::*;
 use super::pretty_print::*;
 use super::util::SymbolGenerator;
@@ -632,10 +633,7 @@ fn sir_param_correction(prog: &mut SirProgram) -> WeldResult<()> {
 
 /// Convert an AST to a SIR program. Symbols must be unique in expr.
 pub fn ast_to_sir(expr: &TypedExpr) -> WeldResult<SirProgram> {
-    if let ExprKind::Lambda {
-               ref params,
-               ref body,
-           } = expr.kind {
+    if let ExprKind::Lambda { ref params, ref body } = expr.kind {
         let mut prog = SirProgram::new(&expr.ty, params);
         prog.sym_gen = SymbolGenerator::from_expression(expr);
         for tp in params {
@@ -874,6 +872,95 @@ fn gen_expr(expr: &TypedExpr,
                 prog.funcs[false_func].blocks[false_block].terminator = JumpBlock(cont_block);
                 Ok((cur_func, cont_block, res_sym))
             }
+        }
+
+        ExprKind::Iterate {
+            ref initial,
+            ref update_func,
+        } => {
+            // Pull out the argument name and function body and validate that things type-check
+            let argument_sym;
+            let func_body;
+            match update_func.kind {
+                ExprKind::Lambda { ref params, ref body } if params.len() == 1 => {
+                    argument_sym = &params[0].name;
+                    func_body = body;
+                    if params[0].ty != initial.ty {
+                        return weld_err!("Wrong argument type for body of Iterate");
+                    }
+                    if func_body.ty != Struct(vec![initial.ty.clone(), Scalar(ScalarKind::Bool)]) {
+                        return weld_err!("Wrong return type for body of Iterate");
+                    }
+                    prog.add_local_named(&params[0].ty, argument_sym, cur_func);
+                }
+                _ => return weld_err!("Argument of Iterate was not a Lambda")
+            }
+
+            // Generate the intial value and assign it to the update_func's argument
+            let (cur_func, cur_block, initial_sym) = gen_expr(initial, prog, cur_func, cur_block)?;
+            prog.funcs[cur_func].blocks[cur_block].add_statement(
+                Assign { output: argument_sym.clone(), value: initial_sym });
+
+            // Jump to a new block for the start of the loop; this is useful so that it can have a block ID that
+            // we can jump to again later
+            let body_start_block = prog.funcs[cur_func].add_block();
+            prog.funcs[cur_func].blocks[cur_block].terminator = JumpBlock(body_start_block);
+
+            // Generate the loop's body, which will work on argument_sym and produce result_sym.
+            // The type of result_sym will be {ArgType, bool} and we will repeat the body if the bool is true.
+            let (body_func, body_end_block, result_sym) = gen_expr(func_body, prog, cur_func, body_start_block)?;
+            
+            if body_func == cur_func {
+                let end_block = prog.funcs[body_func].add_block();
+                let continue_sym = prog.add_local(&Scalar(ScalarKind::Bool), body_func);
+                prog.funcs[body_func].blocks[body_end_block].add_statement(
+                    GetField { output: argument_sym.clone(), value: result_sym.clone(), index: 0 });
+                prog.funcs[body_func].blocks[body_end_block].add_statement(
+                    GetField { output: continue_sym.clone(), value: result_sym.clone(), index: 1 });
+                prog.funcs[body_func].blocks[body_end_block].terminator =
+                    Branch { cond: continue_sym, on_true: body_start_block, on_false: end_block };
+                Ok((body_func, end_block, argument_sym.clone()))
+            } else {
+                weld_err!("Can't generate code for Iterate with parallel stuff inside yet")
+            }
+            
+            /*
+            let true_block = prog.funcs[cur_func].add_block();
+            let false_block = prog.funcs[cur_func].add_block();
+            prog.funcs[cur_func].blocks[cur_block].terminator = Branch {
+                cond: cond_sym,
+                on_true: true_block,
+                on_false: false_block,
+            };
+            let (true_func, true_block, true_sym) = gen_expr(on_true, prog, cur_func, true_block)?;
+            let (false_func, false_block, false_sym) =
+                gen_expr(on_false, prog, cur_func, false_block)?;
+            let res_sym = prog.add_local(&expr.ty, true_func);
+            prog.funcs[true_func].blocks[true_block].add_statement(Assign {
+                                                                       output: res_sym.clone(),
+                                                                       value: true_sym,
+                                                                   });
+            prog.funcs[false_func].blocks[false_block].add_statement(Assign {
+                                                                         output: res_sym.clone(),
+                                                                         value: false_sym,
+                                                                     });
+            if true_func != cur_func || false_func != cur_func {
+                // TODO we probably want a better for name for this symbol than whatever res_sym is
+                prog.add_local_named(&expr.ty, &res_sym, false_func);
+                // the part after the if-else block is split out into a separate continuation
+                // function so that we don't have to duplicate this code
+                let cont_func = prog.add_func();
+                let cont_block = prog.funcs[cont_func].add_block();
+                prog.funcs[true_func].blocks[true_block].terminator = JumpFunction(cont_func);
+                prog.funcs[false_func].blocks[false_block].terminator = JumpFunction(cont_func);
+                Ok((cont_func, cont_block, res_sym))
+            } else {
+                let cont_block = prog.funcs[cur_func].add_block();
+                prog.funcs[true_func].blocks[true_block].terminator = JumpBlock(cont_block);
+                prog.funcs[false_func].blocks[false_block].terminator = JumpBlock(cont_block);
+                Ok((cur_func, cont_block, res_sym))
+            }
+            */
         }
 
         ExprKind::Merge {

@@ -1560,7 +1560,7 @@ impl LlvmGenerator {
                 if let Builder(ref bld_kind, _) = *bld_ty {
                     self.gen_result(bld_kind, builder, output, func, ctx)?;
                 } else {
-                    return weld_err!("Non builder type {} found in Res", print_type(bld_ty))
+                    return weld_err!("Non builder type {} found in Result", print_type(bld_ty))
                 }
             }
 

@@ -371,6 +371,16 @@ impl PartialExpr {
                 }
             }
 
+            Iterate {
+                ref initial,
+                ref update_func,
+            } => {
+                Iterate {
+                    initial: try!(typed_box(initial)),
+                    update_func: try!(typed_box(update_func)),
+                }
+            }
+
             Select {
                 ref cond,
                 ref on_true,
