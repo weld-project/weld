@@ -2541,7 +2541,7 @@ fn get_sym_ty<'a>(func: &'a SirFunction, sym: &Symbol) -> WeldResult<&'a Type> {
     } else if func.params.get(sym).is_some() {
         Ok(func.params.get(sym).unwrap())
     } else {
-        weld_err!("Can't find symbol {}#{}", sym.name, sym.id)
+        weld_err!("Can't find symbol {}", sym)
     }
 }
 

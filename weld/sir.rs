@@ -9,6 +9,7 @@ use super::error::*;
 use super::pretty_print::*;
 use super::util::SymbolGenerator;
 
+// TODO: make these wrapper types so that you can't pass in the wrong value by mistake
 pub type BasicBlockId = usize;
 pub type FunctionId = usize;
 
@@ -305,9 +306,9 @@ impl fmt::Display for Statement {
                 ref elems,
             } => {
                 write!(f,
-                       "{} = new {}",
+                       "{} = {}",
                        output,
-                       join("{", ",", "}", elems.iter().map(|e| e.0.name.clone())))
+                       join("{", ", ", "}", elems.iter().map(|e| format!("{}", e.0))))
             }
             MakeVector {
                 ref output,
@@ -315,9 +316,9 @@ impl fmt::Display for Statement {
                 ..
             } => {
                 write!(f,
-                       "{} = new {}",
+                       "{} = {}",
                        output,
-                       join("[", ",", "]", elems.iter().map(|e| e.name.clone())))
+                       join("[", ", ", "]", elems.iter().map(|e| format!("{}", e))))
             }
             CUDF {
                 ref output,
@@ -329,13 +330,13 @@ impl fmt::Display for Statement {
                        "{} = cudf[{}]{}",
                        output,
                        symbol_name,
-                       join("(", ",", ")", args.iter().map(|e| e.name.clone())))
+                       join("(", ", ", ")", args.iter().map(|e| format!("{}", e))))
             }
             GetField {
                 ref output,
                 ref value,
                 index,
-            } => write!(f, "{} = {}.{}", output, value, index),
+            } => write!(f, "{} = {}.${}", output, value, index),
         }
     }
 }
@@ -440,14 +441,20 @@ impl fmt::Display for SirProgram {
     }
 }
 
-/// Recursive helper function for sir_param_correction. env contains the symbol to type mappings
+/// Recursive helper function for sir_param_correction. `env` contains the symbol to type mappings
 /// that have been defined previously in the program. Any symbols that need to be passed in
-/// as closure parameters to func_id will be added to closure (so that func_id's
+/// as closure parameters to func_id will be added to `closure` (so that `func_id`'s
 /// callers can also add these symbols to their parameters list, if necessary).
+/// `visited` contains functions we have already seen on the way down the function call tree,
+/// to prevent infinite recursion when there are loops.
 fn sir_param_correction_helper(prog: &mut SirProgram,
                                func_id: FunctionId,
                                env: &mut HashMap<Symbol, Type>,
-                               closure: &mut HashSet<Symbol>) {
+                               closure: &mut HashSet<Symbol>,
+                               visited: &mut HashSet<FunctionId>) {
+    if visited.insert(func_id) {
+        return;
+    }
     for (name, ty) in &prog.funcs[func_id].params {
         env.insert(name.clone(), ty.clone());
     }
@@ -592,11 +599,11 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
         match block.terminator {
             // make a recursive call for other functions referenced by the terminator
             ParallelFor(ref pf) => {
-                sir_param_correction_helper(prog, pf.body, env, &mut inner_closure);
-                sir_param_correction_helper(prog, pf.cont, env, &mut inner_closure);
+                sir_param_correction_helper(prog, pf.body, env, &mut inner_closure, visited);
+                sir_param_correction_helper(prog, pf.cont, env, &mut inner_closure, visited);
             }
             JumpFunction(jump_func) => {
-                sir_param_correction_helper(prog, jump_func, env, &mut inner_closure);
+                sir_param_correction_helper(prog, jump_func, env, &mut inner_closure, visited);
             }
             Branch { .. } => {}
             JumpBlock(_) => {}
@@ -621,7 +628,9 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
 fn sir_param_correction(prog: &mut SirProgram) -> WeldResult<()> {
     let mut env = HashMap::new();
     let mut closure = HashSet::new();
-    sir_param_correction_helper(prog, 0, &mut env, &mut closure);
+    let mut visited = HashSet::new();
+    println!("SIR param correction starting for:\n{}", prog);
+    sir_param_correction_helper(prog, 0, &mut env, &mut closure, &mut visited);
     let ref func = prog.funcs[0];
     for name in closure {
         if func.params.get(&name) == None {
@@ -878,7 +887,7 @@ fn gen_expr(expr: &TypedExpr,
             ref initial,
             ref update_func,
         } => {
-            // Pull out the argument name and function body and validate that things type-check
+            // Pull out the argument name and function body and validate that things type-check.
             let argument_sym;
             let func_body;
             match update_func.kind {
@@ -896,71 +905,62 @@ fn gen_expr(expr: &TypedExpr,
                 _ => return weld_err!("Argument of Iterate was not a Lambda")
             }
 
-            // Generate the intial value and assign it to the update_func's argument
+            // Generate the intial value and assign it to the update_func's argument.
             let (cur_func, cur_block, initial_sym) = gen_expr(initial, prog, cur_func, cur_block)?;
             prog.funcs[cur_func].blocks[cur_block].add_statement(
                 Assign { output: argument_sym.clone(), value: initial_sym });
 
-            // Jump to a new block for the start of the loop; this is useful so that it can have a block ID that
-            // we can jump to again later
-            let body_start_block = prog.funcs[cur_func].add_block();
-            prog.funcs[cur_func].blocks[cur_block].terminator = JumpBlock(body_start_block);
+            // Check whether the function's body contains any parallel loops. If so, we should put the loop body
+            // in a new function because we'll need to jump back to it from continuations. If not, we can just
+            // make the loop body be another basic block in the current function.
+            let parallel_body = contains_parallel_expressions(func_body);
+            let body_start_func = if parallel_body {
+                let new_func = prog.add_func();
+                prog.add_local_named(&initial.ty, argument_sym, new_func);
+                new_func
+            } else {
+                cur_func
+            };
+            let body_start_block = prog.funcs[body_start_func].add_block();
+
+            // Jump to where the body starts
+            if parallel_body {
+                prog.funcs[cur_func].blocks[cur_block].terminator = JumpFunction(body_start_func);
+            } else {
+                prog.funcs[cur_func].blocks[cur_block].terminator = JumpBlock(body_start_block);
+            }
 
             // Generate the loop's body, which will work on argument_sym and produce result_sym.
             // The type of result_sym will be {ArgType, bool} and we will repeat the body if the bool is true.
-            let (body_func, body_end_block, result_sym) = gen_expr(func_body, prog, cur_func, body_start_block)?;
+            let (body_end_func, body_end_block, result_sym) =
+                gen_expr(func_body, prog, body_start_func, body_start_block)?;
             
-            if body_func == cur_func {
-                let end_block = prog.funcs[body_func].add_block();
-                let continue_sym = prog.add_local(&Scalar(ScalarKind::Bool), body_func);
-                prog.funcs[body_func].blocks[body_end_block].add_statement(
-                    GetField { output: argument_sym.clone(), value: result_sym.clone(), index: 0 });
-                prog.funcs[body_func].blocks[body_end_block].add_statement(
-                    GetField { output: continue_sym.clone(), value: result_sym.clone(), index: 1 });
-                prog.funcs[body_func].blocks[body_end_block].terminator =
-                    Branch { cond: continue_sym, on_true: body_start_block, on_false: end_block };
-                Ok((body_func, end_block, argument_sym.clone()))
+            // After the body, unpack the {state, bool} struct into symbols argument_sym and continue_sym.
+            let continue_sym = prog.add_local(&Scalar(ScalarKind::Bool), body_end_func);
+            prog.add_local_named(&initial.ty, argument_sym, body_end_func);
+            prog.funcs[body_end_func].blocks[body_end_block].add_statement(
+                GetField { output: argument_sym.clone(), value: result_sym.clone(), index: 0 });
+            prog.funcs[body_end_func].blocks[body_end_block].add_statement(
+                GetField { output: continue_sym.clone(), value: result_sym.clone(), index: 1 });
+
+            // Create two more blocks so we can branch on continue_sym
+            let repeat_block = prog.funcs[body_end_func].add_block();
+            let finish_block = prog.funcs[body_end_func].add_block();
+            prog.funcs[body_end_func].blocks[body_end_block].terminator =
+                Branch { cond: continue_sym, on_true: repeat_block, on_false: finish_block };
+
+            // If we had a parallel body, repeat_block must do a JumpFunction to get back to body_start_func;
+            // otherwise it can just do a normal JumpBlock since it should be in the same function.
+            if parallel_body {
+                assert!(body_end_func != body_start_func);
+                prog.funcs[body_end_func].blocks[repeat_block].terminator = JumpFunction(body_start_func);
             } else {
-                weld_err!("Can't generate code for Iterate with parallel stuff inside yet")
+                assert!(body_end_func == cur_func && body_start_func == cur_func);
+                prog.funcs[body_end_func].blocks[repeat_block].terminator = JumpBlock(body_start_block);
             }
-            
-            /*
-            let true_block = prog.funcs[cur_func].add_block();
-            let false_block = prog.funcs[cur_func].add_block();
-            prog.funcs[cur_func].blocks[cur_block].terminator = Branch {
-                cond: cond_sym,
-                on_true: true_block,
-                on_false: false_block,
-            };
-            let (true_func, true_block, true_sym) = gen_expr(on_true, prog, cur_func, true_block)?;
-            let (false_func, false_block, false_sym) =
-                gen_expr(on_false, prog, cur_func, false_block)?;
-            let res_sym = prog.add_local(&expr.ty, true_func);
-            prog.funcs[true_func].blocks[true_block].add_statement(Assign {
-                                                                       output: res_sym.clone(),
-                                                                       value: true_sym,
-                                                                   });
-            prog.funcs[false_func].blocks[false_block].add_statement(Assign {
-                                                                         output: res_sym.clone(),
-                                                                         value: false_sym,
-                                                                     });
-            if true_func != cur_func || false_func != cur_func {
-                // TODO we probably want a better for name for this symbol than whatever res_sym is
-                prog.add_local_named(&expr.ty, &res_sym, false_func);
-                // the part after the if-else block is split out into a separate continuation
-                // function so that we don't have to duplicate this code
-                let cont_func = prog.add_func();
-                let cont_block = prog.funcs[cont_func].add_block();
-                prog.funcs[true_func].blocks[true_block].terminator = JumpFunction(cont_func);
-                prog.funcs[false_func].blocks[false_block].terminator = JumpFunction(cont_func);
-                Ok((cont_func, cont_block, res_sym))
-            } else {
-                let cont_block = prog.funcs[cur_func].add_block();
-                prog.funcs[true_func].blocks[true_block].terminator = JumpBlock(cont_block);
-                prog.funcs[false_func].blocks[false_block].terminator = JumpBlock(cont_block);
-                Ok((cur_func, cont_block, res_sym))
-            }
-            */
+
+            // In either case, our final value is available in finish_block.
+            Ok((body_end_func, finish_block, argument_sym.clone()))
         }
 
         ExprKind::Merge {
@@ -1199,6 +1199,17 @@ fn gen_expr(expr: &TypedExpr,
 
         _ => weld_err!("Unsupported expression: {}", print_expr(expr)),
     }
+}
+
+/// Return true if an expression contains parallel for operators
+fn contains_parallel_expressions(expr: &TypedExpr) -> bool {
+    let mut found = false;
+    expr.traverse(&mut |ref e| {
+        if let ExprKind::For { .. } = e.kind {
+            found = true;
+        }
+    });
+    found
 }
 
 fn join<T: Iterator<Item = String>>(start: &str, sep: &str, end: &str, strings: T) -> String {
