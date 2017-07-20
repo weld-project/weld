@@ -1591,7 +1591,6 @@ fn iterate_with_parallel_body() {
     let input: i32 = 3;
 
     let ret_value = compile_and_run(code, conf, &input);
-    println!("RAN SUCCESSFULLY!!");
     let data = unsafe { weld_value_data(ret_value) as *const WeldVec<i32> };
     let result = unsafe { (*data).clone() };
 
