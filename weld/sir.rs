@@ -937,7 +937,9 @@ fn gen_expr(expr: &TypedExpr,
             
             // After the body, unpack the {state, bool} struct into symbols argument_sym and continue_sym.
             let continue_sym = prog.add_local(&Scalar(ScalarKind::Bool), body_end_func);
-            prog.funcs[body_end_func].params.insert(argument_sym.clone(), initial.ty.clone());
+            if parallel_body {
+                prog.funcs[body_end_func].params.insert(argument_sym.clone(), initial.ty.clone());
+            }
             prog.funcs[body_end_func].blocks[body_end_block].add_statement(
                 GetField { output: argument_sym.clone(), value: result_sym.clone(), index: 0 });
             prog.funcs[body_end_func].blocks[body_end_block].add_statement(
