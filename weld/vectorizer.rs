@@ -16,12 +16,10 @@ use super::exprs;
 
 /// Get the vectorized version of a type.
 fn vectorized_type(ty: &Type) -> Type {
-    if let Scalar(kind) = *ty {
-        Simd(kind)
-    } else if let Struct(ref elems) = *ty {
-        Struct(elems.iter().map(|ref e| vectorized_type(e)).collect())
-    } else {
-        ty.clone()
+    match *ty {
+        Scalar(kind) => Simd(kind),
+        Struct(ref fields) => Struct(fields.iter().map(|ref f| vectorized_type(f)).collect()),
+        _ => ty.clone()
     }
 }
 
@@ -33,7 +31,7 @@ fn vectorized_type(ty: &Type) -> Type {
 pub fn is_simd(ty: &Type) -> bool {
     match *ty {
         Simd(_) => true,
-        Struct(ref elems) => elems.iter().all(is_simd),
+        Struct(ref fields) => fields.iter().all(is_simd),
         _ => false
     }
 }
@@ -43,12 +41,12 @@ pub fn scalar_type(simd_type: &Type) -> WeldResult<Type> {
     match *simd_type {
         Simd(kind) => Ok(Scalar(kind)),
 
-        Struct(ref elems) => {
-            let mut new_elems = vec![];
-            for e in elems {
-                new_elems.push(scalar_type(e)?)
+        Struct(ref fields) => {
+            let mut new_fields = vec![];
+            for f in fields {
+                new_fields.push(scalar_type(f)?)
             }
-            Ok(Struct(new_elems))
+            Ok(Struct(new_fields))
         }
 
         _ => weld_err!("scalar_type called on non-SIMD type {:?}", simd_type)
@@ -201,30 +199,27 @@ fn vectorizable(for_loop: &Expr<Type>) -> WeldResult<HashSet<Symbol>> {
                     body.traverse(&mut |f| {
                         match f.kind {
                             Literal(_) => {},
+
                             Ident(ref name) => {
                                 if f.ty == params[1].ty && *name == params[1].name {
                                     // Used an index expression in the loop body.
                                     passed = false;
                                 }
                             },
+
                             BinOp{ .. } => {},
+
                             Let{ ref name, .. } => {
                                 defined_in_loop.insert(name.clone()); 
                             },
-                            // GetField is allowed if the only fields we fetch are the ones from
-                            // the argument (in case the input was Zipped). At this point, it is
-                            // already guaranteed that each input vector is a scalar.
-                            GetField { ref expr, .. } => {
-                                let mut getfield_passed = false;
-                                let ref elem_param = params[2];
-                                if let Ident(ref name) = expr.kind {
-                                    if elem_param.name == *name {
-                                       getfield_passed = true; 
-                                    }
-                                }
-                                passed = getfield_passed;
-                            }
-                            Merge{ .. } => {},
+
+                            // TODO: do we want to allow all GetFields and MakeStructs, or look inside them?
+                            GetField { .. } => {},
+
+                            MakeStruct { .. } => {},
+
+                            Merge { .. } => {},
+
                             If { ref on_true, ref on_false, .. } => {
                                 let mut can_predicate = false;
                                 if let Merge { ref builder, .. } = on_true.kind {
@@ -244,6 +239,7 @@ fn vectorizable(for_loop: &Expr<Type>) -> WeldResult<HashSet<Symbol>> {
                                 }
                                 passed = can_predicate;
                             }
+
                             _ => {
                                 passed = false;
                             }
