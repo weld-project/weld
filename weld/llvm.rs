@@ -170,6 +170,14 @@ impl LlvmGenerator {
         format!("; PRELUDE:\n\n{}\n; BODY:\n\n{}", self.prelude_code.result(), self.body_code.result())
     }
 
+    /// Returns the Type, LLVM type (as a string), and LLVM symbol name (as a string).
+    fn symbol_info<'a>(&mut self, func: &'a SirFunction, sym: &Symbol) -> WeldResult<(&'a Type, String, String)> {
+        let ty = func.symbol_type(sym)?;
+        let llvm_ty = self.llvm_type(ty)?.to_string();
+        let llvm_str = llvm_symbol(sym);
+        Ok((ty, llvm_ty, llvm_str))
+    }
+
     fn get_arg_str(&mut self, params: &HashMap<Symbol, Type>, suffix: &str) -> WeldResult<String> {
         let mut arg_types = String::new();
         let params_sorted: BTreeMap<&Symbol, &Type> = params.iter().collect();
@@ -510,7 +518,7 @@ impl LlvmGenerator {
                 let arr_len = wrap_ctx.var_ids.next();
                 let tmp = wrap_ctx.var_ids.next();
                 let tmp2 = wrap_ctx.var_ids.next();
-                let vector_len = format!("{}", vec_size(get_sym_ty(func, &first_data)?)?);
+                let vector_len = format!("{}", vec_size(func.symbol_type(&first_data)?)?);
 
                 wrap_ctx
                     .code
@@ -765,6 +773,18 @@ impl LlvmGenerator {
         Ok(())
     }
 
+    /// Returns the LLVM formatted String for a LiteralKind.
+    fn llvm_literal(&mut self, k: LiteralKind) -> String {
+        match k {
+            BoolLiteral(l) => format!("{}", if l { 1 } else { 0 }),
+            I8Literal(l) => format!("{}", l),
+            I32Literal(l) =>  format!("{}", l),
+            I64Literal(l) => format!("{}", l),
+            F32Literal(l) => format!("{:.30e}", l),
+            F64Literal(l) => format!("{:.30e}", l),
+        }.to_string()
+    }
+
     /// Return the LLVM type name corresponding to a Weld type.
     fn llvm_type(&mut self, ty: &Type) -> WeldResult<&str> {
         match *ty {
@@ -993,25 +1013,35 @@ impl LlvmGenerator {
         Ok(var)
     }
 
-    fn generate_vector_literal(&mut self,
+    /// Generate code to store data with LLVM type ty into a a target.
+    fn gen_store_var(&mut self, data: &str, target: &str, ty: &str, ctx: &mut FunctionContext) {
+        ctx.code.add(format!("store {} {}, {}* {}", ty, data, ty, target));
+    }
+
+    /// Generates code for a SIMD literal with the given `kind` and `ty`. The result is stored in
+    /// `output`.
+    fn gen_simd_literal(&mut self,
                                output: &str,
-                               value: &LiteralKind,
+                               kind: &LiteralKind,
                                vec_ty: &Type,
                                ctx: &mut FunctionContext)
                                -> WeldResult<()> {
+
         let size = vec_size(vec_ty)?;
         let vec_ty_str = self.llvm_type(vec_ty)?.to_string();
         let size_str = format!("{}", size);
-        let insert_str = match *value {
-            BoolLiteral(l) => {
-                format!("insertelement <{} x i1> $NAME, i1 {}, i32 $INDEX", size_str, if l { 1 } else { 0 })
-            }
-            I8Literal(l) => format!("insertelement <{} x i8> $NAME, i8 {}, i32 $INDEX", size_str, l),
-            I32Literal(l) => format!("insertelement <{} x i32> $NAME, i32 {}, i32 $INDEX", size_str, l),
-            I64Literal(l) => format!("insertelement <{} x i64> $NAME, i64 {}, i32 $INDEX", size_str, l),
-            F32Literal(l) => format!("insertelement <{} x float> $NAME, float {:.30e}, i32 $INDEX", size_str, l),
-            F64Literal(l) => format!("insertelement <{} x double> $NAME, double {:.30e}, i32 $INDEX", size_str, l),
-        };
+
+        let value_str = self.llvm_literal(*kind);
+        let elem_ty_str = match *kind {
+            BoolLiteral(_) => "bool",
+            I8Literal(_) => "i8",
+            I32Literal(_) => "i32",
+            I64Literal(_) => "i64",
+            F32Literal(_) => "float",
+            F64Literal(_) => "double",
+        }.to_string();
+
+        let insert_str = format!("insertelement <{size} x {elem}> $NAME, {elem} {value}, i32 $INDEX", size=size_str, elem=elem_ty_str, value=value_str);
 
         let mut prev_name = "undef".to_string();
         for i in 0..size {
@@ -1026,7 +1056,6 @@ impl LlvmGenerator {
                              vec_ty_str = vec_ty_str,
                              output = output,
                              prev_name = prev_name));
-
         Ok(())
     }
 
@@ -1096,14 +1125,14 @@ impl LlvmGenerator {
                     child: &Symbol,
                     op_kind: UnaryOpKind)
                     -> WeldResult<()> {
-        let child_ty = try!(get_sym_ty(func, child));
+        let child_ty = try!(func.symbol_type(child));
         if let Scalar(ref ty) = *child_ty {
             let child_ll_ty = try!(self.llvm_type(&child_ty)).to_string();
             let child_tmp = try!(self.load_var(llvm_symbol(child).as_str(), &child_ll_ty, ctx));
             let res_tmp = ctx.var_ids.next();
             let op_name = try!(llvm_unaryop(op_kind, ty));
             ctx.code.add(format!("{} = call {} {} ({} {})", res_tmp, child_ll_ty, op_name, child_ll_ty, child_tmp));
-            let out_ty = try!(get_sym_ty(func, output));
+            let out_ty = try!(func.symbol_type(output));
             let out_ty_str = try!(self.llvm_type(&out_ty)).to_string();
             ctx.code.add(format!("store {} {}, {}* {}", out_ty_str, res_tmp, out_ty_str, llvm_symbol(output)));
         } else {
@@ -1153,9 +1182,9 @@ impl LlvmGenerator {
                     // First, declare the function.
                     let mut arg_tys = vec![];
                     for ref arg in args {
-                        arg_tys.push(format!("{}*", self.llvm_type(get_sym_ty(func, arg)?)?.to_string()));
+                        arg_tys.push(format!("{}*", self.llvm_type(func.symbol_type(arg)?)?.to_string()));
                     }
-                    arg_tys.push(format!("{}*", self.llvm_type(get_sym_ty(func, output)?)?.to_string()));
+                    arg_tys.push(format!("{}*", self.llvm_type(func.symbol_type(output)?)?.to_string()));
                     let arg_sig = arg_tys.join(", ");
 
                     self.prelude_code.add(format!("declare void @{name}({arg_sig});",
@@ -1166,12 +1195,12 @@ impl LlvmGenerator {
                 // Prepare the parameter list for the function
                 let mut arg_tys = vec![];
                 for ref arg in args {
-                    let ll_ty = self.llvm_type(get_sym_ty(func, arg)?)?.to_string();
+                    let ll_ty = self.llvm_type(func.symbol_type(arg)?)?.to_string();
                     let arg_str = format!("{ll_ty}* {arg}", arg = llvm_symbol(arg), ll_ty = ll_ty);
                     arg_tys.push(arg_str);
                 }
                 arg_tys.push(format!("{}* {}",
-                                        self.llvm_type(get_sym_ty(func, output)?)?.to_string(),
+                                        self.llvm_type(func.symbol_type(output)?)?.to_string(),
                                         llvm_symbol(output)));
                 let param_sig = arg_tys.join(", ");
 
@@ -1218,7 +1247,7 @@ impl LlvmGenerator {
                 let left_tmp = self.load_var(llvm_symbol(left).as_str(), &ll_ty, ctx)?;
                 let right_tmp = self.load_var(llvm_symbol(right).as_str(), &ll_ty, ctx)?;
                 let bin_tmp = ctx.var_ids.next();
-                let out_ty = get_sym_ty(func, output)?;
+                let out_ty = func.symbol_type(output)?;
                 let out_ty_str = self.llvm_type(&out_ty)?.to_string();
                 match *ty {
                     Scalar(_) | Simd(_) => {
@@ -1255,8 +1284,8 @@ impl LlvmGenerator {
             }
 
             Broadcast { ref output, ref child } => {
-                let ty = get_sym_ty(func, output)?;
-                let elem_ty = get_sym_ty(func, child)?;
+                let ty = func.symbol_type(output)?;
+                let elem_ty = func.symbol_type(child)?;
 
                 let elem_ty_str = self.llvm_type(&elem_ty)?.to_string();
                 let vec_ty_str = self.llvm_type(&ty)?.to_string();
@@ -1287,7 +1316,7 @@ impl LlvmGenerator {
             }
 
             Negate { ref output, ref child } => {
-                let out_ty = get_sym_ty(func, output)?;
+                let out_ty = func.symbol_type(output)?;
                 let ll_ty = self.llvm_type(out_ty)?.to_string();
                 let child_tmp = self.load_var(llvm_symbol(child).as_str(), &ll_ty, ctx)?;
                 let bin_tmp = ctx.var_ids.next();
@@ -1304,7 +1333,7 @@ impl LlvmGenerator {
             }
 
             Cast { ref output, ref new_ty, ref child } => {
-                let old_ty = try!(get_sym_ty(func, child));
+                let old_ty = try!(func.symbol_type(child));
                 let old_ll_ty = try!(self.llvm_type(&old_ty)).to_string();
                 if old_ty != new_ty {
                     let op_name = try!(llvm_castop(&old_ty, &new_ty));
@@ -1317,7 +1346,7 @@ impl LlvmGenerator {
                                             old_ll_ty,
                                             child_tmp,
                                             new_ll_ty));
-                    let out_ty = try!(get_sym_ty(func, output));
+                    let out_ty = try!(func.symbol_type(output));
                     let out_ty_str = try!(self.llvm_type(&out_ty)).to_string();
                     ctx.code.add(format!("store {} {}, {}* {}",
                                             out_ty_str,
@@ -1335,11 +1364,11 @@ impl LlvmGenerator {
             }
 
             Lookup { ref output, ref child, ref index } => {
-                let child_ty = try!(get_sym_ty(func, child));
+                let child_ty = try!(func.symbol_type(child));
                 match *child_ty {
                     Vector(_) => {
                         let child_ll_ty = try!(self.llvm_type(&child_ty)).to_string();
-                        let output_ty = try!(get_sym_ty(func, output));
+                        let output_ty = try!(func.symbol_type(output));
                         let output_ll_ty = try!(self.llvm_type(&output_ty)).to_string();
                         let vec_ll_ty = try!(self.llvm_type(&child_ty)).to_string();
                         let vec_prefix = format!("@{}", vec_ll_ty.replace("%", ""));
@@ -1364,10 +1393,10 @@ impl LlvmGenerator {
                     }
                     Dict(_, _) => {
                         let child_ll_ty = try!(self.llvm_type(&child_ty)).to_string();
-                        let output_ty = try!(get_sym_ty(func, output));
+                        let output_ty = try!(func.symbol_type(output));
                         let output_ll_ty = try!(self.llvm_type(&output_ty)).to_string();
                         let dict_ll_ty = try!(self.llvm_type(&child_ty)).to_string();
-                        let index_ty = try!(get_sym_ty(func, index));
+                        let index_ty = try!(func.symbol_type(index));
                         let index_ll_ty = try!(self.llvm_type(&index_ty)).to_string();
                         let dict_prefix = format!("@{}", dict_ll_ty.replace("%", ""));
                         let child_tmp = try!(self.load_var(llvm_symbol(child).as_str(), &child_ll_ty, ctx));
@@ -1399,12 +1428,12 @@ impl LlvmGenerator {
             }
 
             KeyExists { ref output, ref child, ref key } => {
-                let child_ty = try!(get_sym_ty(func, child));
+                let child_ty = try!(func.symbol_type(child));
                 match *child_ty {
                     Dict(_, _) => {
                         let child_ll_ty = try!(self.llvm_type(&child_ty)).to_string();
                         let dict_ll_ty = try!(self.llvm_type(&child_ty)).to_string();
-                        let key_ty = try!(get_sym_ty(func, key));
+                        let key_ty = try!(func.symbol_type(key));
                         let key_ll_ty = try!(self.llvm_type(&key_ty)).to_string();
                         let dict_prefix = format!("@{}", dict_ll_ty.replace("%", ""));
                         let child_tmp = try!(self.load_var(llvm_symbol(child).as_str(), &child_ll_ty, ctx));
@@ -1431,11 +1460,11 @@ impl LlvmGenerator {
             }
 
             Slice { ref output, ref child, ref index, ref size } => {
-                let child_ty = try!(get_sym_ty(func, child));
+                let child_ty = try!(func.symbol_type(child));
                 match *child_ty {
                     Vector(_) => {
                         let child_ll_ty = try!(self.llvm_type(&child_ty)).to_string();
-                        let output_ty = try!(get_sym_ty(func, output));
+                        let output_ty = try!(func.symbol_type(output));
                         let output_ll_ty = try!(self.llvm_type(&output_ty)).to_string();
                         let vec_ll_ty = try!(self.llvm_type(&child_ty)).to_string();
                         let vec_prefix = format!("@{}", vec_ll_ty.replace("%", ""));
@@ -1452,7 +1481,7 @@ impl LlvmGenerator {
                                                 child_tmp,
                                                 index_tmp,
                                                 size_tmp));
-                        let out_ty = try!(get_sym_ty(func, output));
+                        let out_ty = try!(func.symbol_type(output));
                         let out_ty_str = try!(self.llvm_type(&out_ty)).to_string();
                         ctx.code.add(format!("store {} {}, {}* {}",
                                                 out_ty_str,
@@ -1465,8 +1494,8 @@ impl LlvmGenerator {
             }
 
             Select { ref output, ref cond, ref on_true, ref on_false } => {
-                let cond_ty_str = self.llvm_type(get_sym_ty(func, cond)?)?.to_string();
-                let res_ty_str = self.llvm_type(get_sym_ty(func, on_true)?)?.to_string();
+                let cond_ty_str = self.llvm_type(func.symbol_type(cond)?)?.to_string();
+                let res_ty_str = self.llvm_type(func.symbol_type(on_true)?)?.to_string();
 
                 let output_str = llvm_symbol(output).to_string();
                 let cond_str = self.load_var(llvm_symbol(cond).as_str(), &cond_ty_str, ctx)?;
@@ -1489,8 +1518,8 @@ impl LlvmGenerator {
             }
 
             ToVec { ref output, ref child } => {
-                let old_ty = try!(get_sym_ty(func, child));
-                let new_ty = try!(get_sym_ty(func, output));
+                let old_ty = try!(func.symbol_type(child));
+                let new_ty = try!(func.symbol_type(output));
                 let old_ll_ty = try!(self.llvm_type(&old_ty)).to_string();
                 let new_ll_ty = try!(self.llvm_type(&new_ty)).to_string();
 
@@ -1503,33 +1532,33 @@ impl LlvmGenerator {
                                         dict_prefix,
                                         old_ll_ty,
                                         child_tmp));
-                let out_ty = try!(get_sym_ty(func, output));
+                let out_ty = try!(func.symbol_type(output));
                 let out_ty_str = try!(self.llvm_type(&out_ty)).to_string();
                 ctx.code.add(format!("store {} {}, {}* {}", out_ty_str, res_tmp, out_ty_str, llvm_symbol(output)));
             }
 
             Length { ref output, ref child } => {
-                let child_ty = try!(get_sym_ty(func, child));
+                let child_ty = try!(func.symbol_type(child));
                 let child_ll_ty = try!(self.llvm_type(&child_ty)).to_string();
                 let vec_prefix = format!("@{}", child_ll_ty.replace("%", ""));
                 let child_tmp = try!(self.load_var(llvm_symbol(child).as_str(), &child_ll_ty, ctx));
                 let res_tmp = ctx.var_ids.next();
                 ctx.code.add(format!("{} = call i64 {}.size({} {})", res_tmp, vec_prefix, child_ll_ty, child_tmp));
-                let out_ty = try!(get_sym_ty(func, output));
+                let out_ty = try!(func.symbol_type(output));
                 let out_ty_str = try!(self.llvm_type(&out_ty)).to_string();
                 ctx.code.add(format!("store {} {}, {}* {}", out_ty_str, res_tmp, out_ty_str, llvm_symbol(output)));
             }
 
             Assign { ref output, ref value } => {
-                let ty = try!(get_sym_ty(func, output));
+                let ty = try!(func.symbol_type(output));
                 let ll_ty = try!(self.llvm_type(&ty)).to_string();
                 let val_tmp = try!(self.load_var(llvm_symbol(value).as_str(), &ll_ty, ctx));
                 ctx.code.add(format!("store {} {}, {}* {}", ll_ty, val_tmp, ll_ty, llvm_symbol(output)));
             }
 
             GetField { ref output, ref value, index } => {
-                let struct_ty = try!(self.llvm_type(try!(get_sym_ty(func, value)))).to_string();
-                let field_ty = try!(self.llvm_type(try!(get_sym_ty(func, output)))).to_string();
+                let struct_ty = try!(self.llvm_type(try!(func.symbol_type(value)))).to_string();
+                let field_ty = try!(self.llvm_type(try!(func.symbol_type(output)))).to_string();
                 let struct_tmp = try!(self.load_var(llvm_symbol(value).as_str(), &struct_ty, ctx));
                 let res_tmp = ctx.var_ids.next();
                 ctx.code.add(format!("{} = extractvalue {} {}, {}", res_tmp, struct_ty, struct_tmp, index));
@@ -1537,25 +1566,17 @@ impl LlvmGenerator {
             }
 
             AssignLiteral { ref output, ref value } => {
-                let ty = get_sym_ty(func, output)?;
-                if let Simd(_) = *ty {
-                    self.generate_vector_literal(&llvm_symbol(output), value, ty, ctx)?;
+                let (output_ty, output_llvm_ty, output_llvm_sym) = self.symbol_info(func, output)?;
+                if let Simd(_) = *output_ty {
+                    self.gen_simd_literal(&output_llvm_sym, value, output_ty, ctx)?;
                 } else {
-                    match *value {
-                        BoolLiteral(l) => {
-                            ctx.code.add(format!("store i1 {}, i1* {}", if l { 1 } else { 0 }, llvm_symbol(output)))
-                        }
-                        I8Literal(l) => ctx.code.add(format!("store i8 {}, i8* {}", l, llvm_symbol(output))),
-                        I32Literal(l) => ctx.code.add(format!("store i32 {}, i32* {}", l, llvm_symbol(output))),
-                        I64Literal(l) => ctx.code.add(format!("store i64 {}, i64* {}", l, llvm_symbol(output))),
-                        F32Literal(l) => ctx.code.add(format!("store float {:.30e}, float* {}", l, llvm_symbol(output))),
-                        F64Literal(l) => ctx.code.add(format!("store double {:.30e}, double* {}", l, llvm_symbol(output)))
-                    }
+                    let ref value = self.llvm_literal(*value);
+                    self.gen_store_var(value, &output_llvm_sym, &output_llvm_ty, ctx);
                 }
             }
 
             Merge { ref builder, ref value } => {
-                let bld_ty = get_sym_ty(func, builder)?;
+                let bld_ty = func.symbol_type(builder)?;
                 if let Builder(ref bld_kind, _) = *bld_ty {
                     self.gen_merge(bld_kind, builder, value, func, ctx)?;
                 } else {
@@ -1564,7 +1585,7 @@ impl LlvmGenerator {
             }
 
             Res { ref output, ref builder } => {
-                let bld_ty = try!(get_sym_ty(func, builder));
+                let bld_ty = try!(func.symbol_type(builder));
                 if let Builder(ref bld_kind, _) = *bld_ty {
                     self.gen_result(bld_kind, builder, output, func, ctx)?;
                 } else {
@@ -1592,7 +1613,7 @@ impl LlvmGenerator {
                  func: &SirFunction,
                  ctx: &mut FunctionContext)
                  -> WeldResult<()> {
-        let bld_ty = get_sym_ty(func, builder)?;
+        let bld_ty = func.symbol_type(builder)?;
         let bld_ty_str = self.llvm_type(&bld_ty)?.to_string();
         let bld_prefix = format!("@{}", bld_ty_str.replace("%", ""));
 
@@ -1644,7 +1665,7 @@ impl LlvmGenerator {
 
             Merger(ref t, ref op) => {
                 let bld_tmp = self.load_var(llvm_symbol(builder).as_str(), &bld_ty_str, ctx)?;
-                let value_ty = get_sym_ty(func, value)?;
+                let value_ty = func.symbol_type(value)?;
                 let elem_ty_str = self.llvm_type(value_ty)?.to_string();
                 let elem_tmp = self.load_var(llvm_symbol(value).as_str(), &elem_ty_str, ctx)?;
                 let bld_ptr_raw = ctx.var_ids.next();
@@ -1716,8 +1737,8 @@ impl LlvmGenerator {
                   func: &SirFunction,
                   ctx: &mut FunctionContext)
                   -> WeldResult<()> {
-        let bld_ty = get_sym_ty(func, builder)?;
-        let res_ty = get_sym_ty(func, output)?;
+        let bld_ty = func.symbol_type(builder)?;
+        let res_ty = func.symbol_type(output)?;
 
         match *builder_kind {
             Appender(_) => {
@@ -2050,7 +2071,7 @@ impl LlvmGenerator {
                        func: &SirFunction,
                        ctx: &mut FunctionContext)
                        -> WeldResult<()> {
-        let bld_ty = get_sym_ty(func, output)?;
+        let bld_ty = func.symbol_type(output)?;
         let bld_ty_str = self.llvm_type(bld_ty)?.to_string();
         let bld_prefix = format!("@{}", bld_ty_str.replace("%", ""));
 
@@ -2249,7 +2270,7 @@ impl LlvmGenerator {
             }
 
             ProgramReturn(ref sym) => {
-                let ty = try!(get_sym_ty(func, sym));
+                let ty = try!(func.symbol_type(sym));
                 let ty_str = try!(self.llvm_type(ty)).to_string();
                 let res_tmp = try!(self.load_var(llvm_symbol(sym).as_str(), &ty_str, ctx));
                 let elem_size_ptr = ctx.var_ids.next();
@@ -2541,16 +2562,6 @@ fn get_combined_params(sir: &SirProgram, par_for: &ParallelForData) -> HashMap<S
         body_params.insert(arg.clone(), ty.clone());
     }
     body_params
-}
-
-fn get_sym_ty<'a>(func: &'a SirFunction, sym: &Symbol) -> WeldResult<&'a Type> {
-    if func.locals.get(sym).is_some() {
-        Ok(func.locals.get(sym).unwrap())
-    } else if func.params.get(sym).is_some() {
-        Ok(func.params.get(sym).unwrap())
-    } else {
-        weld_err!("Can't find symbol {}#{}", sym.name, sym.id)
-    }
 }
 
 /// Returns a vector size for a type. If a Vetor is passed in, returns the vector size of the

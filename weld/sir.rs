@@ -139,6 +139,19 @@ pub struct SirFunction {
     pub blocks: Vec<BasicBlock>,
 }
 
+impl SirFunction {
+
+    /// Gets the Type for a Symbol in the function. Symbols may be eitehr local variables or
+    /// parameters.
+    pub fn symbol_type(&self, sym: &Symbol) -> WeldResult<&Type> {
+        self.locals.get(sym).map(|s| Ok(s)).unwrap_or_else(|| {
+            self.params.get(sym).map(|s| Ok(s)).unwrap_or_else(|| {
+                weld_err!("Can't find symbol {}#{}", sym.name, sym.id)
+            })
+        })
+    }
+}
+
 pub struct SirProgram {
     /// funcs[0] is the main function
     pub funcs: Vec<SirFunction>,
