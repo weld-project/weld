@@ -785,124 +785,225 @@ impl LlvmGenerator {
         }.to_string()
     }
 
+    /// Generates a struct definition for the given field types.
+    fn gen_struct_definition(&mut self, fields: &Vec<Type>) -> WeldResult<()> {
+        let name = self.struct_ids.next();
+        let mut field_types: Vec<String> = Vec::new();
+        for f in fields.iter() {
+            field_types.push(self.llvm_type(f)?.to_string());
+        }
+        let field_types_str = field_types.join(", ");
+        self.prelude_code.add(format!("{} = type {{ {} }}", name, field_types_str));
+
+        // Generate hash function for the struct.
+        self.prelude_code.add_line(format!("define i64 {}.hash({} %value) {{", name.replace("%", "@"), name));
+        let mut res = "0".to_string();
+        for i in 0..field_types.len() {
+            // TODO(shoumik): hack to prevent incorrect code gen for vectors.
+            if let Simd(_) = fields[i] {
+                continue;
+            }
+            let field = self.prelude_var_ids.next();
+            let hash = self.prelude_var_ids.next();
+            let new_res = self.prelude_var_ids.next();
+            let field_ty_str = &field_types[i];
+            let field_prefix_str = format!("@{}", field_ty_str.replace("%", ""));
+            self.prelude_code.add_line(format!("{} = extractvalue {} %value, {}", field, name, i));
+            self.prelude_code.add_line(format!("{} = call i64 {}.hash({} {})",
+            hash,
+            field_prefix_str,
+            field_ty_str,
+            field));
+            self.prelude_code
+                .add_line(format!("{} = call i64 @hash_combine(i64 {}, i64 {})", new_res, res, hash));
+            res = new_res;
+        }
+        self.prelude_code.add_line(format!("ret i64 {}", res));
+        self.prelude_code.add_line(format!("}}"));
+        self.prelude_code.add_line(format!(""));
+
+        // Generate a comparison function for the struct.
+        self.prelude_code.add_line(format!("define i32 {}.cmp({} %a, {} %b) {{", name.replace("%", "@"), name, name));
+        let mut label_ids = IdGenerator::new("%l");
+        for i in 0..field_types.len() {
+            // TODO(shoumik): hack to prevent incorrect code gen for vectors.
+            if let Simd(_) = fields[i] {
+                continue;
+            }
+            let a_field = self.prelude_var_ids.next();
+            let b_field = self.prelude_var_ids.next();
+            let cmp = self.prelude_var_ids.next();
+            let ne = self.prelude_var_ids.next();
+            let field_ty_str = &field_types[i];
+            let ret_label = label_ids.next();
+            let post_label = label_ids.next();
+            let field_prefix_str = format!("@{}", field_ty_str.replace("%", ""));
+            self.prelude_code.add_line(format!("{} = extractvalue {} %a , {}", a_field, name, i));
+            self.prelude_code.add_line(format!("{} = extractvalue {} %b, {}", b_field, name, i));
+            self.prelude_code.add_line(format!("{} = call i32 {}.cmp({} {}, {} {})",
+            cmp,
+            field_prefix_str,
+            field_ty_str,
+            a_field,
+            field_ty_str,
+            b_field));
+            self.prelude_code.add_line(format!("{} = icmp ne i32 {}, 0", ne, cmp));
+            self.prelude_code.add_line(format!("br i1 {}, label {}, label {}", ne, ret_label, post_label));
+            self.prelude_code.add_line(format!("{}:", ret_label.replace("%", "")));
+            self.prelude_code.add_line(format!("ret i32 {}", cmp));
+            self.prelude_code.add_line(format!("{}:", post_label.replace("%", "")));
+        }
+        self.prelude_code.add_line(format!("ret i32 0"));
+        self.prelude_code.add_line(format!("}}"));
+        self.prelude_code.add_line(format!(""));
+
+        // Add it into our map so we remember its name
+        self.struct_names.insert(fields.clone(), name);
+        Ok(())
+    }
+
+    /// Generates a vector definition with the given type.
+    fn gen_vector_definition(&mut self, elem: &Type) -> WeldResult<()> {
+        let elem_ty = self.llvm_type(elem)?.to_string();
+        let elem_prefix = format!("@{}", elem_ty.replace("%", ""));
+        let name = self.vec_ids.next();
+        self.vec_names.insert(elem.clone(), name.clone());
+        let prefix_replaced = VECTOR_CODE.replace("$ELEM_PREFIX", &elem_prefix);
+        let elem_replaced = prefix_replaced.replace("$ELEM", &elem_ty);
+        let name_replaced = elem_replaced.replace("$NAME", &name.replace("%", ""));
+        self.prelude_code.add(&name_replaced);
+        self.prelude_code.add("\n");
+
+        // Supports vectorization, so add in SIMD extensions.
+        if let Scalar(_) = *elem {
+            let replaced = VVECTOR_CODE.replace("$ELEM_PREFIX", &elem_prefix);
+            let replaced = replaced.replace("$ELEM", &elem_ty);
+            let replaced = replaced.replace("$VECSIZE", &format!("{}", vec_size(elem)?));
+            let replaced = replaced.replace("$NAME", &name.replace("%", ""));
+            self.prelude_code.add(&replaced);
+            self.prelude_code.add("\n");
+        }
+        Ok(())
+    }
+
+    /// Generates a dictionary definition with the given element type, key type `key`, and  value
+    /// type `value`.
+    fn gen_dict_definition(&mut self, key: &Type, value: &Type) -> WeldResult<()> {
+        let elem = Box::new(Struct(vec![key.clone(), value.clone()]));
+        let key_ty = self.llvm_type(key)?.to_string();
+        let value_ty = self.llvm_type(value)?.to_string();
+        let key_prefix = format!("@{}", key_ty.replace("%", ""));
+        let name = self.dict_ids.next();
+        self.dict_names.insert(*elem.clone(), name.clone());
+        let kv_struct_ty = self.llvm_type(&elem)?.to_string();
+        let kv_vec = Box::new(Vector(elem.clone()));
+        let kv_vec_ty = self.llvm_type(&kv_vec)?.to_string();
+        let kv_vec_prefix = format!("@{}", &kv_vec_ty.replace("%", ""));
+        let key_prefix_replaced = DICTIONARY_CODE.replace("$KEY_PREFIX", &key_prefix);
+        let name_replaced = key_prefix_replaced.replace("$NAME", &name.replace("%", ""));
+        let key_ty_replaced = name_replaced.replace("$KEY", &key_ty);
+        let value_ty_replaced = key_ty_replaced.replace("$VALUE", &value_ty);
+        let kv_struct_replaced = value_ty_replaced.replace("$KV_STRUCT", &kv_struct_ty);
+        let kv_vec_prefix_replaced = kv_struct_replaced.replace("$KV_VEC_PREFIX", &kv_vec_prefix);
+        let kv_vec_ty_replaced = kv_vec_prefix_replaced.replace("$KV_VEC", &kv_vec_ty);
+        self.prelude_code.add(&kv_vec_ty_replaced);
+        self.prelude_code.add("\n");
+        Ok(())
+    }
+
+    /// Generates a builder definition with the given type.
+    fn gen_builder_definition(&mut self, bk: &BuilderKind) -> WeldResult<()> {
+        match *bk {
+            Appender(ref t) => {
+                let bld_ty = Vector(t.clone());
+                let bld_ty_str = try!(self.llvm_type(&bld_ty)).to_string();
+                self.bld_names.insert(bk.clone(), format!("{}.bld", bld_ty_str));
+            }
+            Merger(ref t, _) => {
+                if self.merger_names.get(t) == None {
+                    let elem_ty = self.llvm_type(t)?.to_string();
+                    let elem_prefix = format!("@{}", elem_ty.replace("%", ""));
+                    let name = self.merger_ids.next();
+                    self.merger_names.insert(*t.clone(), name.clone());
+                    let prefix_replaced = MERGER_CODE.replace("$ELEM_PREFIX", &elem_prefix);
+                    let elem_replaced = prefix_replaced.replace("$ELEM", &elem_ty);
+                    // TODO!
+                    let vecsize_replaced = elem_replaced.replace("$VECSIZE", &format!("{}", vec_size(t)?));
+                    let name_replaced = vecsize_replaced.replace("$NAME", &name.replace("%", ""));
+                    self.prelude_code.add(&name_replaced);
+                    self.prelude_code.add("\n");
+                }
+                let bld_ty_str = self.merger_names.get(t).unwrap();
+                self.bld_names.insert(bk.clone(), format!("{}.bld", bld_ty_str));
+            }
+            DictMerger(ref kt, ref vt, ref op) => {
+                let bld_ty = Dict(kt.clone(), vt.clone());
+                let bld_ty_str = try!(self.llvm_type(&bld_ty)).to_string();
+                let elem = Box::new(Struct(vec![*kt.clone(), *vt.clone()]));
+                let kv_struct_ty = try!(self.llvm_type(&elem)).to_string();
+                let key_ty = try!(self.llvm_type(kt)).to_string();
+                let value_ty = try!(self.llvm_type(vt)).to_string();
+                let kv_vec = Box::new(Vector(elem.clone()));
+                let kv_vec_ty = try!(self.llvm_type(&kv_vec)).to_string();
+                let kv_vec_prefix = format!("@{}", &kv_vec_ty.replace("%", ""));
+                let name_replaced = DICTMERGER_CODE.replace("$NAME", &bld_ty_str.replace("%", ""));
+                let key_ty_replaced = name_replaced.replace("$KEY", &key_ty);
+                let value_ty_replaced = key_ty_replaced.replace("$VALUE", &value_ty);
+                let kv_struct_replaced = value_ty_replaced
+                    .replace("$KV_STRUCT", &kv_struct_ty.replace("%", ""));
+                let op_replaced = kv_struct_replaced.replace("$OP", &llvm_binop(*op, vt)?);
+                let kv_vec_prefix_replaced = op_replaced.replace("$KV_VEC_PREFIX", &kv_vec_prefix);
+                let kv_vec_ty_replaced = kv_vec_prefix_replaced.replace("$KV_VEC", &kv_vec_ty);
+                self.prelude_code.add(&kv_vec_ty_replaced);
+                self.prelude_code.add("\n");
+                self.bld_names.insert(bk.clone(), format!("{}.bld", bld_ty_str));
+            }
+            GroupMerger(ref kt, ref vt) => {
+                let elem = Box::new(Struct(vec![*kt.clone(), *vt.clone()]));
+                let bld_ty = Vector(elem.clone());
+                let bld_ty_str = try!(self.llvm_type(&bld_ty)).to_string();
+                self.bld_names.insert(bk.clone(), format!("{}.bld", bld_ty_str));
+            }
+            VecMerger(ref elem, _) => {
+                let bld_ty = Vector(elem.clone());
+                let bld_ty_str = try!(self.llvm_type(&bld_ty)).to_string();
+                self.bld_names.insert(bk.clone(), format!("{}.vm.bld", bld_ty_str));
+            }
+        }
+        Ok(())
+    }
+
+    /// Returns the LLVM name for the `ScalarKind` `k`.
+    fn llvm_scalarkind(&self, k: ScalarKind) -> &str {
+         match k {
+            Bool => "i1",
+            I8 => "i8",
+            I32 => "i32",
+            I64 => "i64",
+            F32 => "float",
+            F64 => "double",       
+         }
+    }
+
     /// Return the LLVM type name corresponding to a Weld type.
     fn llvm_type(&mut self, ty: &Type) -> WeldResult<&str> {
         match *ty {
-            Scalar(Bool) => Ok("i1"),
-            Scalar(I8) => Ok("i8"),
-            Scalar(I32) => Ok("i32"),
-            Scalar(I64) => Ok("i64"),
-            Scalar(F32) => Ok("float"),
-            Scalar(F64) => Ok("double"),
-
-            Simd(Bool) => Ok(self.simd_names.entry(Bool).or_insert(format!("<{} x i1>", vec_size(&Scalar(Bool))?))),
-            Simd(I8) => Ok(self.simd_names.entry(I8).or_insert(format!("<{} x i8>", vec_size(&Scalar(I8))?))),
-            Simd(I32) => Ok(self.simd_names.entry(I32).or_insert(format!("<{} x i32>", vec_size(&Scalar(I32))?))),
-            Simd(I64) => Ok(self.simd_names.entry(I64).or_insert(format!("<{} x i64>", vec_size(&Scalar(I64))?))),
-            Simd(F32) => Ok(self.simd_names.entry(F32).or_insert(format!("<{} x float>", vec_size(&Scalar(F32))?))),
-            Simd(F64) => Ok(self.simd_names.entry(F64).or_insert(format!("<{} x double>", vec_size(&Scalar(F64))?))),
+            Scalar(kind) => Ok(self.llvm_scalarkind(kind)),
+            Simd(kind) => {
+                let llvm_kind_str = self.llvm_scalarkind(kind).to_string();
+                Ok(self.simd_names.entry(kind).or_insert(format!("<{} x {}>", vec_size(&Scalar(kind))?, llvm_kind_str)))   
+            }
 
             Struct(ref fields) => {
                 if self.struct_names.get(fields) == None {
-                    // Declare the struct in prelude_code
-                    let name = self.struct_ids.next();
-                    let mut field_types: Vec<String> = Vec::new();
-                    for f in fields {
-                        field_types.push(try!(self.llvm_type(f)).to_string());
-                    }
-                    let field_types_str = field_types.join(", ");
-                    self.prelude_code.add(format!("{} = type {{ {} }}", name, field_types_str));
-
-                    // Generate hash function for the struct.
-                    self.prelude_code
-                        .add_line(format!("define i64 {}.hash({} %value) {{", name.replace("%", "@"), name));
-                    let mut res = "0".to_string();
-                    for i in 0..field_types.len() {
-                        // TODO(shoumik): hack to prevent incorrect code gen for vectors.
-                        if let Simd(_) = fields[i] {
-                            continue;
-                        }
-                        let field = self.prelude_var_ids.next();
-                        let hash = self.prelude_var_ids.next();
-                        let new_res = self.prelude_var_ids.next();
-                        let field_ty_str = &field_types[i];
-                        let field_prefix_str = format!("@{}", field_ty_str.replace("%", ""));
-                        self.prelude_code.add_line(format!("{} = extractvalue {} %value, {}", field, name, i));
-                        self.prelude_code.add_line(format!("{} = call i64 {}.hash({} {})",
-                                                           hash,
-                                                           field_prefix_str,
-                                                           field_ty_str,
-                                                           field));
-                        self.prelude_code
-                            .add_line(format!("{} = call i64 @hash_combine(i64 {}, i64 {})", new_res, res, hash));
-                        res = new_res;
-                    }
-                    self.prelude_code.add_line(format!("ret i64 {}", res));
-                    self.prelude_code.add_line(format!("}}"));
-                    self.prelude_code.add_line(format!(""));
-
-                    self.prelude_code
-                        .add_line(format!("define i32 {}.cmp({} %a, {} %b) {{", name.replace("%", "@"), name, name));
-                    let mut label_ids = IdGenerator::new("%l");
-                    for i in 0..field_types.len() {
-                        // TODO(shoumik): hack to prevent incorrect code gen for vectors.
-                        if let Simd(_) = fields[i] {
-                            continue;
-                        }
-                        let a_field = self.prelude_var_ids.next();
-                        let b_field = self.prelude_var_ids.next();
-                        let cmp = self.prelude_var_ids.next();
-                        let ne = self.prelude_var_ids.next();
-                        let field_ty_str = &field_types[i];
-                        let ret_label = label_ids.next();
-                        let post_label = label_ids.next();
-                        let field_prefix_str = format!("@{}", field_ty_str.replace("%", ""));
-                        self.prelude_code.add_line(format!("{} = extractvalue {} %a , {}", a_field, name, i));
-                        self.prelude_code.add_line(format!("{} = extractvalue {} %b, {}", b_field, name, i));
-                        self.prelude_code.add_line(format!("{} = call i32 {}.cmp({} {}, {} {})",
-                                                           cmp,
-                                                           field_prefix_str,
-                                                           field_ty_str,
-                                                           a_field,
-                                                           field_ty_str,
-                                                           b_field));
-                        self.prelude_code.add_line(format!("{} = icmp ne i32 {}, 0", ne, cmp));
-                        self.prelude_code.add_line(format!("br i1 {}, label {}, label {}", ne, ret_label, post_label));
-                        self.prelude_code.add_line(format!("{}:", ret_label.replace("%", "")));
-                        self.prelude_code.add_line(format!("ret i32 {}", cmp));
-                        self.prelude_code.add_line(format!("{}:", post_label.replace("%", "")));
-                    }
-                    self.prelude_code.add_line(format!("ret i32 0"));
-                    self.prelude_code.add_line(format!("}}"));
-                    self.prelude_code.add_line(format!(""));
-
-                    // Add it into our map so we remember its name
-                    self.struct_names.insert(fields.clone(), name);
+                    self.gen_struct_definition(fields)?
                 }
                 Ok(self.struct_names.get(fields).unwrap())
             }
 
             Vector(ref elem) => {
                 if self.vec_names.get(elem) == None {
-                    let elem_ty = try!(self.llvm_type(elem)).to_string();
-                    let elem_prefix = format!("@{}", elem_ty.replace("%", ""));
-                    let name = self.vec_ids.next();
-                    self.vec_names.insert(*elem.clone(), name.clone());
-                    let prefix_replaced = VECTOR_CODE.replace("$ELEM_PREFIX", &elem_prefix);
-                    let elem_replaced = prefix_replaced.replace("$ELEM", &elem_ty);
-                    let name_replaced = elem_replaced.replace("$NAME", &name.replace("%", ""));
-                    self.prelude_code.add(&name_replaced);
-                    self.prelude_code.add("\n");
-
-                    // Supports vectorization, so splice in the vector extensions.
-                    if let Scalar(_) = *elem.as_ref() {
-                        let replaced = VVECTOR_CODE.replace("$ELEM_PREFIX", &elem_prefix);
-                        let replaced = replaced.replace("$ELEM", &elem_ty);
-                        let replaced = replaced.replace("$VECSIZE", &format!("{}", vec_size(elem)?));
-                        let replaced = replaced.replace("$NAME", &name.replace("%", ""));
-                        self.prelude_code.add(&replaced);
-                        self.prelude_code.add("\n");
-                    }
+                    self.gen_vector_definition(elem)? 
                 }
                 Ok(self.vec_names.get(elem).unwrap())
             }
@@ -910,24 +1011,7 @@ impl LlvmGenerator {
             Dict(ref key, ref value) => {
                 let elem = Box::new(Struct(vec![*key.clone(), *value.clone()]));
                 if self.dict_names.get(&elem) == None {
-                    let key_ty = try!(self.llvm_type(key)).to_string();
-                    let value_ty = try!(self.llvm_type(value)).to_string();
-                    let key_prefix = format!("@{}", key_ty.replace("%", ""));
-                    let name = self.dict_ids.next();
-                    self.dict_names.insert(*elem.clone(), name.clone());
-                    let kv_struct_ty = try!(self.llvm_type(&elem)).to_string();
-                    let kv_vec = Box::new(Vector(elem.clone()));
-                    let kv_vec_ty = try!(self.llvm_type(&kv_vec)).to_string();
-                    let kv_vec_prefix = format!("@{}", &kv_vec_ty.replace("%", ""));
-                    let key_prefix_replaced = DICTIONARY_CODE.replace("$KEY_PREFIX", &key_prefix);
-                    let name_replaced = key_prefix_replaced.replace("$NAME", &name.replace("%", ""));
-                    let key_ty_replaced = name_replaced.replace("$KEY", &key_ty);
-                    let value_ty_replaced = key_ty_replaced.replace("$VALUE", &value_ty);
-                    let kv_struct_replaced = value_ty_replaced.replace("$KV_STRUCT", &kv_struct_ty);
-                    let kv_vec_prefix_replaced = kv_struct_replaced.replace("$KV_VEC_PREFIX", &kv_vec_prefix);
-                    let kv_vec_ty_replaced = kv_vec_prefix_replaced.replace("$KV_VEC", &kv_vec_ty);
-                    self.prelude_code.add(&kv_vec_ty_replaced);
-                    self.prelude_code.add("\n");
+                    self.gen_dict_definition(key, value)?
                 }
                 Ok(self.dict_names.get(&elem).unwrap())
             }
@@ -935,63 +1019,7 @@ impl LlvmGenerator {
             Builder(ref bk, _) => {
                 // TODO(Deepak): Do something with annotations here...
                 if self.bld_names.get(bk) == None {
-                    match *bk {
-                        Appender(ref t) => {
-                            let bld_ty = Vector(t.clone());
-                            let bld_ty_str = try!(self.llvm_type(&bld_ty)).to_string();
-                            self.bld_names.insert(bk.clone(), format!("{}.bld", bld_ty_str));
-                        }
-                        Merger(ref t, _) => {
-                            if self.merger_names.get(t) == None {
-                                let elem_ty = self.llvm_type(t)?.to_string();
-                                let elem_prefix = format!("@{}", elem_ty.replace("%", ""));
-                                let name = self.merger_ids.next();
-                                self.merger_names.insert(*t.clone(), name.clone());
-                                let prefix_replaced = MERGER_CODE.replace("$ELEM_PREFIX", &elem_prefix);
-                                let elem_replaced = prefix_replaced.replace("$ELEM", &elem_ty);
-                                // TODO!
-                                let vecsize_replaced = elem_replaced.replace("$VECSIZE", &format!("{}", vec_size(t)?));
-                                let name_replaced = vecsize_replaced.replace("$NAME", &name.replace("%", ""));
-                                self.prelude_code.add(&name_replaced);
-                                self.prelude_code.add("\n");
-                            }
-                            let bld_ty_str = self.merger_names.get(t).unwrap();
-                            self.bld_names.insert(bk.clone(), format!("{}.bld", bld_ty_str));
-                        }
-                        DictMerger(ref kt, ref vt, ref op) => {
-                            let bld_ty = Dict(kt.clone(), vt.clone());
-                            let bld_ty_str = try!(self.llvm_type(&bld_ty)).to_string();
-                            let elem = Box::new(Struct(vec![*kt.clone(), *vt.clone()]));
-                            let kv_struct_ty = try!(self.llvm_type(&elem)).to_string();
-                            let key_ty = try!(self.llvm_type(kt)).to_string();
-                            let value_ty = try!(self.llvm_type(vt)).to_string();
-                            let kv_vec = Box::new(Vector(elem.clone()));
-                            let kv_vec_ty = try!(self.llvm_type(&kv_vec)).to_string();
-                            let kv_vec_prefix = format!("@{}", &kv_vec_ty.replace("%", ""));
-                            let name_replaced = DICTMERGER_CODE.replace("$NAME", &bld_ty_str.replace("%", ""));
-                            let key_ty_replaced = name_replaced.replace("$KEY", &key_ty);
-                            let value_ty_replaced = key_ty_replaced.replace("$VALUE", &value_ty);
-                            let kv_struct_replaced = value_ty_replaced
-                                .replace("$KV_STRUCT", &kv_struct_ty.replace("%", ""));
-                            let op_replaced = kv_struct_replaced.replace("$OP", &llvm_binop(*op, vt)?);
-                            let kv_vec_prefix_replaced = op_replaced.replace("$KV_VEC_PREFIX", &kv_vec_prefix);
-                            let kv_vec_ty_replaced = kv_vec_prefix_replaced.replace("$KV_VEC", &kv_vec_ty);
-                            self.prelude_code.add(&kv_vec_ty_replaced);
-                            self.prelude_code.add("\n");
-                            self.bld_names.insert(bk.clone(), format!("{}.bld", bld_ty_str));
-                        }
-                        GroupMerger(ref kt, ref vt) => {
-                            let elem = Box::new(Struct(vec![*kt.clone(), *vt.clone()]));
-                            let bld_ty = Vector(elem.clone());
-                            let bld_ty_str = try!(self.llvm_type(&bld_ty)).to_string();
-                            self.bld_names.insert(bk.clone(), format!("{}.bld", bld_ty_str));
-                        }
-                        VecMerger(ref elem, _) => {
-                            let bld_ty = Vector(elem.clone());
-                            let bld_ty_str = try!(self.llvm_type(&bld_ty)).to_string();
-                            self.bld_names.insert(bk.clone(), format!("{}.vm.bld", bld_ty_str));
-                        }
-                    }
+                    self.gen_builder_definition(bk)? 
                 }
                 Ok(self.bld_names.get(bk).unwrap())
             }
