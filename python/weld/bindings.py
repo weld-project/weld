@@ -63,18 +63,6 @@ class WeldModule(c_void_p):
         ret = weld_module_run(self.module, conf.conf, arg.val, err.error)
         return WeldValue(ret, assign=True)
 
-    def memory_usage(self):
-        weld_module_memory_usage = weld.weld_module_memory_usage
-        weld_module_memory_usage.argtypes = [c_weld_module]
-        weld_module_memory_usage.restype = c_int64
-        return weld_module_memory_usage(self.module)
-
-    def free_memory(self):
-        weld_module_mem_free = weld.weld_module_mem_free
-        weld_module_mem_free.argtypes = [c_weld_module]
-        weld_module_mem_free.restype = None
-        weld_module_mem_free(self.module)
-
     def __del__(self):
         weld_module_free = weld.weld_module_free
         weld_module_free.argtypes = [c_weld_module]

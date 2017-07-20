@@ -674,8 +674,6 @@ impl LlvmGenerator {
         run_ctx.code.add(format!("%r.args = extractvalue %input_arg_t %r.inp_val, 0"));
         run_ctx.code.add(format!("%r.nworkers = extractvalue %input_arg_t %r.inp_val, 1"));
         run_ctx.code.add(format!("%r.memlimit = extractvalue %input_arg_t %r.inp_val, 2"));
-        run_ctx.code.add(format!("call void @set_nworkers(i32 %r.nworkers)"));
-        run_ctx.code.add(format!("call void @weld_rt_init(i64 %r.memlimit)"));
         // Code to load args and call function
         run_ctx.code.add(format!(
             "%r.args_typed = inttoptr i64 %r.args to {args_type}*
@@ -706,12 +704,11 @@ impl LlvmGenerator {
         let final_address = run_ctx.var_ids.next();
 
         run_ctx.code.add(format!(
-            "call \
-                          void @execute(void (%work_t*)* @f0_par, i8* {run_struct})
-             %res_ptr = call i8* @get_result()
+            "{rid} = call \
+                          i64 @execute(void (%work_t*)* @f0_par, i8* {run_struct}, i64 %r.memlimit, i32 %r.nworkers)
+             %res_ptr = call i8* @get_result(i64 {rid})
              %res_address = ptrtoint i8* %res_ptr to i64
              \
-             {rid} = call i64 @get_runid()
              {errno} = call i64 @weld_rt_get_errno(i64 {rid})
              {tmp0} = insertvalue %output_arg_t undef, i64 %res_address, 0
              {tmp1} = insertvalue %output_arg_t {tmp0}, i64 {rid}, 1
@@ -2615,7 +2612,9 @@ pub fn compile_program(program: &Program,
         println!("LLVM program:\n{}\n", &llvm_code);
     }
 
-    Ok(try!(easy_ll::compile_module(&llvm_code, Some(LIB_WELD_RT))))
+    let module = try!(easy_ll::compile_module(&llvm_code, Some(LIB_WELD_RT)));
+    module.run_named("rt_init", 0);
+    Ok(module)
 }
 
 #[test]

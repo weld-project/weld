@@ -74,6 +74,7 @@ impl WeldError {
 /// is `None` the data is owned by a caller outside the runtime.
 pub struct WeldValue {
     data: *const c_void,
+    module: Option<*mut WeldModule>,
     run_id: Option<i64>,
 }
 
@@ -142,6 +143,7 @@ pub unsafe extern "C" fn weld_conf_set(ptr: *mut WeldConf,
 pub extern "C" fn weld_value_new(data: *const c_void) -> *mut WeldValue {
     Box::into_raw(Box::new(WeldValue {
                                data: data,
+                               module: None,
                                run_id: None,
                            }))
 }
@@ -168,6 +170,14 @@ pub unsafe extern "C" fn weld_value_data(obj: *const WeldValue) -> *const c_void
 }
 
 #[no_mangle]
+/// Returns a pointer to the data wrapped by the given Weld value.
+pub unsafe extern "C" fn weld_value_module(obj: *mut WeldValue) -> *mut WeldModule {
+    assert!(!obj.is_null());
+    let obj = &*obj;
+    obj.module.unwrap()
+}
+
+#[no_mangle]
 /// Frees a Weld value.
 ///
 /// All Weld values must be freed using this call.
@@ -175,15 +185,32 @@ pub unsafe extern "C" fn weld_value_data(obj: *const WeldValue) -> *const c_void
 /// Weld values which are not owned by the runtime only free the structure used
 /// to wrap the data; the actual data itself is owned by the caller.
 pub unsafe extern "C" fn weld_value_free(obj: *mut WeldValue) {
-    // TODO implement
+    if obj.is_null() {
+        return;
+    }
+    let value = &mut *obj;
+    if let Some(run_id) = value.run_id {
+        let module = &mut *value.module.unwrap();
+        module.run_named("rt_run_free", run_id);
+    }
+    Box::from_raw(obj);
 }
 
 #[no_mangle]
-/// Gets the memory allocated to a Weld value, including memory for objects this value contains.
-/// Returns -1 if the value is not part of a valid Weld run.
+/// Gets the memory allocated to a Weld value, which generally includes all memory allocated during
+/// the execution of the module that created it (Weld does not currently free intermediate values
+/// while running a module). Returns -1 if the value is not part of a valid Weld run.
 pub unsafe extern "C" fn weld_value_memory_usage(obj: *mut WeldValue) -> libc::int64_t {
-    // TODO implement
-    return 0;
+    if obj.is_null() {
+        return -1 as libc::int64_t;
+    }
+    let value = &mut *obj;
+    if let Some(run_id) = value.run_id {
+        let module = &mut *value.module.unwrap();
+        return module.run_named("rt_memory_usage", run_id).unwrap_or(-1) as libc::int64_t;
+    } else {
+        return -1 as libc::int64_t;
+    }
 }
 
 #[no_mangle]
@@ -239,7 +266,7 @@ pub unsafe extern "C" fn weld_module_run(module: *mut WeldModule,
     assert!(!arg.is_null());
     assert!(!err_ptr.is_null());
 
-    let module = &mut *module;
+    let module_callable = &mut *module;
     let arg = &*arg;
     let mut err = &mut *err_ptr;
 
@@ -264,11 +291,12 @@ pub unsafe extern "C" fn weld_module_run(module: *mut WeldModule,
                          });
     let ptr = Box::into_raw(input) as i64;
     // result_raw is allocated with ordinary malloc, hence the free below
-    let result_raw = module.run(ptr) as *const llvm::WeldOutputArgs;
+    let result_raw = module_callable.run(ptr) as *const llvm::WeldOutputArgs;
     let result = (*result_raw).clone();
 
     let ret = Box::into_raw(Box::new(WeldValue {
                                          data: result.output as *const c_void,
+                                         module: Some(module),
                                          run_id: Some(result.run_id),
                                      }));
 
@@ -285,29 +313,14 @@ pub unsafe extern "C" fn weld_module_run(module: *mut WeldModule,
 }
 
 #[no_mangle]
-/// Returns memory usage of a Weld module. This includes unfreed memory allocated over
-/// all prior runs of the module.
-pub unsafe extern "C" fn weld_module_memory_usage(module: *mut WeldModule) -> libc::int64_t {
-    let module = &mut *module;
-    module.run_named("rt_memory_usage", 0).unwrap()
-}
-
-#[no_mangle]
-/// Frees all unfreed memory allocated by this module over all prior runs.
-pub unsafe extern "C" fn weld_module_mem_free(module: *mut WeldModule) {
-    let module = &mut *module;
-    module.run_named("rt_run_free", 0).unwrap();
-}
-
-#[no_mangle]
 /// Frees a module.
 ///
-/// Freeing a module frees all unfreed memory it has allocated over all prior runs.
+/// Freeing a module does not free the memory it may have allocated. Values returned by the module
+/// must be freed explicitly using `weld_value_free`.
 pub unsafe extern "C" fn weld_module_free(ptr: *mut easy_ll::CompiledModule) {
     if ptr.is_null() {
         return;
     }
-    weld_module_mem_free(ptr);
     Box::from_raw(ptr);
 }
 

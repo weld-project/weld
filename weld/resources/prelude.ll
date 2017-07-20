@@ -22,7 +22,7 @@ declare i8* @malloc(i64)
 declare void @qsort(i8*, i64, i64, i32 (i8*, i8*)*)
 
 ; Weld library functions
-declare void    @weld_rt_init(i64)
+declare void    @weld_rt_init()
 declare i8*     @weld_rt_malloc(i64, i64)
 declare i8*     @weld_rt_realloc(i64, i8*, i64)
 declare void    @weld_rt_free(i64, i8*)
@@ -47,9 +47,9 @@ declare void    @weld_abort_thread()
 
 ; documenation in parlib.cpp
 declare void @set_result(i8*)
-declare i8* @get_result()
+declare i8* @get_result(i64)
 declare void @pl_start_loop(%work_t*, i8*, i8*, void (%work_t*)*, void (%work_t*)*, i64, i64, i32)
-declare void @execute(void (%work_t*)*, i8*)
+declare i64 @execute(void (%work_t*)*, i8*, i64, i32)
 ; documentation in vb.cpp
 declare i8* @new_vb(i64, i64)
 declare void @new_piece(i8*, %work_t*)
@@ -61,15 +61,18 @@ declare i8* @get_merger_at_index(i8*, i64, i32)
 declare void @free_merger(i8*)
 
 ; Number of workers
-declare void @set_nworkers(i32)
 declare i32 @get_nworkers()
 
 ; Run IDs
-declare void @set_runid(i64)
 declare i64 @get_runid()
 
 define i64 @rt_run_free(i64 %run_id) {
     call void @weld_rt_run_free(i64 %run_id)
+    ret i64 0
+}
+
+define i64 @rt_init(i64 %unused) {
+    call void @weld_rt_init()
     ret i64 0
 }
 

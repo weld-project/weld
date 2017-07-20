@@ -1,7 +1,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#include "parlib.h"
+#include "runtime.h"
 
 #define CACHE_BITS 6
 #define CACHE_LINE (1 << CACHE_BITS)

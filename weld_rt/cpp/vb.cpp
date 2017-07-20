@@ -4,7 +4,7 @@
 #include <string.h>
 #include <pthread.h>
 #include <assert.h>
-#include "parlib.h"
+#include "runtime.h"
 
 #include <vector>
 #include <algorithm>

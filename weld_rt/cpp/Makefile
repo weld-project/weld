@@ -15,9 +15,6 @@ endif
 
 all: libweldrt.bc
 
-parlib.o: parlib.cpp
-	${CLANG} ${CFLAGS} -c $< -o $@
-
 vb.o: vb.cpp
 	${CLANG} ${CFLAGS} -c $< -o $@
 
@@ -27,7 +24,7 @@ merger.o: merger.cpp
 runtime.o: runtime.cpp
 	${CLANG} ${CFLAGS} -c $< -o $@
 
-libweldrt.bc: parlib.o vb.o merger.o runtime.o
+libweldrt.bc: vb.o merger.o runtime.o
 	llvm-link-${LLVM_VERSION} $^ -o $@
 
 clean:
