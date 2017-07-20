@@ -316,7 +316,7 @@ impl LlvmGenerator {
             ctx.code.add("store i64 %lower.idx, i64* %cur.idx");
             ctx.code.add("br label %loop.start");
             ctx.code.add("loop.start:");
-            let idx_tmp = self.load_var("%cur.idx", "i64", ctx)?;
+            let idx_tmp = self.gen_load_var("%cur.idx", "i64", ctx)?;
             if !par_for.innermost {
                 let work_idx_ptr = ctx.var_ids.next();
                 ctx.code.add(format!(
@@ -345,7 +345,7 @@ impl LlvmGenerator {
             let elem_ty_str = self.llvm_type(&elem_ty)?.to_string();
             for (i, iter) in par_for.data.iter().enumerate() {
                 let data_ty_str = self.llvm_type(func.params.get(&iter.data).unwrap())?.to_string();
-                let data_str = self.load_var(llvm_symbol(&iter.data).as_str(), &data_ty_str, ctx)?;
+                let data_str = self.gen_load_var(llvm_symbol(&iter.data).as_str(), &data_ty_str, ctx)?;
                 let data_prefix = format!("@{}", data_ty_str.replace("%", ""));
                 let inner_elem_tmp_ptr = ctx.var_ids.next();
                 let inner_elem_ty_str = if par_for.data.len() == 1 {
@@ -364,8 +364,8 @@ impl LlvmGenerator {
                         return weld_err!("Unimplemented: vectorized iterators do not support non-unit stride.");
                     }
                     let offset = ctx.var_ids.next();
-                    let stride_str = self.load_var(llvm_symbol(&iter.stride.clone().unwrap()).as_str(), "i64", ctx)?;
-                    let start_str = self.load_var(llvm_symbol(&iter.start.clone().unwrap()).as_str(), "i64", ctx)?;
+                    let stride_str = self.gen_load_var(llvm_symbol(&iter.stride.clone().unwrap()).as_str(), "i64", ctx)?;
+                    let start_str = self.gen_load_var(llvm_symbol(&iter.start.clone().unwrap()).as_str(), "i64", ctx)?;
                     ctx.code.add(format!("{} = mul i64 {}, {}", offset, idx_tmp, stride_str));
                     let final_idx = ctx.var_ids.next();
                     ctx.code.add(format!("{} = add i64 {}, {}", final_idx, start_str, offset));
@@ -419,7 +419,7 @@ impl LlvmGenerator {
                                                 arr_idx));
                     }
                 };
-                let inner_elem_tmp = try!(self.load_var(&inner_elem_tmp_ptr, &inner_elem_ty_str, ctx));
+                let inner_elem_tmp = try!(self.gen_load_var(&inner_elem_tmp_ptr, &inner_elem_ty_str, ctx));
                 if par_for.data.len() == 1 {
                     prev_ref.clear();
                     prev_ref.push_str(&inner_elem_tmp);
@@ -458,7 +458,7 @@ impl LlvmGenerator {
 
             ctx.code.add("br label %loop.terminator");
             ctx.code.add("loop.terminator:");
-            let idx_tmp = self.load_var("%cur.idx", "i64", ctx)?;
+            let idx_tmp = self.gen_load_var("%cur.idx", "i64", ctx)?;
             let idx_inc = ctx.var_ids.next();
             ctx.code.add(format!("{} = add i64 {}, {}", idx_inc, idx_tmp, format!("{}", fetch_width)));
             ctx.code.add(format!("store i64 {}, i64* %cur.idx", idx_inc));
@@ -1029,7 +1029,7 @@ impl LlvmGenerator {
     }
 
     /// Generate code to load a symbol sym with LLVM type ty into a local variable, and return the variable's name.
-    fn load_var(&mut self, sym: &str, ty: &str, ctx: &mut FunctionContext) -> WeldResult<String> {
+    fn gen_load_var(&mut self, sym: &str, ty: &str, ctx: &mut FunctionContext) -> WeldResult<String> {
         let var = ctx.var_ids.next();
         // Hacky...but need an aligned load for vectors to prevent strange segfaults.
         let is_vector = ty.contains("<") && ty.contains(">") && ty.contains("x");
@@ -1156,7 +1156,7 @@ impl LlvmGenerator {
         let child_ty = try!(func.symbol_type(child));
         if let Scalar(ref ty) = *child_ty {
             let child_ll_ty = try!(self.llvm_type(&child_ty)).to_string();
-            let child_tmp = try!(self.load_var(llvm_symbol(child).as_str(), &child_ll_ty, ctx));
+            let child_tmp = try!(self.gen_load_var(llvm_symbol(child).as_str(), &child_ll_ty, ctx));
             let res_tmp = ctx.var_ids.next();
             let op_name = try!(llvm_unaryop(op_kind, ty));
             ctx.code.add(format!("{} = call {} {} ({} {})", res_tmp, child_ll_ty, op_name, child_ll_ty, child_tmp));
@@ -1190,7 +1190,7 @@ impl LlvmGenerator {
                 let ll_ty = self.llvm_type(&struct_type)?.to_string();
                 for (i, &(ref elem, ref ty)) in elems.iter().enumerate() {
                     let ll_elem_ty = try!(self.llvm_type(&ty)).to_string();
-                    let tmp = try!(self.load_var(llvm_symbol(&elem).as_str(), &ll_elem_ty, ctx));
+                    let tmp = try!(self.gen_load_var(llvm_symbol(&elem).as_str(), &ll_elem_ty, ctx));
                     let struct_name = ctx.var_ids.next();
                     ctx.code.add(format!("{} = insertvalue {} {}, {} {}, {}",
                                             &struct_name,
@@ -1248,7 +1248,7 @@ impl LlvmGenerator {
                                         prefix = vec_ll_prefix,
                                         capacity = capacity_str));
                 for (i, elem) in elems.iter().enumerate() {
-                    let e = self.load_var(llvm_symbol(&elem).as_str(), &elem_ll_ty, ctx)?.to_string();
+                    let e = self.gen_load_var(llvm_symbol(&elem).as_str(), &elem_ll_ty, ctx)?.to_string();
                     let ptr = ctx.var_ids.next();
                     let idx_str = format!("{}", i);
                     ctx.code.add(format!("{ptr} = call {elem_ty}* \
@@ -1272,8 +1272,8 @@ impl LlvmGenerator {
 
             BinOp { ref output, op, ref ty, ref left, ref right } => {
                 let ll_ty = self.llvm_type(ty)?.to_string();
-                let left_tmp = self.load_var(llvm_symbol(left).as_str(), &ll_ty, ctx)?;
-                let right_tmp = self.load_var(llvm_symbol(right).as_str(), &ll_ty, ctx)?;
+                let left_tmp = self.gen_load_var(llvm_symbol(left).as_str(), &ll_ty, ctx)?;
+                let right_tmp = self.gen_load_var(llvm_symbol(right).as_str(), &ll_ty, ctx)?;
                 let bin_tmp = ctx.var_ids.next();
                 let out_ty = func.symbol_type(output)?;
                 let out_ty_str = self.llvm_type(&out_ty)?.to_string();
@@ -1318,7 +1318,7 @@ impl LlvmGenerator {
                 let elem_ty_str = self.llvm_type(&elem_ty)?.to_string();
                 let vec_ty_str = self.llvm_type(&ty)?.to_string();
 
-                let elem = self.load_var(llvm_symbol(child).as_str(), &elem_ty_str, ctx)?;
+                let elem = self.gen_load_var(llvm_symbol(child).as_str(), &elem_ty_str, ctx)?;
                 let size = vec_size(&elem_ty)?;
 
                 let mut prev_name = "undef".to_string();
@@ -1346,7 +1346,7 @@ impl LlvmGenerator {
             Negate { ref output, ref child } => {
                 let out_ty = func.symbol_type(output)?;
                 let ll_ty = self.llvm_type(out_ty)?.to_string();
-                let child_tmp = self.load_var(llvm_symbol(child).as_str(), &ll_ty, ctx)?;
+                let child_tmp = self.gen_load_var(llvm_symbol(child).as_str(), &ll_ty, ctx)?;
                 let bin_tmp = ctx.var_ids.next();
                 let out_ty_str = self.llvm_type(&out_ty)?.to_string();
                 let op_name = llvm_binop(BinOpKind::Subtract, out_ty)?;
@@ -1366,7 +1366,7 @@ impl LlvmGenerator {
                 if old_ty != new_ty {
                     let op_name = try!(llvm_castop(&old_ty, &new_ty));
                     let new_ll_ty = try!(self.llvm_type(&new_ty)).to_string();
-                    let child_tmp = try!(self.load_var(llvm_symbol(child).as_str(), &old_ll_ty, ctx));
+                    let child_tmp = try!(self.gen_load_var(llvm_symbol(child).as_str(), &old_ll_ty, ctx));
                     let cast_tmp = ctx.var_ids.next();
                     ctx.code.add(format!("{} = {} {} {} to {}",
                                             cast_tmp,
@@ -1382,7 +1382,7 @@ impl LlvmGenerator {
                                             out_ty_str,
                                             llvm_symbol(output)));
                 } else {
-                    let child_tmp = try!(self.load_var(llvm_symbol(child).as_str(), &old_ll_ty, ctx));
+                    let child_tmp = try!(self.gen_load_var(llvm_symbol(child).as_str(), &old_ll_ty, ctx));
                     ctx.code.add(format!("store {} {}, {}* {}",
                                             old_ll_ty,
                                             child_tmp,
@@ -1400,8 +1400,8 @@ impl LlvmGenerator {
                         let output_ll_ty = try!(self.llvm_type(&output_ty)).to_string();
                         let vec_ll_ty = try!(self.llvm_type(&child_ty)).to_string();
                         let vec_prefix = format!("@{}", vec_ll_ty.replace("%", ""));
-                        let child_tmp = try!(self.load_var(llvm_symbol(child).as_str(), &child_ll_ty, ctx));
-                        let index_tmp = try!(self.load_var(llvm_symbol(index).as_str(), "i64", ctx));
+                        let child_tmp = try!(self.gen_load_var(llvm_symbol(child).as_str(), &child_ll_ty, ctx));
+                        let index_tmp = try!(self.gen_load_var(llvm_symbol(index).as_str(), "i64", ctx));
                         let res_ptr = ctx.var_ids.next();
                         let res_tmp = ctx.var_ids.next();
                         ctx.code.add(format!("{} = call {}* {}.at({} {}, i64 {})",
@@ -1427,8 +1427,8 @@ impl LlvmGenerator {
                         let index_ty = try!(func.symbol_type(index));
                         let index_ll_ty = try!(self.llvm_type(&index_ty)).to_string();
                         let dict_prefix = format!("@{}", dict_ll_ty.replace("%", ""));
-                        let child_tmp = try!(self.load_var(llvm_symbol(child).as_str(), &child_ll_ty, ctx));
-                        let index_tmp = try!(self.load_var(llvm_symbol(index).as_str(), &index_ll_ty, ctx));
+                        let child_tmp = try!(self.gen_load_var(llvm_symbol(child).as_str(), &child_ll_ty, ctx));
+                        let index_tmp = try!(self.gen_load_var(llvm_symbol(index).as_str(), &index_ll_ty, ctx));
                         let slot = ctx.var_ids.next();
                         let res_tmp = ctx.var_ids.next();
                         ctx.code.add(format!("{} = call {}.slot {}.lookup({} {}, {} {})",
@@ -1464,8 +1464,8 @@ impl LlvmGenerator {
                         let key_ty = try!(func.symbol_type(key));
                         let key_ll_ty = try!(self.llvm_type(&key_ty)).to_string();
                         let dict_prefix = format!("@{}", dict_ll_ty.replace("%", ""));
-                        let child_tmp = try!(self.load_var(llvm_symbol(child).as_str(), &child_ll_ty, ctx));
-                        let key_tmp = try!(self.load_var(llvm_symbol(key).as_str(), &key_ll_ty, ctx));
+                        let child_tmp = try!(self.gen_load_var(llvm_symbol(child).as_str(), &child_ll_ty, ctx));
+                        let key_tmp = try!(self.gen_load_var(llvm_symbol(key).as_str(), &key_ll_ty, ctx));
                         let slot = ctx.var_ids.next();
                         let res_tmp = ctx.var_ids.next();
                         ctx.code.add(format!("{} = call {}.slot {}.lookup({} {}, {} {})",
@@ -1496,9 +1496,9 @@ impl LlvmGenerator {
                         let output_ll_ty = try!(self.llvm_type(&output_ty)).to_string();
                         let vec_ll_ty = try!(self.llvm_type(&child_ty)).to_string();
                         let vec_prefix = format!("@{}", vec_ll_ty.replace("%", ""));
-                        let child_tmp = try!(self.load_var(llvm_symbol(child).as_str(), &child_ll_ty, ctx));
-                        let index_tmp = try!(self.load_var(llvm_symbol(index).as_str(), "i64", ctx));
-                        let size_tmp = try!(self.load_var(llvm_symbol(size).as_str(), "i64", ctx));
+                        let child_tmp = try!(self.gen_load_var(llvm_symbol(child).as_str(), &child_ll_ty, ctx));
+                        let index_tmp = try!(self.gen_load_var(llvm_symbol(index).as_str(), "i64", ctx));
+                        let size_tmp = try!(self.gen_load_var(llvm_symbol(size).as_str(), "i64", ctx));
                         let res_ptr = ctx.var_ids.next();
                         ctx.code.add(format!("{} = call {} {}.slice({} {}, i64 {}, \
                                                 i64{})",
@@ -1526,9 +1526,9 @@ impl LlvmGenerator {
                 let res_ty_str = self.llvm_type(func.symbol_type(on_true)?)?.to_string();
 
                 let output_str = llvm_symbol(output).to_string();
-                let cond_str = self.load_var(llvm_symbol(cond).as_str(), &cond_ty_str, ctx)?;
-                let true_str = self.load_var(llvm_symbol(on_true).as_str(), &res_ty_str, ctx)?;
-                let false_str = self.load_var(llvm_symbol(on_false).as_str(), &res_ty_str, ctx)?;
+                let cond_str = self.gen_load_var(llvm_symbol(cond).as_str(), &cond_ty_str, ctx)?;
+                let true_str = self.gen_load_var(llvm_symbol(on_true).as_str(), &res_ty_str, ctx)?;
+                let false_str = self.gen_load_var(llvm_symbol(on_false).as_str(), &res_ty_str, ctx)?;
 
 
                 let tmp = ctx.var_ids.next();
@@ -1552,7 +1552,7 @@ impl LlvmGenerator {
                 let new_ll_ty = try!(self.llvm_type(&new_ty)).to_string();
 
                 let dict_prefix = format!("@{}", old_ll_ty.replace("%", ""));
-                let child_tmp = try!(self.load_var(llvm_symbol(child).as_str(), &old_ll_ty, ctx));
+                let child_tmp = try!(self.gen_load_var(llvm_symbol(child).as_str(), &old_ll_ty, ctx));
                 let res_tmp = ctx.var_ids.next();
                 ctx.code.add(format!("{} = call {} {}.tovec({} {})",
                                         res_tmp,
@@ -1569,7 +1569,7 @@ impl LlvmGenerator {
                 let child_ty = try!(func.symbol_type(child));
                 let child_ll_ty = try!(self.llvm_type(&child_ty)).to_string();
                 let vec_prefix = format!("@{}", child_ll_ty.replace("%", ""));
-                let child_tmp = try!(self.load_var(llvm_symbol(child).as_str(), &child_ll_ty, ctx));
+                let child_tmp = try!(self.gen_load_var(llvm_symbol(child).as_str(), &child_ll_ty, ctx));
                 let res_tmp = ctx.var_ids.next();
                 ctx.code.add(format!("{} = call i64 {}.size({} {})", res_tmp, vec_prefix, child_ll_ty, child_tmp));
                 let out_ty = try!(func.symbol_type(output));
@@ -1580,14 +1580,14 @@ impl LlvmGenerator {
             Assign { ref output, ref value } => {
                 let ty = try!(func.symbol_type(output));
                 let ll_ty = try!(self.llvm_type(&ty)).to_string();
-                let val_tmp = try!(self.load_var(llvm_symbol(value).as_str(), &ll_ty, ctx));
+                let val_tmp = try!(self.gen_load_var(llvm_symbol(value).as_str(), &ll_ty, ctx));
                 ctx.code.add(format!("store {} {}, {}* {}", ll_ty, val_tmp, ll_ty, llvm_symbol(output)));
             }
 
             GetField { ref output, ref value, index } => {
                 let struct_ty = try!(self.llvm_type(try!(func.symbol_type(value)))).to_string();
                 let field_ty = try!(self.llvm_type(try!(func.symbol_type(output)))).to_string();
-                let struct_tmp = try!(self.load_var(llvm_symbol(value).as_str(), &struct_ty, ctx));
+                let struct_tmp = try!(self.gen_load_var(llvm_symbol(value).as_str(), &struct_ty, ctx));
                 let res_tmp = ctx.var_ids.next();
                 ctx.code.add(format!("{} = extractvalue {} {}, {}", res_tmp, struct_ty, struct_tmp, index));
                 ctx.code.add(format!("store {} {}, {}* {}", field_ty, res_tmp, field_ty, llvm_symbol(output)));
@@ -1648,9 +1648,9 @@ impl LlvmGenerator {
         // TODO(Deepak): Do something with annotations here too...
         match *builder_kind {
             Appender(ref t) => {
-                let bld_tmp = try!(self.load_var(llvm_symbol(builder).as_str(), &bld_ty_str, ctx));
+                let bld_tmp = try!(self.gen_load_var(llvm_symbol(builder).as_str(), &bld_ty_str, ctx));
                 let elem_ty_str = try!(self.llvm_type(t)).to_string();
-                let elem_tmp = try!(self.load_var(llvm_symbol(value).as_str(), &elem_ty_str, ctx));
+                let elem_tmp = try!(self.gen_load_var(llvm_symbol(value).as_str(), &elem_ty_str, ctx));
                 ctx.code.add(format!("call {} {}.merge({} {}, {} {}, \
                                         i32 %cur.tid)",
                                         bld_ty_str,
@@ -1662,10 +1662,10 @@ impl LlvmGenerator {
             }
             
             DictMerger(ref kt, ref vt, _) => {
-                let bld_tmp = try!(self.load_var(llvm_symbol(builder).as_str(), &bld_ty_str, ctx));
+                let bld_tmp = try!(self.gen_load_var(llvm_symbol(builder).as_str(), &bld_ty_str, ctx));
                 let elem_ty = Struct(vec![*kt.clone(), *vt.clone()]);
                 let elem_ty_str = try!(self.llvm_type(&elem_ty)).to_string();
-                let elem_tmp = try!(self.load_var(llvm_symbol(value).as_str(), &elem_ty_str, ctx));
+                let elem_tmp = try!(self.gen_load_var(llvm_symbol(value).as_str(), &elem_ty_str, ctx));
                 ctx.code.add(format!(
                     "call {} {}.merge({} {}, {} {}, i32 %cur.tid)",
                     bld_ty_str,
@@ -1677,10 +1677,10 @@ impl LlvmGenerator {
             }
             
             GroupMerger(ref kt, ref vt) => {
-                let bld_tmp = try!(self.load_var(llvm_symbol(builder).as_str(), &bld_ty_str, ctx));
+                let bld_tmp = try!(self.gen_load_var(llvm_symbol(builder).as_str(), &bld_ty_str, ctx));
                 let elem_ty = Struct(vec![*kt.clone(), *vt.clone()]);
                 let elem_ty_str = try!(self.llvm_type(&elem_ty)).to_string();
-                let elem_tmp = try!(self.load_var(llvm_symbol(value).as_str(), &elem_ty_str, ctx));
+                let elem_tmp = try!(self.gen_load_var(llvm_symbol(value).as_str(), &elem_ty_str, ctx));
                 ctx.code.add(format!(
                     "call {} {}.merge({} {}, {} {}, i32 %cur.tid)",
                     bld_ty_str,
@@ -1692,10 +1692,10 @@ impl LlvmGenerator {
             }
 
             Merger(ref t, ref op) => {
-                let bld_tmp = self.load_var(llvm_symbol(builder).as_str(), &bld_ty_str, ctx)?;
+                let bld_tmp = self.gen_load_var(llvm_symbol(builder).as_str(), &bld_ty_str, ctx)?;
                 let value_ty = func.symbol_type(value)?;
                 let elem_ty_str = self.llvm_type(value_ty)?.to_string();
-                let elem_tmp = self.load_var(llvm_symbol(value).as_str(), &elem_ty_str, ctx)?;
+                let elem_tmp = self.gen_load_var(llvm_symbol(value).as_str(), &elem_ty_str, ctx)?;
                 let bld_ptr_raw = ctx.var_ids.next();
                 let bld_ptr = ctx.var_ids.next();
                 ctx.code.add(format!(
@@ -1732,8 +1732,8 @@ impl LlvmGenerator {
                 let elem_ty_str = self.llvm_type(t)?.to_string();
                 let merge_ty = Struct(vec![Scalar(ScalarKind::I64), *t.clone()]);
                 let merge_ty_str = self.llvm_type(&merge_ty)?.to_string();
-                let bld_tmp = self.load_var(llvm_symbol(builder).as_str(), &bld_ty_str, ctx)?;
-                let elem_tmp = self.load_var(llvm_symbol(value).as_str(), &merge_ty_str, ctx)?;
+                let bld_tmp = self.gen_load_var(llvm_symbol(builder).as_str(), &bld_ty_str, ctx)?;
+                let elem_tmp = self.gen_load_var(llvm_symbol(value).as_str(), &merge_ty_str, ctx)?;
                 let index_var = ctx.var_ids.next();
                 let elem_var = ctx.var_ids.next();
                 ctx.code.add(format!("{} = extractvalue {} {}, 0", index_var, merge_ty_str, elem_tmp));
@@ -1774,7 +1774,7 @@ impl LlvmGenerator {
                 let bld_prefix = format!("@{}", bld_ty_str.replace("%", ""));
                 let res_ty_str = try!(self.llvm_type(&res_ty)).to_string();
                 let bld_tmp =
-                    try!(self.load_var(llvm_symbol(builder).as_str(), &bld_ty_str, ctx));
+                    try!(self.gen_load_var(llvm_symbol(builder).as_str(), &bld_ty_str, ctx));
                 let res_tmp = ctx.var_ids.next();
                 ctx.code.add(format!("{} = call {} {}.result({} {})",
                                      res_tmp,
@@ -1811,7 +1811,7 @@ impl LlvmGenerator {
                 // Result type.
                 let res_ty_str = try!(self.llvm_type(&res_ty)).to_string();
                 // Temporary builder variable.
-                let bld_tmp = try!(self.load_var(llvm_symbol(builder).as_str(), &bld_ty_str, ctx));
+                let bld_tmp = try!(self.gen_load_var(llvm_symbol(builder).as_str(), &bld_ty_str, ctx));
 
                 // Generate names for all temporaries.
                 let t0 = ctx.var_ids.next();
@@ -1921,7 +1921,7 @@ impl LlvmGenerator {
                 let bld_prefix = format!("@{}", bld_ty_str.replace("%", ""));
                 let res_ty_str = try!(self.llvm_type(&res_ty)).to_string();
                 let bld_tmp =
-                    try!(self.load_var(llvm_symbol(builder).as_str(), &bld_ty_str, ctx));
+                    try!(self.gen_load_var(llvm_symbol(builder).as_str(), &bld_ty_str, ctx));
                 let res_tmp = ctx.var_ids.next();
                 ctx.code.add(format!("{} = call {} {}.result({} {})",
                                         res_tmp,
@@ -1970,7 +1970,7 @@ impl LlvmGenerator {
 
                 let res_ty_str = try!(self.llvm_type(&res_ty)).to_string();
 
-                let bld_tmp = try!(self.load_var(llvm_symbol(builder).as_str(), &kv_vec_builder_ty, ctx));
+                let bld_tmp = try!(self.gen_load_var(llvm_symbol(builder).as_str(), &kv_vec_builder_ty, ctx));
                 let res_tmp = ctx.var_ids.next();
 
                 ctx.code.add(format!("{} = call {} {}({} {})",
@@ -1997,7 +1997,7 @@ impl LlvmGenerator {
                 let elem_ty_str = self.llvm_type(t)?.to_string();
                 // The builder we operate on.
                 let bld_ptr =
-                    try!(self.load_var(llvm_symbol(builder).as_str(), &bld_ty_str, ctx));
+                    try!(self.gen_load_var(llvm_symbol(builder).as_str(), &bld_ty_str, ctx));
 
                 // Generate names for all temporaries.
                 let nworkers = ctx.var_ids.next();
@@ -2135,7 +2135,7 @@ impl LlvmGenerator {
                 let iden_elem = binop_identity(*op, elem_ty.as_ref())?;
                 let init_elem = match *arg {
                     Some(ref s) => {
-                        let arg_str = self.load_var(llvm_symbol(s).as_str(), &elem_type, ctx)?;
+                        let arg_str = self.gen_load_var(llvm_symbol(s).as_str(), &elem_type, ctx)?;
                         arg_str
                     }
                     _ => iden_elem.clone(),
@@ -2221,7 +2221,7 @@ impl LlvmGenerator {
                     Some(ref s) => {
                         let arg_ty = try!(self.llvm_type(&Vector(elem.clone()))).to_string();
                         let arg_ty_str = arg_ty.to_string();
-                        let arg_str = self.load_var(llvm_symbol(s).as_str(), &arg_ty_str, ctx)?;
+                        let arg_str = self.gen_load_var(llvm_symbol(s).as_str(), &arg_ty_str, ctx)?;
                         let bld_tmp = ctx.var_ids.next();
                         ctx.code.add(format!("{} = call {} {}.new({} \
                                                 {})",
@@ -2256,7 +2256,7 @@ impl LlvmGenerator {
                       -> WeldResult<()> {
         match *terminator {
             Branch { ref cond, on_true, on_false } => {
-                let cond_tmp = try!(self.load_var(llvm_symbol(cond).as_str(), "i1", ctx));
+                let cond_tmp = try!(self.gen_load_var(llvm_symbol(cond).as_str(), "i1", ctx));
                 ctx.code.add(format!("br i1 {}, label %b.b{}, label %b.b{}", cond_tmp, on_true, on_false));
             }
 
@@ -2269,7 +2269,7 @@ impl LlvmGenerator {
                 let mut arg_types = String::new();
                 for (arg, ty) in params_sorted.iter() {
                     let ll_ty = try!(self.llvm_type(&ty)).to_string();
-                    let arg_tmp = try!(self.load_var(llvm_symbol(arg).as_str(), &ll_ty, ctx));
+                    let arg_tmp = try!(self.gen_load_var(llvm_symbol(arg).as_str(), &ll_ty, ctx));
                     let arg_str = format!("{} {}, ", &ll_ty, arg_tmp);
                     arg_types.push_str(&arg_str);
                 }
@@ -2288,7 +2288,7 @@ impl LlvmGenerator {
                 let mut arg_types = String::new();
                 for (arg, ty) in params_sorted.iter() {
                     let ll_ty = try!(self.llvm_type(&ty)).to_string();
-                    let arg_tmp = try!(self.load_var(llvm_symbol(arg).as_str(), &ll_ty, ctx));
+                    let arg_tmp = try!(self.gen_load_var(llvm_symbol(arg).as_str(), &ll_ty, ctx));
                     let arg_str = format!("{} {}, ", ll_ty, arg_tmp);
                     arg_types.push_str(&arg_str);
                 }
@@ -2300,7 +2300,7 @@ impl LlvmGenerator {
             ProgramReturn(ref sym) => {
                 let ty = try!(func.symbol_type(sym));
                 let ty_str = try!(self.llvm_type(ty)).to_string();
-                let res_tmp = try!(self.load_var(llvm_symbol(sym).as_str(), &ty_str, ctx));
+                let res_tmp = try!(self.gen_load_var(llvm_symbol(sym).as_str(), &ty_str, ctx));
                 let elem_size_ptr = ctx.var_ids.next();
                 let elem_size = ctx.var_ids.next();
                 let elem_storage = ctx.var_ids.next();
