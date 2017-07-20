@@ -1591,11 +1591,13 @@ fn iterate_with_parallel_body() {
     let input: i32 = 3;
 
     let ret_value = compile_and_run(code, conf, &input);
+    println!("RAN SUCCESSFULLY!!");
     let data = unsafe { weld_value_data(ret_value) as *const WeldVec<i32> };
     let result = unsafe { (*data).clone() };
 
     let output = [8, 16, 24];
-    for i in 0..(result.len as isize) {
+    assert_eq!(result.len, output.len() as i64);
+    for i in 0..(output.len() as isize) {
         assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
     }
 

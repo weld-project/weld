@@ -284,11 +284,11 @@ impl fmt::Display for Statement {
             Merge {
                 ref builder,
                 ref value,
-            } => write!(f, "merge {} {}", builder, value),
+            } => write!(f, "merge({}, {})", builder, value),
             Res {
                 ref output,
                 ref builder,
-            } => write!(f, "{} = result {}", output, builder),
+            } => write!(f, "{} = result({})", output, builder),
             NewBuilder {
                 ref output,
                 ref arg,
@@ -452,7 +452,7 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
                                env: &mut HashMap<Symbol, Type>,
                                closure: &mut HashSet<Symbol>,
                                visited: &mut HashSet<FunctionId>) {
-    if visited.insert(func_id) {
+    if !visited.insert(func_id) {
         return;
     }
     for (name, ty) in &prog.funcs[func_id].params {
@@ -629,7 +629,6 @@ fn sir_param_correction(prog: &mut SirProgram) -> WeldResult<()> {
     let mut env = HashMap::new();
     let mut closure = HashSet::new();
     let mut visited = HashSet::new();
-    println!("SIR param correction starting for:\n{}", prog);
     sir_param_correction_helper(prog, 0, &mut env, &mut closure, &mut visited);
     let ref func = prog.funcs[0];
     for name in closure {
@@ -916,7 +915,8 @@ fn gen_expr(expr: &TypedExpr,
             let parallel_body = contains_parallel_expressions(func_body);
             let body_start_func = if parallel_body {
                 let new_func = prog.add_func();
-                prog.add_local_named(&initial.ty, argument_sym, new_func);
+                //prog.add_local_named(&initial.ty, argument_sym, new_func);
+                prog.funcs[new_func].params.insert(argument_sym.clone(), initial.ty.clone());
                 new_func
             } else {
                 cur_func
