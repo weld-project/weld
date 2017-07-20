@@ -155,18 +155,6 @@ fn vectorizable(for_loop: &Expr<Type>) -> WeldResult<HashSet<Symbol>> {
         if vectorizable_iters(&iters) {
             // Check if the builder is newly initialized.
             if let NewBuilder(_) = init_builder.kind {
-                // Check the builder.
-                if let Builder(ref bk, _) = init_builder.ty {
-                    match *bk {
-                        BuilderKind::Merger(ref ty, _) => {
-                            if let Scalar(_) = **ty {} else { return weld_err!("Unsupported builder"); }
-                        }
-                        _ => {
-                            return weld_err!("Unsupported builder");
-                        }
-                    };
-                }
-
                 // Check the loop function.
                 if let Lambda { ref params, ref body } = func.kind {
                     let mut passed = true;

@@ -63,26 +63,26 @@ pub fn compile_program(program: &Program,
                        -> WeldResult<easy_ll::CompiledModule> {
     let mut expr = try!(macro_processor::process_program(program));
     if log_level >= LogLevel::Debug {
-        println!("After macro substitution:\n{}\n", print_expr(&expr));
+        println!("After macro substitution:\n{}\n", print_typed_expr(&expr));
     }
 
     let _ = try!(transforms::uniquify(&mut expr));
     try!(type_inference::infer_types(&mut expr));
     let mut expr = try!(expr.to_typed());
     if log_level >= LogLevel::Debug {
-        println!("After type inference:\n{}\n", print_expr(&expr));
+        println!("After type inference:\n{}\n", print_typed_expr(&expr));
     }
 
     for pass in opt_passes {
         try!(pass.transform(&mut expr));
         if log_level >= LogLevel::Debug {
-            println!("After {} pass:\n{}", pass.pass_name(), print_expr(&expr));
+            println!("After {} pass:\n{}", pass.pass_name(), print_typed_expr(&expr));
         }
     }
 
     try!(transforms::uniquify(&mut expr));
     if log_level >= LogLevel::Debug {
-        println!("After uniquify:\n{}\n", print_expr(&expr));
+        println!("After uniquify:\n{}\n", print_typed_expr(&expr));
     }
 
     let sir_prog = try!(sir::ast_to_sir(&expr));
@@ -1550,7 +1550,7 @@ impl LlvmGenerator {
             Merge { ref builder, ref value } => {
                 let bld_ty = get_sym_ty(func, builder)?;
                 if let Builder(ref bld_kind, _) = *bld_ty {
-                    self.gen_merge(bld_kind, builder, value, func, ctx)?;
+                    self.gen_merge(bld_kind, builder, get_sym_ty(func, value)?, value, func, ctx)?;
                 } else {
                     return weld_err!("Non builder type {} found in Merge", print_type(bld_ty))
                 }
@@ -1581,6 +1581,7 @@ impl LlvmGenerator {
     fn gen_merge(&mut self,
                  builder_kind: &BuilderKind,
                  builder: &Symbol,
+                 value_ty: &Type,
                  value: &Symbol,
                  func: &SirFunction,
                  ctx: &mut FunctionContext)
@@ -1588,6 +1589,55 @@ impl LlvmGenerator {
         let bld_ty = get_sym_ty(func, builder)?;
         let bld_ty_str = self.llvm_type(&bld_ty)?.to_string();
         let bld_prefix = format!("@{}", bld_ty_str.replace("%", ""));
+
+        // Special case: if the value is a SIMD vector, we need to merge each element separately (because the final
+        // builder will still operate on scalars). We have specialized functions to merge all of them together for
+        // some builders, such as Merger, but for others we just call the merge operation multiple times.
+        if let Simd(ref item) = *value_ty {
+            match *builder_kind {
+                Merger(ref t, ref op) => {
+                    // For Merger, call the vectorMergePtr function to get a pointer to a vector we can merge into.
+                    let elem_ty_str = self.llvm_type(value_ty)?.to_string();
+                    let elem_tmp = self.load_var(llvm_symbol(value).as_str(), &elem_ty_str, ctx)?;
+                    let bld_ptr_raw = ctx.var_ids.next();
+                    let bld_ptr = ctx.var_ids.next();
+                    let bld_tmp = self.load_var(llvm_symbol(builder).as_str(), &bld_ty_str, ctx)?;
+                    ctx.code.add(format!(
+                        "{bld_ptr_raw} = call {bld_ty_str} {bld_prefix}.getPtrIndexed({bld_ty_str} {bld_tmp}, i32 %cur.tid)",
+                        bld_ptr_raw=bld_ptr_raw,
+                        bld_ty_str=bld_ty_str,
+                        bld_prefix=bld_prefix,
+                        bld_tmp=bld_tmp));
+                    ctx.code.add(format!(
+                        "{bld_ptr} = call {elem_ty_str}* {bld_prefix}.vectorMergePtr({bld_ty_str} {bld_ptr_raw})",
+                        bld_ptr=bld_ptr,
+                        elem_ty_str=elem_ty_str,
+                        bld_prefix=bld_prefix,
+                        bld_ty_str=bld_ty_str,
+                        bld_ptr_raw=bld_ptr_raw));
+                    self.gen_merge_op(&bld_ptr, &elem_tmp, &elem_ty_str, op, t, ctx)?;
+                }
+
+                _ => {
+                    // For all other builders, extract each value in the vector and merge it separately
+                    let value_ty_str = self.llvm_type(value_ty)?.to_string();
+                    let value_tmp = self.load_var(llvm_symbol(value).as_str(), &value_ty_str, ctx)?;
+                    let item_ty = Scalar(*item);
+                    let item_ty_str = self.llvm_type(&item_ty)?.to_string();
+                    for i in 0..vec_size(&item_ty)? {
+                        let item_stack = ctx.var_ids.next();
+                        let item_reg = ctx.var_ids.next();
+                        let item_stack_sym = Symbol::new(&item_stack.replace("%", ""), 0);
+                        ctx.add_alloca(&item_stack, &item_ty_str)?;
+                        ctx.code.add(format!("{} = extractelement {} {}, i32 {}", item_reg, value_ty_str, value_tmp, i));
+                        ctx.code.add(format!("store {} {}, {}* {}", item_ty_str, item_reg, item_ty_str, item_stack));
+                        self.gen_merge(builder_kind, builder, &item_ty, &item_stack_sym, func, ctx)?;
+                    }
+                }
+            }
+
+            return Ok(())
+        }
 
         // TODO(Deepak): Do something with annotations here too...
         match *builder_kind {
@@ -1637,7 +1687,6 @@ impl LlvmGenerator {
 
             Merger(ref t, ref op) => {
                 let bld_tmp = self.load_var(llvm_symbol(builder).as_str(), &bld_ty_str, ctx)?;
-                let value_ty = get_sym_ty(func, value)?;
                 let elem_ty_str = self.llvm_type(value_ty)?.to_string();
                 let elem_tmp = self.load_var(llvm_symbol(value).as_str(), &elem_ty_str, ctx)?;
                 let bld_ptr_raw = ctx.var_ids.next();

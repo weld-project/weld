@@ -128,7 +128,7 @@ fn main() {
         }
 
         if let Err(ref e) = program {
-            println!("Error during parsing: {:?}", e);
+            println!("Error during parsing: {}", e);
             continue;
         }
 
