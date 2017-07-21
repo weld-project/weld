@@ -1,4 +1,5 @@
 use std::env;
+use std::thread;
 
 extern crate weld;
 extern crate weld_common;
@@ -9,7 +10,7 @@ use weld_common::WeldRuntimeErrno;
 use weld::WeldConf;
 use weld::WeldValue;
 use weld::WeldError;
-use weld::{weld_value_new, weld_value_data, weld_value_free};
+use weld::{weld_value_new, weld_value_data, weld_value_module, weld_value_free};
 use weld::{weld_module_compile, weld_module_run, weld_module_free};
 use weld::{weld_error_new, weld_error_code, weld_error_message, weld_error_free};
 use weld::{weld_conf_new, weld_conf_set, weld_conf_free};
@@ -75,6 +76,8 @@ unsafe fn _compile_and_run<T>(code: &str,
     let module = weld_module_compile(code.into_raw() as *const c_char, conf, err);
 
     if weld_error_code(err) != WeldRuntimeErrno::Success {
+        weld_module_free(module);
+        weld_value_free(input_value);
         weld_conf_free(conf);
         return Err(err);
     }
@@ -84,15 +87,23 @@ unsafe fn _compile_and_run<T>(code: &str,
     let ret_value = weld_module_run(module, conf, input_value, err);
     if weld_error_code(err) != WeldRuntimeErrno::Success {
         weld_conf_free(conf);
+        weld_value_free(input_value);
+        weld_value_free(ret_value);
+        weld_module_free(module);
         return Err(err);
     }
 
-    weld_module_free(module);
     weld_error_free(err);
     weld_value_free(input_value);
     weld_conf_free(conf);
 
     return Ok(ret_value);
+}
+
+unsafe fn free_value_and_module(value: *mut WeldValue) {
+    let module = weld_value_module(value);
+    weld_value_free(value);
+    weld_module_free(module);
 }
 
 /// Runs `code` with the given `conf` and input data pointer `ptr`, expecting
@@ -127,7 +138,7 @@ fn basic_program() {
     let result = unsafe { *data };
     assert_eq!(result, 42);
 
-    unsafe { weld_value_free(ret_value) };
+    unsafe { free_value_and_module(ret_value) };
 }
 
 fn float_literals() {
@@ -166,7 +177,7 @@ fn negation() {
     let result = unsafe { *data };
     assert_eq!(result, -1 as i32);
 
-    unsafe { weld_value_free(ret_value) };
+    unsafe { free_value_and_module(ret_value) };
 }
 
 fn negation_double() {
@@ -180,7 +191,7 @@ fn negation_double() {
     let result = unsafe { *data };
     assert_eq!(result, -1.0 as f64);
 
-    unsafe { weld_value_free(ret_value) };
+    unsafe { free_value_and_module(ret_value) };
 }
 
 fn negated_arithmetic() {
@@ -195,7 +206,7 @@ fn negated_arithmetic() {
     let result = unsafe { *data };
     assert_eq!(result, -3 as i32);
 
-    unsafe { weld_value_free(ret_value) };
+    unsafe { free_value_and_module(ret_value) };
 }
 
 // TODO(shoumik): - Failing on Linux. Will fix in a in PR
@@ -218,7 +229,7 @@ fn negated_arithmetic() {
 // let result = unsafe { *data };
 // assert_eq!(result, 10);
 //
-// unsafe { weld_value_free(ret_value) };
+// unsafe { free_value_and_module(ret_value) };
 // }
 //
 
@@ -233,7 +244,7 @@ fn f64_cast() {
     let result = unsafe { *data };
     assert_eq!(result, 42.0);
 
-    unsafe { weld_value_free(ret_value) };
+    unsafe { free_value_and_module(ret_value) };
 }
 
 fn i32_cast() {
@@ -247,7 +258,7 @@ fn i32_cast() {
     let result = unsafe { *data };
     assert_eq!(result, 1);
 
-    unsafe { weld_value_free(ret_value) };
+    unsafe { free_value_and_module(ret_value) };
 }
 
 fn program_with_args() {
@@ -261,7 +272,7 @@ fn program_with_args() {
     let result = unsafe { *data };
     assert_eq!(result, 42);
 
-    unsafe { weld_value_free(ret_value) };
+    unsafe { free_value_and_module(ret_value) };
 }
 
 /// Tests literal data structures such as vectors and structs.
@@ -294,7 +305,7 @@ fn struct_vector_literals() {
     assert_eq!(triple.b, 2);
     assert_eq!(triple.c, 2);
 
-    unsafe { weld_value_free(ret_value) };
+    unsafe { free_value_and_module(ret_value) };
 }
 
 fn let_statement() {
@@ -308,7 +319,7 @@ fn let_statement() {
     let result = unsafe { *data };
     assert_eq!(result, 44);
 
-    unsafe { weld_value_free(ret_value) };
+    unsafe { free_value_and_module(ret_value) };
 }
 
 fn if_statement() {
@@ -322,7 +333,7 @@ fn if_statement() {
     let result = unsafe { *data };
     assert_eq!(result, 3);
 
-    unsafe { weld_value_free(ret_value) };
+    unsafe { free_value_and_module(ret_value) };
 }
 
 fn comparison() {
@@ -336,7 +347,7 @@ fn comparison() {
     let result = unsafe { *data };
     assert_eq!(result, 10);
 
-    unsafe { weld_value_free(ret_value) };
+    unsafe { free_value_and_module(ret_value) };
 
     let conf = default_conf();
     *input_data = 20;
@@ -346,7 +357,7 @@ fn comparison() {
     let result = unsafe { *data };
     assert_eq!(result, 20);
 
-    unsafe { weld_value_free(ret_value) };
+    unsafe { free_value_and_module(ret_value) };
 }
 
 fn map_comparison() {
@@ -368,7 +379,7 @@ fn map_comparison() {
                    input_vec[i as usize] == 100)
     }
 
-    unsafe { weld_value_free(ret_value) };
+    unsafe { free_value_and_module(ret_value) };
 }
 
 fn eq_between_vectors() {
@@ -396,7 +407,7 @@ fn eq_between_vectors() {
     let data = unsafe { weld_value_data(ret_value) as *const bool };
     let result = unsafe { *data };
     assert_eq!(result, true);
-    unsafe { weld_value_free(ret_value) };
+    unsafe { free_value_and_module(ret_value) };
 }
 
 fn eq_between_diff_length_vectors() {
@@ -424,7 +435,7 @@ fn eq_between_diff_length_vectors() {
     let data = unsafe { weld_value_data(ret_value) as *const bool };
     let result = unsafe { *data };
     assert_eq!(result, false);
-    unsafe { weld_value_free(ret_value) };
+    unsafe { free_value_and_module(ret_value) };
 }
 
 fn ne_between_vectors() {
@@ -452,7 +463,7 @@ fn ne_between_vectors() {
     let data = unsafe { weld_value_data(ret_value) as *const bool };
     let result = unsafe { *data };
     assert_eq!(result, true);
-    unsafe { weld_value_free(ret_value) };
+    unsafe { free_value_and_module(ret_value) };
 }
 
 fn lt_between_vectors() {
@@ -480,7 +491,7 @@ fn lt_between_vectors() {
     let data = unsafe { weld_value_data(ret_value) as *const bool };
     let result = unsafe { *data };
     assert_eq!(result, true);
-    unsafe { weld_value_free(ret_value) };
+    unsafe { free_value_and_module(ret_value) };
 }
 
 fn le_between_vectors() {
@@ -508,7 +519,7 @@ fn le_between_vectors() {
     let data = unsafe { weld_value_data(ret_value) as *const bool };
     let result = unsafe { *data };
     assert_eq!(result, false);
-    unsafe { weld_value_free(ret_value) };
+    unsafe { free_value_and_module(ret_value) };
 }
 
 fn simple_vector_lookup() {
@@ -526,7 +537,7 @@ fn simple_vector_lookup() {
     let result = unsafe { *data };
     assert_eq!(result, input_vec[3]);
 
-    unsafe { weld_value_free(ret_value) };
+    unsafe { free_value_and_module(ret_value) };
 }
 
 fn simple_vector_slice() {
@@ -549,7 +560,7 @@ fn simple_vector_slice() {
         assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
     }
 
-    unsafe { weld_value_free(ret_value) };
+    unsafe { free_value_and_module(ret_value) };
 
     // Test slicing out of bounds case
     let conf = default_conf();
@@ -570,7 +581,7 @@ fn simple_vector_slice() {
         assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
     }
 
-    unsafe { weld_value_free(ret_value) };
+    unsafe { free_value_and_module(ret_value) };
 }
 
 fn simple_for_appender_loop() {
@@ -601,7 +612,7 @@ fn simple_for_appender_loop() {
         assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
     }
 
-    unsafe { weld_value_free(ret_value) };
+    unsafe { free_value_and_module(ret_value) };
 }
 
 fn simple_parallel_for_appender_loop() {
@@ -623,7 +634,7 @@ fn simple_parallel_for_appender_loop() {
     for i in 0..(result.len as isize) {
         assert_eq!(unsafe { *result.data.offset(i) }, i as i64)
     }
-    unsafe { weld_value_free(ret_value) };
+    unsafe { free_value_and_module(ret_value) };
 }
 
 fn complex_parallel_for_appender_loop() {
@@ -652,7 +663,7 @@ fn complex_parallel_for_appender_loop() {
         assert_eq!(unsafe { *result.data.offset(i * 3 + 3) }, 2)
     }
 
-    unsafe { weld_value_free(ret_value) };
+    unsafe { free_value_and_module(ret_value) };
 }
 
 fn simple_for_vectorizable_loop() {
@@ -679,7 +690,7 @@ fn simple_for_vectorizable_loop() {
     let result = unsafe { (*data).clone() };
     let output = size * 3;
     assert_eq!(result, output);
-    unsafe { weld_value_free(ret_value) };
+    unsafe { free_value_and_module(ret_value) };
 }
 
 fn fringed_for_vectorizable_loop() {
@@ -714,7 +725,7 @@ fn fringed_for_vectorizable_loop() {
     let result = unsafe { (*data).clone() };
     let output = size * 3;
     assert_eq!(result, output);
-    unsafe { weld_value_free(ret_value) };
+    unsafe { free_value_and_module(ret_value) };
 }
 
 fn for_predicated_vectorizable_loop() {
@@ -751,7 +762,7 @@ fn for_predicated_vectorizable_loop() {
     let result = unsafe { (*data).clone() };
     let output = size;
     assert_eq!(result, output);
-    unsafe { weld_value_free(ret_value) };
+    unsafe { free_value_and_module(ret_value) };
 }
 
 fn simple_for_merger_loop() {
@@ -778,7 +789,7 @@ fn simple_for_merger_loop() {
     let result = unsafe { (*data).clone() };
     let output = 20;
     assert_eq!(result, output);
-    unsafe { weld_value_free(ret_value) };
+    unsafe { free_value_and_module(ret_value) };
 }
 
 fn simple_zipped_for_merger_loop() {
@@ -811,7 +822,7 @@ fn simple_zipped_for_merger_loop() {
     let result = unsafe { (*data).clone() };
     let output = size * (x_data[0] + y_data[0]);
     assert_eq!(result, output);
-    unsafe { weld_value_free(ret_value) };
+    unsafe { free_value_and_module(ret_value) };
 }
 
 fn simple_for_merger_loop_product() {
@@ -838,7 +849,7 @@ fn simple_for_merger_loop_product() {
     let result = unsafe { (*data).clone() };
     let output = 720;
     assert_eq!(result, output);
-    unsafe { weld_value_free(ret_value) };
+    unsafe { free_value_and_module(ret_value) };
 }
 
 fn parallel_for_merger_loop() {
@@ -865,7 +876,7 @@ fn parallel_for_merger_loop() {
     let result = unsafe { (*data).clone() };
     let output = (input_vec[0] + input_data.a) * (input_vec.len() as i32);
     assert_eq!(result, output);
-    unsafe { weld_value_free(ret_value) };
+    unsafe { free_value_and_module(ret_value) };
 }
 
 fn simple_for_merger_loop_initial_value() {
@@ -892,7 +903,7 @@ fn simple_for_merger_loop_initial_value() {
     let result = unsafe { (*data).clone() };
     let output = 1000 + (input_vec[0] + input_data.a) * (input_vec.len() as i32);
     assert_eq!(result, output);
-    unsafe { weld_value_free(ret_value) };
+    unsafe { free_value_and_module(ret_value) };
 }
 
 fn parallel_for_merger_loop_initial_value() {
@@ -919,7 +930,7 @@ fn parallel_for_merger_loop_initial_value() {
     let result = unsafe { (*data).clone() };
     let output = 1000 + (input_vec[0] + input_data.a) * (input_vec.len() as i32);
     assert_eq!(result, output);
-    unsafe { weld_value_free(ret_value) };
+    unsafe { free_value_and_module(ret_value) };
 }
 
 fn parallel_for_merger_loop_initial_value_product() {
@@ -944,7 +955,7 @@ fn parallel_for_merger_loop_initial_value_product() {
     let result = unsafe { (*data).clone() };
     let output = 1000;
     assert_eq!(result, output);
-    unsafe { weld_value_free(ret_value) };
+    unsafe { free_value_and_module(ret_value) };
 }
 
 fn simple_for_vecmerger_loop() {
@@ -964,7 +975,7 @@ fn simple_for_vecmerger_loop() {
     for i in 0..(result.len as isize) {
         assert_eq!(unsafe { *result.data.offset(i) }, input_vec[i as usize]);
     }
-    unsafe { weld_value_free(ret_value) };
+    unsafe { free_value_and_module(ret_value) };
 }
 
 fn simple_for_vecmerger_loop_2() {
@@ -985,7 +996,7 @@ fn simple_for_vecmerger_loop_2() {
         assert_eq!(unsafe { *result.data.offset(i) },
                    input_vec[i as usize] + input_vec[i as usize] * 7);
     }
-    unsafe { weld_value_free(ret_value) };
+    unsafe { free_value_and_module(ret_value) };
 }
 
 fn parallel_for_vecmerger_loop() {
@@ -1008,7 +1019,7 @@ fn parallel_for_vecmerger_loop() {
                    input_vec[i as usize] + input_vec[i as usize] * 7);
     }
 
-    unsafe { weld_value_free(ret_value) };
+    unsafe { free_value_and_module(ret_value) };
 }
 
 fn simple_for_dictmerger_loop() {
@@ -1062,7 +1073,7 @@ fn simple_for_dictmerger_loop() {
         }
         assert_eq!(success, true);
     }
-    unsafe { weld_value_free(ret_value) };
+    unsafe { free_value_and_module(ret_value) };
 }
 
 fn simple_groupmerger() {
@@ -1109,7 +1120,7 @@ fn simple_groupmerger() {
     res.sort_by_key(|a| a.0);
 
     assert_eq!(res, output);
-    unsafe { weld_value_free(ret_value) };
+    unsafe { free_value_and_module(ret_value) };
 }
 
 fn complex_groupmerger_with_struct_key() {
@@ -1167,7 +1178,7 @@ fn complex_groupmerger_with_struct_key() {
     res.sort_by_key(|a| a.0);
 
     assert_eq!(res, output);
-    unsafe { weld_value_free(ret_value) };
+    unsafe { free_value_and_module(ret_value) };
 }
 
 fn simple_parallel_for_dictmerger_loop() {
@@ -1226,7 +1237,7 @@ fn simple_parallel_for_dictmerger_loop() {
         assert_eq!(success, true);
     }
     assert_eq!(result.len, output_keys.len() as i64);
-    unsafe { weld_value_free(ret_value) };
+    unsafe { free_value_and_module(ret_value) };
 }
 
 fn simple_dict_lookup() {
@@ -1259,7 +1270,7 @@ fn simple_dict_lookup() {
 
     let output = 4;
     assert_eq!(output, result);
-    unsafe { weld_value_free(ret_value) };
+    unsafe { free_value_and_module(ret_value) };
 }
 
 fn simple_dict_exists() {
@@ -1295,15 +1306,16 @@ fn simple_dict_exists() {
 
     let output = true;
     assert_eq!(output, result);
+    unsafe { free_value_and_module(ret_value) };
 
-    let conf2 = default_conf();
-    let ret_value2 = compile_and_run(code_false, conf2, input_data.clone());
-    let data = unsafe { weld_value_data(ret_value2) as *const bool };
+    let conf = default_conf();
+    let ret_value = compile_and_run(code_false, conf, input_data.clone());
+    let data = unsafe { weld_value_data(ret_value) as *const bool };
     let result = unsafe { (*data).clone() };
 
     let output = false;
     assert_eq!(output, result);
-    unsafe { weld_value_free(ret_value) };
+    unsafe { free_value_and_module(ret_value) };
 }
 
 fn simple_length() {
@@ -1322,7 +1334,7 @@ fn simple_length() {
 
     let output = 5;
     assert_eq!(output, result);
-    unsafe { weld_value_free(ret_value) };
+    unsafe { free_value_and_module(ret_value) };
 }
 
 fn filter_length() {
@@ -1341,7 +1353,7 @@ fn filter_length() {
 
     let output = 3;
     assert_eq!(output, result);
-    unsafe { weld_value_free(ret_value) };
+    unsafe { free_value_and_module(ret_value) };
 }
 
 fn flat_map_length() {
@@ -1360,7 +1372,7 @@ fn flat_map_length() {
 
     let output = 25;
     assert_eq!(output, result);
-    unsafe { weld_value_free(ret_value) };
+    unsafe { free_value_and_module(ret_value) };
 }
 
 fn simple_log() {
@@ -1372,7 +1384,7 @@ fn simple_log() {
     let result = unsafe { (*data).clone() };
     let output = 1.0f64;
     assert!(approx_equal(output, result, 5));
-    unsafe { weld_value_free(ret_value) };
+    unsafe { free_value_and_module(ret_value) };
 }
 
 fn log_error() {
@@ -1395,7 +1407,7 @@ fn simple_exp() {
     let result = unsafe { (*data).clone() };
     let output = 2.718281828459045;
     assert!(approx_equal(output, result, 5));
-    unsafe { weld_value_free(ret_value) };
+    unsafe { free_value_and_module(ret_value) };
 }
 
 fn exp_error() {
@@ -1417,7 +1429,7 @@ fn simple_erf() {
     let result = unsafe { (*data).clone() };
     let output = 0.84270079294971478;
     assert!(approx_equal(output, result, 5));
-    unsafe { weld_value_free(ret_value) };
+    unsafe { free_value_and_module(ret_value) };
 }
 
 fn simple_sqrt() {
@@ -1430,7 +1442,7 @@ fn simple_sqrt() {
     let result = unsafe { (*data).clone() };
     let output = 2.0f64;
     assert!(approx_equal(output, result, 5));
-    unsafe { weld_value_free(ret_value) };
+    unsafe { free_value_and_module(ret_value) };
 }
 
 fn map_exp() {
@@ -1452,7 +1464,7 @@ fn map_exp() {
         assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
     }
 
-    unsafe { weld_value_free(ret_value) };
+    unsafe { free_value_and_module(ret_value) };
 }
 
 fn if_for_loop() {
@@ -1483,7 +1495,7 @@ fn if_for_loop() {
     for i in 0..(result.len as isize) {
         assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
     }
-    unsafe { weld_value_free(ret_value) };
+    unsafe { free_value_and_module(ret_value) };
 }
 
 fn map_zip_loop() {
@@ -1518,7 +1530,7 @@ fn map_zip_loop() {
         assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
     }
 
-    unsafe { weld_value_free(ret_value) };
+    unsafe { free_value_and_module(ret_value) };
 }
 
 fn iters_for_loop() {
@@ -1554,7 +1566,7 @@ fn iters_for_loop() {
         assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
     }
 
-    unsafe { weld_value_free(ret_value) };
+    unsafe { free_value_and_module(ret_value) };
 }
 
 fn serial_parlib_test() {
@@ -1574,7 +1586,70 @@ fn serial_parlib_test() {
     let result = unsafe { (*data).clone() };
 
     assert_eq!(result, size as i32);
-    unsafe { weld_value_free(ret_value) };
+    unsafe { free_value_and_module(ret_value) };
+}
+
+/// A wrapper struct to allow passing pointers across threads (they aren't Send/Sync by default).
+/// The default #[derive(Copy,Clone)] does not work here unless T has Copy/Clone, so we also
+/// implement those traits manually.
+struct UnsafePtr<T>(*mut T);
+unsafe impl<T> Send for UnsafePtr<T> {}
+unsafe impl<T> Sync for UnsafePtr<T> {}
+impl<T> Clone for UnsafePtr<T> {
+    fn clone(&self) -> UnsafePtr<T> {
+        UnsafePtr(self.0)
+    }
+}
+impl<T> Copy for UnsafePtr<T> {}
+
+fn multithreaded_module_run() {
+    let code = "|v:vec[i32]| result(for(v, appender[i32], |b,i,e| merge(b,e)))";
+    let conf = UnsafePtr(default_conf());
+
+    // Set up input data
+    let len: usize = 10 * 1000 * 1000;
+    let input_vec = vec![1; len];
+    let input_data = WeldVec {
+        data: input_vec.as_ptr(),
+        len: input_vec.len() as i64,
+    };
+
+    unsafe {
+        // Compile the module
+        let code = CString::new(code).unwrap();
+        let input_value = UnsafePtr(weld_value_new(&input_data as *const _ as *const c_void));
+        let err = weld_error_new();
+        let module = UnsafePtr(weld_module_compile(code.into_raw() as *const c_char, conf.0, err));
+        assert_eq!(weld_error_code(err), WeldRuntimeErrno::Success);
+
+        // Run several threads, each of which executes the module several times
+        let mut threads = vec![];
+        let num_threads = 8;
+        let num_runs = 4;
+        for _ in 0..num_threads {
+            threads.push(thread::spawn(move || {
+                for _ in 0..num_runs {
+                    // Run the module
+                    let err = weld_error_new();
+                    let ret_value = weld_module_run(module.0, conf.0, input_value.0, err);
+                    assert_eq!(weld_error_code(err), WeldRuntimeErrno::Success);
+
+                    // Check the result
+                    let ret_data = weld_value_data(ret_value) as *const WeldVec<i32>;
+                    let result = (*ret_data).len;
+                    assert_eq!(result, len as i64);
+                    weld_value_free(ret_value);
+                }
+            }))
+        }
+
+        // Wait for everything to finish, and then clean up
+        for t in threads {
+            t.join().unwrap();
+        }
+
+        weld_module_free(module.0);
+    }
 }
 
 fn iters_outofbounds_error_test() {
@@ -1675,6 +1750,7 @@ fn main() {
              ("map_zip_loop", map_zip_loop),
              ("iters_for_loop", iters_for_loop),
              ("serial_parlib_test", serial_parlib_test),
+             ("multithreaded_module_run", multithreaded_module_run),
              ("iters_outofbounds_error_test", iters_outofbounds_error_test),
              ("outofmemory_error_test", outofmemory_error_test)];
 

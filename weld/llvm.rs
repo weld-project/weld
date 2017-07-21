@@ -25,7 +25,7 @@ use super::sir::Terminator::*;
 use super::transforms;
 use super::type_inference;
 use super::util::IdGenerator;
-use super::util::MERGER_BC;
+use super::util::LIB_WELD_RT;
 
 #[cfg(test)]
 use super::parser::*;
@@ -97,14 +97,9 @@ pub fn compile_program(program: &Program,
         println!("LLVM program:\n{}\n", &llvm_code);
     }
 
-    Ok(try!(easy_ll::compile_module(&llvm_code, Some(MERGER_BC))))
-}
-
-/// Generates a small program which, when called with a `run_id`, frees
-/// memory associated with the run ID.
-pub fn generate_runtime_interface_module() -> WeldResult<easy_ll::CompiledModule> {
-    let program = include_str!("resources/runtime_interface_module.ll");
-    Ok(try!(easy_ll::compile_module(program, None)))
+    let module = try!(easy_ll::compile_module(&llvm_code, Some(LIB_WELD_RT)));
+    module.run_named("runtime_init", 0).unwrap();
+    Ok(module)
 }
 
 /// Generates LLVM code for one or more modules.
@@ -198,7 +193,7 @@ impl LlvmGenerator {
         Ok(())
     }
 
-    fn create_new_pieces(&mut self, params: &HashMap<Symbol, Type>, ctx: &mut FunctionContext) -> WeldResult<()> {
+    fn create_new_vb_pieces(&mut self, params: &HashMap<Symbol, Type>, ctx: &mut FunctionContext) -> WeldResult<()> {
         let full_task_ptr = ctx.var_ids.next();
         let full_task_int = ctx.var_ids.next();
         let full_task_bit = ctx.var_ids.next();
@@ -295,7 +290,7 @@ impl LlvmGenerator {
         }
 
         // Get the current thread ID
-        ctx.code.add(format!("%cur.tid = call i32 @my_id_public()"));
+        ctx.code.add(format!("%cur.tid = call i32 @weld_rt_thread_id()"));
 
         // If we're in a loop, generate loop iteration code
         if containing_loop.is_some() {
@@ -583,9 +578,9 @@ impl LlvmGenerator {
             wrap_ctx.code.add(format!("fn.boundcheckfailed:"));
             let errno = WeldRuntimeErrno::BadIteratorLength;
             let run_id = wrap_ctx.var_ids.next();
-            wrap_ctx.code.add(format!("{} = call i64 @get_runid()", run_id));
-            wrap_ctx.code.add(format!("call void @weld_rt_set_errno(i64 {}, i64 {})", run_id, errno as i64));
-            wrap_ctx.code.add(format!("call void @weld_abort_thread()"));
+            wrap_ctx.code.add(format!("{} = call i64 @weld_rt_get_run_id()", run_id));
+            wrap_ctx.code.add(format!("call void @weld_run_set_errno(i64 {}, i64 {})", run_id, errno as i64));
+            wrap_ctx.code.add(format!("call void @weld_rt_abort_thread()"));
             wrap_ctx.code.add(format!("; Unreachable!"));
             wrap_ctx.code.add(format!("br label %fn.end"));
             wrap_ctx.code.add(format!("fn.boundcheckpassed:"));
@@ -610,7 +605,7 @@ impl LlvmGenerator {
             let body_struct = try!(self.get_arg_struct(&func.params, &mut wrap_ctx));
             let cont_struct = try!(self.get_arg_struct(&sir.funcs[par_for.cont].params, &mut wrap_ctx));
             wrap_ctx.code.add(format!(
-                "call void @pl_start_loop(%work_t* %cur.work, i8* {}, i8* {}, \
+                "call void @weld_rt_start_loop(%work_t* %cur.work, i8* {}, i8* {}, \
                                 void (%work_t*)* @f{}_par, void (%work_t*)* @f{}_par, i64 0, \
                                 i64 {}, i32 {})",
                 body_struct,
@@ -643,7 +638,7 @@ impl LlvmGenerator {
                 .add(format!("{} = getelementptr %work_t, %work_t* %cur.work, i32 0, i32 2", upper_bound_ptr));
             par_body_ctx.code.add(format!("{} = load i64, i64* {}", upper_bound, upper_bound_ptr));
             let body_arg_types = try!(self.get_arg_str(&func.params, ""));
-            try!(self.create_new_pieces(&func.params, &mut par_body_ctx));
+            try!(self.create_new_vb_pieces(&func.params, &mut par_body_ctx));
             par_body_ctx.code.add("fn_call:");
             par_body_ctx.code.add(format!("call void @f{}({}, i64 {}, i64 {})",
                                             func.id,
@@ -658,7 +653,7 @@ impl LlvmGenerator {
             par_cont_ctx.code.add(format!("define void @f{}_par(%work_t* %cur.work) {{", par_for.cont));
             par_cont_ctx.code.add("entry:");
             try!(self.unload_arg_struct(&sir.funcs[par_for.cont].params, &mut par_cont_ctx));
-            try!(self.create_new_pieces(&sir.funcs[par_for.cont].params, &mut par_cont_ctx));
+            try!(self.create_new_vb_pieces(&sir.funcs[par_for.cont].params, &mut par_cont_ctx));
             par_cont_ctx.code.add("fn_call:");
             let cont_arg_types = try!(self.get_arg_str(&sir.funcs[par_for.cont].params, ""));
             par_cont_ctx.code.add(format!("call void @f{}({})", par_for.cont, cont_arg_types));
@@ -701,8 +696,6 @@ impl LlvmGenerator {
         run_ctx.code.add(format!("%r.args = extractvalue %input_arg_t %r.inp_val, 0"));
         run_ctx.code.add(format!("%r.nworkers = extractvalue %input_arg_t %r.inp_val, 1"));
         run_ctx.code.add(format!("%r.memlimit = extractvalue %input_arg_t %r.inp_val, 2"));
-        run_ctx.code.add(format!("call void @set_nworkers(i32 %r.nworkers)"));
-        run_ctx.code.add(format!("call void @weld_rt_init(i64 %r.memlimit)"));
         // Code to load args and call function
         run_ctx.code.add(format!(
             "%r.args_typed = inttoptr i64 %r.args to {args_type}*
@@ -732,11 +725,10 @@ impl LlvmGenerator {
         let final_address = run_ctx.var_ids.next();
 
         run_ctx.code.add(format!(
-            "call void @execute(void (%work_t*)* @f0_par, i8* {run_struct})
-             %res_ptr = call i8* @get_result()
+            "{rid} = call i64 @weld_run_begin(void (%work_t*)* @f0_par, i8* {run_struct}, i64 %r.memlimit, i32 %r.nworkers)
+             %res_ptr = call i8* @weld_run_get_result(i64 {rid})
              %res_address = ptrtoint i8* %res_ptr to i64
-             {rid} = call i64 @get_runid()
-             {errno} = call i64 @weld_rt_get_errno(i64 {rid})
+             {errno} = call i64 @weld_run_get_errno(i64 {rid})
              {tmp0} = insertvalue %output_arg_t undef, i64 %res_address, 0
              {tmp1} = insertvalue %output_arg_t {tmp0}, i64 {rid}, 1
              {tmp2} = insertvalue %output_arg_t {tmp1}, i64 {errno}, 2
@@ -2260,14 +2252,14 @@ impl LlvmGenerator {
                 ctx.code.add(format!("{} = getelementptr {}, {}* null, i32 1", &elem_size_ptr, &ty_str, &ty_str));
                 ctx.code.add(format!("{} = ptrtoint {}* {} to i64", &elem_size, &ty_str, &elem_size_ptr));
 
-                ctx.code.add(format!("{} = call i64 @get_runid()", run_id));
-                ctx.code.add(format!("{} = call i8* @weld_rt_malloc(i64 {}, i64 {})",
+                ctx.code.add(format!("{} = call i64 @weld_rt_get_run_id()", run_id));
+                ctx.code.add(format!("{} = call i8* @weld_run_malloc(i64 {}, i64 {})",
                                         &elem_storage,
                                         &run_id,
                                         &elem_size));
                 ctx.code.add(format!("{} = bitcast i8* {} to {}*", &elem_storage_typed, &elem_storage, &ty_str));
                 ctx.code.add(format!("store {} {}, {}* {}", &ty_str, res_tmp, &ty_str, &elem_storage_typed));
-                ctx.code.add(format!("call void @set_result(i8* {})", elem_storage));
+                ctx.code.add(format!("call void @weld_rt_set_result(i8* {})", elem_storage));
                 ctx.code.add("br label %body.end");
             }
 
@@ -2278,7 +2270,7 @@ impl LlvmGenerator {
             Crash => {
                 let errno = WeldRuntimeErrno::Unknown as i64;
                 let run_id = ctx.var_ids.next();
-                ctx.code.add(format!("call void @weld_rt_set_errno(i64 {}, i64 {})", run_id, errno));
+                ctx.code.add(format!("call void @weld_run_set_errno(i64 {}, i64 {})", run_id, errno));
             }
         }
 

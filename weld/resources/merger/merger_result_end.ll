@@ -5,5 +5,5 @@
 {done}:
   {final_val} = load {res_ty_str}, {res_ty_str}* {t1}
   {as_ptr} = bitcast {bld_ty_str} {bld_tmp} to i8*
-  call void @free_merger(i8* {as_ptr})
+  call void @weld_rt_free_merger(i8* {as_ptr})
   store {res_ty_str} {final_val}, {res_ty_str}*  %{output}

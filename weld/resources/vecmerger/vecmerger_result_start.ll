@@ -1,5 +1,5 @@
 ; Begin vecmerger merge
-  {nworkers} = call i32 @get_nworkers()
+  {nworkers} = call i32 @weld_rt_get_nworkers()
   {t0} = call {bldType} {bldPrefix}.getPtrIndexed({bldType} {buildPtr}, i32 0)
   {typedPtr} = bitcast {bldType} {t0} to {resType}*
   {firstVec} = load {resType}, {resType}* {typedPtr}

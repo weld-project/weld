@@ -1,15 +1,6 @@
 #ifndef _PARLIB_H_
 #define _PARLIB_H_
 
-// Memory allocation functions for Weld.
-extern "C" void *weld_rt_malloc(int64_t run_id, size_t size);
-extern "C" void *weld_rt_realloc(int64_t run_id, void *data, size_t size);
-extern "C" void weld_rt_free(int64_t run_id, void *data);
-
-// Error functions.
-extern "C" int64_t weld_rt_get_errno(int64_t run_id);
-extern "C" void weld_rt_set_errno(int64_t run_id, int64_t errno);
-
 // work item
 struct work_t {
   // parameters for the task function
@@ -67,6 +58,7 @@ struct work_t {
 
 typedef struct work_t work_t;
 
+// VecBuilder structures
 struct vec_piece {
   void *data;
   int64_t size;
@@ -82,26 +74,41 @@ typedef struct {
 } vec_output;
 
 extern "C" {
-  int32_t my_id_public();
-  void set_result(void *res);
-  void *get_result();
-  int32_t get_nworkers();
-  void set_nworkers(int32_t n);
-  int64_t get_runid();
-  void set_runid(int64_t rid);
-  void pl_start_loop(work_t *w, void *body_data, void *cont_data, void (*body)(work_t*),
+  void weld_runtime_init();
+
+  // weld_rt functions can only be called from a runtime thread that is executing a Weld computation
+  int32_t weld_rt_thread_id();
+  void weld_rt_abort_thread();
+  int32_t weld_rt_get_nworkers();
+  int64_t weld_rt_get_run_id();
+
+  void weld_rt_start_loop(work_t *w, void *body_data, void *cont_data, void (*body)(work_t*),
     void (*cont)(work_t*), int64_t lower, int64_t upper, int32_t grain_size);
-  void execute(void (*run)(work_t*), void* data);
+  void weld_rt_set_result(void *res);
 
-  void *new_vb(int64_t elem_size, int64_t starting_cap);
-  void new_piece(void *v, work_t *w);
-  vec_piece *cur_piece(void *v, int32_t my_id);
+  void *weld_rt_new_vb(int64_t elem_size, int64_t starting_cap);
+  void weld_rt_new_vb_piece(void *v, work_t *w);
+  vec_piece *weld_rt_cur_vb_piece(void *v, int32_t my_id);
+  vec_output weld_rt_result_vb(void *v);
 
-  void *get_merger_at_index(void *m, int64_t size, int32_t i);
-  void *new_merger(int64_t size, int32_t nworkers);
-  void free_merger(void *m);
+  void *weld_rt_new_merger(int64_t size, int32_t nworkers);
+  void *weld_rt_get_merger_at_index(void *m, int64_t size, int32_t i);
+  void weld_rt_free_merger(void *m);
 
-  void weld_abort_thread();
+
+  // weld_run functions can be called both from a runtime thread and before/after a Weld computation is
+  // executed
+  int64_t weld_run_begin(void (*run)(work_t*), void* data, int64_t mem_limit, int32_t n_workers);
+  void *weld_run_get_result(int64_t run_id);
+  void weld_run_dispose(int64_t run_id);
+
+  void *weld_run_malloc(int64_t run_id, size_t size);
+  void *weld_run_realloc(int64_t run_id, void *data, size_t size);
+  void weld_run_free(int64_t run_id, void *data);
+  int64_t weld_run_memory_usage(int64_t run_id);
+
+  int64_t weld_run_get_errno(int64_t run_id);
+  void weld_run_set_errno(int64_t run_id, int64_t err);
 }
 
 #endif

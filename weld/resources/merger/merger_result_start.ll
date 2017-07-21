@@ -4,7 +4,7 @@
   {vector_ptr} = call {elem_vec_ty_str}* {bld_prefix}.vectorMergePtr({bld_ty_str} {t0})
   {first_scalar} = load {elem_ty_str}, {elem_ty_str}* {scalar_ptr}
   {first_vector} = load {elem_vec_ty_str}, {elem_vec_ty_str}* {vector_ptr}
-  {nworkers} = call i32 @get_nworkers()
+  {nworkers} = call i32 @weld_rt_get_nworkers()
   br label %{entry}
 {entry}:
   {cond} = icmp ult i32 1, {nworkers}

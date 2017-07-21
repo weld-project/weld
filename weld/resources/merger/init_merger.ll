@@ -1,5 +1,5 @@
   ; Copy the initial value into the first merger
-  {nworkers} = call i32 @get_nworkers()
+  {nworkers} = call i32 @weld_rt_get_nworkers()
   {first_raw} = call {bld_ty_str} {bld_prefix}.getPtrIndexed({bld_ty_str} {bld_inp}, i32 0)
   {first} = call {elem_type}* {bld_prefix}.scalarMergePtr({bld_ty_str} {first_raw})
   call void {bld_prefix}.clearVector({bld_ty_str} {first_raw}, {elem_type} {iden_elem})

@@ -17,18 +17,18 @@ define %$NAME.vm.bld @$NAME.vm.bld.getPtrIndexed(%$NAME.vm.bld %bldPtr, i32 %i) 
   %mergerPtr = getelementptr %$NAME, %$NAME* null, i32 1
   %mergerSize = ptrtoint %$NAME* %mergerPtr to i64
   %asPtr = bitcast %$NAME.vm.bld %bldPtr to i8*
-  %rawPtr = call i8* @get_merger_at_index(i8* %asPtr, i64 %mergerSize, i32 %i)
+  %rawPtr = call i8* @weld_rt_get_merger_at_index(i8* %asPtr, i64 %mergerSize, i32 %i)
   %ptr = bitcast i8* %rawPtr to %$NAME.vm.bld
   ret %$NAME.vm.bld %ptr
 }
 
 ; Initialize and return a new vecmerger with the given initial vector.
 define %$NAME.vm.bld @$NAME.vm.bld.new(%$NAME %vec) {
-  %nworkers = call i32 @get_nworkers()
+  %nworkers = call i32 @weld_rt_get_nworkers()
   %structSizePtr = getelementptr %$NAME, %$NAME* null, i32 1
   %structSize = ptrtoint %$NAME* %structSizePtr to i64
 
-  %bldPtr = call i8* @new_merger(i64 %structSize, i32 %nworkers)
+  %bldPtr = call i8* @weld_rt_new_merger(i64 %structSize, i32 %nworkers)
   %typedPtr = bitcast i8* %bldPtr to %$NAME.vm.bld
 
   ; Copy the initial value into the first vector
@@ -72,8 +72,8 @@ define %$NAME @$NAME.new(i64 %size) {
   %elemSizePtr = getelementptr $ELEM, $ELEM* null, i32 1
   %elemSize = ptrtoint $ELEM* %elemSizePtr to i64
   %allocSize = mul i64 %elemSize, %size
-  %runId = call i64 @get_runid()
-  %bytes = call i8* @weld_rt_malloc(i64 %runId, i64 %allocSize)
+  %runId = call i64 @weld_rt_get_run_id()
+  %bytes = call i8* @weld_run_malloc(i64 %runId, i64 %allocSize)
   %elements = bitcast i8* %bytes to $ELEM*
   %1 = insertvalue %$NAME undef, $ELEM* %elements, 0
   %2 = insertvalue %$NAME %1, i64 %size, 1
@@ -129,20 +129,20 @@ define %$NAME @$NAME.slice(%$NAME %vec, i64 %index, i64 %size) {
 define %$NAME.bld @$NAME.bld.new(i64 %capacity, %work_t* %cur.work) {
   %elemSizePtr = getelementptr $ELEM, $ELEM* null, i32 1
   %elemSize = ptrtoint $ELEM* %elemSizePtr to i64
-  %newVb = call i8* @new_vb(i64 %elemSize, i64 %capacity)
+  %newVb = call i8* @weld_rt_new_vb(i64 %elemSize, i64 %capacity)
   call void @$NAME.bld.newPiece(%$NAME.bld %newVb, %work_t* %cur.work)
   ret %$NAME.bld %newVb
 }
 
 define void @$NAME.bld.newPiece(%$NAME.bld %bldPtr, %work_t* %cur.work) {
-  call void @new_piece(i8* %bldPtr, %work_t* %cur.work)
+  call void @weld_rt_new_vb_piece(i8* %bldPtr, %work_t* %cur.work)
   ret void
 }
 
 ; Append a value into a builder, growing its space if needed.
 define %$NAME.bld @$NAME.bld.merge(%$NAME.bld %bldPtr, $ELEM %value, i32 %myId) {
 entry:
-  %curPiecePtr = call %vb.vp* @cur_piece(i8* %bldPtr, i32 %myId)
+  %curPiecePtr = call %vb.vp* @weld_rt_cur_vb_piece(i8* %bldPtr, i32 %myId)
   %curPiece = load %vb.vp, %vb.vp* %curPiecePtr
   %size = extractvalue %vb.vp %curPiece, 1
   %capacity = extractvalue %vb.vp %curPiece, 2
@@ -155,8 +155,8 @@ onFull:
   %elemSize = ptrtoint $ELEM* %elemSizePtr to i64
   %bytes = extractvalue %vb.vp %curPiece, 0
   %allocSize = mul i64 %elemSize, %newCapacity
-  %runId = call i64 @get_runid()
-  %newBytes = call i8* @weld_rt_realloc(i64 %runId, i8* %bytes, i64 %allocSize)
+  %runId = call i64 @weld_rt_get_run_id()
+  %newBytes = call i8* @weld_run_realloc(i64 %runId, i8* %bytes, i64 %allocSize)
   %curPiece1 = insertvalue %vb.vp %curPiece, i8* %newBytes, 0
   %curPiece2 = insertvalue %vb.vp %curPiece1, i64 %newCapacity, 2
   br label %finish
@@ -175,7 +175,7 @@ finish:
 
 ; Complete building a vector, trimming any extra space left while growing it.
 define %$NAME @$NAME.bld.result(%$NAME.bld %bldPtr) {
-  %out = call %vb.out @result_vb(i8* %bldPtr)
+  %out = call %vb.out @weld_rt_result_vb(i8* %bldPtr)
   %bytes = extractvalue %vb.out %out, 0
   %size = extractvalue %vb.out %out, 1
   %elems = bitcast i8* %bytes to $ELEM*
@@ -200,7 +200,7 @@ define $ELEM* @$NAME.at(%$NAME %vec, i64 %index) {
 
 ; Get the length of a VecBuilder.
 define i64 @$NAME.bld.size(%$NAME.bld %bldPtr, i32 %myId) {
-  %curPiecePtr = call %vb.vp* @cur_piece(i8* %bldPtr, i32 %myId)
+  %curPiecePtr = call %vb.vp* @weld_rt_cur_vb_piece(i8* %bldPtr, i32 %myId)
   %curPiece = load %vb.vp, %vb.vp* %curPiecePtr
   %size = extractvalue %vb.vp %curPiece, 1
   ret i64 %size
@@ -208,7 +208,7 @@ define i64 @$NAME.bld.size(%$NAME.bld %bldPtr, i32 %myId) {
 
 ; Get a pointer to the index'th element of a VecBuilder.
 define $ELEM* @$NAME.bld.at(%$NAME.bld %bldPtr, i64 %index, i32 %myId) {
-  %curPiecePtr = call %vb.vp* @cur_piece(i8* %bldPtr, i32 %myId)
+  %curPiecePtr = call %vb.vp* @weld_rt_cur_vb_piece(i8* %bldPtr, i32 %myId)
   %curPiece = load %vb.vp, %vb.vp* %curPiecePtr
   %bytes = extractvalue %vb.vp %curPiece, 0
   %elements = bitcast i8* %bytes to $ELEM*
