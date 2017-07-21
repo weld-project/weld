@@ -28,5 +28,5 @@ fn main() {
         .status()
         .unwrap();
 
-    println!("cargo:rustc-link-lib-dylib=stdc++");
+    println!("cargo:rustc-link-lib=dylib=stdc++");
 }
