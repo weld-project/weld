@@ -1643,11 +1643,12 @@ fn multithreaded_module_run() {
             }))
         }
 
+        // Wait for everything to finish, and then clean up
         for t in threads {
             t.join().unwrap();
         }
 
-        weld_module_free(module);
+        weld_module_free(module.0);
     }
 }
 
