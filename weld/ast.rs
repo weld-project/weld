@@ -50,6 +50,63 @@ pub enum Type {
     Function(Vec<Type>, Box<Type>),
 }
 
+impl Type {
+    /// Return true if a given type is SIMD vectorized, which concretely means that it is
+    /// either a simd[T], a builder, or a struct of SIMD types.
+    ///
+    /// TODO: we should investigate just using simd[struct[T]] for structs and turning it
+    /// to the nested form at runtime.
+    pub fn is_simd(&self) -> bool {
+        use self::Type::*;
+        match *self {
+            Simd(_) => true,
+            Builder(_, _) => true,
+            Struct(ref fields) => fields.iter().all(|f| f.is_simd()),
+            _ => false
+        }
+    }
+
+    /// Get the vectorized version of a type, if it is vectorizable.
+    pub fn simd_type(&self) -> WeldResult<Type> {
+        use self::Type::*;
+        match *self {
+            Scalar(kind) => Ok(Simd(kind)),
+
+            Builder(_, _) => Ok(self.clone()),
+
+            Struct(ref fields) => {
+                let mut new_fields = vec![];
+                for f in fields {
+                    new_fields.push(f.simd_type()?)
+                }
+                Ok(Struct(new_fields))
+            }
+
+            _ => weld_err!("simd_type called on non-SIMD {:?}", self)
+        }
+    }
+
+    /// Get the scalar version of a type if it `is_simd`.
+    pub fn scalar_type(&self) -> WeldResult<Type> {
+        use self::Type::*;
+        match *self {
+            Simd(kind) => Ok(Scalar(kind)),
+
+            Builder(_, _) => Ok(self.clone()),
+
+            Struct(ref fields) => {
+                let mut new_fields = vec![];
+                for f in fields {
+                    new_fields.push(f.scalar_type()?)
+                }
+                Ok(Struct(new_fields))
+            }
+
+            _ => weld_err!("scalar_type called on non-SIMD {:?}", self)
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ScalarKind {
     Bool,
