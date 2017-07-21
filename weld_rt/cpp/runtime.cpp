@@ -372,7 +372,7 @@ extern "C" int64_t weld_run_begin(void (*run)(work_t*), void *data, int64_t mem_
 
   int64_t my_run_id = __sync_fetch_and_add(&run_id, 1);
   pthread_mutex_lock(&global_lock);
-  runs->emplace(my_run_id, rd);
+  (*runs)[my_run_id] = rd;
   pthread_mutex_unlock(&global_lock);
 
   for (int32_t i = 0; i < rd->n_workers; i++) {
@@ -411,7 +411,7 @@ extern "C" void *weld_run_malloc(int64_t run_id, size_t size) {
   }
   rd->cur_mem += size;
   void *mem = malloc(size);
-  rd->allocs.emplace(reinterpret_cast<intptr_t>(mem), size);
+  rd->allocs[reinterpret_cast<intptr_t>(mem)] = size;
   pthread_mutex_unlock(&rd->lock);
   return mem;
 }
@@ -430,7 +430,7 @@ extern "C" void *weld_run_realloc(int64_t run_id, void *data, size_t size) {
   rd->allocs.erase(reinterpret_cast<intptr_t>(data));
   rd->cur_mem += size;
   void *mem = realloc(data, size);
-  rd->allocs.emplace(reinterpret_cast<intptr_t>(mem), size);
+  rd->allocs[reinterpret_cast<intptr_t>(mem)] = size;
   pthread_mutex_unlock(&rd->lock);
   return mem;
 }
@@ -464,7 +464,7 @@ extern "C" int64_t weld_run_memory_usage(int64_t run_id) {
 extern "C" void weld_run_dispose(int64_t run_id) {
   run_data *rd = get_run_data_by_id(run_id);
   assert(rd->done);
-  for (auto it = rd->allocs.begin(); it != rd->allocs.end(); it++) {
+  for (map<intptr_t, int64_t>::iterator it = rd->allocs.begin(); it != rd->allocs.end(); it++) {
     free(reinterpret_cast<void *>(it->first));
   }
   pthread_mutex_destroy(&rd->lock);
