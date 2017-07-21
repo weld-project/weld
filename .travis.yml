@@ -25,7 +25,6 @@ addons:
 install:
   - sudo rm -f `which llvm-config`
   - export WELD_HOME=`pwd`
-  - (cargo install rustfmt || true)
   - PATH=$PATH:/home/travis/.cargo/bin
   - pip install virtualenv==15.1.0
   - bash -e build_tools/travis/init_virtualenvs.sh 2.7 3.6
