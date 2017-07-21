@@ -333,6 +333,7 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>,
             format!("len({})",
                     print_expr_impl(data, typed, indent, should_indent))
         }
+
         Lookup {
             ref data,
             ref index,
@@ -341,6 +342,7 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>,
                     print_expr_impl(data, typed, indent, should_indent),
                     print_expr_impl(index, typed, indent, should_indent))
         }
+
         KeyExists { ref data, ref key } => {
             format!("keyexists({},{})",
                     print_expr_impl(data, typed, indent, should_indent),
@@ -426,6 +428,18 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>,
                     print_expr_impl(on_true, typed, indent + 2, should_indent),
                     indent_str,
                     print_expr_impl(on_false, typed, indent + 2, should_indent),
+                    less_indent_str)
+        }
+
+        Iterate {
+            ref initial,
+            ref update_func,
+        } => {
+            format!("iterate(\n{}{},\n{}{}\n{})",
+                    indent_str,
+                    print_expr_impl(initial, typed, indent + 2, should_indent),
+                    indent_str,
+                    print_expr_impl(update_func, typed, indent + 2, should_indent),
                     less_indent_str)
         }
 

@@ -622,36 +622,19 @@ impl<'t> Parser<'t> {
         try!(self.parse_annotations(&mut annotations));
 
         match *self.next() {
+            TI8Literal(v) => Ok(expr_box(Literal(I8Literal(v)))),
             TI32Literal(v) => Ok(expr_box(Literal(I32Literal(v)))),
             TI64Literal(v) => Ok(expr_box(Literal(I64Literal(v)))),
             TF32Literal(v) => Ok(expr_box(Literal(F32Literal(v)))),
             TF64Literal(v) => Ok(expr_box(Literal(F64Literal(v)))),
-            TI8Literal(v) => Ok(expr_box(Literal(I8Literal(v)))),
             TBoolLiteral(v) => Ok(expr_box(Literal(BoolLiteral(v)))),
-            TI32 => {
-                let expr = try!(self.parse_cast(ScalarKind::I32));
-                Ok(expr)
-            }
-            TI64 => {
-                let expr = try!(self.parse_cast(ScalarKind::I64));
-                Ok(expr)
-            }
-            TF32 => {
-                let expr = try!(self.parse_cast(ScalarKind::F32));
-                Ok(expr)
-            }
-            TF64 => {
-                let expr = try!(self.parse_cast(ScalarKind::F64));
-                Ok(expr)
-            }
-            TI8 => {
-                let expr = try!(self.parse_cast(ScalarKind::I8));
-                Ok(expr)
-            }
-            TBool => {
-                let expr = try!(self.parse_cast(ScalarKind::Bool));
-                Ok(expr)
-            }
+
+            TI8 => Ok(self.parse_cast(ScalarKind::I8)?),
+            TI32 => Ok(self.parse_cast(ScalarKind::I32)?),
+            TI64 => Ok(self.parse_cast(ScalarKind::I64)?),
+            TF32 => Ok(self.parse_cast(ScalarKind::F32)?),
+            TF64 => Ok(self.parse_cast(ScalarKind::F64)?),
+            TBool => Ok(self.parse_cast(ScalarKind::Bool)?),
 
             TToVec => {
                 try!(self.consume(TOpenParen));
@@ -717,6 +700,18 @@ impl<'t> Parser<'t> {
                                 cond: cond,
                                 on_true: on_true,
                                 on_false: on_false,
+                            }))
+            }
+
+            TIterate => {
+                try!(self.consume(TOpenParen));
+                let initial = try!(self.expr());
+                try!(self.consume(TComma));
+                let update_func = try!(self.expr());
+                try!(self.consume(TCloseParen));
+                Ok(expr_box(Iterate {
+                                initial: initial,
+                                update_func: update_func,
                             }))
             }
 

@@ -1569,6 +1569,40 @@ fn iters_for_loop() {
     unsafe { free_value_and_module(ret_value) };
 }
 
+fn iterate_non_parallel() {
+    let code = "|x:i32| iterate(x, |x| {x-1, x-1>0})";
+    let conf = default_conf();
+
+    let input: i32 = 5;
+
+    let ret_value = compile_and_run(code, conf, &input);
+    let data = unsafe { weld_value_data(ret_value) as *const i32 };
+    let result = unsafe { *data };
+
+    assert_eq!(result, 0);
+
+    unsafe { weld_value_free(ret_value) };
+}
+
+fn iterate_with_parallel_body() {
+    let code = "|x:i32| iterate({[1,2,3], 1}, |p| {{map(p.$0, |y|y*2), p.$1+1}, p.$1<x}).$0";
+    let conf = default_conf();
+
+    let input: i32 = 3;
+
+    let ret_value = compile_and_run(code, conf, &input);
+    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<i32> };
+    let result = unsafe { (*data).clone() };
+
+    let output = [8, 16, 24];
+    assert_eq!(result.len, output.len() as i64);
+    for i in 0..(output.len() as isize) {
+        assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
+    }
+
+    unsafe { weld_value_free(ret_value) };
+}
+
 fn serial_parlib_test() {
     let code = "|x:vec[i32]| result(for(x, merger[i32,+], |b,i,e| merge(b, e)))";
     let conf = default_conf();
@@ -1749,6 +1783,8 @@ fn main() {
              ("if_for_loop", if_for_loop),
              ("map_zip_loop", map_zip_loop),
              ("iters_for_loop", iters_for_loop),
+             ("iterate_non_parallel", iterate_non_parallel),
+             ("iterate_with_parallel_body", iterate_with_parallel_body),
              ("serial_parlib_test", serial_parlib_test),
              ("multithreaded_module_run", multithreaded_module_run),
              ("iters_outofbounds_error_test", iters_outofbounds_error_test),

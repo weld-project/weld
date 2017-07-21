@@ -1118,6 +1118,7 @@ impl LlvmGenerator {
 
     /// Generate code for a single statement, appending it to the code in a FunctionContext.
     fn gen_statement(&mut self, statement: &Statement, func: &SirFunction, ctx: &mut FunctionContext) -> WeldResult<()> {
+        ctx.code.add(format!("; {}", statement));
         match *statement {
             MakeStruct { ref output, ref elems } => {
                 let mut cur = "undef".to_string();
@@ -1560,7 +1561,7 @@ impl LlvmGenerator {
                 if let Builder(ref bld_kind, _) = *bld_ty {
                     self.gen_result(bld_kind, builder, output, func, ctx)?;
                 } else {
-                    return weld_err!("Non builder type {} found in Res", print_type(bld_ty))
+                    return weld_err!("Non builder type {} found in Result", print_type(bld_ty))
                 }
             }
 
@@ -2197,6 +2198,7 @@ impl LlvmGenerator {
                       func: &SirFunction,
                       ctx: &mut FunctionContext)
                       -> WeldResult<()> {
+        ctx.code.add(format!("; {}", terminator));
         match *terminator {
             Branch { ref cond, on_true, on_false } => {
                 let cond_tmp = try!(self.load_var(llvm_symbol(cond).as_str(), "i1", ctx));
@@ -2541,7 +2543,7 @@ fn get_sym_ty<'a>(func: &'a SirFunction, sym: &Symbol) -> WeldResult<&'a Type> {
     } else if func.params.get(sym).is_some() {
         Ok(func.params.get(sym).unwrap())
     } else {
-        weld_err!("Can't find symbol {}#{}", sym.name, sym.id)
+        weld_err!("Can't find symbol {}", sym)
     }
 }
 

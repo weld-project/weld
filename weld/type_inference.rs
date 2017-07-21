@@ -388,7 +388,7 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             match builder.ty {
                 Builder(ref mut b, _) => {
                     let rty = b.result_type();
-                    changed |= try!(push_type(&mut expr.ty, &rty, "Res"));
+                    changed |= try!(push_type(&mut expr.ty, &rty, "Result"));
                 }
                 Unknown => (),
                 _ => return weld_err!("Internal error: Result called on non-builder"),
@@ -529,6 +529,22 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             changed |= try!(push_complete_type(&mut cond.ty, Scalar(Bool), "If"));
             changed |= try!(sync_types(&mut expr.ty, &mut on_true.ty, "If"));
             changed |= try!(sync_types(&mut expr.ty, &mut on_false.ty, "If"));
+            Ok(changed)
+        }
+
+        Iterate {
+            ref mut initial,
+            ref mut update_func,
+        } => {
+            let mut changed = false;
+            // Sync initial type with result type and function argument
+            changed |= sync_types(&mut expr.ty, &mut initial.ty, "Iterate")?;
+            match update_func.ty {
+                Function(ref mut params, _) if params.len() == 1 => {
+                    changed |= sync_types(&mut params[0], &mut initial.ty, "Iterate")?;
+                }
+                _ => return weld_err!("Second argument of Iterate must be a 1-argument function"),
+            };
             Ok(changed)
         }
 
