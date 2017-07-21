@@ -73,7 +73,7 @@ pub enum Statement {
     },
     MakeStruct {
         output: Symbol,
-        elems: Vec<(Symbol, Type)>,
+        elems: Vec<Symbol>,
     },
     MakeVector {
         output: Symbol,
@@ -141,7 +141,7 @@ pub struct SirFunction {
 
 impl SirFunction {
 
-    /// Gets the Type for a Symbol in the function. Symbols may be eitehr local variables or
+    /// Gets the Type for a Symbol in the function. Symbols may be either local variables or
     /// parameters.
     pub fn symbol_type(&self, sym: &Symbol) -> WeldResult<&Type> {
         self.locals.get(sym).map(|s| Ok(s)).unwrap_or_else(|| {
@@ -319,7 +319,7 @@ impl fmt::Display for Statement {
                 write!(f,
                        "{} = new {}",
                        output,
-                       join("{", ",", "}", elems.iter().map(|e| e.0.name.clone())))
+                       join("{", ",", "}", elems.iter().map(|e| e.name.clone())))
             }
             MakeVector {
                 ref output,
@@ -552,7 +552,7 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
                 }
                 MakeStruct { ref elems, .. } => {
                     for elem in elems {
-                        vars.push(elem.0.clone());
+                        vars.push(elem.clone());
                     }
                 }
                 MakeVector { ref elems, .. } => {
@@ -932,13 +932,13 @@ fn gen_expr(expr: &TypedExpr,
             let mut syms = vec![];
             let (mut cur_func, mut cur_block, mut sym) =
                 gen_expr(&elems[0], prog, cur_func, cur_block)?;
-            syms.push((sym, elems[0].ty.clone()));
+            syms.push(sym);
             for elem in elems.iter().skip(1) {
                 let r = gen_expr(elem, prog, cur_func, cur_block)?;
                 cur_func = r.0;
                 cur_block = r.1;
                 sym = r.2;
-                syms.push((sym, elem.ty.clone()));
+                syms.push(sym);
             }
             let res_sym = prog.add_local(&expr.ty, cur_func);
             prog.funcs[cur_func].blocks[cur_block].add_statement(MakeStruct {

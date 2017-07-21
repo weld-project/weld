@@ -336,7 +336,7 @@ impl LlvmGenerator {
 
             if par_for.data[0].kind == IterKind::SimdIter {
                 let check_with_vec = ctx.var_ids.next();
-                let vector_len = format!("{}", vec_size(&elem_ty)?);
+                let vector_len = format!("{}", llvm_simd_size(&elem_ty)?);
                 // Would need to compute stride, etc. here.
                 ctx.code.add(format!("{} = add i64 {}, {}", check_with_vec, idx_tmp, vector_len));
                 ctx.code.add(format!("{} = icmp ule i64 {}, %upper.idx", idx_cmp, check_with_vec));
@@ -376,7 +376,7 @@ impl LlvmGenerator {
                     final_idx
                 } else {
                     if iter.kind == IterKind::FringeIter {
-                        let vector_len = format!("{}", vec_size(&elem_ty)?);
+                        let vector_len = format!("{}", llvm_simd_size(&elem_ty)?);
                         let tmp = ctx.var_ids.next();
                         let arr_len = ctx.var_ids.next();
                         let offset = ctx.var_ids.next();
@@ -455,7 +455,7 @@ impl LlvmGenerator {
             // TODO - should take the minimum vector size of all elements here?
             let vectorized = containing_loop.as_ref().unwrap().data[0].kind == IterKind::SimdIter;
             let fetch_width = if vectorized {
-                vec_size(func.locals.get(&containing_loop.as_ref().unwrap().data_arg).unwrap())?
+                llvm_simd_size(func.locals.get(&containing_loop.as_ref().unwrap().data_arg).unwrap())?
             } else {
                 1
             };
@@ -522,16 +522,16 @@ impl LlvmGenerator {
                 let arr_len = wrap_ctx.var_ids.next();
                 let tmp = wrap_ctx.var_ids.next();
                 let tmp2 = wrap_ctx.var_ids.next();
-                let vector_len = format!("{}", vec_size(func.symbol_type(&first_data)?)?);
+                let vector_len = format!("{}", llvm_simd_size(func.symbol_type(&first_data)?)?);
 
                 wrap_ctx
                     .code
                     .add(format!("{} = call i64 {}.size({} {})", arr_len, data_prefix, data_ty_str, data_str));
 
                 // Compute the number of iterations:
-                // tmp = arr_len / vec_size
-                // tmp2 = tmp * vec_size
-                // num_iters = arr_len - vec_size
+                // tmp = arr_len / llvm_simd_size
+                // tmp2 = tmp * llvm_simd_size
+                // num_iters = arr_len - llvm_simd_size
                 wrap_ctx.code.add(format!("{} = udiv i64 {}, {}", tmp, arr_len, vector_len));
                 // tmp2 is also where the iteration for the FringeIter starts.
                 wrap_ctx.code.add(format!("{} = mul i64 {}, {}", tmp2, tmp, vector_len));
@@ -547,10 +547,10 @@ impl LlvmGenerator {
                 let data_str = llvm_symbol(&iter.data);
                 let data_ty_str = self.llvm_type(func.params.get(&iter.data).unwrap())?;
                 let data_prefix = format!("@{}", data_ty_str.replace("%", ""));
-                let vec_size_str = wrap_ctx.var_ids.next();
+                let llvm_simd_size_str = wrap_ctx.var_ids.next();
                 wrap_ctx
                     .code
-                    .add(format!("{} = call i64 {}.size({} {})", vec_size_str, data_prefix, data_ty_str, data_str));
+                    .add(format!("{} = call i64 {}.size({} {})", llvm_simd_size_str, data_prefix, data_ty_str, data_str));
 
                 let (start_str, stride_str) = if iter.start.is_none() {
                     // We already checked to make sure the FringeIter doesn't have a start,
@@ -583,7 +583,7 @@ impl LlvmGenerator {
                 wrap_ctx.code.add(format!("{} = sub i64 {}, 1", t0, num_iters_str));
                 wrap_ctx.code.add(format!("{} = mul i64 {}, {}", t1, stride_str, t0));
                 wrap_ctx.code.add(format!("{} = add i64 {}, {}", t2, t1, start_str));
-                wrap_ctx.code.add(format!("{} = icmp ult i64 {}, {}", cond, t2, vec_size_str));
+                wrap_ctx.code.add(format!("{} = icmp ult i64 {}, {}", cond, t2, llvm_simd_size_str));
                 wrap_ctx
                     .code
                     .add(format!("br i1 {}, label {}, label %fn.boundcheckfailed", cond, next_bounds_check_label));
@@ -804,8 +804,8 @@ impl LlvmGenerator {
     /// Return the LLVM type name corresponding to a Weld type.
     fn llvm_type(&mut self, ty: &Type) -> WeldResult<String> {
         Ok(match *ty {
-            Scalar(kind) => llvm_scalarkind(kind).to_string(),
-            Simd(kind) => format!("<{} x {}>", vec_size(&Scalar(kind))?, llvm_scalarkind(kind)),
+            Scalar(kind) => llvm_scalar_kind(kind).to_string(),
+            Simd(kind) => format!("<{} x {}>", llvm_simd_size(&Scalar(kind))?, llvm_scalar_kind(kind)),
 
             Struct(ref fields) => {
                 if self.struct_names.get(fields) == None {
@@ -946,7 +946,7 @@ impl LlvmGenerator {
                 "$ELEM_PREFIX" => &elem_prefix,
                 "$ELEM" => &elem_ty, 
                 "$NAME" => &name.replace("%", ""),
-                "$VECSIZE" => &format!("{}", vec_size(elem)?)
+                "$VECSIZE" => &format!("{}", llvm_simd_size(elem)?)
             });
             self.prelude_code.add(&simd_extension);
             self.prelude_code.add("\n");
@@ -1000,7 +1000,7 @@ impl LlvmGenerator {
                     let merger_def = replace!(MERGER_CODE, {
                         "$ELEM_PREFIX" => &elem_prefix,
                         "$ELEM" => &elem_ty,
-                        "$VECSIZE" => &format!("{}", vec_size(t)?),
+                        "$VECSIZE" => &format!("{}", llvm_simd_size(t)?),
                         "$NAME" => &name.replace("%", "")
                     });
                     self.prelude_code.add(&merger_def);
@@ -1075,7 +1075,7 @@ impl LlvmGenerator {
                                ctx: &mut FunctionContext)
                                -> WeldResult<()> {
 
-        let size = vec_size(vec_ty)?;
+        let size = llvm_simd_size(vec_ty)?;
         let vec_ty_str = self.llvm_type(vec_ty)?;
         let size_str = format!("{}", size);
 
@@ -1172,16 +1172,14 @@ impl LlvmGenerator {
                     child: &Symbol,
                     op_kind: UnaryOpKind)
                     -> WeldResult<()> {
-        let child_ty = func.symbol_type(child)?;
+        let (child_ty, child_ll_ty, child_ll_sym) = self.symbol_info(func, child)?;
+        let (_, output_ll_ty, output_ll_sym) = self.symbol_info(func, output)?;
         if let Scalar(ref ty) = *child_ty {
-            let child_ll_ty = self.llvm_type(&child_ty)?;
-            let child_tmp = self.gen_load_var(llvm_symbol(child).as_str(), &child_ll_ty, ctx)?;
+            let child_tmp = self.gen_load_var(&child_ll_sym, &child_ll_ty, ctx)?;
             let res_tmp = ctx.var_ids.next();
             let op_name = llvm_unaryop(op_kind, ty)?;
             ctx.code.add(format!("{} = call {} {} ({} {})", res_tmp, child_ll_ty, op_name, child_ll_ty, child_tmp));
-            let out_ty = func.symbol_type(output)?;
-            let out_ty_str = self.llvm_type(&out_ty)?;
-            self.gen_store_var(&res_tmp, &llvm_symbol(output), &out_ty_str, ctx);
+            self.gen_store_var(&res_tmp, &output_ll_sym, &output_ll_ty, ctx);
         } else {
             weld_err!("Illegal type {} in {}", print_type(child_ty), op_kind)?;
         }
@@ -1204,23 +1202,22 @@ impl LlvmGenerator {
     fn gen_statement(&mut self, statement: &Statement, func: &SirFunction, ctx: &mut FunctionContext) -> WeldResult<()> {
         match *statement {
             MakeStruct { ref output, ref elems } => {
-                let mut cur = "undef".to_string();
-                let struct_type = Struct(elems.iter().map(|e| e.1.clone()).collect::<Vec<_>>());
-                let ll_ty = self.llvm_type(&struct_type)?;
-                for (i, &(ref elem, ref ty)) in elems.iter().enumerate() {
-                    let ll_elem_ty = self.llvm_type(&ty)?;
-                    let tmp = self.gen_load_var(llvm_symbol(&elem).as_str(), &ll_elem_ty, ctx)?;
+                let mut cur_name = String::from("undef");
+                let (_, output_ll_ty, output_ll_sym) = self.symbol_info(func, output)?;
+                for (i, elem) in elems.iter().enumerate() {
+                    let (_, elem_ll_ty, elem_ll_sym) = self.symbol_info(func, elem)?;
+                    let elem_value = self.gen_load_var(&elem_ll_sym, &elem_ll_ty, ctx)?;
                     let struct_name = ctx.var_ids.next();
                     ctx.code.add(format!("{} = insertvalue {} {}, {} {}, {}",
                                             &struct_name,
-                                            &ll_ty,
-                                            &cur,
-                                            &ll_elem_ty,
-                                            &tmp,
+                                            &output_ll_ty,
+                                            &cur_name,
+                                            &elem_ll_ty,
+                                            &elem_value,
                                             i));
-                    cur = struct_name.clone();
+                    cur_name = struct_name;
                 }
-                self.gen_store_var(&cur, &llvm_symbol(output), &ll_ty, ctx);
+                self.gen_store_var(&cur_name, &output_ll_sym, &output_ll_ty, ctx);
             }
 
             CUDF { ref output, ref symbol_name, ref args } => {
@@ -1324,7 +1321,7 @@ impl LlvmGenerator {
                 let vec_ty_str = self.llvm_type(&ty)?;
 
                 let elem = self.gen_load_var(llvm_symbol(child).as_str(), &elem_ty_str, ctx)?;
-                let size = vec_size(&elem_ty)?;
+                let size = llvm_simd_size(&elem_ty)?;
 
                 let mut prev_name = "undef".to_string();
                 for i in 0..size {
@@ -1824,7 +1821,7 @@ impl LlvmGenerator {
                 let entry_label_v = label_ids.next();
                 let body_label_v = label_ids.next();
                 let done_label_v = label_ids.next();
-                let vector_width = format!("{}", vec_size(t)?);
+                let vector_width = format!("{}", llvm_simd_size(t)?);
 
                 ctx.code.add(format!(include_str!("resources/merger/merger_result_start.ll"),
                                         t0 = t0,
@@ -2283,12 +2280,12 @@ impl LlvmGenerator {
 
 /// Returns a vector size for a type. If a Vetor is passed in, returns the vector size of the
 /// element type. TODO this just returns 4 right now.
-fn vec_size(_: &Type) -> WeldResult<u32> {
+fn llvm_simd_size(_: &Type) -> WeldResult<u32> {
     Ok(4)
 }
 
 /// Returns the LLVM name for the `ScalarKind` `k`.
-fn llvm_scalarkind(k: ScalarKind) -> &'static str {
+fn llvm_scalar_kind(k: ScalarKind) -> &'static str {
     match k {
         Bool => "i1",
         I8 => "i8",
