@@ -638,8 +638,8 @@ fn simple_parallel_for_appender_loop() {
 }
 
 fn complex_parallel_for_appender_loop() {
-    let code = "|x:vec[i32]| let a=appender[i64]; let b=merge(a,0L); let r=for(x,b,|b,i,e| \
-                let c=merge(b,1L); let d=for(x,c,|b,i,e| if(i<1L, merge(b,i), b)); merge(d, 2L)); \
+    let code = "|x:vec[i32]| let a=appender[i64]; let b=merge(a,0L); let r=for(x,b,|b,i,e|
+                let c=merge(b,1L); let d=for(x,c,|b,i,e| if(i<1L, merge(b,i), b)); merge(d, 2L));
                 result(merge(r,3L))";
     let conf = many_threads_conf();
 
@@ -672,7 +672,7 @@ fn simple_for_vectorizable_loop() {
         x: WeldVec<i32>,
     }
 
-    let code = "|x:vec[i32]| result(for(simditer(x), merger[i32,+], |b,i,e:simd[i32]| let a = broadcast(1); let a2 = a +\
+    let code = "|x:vec[i32]| result(for(simditer(x), merger[i32,+], |b,i,e:simd[i32]| let a = broadcast(1); let a2 = a +
                     broadcast(1); merge(b, e+a2)))";
     let conf = default_conf();
 
@@ -699,14 +699,14 @@ fn fringed_for_vectorizable_loop() {
         x: WeldVec<i32>,
     }
 
-	let code = "|x:vec[i32]|\
-	let b1 = for(\
-		simditer(x),\
-		merger[i32,+],\
-		|b,i,e:simd[i32]| let a = broadcast(1); let a2 = a + broadcast(1); merge(b, e+a2));\
-	result(for(fringeiter(x),\
-		b1,\
-		|b,i,e| let a = 1; let a2 = a + 1; merge(b, e+a2)\
+	let code = "|x:vec[i32]|
+	let b1 = for(
+		simditer(x),
+		merger[i32,+],
+		|b,i,e:simd[i32]| let a = broadcast(1); let a2 = a + broadcast(1); merge(b, e+a2));
+	result(for(fringeiter(x),
+		b1,
+		|b,i,e| let a = 1; let a2 = a + 1; merge(b, e+a2)
 	))";
 
     let conf = default_conf();
@@ -734,14 +734,14 @@ fn fringed_for_vectorizable_loop_with_par() {
         x: WeldVec<i32>,
     }
 
-	let code = "|x:vec[i32]|\
-	let b1 = for(\
-		simditer(x),\
-		merger[i32,+],\
-		|b,i,e:simd[i32]| let a = broadcast(1); let a2 = a + broadcast(1); merge(b, e+a2));\
-	result(for(fringeiter(x),\
-		b1,\
-		|b,i,e| let a = 1; let a2 = a + 1; merge(b, e+a2)\
+	let code = "|x:vec[i32]|
+	let b1 = for(
+		simditer(x),
+		merger[i32,+],
+		|b,i,e:simd[i32]| let a = broadcast(1); let a2 = a + broadcast(1); merge(b, e+a2));
+	result(for(fringeiter(x),
+		b1,
+		|b,i,e| let a = 1; let a2 = a + 1; merge(b, e+a2)
 	))";
 
     let conf = many_threads_conf();
@@ -1072,7 +1072,7 @@ fn simple_for_dictmerger_loop() {
         y: WeldVec<i32>,
     }
 
-    let code = "|x:vec[i32], y:vec[i32]| tovec(result(for(zip(x,y), dictmerger[i32,i32,+], \
+    let code = "|x:vec[i32], y:vec[i32]| tovec(result(for(zip(x,y), dictmerger[i32,i32,+], 
                 |b,i,e| merge(b, e))))";
     let conf = default_conf();
     let keys = [1, 2, 2, 1, 3];
@@ -1119,7 +1119,7 @@ fn simple_groupmerger() {
         y: WeldVec<i32>,
     }
 
-    let code = "|x:vec[i32], y:vec[i32]| tovec(result(for(zip(x,y), groupmerger[i32,i32], \
+    let code = "|x:vec[i32], y:vec[i32]| tovec(result(for(zip(x,y), groupmerger[i32,i32], 
                 |b,i,e| merge(b, e))))";
 
     let conf = default_conf();
@@ -1167,8 +1167,8 @@ fn complex_groupmerger_with_struct_key() {
         z: WeldVec<i32>,
     }
 
-    let code = "|x:vec[i32], y:vec[i32], z:vec[i32]| \
-                tovec(result(for(zip(x,y,z), groupmerger[{i32,i32}, i32], \
+    let code = "|x:vec[i32], y:vec[i32], z:vec[i32]| 
+                tovec(result(for(zip(x,y,z), groupmerger[{i32,i32}, i32], 
                 |b,i,e| merge(b, {{e.$0, e.$1}, e.$2}))))";
 
     let conf = default_conf();
@@ -1230,7 +1230,7 @@ fn simple_parallel_for_dictmerger_loop() {
         y: WeldVec<i32>,
     }
 
-    let code = "|x:vec[i32], y:vec[i32]| tovec(result(for(zip(x,y), dictmerger[i32,i32,+], \
+    let code = "|x:vec[i32], y:vec[i32]| tovec(result(for(zip(x,y), dictmerger[i32,i32,+],
                 |b,i,e| merge(b, e))))";
     let conf = many_threads_conf();
 
@@ -1283,7 +1283,7 @@ fn simple_dict_lookup() {
         y: WeldVec<i32>,
     }
 
-    let code = "|x:vec[i32], y:vec[i32]| let a = result(for(zip(x,y), dictmerger[i32,i32,+], \
+    let code = "|x:vec[i32], y:vec[i32]| let a = result(for(zip(x,y), dictmerger[i32,i32,+],
                 |b,i,e| merge(b, e))); lookup(a, 1)";
     let conf = default_conf();
 
@@ -1319,9 +1319,9 @@ fn simple_dict_exists() {
     let keys = [1, 2, 2, 1, 3];
     let vals = [2, 3, 4, 2, 1];
 
-    let code_true = "|x:vec[i32], y:vec[i32]| let a = result(for(zip(x,y), dictmerger[i32,i32,+], \
+    let code_true = "|x:vec[i32], y:vec[i32]| let a = result(for(zip(x,y), dictmerger[i32,i32,+],
                 |b,i,e| merge(b, e))); keyexists(a, 1)";
-    let code_false = "|x:vec[i32], y:vec[i32]| let a = result(for(zip(x,y), \
+    let code_false = "|x:vec[i32], y:vec[i32]| let a = result(for(zip(x,y),
                       dictmerger[i32,i32,+], |b,i,e| merge(b, e))); keyexists(a, 4)";
     let conf = default_conf();
 
@@ -1576,7 +1576,7 @@ fn iters_for_loop() {
         y: WeldVec<i32>,
     }
 
-    let code = "|x:vec[i32], y:vec[i32]| result(for(zip(iter(x,0L,4L,2L), y), appender, |b,i,e| \
+    let code = "|x:vec[i32], y:vec[i32]| result(for(zip(iter(x,0L,4L,2L), y), appender, |b,i,e|
                 merge(b,e.$0+e.$1)))";
     let conf = default_conf();
 
