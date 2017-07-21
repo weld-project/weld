@@ -12,6 +12,12 @@
 #ifdef __APPLE__
 #include <sched.h>
 
+// These is needed to ensure each grain size is divisible by the SIMD vector size. A value of 64
+// should be sufficiently high enough to protect against all the common vector lengths (4, 8,
+// 16, 32, 64 - 64 is used for 8-bit values in AVX-512).
+#define MAX_SIMD_SIZE   64
+#define MIN_INNERMOST_GRAIN_SIZE   (MAX_SIMD_SIZE * 4)
+
 typedef int pthread_spinlock_t;
 
 static int pthread_spin_init(pthread_spinlock_t *lock, int pshared) {
@@ -274,6 +280,13 @@ static inline void split_task(work_t *task) {
   while (task->upper - task->lower > task->grain_size) {
     work_t *last_half = clone_task(task);
     int64_t mid = (task->lower + task->upper) / 2;
+
+    // The inner loop may be subject to vectorization, so modify the bounds to make the task size
+    // divisible by the SIMD vector size.
+    if (task->grain_size > MIN_INNERMOST_GRAIN_SIZE) {
+        mid = (mid / MAX_SIMD_SIZE) * MAX_SIMD_SIZE;
+    }
+
     task->upper = mid;
     last_half->lower = mid;
     last_half->cur_idx = mid;

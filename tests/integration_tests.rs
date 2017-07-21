@@ -717,6 +717,41 @@ fn fringed_for_vectorizable_loop() {
     unsafe { weld_value_free(ret_value) };
 }
 
+fn fringed_for_vectorizable_loop_with_par() {
+    #[allow(dead_code)]
+    struct Args {
+        x: WeldVec<i32>,
+    }
+
+	let code = "|x:vec[i32]|\
+	let b1 = for(\
+		simditer(x),\
+		merger[i32,+],\
+		|b,i,e:simd[i32]| let a = broadcast(1); let a2 = a + broadcast(1); merge(b, e+a2));\
+	result(for(fringeiter(x),\
+		b1,\
+		|b,i,e| let a = 1; let a2 = a + 1; merge(b, e+a2)\
+	))";
+
+    let conf = many_threads_conf();
+
+    let size = 10 * 1000 * 1000;
+    let input_vec = vec![1 as i32; size as usize];
+    let ref input_data = Args {
+        x: WeldVec {
+            data: input_vec.as_ptr() as *const i32,
+            len: input_vec.len() as i64,
+        },
+    };
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const i32 };
+    let result = unsafe { (*data).clone() };
+    let output = size * 3;
+    assert_eq!(result, output);
+    unsafe { weld_value_free(ret_value) };
+}
+
 fn for_predicated_vectorizable_loop() {
     #[allow(dead_code)]
     struct Args {
@@ -1650,6 +1685,7 @@ fn main() {
              ("complex_parallel_for_appender_loop", complex_parallel_for_appender_loop),
              ("simple_for_vectorizable_loop", simple_for_vectorizable_loop),
              ("fringed_for_vectorizable_loop", fringed_for_vectorizable_loop),
+             ("fringed_for_vectorizable_loop_with_par", fringed_for_vectorizable_loop_with_par),
              ("for_predicated_vectorizable_loop", for_predicated_vectorizable_loop),
              ("simple_for_merger_loop", simple_for_merger_loop),
              ("simple_zipped_for_merger_loop", simple_zipped_for_merger_loop),
