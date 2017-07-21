@@ -1646,6 +1646,8 @@ fn multithreaded_module_run() {
         for t in threads {
             t.join().unwrap();
         }
+
+        weld_module_free(module);
     }
 }
 
