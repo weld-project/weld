@@ -98,7 +98,7 @@ pub fn compile_program(program: &Program,
     }
 
     let module = try!(easy_ll::compile_module(&llvm_code, Some(LIB_WELD_RT)));
-    module.run_named("runtime_init", 0);
+    module.run_named("runtime_init", 0).unwrap();
     Ok(module)
 }
 

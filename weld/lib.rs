@@ -191,7 +191,7 @@ pub unsafe extern "C" fn weld_value_free(obj: *mut WeldValue) {
     let value = &mut *obj;
     if let Some(run_id) = value.run_id {
         let module = &mut *value.module.unwrap();
-        module.run_named("run_dispose", run_id);
+        module.run_named("run_dispose", run_id).unwrap();
     }
     Box::from_raw(obj);
 }
