@@ -14,7 +14,7 @@ define %$NAME.bld @$NAME.bld.getPtrIndexed(%$NAME.bld %bldPtr, i32 %i) alwaysinl
   %mergerPtr = getelementptr %$NAME.bld.inner, %$NAME.bld.inner* null, i32 1
   %mergerSize = ptrtoint %$NAME.bld.inner* %mergerPtr to i64
   %asPtr = bitcast %$NAME.bld %bldPtr to i8*
-  %rawPtr = call i8* @get_merger_at_index(i8* %asPtr, i64 %mergerSize, i32 %i)
+  %rawPtr = call i8* @weld_rt_get_merger_at_index(i8* %asPtr, i64 %mergerSize, i32 %i)
   %ptr = bitcast i8* %rawPtr to %$NAME.bld
   ret %$NAME.bld %ptr
 }
@@ -23,8 +23,8 @@ define %$NAME.bld @$NAME.bld.getPtrIndexed(%$NAME.bld %bldPtr, i32 %i) alwaysinl
 define %$NAME.bld @$NAME.bld.new() {
   %bldSizePtr = getelementptr %$NAME.bld.inner, %$NAME.bld.inner* null, i32 1
   %bldSize = ptrtoint %$NAME.bld.inner* %bldSizePtr to i64
-  %nworkers = call i32 @get_nworkers()
-  %bldPtr = call i8* @new_merger(i64 %bldSize, i32 %nworkers)
+  %nworkers = call i32 @weld_rt_get_nworkers()
+  %bldPtr = call i8* @weld_rt_new_merger(i64 %bldSize, i32 %nworkers)
   ; TODO(shoumik): For now, mergers can only be scalars. We may need to do some
   ; kind of initialization here like in the dictmerger if we allow more complex
   ; merger types.

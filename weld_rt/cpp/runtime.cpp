@@ -87,11 +87,19 @@ typedef struct {
   int32_t thread_id;
 } thread_data;
 
-extern "C" int32_t my_id_public() {
+extern "C" void weld_runtime_init() {
+  pthread_mutex_init(&global_lock, NULL);
+  pthread_key_create(&global_id, NULL);
+  runs = new map<int64_t, run_data*>;
+}
+
+// *** weld_rt functions and helpers ***
+
+extern "C" int32_t weld_rt_thread_id() {
   return reinterpret_cast<thread_data *>(pthread_getspecific(global_id))->thread_id;
 }
 
-extern "C" int64_t get_runid() {
+extern "C" int64_t weld_rt_get_run_id() {
   return reinterpret_cast<thread_data *>(pthread_getspecific(global_id))->run_id;
 }
 
@@ -103,24 +111,19 @@ static inline run_data *get_run_data_by_id(int64_t run_id) {
 }
 
 static inline run_data *get_run_data() {
-  return get_run_data_by_id(get_runid());
+  return get_run_data_by_id(weld_rt_get_run_id());
 }
 
 // set the result of the computation, called from generated LLVM
-extern "C" void set_result(void *res) {
+extern "C" void weld_rt_set_result(void *res) {
   get_run_data()->result = res;
 }
 
-extern "C" void *get_result(int64_t run_id) {
-  run_data *rd = get_run_data_by_id(run_id);
-  return rd->errno != 0 ? NULL : rd->result;
-}
-
-extern "C" int32_t get_nworkers() {
+extern "C" int32_t weld_rt_get_nworkers() {
   return get_run_data()->n_workers;
 }
 
-extern "C" void weld_abort_thread() {
+extern "C" void weld_rt_abort_thread() {
   pthread_exit(NULL);
 }
 
@@ -223,7 +226,7 @@ static inline void set_cont(work_t *w, work_t *cont) {
 // the data pointers store the closures for the body and continuation
 // lower and upper give the iteration range for the loop
 // w is the currently executing task
-extern "C" void pl_start_loop(work_t *w, void *body_data, void *cont_data, void (*body)(work_t*),
+extern "C" void weld_rt_start_loop(work_t *w, void *body_data, void *cont_data, void (*body)(work_t*),
   void (*cont)(work_t*), int64_t lower, int64_t upper, int32_t grain_size) {
   work_t *body_task = (work_t *)malloc(sizeof(work_t));
   memset(body_task, 0, sizeof(work_t));
@@ -255,7 +258,7 @@ extern "C" void pl_start_loop(work_t *w, void *body_data, void *cont_data, void 
   }
   set_full_task(body_task);
 
-  int32_t my_id = my_id_public();
+  int32_t my_id = weld_rt_thread_id();
   run_data *rd = get_run_data();
   pthread_spin_lock(rd->all_work_queue_locks + my_id);
   (rd->all_work_queues + my_id)->push_front(body_task);
@@ -302,9 +305,9 @@ static inline void work_loop(int32_t my_id, run_data *rd) {
       // Exit the thread if there's an error.
       // We don't need to worry about freeing here; the runtime will
       // free all allocated memory as long as it is allocated with
-      // `weld_rt_malloc` or `weld_rt_realloc`.
+      // `weld_run_malloc` or `weld_run_realloc`.
       if (rd->errno != 0) {
-        weld_abort_thread();
+        weld_rt_abort_thread();
       }
       popped->fp(popped);
       finish_task(popped, my_id, rd);
@@ -341,9 +344,12 @@ static void *thread_func(void *data) {
   return NULL;
 }
 
+
+// *** weld_run functions and helpers ***
+
 // kick off threads running thread_func
 // block until the computation is complete
-extern "C" int64_t execute(void (*run)(work_t*), void *data, int64_t mem_limit, int32_t n_workers) {
+extern "C" int64_t weld_run_begin(void (*run)(work_t*), void *data, int64_t mem_limit, int32_t n_workers) {
   run_data *rd = new run_data;
   pthread_mutex_init(&rd->lock, NULL);
   rd->n_workers = n_workers;
@@ -394,19 +400,13 @@ extern "C" int64_t execute(void (*run)(work_t*), void *data, int64_t mem_limit, 
   return my_run_id;
 }
 
-extern "C" void weld_rt_init() {
-  pthread_mutex_init(&global_lock, NULL);
-  pthread_key_create(&global_id, NULL);
-  runs = new map<int64_t, run_data*>;
-}
-
-extern "C" void *weld_rt_malloc(int64_t run_id, size_t size) {
+extern "C" void *weld_run_malloc(int64_t run_id, size_t size) {
   run_data *rd = get_run_data_by_id(run_id);
   pthread_mutex_lock(&rd->lock);
   if (rd->cur_mem + size > rd->mem_limit) {
     pthread_mutex_unlock(&rd->lock);
-    weld_rt_set_errno(run_id, 7);
-    weld_abort_thread();
+    weld_run_set_errno(run_id, 7);
+    weld_rt_abort_thread();
     return NULL;
   }
   rd->cur_mem += size;
@@ -416,14 +416,14 @@ extern "C" void *weld_rt_malloc(int64_t run_id, size_t size) {
   return mem;
 }
 
-extern "C" void *weld_rt_realloc(int64_t run_id, void *data, size_t size) {
+extern "C" void *weld_run_realloc(int64_t run_id, void *data, size_t size) {
   run_data *rd = get_run_data_by_id(run_id);
   pthread_mutex_lock(&rd->lock);
   int64_t orig_size = rd->allocs.find(reinterpret_cast<intptr_t>(data))->second;
   if (rd->cur_mem - orig_size + size > rd->mem_limit) {
     pthread_mutex_unlock(&rd->lock);
-    weld_rt_set_errno(run_id, 7);
-    weld_abort_thread();
+    weld_run_set_errno(run_id, 7);
+    weld_rt_abort_thread();
     return NULL;
   }
   rd->cur_mem -= orig_size;
@@ -435,7 +435,7 @@ extern "C" void *weld_rt_realloc(int64_t run_id, void *data, size_t size) {
   return mem;
 }
 
-extern "C" void weld_rt_free(int64_t run_id, void *data) {
+extern "C" void weld_run_free(int64_t run_id, void *data) {
   run_data *rd = get_run_data_by_id(run_id);
   pthread_mutex_lock(&rd->lock);
   rd->cur_mem -= rd->allocs.find(reinterpret_cast<intptr_t>(data))->second;
@@ -444,19 +444,24 @@ extern "C" void weld_rt_free(int64_t run_id, void *data) {
   pthread_mutex_unlock(&rd->lock);
 }
 
-extern "C" int64_t weld_rt_get_errno(int64_t run_id) {
+extern "C" void *weld_run_get_result(int64_t run_id) {
+  run_data *rd = get_run_data_by_id(run_id);
+  return rd->errno != 0 ? NULL : rd->result;
+}
+
+extern "C" int64_t weld_run_get_errno(int64_t run_id) {
   return get_run_data_by_id(run_id)->errno;
 }
 
-extern "C" void weld_rt_set_errno(int64_t run_id, int64_t eno) {
+extern "C" void weld_run_set_errno(int64_t run_id, int64_t eno) {
   get_run_data_by_id(run_id)->errno = eno;
 }
 
-extern "C" int64_t weld_rt_memory_usage(int64_t run_id) {
+extern "C" int64_t weld_run_memory_usage(int64_t run_id) {
   return get_run_data_by_id(run_id)->cur_mem;
 }
 
-extern "C" void weld_rt_run_free(int64_t run_id) {
+extern "C" void weld_run_dispose(int64_t run_id) {
   run_data *rd = get_run_data_by_id(run_id);
   assert(rd->done);
   for (auto it = rd->allocs.begin(); it != rd->allocs.end(); it++) {

@@ -191,7 +191,7 @@ pub unsafe extern "C" fn weld_value_free(obj: *mut WeldValue) {
     let value = &mut *obj;
     if let Some(run_id) = value.run_id {
         let module = &mut *value.module.unwrap();
-        module.run_named("rt_run_free", run_id);
+        module.run_named("run_dispose", run_id);
     }
     Box::from_raw(obj);
 }
@@ -207,7 +207,7 @@ pub unsafe extern "C" fn weld_value_memory_usage(obj: *mut WeldValue) -> libc::i
     let value = &mut *obj;
     if let Some(run_id) = value.run_id {
         let module = &mut *value.module.unwrap();
-        return module.run_named("rt_memory_usage", run_id).unwrap_or(-1) as libc::int64_t;
+        return module.run_named("run_memory_usage", run_id).unwrap_or(-1) as libc::int64_t;
     } else {
         return -1 as libc::int64_t;
     }
