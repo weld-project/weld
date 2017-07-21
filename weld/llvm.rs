@@ -141,6 +141,9 @@ pub struct LlvmGenerator {
     dict_names: HashMap<Type, String>,
     dict_ids: IdGenerator,
 
+    /// Set of declared CUDFs.
+    cudf_names: HashSet<String>,
+
     /// LLVM type names for various builder types
     bld_names: HashMap<BuilderKind, String>,
 
@@ -166,6 +169,7 @@ impl LlvmGenerator {
             merger_ids: IdGenerator::new("%m"),
             dict_names: HashMap::new(),
             dict_ids: IdGenerator::new("%d"),
+            cudf_names: HashSet::new(),
             bld_names: HashMap::new(),
             prelude_code: CodeBuilder::new(),
             prelude_var_ids: IdGenerator::new("%p.p"),
@@ -1221,78 +1225,64 @@ impl LlvmGenerator {
             }
 
             CUDF { ref output, ref symbol_name, ref args } => {
-                // TODO If function not declared
-                if true {
-                    // First, declare the function.
+                let (_, output_ll_ty, output_ll_sym) = self.symbol_info(func, output)?;
+                if !self.cudf_names.contains(symbol_name) {
                     let mut arg_tys = vec![];
                     for ref arg in args {
                         arg_tys.push(format!("{}*", self.llvm_type(func.symbol_type(arg)?)?));
                     }
-                    arg_tys.push(format!("{}*", self.llvm_type(func.symbol_type(output)?)?));
+                    arg_tys.push(format!("{}*", &output_ll_ty));
                     let arg_sig = arg_tys.join(", ");
-
-                    self.prelude_code.add(format!("declare void @{name}({arg_sig});",
-                                                    name = symbol_name,
-                                                    arg_sig = arg_sig));
+                    self.prelude_code.add(format!("declare void @{}({});", symbol_name, arg_sig));
+                    self.cudf_names.insert(symbol_name.clone());
                 }
 
                 // Prepare the parameter list for the function
                 let mut arg_tys = vec![];
                 for ref arg in args {
-                    let ll_ty = self.llvm_type(func.symbol_type(arg)?)?;
-                    let arg_str = format!("{ll_ty}* {arg}", arg = llvm_symbol(arg), ll_ty = ll_ty);
-                    arg_tys.push(arg_str);
+                    let (_, arg_ll_ty, arg_ll_sym) = self.symbol_info(func, arg)?;
+                    arg_tys.push(format!("{}* {}", arg_ll_sym, arg_ll_ty));
                 }
-                arg_tys.push(format!("{}* {}",
-                                        self.llvm_type(func.symbol_type(output)?)?,
-                                        llvm_symbol(output)));
-                let param_sig = arg_tys.join(", ");
-
-                ctx.code.add(
-                    format!("call void @{name}({param_sig})", name = symbol_name, param_sig = param_sig));
+                arg_tys.push(format!("{}* {}", &output_ll_ty, &output_ll_sym));
+                let parameters = arg_tys.join(", ");
+                ctx.code.add(format!("call void @{}({})", symbol_name, parameters));
             }
 
-            MakeVector { ref output, ref elems, ref elem_ty } => {
-                let elem_ll_ty = self.llvm_type(elem_ty)?;
-                let vec_ll_ty = self.llvm_type(&Vector(Box::new(elem_ty.clone())))?;
-                let vec_ll_prefix = vec_ll_ty.replace("%", "@");
+            MakeVector { ref output, ref elems } => {
+                let (output_ty, output_ll_ty, output_ll_sym) = self.symbol_info(func, output)?;
+                // Pull the element type from output instead of elems because elems could be empty.
+                let elem_ll_ty = if let Vector(ref elem_ty) = *output_ty {
+                    self.llvm_type(elem_ty)? 
+                } else {
+                    unreachable!();
+                };
+                let output_ll_prefix = output_ll_ty.replace("%", "@");
                 let vec = ctx.var_ids.next();
-                let capacity_str = format!("{}", elems.len());
-                ctx.code.add(format!("{vec} = call {vec_type} {prefix}.new(i64 {capacity})",
-                                        vec = vec,
-                                        vec_type = vec_ll_ty,
-                                        prefix = vec_ll_prefix,
-                                        capacity = capacity_str));
+                ctx.code.add(format!("{} = call {} {}.new(i64 {})", vec, output_ll_ty, output_ll_prefix, elems.len()));
+                // For each element, pull out the pointer and write a value to it.
                 for (i, elem) in elems.iter().enumerate() {
-                    let e = self.gen_load_var(llvm_symbol(&elem).as_str(), &elem_ll_ty, ctx)?.to_string();
+                    let elem_ll_sym = llvm_symbol(&elem);
+                    let elem_loaded = self.gen_load_var(&elem_ll_sym, &elem_ll_ty, ctx)?;
                     let ptr = ctx.var_ids.next();
-                    let idx_str = format!("{}", i);
-                    ctx.code.add(format!("{ptr} = call {elem_ty}* \
-                                            {prefix}.at({vec_type} {vec}, i64 {idx})",
-                                            ptr = ptr,
-                                            elem_ty = elem_ll_ty,
-                                            prefix = vec_ll_prefix,
-                                            vec_type = vec_ll_ty,
-                                            vec = vec,
-                                            idx = idx_str));
-                    self.gen_store_var(&e, &ptr, &elem_ll_ty, ctx);
+                    ctx.code.add(format!("{} = call {}* {}.at({} {}, i64 {})", ptr, elem_ll_ty, output_ll_prefix, output_ll_ty, vec, i));
+                    self.gen_store_var(&elem_loaded, &ptr, &elem_ll_ty, ctx);
                 }
-                self.gen_store_var(&vec, &llvm_symbol(output), &vec_ll_ty, ctx);
+                self.gen_store_var(&vec, &output_ll_sym, &output_ll_ty, ctx);
             }
 
-            BinOp { ref output, op, ref ty, ref left, ref right } => {
-                let ll_ty = self.llvm_type(ty)?;
-                let left_tmp = self.gen_load_var(llvm_symbol(left).as_str(), &ll_ty, ctx)?;
-                let right_tmp = self.gen_load_var(llvm_symbol(right).as_str(), &ll_ty, ctx)?;
-                let bin_tmp = ctx.var_ids.next();
-                let out_ty = func.symbol_type(output)?;
-                let out_ty_str = self.llvm_type(&out_ty)?;
+            BinOp { ref output, op, ref left, ref right } => {
+                let (_, output_ll_ty, output_ll_sym) = self.symbol_info(func, output)?;
+                // Assume the left and right operands have the same type.
+                let (ty, ll_ty, left_ll_sym) = self.symbol_info(func, left)?;
+                let right_ll_sym = llvm_symbol(right);
+                let left_tmp = self.gen_load_var(&left_ll_sym, &ll_ty, ctx)?;
+                let right_tmp = self.gen_load_var(&right_ll_sym, &ll_ty, ctx)?;
+                let output_tmp = ctx.var_ids.next();
                 match *ty {
                     Scalar(_) | Simd(_) => {
-                        let op_name = llvm_binop(op, ty)?;
-                        ctx.code
-                            .add(format!("{} = {} {} {}, {}", bin_tmp, op_name, ll_ty, left_tmp, right_tmp));
-                        self.gen_store_var(&bin_tmp, &llvm_symbol(output), &out_ty_str, ctx);
+                        ctx.code.add(format!("{} = {} {} {}, {}",
+                                             &output_tmp, llvm_binop(op, ty)?, &ll_ty, &left_tmp, &right_tmp));
+                        self.gen_store_var(&output_tmp, &output_ll_sym, &output_ll_ty, ctx);
                     }
                     Vector(_) => {
                         // We support BinOps between vectors as long as they're comparison operators
@@ -1306,36 +1296,25 @@ impl LlvmGenerator {
                                                 left_tmp,
                                                 ll_ty,
                                                 right_tmp));
-                        ctx.code.add(format!("{} = icmp {} i32 {}, {}", bin_tmp, op_name, tmp, value));
-                        self.gen_store_var(&bin_tmp, &llvm_symbol(output), &out_ty_str, ctx);
+                        ctx.code.add(format!("{} = icmp {} i32 {}, {}", output_tmp, op_name, tmp, value));
+                        self.gen_store_var(&output_tmp, &output_ll_sym, &output_ll_ty, ctx);
                     }
                     _ => weld_err!("Illegal type {} in BinOp", print_type(ty))?,
                 }
             }
 
             Broadcast { ref output, ref child } => {
-                let ty = func.symbol_type(output)?;
-                let elem_ty = func.symbol_type(child)?;
-
-                let elem_ty_str = self.llvm_type(&elem_ty)?;
-                let vec_ty_str = self.llvm_type(&ty)?;
-
-                let elem = self.gen_load_var(llvm_symbol(child).as_str(), &elem_ty_str, ctx)?;
-                let size = llvm_simd_size(&elem_ty)?;
-
+                let (_, output_ll_ty, output_ll_sym) = self.symbol_info(func, output)?;
+                let (child_ty, child_ll_ty, child_ll_sym) = self.symbol_info(func, child)?;
+                let value = self.gen_load_var(&child_ll_sym, &child_ll_ty, ctx)?;
                 let mut prev_name = "undef".to_string();
-                for i in 0..size {
+                for i in 0..llvm_simd_size(child_ty)? {
                     let next = ctx.var_ids.next();
-                    ctx.code.add(format!("{next} = insertelement {vec_ty_str} {prev_name}, {elem_ty_str} {elem}, i32 {i}",
-                                            next=next,
-                                            vec_ty_str=vec_ty_str,
-                                            prev_name=prev_name,
-                                            elem_ty_str=elem_ty_str,
-                                            elem=elem,
-                                            i=i));
+                    ctx.code.add(format!("{} = insertelement {} {}, {} {}, i32 {}",
+                                            next, output_ll_ty, prev_name, child_ll_ty, value, i));
                     prev_name = next;
                 }
-                self.gen_store_var(&prev_name, &llvm_symbol(output), &vec_ty_str, ctx);
+                self.gen_store_var(&prev_name, &output_ll_sym, &output_ll_ty, ctx);
             }
 
             UnaryOp { ref output, op, ref child, } => {
@@ -1343,161 +1322,102 @@ impl LlvmGenerator {
             }
 
             Negate { ref output, ref child } => {
-                let out_ty = func.symbol_type(output)?;
-                let ll_ty = self.llvm_type(out_ty)?;
-                let child_tmp = self.gen_load_var(llvm_symbol(child).as_str(), &ll_ty, ctx)?;
-                let bin_tmp = ctx.var_ids.next();
-                let out_ty_str = self.llvm_type(&out_ty)?;
-                let op_name = llvm_binop(BinOpKind::Subtract, out_ty)?;
-
-                let zero_str = match *out_ty {
+                let (output_ty, output_ll_ty, output_ll_sym) = self.symbol_info(func, output)?;
+                let zero = match *output_ty {
                     Scalar(F32) | Scalar(F64) => "0.0",
                     _ => "0",
                 };
-
-                ctx.code.add(format!("{} = {} {} {}, {}", bin_tmp, op_name, ll_ty, zero_str, child_tmp));
-                self.gen_store_var(&bin_tmp, &llvm_symbol(output), &out_ty_str, ctx);
+                let op_name = llvm_binop(BinOpKind::Subtract, output_ty)?;
+                let child_tmp = self.gen_load_var(&llvm_symbol(child), &output_ll_ty, ctx)?;
+                let value = ctx.var_ids.next();
+                ctx.code.add(format!("{} = {} {} {}, {}", value, op_name, output_ll_ty, zero, child_tmp));
+                self.gen_store_var(&value, &output_ll_sym, &output_ll_ty, ctx);
             }
 
-            Cast { ref output, ref new_ty, ref child } => {
-                let old_ty = func.symbol_type(child)?;
-                let old_ll_ty = self.llvm_type(&old_ty)?;
-                if old_ty != new_ty {
-                    let op_name = llvm_castop(&old_ty, &new_ty)?;
-                    let new_ll_ty = self.llvm_type(&new_ty)?;
-                    let child_tmp = self.gen_load_var(llvm_symbol(child).as_str(), &old_ll_ty, ctx)?;
+            Cast { ref output, ref child } => {
+                let (output_ty, output_ll_ty, output_ll_sym) = self.symbol_info(func, output)?;
+                let (child_ty, child_ll_ty, child_ll_sym) = self.symbol_info(func, child)?;
+                if child_ty != output_ty {
+                    let op_name = llvm_castop(child_ty, output_ty)?;
+                    let child_tmp = self.gen_load_var(&child_ll_sym, &child_ll_ty, ctx)?;
                     let cast_tmp = ctx.var_ids.next();
                     ctx.code.add(format!("{} = {} {} {} to {}",
-                                            cast_tmp,
-                                            op_name,
-                                            old_ll_ty,
-                                            child_tmp,
-                                            new_ll_ty));
-                    let out_ty = func.symbol_type(output)?;
-                    let out_ty_str = self.llvm_type(&out_ty)?;
-                    self.gen_store_var(&cast_tmp, &llvm_symbol(output), &out_ty_str, ctx);
+                                            cast_tmp, op_name, child_ll_ty, child_tmp, output_ll_ty));
+                    self.gen_store_var(&cast_tmp, &output_ll_sym, &output_ll_ty, ctx);
                 } else {
-                    let child_tmp = self.gen_load_var(llvm_symbol(child).as_str(), &old_ll_ty, ctx)?;
-                    self.gen_store_var(&child_tmp, &llvm_symbol(output), &old_ll_ty, ctx);
+                    let child_tmp = self.gen_load_var(&child_ll_sym, &child_ll_ty, ctx)?;
+                    self.gen_store_var(&child_tmp, &output_ll_sym, &child_ll_ty, ctx);
                 }
             }
 
             Lookup { ref output, ref child, ref index } => {
-                let child_ty = func.symbol_type(child)?;
+                let (_, output_ll_ty, output_ll_sym) = self.symbol_info(func, output)?;
+                let (child_ty, child_ll_ty, child_ll_sym) = self.symbol_info(func, child)?;
+                let (_, index_ll_ty, index_ll_sym) = self.symbol_info(func, index)?;
                 match *child_ty {
                     Vector(_) => {
-                        let child_ll_ty = self.llvm_type(&child_ty)?;
-                        let output_ty = func.symbol_type(output)?;
-                        let output_ll_ty = self.llvm_type(&output_ty)?;
-                        let vec_ll_ty = self.llvm_type(&child_ty)?;
-                        let vec_prefix = format!("@{}", vec_ll_ty.replace("%", ""));
-                        let child_tmp = self.gen_load_var(llvm_symbol(child).as_str(), &child_ll_ty, ctx)?;
-                        let index_tmp = self.gen_load_var(llvm_symbol(index).as_str(), "i64", ctx)?;
+                        let child_prefix = format!("@{}", child_ll_ty.replace("%", ""));
+                        let child_tmp = self.gen_load_var(&child_ll_sym, &child_ll_ty, ctx)?;
+                        let index_tmp = self.gen_load_var(&index_ll_sym, &index_ll_ty, ctx)?;
                         let res_ptr = ctx.var_ids.next();
-                        let res_tmp = ctx.var_ids.next();
                         ctx.code.add(format!("{} = call {}* {}.at({} {}, i64 {})",
-                                                res_ptr,
-                                                output_ll_ty,
-                                                vec_prefix,
-                                                vec_ll_ty,
-                                                child_tmp,
-                                                index_tmp));
-                        ctx.code.add(format!("{} = load {}, {}* {}", res_tmp, output_ll_ty, output_ll_ty, res_ptr));
-                        self.gen_store_var(&res_tmp, &llvm_symbol(output), &output_ll_ty, ctx);
+                            res_ptr, output_ll_ty, child_prefix, child_ll_ty,child_tmp, index_tmp));
+                        let res_tmp = self.gen_load_var(&res_ptr, &output_ll_ty, ctx)?;
+                        self.gen_store_var(&res_tmp, &output_ll_sym, &output_ll_ty, ctx);
                     }
                     Dict(_, _) => {
-                        let child_ll_ty = self.llvm_type(&child_ty)?;
-                        let output_ty = func.symbol_type(output)?;
-                        let output_ll_ty = self.llvm_type(&output_ty)?;
-                        let dict_ll_ty = self.llvm_type(&child_ty)?;
-                        let index_ty = func.symbol_type(index)?;
-                        let index_ll_ty = self.llvm_type(&index_ty)?;
-                        let dict_prefix = format!("@{}", dict_ll_ty.replace("%", ""));
-                        let child_tmp = self.gen_load_var(llvm_symbol(child).as_str(), &child_ll_ty, ctx)?;
-                        let index_tmp = self.gen_load_var(llvm_symbol(index).as_str(), &index_ll_ty, ctx)?;
+                        let child_prefix = format!("@{}", child_ll_ty.replace("%", ""));
+                        let child_tmp = self.gen_load_var(&child_ll_sym, &child_ll_ty, ctx)?;
+                        let index_tmp = self.gen_load_var(&index_ll_sym, &index_ll_ty, ctx)?;
                         let slot = ctx.var_ids.next();
                         let res_tmp = ctx.var_ids.next();
                         ctx.code.add(format!("{} = call {}.slot {}.lookup({} {}, {} {})",
-                                                slot,
-                                                dict_ll_ty,
-                                                dict_prefix,
-                                                dict_ll_ty,
-                                                child_tmp,
-                                                index_ll_ty,
-                                                index_tmp));
+                                                slot, child_ll_ty, child_prefix, child_ll_ty, child_tmp, index_ll_ty, index_tmp));
                         ctx.code.add(format!("{} = call {} {}.slot.value({}.slot {})",
-                                                res_tmp,
-                                                output_ll_ty,
-                                                dict_prefix,
-                                                dict_ll_ty,
-                                                slot));
-
-                        self.gen_store_var(&res_tmp, &llvm_symbol(output), &output_ll_ty, ctx);
+                                                res_tmp, output_ll_ty, child_prefix, child_ll_ty, slot));
+                        self.gen_store_var(&res_tmp, &output_ll_sym, &output_ll_ty, ctx);
                     }
                     _ => weld_err!("Illegal type {} in Lookup", print_type(child_ty))?,
                 }
             }
 
             KeyExists { ref output, ref child, ref key } => {
-                let child_ty = func.symbol_type(child)?;
-                match *child_ty {
-                    Dict(_, _) => {
-                        let child_ll_ty = self.llvm_type(&child_ty)?;
-                        let dict_ll_ty = self.llvm_type(&child_ty)?;
-                        let key_ty = func.symbol_type(key)?;
-                        let key_ll_ty = self.llvm_type(&key_ty)?;
-                        let dict_prefix = format!("@{}", dict_ll_ty.replace("%", ""));
-                        let child_tmp = self.gen_load_var(llvm_symbol(child).as_str(), &child_ll_ty, ctx)?;
-                        let key_tmp = self.gen_load_var(llvm_symbol(key).as_str(), &key_ll_ty, ctx)?;
-                        let slot = ctx.var_ids.next();
-                        let res_tmp = ctx.var_ids.next();
-                        ctx.code.add(format!("{} = call {}.slot {}.lookup({} {}, {} {})",
-                                                slot,
-                                                dict_ll_ty,
-                                                dict_prefix,
-                                                dict_ll_ty,
-                                                child_tmp,
-                                                key_ll_ty,
-                                                key_tmp));
-                        ctx.code.add(format!("{} = call i1 {}.slot.filled({}.slot {})",
-                                                res_tmp,
-                                                dict_prefix,
-                                                dict_ll_ty,
-                                                slot));
-                        self.gen_store_var(&res_tmp, &llvm_symbol(output), "i1", ctx);
-                    }
-                    _ => weld_err!("Illegal type {} in KeyExists", print_type(child_ty))?,
-                }
+                let (_, output_ll_ty, output_ll_sym) = self.symbol_info(func, output)?;
+                let (_, child_ll_ty, child_ll_sym) = self.symbol_info(func, child)?;
+                let (_, key_ll_ty, key_ll_sym) = self.symbol_info(func, key)?;
+                let child_prefix = format!("@{}", child_ll_ty.replace("%", ""));
+
+                let child_tmp = self.gen_load_var(&child_ll_sym, &child_ll_ty, ctx)?;
+                let key_tmp = self.gen_load_var(&key_ll_sym, &key_ll_ty, ctx)?;
+
+                let slot = ctx.var_ids.next();
+                let res_tmp = ctx.var_ids.next();
+                ctx.code.add(format!("{} = call {}.slot {}.lookup({} {}, {} {})",
+                    slot, child_ll_ty, child_prefix, child_ll_ty, child_tmp, key_ll_ty, key_tmp));
+                ctx.code.add(format!("{} = call i1 {}.slot.filled({}.slot {})",
+                    res_tmp, child_prefix, child_ll_ty, slot));
+                self.gen_store_var(&res_tmp, &output_ll_sym, &output_ll_ty, ctx);
             }
 
             Slice { ref output, ref child, ref index, ref size } => {
-                let child_ty = func.symbol_type(child)?;
-                match *child_ty {
-                    Vector(_) => {
-                        let child_ll_ty = self.llvm_type(&child_ty)?;
-                        let output_ty = func.symbol_type(output)?;
-                        let output_ll_ty = self.llvm_type(&output_ty)?;
-                        let vec_ll_ty = self.llvm_type(&child_ty)?;
-                        let vec_prefix = format!("@{}", vec_ll_ty.replace("%", ""));
-                        let child_tmp = self.gen_load_var(llvm_symbol(child).as_str(), &child_ll_ty, ctx)?;
-                        let index_tmp = self.gen_load_var(llvm_symbol(index).as_str(), "i64", ctx)?;
-                        let size_tmp = self.gen_load_var(llvm_symbol(size).as_str(), "i64", ctx)?;
-                        let res_ptr = ctx.var_ids.next();
-                        ctx.code.add(format!("{} = call {} {}.slice({} {}, i64 {}, \
-                                                i64{})",
+                let (_, output_ll_ty, output_ll_sym) = self.symbol_info(func, output)?;
+                let (_, child_ll_ty, child_ll_sym) = self.symbol_info(func, child)?;
+                let (_, index_ll_ty, index_ll_sym) = self.symbol_info(func, index)?;
+                let (_, size_ll_ty, size_ll_sym) = self.symbol_info(func, size)?;
+                let vec_prefix = format!("@{}", child_ll_ty.replace("%", ""));
+                let child_tmp = self.gen_load_var(&child_ll_sym, &child_ll_ty, ctx)?;
+                let index_tmp = self.gen_load_var(&index_ll_sym, &index_ll_ty, ctx)?;
+                let size_tmp = self.gen_load_var(&size_ll_sym, &size_ll_ty, ctx)?;
+                let res_ptr = ctx.var_ids.next();
+                ctx.code.add(format!("{} = call {} {}.slice({} {}, i64 {}, i64{})",
                                                 res_ptr,
                                                 output_ll_ty,
                                                 vec_prefix,
-                                                vec_ll_ty,
+                                                child_ll_ty,
                                                 child_tmp,
                                                 index_tmp,
                                                 size_tmp));
-                        let out_ty = func.symbol_type(output)?;
-                        let out_ty_str = self.llvm_type(&out_ty)?;
-                        self.gen_store_var(&res_ptr, &llvm_symbol(output), &out_ty_str, ctx);
-                    }
-                    _ => weld_err!("Illegal type {} in Slice", print_type(child_ty))?,
-                }
+                self.gen_store_var(&res_ptr, &output_ll_sym, &output_ll_ty, ctx);
             }
 
             Select { ref output, ref cond, ref on_true, ref on_false } => {

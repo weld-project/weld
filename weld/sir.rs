@@ -17,7 +17,6 @@ pub enum Statement {
     BinOp {
         output: Symbol,
         op: BinOpKind,
-        ty: Type,
         left: Symbol,
         right: Symbol,
     },
@@ -30,7 +29,6 @@ pub enum Statement {
     Broadcast { output: Symbol, child: Symbol },
     Cast {
         output: Symbol,
-        new_ty: Type,
         child: Symbol,
     },
     Lookup {
@@ -78,7 +76,6 @@ pub enum Statement {
     MakeVector {
         output: Symbol,
         elems: Vec<Symbol>,
-        elem_ty: Type,
     },
     GetField {
         output: Symbol,
@@ -223,15 +220,13 @@ impl fmt::Display for Statement {
             BinOp {
                 ref output,
                 ref op,
-                ref ty,
                 ref left,
                 ref right,
             } => {
                 write!(f,
-                       "{} = {} {} {} {}",
+                       "{} = {} {} {}",
                        output,
                        op,
-                       print_type(ty),
                        left,
                        right)
             }
@@ -250,9 +245,8 @@ impl fmt::Display for Statement {
             } => write!(f, "{} = broadcast({})", output, child),
             Cast {
                 ref output,
-                ref new_ty,
                 ref child,
-            } => write!(f, "{} = cast({}, {})", output, child, print_type(new_ty)),
+            } => write!(f, "{} = cast({})", output, child),
             Lookup {
                 ref output,
                 ref child,
@@ -324,7 +318,6 @@ impl fmt::Display for Statement {
             MakeVector {
                 ref output,
                 ref elems,
-                ..
             } => {
                 write!(f,
                        "{} = new {}",
@@ -712,7 +705,6 @@ fn gen_expr(expr: &TypedExpr,
             prog.funcs[cur_func].blocks[cur_block].add_statement(BinOp {
                                                                      output: res_sym.clone(),
                                                                      op: kind,
-                                                                     ty: left.ty.clone(),
                                                                      left: left_sym,
                                                                      right: right_sym,
                                                                  });
@@ -758,7 +750,6 @@ fn gen_expr(expr: &TypedExpr,
             let res_sym = prog.add_local(&expr.ty, cur_func);
             prog.funcs[cur_func].blocks[cur_block].add_statement(Cast {
                                                                      output: res_sym.clone(),
-                                                                     new_ty: expr.ty.clone(),
                                                                      child: child_sym,
                                                                  });
             Ok((cur_func, cur_block, res_sym))
@@ -950,10 +941,6 @@ fn gen_expr(expr: &TypedExpr,
 
         ExprKind::MakeVector { ref elems } => {
             let mut syms = vec![];
-            let ty = match expr.ty {
-                super::ast::Type::Vector(ref ety) => ety.clone(),
-                _ => weld_err!("MakeVector doesn't have type Vector")?,
-            };
             let mut cur_func = cur_func;
             let mut cur_block = cur_block;
             for elem in elems.iter() {
@@ -966,8 +953,7 @@ fn gen_expr(expr: &TypedExpr,
             let res_sym = prog.add_local(&expr.ty, cur_func);
             prog.funcs[cur_func].blocks[cur_block].add_statement(MakeVector {
                                                                      output: res_sym.clone(),
-                                                                     elems: syms,
-                                                                     elem_ty: *ty,
+                                                                     elems: syms
                                                                  });
             Ok((cur_func, cur_block, res_sym))
         }
