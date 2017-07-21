@@ -231,6 +231,13 @@ pub unsafe extern "C" fn weld_module_compile(code: *const c_char,
     }
     let conf = conf.unwrap();
 
+    // Tell LLVM to load libstdc++ permanently so it can link to functions in it
+    if let Err(e) = easy_ll::load_library("stdc++") {
+        err.errno = WeldRuntimeErrno::RuntimeLibraryError;
+        err.message = CString::new(e.0).unwrap();
+        return std::ptr::null_mut();
+    }
+
     let code = CStr::from_ptr(code);
     let code = code.to_str().unwrap().trim();
 
