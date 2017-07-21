@@ -452,6 +452,12 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
                                env: &mut HashMap<Symbol, Type>,
                                closure: &mut HashSet<Symbol>,
                                visited: &mut HashSet<FunctionId>) {
+    // this is needed for cases where params are added outside of sir_param_correction and are not
+    // based on variable reads in the function (e.g. in the Iterate case);
+    // and when there are loops in the call graph (also in the Iterate case)
+    for (name, _) in &prog.funcs[func_id].params {
+        closure.insert(name.clone());
+    }
     if !visited.insert(func_id) {
         return;
     }
@@ -915,8 +921,6 @@ fn gen_expr(expr: &TypedExpr,
             let parallel_body = contains_parallel_expressions(func_body);
             let body_start_func = if parallel_body {
                 let new_func = prog.add_func();
-                //prog.add_local_named(&initial.ty, argument_sym, new_func);
-                prog.funcs[new_func].params.insert(argument_sym.clone(), initial.ty.clone());
                 new_func
             } else {
                 cur_func
@@ -938,6 +942,8 @@ fn gen_expr(expr: &TypedExpr,
             // After the body, unpack the {state, bool} struct into symbols argument_sym and continue_sym.
             let continue_sym = prog.add_local(&Scalar(ScalarKind::Bool), body_end_func);
             if parallel_body {
+                // this is needed because sir_param_correction does not add variables only used
+                // on the LHS of assignments to the params list
                 prog.funcs[body_end_func].params.insert(argument_sym.clone(), initial.ty.clone());
             }
             prog.funcs[body_end_func].blocks[body_end_block].add_statement(
