@@ -27,4 +27,6 @@ fn main() {
         .arg("weld_rt/cpp/")
         .status()
         .unwrap();
+
+    println!("cargo:rustc-link-lib=dylib=stdc++");
 }
