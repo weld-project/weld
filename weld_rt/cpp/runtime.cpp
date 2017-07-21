@@ -77,7 +77,7 @@ struct run_data {
   int64_t mem_limit;
   map<intptr_t, int64_t> allocs;
   int64_t cur_mem;
-  volatile int64_t errno;
+  volatile int64_t err; // "errno" is a macro on some systems so we'll call this "err"
 };
 
 map<int64_t, run_data*> *runs;
@@ -306,7 +306,7 @@ static inline void work_loop(int32_t my_id, run_data *rd) {
       // We don't need to worry about freeing here; the runtime will
       // free all allocated memory as long as it is allocated with
       // `weld_run_malloc` or `weld_run_realloc`.
-      if (rd->errno != 0) {
+      if (rd->err != 0) {
         weld_rt_abort_thread();
       }
       popped->fp(popped);
@@ -333,7 +333,7 @@ static void *thread_func(void *data) {
       // If this thread is stalling, periodically check for errors.
       iters++;
       if (iters > 1000000) {
-        if (rd->errno != 0) {
+        if (rd->err != 0) {
 	  break;
         }
         iters = 0;
@@ -360,7 +360,7 @@ extern "C" int64_t weld_run_begin(void (*run)(work_t*), void *data, int64_t mem_
   rd->result = NULL;
   rd->mem_limit = mem_limit;
   rd->cur_mem = 0;
-  rd->errno = 0;
+  rd->err = 0;
 
   work_t *run_task = (work_t *)malloc(sizeof(work_t));
   memset(run_task, 0, sizeof(work_t));
@@ -446,15 +446,15 @@ extern "C" void weld_run_free(int64_t run_id, void *data) {
 
 extern "C" void *weld_run_get_result(int64_t run_id) {
   run_data *rd = get_run_data_by_id(run_id);
-  return rd->errno != 0 ? NULL : rd->result;
+  return rd->err != 0 ? NULL : rd->result;
 }
 
 extern "C" int64_t weld_run_get_errno(int64_t run_id) {
-  return get_run_data_by_id(run_id)->errno;
+  return get_run_data_by_id(run_id)->err;
 }
 
-extern "C" void weld_run_set_errno(int64_t run_id, int64_t eno) {
-  get_run_data_by_id(run_id)->errno = eno;
+extern "C" void weld_run_set_errno(int64_t run_id, int64_t err) {
+  get_run_data_by_id(run_id)->err = err;
 }
 
 extern "C" int64_t weld_run_memory_usage(int64_t run_id) {

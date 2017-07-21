@@ -108,7 +108,7 @@ extern "C" {
   int64_t weld_run_memory_usage(int64_t run_id);
 
   int64_t weld_run_get_errno(int64_t run_id);
-  void weld_run_set_errno(int64_t run_id, int64_t errno);
+  void weld_run_set_errno(int64_t run_id, int64_t err);
 }
 
 #endif
