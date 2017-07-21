@@ -5,14 +5,14 @@ use std::fmt;
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd)]
 #[repr(u64)]
 pub enum WeldRuntimeErrno {
-    Success = 0,
+    Success = 0, // explicit values for Success and OutOfMemory required due to use by weld_rt C++ code
     ConfigurationError,
     RuntimeLibraryError,
     CompileError,
     ArrayOutOfBounds,
     BadIteratorLength,
     MismatchedZipSize,
-    OutOfMemory,
+    OutOfMemory = 7,
     RunNotFound,
     Unknown,
     ErrnoMax,

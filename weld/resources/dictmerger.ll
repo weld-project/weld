@@ -14,10 +14,10 @@
 ; Initialize and return a new dictionary with the given initial capacity.
 ; The capacity must be a power of 2.
 define %$NAME.bld @$NAME.bld.new(i64 %capacity) {
-  %nworkers = call i32 @get_nworkers()
+  %nworkers = call i32 @weld_rt_get_nworkers()
   %structSizePtr = getelementptr %$NAME, %$NAME* null, i32 1
   %structSize = ptrtoint %$NAME* %structSizePtr to i64
-  %bldPtr = call i8* @new_merger(i64 %structSize, i32 %nworkers)
+  %bldPtr = call i8* @weld_rt_new_merger(i64 %structSize, i32 %nworkers)
   br label %entry
 
 entry:
@@ -41,7 +41,7 @@ define %$NAME* @$NAME.bld.getptrIndexed(%$NAME.bld %bldPtr, i32 %i) alwaysinline
   %dictPtr = getelementptr %$NAME, %$NAME* null, i32 1
   %dictSize = ptrtoint %$NAME* %dictPtr to i64
 
-  %rawPtr = call i8* @get_merger_at_index(%$NAME.bld %bldPtr, i64 %dictSize, i32 %i)
+  %rawPtr = call i8* @weld_rt_get_merger_at_index(%$NAME.bld %bldPtr, i64 %dictSize, i32 %i)
   %ptr = bitcast i8* %rawPtr to %$NAME*
   ret %$NAME* %ptr
 }
@@ -81,7 +81,7 @@ define %$NAME @$NAME.bld.result(%$NAME.bld %bldPtr) {
   br label %entryLabel
 
 entryLabel:
-  %nworkers = call i32 @get_nworkers()
+  %nworkers = call i32 @weld_rt_get_nworkers()
   br label %bodyLabel
 
 bodyLabel:
@@ -145,7 +145,7 @@ freeBody:
   br i1 %freeCond2, label %freeBody, label %endLabel
 
 endLabel:
-  call void @free_merger(i8* %bldPtr)
+  call void @weld_rt_free_merger(i8* %bldPtr)
   %finalRes = load %$NAME, %$NAME* %finalDictPtr
   ret %$NAME %finalRes
 }
