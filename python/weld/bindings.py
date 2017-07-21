@@ -27,7 +27,7 @@ if home[-1] != "/":
 path = home + "target/release/" + path
 
 # Load the Weld Dynamic Library.
-weld = CDLL(path)
+weld = CDLL(path, mode=RTLD_GLOBAL)
 
 # Used for some type checking carried out by ctypes
 
