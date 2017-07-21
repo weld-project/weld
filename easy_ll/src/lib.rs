@@ -99,15 +99,6 @@ impl Drop for CompiledModule {
 /// Loads a dynamic library by name. It is safe to call this function multiple times. The library
 /// must be on the search path or in one of the build directories for the module.
 pub fn load_library(libname: &str) -> Result<(), LlvmError> {
-    let ext = if cfg!(target_os = "linux") {
-        "so"
-    } else if cfg!(target_os = "macos") {
-        "dylib"
-    } else {
-        return Err(LlvmError::new("Unknown target os"));
-    };
-    let libname = format!("{}.{}", libname, ext);
-
     let c_string = CString::new(libname.clone()).unwrap();
     let c_string_raw = c_string.into_raw() as *const c_char;
 
