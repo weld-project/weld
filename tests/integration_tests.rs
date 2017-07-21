@@ -746,7 +746,8 @@ fn fringed_for_vectorizable_loop_with_par() {
 
     let conf = many_threads_conf();
 
-    let size = 10 * 1000 * 1000;
+    // Large size to invoke parallel runtime + some fringing.
+    let size = 10 * 1000 * 1000 + 123;
     let input_vec = vec![1 as i32; size as usize];
     let ref input_data = Args {
         x: WeldVec {
@@ -760,7 +761,7 @@ fn fringed_for_vectorizable_loop_with_par() {
     let result = unsafe { (*data).clone() };
     let output = size * 3;
     assert_eq!(result, output);
-    unsafe { weld_value_free(ret_value) };
+    unsafe { free_value_and_module(ret_value) };
 }
 
 fn for_predicated_vectorizable_loop() {
