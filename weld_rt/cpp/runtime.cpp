@@ -3,7 +3,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <pthread.h>
-#include <map>
+#include <unordered_map>
 #include <queue>
 #include <deque>
 #include <algorithm>
@@ -75,12 +75,12 @@ struct run_data {
   void *result; // stores the final result of the computation to be passed back
   // to the caller
   int64_t mem_limit;
-  map<intptr_t, int64_t> allocs;
+  unordered_map<intptr_t, int64_t> allocs;
   int64_t cur_mem;
   volatile int64_t err; // "errno" is a macro on some systems so we'll call this "err"
 };
 
-map<int64_t, run_data*> *runs;
+unordered_map<int64_t, run_data*> *runs;
 
 typedef struct {
   int64_t run_id;
@@ -90,7 +90,7 @@ typedef struct {
 extern "C" void weld_runtime_init() {
   pthread_mutex_init(&global_lock, NULL);
   pthread_key_create(&global_id, NULL);
-  runs = new map<int64_t, run_data*>;
+  runs = new unordered_map<int64_t, run_data*>;
 }
 
 // *** weld_rt functions and helpers ***
@@ -464,7 +464,7 @@ extern "C" int64_t weld_run_memory_usage(int64_t run_id) {
 extern "C" void weld_run_dispose(int64_t run_id) {
   run_data *rd = get_run_data_by_id(run_id);
   assert(rd->done);
-  for (map<intptr_t, int64_t>::iterator it = rd->allocs.begin(); it != rd->allocs.end(); it++) {
+  for (unordered_map<intptr_t, int64_t>::iterator it = rd->allocs.begin(); it != rd->allocs.end(); it++) {
     free(reinterpret_cast<void *>(it->first));
   }
   pthread_mutex_destroy(&rd->lock);
