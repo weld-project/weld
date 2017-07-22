@@ -1773,7 +1773,7 @@ impl LlvmGenerator {
                 // Type of element to merge.
                 let elem_ty_str = self.llvm_type(t)?.to_string();
 
-                let output_str = format!("%{}", output);
+                let output_str = llvm_symbol(output);
 
                 // Vector type.
                 let ref vec_type = if let Scalar(ref k) = **t {
