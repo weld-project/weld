@@ -631,6 +631,8 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
 /// gen_expr may result in the use of symbols across function boundaries,
 /// so ast_to_sir calls sir_param_correction to correct function parameters
 /// to ensure that such symbols (the closure) are passed in as parameters.
+/// Can be safely called multiple times -- only the necessary param corrections
+/// will be performed.
 fn sir_param_correction(prog: &mut SirProgram) -> WeldResult<()> {
     let mut env = HashMap::new();
     let mut closure = HashSet::new();
@@ -656,6 +658,9 @@ pub fn ast_to_sir(expr: &TypedExpr) -> WeldResult<SirProgram> {
         let first_block = prog.funcs[0].add_block();
         let (res_func, res_block, res_sym) = gen_expr(body, &mut prog, 0, first_block)?;
         prog.funcs[res_func].blocks[res_block].terminator = Terminator::ProgramReturn(res_sym);
+        sir_param_correction(&mut prog)?;
+        // second call is necessary in the case where there are loops in the call graph, since
+        // some parameter dependencies may not have been propagated through back edges
         sir_param_correction(&mut prog)?;
         Ok((prog))
     } else {
