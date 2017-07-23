@@ -1681,7 +1681,7 @@ fn iterate_non_parallel() {
 }
 
 fn iterate_with_parallel_body() {
-    let code = "|x:i32| iterate({[1,2,3], 1}, |p| {{map(p.$0, |y|y*2), p.$1+1}, p.$1<x}).$0";
+    let code = "|x:i32| let a=2; iterate({[1,2,3], 1}, |p| {{map(p.$0, |y|y*a), p.$1+1}, p.$1<x}).$0";
     let conf = default_conf();
 
     let input: i32 = 3;

@@ -452,6 +452,12 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
                                env: &mut HashMap<Symbol, Type>,
                                closure: &mut HashSet<Symbol>,
                                visited: &mut HashSet<FunctionId>) {
+    // this is needed for cases where params are added outside of sir_param_correction and are not
+    // based on variable reads in the function (e.g. in the Iterate case);
+    // and when there are loops in the call graph (also in the Iterate case)
+    for (name, _) in &prog.funcs[func_id].params {
+        closure.insert(name.clone());
+    }
     if !visited.insert(func_id) {
         return;
     }
@@ -625,6 +631,8 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
 /// gen_expr may result in the use of symbols across function boundaries,
 /// so ast_to_sir calls sir_param_correction to correct function parameters
 /// to ensure that such symbols (the closure) are passed in as parameters.
+/// Can be safely called multiple times -- only the necessary param corrections
+/// will be performed.
 fn sir_param_correction(prog: &mut SirProgram) -> WeldResult<()> {
     let mut env = HashMap::new();
     let mut closure = HashSet::new();
@@ -650,6 +658,9 @@ pub fn ast_to_sir(expr: &TypedExpr) -> WeldResult<SirProgram> {
         let first_block = prog.funcs[0].add_block();
         let (res_func, res_block, res_sym) = gen_expr(body, &mut prog, 0, first_block)?;
         prog.funcs[res_func].blocks[res_block].terminator = Terminator::ProgramReturn(res_sym);
+        sir_param_correction(&mut prog)?;
+        // second call is necessary in the case where there are loops in the call graph, since
+        // some parameter dependencies may not have been propagated through back edges
         sir_param_correction(&mut prog)?;
         Ok((prog))
     } else {
@@ -915,8 +926,6 @@ fn gen_expr(expr: &TypedExpr,
             let parallel_body = contains_parallel_expressions(func_body);
             let body_start_func = if parallel_body {
                 let new_func = prog.add_func();
-                //prog.add_local_named(&initial.ty, argument_sym, new_func);
-                prog.funcs[new_func].params.insert(argument_sym.clone(), initial.ty.clone());
                 new_func
             } else {
                 cur_func
@@ -938,6 +947,8 @@ fn gen_expr(expr: &TypedExpr,
             // After the body, unpack the {state, bool} struct into symbols argument_sym and continue_sym.
             let continue_sym = prog.add_local(&Scalar(ScalarKind::Bool), body_end_func);
             if parallel_body {
+                // this is needed because sir_param_correction does not add variables only used
+                // on the LHS of assignments to the params list
                 prog.funcs[body_end_func].params.insert(argument_sym.clone(), initial.ty.clone());
             }
             prog.funcs[body_end_func].blocks[body_end_block].add_statement(
