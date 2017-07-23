@@ -7,7 +7,9 @@
 ; - KV_STRUCT: name of struct holding {KEY, VALUE} (should be generated outside)
 ; - KV_VEC: name of vector of KV_STRUCTs (should be generated outside)
 ; - KV_VEC_PREFIX: prefix for helper functions of KV_VEC
-; - OP: binary commutative merge operation (example: add or fadd)
+;
+; In addition, the function $NAME.bld.merge_op($VALUE, $VALUE) is expected to be
+; defined, implementing the operation needed to merge two values.
 
 %$NAME.bld = type i8* ; the dictmerger is a pointer to the corresponding dictionary
 
@@ -59,7 +61,7 @@ entry:
 
 onFilled:
   %oldValue = call $VALUE @$NAME.slot.value(%$NAME.slot %slot)
-  %newValue = $OP $VALUE %oldValue, %value  ; TODO: Fix this when making Op more generic
+  %newValue = call $VALUE @$NAME.bld.merge_op($VALUE %oldValue, $VALUE %value)
   %res1 = call %$NAME @$NAME.put(%$NAME %bld, %$NAME.slot %slot, $KEY %key, $VALUE %newValue)
   br label %done
 
@@ -107,7 +109,7 @@ innerBodyLabel:
 onFilled:
   %finalDict2 = load %$NAME, %$NAME* %finalDictPtr
   %oldValue = call $VALUE @$NAME.slot.value(%$NAME.slot %slot)
-  %newValue = $OP $VALUE %oldValue, %value  ; TODO: Fix this when making Op more generic
+  %newValue = call $VALUE @$NAME.bld.merge_op($VALUE %oldValue, $VALUE %value)
   %res1 = call %$NAME @$NAME.put(%$NAME %finalDict2, %$NAME.slot %slot, $KEY %key, $VALUE %newValue)
   br label %done
 
