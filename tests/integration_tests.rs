@@ -770,7 +770,7 @@ fn for_predicated_vectorizable_loop() {
         x: WeldVec<i32>,
     }
 
-    let code = "|x:vec[i32]| 
+    let code = "|x:vec[i32]|
 	result(for(
 			simditer(x:vec[i32]),
 			merger[i32,+],
@@ -1072,7 +1072,7 @@ fn simple_for_dictmerger_loop() {
         y: WeldVec<i32>,
     }
 
-    let code = "|x:vec[i32], y:vec[i32]| tovec(result(for(zip(x,y), dictmerger[i32,i32,+], 
+    let code = "|x:vec[i32], y:vec[i32]| tovec(result(for(zip(x,y), dictmerger[i32,i32,+],
                 |b,i,e| merge(b, e))))";
     let conf = default_conf();
     let keys = [1, 2, 2, 1, 3];
@@ -1112,6 +1112,66 @@ fn simple_for_dictmerger_loop() {
     unsafe { free_value_and_module(ret_value) };
 }
 
+/// Similar case to parallel_for_vecmerger_loop but values and keys are structs
+fn dictmerger_with_structs() {
+    /// An entry after the final tovec call, which has an {i32,i32} key and {i32,f32} value.
+    #[derive(Clone)]
+    #[allow(dead_code)]
+    struct Entry {
+        k1: i32,
+        k2: i32,
+        v1: i32,
+        v2: f32
+    }
+
+    #[allow(dead_code)]
+    struct Args {
+        x: WeldVec<i32>,
+        y: WeldVec<i32>,
+    }
+
+    let code = "|x:vec[i32], y:vec[i32]|
+                    tovec(result(for(
+                        zip(x,y),
+                        dictmerger[{i32,i32},{i32,f32},+],
+                        |b,i,e| merge(b, {{e.$0, e.$0}, {e.$1, f32(e.$1)}}))))";
+    let conf = default_conf();
+    let keys = [1, 2, 2, 1, 3];
+    let vals = [2, 3, 4, 2, 1];
+    let ref input_data = Args {
+        x: WeldVec {
+            data: &keys as *const i32,
+            len: keys.len() as i64,
+        },
+        y: WeldVec {
+            data: &vals as *const i32,
+            len: vals.len() as i64,
+        },
+    };
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<Entry> };
+    let result = unsafe { (*data).clone() };
+
+    let output_keys = [1, 2, 3];
+    let output_vals = [4, 7, 1];
+
+    assert_eq!(result.len, output_keys.len() as i64);
+    for i in 0..(output_keys.len() as isize) {
+        let entry = unsafe { (*result.data.offset(i)).clone() };
+        // Check whether we find the entry anywhere in the expected outputs
+        let mut success = false;
+        for j in 0..(output_keys.len()) {
+            if (entry.k1 == output_keys[j] && entry.k2 == output_keys[j] &&
+                    entry.v1 == output_vals[j] && entry.v2 == output_vals[j] as f32) {
+                success = true;
+            }
+        }
+        assert_eq!(success, true);
+    }
+    unsafe { free_value_and_module(ret_value) };
+}
+
 fn simple_groupmerger() {
     #[allow(dead_code)]
     struct Args {
@@ -1119,7 +1179,7 @@ fn simple_groupmerger() {
         y: WeldVec<i32>,
     }
 
-    let code = "|x:vec[i32], y:vec[i32]| tovec(result(for(zip(x,y), groupmerger[i32,i32], 
+    let code = "|x:vec[i32], y:vec[i32]| tovec(result(for(zip(x,y), groupmerger[i32,i32],
                 |b,i,e| merge(b, e))))";
 
     let conf = default_conf();
@@ -1167,8 +1227,8 @@ fn complex_groupmerger_with_struct_key() {
         z: WeldVec<i32>,
     }
 
-    let code = "|x:vec[i32], y:vec[i32], z:vec[i32]| 
-                tovec(result(for(zip(x,y,z), groupmerger[{i32,i32}, i32], 
+    let code = "|x:vec[i32], y:vec[i32], z:vec[i32]|
+                tovec(result(for(zip(x,y,z), groupmerger[{i32,i32}, i32],
                 |b,i,e| merge(b, {{e.$0, e.$1}, e.$2}))))";
 
     let conf = default_conf();
@@ -1809,6 +1869,7 @@ fn main() {
              ("simple_for_vecmerger_loop_2", simple_for_vecmerger_loop_2),
              ("parallel_for_vecmerger_loop", parallel_for_vecmerger_loop),
              ("simple_for_dictmerger_loop", simple_for_dictmerger_loop),
+             ("dictmerger_with_structs", dictmerger_with_structs),
              ("simple_groupmerger", simple_groupmerger),
              ("complex_groupmerger_with_struct_key", complex_groupmerger_with_struct_key),
              ("simple_parallel_for_dictmerger_loop", simple_parallel_for_dictmerger_loop),
