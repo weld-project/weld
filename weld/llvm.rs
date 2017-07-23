@@ -1421,72 +1421,54 @@ impl LlvmGenerator {
             }
 
             Select { ref output, ref cond, ref on_true, ref on_false } => {
-                let cond_ty_str = self.llvm_type(func.symbol_type(cond)?)?;
-                let res_ty_str = self.llvm_type(func.symbol_type(on_true)?)?;
-
-                let output_str = llvm_symbol(output).to_string();
-                let cond_str = self.gen_load_var(llvm_symbol(cond).as_str(), &cond_ty_str, ctx)?;
-                let true_str = self.gen_load_var(llvm_symbol(on_true).as_str(), &res_ty_str, ctx)?;
-                let false_str = self.gen_load_var(llvm_symbol(on_false).as_str(), &res_ty_str, ctx)?;
-
-
+                let (_, output_ll_ty, output_ll_sym) = self.symbol_info(func, output)?;
+                let (_, cond_ll_ty, cond_ll_sym) = self.symbol_info(func, cond)?;
+                let (_, on_true_ll_ty, on_true_ll_sym) = self.symbol_info(func, on_true)?;
+                let (_, on_false_ll_ty, on_false_ll_sym) = self.symbol_info(func, on_false)?;
+                let cond_tmp = self.gen_load_var(&cond_ll_sym, &cond_ll_ty, ctx)?;
+                let on_true_tmp = self.gen_load_var(&on_true_ll_sym, &on_true_ll_ty, ctx)?;
+                let on_false_tmp = self.gen_load_var(&on_false_ll_sym, &on_false_ll_ty, ctx)?;
                 let tmp = ctx.var_ids.next();
-                ctx.code.add(format!("{tmp} = select {cond_ty_str} {cond_str}, {res_ty_str} {true_str}, {res_ty_str} {false_str}",
-                                        tmp=tmp,
-                                        cond_ty_str=cond_ty_str,
-                                        cond_str=cond_str,
-                                        res_ty_str=res_ty_str,
-                                        true_str=true_str,
-                                        false_str=false_str));
-                self.gen_store_var(&tmp, &output_str, &res_ty_str, ctx);
+                ctx.code.add(format!("{} = select {} {}, {} {}, {} {}",
+                    tmp, cond_ll_ty, cond_tmp, on_true_ll_ty, on_true_tmp, on_false_ll_ty, on_false_tmp));
+                self.gen_store_var(&tmp, &output_ll_sym, &output_ll_ty, ctx);
             }
 
             ToVec { ref output, ref child } => {
-                let old_ty = func.symbol_type(child)?;
-                let new_ty = func.symbol_type(output)?;
-                let old_ll_ty = self.llvm_type(&old_ty)?;
-                let new_ll_ty = self.llvm_type(&new_ty)?;
-
-                let dict_prefix = format!("@{}", old_ll_ty.replace("%", ""));
-                let child_tmp = self.gen_load_var(llvm_symbol(child).as_str(), &old_ll_ty, ctx)?;
+                let (_, output_ll_ty, output_ll_sym) = self.symbol_info(func, output)?;
+                let (_, child_ll_ty, child_ll_sym) = self.symbol_info(func, child)?;
+                let dict_prefix = format!("@{}", child_ll_ty.replace("%", ""));
+                let child_tmp = self.gen_load_var(&child_ll_sym, &child_ll_ty, ctx)?;
                 let res_tmp = ctx.var_ids.next();
                 ctx.code.add(format!("{} = call {} {}.tovec({} {})",
-                                        res_tmp,
-                                        new_ll_ty,
-                                        dict_prefix,
-                                        old_ll_ty,
-                                        child_tmp));
-                let out_ty = func.symbol_type(output)?;
-                let out_ty_str = self.llvm_type(&out_ty)?;
-                self.gen_store_var(&res_tmp, &llvm_symbol(output), &out_ty_str, ctx);
+                    res_tmp, output_ll_ty, dict_prefix, child_ll_ty, child_tmp));
+                self.gen_store_var(&res_tmp, &output_ll_sym, &output_ll_ty, ctx);
             }
 
             Length { ref output, ref child } => {
-                let child_ty = func.symbol_type(child)?;
-                let child_ll_ty = self.llvm_type(&child_ty)?;
+                let (_, output_ll_ty, output_ll_sym) = self.symbol_info(func, output)?;
+                let (_, child_ll_ty, child_ll_sym) = self.symbol_info(func, child)?;
                 let vec_prefix = format!("@{}", child_ll_ty.replace("%", ""));
-                let child_tmp = self.gen_load_var(llvm_symbol(child).as_str(), &child_ll_ty, ctx)?;
+                let child_tmp = self.gen_load_var(&child_ll_sym, &child_ll_ty, ctx)?;
                 let res_tmp = ctx.var_ids.next();
                 ctx.code.add(format!("{} = call i64 {}.size({} {})", res_tmp, vec_prefix, child_ll_ty, child_tmp));
-                let out_ty = func.symbol_type(output)?;
-                let out_ty_str = self.llvm_type(&out_ty)?;
-                self.gen_store_var(&res_tmp, &llvm_symbol(output), &out_ty_str, ctx);
+                self.gen_store_var(&res_tmp, &output_ll_sym, &output_ll_ty, ctx);
             }
 
             Assign { ref output, ref value } => {
-                let ty = func.symbol_type(output)?;
-                let ll_ty = self.llvm_type(&ty)?;
-                let val_tmp = self.gen_load_var(llvm_symbol(value).as_str(), &ll_ty, ctx)?;
-                self.gen_store_var(&val_tmp, &llvm_symbol(output), &ll_ty, ctx);
+                let (_, output_ll_ty, output_ll_sym) = self.symbol_info(func, output)?;
+                let (_, value_ll_ty, value_ll_sym) = self.symbol_info(func, value)?;
+                let val_tmp = self.gen_load_var(&value_ll_sym, &value_ll_ty, ctx)?;
+                self.gen_store_var(&val_tmp, &output_ll_sym, &output_ll_ty, ctx);
             }
 
             GetField { ref output, ref value, index } => {
-                let struct_ty = self.llvm_type(func.symbol_type(value)?)?;
-                let field_ty = self.llvm_type(func.symbol_type(output)?)?;
-                let struct_tmp = self.gen_load_var(llvm_symbol(value).as_str(), &struct_ty, ctx)?;
+                let (_, output_ll_ty, output_ll_sym) = self.symbol_info(func, output)?;
+                let (_, value_ll_ty, value_ll_sym) = self.symbol_info(func, value)?;
+                let struct_tmp = self.gen_load_var(&value_ll_sym, &value_ll_ty, ctx)?;
                 let res_tmp = ctx.var_ids.next();
-                ctx.code.add(format!("{} = extractvalue {} {}, {}", res_tmp, struct_ty, struct_tmp, index));
-                self.gen_store_var(&res_tmp, &llvm_symbol(output), &field_ty, ctx);
+                ctx.code.add(format!("{} = extractvalue {} {}, {}", res_tmp, value_ll_ty, struct_tmp, index));
+                self.gen_store_var(&res_tmp, &output_ll_sym, &output_ll_ty, ctx);
             }
 
             AssignLiteral { ref output, ref value } => {
@@ -2484,8 +2466,6 @@ fn get_combined_params(sir: &SirProgram, par_for: &ParallelForData) -> HashMap<S
     }
     body_params
 }
-
-
 
 #[test]
 fn types() {
