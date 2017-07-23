@@ -1528,119 +1528,110 @@ impl LlvmGenerator {
                  func: &SirFunction,
                  ctx: &mut FunctionContext)
                  -> WeldResult<()> {
-        let bld_ty = func.symbol_type(builder)?;
-        let bld_ty_str = self.llvm_type(&bld_ty)?;
-        let bld_prefix = format!("@{}", bld_ty_str.replace("%", ""));
+                     
+        let (bld_ll_ty, bld_ll_sym) = self.llvm_type_and_name(func, builder)?;
+        let (val_ll_ty, val_ll_sym) = self.llvm_type_and_name(func, value)?;
+        let bld_prefix = format!("@{}", bld_ll_ty.replace("%", ""));
 
-        // TODO(Deepak): Do something with annotations here too...
         match *builder_kind {
-            Appender(ref t) => {
-                let bld_tmp = self.gen_load_var(llvm_symbol(builder).as_str(), &bld_ty_str, ctx)?;
-                let elem_ty_str = self.llvm_type(t)?;
-                let elem_tmp = self.gen_load_var(llvm_symbol(value).as_str(), &elem_ty_str, ctx)?;
+            Appender(_) => {
+                let bld_tmp = self.gen_load_var(&bld_ll_sym, &bld_ll_ty, ctx)?;
+                let val_tmp = self.gen_load_var(&val_ll_sym, &val_ll_ty, ctx)?;
                 ctx.code.add(format!("call {} {}.merge({} {}, {} {}, \
                                         i32 %cur.tid)",
-                                        bld_ty_str,
+                                        bld_ll_ty,
                                         bld_prefix,
-                                        bld_ty_str,
+                                        bld_ll_ty,
                                         bld_tmp,
-                                        elem_ty_str,
-                                        elem_tmp));
+                                        val_ll_ty,
+                                        val_tmp));
             }
             
-            DictMerger(ref kt, ref vt, _) => {
-                let bld_tmp = self.gen_load_var(llvm_symbol(builder).as_str(), &bld_ty_str, ctx)?;
-                let elem_ty = Struct(vec![*kt.clone(), *vt.clone()]);
-                let elem_ty_str = self.llvm_type(&elem_ty)?;
-                let elem_tmp = self.gen_load_var(llvm_symbol(value).as_str(), &elem_ty_str, ctx)?;
+            DictMerger(_, _, _) => {
+                let bld_tmp = self.gen_load_var(&bld_ll_sym, &bld_ll_ty, ctx)?;
+                let val_tmp = self.gen_load_var(&val_ll_sym, &val_ll_ty, ctx)?;
                 ctx.code.add(format!(
                     "call {} {}.merge({} {}, {} {}, i32 %cur.tid)",
-                    bld_ty_str,
+                    bld_ll_ty,
                     bld_prefix,
-                    bld_ty_str,
+                    bld_ll_ty,
                     bld_tmp,
-                    elem_ty_str,
-                    elem_tmp));
+                    val_ll_ty,
+                    val_tmp));
             }
             
-            GroupMerger(ref kt, ref vt) => {
-                let bld_tmp = self.gen_load_var(llvm_symbol(builder).as_str(), &bld_ty_str, ctx)?;
-                let elem_ty = Struct(vec![*kt.clone(), *vt.clone()]);
-                let elem_ty_str = self.llvm_type(&elem_ty)?;
-                let elem_tmp = self.gen_load_var(llvm_symbol(value).as_str(), &elem_ty_str, ctx)?;
+            GroupMerger(_, _) => {
+                let bld_tmp = self.gen_load_var(&bld_ll_sym, &bld_ll_ty, ctx)?;
+                let val_tmp = self.gen_load_var(&val_ll_sym, &val_ll_ty, ctx)?;
                 ctx.code.add(format!(
                     "call {} {}.merge({} {}, {} {}, i32 %cur.tid)",
-                    bld_ty_str,
+                    bld_ll_ty,
                     bld_prefix,
-                    bld_ty_str,
+                    bld_ll_ty,
                     bld_tmp,
-                    elem_ty_str,
-                    elem_tmp));
+                    val_ll_ty,
+                    val_tmp));
             }
 
             Merger(ref t, ref op) => {
-                let bld_tmp = self.gen_load_var(llvm_symbol(builder).as_str(), &bld_ty_str, ctx)?;
-                let value_ty = func.symbol_type(value)?;
-                let elem_ty_str = self.llvm_type(value_ty)?;
-                let elem_tmp = self.gen_load_var(llvm_symbol(value).as_str(), &elem_ty_str, ctx)?;
+                let val_ty = func.symbol_type(value)?;
+                let bld_tmp = self.gen_load_var(&bld_ll_sym, &bld_ll_ty, ctx)?;
+                let val_tmp = self.gen_load_var(&val_ll_sym, &val_ll_ty, ctx)?;
                 let bld_ptr_raw = ctx.var_ids.next();
                 let bld_ptr = ctx.var_ids.next();
                 ctx.code.add(format!(
-                    "{bld_ptr_raw} = call {bld_ty_str} {bld_prefix}.getPtrIndexed({bld_ty_str} {bld_tmp}, i32 %cur.tid)",
-                    bld_ptr_raw=bld_ptr_raw,
-                    bld_ty_str=bld_ty_str,
-                    bld_prefix=bld_prefix,
-                    bld_tmp=bld_tmp));
+                    "{} = call {} {}.getPtrIndexed({} {}, i32 %cur.tid)",
+                    bld_ptr_raw,
+                    bld_ll_ty,
+                    bld_prefix,
+                    bld_ll_ty,
+                    bld_tmp));
 
                 // If the argument is vectorized, load the vector element.
-                if let Simd(_) = *value_ty {
+                if let Simd(_) = *val_ty {
                     ctx.code.add(format!(
-                        "{bld_ptr} = call {elem_ty_str}* {bld_prefix}.vectorMergePtr({bld_ty_str} {bld_ptr_raw})",
-                        bld_ptr=bld_ptr,
-                        elem_ty_str=elem_ty_str,
-                        bld_prefix=bld_prefix,
-                        bld_ty_str=bld_ty_str,
-                        bld_ptr_raw=bld_ptr_raw));
+                        "{} = call {}* {}.vectorMergePtr({} {})",
+                        bld_ptr,
+                        val_ll_ty,
+                        bld_prefix,
+                        bld_ll_ty,
+                        bld_ptr_raw));
 
                 } else {
                     ctx.code.add(format!(
-                        "{bld_ptr} = call {elem_ty_str}* {bld_prefix}.scalarMergePtr({bld_ty_str} {bld_ptr_raw})",
-                        bld_ptr=bld_ptr,
-                        elem_ty_str=elem_ty_str,
-                        bld_prefix=bld_prefix,
-                        bld_ty_str=bld_ty_str,
-                        bld_ptr_raw=bld_ptr_raw));
+                        "{} = call {}* {}.scalarMergePtr({} {})",
+                        bld_ptr,
+                        val_ll_ty,
+                        bld_prefix,
+                        bld_ll_ty,
+                        bld_ptr_raw));
                 }
-
-                self.gen_merge_op(&bld_ptr, &elem_tmp, &elem_ty_str, op, t, ctx)?;
+                self.gen_merge_op(&bld_ptr, &val_tmp, &val_ll_ty, op, t, ctx)?;
             }
 
             VecMerger(ref t, ref op) => {
-                let elem_ty_str = self.llvm_type(t)?;
-                let merge_ty = Struct(vec![Scalar(ScalarKind::I64), *t.clone()]);
-                let merge_ty_str = self.llvm_type(&merge_ty)?;
-                let bld_tmp = self.gen_load_var(llvm_symbol(builder).as_str(), &bld_ty_str, ctx)?;
-                let elem_tmp = self.gen_load_var(llvm_symbol(value).as_str(), &merge_ty_str, ctx)?;
+                let elem_ll_ty = self.llvm_type(t)?;
+                let bld_tmp = self.gen_load_var(&bld_ll_sym, &bld_ll_ty, ctx)?;
+                let val_tmp = self.gen_load_var(&val_ll_sym, &val_ll_ty, ctx)?;
                 let index_var = ctx.var_ids.next();
                 let elem_var = ctx.var_ids.next();
-                ctx.code.add(format!("{} = extractvalue {} {}, 0", index_var, merge_ty_str, elem_tmp));
-                ctx.code.add(format!("{} = extractvalue {} {}, 1", elem_var, merge_ty_str, elem_tmp));
+                ctx.code.add(format!("{} = extractvalue {} {}, 0", index_var, &val_ll_ty, val_tmp));
+                ctx.code.add(format!("{} = extractvalue {} {}, 1", elem_var, &val_ll_ty, val_tmp));
                 let bld_ptr_raw = ctx.var_ids.next();
                 let bld_ptr = ctx.var_ids.next();
                 ctx.code.add(format!("{} = call i8* {}.merge_ptr({} {}, i64 {}, i32 %cur.tid)",
                                         bld_ptr_raw,
                                         bld_prefix,
-                                        bld_ty_str,
+                                        bld_ll_ty,
                                         bld_tmp,
                                         index_var));
                 ctx.code.add(format!("{} = bitcast i8* {} to {}*",
                                         bld_ptr,
                                         bld_ptr_raw,
-                                        elem_ty_str));
-                self.gen_merge_op(&bld_ptr, &elem_var, &elem_ty_str, op, t, ctx)?;
+                                        elem_ll_ty));
+                self.gen_merge_op(&bld_ptr, &elem_var, &elem_ll_ty, op, t, ctx)?;
             }
         }
-        
         Ok(())
     }
 
@@ -1983,7 +1974,6 @@ impl LlvmGenerator {
             builder_size = e.clone();
         }
 
-        // TODO(Deepak): Do more with annotations here...
         match *builder_kind {
             Appender(_) => {
                 let bld_tmp = ctx.var_ids.next();
