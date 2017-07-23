@@ -230,7 +230,7 @@ impl LlvmGenerator {
                     match *bk {
                         Appender(_) => {
                             let bld_ty_str = self.llvm_type(ty)?;
-                            let bld_prefix = format!("@{}", bld_ty_str.replace("%", ""));
+                            let bld_prefix = llvm_prefix(&bld_ty_str);
                             ctx.code.add(format!("call void {}.newPiece({} {}, %work_t* %cur.work)",
                                                  bld_prefix,
                                                  bld_ty_str,
@@ -354,7 +354,7 @@ impl LlvmGenerator {
             for (i, iter) in par_for.data.iter().enumerate() {
                 let data_ty_str = self.llvm_type(func.params.get(&iter.data).unwrap())?;
                 let data_str = self.gen_load_var(llvm_symbol(&iter.data).as_str(), &data_ty_str, ctx)?;
-                let data_prefix = format!("@{}", data_ty_str.replace("%", ""));
+                let data_prefix = llvm_prefix(&data_ty_str);
                 let inner_elem_tmp_ptr = ctx.var_ids.next();
                 let inner_elem_ty_str = if par_for.data.len() == 1 {
                     elem_ty_str.clone()
@@ -491,7 +491,7 @@ impl LlvmGenerator {
             let first_data = &par_for.data[0].data;
             let data_str = llvm_symbol(&first_data);
             let data_ty_str = self.llvm_type(func.params.get(&first_data).unwrap())?;
-            let data_prefix = format!("@{}", data_ty_str.replace("%", ""));
+            let data_prefix = llvm_prefix(&data_ty_str);
 
             let num_iters_str = wrap_ctx.var_ids.next();
             let mut fringe_start_str = None;
@@ -550,7 +550,7 @@ impl LlvmGenerator {
                 // Vector LLVM information for the current iter.
                 let data_str = llvm_symbol(&iter.data);
                 let data_ty_str = self.llvm_type(func.params.get(&iter.data).unwrap())?;
-                let data_prefix = format!("@{}", data_ty_str.replace("%", ""));
+                let data_prefix = llvm_prefix(&data_ty_str);
                 let llvm_simd_size_str = wrap_ctx.var_ids.next();
                 wrap_ctx
                     .code
@@ -874,7 +874,7 @@ impl LlvmGenerator {
             let hash = self.prelude_var_ids.next();
             let new_res = self.prelude_var_ids.next();
             let field_ty_str = &field_types[i];
-            let field_prefix_str = format!("@{}", field_ty_str.replace("%", ""));
+            let field_prefix_str = llvm_prefix(&field_ty_str);
             self.prelude_code.add_line(format!("{} = extractvalue {} %value, {}", field, name, i));
             self.prelude_code.add_line(format!("{} = call i64 {}.hash({} {})",
             hash,
@@ -904,7 +904,7 @@ impl LlvmGenerator {
             let field_ty_str = &field_types[i];
             let ret_label = label_ids.next();
             let post_label = label_ids.next();
-            let field_prefix_str = format!("@{}", field_ty_str.replace("%", ""));
+            let field_prefix_str = llvm_prefix(&field_ty_str);
             self.prelude_code.add_line(format!("{} = extractvalue {} %a , {}", a_field, name, i));
             self.prelude_code.add_line(format!("{} = extractvalue {} %b, {}", b_field, name, i));
             self.prelude_code.add_line(format!("{} = call i32 {}.cmp({} {}, {} {})",
@@ -932,7 +932,7 @@ impl LlvmGenerator {
     /// Generates a vector definition with the given type.
     fn gen_vector_definition(&mut self, elem: &Type) -> WeldResult<()> {
         let elem_ty = self.llvm_type(elem)?;
-        let elem_prefix = format!("@{}", elem_ty.replace("%", ""));
+        let elem_prefix = llvm_prefix(&elem_ty);
         let name = self.vec_ids.next();
         self.vec_names.insert(elem.clone(), name.clone());
 
@@ -964,13 +964,13 @@ impl LlvmGenerator {
         let elem = Box::new(Struct(vec![key.clone(), value.clone()]));
         let key_ty = self.llvm_type(key)?;
         let value_ty = self.llvm_type(value)?;
-        let key_prefix = format!("@{}", key_ty.replace("%", ""));
+        let key_prefix = llvm_prefix(&key_ty);
         let name = self.dict_ids.next();
         self.dict_names.insert(*elem.clone(), name.clone());
         let kv_struct_ty = self.llvm_type(&elem)?;
         let kv_vec = Box::new(Vector(elem.clone()));
         let kv_vec_ty = self.llvm_type(&kv_vec)?;
-        let kv_vec_prefix = format!("@{}", &kv_vec_ty.replace("%", ""));
+        let kv_vec_prefix = llvm_prefix(&&kv_vec_ty);
 
         let dict_def = replace!(DICTIONARY_CODE, {
             "$KEY_PREFIX" => &key_prefix,
@@ -997,7 +997,7 @@ impl LlvmGenerator {
             Merger(ref t, _) => {
                 if self.merger_names.get(t) == None {
                     let elem_ty = self.llvm_type(t)?;
-                    let elem_prefix = format!("@{}", elem_ty.replace("%", ""));
+                    let elem_prefix = llvm_prefix(&elem_ty);
                     let name = self.merger_ids.next();
                     self.merger_names.insert(*t.clone(), name.clone());
 
@@ -1022,7 +1022,7 @@ impl LlvmGenerator {
                 let value_ty = self.llvm_type(vt)?;
                 let kv_vec = Box::new(Vector(elem.clone()));
                 let kv_vec_ty = self.llvm_type(&kv_vec)?;
-                let kv_vec_prefix = format!("@{}", &kv_vec_ty.replace("%", ""));
+                let kv_vec_prefix = llvm_prefix(&&kv_vec_ty);
 
                 let dictmerger_def = replace!(DICTMERGER_CODE, {
                     "$NAME" => &bld_ty_str.replace("%", ""),
@@ -1291,7 +1291,7 @@ impl LlvmGenerator {
                         // We support BinOps between vectors as long as they're comparison operators
                         let (op_name, value) = llvm_binop_vector(op, ty)?;
                         let tmp = ctx.var_ids.next();
-                        let vec_prefix = format!("@{}", ll_ty.replace("%", ""));
+                        let vec_prefix = llvm_prefix(&ll_ty);
                         ctx.code.add(format!("{} = call i32 {}.cmp({} {}, {} {})",
                                                 tmp,
                                                 vec_prefix,
@@ -1364,7 +1364,7 @@ impl LlvmGenerator {
                 let child_ty = func.symbol_type(child)?;
                 match *child_ty {
                     Vector(_) => {
-                        let child_prefix = format!("@{}", child_ll_ty.replace("%", ""));
+                        let child_prefix = llvm_prefix(&child_ll_ty);
                         let child_tmp = self.gen_load_var(&child_ll_sym, &child_ll_ty, ctx)?;
                         let index_tmp = self.gen_load_var(&index_ll_sym, &index_ll_ty, ctx)?;
                         let res_ptr = ctx.var_ids.next();
@@ -1374,7 +1374,7 @@ impl LlvmGenerator {
                         self.gen_store_var(&res_tmp, &output_ll_sym, &output_ll_ty, ctx);
                     }
                     Dict(_, _) => {
-                        let child_prefix = format!("@{}", child_ll_ty.replace("%", ""));
+                        let child_prefix = llvm_prefix(&child_ll_ty);
                         let child_tmp = self.gen_load_var(&child_ll_sym, &child_ll_ty, ctx)?;
                         let index_tmp = self.gen_load_var(&index_ll_sym, &index_ll_ty, ctx)?;
                         let slot = ctx.var_ids.next();
@@ -1393,7 +1393,7 @@ impl LlvmGenerator {
                 let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
                 let (child_ll_ty, child_ll_sym) = self.llvm_type_and_name(func, child)?;
                 let (key_ll_ty, key_ll_sym) = self.llvm_type_and_name(func, key)?;
-                let child_prefix = format!("@{}", child_ll_ty.replace("%", ""));
+                let child_prefix = llvm_prefix(&child_ll_ty);
 
                 let child_tmp = self.gen_load_var(&child_ll_sym, &child_ll_ty, ctx)?;
                 let key_tmp = self.gen_load_var(&key_ll_sym, &key_ll_ty, ctx)?;
@@ -1412,7 +1412,7 @@ impl LlvmGenerator {
                 let (child_ll_ty, child_ll_sym) = self.llvm_type_and_name(func, child)?;
                 let (index_ll_ty, index_ll_sym) = self.llvm_type_and_name(func, index)?;
                 let (size_ll_ty, size_ll_sym) = self.llvm_type_and_name(func, size)?;
-                let vec_prefix = format!("@{}", child_ll_ty.replace("%", ""));
+                let vec_prefix = llvm_prefix(&child_ll_ty);
                 let child_tmp = self.gen_load_var(&child_ll_sym, &child_ll_ty, ctx)?;
                 let index_tmp = self.gen_load_var(&index_ll_sym, &index_ll_ty, ctx)?;
                 let size_tmp = self.gen_load_var(&size_ll_sym, &size_ll_ty, ctx)?;
@@ -1445,7 +1445,7 @@ impl LlvmGenerator {
             ToVec { ref output, ref child } => {
                 let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
                 let (child_ll_ty, child_ll_sym) = self.llvm_type_and_name(func, child)?;
-                let dict_prefix = format!("@{}", child_ll_ty.replace("%", ""));
+                let dict_prefix = llvm_prefix(&child_ll_ty);
                 let child_tmp = self.gen_load_var(&child_ll_sym, &child_ll_ty, ctx)?;
                 let res_tmp = ctx.var_ids.next();
                 ctx.code.add(format!("{} = call {} {}.tovec({} {})",
@@ -1456,7 +1456,7 @@ impl LlvmGenerator {
             Length { ref output, ref child } => {
                 let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
                 let (child_ll_ty, child_ll_sym) = self.llvm_type_and_name(func, child)?;
-                let vec_prefix = format!("@{}", child_ll_ty.replace("%", ""));
+                let vec_prefix = llvm_prefix(&child_ll_ty);
                 let child_tmp = self.gen_load_var(&child_ll_sym, &child_ll_ty, ctx)?;
                 let res_tmp = ctx.var_ids.next();
                 ctx.code.add(format!("{} = call i64 {}.size({} {})", res_tmp, vec_prefix, child_ll_ty, child_tmp));
@@ -1531,7 +1531,7 @@ impl LlvmGenerator {
                      
         let (bld_ll_ty, bld_ll_sym) = self.llvm_type_and_name(func, builder)?;
         let (val_ll_ty, val_ll_sym) = self.llvm_type_and_name(func, value)?;
-        let bld_prefix = format!("@{}", bld_ll_ty.replace("%", ""));
+        let bld_prefix = llvm_prefix(&bld_ll_ty);
 
         match *builder_kind {
             Appender(_) => {
@@ -1649,7 +1649,7 @@ impl LlvmGenerator {
         match *builder_kind {
             Appender(_) => {
                 let bld_ty_str = self.llvm_type(&bld_ty)?;
-                let bld_prefix = format!("@{}", bld_ty_str.replace("%", ""));
+                let bld_prefix = llvm_prefix(&bld_ty_str);
                 let res_ty_str = self.llvm_type(&res_ty)?;
                 let bld_tmp =
                     self.gen_load_var(llvm_symbol(builder).as_str(), &bld_ty_str, ctx)?;
@@ -1681,7 +1681,7 @@ impl LlvmGenerator {
                 // Builder type.
                 let bld_ty_str = self.llvm_type(&bld_ty)?;
                 // Prefix of the builder.
-                let bld_prefix = format!("@{}", bld_ty_str.replace("%", ""));
+                let bld_prefix = llvm_prefix(&bld_ty_str);
                 // Result type.
                 let res_ty_str = self.llvm_type(&res_ty)?;
                 // Temporary builder variable.
@@ -1792,7 +1792,7 @@ impl LlvmGenerator {
 
             DictMerger(_, _, _) => {
                 let bld_ty_str = self.llvm_type(&bld_ty)?;
-                let bld_prefix = format!("@{}", bld_ty_str.replace("%", ""));
+                let bld_prefix = llvm_prefix(&bld_ty_str);
                 let res_ty_str = self.llvm_type(&res_ty)?;
                 let bld_tmp =
                     self.gen_load_var(llvm_symbol(builder).as_str(), &bld_ty_str, ctx)?;
@@ -1810,7 +1810,7 @@ impl LlvmGenerator {
             GroupMerger(ref kt, ref vt) => {
                 let mut func_gen = IdGenerator::new("%func");
                 let function_id = func_gen.next();
-                let func_str = format!("@{}", &function_id.replace("%", ""));
+                let func_str = llvm_prefix(&&function_id);
                 let bld_ty = Dict(kt.clone(), Box::new(Vector(vt.clone())));
                 let elem = Box::new(Struct(vec![*kt.clone(), *vt.clone()]));
                 let bld_ty_str = self.llvm_type(&bld_ty)?;
@@ -1821,10 +1821,10 @@ impl LlvmGenerator {
                 let kv_vec = Box::new(Vector(elem.clone()));
                 let kv_vec_ty = self.llvm_type(&kv_vec)?;
                 let kv_vec_builder_ty = format!("{}.bld", &kv_vec_ty);
-                let key_prefix = format!("@{}", &key_ty.replace("%", ""));
-                let kv_vec_prefix = format!("@{}", &kv_vec_ty.replace("%", ""));
-                let value_vec_prefix = format!("@{}", &value_vec_ty.replace("%", ""));
-                let dict_prefix = format!("@{}", &bld_ty_str.replace("%", ""));
+                let key_prefix = llvm_prefix(&&key_ty);
+                let kv_vec_prefix = llvm_prefix(&&kv_vec_ty);
+                let value_vec_prefix = llvm_prefix(&&value_vec_ty);
+                let dict_prefix = llvm_prefix(&&bld_ty_str);
 
                 let groupmerger_def = replace!(GROUPMERGER_CODE, {
                     "$NAME" => &function_id.replace("%", ""),
@@ -1855,10 +1855,10 @@ impl LlvmGenerator {
             VecMerger(ref t, ref op) => {
                 // The builder type (special internal type).
                 let bld_ty_str = self.llvm_type(&bld_ty)?;
-                let bld_prefix = format!("@{}", bld_ty_str.replace("%", ""));
+                let bld_prefix = llvm_prefix(&bld_ty_str);
                 // The result type (vec[elem_type])
                 let res_ty_str = self.llvm_type(&res_ty)?;
-                let res_prefix = format!("@{}", res_ty_str.replace("%", ""));
+                let res_prefix = llvm_prefix(&res_ty_str);
                 // The element type
                 let elem_ty_str = self.llvm_type(t)?;
                 // The builder we operate on.
@@ -1967,7 +1967,7 @@ impl LlvmGenerator {
                        -> WeldResult<()> {
         let bld_ty = func.symbol_type(output)?;
         let bld_ty_str = self.llvm_type(bld_ty)?;
-        let bld_prefix = format!("@{}", bld_ty_str.replace("%", ""));
+        let bld_prefix = llvm_prefix(&bld_ty_str);
 
         let mut builder_size = 16;
         if let Some(ref e) = *annotations.size() {
@@ -2177,6 +2177,11 @@ impl LlvmGenerator {
 
         Ok(())
     }
+}
+
+/// Converts an LLVM type string to a prefix for functions operating over the type.
+fn llvm_prefix(ty_str: &str) -> String {
+    format!("@{}", ty_str.replace("%", ""))
 }
 
 /// Returns a vector size for a type. If a Vetor is passed in, returns the vector size of the
