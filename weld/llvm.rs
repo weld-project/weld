@@ -798,11 +798,11 @@ impl LlvmGenerator {
     *********************************************************************************************/
 
     /// Returns the Type, LLVM type (as a string), and LLVM symbol name (as a string).
-    fn symbol_info<'a>(&mut self, func: &'a SirFunction, sym: &Symbol) -> WeldResult<(&'a Type, String, String)> {
+    fn llvm_type_and_name<'a>(&mut self, func: &'a SirFunction, sym: &Symbol) -> WeldResult<(String, String)> {
         let ty = func.symbol_type(sym)?;
         let llvm_ty = self.llvm_type(ty)?;
         let llvm_str = llvm_symbol(sym);
-        Ok((ty, llvm_ty, llvm_str))
+        Ok((llvm_ty, llvm_str))
     }
 
     /// Return the LLVM type name corresponding to a Weld type.
@@ -1176,8 +1176,9 @@ impl LlvmGenerator {
                     child: &Symbol,
                     op_kind: UnaryOpKind)
                     -> WeldResult<()> {
-        let (child_ty, child_ll_ty, child_ll_sym) = self.symbol_info(func, child)?;
-        let (_, output_ll_ty, output_ll_sym) = self.symbol_info(func, output)?;
+        let (child_ll_ty, child_ll_sym) = self.llvm_type_and_name(func, child)?;
+        let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
+        let child_ty = func.symbol_type(child)?;
         if let Scalar(ref ty) = *child_ty {
             let child_tmp = self.gen_load_var(&child_ll_sym, &child_ll_ty, ctx)?;
             let res_tmp = ctx.var_ids.next();
@@ -1207,9 +1208,9 @@ impl LlvmGenerator {
         match *statement {
             MakeStruct { ref output, ref elems } => {
                 let mut cur_name = String::from("undef");
-                let (_, output_ll_ty, output_ll_sym) = self.symbol_info(func, output)?;
+                let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
                 for (i, elem) in elems.iter().enumerate() {
-                    let (_, elem_ll_ty, elem_ll_sym) = self.symbol_info(func, elem)?;
+                    let (elem_ll_ty, elem_ll_sym) = self.llvm_type_and_name(func, elem)?;
                     let elem_value = self.gen_load_var(&elem_ll_sym, &elem_ll_ty, ctx)?;
                     let struct_name = ctx.var_ids.next();
                     ctx.code.add(format!("{} = insertvalue {} {}, {} {}, {}",
@@ -1225,7 +1226,7 @@ impl LlvmGenerator {
             }
 
             CUDF { ref output, ref symbol_name, ref args } => {
-                let (_, output_ll_ty, output_ll_sym) = self.symbol_info(func, output)?;
+                let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
                 if !self.cudf_names.contains(symbol_name) {
                     let mut arg_tys = vec![];
                     for ref arg in args {
@@ -1240,7 +1241,7 @@ impl LlvmGenerator {
                 // Prepare the parameter list for the function
                 let mut arg_tys = vec![];
                 for ref arg in args {
-                    let (_, arg_ll_ty, arg_ll_sym) = self.symbol_info(func, arg)?;
+                    let (arg_ll_ty, arg_ll_sym) = self.llvm_type_and_name(func, arg)?;
                     arg_tys.push(format!("{}* {}", arg_ll_sym, arg_ll_ty));
                 }
                 arg_tys.push(format!("{}* {}", &output_ll_ty, &output_ll_sym));
@@ -1249,7 +1250,8 @@ impl LlvmGenerator {
             }
 
             MakeVector { ref output, ref elems } => {
-                let (output_ty, output_ll_ty, output_ll_sym) = self.symbol_info(func, output)?;
+                let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
+                let output_ty = func.symbol_type(output)?;
                 // Pull the element type from output instead of elems because elems could be empty.
                 let elem_ll_ty = if let Vector(ref elem_ty) = *output_ty {
                     self.llvm_type(elem_ty)? 
@@ -1271,9 +1273,10 @@ impl LlvmGenerator {
             }
 
             BinOp { ref output, op, ref left, ref right } => {
-                let (_, output_ll_ty, output_ll_sym) = self.symbol_info(func, output)?;
+                let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
+                let ty = func.symbol_type(left)?;
                 // Assume the left and right operands have the same type.
-                let (ty, ll_ty, left_ll_sym) = self.symbol_info(func, left)?;
+                let (ll_ty, left_ll_sym) = self.llvm_type_and_name(func, left)?;
                 let right_ll_sym = llvm_symbol(right);
                 let left_tmp = self.gen_load_var(&left_ll_sym, &ll_ty, ctx)?;
                 let right_tmp = self.gen_load_var(&right_ll_sym, &ll_ty, ctx)?;
@@ -1304,8 +1307,9 @@ impl LlvmGenerator {
             }
 
             Broadcast { ref output, ref child } => {
-                let (_, output_ll_ty, output_ll_sym) = self.symbol_info(func, output)?;
-                let (child_ty, child_ll_ty, child_ll_sym) = self.symbol_info(func, child)?;
+                let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
+                let (child_ll_ty, child_ll_sym) = self.llvm_type_and_name(func, child)?;
+                let child_ty = func.symbol_type(child)?;
                 let value = self.gen_load_var(&child_ll_sym, &child_ll_ty, ctx)?;
                 let mut prev_name = "undef".to_string();
                 for i in 0..llvm_simd_size(child_ty)? {
@@ -1322,7 +1326,8 @@ impl LlvmGenerator {
             }
 
             Negate { ref output, ref child } => {
-                let (output_ty, output_ll_ty, output_ll_sym) = self.symbol_info(func, output)?;
+                let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
+                let output_ty = func.symbol_type(output)?;
                 let zero = match *output_ty {
                     Scalar(F32) | Scalar(F64) => "0.0",
                     _ => "0",
@@ -1335,8 +1340,10 @@ impl LlvmGenerator {
             }
 
             Cast { ref output, ref child } => {
-                let (output_ty, output_ll_ty, output_ll_sym) = self.symbol_info(func, output)?;
-                let (child_ty, child_ll_ty, child_ll_sym) = self.symbol_info(func, child)?;
+                let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
+                let (child_ll_ty, child_ll_sym) = self.llvm_type_and_name(func, child)?;
+                let output_ty = func.symbol_type(output)?;
+                let child_ty = func.symbol_type(child)?;
                 if child_ty != output_ty {
                     let op_name = llvm_castop(child_ty, output_ty)?;
                     let child_tmp = self.gen_load_var(&child_ll_sym, &child_ll_ty, ctx)?;
@@ -1351,9 +1358,10 @@ impl LlvmGenerator {
             }
 
             Lookup { ref output, ref child, ref index } => {
-                let (_, output_ll_ty, output_ll_sym) = self.symbol_info(func, output)?;
-                let (child_ty, child_ll_ty, child_ll_sym) = self.symbol_info(func, child)?;
-                let (_, index_ll_ty, index_ll_sym) = self.symbol_info(func, index)?;
+                let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
+                let (child_ll_ty, child_ll_sym) = self.llvm_type_and_name(func, child)?;
+                let (index_ll_ty, index_ll_sym) = self.llvm_type_and_name(func, index)?;
+                let child_ty = func.symbol_type(child)?;
                 match *child_ty {
                     Vector(_) => {
                         let child_prefix = format!("@{}", child_ll_ty.replace("%", ""));
@@ -1382,9 +1390,9 @@ impl LlvmGenerator {
             }
 
             KeyExists { ref output, ref child, ref key } => {
-                let (_, output_ll_ty, output_ll_sym) = self.symbol_info(func, output)?;
-                let (_, child_ll_ty, child_ll_sym) = self.symbol_info(func, child)?;
-                let (_, key_ll_ty, key_ll_sym) = self.symbol_info(func, key)?;
+                let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
+                let (child_ll_ty, child_ll_sym) = self.llvm_type_and_name(func, child)?;
+                let (key_ll_ty, key_ll_sym) = self.llvm_type_and_name(func, key)?;
                 let child_prefix = format!("@{}", child_ll_ty.replace("%", ""));
 
                 let child_tmp = self.gen_load_var(&child_ll_sym, &child_ll_ty, ctx)?;
@@ -1400,10 +1408,10 @@ impl LlvmGenerator {
             }
 
             Slice { ref output, ref child, ref index, ref size } => {
-                let (_, output_ll_ty, output_ll_sym) = self.symbol_info(func, output)?;
-                let (_, child_ll_ty, child_ll_sym) = self.symbol_info(func, child)?;
-                let (_, index_ll_ty, index_ll_sym) = self.symbol_info(func, index)?;
-                let (_, size_ll_ty, size_ll_sym) = self.symbol_info(func, size)?;
+                let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
+                let (child_ll_ty, child_ll_sym) = self.llvm_type_and_name(func, child)?;
+                let (index_ll_ty, index_ll_sym) = self.llvm_type_and_name(func, index)?;
+                let (size_ll_ty, size_ll_sym) = self.llvm_type_and_name(func, size)?;
                 let vec_prefix = format!("@{}", child_ll_ty.replace("%", ""));
                 let child_tmp = self.gen_load_var(&child_ll_sym, &child_ll_ty, ctx)?;
                 let index_tmp = self.gen_load_var(&index_ll_sym, &index_ll_ty, ctx)?;
@@ -1421,10 +1429,10 @@ impl LlvmGenerator {
             }
 
             Select { ref output, ref cond, ref on_true, ref on_false } => {
-                let (_, output_ll_ty, output_ll_sym) = self.symbol_info(func, output)?;
-                let (_, cond_ll_ty, cond_ll_sym) = self.symbol_info(func, cond)?;
-                let (_, on_true_ll_ty, on_true_ll_sym) = self.symbol_info(func, on_true)?;
-                let (_, on_false_ll_ty, on_false_ll_sym) = self.symbol_info(func, on_false)?;
+                let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
+                let (cond_ll_ty, cond_ll_sym) = self.llvm_type_and_name(func, cond)?;
+                let (on_true_ll_ty, on_true_ll_sym) = self.llvm_type_and_name(func, on_true)?;
+                let (on_false_ll_ty, on_false_ll_sym) = self.llvm_type_and_name(func, on_false)?;
                 let cond_tmp = self.gen_load_var(&cond_ll_sym, &cond_ll_ty, ctx)?;
                 let on_true_tmp = self.gen_load_var(&on_true_ll_sym, &on_true_ll_ty, ctx)?;
                 let on_false_tmp = self.gen_load_var(&on_false_ll_sym, &on_false_ll_ty, ctx)?;
@@ -1435,8 +1443,8 @@ impl LlvmGenerator {
             }
 
             ToVec { ref output, ref child } => {
-                let (_, output_ll_ty, output_ll_sym) = self.symbol_info(func, output)?;
-                let (_, child_ll_ty, child_ll_sym) = self.symbol_info(func, child)?;
+                let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
+                let (child_ll_ty, child_ll_sym) = self.llvm_type_and_name(func, child)?;
                 let dict_prefix = format!("@{}", child_ll_ty.replace("%", ""));
                 let child_tmp = self.gen_load_var(&child_ll_sym, &child_ll_ty, ctx)?;
                 let res_tmp = ctx.var_ids.next();
@@ -1446,8 +1454,8 @@ impl LlvmGenerator {
             }
 
             Length { ref output, ref child } => {
-                let (_, output_ll_ty, output_ll_sym) = self.symbol_info(func, output)?;
-                let (_, child_ll_ty, child_ll_sym) = self.symbol_info(func, child)?;
+                let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
+                let (child_ll_ty, child_ll_sym) = self.llvm_type_and_name(func, child)?;
                 let vec_prefix = format!("@{}", child_ll_ty.replace("%", ""));
                 let child_tmp = self.gen_load_var(&child_ll_sym, &child_ll_ty, ctx)?;
                 let res_tmp = ctx.var_ids.next();
@@ -1456,15 +1464,15 @@ impl LlvmGenerator {
             }
 
             Assign { ref output, ref value } => {
-                let (_, output_ll_ty, output_ll_sym) = self.symbol_info(func, output)?;
-                let (_, value_ll_ty, value_ll_sym) = self.symbol_info(func, value)?;
+                let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
+                let (value_ll_ty, value_ll_sym) = self.llvm_type_and_name(func, value)?;
                 let val_tmp = self.gen_load_var(&value_ll_sym, &value_ll_ty, ctx)?;
                 self.gen_store_var(&val_tmp, &output_ll_sym, &output_ll_ty, ctx);
             }
 
             GetField { ref output, ref value, index } => {
-                let (_, output_ll_ty, output_ll_sym) = self.symbol_info(func, output)?;
-                let (_, value_ll_ty, value_ll_sym) = self.symbol_info(func, value)?;
+                let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
+                let (value_ll_ty, value_ll_sym) = self.llvm_type_and_name(func, value)?;
                 let struct_tmp = self.gen_load_var(&value_ll_sym, &value_ll_ty, ctx)?;
                 let res_tmp = ctx.var_ids.next();
                 ctx.code.add(format!("{} = extractvalue {} {}, {}", res_tmp, value_ll_ty, struct_tmp, index));
@@ -1472,12 +1480,13 @@ impl LlvmGenerator {
             }
 
             AssignLiteral { ref output, ref value } => {
-                let (output_ty, output_llvm_ty, output_llvm_sym) = self.symbol_info(func, output)?;
+                let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
+                let output_ty = func.symbol_type(output)?;
                 if let Simd(_) = *output_ty {
-                    self.gen_simd_literal(&output_llvm_sym, value, output_ty, ctx)?;
+                    self.gen_simd_literal(&output_ll_sym, value, output_ty, ctx)?;
                 } else {
                     let ref value = llvm_literal(*value);
-                    self.gen_store_var(value, &output_llvm_sym, &output_llvm_ty, ctx);
+                    self.gen_store_var(value, &output_ll_sym, &output_ll_ty, ctx);
                 }
             }
 
