@@ -58,8 +58,8 @@ define %$NAME @$NAME.clone(%$NAME %dict) {
 
 ; Dummy hash function; this is needed for structs that use these dictionaries as fields,
 ; but it doesn't yet work! (Or technically it does, but is a very poor function.)
-define i64 @$NAME.hash(%$NAME %dict) {
-  ret i64 0
+define i32 @$NAME.hash(%$NAME %dict) {
+  ret i32 0
 }
 
 ; Dummy comparison function; this is needed for structs that use these dictionaries as fields,
@@ -103,8 +103,9 @@ entry:
   %entries = extractvalue %$NAME %dict, 0
   %capacity = extractvalue %$NAME %dict, 2
   %mask = sub i64 %capacity, 1
-  %raw_hash = call i64 $KEY_PREFIX.hash($KEY %key)
-  %hash = call i64 @hash_finalize(i64 %raw_hash)
+  %raw_hash = call i32 $KEY_PREFIX.hash($KEY %key)
+  %finalized_hash = call i32 @hash_finalize(i32 %raw_hash)
+  %hash = zext i32 %raw_hash to i64
   br label %body
 
 body:

@@ -46,7 +46,7 @@ define <$VECSIZE x $ELEM>* @$NAME.bld.vectorMergePtr(%$NAME.bld %bldPtr) {
   ret <$VECSIZE x $ELEM>* %bldVectorPtr
 }
 
-; Clear the vector by assigning each vector element to a user defined identity value. 
+; Clear the vector by assigning each vector element to a user defined identity value.
 define void @$NAME.bld.clearVector(%$NAME.bld %bldPtr, $ELEM %identity) {
     %vectorPtr = call <$VECSIZE x $ELEM>* @$NAME.bld.vectorMergePtr(%$NAME.bld %bldPtr)
     %vector = load <$VECSIZE x $ELEM>, <$VECSIZE x $ELEM>* %vectorPtr
@@ -56,20 +56,20 @@ entry:
   br i1 %cond, label %body, label %done
 body:
   %i = phi i32 [ 0, %entry ], [ %i2, %body ]
-  %vector2 = phi <$VECSIZE x $ELEM> [ %vector, %entry], [ %vector3, %body ] 
+  %vector2 = phi <$VECSIZE x $ELEM> [ %vector, %entry], [ %vector3, %body ]
   %vector3 = insertelement <$VECSIZE x $ELEM> %vector2, $ELEM %identity, i32 %i
   %i2 = add i32 %i, 1
   %cond2 = icmp ult i32 %i2, $VECSIZE
   br i1 %cond2, label %body, label %done
 done:
-  %vector4 = phi <$VECSIZE x $ELEM> [ %vector, %entry ], [ %vector3, %body ] 
+  %vector4 = phi <$VECSIZE x $ELEM> [ %vector, %entry ], [ %vector3, %body ]
   store <$VECSIZE x $ELEM> %vector4, <$VECSIZE x $ELEM>* %vectorPtr
   ret void
 }
 
 ; Dummy hash function; this is needed for structs that use these mergers as fields.
-define i64 @$NAME.bld.hash(%$NAME.bld %bld) {
-  ret i64 0
+define i32 @$NAME.bld.hash(%$NAME.bld %bld) {
+  ret i32 0
 }
 
 ; Dummy comparison function; this is needed for structs that use these mergers as fields.

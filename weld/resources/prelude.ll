@@ -84,56 +84,59 @@ define i64 @run_memory_usage(i64 %run_id) {
 ; Hash functions
 
 ; Combines two hash values using the method in Effective Java
-define i64 @hash_combine(i64 %start, i64 %value) alwaysinline {
+define i32 @hash_combine(i32 %start, i32 %value) alwaysinline {
   ; return 31 * start + value
-  %1 = mul i64 %start, 31
-  %2 = add i64 %1, %value
-  ret i64 %2
+  %1 = mul i32 %start, 31
+  %2 = add i32 %1, %value
+  ret i32 %2
 }
 
 ; Mixes the bits in a hash code, similar to Java's HashMap
-define i64 @hash_finalize(i64 %hash) {
+define i32 @hash_finalize(i32 %hash) {
   ; h ^= (h >>> 20) ^ (h >>> 12);
   ; return h ^ (h >>> 7) ^ (h >>> 4);
-  %1 = lshr i64 %hash, 20
-  %2 = lshr i64 %hash, 12
-  %3 = xor i64 %hash, %1
-  %h2 = xor i64 %3, %2
-  %4 = lshr i64 %h2, 7
-  %5 = lshr i64 %h2, 4
-  %6 = xor i64 %h2, %4
-  %res = xor i64 %6, %5
-  ret i64 %res
+  %1 = lshr i32 %hash, 20
+  %2 = lshr i32 %hash, 12
+  %3 = xor i32 %hash, %1
+  %h2 = xor i32 %3, %2
+  %4 = lshr i32 %h2, 7
+  %5 = lshr i32 %h2, 4
+  %6 = xor i32 %h2, %4
+  %res = xor i32 %6, %5
+  ret i32 %res
 }
 
-define i64 @i64.hash(i64 %arg) {
-  ret i64 %arg
+define i32 @i64.hash(i64 %arg) {
+  ; return (i32) ((arg >>> 32) ^ arg)
+  %1 = lshr i64 %arg, 32
+  %2 = xor i64 %arg, %1
+  %3 = trunc i64 %2 to i32
+  ret i32 %3
 }
 
-define i64 @i32.hash(i32 %arg) {
-  %1 = zext i32 %arg to i64
-  ret i64 %1
+define i32 @i32.hash(i32 %arg) {
+  ret i32 %arg
 }
 
-define i64 @i8.hash(i8 %arg) {
-  %1 = zext i8 %arg to i64
-  ret i64 %1
+define i32 @i8.hash(i8 %arg) {
+  %1 = zext i8 %arg to i32
+  ret i32 %1
 }
 
-define i64 @i1.hash(i1 %arg) {
-  %1 = zext i1 %arg to i64
-  ret i64 %1
+define i32 @i1.hash(i1 %arg) {
+  %1 = zext i1 %arg to i32
+  ret i32 %1
 }
 
-define i64 @float.hash(float %arg) {
+define i32 @float.hash(float %arg) {
   %1 = bitcast float %arg to i32
-  %2 = zext i32 %1 to i64
-  ret i64 %2
+  ret i32 %1
 }
 
-define i64 @double.hash(double %arg) {
+define i32 @double.hash(double %arg) {
   %1 = bitcast double %arg to i64
-  ret i64 %1
+  %2 = call i32 @i64.hash(i64 %1)
+  ret i32 %2
 }
 
 ; Comparison functions

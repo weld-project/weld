@@ -787,7 +787,7 @@ impl LlvmGenerator {
 
                     // Generate hash function for the struct.
                     self.prelude_code
-                        .add_line(format!("define i64 {}.hash({} %value) {{", name.replace("%", "@"), name));
+                        .add_line(format!("define i32 {}.hash({} %value) {{", name.replace("%", "@"), name));
                     let mut res = "0".to_string();
                     for i in 0..field_types.len() {
                         // TODO(shoumik): hack to prevent incorrect code gen for vectors.
@@ -800,16 +800,16 @@ impl LlvmGenerator {
                         let field_ty_str = &field_types[i];
                         let field_prefix_str = format!("@{}", field_ty_str.replace("%", ""));
                         self.prelude_code.add_line(format!("{} = extractvalue {} %value, {}", field, name, i));
-                        self.prelude_code.add_line(format!("{} = call i64 {}.hash({} {})",
+                        self.prelude_code.add_line(format!("{} = call i32 {}.hash({} {})",
                                                            hash,
                                                            field_prefix_str,
                                                            field_ty_str,
                                                            field));
                         self.prelude_code
-                            .add_line(format!("{} = call i64 @hash_combine(i64 {}, i64 {})", new_res, res, hash));
+                            .add_line(format!("{} = call i32 @hash_combine(i32 {}, i32 {})", new_res, res, hash));
                         res = new_res;
                     }
-                    self.prelude_code.add_line(format!("ret i64 {}", res));
+                    self.prelude_code.add_line(format!("ret i32 {}", res));
                     self.prelude_code.add_line(format!("}}"));
                     self.prelude_code.add_line(format!(""));
 
