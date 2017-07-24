@@ -813,6 +813,7 @@ impl LlvmGenerator {
                     self.prelude_code.add_line(format!("}}"));
                     self.prelude_code.add_line(format!(""));
 
+                    // Generate a comparison function for the struct
                     self.prelude_code
                         .add_line(format!("define i32 {}.cmp({} %a, {} %b) {{", name.replace("%", "@"), name, name));
                     let mut label_ids = IdGenerator::new("%l");
@@ -845,6 +846,37 @@ impl LlvmGenerator {
                         self.prelude_code.add_line(format!("{}:", post_label.replace("%", "")));
                     }
                     self.prelude_code.add_line(format!("ret i32 0"));
+                    self.prelude_code.add_line(format!("}}"));
+                    self.prelude_code.add_line(format!(""));
+
+                    // Generate an equality function for the struct; unlike cmp we try to have fewer branches
+                    self.prelude_code
+                        .add_line(format!("define i1 {}.eq({} %a, {} %b) {{", name.replace("%", "@"), name, name));
+                    let mut result = String::from("1");
+                    for i in 0..field_types.len() {
+                        // TODO(shoumik): hack to prevent incorrect code gen for vectors.
+                        if let Simd(_) = fields[i] {
+                            continue;
+                        }
+                        let a_field = self.prelude_var_ids.next();
+                        let b_field = self.prelude_var_ids.next();
+                        let this_eq = self.prelude_var_ids.next();
+                        let new_result = self.prelude_var_ids.next();
+                        let field_ty_str = &field_types[i];
+                        let field_prefix_str = format!("@{}", field_ty_str.replace("%", ""));
+                        self.prelude_code.add_line(format!("{} = extractvalue {} %a , {}", a_field, name, i));
+                        self.prelude_code.add_line(format!("{} = extractvalue {} %b, {}", b_field, name, i));
+                        self.prelude_code.add_line(format!("{} = call i1 {}.eq({} {}, {} {})",
+                                                           this_eq,
+                                                           field_prefix_str,
+                                                           field_ty_str,
+                                                           a_field,
+                                                           field_ty_str,
+                                                           b_field));
+                        self.prelude_code.add_line(format!("{} = and i1 {}, {}", new_result, this_eq, result));
+                        result = new_result;
+                    }
+                    self.prelude_code.add_line(format!("ret i1 {}", result));
                     self.prelude_code.add_line(format!("}}"));
                     self.prelude_code.add_line(format!(""));
 

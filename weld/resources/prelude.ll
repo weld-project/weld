@@ -205,3 +205,35 @@ ne:
   %3 = select i1 %2, i32 -1, i32 1
   ret i32 %3
 }
+
+; Equality functions
+
+define i1 @i64.eq(i64 %a, i64 %b) {
+  %1 = icmp eq i64 %a, %b
+  ret i1 %1
+}
+
+define i1 @i32.eq(i32 %a, i32 %b) {
+  %1 = icmp eq i32 %a, %b
+  ret i1 %1
+}
+
+define i1 @i8.eq(i8 %a, i8 %b) {
+  %1 = icmp eq i8 %a, %b
+  ret i1 %1
+}
+
+define i1 @i1.eq(i1 %a, i1 %b) {
+  %1 = icmp eq i1 %a, %b
+  ret i1 %1
+}
+
+define i1 @float.eq(float %a, float %b) {
+  %1 = fcmp oeq float %a, %b
+  ret i1 %1
+}
+
+define i1 @double.eq(double %a, double %b) {
+  %1 = fcmp oeq double %a, %b
+  ret i1 %1
+}

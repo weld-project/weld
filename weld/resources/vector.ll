@@ -295,3 +295,20 @@ define i32 @$NAME.bld.cmp(%$NAME.bld %bld1, %$NAME.bld %bld2) {
 define i32 @$NAME.vm.bld.cmp(%$NAME.vm.bld %bld1, %$NAME.vm.bld %bld2) {
   ret i32 -1
 }
+
+; Compare two vectors for equality.
+define i1 @$NAME.eq(%$NAME %a, %$NAME %b) {
+  %cmp = call i32 @$NAME.cmp(%$NAME %a, %$NAME %b)
+  %res = icmp eq i32 %cmp, 0
+  ret i1 %res
+}
+
+; Dummy comparison function for builders.
+define i1 @$NAME.bld.eq(%$NAME.bld %a, %$NAME.bld %b) {
+  ret i1 0
+}
+
+; Dummy comparison function for builders.
+define i1 @$NAME.vm.bld.eq(%$NAME.vm.bld %a, %$NAME.vm.bld %b) {
+  ret i1 0
+}

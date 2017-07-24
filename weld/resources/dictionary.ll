@@ -68,6 +68,11 @@ define i32 @$NAME.cmp(%$NAME %dict1, %$NAME %dict2) {
   ret i32 -1
 }
 
+; Dummy equality function (should call cmp when that is fully implemented)
+define i1 @$NAME.eq(%$NAME %dict1, %$NAME %dict2) {
+  ret i1 0
+}
+
 ; Get the size of a dictionary.
 define i64 @$NAME.size(%$NAME %dict) {
   %size = extractvalue %$NAME %dict, 1
@@ -120,8 +125,7 @@ body:
 body2:
   %keyPtr = getelementptr %$NAME.entry, %$NAME.entry* %ptr, i64 0, i32 1
   %elemKey = load $KEY, $KEY* %keyPtr
-  %cmp = call i32 $KEY_PREFIX.cmp($KEY %key, $KEY %elemKey)
-  %eq = icmp eq i32 %cmp, 0
+  %eq = call i1 $KEY_PREFIX.eq($KEY %key, $KEY %elemKey)
   %h2 = add i64 %h, 1
   br i1 %eq, label %done, label %body
 
