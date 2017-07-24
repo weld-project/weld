@@ -1162,8 +1162,8 @@ fn dictmerger_with_structs() {
         // Check whether we find the entry anywhere in the expected outputs
         let mut success = false;
         for j in 0..(output_keys.len()) {
-            if (entry.k1 == output_keys[j] && entry.k2 == output_keys[j] &&
-                    entry.v1 == output_vals[j] && entry.v2 == output_vals[j] as f32) {
+            if entry.k1 == output_keys[j] && entry.k2 == output_keys[j] &&
+                    entry.v1 == output_vals[j] && entry.v2 == output_vals[j] as f32 {
                 success = true;
             }
         }
