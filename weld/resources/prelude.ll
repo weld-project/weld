@@ -83,16 +83,27 @@ define i64 @run_memory_usage(i64 %run_id) {
 
 ; Hash functions
 
-; Same as Boost's hash_combine; obtained by compiling that with clang
-define i64 @hash_combine(i64 %seed, i64 %value) {
-  ; return seed ^ (value + 0x9e3779b9 + (seed << 6) + (seed >> 2));
-  %1 = add i64 %value, 2654435769   ; TODO: should this be 64-bit?
-  %2 = shl i64 %seed, 6
-  %3 = add i64 %1, %2
-  %4 = lshr i64 %seed, 2
-  %5 = add i64 %3, %4
-  %6 = xor i64 %5, %seed
-  ret i64 %6
+; Combines two hash values using the method in Effective Java
+define i64 @hash_combine(i64 %start, i64 %value) alwaysinline {
+  ; return 31 * start + value
+  %1 = mul i64 %start, 31
+  %2 = add i64 %1, %value
+  ret i64 %2
+}
+
+; Mixes the bits in a hash code, similar to Java's HashMap
+define i64 @hash_finalize(i64 %hash) {
+  ; h ^= (h >>> 20) ^ (h >>> 12);
+  ; return h ^ (h >>> 7) ^ (h >>> 4);
+  %1 = lshr i64 %hash, 20
+  %2 = lshr i64 %hash, 12
+  %3 = xor i64 %hash, %1
+  %h2 = xor i64 %3, %2
+  %4 = lshr i64 %h2, 7
+  %5 = lshr i64 %h2, 4
+  %6 = xor i64 %h2, %4
+  %res = xor i64 %6, %5
+  ret i64 %res
 }
 
 define i64 @i64.hash(i64 %arg) {

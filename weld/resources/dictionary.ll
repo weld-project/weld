@@ -103,8 +103,8 @@ entry:
   %entries = extractvalue %$NAME %dict, 0
   %capacity = extractvalue %$NAME %dict, 2
   %mask = sub i64 %capacity, 1
-  %hash = call i64 $KEY_PREFIX.hash($KEY %key)
-  ; TODO: mix hash further here?
+  %raw_hash = call i64 $KEY_PREFIX.hash($KEY %key)
+  %hash = call i64 @hash_finalize(i64 %raw_hash)
   br label %body
 
 body:
