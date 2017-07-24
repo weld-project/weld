@@ -1699,42 +1699,6 @@ fn iterate_with_parallel_body() {
     unsafe { weld_value_free(ret_value) };
 }
 
-fn nested_iterates() {
-    let code = "|| iterate([1,2,3], |e| {map(e, |e1| lookup(iterate([4,5,6], |e| {map(e, |e| e+e1), len(e)<2L}), 0L)), len(e)<2L})";
-    let conf = default_conf();
-
-    let ref input = 0;
-    let ret_value = compile_and_run(code, conf, input);
-    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<i32> };
-    let result = unsafe { (*data).clone() };
-
-    let output = [5, 6, 7];
-    assert_eq!(result.len, output.len() as i64);
-    for i in 0..(output.len() as isize) {
-        assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
-    }
-
-    unsafe { free_value_and_module(ret_value) };
-}
-
-fn sequential_iterates() {
-    let code = "|| iterate(iterate([4,5,6], |e| {map(e, |e| e+1), len(e)<2L}), |e| {map(e, |e| e+1), len(e)<2L})";
-    let conf = default_conf();
-
-    let ref input = 0;
-    let ret_value = compile_and_run(code, conf, input);
-    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<i32> };
-    let result = unsafe { (*data).clone() };
-
-    let output = [6, 7, 8];
-    assert_eq!(result.len, output.len() as i64);
-    for i in 0..(output.len() as isize) {
-        assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
-    }
-
-    unsafe { free_value_and_module(ret_value) };
-}
-
 fn serial_parlib_test() {
     let code = "|x:vec[i32]| result(for(x, merger[i32,+], |b,i,e| merge(b, e)))";
     let conf = default_conf();
@@ -1919,8 +1883,6 @@ fn main() {
              ("iters_for_loop", iters_for_loop),
              ("iterate_non_parallel", iterate_non_parallel),
              ("iterate_with_parallel_body", iterate_with_parallel_body),
-             ("nested_iterates", nested_iterates),
-             ("sequential_iterates", sequential_iterates),
              ("serial_parlib_test", serial_parlib_test),
              ("multithreaded_module_run", multithreaded_module_run),
              ("iters_outofbounds_error_test", iters_outofbounds_error_test),
