@@ -265,7 +265,7 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
                 if index >= elem_types.len() {
                     return weld_err!("Invalid index for GetField");
                 }
-                sync_types(&mut elem_types[index], &mut expr.ty, "MakeStruct")
+                sync_types(&mut elem_types[index], &mut expr.ty, "GetField")
             } else if param.ty == Unknown {
                 Ok(false)
             } else {
@@ -447,7 +447,7 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
                             match *t {
                                 Scalar(ref kind) => Simd(kind.clone()),
                                 ref a => a.clone()
-                            } 
+                            }
                         }).collect());
                         vector_param = true;
                     }
@@ -496,7 +496,7 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
                             None => {
                                 return weld_err!("Expected argument for NewBuilder of type \
                                                   VecMerger");
-                            } 
+                            }
                             Some(ref mut arg) => {
                                 changed |= try!(push_type(&mut arg.ty,
                                                           &Vector(elem.clone()),
