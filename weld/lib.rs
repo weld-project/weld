@@ -360,5 +360,19 @@ pub unsafe extern "C" fn weld_error_free(err: *mut WeldError) {
     Box::from_raw(err);
 }
 
+#[no_mangle]
+/// Loads a dynamically linked library and makes it available to the LLVM compiler and JIT.
+/// This function is safe to call multiple times on the same library file.
+pub unsafe extern "C" fn weld_load_library(filename: *const c_char, err: *mut WeldError) {
+    assert!(!err.is_null());
+    let mut err = &mut *err;
+    let filename = CStr::from_ptr(filename);
+    let filename = filename.to_str().unwrap();
+    if let Err(e) = easy_ll::load_library(filename) {
+        err.errno = WeldRuntimeErrno::LoadLibraryError;
+        err.message = CString::new(e.description()).unwrap();
+    }
+}
+
 #[cfg(test)]
 mod tests;
