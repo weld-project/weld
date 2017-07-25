@@ -13,9 +13,8 @@ Directory Structure:
 
   ./timings:
 
-    - timings.py: long loop with few commands (np.add/exp etc) - being tested
-for all three possibilities (numpy, weldarray (subclass), weld array as a
-    separate object)
+    - timings.py: long loop with multiple ops being tested with (numpy,
+        weldarray (subclass), weld array as a separate object).
 
     - blackscholes stuff: Various files that implement the blackscholes
     workload - need to change these to get it in the same form as timings.py.

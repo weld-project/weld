@@ -2,13 +2,13 @@ import numpy as np
 import sys
 sys.path.append('..')
 import weldarray as wa
-import weld_numpy_elemwise as wne
 import py.test
 import random
 import timeit
 import time
 
 NUM_REPS = 100000
+NUM_ELS = 100000
 
 def simple_loop_binary(lib, reps):
     '''
@@ -18,7 +18,7 @@ def simple_loop_binary(lib, reps):
     test = []
     test2 = []
     test3 = []
-    for i in range(100):
+    for i in range(NUM_ELS):
         test.append(float(random.random()))
         test2.append(float(random.random()))
         test3.append(float(random.random()))
@@ -50,12 +50,5 @@ arr.eval()
 print("weldarray subclass took {} seconds".format(time.time() - start))
 
 start = time.time()
-arr = simple_loop_binary(wne, NUM_REPS)
-arr = arr._to_numpy()
-# print(arr)
-print("weldarray sep object took {} seconds".format(time.time() - start))
-
-start = time.time()
 arr = simple_loop_binary(np, NUM_REPS)
-# print(arr)
 print("numpy ndarray took {} seconds".format(time.time() - start))
