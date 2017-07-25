@@ -19,7 +19,6 @@ pub enum Statement {
     BinOp {
         output: Symbol,
         op: BinOpKind,
-        ty: Type,
         left: Symbol,
         right: Symbol,
     },
@@ -32,7 +31,6 @@ pub enum Statement {
     Broadcast { output: Symbol, child: Symbol },
     Cast {
         output: Symbol,
-        new_ty: Type,
         child: Symbol,
     },
     Lookup {
@@ -75,12 +73,11 @@ pub enum Statement {
     },
     MakeStruct {
         output: Symbol,
-        elems: Vec<(Symbol, Type)>,
+        elems: Vec<Symbol>,
     },
     MakeVector {
         output: Symbol,
         elems: Vec<Symbol>,
-        elem_ty: Type,
     },
     GetField {
         output: Symbol,
@@ -139,6 +136,19 @@ pub struct SirFunction {
     pub params: HashMap<Symbol, Type>,
     pub locals: HashMap<Symbol, Type>,
     pub blocks: Vec<BasicBlock>,
+}
+
+impl SirFunction {
+
+    /// Gets the Type for a Symbol in the function. Symbols may be either local variables or
+    /// parameters.
+    pub fn symbol_type(&self, sym: &Symbol) -> WeldResult<&Type> {
+        self.locals.get(sym).map(|s| Ok(s)).unwrap_or_else(|| {
+            self.params.get(sym).map(|s| Ok(s)).unwrap_or_else(|| {
+                weld_err!("Can't find symbol {}#{}", sym.name, sym.id)
+            })
+        })
+    }
 }
 
 pub struct SirProgram {
@@ -212,15 +222,13 @@ impl fmt::Display for Statement {
             BinOp {
                 ref output,
                 ref op,
-                ref ty,
                 ref left,
                 ref right,
             } => {
                 write!(f,
-                       "{} = {} {} {} {}",
+                       "{} = {} {} {}",
                        output,
                        op,
-                       print_type(ty),
                        left,
                        right)
             }
@@ -239,9 +247,8 @@ impl fmt::Display for Statement {
             } => write!(f, "{} = broadcast({})", output, child),
             Cast {
                 ref output,
-                ref new_ty,
                 ref child,
-            } => write!(f, "{} = cast({}, {})", output, child, print_type(new_ty)),
+            } => write!(f, "{} = cast({})", output, child),
             Lookup {
                 ref output,
                 ref child,
@@ -308,12 +315,11 @@ impl fmt::Display for Statement {
                 write!(f,
                        "{} = {}",
                        output,
-                       join("{", ", ", "}", elems.iter().map(|e| format!("{}", e.0))))
+                       join("{", ",", "}", elems.iter().map(|e| format!("{}", e.name))))
             }
             MakeVector {
                 ref output,
                 ref elems,
-                ..
             } => {
                 write!(f,
                        "{} = {}",
@@ -553,7 +559,7 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
                 }
                 MakeStruct { ref elems, .. } => {
                     for elem in elems {
-                        vars.push(elem.0.clone());
+                        vars.push(elem.clone());
                     }
                 }
                 MakeVector { ref elems, .. } => {
@@ -716,7 +722,6 @@ fn gen_expr(expr: &TypedExpr,
             prog.funcs[cur_func].blocks[cur_block].add_statement(BinOp {
                                                                      output: res_sym.clone(),
                                                                      op: kind,
-                                                                     ty: left.ty.clone(),
                                                                      left: left_sym,
                                                                      right: right_sym,
                                                                  });
@@ -762,7 +767,6 @@ fn gen_expr(expr: &TypedExpr,
             let res_sym = prog.add_local(&expr.ty, cur_func);
             prog.funcs[cur_func].blocks[cur_block].add_statement(Cast {
                                                                      output: res_sym.clone(),
-                                                                     new_ty: expr.ty.clone(),
                                                                      child: child_sym,
                                                                  });
             Ok((cur_func, cur_block, res_sym))
@@ -1019,13 +1023,13 @@ fn gen_expr(expr: &TypedExpr,
             let mut syms = vec![];
             let (mut cur_func, mut cur_block, mut sym) =
                 gen_expr(&elems[0], prog, cur_func, cur_block)?;
-            syms.push((sym, elems[0].ty.clone()));
+            syms.push(sym);
             for elem in elems.iter().skip(1) {
                 let r = gen_expr(elem, prog, cur_func, cur_block)?;
                 cur_func = r.0;
                 cur_block = r.1;
                 sym = r.2;
-                syms.push((sym, elem.ty.clone()));
+                syms.push(sym);
             }
             let res_sym = prog.add_local(&expr.ty, cur_func);
             prog.funcs[cur_func].blocks[cur_block].add_statement(MakeStruct {
@@ -1037,10 +1041,6 @@ fn gen_expr(expr: &TypedExpr,
 
         ExprKind::MakeVector { ref elems } => {
             let mut syms = vec![];
-            let ty = match expr.ty {
-                super::ast::Type::Vector(ref ety) => ety.clone(),
-                _ => weld_err!("MakeVector doesn't have type Vector")?,
-            };
             let mut cur_func = cur_func;
             let mut cur_block = cur_block;
             for elem in elems.iter() {
@@ -1053,8 +1053,7 @@ fn gen_expr(expr: &TypedExpr,
             let res_sym = prog.add_local(&expr.ty, cur_func);
             prog.funcs[cur_func].blocks[cur_block].add_statement(MakeVector {
                                                                      output: res_sym.clone(),
-                                                                     elems: syms,
-                                                                     elem_ty: *ty,
+                                                                     elems: syms
                                                                  });
             Ok((cur_func, cur_block, res_sym))
         }
