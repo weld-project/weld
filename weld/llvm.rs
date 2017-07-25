@@ -31,28 +31,6 @@ use super::util::LIB_WELD_RT;
 use super::parser::*;
 
 static PRELUDE_CODE: &'static str = include_str!("resources/prelude.ll");
-static VECTOR_CODE: &'static str = include_str!("resources/vector.ll");
-static VVECTOR_CODE: &'static str = include_str!("resources/vvector.ll");
-static MERGER_CODE: &'static str = include_str!("resources/merger/merger.ll");
-static DICTIONARY_CODE: &'static str = include_str!("resources/dictionary.ll");
-static DICTMERGER_CODE: &'static str = include_str!("resources/dictmerger.ll");
-static GROUPMERGER_CODE: &'static str = include_str!("resources/groupbuilder.ll");
-
-/// Replace occurances of each `key` in `template` with `value`.
-///
-/// // returns "My name is Shoumik"
-/// replace!("My name is $NAME", "$NAME" => "shoumik")
-macro_rules! replace(
-    ( $template:expr, { $($key:expr => $value:expr),+ } ) => {
-        {
-            let replaced = String::from($template);
-            $(
-                let replaced = replaced.replace($key, $value);
-            )+
-            replaced
-        }
-     };
-);
 
 /// A wrapper for a struct passed as input to the Weld runtime.
 #[derive(Clone, Debug)]
@@ -969,22 +947,21 @@ impl LlvmGenerator {
         let name = self.vec_ids.next();
         self.vec_names.insert(elem.clone(), name.clone());
 
-		let vector_def = replace!(VECTOR_CODE, {
-			"$ELEM_PREFIX" => &elem_prefix,
-			"$ELEM" => &elem_ty,
-			"$NAME" => &name.replace("%", "")
-		});
+		let vector_def = format!(include_str!("resources/vector.ll"),
+			ELEM_PREFIX=&elem_prefix,
+			ELEM=&elem_ty,
+			NAME=&name.replace("%", ""));
+
         self.prelude_code.add(&vector_def);
         self.prelude_code.add("\n");
 
         // Supports vectorization, so add in SIMD extensions.
         if let Scalar(_) = *elem {
-            let simd_extension = replace!(VVECTOR_CODE, {
-                "$ELEM_PREFIX" => &elem_prefix,
-                "$ELEM" => &elem_ty, 
-                "$NAME" => &name.replace("%", ""),
-                "$VECSIZE" => &format!("{}", llvm_simd_size(elem)?)
-            });
+            let simd_extension = format!(include_str!("resources/vvector.ll"),
+                ELEM=elem_ty, 
+                NAME=&name.replace("%", ""),
+                VECSIZE=&format!("{}", llvm_simd_size(elem)?));
+
             self.prelude_code.add(&simd_extension);
             self.prelude_code.add("\n");
         }
@@ -1005,15 +982,15 @@ impl LlvmGenerator {
         let kv_vec_ty = self.llvm_type(&kv_vec)?;
         let kv_vec_prefix = llvm_prefix(&&kv_vec_ty);
 
-        let dict_def = replace!(DICTIONARY_CODE, {
-            "$KEY_PREFIX" => &key_prefix,
-            "$NAME" => &name.replace("%", ""),
-            "$KEY" => &key_ty,
-            "$VALUE" => &value_ty,
-            "$KV_STRUCT" => &kv_struct_ty,
-            "$KV_VEC_PREFIX" => &kv_vec_prefix,
-            "$KV_VEC" => &kv_vec_ty
-        });
+        let dict_def = format!(include_str!("resources/dictionary.ll"),
+            NAME=&name.replace("%", ""),
+            KEY=&key_ty,
+            KEY_PREFIX=&key_prefix,
+            VALUE=&value_ty,
+            KV_STRUCT=&kv_struct_ty,
+            KV_VEC_PREFIX=&kv_vec_prefix,
+            KV_VEC=&kv_vec_ty);
+
         self.prelude_code.add(&dict_def);
         self.prelude_code.add("\n");
         Ok(())
@@ -1030,16 +1007,14 @@ impl LlvmGenerator {
             Merger(ref t, _) => {
                 if self.merger_names.get(t) == None {
                     let elem_ty = self.llvm_type(t)?;
-                    let elem_prefix = llvm_prefix(&elem_ty);
                     let name = self.merger_ids.next();
                     self.merger_names.insert(*t.clone(), name.clone());
 
-                    let merger_def = replace!(MERGER_CODE, {
-                        "$ELEM_PREFIX" => &elem_prefix,
-                        "$ELEM" => &elem_ty,
-                        "$VECSIZE" => &format!("{}", llvm_simd_size(t)?),
-                        "$NAME" => &name.replace("%", "")
-                    });
+                    let merger_def = format!(include_str!("resources/merger/merger.ll"),
+                        ELEM=&elem_ty,
+                        VECSIZE=&format!("{}", llvm_simd_size(t)?),
+                        NAME=&name.replace("%", ""));
+
                     self.prelude_code.add(&merger_def);
                     self.prelude_code.add("\n");
                 }
@@ -1057,14 +1032,14 @@ impl LlvmGenerator {
                 let kv_vec_ty = self.llvm_type(&kv_vec)?;
                 let kv_vec_prefix = llvm_prefix(&&kv_vec_ty);
 
-                let dictmerger_def = replace!(DICTMERGER_CODE, {
-                    "$NAME" => &bld_ty_str.replace("%", ""),
-                    "$KEY" => &key_ty,
-                    "$VALUE" => &value_ty,
-                    "$KV_STRUCT" => &kv_struct_ty.replace("%", ""),
-                    "$KV_VEC_PREFIX" => &kv_vec_prefix,
-                    "$KV_VEC" => &kv_vec_ty
-                });
+                let dictmerger_def = format!(include_str!("resources/dictmerger.ll"),
+                    NAME=&bld_ty_str.replace("%", ""),
+                    KEY=&key_ty,
+                    VALUE=&value_ty,
+                    KV_STRUCT=&kv_struct_ty.replace("%", ""),
+                    KV_VEC_PREFIX=&kv_vec_prefix,
+                    KV_VEC=&kv_vec_ty);
+
                 self.prelude_code.add(&dictmerger_def);
                 self.prelude_code.add("\n");
 
@@ -1144,10 +1119,8 @@ impl LlvmGenerator {
 
         let mut prev_name = "undef".to_string();
         for i in 0..size {
-            let replaced = replace!(insert_str.as_str(), {
-                "$NAME" => &prev_name,
-                "$INDEX" => &format!("{}", i)
-            });
+            let replaced = insert_str.replace("$NAME", &prev_name);
+            let replaced = replaced.replace("$INDEX", format!("{}", i).as_str());
             let name = ctx.var_ids.next().to_string();
             ctx.code.add(format!("{} = {}", name, replaced));
             prev_name = name;
@@ -1913,19 +1886,19 @@ impl LlvmGenerator {
                 let value_vec_prefix = llvm_prefix(&&value_vec_ty);
                 let dict_prefix = llvm_prefix(&&bld_ty_str);
 
-                let groupmerger_def = replace!(GROUPMERGER_CODE, {
-                    "$NAME" => &function_id.replace("%", ""),
-                    "$KEY_PREFIX" => &key_prefix,
-                    "$KEY" => &key_ty,
-                    "$VALUE_VEC_PREFIX" => &value_vec_prefix,
-                    "$VALUE_VEC" => &value_vec_ty,
-                    "$VALUE" => &value_ty,
-                    "$KV_STRUCT" => &kv_struct_ty.replace("%", ""),
-                    "$KV_VEC_PREFIX" => &kv_vec_prefix,
-                    "$KV_VEC" => &kv_vec_ty,
-                    "$DICT_PREFIX" => &dict_prefix,
-                    "$DICT" => &bld_ty_str
-                });
+                let groupmerger_def = format!(include_str!("resources/groupbuilder.ll"),
+                    NAME=&function_id.replace("%", ""),
+                    KEY_PREFIX=&key_prefix,
+                    KEY=&key_ty,
+                    VALUE_VEC_PREFIX=&value_vec_prefix,
+                    VALUE_VEC=&value_vec_ty,
+                    VALUE=&value_ty,
+                    KV_STRUCT=&kv_struct_ty.replace("%", ""),
+                    KV_VEC_PREFIX=&kv_vec_prefix,
+                    KV_VEC=&kv_vec_ty,
+                    DICT_PREFIX=&dict_prefix,
+                    DICT=&bld_ty_str);
+
                 self.prelude_code.add(&groupmerger_def);
                 let res_ty_str = self.llvm_type(&res_ty)?;
                 let bld_tmp = self.gen_load_var(llvm_symbol(builder).as_str(), &kv_vec_builder_ty, ctx)?;
