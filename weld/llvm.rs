@@ -814,8 +814,8 @@ impl LlvmGenerator {
                     self.prelude_code.add_line(format!(""));
 
                     // Generate a comparison function for the struct
-                    self.prelude_code
-                        .add_line(format!("define i32 {}.cmp({} %a, {} %b) {{", name.replace("%", "@"), name, name));
+                    self.prelude_code.add_line(format!(
+                        "define i32 {}.cmp({} %a, {} %b) {{", name.replace("%", "@"), name, name));
                     let mut label_ids = IdGenerator::new("%l");
                     for i in 0..field_types.len() {
                         // TODO(shoumik): hack to prevent incorrect code gen for vectors.
@@ -850,9 +850,9 @@ impl LlvmGenerator {
                     self.prelude_code.add_line(format!(""));
 
                     // Generate an equality function for the struct; unlike cmp we try to have fewer branches
-                    self.prelude_code
-                        .add_line(format!("define i1 {}.eq({} %a, {} %b) {{", name.replace("%", "@"), name, name));
-                    let mut result = String::from("1");
+                    self.prelude_code.add_line(format!(
+                        "define i1 {}.eq({} %a, {} %b) {{", name.replace("%", "@"), name, name));
+                    let mut label_ids = IdGenerator::new("%l");
                     for i in 0..field_types.len() {
                         // TODO(shoumik): hack to prevent incorrect code gen for vectors.
                         if let Simd(_) = fields[i] {
@@ -861,7 +861,6 @@ impl LlvmGenerator {
                         let a_field = self.prelude_var_ids.next();
                         let b_field = self.prelude_var_ids.next();
                         let this_eq = self.prelude_var_ids.next();
-                        let new_result = self.prelude_var_ids.next();
                         let field_ty_str = &field_types[i];
                         let field_prefix_str = format!("@{}", field_ty_str.replace("%", ""));
                         self.prelude_code.add_line(format!("{} = extractvalue {} %a , {}", a_field, name, i));
@@ -873,10 +872,14 @@ impl LlvmGenerator {
                                                            a_field,
                                                            field_ty_str,
                                                            b_field));
-                        self.prelude_code.add_line(format!("{} = and i1 {}, {}", new_result, this_eq, result));
-                        result = new_result;
+                        let on_ne = label_ids.next();
+                        let on_eq = label_ids.next();
+                        self.prelude_code.add_line(format!("br i1 {}, label {}, label {}", this_eq, on_eq, on_ne));
+                        self.prelude_code.add_line(format!("{}:", on_ne.replace("%", "")));
+                        self.prelude_code.add_line(format!("ret i1 0"));
+                        self.prelude_code.add_line(format!("{}:", on_eq.replace("%", "")));
                     }
-                    self.prelude_code.add_line(format!("ret i1 {}", result));
+                    self.prelude_code.add_line(format!("ret i1 1"));
                     self.prelude_code.add_line(format!("}}"));
                     self.prelude_code.add_line(format!(""));
 
