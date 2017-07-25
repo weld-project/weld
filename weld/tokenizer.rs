@@ -102,10 +102,10 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
 
         // Regular expressions for various types of tokens.
         static ref KEYWORD_RE: Regex = Regex::new(
-            "if|for|zip|len|lookup|keyexists|slice|exp|log|erf|sqrt|simd|select|broadcast|\
+            "^(if|for|zip|len|lookup|keyexists|slice|exp|log|erf|sqrt|simd|select|broadcast|\
              iterate|cudf|simditer|fringeiter|iter|merge|result|let|true|false|macro|\
              i8|i32|i64|f32|f64|bool|vec|appender|merger|vecmerger|dictmerger|groupmerger|\
-             tovec").unwrap();
+             tovec)$").unwrap();
 
         static ref IDENT_RE: Regex = Regex::new(r"^[A-Za-z$_][A-Za-z0-9$_]*$").unwrap();
 
@@ -472,6 +472,10 @@ fn basic_tokenize() {
                     TOpenParen,
                     TIdent("a".into()),
                     TCloseParen,
+                    TEndOfInput]);
+    assert_eq!(tokenize("iffy if").unwrap(),
+               vec![TIdent("iffy".into()),
+                    TIf,
                     TEndOfInput]);
 
     assert_eq!(tokenize("keyexists(a, 1)").unwrap(),
