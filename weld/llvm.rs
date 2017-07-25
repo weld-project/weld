@@ -793,7 +793,7 @@ impl LlvmGenerator {
     *********************************************************************************************/
 
     /// Returns the LLVM type (as a string), and LLVM symbol name (as a string). This function is
-    /// only valid for Symbols defined in a function.
+    /// only valid for Symbols defined in a SirFunction.
     fn llvm_type_and_name<'a>(&mut self, func: &'a SirFunction, sym: &Symbol) -> WeldResult<(String, String)> {
         let ty = func.symbol_type(sym)?;
         let llvm_ty = self.llvm_type(ty)?;
