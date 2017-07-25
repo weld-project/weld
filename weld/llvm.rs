@@ -809,7 +809,119 @@ impl LlvmGenerator {
 
             Struct(ref fields) => {
                 if self.struct_names.get(fields) == None {
+<<<<<<< HEAD
                     self.gen_struct_definition(fields)?
+=======
+                    // Declare the struct in prelude_code
+                    let name = self.struct_ids.next();
+                    let mut field_types: Vec<String> = Vec::new();
+                    for f in fields {
+                        field_types.push(try!(self.llvm_type(f)).to_string());
+                    }
+                    let field_types_str = field_types.join(", ");
+                    self.prelude_code.add(format!("{} = type {{ {} }}", name, field_types_str));
+
+                    // Generate hash function for the struct.
+                    self.prelude_code
+                        .add_line(format!("define i32 {}.hash({} %value) {{", name.replace("%", "@"), name));
+                    let mut res = "0".to_string();
+                    for i in 0..field_types.len() {
+                        // TODO(shoumik): hack to prevent incorrect code gen for vectors.
+                        if let Simd(_) = fields[i] {
+                            continue;
+                        }
+                        let field = self.prelude_var_ids.next();
+                        let hash = self.prelude_var_ids.next();
+                        let new_res = self.prelude_var_ids.next();
+                        let field_ty_str = &field_types[i];
+                        let field_prefix_str = format!("@{}", field_ty_str.replace("%", ""));
+                        self.prelude_code.add_line(format!("{} = extractvalue {} %value, {}", field, name, i));
+                        self.prelude_code.add_line(format!("{} = call i32 {}.hash({} {})",
+                                                           hash,
+                                                           field_prefix_str,
+                                                           field_ty_str,
+                                                           field));
+                        self.prelude_code
+                            .add_line(format!("{} = call i32 @hash_combine(i32 {}, i32 {})", new_res, res, hash));
+                        res = new_res;
+                    }
+                    self.prelude_code.add_line(format!("ret i32 {}", res));
+                    self.prelude_code.add_line(format!("}}"));
+                    self.prelude_code.add_line(format!(""));
+
+                    // Generate a comparison function for the struct
+                    self.prelude_code.add_line(format!(
+                        "define i32 {}.cmp({} %a, {} %b) {{", name.replace("%", "@"), name, name));
+                    let mut label_ids = IdGenerator::new("%l");
+                    for i in 0..field_types.len() {
+                        // TODO(shoumik): hack to prevent incorrect code gen for vectors.
+                        if let Simd(_) = fields[i] {
+                            continue;
+                        }
+                        let a_field = self.prelude_var_ids.next();
+                        let b_field = self.prelude_var_ids.next();
+                        let cmp = self.prelude_var_ids.next();
+                        let ne = self.prelude_var_ids.next();
+                        let field_ty_str = &field_types[i];
+                        let ret_label = label_ids.next();
+                        let post_label = label_ids.next();
+                        let field_prefix_str = format!("@{}", field_ty_str.replace("%", ""));
+                        self.prelude_code.add_line(format!("{} = extractvalue {} %a , {}", a_field, name, i));
+                        self.prelude_code.add_line(format!("{} = extractvalue {} %b, {}", b_field, name, i));
+                        self.prelude_code.add_line(format!("{} = call i32 {}.cmp({} {}, {} {})",
+                                                           cmp,
+                                                           field_prefix_str,
+                                                           field_ty_str,
+                                                           a_field,
+                                                           field_ty_str,
+                                                           b_field));
+                        self.prelude_code.add_line(format!("{} = icmp ne i32 {}, 0", ne, cmp));
+                        self.prelude_code.add_line(format!("br i1 {}, label {}, label {}", ne, ret_label, post_label));
+                        self.prelude_code.add_line(format!("{}:", ret_label.replace("%", "")));
+                        self.prelude_code.add_line(format!("ret i32 {}", cmp));
+                        self.prelude_code.add_line(format!("{}:", post_label.replace("%", "")));
+                    }
+                    self.prelude_code.add_line(format!("ret i32 0"));
+                    self.prelude_code.add_line(format!("}}"));
+                    self.prelude_code.add_line(format!(""));
+
+                    // Generate an equality function for the struct; unlike cmp we try to have fewer branches
+                    self.prelude_code.add_line(format!(
+                        "define i1 {}.eq({} %a, {} %b) {{", name.replace("%", "@"), name, name));
+                    let mut label_ids = IdGenerator::new("%l");
+                    for i in 0..field_types.len() {
+                        // TODO(shoumik): hack to prevent incorrect code gen for vectors.
+                        if let Simd(_) = fields[i] {
+                            continue;
+                        }
+                        let a_field = self.prelude_var_ids.next();
+                        let b_field = self.prelude_var_ids.next();
+                        let this_eq = self.prelude_var_ids.next();
+                        let field_ty_str = &field_types[i];
+                        let field_prefix_str = format!("@{}", field_ty_str.replace("%", ""));
+                        self.prelude_code.add_line(format!("{} = extractvalue {} %a , {}", a_field, name, i));
+                        self.prelude_code.add_line(format!("{} = extractvalue {} %b, {}", b_field, name, i));
+                        self.prelude_code.add_line(format!("{} = call i1 {}.eq({} {}, {} {})",
+                                                           this_eq,
+                                                           field_prefix_str,
+                                                           field_ty_str,
+                                                           a_field,
+                                                           field_ty_str,
+                                                           b_field));
+                        let on_ne = label_ids.next();
+                        let on_eq = label_ids.next();
+                        self.prelude_code.add_line(format!("br i1 {}, label {}, label {}", this_eq, on_eq, on_ne));
+                        self.prelude_code.add_line(format!("{}:", on_ne.replace("%", "")));
+                        self.prelude_code.add_line(format!("ret i1 0"));
+                        self.prelude_code.add_line(format!("{}:", on_eq.replace("%", "")));
+                    }
+                    self.prelude_code.add_line(format!("ret i1 1"));
+                    self.prelude_code.add_line(format!("}}"));
+                    self.prelude_code.add_line(format!(""));
+
+                    // Add it into our map so we remember its name
+                    self.struct_names.insert(fields.clone(), name);
+>>>>>>> master
                 }
                 self.struct_names.get(fields).unwrap().to_string()
             }

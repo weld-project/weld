@@ -7,6 +7,8 @@
 #ifndef _WELD_H_
 #define _WELD_H_
 
+#include <stdint.h>
+
 // Types
 
 /** A type encapsulating a Weld value. */
@@ -33,7 +35,7 @@ typedef void* weld_conf_t;
  * @param data the data this struct captures.
  * @return a new Weld value.
  */
-extern "C" weld_value_t 
+extern "C" weld_value_t
 weld_value_new(void *data);
 
 /** Returns 1 if the value's data is owned by the Weld runtime, or
@@ -47,7 +49,7 @@ weld_value_new(void *data);
  * @param obj the value to check
  * @return 1 if owned, 0 otherwise.
  */
-extern "C" int 
+extern "C" int
 weld_value_run(weld_value_t obj);
 
 /** Returns this value's data buffer.
@@ -56,7 +58,7 @@ weld_value_run(weld_value_t obj);
  * @return a void * data buffer. The caller is responsible for knowing
  * the type of the buffer and casting it appropriately.
  */
-extern "C" void* 
+extern "C" void*
 weld_value_data(weld_value_t obj);
 
 /* Frees a Weld value.
@@ -67,8 +69,18 @@ weld_value_data(weld_value_t obj);
  *
  * @param obj the value to free.
  */
-extern "C" void 
-weld_value_free(weld_value_t);
+extern "C" void
+weld_value_free(weld_value_t obj);
+
+/* Gets the memory usage of the Weld run that computed a given value
+ * (in bytes). This includes all temporaries allocated during the run's
+ * execution that have not yet been freed. If the value is not from a
+ * run, returns -1.
+ *
+ * @param obj the value whose module to get memory usage for.
+ */
+extern "C" int64_t
+weld_value_memory_usage(weld_value_t obj);
 
 // ************* Modules ****************
 
@@ -81,7 +93,7 @@ weld_value_free(weld_value_t);
  * @param err a Weld erro for this compilation.
  * @return a runnable module.
  */
-extern "C" weld_module_t 
+extern "C" weld_module_t
 weld_module_compile(const char *code, weld_conf_t, weld_error_t);
 
 /** Runs a module using the given argument.
@@ -98,14 +110,14 @@ weld_module_compile(const char *code, weld_conf_t, weld_error_t);
  * is responsible for knowing what the type of the return value is based on
  * the module she runs.
  */
-extern "C" weld_value_t 
+extern "C" weld_value_t
 weld_module_run(weld_module_t, weld_conf_t, weld_value_t, weld_error_t);
 
 /** Garbage collects a module.
  *
  * @param module the module to garbage collect.
  */
-extern "C" void 
+extern "C" void
 weld_module_free(weld_module_t);
 
 // ************* Errors ****************
@@ -136,7 +148,7 @@ weld_error_message(weld_error_t);
  *
  * @param err the error
  */
-extern "C" void 
+extern "C" void
 weld_error_free(weld_error_t);
 
 // ************* Configuration ****************

@@ -58,14 +58,19 @@ define %$NAME @$NAME.clone(%$NAME %dict) {
 
 ; Dummy hash function; this is needed for structs that use these dictionaries as fields,
 ; but it doesn't yet work! (Or technically it does, but is a very poor function.)
-define i64 @$NAME.hash(%$NAME %dict) {
-  ret i64 0
+define i32 @$NAME.hash(%$NAME %dict) {
+  ret i32 0
 }
 
 ; Dummy comparison function; this is needed for structs that use these dictionaries as fields,
 ; but it doesn't yet work!
 define i32 @$NAME.cmp(%$NAME %dict1, %$NAME %dict2) {
   ret i32 -1
+}
+
+; Dummy equality function (should call cmp when that is fully implemented)
+define i1 @$NAME.eq(%$NAME %dict1, %$NAME %dict2) {
+  ret i1 0
 }
 
 ; Get the size of a dictionary.
@@ -103,8 +108,9 @@ entry:
   %entries = extractvalue %$NAME %dict, 0
   %capacity = extractvalue %$NAME %dict, 2
   %mask = sub i64 %capacity, 1
-  %hash = call i64 $KEY_PREFIX.hash($KEY %key)
-  ; TODO: mix hash further here?
+  %raw_hash = call i32 $KEY_PREFIX.hash($KEY %key)
+  %finalized_hash = call i32 @hash_finalize(i32 %raw_hash)
+  %hash = zext i32 %raw_hash to i64
   br label %body
 
 body:
@@ -119,8 +125,7 @@ body:
 body2:
   %keyPtr = getelementptr %$NAME.entry, %$NAME.entry* %ptr, i64 0, i32 1
   %elemKey = load $KEY, $KEY* %keyPtr
-  %cmp = call i32 $KEY_PREFIX.cmp($KEY %key, $KEY %elemKey)
-  %eq = icmp eq i32 %cmp, 0
+  %eq = call i1 $KEY_PREFIX.eq($KEY %key, $KEY %elemKey)
   %h2 = add i64 %h, 1
   br i1 %eq, label %done, label %body
 
