@@ -25,7 +25,8 @@ typedef void* weld_conf_t;
 
 // ************* Values ****************
 
-/** Returns a Weld-readable value with the given input buffer.
+/**
+ * Returns a Weld-readable value with the given input buffer.
  *
  * A Weld value created using this method is owned by the caller.
  * The caller must ensure that the data buffer remains a valid pointer
@@ -38,7 +39,8 @@ typedef void* weld_conf_t;
 extern "C" weld_value_t
 weld_value_new(void *data);
 
-/** Returns 1 if the value's data is owned by the Weld runtime, or
+/**
+ * Returns 1 if the value's data is owned by the Weld runtime, or
  * 0 otherwise.
  *
  * A value owned by the Weld runtime is freed using the `weld_value_free`
@@ -52,7 +54,8 @@ weld_value_new(void *data);
 extern "C" int
 weld_value_run(weld_value_t obj);
 
-/** Returns this value's data buffer.
+/**
+ * Returns this value's data buffer.
  *
  * @param obj the value whose data buffer should be retrieved.
  * @return a void * data buffer. The caller is responsible for knowing
@@ -61,7 +64,8 @@ weld_value_run(weld_value_t obj);
 extern "C" void*
 weld_value_data(weld_value_t obj);
 
-/* Frees a Weld value.
+/**
+ * Frees a Weld value.
  *
  * Each Weld value must be freed using this call. Owned values also
  * free their data buffers; non-owned values require the caller to free
@@ -84,19 +88,21 @@ weld_value_memory_usage(weld_value_t obj);
 
 // ************* Modules ****************
 
-/** Compiles a Weld module.
+/**
+ * Compiles a Weld module.
  *
  * Takes a string and configuration and returns a runnable module.
  *
- * @param code a Weld program to compile
+ * @param code a Weld program to compile.
  * @param conf a configuration for the module.
- * @param err a Weld erro for this compilation.
+ * @param err will hold any error raised during compilation.
  * @return a runnable module.
  */
 extern "C" weld_module_t
 weld_module_compile(const char *code, weld_conf_t, weld_error_t);
 
-/** Runs a module using the given argument.
+/**
+ * Runs a module using the given argument.
  *
  * Multi-argument Weld functions take a Weld value encapsulating
  * a single struct as an argument. The field at index i in the struct
@@ -105,7 +111,7 @@ weld_module_compile(const char *code, weld_conf_t, weld_error_t);
  * @param module the module to run.
  * @param conf a configuration for this run.
  * @param arg the argument for the module's function.
- * @param err a Weld error for this run.
+ * @param err will hold any error raised during execution.
  * @return an owned Weld value representing the return value. The caller
  * is responsible for knowing what the type of the return value is based on
  * the module she runs.
@@ -113,7 +119,8 @@ weld_module_compile(const char *code, weld_conf_t, weld_error_t);
 extern "C" weld_value_t
 weld_module_run(weld_module_t, weld_conf_t, weld_value_t, weld_error_t);
 
-/** Garbage collects a module.
+/**
+ * Garbage collects a module.
  *
  * @param module the module to garbage collect.
  */
@@ -122,64 +129,83 @@ weld_module_free(weld_module_t);
 
 // ************* Errors ****************
 
-/** Return a new Weld error.
- *
+/**
+ * Return a new Weld error holder.
  */
 extern "C" weld_error_t
 weld_error_new();
 
-/** Returns an error code, or 0 if there was no error.
+/**
+ * Returns an error code, or 0 if there was no error.
  *
  * @param err the error to check
  * @param 0 if the error was a success, or a nonzero error code otherwise.
  */
 extern "C" int
-weld_error_code(weld_error_t);
+weld_error_code(weld_error_t err);
 
-/** Returns an error message for a given error.
+/**
+ * Returns an error message for a given error.
  *
  * @param err the error
  * @return a string error message.
  */
 extern "C" const char *
-weld_error_message(weld_error_t);
+weld_error_message(weld_error_t err);
 
-/** Free a Weld error.
+/**
+ * Free a Weld error.
  *
- * @param err the error
+ * @param err the error to free
  */
 extern "C" void
-weld_error_free(weld_error_t);
+weld_error_free(weld_error_t err);
 
 // ************* Configuration ****************
 
-/** Return a new Weld configuraiton.
- *
+/**
+ * Returns a new Weld configuration.
  */
 extern "C" weld_conf_t
 weld_conf_new();
 
-/** Returns a value for a Weld configuration key.
+/**
+ * Returns a value for a Weld configuration key.
  *
  * @param key the key to look up.
  * @return the string value for the key, or NULL if the key does not exist.
  */
 extern "C" const char*
-weld_conf_get(weld_conf_t, const char *key);
+weld_conf_get(weld_conf_t conf, const char *key);
 
-/** Set a value for a Weld configuration key.
+/**
+ * Set a value for a Weld configuration key.
  *
  * @param key the key
  * @param key the value
  */
 extern "C" void
-weld_conf_set(weld_conf_t, const char *key, const char *value);
+weld_conf_set(weld_conf_t conf, const char *key, const char *value);
 
-/** Free a Weld configuration.
+/**
+ * Free a Weld configuration.
  *
+ * @param conf the configuration to free
  */
 extern "C" weld_conf_t
-weld_conf_free(weld_conf_t);
+weld_conf_free(weld_conf_t conf);
+
+// ************* Other Functions ****************
+
+/**
+ * Loads a dynamically linked library and makes it available to the LLVM compiler and JIT.
+ * This function is safe to call multiple times on the same library file.
+ *
+ * @param filename path of the library to load, including .so extension on Linux
+ * @param err will hold any errors raised during execution
+ */
+extern "C" void
+weld_load_library(const char *filename, weld_error_t err);
 
 #endif
 

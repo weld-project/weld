@@ -7,7 +7,7 @@ use std::fmt;
 pub enum WeldRuntimeErrno {
     Success = 0, // explicit values for Success and OutOfMemory required due to use by weld_rt C++ code
     ConfigurationError,
-    RuntimeLibraryError,
+    LoadLibraryError,
     CompileError,
     ArrayOutOfBounds,
     BadIteratorLength,
