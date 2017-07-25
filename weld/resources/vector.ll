@@ -218,7 +218,7 @@ define $ELEM* @$NAME.bld.at(%$NAME.bld %bldPtr, i64 %index, i32 %myId) {
 
 ; Compute the hash code of a vector.
 ; TODO: We should hash more bytes at a time if elements are non-pointer types.
-define i64 @$NAME.hash(%$NAME %vec) {
+define i32 @$NAME.hash(%$NAME %vec) {
 entry:
   %elements = extractvalue %$NAME %vec, 0
   %size = extractvalue %$NAME %vec, 1
@@ -227,28 +227,28 @@ entry:
 
 body:
   %i = phi i64 [ 0, %entry ], [ %i2, %body ]
-  %prevHash = phi i64 [ 0, %entry ], [ %newHash, %body ]
+  %prevHash = phi i32 [ 0, %entry ], [ %newHash, %body ]
   %ptr = getelementptr $ELEM, $ELEM* %elements, i64 %i
   %elem = load $ELEM, $ELEM* %ptr
-  %elemHash = call i64 $ELEM_PREFIX.hash($ELEM %elem)
-  %newHash = call i64 @hash_combine(i64 %prevHash, i64 %elemHash)
+  %elemHash = call i32 $ELEM_PREFIX.hash($ELEM %elem)
+  %newHash = call i32 @hash_combine(i32 %prevHash, i32 %elemHash)
   %i2 = add i64 %i, 1
   %cond2 = icmp ult i64 %i2, %size
   br i1 %cond2, label %body, label %done
 
 done:
-  %res = phi i64 [ 0, %entry ], [ %newHash, %body ]
-  ret i64 %res
+  %res = phi i32 [ 0, %entry ], [ %newHash, %body ]
+  ret i32 %res
 }
 
 ; Dummy hash function; this is needed for structs that use these vecbuilders as fields.
-define i64 @$NAME.bld.hash(%$NAME.bld %bld) {
-  ret i64 0
+define i32 @$NAME.bld.hash(%$NAME.bld %bld) {
+  ret i32 0
 }
 
 ; Dummy hash function; this is needed for structs that use these vecbuilders as fields.
-define i64 @$NAME.vm.bld.hash(%$NAME.vm.bld %bld) {
-  ret i64 0
+define i32 @$NAME.vm.bld.hash(%$NAME.vm.bld %bld) {
+  ret i32 0
 }
 
 ; Compare two vectors lexicographically.
@@ -294,4 +294,21 @@ define i32 @$NAME.bld.cmp(%$NAME.bld %bld1, %$NAME.bld %bld2) {
 ; Dummy comparison function; this is needed for structs that use these vecmergers as fields.
 define i32 @$NAME.vm.bld.cmp(%$NAME.vm.bld %bld1, %$NAME.vm.bld %bld2) {
   ret i32 -1
+}
+
+; Compare two vectors for equality.
+define i1 @$NAME.eq(%$NAME %a, %$NAME %b) {
+  %cmp = call i32 @$NAME.cmp(%$NAME %a, %$NAME %b)
+  %res = icmp eq i32 %cmp, 0
+  ret i1 %res
+}
+
+; Dummy comparison function for builders.
+define i1 @$NAME.bld.eq(%$NAME.bld %a, %$NAME.bld %b) {
+  ret i1 0
+}
+
+; Dummy comparison function for builders.
+define i1 @$NAME.vm.bld.eq(%$NAME.vm.bld %a, %$NAME.vm.bld %b) {
+  ret i1 0
 }

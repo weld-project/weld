@@ -48,8 +48,8 @@ innerLoop:
 innerLoop2:
   %keyPtr2 = getelementptr %$KV_STRUCT, %$KV_STRUCT* %elements, i64 %endPos2, i32 0
   %key2 = load $KEY, $KEY* %keyPtr2
-  %cmp = call i32 $KEY_PREFIX.cmp($KEY %key, $KEY %key2)
-  %ne = icmp ne i32 %cmp, 0
+  %eq = call i1 $KEY_PREFIX.eq($KEY %key, $KEY %key2)
+  %ne = icmp ne i1 %eq, 1
   %endPos3 = add i64 %endPos2, 1
   br i1 %ne, label %innerLoopDone, label %innerLoop
 
