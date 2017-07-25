@@ -74,6 +74,7 @@ impl WeldError {
 /// is `None` the data is owned by a caller outside the runtime.
 pub struct WeldValue {
     data: *const c_void,
+    module: Option<*mut WeldModule>,
     run_id: Option<i64>,
 }
 
@@ -142,6 +143,7 @@ pub unsafe extern "C" fn weld_conf_set(ptr: *mut WeldConf,
 pub extern "C" fn weld_value_new(data: *const c_void) -> *mut WeldValue {
     Box::into_raw(Box::new(WeldValue {
                                data: data,
+                               module: None,
                                run_id: None,
                            }))
 }
@@ -168,6 +170,14 @@ pub unsafe extern "C" fn weld_value_data(obj: *const WeldValue) -> *const c_void
 }
 
 #[no_mangle]
+/// Returns a pointer to the data wrapped by the given Weld value.
+pub unsafe extern "C" fn weld_value_module(obj: *mut WeldValue) -> *mut WeldModule {
+    assert!(!obj.is_null());
+    let obj = &*obj;
+    obj.module.unwrap()
+}
+
+#[no_mangle]
 /// Frees a Weld value.
 ///
 /// All Weld values must be freed using this call.
@@ -180,10 +190,8 @@ pub unsafe extern "C" fn weld_value_free(obj: *mut WeldValue) {
     }
     let value = &mut *obj;
     if let Some(run_id) = value.run_id {
-        // TODO(shoumik): Cache this? No need to compile it each time.
-        let module = llvm::generate_runtime_interface_module().unwrap();
-        let arg = run_id;
-        let _ = module.run_named("rt_run_free", arg);
+        let module = &mut *value.module.unwrap();
+        module.run_named("run_dispose", run_id).unwrap();
     }
     Box::from_raw(obj);
 }
@@ -198,10 +206,8 @@ pub unsafe extern "C" fn weld_value_memory_usage(obj: *mut WeldValue) -> libc::i
     }
     let value = &mut *obj;
     if let Some(run_id) = value.run_id {
-        // TODO: Cache this? No need to compile it each time.
-        let module = llvm::generate_runtime_interface_module().unwrap();
-        let arg = run_id;
-        return module.run_named("rt_memory_usage", arg).unwrap_or(-1) as libc::int64_t;
+        let module = &mut *value.module.unwrap();
+        return module.run_named("run_memory_usage", run_id).unwrap_or(-1) as libc::int64_t;
     } else {
         return -1 as libc::int64_t;
     }
@@ -227,12 +233,6 @@ pub unsafe extern "C" fn weld_module_compile(code: *const c_char,
 
     let code = CStr::from_ptr(code);
     let code = code.to_str().unwrap().trim();
-
-    if let Err(e) = util::load_runtime_library() {
-        err.errno = WeldRuntimeErrno::RuntimeLibraryError;
-        err.message = CString::new(e).unwrap();
-        return std::ptr::null_mut();
-    }
 
     let parsed = parser::parse_program(code);
     if let Err(e) = parsed {
@@ -266,7 +266,7 @@ pub unsafe extern "C" fn weld_module_run(module: *mut WeldModule,
     assert!(!arg.is_null());
     assert!(!err_ptr.is_null());
 
-    let module = &mut *module;
+    let module_callable = &mut *module;
     let arg = &*arg;
     let mut err = &mut *err_ptr;
 
@@ -291,11 +291,12 @@ pub unsafe extern "C" fn weld_module_run(module: *mut WeldModule,
                          });
     let ptr = Box::into_raw(input) as i64;
     // result_raw is allocated with ordinary malloc, hence the free below
-    let result_raw = module.run(ptr) as *const llvm::WeldOutputArgs;
+    let result_raw = module_callable.run(ptr) as *const llvm::WeldOutputArgs;
     let result = (*result_raw).clone();
 
     let ret = Box::into_raw(Box::new(WeldValue {
                                          data: result.output as *const c_void,
+                                         module: Some(module),
                                          run_id: Some(result.run_id),
                                      }));
 

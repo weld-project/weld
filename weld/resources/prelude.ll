@@ -21,50 +21,65 @@ declare i64 @llvm.ctlz.i64(i64, i1)
 declare i8* @malloc(i64)
 declare void @qsort(i8*, i64, i64, i32 (i8*, i8*)*)
 
-; Weld library functions
-declare void    @weld_rt_init(i64)
-declare i8*     @weld_rt_malloc(i64, i64)
-declare i8*     @weld_rt_realloc(i64, i8*, i64)
-declare void    @weld_rt_free(i64, i8*)
-declare i32     @my_id_public()
-declare void    @weld_rt_set_errno(i64, i64)
-declare i64     @weld_rt_get_errno(i64)
-declare void    @weld_abort_thread()
+; Weld runtime functions
+declare void    @weld_runtime_init()
+
+declare i64     @weld_run_begin(void (%work_t*)*, i8*, i64, i32)
+declare i8*     @weld_run_get_result(i64)
+declare void    @weld_run_dispose(i64)
+
+declare i8*     @weld_run_malloc(i64, i64)
+declare i8*     @weld_run_realloc(i64, i8*, i64)
+declare void    @weld_run_free(i64, i8*)
+declare i64     @weld_run_memory_usage(i64)
+
+declare void    @weld_run_set_errno(i64, i64)
+declare i64     @weld_run_get_errno(i64)
+
+declare i32     @weld_rt_thread_id()
+declare void    @weld_rt_abort_thread()
+declare i32     @weld_rt_get_nworkers()
+declare i64     @weld_rt_get_run_id()
+
+declare void    @weld_rt_start_loop(%work_t*, i8*, i8*, void (%work_t*)*, void (%work_t*)*, i64, i64, i32)
+declare void    @weld_rt_set_result(i8*)
+
+declare i8*     @weld_rt_new_vb(i64, i64)
+declare void    @weld_rt_new_vb_piece(i8*, %work_t*)
+declare %vb.vp* @weld_rt_cur_vb_piece(i8*, i32)
+declare %vb.out @weld_rt_result_vb(i8*)
+
+declare i8*     @weld_rt_new_merger(i64, i32)
+declare i8*     @weld_rt_get_merger_at_index(i8*, i64, i32)
+declare void    @weld_rt_free_merger(i8*)
+
+define i64 @run_dispose(i64 %run_id) {
+    call void @weld_run_dispose(i64 %run_id)
+    ret i64 0
+}
+
+define i64 @runtime_init(i64 %unused) {
+    call void @weld_runtime_init()
+    ret i64 0
+}
+
+define i64 @run_memory_usage(i64 %run_id) {
+    %res = call i64 @weld_run_memory_usage(i64 %run_id)
+    ret i64 %res
+}
 
 ; Parallel runtime structures
-; documentation in parlib.h
+; work_t struct in runtime.h
 %work_t = type { i8*, i64, i64, i64, i32, i64*, i64*, i32, i64, void (%work_t*)*, %work_t*, i32, i32, i32 }
-; documentation in vb.cpp
+; vec_piece struct in runtime.h
 %vb.vp = type { i8*, i64, i64, i64*, i64*, i32 }
+; vec_output struct in runtime.h
 %vb.out = type { i8*, i64 }
 
 ; Input argument (input data pointer, nworkers, mem_limit)
 %input_arg_t = type { i64, i32, i64 }
 ; Return type (output data pointer, run ID, errno)
 %output_arg_t = type { i64, i64, i64 }
-
-; documenation in parlib.cpp
-declare void @set_result(i8*)
-declare i8* @get_result()
-declare void @pl_start_loop(%work_t*, i8*, i8*, void (%work_t*)*, void (%work_t*)*, i64, i64, i32)
-declare void @execute(void (%work_t*)*, i8*)
-; documentation in vb.cpp
-declare i8* @new_vb(i64, i64)
-declare void @new_piece(i8*, %work_t*)
-declare %vb.vp* @cur_piece(i8*, i32)
-declare %vb.out @result_vb(i8*)
-; merger.cpp
-declare i8* @new_merger(i64, i32)
-declare i8* @get_merger_at_index(i8*, i64, i32)
-declare void @free_merger(i8*)
-
-; Number of workers
-declare void @set_nworkers(i32)
-declare i32 @get_nworkers()
-
-; Run IDs
-declare void @set_runid(i64)
-declare i64 @get_runid()
 
 ; Hash functions
 

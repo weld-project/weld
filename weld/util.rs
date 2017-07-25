@@ -2,8 +2,6 @@
 extern crate easy_ll;
 extern crate libc;
 
-use std;
-
 use std::cmp::max;
 use std::collections::HashMap;
 
@@ -12,7 +10,7 @@ use std::env;
 use super::ast::*;
 use super::ast::ExprKind::*;
 
-pub const MERGER_BC: &'static [u8] = include_bytes!("../weld_rt/cpp/libparbuilder.bc");
+pub const LIB_WELD_RT: &'static [u8] = include_bytes!("../weld_rt/cpp/libweldrt.bc");
 const WELD_HOME: &'static str = "WELD_HOME";
 
 /// Utility struct that can track and generate unique IDs and symbols for use in an expression.
@@ -107,18 +105,5 @@ pub fn get_weld_home() -> Result<String, ()> {
             Ok(path)
         }
         Err(_) => Err(()),
-    }
-}
-
-/// Loads the Weld runtime library.
-pub fn load_runtime_library() -> Result<(), String> {
-    let weld_home = get_weld_home().unwrap_or("./".to_string());
-    let path = format!("{}{}", weld_home, "weld_rt/target/release/libweldrt");
-    if let Err(_) = easy_ll::load_library(&path) {
-        let err_message = unsafe { std::ffi::CStr::from_ptr(libc::dlerror()) };
-        let err_message = err_message.to_owned().into_string().unwrap();
-        Err(err_message)
-    } else {
-        Ok(())
     }
 }

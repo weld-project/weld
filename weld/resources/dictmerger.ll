@@ -7,17 +7,19 @@
 ; - KV_STRUCT: name of struct holding {KEY, VALUE} (should be generated outside)
 ; - KV_VEC: name of vector of KV_STRUCTs (should be generated outside)
 ; - KV_VEC_PREFIX: prefix for helper functions of KV_VEC
-; - OP: binary commutative merge operation (example: add or fadd)
+;
+; In addition, the function $NAME.bld.merge_op($VALUE, $VALUE) is expected to be
+; defined, implementing the operation needed to merge two values.
 
 %$NAME.bld = type i8* ; the dictmerger is a pointer to the corresponding dictionary
 
 ; Initialize and return a new dictionary with the given initial capacity.
 ; The capacity must be a power of 2.
 define %$NAME.bld @$NAME.bld.new(i64 %capacity) {
-  %nworkers = call i32 @get_nworkers()
+  %nworkers = call i32 @weld_rt_get_nworkers()
   %structSizePtr = getelementptr %$NAME, %$NAME* null, i32 1
   %structSize = ptrtoint %$NAME* %structSizePtr to i64
-  %bldPtr = call i8* @new_merger(i64 %structSize, i32 %nworkers)
+  %bldPtr = call i8* @weld_rt_new_merger(i64 %structSize, i32 %nworkers)
   br label %entry
 
 entry:
@@ -41,7 +43,7 @@ define %$NAME* @$NAME.bld.getptrIndexed(%$NAME.bld %bldPtr, i32 %i) alwaysinline
   %dictPtr = getelementptr %$NAME, %$NAME* null, i32 1
   %dictSize = ptrtoint %$NAME* %dictPtr to i64
 
-  %rawPtr = call i8* @get_merger_at_index(%$NAME.bld %bldPtr, i64 %dictSize, i32 %i)
+  %rawPtr = call i8* @weld_rt_get_merger_at_index(%$NAME.bld %bldPtr, i64 %dictSize, i32 %i)
   %ptr = bitcast i8* %rawPtr to %$NAME*
   ret %$NAME* %ptr
 }
@@ -59,7 +61,7 @@ entry:
 
 onFilled:
   %oldValue = call $VALUE @$NAME.slot.value(%$NAME.slot %slot)
-  %newValue = $OP $VALUE %oldValue, %value  ; TODO: Fix this when making Op more generic
+  %newValue = call $VALUE @$NAME.bld.merge_op($VALUE %oldValue, $VALUE %value)
   %res1 = call %$NAME @$NAME.put(%$NAME %bld, %$NAME.slot %slot, $KEY %key, $VALUE %newValue)
   br label %done
 
@@ -81,7 +83,7 @@ define %$NAME @$NAME.bld.result(%$NAME.bld %bldPtr) {
   br label %entryLabel
 
 entryLabel:
-  %nworkers = call i32 @get_nworkers()
+  %nworkers = call i32 @weld_rt_get_nworkers()
   br label %bodyLabel
 
 bodyLabel:
@@ -107,7 +109,7 @@ innerBodyLabel:
 onFilled:
   %finalDict2 = load %$NAME, %$NAME* %finalDictPtr
   %oldValue = call $VALUE @$NAME.slot.value(%$NAME.slot %slot)
-  %newValue = $OP $VALUE %oldValue, %value  ; TODO: Fix this when making Op more generic
+  %newValue = call $VALUE @$NAME.bld.merge_op($VALUE %oldValue, $VALUE %value)
   %res1 = call %$NAME @$NAME.put(%$NAME %finalDict2, %$NAME.slot %slot, $KEY %key, $VALUE %newValue)
   br label %done
 
@@ -145,7 +147,7 @@ freeBody:
   br i1 %freeCond2, label %freeBody, label %endLabel
 
 endLabel:
-  call void @free_merger(i8* %bldPtr)
+  call void @weld_rt_free_merger(i8* %bldPtr)
   %finalRes = load %$NAME, %$NAME* %finalDictPtr
   ret %$NAME %finalRes
 }

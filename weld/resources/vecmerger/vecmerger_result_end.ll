@@ -9,5 +9,5 @@
 {doneLabel}:
   store {resType} {retValue}, {resType}* {output}
   {rawPtr} = bitcast {bldType} {buildPtr} to i8*
-  call void @free_merger(i8* {rawPtr})
+  call void @weld_rt_free_merger(i8* {rawPtr})
 ; End vecmerger merge.

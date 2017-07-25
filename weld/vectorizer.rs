@@ -4,24 +4,19 @@
 //! into expressions of type `Simd`. It also modifies loops and builders to accept vector
 //! arguments instead of scalar arguments.
 
+use std::collections::HashSet;
+
 use super::ast::*;
 use super::ast::ExprKind::*;
 use super::ast::Type::*;
 use super::error::*;
+use super::exprs;
 use super::util::SymbolGenerator;
 
-use std::collections::HashSet;
-
-use super::exprs;
-
-/// Vectorizes a type.
-fn vectorized_type(ty: &Type) -> Type {
-    if let Scalar(kind) = *ty {
-        Simd(kind)
-    } else {
-        ty.clone()
-    }
-}
+#[cfg(test)]
+use super::parser::*;
+#[cfg(test)]
+use super::type_inference::*;
 
 /// Returns `true` if this is a set of iterators we can vectorize, `false` otherwise.
 /// 
@@ -44,14 +39,14 @@ fn vectorizable_iters(iters: &Vec<Iter<Type>>) -> bool {
     true
 }
 
-/// Vectorizes the expression by changing its type if the expression is a scalar.
+/// Vectorizes an expression in-place, also changing its type if needed.
 fn vectorize_expr(e: &mut Expr<Type>, broadcast_idens: &HashSet<Symbol>) -> WeldResult<bool> {
     let mut new_expr = None;
     let mut cont = true;
 
     match e.kind {
         Literal(_) => {
-            e.ty = vectorized_type(&e.ty);
+            e.ty = e.ty.simd_type()?;
         }
         Ident(ref name) => {
             if let Scalar(_) = e.ty {
@@ -62,22 +57,23 @@ fn vectorize_expr(e: &mut Expr<Type>, broadcast_idens: &HashSet<Symbol>) -> Weld
                     new_expr = Some(exprs::broadcast_expr(e.clone())?);
                     cont = false;
                 } else {
-                    e.ty = vectorized_type(&e.ty);
+                    e.ty = e.ty.simd_type()?;
                 }
-            } else if let Struct(ref mut field_tys) = e.ty {
-                for ty in field_tys.iter_mut() {
-                    *ty = vectorized_type(&ty);
-                }
+            } else if let Struct(_) = e.ty {
+                e.ty = e.ty.simd_type()?;
             }
         }
         GetField { .. } => {
-            e.ty = vectorized_type(&e.ty);
+            e.ty = e.ty.simd_type()?;
         }
         BinOp { .. } => {
-            e.ty = vectorized_type(&e.ty);
+            e.ty = e.ty.simd_type()?;
         }
         Select { .. } => {
-            e.ty = vectorized_type(&e.ty);
+            e.ty = e.ty.simd_type()?;
+        }
+        MakeStruct { .. } => {
+            e.ty = e.ty.simd_type()?;
         }
         // Predication for a value merged into a merger. This pattern checks for if(cond, merge(b, e), b).
         If { ref cond, ref on_true, ref on_false } => {
@@ -155,18 +151,6 @@ fn vectorizable(for_loop: &Expr<Type>) -> WeldResult<HashSet<Symbol>> {
         if vectorizable_iters(&iters) {
             // Check if the builder is newly initialized.
             if let NewBuilder(_) = init_builder.kind {
-                // Check the builder.
-                if let Builder(ref bk, _) = init_builder.ty {
-                    match *bk {
-                        BuilderKind::Merger(ref ty, _) => {
-                            if let Scalar(_) = **ty {} else { return weld_err!("Unsupported builder"); }
-                        }
-                        _ => {
-                            return weld_err!("Unsupported builder");
-                        }
-                    };
-                }
-
                 // Check the loop function.
                 if let Lambda { ref params, ref body } = func.kind {
                     let mut passed = true;
@@ -180,30 +164,27 @@ fn vectorizable(for_loop: &Expr<Type>) -> WeldResult<HashSet<Symbol>> {
                     body.traverse(&mut |f| {
                         match f.kind {
                             Literal(_) => {},
+
                             Ident(ref name) => {
                                 if f.ty == params[1].ty && *name == params[1].name {
                                     // Used an index expression in the loop body.
                                     passed = false;
                                 }
                             },
+
                             BinOp{ .. } => {},
+
                             Let{ ref name, .. } => {
                                 defined_in_loop.insert(name.clone()); 
                             },
-                            // GetField is allowed if the only fields we fetch are the ones from
-                            // the argument (in case the input was Zipped). At this point, it is
-                            // already guaranteed that each input vector is a scalar.
-                            GetField { ref expr, .. } => {
-                                let mut getfield_passed = false;
-                                let ref elem_param = params[2];
-                                if let Ident(ref name) = expr.kind {
-                                    if elem_param.name == *name {
-                                       getfield_passed = true; 
-                                    }
-                                }
-                                passed = getfield_passed;
-                            }
-                            Merge{ .. } => {},
+
+                            // TODO: do we want to allow all GetFields and MakeStructs, or look inside them?
+                            GetField { .. } => {},
+
+                            MakeStruct { .. } => {},
+
+                            Merge { .. } => {},
+
                             If { ref on_true, ref on_false, .. } => {
                                 let mut can_predicate = false;
                                 if let Merge { ref builder, .. } = on_true.kind {
@@ -223,6 +204,7 @@ fn vectorizable(for_loop: &Expr<Type>) -> WeldResult<HashSet<Symbol>> {
                                 }
                                 passed = can_predicate;
                             }
+
                             _ => {
                                 passed = false;
                             }
@@ -299,15 +281,7 @@ pub fn vectorize(expr: &mut Expr<Type>) {
                         });
 
                         let mut vectorized_params = params.clone();
-
-                        let new_ty = if let Scalar(_) = vectorized_params[2].ty {
-                            vectorized_type(&vectorized_params[2].ty)
-                        } else if let Struct(ref field_tys) = vectorized_params[2].ty {
-                            Struct(field_tys.iter().map(|ref t| vectorized_type(t)).collect())
-                        } else {
-                            unreachable!();
-                        };
-                        vectorized_params[2].ty = new_ty;
+                        vectorized_params[2].ty = vectorized_params[2].ty.simd_type()?;
 
                         let vec_func = exprs::lambda_expr(vectorized_params, *vectorized_body)?;
 
@@ -362,3 +336,90 @@ pub fn vectorize(expr: &mut Expr<Type>) {
     });
 }
 
+/// Parse and perform type inference on an expression.
+#[cfg(test)]
+fn typed_expr(code: &str) -> TypedExpr {
+    let mut e = parse_expr(code).unwrap();
+    assert!(infer_types(&mut e).is_ok());
+    e.to_typed().unwrap()
+}
+
+/// Check whether a function has a vectorized Merge call. We'll use this to check whether function
+/// bodies got vectorized.
+#[cfg(test)]
+fn has_vectorized_merge(expr: &TypedExpr) -> bool {
+    let mut found = false;
+    expr.traverse(&mut |ref e| {
+        if let Merge { ref value, .. } = e.kind {
+            found |= value.ty.is_simd();
+        }
+    });
+    found
+}
+
+#[test]
+fn simple_merger() {
+    let mut e = typed_expr(
+        "|v:vec[i32]| result(for(v, merger[i32,+], |b,i,e| merge(b,e+1)))");
+    vectorize(&mut e);
+    assert!(has_vectorized_merge(&e));
+}
+
+#[test]
+fn predicated_merger() {
+    let mut e = typed_expr(
+        "|v:vec[i32]| result(for(v, merger[i32,+], |b,i,e| if(e>0, merge(b,e), b)))");
+    vectorize(&mut e);
+    assert!(has_vectorized_merge(&e));
+}
+
+#[test]
+fn simple_appender() {
+    let mut e = typed_expr(
+        "|v:vec[i32]| result(for(v, appender[i32], |b,i,e| merge(b,e+1)))");
+    vectorize(&mut e);
+    assert!(has_vectorized_merge(&e));
+}
+
+#[test]
+fn predicated_appender() {
+    // This code should NOT be vectorized because we can't predicate merges into vecbuilder.
+    let mut e = typed_expr(
+        "|v:vec[i32]| result(for(v, appender[i32], |b,i,e| if(e>0, merge(b,e), b)))");
+    vectorize(&mut e);
+    assert!(!has_vectorized_merge(&e));
+}
+
+#[test]
+fn non_vectorizable_type() {
+    // This code should NOT be vectorized because we can't vectorize merges of vectors.
+    let mut e = typed_expr(
+        "|v:vec[i32]| result(for(v, appender[vec[i32]], |b,i,e| merge(b,v)))");
+    vectorize(&mut e);
+    assert!(!has_vectorized_merge(&e));
+}
+
+#[test]
+fn non_vectorizable_expr() {
+    // This code should NOT be vectorized because we can't vectorize lookup().
+    let mut e = typed_expr(
+        "|v:vec[i32]| result(for(v, appender[i32], |b,i,e| merge(b,lookup(v,i))))");
+    vectorize(&mut e);
+    assert!(!has_vectorized_merge(&e));
+}
+
+#[test]
+fn zipped_input() {
+    let mut e = typed_expr(
+        "|v:vec[i32]| result(for(zip(v,v), appender[i32], |b,i,e| merge(b,e.$0+e.$1)))");
+    vectorize(&mut e);
+    assert!(has_vectorized_merge(&e));
+}
+
+#[test]
+fn zips_in_body() {
+    let mut e = typed_expr(
+        "|v:vec[i32]| result(for(v, dictmerger[{i32,i32},i32,+], |b,i,e| merge(b,{{e,e},e})))");
+    vectorize(&mut e);
+    assert!(has_vectorized_merge(&e));
+}

@@ -4,10 +4,12 @@ use std::fmt;
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use super::ast::*;
+use super::ast::Type::*;
 use super::error::*;
 use super::pretty_print::*;
 use super::util::SymbolGenerator;
 
+// TODO: make these wrapper types so that you can't pass in the wrong value by mistake
 pub type BasicBlockId = usize;
 pub type FunctionId = usize;
 
@@ -289,11 +291,11 @@ impl fmt::Display for Statement {
             Merge {
                 ref builder,
                 ref value,
-            } => write!(f, "merge {} {}", builder, value),
+            } => write!(f, "merge({}, {})", builder, value),
             Res {
                 ref output,
                 ref builder,
-            } => write!(f, "{} = result {}", output, builder),
+            } => write!(f, "{} = result({})", output, builder),
             NewBuilder {
                 ref output,
                 ref arg,
@@ -311,18 +313,18 @@ impl fmt::Display for Statement {
                 ref elems,
             } => {
                 write!(f,
-                       "{} = new {}",
+                       "{} = {}",
                        output,
-                       join("{", ",", "}", elems.iter().map(|e| e.name.clone())))
+                       join("{", ",", "}", elems.iter().map(|e| format!("{}", e.name)))
             }
             MakeVector {
                 ref output,
                 ref elems,
             } => {
                 write!(f,
-                       "{} = new {}",
+                       "{} = {}",
                        output,
-                       join("[", ",", "]", elems.iter().map(|e| e.name.clone())))
+                       join("[", ", ", "]", elems.iter().map(|e| format!("{}", e))))
             }
             CUDF {
                 ref output,
@@ -334,13 +336,13 @@ impl fmt::Display for Statement {
                        "{} = cudf[{}]{}",
                        output,
                        symbol_name,
-                       join("(", ",", ")", args.iter().map(|e| e.name.clone())))
+                       join("(", ", ", ")", args.iter().map(|e| format!("{}", e))))
             }
             GetField {
                 ref output,
                 ref value,
                 index,
-            } => write!(f, "{} = {}.{}", output, value, index),
+            } => write!(f, "{} = {}.${}", output, value, index),
         }
     }
 }
@@ -445,14 +447,26 @@ impl fmt::Display for SirProgram {
     }
 }
 
-/// Recursive helper function for sir_param_correction. env contains the symbol to type mappings
+/// Recursive helper function for sir_param_correction. `env` contains the symbol to type mappings
 /// that have been defined previously in the program. Any symbols that need to be passed in
-/// as closure parameters to func_id will be added to closure (so that func_id's
+/// as closure parameters to func_id will be added to `closure` (so that `func_id`'s
 /// callers can also add these symbols to their parameters list, if necessary).
+/// `visited` contains functions we have already seen on the way down the function call tree,
+/// to prevent infinite recursion when there are loops.
 fn sir_param_correction_helper(prog: &mut SirProgram,
                                func_id: FunctionId,
                                env: &mut HashMap<Symbol, Type>,
-                               closure: &mut HashSet<Symbol>) {
+                               closure: &mut HashSet<Symbol>,
+                               visited: &mut HashSet<FunctionId>) {
+    // this is needed for cases where params are added outside of sir_param_correction and are not
+    // based on variable reads in the function (e.g. in the Iterate case);
+    // and when there are loops in the call graph (also in the Iterate case)
+    for (name, _) in &prog.funcs[func_id].params {
+        closure.insert(name.clone());
+    }
+    if !visited.insert(func_id) {
+        return;
+    }
     for (name, ty) in &prog.funcs[func_id].params {
         env.insert(name.clone(), ty.clone());
     }
@@ -597,11 +611,11 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
         match block.terminator {
             // make a recursive call for other functions referenced by the terminator
             ParallelFor(ref pf) => {
-                sir_param_correction_helper(prog, pf.body, env, &mut inner_closure);
-                sir_param_correction_helper(prog, pf.cont, env, &mut inner_closure);
+                sir_param_correction_helper(prog, pf.body, env, &mut inner_closure, visited);
+                sir_param_correction_helper(prog, pf.cont, env, &mut inner_closure, visited);
             }
             JumpFunction(jump_func) => {
-                sir_param_correction_helper(prog, jump_func, env, &mut inner_closure);
+                sir_param_correction_helper(prog, jump_func, env, &mut inner_closure, visited);
             }
             Branch { .. } => {}
             JumpBlock(_) => {}
@@ -623,10 +637,13 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
 /// gen_expr may result in the use of symbols across function boundaries,
 /// so ast_to_sir calls sir_param_correction to correct function parameters
 /// to ensure that such symbols (the closure) are passed in as parameters.
+/// Can be safely called multiple times -- only the necessary param corrections
+/// will be performed.
 fn sir_param_correction(prog: &mut SirProgram) -> WeldResult<()> {
     let mut env = HashMap::new();
     let mut closure = HashSet::new();
-    sir_param_correction_helper(prog, 0, &mut env, &mut closure);
+    let mut visited = HashSet::new();
+    sir_param_correction_helper(prog, 0, &mut env, &mut closure, &mut visited);
     let ref func = prog.funcs[0];
     for name in closure {
         if func.params.get(&name) == None {
@@ -638,10 +655,7 @@ fn sir_param_correction(prog: &mut SirProgram) -> WeldResult<()> {
 
 /// Convert an AST to a SIR program. Symbols must be unique in expr.
 pub fn ast_to_sir(expr: &TypedExpr) -> WeldResult<SirProgram> {
-    if let ExprKind::Lambda {
-               ref params,
-               ref body,
-           } = expr.kind {
+    if let ExprKind::Lambda { ref params, ref body } = expr.kind {
         let mut prog = SirProgram::new(&expr.ty, params);
         prog.sym_gen = SymbolGenerator::from_expression(expr);
         for tp in params {
@@ -650,6 +664,9 @@ pub fn ast_to_sir(expr: &TypedExpr) -> WeldResult<SirProgram> {
         let first_block = prog.funcs[0].add_block();
         let (res_func, res_block, res_sym) = gen_expr(body, &mut prog, 0, first_block)?;
         prog.funcs[res_func].blocks[res_block].terminator = Terminator::ProgramReturn(res_sym);
+        sir_param_correction(&mut prog)?;
+        // second call is necessary in the case where there are loops in the call graph, since
+        // some parameter dependencies may not have been propagated through back edges
         sir_param_correction(&mut prog)?;
         Ok((prog))
     } else {
@@ -878,6 +895,89 @@ fn gen_expr(expr: &TypedExpr,
                 prog.funcs[false_func].blocks[false_block].terminator = JumpBlock(cont_block);
                 Ok((cur_func, cont_block, res_sym))
             }
+        }
+
+        ExprKind::Iterate {
+            ref initial,
+            ref update_func,
+        } => {
+            // Pull out the argument name and function body and validate that things type-check.
+            let argument_sym;
+            let func_body;
+            match update_func.kind {
+                ExprKind::Lambda { ref params, ref body } if params.len() == 1 => {
+                    argument_sym = &params[0].name;
+                    func_body = body;
+                    if params[0].ty != initial.ty {
+                        return weld_err!("Wrong argument type for body of Iterate");
+                    }
+                    if func_body.ty != Struct(vec![initial.ty.clone(), Scalar(ScalarKind::Bool)]) {
+                        return weld_err!("Wrong return type for body of Iterate");
+                    }
+                    prog.add_local_named(&params[0].ty, argument_sym, cur_func);
+                }
+                _ => return weld_err!("Argument of Iterate was not a Lambda")
+            }
+
+            // Generate the intial value and assign it to the update_func's argument.
+            let (cur_func, cur_block, initial_sym) = gen_expr(initial, prog, cur_func, cur_block)?;
+            prog.funcs[cur_func].blocks[cur_block].add_statement(
+                Assign { output: argument_sym.clone(), value: initial_sym });
+
+            // Check whether the function's body contains any parallel loops. If so, we should put the loop body
+            // in a new function because we'll need to jump back to it from continuations. If not, we can just
+            // make the loop body be another basic block in the current function.
+            let parallel_body = contains_parallel_expressions(func_body);
+            let body_start_func = if parallel_body {
+                let new_func = prog.add_func();
+                new_func
+            } else {
+                cur_func
+            };
+            let body_start_block = prog.funcs[body_start_func].add_block();
+
+            // Jump to where the body starts
+            if parallel_body {
+                prog.funcs[cur_func].blocks[cur_block].terminator = JumpFunction(body_start_func);
+            } else {
+                prog.funcs[cur_func].blocks[cur_block].terminator = JumpBlock(body_start_block);
+            }
+
+            // Generate the loop's body, which will work on argument_sym and produce result_sym.
+            // The type of result_sym will be {ArgType, bool} and we will repeat the body if the bool is true.
+            let (body_end_func, body_end_block, result_sym) =
+                gen_expr(func_body, prog, body_start_func, body_start_block)?;
+            
+            // After the body, unpack the {state, bool} struct into symbols argument_sym and continue_sym.
+            let continue_sym = prog.add_local(&Scalar(ScalarKind::Bool), body_end_func);
+            if parallel_body {
+                // this is needed because sir_param_correction does not add variables only used
+                // on the LHS of assignments to the params list
+                prog.funcs[body_end_func].params.insert(argument_sym.clone(), initial.ty.clone());
+            }
+            prog.funcs[body_end_func].blocks[body_end_block].add_statement(
+                GetField { output: argument_sym.clone(), value: result_sym.clone(), index: 0 });
+            prog.funcs[body_end_func].blocks[body_end_block].add_statement(
+                GetField { output: continue_sym.clone(), value: result_sym.clone(), index: 1 });
+
+            // Create two more blocks so we can branch on continue_sym
+            let repeat_block = prog.funcs[body_end_func].add_block();
+            let finish_block = prog.funcs[body_end_func].add_block();
+            prog.funcs[body_end_func].blocks[body_end_block].terminator =
+                Branch { cond: continue_sym, on_true: repeat_block, on_false: finish_block };
+
+            // If we had a parallel body, repeat_block must do a JumpFunction to get back to body_start_func;
+            // otherwise it can just do a normal JumpBlock since it should be in the same function.
+            if parallel_body {
+                assert!(body_end_func != body_start_func);
+                prog.funcs[body_end_func].blocks[repeat_block].terminator = JumpFunction(body_start_func);
+            } else {
+                assert!(body_end_func == cur_func && body_start_func == cur_func);
+                prog.funcs[body_end_func].blocks[repeat_block].terminator = JumpBlock(body_start_block);
+            }
+
+            // In either case, our final value is available in finish_block.
+            Ok((body_end_func, finish_block, argument_sym.clone()))
         }
 
         ExprKind::Merge {
@@ -1111,6 +1211,17 @@ fn gen_expr(expr: &TypedExpr,
 
         _ => weld_err!("Unsupported expression: {}", print_expr(expr)),
     }
+}
+
+/// Return true if an expression contains parallel for operators
+fn contains_parallel_expressions(expr: &TypedExpr) -> bool {
+    let mut found = false;
+    expr.traverse(&mut |ref e| {
+        if let ExprKind::For { .. } = e.kind {
+            found = true;
+        }
+    });
+    found
 }
 
 fn join<T: Iterator<Item = String>>(start: &str, sep: &str, end: &str, strings: T) -> String {

@@ -21,7 +21,7 @@ You can join the discussion on Weld on our [Google Group](https://groups.google.
 
 ## Building
 
-To build Weld, you need [Rust 1.13 or higher](http://rust-lang.org) and [LLVM](http://llvm.org) 3.8 or newer.
+To build Weld, you need [Rust 1.18 or higher](http://rust-lang.org) and [LLVM](http://llvm.org) 3.8 or newer.
 
 To install Rust, follow the steps [here](https://rustup.rs). You can verify that Rust was installed correctly on your system by typing `rustc` into your shell.
 
@@ -40,6 +40,8 @@ $ ln -s /usr/local/bin/llvm-config-3.8 /usr/local/bin/llvm-config
 ```
 
 To make sure this worked correctly, run `llvm-config --version`. You should see `3.8.x` or newer.
+
+Enter the `weld_rt/cpp` directory and try running `make`. If the command fails with errors related to missing header files, you may need to install XCode and/or XCode Command Line Tools. Run `xcode-select --install` to do this.
 
 #### Ubuntu LLVM Installation
 

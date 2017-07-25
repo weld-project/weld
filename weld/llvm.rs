@@ -25,7 +25,7 @@ use super::sir::Terminator::*;
 use super::transforms;
 use super::type_inference;
 use super::util::IdGenerator;
-use super::util::MERGER_BC;
+use super::util::LIB_WELD_RT;
 
 #[cfg(test)]
 use super::parser::*;
@@ -79,26 +79,26 @@ pub fn compile_program(program: &Program,
                        -> WeldResult<easy_ll::CompiledModule> {
     let mut expr = macro_processor::process_program(program)?;
     if log_level >= LogLevel::Debug {
-        println!("After macro substitution:\n{}\n", print_expr(&expr));
+        println!("After macro substitution:\n{}\n", print_typed_expr(&expr));
     }
 
     let _ = transforms::uniquify(&mut expr)?;
     type_inference::infer_types(&mut expr)?;
     let mut expr = expr.to_typed()?;
     if log_level >= LogLevel::Debug {
-        println!("After type inference:\n{}\n", print_expr(&expr));
+        println!("After type inference:\n{}\n", print_typed_expr(&expr));
     }
 
     for pass in opt_passes {
         pass.transform(&mut expr)?;
         if log_level >= LogLevel::Debug {
-            println!("After {} pass:\n{}", pass.pass_name(), print_expr(&expr));
+            println!("After {} pass:\n{}", pass.pass_name(), print_typed_expr(&expr));
         }
     }
 
     transforms::uniquify(&mut expr)?;
     if log_level >= LogLevel::Debug {
-        println!("After uniquify:\n{}\n", print_expr(&expr));
+        println!("After uniquify:\n{}\n", print_typed_expr(&expr));
     }
 
     let sir_prog = sir::ast_to_sir(&expr)?;
@@ -113,14 +113,9 @@ pub fn compile_program(program: &Program,
         println!("LLVM program:\n{}\n", &llvm_code);
     }
 
-    Ok(easy_ll::compile_module(&llvm_code, Some(MERGER_BC))?)
-}
-
-/// Generates a small program which, when called with a `run_id`, frees
-/// memory associated with the run ID.
-pub fn generate_runtime_interface_module() -> WeldResult<easy_ll::CompiledModule> {
-    let program = include_str!("resources/runtime_interface_module.ll");
-    Ok(easy_ll::compile_module(program, None)?)
+    let module = try!(easy_ll::compile_module(&llvm_code, Some(LIB_WELD_RT)));
+    module.run_named("runtime_init", 0).unwrap();
+    Ok(module)
 }
 
 /// Generates LLVM code for one or more modules.
@@ -214,7 +209,7 @@ impl LlvmGenerator {
         Ok(())
     }
 
-    fn create_new_pieces(&mut self, params: &HashMap<Symbol, Type>, ctx: &mut FunctionContext) -> WeldResult<()> {
+    fn create_new_vb_pieces(&mut self, params: &HashMap<Symbol, Type>, ctx: &mut FunctionContext) -> WeldResult<()> {
         let full_task_ptr = ctx.var_ids.next();
         let full_task_int = ctx.var_ids.next();
         let full_task_bit = ctx.var_ids.next();
@@ -311,7 +306,7 @@ impl LlvmGenerator {
         }
 
         // Get the current thread ID
-        ctx.code.add(format!("%cur.tid = call i32 @my_id_public()"));
+        ctx.code.add(format!("%cur.tid = call i32 @weld_rt_thread_id()"));
 
         // If we're in a loop, generate loop iteration code
         if containing_loop.is_some() {
@@ -448,7 +443,7 @@ impl LlvmGenerator {
             ctx.code.add(format!("store {} {}, {}* {}", &elem_ty_str, prev_ref, &elem_ty_str, elem_str));
             ctx.code.add(format!("store i64 {}, i64* {}", idx_tmp, llvm_symbol(&par_for.idx_arg)));
         }
-        
+
         // Jump to block 0.
         ctx.code.add(format!("br label %b.b{}", func.blocks[0].id));
 
@@ -599,9 +594,9 @@ impl LlvmGenerator {
             wrap_ctx.code.add(format!("fn.boundcheckfailed:"));
             let errno = WeldRuntimeErrno::BadIteratorLength;
             let run_id = wrap_ctx.var_ids.next();
-            wrap_ctx.code.add(format!("{} = call i64 @get_runid()", run_id));
-            wrap_ctx.code.add(format!("call void @weld_rt_set_errno(i64 {}, i64 {})", run_id, errno as i64));
-            wrap_ctx.code.add(format!("call void @weld_abort_thread()"));
+            wrap_ctx.code.add(format!("{} = call i64 @weld_rt_get_run_id()", run_id));
+            wrap_ctx.code.add(format!("call void @weld_run_set_errno(i64 {}, i64 {})", run_id, errno as i64));
+            wrap_ctx.code.add(format!("call void @weld_rt_abort_thread()"));
             wrap_ctx.code.add(format!("; Unreachable!"));
             wrap_ctx.code.add(format!("br label %fn.end"));
             wrap_ctx.code.add(format!("fn.boundcheckpassed:"));
@@ -626,7 +621,7 @@ impl LlvmGenerator {
             let body_struct = self.get_arg_struct(&func.params, &mut wrap_ctx)?;
             let cont_struct = self.get_arg_struct(&sir.funcs[par_for.cont].params, &mut wrap_ctx)?;
             wrap_ctx.code.add(format!(
-                "call void @pl_start_loop(%work_t* %cur.work, i8* {}, i8* {}, \
+                "call void @weld_rt_start_loop(%work_t* %cur.work, i8* {}, i8* {}, \
                                 void (%work_t*)* @f{}_par, void (%work_t*)* @f{}_par, i64 0, \
                                 i64 {}, i32 {})",
                 body_struct,
@@ -658,8 +653,9 @@ impl LlvmGenerator {
                 .code
                 .add(format!("{} = getelementptr %work_t, %work_t* %cur.work, i32 0, i32 2", upper_bound_ptr));
             par_body_ctx.code.add(format!("{} = load i64, i64* {}", upper_bound, upper_bound_ptr));
-            let body_arg_types = self.get_arg_str(&func.params, "")?;
-            self.create_new_pieces(&func.params, &mut par_body_ctx)?;
+
+            let body_arg_types = try!(self.get_arg_str(&func.params, ""));
+            self.create_new_vb_pieces(&func.params, &mut par_body_ctx)?;
             par_body_ctx.code.add("fn_call:");
             par_body_ctx.code.add(format!("call void @f{}({}, i64 {}, i64 {})",
                                             func.id,
@@ -673,8 +669,10 @@ impl LlvmGenerator {
             let mut par_cont_ctx = &mut FunctionContext::new();
             par_cont_ctx.code.add(format!("define void @f{}_par(%work_t* %cur.work) {{", par_for.cont));
             par_cont_ctx.code.add("entry:");
+
             self.unload_arg_struct(&sir.funcs[par_for.cont].params, &mut par_cont_ctx)?;
-            self.create_new_pieces(&sir.funcs[par_for.cont].params, &mut par_cont_ctx)?;
+            self.create_new_vb_pieces(&sir.funcs[par_for.cont].params, &mut par_cont_ctx)?;
+
             par_cont_ctx.code.add("fn_call:");
             let cont_arg_types = self.get_arg_str(&sir.funcs[par_for.cont].params, "")?;
             par_cont_ctx.code.add(format!("call void @f{}({})", par_for.cont, cont_arg_types));
@@ -717,8 +715,6 @@ impl LlvmGenerator {
         run_ctx.code.add(format!("%r.args = extractvalue %input_arg_t %r.inp_val, 0"));
         run_ctx.code.add(format!("%r.nworkers = extractvalue %input_arg_t %r.inp_val, 1"));
         run_ctx.code.add(format!("%r.memlimit = extractvalue %input_arg_t %r.inp_val, 2"));
-        run_ctx.code.add(format!("call void @set_nworkers(i32 %r.nworkers)"));
-        run_ctx.code.add(format!("call void @weld_rt_init(i64 %r.memlimit)"));
         // Code to load args and call function
         run_ctx.code.add(format!(
             "%r.args_typed = inttoptr i64 %r.args to {args_type}*
@@ -748,11 +744,10 @@ impl LlvmGenerator {
         let final_address = run_ctx.var_ids.next();
 
         run_ctx.code.add(format!(
-            "call void @execute(void (%work_t*)* @f0_par, i8* {run_struct})
-             %res_ptr = call i8* @get_result()
+            "{rid} = call i64 @weld_run_begin(void (%work_t*)* @f0_par, i8* {run_struct}, i64 %r.memlimit, i32 %r.nworkers)
+             %res_ptr = call i8* @weld_run_get_result(i64 {rid})
              %res_address = ptrtoint i8* %res_ptr to i64
-             {rid} = call i64 @get_runid()
-             {errno} = call i64 @weld_rt_get_errno(i64 {rid})
+             {errno} = call i64 @weld_run_get_errno(i64 {rid})
              {tmp0} = insertvalue %output_arg_t undef, i64 %res_address, 0
              {tmp1} = insertvalue %output_arg_t {tmp0}, i64 {rid}, 1
              {tmp2} = insertvalue %output_arg_t {tmp1}, i64 {errno}, 2
@@ -1111,10 +1106,53 @@ impl LlvmGenerator {
         Ok(())
     }
 
-    /// Given a pointer to a some data retrieved from a builder, generates code to merge a value
-    /// into the builder using a binary operation. The result will be stored back into the
-    /// pointer to complete the merge. `builder_ptr` is the pointer into which the original value
-    /// is read and the new value will be stored. `merge_value` is the value to merge in.
+    /// Generate code to perform a binary operation on two registers, returning the name of a new register
+    /// that will hold the value. For structs, this will perform the same merge operation on each element
+    /// of the struct, regardless of its type. Takes an IdGenerator for variable names.
+    fn gen_merge_op_on_registers(&mut self,
+                                 arg1: &str,
+                                 arg2: &str,
+                                 bin_op: &BinOpKind,
+                                 arg_ty: &Type,
+                                 var_ids: &mut IdGenerator,
+                                 code: &mut CodeBuilder)
+                                 -> WeldResult<String> {
+        let llvm_ty = self.llvm_type(arg_ty)?.to_string();
+        let mut res = var_ids.next();
+
+        match *arg_ty {
+            Scalar(_) | Simd(_) => {
+                code.add(format!("{} = {} {} {}, {}",
+                    &res, try!(llvm_binop(*bin_op, arg_ty)), &llvm_ty, arg1, arg2));
+            }
+
+            Struct(ref fields) => {
+                res = "undef".to_string();
+                for (i, ty) in fields.iter().enumerate() {
+                    let arg1_elem = var_ids.next();
+                    let arg2_elem = var_ids.next();
+                    let new_res = var_ids.next();
+                    let elem_ty_str = try!(self.llvm_type(ty)).to_string();
+                    code.add(format!("{} = extractvalue {} {}, {}", &arg1_elem, &llvm_ty, &arg1, i));
+                    code.add(format!("{} = extractvalue {} {}, {}", &arg2_elem, &llvm_ty, &arg2, i));
+                    let elem_res = self.gen_merge_op_on_registers(
+                        &arg1_elem, &arg2_elem, &bin_op, &ty, var_ids, code)?;
+                    code.add(format!("{} = insertvalue {} {}, {} {}, {}",
+                        &new_res, &llvm_ty, &res, &elem_ty_str, &elem_res, i));
+                    res = new_res;
+                }
+            }
+
+            _ => return weld_err!("gen_merge_op_on_registers called on invalid type {}", print_type(arg_ty))
+        }
+
+        Ok(res)
+    }
+
+    /// Given a pointer to a result variable (e.g. from a builder), generates code to merge a value
+    /// into it using a binary operation. `result_ptr` is the pointer into which the original value
+    /// is read and the updated value will be stored. `merge_value` is the value to merge in, which
+    /// should be a value in a register.
     fn gen_merge_op(&mut self,
                     builder_ptr: &str,
                     merge_value: &str,
@@ -1123,49 +1161,6 @@ impl LlvmGenerator {
                     merge_ty: &Type,
                     ctx: &mut FunctionContext)
                     -> WeldResult<()> {
-        let builder_value = self.gen_load_var(builder_ptr, merge_ty_str, ctx)?;
-        let mut res = ctx.var_ids.next();
-        if let Scalar(_) = *merge_ty {
-            ctx.code.add(format!("{} = {} {} {}, {}",
-                                 &res,
-                                 llvm_binop(*bin_op, merge_ty)?,
-                                 &merge_ty_str,
-                                 builder_value,
-                                 merge_value));
-        } else if let Struct(ref tys) = *merge_ty {
-            let mut cur = "undef".to_string();
-            for (i, ty) in tys.iter().enumerate() {
-                let merge_elem = ctx.var_ids.next();
-                let builder_elem = ctx.var_ids.next();
-                let struct_name = ctx.var_ids.next();
-                let binop_value = ctx.var_ids.next();
-                let elem_ty_str = self.llvm_type(ty)?;
-                ctx.code.add(format!("{} = extractvalue {} {}, {}", &merge_elem, &merge_ty_str, &merge_value, i));
-                ctx.code.add(format!("{} = extractvalue {} {}, {}", &builder_elem, &merge_ty_str, &builder_value, i));
-                ctx.code.add(format!("{} = {} {} {}, {}",
-                                     &binop_value,
-                                     llvm_binop(*bin_op, ty)?,
-                                     &elem_ty_str,
-                                     &merge_elem,
-                                     &builder_elem));
-                ctx.code.add(format!("{} = insertvalue {} {}, {} {}, {}",
-                                     &struct_name,
-                                     &merge_ty_str,
-                                     &cur,
-                                     &elem_ty_str,
-                                     &binop_value,
-                                     i));
-                res = struct_name.clone();
-                cur = struct_name.clone();
-            }
-        } else {
-            unreachable!();
-        }
-
-        // Store the resulting merge value back into the builder pointer.
-        self.gen_store_var(&res, builder_ptr, merge_ty_str, ctx);
-        Ok(())
-    }
 
     /// Generate code to perform a unary operation on `child` and store the result in `output` (which should
     /// be a location on the stack).
@@ -1205,6 +1200,7 @@ impl LlvmGenerator {
 
     /// Generate code for a single statement, appending it to the code in a FunctionContext.
     fn gen_statement(&mut self, statement: &Statement, func: &SirFunction, ctx: &mut FunctionContext) -> WeldResult<()> {
+        ctx.code.add(format!("; {}", statement));
         match *statement {
             MakeStruct { ref output, ref elems } => {
                 let mut cur_name = String::from("undef");
@@ -1493,7 +1489,7 @@ impl LlvmGenerator {
             Merge { ref builder, ref value } => {
                 let bld_ty = func.symbol_type(builder)?;
                 if let Builder(ref bld_kind, _) = *bld_ty {
-                    self.gen_merge(bld_kind, builder, value, func, ctx)?;
+                    self.gen_merge(bld_kind, builder, get_sym_ty(func, value)?, value, func, ctx)?;
                 } else {
                     return weld_err!("Non builder type {} found in Merge", print_type(bld_ty))
                 }
@@ -1504,7 +1500,7 @@ impl LlvmGenerator {
                 if let Builder(ref bld_kind, _) = *bld_ty {
                     self.gen_result(bld_kind, builder, output, func, ctx)?;
                 } else {
-                    return weld_err!("Non builder type {} found in Res", print_type(bld_ty))
+                    return weld_err!("Non builder type {} found in Result", print_type(bld_ty))
                 }
             }
 
@@ -1524,6 +1520,7 @@ impl LlvmGenerator {
     fn gen_merge(&mut self,
                  builder_kind: &BuilderKind,
                  builder: &Symbol,
+                 value_ty: &Type,
                  value: &Symbol,
                  func: &SirFunction,
                  ctx: &mut FunctionContext)
@@ -1533,6 +1530,57 @@ impl LlvmGenerator {
         let (val_ll_ty, val_ll_sym) = self.llvm_type_and_name(func, value)?;
         let bld_prefix = llvm_prefix(&bld_ll_ty);
 
+        // Special case: if the value is a SIMD vector, we need to merge each element separately (because the final
+        // builder will still operate on scalars). We have specialized functions to merge all of them together for
+        // some builders, such as Merger, but for others we just call the merge operation multiple times.
+        if value_ty.is_simd() {
+            match *builder_kind {
+                Merger(_, ref op) => {
+                    // For Merger, call the vectorMergePtr function to get a pointer to a vector we can merge into.
+                    let elem_ty_str = self.llvm_type(value_ty)?.to_string();
+                    let elem_tmp = self.load_var(llvm_symbol(value).as_str(), &elem_ty_str, ctx)?;
+                    let bld_ptr_raw = ctx.var_ids.next();
+                    let bld_ptr = ctx.var_ids.next();
+                    let bld_tmp = self.load_var(llvm_symbol(builder).as_str(), &bld_ty_str, ctx)?;
+                    ctx.code.add(format!(
+                        "{bld_ptr_raw} = call {bld_ty_str} {bld_prefix}.getPtrIndexed({bld_ty_str} {bld_tmp}, i32 %cur.tid)",
+                        bld_ptr_raw=bld_ptr_raw,
+                        bld_ty_str=bld_ty_str,
+                        bld_prefix=bld_prefix,
+                        bld_tmp=bld_tmp));
+                    ctx.code.add(format!(
+                        "{bld_ptr} = call {elem_ty_str}* {bld_prefix}.vectorMergePtr({bld_ty_str} {bld_ptr_raw})",
+                        bld_ptr=bld_ptr,
+                        elem_ty_str=elem_ty_str,
+                        bld_prefix=bld_prefix,
+                        bld_ty_str=bld_ty_str,
+                        bld_ptr_raw=bld_ptr_raw));
+                    self.gen_merge_op(&bld_ptr, &elem_tmp, &elem_ty_str, op, value_ty, ctx)?;
+                }
+
+                _ => {
+                    // For all other builders, extract each value in the vector and merge it separately
+                    let value_ty_str = self.llvm_type(value_ty)?.to_string();
+                    let value_tmp = self.load_var(llvm_symbol(value).as_str(), &value_ty_str, ctx)?;
+                    let item_ty = value_ty.scalar_type()?;
+                    let item_ty_str = self.llvm_type(&item_ty)?.to_string();
+                    for i in 0..vec_size(&item_ty)? {
+                        // Extract the item to a register
+                        let item_tmp = self.gen_simd_extract(value_ty, &value_tmp, i, ctx)?;
+                        // Put it into a stack variable so we can call gen)merge
+                        let item_stack = ctx.var_ids.next();
+                        ctx.add_alloca(&item_stack, &item_ty_str)?;
+                        let item_stack_sym = Symbol::new(&item_stack.replace("%", ""), 0);
+                        ctx.code.add(format!("store {} {}, {}* {}", item_ty_str, item_tmp, item_ty_str, item_stack));
+                        self.gen_merge(builder_kind, builder, &item_ty, &item_stack_sym, func, ctx)?;
+                    }
+                }
+            }
+
+            return Ok(())
+        }
+
+        // For non-vectorized elements, just switch on the builder type. TODO: Use annotations here too.
         match *builder_kind {
             Appender(_) => {
                 let bld_tmp = self.gen_load_var(&bld_ll_sym, &bld_ll_ty, ctx)?;
@@ -1547,9 +1595,11 @@ impl LlvmGenerator {
                                         val_tmp));
             }
             
-            DictMerger(_, _, _) => {
-                let bld_tmp = self.gen_load_var(&bld_ll_sym, &bld_ll_ty, ctx)?;
-                let val_tmp = self.gen_load_var(&val_ll_sym, &val_ll_ty, ctx)?;
+            DictMerger(ref kt, ref vt, _) => {
+                let bld_tmp = try!(self.load_var(llvm_symbol(builder).as_str(), &bld_ty_str, ctx));
+                let elem_ty = Struct(vec![*kt.clone(), *vt.clone()]);
+                let elem_ty_str = try!(self.llvm_type(&elem_ty)).to_string();
+                let elem_tmp = try!(self.load_var(llvm_symbol(value).as_str(), &elem_ty_str, ctx));
                 ctx.code.add(format!(
                     "call {} {}.merge({} {}, {} {}, i32 %cur.tid)",
                     bld_ll_ty,
@@ -1559,10 +1609,12 @@ impl LlvmGenerator {
                     val_ll_ty,
                     val_tmp));
             }
-            
-            GroupMerger(_, _) => {
-                let bld_tmp = self.gen_load_var(&bld_ll_sym, &bld_ll_ty, ctx)?;
-                let val_tmp = self.gen_load_var(&val_ll_sym, &val_ll_ty, ctx)?;
+
+            GroupMerger(ref kt, ref vt) => {
+                let bld_tmp = try!(self.load_var(llvm_symbol(builder).as_str(), &bld_ty_str, ctx));
+                let elem_ty = Struct(vec![*kt.clone(), *vt.clone()]);
+                let elem_ty_str = try!(self.llvm_type(&elem_ty)).to_string();
+                let elem_tmp = try!(self.load_var(llvm_symbol(value).as_str(), &elem_ty_str, ctx));
                 ctx.code.add(format!(
                     "call {} {}.merge({} {}, {} {}, i32 %cur.tid)",
                     bld_ll_ty,
@@ -1580,33 +1632,19 @@ impl LlvmGenerator {
                 let bld_ptr_raw = ctx.var_ids.next();
                 let bld_ptr = ctx.var_ids.next();
                 ctx.code.add(format!(
-                    "{} = call {} {}.getPtrIndexed({} {}, i32 %cur.tid)",
-                    bld_ptr_raw,
-                    bld_ll_ty,
-                    bld_prefix,
-                    bld_ll_ty,
-                    bld_tmp));
-
-                // If the argument is vectorized, load the vector element.
-                if let Simd(_) = *val_ty {
-                    ctx.code.add(format!(
-                        "{} = call {}* {}.vectorMergePtr({} {})",
-                        bld_ptr,
-                        val_ll_ty,
-                        bld_prefix,
-                        bld_ll_ty,
-                        bld_ptr_raw));
-
-                } else {
-                    ctx.code.add(format!(
-                        "{} = call {}* {}.scalarMergePtr({} {})",
-                        bld_ptr,
-                        val_ll_ty,
-                        bld_prefix,
-                        bld_ll_ty,
-                        bld_ptr_raw));
-                }
-                self.gen_merge_op(&bld_ptr, &val_tmp, &val_ll_ty, op, t, ctx)?;
+                    "{bld_ptr_raw} = call {bld_ty_str} {bld_prefix}.getPtrIndexed({bld_ty_str} {bld_tmp}, i32 %cur.tid)",
+                    bld_ptr_raw=bld_ptr_raw,
+                    bld_ty_str=bld_ty_str,
+                    bld_prefix=bld_prefix,
+                    bld_tmp=bld_tmp));
+                ctx.code.add(format!(
+                    "{bld_ptr} = call {elem_ty_str}* {bld_prefix}.scalarMergePtr({bld_ty_str} {bld_ptr_raw})",
+                    bld_ptr=bld_ptr,
+                    elem_ty_str=elem_ty_str,
+                    bld_prefix=bld_prefix,
+                    bld_ty_str=bld_ty_str,
+                    bld_ptr_raw=bld_ptr_raw));
+                self.gen_merge_op(&bld_ptr, &elem_tmp, &elem_ty_str, op, t, ctx)?;
             }
 
             VecMerger(ref t, ref op) => {
@@ -1667,7 +1705,7 @@ impl LlvmGenerator {
                 // Type of element to merge.
                 let elem_ty_str = self.llvm_type(t)?;
 
-                let output_str = format!("%{}", output);
+                let output_str = llvm_symbol(output);
 
                 // Vector type.
                 let ref vec_type = if let Scalar(ref k) = **t {
@@ -1751,7 +1789,7 @@ impl LlvmGenerator {
 
                 // Add the scalar and vector values to the aggregate result.
                 self.gen_merge_op(&scalar_ptr, &val_scalar, &elem_ty_str, op, t, ctx)?;
-                self.gen_merge_op(&vector_ptr, &val_vector, &elem_vec_ty_str, op, t, ctx)?;
+                self.gen_merge_op(&vector_ptr, &val_vector, &elem_vec_ty_str, op, vec_type, ctx)?;
 
                 ctx.code.add(format!(include_str!("resources/merger/merger_result_end_vectorized_1.ll"),
                         nworkers = nworkers,
@@ -2098,6 +2136,7 @@ impl LlvmGenerator {
                       func: &SirFunction,
                       ctx: &mut FunctionContext)
                       -> WeldResult<()> {
+        ctx.code.add(format!("; {}", terminator));
         match *terminator {
             Branch { ref cond, on_true, on_false } => {
                 let cond_tmp = self.gen_load_var(llvm_symbol(cond).as_str(), "i1", ctx)?;
@@ -2153,14 +2192,14 @@ impl LlvmGenerator {
                 ctx.code.add(format!("{} = getelementptr {}, {}* null, i32 1", &elem_size_ptr, &ty_str, &ty_str));
                 ctx.code.add(format!("{} = ptrtoint {}* {} to i64", &elem_size, &ty_str, &elem_size_ptr));
 
-                ctx.code.add(format!("{} = call i64 @get_runid()", run_id));
-                ctx.code.add(format!("{} = call i8* @weld_rt_malloc(i64 {}, i64 {})",
+                ctx.code.add(format!("{} = call i64 @weld_rt_get_run_id()", run_id));
+                ctx.code.add(format!("{} = call i8* @weld_run_malloc(i64 {}, i64 {})",
                                         &elem_storage,
                                         &run_id,
                                         &elem_size));
                 ctx.code.add(format!("{} = bitcast i8* {} to {}*", &elem_storage_typed, &elem_storage, &ty_str));
                 self.gen_store_var(&res_tmp, &elem_storage_typed, &ty_str, ctx);
-                ctx.code.add(format!("call void @set_result(i8* {})", elem_storage));
+                ctx.code.add(format!("call void @weld_rt_set_result(i8* {})", elem_storage));
                 ctx.code.add("br label %body.end");
             }
 
@@ -2171,11 +2210,58 @@ impl LlvmGenerator {
             Crash => {
                 let errno = WeldRuntimeErrno::Unknown as i64;
                 let run_id = ctx.var_ids.next();
-                ctx.code.add(format!("call void @weld_rt_set_errno(i64 {}, i64 {})", run_id, errno));
+                ctx.code.add(format!("call void @weld_run_set_errno(i64 {}, i64 {})", run_id, errno));
             }
         }
 
         Ok(())
+    }
+
+    /// Generate code to extract the index'th element of a SIMD value, returning a register name for it.
+    /// This is slightly tricky because the SIMD value may be a struct, in which case we need to recurse into each of
+    /// its elements. `simd_reg` must be the name of an LLVM register containing the SIMD value.
+    fn gen_simd_extract(&mut self,
+                        simd_type: &Type,
+                        simd_reg: &str,
+                        index: u32,
+                        ctx: &mut FunctionContext)
+                        -> WeldResult<String> {
+
+        let simd_type_llvm = self.llvm_type(simd_type)?.to_string();
+        let item_type = simd_type.scalar_type()?;
+        let item_type_llvm = self.llvm_type(&item_type)?.to_string();
+
+        match *simd_type {
+            Simd(_) => {
+                // Simple case: extract the element using an extractelement instruction
+                let item_reg = ctx.var_ids.next();
+                ctx.code.add(format!("{} = extractelement {} {}, i32 {}", item_reg, simd_type_llvm, simd_reg, index));
+                Ok(item_reg)
+            }
+
+            Struct(ref fields) => {
+                // Complex case: build up a struct with each item
+                let mut current_struct = "undef".to_string();
+                for (i, field_type) in fields.iter().enumerate() {
+                    // First, extract the i'th field of our SIMD struct into a register
+                    let field_reg = ctx.var_ids.next();
+                    ctx.code.add(format!("{} = extractvalue {} {}, {}", field_reg, simd_type_llvm, simd_reg, i));
+
+                    // Call ourselves recursively to extract the right item from this sub-vector
+                    let item_reg = self.gen_simd_extract(field_type, &field_reg, index, ctx)?;
+                    let item_type = field_type.scalar_type()?;
+
+                    // Insert this into our result struct
+                    let new_struct = ctx.var_ids.next();
+                    ctx.code.add(format!("{} = insertvalue {} {}, {} {}, {}",
+                        new_struct, item_type_llvm, current_struct, self.llvm_type(&item_type)?, item_reg, i));
+                    current_struct = new_struct;
+                }
+                Ok(current_struct)
+            }
+
+            _ => weld_err!("Invalid type for gen_simd_extract: {:?}", simd_type)
+        }
     }
 }
 
