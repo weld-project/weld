@@ -315,7 +315,7 @@ impl fmt::Display for Statement {
                 write!(f,
                        "{} = {}",
                        output,
-                       join("{", ",", "}", elems.iter().map(|e| format!("{}", e.name)))
+                       join("{", ",", "}", elems.iter().map(|e| format!("{}", e.name))))
             }
             MakeVector {
                 ref output,
