@@ -12,9 +12,17 @@ def random_arrays(num, dtype):
     Generates random Weld array, and numpy array of the given num elements.
     FIXME: Use np.random to generate random numbers of the given dtype.
     '''
+    random.seed(1234)
     test = []
     for i in range(num):
         test.append(float(random.random()))
+
+    # FIXME: Should be the same result as above, but this seems to fail for
+    # some reason...
+    # test = np.zeros((num), dtype=dtype)
+    # print(test)
+    # test[:] = np.random.randn(*test.shape)
+    # print(test)
 
     test = np.array(test, dtype=dtype)
     np_test = np.copy(test)
@@ -32,8 +40,8 @@ def test_unary_elemwise():
     for op in UNARY_OPS:
         for dtype in TYPES:
             np_test, w = random_arrays(10, dtype)
-            w = op(w)
-            weld_result = w.eval()
+            w2 = op(w)
+            weld_result = w2.eval()
             np_result = op(np_test)
             assert np.allclose(weld_result, np_result)
 
@@ -57,9 +65,9 @@ def test_multiple_array_creation():
     level.
     '''
     np_test, w = random_arrays(10, "float32")
-    w = WeldArray(w)
-    w = np.exp(w)
-    weld_result = w.eval()
+    w = WeldArray(w)        # creating array again.
+    w2 = np.exp(w)
+    weld_result = w2.eval()
     np_result = np.exp(np_test)
 
     assert np.allclose(weld_result, np_result)
@@ -78,8 +86,8 @@ def test_numpy_operations():
     '''
     np_test, w = random_arrays(10, "float32")
     np_result = np.sin(np_test)
-    w = np.sin(w)
-    weld_result = w.eval()
+    w2 = np.sin(w)
+    weld_result = w2.eval()
 
     assert np.allclose(weld_result, np_result)
 
@@ -90,8 +98,8 @@ def test_type_conversion():
     FIXME: Will need to generalize this after adding support for all types.
     '''
     _, w = random_arrays(10, "float32")
-    w = np.exp(w)
-    weld_result = w.eval()
+    w2 = np.exp(w)
+    weld_result = w2.eval()
 
     assert weld_result.dtype == "float32"
 
@@ -117,7 +125,24 @@ def test_views():
 
     assert np.allclose(weld_result, np_result)
 
-'''
-Multi-dimensional tests.
-'''
+def test_mix_np_weld_ops():
+    '''
+    '''
+    np_test, w = random_arrays(10, "float32")
+    np_test = np.exp(np_test)
+    np_result = np.sin(np_test)
+
+    w2 = np.exp(w)
+    w2 = np.sin(w2)
+    weld_result = w2.eval()
+    assert np.allclose(weld_result, np_result)
+
+def test_add_scalars():
+
+    np_test, w = random_arrays(10, "float32")
+    np_result = np_test + 2.00
+    w2 = w + 2.00
+    weld_result = w2.eval()
+    assert np.allclose(weld_result, np_result)
+
 
