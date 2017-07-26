@@ -794,7 +794,7 @@ impl LlvmGenerator {
 
             Vector(ref elem) => {
                 if self.vec_names.get(elem) == None {
-                    self.gen_vector_definition(elem)? 
+                    self.gen_vector_definition(elem)?
                 }
                 self.vec_names.get(elem).unwrap().to_string()
             }
@@ -809,7 +809,7 @@ impl LlvmGenerator {
 
             Builder(ref bk, _) => {
                 if self.bld_names.get(bk) == None {
-                    self.gen_builder_definition(bk)? 
+                    self.gen_builder_definition(bk)?
                 }
                 self.bld_names.get(bk).unwrap().to_string()
             }
@@ -958,7 +958,7 @@ impl LlvmGenerator {
         // Supports vectorization, so add in SIMD extensions.
         if let Scalar(_) = *elem {
             let simd_extension = format!(include_str!("resources/vvector.ll"),
-                ELEM=elem_ty, 
+                ELEM=elem_ty,
                 NAME=&name.replace("%", ""),
                 VECSIZE=&format!("{}", llvm_simd_size(elem)?));
 
@@ -1190,7 +1190,7 @@ impl LlvmGenerator {
 		self.gen_store_var(&result_reg, &builder_ptr, &merge_ty_str, ctx);
 		Ok(())
 	}
- 
+
 
     /// Generate code to perform a unary operation on `child` and store the result in `output` (which should
     /// be a location on the stack).
@@ -1268,7 +1268,7 @@ impl LlvmGenerator {
                 let mut arg_tys = vec![];
                 for ref arg in args {
                     let (arg_ll_ty, arg_ll_sym) = self.llvm_type_and_name(func, arg)?;
-                    arg_tys.push(format!("{}* {}", arg_ll_sym, arg_ll_ty));
+                    arg_tys.push(format!("{}* {}", arg_ll_ty, arg_ll_sym));
                 }
                 arg_tys.push(format!("{}* {}", &output_ll_ty, &output_ll_sym));
                 let parameters = arg_tys.join(", ");
@@ -1280,7 +1280,7 @@ impl LlvmGenerator {
                 let output_ty = func.symbol_type(output)?;
                 // Pull the element type from output instead of elems because elems could be empty.
                 let elem_ll_ty = if let Vector(ref elem_ty) = *output_ty {
-                    self.llvm_type(elem_ty)? 
+                    self.llvm_type(elem_ty)?
                 } else {
                     unreachable!();
                 };
@@ -1556,7 +1556,7 @@ impl LlvmGenerator {
                  func: &SirFunction,
                  ctx: &mut FunctionContext)
                  -> WeldResult<()> {
-                     
+
         let (bld_ll_ty, bld_ll_sym) = self.llvm_type_and_name(func, builder)?;
         let val_ll_ty = self.llvm_type(value_ty)?;
         let val_ll_sym = llvm_symbol(value);
@@ -1622,7 +1622,7 @@ impl LlvmGenerator {
                                         val_ll_ty,
                                         val_tmp));
             }
-            
+
             DictMerger(_, _, _) => {
                 let bld_tmp = self.gen_load_var(&bld_ll_sym, &bld_ll_ty, ctx)?;
                 let val_tmp = self.gen_load_var(&val_ll_sym, &val_ll_ty, ctx)?;
@@ -2306,7 +2306,7 @@ fn llvm_scalar_kind(k: ScalarKind) -> &'static str {
         I32 => "i32",
         I64 => "i64",
         F32 => "float",
-        F64 => "double",       
+        F64 => "double",
     }
 }
 
