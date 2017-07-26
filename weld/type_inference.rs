@@ -606,6 +606,17 @@ fn push_complete_type(dest: &mut PartialType, src: PartialType, context: &str) -
             }
         }
 
+        Vector(ref elem) => {
+            if *dest == Unknown {
+                *dest = src.clone();
+                Ok(true)
+            } else if let Vector(ref mut dest_elem) = *dest {
+                push_complete_type(dest_elem, elem.as_ref().clone(), context)
+            } else {
+                weld_err!("Mismatched types in {}", context)
+            }
+        }
+
         _ => {
             weld_err!("Internal error: push_complete_type not implemented for {:?}",
                       src)
