@@ -360,6 +360,21 @@ fn comparison() {
     unsafe { free_value_and_module(ret_value) };
 }
 
+fn reused_variable() {
+    // `a` is reused in different scopes
+    let code = "|| let a=2; let b=map([1,2,3], |e| let a=1; e+a); lookup(b, 0L)+a";
+    let conf = default_conf();
+
+    let ref input_data = 0;
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const i32 };
+    let result = unsafe { *data };
+    assert_eq!(result, 4);
+
+    unsafe { free_value_and_module(ret_value) };
+}
+
 fn map_comparison() {
     let code = "|e0: vec[i32]| map(e0, |a: i32| a == i32(100))";
     let conf = default_conf();
@@ -1835,6 +1850,7 @@ fn main() {
              ("let_statement", let_statement),
              ("if_statement", if_statement),
              ("comparison", comparison),
+             ("reused_variable", reused_variable),
              ("map_comparison", map_comparison),
              ("eq_between_vectors", eq_between_vectors),
              ("eq_between_diff_length_vectors", eq_between_diff_length_vectors),

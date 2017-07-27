@@ -901,6 +901,9 @@ fn gen_expr(expr: &TypedExpr,
             ref initial,
             ref update_func,
         } => {
+            // Generate the intial value.
+            let (cur_func, cur_block, initial_sym) = gen_expr(initial, prog, cur_func, cur_block)?;
+
             // Pull out the argument name and function body and validate that things type-check.
             let argument_sym;
             let func_body;
@@ -918,9 +921,6 @@ fn gen_expr(expr: &TypedExpr,
                 }
                 _ => return weld_err!("Argument of Iterate was not a Lambda")
             }
-
-            // Generate the intial value and assign it to the update_func's argument.
-            let (cur_func, cur_block, initial_sym) = gen_expr(initial, prog, cur_func, cur_block)?;
             prog.funcs[cur_func].blocks[cur_block].add_statement(
                 Assign { output: argument_sym.clone(), value: initial_sym });
 

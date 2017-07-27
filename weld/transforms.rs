@@ -174,6 +174,7 @@ fn _uniquify<T: TypeBounds>(expr: &mut Expr<T>,
                 retval = Err(err);
                 return (None, false);
             }
+            pop_id(id_map, &name);
             return (Some(Expr {
                              ty: e.ty.clone(),
                              kind: Let {
