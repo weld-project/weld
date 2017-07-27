@@ -136,6 +136,8 @@ def test_views():
     w = np.exp(w)
     weld_result = w.eval()
     np_result = np.exp(np_test)
+    w2 = np.add(w, np_test)
+    w2.eval()
 
     assert np.allclose(weld_result, np_result)
 

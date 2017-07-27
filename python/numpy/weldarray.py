@@ -4,22 +4,20 @@ from weld.types import *
 from weld.encoders import NumpyArrayEncoder, NumpyArrayDecoder
 import time
 
-'''
-TODO:
-    1. Improve naming scheme - especially for internal variables etc.
-    2. Improve readability of the emitted weld code (e.g., binop)
-    3. deal with FIXME's
-'''
-
 # Temporary debugging aid
 DEBUG = False
+
+def addr(arr):
+    '''
+    returns address of the given ndarray.
+    '''
+    return arr.__array_interface__['data'][0]
 
 def get_supported_binary_ops():
     '''
     Returns a dictionary of the Weld supported binary ops, with values being
     their Weld symbol.
     '''
-    # TODO: Add inplace ops (__iadd__) and stuff.
     binary_ops = {}
     binary_ops[np.add.__name__] = '+'
     binary_ops[np.subtract.__name__] = '-'
@@ -58,70 +56,67 @@ class WeldArray(np.ndarray):
         assert isinstance(input_array, np.ndarray), 'only support ndarrays'
         # sharing memory with the ndarray/weldarry
         obj = np.asarray(input_array).view(cls)
-
-        # this var id list is maintained per WeldArray to name the variables as
-        # we register more ops to the WeldArray.
-        # obj._var_id = 0
-
-        # dicts that map the ops name to its weld IR equivalent.
-        obj._supported_dtypes = get_supported_types()
-        assert str(input_array.dtype) in obj._supported_dtypes
-        obj._weld_type = obj._supported_dtypes[str(input_array.dtype)]
-        obj.unary_ops = get_supported_unary_ops()
-        obj.binary_ops = get_supported_binary_ops()
-
-        # name refers to the name for the given WeldArray so weldobj can
-        # interpret it when we emit the IR.
-        obj.name = None
-        obj.weldobj = WeldObject(NumpyArrayEncoder(), NumpyArrayDecoder())
-        obj.weldobj.weld_code = ''
-
-        if isinstance(input_array, WeldArray):
-            # need to update the internal state of the weld array
-            obj._update_weldarray(input_array, True)
-        elif isinstance(input_array, np.ndarray):
-            obj._update_ndarray(input_array, True)
-        else:
-            return NotImplemented
-
+        obj._gen_weldobj(input_array)
         return obj
 
     def __array_finalize__(self, obj):
         '''
-        FIXME: This gets called both when slicing / or creating a new array.
-        At least need to deal with slicing here...
+        Gets called whenever a new array is created. This is possible due to:
+            - from __new__
+            - generating view of weldarray
+            - TODO.
+
+        @self: current array.
+        @obj: base array.
+        In particular, the cases we care about are:
+            @self: new, smaller array.
+            @obj: WeldArray.
+
+        In case of init WeldArray (from WeldArray, or numpy array):
+            @self: new weldarray
+            @obj: base ndarray.
         '''
         if obj is None:
             return
+
+        # dicts that map the ops name to its weld IR equivalent.
+        self._supported_dtypes = get_supported_types()
+        assert str(obj.dtype) in self._supported_dtypes
+        self._weld_type = self._supported_dtypes[str(obj.dtype)]
+        self.unary_ops = get_supported_unary_ops()
+        self.binary_ops = get_supported_binary_ops()
+
         if isinstance(obj, WeldArray):
-            # FIXME: Are there cases besides views when we might be here?
-            pass
+            # evaluate the parent array (obj) and update values of self.
+            parent = obj.eval()
+            start = (addr(self) - addr(obj)) / self.itemsize
+            end = start + len(self)
+            # TODO: optimize this routine.
+            for i in range(end-start):
+                self[i] = parent[start+i]
 
-        # TODO: Might want to move some of the general initialization stuff
-        # here from __new__?
+            # Create weldobj for self, treating the array self as ndarray.
+            self._gen_weldobj(self.view(np.ndarray))
 
-    def _update_weldarray(self, arr, new):
+    def _gen_weldobj(self, arr):
         '''
-        Need to store the names from the array to this one.
-        @new: If this is being called from __new__. Otherwise, won't update
-        name/_var_id of self. It is also called internally whenever applying a
-        binary op to a given vec.
+        Generating a new WeldArray from a given arr.
+        @arr: WeldArray or ndarray.
+
+        Sets self.name and self.weldobj.
         '''
-        self.weldobj.update(arr.weldobj)
-        if new:
+        self.weldobj = WeldObject(NumpyArrayEncoder(), NumpyArrayDecoder())
+        if isinstance(arr, WeldArray):
+            self.weldobj.update(arr.weldobj)
             self.weldobj.weld_code = arr.weldobj.weld_code
             self.name = arr.name
-
-    def _update_ndarray(self, vector, new):
-        '''
-        vector: ndarray.
-        new: if being called from __new__ while generating a new array.
-        '''
-        assert isinstance(vector, np.ndarray)
-        name = self.weldobj.update(vector, self._supported_dtypes[str(vector.dtype)])
-        self.name = name
-        # TODO: Add explanation.
-        self.weldobj.weld_code = self.name
+        elif isinstance(arr, np.ndarray):
+            # weldobj returns the name bound to the given array. That is also
+            # the array that future ops will act on, so set weld_code to it.
+            self.name = self.weldobj.weld_code = self.weldobj.update(arr,
+                    self._supported_dtypes[str(arr.dtype)])
+        else:
+            assert False, '_gen_weldobj has unsupported input array'
 
     def __repr__(self):
         '''
@@ -136,12 +131,10 @@ class WeldArray(np.ndarray):
 
     def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
         '''
-        FIXME: Not dealing with method at all, not sure what needs to be done
-        there either.
-
         Just overwrite the action of weld supported functions and for others,
         pass on to numpy's implementation.
 
+        FIXME: Not dealing with method at all. Check use cases.
         TODO: add input descriptions.
         TODO: Deal with outputs (should solve the issue with a += b too)
         '''
@@ -151,23 +144,22 @@ class WeldArray(np.ndarray):
         for input_ in inputs:
             args.append(input_)
             if not isinstance(input_, np.ndarray):
-                # For instance, it can be just a number
                 # FIXME: Add more checks for its type here.
                 continue
             if str(input_.dtype) not in self._supported_dtypes:
                 supported_dtype = False
 
-        # FIXME: might be more efficient to just add a check for all the ops
-        # instead of dealing with dicts?
+        # FIXME: might be more efficient to not use dicts?
         if ufunc.__name__ in self.unary_ops and supported_dtype:
             assert(len(args) == 1)
             return self._unary_op(self.unary_ops[ufunc.__name__])
 
         elif ufunc.__name__ in self.binary_ops and supported_dtype:
             assert(len(args) == 2)
-            # Figure out which of the args is self
+
+            # which arg is self?
             if isinstance(args[0], WeldArray):
-                # first arg is WeldArray, so it must be self
+                # first arg is WeldArray, must be self
                 assert args[0].name == self.name
                 other_arg = args[1]
             else:
@@ -215,9 +207,15 @@ class WeldArray(np.ndarray):
             return WeldArray(self)
         if DEBUG: print('code in eval: ', self.weldobj.weld_code)
 
-        # FIXME: is there sth better than first make it a np array and then convert back
-        # to WeldArray?
         arr = self.weldobj.evaluate(WeldVec(self._weld_type), verbose=False)
+
+        # Now that the evaluation is done - create new weldobject for self,
+        # initalized from the given arr.
+        self.weldobj = WeldObject(NumpyArrayEncoder(), NumpyArrayDecoder())
+        self.weldobj.weld_code = ''
+        self.name = self.weldobj.update(arr, self._supported_dtypes[str(arr.dtype)])
+        self.weldobj.weld_code = self.name
+
         return WeldArray(arr)
 
     def _unary_op(self, unop):
@@ -263,7 +261,7 @@ class WeldArray(np.ndarray):
         else:
             raise ValueError('invalid type for other in binaryop')
 
-        result._update_weldarray(other, False)
+        result.weldobj.update(other.weldobj)
         # @arr{i}: latest array based on the ops registered on operand{i}. {{
         # is used for escaping { for format.
         template = 'map(zip({arr1},{arr2}), |z: {{{type1},{type2}}}| z.$0 {binop} z.$1)'
