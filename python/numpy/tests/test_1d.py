@@ -19,13 +19,24 @@ def random_arrays(num, dtype):
     test = []
     for i in range(num):
         test.append(float(random.random()))
+    test = np.array(test, dtype=dtype)
 
     # FIXME: Should be the same result as above, but this seems to fail for
     # some reason...
     # test = np.zeros((num), dtype=dtype)
     # test[:] = np.random.randn(*test.shape)
 
-    test = np.array(test, dtype=dtype)
+    np_test = np.copy(test)
+    w = WeldArray(test)
+
+    return np_test, w
+
+def given_arrays(l, dtype):
+    '''
+    @l: list.
+    returns a np array and a weldarray.
+    '''
+    test = np.array(l, dtype=dtype)
     np_test = np.copy(test)
     w = WeldArray(test)
 
@@ -42,10 +53,8 @@ def test_unary_elemwise():
         for dtype in TYPES:
             np_test, w = random_arrays(10, dtype)
             w2 = op(w)
-            print('going to evaluate w2 now')
             weld_result = w2.eval()
             np_result = op(np_test)
-            print('going to call allclose')
             assert np.allclose(weld_result, np_result)
 
 def test_binary_elemwise():
@@ -97,7 +106,7 @@ def test_numpy_operations():
 def test_type_conversion():
     '''
     After evaluation, the dtype of the returned array must be the same as
-    before. 
+    before.
     FIXME: Will need to generalize this after adding support for all types.
     '''
     _, w = random_arrays(10, 'float32')
@@ -117,6 +126,8 @@ def test_views():
     Taking views into a 1d WeldArray should work as expected.
     In particular, this requires part of the initialization of the WeldArray be
     done in __array_finalize__ instead of __new__.
+
+    FIXME: After supporting views, need to add more tests.
     '''
     np_test, w = random_arrays(10, 'float32')
     w = w[2:5]
@@ -154,4 +165,82 @@ def test_add_scalars():
     weld_result = w2.eval()
     assert np.allclose(weld_result, np_result)
 
+def test_stale_add():
+    '''
+    Registers op for WeldArray w2, and then add it to w1. Works trivially
+    because updating a weldobject with another weldobject just needs to get the
+    naming right.
+    '''
+    n1, w1 = random_arrays(10, 'float32')
+    n2, w2 = random_arrays(10, 'float32')
 
+    w2 = np.exp(w2)
+    n2 = np.exp(n2)
+
+    w1 = np.add(w1, w2)
+    n1 = np.add(n1, n2)
+
+    w1 = w1.eval()
+    assert np.allclose(w1, n1)
+
+def test_cycle():
+    '''
+    the problem here seems to be reassiging to the same array.
+    '''
+    n1, w1 = given_arrays([1.0, 2.0], 'float32')
+    n2, w2 = given_arrays([3.0, 3.0], 'float32')
+
+    # w3 depends on w1.
+    w3 = np.add(w1, w2)
+    n3 = np.add(n1, n2)
+
+    # changing this to some other variable lets us pass the test.
+    w1 = np.exp(w1)
+    n1 = np.exp(n1)
+
+    w1 = np.add(w1,w3)
+    n1 = np.add(n1, n3)
+
+    assert np.allclose(w1.eval(), n1)
+    assert np.allclose(w3.eval(), n3)
+
+def test_self_assignment():
+    n1, w1 = given_arrays([1.0, 2.0], 'float32')
+    n2, w2 = given_arrays([2.0, 1.0], 'float32')
+
+    w1 = np.exp(w1)
+    n1 = np.exp(n1)
+    assert np.allclose(w1.eval(), n1)
+
+    w1 = w1 + w2
+    n1 = n1 + n2
+
+    assert np.allclose(w1.eval(), n1)
+
+def test_reuse_array():
+    '''
+    a = np.add(b,)
+    Ensure that despite sharing underlying memory of ndarrays, future ops on a
+    and b should not affect each other as calculations are performed based on
+    the weldobject which isn't shared between the two.
+    '''
+    n1, w1 = given_arrays([1.0, 2.0], 'float32')
+    n2, w2 = given_arrays([2.0, 1.0], 'float32')
+
+    w3 = np.add(w1, w2)
+    n3 = np.add(n1, n2)
+
+    w1 = np.log(w1)
+    n1 = np.log(n1)
+
+    w3 = np.exp(w3)
+    n3 = np.exp(n3)
+
+    w1 = w1 + w3
+    n1 = n1 + n3
+
+    w1_result = w1.eval()
+    assert np.allclose(w1_result, n1)
+
+    w3_result = w3.eval()
+    assert np.allclose(w3_result, n3)
