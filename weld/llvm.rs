@@ -162,6 +162,15 @@ impl LlvmGenerator {
         format!("; PRELUDE:\n\n{}\n; BODY:\n\n{}", self.prelude_code.result(), self.body_code.result())
     }
 
+    /*********************************************************************************************
+    //
+    // Helpers for Function Code Generation
+    //
+    *********************************************************************************************/
+
+    /// Given a set of parameters and a suffix, returns a string used to represent LLVM function
+    /// arguments. Each argument has the given suffix. Argument names are sorted by their symbol
+    /// name.
     fn get_arg_str(&mut self, params: &HashMap<Symbol, Type>, suffix: &str) -> WeldResult<String> {
         let mut arg_types = String::new();
         let params_sorted: BTreeMap<&Symbol, &Type> = params.iter().collect();
@@ -173,7 +182,9 @@ impl LlvmGenerator {
         Ok(arg_types)
     }
 
-    fn unload_arg_struct(&mut self, params: &HashMap<Symbol, Type>, ctx: &mut FunctionContext) -> WeldResult<()> {
+    /// Generates code to unpack a struct containing a set of arguments with the given symbols and
+    /// types. The order of arguments is assumed to be sorted by the symbol name.
+    fn gen_unload_arg_struct(&mut self, params: &HashMap<Symbol, Type>, ctx: &mut FunctionContext) -> WeldResult<()> {
         let params_sorted: BTreeMap<&Symbol, &Type> = params.iter().collect();
         let ll_ty = self.llvm_type(&Struct(params_sorted.iter().map(|p| p.1.clone()).cloned().collect()))?;
         let storage_typed = ctx.var_ids.next();
@@ -190,7 +201,8 @@ impl LlvmGenerator {
         Ok(())
     }
 
-    fn create_new_vb_pieces(&mut self, params: &HashMap<Symbol, Type>, ctx: &mut FunctionContext) -> WeldResult<()> {
+    /// Generates code to creates new pieces for the appender.
+    fn gen_create_new_vb_pieces(&mut self, params: &HashMap<Symbol, Type>, ctx: &mut FunctionContext) -> WeldResult<()> {
         let full_task_ptr = ctx.var_ids.next();
         let full_task_int = ctx.var_ids.next();
         let full_task_bit = ctx.var_ids.next();
@@ -222,7 +234,10 @@ impl LlvmGenerator {
         Ok(())
     }
 
-    fn get_arg_struct(&mut self, params: &HashMap<Symbol, Type>, ctx: &mut FunctionContext) -> WeldResult<String> {
+    /// Generates code which, given the arguments with symbols and types, creates a struct with the
+    /// arguments. The order of the strut elements is sorted by the symbol names. Returns the LLVM
+    /// name of the i8* pointer pointing to the created struct.
+    fn gen_create_arg_struct(&mut self, params: &HashMap<Symbol, Type>, ctx: &mut FunctionContext) -> WeldResult<String> {
         let params_sorted: BTreeMap<&Symbol, &Type> = params.iter().collect();
         let mut prev_ref = String::from("undef");
         let ll_ty = self.llvm_type(&Struct(params_sorted.iter().map(|p| p.1.clone()).cloned().collect()))?
@@ -256,6 +271,8 @@ impl LlvmGenerator {
     /// Generates code to compute the number of iterations the given loop will execute. Returns an
     /// LLVM register name representing the number of iterations and, if the iterator is a
     /// `FringeIter`, the LLVM register name representing the starting index of the fringe iterator.
+    /// 
+    /// Precedes gen_loop_bounds_check 
     fn gen_num_iters_and_fringe_start(&mut self,
                                       par_for: &ParallelForData,
                                       func: &SirFunction,
@@ -321,6 +338,9 @@ impl LlvmGenerator {
 
     /// Generates a bounds check for a parallel for loop by ensuring that the number of iterations
     /// does not cause an out of bounds error with the given start and stride.
+    /// 
+    /// Succeeds gen_num_iters_and_fringe_start
+    /// Precedes gen_invoke_loop_body 
     fn gen_loop_bounds_check(&mut self,
                                  fringe_start_str: Option<String>,
                                  num_iters_str: &str,
@@ -391,7 +411,9 @@ impl LlvmGenerator {
     /// Generates code to either call into the parallel runtime or to call the function which
     /// executes the for loops body directly on a single thread, given the number of iterations to
     /// be executed.
-    fn gen_call_loop_function(&mut self,
+    /// 
+    /// Succeeds gen_loop_bounds_check
+    fn gen_invoke_loop_body(&mut self,
                           num_iters_str: &str,
                           par_for: &ParallelForData,
                           sir: &SirProgram,
@@ -414,8 +436,8 @@ impl LlvmGenerator {
             grain_size = 1;
         }
         ctx.code.add(format!("for.par:"));
-        let body_struct = self.get_arg_struct(&func.params, ctx)?;
-        let cont_struct = self.get_arg_struct(&sir.funcs[par_for.cont].params, ctx)?;
+        let body_struct = self.gen_create_arg_struct(&func.params, ctx)?;
+        let cont_struct = self.gen_create_arg_struct(&sir.funcs[par_for.cont].params, ctx)?;
         ctx.code.add(format!(
                 "call void @weld_rt_start_loop(%work_t* %cur.work, i8* {}, i8* {}, \
                                 void (%work_t*)* @f{}_par, void (%work_t*)* @f{}_par, i64 0, \
@@ -596,6 +618,37 @@ impl LlvmGenerator {
         Ok(())
     }
 
+    /// Generates a header common to each top-level generated function.
+    fn gen_function_header(&mut self, arg_types: &str, func: &SirFunction, ctx: &mut FunctionContext) -> WeldResult<()> {
+        // Start the entry block by defining the function and storing all its arguments on the
+        // stack (this makes them consistent with other local variables). Later, expressions may
+        // add more local variables to alloca_code.
+        ctx.alloca_code.add(format!("define void @f{}({}) {{", func.id, arg_types));
+        ctx.alloca_code.add(format!("fn.entry:"));
+        for (arg, ty) in func.params.iter() {
+            let arg_str = llvm_symbol(&arg);
+            let ty_str = self.llvm_type(&ty)?;
+            ctx.add_alloca(&arg_str, &ty_str)?;
+            ctx.code.add(format!("store {} {}.in, {}* {}", ty_str, arg_str, ty_str, arg_str));
+        }
+        for (arg, ty) in func.locals.iter() {
+            let arg_str = llvm_symbol(&arg);
+            let ty_str = self.llvm_type(&ty)?;
+            ctx.add_alloca(&arg_str, &ty_str)?;
+        }
+
+        // Get the current thread ID
+        ctx.code.add(format!("%cur.tid = call i32 @weld_rt_thread_id()"));
+
+        Ok(())
+    }
+
+    /*********************************************************************************************
+    //
+    // Function Code Generation
+    //
+    *********************************************************************************************/
+
     /// Generates a wrapper function for a for loop, which performs a bounds check on the loop data
     /// and then invokes the loop body.
     fn gen_loop_wrapper_function(&mut self,
@@ -613,7 +666,7 @@ impl LlvmGenerator {
         // Check if the loops are in-bounds and throw an error if they are not.
         self.gen_loop_bounds_check(fringe_start_str, &num_iters_str, &par_for, func, ctx)?;
         // Invoke the loop body (either by directly calling a function or starting the runtime).
-        self.gen_call_loop_function(&num_iters_str, &par_for, sir, func, ctx)?;
+        self.gen_invoke_loop_body(&num_iters_str, &par_for, sir, func, ctx)?;
 
         ctx.code.add(format!("br label %fn.end"));
         ctx.code.add("fn.end:");
@@ -631,7 +684,7 @@ impl LlvmGenerator {
             let mut ctx = &mut FunctionContext::new();
             ctx.code.add(format!("define void @f{}_par(%work_t* %cur.work) {{", func.id));
             ctx.code.add("entry:");
-            self.unload_arg_struct(&func.params, &mut ctx)?;
+            self.gen_unload_arg_struct(&func.params, &mut ctx)?;
             let lower_bound_ptr = ctx.var_ids.next();
             let lower_bound = ctx.var_ids.next();
             let upper_bound_ptr = ctx.var_ids.next();
@@ -642,7 +695,7 @@ impl LlvmGenerator {
             ctx.code.add(format!("{} = load i64, i64* {}", upper_bound, upper_bound_ptr));
 
             let body_arg_types = try!(self.get_arg_str(&func.params, ""));
-            self.create_new_vb_pieces(&func.params, &mut ctx)?;
+            self.gen_create_new_vb_pieces(&func.params, &mut ctx)?;
             ctx.code.add("fn_call:");
             ctx.code.add(format!("call void @f{}({}, i64 {}, i64 {})",
                                             func.id,
@@ -663,8 +716,8 @@ impl LlvmGenerator {
             ctx.code.add(format!("define void @f{}_par(%work_t* %cur.work) {{", par_for.cont));
             ctx.code.add("entry:");
 
-            self.unload_arg_struct(&sir.funcs[par_for.cont].params, &mut ctx)?;
-            self.create_new_vb_pieces(&sir.funcs[par_for.cont].params, &mut ctx)?;
+            self.gen_unload_arg_struct(&sir.funcs[par_for.cont].params, &mut ctx)?;
+            self.gen_create_new_vb_pieces(&sir.funcs[par_for.cont].params, &mut ctx)?;
 
             ctx.code.add("fn_call:");
             let cont_arg_types = self.get_arg_str(&sir.funcs[par_for.cont].params, "")?;
@@ -690,39 +743,16 @@ impl LlvmGenerator {
         // Add the lower and upper index to the standard function params.
         arg_types.push_str(", i64 %lower.idx, i64 %upper.idx");
 
-        // Start the entry block by defining the function and storing all its arguments on the
-        // stack (this makes them consistent with other local variables). Later, expressions may
-        // add more local variables to alloca_code.
-        ctx.alloca_code.add(format!("define void @f{}({}) {{", func.id, arg_types));
-        ctx.alloca_code.add(format!("fn.entry:"));
-        for (arg, ty) in func.params.iter() {
-            let arg_str = llvm_symbol(&arg);
-            let ty_str = self.llvm_type(&ty)?;
-            ctx.add_alloca(&arg_str, &ty_str)?;
-            ctx.code.add(format!("store {} {}.in, {}* {}", ty_str, arg_str, ty_str, arg_str));
-        }
-        for (arg, ty) in func.locals.iter() {
-            let arg_str = llvm_symbol(&arg);
-            let ty_str = self.llvm_type(&ty)?;
-            ctx.add_alloca(&arg_str, &ty_str)?;
-        }
-
-        // Get the current thread ID
-        ctx.code.add(format!("%cur.tid = call i32 @weld_rt_thread_id()"));
-
+        self.gen_function_header(&arg_types, func, ctx)?;
         // Generate the first part of the loop.
         self.gen_loop_iteration_start(par_for, func, ctx)?;
-
         // Jump to block 0, which is where the loop body starts.
         ctx.code.add(format!("br label %b.b{}", func.blocks[0].id));
-
         // Generate an expression for the function body.
         self.gen_function_body(sir, func, ctx)?;
         ctx.code.add("body.end:");
-
         // Generate the second part of the loop, which jumps back to the first.
         self.gen_loop_iteration_end(par_for, func, ctx)?;
-
         ctx.code.add("ret void");
         ctx.code.add("}\n\n");
 
@@ -738,88 +768,26 @@ impl LlvmGenerator {
         Ok(())
     }
 
-    /// Add a function to the generated program.
-    pub fn add_function(&mut self,
-                        sir: &SirProgram,
-                        func: &SirFunction,
-                        // non-None only if func is loop body
-                        containing_loop: Option<ParallelForData>)
-                        -> WeldResult<()> {
-
+    /// Add a top-level non-loop function to the generated program for a block that is not a loop.
+    pub fn gen_top_level_function(&mut self, sir: &SirProgram, func: &SirFunction) -> WeldResult<()> {
         if !self.visited.insert(func.id) {
             return Ok(());
         }
 
         let mut ctx = &mut FunctionContext::new();
-        let mut arg_types = self.get_arg_str(&func.params, ".in")?;
-        if containing_loop.is_some() {
-            arg_types.push_str(", i64 %lower.idx, i64 %upper.idx");
-        }
+        let arg_types = self.get_arg_str(&func.params, ".in")?;
 
-        // Start the entry block by defining the function and storing all its arguments on the
-        // stack (this makes them consistent with other local variables). Later, expressions may
-        // add more local variables to alloca_code.
-        ctx.alloca_code.add(format!("define void @f{}({}) {{", func.id, arg_types));
-        ctx.alloca_code.add(format!("fn.entry:"));
-        for (arg, ty) in func.params.iter() {
-            let arg_str = llvm_symbol(&arg);
-            let ty_str = self.llvm_type(&ty)?;
-            ctx.add_alloca(&arg_str, &ty_str)?;
-            ctx.code.add(format!("store {} {}.in, {}* {}", ty_str, arg_str, ty_str, arg_str));
-        }
-        for (arg, ty) in func.locals.iter() {
-            let arg_str = llvm_symbol(&arg);
-            let ty_str = self.llvm_type(&ty)?;
-            ctx.add_alloca(&arg_str, &ty_str)?;
-        }
-
-        // Get the current thread ID
-        ctx.code.add(format!("%cur.tid = call i32 @weld_rt_thread_id()"));
-
-        // If we're in a loop, generate loop iteration code.
-        if containing_loop.is_some() {
-            let par_for = containing_loop.as_ref().unwrap();
-            self.gen_loop_iteration_start(par_for, func, ctx)?;
-        }
-
+        self.gen_function_header(&arg_types, func, ctx)?;
         // Jump to block 0, which is where the loop body starts.
         ctx.code.add(format!("br label %b.b{}", func.blocks[0].id));
-
         // Generate an expression for the function body.
         self.gen_function_body(sir, func, ctx)?;
         ctx.code.add("body.end:");
-
-        if containing_loop.is_some() {
-            let par_for = containing_loop.as_ref().unwrap();
-            self.gen_loop_iteration_end(par_for, func, ctx)?;
-        }
-
         ctx.code.add("ret void");
         ctx.code.add("}\n\n");
 
         self.body_code.add(&ctx.alloca_code.result());
         self.body_code.add(&ctx.code.result());
-
-        // If there is a loop, generate functions which call the continuation and wrapper functions
-        // used by the runtime to call the loop body.
-        if containing_loop.is_some() {
-            let par_for = containing_loop.clone().unwrap();
-            self.gen_loop_wrapper_function(&par_for, sir, func)?;
-            self.gen_parallel_runtime_callback_function(func)?;
-            self.gen_loop_continuation_function(&par_for, sir)?;
-
-        }
-
-        if func.id == 0 {
-            let mut par_top_ctx = &mut FunctionContext::new();
-            par_top_ctx.code.add("define void @f0_par(%work_t* %cur.work) {");
-            self.unload_arg_struct(&sir.funcs[0].params, &mut par_top_ctx)?;
-            let top_arg_types = self.get_arg_str(&sir.funcs[0].params, "")?;
-            par_top_ctx.code.add(format!("call void @f0({})", top_arg_types));
-            par_top_ctx.code.add("ret void");
-            par_top_ctx.code.add("}\n\n");
-            self.body_code.add(&par_top_ctx.code.result());
-        }
 
         Ok(())
     }
@@ -829,7 +797,17 @@ impl LlvmGenerator {
     /// to pass them arbitrary structures.
     pub fn add_function_on_pointers(&mut self, name: &str, sir: &SirProgram) -> WeldResult<()> {
         // First add the function on raw values, which we'll call from the pointer version.
-        self.add_function(sir, &sir.funcs[0], None)?;
+        self.gen_top_level_function(sir, &sir.funcs[0])?;
+
+        // Generates an entry point.
+        let mut par_top_ctx = &mut FunctionContext::new();
+        par_top_ctx.code.add("define void @f0_par(%work_t* %cur.work) {");
+        self.gen_unload_arg_struct(&sir.funcs[0].params, &mut par_top_ctx)?;
+        let top_arg_types = self.get_arg_str(&sir.funcs[0].params, "")?;
+        par_top_ctx.code.add(format!("call void @f0({})", top_arg_types));
+        par_top_ctx.code.add("ret void");
+        par_top_ctx.code.add("}\n\n");
+        self.body_code.add(&par_top_ctx.code.result());
 
         // Define a struct with all the argument types as fields
         let args_struct = Struct(sir.top_params.iter().map(|a| a.ty.clone()).collect());
@@ -859,7 +837,7 @@ impl LlvmGenerator {
             let idx = arg_pos_map.get(arg).unwrap();
             run_ctx.code.add(format!("{} = extractvalue {} %r.args_val, {}", llvm_symbol(arg), args_type, idx));
         }
-        let run_struct = self.get_arg_struct(&sir.funcs[0].params, &mut run_ctx)?;
+        let run_struct = self.gen_create_arg_struct(&sir.funcs[0].params, &mut run_ctx)?;
 
         let rid = run_ctx.var_ids.next();
         let errno = run_ctx.var_ids.next();
@@ -2307,9 +2285,11 @@ impl LlvmGenerator {
             }
 
             ParallelFor(ref pf) => {
-                self.add_function(sir, &sir.funcs[pf.cont], None)?;
-                self.add_function(sir, &sir.funcs[pf.body], Some(pf.clone()))?;
-                // TODO add parallel wrapper call
+                // Generate the continuation function
+                self.gen_top_level_function(sir, &sir.funcs[pf.cont])?;
+                // Generate the functions to execute the loop
+                self.gen_par_for_functions(pf, sir, &sir.funcs[pf.body])?;
+                // Call into the loop.
                 let params = get_combined_params(sir, pf);
                 let params_sorted: BTreeMap<&Symbol, &Type> = params.iter().collect();
                 let mut arg_types = String::new();
@@ -2329,7 +2309,7 @@ impl LlvmGenerator {
             }
 
             JumpFunction(func) => {
-                self.add_function(sir, &sir.funcs[func], None)?;
+                self.gen_top_level_function(sir, &sir.funcs[func])?;
                 let params_sorted: BTreeMap<&Symbol, &Type> = sir.funcs[func].params.iter().collect();
                 let mut arg_types = String::new();
                 for (arg, ty) in params_sorted.iter() {
