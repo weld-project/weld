@@ -32,6 +32,9 @@ use super::parser::*;
 
 static PRELUDE_CODE: &'static str = include_str!("resources/prelude.ll");
 
+/// The default grain size for the parallel runtime.
+static DEFAULT_GRAIN_SIZE: i64 = 4096;
+
 /// A wrapper for a struct passed as input to the Weld runtime.
 #[derive(Clone, Debug)]
 #[repr(C)]
@@ -249,6 +252,266 @@ impl LlvmGenerator {
         Ok(struct_storage)
     }
 
+    /// Generates a wrapper function for a for loop, which performs a bounds check on the loop data
+    /// and then invokes the loop body.
+    fn gen_loop_wrapper_function(&mut self,
+                                 par_for: &ParallelForData,
+                                 sir: &SirProgram,
+                                 func: &SirFunction) -> WeldResult<()> {
+
+        let ref mut wrap_ctx = FunctionContext::new();
+        let serial_arg_types = self.get_arg_str(&get_combined_params(sir, &par_for), "")?;
+        wrap_ctx.code.add(format!("define void @f{}_wrapper({}) {{", func.id, serial_arg_types));
+        wrap_ctx.code.add(format!("fn.entry:"));
+
+        // Compute the number of iterations and the start point of a fringe iter if there is one.
+        let (num_iters_str, fringe_start_str) = self.gen_num_iters_and_fringe_start(&par_for, func, wrap_ctx)?;
+        // Check if the loops are in-bounds and throw an error if they are not.
+        self.gen_loop_bounds_check(fringe_start_str, &num_iters_str, &par_for, func, wrap_ctx)?;
+        // Invoke the loop body (either by directly calling a function or starting the runtime).
+        self.gen_call_loop_body(&num_iters_str, &par_for, sir, func, wrap_ctx)?;
+
+        wrap_ctx.code.add(format!("br label %fn.end"));
+        wrap_ctx.code.add("fn.end:");
+        wrap_ctx.code.add("ret void");
+        wrap_ctx.code.add("}\n\n");
+        self.body_code.add(&wrap_ctx.code.result());
+
+        Ok(())
+    }
+
+    /// Generates the parallel runtime callback function for a loop body. This function calls the
+    /// function which executes a loop body after unpacking teh lower and upper bound from the work
+    /// item.
+    fn gen_parallel_runtime_callback_function(&mut self, func: &SirFunction) -> WeldResult<()> {
+            let mut par_body_ctx = &mut FunctionContext::new();
+            par_body_ctx.code.add(format!("define void @f{}_par(%work_t* %cur.work) {{", func.id));
+            par_body_ctx.code.add("entry:");
+            self.unload_arg_struct(&func.params, &mut par_body_ctx)?;
+            let lower_bound_ptr = par_body_ctx.var_ids.next();
+            let lower_bound = par_body_ctx.var_ids.next();
+            let upper_bound_ptr = par_body_ctx.var_ids.next();
+            let upper_bound = par_body_ctx.var_ids.next();
+            par_body_ctx
+                .code
+                .add(format!("{} = getelementptr %work_t, %work_t* %cur.work, i32 0, i32 1", lower_bound_ptr));
+            par_body_ctx.code.add(format!("{} = load i64, i64* {}", lower_bound, lower_bound_ptr));
+            par_body_ctx
+                .code
+                .add(format!("{} = getelementptr %work_t, %work_t* %cur.work, i32 0, i32 2", upper_bound_ptr));
+            par_body_ctx.code.add(format!("{} = load i64, i64* {}", upper_bound, upper_bound_ptr));
+
+            let body_arg_types = try!(self.get_arg_str(&func.params, ""));
+            self.create_new_vb_pieces(&func.params, &mut par_body_ctx)?;
+            par_body_ctx.code.add("fn_call:");
+            par_body_ctx.code.add(format!("call void @f{}({}, i64 {}, i64 {})",
+                                            func.id,
+                                            body_arg_types,
+                                            lower_bound,
+                                            upper_bound));
+            par_body_ctx.code.add("ret void");
+            par_body_ctx.code.add("}\n\n");
+            self.body_code.add(&par_body_ctx.code.result());
+            Ok(())
+    }
+
+    /// Generates the continuation function of the given parallel loop.
+    fn gen_loop_continuation_function(&mut self, 
+                                      par_for: &ParallelForData,
+                                      sir: &SirProgram) -> WeldResult<()> {
+            let mut par_cont_ctx = &mut FunctionContext::new();
+            par_cont_ctx.code.add(format!("define void @f{}_par(%work_t* %cur.work) {{", par_for.cont));
+            par_cont_ctx.code.add("entry:");
+
+            self.unload_arg_struct(&sir.funcs[par_for.cont].params, &mut par_cont_ctx)?;
+            self.create_new_vb_pieces(&sir.funcs[par_for.cont].params, &mut par_cont_ctx)?;
+
+            par_cont_ctx.code.add("fn_call:");
+            let cont_arg_types = self.get_arg_str(&sir.funcs[par_for.cont].params, "")?;
+            par_cont_ctx.code.add(format!("call void @f{}({})", par_for.cont, cont_arg_types));
+            par_cont_ctx.code.add("ret void");
+            par_cont_ctx.code.add("}\n\n");
+            self.body_code.add(&par_cont_ctx.code.result());
+            Ok(())
+    }
+
+    /// Generates code to compute the number of iterations the given loop will execute. Returns an
+    /// LLVM register name representing the number of iterations and, if the iterator is a
+    /// `FringeIter`, the LLVM register name representing the starting index of the fringe iterator.
+    fn gen_num_iters_and_fringe_start(&mut self,
+                                      par_for: &ParallelForData,
+                                      func: &SirFunction,
+                                      ctx: &mut FunctionContext) -> WeldResult<(String, Option<String>)> {
+        // Use the first data to compute the indexing.
+        let first_data = &par_for.data[0].data;
+        let data_str = llvm_symbol(&first_data);
+        let data_ty_str = self.llvm_type(func.params.get(&first_data).unwrap())?;
+        let data_prefix = llvm_prefix(&data_ty_str);
+
+        let num_iters_str = ctx.var_ids.next();
+        let mut fringe_start_str = None;
+        if par_for.data[0].kind == IterKind::SimdIter || par_for.data[0].kind == IterKind::ScalarIter {
+            if par_for.data[0].start.is_none() {
+                // set num_iters_str to len(first_data)
+                ctx.code.add(format!("{} = call i64 {}.size({} {})",
+                num_iters_str,
+                data_prefix,
+                data_ty_str,
+                data_str));
+            } else {
+                // TODO(shoumik): Don't support non-unit stride right now.
+                if par_for.data[0].kind == IterKind::SimdIter {
+                    return weld_err!("vector iterator does not support non-unit stride");
+                }
+                // set num_iters_str to (end - start) / stride
+                let start_str = llvm_symbol(&par_for.data[0].start.clone().unwrap());
+                let end_str = llvm_symbol(&par_for.data[0].end.clone().unwrap());
+                let stride_str = llvm_symbol(&par_for.data[0].stride.clone().unwrap());
+                let diff_tmp = ctx.var_ids.next();
+                ctx.code.add(format!("{} = sub i64 {}, {}", diff_tmp, end_str, start_str));
+                ctx.code.add(format!("{} = udiv i64 {}, {}", num_iters_str, diff_tmp, stride_str));
+            }
+        } else {
+            // FringeIter
+            // TODO(shoumik): Don't support non-unit stride right now.
+            if par_for.data[0].start.is_some() {
+                return weld_err!("fringe iterator does not support non-unit stride");
+            }
+            let arr_len = ctx.var_ids.next();
+            let tmp = ctx.var_ids.next();
+            let tmp2 = ctx.var_ids.next();
+            let vector_len = format!("{}", llvm_simd_size(func.symbol_type(&first_data)?)?);
+
+            ctx
+                .code
+                .add(format!("{} = call i64 {}.size({} {})", arr_len, data_prefix, data_ty_str, data_str));
+
+            // Compute the number of iterations:
+            // tmp = arr_len / llvm_simd_size
+            // tmp2 = tmp * llvm_simd_size
+            // num_iters = arr_len - llvm_simd_size
+            ctx.code.add(format!("{} = udiv i64 {}, {}", tmp, arr_len, vector_len));
+            // tmp2 is also where the iteration for the FringeIter starts.
+            ctx.code.add(format!("{} = mul i64 {}, {}", tmp2, tmp, vector_len));
+            // Compute the number of iterations.
+            ctx.code.add(format!("{} = sub i64 {}, {}", num_iters_str, arr_len, tmp2));
+
+            fringe_start_str = Some(tmp2);
+        }
+        Ok((String::from(num_iters_str), fringe_start_str))
+    }
+
+    /// Generates a bounds check for a parallel for loop by ensuring that the number of iterations
+    /// does not cause an out of bounds error with the given start and stride.
+    fn gen_loop_bounds_check(&mut self,
+                                 fringe_start_str: Option<String>,
+                                 num_iters_str: &str,
+                                 par_for: &ParallelForData,
+                                 func: &SirFunction,
+                                 ctx: &mut FunctionContext) -> WeldResult<()> {
+        for iter in par_for.data.iter() {
+            let (data_ll_ty, data_ll_sym) = self.llvm_type_and_name(func, &iter.data)?;
+            let data_prefix = llvm_prefix(&data_ll_ty);
+
+            let data_size_ll_tmp = ctx.var_ids.next();
+            ctx.code.add(format!("{} = call i64 {}.size({} {})",
+                data_size_ll_tmp, data_prefix, data_ll_ty, data_ll_sym));
+
+            // Obtain the start and stride values.
+            let (start_str, stride_str) = if iter.start.is_none() {
+                // We already checked to make sure the FringeIter doesn't have a start, etc.
+                let start_str = match iter.kind {
+                    IterKind::FringeIter => fringe_start_str.as_ref().unwrap().to_string(),
+                    _ => String::from("0")
+                };
+                let stride_str = String::from("1");
+                (start_str, stride_str)
+            } else {
+                (llvm_symbol(iter.start.as_ref().unwrap()), llvm_symbol(iter.stride.as_ref().unwrap()))
+            };
+
+            let t0 = ctx.var_ids.next();
+            let t1 = ctx.var_ids.next();
+            let t2 = ctx.var_ids.next();
+            let cond = ctx.var_ids.next();
+            let next_bounds_check_label = ctx.var_ids.next();
+
+            // TODO just compare against end here...this computation is redundant.
+            // t0 = sub i64 num_iters, 1
+            // t1 = mul i64 stride, t0
+            // t2 = add i64 t1, start
+            // cond = icmp lte i64 t1, size
+            // br i1 cond, label %nextCheck, label %checkFailed
+            // nextCheck:
+            // (loop)
+            ctx.code.add(format!("{} = sub i64 {}, 1", t0, num_iters_str));
+            ctx.code.add(format!("{} = mul i64 {}, {}", t1, stride_str, t0));
+            ctx.code.add(format!("{} = add i64 {}, {}", t2, t1, start_str));
+            ctx.code.add(format!("{} = icmp ult i64 {}, {}", cond, t2, data_size_ll_tmp));
+            ctx
+                .code
+                .add(format!("br i1 {}, label {}, label %fn.boundcheckfailed", cond, next_bounds_check_label));
+            ctx.code.add(format!("{}:", next_bounds_check_label.replace("%", "")));
+        }
+
+        // If we get here, the bounds check passed.
+        ctx.code.add(format!("br label %fn.boundcheckpassed"));
+        // Handle a bounds check fail.
+        ctx.code.add(format!("fn.boundcheckfailed:"));
+        let errno = WeldRuntimeErrno::BadIteratorLength;
+        let run_id = ctx.var_ids.next();
+        ctx.code.add(format!("{} = call i64 @weld_rt_get_run_id()", run_id));
+        ctx.code.add(format!("call void @weld_run_set_errno(i64 {}, i64 {})", run_id, errno as i64));
+        ctx.code.add(format!("call void @weld_rt_abort_thread()"));
+        ctx.code.add(format!("; Unreachable!"));
+        ctx.code.add(format!("br label %fn.end"));
+        ctx.code.add(format!("fn.boundcheckpassed:"));
+
+        Ok(())
+    }
+
+    /// Generates code to either call into the parallel runtime or to call the function which
+    /// executes the for loops body direclty on a single thread, given the number of iterations to
+    /// be executed.
+    fn gen_call_loop_body(&mut self,
+                          num_iters_str: &str,
+                          par_for: &ParallelForData,
+                          sir: &SirProgram,
+                          func: &SirFunction,
+                          ctx: &mut FunctionContext) -> WeldResult<()> {
+        let bound_cmp = ctx.var_ids.next();
+        let mut grain_size = DEFAULT_GRAIN_SIZE;
+        if par_for.innermost {
+            ctx.code.add(format!("{} = icmp ule i64 {}, {}", bound_cmp, num_iters_str, grain_size));
+            ctx.code.add(format!("br i1 {}, label %for.ser, label %for.par", bound_cmp));
+            ctx.code.add(format!("for.ser:"));
+            let mut body_arg_types = self.get_arg_str(&func.params, "")?;
+            body_arg_types.push_str(format!(", i64 0, i64 {}", num_iters_str).as_str());
+            ctx.code.add(format!("call void @f{}({})", func.id, body_arg_types));
+            let cont_arg_types = self.get_arg_str(&sir.funcs[par_for.cont].params, "")?;
+            ctx.code.add(format!("call void @f{}({})", par_for.cont, cont_arg_types));
+            ctx.code.add(format!("br label %fn.end"));
+        } else {
+            ctx.code.add("br label %for.par");
+            grain_size = 1;
+        }
+        ctx.code.add(format!("for.par:"));
+        let body_struct = self.get_arg_struct(&func.params, ctx)?;
+        let cont_struct = self.get_arg_struct(&sir.funcs[par_for.cont].params, ctx)?;
+        ctx.code.add(format!(
+                "call void @weld_rt_start_loop(%work_t* %cur.work, i8* {}, i8* {}, \
+                                void (%work_t*)* @f{}_par, void (%work_t*)* @f{}_par, i64 0, \
+                                i64 {}, i32 {})",
+                                body_struct,
+                                cont_struct,
+                                func.id,
+                                par_for.cont,
+                                num_iters_str,
+                                grain_size
+                                ));
+        Ok(())
+    }
+
     /// Add a function to the generated program.
     pub fn add_function(&mut self,
                         sir: &SirProgram,
@@ -452,211 +715,12 @@ impl LlvmGenerator {
         self.body_code.add(&ctx.alloca_code.result());
         self.body_code.add(&ctx.code.result());
 
-        // if we'er in a loop, generaet wrapper function.
         if containing_loop.is_some() {
             let par_for = containing_loop.clone().unwrap();
-            let mut wrap_ctx = &mut FunctionContext::new();
-            let serial_arg_types = self.get_arg_str(&get_combined_params(sir, &par_for), "")?;
-            wrap_ctx.code.add(format!("define void @f{}_wrapper({}) {{", func.id, serial_arg_types));
-            wrap_ctx.code.add(format!("fn.entry:"));
+            self.gen_loop_wrapper_function(&par_for, sir, func)?;
+            self.gen_parallel_runtime_callback_function(func)?;
+            self.gen_loop_continuation_function(&par_for, sir)?;
 
-            // Use the first data to compute the indexing.
-            let first_data = &par_for.data[0].data;
-            let data_str = llvm_symbol(&first_data);
-            let data_ty_str = self.llvm_type(func.params.get(&first_data).unwrap())?;
-            let data_prefix = llvm_prefix(&data_ty_str);
-
-            let num_iters_str = wrap_ctx.var_ids.next();
-            let mut fringe_start_str = None;
-
-            if par_for.data[0].kind == IterKind::SimdIter || par_for.data[0].kind == IterKind::ScalarIter {
-                if par_for.data[0].start.is_none() {
-                    // set num_iters_str to len(first_data)
-                    wrap_ctx.code.add(format!("{} = call i64 {}.size({} {})",
-                                                num_iters_str,
-                                                data_prefix,
-                                                data_ty_str,
-                                                data_str));
-                } else {
-                    // TODO(shoumik): Don't support non-unit stride right now.
-                    if par_for.data[0].kind == IterKind::SimdIter {
-                        return weld_err!("vector iterator does not support non-unit stride");
-                    }
-                    // set num_iters_str to (end - start) / stride
-                    let start_str = llvm_symbol(&par_for.data[0].start.clone().unwrap());
-                    let end_str = llvm_symbol(&par_for.data[0].end.clone().unwrap());
-                    let stride_str = llvm_symbol(&par_for.data[0].stride.clone().unwrap());
-                    let diff_tmp = wrap_ctx.var_ids.next();
-                    wrap_ctx.code.add(format!("{} = sub i64 {}, {}", diff_tmp, end_str, start_str));
-                    wrap_ctx.code.add(format!("{} = udiv i64 {}, {}", num_iters_str, diff_tmp, stride_str));
-                }
-            } else {
-                // FringeIter
-                // TODO(shoumik): Don't support non-unit stride right now.
-                if par_for.data[0].start.is_some() {
-                    return weld_err!("fringe iterator does not support non-unit stride");
-                }
-                let arr_len = wrap_ctx.var_ids.next();
-                let tmp = wrap_ctx.var_ids.next();
-                let tmp2 = wrap_ctx.var_ids.next();
-                let vector_len = format!("{}", llvm_simd_size(func.symbol_type(&first_data)?)?);
-
-                wrap_ctx
-                    .code
-                    .add(format!("{} = call i64 {}.size({} {})", arr_len, data_prefix, data_ty_str, data_str));
-
-                // Compute the number of iterations:
-                // tmp = arr_len / llvm_simd_size
-                // tmp2 = tmp * llvm_simd_size
-                // num_iters = arr_len - llvm_simd_size
-                wrap_ctx.code.add(format!("{} = udiv i64 {}, {}", tmp, arr_len, vector_len));
-                // tmp2 is also where the iteration for the FringeIter starts.
-                wrap_ctx.code.add(format!("{} = mul i64 {}, {}", tmp2, tmp, vector_len));
-                // Compute the number of iterations.
-                wrap_ctx.code.add(format!("{} = sub i64 {}, {}", num_iters_str, arr_len, tmp2));
-
-                fringe_start_str = Some(tmp2);
-            }
-
-            // Perform a bounds check on each of the data items before launching the loop
-            for iter in par_for.data.iter() {
-                // Vector LLVM information for the current iter.
-                let data_str = llvm_symbol(&iter.data);
-                let data_ty_str = self.llvm_type(func.params.get(&iter.data).unwrap())?;
-                let data_prefix = llvm_prefix(&data_ty_str);
-                let llvm_simd_size_str = wrap_ctx.var_ids.next();
-                wrap_ctx
-                    .code
-                    .add(format!("{} = call i64 {}.size({} {})", llvm_simd_size_str, data_prefix, data_ty_str, data_str));
-
-                let (start_str, stride_str) = if iter.start.is_none() {
-                    // We already checked to make sure the FringeIter doesn't have a start,
-                    // etc.
-                    let start_str = if iter.kind == IterKind::FringeIter {
-                        fringe_start_str.as_ref().unwrap().to_string()
-                    } else {
-                        "0".to_string()
-                    };
-                    let stride_str = "1".to_string();
-                    (start_str, stride_str)
-                } else {
-                    (llvm_symbol(iter.start.as_ref().unwrap()), llvm_symbol(iter.stride.as_ref().unwrap()))
-                };
-
-                let t0 = wrap_ctx.var_ids.next();
-                let t1 = wrap_ctx.var_ids.next();
-                let t2 = wrap_ctx.var_ids.next();
-                let cond = wrap_ctx.var_ids.next();
-                let next_bounds_check_label = wrap_ctx.var_ids.next();
-
-                // TODO just compare against end here...this computation is redundant.
-                // t0 = sub i64 num_iters, 1
-                // t1 = mul i64 stride, t0
-                // t2 = add i64 t1, start
-                // cond = icmp lte i64 t1, size
-                // br i1 cond, label %nextCheck, label %checkFailed
-                // nextCheck:
-                // (loop)
-                wrap_ctx.code.add(format!("{} = sub i64 {}, 1", t0, num_iters_str));
-                wrap_ctx.code.add(format!("{} = mul i64 {}, {}", t1, stride_str, t0));
-                wrap_ctx.code.add(format!("{} = add i64 {}, {}", t2, t1, start_str));
-                wrap_ctx.code.add(format!("{} = icmp ult i64 {}, {}", cond, t2, llvm_simd_size_str));
-                wrap_ctx
-                    .code
-                    .add(format!("br i1 {}, label {}, label %fn.boundcheckfailed", cond, next_bounds_check_label));
-                wrap_ctx.code.add(format!("{}:", next_bounds_check_label.replace("%", "")));
-            }
-            // If we get here, the bounds check passed.
-            wrap_ctx.code.add(format!("br label %fn.boundcheckpassed"));
-            // Handle a bounds check fail.
-            wrap_ctx.code.add(format!("fn.boundcheckfailed:"));
-            let errno = WeldRuntimeErrno::BadIteratorLength;
-            let run_id = wrap_ctx.var_ids.next();
-            wrap_ctx.code.add(format!("{} = call i64 @weld_rt_get_run_id()", run_id));
-            wrap_ctx.code.add(format!("call void @weld_run_set_errno(i64 {}, i64 {})", run_id, errno as i64));
-            wrap_ctx.code.add(format!("call void @weld_rt_abort_thread()"));
-            wrap_ctx.code.add(format!("; Unreachable!"));
-            wrap_ctx.code.add(format!("br label %fn.end"));
-            wrap_ctx.code.add(format!("fn.boundcheckpassed:"));
-
-            let bound_cmp = wrap_ctx.var_ids.next();
-            let mut grain_size = 4096;
-            if par_for.innermost {
-                wrap_ctx.code.add(format!("{} = icmp ule i64 {}, {}", bound_cmp, num_iters_str, grain_size));
-                wrap_ctx.code.add(format!("br i1 {}, label %for.ser, label %for.par", bound_cmp));
-                wrap_ctx.code.add(format!("for.ser:"));
-                let mut body_arg_types = self.get_arg_str(&func.params, "")?;
-                body_arg_types.push_str(format!(", i64 0, i64 {}", num_iters_str).as_str());
-                wrap_ctx.code.add(format!("call void @f{}({})", func.id, body_arg_types));
-                let cont_arg_types = self.get_arg_str(&sir.funcs[par_for.cont].params, "")?;
-                wrap_ctx.code.add(format!("call void @f{}({})", par_for.cont, cont_arg_types));
-                wrap_ctx.code.add(format!("br label %fn.end"));
-            } else {
-                wrap_ctx.code.add("br label %for.par");
-                grain_size = 1;
-            }
-            wrap_ctx.code.add(format!("for.par:"));
-            let body_struct = self.get_arg_struct(&func.params, &mut wrap_ctx)?;
-            let cont_struct = self.get_arg_struct(&sir.funcs[par_for.cont].params, &mut wrap_ctx)?;
-            wrap_ctx.code.add(format!(
-                "call void @weld_rt_start_loop(%work_t* %cur.work, i8* {}, i8* {}, \
-                                void (%work_t*)* @f{}_par, void (%work_t*)* @f{}_par, i64 0, \
-                                i64 {}, i32 {})",
-                body_struct,
-                cont_struct,
-                func.id,
-                par_for.cont,
-                num_iters_str,
-                grain_size
-            ));
-            wrap_ctx.code.add(format!("br label %fn.end"));
-            wrap_ctx.code.add("fn.end:");
-            wrap_ctx.code.add("ret void");
-            wrap_ctx.code.add("}\n\n");
-            self.body_code.add(&wrap_ctx.code.result());
-
-            let mut par_body_ctx = &mut FunctionContext::new();
-            par_body_ctx.code.add(format!("define void @f{}_par(%work_t* %cur.work) {{", func.id));
-            par_body_ctx.code.add("entry:");
-            self.unload_arg_struct(&func.params, &mut par_body_ctx)?;
-            let lower_bound_ptr = par_body_ctx.var_ids.next();
-            let lower_bound = par_body_ctx.var_ids.next();
-            let upper_bound_ptr = par_body_ctx.var_ids.next();
-            let upper_bound = par_body_ctx.var_ids.next();
-            par_body_ctx
-                .code
-                .add(format!("{} = getelementptr %work_t, %work_t* %cur.work, i32 0, i32 1", lower_bound_ptr));
-            par_body_ctx.code.add(format!("{} = load i64, i64* {}", lower_bound, lower_bound_ptr));
-            par_body_ctx
-                .code
-                .add(format!("{} = getelementptr %work_t, %work_t* %cur.work, i32 0, i32 2", upper_bound_ptr));
-            par_body_ctx.code.add(format!("{} = load i64, i64* {}", upper_bound, upper_bound_ptr));
-
-            let body_arg_types = try!(self.get_arg_str(&func.params, ""));
-            self.create_new_vb_pieces(&func.params, &mut par_body_ctx)?;
-            par_body_ctx.code.add("fn_call:");
-            par_body_ctx.code.add(format!("call void @f{}({}, i64 {}, i64 {})",
-                                            func.id,
-                                            body_arg_types,
-                                            lower_bound,
-                                            upper_bound));
-            par_body_ctx.code.add("ret void");
-            par_body_ctx.code.add("}\n\n");
-            self.body_code.add(&par_body_ctx.code.result());
-
-            let mut par_cont_ctx = &mut FunctionContext::new();
-            par_cont_ctx.code.add(format!("define void @f{}_par(%work_t* %cur.work) {{", par_for.cont));
-            par_cont_ctx.code.add("entry:");
-
-            self.unload_arg_struct(&sir.funcs[par_for.cont].params, &mut par_cont_ctx)?;
-            self.create_new_vb_pieces(&sir.funcs[par_for.cont].params, &mut par_cont_ctx)?;
-
-            par_cont_ctx.code.add("fn_call:");
-            let cont_arg_types = self.get_arg_str(&sir.funcs[par_for.cont].params, "")?;
-            par_cont_ctx.code.add(format!("call void @f{}({})", par_for.cont, cont_arg_types));
-            par_cont_ctx.code.add("ret void");
-            par_cont_ctx.code.add("}\n\n");
-            self.body_code.add(&par_cont_ctx.code.result());
         }
 
         if func.id == 0 {
