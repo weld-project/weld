@@ -339,7 +339,7 @@ impl LlvmGenerator {
     /// Generates a bounds check for a parallel for loop by ensuring that the number of iterations
     /// does not cause an out of bounds error with the given start and stride.
     /// 
-    /// Succeeds gen_num_iters_and_fringe_start
+    /// Follows gen_num_iters_and_fringe_start
     /// Precedes gen_invoke_loop_body 
     fn gen_loop_bounds_check(&mut self,
                                  fringe_start_str: Option<String>,
@@ -409,10 +409,10 @@ impl LlvmGenerator {
     }
 
     /// Generates code to either call into the parallel runtime or to call the function which
-    /// executes the for loops body directly on a single thread, given the number of iterations to
-    /// be executed.
+    /// executes the for loops body directly on the current thread, based on the number of
+    /// iterations to be executed.
     /// 
-    /// Succeeds gen_loop_bounds_check
+    /// Follows gen_loop_bounds_check
     fn gen_invoke_loop_body(&mut self,
                           num_iters_str: &str,
                           par_for: &ParallelForData,
@@ -678,7 +678,7 @@ impl LlvmGenerator {
     }
 
     /// Generates the parallel runtime callback function for a loop body. This function calls the
-    /// function which executes a loop body after unpacking teh lower and upper bound from the work
+    /// function which executes a loop body after unpacking the lower and upper bound from the work
     /// item.
     fn gen_parallel_runtime_callback_function(&mut self, func: &SirFunction) -> WeldResult<()> {
             let mut ctx = &mut FunctionContext::new();
@@ -768,7 +768,7 @@ impl LlvmGenerator {
         Ok(())
     }
 
-    /// Add a top-level non-loop function to the generated program for a block that is not a loop.
+    /// Generates code for an SIR function which is not a loop body.
     pub fn gen_top_level_function(&mut self, sir: &SirProgram, func: &SirFunction) -> WeldResult<()> {
         if !self.visited.insert(func.id) {
             return Ok(());
