@@ -4,27 +4,25 @@ import py.test
 import random
 
 UNARY_OPS = [np.exp, np.log, np.sqrt]
-# TODO: Add wa.erf.
+# TODO: Add wa.erf - doesn't use the ufunc functionality so not doing it for
+# now.
 BINARY_OPS = [np.add, np.subtract, np.multiply, np.divide]
-# TODO: Add int32, int64.
-TYPES = ['float32', 'float64']
-# TODO: Create test with all other ufuncs.
+TYPES = ['float32', 'float64', 'int32', 'int64']
 
+# TODO: Create test with all other ufuncs.
 def random_arrays(num, dtype):
     '''
     Generates random Weld array, and numpy array of the given num elements.
-    FIXME: Use np.random to generate random numbers of the given dtype.
     '''
-    random.seed(1234)
-    test = []
-    for i in range(num):
-        test.append(float(random.random()))
-    test = np.array(test, dtype=dtype)
-
-    # FIXME: Should be the same result as above, but this seems to fail for
-    # some reason...
-    # test = np.zeros((num), dtype=dtype)
-    # test[:] = np.random.randn(*test.shape)
+    # np.random does not support specifying dtype, so this is a weird
+    # way to support both float/int random numbers
+    test = np.zeros((num), dtype=dtype)
+    test[:] = np.random.randn(*test.shape)
+    test = np.abs(test)
+    # at least add 1 so no 0's (o.w. divide errors)
+    random_add = np.random.randint(1, high=10, size=test.shape)
+    test = test + random_add
+    test = test.astype(dtype)
 
     np_test = np.copy(test)
     w = WeldArray(test)
@@ -48,9 +46,13 @@ def test_unary_elemwise():
 
     TODO: Add tests for all supported datatypes
     TODO: Factor out code for binary tests.
+    TODO: For now, unary ops seem to only be supported on floats.
     '''
     for op in UNARY_OPS:
         for dtype in TYPES:
+            # int still not supported for the unary ops in Weld.
+            if "int" in dtype:
+                continue
             np_test, w = random_arrays(10, dtype)
             w2 = op(w)
             weld_result = w2.eval()
@@ -64,11 +66,16 @@ def test_binary_elemwise():
         for dtype in TYPES:
             np_test, w = random_arrays(10, dtype)
             np_test2, w2 = random_arrays(10, dtype)
+            print("dtype = ", dtype)
+            print("op = ", op)
+            print(np_test2)
             w3 = op(w, w2)
             weld_result = w3.eval()
+            print(weld_result)
             np_result = op(np_test, np_test2)
-
-            assert np.allclose(weld_result, np_result)
+            # Need array equal to keep matching types for WeldArray, otherwise
+            # allclose tries to subtract floats from ints.
+            assert np.array_equal(weld_result, np_result)
 
 def test_multiple_array_creation():
     '''
@@ -107,13 +114,13 @@ def test_type_conversion():
     '''
     After evaluation, the dtype of the returned array must be the same as
     before.
-    FIXME: Will need to generalize this after adding support for all types.
     '''
-    _, w = random_arrays(10, 'float32')
-    w2 = np.exp(w)
-    weld_result = w2.eval()
-
-    assert weld_result.dtype == 'float32'
+    for t in TYPES:
+        _, w = random_arrays(10, t)
+        _, w2 = random_arrays(10, t)
+        w2 = np.add(w, w2)
+        weld_result = w2.eval()
+        assert weld_result.dtype == t
 
 def test_concat():
     '''
@@ -127,7 +134,7 @@ def test_views():
     In particular, this requires part of the initialization of the WeldArray be
     done in __array_finalize__ instead of __new__.
 
-    FIXME: After supporting views, need to add more tests.
+    FIXME: Add more views based tests.
     '''
     np_test, w = random_arrays(10, 'float32')
     w = w[2:5]
@@ -140,6 +147,12 @@ def test_views():
     w2.eval()
 
     assert np.allclose(weld_result, np_result)
+
+def test_views_mess():
+    '''
+    More complicated versions of the views test.
+    '''
+    pass
 
 def test_mix_np_weld_ops():
     '''
@@ -155,7 +168,7 @@ def test_mix_np_weld_ops():
     weld_result = w2.eval()
     assert np.allclose(weld_result, np_result)
 
-def test_add_scalars():
+def test_scalars():
     '''
     FIXME: Add all types of numbers.
     Special case of broadcasting rules - the scalar is applied to all the
@@ -187,7 +200,8 @@ def test_stale_add():
 
 def test_cycle():
     '''
-    the problem here seems to be reassiging to the same array.
+    This was a problem when I was using let statements to hold intermediate
+    weld code. (because of my naming scheme)
     '''
     n1, w1 = given_arrays([1.0, 2.0], 'float32')
     n2, w2 = given_arrays([3.0, 3.0], 'float32')
@@ -246,3 +260,61 @@ def test_reuse_array():
 
     w3_result = w3.eval()
     assert np.allclose(w3_result, n3)
+
+def test_iterator():
+    '''
+    While iterating, the values of the np array must be the latest after
+    evaluated stored ops.
+    '''
+    pass
+
+def test_fancy_indexing():
+    '''
+    FIXME: This still fails miserably.
+    '''
+    _, w = random_arrays(10, 'float64')
+    print('w = ', type(w))
+    print('random arrays done')
+    b = w > 0.50
+    print('b = ', type(b))
+    print('fancy index time')
+    w2 = w[b]
+    print('w2 = ', type(w2))
+    # print(w2)
+    # assert isinstance(w2, WeldArray)
+
+def test_mixing_types():
+    '''
+    mixing f32 with f64, or i32 with f64.
+    Weld doesn't seem to support this right now, so pass it on to np.
+    '''
+    n1, w1 = random_arrays(2, 'float64')
+    n2, w2 = random_arrays(2, 'float32')
+
+    w3 = w1 + w2
+    n3 = n1 + n2
+    assert np.array_equal(n3, w3.eval())
+
+def test_inplace_assignment():
+    '''
+    With the output optimization, this should be quite efficient for weld.
+    '''
+    n, w = random_arrays(100, 'float32')
+    n2, w2 = random_arrays(100, 'float32')
+
+    for i in range(100):
+        n += n2
+        w += w2
+
+    w = w.eval()
+    print("eval done")
+    assert np.allclose(n, w)
+
+def test_nested_weld_expr():
+    '''
+    map(zip(map(...))) kind of really long nested expressions.
+    Add a timeout - it shouldn't take literally forever as it does now.
+    '''
+    pass
+
+test_scalars()
