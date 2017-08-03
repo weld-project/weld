@@ -1,6 +1,19 @@
 import numpy as np
 from weld.types import *
 
+def is_view_child(child, par):
+    '''
+    Checks the base address of the given arrays to figure out if child and par
+    have overlapping memory regions.
+    '''
+    return child.base is par
+
+def addr(arr):
+    '''
+    returns address of the given ndarray.
+    '''
+    return arr.__array_interface__['data'][0]
+
 def get_supported_binary_ops():
     '''
     Returns a dictionary of the Weld supported binary ops, with values being

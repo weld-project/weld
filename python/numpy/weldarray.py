@@ -2,9 +2,6 @@ from weld.weldobject import *
 from weld.encoders import NumpyArrayEncoder, NumpyArrayDecoder
 from weldnumpy import *
 
-# Temporary debugging aid
-DEBUG = False
-
 class WeldArray(np.ndarray):
     '''
     A new WeldArray can be created in three ways:
@@ -31,6 +28,10 @@ class WeldArray(np.ndarray):
         obj._gen_weldobj(input_array)
         obj._weld_type = SUPPORTED_DTYPES[str(input_array.dtype)]
         obj.verbose = verbose
+        # Views
+        obj.view_parents = []
+        obj.view_children = []
+
         return obj
 
     def __repr__(self):
@@ -62,9 +63,25 @@ class WeldArray(np.ndarray):
         '''
         # evaluate all lazily stored ops.
         arr = self._eval()
-        # res is an ndarray, so we call ndarray's implementation on it.
+        # arr is an ndarray, so we call ndarray's implementation on it.
         res = arr.__getitem__(idx)
-        if isinstance(idx, slice) or isinstance(idx, np.ndarray):
+
+        if isinstance(idx, slice):
+            # is res really a view of arr?
+            if is_view_child(res, arr):
+                res = WeldArray(res)
+                # update both the lists.
+                self.view_children.append(res)
+                res.view_parents.append(self)
+                # if self already has parents
+                for p in self.view_parents:
+                    # parenting is transitive.
+                    res.view_parents.append(p)
+
+                return res
+
+        elif isinstance(idx, np.ndarray):
+            # this will not have shared memory with parent array.
             return WeldArray(res)
         else:
             # return the scalar.
@@ -92,6 +109,47 @@ class WeldArray(np.ndarray):
         else:
             assert False, '_gen_weldobj has unsupported input array'
 
+    def _process_ufunc_inputs(self, input_args, outputs):
+        '''
+        Helper function for __array_ufunc__ that deals with a lot of the
+        annoying checks.
+        @input_args: args to __array_ufunc__
+        @outputs: specified outputs.
+
+        @ret1: output: If one output is specified.
+        @ret2: supported: If weld supports the given input/output format - if
+        Weld doesn't then will just pass it on to numpy.
+        '''
+        if len(input_args) > 2:
+            supported = False
+            return None, supported
+
+        arrays = all(isinstance(i, np.ndarray) for i in input_args)
+        supported = True
+        if arrays:
+            supported = all(str(_inp.dtype) in SUPPORTED_DTYPES for _inp in input_args)
+            if len(input_args) == 2 and input_args[0].dtype != input_args[1].dtype:
+                supported = False
+        else:
+            # FIXME: add more scalar tests
+            pass
+
+        # check ouput.
+        if outputs:
+            # if the output is not the same weldarray as self, then let np deal
+            # with it.
+            if len(outputs) == 1 and outputs[0].weldobj.objectId == self.weldobj.objectId:
+                output = outputs[0]
+            else:
+                # not sure about the use case with multiple outputs - let numpy
+                # handle it.
+                supported = False
+                output = None
+        else:
+            output = None
+
+        return output, supported
+
     def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
         '''
         Overwrites the action of weld supported functions and for others,
@@ -100,25 +158,13 @@ class WeldArray(np.ndarray):
         FIXME: Not dealing with method at all. Check use cases.
         TODO: add input descriptions.
         '''
-        # TODO: Decompose this part - a lot of boring checks.
         input_args = [inp for inp in inputs]
-        arrays = all(isinstance(i, np.ndarray) for i in input_args)
-        supported = True
-        if arrays:
-            supported = all(str(_inp.dtype) in SUPPORTED_DTYPES for _inp in input_args)
-            if len(input_args) == 2 and input_args[0].dtype != input_args[1].dtype:
-                supported = False
-        else:
-            # FIXME: add scalar tests
-            pass
         outputs = kwargs.pop('out', None)
-        if outputs:
-            if len(outputs) == 1:
-                output = outputs[0]
-            else:
-                supported = False
-        else:
-            output = None
+        output, supported = self._process_ufunc_inputs(input_args, outputs)
+        if output is None:
+            # the new array will have no views parent/children
+            self.view_parents = []
+            self.view_children = []
 
         # check for supported ops.
         if ufunc.__name__ in UNARY_OPS and supported:
@@ -126,7 +172,6 @@ class WeldArray(np.ndarray):
             return self._unary_op(UNARY_OPS[ufunc.__name__], result=output)
 
         if ufunc.__name__ in BINARY_OPS and supported:
-            assert(len(input_args) == 2)
             # self can be first or second arg.
             if isinstance(input_args[0], WeldArray):
                 # first arg is WeldArray, must be self
@@ -139,14 +184,12 @@ class WeldArray(np.ndarray):
             return self._binary_op(other_arg, BINARY_OPS[ufunc.__name__],
                     result=output)
 
-        # TODO: Decompose this part.
         # Relegating the work to numpy. If input arg is WeldArray, evaluate it,
         # and convert to ndarray before passing to super()
         for i, arg_ in enumerate(input_args):
             if isinstance(arg_, WeldArray):
                 # Evaluate all the lazily stored computations first.
                 input_args[i] = arg_._eval()
-        outputs = kwargs.pop('out', None)
         if outputs:
             out_args = []
             for j, output in enumerate(outputs):
@@ -184,9 +227,6 @@ class WeldArray(np.ndarray):
         Evalutes the expression based on weldobj.weld_code. If no new ops have
         been registered, then just returns the last ndarray.
         '''
-        if DEBUG: print('code len in eval: ', len(self.weldobj.weld_code))
-        if DEBUG: print('code in eval: ', self.weldobj.weld_code)
-
         if self.name == self.weldobj.weld_code:
             # no new ops have been registered. Let's avoid creating
             # unneccessary new copies with weldobj.evaluate()
@@ -209,69 +249,122 @@ class WeldArray(np.ndarray):
         Create a new array, and updates weldobj.weld_code with the code for
         unop.
         @unop: str, weld IR for the given function.
+        @result: output array.
+        '''
+        def _update_array_unary_op(res, unop):
+            '''
+            '''
+            template = 'map({arr}, |z : {type}| {unop}(z))'
+            code = template.format(arr = res.weldobj.weld_code,
+                    type=res._weld_type.__str__(),
+                    unop=unop)
+            res.weldobj.weld_code = code
+
+        if result is None:
+            result = WeldArray(self)
+        else:
+            # if array had view / was a view - need to update the other
+            # appropriate arrays too.
+            for c in self.view_children:
+                _update_array_unary_op(c, unop)
+
+            # TODO: Updating parents.
+
+        _update_array_unary_op(result, unop)
+        return result
+
+    def _scalar_binary_op(self, other, binop, result):
+        '''
+        Helper function for _binary_op.
+        @other is a scalar (i32, i64, f32, f64).
+        @result: None or a weldarray to store results in.
         '''
         if result is None:
             result = WeldArray(self)
+        else:
+            # FIXME: deal with updating view children/parents
+            pass
 
-        template = 'map({arr}, |z : {type}| {unop}(z))'
+        # FIXME: support other dtypes - not sure what to do for f64/or i64.
+        if isinstance(other, np.float32) or isinstance(other, float):
+            template = 'map({arr}, |z: {type}| z {binop} {other}f)'
+
+        elif isinstance(other, np.int32) or isinstance(other, int):
+            template = 'map({arr}, |z: {type}| z {binop} {other})'
+
         code = template.format(arr = result.weldobj.weld_code,
-                type=result._weld_type.__str__(),
-                unop=unop)
+                    type = result._weld_type.__str__(),
+                    binop = binop,
+                    other = str(other))
         result.weldobj.weld_code = code
+
         return result
 
     def _binary_op(self, other, binop, result=None):
         '''
-        @other: ndarray, weldarray or number.
+        @other: ndarray, weldarray or scalar.
+        @binop: str, one of the weld supported binop.
+        @result: output array. If it has been specified by the caller, then we
+        don't have to allocate a new array.
         '''
-        if result is None:
-            result = WeldArray(self)
+        if not hasattr(other, "__len__"):
+            return self._scalar_binary_op(other, binop, result)
 
         is_weld_array = False
-        # FIXME: support other dtypes.
-        if isinstance(other, np.float32) or isinstance(other, float):
-            template = 'map({arr}, |z: {type}| z {binop} {other}f)'
-            code = template.format(arr = result.weldobj.weld_code,
-                        type = result._weld_type.__str__(),
-                        binop = binop,
-                        other = str(other))
-            result.weldobj.weld_code = code
-            return result
-
-        elif isinstance(other, WeldArray):
+        if isinstance(other, WeldArray):
             is_weld_array = True
         elif isinstance(other, np.ndarray):
             # turn it into WeldArray - for convenience, as this reduces to the
             # case of other being a WeldArray.
-
-            # FIXME: To optimize this, might want to update the weldobj without
+            # TODO: To optimize this, might want to update the weldobj without
             # converting other to WeldArray.
             other = WeldArray(other)
         else:
-            raise ValueError('invalid type for other in binaryop')
+            raise ValueError('invalid array type for other in binaryop')
 
-        result.weldobj.update(other.weldobj)
         # @arr{i}: latest array based on the ops registered on operand{i}. {{
         # is used for escaping { for format.
         template = 'map(zip({arr1},{arr2}), |z: {{{type1},{type2}}}| z.$0 {binop} z.$1)'
 
+        if result is None:
+            result = WeldArray(self)
+        else:
+            # if array had view / was a view - then update those too.
+            for c in self.view_children:
+                c.weldobj.update(other.weldobj)
+                # for arr2, need to select the subset of other whose indices
+                # matches c.
+                start = (addr(c) - addr(self.weldobj.context[self.name])) / c.itemsize
+                end = len(c)
+                # FIXME: For Weld IR, mixing sugar syntax (map/zip) and low level constructs
+                # like iter does not seem to be working.
+                arr2_template = 'iter({arr},{start},{end},{stride})'
+                arr2 = arr2_template.format(arr=other.weldobj.weld_code,
+                                            start = str(start),
+                                            end = str(end),
+                                            stride = str(1))
+                c.weldobj.weld_code = template.format(arr1=c.weldobj.weld_code,
+                                                      arr2=arr2,
+                                                      type1 = c._weld_type.__str__(),
+                                                      type2 = other._weld_type.__str__(),
+                                                      binop = binop)
+
+        result.weldobj.update(other.weldobj)
         code = template.format(arr1 = result.weldobj.weld_code,
                 arr2 = other.weldobj.weld_code,
                 type1 = result._weld_type.__str__(),
                 type2 = other._weld_type.__str__(),
                 binop = binop)
-
         result.weldobj.weld_code = code
 
         if not is_weld_array:
-            if DEBUG: print("not weld array")
             # Evaluate all the lazily stored ops, as the caller probably
-            # expects to get back a ndarray - which would have latest values.
+            # expects to get back a ndarray - which would have correct values.
             result = WeldArray(result._eval())
 
         return result
 
-# FIXME: This should finally go into weldnumpy - along with other functions
+# TODO: This should finally go into weldnumpy - along with other functions
 # which are equivalents of np.zeros etc. - need to figure out the exact
 # imports etc.
 def array(arr, *args, **kwargs):

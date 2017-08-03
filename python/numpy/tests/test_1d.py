@@ -2,6 +2,7 @@ import numpy as np
 from weldarray import WeldArray
 import py.test
 import random
+from weldnumpy import *
 
 UNARY_OPS = [np.exp, np.log, np.sqrt]
 # TODO: Add wa.erf - doesn't use the ufunc functionality so not doing it for
@@ -10,12 +11,6 @@ BINARY_OPS = [np.add, np.subtract, np.multiply, np.divide]
 TYPES = ['float32', 'float64', 'int32', 'int64']
 
 NUM_ELS = 5
-
-def addr(arr):
-    '''
-    returns address of the given ndarray.
-    '''
-    return arr.__array_interface__['data'][0]
 
 # TODO: Create test with all other ufuncs.
 def random_arrays(num, dtype):
@@ -144,7 +139,7 @@ def test_views_basic():
     n2 = n[2:5]
     assert isinstance(w2, WeldArray)
 
-def test_views_advanced():
+def test_views_update_child():
     '''
     If the values of a given view are changed - then these changes should be
     reflected in the bigger parent array.
@@ -178,6 +173,30 @@ def test_views_advanced():
 
     # assert np.allclose(w2.evaluate(), n2)
 
+def test_views_update_parent():
+    '''
+    Create a view, then update the parent in place. The change should be
+    effected in the view-child as well.
+    ''' 
+    n, w = random_arrays(NUM_ELS, 'float32')
+    w2 = w[2:4]
+    n2 = n[2:4]
+
+    w = np.exp(w, out=w)
+    n = np.exp(n, out=n)
+
+    # w2 should have been updated too.    
+    assert np.allclose(n[2:4], n2)
+    assert np.allclose(w[2:4], w2.evaluate())
+    
+    # Part 2: binops don't work for us yet.
+    # n3, w3 = random_arrays(NUM_ELS, 'float32')
+    # w = np.add(w, w3, out=w)
+    # n = np.add(n, n3, out=n)
+
+    # assert np.allclose(n[2:4], n2)
+    # assert np.allclose(w[2:4], w2.evaluate())
+
 def test_views_mess():
     '''
     More complicated versions of the views test.
@@ -200,11 +219,21 @@ def test_mix_np_weld_ops():
 
 def test_scalars():
     '''
-    FIXME: Add all types of numbers.
+    FIXME: Not sure how f64/i64 is represented in weld.
     Special case of broadcasting rules - the scalar is applied to all the
     Weldrray members.
     '''
-    np_test, w = random_arrays(NUM_ELS, 'float32')
+    t = "int32"
+    print("t = ", t)
+    np_test, w = random_arrays(NUM_ELS, t)
+    np_result = np_test + 2
+    w2 = w + 2
+    weld_result = w2.evaluate()
+    assert np.allclose(weld_result, np_result)
+
+    t = "float32"
+    print("t = ", t)
+    np_test, w = random_arrays(NUM_ELS, t)
     np_result = np_test + 2.00
     w2 = w + 2.00
     weld_result = w2.evaluate()
@@ -367,3 +396,5 @@ def test_implicit_evaluate():
 
     assert np.allclose(w3, n3)
 
+# test_views_update_parent()
+# test_views_update_child()
