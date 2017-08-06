@@ -1,7 +1,7 @@
 OS = $(shell uname -s)
 LLVM_VERSION = $(shell llvm-config --version | cut -d . -f 1,2)
 
-CFLAGS = -O3 -std=c++11 -stdlib=libstdc++ -Wall -fno-use-cxa-atexit -fPIC -flto
+CFLAGS = -O3 -std=c++11 -Wall -fno-use-cxa-atexit -fPIC -flto
 ifeq (${OS}, Darwin)
   # OS X
   CLANG ?= clang++-${LLVM_VERSION}
