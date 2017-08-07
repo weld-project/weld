@@ -1,18 +1,16 @@
 Directory Structure:
 
-  - weldarray.py: Weld Numpy file, which subclasses from numpy.
-  - main.py: Just some random code for testing features in isolation.
+  - weldarray.py: Weld Array file, which subclasses ndarray from numpy.
+  - weldnumpy.py: Helper functions, should eventually have stuff like np.zeros
+  etc.
 
-  ./tests:
+  ./tests: contains all the tests.
   Run with the command 'pytest'.
 
   ./timings:
 
     - timings.py: long loop with multiple ops being tested with (numpy,
-        weldarray (subclass), weld array as a separate object).
-
-    - blackscholes stuff: Various files that implement the blackscholes
-    workload - need to change these to get it in the same form as timings.py.
+        weldarray)
 
 Design Decisions: (see google doc for details)
 
@@ -35,14 +33,16 @@ Design Decisions: (see google doc for details)
     as we will never access the original np memory for this array.
 
   - Subclassing ndarray vs Having a separate object:
-    - So far I'm going with subclassing, but while implementing some of the
-    things, particularly the above point - I see some good reasons why a
-    separate object might be better.  Subclassing Pros:
-
+    - So far I'm going with subclassing.
 
   - Views:
-    Just do the following:
-    - Evaluate the base array (so all previously registered ops are done). Will get a ndarray back.
-    - Find the relevant indices, index into this array, and create a new weldobject with this array as the base parameter.
-   - Should work the same as other cases after.
+    - dealt with in __getitem__, along with other indexing strategies [..]
+    - Always evaluate registered ops, and then let ndarray superclass create the view.
+      - The new view shares underlying memory with parent if possible (if
+          ndarray can avoid copying the stuff). Since we aren't making changes
+      to the underlying memory - but storing future ops - we need to deal with
+      it separately.
+      - Keep a child list / parent list for any view/parent - and whenever
+      updating these - update the elements in this list too. This seems a
+      little awkward...but I didn't see a nicer alternative.    
 
