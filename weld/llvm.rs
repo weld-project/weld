@@ -271,8 +271,8 @@ impl LlvmGenerator {
     /// Generates code to compute the number of iterations the given loop will execute. Returns an
     /// LLVM register name representing the number of iterations and, if the iterator is a
     /// `FringeIter`, the LLVM register name representing the starting index of the fringe iterator.
-    /// 
-    /// Precedes gen_loop_bounds_check 
+    ///
+    /// Precedes gen_loop_bounds_check
     fn gen_num_iters_and_fringe_start(&mut self,
                                       par_for: &ParallelForData,
                                       func: &SirFunction,
@@ -338,9 +338,9 @@ impl LlvmGenerator {
 
     /// Generates a bounds check for a parallel for loop by ensuring that the number of iterations
     /// does not cause an out of bounds error with the given start and stride.
-    /// 
+    ///
     /// Follows gen_num_iters_and_fringe_start
-    /// Precedes gen_invoke_loop_body 
+    /// Precedes gen_invoke_loop_body
     fn gen_loop_bounds_check(&mut self,
                                  fringe_start_str: Option<String>,
                                  num_iters_str: &str,
@@ -411,7 +411,7 @@ impl LlvmGenerator {
     /// Generates code to either call into the parallel runtime or to call the function which
     /// executes the for loops body directly on the current thread, based on the number of
     /// iterations to be executed.
-    /// 
+    ///
     /// Follows gen_loop_bounds_check
     fn gen_invoke_loop_body(&mut self,
                           num_iters_str: &str,
@@ -709,7 +709,7 @@ impl LlvmGenerator {
     }
 
     /// Generates the continuation function of the given parallel loop.
-    fn gen_loop_continuation_function(&mut self, 
+    fn gen_loop_continuation_function(&mut self,
                                       par_for: &ParallelForData,
                                       sir: &SirProgram) -> WeldResult<()> {
             let mut ctx = &mut FunctionContext::new();
@@ -2512,6 +2512,17 @@ fn llvm_binop(op_kind: BinOpKind, ty: &Type) -> WeldResult<&'static str> {
         (BinOpKind::Divide, &Simd(I64)) => Ok("sdiv"),
         (BinOpKind::Divide, &Simd(F32)) => Ok("fdiv"),
         (BinOpKind::Divide, &Simd(F64)) => Ok("fdiv"),
+
+        (BinOpKind::Modulo, &Scalar(I8)) => Ok("srem"),
+        (BinOpKind::Modulo, &Scalar(I32)) => Ok("srem"),
+        (BinOpKind::Modulo, &Scalar(I64)) => Ok("srem"),
+        (BinOpKind::Modulo, &Scalar(F32)) => Ok("frem"),
+        (BinOpKind::Modulo, &Scalar(F64)) => Ok("frem"),
+        (BinOpKind::Modulo, &Simd(I8)) => Ok("srem"),
+        (BinOpKind::Modulo, &Simd(I32)) => Ok("srem"),
+        (BinOpKind::Modulo, &Simd(I64)) => Ok("srem"),
+        (BinOpKind::Modulo, &Simd(F32)) => Ok("frem"),
+        (BinOpKind::Modulo, &Simd(F64)) => Ok("frem"),
 
         (BinOpKind::Equal, &Scalar(Bool)) => Ok("icmp eq"),
         (BinOpKind::Equal, &Scalar(I8)) => Ok("icmp eq"),
