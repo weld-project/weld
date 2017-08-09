@@ -1578,6 +1578,28 @@ fn map_exp() {
     unsafe { free_value_and_module(ret_value) };
 }
 
+fn simple_int_mod() {
+    let code = "|x:i64| x % 3L";
+    let conf = default_conf();
+    let ref input_data: i64 = -10;
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const i64 };
+    let result = unsafe { *data };
+    assert_eq!(result, -1);
+    unsafe { free_value_and_module(ret_value) };
+}
+
+fn simple_float_mod() {
+    let code = "|x:f64| x % 0.04";
+    let conf = default_conf();
+    let ref input_data: f64 = 0.5;
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const f64 };
+    let result = unsafe { *data };
+    assert!(approx_equal(result, 0.02, 5));
+    unsafe { free_value_and_module(ret_value) };
+}
+
 fn if_for_loop() {
     let code = "|x:vec[i32], a:i32| if(a > 5, map(x, |e| e+1), map(x, |e| e+2))";
     let conf = default_conf();
@@ -1902,7 +1924,9 @@ fn main() {
              ("serial_parlib_test", serial_parlib_test),
              ("multithreaded_module_run", multithreaded_module_run),
              ("iters_outofbounds_error_test", iters_outofbounds_error_test),
-             ("outofmemory_error_test", outofmemory_error_test)];
+             ("outofmemory_error_test", outofmemory_error_test),
+             ("simple_float_mod", simple_float_mod),
+             ("simple_int_mod", simple_int_mod)];
 
 
     println!("");
