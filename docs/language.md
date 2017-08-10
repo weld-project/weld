@@ -222,7 +222,7 @@ extern "C" void fast_matmul(float_vec_t *a, float_vec_t *b, float_vec_t *result)
   // can call any arbitrary C code in a UDF.
   my_fast_matrix_multiply(a->data, b->data, result->data, a->length);
 }
-
+```
 ## Annotations
 
 In addition, it's possible to specify annotations on both builder types and expressions: these could for example specify an implementation strategy for a builder. To specify an annotation on a `dictmerger`, one can use syntax like
