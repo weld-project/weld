@@ -3,6 +3,9 @@
 extern crate llvm_sys as llvm;
 extern crate libc;
 
+#[macro_use]
+extern crate log;
+
 use std::error::Error;
 use std::ffi::{CStr, CString, NulError};
 use std::fmt;
@@ -124,6 +127,7 @@ pub fn compile_module(code: &str, bc_file: Option<&[u8]>) -> Result<CompiledModu
         if context.is_null() {
             return Err(LlvmError::new("LLVMContextCreate returned null"));
         }
+        debug!("Done creating LLVM context");
 
         // Create a CompiledModule to wrap the context and our result (will clean it on Drop).
         let mut result = CompiledModule {
@@ -134,22 +138,29 @@ pub fn compile_module(code: &str, bc_file: Option<&[u8]>) -> Result<CompiledModu
 
         // Parse the IR to get an LLVMModuleRef
         let module = parse_module_str(context, code)?;
+        debug!("Done parsing module");
 
         if let Some(s) = bc_file {
             let bc_module = parse_module_bytes(context, s)?;
+            debug!("Done parsing bytecode file");
             llvm::linker::LLVMLinkModules2(module, bc_module);
+            debug!("Done linking bytecode file");
         }
 
         // Validate and optimize the module
         verify_module(module)?;
         check_run_function(module)?;
+        debug!("Done validating module");
         optimize_module(module)?;
+        debug!("Done optimizing module");
 
         // Create an execution engine for the module and find its run function
         let engine = create_exec_engine(module)?;
+        debug!("Done creating execution engine");
 
         result.engine = Some(engine);
         result.run_function = Some(find_function(engine, "run")?);
+        debug!("Done generating/finding run function");
 
         Ok(result)
     }

@@ -12,7 +12,6 @@ use super::ast::LiteralKind::*;
 use super::ast::ScalarKind::*;
 use super::ast::BuilderKind::*;
 use super::code_builder::CodeBuilder;
-use super::conf::LogLevel;
 use super::error::*;
 use super::macro_processor;
 use super::passes::*;
@@ -54,48 +53,39 @@ pub struct WeldOutputArgs {
 }
 
 /// Generate a compiled LLVM module from a program whose body is a function.
-pub fn compile_program(program: &Program,
-                       opt_passes: &Vec<Pass>,
-                       log_level: LogLevel)
-                       -> WeldResult<easy_ll::CompiledModule> {
+pub fn compile_program(program: &Program, opt_passes: &Vec<Pass>) -> WeldResult<easy_ll::CompiledModule> {
     let mut expr = macro_processor::process_program(program)?;
-    if log_level >= LogLevel::Debug {
-        println!("After macro substitution:\n{}\n", print_typed_expr(&expr));
-    }
+    debug!("After macro substitution:\n{}\n", print_typed_expr(&expr));
 
     let _ = transforms::uniquify(&mut expr)?;
     type_inference::infer_types(&mut expr)?;
     let mut expr = expr.to_typed()?;
-    if log_level >= LogLevel::Debug {
-        println!("After type inference:\n{}\n", print_typed_expr(&expr));
-    }
+    debug!("After type inference:\n{}\n", print_typed_expr(&expr));
 
     for pass in opt_passes {
         pass.transform(&mut expr)?;
-        if log_level >= LogLevel::Debug {
-            println!("After {} pass:\n{}", pass.pass_name(), print_typed_expr(&expr));
-        }
+        debug!("After {} pass:\n{}", pass.pass_name(), print_typed_expr(&expr));
     }
 
     transforms::uniquify(&mut expr)?;
-    if log_level >= LogLevel::Debug {
-        println!("After uniquify:\n{}\n", print_typed_expr(&expr));
-    }
+    debug!("After uniquify:\n{}\n", print_typed_expr(&expr));
 
     let sir_prog = sir::ast_to_sir(&expr)?;
-    if log_level >= LogLevel::Debug {
-        println!("SIR program:\n{}\n", &sir_prog);
-    }
+    debug!("SIR program:\n{}\n", &sir_prog);
 
     let mut gen = LlvmGenerator::new();
     gen.add_function_on_pointers("run", &sir_prog)?;
     let llvm_code = gen.result();
-    if log_level >= LogLevel::Debug {
-        println!("LLVM program:\n{}\n", &llvm_code);
-    }
+    debug!("LLVM program:\n{}\n", &llvm_code);
 
+    debug!("Started compiling LLVM");
     let module = try!(easy_ll::compile_module(&llvm_code, Some(LIB_WELD_RT)));
+    debug!("Done compiling LLVM");
+
+    debug!("Started runtime_init call");
     module.run_named("runtime_init", 0).unwrap();
+    debug!("Done runtime_init call");
+
     Ok(module)
 }
 

@@ -12,6 +12,9 @@ easy_ll = { path = "easy_ll", version = "^0.1.0" }
 weld_common = { path = "weld_common", version = "^0.1.0" }
 libc = "0.2.0"
 csv = "0.15.0"
+log = "*"
+env_logger = "*"
+chrono = "*"
 
 [lib]
 path = "weld/lib.rs"

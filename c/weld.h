@@ -9,6 +9,18 @@
 
 #include <stdint.h>
 
+// Log level constants -- should match WeldLogLevel.
+
+/** A Weld log level. */
+typedef uint64_t weld_log_level_t;
+
+weld_log_level_t WELD_LOG_LEVEL_OFF = 0;
+weld_log_level_t WELD_LOG_LEVEL_ERROR = 1;
+weld_log_level_t WELD_LOG_LEVEL_WARN = 2;
+weld_log_level_t WELD_LOG_LEVEL_INFO = 3;
+weld_log_level_t WELD_LOG_LEVEL_DEBUG = 4;
+weld_log_level_t WELD_LOG_LEVEL_TRACE = 5;
+
 // Types
 
 /** A type encapsulating a Weld value. */
@@ -206,6 +218,16 @@ weld_conf_free(weld_conf_t conf);
  */
 extern "C" void
 weld_load_library(const char *filename, weld_error_t err);
+
+/**
+ * Enables logging to stderr in Weld with the given level (one of the WELD_LOG_* constants).
+ * This function is ignored if it has already been called once, or if some other code in the
+ * process has initialized logging using Rust's `log` crate.
+ *
+ * @param level the log level to use.
+ */
+extern "C" void
+weld_set_log_level(weld_log_level_t level);
 
 #endif
 
