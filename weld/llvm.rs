@@ -80,11 +80,11 @@ pub fn compile_program(program: &Program, opt_passes: &Vec<Pass>) -> WeldResult<
 
     debug!("Started compiling LLVM");
     let module = try!(easy_ll::compile_module(&llvm_code, Some(LIB_WELD_RT)));
-    debug!("Finished compiling LLVM");
+    debug!("Done compiling LLVM");
 
     debug!("Started runtime_init call");
     module.run_named("runtime_init", 0).unwrap();
-    debug!("Finished runtime_init call");
+    debug!("Done runtime_init call");
 
     Ok(module)
 }
