@@ -1,7 +1,7 @@
 extern crate rustyline;
 extern crate easy_ll;
 extern crate weld;
-
+extern crate weld_common;
 extern crate libc;
 
 use rustyline::error::ReadlineError;
@@ -13,10 +13,12 @@ use std::fs::File;
 use std::error::Error;
 use std::io::prelude::*;
 use std::fmt;
+use std::ffi::{CStr, CString};
 use std::collections::HashMap;
+use libc::c_char;
 
 use weld::*;
-use weld::parser::*;
+use weld_common::*;
 
 enum ReplCommands {
     LoadFile,
@@ -65,6 +67,8 @@ fn process_loadfile(arg: String) -> Result<String, String> {
 }
 
 fn main() {
+    weld_set_log_level(WeldLogLevel::Debug);
+
     let home_path = env::home_dir().unwrap_or(PathBuf::new());
     let history_file_path = home_path.join(".weld_history");
     let history_file_path = history_file_path.to_str().unwrap_or(".weld_history");
@@ -102,13 +106,11 @@ fn main() {
             continue;
         }
 
-        let program;
-
         // Check whether the command is to load a file; if not, treat it as a program to run.
         let mut tokens = trimmed.splitn(2, " ");
         let command = tokens.next().unwrap();
         let arg = tokens.next().unwrap_or("");
-        if reserved_words.contains_key(command) {
+        let code = if reserved_words.contains_key(command) {
             let command = reserved_words.get(command).unwrap();
             match *command {
                 ReplCommands::LoadFile => {
@@ -118,27 +120,29 @@ fn main() {
                             continue;
                         }
                         Ok(code) => {
-                            program = parse_program(&code);
+                            code
                         }
                     }
                 }
             }
         } else {
-            program = parse_program(trimmed);
-        }
+            trimmed.to_string()
+        };
 
-        if let Err(ref e) = program {
-            println!("Error during parsing: {}", e);
-            continue;
-        }
-
-        let result = llvm::compile_program(
-            &program.unwrap(),
-            &conf::DEFAULT_OPTIMIZATION_PASSES,
-            conf::LogLevel::Debug);
-        match result {
-            Err(e) => println!("Error during compilation:\n{}\n", e),
-            Ok(_) => println!("Program compiled successfully to LLVM")
+        unsafe {
+            let code = CString::new(code).unwrap();
+            let conf = weld_conf_new();
+            let err = weld_error_new();
+            let module = weld_module_compile(code.into_raw() as *const c_char, conf, err);
+            if weld_error_code(err) != WeldRuntimeErrno::Success {
+                println!("Compile error: {}",
+                    CStr::from_ptr(weld_error_message(err)).to_str().unwrap());
+            } else {
+                println!("Program compiled successfully to LLVM");
+                weld_module_free(module);
+            }
+            weld_conf_free(conf);
+            weld_error_free(err);
         }
     }
     rl.save_history(&history_file_path).unwrap();

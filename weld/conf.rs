@@ -10,20 +10,11 @@ use super::passes::Pass;
 // Keys used in textual representation of conf
 pub const MEMORY_LIMIT_KEY: &'static str = "weld.memory.limit";
 pub const THREADS_KEY: &'static str = "weld.threads";
-pub const LOG_LEVEL_KEY: &'static str = "weld.log.level";
 pub const OPTIMIZATION_PASSES_KEY: &'static str = "weld.optimization.passes";
-
-/// Available logging levels; these should be listed in order of verbosity
-/// because code will compare them.
-#[derive(PartialEq,Eq,Clone,PartialOrd,Debug)]
-pub enum LogLevel {
-    None, Debug
-}
 
 // Default values of each key
 pub const DEFAULT_MEMORY_LIMIT: i64 = 1000000000;
 pub const DEFAULT_THREADS: i64 = 1;
-pub const DEFAULT_LOG_LEVEL: LogLevel = LogLevel::None;
 lazy_static! {
     pub static ref DEFAULT_OPTIMIZATION_PASSES: Vec<Pass> = {
         let m = ["inline-apply", "inline-let", "inline-zip", "loop-fusion", "vectorize"];
@@ -35,7 +26,6 @@ lazy_static! {
 pub struct ParsedConf {
     pub memory_limit: i64,
     pub threads: i64,
-    pub log_level: LogLevel,
     pub optimization_passes: Vec<Pass>
 }
 
@@ -49,10 +39,6 @@ pub fn parse(conf: &WeldConf) -> WeldResult<ParsedConf> {
     let threads = value.map(|s| parse_threads(&s))
                        .unwrap_or(Ok(DEFAULT_THREADS))?;
 
-    let value = get_value(conf, LOG_LEVEL_KEY);
-    let log_level = value.map(|s| parse_log_level(&s))
-                         .unwrap_or(Ok(DEFAULT_LOG_LEVEL))?;
-
     let value = get_value(conf, OPTIMIZATION_PASSES_KEY);
     let passes = value.map(|s| parse_passes(&s))
                       .unwrap_or(Ok(DEFAULT_OPTIMIZATION_PASSES.clone()))?;
@@ -60,7 +46,6 @@ pub fn parse(conf: &WeldConf) -> WeldResult<ParsedConf> {
     Ok(ParsedConf {
         memory_limit: memory_limit,
         threads: threads,
-        log_level: log_level,
         optimization_passes: passes
     })
 }
@@ -101,15 +86,6 @@ fn parse_passes(s: &str) -> WeldResult<Vec<Pass>> {
     Ok(result)
 }
 
-/// Parse a log level.
-fn parse_log_level(s: &str) -> WeldResult<LogLevel> {
-    match s {
-        "debug" => Ok(LogLevel::Debug),
-        "none" => Ok(LogLevel::None),
-        _ => weld_err!("Invalid log level: {}", s)
-    }
-}
-
 #[test]
 fn conf_parsing() {
     assert_eq!(parse_threads("1").unwrap(), 1);
@@ -123,8 +99,4 @@ fn conf_parsing() {
     assert_eq!(parse_passes("loop-fusion").unwrap().len(), 1);
     assert_eq!(parse_passes("").unwrap().len(), 0);
     assert!(parse_passes("non-existent-pass").is_err());
-
-    assert_eq!(parse_log_level("debug").unwrap(), LogLevel::Debug);
-    assert_eq!(parse_log_level("none").unwrap(), LogLevel::None);
-    assert!(parse_log_level("").is_err());
 }

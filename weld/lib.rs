@@ -5,9 +5,15 @@
 
 #[macro_use]
 extern crate lazy_static;
+
+#[macro_use]
+extern crate log;
+
 extern crate regex;
 extern crate easy_ll;
 extern crate libc;
+extern crate env_logger;
+extern crate chrono;
 
 extern crate weld_common;
 
@@ -17,6 +23,7 @@ use libc::{c_char, c_void};
 use std::ffi::{CStr, CString};
 
 use weld_common::WeldRuntimeErrno;
+use weld_common::WeldLogLevel;
 
 /// Utility macro to create an Err result with a WeldError from a format string.
 macro_rules! weld_err {
@@ -219,6 +226,7 @@ pub unsafe extern "C" fn weld_module_compile(code: *const c_char,
                                              conf: *const WeldConf,
                                              err_ptr: *mut WeldError)
                                              -> *mut WeldModule {
+    info!("Started weld_module_compile");
     assert!(!code.is_null());
     assert!(!err_ptr.is_null());
     let mut err = &mut *err_ptr;
@@ -234,21 +242,25 @@ pub unsafe extern "C" fn weld_module_compile(code: *const c_char,
     let code = CStr::from_ptr(code);
     let code = code.to_str().unwrap().trim();
 
+    info!("Started parsing program");
     let parsed = parser::parse_program(code);
+    info!("Done parsing program");
     if let Err(e) = parsed {
         err.errno = WeldRuntimeErrno::CompileError;
         err.message = CString::new(e.description().to_string()).unwrap();
         return std::ptr::null_mut();
     }
 
-    let module = llvm::compile_program(
-        &parsed.unwrap(), &conf.optimization_passes, conf.log_level);
+    info!("Started compiling program");
+    let module = llvm::compile_program(&parsed.unwrap(), &conf.optimization_passes);
+    info!("Done compiling program");
 
     if let Err(ref e) = module {
         err.errno = WeldRuntimeErrno::CompileError;
         err.message = CString::new(e.description().to_string()).unwrap();
         return std::ptr::null_mut();
     }
+    info!("Done weld_module_compile");
     Box::into_raw(Box::new(module.unwrap()))
 }
 
@@ -372,6 +384,31 @@ pub unsafe extern "C" fn weld_load_library(filename: *const c_char, err: *mut We
         err.errno = WeldRuntimeErrno::LoadLibraryError;
         err.message = CString::new(e.description()).unwrap();
     }
+}
+
+#[no_mangle]
+/// Enables logging to stderr in Weld with the given log level.
+/// This function is ignored if it has already been called once, or if some other code in the
+/// process has initialized logging using Rust's `log` crate.
+pub extern "C" fn weld_set_log_level(level: WeldLogLevel) {
+    let filter = match level {
+        WeldLogLevel::Error => log::LogLevelFilter::Error,
+        WeldLogLevel::Warn => log::LogLevelFilter::Warn,
+        WeldLogLevel::Info => log::LogLevelFilter::Info,
+        WeldLogLevel::Debug => log::LogLevelFilter::Debug,
+        WeldLogLevel::Trace => log::LogLevelFilter::Trace,
+        _ => log::LogLevelFilter::Off
+    };
+
+    let format = |rec: &log::LogRecord| {
+        let date = chrono::Local::now().format("%T%.3f");
+        format!("{}: {}", date, rec.args())
+    };
+
+    let mut builder = env_logger::LogBuilder::new();
+    builder.format(format);
+    builder.filter(None, filter);
+    builder.init().unwrap_or(());
 }
 
 #[cfg(test)]
