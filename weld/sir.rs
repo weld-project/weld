@@ -315,7 +315,7 @@ impl fmt::Display for Statement {
                 write!(f,
                        "{} = {}",
                        output,
-                       join("{", ",", "}", elems.iter().map(|e| format!("{}", e.name))))
+                       join("{", ",", "}", elems.iter().map(|e| format!("{}", e))))
             }
             MakeVector {
                 ref output,
@@ -947,7 +947,7 @@ fn gen_expr(expr: &TypedExpr,
             // The type of result_sym will be {ArgType, bool} and we will repeat the body if the bool is true.
             let (body_end_func, body_end_block, result_sym) =
                 gen_expr(func_body, prog, body_start_func, body_start_block)?;
-            
+
             // After the body, unpack the {state, bool} struct into symbols argument_sym and continue_sym.
             let continue_sym = prog.add_local(&Scalar(ScalarKind::Bool), body_end_func);
             if parallel_body {
