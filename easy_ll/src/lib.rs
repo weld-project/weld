@@ -160,7 +160,7 @@ pub fn compile_module(code: &str, bc_file: Option<&[u8]>) -> Result<CompiledModu
 
         result.engine = Some(engine);
         result.run_function = Some(find_function(engine, "run")?);
-        debug!("Done finding run function");
+        debug!("Done generating/finding run function");
 
         Ok(result)
     }
