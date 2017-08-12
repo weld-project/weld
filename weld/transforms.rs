@@ -225,7 +225,7 @@ pub fn inline_apply<T: TypeBounds>(expr: &mut Expr<T>) {
 /// Inlines Let calls if the symbol defined by the Let statement is used
 /// less than one time.
 pub fn inline_let(expr: &mut Expr<Type>) {
-    if let Ok(_) = uniquify(expr) { 
+    if let Ok(_) = uniquify(expr) {
         expr.transform(&mut |ref mut expr| {
             if let Let {
                 ref mut name,
@@ -305,7 +305,7 @@ pub fn fuse_loops_horizontal(expr: &mut Expr<Type>) {
                                 if common_data.is_none() {
                                     common_data = Some(iters2.clone());
                                 }
-                                if iters2 == common_data.as_ref().unwrap() { 
+                                if iters2 == common_data.as_ref().unwrap() {
                                     if let NewBuilder(_) = bldr2.kind {
                                         if let Builder(ref kind, _) = bldr2.ty {
                                             if let Appender(_) = *kind {
@@ -315,7 +315,7 @@ pub fn fuse_loops_horizontal(expr: &mut Expr<Type>) {
                                                             if *n == args[0].name {
                                                                 // Save the arguments and expressions for the function so
                                                                 // they can be used for fusion later.
-                                                                lambdas.push((args.clone(), value.clone())); 
+                                                                lambdas.push((args.clone(), value.clone()));
                                                                 return true
                                                             }
                                                         }
@@ -334,7 +334,7 @@ pub fn fuse_loops_horizontal(expr: &mut Expr<Type>) {
                     // All Iters are over the same range and same vector, with a pattern we can
                     // transform. Produce the new expression by zipping the functions of each
                     // nested for into a single merge into a struct.
- 
+
                     // Zip the expressions to create an appender whose merge (value) type is a struct.
                     let merge_type = Struct(lambdas.iter().map(|ref e| e.1.ty.clone()).collect::<Vec<_>>());
                     // TODO(Deepak): Fix this to something meaningful.
@@ -621,4 +621,17 @@ fn replace_builder(lambda: &Expr<Type>,
     } else {
         nested.clone()
     }
+}
+
+/// Simplifies GetField(MakeStruct(*)) expressions, which can occur during loop fusion when some
+/// of the loops are zipping together multiple column vectors.
+pub fn simplify_get_field<T: TypeBounds>(expr: &mut Expr<T>) {
+    expr.transform(&mut |ref mut expr| {
+        if let GetField { ref expr, index } = expr.kind {
+            if let MakeStruct { ref elems } = expr.kind {
+                return Some(elems[index as usize].clone());
+            }
+        }
+        None
+    });
 }
