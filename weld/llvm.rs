@@ -1383,7 +1383,7 @@ impl LlvmGenerator {
                     let (elem_ll_ty, elem_ll_sym) = self.llvm_type_and_name(func, elem)?;
                     let elem_value = self.gen_load_var(&elem_ll_sym, &elem_ll_ty, ctx)?;
                     let ptr_tmp = ctx.var_ids.next();
-                    ctx.code.add(format!("{} = getelementptr {}, {}* {}, i32 0, i32 {}",
+                    ctx.code.add(format!("{} = getelementptr inbounds {}, {}* {}, i32 0, i32 {}",
                         ptr_tmp, output_ll_ty, output_ll_ty, output_ll_sym, index));
                     self.gen_store_var(&elem_value, &ptr_tmp, &elem_ll_ty, ctx);
                 }
@@ -1638,7 +1638,7 @@ impl LlvmGenerator {
                 let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
                 let (value_ll_ty, value_ll_sym) = self.llvm_type_and_name(func, value)?;
                 let ptr_tmp = ctx.var_ids.next();
-                ctx.code.add(format!("{} = getelementptr {}, {}* {}, i32 0, i32 {}",
+                ctx.code.add(format!("{} = getelementptr inbounds {}, {}* {}, i32 0, i32 {}",
                     ptr_tmp, value_ll_ty, value_ll_ty, value_ll_sym, index));
                 let res_tmp = self.gen_load_var(&ptr_tmp, &output_ll_ty, ctx)?;
                 self.gen_store_var(&res_tmp, &output_ll_sym, &output_ll_ty, ctx);
