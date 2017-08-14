@@ -7,21 +7,16 @@ import random
 import timeit
 import time
 
-NUM_REPS = 100
+NUM_REPS = 500
 NUM_ELS = 100
 
 def simple_loop(lib, reps):
     '''
     lib = np or wa.
     '''
-    random.seed(1234)
-    test = []
-    test2 = []
-    test3 = []
-    for i in range(NUM_ELS):
-        test.append(float(random.random()))
-        test2.append(float(random.random()))
-        test3.append(float(random.random()))
+    np.random.seed(1)
+    test = np.random.rand(NUM_ELS)
+    test2 = np.random.rand(NUM_ELS)
 
     arr = lib.array(test, dtype="float32")
     arr2 = lib.array(test2, dtype="float32")

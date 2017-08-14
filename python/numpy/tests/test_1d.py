@@ -1,5 +1,4 @@
 import numpy as np
-from weldarray import WeldArray
 import py.test
 import random
 from weldnumpy import *
@@ -28,7 +27,7 @@ def random_arrays(num, dtype):
     test = test.astype(dtype)
 
     np_test = np.copy(test)
-    w = WeldArray(test)
+    w = weldarray(test)
 
     return np_test, w
 
@@ -39,7 +38,7 @@ def given_arrays(l, dtype):
     '''
     test = np.array(l, dtype=dtype)
     np_test = np.copy(test)
-    w = WeldArray(test)
+    w = weldarray(test)
 
     return np_test, w
 
@@ -74,7 +73,7 @@ def test_binary_elemwise():
             w3 = op(w, w2)
             weld_result = w3.evaluate()
             np_result = op(np_test, np_test2)
-            # Need array equal to keep matching types for WeldArray, otherwise
+            # Need array equal to keep matching types for weldarray, otherwise
             # allclose tries to subtract floats from ints.
             assert np.array_equal(weld_result, np_result)
 
@@ -85,7 +84,7 @@ def test_multiple_array_creation():
     level.
     '''
     np_test, w = random_arrays(NUM_ELS, 'float32')
-    w = WeldArray(w)        # creating array again.
+    w = weldarray(w)        # creating array again.
     w2 = np.exp(w)
     weld_result = w2.evaluate()
     np_result = np.exp(np_test)
@@ -102,7 +101,7 @@ def test_array_indexing():
 def test_numpy_operations():
     '''
     Test operations that aren't implemented yet - it should pass it on to
-    numpy's implementation, and return WeldArrays.
+    numpy's implementation, and return weldarrays.
     '''
     np_test, w = random_arrays(NUM_ELS, 'float32')
     np_result = np.sin(np_test)
@@ -131,13 +130,13 @@ def test_concat():
 
 def test_views_basic():
     '''
-    Taking views into a 1d WeldArray should return a WeldArray view of the
+    Taking views into a 1d weldarray should return a weldarray view of the
     correct data without any copying.
     '''
     n, w = random_arrays(NUM_ELS, 'float32')
     w2 = w[2:5]
     n2 = n[2:5]
-    assert isinstance(w2, WeldArray)
+    assert isinstance(w2, weldarray)
 
 def test_views_update_child():
     '''
@@ -241,7 +240,7 @@ def test_scalars():
 
 def test_stale_add():
     '''
-    Registers op for WeldArray w2, and then add it to w1. Works trivially
+    Registers op for weldarray w2, and then add it to w1. Works trivially
     because updating a weldobject with another weldobject just needs to get the
     naming right.
     '''
@@ -329,11 +328,14 @@ def test_iterator():
 
 def test_fancy_indexing():
     '''
+    TODO: Needs more complicated tests that mix different indexing strategies,
+    but since fancy indexing creates a new array - it shouldn't have any
+    problems dealing with further stuff.
     '''
     _, w = random_arrays(NUM_ELS, 'float64')
     b = w > 0.50
     w2 = w[b]
-    assert isinstance(w2, WeldArray)
+    assert isinstance(w2, weldarray)
 
 def test_mixing_types():
     '''
