@@ -3,7 +3,7 @@ from weld.encoders import NumpyArrayEncoder, NumpyArrayDecoder
 from weldnumpy import *
 import time
 
-DEBUG = False
+DEBU = False
 class weldarray(np.ndarray):
     '''
     A new weldarray can be created in three ways:
@@ -18,7 +18,7 @@ class weldarray(np.ndarray):
     the creation of a new array, which adds to the overhead as compared to
     numpy for initializing arrays)
     '''
-    def __new__(cls, input_array, verbose=False, *args, **kwargs):
+    def __new__(cls, input_array, verbose=True, *args, **kwargs):
         '''
         @input_array: original ndarray from which the new array is derived.
         '''
@@ -236,7 +236,7 @@ class weldarray(np.ndarray):
             # unneccessary new copies with weldobj.evaluate()
             arr = self.weldobj.context[self.name]
             return arr
-        
+
         arr = self.weldobj.evaluate(WeldVec(self._weld_type),
                 verbose=self.verbose)
 
@@ -245,7 +245,7 @@ class weldarray(np.ndarray):
         self.weldobj = WeldObject(NumpyArrayEncoder(), NumpyArrayDecoder())
         self.name = self.weldobj.update(arr, SUPPORTED_DTYPES[str(arr.dtype)])
         self.weldobj.weld_code = self.name
-        
+
         return arr
 
     def _unary_op(self, unop, result=None):
@@ -288,7 +288,7 @@ class weldarray(np.ndarray):
         else:
             # FIXME: deal with updating view children/parents
             pass
-        
+
         template = 'map({arr}, |z: {type}| z {binop} {other}{suffix})'
         code = template.format(arr = result.weldobj.weld_code,
                     type = result._weld_type.__str__(),
@@ -348,7 +348,7 @@ class weldarray(np.ndarray):
 
                 c.weldobj.weld_code = template2.format(arr1=c.weldobj.weld_code,
                                                        arr2=arr2)
-                
+
 
         result.weldobj.update(other.weldobj)
         code = template.format(arr1 = result.weldobj.weld_code,
