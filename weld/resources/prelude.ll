@@ -12,6 +12,9 @@ declare double @llvm.log.f64(double)
 declare float @erff(float)
 declare double @erf(double)
 
+declare <4 x float> @llvm.sqrt.v4f32(<4 x float>)
+declare <8 x float> @llvm.sqrt.v8f32(<8 x float>)
+
 declare float @llvm.sqrt.f32(float)
 declare double @llvm.sqrt.f64(double)
 

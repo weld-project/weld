@@ -189,6 +189,7 @@ fn vectorizable(for_loop: &Expr<Type>) -> WeldResult<HashSet<Symbol>> {
                                 }
                             },
 
+                            UnaryOp{ .. } => {},
                             BinOp{ .. } => {},
 
                             Let{ ref name, .. } => {
