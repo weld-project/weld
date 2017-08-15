@@ -1874,12 +1874,10 @@ impl LlvmGenerator {
                 let cond2 = ctx.var_ids.next();
                 let as_ptr = ctx.var_ids.next();
 
-                // Generate label names.
-                let label_base = ctx.var_ids.next();
-                let mut label_ids = IdGenerator::new(&label_base.replace("%", ""));
-                let entry_label = label_ids.next();
-                let body_label = label_ids.next();
-                let done_label = label_ids.next();
+                // Generate label names without prefix.
+                let entry_label = ctx.var_ids.next().replace("%", "");
+                let body_label = ctx.var_ids.next().replace("%", "");
+                let done_label = ctx.var_ids.next().replace("%", "");
 
                 // state for the vector collapse
                 let i_v = ctx.var_ids.next();
@@ -1889,9 +1887,9 @@ impl LlvmGenerator {
                 let cond2_v = ctx.var_ids.next();
                 let final_val_vec = ctx.var_ids.next();
                 let scalar_val_2 = ctx.var_ids.next();
-                let entry_label_v = label_ids.next();
-                let body_label_v = label_ids.next();
-                let done_label_v = label_ids.next();
+                let entry_label_v = ctx.var_ids.next().replace("%", "");
+                let body_label_v = ctx.var_ids.next().replace("%", "");
+                let done_label_v = ctx.var_ids.next().replace("%", "");
                 let vector_width = format!("{}", llvm_simd_size(t)?);
 
                 ctx.code.add(format!(include_str!("resources/merger/merger_result_start.ll"),
@@ -2055,15 +2053,13 @@ impl LlvmGenerator {
                 let i2 = ctx.var_ids.next();
                 let cond2 = ctx.var_ids.next();
 
-                // Generate label names.
-                let label_base = ctx.var_ids.next();
-                let mut label_ids = IdGenerator::new(&label_base.replace("%", ""));
-                let entry = label_ids.next();
-                let body_label = label_ids.next();
-                let copy_entry_label = label_ids.next();
-                let copy_body_label = label_ids.next();
-                let copy_done_label = label_ids.next();
-                let done_label = label_ids.next();
+                // Generate label names without prefix.
+                let entry = ctx.var_ids.next().replace("%", "");
+                let body_label = ctx.var_ids.next().replace("%", "");
+                let copy_entry_label = ctx.var_ids.next().replace("%", "");
+                let copy_body_label = ctx.var_ids.next().replace("%", "");
+                let copy_done_label = ctx.var_ids.next().replace("%", "");
+                let done_label = ctx.var_ids.next().replace("%", "");
                 let raw_ptr = ctx.var_ids.next();
 
                 ctx.code.add(format!(include_str!("resources/vecmerger/vecmerger_result_start.ll"),
@@ -2181,12 +2177,9 @@ impl LlvmGenerator {
                 let cond = ctx.var_ids.next();
                 let cond2 = ctx.var_ids.next();
 
-                // Generate label names.
-                let label_base = ctx.var_ids.next();
-                let mut label_ids = IdGenerator::new(&label_base.replace("%", ""));
-                let entry = label_ids.next();
-                let body = label_ids.next();
-                let done = label_ids.next();
+                let entry = ctx.var_ids.next().replace("%", "");
+                let body = ctx.var_ids.next().replace("%", "");
+                let done = ctx.var_ids.next().replace("%", "");
 
                 ctx.code.add(format!(include_str!("resources/merger/init_merger.ll"),
                                         first = first,

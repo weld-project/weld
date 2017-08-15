@@ -1756,6 +1756,69 @@ fn serial_parlib_test() {
     unsafe { free_value_and_module(ret_value) };
 }
 
+fn many_mergers_test() {
+    #[derive(Clone)]
+    #[allow(dead_code)]
+    struct Output {
+        a: i64,
+        b: f64,
+        c: i64,
+        d: f64,
+        e: i64,
+        f: f64,
+    }
+
+    #[derive(Clone)]
+    #[allow(dead_code)]
+    struct Args {
+        x: WeldVec<f64>,
+        y: WeldVec<f64>,
+        z: WeldVec<f64>,
+    }
+
+    let code = "
+|p0: vec[f64], p1: vec[f64], p2: vec[f64]|
+ let merged = for(zip(p0, p1, p2),
+                  {merger[i64, +], merger[f64, +], merger[i64, +], merger[f64, +], merger[i64, +], merger[f64, +]},
+                  |bs1: {merger[i64, +], merger[f64, +], merger[i64, +], merger[f64, +], merger[i64, +], merger[f64, +]}, i1: i64, ns1: {f64, f64, f64}|
+                   {merge(bs1.$0, 1L), merge(bs1.$1, f64(ns1.$0)), merge(bs1.$2, 1L), merge(bs1.$3, f64(ns1.$1)), merge(bs1.$4, 1L), merge(bs1.$5, f64(ns1.$2))});
+ {result(merged.$0), result(merged.$1), result(merged.$2), result(merged.$3), result(merged.$4), result(merged.$5)}";
+
+    let conf = default_conf();
+
+    let size: i32 = 1000;
+    let x = vec![1.0; size as usize];
+    let y = vec![1.0; size as usize];
+    let z = vec![1.0; size as usize];
+
+    let ref input_data = Args {
+        x: WeldVec {
+            data: x.as_ptr() as *const f64,
+            len: x.len() as i64,
+        },
+        y: WeldVec {
+            data: y.as_ptr() as *const f64,
+            len: y.len() as i64,
+        },
+        z: WeldVec {
+            data: z.as_ptr() as *const f64,
+            len: z.len() as i64,
+        },
+    };
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const Output };
+    let result = unsafe { (*data).clone() };
+
+    assert_eq!(result.a, size as i64);
+    assert_eq!(result.b, size as f64);
+    assert_eq!(result.c, size as i64);
+    assert_eq!(result.d, size as f64);
+    assert_eq!(result.e, size as i64);
+    assert_eq!(result.f, size as f64);
+    unsafe { free_value_and_module(ret_value) };
+}
+
 /// A wrapper struct to allow passing pointers across threads (they aren't Send/Sync by default).
 /// The default #[derive(Copy,Clone)] does not work here unless T has Copy/Clone, so we also
 /// implement those traits manually.
@@ -1922,6 +1985,7 @@ fn main() {
              ("iterate_non_parallel", iterate_non_parallel),
              ("iterate_with_parallel_body", iterate_with_parallel_body),
              ("serial_parlib_test", serial_parlib_test),
+             ("many_mergers_test", many_mergers_test),
              ("multithreaded_module_run", multithreaded_module_run),
              ("iters_outofbounds_error_test", iters_outofbounds_error_test),
              ("outofmemory_error_test", outofmemory_error_test),
