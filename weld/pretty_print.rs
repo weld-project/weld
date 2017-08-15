@@ -238,7 +238,7 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>,
             ref value,
         } => {
             format!(
-                "({}{})",
+                "({}({}))",
                 kind,
                 print_expr_impl(value, typed, indent, should_indent)
             )

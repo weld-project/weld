@@ -1313,12 +1313,38 @@ impl LlvmGenerator {
         let (child_ll_ty, child_ll_sym) = self.llvm_type_and_name(func, child)?;
         let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
         let child_ty = func.symbol_type(child)?;
+
+        let child_tmp = self.gen_load_var(&child_ll_sym, &child_ll_ty, ctx)?;
+
         if let Scalar(ref ty) = *child_ty {
-            let child_tmp = self.gen_load_var(&child_ll_sym, &child_ll_ty, ctx)?;
             let res_tmp = ctx.var_ids.next();
-            let op_name = llvm_unaryop(op_kind, ty)?;
-            ctx.code.add(format!("{} = call {} {} ({} {})", res_tmp, child_ll_ty, op_name, child_ll_ty, child_tmp));
+            let op_name = llvm_scalar_unaryop(op_kind, ty)?;
+            ctx.code.add(format!("{} = call {} {}({} {})", res_tmp, child_ll_ty, op_name, child_ll_ty, child_tmp));
             self.gen_store_var(&res_tmp, &output_ll_sym, &output_ll_ty, ctx);
+        } 
+        else if let Simd(ref ty) = *child_ty {
+            let width = llvm_simd_size(child_ty)?;
+            // If an intrinsic exists for this SIMD op, use it.
+            if let Ok(op_name) = llvm_simd_unaryop(op_kind, ty, width) {
+                let res_tmp = ctx.var_ids.next();
+                ctx.code.add(format!("{} = call {} {}({} {})", res_tmp, child_ll_ty, op_name, child_ll_ty, child_tmp));
+                self.gen_store_var(&res_tmp, &output_ll_sym, &output_ll_ty, ctx);
+            } else {
+                // Unroll and apply the scalar op, and then pack back into vector
+                let scalar_ll_ty = self.llvm_type(&Scalar(*ty))?;
+                let op_name = llvm_scalar_unaryop(op_kind, ty)?;
+                let mut prev_tmp = "undef".to_string();
+                for i in 0..width {
+                    let elem_tmp = self.gen_simd_extract(child_ty, &child_tmp, i, ctx)?;
+                    let val_tmp = ctx.var_ids.next();
+                    ctx.code.add(format!("{} = call {} {}({} {})", val_tmp, scalar_ll_ty, op_name, scalar_ll_ty, elem_tmp));
+                    let next = ctx.var_ids.next();
+                    ctx.code.add(format!("{} = insertelement {} {}, {} {}, i32 {}",
+                                         next, child_ll_ty, prev_tmp, scalar_ll_ty, val_tmp, i));
+                    prev_tmp = next;
+                }
+                self.gen_store_var(&prev_tmp, &output_ll_sym, &output_ll_ty, ctx);
+            }
         } else {
             weld_err!("Illegal type {} in {}", print_type(child_ty), op_kind)?;
         }
@@ -2604,8 +2630,8 @@ fn llvm_binop(op_kind: BinOpKind, ty: &Type) -> WeldResult<&'static str> {
     }
 }
 
-/// Return the name of the LLVM instruction for the given operation and type.
-fn llvm_unaryop(op_kind: UnaryOpKind, ty: &ScalarKind) -> WeldResult<&'static str> {
+/// Return the name of the scalar LLVM instruction for the given operation and type.
+fn llvm_scalar_unaryop(op_kind: UnaryOpKind, ty: &ScalarKind) -> WeldResult<&'static str> {
     match (op_kind, ty) {
         (UnaryOpKind::Log, &F32) => Ok("@llvm.log.f32"),
         (UnaryOpKind::Log, &F64) => Ok("@llvm.log.f64"),
@@ -2620,6 +2646,28 @@ fn llvm_unaryop(op_kind: UnaryOpKind, ty: &ScalarKind) -> WeldResult<&'static st
         (UnaryOpKind::Erf, &F64) => Ok("@erf"),
 
         _ => weld_err!("Unsupported unary op: {} on {}", op_kind, ty),
+    }
+}
+
+/// Return the name of the SIMD LLVM instruction for the given operation and type.
+fn llvm_simd_unaryop(op_kind: UnaryOpKind, ty: &ScalarKind, width: u32) -> WeldResult<&'static str> {
+    match (op_kind, ty, width) {
+        (UnaryOpKind::Sqrt, &F32, 4) => Ok("@llvm.sqrt.v4f32"),
+        (UnaryOpKind::Sqrt, &F32, 8) => Ok("@llvm.sqrt.v8f32"),
+        (UnaryOpKind::Sqrt, &F64, 2) => Ok("@llvm.sqrt.v2f64"),
+        (UnaryOpKind::Sqrt, &F64, 4) => Ok("@llvm.sqrt.v4f64"),
+
+        (UnaryOpKind::Log, &F32, 4) => Ok("@llvm.log.v4f32"),
+        (UnaryOpKind::Log, &F32, 8) => Ok("@llvm.log.v8f32"),
+        (UnaryOpKind::Log, &F64, 2) => Ok("@llvm.log.v2f64"),
+        (UnaryOpKind::Log, &F64, 4) => Ok("@llvm.log.v4f64"),
+
+        (UnaryOpKind::Exp, &F32, 4) => Ok("@llvm.exp.v4f32"),
+        (UnaryOpKind::Exp, &F32, 8) => Ok("@llvm.exp.v8f32"),
+        (UnaryOpKind::Exp, &F64, 2) => Ok("@llvm.exp.v2f64"),
+        (UnaryOpKind::Exp, &F64, 4) => Ok("@llvm.exp.v4f64"),
+
+        _ => weld_err!("Unsupported unary op: {} on <{} x {}>", op_kind, width, ty),
     }
 }
 
