@@ -2660,6 +2660,19 @@ fn llvm_simd_unaryop(op_kind: UnaryOpKind, ty: &ScalarKind, width: u32) -> WeldR
     match (op_kind, ty, width) {
         (UnaryOpKind::Sqrt, &F32, 4) => Ok("@llvm.sqrt.v4f32"),
         (UnaryOpKind::Sqrt, &F32, 8) => Ok("@llvm.sqrt.v8f32"),
+        (UnaryOpKind::Sqrt, &F64, 2) => Ok("@llvm.sqrt.v2f64"),
+        (UnaryOpKind::Sqrt, &F64, 4) => Ok("@llvm.sqrt.v4f64"),
+
+        (UnaryOpKind::Log, &F32, 4) => Ok("@llvm.log.v4f32"),
+        (UnaryOpKind::Log, &F32, 8) => Ok("@llvm.log.v8f32"),
+        (UnaryOpKind::Log, &F64, 2) => Ok("@llvm.log.v2f64"),
+        (UnaryOpKind::Log, &F64, 4) => Ok("@llvm.log.v4f64"),
+
+        (UnaryOpKind::Exp, &F32, 4) => Ok("@llvm.exp.v4f32"),
+        (UnaryOpKind::Exp, &F32, 8) => Ok("@llvm.exp.v8f32"),
+        (UnaryOpKind::Exp, &F64, 2) => Ok("@llvm.exp.v2f64"),
+        (UnaryOpKind::Exp, &F64, 4) => Ok("@llvm.exp.v4f64"),
+
         _ => weld_err!("Unsupported unary op: {} on <{} x {}>", op_kind, width, ty),
     }
 }
