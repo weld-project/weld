@@ -619,6 +619,27 @@ fn nested_if_statement_loop() {
     unsafe { free_value_and_module(ret_value) };
 }
 
+fn nested_if_statement_with_builders_loop() {
+    let code = "|p: vec[i64]|
+        let filter = result(for(p,appender[i64], |bs, i, ns|if(ns >= 3L, if(ns < 7L, merge(bs, ns), bs), bs)));
+        result(for(filter, merger[i64, +], |bs2, i2, ns2| merge(bs2, ns2)))";
+
+    let conf = default_conf();
+
+    let input_vec: Vec<i64> = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    let ref input_data = WeldVec {
+        data: input_vec.as_ptr() as *const i64,
+        len: input_vec.len() as i64,
+    };
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const i32 };
+    let result = unsafe { (*data).clone() };
+    let output = 18;
+    assert_eq!(result, output);
+    unsafe { free_value_and_module(ret_value) };
+}
+
 fn simple_for_appender_loop() {
     #[allow(dead_code)]
     struct Args {
@@ -1972,6 +1993,7 @@ fn main() {
              ("simple_sqrt", simple_sqrt),
              ("map_exp", map_exp),
              ("nested_if_statement_loop", nested_if_statement_loop),
+             ("nested_if_statement_with_builders_loop", nested_if_statement_with_builders_loop),
              ("simple_for_appender_loop", simple_for_appender_loop),
              ("simple_parallel_for_appender_loop", simple_parallel_for_appender_loop),
              ("complex_parallel_for_appender_loop", complex_parallel_for_appender_loop),
