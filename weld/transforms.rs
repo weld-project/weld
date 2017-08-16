@@ -6,6 +6,7 @@ use super::ast::Type::*;
 use super::ast::BuilderKind::*;
 use super::ast::LiteralKind::*;
 use super::error::*;
+use super::exprs;
 
 use std::collections::HashMap;
 
@@ -430,37 +431,19 @@ pub fn fuse_loops_horizontal(expr: &mut Expr<Type>) {
 /// Fuses loops where one for loop takes another as it's input, which prevents intermediate results
 /// from being materialized.
 pub fn fuse_loops_vertical(expr: &mut Expr<Type>) {
-    expr.transform(&mut |ref mut expr| {
+    expr.transform_and_continue_res(&mut |ref mut expr| {
         let mut sym_gen = SymbolGenerator::from_expression(expr);
-        if let For {
-                   iters: ref all_iters,
-                   builder: ref bldr1,
-                   func: ref nested,
-               } = expr.kind {
+        if let For { iters: ref all_iters, builder: ref bldr1, func: ref nested } = expr.kind {
             if all_iters.len() == 1 {
                 let ref iter1 = all_iters[0];
                 if let Res { builder: ref res_bldr } = iter1.data.kind {
-                    if let For {
-                               iters: ref iters2,
-                               builder: ref bldr2,
-                               func: ref lambda,
-                           } = res_bldr.kind {
+                    if let For { iters: ref iters2, builder: ref bldr2, func: ref lambda, } = res_bldr.kind {
                         if iters2.iter().all(|ref i| consumes_all(&i)) {
                             if let NewBuilder(_) = bldr2.kind {
                                 if let Builder(ref kind, _) = bldr2.ty {
                                     if let Appender(_) = *kind {
-                                        let e = Expr {
-                                            ty: expr.ty.clone(),
-                                            kind: For {
-                                                iters: iters2.clone(),
-                                                builder: bldr1.clone(),
-                                                func: Box::new(replace_builder(lambda,
-                                                                               nested,
-                                                                               &mut sym_gen)),
-                                            },
-                                            annotations: Annotations::new(),
-                                        };
-                                        return Some(e);
+                                        let e = exprs::for_expr(iters2.clone(), *bldr1.clone(), replace_builder(lambda, nested, &mut sym_gen)?, false)?;
+                                        return Ok((Some(e), true));
                                     }
                                 }
                             }
@@ -469,7 +452,7 @@ pub fn fuse_loops_vertical(expr: &mut Expr<Type>) {
                 }
             }
         }
-        None
+        Ok((None, true))
     });
 }
 
@@ -516,7 +499,7 @@ fn consumes_all(iter: &Iter<Type>) -> bool {
 fn replace_builder(lambda: &Expr<Type>,
                    nested: &Expr<Type>,
                    sym_gen: &mut SymbolGenerator)
-                   -> Expr<Type> {
+                   -> WeldResult<Expr<Type>> {
 
     // Tests whether an identifier and symbol refer to the same value by
     // comparing the symbols.
@@ -528,11 +511,7 @@ fn replace_builder(lambda: &Expr<Type>,
         }
     }
 
-    let mut new_func = None;
-    if let Lambda {
-               params: ref args,
-               ref body,
-           } = lambda.kind {
+    if let Lambda { params: ref args, ref body } = lambda.kind {
         if let Lambda { params: ref nested_args, .. } = nested.kind {
             let mut new_body = *body.clone();
             let ref old_bldr = args[0];
@@ -540,53 +519,33 @@ fn replace_builder(lambda: &Expr<Type>,
             let ref old_arg = args[2];
             let new_bldr_sym = sym_gen.new_symbol(&old_bldr.name.name);
             let new_index_sym = sym_gen.new_symbol(&old_index.name.name);
-            let new_bldr = Expr {
-                ty: nested_args[0].ty.clone(),
-                kind: Ident(new_bldr_sym.clone()),
-                annotations: Annotations::new(),
-            };
-            let new_index = Expr {
-                ty: nested_args[1].ty.clone(),
-                kind: Ident(new_index_sym.clone()),
-                annotations: Annotations::new(),
-            };
-            new_body.ty = new_bldr.ty.clone();
-            new_body.transform_and_continue(&mut |ref mut e| match e.kind {
+            let new_bldr = exprs::ident_expr(new_bldr_sym.clone(), nested_args[0].ty.clone())?;
+            let new_index = exprs::ident_expr(new_index_sym.clone(), nested_args[1].ty.clone())?;
+
+            // Fix expressions to use the new builder.
+            new_body.transform_and_continue_res(&mut |ref mut e| match e.kind {
                 Merge { ref builder, ref value } if same_iden(&(*builder).kind, &old_bldr.name) => {
-                    let params: Vec<Expr<Type>> =
-                        vec![new_bldr.clone(), new_index.clone(), *value.clone()];
-                    let mut expr = Expr {
-                        ty: e.ty.clone(),
-                        kind: Apply {
-                            func: Box::new(nested.clone()),
-                            params: params,
-                        },
-                        annotations: Annotations::new(),
-                    };
+                    let params: Vec<Expr<Type>> = vec![new_bldr.clone(), new_index.clone(), *value.clone()];
+                    let mut expr = exprs::apply_expr(nested.clone(), params)?;
                     inline_apply(&mut expr);
-                    (Some(expr), true)
+                    Ok((Some(expr), true))
                 }
-                For { iters: ref data, builder: ref bldr, ref func }
-                    if same_iden(&(*bldr).kind, &old_bldr.name) => {
-                    (Some(Expr {
-                         ty: e.ty.clone(),
-                         kind: For {
-                             iters: data.clone(),
-                             builder: Box::new(new_bldr.clone()),
-                             func: Box::new(replace_builder(func, nested, sym_gen)),
-                         },
-                         annotations: Annotations::new(),
-                     }),
-                     false)
+                For { iters: ref data, builder: ref bldr, ref func } if same_iden(&(*bldr).kind, &old_bldr.name) => {
+                    let expr = exprs::for_expr(data.clone(), new_bldr.clone(), replace_builder(func, nested, sym_gen)?, false)?;
+                    Ok((Some(expr), false))
                 }
                 Ident(ref mut symbol) if *symbol == old_bldr.name => {
-                    (Some(new_bldr.clone()), false)
+                    Ok((Some(new_bldr.clone()), false))
                 }
                 Ident(ref mut symbol) if *symbol == old_index.name => {
-                    (Some(new_index.clone()), false)
+                    Ok((Some(new_index.clone()), false))
                 }
-                _ => (None, true),
+                _ => Ok((None, true)),
             });
+
+            // Fix types to make sure the return type propagates through all subexpressions.
+            match_types(&new_bldr.ty, &mut new_body);
+
             let new_params = vec![Parameter {
                                       ty: new_bldr.ty.clone(),
                                       name: new_bldr_sym.clone(),
@@ -599,28 +558,30 @@ fn replace_builder(lambda: &Expr<Type>,
                                       ty: old_arg.ty.clone(),
                                       name: old_arg.name.clone(),
                                   }];
-
-            if let Function(_, ref ret_ty) = nested.ty {
-                let new_func_type =
-                    Function(new_params.iter().map(|e| e.ty.clone()).collect::<Vec<_>>(),
-                             ret_ty.clone());
-                new_func = Some(Expr {
-                                    ty: new_func_type,
-                                    kind: Lambda {
-                                        params: new_params,
-                                        body: Box::new(new_body),
-                                    },
-                                    annotations: Annotations::new(),
-                                })
-            }
+            return exprs::lambda_expr(new_params, new_body);
         }
     }
+    return weld_err!("Inconsistency in replace_builder");
+}
 
-    if let Some(new) = new_func {
-        new
-    } else {
-        nested.clone()
-    }
+/// Given a root type, forces each expression to return that type. TODO For now, only supporting
+/// expressions which can be builders. We might want to factor this out to be somewhere else.
+fn match_types(root_ty: &Type, expr: &mut Expr<Type>) {
+    expr.ty = root_ty.clone();
+    match expr.kind {
+        If { ref mut on_true, ref mut on_false, ..} => {
+            match_types(root_ty, on_true);
+            match_types(root_ty, on_false);
+        }
+        Select { ref mut on_true, ref mut on_false, ..} => {
+            match_types(root_ty, on_true);
+            match_types(root_ty, on_false);
+        }
+        Let { ref mut body, ..} => {
+            match_types(root_ty, body);
+        }
+        _ => {}
+    };
 }
 
 /// Simplifies GetField(MakeStruct(*)) expressions, which can occur during loop fusion when some
