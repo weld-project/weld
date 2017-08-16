@@ -41,10 +41,7 @@ fn vectorizable_iters(iters: &Vec<Iter<Type>>) -> bool {
 
 /// Attempts to predicate an expression whose `ExprKind` is `If`, returning the new expression and
 /// true if subexpressions need to be vectorized or false otherwise.
-fn predicate_if(e: &mut Expr<Type>, broadcast_idens: &HashSet<Symbol>) -> WeldResult<(Option<Expr<Type>>, bool)> {
-    let mut new_expr = None;
-    let mut cont = true;
-
+fn predicate_if(e: &Expr<Type>, broadcast_idens: &HashSet<Symbol>) -> WeldResult<(Option<Expr<Type>>, bool)> {
     // Predication for a value merged into a merger. This pattern checks for if(cond, merge(b, e), b).
     if let If { ref cond, ref on_true, ref on_false } = e.kind {
         if let Merge { ref builder, ref value } = on_true.kind {
@@ -54,6 +51,7 @@ fn predicate_if(e: &mut Expr<Type>, broadcast_idens: &HashSet<Symbol>) -> WeldRe
                         if let Builder(ref bk, _) = builder.ty {
                             if let BuilderKind::Merger(ref ty, ref op) = *bk {
                                 if let Scalar(ref sk) = *ty.as_ref() {
+                                    // Merge in the identity element if the predicate fails (effectively merging in nothing)
                                     let identity = match *op {
                                         BinOpKind::Add => {
                                             match *sk {
@@ -83,16 +81,15 @@ fn predicate_if(e: &mut Expr<Type>, broadcast_idens: &HashSet<Symbol>) -> WeldRe
                                             return weld_err!("Merger type not vectorizable.");
                                         }
                                     };
-                                    // Change if(cond, merge(b, e), b) => 
-                                    // merge(b, select(cond, e, identity).
+                                    // Change if(cond, merge(b, e), b) => merge(b, select(cond, e, identity).
                                     let mut expr = exprs::merge_expr(*builder.clone(), exprs::select_expr(*cond.clone(), *value.clone(), identity)?)?;
+                                    // Recursively vectorize the subexpressions.
                                     expr.transform_and_continue(&mut |ref mut e| {
                                         let cont = vectorize_expr(e, broadcast_idens).unwrap();
                                         (None, cont)
                                     });
-                                    new_expr = Some(expr);
-                                    // We already vectorized this subexpression.
-                                    cont = false;
+
+                                    return Ok((Some(expr), false));
                                 }
                             }
                         }
@@ -101,7 +98,7 @@ fn predicate_if(e: &mut Expr<Type>, broadcast_idens: &HashSet<Symbol>) -> WeldRe
             }
         }
     }
-    Ok((new_expr, cont))
+    weld_err!("Predication not supported!")
 }
 
 /// Vectorizes an expression in-place, also changing its type if needed.
@@ -154,7 +151,6 @@ fn vectorize_expr(e: &mut Expr<Type>, broadcast_idens: &HashSet<Symbol>) -> Weld
     if new_expr.is_some() {
         *e = new_expr.unwrap();
     }
-
     Ok(cont)
 }
 
@@ -178,53 +174,59 @@ fn vectorizable(for_loop: &Expr<Type>) -> WeldResult<HashSet<Symbol>> {
                         defined_in_loop.insert(param.name.clone());
                     }
 
+                    // Check if subexpressions in the body are all vectorizable.
                     body.traverse(&mut |f| {
-                        match f.kind {
-                            Literal(_) => {},
+                        if passed {
+                            match f.kind {
+                                Literal(_) => {},
 
-                            Ident(ref name) => {
-                                if f.ty == params[1].ty && *name == params[1].name {
-                                    // Used an index expression in the loop body.
-                                    passed = false;
-                                }
-                            },
+                                Ident(ref name) => {
+                                    if f.ty == params[1].ty && *name == params[1].name {
+                                        // Used an index expression in the loop body.
+                                        passed = false;
+                                    }
+                                },
 
-                            UnaryOp{ .. } => {},
-                            BinOp{ .. } => {},
+                                UnaryOp{ .. } => {},
+                                BinOp{ .. } => {},
 
-                            Let{ ref name, .. } => {
-                                defined_in_loop.insert(name.clone()); 
-                            },
+                                Let{ ref name, .. } => {
+                                    defined_in_loop.insert(name.clone()); 
+                                },
 
-                            // TODO: do we want to allow all GetFields and MakeStructs, or look inside them?
-                            GetField { .. } => {},
+                                // TODO: do we want to allow all GetFields and MakeStructs, or look inside them?
+                                GetField { .. } => {},
 
-                            MakeStruct { .. } => {},
+                                MakeStruct { .. } => {},
 
-                            Merge { .. } => {},
+                                Merge { .. } => {},
 
-                            If { ref on_true, ref on_false, .. } => {
-                                let mut can_predicate = false;
-                                if let Merge { ref builder, .. } = on_true.kind {
-                                    if let Ident(ref name) = on_false.kind {
-                                        if let Ident(ref name2) = builder.kind {
-                                            if name == name2 {
-                                                if let Builder(ref bk, _) = builder.ty {
-                                                    if let BuilderKind::Merger(ref ty, _) = *bk {
-                                                        if let Scalar(_) = *ty.as_ref() {
-                                                            can_predicate = true;
+                                Select { .. } => {},
+
+                                // TODO it might just be better to remove this and check only Select
+                                If { ref cond, ref on_true, ref on_false, } => {
+                                    let mut can_predicate = false;
+                                    if let Merge { ref builder, .. } = on_true.kind {
+                                        if let Ident(ref name) = on_false.kind {
+                                            if let Ident(ref name2) = builder.kind {
+                                                if name == name2 {
+                                                    if let Builder(ref bk, _) = builder.ty {
+                                                        if let BuilderKind::Merger(ref ty, _) = *bk {
+                                                            if let Scalar(_) = *ty.as_ref() {
+                                                                can_predicate = true;
+                                                            }
                                                         }
                                                     }
                                                 }
                                             }
                                         }
                                     }
+                                    passed = can_predicate;
                                 }
-                                passed = can_predicate;
-                            }
 
-                            _ => {
-                                passed = false;
+                                _ => {
+                                    passed = false;
+                                }
                             }
                         }
                     });
