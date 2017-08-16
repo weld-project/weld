@@ -61,6 +61,9 @@ lazy_static! {
                                 transforms::fuse_loops_vertical,
                                 transforms::simplify_get_field],
                  "loop-fusion"));
+        m.insert("predicate",
+                 Pass::new(vec![vectorizer::predicate],
+                 "predicate"));
         m.insert("vectorize",
                  Pass::new(vec![vectorizer::vectorize],
                  "vectorize"));

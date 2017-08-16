@@ -39,68 +39,7 @@ fn vectorizable_iters(iters: &Vec<Iter<Type>>) -> bool {
     true
 }
 
-/// Attempts to predicate an expression whose `ExprKind` is `If`, returning the new expression and
-/// true if subexpressions need to be vectorized or false otherwise.
-fn predicate_if(e: &Expr<Type>, broadcast_idens: &HashSet<Symbol>) -> WeldResult<(Option<Expr<Type>>, bool)> {
-    // Predication for a value merged into a merger. This pattern checks for if(cond, merge(b, e), b).
-    if let If { ref cond, ref on_true, ref on_false } = e.kind {
-        if let Merge { ref builder, ref value } = on_true.kind {
-            if let Ident(ref name) = on_false.kind {
-                if let Ident(ref name2) = builder.kind {
-                    if name == name2 {
-                        if let Builder(ref bk, _) = builder.ty {
-                            if let BuilderKind::Merger(ref ty, ref op) = *bk {
-                                if let Scalar(ref sk) = *ty.as_ref() {
-                                    // Merge in the identity element if the predicate fails (effectively merging in nothing)
-                                    let identity = match *op {
-                                        BinOpKind::Add => {
-                                            match *sk {
-                                                ScalarKind::I8 => exprs::literal_expr(LiteralKind::I8Literal(0))?,
-                                                ScalarKind::I32 => exprs::literal_expr(LiteralKind::I32Literal(0))?,
-                                                ScalarKind::I64 => exprs::literal_expr(LiteralKind::I64Literal(0))?,
-                                                ScalarKind::F32 => exprs::literal_expr(LiteralKind::F32Literal(0.0))?,
-                                                ScalarKind::F64 => exprs::literal_expr(LiteralKind::F64Literal(0.0))?,
-                                                _ => {
-                                                    return weld_err!("Predication not supported");
-                                                }
-                                            }
-                                        }
-                                        BinOpKind::Multiply => {
-                                            match *sk {
-                                                ScalarKind::I8 => exprs::literal_expr(LiteralKind::I8Literal(1))?,
-                                                ScalarKind::I32 => exprs::literal_expr(LiteralKind::I32Literal(1))?,
-                                                ScalarKind::I64 => exprs::literal_expr(LiteralKind::I64Literal(1))?,
-                                                ScalarKind::F32 => exprs::literal_expr(LiteralKind::F32Literal(1.0))?,
-                                                ScalarKind::F64 => exprs::literal_expr(LiteralKind::F64Literal(1.0))?,
-                                                _ => {
-                                                    return weld_err!("Predication not supported");
-                                                }
-                                            }
-                                        }
-                                        _ => {
-                                            return weld_err!("Merger type not vectorizable.");
-                                        }
-                                    };
-                                    // Change if(cond, merge(b, e), b) => merge(b, select(cond, e, identity).
-                                    let mut expr = exprs::merge_expr(*builder.clone(), exprs::select_expr(*cond.clone(), *value.clone(), identity)?)?;
-                                    // Recursively vectorize the subexpressions.
-                                    expr.transform_and_continue(&mut |ref mut e| {
-                                        let cont = vectorize_expr(e, broadcast_idens).unwrap();
-                                        (None, cont)
-                                    });
-
-                                    return Ok((Some(expr), false));
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    weld_err!("Predication not supported!")
-}
-
+/// Attempts to predicate an expression whose `ExprKind` is `If`.
 /// Vectorizes an expression in-place, also changing its type if needed.
 fn vectorize_expr(e: &mut Expr<Type>, broadcast_idens: &HashSet<Symbol>) -> WeldResult<bool> {
     let mut new_expr = None;
@@ -139,11 +78,6 @@ fn vectorize_expr(e: &mut Expr<Type>, broadcast_idens: &HashSet<Symbol>) -> Weld
         }
         MakeStruct { .. } => {
             e.ty = e.ty.simd_type()?;
-        }
-        If { .. } => {
-            let (e, c) = predicate_if(e, broadcast_idens)?;
-            new_expr = e;
-            cont = c;
         }
         _ => {},
     }
@@ -203,27 +137,6 @@ fn vectorizable(for_loop: &Expr<Type>) -> WeldResult<HashSet<Symbol>> {
 
                                 Select { .. } => {},
 
-                                // TODO it might just be better to remove this and check only Select
-                                If { ref cond, ref on_true, ref on_false, } => {
-                                    let mut can_predicate = false;
-                                    if let Merge { ref builder, .. } = on_true.kind {
-                                        if let Ident(ref name) = on_false.kind {
-                                            if let Ident(ref name2) = builder.kind {
-                                                if name == name2 {
-                                                    if let Builder(ref bk, _) = builder.ty {
-                                                        if let BuilderKind::Merger(ref ty, _) = *bk {
-                                                            if let Scalar(_) = *ty.as_ref() {
-                                                                can_predicate = true;
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                    passed = can_predicate;
-                                }
-
                                 _ => {
                                     passed = false;
                                 }
@@ -280,6 +193,63 @@ fn vectorizable(for_loop: &Expr<Type>) -> WeldResult<HashSet<Symbol>> {
         }
     }
     return weld_err!("Unsupported pattern");
+}
+
+/// Predicate an `If` expression by checking for if(cond, merge(b, e), b) and transforms it to merge(b, select(cond, e,identity)).
+pub fn predicate(e: &mut Expr<Type>) {
+    e.transform_and_continue_res(&mut |ref mut e| {
+        // Predication for a value merged into a merger. This pattern checks for if(cond, merge(b, e), b).
+        if let If { ref cond, ref on_true, ref on_false } = e.kind {
+            if let Merge { ref builder, ref value } = on_true.kind {
+                if let Ident(ref name) = on_false.kind {
+                    if let Ident(ref name2) = builder.kind {
+                        if name == name2 {
+                            if let Builder(ref bk, _) = builder.ty {
+                                if let BuilderKind::Merger(ref ty, ref op) = *bk {
+                                    if let Scalar(ref sk) = *ty.as_ref() {
+                                        // Merge in the identity element if the predicate fails (effectively merging in nothing)
+                                        let identity = match *op {
+                                            BinOpKind::Add => {
+                                                match *sk {
+                                                    ScalarKind::I8 => exprs::literal_expr(LiteralKind::I8Literal(0))?,
+                                                    ScalarKind::I32 => exprs::literal_expr(LiteralKind::I32Literal(0))?,
+                                                    ScalarKind::I64 => exprs::literal_expr(LiteralKind::I64Literal(0))?,
+                                                    ScalarKind::F32 => exprs::literal_expr(LiteralKind::F32Literal(0.0))?,
+                                                    ScalarKind::F64 => exprs::literal_expr(LiteralKind::F64Literal(0.0))?,
+                                                    _ => {
+                                                        return Ok((None, true));
+                                                    }
+                                                }
+                                            }
+                                            BinOpKind::Multiply => {
+                                                match *sk {
+                                                    ScalarKind::I8 => exprs::literal_expr(LiteralKind::I8Literal(1))?,
+                                                    ScalarKind::I32 => exprs::literal_expr(LiteralKind::I32Literal(1))?,
+                                                    ScalarKind::I64 => exprs::literal_expr(LiteralKind::I64Literal(1))?,
+                                                    ScalarKind::F32 => exprs::literal_expr(LiteralKind::F32Literal(1.0))?,
+                                                    ScalarKind::F64 => exprs::literal_expr(LiteralKind::F64Literal(1.0))?,
+                                                    _ => {
+                                                        return Ok((None, true));
+                                                    }
+                                                }
+                                            }
+                                            _ => {
+                                                return Ok((None, true));
+                                            }
+                                        };
+                                        // Change if(cond, merge(b, e), b) => merge(b, select(cond, e, identity).
+                                        let expr = exprs::merge_expr(*builder.clone(), exprs::select_expr(*cond.clone(), *value.clone(), identity)?)?;
+                                        return Ok((Some(expr), true));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Ok((None, true))
+    });
 }
 
 /// Vectorize an expression.
@@ -389,8 +359,18 @@ fn simple_merger() {
 fn predicated_merger() {
     let mut e = typed_expr(
         "|v:vec[i32]| result(for(v, merger[i32,+], |b,i,e| if(e>0, merge(b,e), b)))");
+    predicate(&mut e);
     vectorize(&mut e);
     assert!(has_vectorized_merge(&e));
+}
+
+#[test]
+fn unpredicated_merger() {
+    // This one shouldn't be vectorized since we didn't predicate it.
+    let mut e = typed_expr(
+        "|v:vec[i32]| result(for(v, merger[i32,+], |b,i,e| if(e>0, merge(b,e), b)))");
+    vectorize(&mut e);
+    assert!(!has_vectorized_merge(&e));
 }
 
 #[test]
@@ -406,6 +386,7 @@ fn predicated_appender() {
     // This code should NOT be vectorized because we can't predicate merges into vecbuilder.
     let mut e = typed_expr(
         "|v:vec[i32]| result(for(v, appender[i32], |b,i,e| if(e>0, merge(b,e), b)))");
+    predicate(&mut e);
     vectorize(&mut e);
     assert!(!has_vectorized_merge(&e));
 }
