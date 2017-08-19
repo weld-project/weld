@@ -4,7 +4,7 @@ import random
 from weldnumpy import *
 
 UNARY_OPS = [np.exp, np.log, np.sqrt]
-# TODO: Add wa.erf - doesn't use the ufunc functionality so not doing it for
+# TODO: Add wa.erf - doesn't use the ufunc functionality of numpy so not doing it for
 # now.
 BINARY_OPS = [np.add, np.subtract, np.multiply, np.divide]
 TYPES = ['float32', 'float64', 'int32', 'int64']
@@ -27,7 +27,7 @@ def random_arrays(num, dtype):
     test = test.astype(dtype)
 
     np_test = np.copy(test)
-    w = weldarray(test)
+    w = weldarray(test, verbose=False)
 
     return np_test, w
 
@@ -140,16 +140,116 @@ def test_views_basic():
 
 def test_views_update_child():
     '''
-    If the values of a given view are changed - then these changes should be
-    reflected in the bigger parent array.
-    FIXME: One way to solve this would be - if we register an op for the child
-    array, then also register the same op for the equivalent elements of the
-    parent array...but this would add a bunch of code which doesn't seem as
-    clean.
+    Updates both parents and child to put more strain.
     '''
+    NUM_ELS = 5
     n, w = random_arrays(NUM_ELS, 'float32')
-    print("orig n: ", n)
-    print("orig w: ", w)
+
+    w2 = w[2:5]
+    n2 = n[2:5]
+
+    # unary part
+    w2 = np.exp(w2, out=w2)
+    n2 = np.exp(n2, out=n2)
+    w2.evaluate()
+
+    assert np.allclose(w[2:5], w2)
+    assert np.allclose(w2.evaluate(), n2)
+    assert np.allclose(w, n)
+
+    # binary part
+    # now update the child with binary op
+    n3, w3 = random_arrays(3, 'float32')
+    # n3, w3 = given_arrays([1.0, 1.0, 1.0], 'float32')
+
+    n2 = np.add(n2, n3, out=n2)
+    w2 = np.add(w2, w3, out=w2)
+    w2.evaluate()
+
+    assert np.allclose(w[2:5], w2)
+    assert np.allclose(w, n)
+    assert np.allclose(w2.evaluate(), n2)
+
+    w2 += 5.0
+    n2 += 5.0
+    w2.evaluate()
+
+    assert np.allclose(w[2:5], w2)
+    assert np.allclose(w, n)
+    assert np.allclose(w2.evaluate(), n2)
+
+def test_views_update_parent():
+    '''
+    Create a view, then update the parent in place. The change should be
+    effected in the view-child as well.
+    '''
+    # NUM_ELS = 10
+    n, w = random_arrays(NUM_ELS, 'float32')
+    w2 = w[2:4]
+    n2 = n[2:4]
+
+    w = np.exp(w, out=w)
+    n = np.exp(n, out=n)
+    w2.evaluate()
+
+    # w2 should have been updated too.
+    assert np.allclose(n[2:4], n2)
+    assert np.allclose(w[2:4], w2.evaluate())
+    assert np.allclose(w, n)
+
+    n3, w3 = random_arrays(NUM_ELS, 'float32')
+    w = np.add(w, w3, out=w)
+    n = np.add(n, n3, out=n)
+
+    assert np.allclose(n[2:4], n2)
+    assert np.allclose(w[2:4], w2.evaluate())
+    assert np.allclose(w, n)
+
+    # print("going to test scalars now")
+    # # check scalars
+    w += 5.0
+    n += 5.0
+    w.evaluate()
+
+    assert np.allclose(n[2:4], n2)
+    assert np.allclose(w[2:4], w2.evaluate())
+    assert np.allclose(w, n)
+
+def test_views_update_mix():
+    '''
+    '''
+    n, w = random_arrays(10, 'float32')
+    # Let's add more complexity. Before messing with child views etc, first
+    # register an op with the parent as well.
+    n = np.sqrt(n)
+    w = np.sqrt(w)
+    # get the child views
+    w2 = w[2:5]
+    n2 = n[2:5]
+
+    # updatig the values in place is still reflected correctly.
+    w = np.log(w, out=w)
+    n = np.log(n, out=n)
+
+    # evaluating this causes the internal representation to change. So can't
+    # rely on w.weldobj.context[w.name] anymore.
+    w.evaluate()
+
+    # print("w2 before exp: ", w2)
+    w2 = np.exp(w2, out=w2)
+    n2 = np.exp(n2, out=n2)
+    w2.evaluate()
+
+    assert np.allclose(w[2:5], w2)
+    assert np.allclose(w2.evaluate(), n2)
+    assert np.allclose(w, n)
+
+def test_views_mix2():
+    '''
+    update parent/child, binary/unary ops.
+    '''
+    NUM_ELS = 10
+    n, w = random_arrays(NUM_ELS, 'float32')
 
     w2 = w[2:5]
     n2 = n[2:5]
@@ -157,50 +257,151 @@ def test_views_update_child():
     w2 = np.exp(w2, out=w2)
     n2 = np.exp(n2, out=n2)
     w2.evaluate()
-    print("after exp, addr: ", addr(w2))
 
-    print("n[2:5] = ", n[2:5])
-    print("w[2:5] = ", w[2:5])
-    print("w2: ", w2)
-    print("n2: ", n2)
-
-    print("before all close")
     assert np.allclose(w[2:5], w2)
-    print("after all close")
+    assert np.allclose(w2.evaluate(), n2)
+    assert np.allclose(w, n)
 
-    # assert np.allclose(w[2:5], w2.evaluate())
+    n3, w3 = random_arrays(NUM_ELS, 'float32')
+    w = np.add(w, w3, out=w)
+    n = np.add(n, n3, out=n)
 
-    # assert np.allclose(w2.evaluate(), n2)
+    assert np.allclose(w[2:5], w2.evaluate())
+    assert np.allclose(w2.evaluate(), n2)
+    assert np.allclose(w, n)
 
-def test_views_update_parent():
+    # now update the child
+
+def test_views_grandparents_update_mix():
     '''
-    Create a view, then update the parent in place. The change should be
-    effected in the view-child as well.
-    ''' 
-    n, w = random_arrays(NUM_ELS, 'float32')
-    w2 = w[2:4]
-    n2 = n[2:4]
+    Similar to above. Ensure consistency of views of views etc.
+    '''
+    n, w = random_arrays(10, 'float32')
+    # Let's add more complexity. Before messing with child views etc, first
+    # register an op with the parent as well.
 
-    w = np.exp(w, out=w)
-    n = np.exp(n, out=n)
+    # TODO: uncomment.
+    # n = np.sqrt(n)
+    # w = np.sqrt(w)
 
-    # w2 should have been updated too.    
-    assert np.allclose(n[2:4], n2)
-    assert np.allclose(w[2:4], w2.evaluate())
-    
-    # Part 2: binops don't work for us yet.
-    # n3, w3 = random_arrays(NUM_ELS, 'float32')
-    # w = np.add(w, w3, out=w)
-    # n = np.add(n, n3, out=n)
+    # get the child views
+    w2 = w[2:9]
+    n2 = n[2:9]
 
-    # assert np.allclose(n[2:4], n2)
-    # assert np.allclose(w[2:4], w2.evaluate())
+    w3 = w2[2:4]
+    n3 = n2[2:4]
+
+    assert len(w2.view_siblings) == 0, 'no sibs'
+    # updatig the values in place is still reflected correctly.
+    w = np.log(w, out=w)
+    n = np.log(n, out=n)
+
+    # evaluating this causes the internal representation to change. So can't
+    # rely on w.weldobj.context[w.name] anymore.
+    w.evaluate()
+
+    # print("w2 before exp: ", w2)
+
+    # TODO: uncomment
+    w2 = np.exp(w2, out=w2)
+    n2 = np.exp(n2, out=n2)
+    w2.evaluate()
+
+    # TODO: uncomment
+    print("going to call sqrt on w3")
+    w3 = np.sqrt(w3, out=w3)
+    print("called sqrt on w3")
+    n3 = np.sqrt(n3, out=n3)
+    # this needs to be called so changes are reflected in the parents and all.
+    w3.evaluate()
+    w.evaluate()
+
+    assert np.allclose(w2.evaluate(), n2)
+    assert np.allclose(w, n)
+    assert np.allclose(w[2:9], w2)
+    assert np.allclose(w3, n3)
+    assert np.allclose(w2[2:4], w3)
+
+def test_views_check_old():
+    '''
+    Old views should still be valid etc.
+    '''
+    pass
 
 def test_views_mess():
     '''
     More complicated versions of the views test.
     '''
     pass
+
+def test_views_overlap():
+    '''
+    Two overlapping views of the same array. Updating one must result in the
+    other being updated too.
+    '''
+    NUM_ELS = 10
+    n, w = random_arrays(NUM_ELS, 'float32')
+
+    w2 = w[2:5]
+    n2 = n[2:5]
+
+    # TODO: uncomment
+    w3 = w[4:7]
+    n3 = n[4:7]
+
+    # TODO: uncomment.
+    # w4, n4 are non overlapping views. Values should never change
+    w4 = w[7:9]
+    n4 = n[7:9]
+
+    # w5, n5 are contained within w2, n2.
+    w5 = w[3:4]
+    n5 = n[3:4]
+
+    print("num w2 siblings: ", len(w2.view_siblings))
+    # unary part
+    w2 = np.exp(w2, out=w2)
+    n2 = np.exp(n2, out=n2)
+    w2.evaluate()
+
+    assert np.allclose(w[2:5], w2)
+    assert np.allclose(w2.evaluate(), n2)
+    assert np.allclose(w, n)
+    assert np.allclose(w5, n5)
+    assert np.allclose(w4, n4)
+    assert np.allclose(w3, n3)
+
+    print("starting binary part!")
+    print("num w2 siblings: ", len(w2.view_siblings))
+
+    # binary part:
+    # now update the child with binary op
+    n3, w3 = random_arrays(3, 'float32')
+    # n3, w3 = given_arrays([1.0, 1.0, 1.0], 'float32')
+
+    n2 = np.add(n2, n3, out=n2)
+    w2 = np.add(w2, w3, out=w2)
+    w2.evaluate()
+
+    # assert np.allclose(w[2:5], w2)
+    assert np.allclose(w, n)
+    assert np.allclose(w2.evaluate(), n2)
+    print('w5: ', w5)
+    print(n5)
+    assert np.allclose(w5, n5)
+    assert np.allclose(w4, n4)
+    assert np.allclose(w3, n3)
+
+    w2 += 5.0
+    n2 += 5.0
+    w2.evaluate()
+
+    assert np.allclose(w[2:5], w2)
+    assert np.allclose(w, n)
+    assert np.allclose(w2.evaluate(), n2)
+    assert np.allclose(w5, n5)
+    assert np.allclose(w4, n4)
+    assert np.allclose(w3, n3)
 
 def test_mix_np_weld_ops():
     '''
@@ -215,6 +416,7 @@ def test_mix_np_weld_ops():
     w2 = np.sin(w2)
     weld_result = w2.evaluate()
     assert np.allclose(weld_result, np_result)
+
 
 def test_scalars():
     '''
@@ -336,6 +538,7 @@ def test_fancy_indexing():
     b = w > 0.50
     w2 = w[b]
     assert isinstance(w2, weldarray)
+    assert id(w) != id(w2)
 
 def test_mixing_types():
     '''
@@ -398,5 +601,20 @@ def test_implicit_evaluate():
 
     assert np.allclose(w3, n3)
 
-# test_views_update_parent()
-# test_views_update_child()
+def test_setitem():
+    '''
+    set an arbitrary item in the array after registering ops on it.
+    '''
+    n, w = random_arrays(NUM_ELS, 'float32')
+    n = np.exp(n)
+    w = np.exp(w)
+    n[0] = 5
+    w[0] = 5
+
+    assert np.allclose(n, w)
+
+    # in place addition
+    n[2] += 10
+    w[2] += 10
+    assert np.allclose(n, w)
+

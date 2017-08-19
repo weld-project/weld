@@ -3,7 +3,6 @@ from weld.encoders import NumpyArrayEncoder, NumpyArrayDecoder
 from weldnumpy import *
 import time
 
-DEBU = False
 class weldarray(np.ndarray):
     '''
     A new weldarray can be created in three ways:
@@ -18,7 +17,7 @@ class weldarray(np.ndarray):
     the creation of a new array, which adds to the overhead as compared to
     numpy for initializing arrays)
     '''
-    def __new__(cls, input_array, verbose=True, *args, **kwargs):
+    def __new__(cls, input_array, verbose=False, *args, **kwargs):
         '''
         @input_array: original ndarray from which the new array is derived.
         '''
@@ -33,6 +32,7 @@ class weldarray(np.ndarray):
         # Views
         obj.view_parents = []
         obj.view_children = []
+        obj.view_siblings = []
 
         return obj
 
@@ -57,30 +57,84 @@ class weldarray(np.ndarray):
         Deal with the following three scenarios:
             - idx is a scalar
             - idx is a slice (e.g., 3:5)
+                - In this scenario, if the memory is being shared with the
+                  parent then we need to update child/parent views lists.
             - idx is an array (fancy indicing)
 
+        TODO: Describe parents, children, siblings.
         Steps:
-            1. Evaluate all registered ops. This is neccessary for all the
-            three scenarios above.
+            1. Evaluate all registered ops. This is definitely neccessary for
+            the first and the third scenario. In scenario 2, it may be possible
+            to avoid it - but that leads to a lot of edge case:
+                - e.g., parent's registered ops would need to be applied to
+                  child. Simple solution of including parents weldcode in child
+                  does not work as the parent might have index specific weld
+                  code etc.
             2. Call np.ndarray on the evaluated array.
             3. Convert back to weldarray if needed.
         '''
-        # evaluate all lazily stored ops.
-        arr = self._eval()
+        # evaluate all lazily stored ops, if any.
+        # Need to cast it as ndarray view, as otherwise arr.base will be a
+        # weld_encoders object - so fails in is_view_child.
+        arr = self._eval().view(np.ndarray)
         # arr is an ndarray, so we call ndarray's implementation on it.
         ret = arr.__getitem__(idx)
 
+        # handle views in this block.
+        # TODO: decompose / improve this chunk.
         if isinstance(idx, slice):
             ret = weldarray(ret)
-            # is ret really a view of arr?
+            # check if ret really is a view of arr.
             if is_view_child(ret.view(np.ndarray), arr):
-                # update both the lists.
-                self.view_children.append(ret)
-                ret.view_parents.append(self)
-                # parenting is transitive.
+                # we need to calculate start / end right now, because otherwise
+                # registering / evaluating ops on the parent in the future will
+                # change its address (see test_views_update_mix in tests_1d for
+                # an example)
+                ret_start = (addr(ret.view(np.ndarray)) - addr(arr)) / ret.itemsize
+                ret_end = ret_start + len(ret)
+
+                # TODO: explain ordering.
+                # Update sibling relationship between ret and self's children.
+                for c in self.view_children:
+                    # check if the children of self have overlap in parent indices
+                    # x1 < y2 and y1 < x2, with all indices relative to parent array.
+                    if (ret_start < (c.other_start+c.upd_end) and c.other_start < ret_end):
+                        print("found sibling!")
+                        # TODO: decompose the finding of indices.
+                        # c is a sibling of ret. find index range in which c should be updated.
+                        c_start = max(0, ret_start - c.other_start)
+                        c_end = min(c.other_start+c.upd_end, ret_end) - c.other_start
+                        assert c_start < c_end, 'start < end'
+                        # where in ret does c start?
+                        ret_c_start = max(0, c.other_start-ret_start)
+                        assert ret_c_start >= 0, 'ret_c_start > 0'
+                        # c_start, c_end are indices of c, where ret starts
+                        ret.view_siblings.append(weldarray_view(c, c_start, c_end, ret_start))
+
+                        r_start = max(0, c.other_start-ret_start)
+                        r_end = min(ret_end, c.other_start+c.upd_end) - ret_start
+                        c_ret_start = max(0, ret_start - c.other_start)
+                        # add c to ret's sibling list.
+                        c.arr.view_siblings.append(weldarray_view(ret, r_start, r_end, c_ret_start))
+
+                # Update parent-child relationship between self / and new view
+                # add self's children. all of ret should be updated if self (parent) is updated.
+                self.view_children.append(weldarray_view(ret, 0, len(ret), ret_start))
+                # add child's parent. upd_start = index in parent (self) where the child starts.
+                # other_start will always be 0 because all of child in parent.
+                ret.view_parents.append(weldarray_view(self, ret_start, ret_end, 0))
+
+                # parenting is transitive, i.e., if x is parent of y, and z is
+                # parent of x, then z is also parent of y.
+                # Note: we need to do this after updating siblings first, otherwise TODO: Explain
+                # problem.
                 for p in self.view_parents:
-                    ret.view_parents.append(p)
-                    p.view_children.append(ret)
+                    gp_start = p.upd_start + ret_start
+                    gp_end = p.upd_start + ret_end
+                    print("gp_start = {}, gp_end = {}".format(gp_start, gp_end))
+                    p.arr.view_children.append(weldarray_view(ret, 0, len(ret), gp_start))
+                    ret.view_parents.append(weldarray_view(p.arr, gp_start, gp_end, 0))
+
 
             return ret
 
@@ -93,7 +147,7 @@ class weldarray(np.ndarray):
 
     def _gen_weldobj(self, arr):
         '''
-        Generating a new weldarray from a given arr.
+        Generating a new weldarray from a given arr for self.
         @arr: weldarray or ndarray.
             - weldarray: Just update the weldobject with the context from the
               weldarray.
@@ -142,6 +196,7 @@ class weldarray(np.ndarray):
         if outputs:
             # if the output is not the same weldarray as self, then let np deal
             # with it.
+            # FIXME: This fails if output is ndarray!
             if len(outputs) == 1 and outputs[0].weldobj.objectId == self.weldobj.objectId:
                 output = outputs[0]
             else:
@@ -165,10 +220,6 @@ class weldarray(np.ndarray):
         input_args = [inp for inp in inputs]
         outputs = kwargs.pop('out', None)
         output, supported = self._process_ufunc_inputs(input_args, outputs)
-        if output is None:
-            # the new array can't have views
-            self.view_parents = []
-            self.view_children = []
 
         # check for supported ops.
         if ufunc.__name__ in UNARY_OPS and supported:
@@ -230,33 +281,36 @@ class weldarray(np.ndarray):
 
         Evalutes the expression based on weldobj.weld_code. If no new ops have
         been registered, then just returns the last ndarray.
+
+        TODO: Cache views for parents/children. Caching computations for
+        children is easy, just update the whole array. Becomes messier for
+        parents - might need to store additional info in the weldview objects
+        for parents.
         '''
         if self.name == self.weldobj.weld_code:
             # no new ops have been registered. Let's avoid creating
             # unneccessary new copies with weldobj.evaluate()
-            arr = self.weldobj.context[self.name]
-            return arr
+            return self.weldobj.context[self.name]
 
         arr = self.weldobj.evaluate(WeldVec(self._weld_type),
                 verbose=self.verbose)
-
         # Now that the evaluation is done - create new weldobject for self,
         # initalized from the given arr.
-        self.weldobj = WeldObject(NumpyArrayEncoder(), NumpyArrayDecoder())
-        self.name = self.weldobj.update(arr, SUPPORTED_DTYPES[str(arr.dtype)])
-        self.weldobj.weld_code = self.name
-
+        self._gen_weldobj(arr)
         return arr
 
     def _unary_op(self, unop, result=None):
         '''
-        Create a new array, and updates weldobj.weld_code with the code for
-        unop.
         @unop: str, weld IR for the given function.
         @result: output array.
+
+        Create a new array, and updates weldobj.weld_code with the code for
+        unop.
         '''
         def _update_array_unary_op(res, unop):
             '''
+            @res: weldarray to be updated.
+            @unop: str, operator applied to res.
             '''
             template = 'map({arr}, |z : {type}| {unop}(z))'
             code = template.format(arr = res.weldobj.weld_code,
@@ -266,14 +320,35 @@ class weldarray(np.ndarray):
 
         if result is None:
             result = weldarray(self)
-        else:
-            # if array had view / was a view - need to update the other
-            # appropriate arrays too.
-            for c in self.view_children:
-                _update_array_unary_op(c, unop)
 
-            # TODO: Updating parents.
+        # Update results children/parents because results represent the output
+        # array, ie. the array that will be changed in place.
+        for c in result.view_children:
+            # updating child is easy - just apply unary op to every
+            # element.
+            _update_array_unary_op(c.arr, unop)
 
+        for p in result.view_parents:
+            # print("updating unary op parent!")
+            # print("p_us: {}, p_ue: {}, p_os: {}".format(p.upd_start, p.upd_end, p.other_start))
+            par_template = "result(for({arr}, appender,|b,i,e| if \
+            (i >= {start}L & i < {end}L,merge(b,{unop}(e)),merge(b,e))))"
+            p.arr.weldobj.weld_code = par_template.format(arr=p.arr.weldobj.weld_code,
+                                       start = str(p.upd_start),
+                                       end = str(p.upd_end),
+                                       unop=unop)
+
+        # TODO: refactor this stuff with update parents
+        for s in result.view_siblings:
+            # apply unop to s.upd_start, end
+            print("updating siblings in unary op")
+            sib_template = "result(for({arr}, appender,|b,i,e| if \
+            (i >= {start}L & i < {end}L,merge(b,{unop}(e)),merge(b,e))))"
+            s.arr.weldobj.weld_code = sib_template.format(arr=s.arr.weldobj.weld_code,
+                                       start = str(s.upd_start),
+                                       end = str(s.upd_end),
+                                       unop=unop)
+        # back to updating result array
         _update_array_unary_op(result, unop)
         return result
 
@@ -286,24 +361,75 @@ class weldarray(np.ndarray):
         if result is None:
             result = weldarray(self)
         else:
-            # FIXME: deal with updating view children/parents
-            pass
+            self._update_views(result, other, binop)
 
         template = 'map({arr}, |z: {type}| z {binop} {other}{suffix})'
-        code = template.format(arr = result.weldobj.weld_code,
-                    type = result._weld_type.__str__(),
-                    binop = binop,
-                    other = str(other),
-                    suffix = DTYPE_SUFFIXES[str(type(other))])
-        result.weldobj.weld_code = code
+        result.weldobj.weld_code = template.format(arr = result.weldobj.weld_code,
+                                                  type = result._weld_type.__str__(),
+                                                  binop = binop,
+                                                  other = str(other),
+                                                  suffix = DTYPE_SUFFIXES[str(type(other))])
         return result
+
+    def _update_views(self, result, other, binop):
+        '''
+        @result: weldarray that is being updated
+        @other: weldarray. (result binop other)
+        @binop: str, operation to perform.
+
+        Will go over any parent/child of result and update them accordingly.
+
+        FIXME: the common indexing pattern for parent/child in _update_view
+        might be too expensive (uses if statements (unneccessary checks when
+        updating child) and wouldn't be ideal to update a really long parent).
+        '''
+        def _update_view(view, lookup_ind, start, end):
+            '''
+            @view: weldarray that needs to be updated. could be a parent or a
+            child view.
+            @lookup_ind: int, used to update the correct values in view. Will
+            be different if view is a child or parent array.
+            @start, end: define which values of the view needs to be updated -
+            for a child, it would be all values, and for parent it wouldn't be.
+            '''
+            views_template = "result(for({arr1}, appender,|b,i,e| if \
+            (i >= {start}L & i < {end}L,merge(b,{e2}{binop}e),merge(b,e))))"
+
+            if isinstance(other, weldarray):
+                view.weldobj.update(other.weldobj)
+                e2 = 'lookup({arr2},{i}L)'.format(arr2 = other.weldobj.weld_code,
+                                                         i = lookup_ind)
+            else:
+                # other is just a scalar.
+                e2 = str(other) + DTYPE_SUFFIXES[str(type(other))]
+
+            # all values of child will be updated. so start = 0, end = len(c)
+            view.weldobj.weld_code = views_template.format(arr1 = view.weldobj.weld_code,
+                                                          start = start,
+                                                          end = end,
+                                                          e2=e2,
+                                                          binop=binop)
+        for c in result.view_children:
+            _update_view(c.arr, 'i+{st}'.format(st=c.other_start), c.upd_start, c.upd_end)
+
+        for p in result.view_parents:
+            _update_view(p.arr, 'i-{st}'.format(st=p.upd_start), p.upd_start, p.upd_end)
+
+        for s in result.view_siblings:
+            print("going to update sibling in binaryop")
+            print("s.os = {}, s.us = {}, s.ue = {}".format(s.other_start, s.upd_start, s.upd_end))
+            if s.other_start == 0:
+                _update_view(s.arr, 'i-{st}'.format(st=s.upd_start), s.upd_start, s.upd_end)
+            else:
+                print("updating non-os = 0 array")
+                _update_view(s.arr, 'i+{st}'.format(st=s.other_start), s.upd_start, s.upd_end)
 
     def _binary_op(self, other, binop, result=None):
         '''
         @other: ndarray, weldarray or scalar.
         @binop: str, one of the weld supported binop.
-        @result: output array. If it has been specified by the caller, then we
-        don't have to allocate a new array.
+        @result: output array. If it has been specified by the caller, then
+        don't allocate new array.
         '''
         if not hasattr(other, "__len__"):
             return self._scalar_binary_op(other, binop, result)
@@ -314,63 +440,34 @@ class weldarray(np.ndarray):
         elif isinstance(other, np.ndarray):
             # turn it into weldarray - for convenience, as this reduces to the
             # case of other being a weldarray.
-            # TODO: To optimize this, might want to update the weldobj without
-            # converting other to weldarray.
+            # FIXME: could optimize this by skipping conversion.
             other = weldarray(other)
         else:
             raise ValueError('invalid array type for other in binaryop')
 
+        if result is None:
+            result = weldarray(self)
+            # in this case, we do not need to change values in parent/child
+            # arrays because new array is created so there won't be any views.
+        else:
+            self._update_views(result, other, binop)
+
+        result.weldobj.update(other.weldobj)
         # @arr{i}: latest array based on the ops registered on operand{i}. {{
         # is used for escaping { for format.
         template = 'map(zip({arr1},{arr2}), |z: {{{type1},{type2}}}| z.$0 {binop} z.$1)'
-        # For the views, since map doesn't seem to work for some reason.
-        template2 = "result(for(zip({arr1}, {arr2}), appender, |b,i,e| merge(b,e.$0+e.$1)))"
-
-        if result is None:
-            result = weldarray(self)
-        else:
-            # FIXME: Deal with updating parents.
-            # if array had view / was a view - then update those too.
-            print("num children = ", len(self.view_children))
-            for c in self.view_children:
-                c.weldobj.update(other.weldobj)
-                # for arr2, need to select the subset of other whose indices
-                # matches c.
-                start = (addr(c.view(np.ndarray)) - addr(self.view(np.ndarray))) / c.itemsize
-                end = start + len(c)
-                print("start = {}, end = {}".format(start, end))
-                assert end >= start, 'end cant be before start in iter'
-                arr2_template = 'iter({arr},{start}L,{end}L,{stride}L)'
-                arr2 = arr2_template.format(arr=other.weldobj.weld_code,
-                                            start = str(start),
-                                            end = str(end),
-                                            stride = str(1))
-
-                c.weldobj.weld_code = template2.format(arr1=c.weldobj.weld_code,
-                                                       arr2=arr2)
-
-
-        result.weldobj.update(other.weldobj)
-        code = template.format(arr1 = result.weldobj.weld_code,
-                arr2 = other.weldobj.weld_code,
-                type1 = result._weld_type.__str__(),
-                type2 = other._weld_type.__str__(),
-                binop = binop)
-        result.weldobj.weld_code = code
+        result.weldobj.weld_code = template.format(arr1 = result.weldobj.weld_code,
+                                                  arr2 = other.weldobj.weld_code,
+                                                  type1 = result._weld_type.__str__(),
+                                                  type2 = other._weld_type.__str__(),
+                                                  binop = binop)
 
         if not is_weld_array:
+            # FIXME: Not completely sure this is neccessary. Recheck the
+            # np.allclose example.
             # Evaluate all the lazily stored ops, as the caller probably
             # expects to get back a ndarray - which would have correct values.
             result = weldarray(result._eval())
 
         return result
 
-# TODO: This should finally go into weldnumpy - along with other functions
-# which are equivalents of np.zeros etc. - need to figure out the exact
-# imports etc.
-def array(arr, *args, **kwargs):
-    '''
-    Wrapper around weldarray - first create np.array and then convert to
-    weldarray.
-    '''
-    return weldarray(np.array(arr, *args, **kwargs))

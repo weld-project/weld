@@ -1,18 +1,49 @@
 import numpy as np
 from weld.types import *
 
-def is_view_child(child, par):
+class weldarray_view():
+    '''
+    This can be either a parent or a child.
+    '''
+    def __init__(self, arr, upd_start, upd_end, other_start):
+        '''
+        @w: weldarray.
+        TODO: Describe other variables / and model for using them.
+        '''
+        self.arr = arr
+        self.upd_start = upd_start
+        self.upd_end = upd_end
+        self.other_start = other_start
+
+def is_view_child(view, par):
     '''
     Checks the base address of the given arrays to figure out if child and par
     have overlapping memory regions.
     '''
-    return child.base is par
+    if par.base is None:
+        print("par.base is None")
+        # par is the base array.
+        return view.base is par
+    else:
+        # par is a view of another array as well!
+        # view can only be a child of par if they share base.
+        return view.base is par.base
+
+def get_start_weldarray(child, par):
+    '''
+    Get start index of child (view) of par.
+    @child, par: weldarrays. Case for weldarrays vs ndarrays is subtly
+    different because with weldarrays we need to consider the latest version of
+    the array.
+    '''
+    pass
 
 def addr(arr):
     '''
     returns address of the given ndarray.
     '''
     return arr.__array_interface__['data'][0]
+
 
 def get_supported_binary_ops():
     '''
