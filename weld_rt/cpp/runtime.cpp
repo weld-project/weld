@@ -7,6 +7,7 @@
 #include <queue>
 #include <deque>
 #include <algorithm>
+#include <exception>
 #include "assert.h"
 #include "runtime.h"
 
@@ -61,6 +62,8 @@ The Weld parallel runtime. When the comments refer to a "computation",
 this means a single complete execution of a Weld program.
 */
 using namespace std;
+
+class weld_abort_exception: public exception {};
 
 typedef deque<work_t *> work_queue;
 typedef pthread_spinlock_t work_queue_lock;
@@ -129,7 +132,7 @@ extern "C" int32_t weld_rt_get_nworkers() {
 }
 
 extern "C" void weld_rt_abort_thread() {
-  pthread_exit(NULL);
+  throw weld_abort_exception();
 }
 
 static inline void set_nest(work_t *task) {
@@ -335,22 +338,26 @@ static void *thread_func(void *data) {
   pthread_mutex_unlock(&global_lock);
 
   int iters = 0;
-  // this work_loop call is needed to complete any work items that are initially on the queue
-  work_loop(td->thread_id, rd);
-  while (!rd->done) {
-    if (try_steal(td->thread_id, rd)) {
-      iters = 0;
-      work_loop(td->thread_id, rd);
-    } else {
-      // If this thread is stalling, periodically check for errors.
-      iters++;
-      if (iters > 1000000) {
-        if (rd->err != 0) {
-	  break;
-        }
+  try {
+    // this work_loop call is needed to complete any work items that are initially on the queue
+    work_loop(td->thread_id, rd);
+    while (!rd->done) {
+      if (try_steal(td->thread_id, rd)) {
         iters = 0;
+        work_loop(td->thread_id, rd);
+      } else {
+        // If this thread is stalling, periodically check for errors.
+        iters++;
+        if (iters > 1000000) {
+          if (rd->err != 0) {
+            break;
+          }
+          iters = 0;
+        }
       }
     }
+  } catch (weld_abort_exception &) {
+    // swallow aborts here
   }
   free(data);
   return NULL;
@@ -396,11 +403,7 @@ extern "C" int64_t weld_run_begin(void (*run)(work_t*), void *data, int64_t mem_
     td->run_id = my_run_id;
     td->thread_id = i;
     if (rd->n_workers == 1) {
-      try {
-        thread_func(reinterpret_cast<void *>(td));
-      } catch (...) {
-        // swallow the forced_unwind exception thrown if pthread_exit is called
-      }
+      thread_func(reinterpret_cast<void *>(td));
     } else {
       pthread_create(rd->workers + i, NULL, &thread_func, reinterpret_cast<void *>(td));
     }
