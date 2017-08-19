@@ -395,11 +395,21 @@ extern "C" int64_t weld_run_begin(void (*run)(work_t*), void *data, int64_t mem_
     thread_data *td = (thread_data *)malloc(sizeof(thread_data));
     td->run_id = my_run_id;
     td->thread_id = i;
-    pthread_create(rd->workers + i, NULL, &thread_func, reinterpret_cast<void *>(td));
+    if (rd->n_workers == 1) {
+      try {
+        thread_func(reinterpret_cast<void *>(td));
+      } catch (...) {
+        // swallow the forced_unwind exception thrown if pthread_exit is called
+      }
+    } else {
+      pthread_create(rd->workers + i, NULL, &thread_func, reinterpret_cast<void *>(td));
+    }
   }
 
-  for (int32_t i = 0; i < rd->n_workers; i++) {
-    pthread_join(rd->workers[i], NULL);
+  if (rd->n_workers > 1) {
+    for (int32_t i = 0; i < rd->n_workers; i++) {
+      pthread_join(rd->workers[i], NULL);
+    }
   }
 
   for (int32_t i = 0; i < n_workers; i++) {
