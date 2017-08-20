@@ -5,15 +5,19 @@ class weldarray_view():
     '''
     This can be either a parent or a child.
     '''
-    def __init__(self, arr, upd_start, upd_end, other_start):
+    def __init__(self, base_array, parent, start, end, idx):
         '''
-        @w: weldarray.
         TODO: Describe other variables / and model for using them.
+        TODO: Need to add more stuff / generalize to nd case.
+        TODO: Can base array be calculated without this?
+        TODO: should start/end be wrt base or parent? in 1D base is nice because then we can use
+        those to update the base array correctly.
         '''
-        self.arr = arr
-        self.upd_start = upd_start
-        self.upd_end = upd_end
-        self.other_start = other_start
+        self.base_array = base_array
+        self.parent = parent
+        self.start = start
+        self.end = end
+        self.idx = idx
 
 def is_view_child(view, par):
     '''
@@ -21,7 +25,6 @@ def is_view_child(view, par):
     have overlapping memory regions.
     '''
     if par.base is None:
-        print("par.base is None")
         # par is the base array.
         return view.base is par
     else:

@@ -3,13 +3,23 @@ import py.test
 import random
 from weldnumpy import *
 
+'''
+TODO0: Decompose heavily repeated stuff, like the assert blocks and so on.
+
+TODO: New tests:
+    - error based tests: nan; underflow/overflow; unsupported types [true] * [...] etc; 
+    - long computational graphs - that segfault or take too long; will require implicit evaluation
+      at a threshold nested level.
+    - edge/failing cases: out = ndarray for op involving weldarrays.
+'''
+
 UNARY_OPS = [np.exp, np.log, np.sqrt]
 # TODO: Add wa.erf - doesn't use the ufunc functionality of numpy so not doing it for
 # now.
 BINARY_OPS = [np.add, np.subtract, np.multiply, np.divide]
 TYPES = ['float32', 'float64', 'int32', 'int64']
 
-NUM_ELS = 5
+NUM_ELS = 10
 
 # TODO: Create test with all other ufuncs.
 def random_arrays(num, dtype):
@@ -46,9 +56,7 @@ def test_unary_elemwise():
     '''
     Tests all the unary ops in UNARY_OPS.
 
-    TODO: Add tests for all supported datatypes
-    TODO: Factor out code for binary tests.
-    TODO: For now, unary ops seem to only be supported on floats.
+    FIXME: For now, unary ops seem to only be supported on floats.
     '''
     for op in UNARY_OPS:
         for dtype in TYPES:
@@ -58,9 +66,11 @@ def test_unary_elemwise():
             np_test, w = random_arrays(NUM_ELS, dtype)
             w2 = op(w)
             print(w2)
-            weld_result = w2.evaluate()
+            # weld_result = w2.evaluate()
             np_result = op(np_test)
-            assert np.allclose(weld_result, np_result)
+            w2_eval = w2.evaluate()
+            assert np.allclose(w2, np_result)
+            assert np.array_equal(w2_eval, np_result)
 
 def test_binary_elemwise():
     '''
@@ -69,7 +79,6 @@ def test_binary_elemwise():
         for dtype in TYPES:
             np_test, w = random_arrays(NUM_ELS, dtype)
             np_test2, w2 = random_arrays(NUM_ELS, dtype)
-            print(w2)
             w3 = op(w, w2)
             weld_result = w3.evaluate()
             np_result = op(np_test, np_test2)
@@ -112,7 +121,7 @@ def test_numpy_operations():
 
 def test_type_conversion():
     '''
-    After evaluateuation, the dtype of the returned array must be the same as
+    After evaluating, the dtype of the returned array must be the same as
     before.
     '''
     for t in TYPES:
@@ -142,7 +151,12 @@ def test_views_update_child():
     '''
     Updates both parents and child to put more strain.
     '''
-    NUM_ELS = 5
+    def asserts(w, n, w2, n2):
+        assert np.allclose(w[2:5], w2.evaluate())
+        assert np.allclose(w2.evaluate(), n2)
+        assert np.allclose(w, n)
+
+    NUM_ELS = 10
     n, w = random_arrays(NUM_ELS, 'float32')
 
     w2 = w[2:5]
@@ -151,39 +165,34 @@ def test_views_update_child():
     # unary part
     w2 = np.exp(w2, out=w2)
     n2 = np.exp(n2, out=n2)
-    w2.evaluate()
-
-    assert np.allclose(w[2:5], w2)
-    assert np.allclose(w2.evaluate(), n2)
-    assert np.allclose(w, n)
+    
+    asserts(w, n, w2, n2)
 
     # binary part
-    # now update the child with binary op
     n3, w3 = random_arrays(3, 'float32')
-    # n3, w3 = given_arrays([1.0, 1.0, 1.0], 'float32')
 
     n2 = np.add(n2, n3, out=n2)
     w2 = np.add(w2, w3, out=w2)
     w2.evaluate()
-
-    assert np.allclose(w[2:5], w2)
-    assert np.allclose(w, n)
-    assert np.allclose(w2.evaluate(), n2)
+    
+    asserts(w, n, w2, n2)
 
     w2 += 5.0
     n2 += 5.0
     w2.evaluate()
 
-    assert np.allclose(w[2:5], w2)
-    assert np.allclose(w, n)
-    assert np.allclose(w2.evaluate(), n2)
+    asserts(w, n, w2, n2)
 
 def test_views_update_parent():
     '''
     Create a view, then update the parent in place. The change should be
     effected in the view-child as well.
     '''
-    # NUM_ELS = 10
+    def asserts(w, n, w2, n2):
+        assert np.allclose(w[2:4], w2.evaluate())
+        assert np.allclose(w2.evaluate(), n2)
+        assert np.allclose(w, n)
+
     n, w = random_arrays(NUM_ELS, 'float32')
     w2 = w[2:4]
     n2 = n[2:4]
@@ -191,29 +200,25 @@ def test_views_update_parent():
     w = np.exp(w, out=w)
     n = np.exp(n, out=n)
     w2.evaluate()
-
+    
+    print(w2)
+    print(w[2:4])
     # w2 should have been updated too.
-    assert np.allclose(n[2:4], n2)
-    assert np.allclose(w[2:4], w2.evaluate())
-    assert np.allclose(w, n)
+    asserts(w, n, w2, n2)
 
     n3, w3 = random_arrays(NUM_ELS, 'float32')
     w = np.add(w, w3, out=w)
     n = np.add(n, n3, out=n)
 
-    assert np.allclose(n[2:4], n2)
-    assert np.allclose(w[2:4], w2.evaluate())
-    assert np.allclose(w, n)
+    asserts(w, n, w2, n2)
+    assert np.allclose(w3, n3)
 
-    # print("going to test scalars now")
-    # # check scalars
+    # check scalars
     w += 5.0
     n += 5.0
     w.evaluate()
 
-    assert np.allclose(n[2:4], n2)
-    assert np.allclose(w[2:4], w2.evaluate())
-    assert np.allclose(w, n)
+    asserts(w, n, w2, n2)
 
 def test_views_update_mix():
     '''
@@ -281,17 +286,18 @@ def test_views_grandparents_update_mix():
     # register an op with the parent as well.
 
     # TODO: uncomment.
-    # n = np.sqrt(n)
-    # w = np.sqrt(w)
+    n = np.sqrt(n)
+    w = np.sqrt(w)
 
     # get the child views
     w2 = w[2:9]
     n2 = n[2:9]
-
+    
     w3 = w2[2:4]
     n3 = n2[2:4]
 
-    assert len(w2.view_siblings) == 0, 'no sibs'
+    assert np.allclose(w3.evaluate(), n3)
+    
     # updatig the values in place is still reflected correctly.
     w = np.log(w, out=w)
     n = np.log(n, out=n)
@@ -300,26 +306,17 @@ def test_views_grandparents_update_mix():
     # rely on w.weldobj.context[w.name] anymore.
     w.evaluate()
 
-    # print("w2 before exp: ", w2)
-
-    # TODO: uncomment
     w2 = np.exp(w2, out=w2)
     n2 = np.exp(n2, out=n2)
-    w2.evaluate()
+    # w2.evaluate()
 
-    # TODO: uncomment
-    print("going to call sqrt on w3")
     w3 = np.sqrt(w3, out=w3)
-    print("called sqrt on w3")
     n3 = np.sqrt(n3, out=n3)
-    # this needs to be called so changes are reflected in the parents and all.
-    w3.evaluate()
-    w.evaluate()
 
-    assert np.allclose(w2.evaluate(), n2)
-    assert np.allclose(w, n)
     assert np.allclose(w[2:9], w2)
+    assert np.allclose(w2, n2)
     assert np.allclose(w3, n3)
+    assert np.allclose(w, n)
     assert np.allclose(w2[2:4], w3)
 
 def test_views_check_old():
@@ -332,7 +329,64 @@ def test_views_mess():
     '''
     More complicated versions of the views test.
     '''
-    pass
+    # parent arrays
+    NUM_ELS = 100
+    num_views = 10
+
+    n, w = random_arrays(NUM_ELS, 'float32')
+
+    # in order to avoid sqrt running into bad values
+    w += 1000.00
+    n += 1000.00
+
+    weld_views = []
+    np_views = []
+
+    weld_views2 = []
+    np_views2 = []
+    
+    for i in range(num_views):
+        nums = random.sample(range(0,NUM_ELS), 2)
+        start = min(nums)
+        end = max(nums)
+        # FIXME: Need to add correct behaviour in this case.
+        if start == end:
+            continue
+
+        weld_views.append(w[start:end])
+        np_views.append(n[start:end])
+        
+        np.sqrt(weld_views[i], out=weld_views[i])
+        np.sqrt(np_views[i], out=np_views[i])
+
+        np.log(weld_views[i], out=weld_views[i])
+        np.log(np_views[i], out=np_views[i])
+
+        np.exp(weld_views[i], out=weld_views[i])
+        np.exp(np_views[i], out=np_views[i])
+
+        # add some binary ops.
+        n2, w2 = random_arrays(len(np_views[i]), 'float32')
+        weld_views[i] = np.add(weld_views[i], w2, out=weld_views[i])
+        np_views[i] = np.add(np_views[i], n2, out=np_views[i])
+        # weld_views[i].evaluate()
+
+        a = np.log(weld_views[i])
+        b = np.log(np_views[i]) 
+        assert np.allclose(a, b)
+    
+    w = np.sqrt(w, out=w)
+    n = np.sqrt(n, out=n)
+    
+    assert np.allclose(n, w)
+    assert np.array_equal(w.evaluate(), n)
+
+    # TODO: Add stuff with grandchildren, and so on.
+
+    for i in range(num_views):
+        assert np.array_equal(np_views[i], weld_views[i].evaluate())
+        assert np.allclose(np_views[i], weld_views[i])
+
 
 def test_views_overlap():
     '''
@@ -349,7 +403,6 @@ def test_views_overlap():
     w3 = w[4:7]
     n3 = n[4:7]
 
-    # TODO: uncomment.
     # w4, n4 are non overlapping views. Values should never change
     w4 = w[7:9]
     n4 = n[7:9]
@@ -358,7 +411,6 @@ def test_views_overlap():
     w5 = w[3:4]
     n5 = n[3:4]
 
-    print("num w2 siblings: ", len(w2.view_siblings))
     # unary part
     w2 = np.exp(w2, out=w2)
     n2 = np.exp(n2, out=n2)
@@ -372,7 +424,6 @@ def test_views_overlap():
     assert np.allclose(w3, n3)
 
     print("starting binary part!")
-    print("num w2 siblings: ", len(w2.view_siblings))
 
     # binary part:
     # now update the child with binary op
@@ -420,17 +471,29 @@ def test_mix_np_weld_ops():
 
 def test_scalars():
     '''
-    FIXME: Not sure how f64/i64 is represented in weld.
     Special case of broadcasting rules - the scalar is applied to all the
     Weldrray members.
     '''
     t = "int32"
     print("t = ", t)
-    np_test, w = random_arrays(NUM_ELS, t)
-    np_result = np_test + 2
+    n, w = random_arrays(NUM_ELS, t)
+    n2 = n + 2
     w2 = w + 2
-    weld_result = w2.evaluate()
-    assert np.allclose(weld_result, np_result)
+
+    w2 = w2.evaluate()
+    assert np.allclose(w2, n2)
+    
+    # test by combining it with binary op.
+    n, w = random_arrays(NUM_ELS, t)
+    w += 10
+    n += 10
+
+    n2, w2 = random_arrays(NUM_ELS, t)
+
+    w = np.add(w, w2)
+    n = np.add(n, n2)
+
+    assert np.allclose(w, n)
 
     t = "float32"
     print("t = ", t)
@@ -520,13 +583,6 @@ def test_reuse_array():
 
     w3_result = w3.evaluate()
     assert np.allclose(w3_result, n3)
-
-def test_iterator():
-    '''
-    While iterating, the values of the np array must be the latest after
-    evaluateuated stored ops.
-    '''
-    pass
 
 def test_fancy_indexing():
     '''
@@ -618,3 +674,140 @@ def test_setitem():
     w[2] += 10
     assert np.allclose(n, w)
 
+def test_iterator():
+    n, w = random_arrays(NUM_ELS, 'float32')
+
+    w = np.exp(w, out=w)
+    n = np.exp(n, out=n)
+    
+    for i, e in enumerate(w):
+        print(e)
+        assert e == n[i]
+        assert w[i] == n[i]
+
+def test_views_double_update():
+    '''
+    Cool edge case involving views / and ordering of np.add args etc.  When using wv = np.add(a,
+    b, out=b), other is b, and result is b too. So b gets added to b instead of a.
+    '''
+    n, w = random_arrays(NUM_ELS, 'float32')
+    n2, w2 = random_arrays(NUM_ELS, 'float32')
+
+    w += 100.00
+    n += 100.00
+
+    wv = w[3:5]
+    nv = n[3:5]
+
+    nv2, wv2 = random_arrays(len(wv), 'float32')
+    
+    wv = np.add(wv2, wv, out=wv)
+    nv = np.add(nv2, nv, out=nv)
+    
+    # Instead, this would work:
+    # wv = np.add(wv, wv2, out=wv)
+    # nv = np.add(nv, nv2, out=nv)
+    
+    assert np.allclose(w, n)
+    assert np.allclose(wv, nv)
+
+def test_views_strides():
+    '''
+    Generating views with different strides besides 1.
+    FIXME: not supported yet.
+    ''' 
+    n, w = random_arrays(NUM_ELS, 'float32')
+    w2 = w[2:8:2]
+    n2 = n[2:8:2]
+
+    w += 100.00
+    n += 100.00
+
+    assert np.allclose(w, n)
+    assert np.allclose(w2, n2)
+    
+    w2 = np.sqrt(w2, out=w2)
+    n2 = np.sqrt(n2, out=n2)
+    
+    assert np.allclose(w, n)
+    assert np.allclose(w2, n2)
+
+def test_views_other_indexing():
+    '''
+    Testing more unusual indexing patterns here.
+    This should be much more relevant in multidimensional arrays, so not testing it in depth here.
+    '''
+    def test_stuff(w, n, w2, n2):
+        w += 100.00
+        n += 100.00
+
+        assert np.allclose(w, n)
+        assert np.allclose(w2, n2)
+        
+        w2 = np.sqrt(w2, out=w2)
+        n2 = np.sqrt(n2, out=n2)
+        
+        assert np.allclose(w, n)
+        assert np.allclose(w2, n2)
+
+    n, w = random_arrays(NUM_ELS, 'float32')
+    w2 = w[:]
+    n2 = n[:]
+    
+    test_stuff(w, n, w2, n2)
+
+    w3 = w[2:]
+    n3 = n[2:]
+
+    test_stuff(w, n, w2, n2)
+
+# Bunch of failing / error handling tests.
+def test_views_empty_index():
+    n, w = random_arrays(NUM_ELS, 'float32')
+    w2 = w[2:2]
+    n2 = n[2:2]
+    print(w2)
+    print(n2)
+    
+    # Fails on this one - but instead this case should be dealt with correctly when setting up
+    # inputs.
+    assert np.allclose(w2, n2)
+
+def test_nan_vals():
+    '''
+    need to send this off to np to handle as weld fails if elements are nans etc.
+    '''
+    n, w = random_arrays(NUM_ELS, 'float32')
+    for i in range(5):
+        n = np.exp(n)
+        w = np.exp(w)
+    
+    assert np.allclose(n, w)
+
+def test_unsupported_types():
+    n, w = given_arrays([2.0, 3.0], 'float32')
+    t = [True, False]
+    n = n*t
+    w = w*t
+    assert np.allclose(n, w)
+    n, w = given_arrays([2.0, 3.0], 'float32')
+    n = n*True
+    w = w*True
+    assert np.allclose(n, w)
+
+def test_unsupported_ndarray_output():
+    '''
+    kind of a stupid test - just make sure weldarray doesn't die with ugly errors.
+    '''
+    n, w = random_arrays(NUM_ELS, 'float32')
+    n2, w2 = random_arrays(NUM_ELS, 'float32')
+    n = np.exp(n, out=n)
+    n2 = np.exp(w, out=n2)
+    assert np.allclose(n,n2)
+ 
+# test_views_double_update()
+# test_views_strides()
+# test_views_other_indexing()
+# test_views_empty_index()
+# test_nan_vals()
+# test_unsupported_types()
