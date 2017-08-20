@@ -261,7 +261,10 @@ pub unsafe extern "C" fn weld_module_compile(code: *const c_char,
     }
 
     info!("Started compiling program");
-    let module = llvm::compile_program(&parsed.unwrap(), &conf.optimization_passes);
+    let module = llvm::compile_program(
+        &parsed.unwrap(),
+        &conf.optimization_passes,
+        conf.llvm_optimization_level);
     info!("Done compiling program");
 
     if let Err(ref e) = module {
@@ -307,7 +310,7 @@ pub unsafe extern "C" fn weld_module_run(module: *mut WeldModule,
 
     let input = Box::new(llvm::WeldInputArgs {
                              input: arg.data as i64,
-                             nworkers: conf.threads as i32,
+                             nworkers: conf.threads,
                              mem_limit: conf.memory_limit,
                          });
     let ptr = Box::into_raw(input) as i64;
@@ -418,18 +421,6 @@ pub extern "C" fn weld_set_log_level(level: WeldLogLevel) {
     builder.format(format);
     builder.filter(None, filter);
     builder.init().unwrap_or(());
-}
-
-extern {
-    pub fn weld_run_get_errno(run_id: i64) -> i64;
-    pub fn weld_runtime_init();
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn foo() {
-    println!("{:?}", weld_runtime_init());
-    println!("{:?}", weld_run_get_errno(0));
-    println!("{:?}", weld_run_get_errno(0));
 }
 
 #[cfg(test)]

@@ -61,7 +61,8 @@ pub fn apply_opt_passes(expr: &mut TypedExpr, opt_passes: &Vec<Pass>) -> WeldRes
 }
 
 /// Generate a compiled LLVM module from a program whose body is a function.
-pub fn compile_program(program: &Program, opt_passes: &Vec<Pass>) -> WeldResult<easy_ll::CompiledModule> {
+pub fn compile_program(program: &Program, opt_passes: &Vec<Pass>, llvm_opt_level: u32)
+        -> WeldResult<easy_ll::CompiledModule> {
     let mut expr = macro_processor::process_program(program)?;
     debug!("After macro substitution:\n{}\n", print_typed_expr(&expr));
 
@@ -84,7 +85,10 @@ pub fn compile_program(program: &Program, opt_passes: &Vec<Pass>) -> WeldResult<
     debug!("LLVM program:\n{}\n", &llvm_code);
 
     debug!("Started compiling LLVM");
-    let module = try!(easy_ll::compile_module(&llvm_code, Some(WELD_INLINE_LIB)));
+    let module = try!(easy_ll::compile_module(
+        &llvm_code,
+        llvm_opt_level,
+        Some(WELD_INLINE_LIB)));
     debug!("Done compiling LLVM");
 
     debug!("Started runtime_init call");

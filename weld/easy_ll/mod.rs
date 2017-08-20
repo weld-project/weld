@@ -112,7 +112,11 @@ pub fn load_library(libname: &str) -> Result<(), LlvmError> {
 /// Compile a string of LLVM IR (in human readable format) into a `CompiledModule` that can then
 /// be executed. The LLVM IR should contain an entry point function called `run` that takes `i64`
 /// and returns `i64`, which will be called by `CompiledModule::run`.
-pub fn compile_module(code: &str, bc_file: Option<&[u8]>) -> Result<CompiledModule, LlvmError> {
+pub fn compile_module(
+        code: &str,
+        optimization_level: u32,
+        bc_file: Option<&[u8]>)
+        -> Result<CompiledModule, LlvmError> {
     unsafe {
         // Initialize LLVM
         ONCE.call_once(|| initialize());
@@ -149,11 +153,11 @@ pub fn compile_module(code: &str, bc_file: Option<&[u8]>) -> Result<CompiledModu
         verify_module(module)?;
         check_run_function(module)?;
         debug!("Done validating module");
-        optimize_module(module)?;
+        optimize_module(module, optimization_level)?;
         debug!("Done optimizing module");
 
         // Create an execution engine for the module and find its run function
-        let engine = create_exec_engine(module)?;
+        let engine = create_exec_engine(module, optimization_level)?;
         debug!("Done creating execution engine");
 
         result.engine = Some(engine);
@@ -293,8 +297,9 @@ unsafe fn check_run_function(module: LLVMModuleRef) -> Result<(), LlvmError> {
     Ok(())
 }
 
-/// Optimize an LLVM module using our chosen passes (currently uses standard passes for -O2).
-unsafe fn optimize_module(module: LLVMModuleRef) -> Result<(), LlvmError> {
+/// Optimize an LLVM module using a given LLVM optimization level.
+unsafe fn optimize_module(module: LLVMModuleRef, optimization_level: u32)
+        -> Result<(), LlvmError> {
     let manager = llvm::core::LLVMCreatePassManager();
     if manager.is_null() {
         return Err(LlvmError::new("LLVMCreatePassManager returned null"));
@@ -304,7 +309,7 @@ unsafe fn optimize_module(module: LLVMModuleRef) -> Result<(), LlvmError> {
         return Err(LlvmError::new("LLVMPassManagerBuilderCreate returned null"));
     }
     // TODO: not clear we need both Module and LTO calls here; just LTO might work
-    pmb::LLVMPassManagerBuilderSetOptLevel(builder, 2);
+    pmb::LLVMPassManagerBuilderSetOptLevel(builder, optimization_level);
     pmb::LLVMPassManagerBuilderPopulateModulePassManager(builder, manager);
     pmb::LLVMPassManagerBuilderPopulateLTOPassManager(builder, manager, 1, 1);
     pmb::LLVMPassManagerBuilderDispose(builder);
@@ -314,18 +319,16 @@ unsafe fn optimize_module(module: LLVMModuleRef) -> Result<(), LlvmError> {
 }
 
 /// Create an MCJIT execution engine for a given module.
-unsafe fn create_exec_engine(module: LLVMModuleRef) -> Result<LLVMExecutionEngineRef, LlvmError> {
+unsafe fn create_exec_engine(module: LLVMModuleRef, optimization_level: u32)
+        -> Result<LLVMExecutionEngineRef, LlvmError> {
     let mut engine = 0 as LLVMExecutionEngineRef;
     let mut error_str = 0 as *mut c_char;
     let mut options: LLVMMCJITCompilerOptions = mem::uninitialized();
     let options_size = mem::size_of::<LLVMMCJITCompilerOptions>();
     llvm::execution_engine::LLVMInitializeMCJITCompilerOptions(&mut options, options_size);
-    options.OptLevel = 2;
-    let result_code = llvm::execution_engine::LLVMCreateMCJITCompilerForModule(&mut engine,
-                                                                               module,
-                                                                               &mut options,
-                                                                               options_size,
-                                                                               &mut error_str);
+    options.OptLevel = optimization_level;
+    let result_code = llvm::execution_engine::LLVMCreateMCJITCompilerForModule(
+        &mut engine, module, &mut options, options_size, &mut error_str);
     if result_code != 0 {
         let msg = format!("Creating execution engine failed: {}",
                           CStr::from_ptr(error_str).to_str().unwrap());
