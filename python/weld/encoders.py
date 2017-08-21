@@ -54,8 +54,12 @@ class NumpyArrayDecoder(WeldObjectDecoder):
         obj = obj.contents
         size = obj.size
         data = obj.ptr
-        dtype = restype.elemType.cTypeClass
-        result = np.fromiter(data, dtype=dtype, count=size)
+        dtype = restype.elemType.cTypeClass 
+        # np.fromiter copies the memory location, np.frombuffer does not
+        ArrayType = ctypes.c_double*size
+        array_pointer = ctypes.cast(data, ctypes.POINTER(ArrayType))
+        result = np.frombuffer(array_pointer.contents, dtype=dtype,count=size)
+
         return result
 
 
