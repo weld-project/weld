@@ -7,11 +7,13 @@ class weldarray_view():
     '''
     def __init__(self, base_array, parent, start, end, idx):
         '''
-        TODO: Describe other variables / and model for using them.
         TODO: Need to add more stuff / generalize to nd case.
-        TODO: Can base array be calculated without this?
-        TODO: should start/end be wrt base or parent? in 1D base is nice because then we can use
-        those to update the base array correctly.
+        TODO: Can also just use w.base instead of storing base_array here.
+        @base_array: base array from which all views are derived.
+        @parent: direct parent from which this view is generated.
+        @start:  starting index of view in base_array.
+        @end:    ending index of view in base_array.
+        @idx:    the slicing notation used to generate the view.
         '''
         self.base_array = base_array
         self.parent = parent
@@ -32,26 +34,16 @@ def is_view_child(view, par):
         # view can only be a child of par if they share base.
         return view.base is par.base
 
-def get_start_weldarray(child, par):
-    '''
-    Get start index of child (view) of par.
-    @child, par: weldarrays. Case for weldarrays vs ndarrays is subtly
-    different because with weldarrays we need to consider the latest version of
-    the array.
-    '''
-    pass
-
 def addr(arr):
     '''
-    returns address of the given ndarray.
+    returns raw address of the given ndarray.
     '''
     return arr.__array_interface__['data'][0]
 
 
 def get_supported_binary_ops():
     '''
-    Returns a dictionary of the Weld supported binary ops, with values being
-    their Weld symbol.
+    Returns a dictionary of the Weld supported binary ops, with values being their Weld symbol.
     '''
     binary_ops = {}
     binary_ops[np.add.__name__] = '+'
@@ -62,8 +54,7 @@ def get_supported_binary_ops():
 
 def get_supported_unary_ops():
     '''
-    Returns a dictionary of the Weld supported unary ops, with values being
-    their Weld symbol.
+    Returns a dictionary of the Weld supported unary ops, with values being their Weld symbol.
     '''
     unary_ops = {}
     unary_ops[np.exp.__name__] = 'exp'
@@ -83,16 +74,14 @@ def get_supported_types():
 
 def get_supported_suffixes():
     '''
-    Right now weld supports int32, int64, float32, float64.
-    Treating python int as i32, float as f32
+    Right now weld supports int32, int64, float32, float64.      
     '''
     suffixes = {}
-    suffixes[str(np.int32)] = ''
-    suffixes[str(int)] = ''
-    suffixes[str(np.int64)] = 'L'
-    suffixes[str(np.float32)] = 'f'
-    suffixes[str(float)] = 'f'
-    suffixes[str(np.float64)] = ''
+    suffixes['i32'] = ''
+    suffixes['i64'] = 'L'
+    suffixes['f32'] = 'f'
+    suffixes['f64'] = ''
+
     return suffixes
 
 # TODO: turn these all into classes which provide functions.
