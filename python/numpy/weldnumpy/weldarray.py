@@ -15,10 +15,11 @@ class weldarray(np.ndarray):
     use __array_finalize (besides __array_finalize__ also adds a function call to the creation of a
     new array, which adds to the overhead compared to numpy for initializing arrays)
     '''
-    def __new__(cls, input_array, verbose=False, *args, **kwargs):
+    def __new__(cls, input_array, verbose=True, *args, **kwargs):
         '''
         @input_array: original ndarray from which the new array is derived.
         '''
+        # TODO: Add support for lists / ints.
         assert isinstance(input_array, np.ndarray), 'only support ndarrays'
         assert str(input_array.dtype) in SUPPORTED_DTYPES
 
@@ -123,8 +124,7 @@ class weldarray(np.ndarray):
                 - int
 
         When self is a view, update parent instead.
-        TODO: This is work in progress, and needs more work, although it does seem to be
-        functionally correct for now.
+        TODO: This is work in progress, although it does seem to be mostly functionally correct for now.
         '''
         def _update_single_entry(arr, index, val):
             '''
@@ -140,7 +140,6 @@ class weldarray(np.ndarray):
         if isinstance(idx, slice):
             if idx.step is None: step = 1
             else: step = idx.step
-
             # FIXME: hacky - need to check exact mechanisms b/w getitem and setitem calls further.
             # + it seems like numpy calls getitem and evaluates the value, and then sets it to the
             # correct value here (?) - this seems like a waste.
@@ -178,13 +177,12 @@ class weldarray(np.ndarray):
             self.weldobj.update(arr.weldobj)
             self.weldobj.weld_code = arr.weldobj.weld_code
             self.name = arr.name
-        elif isinstance(arr, np.ndarray):
+        else:
+            # general case for arr being numpy scalar or ndarray
             # weldobj returns the name bound to the given array. That is also
             # the array that future ops will act on, so set weld_code to it.
             self.name = self.weldobj.weld_code = self.weldobj.update(arr,
                     SUPPORTED_DTYPES[str(arr.dtype)])
-        else:
-            assert False, '_gen_weldobj has unsupported input array'
 
     def _process_ufunc_inputs(self, input_args, outputs):
         '''
@@ -193,29 +191,28 @@ class weldarray(np.ndarray):
         @input_args: args to __array_ufunc__
         @outputs: specified outputs.
 
-        @ret1: output: If one outputs are specified.
-        @ret2: supported: If weld supports the given input/output format - if Weld doesn't then
+        @ret: Bool, If weld supports the given input/output format or not - if weld doesn't then
         will just pass it on to numpy.
         '''
         if len(input_args) > 2:
-            return None, False
+            return False
 
         arrays = []
         scalars = []
         for i in input_args:
             if isinstance(i, np.ndarray):
                 if not str(i.dtype) in SUPPORTED_DTYPES:
-                    return None, False
+                    return False
                 if len(i) == 0:
-                    return None, False
+                    return False
                 arrays.append(i)
             elif isinstance(i, list):
-                return None, False
+                return False
             else:
                 scalars.append(i)
 
         if len(arrays) == 2 and arrays[0].dtype != arrays[1].dtype:
-            return None, False
+            return False
 
         # handle all scalar based tests here - later will just assume that scalar type is correct,
         # and use the suffix based on the weldarray's type.
@@ -224,70 +221,59 @@ class weldarray(np.ndarray):
         elif len(arrays) == 1 and len(scalars) == 1:
             # need to test for bool before int because it True would be instance of int as well.
             if isinstance(scalars[0], bool):
-                return None, False
+                return False
             elif isinstance(scalars[0], float):
                 pass
             elif isinstance(scalars[0], int):
                 pass
             # assuming its np.float32 etc.
             elif not str(scalars[0].dtype) in SUPPORTED_DTYPES:
-                return None, False
+                return False
             else:
                 weld_type = types[str(scalars[0].dtype)]
                 if weld_type != arrays[0]._weld_type:
-                    return None, False
-
+                    return False
         # check ouput.
         if outputs:
-            # if the output is not the same weldarray as self, then let np deal
-            # with it.
-            if len(outputs) == 1 and isinstance(outputs[0], weldarray):
-                output = outputs[0]
-            else:
-                # not sure about the use case with multiple outputs - let numpy
-                # handle it.
-                return None, False
-        else:
-            output = None
+            # if the output is not weldarray, then let np deal with it.
+            if not (len(outputs) == 1 and isinstance(outputs[0], weldarray)):
+                return False
 
-        return output, True
+        return True
 
     def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
         '''
         Overwrites the action of weld supported functions and for others,
         pass on to numpy's implementation.
         @ufunc: np op, like np.add etc.
-        @method: __call, __reduceat__ etc.
-
-        FIXME: Not dealing with method at all - just assume its __call__ as in most cases.
+        TODO: support other type of methods?
+        @method: call, __reduce__,
         '''
         input_args = [inp for inp in inputs]
         outputs = kwargs.pop('out', None)
-        output, supported = self._process_ufunc_inputs(input_args, outputs)
+        supported = self._process_ufunc_inputs(input_args, outputs)
+        output = None
+        if supported and method == '__call__':
+            output = self._handle_call(ufunc, input_args, outputs)
+        elif supported and method == 'reduce':
+            output = self._handle_reduce(ufunc, input_args, outputs)
 
-        # check for supported ops.
-        if supported and ufunc.__name__ in UNARY_OPS:
-            assert(len(input_args) == 1)
-            return self._unary_op(UNARY_OPS[ufunc.__name__], result=output)
+        if output is not None:
+            return output
 
-        if supported and ufunc.__name__ in BINARY_OPS:
-            # weldarray can be first or second arg.
-            if isinstance(input_args[0], weldarray):
-                # first arg is weldarray, must be self
-                assert input_args[0].name == self.name
-                other_arg = input_args[1]
-            else:
-                other_arg = input_args[0]
-                assert input_args[1].name == self.name
+        return self._handle_numpy(ufunc, method, input_args, outputs, kwargs)
 
-            return self._binary_op(other_arg, BINARY_OPS[ufunc.__name__], result=output)
-
+    def _handle_numpy(self, ufunc, method, input_args, outputs, kwargs):
+        '''
+        relegate responsibility of executing ufunc to numpy.
+        '''
         # Relegating the work to numpy. If input arg is weldarray, evaluate it,
         # and convert to ndarray before passing to super()
         for i, arg_ in enumerate(input_args):
             if isinstance(arg_, weldarray):
                 # Evaluate all the lazily stored computations first.
                 input_args[i] = arg_._eval()
+
         if outputs:
             out_args = []
             for j, output in enumerate(outputs):
@@ -302,10 +288,62 @@ class weldarray(np.ndarray):
         result = super(weldarray, self).__array_ufunc__(ufunc, method, *input_args, **kwargs)
 
         # if possible, return weldarray.
-        if str(result.dtype) in SUPPORTED_DTYPES:
+        if str(result.dtype) in SUPPORTED_DTYPES and isinstance(result, np.ndarray):
             return weldarray(result, verbose=self._verbose)
         else:
             return result
+
+    def _handle_call(self, ufunc, input_args, outputs):
+        '''
+        TODO: add description
+        '''
+        # if output is not None, choose the first one - since we don't support any ops with
+        # multiple outputs.
+        if outputs: output = outputs[0]
+        else: output = None
+
+        # check for supported ops.
+        if ufunc.__name__ in UNARY_OPS:
+            assert(len(input_args) == 1)
+            return self._unary_op(UNARY_OPS[ufunc.__name__], result=output)
+
+        if ufunc.__name__ in BINARY_OPS:
+            # weldarray can be first or second arg.
+            if isinstance(input_args[0], weldarray):
+                # first arg is weldarray, must be self
+                assert input_args[0].name == self.name
+                other_arg = input_args[1]
+            else:
+                other_arg = input_args[0]
+                assert input_args[1].name == self.name
+
+            return self._binary_op(other_arg, BINARY_OPS[ufunc.__name__], result=output)
+
+    def _handle_reduce(self, ufunc, input_args, outputs):
+        '''
+        TODO: describe.
+        TODO: For multi-dimensional case, might need extra work here if the reduction is being
+        performed only along a certain axis.
+        We force evaluation at the end of the reduction - weird errors if we don't. This seems
+        safer anyway.
+        np supports reduce only for binary ops.
+        '''
+        # input_args[0] must be self so it can be ignored.
+        assert len(input_args) == 1
+        if outputs: output = outputs[0]
+        else: output = None
+        if ufunc.__name__ in BINARY_OPS:
+            return self._reduce_op(BINARY_OPS[ufunc.__name__], result=output)
+
+    def _reduce_op(self, op, result=None):
+        '''
+        TODO: support for multidimensional arrays.
+        '''
+        template = 'result(for({arr},merger[{type}, {op}], |b, i, e| merge(b, e)))'
+        self.weldobj.weld_code = template.format(arr = self.weldobj.weld_code,
+                                                 type = self._weld_type.__str__(),
+                                                 op  = op)
+        return self._eval(restype = self._weld_type)
 
     def evaluate(self):
         '''
@@ -314,9 +352,11 @@ class weldarray(np.ndarray):
         '''
         return weldarray(self._eval(), verbose=self._verbose)
 
-    def _eval(self):
+    def _eval(self, restype=None):
         '''
         @ret: ndarray after evaluating all the ops registered with the given weldarray.
+        @restype: type of the result. Usually, it will be a WeldVec, but if called from reduction,
+        it would be a scalar.
         Evalutes the expression based on weldobj.weld_code. If no new ops have been registered,
         then just returns the last ndarray.
         If self is a view, then evaluates the parent array, and returns the aprropriate index from
@@ -338,7 +378,10 @@ class weldarray(np.ndarray):
             # weldobj.evaluate()
             return self.weldobj.context[self.name]
 
-        arr = self.weldobj.evaluate(WeldVec(self._weld_type), verbose=self._verbose)
+        if restype is None:
+            # use default type for all weldarray operations
+            restype = WeldVec(self._weld_type)
+        arr = self.weldobj.evaluate(restype, verbose=self._verbose)
         # Now that the evaluation is done - create new weldobject for self,
         # initalized from the returned arr.
         self._gen_weldobj(arr)
@@ -382,13 +425,6 @@ class weldarray(np.ndarray):
             # in place op. If is a view, just update base array and return.
             if result._weldarray_view:
                 v = result._weldarray_view
-                # need to update the relevant indices of the parent array
-                # par_template = "result(for({arr}, appender,|b,i,e| if \
-                # (i >= {start}L & i < {end}L,merge(b,{unop}(e)),merge(b,e))))"
-                # v.base_array.weldobj.weld_code = par_template.format(arr = v.base_array.weldobj.weld_code,
-                                                                   # start = str(v.start),
-                                                                   # end   = str(v.end),
-                                                                   # unop  = unop)
                 update_str = '{unop}(e)'.format(unop=unop)
                 v.base_array._update_range(v.start, v.end, update_str)
                 return result

@@ -2,20 +2,22 @@ import subprocess as sp
 import math
 import re
 from collections import defaultdict
-import hashlib
 import matplotlib.pyplot as plt
 import numpy as np
+
+import glob, os
+import json
 
 template = 'python timing.py --num_reps {reps} --num_els {els} --num_operands {operands} '
 
 # max power of 10 that we increase the number of elements to.
-MAX_POWER = 9
+MAX_POWER = 7
 
 def weld_numpy_plot(X, Y, x_label, y_label, colors, name, title):
         labels = ['Numpy', 'Weld']
         for i, y in enumerate(Y):
-            # print('y: ', len(y))
-            # print('X: ', len(X))
+            print('y: ', len(y))
+            print('X: ', len(X))
             assert len(y) == len(X), 'match'
             plt.plot(X, y, colors[i], label=labels[i], marker='o',
             linestyle='--')
@@ -44,6 +46,8 @@ def bar_plot(np_times, breakdown, name, title):
 
     # bar: encoding + decoding
     Y = list(np.array(breakdown['encoding']+np.array(breakdown['decoding'])))
+    print(len(Y))
+    print('Y: ', Y)
     plt.bar(index-bar_width, Y,bar_width,
              alpha=opacity,
              color='b',
@@ -110,8 +114,19 @@ def get_time_from_string(string):
     else:
         return None
 
-def extract_times(output, np_times, weld_times, breakdown):
+def add_n_els(lst, n, start):
+    assert n >= 1
+    new_l = []
+    # assert n == 2, 'only supp'
+    for i in range(start, len(lst), n):
+        s = 0
+        for j in range(start, n, 1):
+            s += lst[j]
+        new_l.append(s)
 
+    return new_l
+
+def extract_times(output, np_times, weld_times, breakdown, start=0):
     # now let's parse it to get values.
     for o in output:
         t = get_time_from_string(o)
@@ -140,7 +155,49 @@ def extract_times(output, np_times, weld_times, breakdown):
         elif 'module.run' in o:
             breakdown['run_module'].append(t)
 
-def simple_loop(binary=True):
+    if breakdown['encoding'] > len(np_times):
+        num_evals = 2
+        print('num evals = ', num_evals)
+        # assert num_evals <= 2
+        for k, val in breakdown.iteritems():
+            breakdown[k] = []
+            for i in range(start):
+                breakdown[k].append(val[i])
+
+            breakdown[k].append(add_n_els(val, num_evals, start))
+            assert len(breakdown[k]) == len(np_times)
+
+def plot_stuff(np_times, weld_times, breakdown, name='', title=''):
+    '''
+    '''
+    # convert to np arrays because it makes future life easier.
+    np_times = np.array(np_times)
+    weld_times = np.array(weld_times)
+    for k,v in breakdown.iteritems():
+        breakdown[k] = np.array(v)
+
+    assert len(np_times) == len(weld_times)
+    for k,v in breakdown.iteritems():
+        len(v) == len(weld_times)
+
+    # time to start plotting stuff.
+
+    name1 = 'weld_numpy' + name
+
+    # plot 1: x-elements, y = time. numpy vs weld.
+    Y = [np_times, weld_times]
+    x_axis = "Number of elements as a power of 10"
+    y_axis = "Seconds"
+    colors = ["r", "b"]
+
+    weld_numpy_plot(range(len(Y[0])), Y, x_axis, y_axis, colors, name1,
+            title)
+
+    name2 = 'bar_graph' + name
+
+    bar_plot(np_times, breakdown, name2, title)
+
+def simple_loop(binary=True, inplace=False):
     '''
     '''
 
@@ -149,8 +206,10 @@ def simple_loop(binary=True):
 
     if binary:
         op_list = ['+', '*']
+        # op_list = ['+', '*']
     else:
         op_list = ['sqrt', 'exp']
+        # op_list = ['sqrt']
 
     reps_list = [1, 10, 20, 50]
     operands_list = [2]
@@ -171,12 +230,17 @@ def simple_loop(binary=True):
                     # call the process and get back stdout.
                     cmd = template.format(reps=str(reps), els=str(els),
                             operands=str(operands), op=op)
-                    if binary:
+
+                    if inplace:
+                        cmd += '--inplace_loop 1 '
+                        cmd += '--unary_op ' + op
+
+                    elif binary:
                         cmd += '--binary_loop 1 '
                         cmd += '--binary_op ' + op
                     else:
                         cmd += '--unary_loop 1 '
-                        cmd += '--unary_op ' + 'sqrt'
+                        cmd += '--unary_op ' + op
 
                     cmd = cmd.split(' ')
                     output = sp.check_output(cmd)
@@ -184,37 +248,73 @@ def simple_loop(binary=True):
                     output = output.split('\n')
                     extract_times(output, np_times, weld_times, breakdown)
 
-                # convert to np arrays because it makes future life easier.
-                np_times = np.array(np_times)
-                weld_times = np.array(weld_times)
-                for k,v in breakdown.iteritems():
-                    breakdown[k] = np.array(v)
+                name = str(MAX_POWER) + str(reps) + op + str(inplace) + '.png'
+                title_template = "Numpy vs Weld, Reps = {reps}, Op = {op}, Inplace = {ip}"
+                title = title_template.format(reps=reps, op=op, ip=inplace)
+                plot_stuff(np_times, weld_times, breakdown, name=name, title=title)
 
-                assert len(np_times) == len(weld_times)
-                for k,v in breakdown.iteritems():
-                    len(v) == len(weld_times)
+def random_func(func_flag):
+    '''
+    '''
+    reps_list = []
+    for i in range(1):
+        reps_list.append(i+1)
 
-                # time to start plotting stuff.
+    # els_list = [int(math.pow(10,i)) for i in range(5,8,1)]
+    els_list = [int(math.pow(10,i)) for i in range(MAX_POWER)]
 
-                # hcmd = hashlib.sha1(str(cmd)).hexdigest()
-                # name = 'weld_numpy' + hcmd[0:4] + '.png'
-                name = 'weld_numpy' + str(MAX_POWER) + str(reps) + op + str(operands) + '.png'
+    op = func_flag.replace('--', '')
+    op = op.replace(' 1', '')
+    for reps in reps_list:
+        print('reps: ', reps)
+        np_times = []
+        weld_times = []
+        # each key will be one of the components of the weld time.
+        # each val will be a list like weld_times.
+        breakdown = defaultdict(list)
+        for i, els in enumerate(els_list):
+            print("num els = ", els)
+            # call the process and get back stdout.
+            cmd = template.format(reps=str(reps), els=str(els),
+                    operands=str(2), op='whatever')
 
-                # plot 1: x-elements, y = time. numpy vs weld.
-                Y = [np_times, weld_times]
-                x_axis = "Number of elements as a power of 10"
-                y_axis = "Seconds"
-                colors = ["r", "b"]
+            cmd += func_flag
+            print(cmd)
 
-                title_template = "Numpy vs Weld, Reps = {reps}, Op = {op}, operands = {operands}"
-                title = title_template.format(reps=reps, op=op, operands=operands)
-                weld_numpy_plot(range(MAX_POWER), Y, x_axis, y_axis, colors, name,
-                        title)
+            cmd = cmd.split(' ')
+            output = sp.check_output(cmd)
+            print(output)
+            output = output.split('\n')
+            extract_times(output, np_times, weld_times, breakdown, start=i)
 
-                name = 'bar_graph' + str(MAX_POWER) + str(reps) + op + str(operands) + '.png'
-                bar_plot(np_times, breakdown, name, title)
+        # decompose plotting stuff and add it here.
+        name = str(MAX_POWER) + str(reps) + op + '.png'
+        title_template = "Numpy vs Weld, Reps = {reps}, func = {op}"
+        title = title_template.format(reps=reps, op=op)
+        plot_stuff(np_times, weld_times, breakdown, name=name, title=title)
+
+def plot_jsons():
+    '''
+    '''
+    # load all .txt files in directory
+    os.chdir("jsons")
+    for f in glob.glob("*.txt"):
+        print(f)
+
+        with open(f) as json_data:
+            d = json.load(json_data)
+            # title, np_times, weld_times, breakdown.
+            title = d[0]
+            assert len(d[1]) == len(d[2])
+            plot_stuff(d[1], d[2], d[3], title=title, name=f.replace('.txt', '.png'))
 
 if __name__ == '__main__':
     simple_loop(binary=False)
     simple_loop(binary=True)
+    simple_loop(binary=False, inplace=True)
+    func_flag = '--random_computation1 1'
+    random_func(func_flag)
 
+    func_flag = '--blackscholes 1'
+    random_func(func_flag)
+    # plot_jsons()

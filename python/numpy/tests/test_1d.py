@@ -7,6 +7,8 @@ from weldnumpy import *
 TODO0: Decompose heavily repeated stuff, like the assert blocks and so on.
 
 TODO: New tests:
+    - reduce ufuncs: at least the supported ones.
+    - use np.add.reduce syntax for the reduce ufuncs.
     - getitem: lists and ndarrays + ints.
     - error based tests: nan; underflow/overflow; unsupported types [true] * [...] etc;
     - long computational graphs - that segfault or take too long; will require implicit evaluation
@@ -20,8 +22,12 @@ UNARY_OPS = [np.exp, np.log, np.sqrt]
 # TODO: Add wa.erf - doesn't use the ufunc functionality of numpy so not doing it for
 # now.
 BINARY_OPS = [np.add, np.subtract, np.multiply, np.divide]
-TYPES = ['float32', 'float64', 'int32', 'int64']
+REDUCE_UFUNCS = [np.add.reduce, np.multiply.reduce]
 
+# FIXME: weld mergers dont support non-commutative ops --> need to find a workaround for this.
+# REDUCE_UFUNCS = [np.add.reduce, np.subtract.reduce, np.multiply.reduce, np.divide.reduce]
+
+TYPES = ['float32', 'float64', 'int32', 'int64']
 NUM_ELS = 10
 
 # TODO: Create test with all other ufuncs.
@@ -901,3 +907,29 @@ def test_unsupported_ndarray_output():
     n = np.exp(n, out=n)
     n2 = np.exp(w, out=n2)
     assert np.allclose(n,n2)
+
+def test_new_array_creation():
+    '''
+    Creating new array with an op should leave the value in the old array unchanged.
+    If the weldobject.evaluate() method would perform the update in place, then this test would
+    fail.
+    '''
+    n, w = random_arrays(NUM_ELS, 'float32')
+    n2 = np.sqrt(n)
+    w2 = np.sqrt(w)
+
+    assert np.allclose(n, w)
+    assert np.allclose(n2, w2)
+
+def test_reduce():
+    '''
+    reductions is another type of ufunc. Only applies to binary ops. Not many other interesting
+    cases to test this because it just evaluates stuff and returns an int/float.
+    '''
+    for t in TYPES:
+        for r in REDUCE_UFUNCS:
+            n, w = random_arrays(NUM_ELS, t)
+            n2 = r(n)
+            w2 = r(w)
+            assert np.allclose(n2, w2)
+
