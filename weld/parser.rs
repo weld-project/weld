@@ -895,7 +895,16 @@ impl<'t> Parser<'t> {
                     try!(self.consume(TCloseBracket));
                 }
 
-                let mut expr = expr_box(NewBuilder(None));
+                let arg = if *self.peek() == TOpenParen {
+                    self.consume(TOpenParen)?;
+                    let arg = self.expr()?;
+                    self.consume(TCloseParen)?;
+                    Some(arg)
+                } else {
+                    None
+                };
+
+                let mut expr = expr_box(NewBuilder(arg));
                 expr.ty = Builder(Appender(Box::new(elem_type)), annotations);
                 Ok(expr)
             }
@@ -1086,6 +1095,7 @@ impl<'t> Parser<'t> {
                 try!(self.consume(TOpenBracket));
                 let elem_type = try!(self.type_());
                 try!(self.consume(TCloseBracket));
+
 
                 Ok(Builder(Appender(Box::new(elem_type)), annotations))
             }

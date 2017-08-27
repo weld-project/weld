@@ -2168,13 +2168,20 @@ impl LlvmGenerator {
         match *builder_kind {
             Appender(_) => {
                 let bld_tmp = ctx.var_ids.next();
+                let size_tmp = if let Some(ref sym) = *arg {
+                    let (arg_ll_ty, arg_ll_sym) = self.llvm_type_and_name(func, sym)?;
+                    self.gen_load_var(&arg_ll_sym, &arg_ll_ty, ctx)?
+                } else {
+                    format!("{}", builder_size)
+                };
+
                 ctx.code.add(format!(
                     "{} = call {} {}.new(i64 {}, %work_t* \
                                     %cur.work)",
                     bld_tmp,
                     bld_ty_str,
                     bld_prefix,
-                    builder_size
+                    size_tmp
                 ));
                 self.gen_store_var(&bld_tmp, &llvm_symbol(output), &bld_ty_str, ctx);
             }
