@@ -916,6 +916,7 @@ impl<T: TypeBounds> Expr<T> {
         }
     }
 
+    /// Returns `true` if this expression contains the symbol `sym` in an `Ident`.
     pub fn contains_symbol(&self, sym: &Symbol) -> bool {
         let mut found = false;
         self.traverse(&mut |ref mut e| {
