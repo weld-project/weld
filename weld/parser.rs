@@ -1269,6 +1269,9 @@ fn basic_parsing() {
     let e = parse_expr("appender[i32]").unwrap();
     assert_eq!(print_expr_without_indent(&e), "appender[i32]");
 
+    let e = parse_expr("appender[i32](1000L)").unwrap();
+    assert_eq!(print_expr_without_indent(&e), "appender[i32](1000L)");
+
     let e = parse_expr("@(impl:local) dictmerger[i32,i32,+]").unwrap();
     assert_eq!(print_expr_without_indent(&e),
                "@(impl:local)dictmerger[i32,i32,+]");
