@@ -647,7 +647,7 @@ fn simple_merge(sym: &Symbol, expr: &Expr<Type>) -> bool {
             return false;
         }
         If { ref cond, ref on_true, ref on_false } => {
-            cond.contains_symbol(sym) && simple_merge(sym, on_true) &&
+            !cond.contains_symbol(sym) && simple_merge(sym, on_true) &&
                 simple_merge(sym, on_false)
         }
         _ => false,
