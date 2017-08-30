@@ -7,11 +7,33 @@ import numpy as np
 
 import glob, os
 import json
+import csv
+import argparse
+
+# TODO: create common utils file for plotting/timing.
+def str2bool(v):
+  '''
+  used to create special type for argparse
+  '''
+  return v.lower() in ('yes', 'true', 't', '1')
 
 template = 'python timing.py --num_reps {reps} --num_els {els} --num_operands {operands} '
 
 # max power of 10 that we increase the number of elements to.
-MAX_POWER = 7
+parser = argparse.ArgumentParser()
+parser.register('type', 'Bool', str2bool)
+
+parser.add_argument('--plot', help='',default=False,type='Bool')
+parser.add_argument('--csv', help='',default=True,type='Bool')
+parser.add_argument('--max_power', help='',default=1,type=int)
+parser.add_argument('--base_name', help='',default='info',type=str)
+parser.add_argument('--unary', help='', default=False, type='Bool')
+parser.add_argument('--binary', help='', default=False, type='Bool')
+parser.add_argument('--inplace', help='', default=False, type='Bool')
+parser.add_argument('--random_func', help='', default=False, type='Bool')
+parser.add_argument('--blackscholes', help='', default=False, type='Bool')
+
+args = parser.parse_args()
 
 def weld_numpy_plot(X, Y, x_label, y_label, colors, name, title):
         labels = ['Numpy', 'Weld']
@@ -130,6 +152,10 @@ def extract_times(output, np_times, weld_times, breakdown, start=0):
     # now let's parse it to get values.
     for o in output:
         t = get_time_from_string(o)
+        if t is None:
+            continue
+        t = round(t, 4)
+
         if 'ndarray' in o:
             np_times.append(t)
         elif 'weldarray' in o:
@@ -155,7 +181,7 @@ def extract_times(output, np_times, weld_times, breakdown, start=0):
         elif 'module.run' in o:
             breakdown['run_module'].append(t)
 
-    if breakdown['encoding'] > len(np_times):
+    if len(breakdown['encoding']) > len(np_times):
         num_evals = 2
         print('num evals = ', num_evals)
         # assert num_evals <= 2
@@ -197,24 +223,54 @@ def plot_stuff(np_times, weld_times, breakdown, name='', title=''):
 
     bar_plot(np_times, breakdown, name2, title)
 
+def dump_csv(np_times, weld_times, breakdown, reps, func_name):
+
+    name = args.base_name + '.csv'
+    file_exists = False
+
+    dir = os.path.dirname(__file__)
+    filename = os.path.join(dir, name)
+
+    if os.path.exists(filename):
+        file_exists = True
+
+    # TODO: improve the ordering of these elements.
+    header = ['Function Name', 'Reps', 'log(10) elements', 'Numpy Time', 'Weld Time']
+    for k in breakdown:
+        header.append(k)
+
+    assert len(np_times) == len(weld_times) == len(breakdown['encoding'])
+
+    with open(name, 'a') as f:
+        writer = csv.writer(f)
+        if not file_exists:
+            print('writing row')
+            writer.writerow(header)
+
+        for i, np_time in enumerate(np_times):
+            row = [func_name, reps, i, np_time, weld_times[i]]
+            for k,v in breakdown.iteritems():
+                row.append(v[i])
+
+            writer.writerow(row)
+
 def simple_loop(binary=True, inplace=False):
     '''
     '''
 
     # default values.
     # TODO: Run loop over each of these.
-
     if binary:
-        op_list = ['+', '*']
+        op_list = ['+']
         # op_list = ['+', '*']
     else:
-        op_list = ['sqrt', 'exp']
-        # op_list = ['sqrt']
+        # op_list = ['sqrt', 'exp']
+        op_list = ['sqrt']
 
-    reps_list = [1, 10, 20, 50]
+    reps_list = [1]
     operands_list = [2]
 
-    els_list = [int(math.pow(10,i)) for i in range(MAX_POWER)]
+    els_list = [int(math.pow(10,i)) for i in range(args.max_power)]
 
     for op in op_list:
         for reps in reps_list:
@@ -224,7 +280,8 @@ def simple_loop(binary=True, inplace=False):
                 # each key will be one of the components of the weld time.
                 # each val will be a list like weld_times.
                 breakdown = defaultdict(list)
-
+                
+                # will plot/dump row to csv after this loop.
                 for els in els_list:
                     print("num els = ", els)
                     # call the process and get back stdout.
@@ -248,10 +305,19 @@ def simple_loop(binary=True, inplace=False):
                     output = output.split('\n')
                     extract_times(output, np_times, weld_times, breakdown)
 
-                name = str(MAX_POWER) + str(reps) + op + str(inplace) + '.png'
+                name = str(args.max_power) + str(reps) + op + str(inplace) + '.png'
                 title_template = "Numpy vs Weld, Reps = {reps}, Op = {op}, Inplace = {ip}"
                 title = title_template.format(reps=reps, op=op, ip=inplace)
-                plot_stuff(np_times, weld_times, breakdown, name=name, title=title)
+                
+                if args.plot:
+                    plot_stuff(np_times, weld_times, breakdown, name=name, title=title)
+
+                if args.csv:
+                    func_name = op
+                    if inplace:
+                        func_name + '-inplace'
+                    dump_csv(np_times, weld_times, breakdown, reps, func_name)
+
 
 def random_func(func_flag):
     '''
@@ -261,7 +327,7 @@ def random_func(func_flag):
         reps_list.append(i+1)
 
     # els_list = [int(math.pow(10,i)) for i in range(5,8,1)]
-    els_list = [int(math.pow(10,i)) for i in range(MAX_POWER)]
+    els_list = [int(math.pow(10,i)) for i in range(args.max_power)]
 
     op = func_flag.replace('--', '')
     op = op.replace(' 1', '')
@@ -288,10 +354,19 @@ def random_func(func_flag):
             extract_times(output, np_times, weld_times, breakdown, start=i)
 
         # decompose plotting stuff and add it here.
-        name = str(MAX_POWER) + str(reps) + op + '.png'
+        name = str(args.max_power) + str(reps) + op
         title_template = "Numpy vs Weld, Reps = {reps}, func = {op}"
         title = title_template.format(reps=reps, op=op)
-        plot_stuff(np_times, weld_times, breakdown, name=name, title=title)
+        
+        # TODO: add args here.
+        if args.plot:
+            name += '.png'
+            plot_stuff(np_times, weld_times, breakdown, name=name, title=title)
+
+        if args.csv:
+            func_name = 'random'
+            dump_csv(np_times, weld_times, breakdown, reps, func_name)
+
 
 def plot_jsons():
     '''
@@ -309,12 +384,20 @@ def plot_jsons():
             plot_stuff(d[1], d[2], d[3], title=title, name=f.replace('.txt', '.png'))
 
 if __name__ == '__main__':
-    simple_loop(binary=False)
-    simple_loop(binary=True)
-    simple_loop(binary=False, inplace=True)
-    func_flag = '--random_computation1 1'
-    random_func(func_flag)
-
-    func_flag = '--blackscholes 1'
-    random_func(func_flag)
+    if args.unary:
+        simple_loop(binary=False)
+    if args.binary:
+        simple_loop(binary=True)
+    if args.inplace:
+        simple_loop(binary=False, inplace=True)
+    
+    if args.random_func:
+        func_flag = '--random_computation1 1'
+        random_func(func_flag)
+    
+    if args.blackscholes:
+        func_flag = '--blackscholes 1'
+        random_func(func_flag)
+    
+    # if we have json files
     # plot_jsons()
