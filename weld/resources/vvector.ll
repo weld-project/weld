@@ -14,7 +14,7 @@ define <{VECSIZE} x {ELEM}>* @{NAME}.vat(%{NAME} %vec, i64 %index) {{
 }}
 
 ; Append a value into a builder, growing its space if needed.
-define %{NAME}.bld @{NAME}.bld.vmerge(%{NAME}.bld noalias %bldPtr, <{VECSIZE} x {ELEM}> %value, i32 %myId) {{
+define %{NAME}.bld @{NAME}.bld.vmerge(%{NAME}.bld %bldPtr, <{VECSIZE} x {ELEM}> %value, i32 %myId) {{
 entry:
   %curPiecePtr = call %vb.vp* @weld_rt_cur_vb_piece(i8* %bldPtr, i32 %myId)
   %curPiece = load %vb.vp, %vb.vp* %curPiecePtr
@@ -39,9 +39,10 @@ onFull:
 finish:
   %curPiece3 = phi %vb.vp [ %curPiece, %entry ], [ %curPiece2, %onFull ]
   %bytes1 = extractvalue %vb.vp %curPiece3, 0
-  %elements = bitcast i8* %bytes1 to <{VECSIZE} x {ELEM}>*
-  %insertPtr = getelementptr <{VECSIZE} x {ELEM}>, <{VECSIZE} x {ELEM}>* %elements, i64 %size
-  store <{VECSIZE} x {ELEM}> %value, <{VECSIZE} x {ELEM}>* %insertPtr
+  %elements = bitcast i8* %bytes1 to {ELEM}*
+  %insertPtr = getelementptr {ELEM}, {ELEM}* %elements, i64 %size
+  %vecInsertPtr = bitcast {ELEM}* %insertPtr to <{VECSIZE} x {ELEM}>*
+  store <{VECSIZE} x {ELEM}> %value, <{VECSIZE} x {ELEM}>* %vecInsertPtr, align 1
   %newSize = add i64 %size, {VECSIZE}
   %curPiece4 = insertvalue %vb.vp %curPiece3, i64 %newSize, 1
   store %vb.vp %curPiece4, %vb.vp* %curPiecePtr
