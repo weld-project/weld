@@ -21,7 +21,7 @@ entry:
   %size = extractvalue %vb.vp %curPiece, 1
   %capacity = extractvalue %vb.vp %curPiece, 2
   %adjusted = add i64 %size, {VECSIZE}
-  %full = icmp sge i64 %adjusted, %capacity
+  %full = icmp sgt i64 %adjusted, %capacity
   br i1 %full, label %onFull, label %finish
 
 onFull:
