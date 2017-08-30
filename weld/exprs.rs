@@ -316,6 +316,15 @@ pub fn newbuilder_expr(kind: BuilderKind, expr: Option<Expr<Type>>) -> WeldResul
             }
             passed
         }
+        Appender(_) => {
+            let mut passed = false;
+            if let Some(ref e) = expr {
+                if let Scalar(ScalarKind::I64) = e.ty {
+                    passed = true;
+                }
+            }
+            passed
+        }
         _ => expr.is_none(),
     };
 

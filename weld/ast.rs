@@ -916,6 +916,19 @@ impl<T: TypeBounds> Expr<T> {
         }
     }
 
+    /// Returns `true` if this expression contains the symbol `sym` in an `Ident`.
+    pub fn contains_symbol(&self, sym: &Symbol) -> bool {
+        let mut found = false;
+        self.traverse(&mut |ref mut e| {
+            if let ExprKind::Ident(ref s) = e.kind {
+                if *sym == *s {
+                    found = true;
+                }
+            }
+        });
+        found
+    }
+
     /// Recursively transforms an expression in place by running a function on it and optionally replacing it with another expression.
     pub fn transform_and_continue<F>(&mut self, func: &mut F)
         where F: FnMut(&mut Expr<T>) -> (Option<Expr<T>>, bool)

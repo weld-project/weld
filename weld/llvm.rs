@@ -1725,6 +1725,18 @@ impl LlvmGenerator {
                     self.gen_merge_op(&bld_ptr, &elem_tmp, &val_ll_ty, op, value_ty, ctx)?;
                 }
 
+                Appender(_) => {
+                    let bld_tmp = self.gen_load_var(&bld_ll_sym, &bld_ll_ty, ctx)?;
+                    let val_tmp = self.gen_load_var(&val_ll_sym, &val_ll_ty, ctx)?;
+                    ctx.code.add(format!("call {} {}.vmerge({} {}, {} {}, i32 %cur.tid)",
+                    bld_ll_ty,
+                    bld_prefix,
+                    bld_ll_ty,
+                    bld_tmp,
+                    val_ll_ty,
+                    val_tmp));
+                }
+
                 _ => {
                     // For all other builders, extract each value in the vector and merge it separately
                     let value_tmp = self.gen_load_var(&val_ll_sym, &val_ll_ty, ctx)?;
@@ -2168,13 +2180,20 @@ impl LlvmGenerator {
         match *builder_kind {
             Appender(_) => {
                 let bld_tmp = ctx.var_ids.next();
+                let size_tmp = if let Some(ref sym) = *arg {
+                    let (arg_ll_ty, arg_ll_sym) = self.llvm_type_and_name(func, sym)?;
+                    self.gen_load_var(&arg_ll_sym, &arg_ll_ty, ctx)?
+                } else {
+                    format!("{}", builder_size)
+                };
+
                 ctx.code.add(format!(
                     "{} = call {} {}.new(i64 {}, %work_t* \
                                     %cur.work)",
                     bld_tmp,
                     bld_ty_str,
                     bld_prefix,
-                    builder_size
+                    size_tmp
                 ));
                 self.gen_store_var(&bld_tmp, &llvm_symbol(output), &bld_ty_str, ctx);
             }

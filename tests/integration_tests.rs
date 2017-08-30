@@ -671,6 +671,26 @@ fn simple_for_appender_loop() {
     unsafe { free_value_and_module(ret_value) };
 }
 
+fn large_unaryop_for_appender_loop() {
+    let code = "|x:vec[f32]| map(x, |e| sqrt(e))";
+    let conf = default_conf();
+
+    let input_vec: Vec<f32> = vec![4.0; 1000000];
+    let ref input_data: WeldVec<f32> = WeldVec {
+        data: input_vec.as_ptr(),
+        len: input_vec.len() as i64,
+    };
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<f32> };
+    let result = unsafe { (*data).clone() };
+    assert_eq!(result.len as usize, input_vec.len());
+    for i in 0..(result.len as isize) {
+        assert_eq!(unsafe { *result.data.offset(i) as i32 }, 2)
+    }
+    unsafe { free_value_and_module(ret_value) };
+}
+
 fn simple_parallel_for_appender_loop() {
     let code = "|x:vec[i32]| result(for(x, appender[i64], |b,i,e| merge(b, i)))";
     let conf = many_threads_conf();
@@ -1995,6 +2015,7 @@ fn main() {
              ("nested_if_statement_loop", nested_if_statement_loop),
              ("nested_if_statement_with_builders_loop", nested_if_statement_with_builders_loop),
              ("simple_for_appender_loop", simple_for_appender_loop),
+             ("large_unaryop_for_appender_loop", large_unaryop_for_appender_loop),
              ("simple_parallel_for_appender_loop", simple_parallel_for_appender_loop),
              ("complex_parallel_for_appender_loop", complex_parallel_for_appender_loop),
              ("simple_for_vectorizable_loop", simple_for_vectorizable_loop),
