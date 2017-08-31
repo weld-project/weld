@@ -58,7 +58,7 @@ declare i64     @weld_rt_get_run_id()
 declare void    @weld_rt_start_loop(%work_t*, i8*, i8*, void (%work_t*)*, void (%work_t*)*, i64, i64, i32)
 declare void    @weld_rt_set_result(i8*)
 
-declare i8*     @weld_rt_new_vb(i64, i64)
+declare i8*     @weld_rt_new_vb(i64, i64, i32)
 declare void    @weld_rt_new_vb_piece(i8*, %work_t*)
 declare %vb.vp* @weld_rt_cur_vb_piece(i8*, i32)
 declare %vb.out @weld_rt_result_vb(i8*)
