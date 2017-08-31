@@ -126,10 +126,10 @@ define %{NAME} @{NAME}.slice(%{NAME} %vec, i64 %index, i64 %size) {{
 }}
 
 ; Initialize and return a new builder, with the given initial capacity.
-define %{NAME}.bld @{NAME}.bld.new(i64 %capacity, %work_t* %cur.work) {{
+define %{NAME}.bld @{NAME}.bld.new(i64 %capacity, %work_t* %cur.work, i32 %fixedSize) {{
   %elemSizePtr = getelementptr {ELEM}, {ELEM}* null, i32 1
   %elemSize = ptrtoint {ELEM}* %elemSizePtr to i64
-  %newVb = call i8* @weld_rt_new_vb(i64 %elemSize, i64 %capacity)
+  %newVb = call i8* @weld_rt_new_vb(i64 %elemSize, i64 %capacity, i32 %fixedSize)
   call void @{NAME}.bld.newPiece(%{NAME}.bld %newVb, %work_t* %cur.work)
   ret %{NAME}.bld %newVb
 }}

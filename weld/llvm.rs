@@ -2186,14 +2186,16 @@ impl LlvmGenerator {
                 } else {
                     format!("{}", builder_size)
                 };
+                let fixed_size = if let Some(_) = *arg { "1" } else { "0" };
 
                 ctx.code.add(format!(
                     "{} = call {} {}.new(i64 {}, %work_t* \
-                                    %cur.work)",
+                                    %cur.work, i32 {})",
                     bld_tmp,
                     bld_ty_str,
                     bld_prefix,
-                    size_tmp
+                    size_tmp,
+                    fixed_size
                 ));
                 self.gen_store_var(&bld_tmp, &llvm_symbol(output), &bld_ty_str, ctx);
             }
@@ -2260,7 +2262,7 @@ impl LlvmGenerator {
                 let bld_tmp = ctx.var_ids.next();
                 ctx.code.add(format!(
                     "{} = call {} {}.new(i64 {}, %work_t* \
-                                    %cur.work)",
+                                    %cur.work, i32 0)",
                     bld_tmp,
                     bld_ty_str,
                     bld_prefix,
