@@ -382,7 +382,7 @@ fn simple_merger() {
 #[test]
 fn predicated_merger() {
     let mut e = typed_expr(
-        "|v:vec[i32]| result(for(v, merger[i32,+], |b,i,e| if(e>0, merge(b,e), b)))");
+        "|v:vec[i32]| result(for(v, merger[i32,+], |b,i,e| @(predicate:true)if(e>0, merge(b,e), b)))");
     predicate(&mut e);
     vectorize(&mut e);
     assert!(has_vectorized_merge(&e));
@@ -409,7 +409,7 @@ fn simple_appender() {
 fn predicated_appender() {
     // This code should NOT be vectorized because we can't predicate merges into vecbuilder.
     let mut e = typed_expr(
-        "|v:vec[i32]| result(for(v, appender[i32], |b,i,e| if(e>0, merge(b,e), b)))");
+        "|v:vec[i32]| result(for(v, appender[i32], |b,i,e| @(predicate:true)if(e>0, merge(b,e), b)))");
     predicate(&mut e);
     vectorize(&mut e);
     assert!(!has_vectorized_merge(&e));
