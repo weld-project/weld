@@ -12,6 +12,8 @@ use super::partial_types::PartialBuilderKind::*;
 use super::error::*;
 
 #[cfg(test)]
+use super::ast::Annotations;
+#[cfg(test)]
 use super::ast::BinOpKind::*;
 #[cfg(test)]
 use super::parser::*;
@@ -911,37 +913,37 @@ fn sync_types(t1: &mut PartialType, t2: &mut PartialType, error: &str) -> WeldRe
 
 #[test]
 fn infer_types_simple() {
-    let int_lit = expr_box(Literal(I32Literal(1)));
-    let float_lit = expr_box(Literal(F32Literal(1.0)));
-    let bool_lit = expr_box(Literal(BoolLiteral(false)));
+    let int_lit = expr_box(Literal(I32Literal(1)), Annotations::new());
+    let float_lit = expr_box(Literal(F32Literal(1.0)), Annotations::new());
+    let bool_lit = expr_box(Literal(BoolLiteral(false)), Annotations::new());
     let sum = expr_box(BinOp {
                            kind: Add,
                            left: int_lit.clone(),
                            right: int_lit.clone(),
-                       });
+                       }, Annotations::new());
     let prod = expr_box(BinOp {
                             kind: Multiply,
                             left: sum.clone(),
                             right: sum.clone(),
-                        });
+                        }, Annotations::new());
     let fsum = expr_box(BinOp {
                             kind: Add,
                             left: float_lit.clone(),
                             right: float_lit.clone(),
-                        });
+                        }, Annotations::new());
     let fprod = expr_box(BinOp {
                              kind: Add,
                              left: float_lit.clone(),
                              right: float_lit.clone(),
-                         });
+                         }, Annotations::new());
     let f64cast = expr_box(Cast {
                                kind: F64,
                                child_expr: fprod.clone(),
-                           });
+                           }, Annotations::new());
     let boolcast = expr_box(Cast {
                                 kind: Bool,
                                 child_expr: f64cast.clone(),
-                            });
+                            }, Annotations::new());
 
     let mut e = *int_lit.clone();
     assert!(infer_types(&mut e).is_ok());

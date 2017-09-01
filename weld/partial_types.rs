@@ -39,11 +39,11 @@ pub type PartialExpr = Expr<PartialType>;
 pub type PartialParameter = Parameter<PartialType>;
 
 /// Create a box containing an untyped expression of the given kind.
-pub fn expr_box(kind: ExprKind<PartialType>) -> Box<PartialExpr> {
+pub fn expr_box(kind: ExprKind<PartialType>, annot: Annotations) -> Box<PartialExpr> {
     Box::new(PartialExpr {
                  ty: PartialType::Unknown,
                  kind: kind,
-                 annotations: Annotations::new(),
+                 annotations: annot,
              })
 }
 
@@ -216,10 +216,7 @@ impl PartialExpr {
                 }
             }
 
-            UnaryOp {
-                kind,
-                ref value,
-            } => {
+            UnaryOp { kind, ref value } => {
                 UnaryOp {
                     kind: kind,
                     value: try!(typed_box(value)),
@@ -417,7 +414,7 @@ impl PartialExpr {
         Ok(TypedExpr {
                ty: try!(self.ty.to_type()),
                kind: new_kind,
-               annotations: Annotations::new(),
+               annotations: self.annotations.clone(),
            })
     }
 }
