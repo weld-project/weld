@@ -273,6 +273,18 @@ fn multiple_casts() {
     assert_eq!(result, -1i16);
 
     unsafe { free_value_and_module(ret_value) };
+
+    let code = "|| i16(u8(i64(-1)))";
+    let conf = default_conf();
+
+    let ref input_data = 0;
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const i16 };
+    let result = unsafe { *data };
+    assert_eq!(result, 255i16);
+
+    unsafe { free_value_and_module(ret_value) };
 }
 
 fn program_with_args() {
