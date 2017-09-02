@@ -261,6 +261,20 @@ fn i32_cast() {
     unsafe { free_value_and_module(ret_value) };
 }
 
+fn multiple_casts() {
+    let code = "|| i16(i8(u8(i64(256+255))))";
+    let conf = default_conf();
+
+    let ref input_data = 0;
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const i16 };
+    let result = unsafe { *data };
+    assert_eq!(result, -1i16);
+
+    unsafe { free_value_and_module(ret_value) };
+}
+
 fn program_with_args() {
     let code = "|x:i32| 40 + x";
     let conf = default_conf();
@@ -1991,6 +2005,7 @@ fn main() {
              //("c_udf", c_udf),
              ("f64_cast", f64_cast),
              ("i32_cast", i32_cast),
+             ("multiple_casts", multiple_casts),
              ("program_with_args", program_with_args),
              ("struct_vector_literals", struct_vector_literals),
              ("let_statement", let_statement),

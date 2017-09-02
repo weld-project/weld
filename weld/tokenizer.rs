@@ -106,8 +106,8 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
         static ref KEYWORD_RE: Regex = Regex::new(
             "^(if|for|zip|len|lookup|keyexists|slice|exp|log|erf|sqrt|simd|select|broadcast|\
              iterate|cudf|simditer|fringeiter|iter|merge|result|let|true|false|macro|\
-             i8|i32|i64|f32|f64|bool|vec|appender|merger|vecmerger|dictmerger|groupmerger|\
-             tovec)$").unwrap();
+             i8|i16|i32|i64|u8|f32|f64|bool|vec|appender|merger|vecmerger|dictmerger|\
+             groupmerger|tovec)$").unwrap();
 
         static ref IDENT_RE: Regex = Regex::new(r"^[A-Za-z$_][A-Za-z0-9$_]*$").unwrap();
 
