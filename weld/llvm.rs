@@ -1220,7 +1220,7 @@ impl LlvmGenerator {
             I16Literal(_) => "i16",
             I32Literal(_) => "i32",
             I64Literal(_) => "i64",
-            U8Literal(_) => "u8",
+            U8Literal(_) => "i8",
             F32Literal(_) => "float",
             F64Literal(_) => "double",
         }.to_string();
@@ -2459,7 +2459,7 @@ fn llvm_scalar_kind(k: ScalarKind) -> &'static str {
         I16 => "i16",
         I32 => "i32",
         I64 => "i64",
-        U8 => "u8",
+        U8 => "i8",
         F32 => "float",
         F64 => "double",
     }
@@ -2697,7 +2697,7 @@ fn types() {
     assert_eq!(gen.llvm_type(&Scalar(I16)).unwrap(), "i16");
     assert_eq!(gen.llvm_type(&Scalar(I32)).unwrap(), "i32");
     assert_eq!(gen.llvm_type(&Scalar(I64)).unwrap(), "i64");
-    assert_eq!(gen.llvm_type(&Scalar(U8)).unwrap(), "u8");
+    assert_eq!(gen.llvm_type(&Scalar(U8)).unwrap(), "i8");
     assert_eq!(gen.llvm_type(&Scalar(F32)).unwrap(), "float");
     assert_eq!(gen.llvm_type(&Scalar(F64)).unwrap(), "double");
     assert_eq!(gen.llvm_type(&Scalar(Bool)).unwrap(), "i1");
