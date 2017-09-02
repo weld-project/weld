@@ -20,11 +20,13 @@ pub fn literal_expr(kind: LiteralKind) -> WeldResult<Expr<Type>> {
              Scalar(match kind {
                         BoolLiteral(_) => ScalarKind::Bool,
                         I8Literal(_) => ScalarKind::I8,
+                        I16Literal(_) => ScalarKind::I16,
                         I32Literal(_) => ScalarKind::I32,
                         I64Literal(_) => ScalarKind::I64,
+                        U8Literal(_) => ScalarKind::U8,
                         F32Literal(_) => ScalarKind::F32,
                         F64Literal(_) => ScalarKind::F64,
-                    }))
+              }))
 }
 
 pub fn ident_expr(symbol: Symbol, ty: Type) -> WeldResult<Expr<Type>> {

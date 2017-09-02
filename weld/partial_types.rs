@@ -183,8 +183,10 @@ impl PartialExpr {
         let new_kind: ExprKind<Type> = match self.kind {
             Literal(BoolLiteral(v)) => Literal(BoolLiteral(v)),
             Literal(I8Literal(v)) => Literal(I8Literal(v)),
+            Literal(I16Literal(v)) => Literal(I16Literal(v)),
             Literal(I32Literal(v)) => Literal(I32Literal(v)),
             Literal(I64Literal(v)) => Literal(I64Literal(v)),
+            Literal(U8Literal(v)) => Literal(U8Literal(v)),
             Literal(F32Literal(v)) => Literal(F32Literal(v)),
             Literal(F64Literal(v)) => Literal(F64Literal(v)),
             Ident(ref name) => Ident(name.clone()),

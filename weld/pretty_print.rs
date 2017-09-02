@@ -479,8 +479,10 @@ pub fn print_vector_literal(lit: &LiteralKind) -> String {
     match *lit {
         BoolLiteral(v) => format!("<{}, {}, ..>", v, v),
         I8Literal(v) => format!("<{}, {}, ..>", v, v),
+        I16Literal(v) => format!("<{}, {}, ..>", v, v),
         I32Literal(v) => format!("<{}, {}, ..>", v, v),
         I64Literal(v) => format!("<{}L, {}L, ..>", v, v),
+        U8Literal(v) => format!("<{}, {}, ..>", v, v),
         F32Literal(v) => {
             let mut res = format!("{}", v);
             // Hack to disambiguate from integers.
@@ -506,8 +508,10 @@ pub fn print_literal(lit: &LiteralKind) -> String {
     match *lit {
         BoolLiteral(v) => format!("{}", v),
         I8Literal(v) => format!("{}", v),
+        I16Literal(v) => format!("{}", v),
         I32Literal(v) => format!("{}", v),
         I64Literal(v) => format!("{}L", v),
+        U8Literal(v) => format!("{}", v),
         F32Literal(v) => {
             let mut res = format!("{}", v);
             // Hack to disambiguate from integers.
