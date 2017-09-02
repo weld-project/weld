@@ -120,6 +120,7 @@ pub enum ScalarKind {
 }
 
 impl ScalarKind {
+    /// Is this scalar a floating point type (F32 or F64)?
     pub fn is_float(&self) -> bool {
         use ast::ScalarKind::*;
         match *self {
@@ -128,6 +129,7 @@ impl ScalarKind {
         }
     }
 
+    /// Is this scalar a Bool?
     pub fn is_bool(&self) -> bool {
         use ast::ScalarKind::*;
         match *self {
@@ -136,7 +138,7 @@ impl ScalarKind {
         }
     }
 
-    // Is this type a signed integer of any type (excludes Bool)?
+    /// Is this type a signed integer of any type (excludes Bool)?
     pub fn is_signed_integer(&self) -> bool {
         use ast::ScalarKind::*;
         match *self {
@@ -145,7 +147,7 @@ impl ScalarKind {
         }
     }
 
-    // Is this type a signed integer of any type (excludes Bool)?
+    /// Is this type a signed integer of any type (excludes Bool)?
     pub fn is_unsigned_integer(&self) -> bool {
         use ast::ScalarKind::*;
         match *self {
@@ -154,12 +156,12 @@ impl ScalarKind {
         }
     }
 
-    // Is this type a signed or unsigned integer of any type (excludes Bool)?
+    /// Is this type a signed or unsigned integer of any type (excludes Bool)?
     pub fn is_integer(&self) -> bool {
         return self.is_signed_integer() || self.is_unsigned_integer();
     }
 
-    // Return the length of this scalar type in bits
+    /// Return the length of this scalar type in bits
     pub fn bits(&self) -> u32 {
         use ast::ScalarKind::*;
         match *self {
