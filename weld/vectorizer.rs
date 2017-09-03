@@ -39,7 +39,6 @@ fn vectorizable_iters(iters: &Vec<Iter<Type>>) -> bool {
     true
 }
 
-/// Attempts to predicate an expression whose `ExprKind` is `If`.
 /// Vectorizes an expression in-place, also changing its type if needed.
 fn vectorize_expr(e: &mut Expr<Type>, broadcast_idens: &HashSet<Symbol>) -> WeldResult<bool> {
     let mut new_expr = None;
@@ -195,9 +194,55 @@ fn vectorizable(for_loop: &Expr<Type>) -> WeldResult<HashSet<Symbol>> {
     return weld_err!("Unsupported pattern");
 }
 
+pub fn should_be_predicated(e: &mut Expr<Type>) -> bool {
+    match *(e.annotations.predicate()) {
+        Some(false) | None => false,
+        _ => true
+    }
+}
+
+pub fn get_id_element(sk: &ScalarKind, op: &BinOpKind) -> WeldResult<Option<Expr<Type>>> {
+    /* Dummy element to merge when predicate fails. */
+    let identity = match *op {
+        BinOpKind::Add => {
+            match *sk {
+                ScalarKind::I8 => exprs::literal_expr(LiteralKind::I8Literal(0))?,
+                ScalarKind::I32 => exprs::literal_expr(LiteralKind::I32Literal(0))?,
+                ScalarKind::I64 => exprs::literal_expr(LiteralKind::I64Literal(0))?,
+                ScalarKind::F32 => exprs::literal_expr(LiteralKind::F32Literal(0.0))?,
+                ScalarKind::F64 => exprs::literal_expr(LiteralKind::F64Literal(0.0))?,
+                _ => {
+                    return Ok(None);
+                }
+            }
+        }
+        BinOpKind::Multiply => {
+            match *sk {
+                ScalarKind::I8 => exprs::literal_expr(LiteralKind::I8Literal(1))?,
+                ScalarKind::I32 => exprs::literal_expr(LiteralKind::I32Literal(1))?,
+                ScalarKind::I64 => exprs::literal_expr(LiteralKind::I64Literal(1))?,
+                ScalarKind::F32 => exprs::literal_expr(LiteralKind::F32Literal(1.0))?,
+                ScalarKind::F64 => exprs::literal_expr(LiteralKind::F64Literal(1.0))?,
+                _ => {
+                    return Ok(None);
+                }
+            }
+        }
+        _ => {
+            return Ok(None);
+        }
+    };
+    
+    Ok(Some(identity))
+}
+
 /// Predicate an `If` expression by checking for if(cond, merge(b, e), b) and transforms it to merge(b, select(cond, e,identity)).
 pub fn predicate(e: &mut Expr<Type>) {
     e.transform_and_continue_res(&mut |ref mut e| {
+        if !(should_be_predicated(e)) {
+            return Ok((None, true));
+        }
+        
         // Predication for a value merged into a merger. This pattern checks for if(cond, merge(b, e), b).
         if let If { ref cond, ref on_true, ref on_false } = e.kind {
             if let Merge { ref builder, ref value } = on_true.kind {
@@ -208,37 +253,16 @@ pub fn predicate(e: &mut Expr<Type>) {
                                 if let BuilderKind::Merger(ref ty, ref op) = *bk {
                                     if let Scalar(ref sk) = *ty.as_ref() {
                                         // Merge in the identity element if the predicate fails (effectively merging in nothing)
-                                        let identity = match *op {
-                                            BinOpKind::Add => {
-                                                match *sk {
-                                                    ScalarKind::I8 => exprs::literal_expr(LiteralKind::I8Literal(0))?,
-                                                    ScalarKind::I32 => exprs::literal_expr(LiteralKind::I32Literal(0))?,
-                                                    ScalarKind::I64 => exprs::literal_expr(LiteralKind::I64Literal(0))?,
-                                                    ScalarKind::F32 => exprs::literal_expr(LiteralKind::F32Literal(0.0))?,
-                                                    ScalarKind::F64 => exprs::literal_expr(LiteralKind::F64Literal(0.0))?,
-                                                    _ => {
-                                                        return Ok((None, true));
-                                                    }
-                                                }
-                                            }
-                                            BinOpKind::Multiply => {
-                                                match *sk {
-                                                    ScalarKind::I8 => exprs::literal_expr(LiteralKind::I8Literal(1))?,
-                                                    ScalarKind::I32 => exprs::literal_expr(LiteralKind::I32Literal(1))?,
-                                                    ScalarKind::I64 => exprs::literal_expr(LiteralKind::I64Literal(1))?,
-                                                    ScalarKind::F32 => exprs::literal_expr(LiteralKind::F32Literal(1.0))?,
-                                                    ScalarKind::F64 => exprs::literal_expr(LiteralKind::F64Literal(1.0))?,
-                                                    _ => {
-                                                        return Ok((None, true));
-                                                    }
-                                                }
-                                            }
-                                            _ => {
+                                        let identity = get_id_element(sk, op)?;
+                                        let id_value = match identity {
+                                            Some(x) => x,
+                                            None => {
                                                 return Ok((None, true));
                                             }
                                         };
+                                        
                                         // Change if(cond, merge(b, e), b) => merge(b, select(cond, e, identity).
-                                        let expr = exprs::merge_expr(*builder.clone(), exprs::select_expr(*cond.clone(), *value.clone(), identity)?)?;
+                                        let expr = exprs::merge_expr(*builder.clone(), exprs::select_expr(*cond.clone(), *value.clone(), id_value)?)?;
                                         return Ok((Some(expr), true));
                                     }
                                 }
@@ -337,7 +361,7 @@ fn typed_expr(code: &str) -> TypedExpr {
 /// Check whether a function has a vectorized Merge call. We'll use this to check whether function
 /// bodies got vectorized.
 #[cfg(test)]
-fn has_vectorized_merge(expr: &TypedExpr) -> bool {
+pub fn has_vectorized_merge(expr: &TypedExpr) -> bool {
     let mut found = false;
     expr.traverse(&mut |ref e| {
         if let Merge { ref value, .. } = e.kind {
@@ -358,7 +382,7 @@ fn simple_merger() {
 #[test]
 fn predicated_merger() {
     let mut e = typed_expr(
-        "|v:vec[i32]| result(for(v, merger[i32,+], |b,i,e| if(e>0, merge(b,e), b)))");
+        "|v:vec[i32]| result(for(v, merger[i32,+], |b,i,e| @(predicate:true)if(e>0, merge(b,e), b)))");
     predicate(&mut e);
     vectorize(&mut e);
     assert!(has_vectorized_merge(&e));
@@ -385,7 +409,7 @@ fn simple_appender() {
 fn predicated_appender() {
     // This code should NOT be vectorized because we can't predicate merges into vecbuilder.
     let mut e = typed_expr(
-        "|v:vec[i32]| result(for(v, appender[i32], |b,i,e| if(e>0, merge(b,e), b)))");
+        "|v:vec[i32]| result(for(v, appender[i32], |b,i,e| @(predicate:true)if(e>0, merge(b,e), b)))");
     predicate(&mut e);
     vectorize(&mut e);
     assert!(!has_vectorized_merge(&e));

@@ -1980,6 +1980,49 @@ fn outofmemory_error_test() {
     unsafe { weld_error_free(err_value) };
 }
 
+fn check_result_and_free(ret_value: *mut WeldValue, expected: i32) {
+    let data = unsafe { weld_value_data(ret_value) as *const i32 };
+    let result = unsafe { (*data).clone() };
+    assert_eq!(result, expected);
+    unsafe { free_value_and_module(ret_value) };
+}
+
+/* Only tests for compile success -- predication test in llvm.rs */
+fn predicate_if_iff_annotated() {
+    #[allow(dead_code)]
+    struct Args {
+        v: WeldVec<i32>
+    }
+
+    let input_vec = vec![-1, 2, 3, 4, 5];
+    let ref input_data = Args {
+        v: WeldVec {
+            data: input_vec.as_ptr(),
+            len: input_vec.len() as i64,
+        }
+    };
+
+    let expected = 14;
+
+    /* annotation true */
+    let code = "|v:vec[i32]| result(for(v, merger[i32,+], |b,i,e| @(predicate:true)if(e>0, merge(b,e), b)))";
+    let conf = default_conf();
+    let ret_value = compile_and_run(code, conf, input_data);
+    check_result_and_free(ret_value, expected);
+
+    /* annotation false */
+    let code = "|v:vec[i32]| result(for(v, merger[i32,+], |b,i,e| @(predicate:false)if(e>0, merge(b,e), b)))";
+    let conf = default_conf();
+    let ret_value = compile_and_run(code, conf, input_data);
+    check_result_and_free(ret_value, expected);
+
+    /* annotation missing */
+    let code = "|v:vec[i32]| result(for(v, merger[i32,+], |b,i,e| if(e>0, merge(b,e), b)))";
+    let conf = default_conf();
+    let ret_value = compile_and_run(code, conf, input_data);
+    check_result_and_free(ret_value, expected);
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     let tests: Vec<(&str, fn())> =
@@ -2054,7 +2097,8 @@ fn main() {
              ("iters_outofbounds_error_test", iters_outofbounds_error_test),
              ("outofmemory_error_test", outofmemory_error_test),
              ("simple_float_mod", simple_float_mod),
-             ("simple_int_mod", simple_int_mod)];
+             ("simple_int_mod", simple_int_mod),
+             ("predicate_if_iff_annotated", predicate_if_iff_annotated)];
 
 
     println!("");

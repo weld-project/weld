@@ -17,7 +17,7 @@ pub const DEFAULT_MEMORY_LIMIT: i64 = 1000000000;
 pub const DEFAULT_THREADS: i64 = 1;
 lazy_static! {
     pub static ref DEFAULT_OPTIMIZATION_PASSES: Vec<Pass> = {
-        let m = ["inline-apply", "inline-let", "inline-zip", "loop-fusion", "infer-size", "vectorize"];
+        let m = ["inline-apply", "inline-let", "inline-zip", "loop-fusion", "infer-size", "predicate", "vectorize"];
         m.iter().map(|e| (*OPTIMIZATION_PASSES.get(e).unwrap()).clone()).collect()
     };
 }

@@ -19,12 +19,8 @@ pub trait PrintableType: TypeBounds {
 impl PrintableType for Type {
     fn print(&self) -> String {
         match *self {
-            Scalar(ref kind) => {
-                format!("{}", kind)
-            }
-            Simd(ref kind) => {
-                format!("simd[{}]", kind)
-            }
+            Scalar(ref kind) => format!("{}", kind),
+            Simd(ref kind) => format!("simd[{}]", kind),
             Vector(ref elem) => format!("vec[{}]", elem.print()),
             Dict(ref kt, ref vt) => format!("dict[{},{}]", kt.print(), vt.print()),
             Struct(ref elems) => join("{", ",", "}", elems.iter().map(|e| e.print())),
@@ -64,12 +60,8 @@ impl PrintableType for PartialType {
         use partial_types::PartialBuilderKind::*;
         match *self {
             Unknown => "?".to_string(),
-            Scalar(ref kind) => {
-                format!("{}", kind)
-            }
-            Simd(ref kind) => {
-                format!("simd[{}]", kind)
-            }
+            Scalar(ref kind) => format!("{}", kind),
+            Simd(ref kind) => format!("simd[{}]", kind),
             Vector(ref elem) => format!("vec[{}]", elem.print()),
             Dict(ref kt, ref vt) => format!("dict[{},{}]", kt.print(), vt.print()),
             Struct(ref elems) => join("{", ",", "}", elems.iter().map(|e| e.print())),
@@ -181,9 +173,11 @@ fn print_iters<T: PrintableType>(iters: &Vec<Iter<T>>,
                                     ));
         } else if iter.kind != IterKind::ScalarIter {
             iter_strs.push(format!("{}iter({})",
-                print_iter_kind(iter),
-                print_expr_impl(iter.data.as_ref(), typed, indent, should_indent)
-            ));
+                                   print_iter_kind(iter),
+                                   print_expr_impl(iter.data.as_ref(),
+                                                   typed,
+                                                   indent,
+                                                   should_indent)));
         } else {
             iter_strs.push(print_expr_impl(iter.data.as_ref(), typed, indent + 2, should_indent));
         }
@@ -211,7 +205,7 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>,
         less_indent_str = "".to_string();
         indent_str = "".to_string();
     }
-    match expr.kind {
+    let expr_str = match expr.kind {
         Literal(ref lit) => print_literal(lit),
 
         Ident(ref symbol) => {
@@ -233,20 +227,18 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>,
                     print_expr_impl(right, typed, indent, should_indent))
         }
 
-        UnaryOp {
-            kind,
-            ref value,
-        } => {
-            format!(
-                "({}({}))",
-                kind,
-                print_expr_impl(value, typed, indent, should_indent)
-            )
+        UnaryOp { kind, ref value } => {
+            format!("({}({}))",
+                    kind,
+                    print_expr_impl(value, typed, indent, should_indent))
         }
 
         Negate(ref e) => format!("(-{})", print_expr_impl(e, typed, indent, should_indent)),
 
-        Broadcast(ref e) => format!("broadcast({})", print_expr_impl(e, typed, indent, should_indent)),
+        Broadcast(ref e) => {
+            format!("broadcast({})",
+                    print_expr_impl(e, typed, indent, should_indent))
+        }
 
         CUDF {
             ref sym_name,
@@ -471,7 +463,9 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>,
                                    .map(|e| print_expr_impl(e, typed, indent, should_indent))));
             res
         }
-    }
+    };
+
+    format!("{}{}", expr.annotations, expr_str)
 }
 
 /// Print a vector literal value.

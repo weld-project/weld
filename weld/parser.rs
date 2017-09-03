@@ -179,7 +179,8 @@ impl<'t> Parser<'t> {
                                     name: name,
                                     value: value,
                                     body: body,
-                                });
+                                },
+                                Annotations::new());
         expr.ty = ty;
         Ok(expr)
     }
@@ -208,7 +209,8 @@ impl<'t> Parser<'t> {
         Ok(expr_box(Lambda {
                         params: params,
                         body: body,
-                    }))
+                    },
+                    Annotations::new()))
     }
 
     /// Parse an expression involving operators (||, &&, +, -, etc down the precedence chain)
@@ -226,7 +228,8 @@ impl<'t> Parser<'t> {
                                kind: LogicalOr,
                                left: res,
                                right: right,
-                           })
+                           },
+                           Annotations::new())
         }
         Ok(res)
     }
@@ -241,7 +244,8 @@ impl<'t> Parser<'t> {
                                kind: LogicalAnd,
                                left: res,
                                right: right,
-                           })
+                           },
+                           Annotations::new())
         }
         Ok(res)
     }
@@ -256,7 +260,8 @@ impl<'t> Parser<'t> {
                                kind: BitwiseOr,
                                left: res,
                                right: right,
-                           })
+                           },
+                           Annotations::new())
         }
         Ok(res)
     }
@@ -271,7 +276,8 @@ impl<'t> Parser<'t> {
                                kind: Xor,
                                left: res,
                                right: right,
-                           })
+                           },
+                           Annotations::new())
         }
         Ok(res)
     }
@@ -286,7 +292,8 @@ impl<'t> Parser<'t> {
                                kind: BitwiseAnd,
                                left: res,
                                right: right,
-                           })
+                           },
+                           Annotations::new())
         }
         Ok(res)
     }
@@ -303,13 +310,15 @@ impl<'t> Parser<'t> {
                                    kind: Equal,
                                    left: res,
                                    right: right,
-                               })
+                               },
+                               Annotations::new())
             } else {
                 res = expr_box(BinOp {
                                    kind: NotEqual,
                                    left: res,
                                    right: right,
-                               })
+                               },
+                               Annotations::new())
             }
         }
         Ok(res)
@@ -332,7 +341,8 @@ impl<'t> Parser<'t> {
                                kind: op,
                                left: res,
                                right: right,
-                           })
+                           },
+                           Annotations::new())
         }
         Ok(res)
     }
@@ -348,13 +358,15 @@ impl<'t> Parser<'t> {
                                    kind: Add,
                                    left: res,
                                    right: right,
-                               })
+                               },
+                               Annotations::new())
             } else {
                 res = expr_box(BinOp {
                                    kind: Subtract,
                                    left: res,
                                    right: right,
-                               })
+                               },
+                               Annotations::new())
             }
         }
         Ok(res)
@@ -374,7 +386,8 @@ impl<'t> Parser<'t> {
                                kind: op,
                                left: res,
                                right: right,
-                           })
+                           },
+                           Annotations::new())
         }
         Ok(res)
     }
@@ -401,7 +414,8 @@ impl<'t> Parser<'t> {
                                     expr = expr_box(GetField {
                                                         expr: expr,
                                                         index: index,
-                                                    })
+                                                    },
+                                                    Annotations::new())
                                 }
                                 _ => return weld_err!("Expected field index but got '{}'", value),
                             }
@@ -426,7 +440,8 @@ impl<'t> Parser<'t> {
                 expr = expr_box(Apply {
                                     func: expr,
                                     params: params,
-                                })
+                                },
+                                Annotations::new())
             }
         }
         Ok(expr)
@@ -493,7 +508,8 @@ impl<'t> Parser<'t> {
         let cast_expr = expr_box(Cast {
                                      kind: kind,
                                      child_expr: expr,
-                                 });
+                                 },
+                                 Annotations::new());
         Ok(cast_expr)
     }
 
@@ -602,18 +618,42 @@ impl<'t> Parser<'t> {
     }
 
     /// Helper function for leaf_expr as all functions with unary args follow same pattern.
-    fn unary_leaf_expr(&mut self, func_name : &str) -> WeldResult<Box<PartialExpr>> {
+    fn unary_leaf_expr(&mut self, func_name: &str) -> WeldResult<Box<PartialExpr>> {
         try!(self.consume(TOpenParen));
         let value = try!(self.expr());
         try!(self.consume(TCloseParen));
 
         match func_name {
-            "Exp" => Ok(expr_box(UnaryOp { kind: Exp, value: value })),
-            "Log" => Ok(expr_box(UnaryOp { kind: Log, value: value })),
-            "Sqrt" => Ok(expr_box(UnaryOp { kind: Sqrt, value: value })),
-            "Erf" => Ok(expr_box(UnaryOp { kind: Erf, value: value })),
-            "Res" => Ok(expr_box(Res { builder: value })),
-            _ => weld_err!("Expr type {} is not a unary leaf expr", func_name)
+            "Exp" => {
+                Ok(expr_box(UnaryOp {
+                                kind: Exp,
+                                value: value,
+                            },
+                            Annotations::new()))
+            }
+            "Log" => {
+                Ok(expr_box(UnaryOp {
+                                kind: Log,
+                                value: value,
+                            },
+                            Annotations::new()))
+            }
+            "Sqrt" => {
+                Ok(expr_box(UnaryOp {
+                                kind: Sqrt,
+                                value: value,
+                            },
+                            Annotations::new()))
+            }
+            "Erf" => {
+                Ok(expr_box(UnaryOp {
+                                kind: Erf,
+                                value: value,
+                            },
+                            Annotations::new()))
+            }
+            "Res" => Ok(expr_box(Res { builder: value }, Annotations::new())),
+            _ => weld_err!("Expr type {} is not a unary leaf expr", func_name),
         }
     }
     /// Parse a terminal expression at the bottom of the precedence chain.
@@ -622,12 +662,12 @@ impl<'t> Parser<'t> {
         try!(self.parse_annotations(&mut annotations));
 
         match *self.next() {
-            TI8Literal(v) => Ok(expr_box(Literal(I8Literal(v)))),
-            TI32Literal(v) => Ok(expr_box(Literal(I32Literal(v)))),
-            TI64Literal(v) => Ok(expr_box(Literal(I64Literal(v)))),
-            TF32Literal(v) => Ok(expr_box(Literal(F32Literal(v)))),
-            TF64Literal(v) => Ok(expr_box(Literal(F64Literal(v)))),
-            TBoolLiteral(v) => Ok(expr_box(Literal(BoolLiteral(v)))),
+            TI8Literal(v) => Ok(expr_box(Literal(I8Literal(v)), Annotations::new())),
+            TI32Literal(v) => Ok(expr_box(Literal(I32Literal(v)), Annotations::new())),
+            TI64Literal(v) => Ok(expr_box(Literal(I64Literal(v)), Annotations::new())),
+            TF32Literal(v) => Ok(expr_box(Literal(F32Literal(v)), Annotations::new())),
+            TF64Literal(v) => Ok(expr_box(Literal(F64Literal(v)), Annotations::new())),
+            TBoolLiteral(v) => Ok(expr_box(Literal(BoolLiteral(v)), Annotations::new())),
 
             TI8 => Ok(self.parse_cast(ScalarKind::I8)?),
             TI32 => Ok(self.parse_cast(ScalarKind::I32)?),
@@ -640,14 +680,15 @@ impl<'t> Parser<'t> {
                 try!(self.consume(TOpenParen));
                 let child_expr = try!(self.expr());
                 try!(self.consume(TCloseParen));
-                Ok(expr_box(ToVec { child_expr: child_expr }))
+                Ok(expr_box(ToVec { child_expr: child_expr }, Annotations::new()))
             }
 
             TIdent(ref name) => {
                 Ok(expr_box(Ident(Symbol {
                                       name: name.clone(),
                                       id: 0,
-                                  })))
+                                  }),
+                            Annotations::new()))
             }
 
             TOpenParen => {
@@ -670,7 +711,7 @@ impl<'t> Parser<'t> {
                     }
                 }
                 try!(self.consume(TCloseBracket));
-                Ok(expr_box(MakeVector { elems: exprs }))
+                Ok(expr_box(MakeVector { elems: exprs }, Annotations::new()))
             }
 
             TOpenBrace => {
@@ -685,7 +726,7 @@ impl<'t> Parser<'t> {
                     }
                 }
                 try!(self.consume(TCloseBrace));
-                Ok(expr_box(MakeStruct { elems: exprs }))
+                Ok(expr_box(MakeStruct { elems: exprs }, Annotations::new()))
             }
 
             TIf => {
@@ -700,7 +741,8 @@ impl<'t> Parser<'t> {
                                 cond: cond,
                                 on_true: on_true,
                                 on_false: on_false,
-                            }))
+                            },
+                            annotations))
             }
 
             TIterate => {
@@ -712,7 +754,8 @@ impl<'t> Parser<'t> {
                 Ok(expr_box(Iterate {
                                 initial: initial,
                                 update_func: update_func,
-                            }))
+                            },
+                            Annotations::new()))
             }
 
             TSelect => {
@@ -727,14 +770,15 @@ impl<'t> Parser<'t> {
                                 cond: cond,
                                 on_true: on_true,
                                 on_false: on_false,
-                            }))
+                            },
+                            Annotations::new()))
             }
 
             TBroadcast => {
                 try!(self.consume(TOpenParen));
                 let expr = try!(self.expr());
                 try!(self.consume(TCloseParen));
-                Ok(expr_box(Broadcast(expr)))
+                Ok(expr_box(Broadcast(expr), Annotations::new()))
             }
 
             TCUDF => {
@@ -757,7 +801,8 @@ impl<'t> Parser<'t> {
                                 sym_name: sym_name.name,
                                 return_ty: Box::new(return_ty),
                                 args: args,
-                            }))
+                            },
+                            annotations))
             }
 
             TZip => {
@@ -776,7 +821,7 @@ impl<'t> Parser<'t> {
                 if vectors.len() < 2 {
                     return weld_err!("Expected two or more arguments in Zip");
                 }
-                Ok(expr_box(Zip { vectors: vectors }))
+                Ok(expr_box(Zip { vectors: vectors }, Annotations::new()))
             }
 
             TFor => {
@@ -806,14 +851,15 @@ impl<'t> Parser<'t> {
                                 iters: iters,
                                 builder: builders,
                                 func: body,
-                            }))
+                            },
+                            annotations))
             }
 
             TLen => {
                 try!(self.consume(TOpenParen));
                 let data = try!(self.expr());
                 try!(self.consume(TCloseParen));
-                Ok(expr_box(Length { data: data }))
+                Ok(expr_box(Length { data: data }, Annotations::new()))
             }
 
             TLookup => {
@@ -825,7 +871,8 @@ impl<'t> Parser<'t> {
                 Ok(expr_box(Lookup {
                                 data: data,
                                 index: index,
-                            }))
+                            },
+                            Annotations::new()))
             }
 
             TKeyExists => {
@@ -837,7 +884,8 @@ impl<'t> Parser<'t> {
                 Ok(expr_box(KeyExists {
                                 data: data,
                                 key: key,
-                            }))
+                            },
+                            Annotations::new()))
             }
 
             TSlice => {
@@ -852,24 +900,17 @@ impl<'t> Parser<'t> {
                                 data: data,
                                 index: index,
                                 size: size,
-                            }))
+                            },
+                            Annotations::new()))
             }
 
-            TExp => {
-                self.unary_leaf_expr("Exp")
-            }
+            TExp => self.unary_leaf_expr("Exp"),
 
-            TLog => {
-                self.unary_leaf_expr("Log")
-            }
+            TLog => self.unary_leaf_expr("Log"),
 
-            TErf => {
-                self.unary_leaf_expr("Erf")
-            }
+            TErf => self.unary_leaf_expr("Erf"),
 
-            TSqrt => {
-                self.unary_leaf_expr("Sqrt")
-            }
+            TSqrt => self.unary_leaf_expr("Sqrt"),
 
             TMerge => {
                 try!(self.consume(TOpenParen));
@@ -880,12 +921,11 @@ impl<'t> Parser<'t> {
                 Ok(expr_box(Merge {
                                 builder: builder,
                                 value: value,
-                            }))
+                            },
+                            Annotations::new()))
             }
 
-            TResult => {
-                self.unary_leaf_expr("Res")
-            }
+            TResult => self.unary_leaf_expr("Res"),
 
             TAppender => {
                 let mut elem_type = Unknown;
@@ -904,7 +944,7 @@ impl<'t> Parser<'t> {
                     None
                 };
 
-                let mut expr = expr_box(NewBuilder(arg));
+                let mut expr = expr_box(NewBuilder(arg), Annotations::new());
                 expr.ty = Builder(Appender(Box::new(elem_type)), annotations);
                 Ok(expr)
             }
@@ -939,7 +979,7 @@ impl<'t> Parser<'t> {
                     self.consume(TCloseParen)?;
                 }
 
-                let mut expr = expr_box(NewBuilder(value));
+                let mut expr = expr_box(NewBuilder(value), Annotations::new());
                 expr.ty = Builder(Merger(Box::new(elem_type), bin_op), annotations);
                 Ok(expr)
             }
@@ -969,7 +1009,7 @@ impl<'t> Parser<'t> {
                 }
                 try!(self.consume(TCloseBracket));
 
-                let mut expr = expr_box(NewBuilder(None));
+                let mut expr = expr_box(NewBuilder(None), Annotations::new());
                 expr.ty = Builder(DictMerger(Box::new(key_type.clone()),
                                              Box::new(value_type.clone()),
                                              Box::new(Struct(vec![key_type.clone(),
@@ -987,7 +1027,7 @@ impl<'t> Parser<'t> {
                 try!(self.consume(TComma));
                 value_type = try!(self.type_());
                 try!(self.consume(TCloseBracket));
-                let mut expr = expr_box(NewBuilder(None));
+                let mut expr = expr_box(NewBuilder(None), Annotations::new());
                 expr.ty = Builder(GroupMerger(Box::new(key_type.clone()),
                                               Box::new(value_type.clone()),
                                               Box::new(Struct(vec![key_type.clone(),
@@ -1021,7 +1061,7 @@ impl<'t> Parser<'t> {
                 let expr = try!(self.expr());
                 try!(self.consume(TCloseParen));
 
-                let mut expr = expr_box(NewBuilder(Some(expr)));
+                let mut expr = expr_box(NewBuilder(Some(expr)), Annotations::new());
                 expr.ty = Builder(VecMerger(Box::new(elem_type.clone()),
                                             Box::new(Struct(vec![Scalar(ScalarKind::I64),
                                                                  elem_type.clone()])),
@@ -1030,7 +1070,7 @@ impl<'t> Parser<'t> {
                 Ok(expr)
             }
 
-            TMinus => Ok(expr_box(Negate(try!(self.leaf_expr())))),
+            TMinus => Ok(expr_box(Negate(try!(self.leaf_expr())), Annotations::new())),
 
             ref other => weld_err!("Expected expression but got '{}'", other),
         }

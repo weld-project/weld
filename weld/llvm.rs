@@ -52,6 +52,14 @@ pub struct WeldOutputArgs {
     pub errno: WeldRuntimeErrno,
 }
 
+pub fn apply_opt_passes(expr: &mut TypedExpr, opt_passes: &Vec<Pass>) -> WeldResult<()> {
+    for pass in opt_passes {
+        pass.transform(expr)?;
+        debug!("After {} pass:\n{}", pass.pass_name(), print_typed_expr(&expr));
+    }
+    Ok(())
+}
+
 /// Generate a compiled LLVM module from a program whose body is a function.
 pub fn compile_program(program: &Program, opt_passes: &Vec<Pass>) -> WeldResult<easy_ll::CompiledModule> {
     let mut expr = macro_processor::process_program(program)?;
@@ -62,10 +70,7 @@ pub fn compile_program(program: &Program, opt_passes: &Vec<Pass>) -> WeldResult<
     let mut expr = expr.to_typed()?;
     debug!("After type inference:\n{}\n", print_typed_expr(&expr));
 
-    for pass in opt_passes {
-        pass.transform(&mut expr)?;
-        debug!("After {} pass:\n{}", pass.pass_name(), print_typed_expr(&expr));
-    }
+    apply_opt_passes(&mut expr, opt_passes)?;
 
     transforms::uniquify(&mut expr)?;
     debug!("After uniquify:\n{}\n", print_typed_expr(&expr));
@@ -2761,6 +2766,49 @@ fn get_combined_params(sir: &SirProgram, par_for: &ParallelForData) -> HashMap<S
         body_params.insert(arg.clone(), ty.clone());
     }
     body_params
+}
+
+#[cfg(test)]
+fn predicate_only(code: &str) -> WeldResult<TypedExpr> {
+    let mut e = parse_expr(code).unwrap();
+    assert!(type_inference::infer_types(&mut e).is_ok());
+    let mut typed_e = e.to_typed().unwrap();
+    
+    let optstr = ["predicate"];
+    let optpass = optstr.iter().map(|x| (*OPTIMIZATION_PASSES.get(x).unwrap()).clone()).collect();
+
+    apply_opt_passes(&mut typed_e, &optpass)?;
+
+    Ok(typed_e)
+}
+
+#[test]
+fn predicate_iff_annotated() {
+    /* Ensure predication is only applied if annotation is present. */
+
+    /* annotation true */
+    let code = "|v:vec[i32]| result(for(v, merger[i32,+], |b,i,e| @(predicate:true)if(e>0, merge(b,e), b)))";
+    let typed_e = predicate_only(code);
+    assert!(typed_e.is_ok());
+    let expected = "|v:vec[i32]|result(for(v:vec[i32],merger[i32,+],|b:merger[i32,+],i:i64,e:i32|merge(b:merger[i32,+],select((e:i32>0),e:i32,0))))";
+    assert_eq!(print_typed_expr_without_indent(&typed_e.unwrap()).as_str(),
+               expected);
+
+    /* annotation false */
+    let code = "|v:vec[i32]| result(for(v, merger[i32,+], |b,i,e| @(predicate:false)if(e>0, merge(b,e), b)))";
+    let typed_e = predicate_only(code);
+    assert!(typed_e.is_ok());
+    let expected = "|v:vec[i32]|result(for(v:vec[i32],merger[i32,+],|b:merger[i32,+],i:i64,e:i32|@(predicate:false)if((e:i32>0),merge(b:merger[i32,+],e:i32),b:merger[i32,+])))";
+    assert_eq!(print_typed_expr_without_indent(&typed_e.unwrap()).as_str(),
+               expected);
+
+    /* annotation missing */
+    let code = "|v:vec[i32]| result(for(v, merger[i32,+], |b,i,e| if(e>0, merge(b,e), b)))";
+    let typed_e = predicate_only(code);
+    assert!(typed_e.is_ok());
+    let expected = "|v:vec[i32]|result(for(v:vec[i32],merger[i32,+],|b:merger[i32,+],i:i64,e:i32|if((e:i32>0),merge(b:merger[i32,+],e:i32),b:merger[i32,+])))";
+    assert_eq!(print_typed_expr_without_indent(&typed_e.unwrap()).as_str(),
+               expected);
 }
 
 #[test]
