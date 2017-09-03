@@ -2710,7 +2710,7 @@ fn types() {
     assert_eq!(gen.llvm_type(&Scalar(I16)).unwrap(), "i16");
     assert_eq!(gen.llvm_type(&Scalar(I32)).unwrap(), "i32");
     assert_eq!(gen.llvm_type(&Scalar(I64)).unwrap(), "i64");
-    assert_eq!(gen.llvm_type(&Scalar(U8)).unwrap(), "i8");
+    assert_eq!(gen.llvm_type(&Scalar(U8)).unwrap(), "%u8");
     assert_eq!(gen.llvm_type(&Scalar(F32)).unwrap(), "float");
     assert_eq!(gen.llvm_type(&Scalar(F64)).unwrap(), "double");
     assert_eq!(gen.llvm_type(&Scalar(Bool)).unwrap(), "i1");
