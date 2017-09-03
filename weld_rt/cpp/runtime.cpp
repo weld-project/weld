@@ -305,6 +305,22 @@ static inline void split_task(work_t *task, int32_t my_id, run_data *rd) {
   }
 }
 
+static inline void cleanup_tasks_on_thread(work_t *cur_task, int32_t my_id, run_data *rd) {
+  finish_task(cur_task, my_id, rd);
+  while (true) {
+    pthread_spin_lock(rd->all_work_queue_locks + my_id);
+    if ((rd->all_work_queues + my_id)->empty()) {
+      pthread_spin_unlock(rd->all_work_queue_locks + my_id);
+      return;
+    } else {
+      work_t *popped = (rd->all_work_queues + my_id)->front();
+      (rd->all_work_queues + my_id)->pop_front();
+      pthread_spin_unlock(rd->all_work_queue_locks + my_id);
+      finish_task(popped, my_id, rd);
+    }
+  }
+}
+
 // keeps executing items from the work queue until it is empty
 static inline void work_loop(int32_t my_id, run_data *rd) {
   while (true) {
@@ -322,15 +338,17 @@ static inline void work_loop(int32_t my_id, run_data *rd) {
       // free all allocated memory as long as it is allocated with
       // `weld_run_malloc` or `weld_run_realloc`.
       if (rd->err != 0) {
+	cleanup_tasks_on_thread(popped, my_id, rd);
         return;
       }
       if (!setjmp(rd->work_loop_roots[my_id])) {
         popped->fp(popped);
+        finish_task(popped, my_id, rd);
       } else {
-	// TODO we should clean up this task as well as other tasks that might be left on work queues
+	// error-case exit from task
+	cleanup_tasks_on_thread(popped, my_id, rd);
         return;
       }
-      finish_task(popped, my_id, rd);
     }
   }
 }
@@ -481,9 +499,7 @@ extern "C" int64_t weld_run_get_errno(int64_t run_id) {
 }
 
 extern "C" void weld_run_set_errno(int64_t run_id, int64_t err) {
-  run_data *rd = get_run_data_by_id(run_id);
-  rd->err = err;
-  rd->done = true;
+  get_run_data_by_id(run_id)->err = err;
 }
 
 extern "C" int64_t weld_run_memory_usage(int64_t run_id) {
