@@ -10,12 +10,9 @@ extern crate lazy_static;
 extern crate log;
 
 extern crate regex;
-extern crate easy_ll;
 extern crate libc;
 extern crate env_logger;
 extern crate chrono;
-
-extern crate weld_common;
 
 use std::collections::HashMap;
 use std::error::Error;
@@ -52,6 +49,9 @@ pub mod exprs;
 
 // TODO not the right place for this.
 pub mod vectorizer;
+
+pub mod easy_ll;
+pub mod weld_common;
 
 extern "C" {
     pub fn free(ptr: *mut c_void);
