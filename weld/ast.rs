@@ -111,10 +111,70 @@ impl Type {
 pub enum ScalarKind {
     Bool,
     I8,
+    I16,
     I32,
     I64,
+    U8,
+    U16,
+    U32,
+    U64,
     F32,
     F64,
+}
+
+impl ScalarKind {
+    /// Is this scalar a floating point type (F32 or F64)?
+    pub fn is_float(&self) -> bool {
+        use ast::ScalarKind::*;
+        match *self {
+            F32 | F64 => true,
+            _ => false
+        }
+    }
+
+    /// Is this scalar a Bool?
+    pub fn is_bool(&self) -> bool {
+        use ast::ScalarKind::*;
+        match *self {
+            Bool => true,
+            _ => false
+        }
+    }
+
+    /// Is this type a signed integer of any type (excludes Bool)?
+    pub fn is_signed_integer(&self) -> bool {
+        use ast::ScalarKind::*;
+        match *self {
+            I8 | I16 | I32 | I64 => true,
+            _ => false
+        }
+    }
+
+    /// Is this type a signed integer of any type (excludes Bool)?
+    pub fn is_unsigned_integer(&self) -> bool {
+        use ast::ScalarKind::*;
+        match *self {
+            U8 | U16 | U32 | U64 => true,
+            _ => false
+        }
+    }
+
+    /// Is this type a signed or unsigned integer of any type (excludes Bool)?
+    pub fn is_integer(&self) -> bool {
+        return self.is_signed_integer() || self.is_unsigned_integer();
+    }
+
+    /// Return the length of this scalar type in bits
+    pub fn bits(&self) -> u32 {
+        use ast::ScalarKind::*;
+        match *self {
+            Bool => 1,
+            I8 | U8 => 8,
+            I16 | U16 => 16,
+            I32 | U32 | F32 => 32,
+            I64 | U64 | F64 => 64
+        }
+    }
 }
 
 impl fmt::Display for ScalarKind {
@@ -123,8 +183,13 @@ impl fmt::Display for ScalarKind {
         let text = match *self {
             Bool => "bool",
             I8 => "i8",
+            I16 => "i16",
             I32 => "i32",
             I64 => "i64",
+            U8 => "u8",
+            U16 => "u16",
+            U32 => "u32",
+            U64 => "u64",
             F32 => "f32",
             F64 => "f64",
         };
@@ -454,8 +519,13 @@ pub enum ExprKind<T: TypeBounds> {
 pub enum LiteralKind {
     BoolLiteral(bool),
     I8Literal(i8),
+    I16Literal(i16),
     I32Literal(i32),
     I64Literal(i64),
+    U8Literal(u8),
+    U16Literal(u16),
+    U32Literal(u32),
+    U64Literal(u64),
     F32Literal(f32),
     F64Literal(f64),
 }

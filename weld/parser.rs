@@ -670,8 +670,13 @@ impl<'t> Parser<'t> {
             TBoolLiteral(v) => Ok(expr_box(Literal(BoolLiteral(v)), Annotations::new())),
 
             TI8 => Ok(self.parse_cast(ScalarKind::I8)?),
+            TI16 => Ok(self.parse_cast(ScalarKind::I16)?),
             TI32 => Ok(self.parse_cast(ScalarKind::I32)?),
             TI64 => Ok(self.parse_cast(ScalarKind::I64)?),
+            TU8 => Ok(self.parse_cast(ScalarKind::U8)?),
+            TU16 => Ok(self.parse_cast(ScalarKind::U16)?),
+            TU32 => Ok(self.parse_cast(ScalarKind::U32)?),
+            TU64 => Ok(self.parse_cast(ScalarKind::U64)?),
             TF32 => Ok(self.parse_cast(ScalarKind::F32)?),
             TF64 => Ok(self.parse_cast(ScalarKind::F64)?),
             TBool => Ok(self.parse_cast(ScalarKind::Bool)?),
@@ -1106,11 +1111,16 @@ impl<'t> Parser<'t> {
         try!(self.parse_annotations(&mut annotations));
 
         match *self.next() {
+            TI8 => Ok(Scalar(ScalarKind::I8)),
+            TI16 => Ok(Scalar(ScalarKind::I16)),
             TI32 => Ok(Scalar(ScalarKind::I32)),
             TI64 => Ok(Scalar(ScalarKind::I64)),
+            TU8 => Ok(Scalar(ScalarKind::U8)),
+            TU16 => Ok(Scalar(ScalarKind::U16)),
+            TU32 => Ok(Scalar(ScalarKind::U32)),
+            TU64 => Ok(Scalar(ScalarKind::U64)),
             TF32 => Ok(Scalar(ScalarKind::F32)),
             TF64 => Ok(Scalar(ScalarKind::F64)),
-            TI8 => Ok(Scalar(ScalarKind::I8)),
             TBool => Ok(Scalar(ScalarKind::Bool)),
 
             TVec => {

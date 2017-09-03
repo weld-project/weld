@@ -97,15 +97,18 @@ fn infer_up(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> {
 /// Return true if any new expression's type was inferred, or an error if types are inconsistent.
 fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> {
     match expr.kind {
+        Literal(I8Literal(_)) => push_complete_type(&mut expr.ty, Scalar(I8), "I8Literal"),
+        Literal(I16Literal(_)) => push_complete_type(&mut expr.ty, Scalar(I16), "I16Literal"),
         Literal(I32Literal(_)) => push_complete_type(&mut expr.ty, Scalar(I32), "I32Literal"),
-
         Literal(I64Literal(_)) => push_complete_type(&mut expr.ty, Scalar(I64), "I64Literal"),
 
+        Literal(U8Literal(_)) => push_complete_type(&mut expr.ty, Scalar(U8), "U8Literal"),
+        Literal(U16Literal(_)) => push_complete_type(&mut expr.ty, Scalar(U16), "U16Literal"),
+        Literal(U32Literal(_)) => push_complete_type(&mut expr.ty, Scalar(U32), "U32Literal"),
+        Literal(U64Literal(_)) => push_complete_type(&mut expr.ty, Scalar(U64), "U64Literal"),
+
         Literal(F32Literal(_)) => push_complete_type(&mut expr.ty, Scalar(F32), "F32Literal"),
-
         Literal(F64Literal(_)) => push_complete_type(&mut expr.ty, Scalar(F64), "F64Literal"),
-
-        Literal(I8Literal(_)) => push_complete_type(&mut expr.ty, Scalar(I8), "I8Literal"),
 
         Literal(BoolLiteral(_)) => push_complete_type(&mut expr.ty, Scalar(Bool), "BoolLiteral"),
 

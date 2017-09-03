@@ -999,12 +999,12 @@ impl LlvmGenerator {
             self.prelude_code.add_line(format!("{} = extractvalue {} %a , {}", a_field, name, i));
             self.prelude_code.add_line(format!("{} = extractvalue {} %b, {}", b_field, name, i));
             self.prelude_code.add_line(format!("{} = call i32 {}.cmp({} {}, {} {})",
-            cmp,
-            field_prefix_str,
-            field_ty_str,
-            a_field,
-            field_ty_str,
-            b_field));
+                cmp,
+                field_prefix_str,
+                field_ty_str,
+                a_field,
+                field_ty_str,
+                b_field));
             self.prelude_code.add_line(format!("{} = icmp ne i32 {}, 0", ne, cmp));
             self.prelude_code.add_line(format!("br i1 {}, label {}, label {}", ne, ret_label, post_label));
             self.prelude_code.add_line(format!("{}:", ret_label.replace("%", "")));
@@ -1222,8 +1222,13 @@ impl LlvmGenerator {
         let elem_ty_str = match *kind {
             BoolLiteral(_) => "bool",
             I8Literal(_) => "i8",
+            I16Literal(_) => "i16",
             I32Literal(_) => "i32",
             I64Literal(_) => "i64",
+            U8Literal(_) => "i8",
+            U16Literal(_) => "i16",
+            U32Literal(_) => "i32",
+            U64Literal(_) => "i64",
             F32Literal(_) => "float",
             F64Literal(_) => "double",
         }.to_string();
@@ -1326,7 +1331,7 @@ impl LlvmGenerator {
             let op_name = llvm_scalar_unaryop(op_kind, ty)?;
             ctx.code.add(format!("{} = call {} {}({} {})", res_tmp, child_ll_ty, op_name, child_ll_ty, child_tmp));
             self.gen_store_var(&res_tmp, &output_ll_sym, &output_ll_ty, ctx);
-        } 
+        }
         else if let Simd(ref ty) = *child_ty {
             let width = llvm_simd_size(child_ty)?;
             // If an intrinsic exists for this SIMD op, use it.
@@ -2459,8 +2464,13 @@ fn llvm_scalar_kind(k: ScalarKind) -> &'static str {
     match k {
         Bool => "i1",
         I8 => "i8",
+        I16 => "i16",
         I32 => "i32",
         I64 => "i64",
+        U8 => "%u8",
+        U16 => "%u16",
+        U32 => "%u32",
+        U64 => "%u64",
         F32 => "float",
         F64 => "double",
     }
@@ -2471,8 +2481,13 @@ fn llvm_literal(k: LiteralKind) -> String {
     match k {
         BoolLiteral(l) => format!("{}", if l { 1 } else { 0 }),
         I8Literal(l) => format!("{}", l),
+        I16Literal(l) => format!("{}", l),
         I32Literal(l) =>  format!("{}", l),
         I64Literal(l) => format!("{}", l),
+        U8Literal(l) => format!("{}", l),
+        U16Literal(l) => format!("{}", l),
+        U32Literal(l) => format!("{}", l),
+        U64Literal(l) => format!("{}", l),
         F32Literal(l) => format!("{:.30e}", l),
         F64Literal(l) => format!("{:.30e}", l),
     }.to_string()
@@ -2484,18 +2499,13 @@ fn llvm_symbol(symbol: &Symbol) -> String {
 }
 
 fn binop_identity(op_kind: BinOpKind, ty: &Type) -> WeldResult<String> {
+    use super::ast::BinOpKind::*;
     match (op_kind, ty) {
-        (BinOpKind::Add, &Scalar(I8)) => Ok("0".to_string()),
-        (BinOpKind::Add, &Scalar(I32)) => Ok("0".to_string()),
-        (BinOpKind::Add, &Scalar(I64)) => Ok("0".to_string()),
-        (BinOpKind::Add, &Scalar(F32)) => Ok("0.0".to_string()),
-        (BinOpKind::Add, &Scalar(F64)) => Ok("0.0".to_string()),
+        (Add, &Scalar(s)) if s.is_integer() => Ok("0".to_string()),
+        (Add, &Scalar(s)) if s.is_float() => Ok("0.0".to_string()),
 
-        (BinOpKind::Multiply, &Scalar(I8)) => Ok("1".to_string()),
-        (BinOpKind::Multiply, &Scalar(I32)) => Ok("1".to_string()),
-        (BinOpKind::Multiply, &Scalar(I64)) => Ok("1".to_string()),
-        (BinOpKind::Multiply, &Scalar(F32)) => Ok("1.0".to_string()),
-        (BinOpKind::Multiply, &Scalar(F64)) => Ok("1.0".to_string()),
+        (Multiply, &Scalar(s)) if s.is_integer() => Ok("1".to_string()),
+        (Multiply, &Scalar(s)) if s.is_float() => Ok("1.0".to_string()),
 
         _ => weld_err!("Unsupported identity for binary op: {} on {}", op_kind, print_type(ty)),
     }
@@ -2503,156 +2513,62 @@ fn binop_identity(op_kind: BinOpKind, ty: &Type) -> WeldResult<String> {
 
 /// Return the name of the LLVM instruction for a binary operation on a specific type.
 fn llvm_binop(op_kind: BinOpKind, ty: &Type) -> WeldResult<&'static str> {
-    match (op_kind, ty) {
-        (BinOpKind::Add, &Scalar(I8)) => Ok("add"),
-        (BinOpKind::Add, &Scalar(I32)) => Ok("add"),
-        (BinOpKind::Add, &Scalar(I64)) => Ok("add"),
-        (BinOpKind::Add, &Scalar(F32)) => Ok("fadd"),
-        (BinOpKind::Add, &Scalar(F64)) => Ok("fadd"),
-        (BinOpKind::Add, &Simd(I8)) => Ok("add"),
-        (BinOpKind::Add, &Simd(I32)) => Ok("add"),
-        (BinOpKind::Add, &Simd(I64)) => Ok("add"),
-        (BinOpKind::Add, &Simd(F32)) => Ok("fadd"),
-        (BinOpKind::Add, &Simd(F64)) => Ok("fadd"),
+    use super::ast::BinOpKind::*;
+    match ty {
+        &Scalar(s) | &Simd(s) => {
+            match op_kind {
+                Add if s.is_integer() => Ok("add"),
+                Add if s.is_float() => Ok("fadd"),
 
-        (BinOpKind::Subtract, &Scalar(I8)) => Ok("sub"),
-        (BinOpKind::Subtract, &Scalar(I32)) => Ok("sub"),
-        (BinOpKind::Subtract, &Scalar(I64)) => Ok("sub"),
-        (BinOpKind::Subtract, &Scalar(F32)) => Ok("fsub"),
-        (BinOpKind::Subtract, &Scalar(F64)) => Ok("fsub"),
-        (BinOpKind::Subtract, &Simd(I8)) => Ok("sub"),
-        (BinOpKind::Subtract, &Simd(I32)) => Ok("sub"),
-        (BinOpKind::Subtract, &Simd(I64)) => Ok("sub"),
-        (BinOpKind::Subtract, &Simd(F32)) => Ok("fsub"),
-        (BinOpKind::Subtract, &Simd(F64)) => Ok("fsub"),
+                Subtract if s.is_integer() => Ok("sub"),
+                Subtract if s.is_float() => Ok("fsub"),
 
-        (BinOpKind::Multiply, &Scalar(I8)) => Ok("mul"),
-        (BinOpKind::Multiply, &Scalar(I32)) => Ok("mul"),
-        (BinOpKind::Multiply, &Scalar(I64)) => Ok("mul"),
-        (BinOpKind::Multiply, &Scalar(F32)) => Ok("fmul"),
-        (BinOpKind::Multiply, &Scalar(F64)) => Ok("fmul"),
-        (BinOpKind::Multiply, &Simd(I8)) => Ok("mul"),
-        (BinOpKind::Multiply, &Simd(I32)) => Ok("mul"),
-        (BinOpKind::Multiply, &Simd(I64)) => Ok("mul"),
-        (BinOpKind::Multiply, &Simd(F32)) => Ok("fmul"),
-        (BinOpKind::Multiply, &Simd(F64)) => Ok("fmul"),
+                Multiply if s.is_integer() => Ok("mul"),
+                Multiply if s.is_float() => Ok("fmul"),
 
-        (BinOpKind::Divide, &Scalar(I8)) => Ok("sdiv"),
-        (BinOpKind::Divide, &Scalar(I32)) => Ok("sdiv"),
-        (BinOpKind::Divide, &Scalar(I64)) => Ok("sdiv"),
-        (BinOpKind::Divide, &Scalar(F32)) => Ok("fdiv"),
-        (BinOpKind::Divide, &Scalar(F64)) => Ok("fdiv"),
-        (BinOpKind::Divide, &Simd(I8)) => Ok("sdiv"),
-        (BinOpKind::Divide, &Simd(I32)) => Ok("sdiv"),
-        (BinOpKind::Divide, &Simd(I64)) => Ok("sdiv"),
-        (BinOpKind::Divide, &Simd(F32)) => Ok("fdiv"),
-        (BinOpKind::Divide, &Simd(F64)) => Ok("fdiv"),
+                Divide if s.is_signed_integer() => Ok("sdiv"),
+                Divide if s.is_unsigned_integer() => Ok("udiv"),
+                Divide if s.is_float() => Ok("fdiv"),
 
-        (BinOpKind::Modulo, &Scalar(I8)) => Ok("srem"),
-        (BinOpKind::Modulo, &Scalar(I32)) => Ok("srem"),
-        (BinOpKind::Modulo, &Scalar(I64)) => Ok("srem"),
-        (BinOpKind::Modulo, &Scalar(F32)) => Ok("frem"),
-        (BinOpKind::Modulo, &Scalar(F64)) => Ok("frem"),
-        (BinOpKind::Modulo, &Simd(I8)) => Ok("srem"),
-        (BinOpKind::Modulo, &Simd(I32)) => Ok("srem"),
-        (BinOpKind::Modulo, &Simd(I64)) => Ok("srem"),
-        (BinOpKind::Modulo, &Simd(F32)) => Ok("frem"),
-        (BinOpKind::Modulo, &Simd(F64)) => Ok("frem"),
+                Modulo if s.is_signed_integer() => Ok("srem"),
+                Modulo if s.is_unsigned_integer() => Ok("urem"),
+                Modulo if s.is_float() => Ok("frem"),
 
-        (BinOpKind::Equal, &Scalar(Bool)) => Ok("icmp eq"),
-        (BinOpKind::Equal, &Scalar(I8)) => Ok("icmp eq"),
-        (BinOpKind::Equal, &Scalar(I32)) => Ok("icmp eq"),
-        (BinOpKind::Equal, &Scalar(I64)) => Ok("icmp eq"),
-        (BinOpKind::Equal, &Scalar(F32)) => Ok("fcmp oeq"),
-        (BinOpKind::Equal, &Scalar(F64)) => Ok("fcmp oeq"),
-        (BinOpKind::Equal, &Simd(Bool)) => Ok("icmp eq"),
-        (BinOpKind::Equal, &Simd(I8)) => Ok("icmp eq"),
-        (BinOpKind::Equal, &Simd(I32)) => Ok("icmp eq"),
-        (BinOpKind::Equal, &Simd(I64)) => Ok("icmp eq"),
-        (BinOpKind::Equal, &Simd(F32)) => Ok("fcmp oeq"),
-        (BinOpKind::Equal, &Simd(F64)) => Ok("fcmp oeq"),
+                Equal if s.is_integer() => Ok("icmp eq"),
+                Equal if s.is_float() => Ok("fcmp oeq"),
 
-        (BinOpKind::NotEqual, &Scalar(Bool)) => Ok("icmp ne"),
-        (BinOpKind::NotEqual, &Scalar(I8)) => Ok("icmp ne"),
-        (BinOpKind::NotEqual, &Scalar(I32)) => Ok("icmp ne"),
-        (BinOpKind::NotEqual, &Scalar(I64)) => Ok("icmp ne"),
-        (BinOpKind::NotEqual, &Scalar(F32)) => Ok("fcmp one"),
-        (BinOpKind::NotEqual, &Scalar(F64)) => Ok("fcmp one"),
+                NotEqual if s.is_integer() => Ok("icmp ne"),
+                NotEqual if s.is_float() => Ok("fcmp one"),
 
-        (BinOpKind::LessThan, &Scalar(I8)) => Ok("icmp slt"),
-        (BinOpKind::LessThan, &Scalar(I32)) => Ok("icmp slt"),
-        (BinOpKind::LessThan, &Scalar(I64)) => Ok("icmp slt"),
-        (BinOpKind::LessThan, &Scalar(F32)) => Ok("fcmp olt"),
-        (BinOpKind::LessThan, &Scalar(F64)) => Ok("fcmp olt"),
-        (BinOpKind::LessThan, &Simd(I8)) => Ok("icmp slt"),
-        (BinOpKind::LessThan, &Simd(I32)) => Ok("icmp slt"),
-        (BinOpKind::LessThan, &Simd(I64)) => Ok("icmp slt"),
-        (BinOpKind::LessThan, &Simd(F32)) => Ok("fcmp olt"),
-        (BinOpKind::LessThan, &Simd(F64)) => Ok("fcmp olt"),
+                LessThan if s.is_signed_integer() => Ok("icmp slt"),
+                LessThan if s.is_unsigned_integer() => Ok("icmp ult"),
+                LessThan if s.is_float() => Ok("fcmp olt"),
 
-        (BinOpKind::LessThanOrEqual, &Scalar(I8)) => Ok("icmp sle"),
-        (BinOpKind::LessThanOrEqual, &Scalar(I32)) => Ok("icmp sle"),
-        (BinOpKind::LessThanOrEqual, &Scalar(I64)) => Ok("icmp sle"),
-        (BinOpKind::LessThanOrEqual, &Scalar(F32)) => Ok("fcmp ole"),
-        (BinOpKind::LessThanOrEqual, &Scalar(F64)) => Ok("fcmp ole"),
-        (BinOpKind::LessThanOrEqual, &Simd(I8)) => Ok("icmp sle"),
-        (BinOpKind::LessThanOrEqual, &Simd(I32)) => Ok("icmp sle"),
-        (BinOpKind::LessThanOrEqual, &Simd(I64)) => Ok("icmp sle"),
-        (BinOpKind::LessThanOrEqual, &Simd(F32)) => Ok("fcmp ole"),
-        (BinOpKind::LessThanOrEqual, &Simd(F64)) => Ok("fcmp ole"),
+                LessThanOrEqual if s.is_signed_integer() => Ok("icmp sle"),
+                LessThanOrEqual if s.is_unsigned_integer() => Ok("icmp ule"),
+                LessThanOrEqual if s.is_float() => Ok("fcmp ole"),
 
-        (BinOpKind::GreaterThan, &Scalar(I8)) => Ok("icmp sgt"),
-        (BinOpKind::GreaterThan, &Scalar(I32)) => Ok("icmp sgt"),
-        (BinOpKind::GreaterThan, &Scalar(I64)) => Ok("icmp sgt"),
-        (BinOpKind::GreaterThan, &Scalar(F32)) => Ok("fcmp ogt"),
-        (BinOpKind::GreaterThan, &Scalar(F64)) => Ok("fcmp ogt"),
-        (BinOpKind::GreaterThan, &Simd(I8)) => Ok("icmp sgt"),
-        (BinOpKind::GreaterThan, &Simd(I32)) => Ok("icmp sgt"),
-        (BinOpKind::GreaterThan, &Simd(I64)) => Ok("icmp sgt"),
-        (BinOpKind::GreaterThan, &Simd(F32)) => Ok("fcmp ogt"),
-        (BinOpKind::GreaterThan, &Simd(F64)) => Ok("fcmp ogt"),
+                GreaterThan if s.is_signed_integer() => Ok("icmp sgt"),
+                GreaterThan if s.is_unsigned_integer() => Ok("icmp ugt"),
+                GreaterThan if s.is_float() => Ok("fcmp ogt"),
 
-        (BinOpKind::GreaterThanOrEqual, &Scalar(I8)) => Ok("icmp sge"),
-        (BinOpKind::GreaterThanOrEqual, &Scalar(I32)) => Ok("icmp sge"),
-        (BinOpKind::GreaterThanOrEqual, &Scalar(I64)) => Ok("icmp sge"),
-        (BinOpKind::GreaterThanOrEqual, &Scalar(F32)) => Ok("fcmp oge"),
-        (BinOpKind::GreaterThanOrEqual, &Scalar(F64)) => Ok("fcmp oge"),
-        (BinOpKind::GreaterThanOrEqual, &Simd(I8)) => Ok("icmp sge"),
-        (BinOpKind::GreaterThanOrEqual, &Simd(I32)) => Ok("icmp sge"),
-        (BinOpKind::GreaterThanOrEqual, &Simd(I64)) => Ok("icmp sge"),
-        (BinOpKind::GreaterThanOrEqual, &Simd(F32)) => Ok("fcmp oge"),
-        (BinOpKind::GreaterThanOrEqual, &Simd(F64)) => Ok("fcmp oge"),
+                GreaterThanOrEqual if s.is_signed_integer() => Ok("icmp sge"),
+                GreaterThanOrEqual if s.is_unsigned_integer() => Ok("icmp uge"),
+                GreaterThanOrEqual if s.is_float() => Ok("fcmp oge"),
 
-        (BinOpKind::LogicalAnd, &Scalar(Bool)) => Ok("and"),
-        (BinOpKind::BitwiseAnd, &Scalar(Bool)) => Ok("and"),
-        (BinOpKind::BitwiseAnd, &Scalar(I8)) => Ok("and"),
-        (BinOpKind::BitwiseAnd, &Scalar(I32)) => Ok("and"),
-        (BinOpKind::BitwiseAnd, &Scalar(I64)) => Ok("and"),
-        (BinOpKind::BitwiseAnd, &Simd(Bool)) => Ok("and"),
-        (BinOpKind::BitwiseAnd, &Simd(I8)) => Ok("and"),
-        (BinOpKind::BitwiseAnd, &Simd(I32)) => Ok("and"),
-        (BinOpKind::BitwiseAnd, &Simd(I64)) => Ok("and"),
+                LogicalAnd if s.is_bool() => Ok("and"),
+                BitwiseAnd if s.is_integer() || s.is_bool() => Ok("and"),
 
-        (BinOpKind::LogicalOr, &Scalar(Bool)) => Ok("or"),
-        (BinOpKind::BitwiseOr, &Scalar(Bool)) => Ok("or"),
-        (BinOpKind::BitwiseOr, &Scalar(I8)) => Ok("or"),
-        (BinOpKind::BitwiseOr, &Scalar(I32)) => Ok("or"),
-        (BinOpKind::BitwiseOr, &Scalar(I64)) => Ok("or"),
-        (BinOpKind::BitwiseOr, &Simd(Bool)) => Ok("or"),
-        (BinOpKind::BitwiseOr, &Simd(I8)) => Ok("or"),
-        (BinOpKind::BitwiseOr, &Simd(I32)) => Ok("or"),
-        (BinOpKind::BitwiseOr, &Simd(I64)) => Ok("or"),
+                LogicalOr if s.is_bool() => Ok("or"),
+                BitwiseOr if s.is_integer() || s.is_bool() => Ok("or"),
 
-        (BinOpKind::Xor, &Scalar(Bool)) => Ok("xor"),
-        (BinOpKind::Xor, &Scalar(I8)) => Ok("xor"),
-        (BinOpKind::Xor, &Scalar(I32)) => Ok("xor"),
-        (BinOpKind::Xor, &Scalar(I64)) => Ok("xor"),
-        (BinOpKind::Xor, &Simd(Bool)) => Ok("xor"),
-        (BinOpKind::Xor, &Simd(I8)) => Ok("xor"),
-        (BinOpKind::Xor, &Simd(I32)) => Ok("xor"),
-        (BinOpKind::Xor, &Simd(I64)) => Ok("xor"),
+                Xor if s.is_integer() || s.is_bool() => Ok("xor"),
 
-        _ => weld_err!("Unsupported binary op: {} on {}", op_kind, print_type(ty)),
+                _ => return weld_err!("Unsupported binary op: {} on {}", op_kind, print_type(ty))
+            }
+        }
+
+        _ => return weld_err!("Unsupported binary op: {} on {}", op_kind, print_type(ty))
     }
 }
 
@@ -2714,19 +2630,42 @@ fn llvm_binop_vector(op_kind: BinOpKind, ty: &Type) -> WeldResult<(&'static str,
 /// Return the name of hte LLVM instruction for a cast operation between specific types.
 fn llvm_castop(ty1: &Type, ty2: &Type) -> WeldResult<&'static str> {
     match (ty1, ty2) {
-        (&Scalar(F64), &Scalar(Bool)) => Ok("fptoui"),
-        (&Scalar(F32), &Scalar(Bool)) => Ok("fptoui"),
-        (&Scalar(Bool), &Scalar(F64)) => Ok("uitofp"),
-        (&Scalar(Bool), &Scalar(F32)) => Ok("uitofp"),
-        (&Scalar(F64), &Scalar(F32)) => Ok("fptrunc"),
-        (&Scalar(F32), &Scalar(F64)) => Ok("fpext"),
-        (&Scalar(F64), _) => Ok("fptosi"),
-        (&Scalar(F32), _) => Ok("fptosi"),
-        (_, &Scalar(F64)) => Ok("sitofp"),
-        (_, &Scalar(F32)) => Ok("sitofp"),
-        (&Scalar(Bool), _) => Ok("zext"),
-        (_, &Scalar(I64)) => Ok("sext"),
-        _ => Ok("trunc"),
+        (&Scalar(s1), &Scalar(s2)) => {
+            match (s1, s2) {
+                (F32, F64) => Ok("fpext"),
+                (F64, F32) => Ok("fptrunc"),
+
+                (F32, _) if s2.is_signed_integer() => Ok("fptosi"),
+                (F64, _) if s2.is_signed_integer() => Ok("fptosi"),
+
+                (F32, _) => Ok("fptoui"),
+                (F64, _) => Ok("fptoui"),
+
+                (_, F32) if s1.is_signed_integer() => Ok("sitofp"),
+                (_, F64) if s1.is_signed_integer() => Ok("sitofp"),
+
+                (_, F32) => Ok("uitofp"),
+                (_, F64) => Ok("uitofp"),
+
+                (Bool, _) => Ok("zext"),
+
+                (U8, _) if s2.bits() > 8 => Ok("zext"),
+                (U16, _) if s2.bits() > 16 => Ok("zext"),
+                (U32, _) if s2.bits() > 32 => Ok("zext"),
+                (U64, _) if s2.bits() > 64 => Ok("zext"),
+
+                (_, _) if s2.bits() > s1.bits() => Ok("sext"),
+
+                (_, _) if s2.bits() < s1.bits() => Ok("trunc"),
+
+                (_, _) if s2.bits() == s1.bits() => Ok("bitcast"),
+
+                 _ => weld_err!("Can't cast {} to {}", print_type(ty1), print_type(ty2))
+            }
+        }
+
+        _ => weld_err!("Can't cast {} to {}", print_type(ty1), print_type(ty2))
+
     }
 }
 
@@ -2815,11 +2754,13 @@ fn predicate_iff_annotated() {
 fn types() {
     let mut gen = LlvmGenerator::new();
 
+    assert_eq!(gen.llvm_type(&Scalar(I8)).unwrap(), "i8");
+    assert_eq!(gen.llvm_type(&Scalar(I16)).unwrap(), "i16");
     assert_eq!(gen.llvm_type(&Scalar(I32)).unwrap(), "i32");
     assert_eq!(gen.llvm_type(&Scalar(I64)).unwrap(), "i64");
+    assert_eq!(gen.llvm_type(&Scalar(U8)).unwrap(), "%u8");
     assert_eq!(gen.llvm_type(&Scalar(F32)).unwrap(), "float");
     assert_eq!(gen.llvm_type(&Scalar(F64)).unwrap(), "double");
-    assert_eq!(gen.llvm_type(&Scalar(I8)).unwrap(), "i8");
     assert_eq!(gen.llvm_type(&Scalar(Bool)).unwrap(), "i1");
 
     let struct1 = parse_type("{i32,bool,i32}").unwrap().to_type().unwrap();
