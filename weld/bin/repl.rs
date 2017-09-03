@@ -16,7 +16,7 @@ use std::collections::HashMap;
 use libc::c_char;
 
 use weld::*;
-use weld::weld_common::*;
+use weld::common::*;
 
 enum ReplCommands {
     LoadFile,

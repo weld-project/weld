@@ -4,7 +4,7 @@ use std::thread;
 extern crate weld;
 extern crate libc;
 
-use weld::weld_common::WeldRuntimeErrno;
+use weld::common::WeldRuntimeErrno;
 
 use weld::WeldConf;
 use weld::WeldValue;
