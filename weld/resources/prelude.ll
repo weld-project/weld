@@ -1,5 +1,12 @@
 ; Common prelude to add at the start of generated LLVM modules.
 
+; Unsigned data types -- we use these in the generated code for clarity and to make
+; template substitution work nicely when calling type-specific functions
+%u8 = type i8;
+%u16 = type i16;
+%u32 = type i32;
+%u64 = type i64;
+
 ; LLVM intrinsic functions
 declare void @llvm.memcpy.p0i8.p0i8.i64(i8*, i8*, i64, i32, i1)
 declare void @llvm.memset.p0i8.i64(i8*, i8, i64, i32, i1)
@@ -132,6 +139,11 @@ define i32 @i32.hash(i32 %arg) {
   ret i32 %arg
 }
 
+define i32 @i16.hash(i16 %arg) {
+  %1 = zext i16 %arg to i32
+  ret i32 %1
+}
+
 define i32 @i8.hash(i8 %arg) {
   %1 = zext i8 %arg to i32
   ret i32 %1
@@ -139,6 +151,26 @@ define i32 @i8.hash(i8 %arg) {
 
 define i32 @i1.hash(i1 %arg) {
   %1 = zext i1 %arg to i32
+  ret i32 %1
+}
+
+define i32 @u64.hash(%u64 %arg) {
+  %1 = call i32 @i64.hash(i64 %arg)
+  ret i32 %1
+}
+
+define i32 @u32.hash(%u32 %arg) {
+  %1 = call i32 @i32.hash(i32 %arg)
+  ret i32 %1
+}
+
+define i32 @u16.hash(%u16 %arg) {
+  %1 = call i32 @i16.hash(i16 %arg)
+  ret i32 %1
+}
+
+define i32 @u8.hash(%u8 %arg) {
+  %1 = call i32 @i8.hash(i8 %arg)
   ret i32 %1
 }
 
@@ -177,6 +209,17 @@ ne:
   ret i32 %3
 }
 
+define i32 @i16.cmp(i16 %a, i16 %b) {
+  %1 = icmp eq i16 %a, %b
+  br i1 %1, label %eq, label %ne
+eq:
+  ret i32 0
+ne:
+  %2 = icmp slt i16 %a, %b
+  %3 = select i1 %2, i32 -1, i32 1
+  ret i32 %3
+}
+
 define i32 @i8.cmp(i8 %a, i8 %b) {
   %1 = icmp eq i8 %a, %b
   br i1 %1, label %eq, label %ne
@@ -196,6 +239,50 @@ eq:
 ne:
   %2 = select i1 %b, i32 -1, i32 1
   ret i32 %2
+}
+
+define i32 @u64.cmp(%u64 %a, %u64 %b) {
+  %1 = icmp eq i64 %a, %b
+  br i1 %1, label %eq, label %ne
+eq:
+  ret i32 0
+ne:
+  %2 = icmp ult i64 %a, %b
+  %3 = select i1 %2, i32 -1, i32 1
+  ret i32 %3
+}
+
+define i32 @u32.cmp(%u32 %a, %u32 %b) {
+  %1 = icmp eq i32 %a, %b
+  br i1 %1, label %eq, label %ne
+eq:
+  ret i32 0
+ne:
+  %2 = icmp ult i32 %a, %b
+  %3 = select i1 %2, i32 -1, i32 1
+  ret i32 %3
+}
+
+define i32 @u16.cmp(%u16 %a, %u16 %b) {
+  %1 = icmp eq i16 %a, %b
+  br i1 %1, label %eq, label %ne
+eq:
+  ret i32 0
+ne:
+  %2 = icmp ult i16 %a, %b
+  %3 = select i1 %2, i32 -1, i32 1
+  ret i32 %3
+}
+
+define i32 @u8.cmp(%u8 %a, %u8 %b) {
+  %1 = icmp eq i8 %a, %b
+  br i1 %1, label %eq, label %ne
+eq:
+  ret i32 0
+ne:
+  %2 = icmp ult i8 %a, %b
+  %3 = select i1 %2, i32 -1, i32 1
+  ret i32 %3
 }
 
 define i32 @float.cmp(float %a, float %b) {
@@ -232,6 +319,11 @@ define i1 @i32.eq(i32 %a, i32 %b) {
   ret i1 %1
 }
 
+define i1 @i16.eq(i16 %a, i16 %b) {
+  %1 = icmp eq i16 %a, %b
+  ret i1 %1
+}
+
 define i1 @i8.eq(i8 %a, i8 %b) {
   %1 = icmp eq i8 %a, %b
   ret i1 %1
@@ -239,6 +331,26 @@ define i1 @i8.eq(i8 %a, i8 %b) {
 
 define i1 @i1.eq(i1 %a, i1 %b) {
   %1 = icmp eq i1 %a, %b
+  ret i1 %1
+}
+
+define i1 @u64.eq(%u64 %a, %u64 %b) {
+  %1 = icmp eq i64 %a, %b
+  ret i1 %1
+}
+
+define i1 @u32.eq(%u32 %a, %u32 %b) {
+  %1 = icmp eq i32 %a, %b
+  ret i1 %1
+}
+
+define i1 @u16.eq(%u16 %a, %u16 %b) {
+  %1 = icmp eq i16 %a, %b
+  ret i1 %1
+}
+
+define i1 @u8.eq(%u8 %a, %u8 %b) {
+  %1 = icmp eq i8 %a, %b
   ret i1 %1
 }
 

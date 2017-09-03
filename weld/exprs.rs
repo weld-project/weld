@@ -24,6 +24,9 @@ pub fn literal_expr(kind: LiteralKind) -> WeldResult<Expr<Type>> {
                         I32Literal(_) => ScalarKind::I32,
                         I64Literal(_) => ScalarKind::I64,
                         U8Literal(_) => ScalarKind::U8,
+                        U16Literal(_) => ScalarKind::U16,
+                        U32Literal(_) => ScalarKind::U32,
+                        U64Literal(_) => ScalarKind::U64,
                         F32Literal(_) => ScalarKind::F32,
                         F64Literal(_) => ScalarKind::F64,
               }))

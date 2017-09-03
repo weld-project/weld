@@ -35,6 +35,9 @@ pub enum Token {
     TI32,
     TI64,
     TU8,
+    TU16,
+    TU32,
+    TU64,
     TF32,
     TF64,
     TBool,
@@ -106,8 +109,8 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
         static ref KEYWORD_RE: Regex = Regex::new(
             "^(if|for|zip|len|lookup|keyexists|slice|exp|log|erf|sqrt|simd|select|broadcast|\
              iterate|cudf|simditer|fringeiter|iter|merge|result|let|true|false|macro|\
-             i8|i16|i32|i64|u8|f32|f64|bool|vec|appender|merger|vecmerger|dictmerger|\
-             groupmerger|tovec)$").unwrap();
+             i8|i16|i32|i64|u8|u16|u32|u64|f32|f64|bool|vec|appender|merger|vecmerger|\
+             dictmerger|groupmerger|tovec)$").unwrap();
 
         static ref IDENT_RE: Regex = Regex::new(r"^[A-Za-z$_][A-Za-z0-9$_]*$").unwrap();
 
@@ -150,6 +153,9 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
                             "i32" => TI32,
                             "i64" => TI64,
                             "u8" => TU8,
+                            "u16" => TU16,
+                            "u32" => TU32,
+                            "u64" => TU64,
                             "f32" => TF32,
                             "f64" => TF64,
                             "bool" => TBool,
@@ -287,6 +293,9 @@ impl fmt::Display for Token {
                     TI32 => "i32",
                     TI64 => "i64",
                     TU8 => "u8",
+                    TU16 => "u16",
+                    TU32 => "u32",
+                    TU64 => "u64",
                     TF32 => "f32",
                     TF64 => "f64",
                     TBool => "bool",

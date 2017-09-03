@@ -994,12 +994,12 @@ impl LlvmGenerator {
             self.prelude_code.add_line(format!("{} = extractvalue {} %a , {}", a_field, name, i));
             self.prelude_code.add_line(format!("{} = extractvalue {} %b, {}", b_field, name, i));
             self.prelude_code.add_line(format!("{} = call i32 {}.cmp({} {}, {} {})",
-            cmp,
-            field_prefix_str,
-            field_ty_str,
-            a_field,
-            field_ty_str,
-            b_field));
+                cmp,
+                field_prefix_str,
+                field_ty_str,
+                a_field,
+                field_ty_str,
+                b_field));
             self.prelude_code.add_line(format!("{} = icmp ne i32 {}, 0", ne, cmp));
             self.prelude_code.add_line(format!("br i1 {}, label {}, label {}", ne, ret_label, post_label));
             self.prelude_code.add_line(format!("{}:", ret_label.replace("%", "")));
@@ -1221,6 +1221,9 @@ impl LlvmGenerator {
             I32Literal(_) => "i32",
             I64Literal(_) => "i64",
             U8Literal(_) => "i8",
+            U16Literal(_) => "i16",
+            U32Literal(_) => "i32",
+            U64Literal(_) => "i64",
             F32Literal(_) => "float",
             F64Literal(_) => "double",
         }.to_string();
@@ -2459,7 +2462,10 @@ fn llvm_scalar_kind(k: ScalarKind) -> &'static str {
         I16 => "i16",
         I32 => "i32",
         I64 => "i64",
-        U8 => "i8",
+        U8 => "%u8",
+        U16 => "%u16",
+        U32 => "%u32",
+        U64 => "%u64",
         F32 => "float",
         F64 => "double",
     }
@@ -2474,6 +2480,9 @@ fn llvm_literal(k: LiteralKind) -> String {
         I32Literal(l) =>  format!("{}", l),
         I64Literal(l) => format!("{}", l),
         U8Literal(l) => format!("{}", l),
+        U16Literal(l) => format!("{}", l),
+        U32Literal(l) => format!("{}", l),
+        U64Literal(l) => format!("{}", l),
         F32Literal(l) => format!("{:.30e}", l),
         F64Literal(l) => format!("{:.30e}", l),
     }.to_string()
@@ -2633,14 +2642,18 @@ fn llvm_castop(ty1: &Type, ty2: &Type) -> WeldResult<&'static str> {
                 (_, F32) => Ok("uitofp"),
                 (_, F64) => Ok("uitofp"),
 
-                (U8, I8) => Ok("bitcast"),
-                (I8, U8) => Ok("bitcast"),
-
                 (Bool, _) => Ok("zext"),
-                (U8, _) if s2.bits() > 8 => Ok("zext"),
-                (_, _) if s1.bits() < s2.bits() => Ok("sext"),
 
-                (_, _) if s1.bits() > s2.bits() => Ok("trunc"),
+                (U8, _) if s2.bits() > 8 => Ok("zext"),
+                (U16, _) if s2.bits() > 16 => Ok("zext"),
+                (U32, _) if s2.bits() > 32 => Ok("zext"),
+                (U64, _) if s2.bits() > 64 => Ok("zext"),
+
+                (_, _) if s2.bits() > s1.bits() => Ok("sext"),
+
+                (_, _) if s2.bits() < s1.bits() => Ok("trunc"),
+
+                (_, _) if s2.bits() == s1.bits() => Ok("bitcast"),
 
                  _ => weld_err!("Can't cast {} to {}", print_type(ty1), print_type(ty2))
             }
