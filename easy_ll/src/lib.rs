@@ -1,7 +1,6 @@
 //! A very simple wrapper for LLVM that can JIT functions written as IR strings.
 
 extern crate llvm_sys as llvm;
-extern crate libc;
 
 #[macro_use]
 extern crate log;
@@ -16,9 +15,10 @@ use std::sync::{Once, ONCE_INIT};
 
 use llvm::support::LLVMLoadLibraryPermanently;
 use llvm::prelude::{LLVMContextRef, LLVMModuleRef, LLVMMemoryBufferRef};
-use llvm::execution_engine::{LLVMExecutionEngineRef, LLVMMCJITCompilerOptions};
+use llvm::execution_engine::{LLVMExecutionEngineRef, LLVMMCJITCompilerOptions, LLVMGetExecutionEngineTargetMachine};
 use llvm::analysis::LLVMVerifierFailureAction;
 use llvm::transforms::pass_manager_builder as pmb;
+use llvm::target_machine::{LLVMCodeGenFileType, LLVMTargetMachineEmitToMemoryBuffer};
 
 #[cfg(test)]
 mod tests;
@@ -111,6 +111,26 @@ pub fn load_library(libname: &str) -> Result<(), LlvmError> {
     }
 }
 
+fn output_llvm_ir(engine: LLVMExecutionEngineRef, module: LLVMModuleRef) -> String {
+    //let test = CString::new("test").unwrap();
+    let mut v = [8 as i8; 20000];
+    unsafe {
+        // Create MemoryBuffer with larger than required space for the llvm IR.
+        let mut output_buf = llvm::core::LLVMCreateMemoryBufferWithMemoryRange(v.as_mut_ptr(), 2000000, CString::new("rand").unwrap().as_ptr(), 0);
+        let cur_target = LLVMGetExecutionEngineTargetMachine(engine);
+        let mut error_str = std::ptr::null_mut();
+        let file_type = LLVMCodeGenFileType::LLVMAssemblyFile;
+        let res = LLVMTargetMachineEmitToMemoryBuffer(cur_target, module, file_type, &mut error_str, &mut output_buf);
+        if res == 1 {
+            let x = CStr::from_ptr(error_str);
+            panic!("Getting LLVM IR failed! {:?}", x);
+        }
+        let start = llvm::core::LLVMGetBufferStart(output_buf);
+        let c_str: &CStr = CStr::from_ptr(start as *mut c_char);
+        c_str.to_str().unwrap().to_owned()
+    }
+}
+
 /// Compile a string of LLVM IR (in human readable format) into a `CompiledModule` that can then
 /// be executed. The LLVM IR should contain an entry point function called `run` that takes `i64`
 /// and returns `i64`, which will be called by `CompiledModule::run`.
@@ -157,6 +177,7 @@ pub fn compile_module(code: &str, bc_file: Option<&[u8]>) -> Result<CompiledModu
         // Create an execution engine for the module and find its run function
         let engine = create_exec_engine(module)?;
         debug!("Done creating execution engine");
+        trace!("llvm ir for target:\n = {}", output_llvm_ir(engine, module));
 
         result.engine = Some(engine);
         result.run_function = Some(find_function(engine, "run")?);
