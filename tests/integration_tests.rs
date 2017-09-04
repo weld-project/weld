@@ -208,6 +208,27 @@ fn negated_arithmetic() {
     unsafe { free_value_and_module(ret_value) };
 }
 
+fn bool_eq() {
+    let code = "|| [(2 < 3) != (2 > 2), true == false]";
+
+    let conf = default_conf();
+
+    let ref input_data: i32 = 0;
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<bool> };
+    let result = unsafe { (*data).clone() };
+
+    assert_eq!(result.len, 2);
+
+    let bool1 = unsafe { (*result.data.offset(0)).clone() };
+    let bool2 = unsafe { (*result.data.offset(1)).clone() };
+    assert_eq!(bool1, true);
+    assert_eq!(bool2, false);
+
+    unsafe { free_value_and_module(ret_value) };
+}
+
 // TODO(shoumik): - Failing on Linux. Will fix in a in PR
 // For the C UDF integration test.
 // #[no_mangle]
@@ -2085,6 +2106,7 @@ fn main() {
              ("negation", negation),
              ("negation_double", negation_double),
              ("negated_arithmetic", negated_arithmetic),
+             ("bool_eq", bool_eq),
              //("c_udf", c_udf),
              ("f64_cast", f64_cast),
              ("i32_cast", i32_cast),
@@ -2155,7 +2177,7 @@ fn main() {
              ("simple_float_mod", simple_float_mod),
              ("simple_int_mod", simple_int_mod),
              ("predicate_if_iff_annotated", predicate_if_iff_annotated)];
-    
+
     println!("");
     println!("running tests");
     let mut passed = 0;
