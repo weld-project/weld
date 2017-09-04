@@ -245,6 +245,8 @@ pub unsafe extern "C" fn weld_module_compile(code: *const c_char,
     // Let LLVM find symbols in libweldrt; it's okay to call this multiple times
     let libweldrt = if cfg!(target_os="macos") {
         "libweldrt.dylib"
+    } else if cfg!(target_os="windows") {
+        "libweltrt.dll"
     } else {
         "libweldrt.so"
     };

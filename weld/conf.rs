@@ -98,7 +98,7 @@ fn parse_passes(s: &str) -> WeldResult<Vec<Pass>> {
 /// Parse an LLVM optimization level.
 fn parse_llvm_optimization_level(s: &str) -> WeldResult<u32> {
     match s.parse::<u32>() {
-        Ok(v) if v <= 2 => Ok(v),
+        Ok(v) if v <= 3 => Ok(v),
         _ => weld_err!("Invalid LLVM optimization level: {}", s),
     }
 }
