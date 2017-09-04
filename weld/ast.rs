@@ -66,6 +66,14 @@ impl Type {
         }
     }
 
+    pub fn is_scalar(&self) -> bool {
+        use self::Type::*;
+        match *self {
+            Scalar(_) => true,
+            _ => false
+        }
+    }
+
     /// Get the vectorized version of a type, if it is vectorizable.
     pub fn simd_type(&self) -> WeldResult<Type> {
         use self::Type::*;

@@ -1070,7 +1070,7 @@ impl LlvmGenerator {
         self.prelude_code.add("\n");
 
         // Supports vectorization, so add in SIMD extensions.
-        if let Scalar(_) = *elem {
+        if elem.is_scalar() {
             let simd_extension = format!(include_str!("resources/vvector.ll"),
                 ELEM=elem_ty,
                 NAME=&name.replace("%", ""),
@@ -1735,7 +1735,7 @@ impl LlvmGenerator {
                     self.gen_merge_op(&bld_ptr, &elem_tmp, &val_ll_ty, op, value_ty, ctx)?;
                 }
 
-                Appender(_) => {
+                Appender(ref elem) if elem.is_scalar() => {
                     let bld_tmp = self.gen_load_var(&bld_ll_sym, &bld_ll_ty, ctx)?;
                     let val_tmp = self.gen_load_var(&val_ll_sym, &val_ll_ty, ctx)?;
                     ctx.code.add(format!("call {} {}.vmerge({} {}, {} {}, i32 %cur.tid)",
