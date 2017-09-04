@@ -80,7 +80,7 @@ struct vec_output {
 };
 
 struct vec_builder {
-  vector<vec_piece> pieces;
+  std::vector<vec_piece> pieces;
   void *thread_curs;
   int64_t elem_size;
   int64_t starting_cap;
