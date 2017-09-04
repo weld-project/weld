@@ -24,7 +24,7 @@ use super::sir::Terminator::*;
 use super::transforms;
 use super::type_inference;
 use super::util::IdGenerator;
-use super::util::LIB_WELD_RT;
+use super::util::WELD_INLINE_LIB;
 
 #[cfg(test)]
 use super::parser::*;
@@ -84,7 +84,7 @@ pub fn compile_program(program: &Program, opt_passes: &Vec<Pass>) -> WeldResult<
     debug!("LLVM program:\n{}\n", &llvm_code);
 
     debug!("Started compiling LLVM");
-    let module = try!(easy_ll::compile_module(&llvm_code, Some(LIB_WELD_RT)));
+    let module = try!(easy_ll::compile_module(&llvm_code, Some(WELD_INLINE_LIB)));
     debug!("Done compiling LLVM");
 
     debug!("Started runtime_init call");

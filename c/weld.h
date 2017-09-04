@@ -229,5 +229,9 @@ weld_load_library(const char *filename, weld_error_t err);
 extern "C" void
 weld_set_log_level(weld_log_level_t level);
 
+extern {
+    pub fn weld_runtime_init();
+}
+
 #endif
 

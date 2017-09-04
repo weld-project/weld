@@ -242,6 +242,15 @@ pub unsafe extern "C" fn weld_module_compile(code: *const c_char,
     let code = CStr::from_ptr(code);
     let code = code.to_str().unwrap().trim();
 
+    // Let LLVM find symbols in libweldrt; it's okay to call this multiple times
+    let libweldrt = if cfg!(target_os="macos") {
+        "libweldrt.dylib"
+    } else {
+        "libweldrt.so"
+    };
+    easy_ll::load_library(libweldrt).unwrap();
+    info!("Loaded libweldrt in LLVM");
+
     info!("Started parsing program");
     let parsed = parser::parse_program(code);
     info!("Done parsing program");
@@ -409,6 +418,18 @@ pub extern "C" fn weld_set_log_level(level: WeldLogLevel) {
     builder.format(format);
     builder.filter(None, filter);
     builder.init().unwrap_or(());
+}
+
+extern {
+    pub fn weld_run_get_errno(run_id: i64) -> i64;
+    pub fn weld_runtime_init();
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn foo() {
+    println!("{:?}", weld_runtime_init());
+    println!("{:?}", weld_run_get_errno(0));
+    println!("{:?}", weld_run_get_errno(0));
 }
 
 #[cfg(test)]

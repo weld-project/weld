@@ -10,24 +10,16 @@ import copy
 
 system = platform.system()
 if system == 'Linux':
-    path = "libweld.so"
+    lib_file = "libweld.so"
 elif system == 'Windows':
-    path = "libweld.dll"
+    lib_file = "libweld.dll"
 elif system == 'Darwin':
-    path = "libweld.dylib"
+    lib_file = "libweld.dylib"
 else:
     raise OSError("Unsupported platform {}", system)
 
-if "WELD_HOME" not in os.environ:
-    raise Exception("Set the WELD_HOME environment variable")
-home = os.environ["WELD_HOME"]
-if home[-1] != "/":
-    home += "/"
-
-path = home + "target/release/" + path
-
 # Load the Weld Dynamic Library.
-weld = CDLL(path, mode=RTLD_GLOBAL)
+weld = CDLL(lib_file, mode=RTLD_GLOBAL)
 
 # Used for some type checking carried out by ctypes
 
