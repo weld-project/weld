@@ -3,6 +3,11 @@ name = "weld"
 version = "0.1.0"
 authors = ["Weld Developers <weld-group@lists.stanford.edu>"]
 build = "build.rs"
+description = "Weld is a language and runtime for improving the performance of data-intensive applications. It optimizes across libraries and functions by expressing the core computations in libraries using a common intermediate representation, and optimizing across each framework."
+readme = "README.md"
+license = "BSD-3-Clause"
+homepage = "http://weld.stanford.edu"
+repository = "https://github.com/weld-project/weld"
 
 [dependencies]
 lazy_static = "0.2.1"
@@ -10,9 +15,9 @@ regex = "0.1.71"
 rustyline = "1.0.0"
 libc = "0.2.0"
 csv = "0.15.0"
-log = "*"
-env_logger = "*"
-chrono = "*"
+log = "0.3.8"
+env_logger = "0.4.3"
+chrono = "0.4.0"
 llvm-sys = "38.0.1"
 
 [lib]
