@@ -16,7 +16,7 @@ python setup.py install
 cd ..
 
 # set llvm-sys crate version
-sed -i "s/llvm-sys = \".*\"/llvm-sys = \"$LLVM_SYS_VERSION\"/g" easy_ll/Cargo.toml
+sed -i "s/llvm-sys = \".*\"/llvm-sys = \"$LLVM_SYS_VERSION\"/g" Cargo.toml
 
 # build and test
 # Note that cargo build must, counterintuitively, come after setup.py install,

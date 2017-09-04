@@ -3,22 +3,20 @@
 extern crate llvm_sys as llvm;
 extern crate libc;
 
-#[macro_use]
-extern crate log;
-
 use std::error::Error;
 use std::ffi::{CStr, CString, NulError};
 use std::fmt;
 use std::result::Result;
+use std::mem;
 use std::ops::Drop;
 use std::os::raw::c_char;
 use std::sync::{Once, ONCE_INIT};
 
-use llvm::support::LLVMLoadLibraryPermanently;
-use llvm::prelude::{LLVMContextRef, LLVMModuleRef, LLVMMemoryBufferRef};
-use llvm::execution_engine::{LLVMExecutionEngineRef, LLVMMCJITCompilerOptions};
-use llvm::analysis::LLVMVerifierFailureAction;
-use llvm::transforms::pass_manager_builder as pmb;
+use self::llvm::support::LLVMLoadLibraryPermanently;
+use self::llvm::prelude::{LLVMContextRef, LLVMModuleRef, LLVMMemoryBufferRef};
+use self::llvm::execution_engine::{LLVMExecutionEngineRef, LLVMMCJITCompilerOptions};
+use self::llvm::analysis::LLVMVerifierFailureAction;
+use self::llvm::transforms::pass_manager_builder as pmb;
 
 #[cfg(test)]
 mod tests;
@@ -319,8 +317,8 @@ unsafe fn optimize_module(module: LLVMModuleRef) -> Result<(), LlvmError> {
 unsafe fn create_exec_engine(module: LLVMModuleRef) -> Result<LLVMExecutionEngineRef, LlvmError> {
     let mut engine = 0 as LLVMExecutionEngineRef;
     let mut error_str = 0 as *mut c_char;
-    let mut options: LLVMMCJITCompilerOptions = std::mem::uninitialized();
-    let options_size = std::mem::size_of::<LLVMMCJITCompilerOptions>();
+    let mut options: LLVMMCJITCompilerOptions = mem::uninitialized();
+    let options_size = mem::size_of::<LLVMMCJITCompilerOptions>();
     llvm::execution_engine::LLVMInitializeMCJITCompilerOptions(&mut options, options_size);
     options.OptLevel = 2;
     let result_code = llvm::execution_engine::LLVMCreateMCJITCompilerForModule(&mut engine,
@@ -343,6 +341,6 @@ unsafe fn find_function(engine: LLVMExecutionEngineRef, name: &str) -> Result<I6
     if func_addr == 0 {
         return Err(LlvmError(format!("No function named {} in module", name)));
     }
-    let function: I64Func = std::mem::transmute(func_addr);
+    let function: I64Func = mem::transmute(func_addr);
     Ok(function)
 }

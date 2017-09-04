@@ -1,7 +1,5 @@
 extern crate rustyline;
-extern crate easy_ll;
 extern crate weld;
-extern crate weld_common;
 extern crate libc;
 
 use rustyline::error::ReadlineError;
@@ -18,7 +16,7 @@ use std::collections::HashMap;
 use libc::c_char;
 
 use weld::*;
-use weld_common::*;
+use weld::common::*;
 
 enum ReplCommands {
     LoadFile,

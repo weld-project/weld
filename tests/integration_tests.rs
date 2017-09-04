@@ -2,10 +2,9 @@ use std::env;
 use std::thread;
 
 extern crate weld;
-extern crate weld_common;
 extern crate libc;
 
-use weld_common::WeldRuntimeErrno;
+use weld::common::WeldRuntimeErrno;
 
 use weld::WeldConf;
 use weld::WeldValue;

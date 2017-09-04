@@ -10,20 +10,17 @@ extern crate lazy_static;
 extern crate log;
 
 extern crate regex;
-extern crate easy_ll;
 extern crate libc;
 extern crate env_logger;
 extern crate chrono;
-
-extern crate weld_common;
 
 use std::collections::HashMap;
 use std::error::Error;
 use libc::{c_char, c_void};
 use std::ffi::{CStr, CString};
 
-use weld_common::WeldRuntimeErrno;
-use weld_common::WeldLogLevel;
+use common::WeldRuntimeErrno;
+use common::WeldLogLevel;
 
 /// Utility macro to create an Err result with a WeldError from a format string.
 macro_rules! weld_err {
@@ -34,6 +31,7 @@ macro_rules! weld_err {
 
 pub mod ast;
 pub mod code_builder;
+pub mod common;
 pub mod error;
 pub mod llvm;
 pub mod macro_processor;
@@ -52,6 +50,8 @@ pub mod exprs;
 
 // TODO not the right place for this.
 pub mod vectorizer;
+
+pub mod easy_ll;
 
 extern "C" {
     pub fn free(ptr: *mut c_void);
