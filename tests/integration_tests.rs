@@ -2155,14 +2155,13 @@ fn main() {
              ("simple_float_mod", simple_float_mod),
              ("simple_int_mod", simple_int_mod),
              ("predicate_if_iff_annotated", predicate_if_iff_annotated)];
-
-
+    
     println!("");
     println!("running tests");
     let mut passed = 0;
     for t in tests.iter() {
         if args.len() > 1 {
-            if !args[1].contains(t.0) {
+            if !(t.0).contains(&args[1]) {
                 println!("{} ... \x1b[0;33mignored\x1b[0m", t.0);
                 continue;
             }
