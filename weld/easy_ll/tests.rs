@@ -1,7 +1,6 @@
 use std::error::Error;
 
 use easy_ll::compile_module;
-pub const LIB_WELD_RT: &'static [u8] = include_bytes!("../../weld_rt/cpp/libweldrt.bc");
 
 #[test]
 fn basic_use() {
