@@ -338,15 +338,15 @@ static inline void work_loop(int32_t my_id, run_data *rd) {
       // free all allocated memory as long as it is allocated with
       // `weld_run_malloc` or `weld_run_realloc`.
       if (rd->err != 0) {
-	cleanup_tasks_on_thread(popped, my_id, rd);
+        cleanup_tasks_on_thread(popped, my_id, rd);
         return;
       }
       if (!setjmp(rd->work_loop_roots[my_id])) {
         popped->fp(popped);
         finish_task(popped, my_id, rd);
       } else {
-	// error-case exit from task
-	cleanup_tasks_on_thread(popped, my_id, rd);
+        // error-case exit from task
+        cleanup_tasks_on_thread(popped, my_id, rd);
         return;
       }
     }
