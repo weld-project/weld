@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <pthread.h>
+#include <setjmp.h>
 #include <map>
 #include <queue>
 #include <deque>
@@ -63,8 +64,6 @@ this means a single complete execution of a Weld program.
 */
 using namespace std;
 
-class weld_abort_exception: public exception {};
-
 typedef deque<work_t *> work_queue;
 typedef pthread_spinlock_t work_queue_lock;
 
@@ -79,6 +78,7 @@ struct run_data {
   pthread_t *workers;
   work_queue *all_work_queues; // queue per worker
   work_queue_lock *all_work_queue_locks; // lock per queue
+  jmp_buf *work_loop_roots; // jmp_buf per worker so that workers can exit easily on errors
   volatile bool done; // if a computation is currently running, have we finished it?
   void *result; // stores the final result of the computation to be passed back
   // to the caller
@@ -132,7 +132,7 @@ extern "C" int32_t weld_rt_get_nworkers() {
 }
 
 extern "C" void weld_rt_abort_thread() {
-  throw weld_abort_exception();
+  longjmp(get_run_data()->work_loop_roots[weld_rt_thread_id()], 0);
 }
 
 static inline void set_nest(work_t *task) {
@@ -305,6 +305,22 @@ static inline void split_task(work_t *task, int32_t my_id, run_data *rd) {
   }
 }
 
+static inline void cleanup_tasks_on_thread(work_t *cur_task, int32_t my_id, run_data *rd) {
+  finish_task(cur_task, my_id, rd);
+  while (true) {
+    pthread_spin_lock(rd->all_work_queue_locks + my_id);
+    if ((rd->all_work_queues + my_id)->empty()) {
+      pthread_spin_unlock(rd->all_work_queue_locks + my_id);
+      return;
+    } else {
+      work_t *popped = (rd->all_work_queues + my_id)->front();
+      (rd->all_work_queues + my_id)->pop_front();
+      pthread_spin_unlock(rd->all_work_queue_locks + my_id);
+      finish_task(popped, my_id, rd);
+    }
+  }
+}
+
 // keeps executing items from the work queue until it is empty
 static inline void work_loop(int32_t my_id, run_data *rd) {
   while (true) {
@@ -322,10 +338,17 @@ static inline void work_loop(int32_t my_id, run_data *rd) {
       // free all allocated memory as long as it is allocated with
       // `weld_run_malloc` or `weld_run_realloc`.
       if (rd->err != 0) {
-        weld_rt_abort_thread();
+        cleanup_tasks_on_thread(popped, my_id, rd);
+        return;
       }
-      popped->fp(popped);
-      finish_task(popped, my_id, rd);
+      if (!setjmp(rd->work_loop_roots[my_id])) {
+        popped->fp(popped);
+        finish_task(popped, my_id, rd);
+      } else {
+        // error-case exit from task
+        cleanup_tasks_on_thread(popped, my_id, rd);
+        return;
+      }
     }
   }
 }
@@ -338,26 +361,22 @@ static void *thread_func(void *data) {
   pthread_mutex_unlock(&global_lock);
 
   int iters = 0;
-  try {
-    // this work_loop call is needed to complete any work items that are initially on the queue
-    work_loop(td->thread_id, rd);
-    while (!rd->done) {
-      if (try_steal(td->thread_id, rd)) {
-        iters = 0;
-        work_loop(td->thread_id, rd);
-      } else {
-        // If this thread is stalling, periodically check for errors.
-        iters++;
-        if (iters > 1000000) {
-          if (rd->err != 0) {
-            break;
-          }
-          iters = 0;
+  // this work_loop call is needed to complete any work items that are initially on the queue
+  work_loop(td->thread_id, rd);
+  while (!rd->done) {
+    if (try_steal(td->thread_id, rd)) {
+      iters = 0;
+      work_loop(td->thread_id, rd);
+    } else {
+      // If this thread is stalling, periodically check for errors.
+      iters++;
+      if (iters > 1000000) {
+        if (rd->err != 0) {
+          break;
         }
+        iters = 0;
       }
     }
-  } catch (weld_abort_exception &) {
-    // swallow aborts here
   }
   free(data);
   return NULL;
@@ -375,6 +394,7 @@ extern "C" int64_t weld_run_begin(void (*run)(work_t*), void *data, int64_t mem_
   rd->workers = new pthread_t[n_workers];
   rd->all_work_queue_locks = new work_queue_lock[n_workers];
   rd->all_work_queues = new work_queue[n_workers];
+  rd->work_loop_roots = new jmp_buf[n_workers];
   rd->done = false;
   rd->result = NULL;
   rd->mem_limit = mem_limit;
@@ -418,10 +438,10 @@ extern "C" int64_t weld_run_begin(void (*run)(work_t*), void *data, int64_t mem_
   for (int32_t i = 0; i < n_workers; i++) {
     pthread_spin_destroy(rd->all_work_queue_locks + i);
   }
+  delete [] rd->work_loop_roots;
   delete [] rd->all_work_queue_locks;
   delete [] rd->all_work_queues;
   delete [] rd->workers;
-  rd->done = true;
   return my_run_id;
 }
 

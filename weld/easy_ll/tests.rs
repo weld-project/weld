@@ -1,6 +1,7 @@
 use std::error::Error;
 
-use super::compile_module;
+use easy_ll::compile_module;
+pub const LIB_WELD_RT: &'static [u8] = include_bytes!("../../weld_rt/cpp/libweldrt.bc");
 
 #[test]
 fn basic_use() {
@@ -15,7 +16,7 @@ fn basic_use() {
            %2 = call i64 @bar(i64 %1)
            ret i64 %2
        }
-    ");
+    ", None);
     assert!(module.is_ok());
     assert_eq!(module.unwrap().run(42), 44);
 }
@@ -26,7 +27,7 @@ fn compile_error() {
        define ZZZZZZZZ @run(i64 %arg) {
            ret i64 0
        }
-    ");
+    ", None);
     assert!(!module.is_ok());
     assert!(module.unwrap_err().description().contains("Compile"));
 }
@@ -37,7 +38,7 @@ fn no_run_function() {
        define i64 @ZZZZZZZ(i64 %arg) {
            ret i64 0
        }
-    ");
+    ", None);
     assert!(!module.is_ok());
     assert!(module.unwrap_err().description().contains("run function"));
 }
@@ -48,7 +49,7 @@ fn wrong_function_type() {
        define i64 @run() {
            ret i64 0
        }
-    ");
+    ", None);
     assert!(!module.is_ok());
     assert!(module.unwrap_err().description().contains("wrong type"));
 }

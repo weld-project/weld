@@ -2,10 +2,9 @@ use std::env;
 use std::thread;
 
 extern crate weld;
-extern crate weld_common;
 extern crate libc;
 
-use weld_common::WeldRuntimeErrno;
+use weld::common::WeldRuntimeErrno;
 
 use weld::WeldConf;
 use weld::WeldValue;
@@ -257,6 +256,32 @@ fn i32_cast() {
     let data = unsafe { weld_value_data(ret_value) as *const i32 };
     let result = unsafe { *data };
     assert_eq!(result, 1);
+
+    unsafe { free_value_and_module(ret_value) };
+}
+
+fn multiple_casts() {
+    let code = "|| i16(i8(u8(i64(256+255))))";
+    let conf = default_conf();
+
+    let ref input_data = 0;
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const i16 };
+    let result = unsafe { *data };
+    assert_eq!(result, -1i16);
+
+    unsafe { free_value_and_module(ret_value) };
+
+    let code = "|| u32(u64(u16(i16(u8(i64(-1))))))";
+    let conf = default_conf();
+
+    let ref input_data = 0;
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const u32 };
+    let result = unsafe { *data };
+    assert_eq!(result, 255);
 
     unsafe { free_value_and_module(ret_value) };
 }
@@ -518,8 +543,8 @@ fn le_between_vectors() {
     let conf = default_conf();
 
     let code = "|e0: vec[i32], e1: vec[i32]| e0 <= e1";
-    let input_vec1 = [1, 2, 3, 4, 5];
-    let input_vec2 = [0, 3, 4, 5, 6];
+    let input_vec1 = [-1, 0, 3, 4, 5];
+    let input_vec2 = [-1, -3, 4, 5, 6];
     let ref input_data = Args {
         x: WeldVec {
             data: &input_vec1 as *const i32,
@@ -534,6 +559,35 @@ fn le_between_vectors() {
     let data = unsafe { weld_value_data(ret_value) as *const bool };
     let result = unsafe { *data };
     assert_eq!(result, false);
+    unsafe { free_value_and_module(ret_value) };
+}
+
+fn le_between_unsigned_vectors() {
+    #[allow(dead_code)]
+    struct Args {
+        x: WeldVec<i32>,
+        y: WeldVec<i32>,
+    }
+    let conf = default_conf();
+
+    // Note that we pass our integers in as unsigneds in Weld
+    let code = "|e0: vec[u32], e1: vec[u32]| e0 <= e1";
+    let input_vec1 = [-1, 0, 3, 4, 5];
+    let input_vec2 = [-1, -3, 4, 5, 6];
+    let ref input_data = Args {
+        x: WeldVec {
+            data: &input_vec1 as *const i32,
+            len: input_vec1.len() as i64,
+        },
+        y: WeldVec {
+            data: &input_vec2 as *const i32,
+            len: input_vec2.len() as i64,
+        },
+    };
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const bool };
+    let result = unsafe { *data };
+    assert_eq!(result, true);
     unsafe { free_value_and_module(ret_value) };
 }
 
@@ -2034,6 +2088,7 @@ fn main() {
              //("c_udf", c_udf),
              ("f64_cast", f64_cast),
              ("i32_cast", i32_cast),
+             ("multiple_casts", multiple_casts),
              ("program_with_args", program_with_args),
              ("struct_vector_literals", struct_vector_literals),
              ("let_statement", let_statement),
@@ -2046,6 +2101,7 @@ fn main() {
              ("ne_between_vectors", ne_between_vectors),
              ("lt_between_vectors", lt_between_vectors),
              ("le_between_vectors", le_between_vectors),
+             ("le_between_unsigned_vectors", le_between_unsigned_vectors),
              ("simple_vector_lookup", simple_vector_lookup),
              ("simple_vector_slice", simple_vector_slice),
              ("simple_log", simple_log),
@@ -2099,14 +2155,13 @@ fn main() {
              ("simple_float_mod", simple_float_mod),
              ("simple_int_mod", simple_int_mod),
              ("predicate_if_iff_annotated", predicate_if_iff_annotated)];
-
-
+    
     println!("");
     println!("running tests");
     let mut passed = 0;
     for t in tests.iter() {
         if args.len() > 1 {
-            if !args[1].contains(t.0) {
+            if !(t.0).contains(&args[1]) {
                 println!("{} ... \x1b[0;33mignored\x1b[0m", t.0);
                 continue;
             }

@@ -2,23 +2,21 @@
 
 extern crate llvm_sys as llvm;
 
-#[macro_use]
-extern crate log;
-
 use std::error::Error;
 use std::ffi::{CStr, CString, NulError};
 use std::fmt;
 use std::result::Result;
+use std::mem;
 use std::ops::Drop;
 use std::os::raw::c_char;
 use std::sync::{Once, ONCE_INIT};
 
-use llvm::support::LLVMLoadLibraryPermanently;
-use llvm::prelude::{LLVMContextRef, LLVMModuleRef, LLVMMemoryBufferRef};
-use llvm::execution_engine::{LLVMExecutionEngineRef, LLVMMCJITCompilerOptions, LLVMGetExecutionEngineTargetMachine};
-use llvm::analysis::LLVMVerifierFailureAction;
-use llvm::transforms::pass_manager_builder as pmb;
-use llvm::target_machine::{LLVMCodeGenFileType, LLVMTargetMachineEmitToMemoryBuffer};
+use self::llvm::support::LLVMLoadLibraryPermanently;
+use self::llvm::prelude::{LLVMContextRef, LLVMModuleRef, LLVMMemoryBufferRef};
+use self::llvm::execution_engine::{LLVMExecutionEngineRef, LLVMMCJITCompilerOptions, LLVMGetExecutionEngineTargetMachine};
+use self::llvm::analysis::LLVMVerifierFailureAction;
+use self::llvm::target_machine::{LLVMCodeGenFileType, LLVMTargetMachineEmitToMemoryBuffer};
+use self::llvm::transforms::pass_manager_builder as pmb;
 
 #[cfg(test)]
 mod tests;
@@ -112,17 +110,17 @@ pub fn load_library(libname: &str) -> Result<(), LlvmError> {
 }
 
 fn output_llvm_ir(engine: LLVMExecutionEngineRef, module: LLVMModuleRef) -> String {
-    //let test = CString::new("test").unwrap();
-    let mut v = [8 as i8; 20000];
+    // Keep enough space for the llvm IR being created.
+    let mut v = [8 as i8; 200000];
+    let mut err = [8 as i8; 200];
     unsafe {
         // Create MemoryBuffer with larger than required space for the llvm IR.
-        let mut output_buf = llvm::core::LLVMCreateMemoryBufferWithMemoryRange(v.as_mut_ptr(), 2000000, CString::new("rand").unwrap().as_ptr(), 0);
+        let mut output_buf = llvm::core::LLVMCreateMemoryBufferWithMemoryRange(v.as_mut_ptr(), v.len(), CString::new("rand").unwrap().as_ptr(), 0);
         let cur_target = LLVMGetExecutionEngineTargetMachine(engine);
-        let mut error_str = std::ptr::null_mut();
         let file_type = LLVMCodeGenFileType::LLVMAssemblyFile;
-        let res = LLVMTargetMachineEmitToMemoryBuffer(cur_target, module, file_type, &mut error_str, &mut output_buf);
+        let res = LLVMTargetMachineEmitToMemoryBuffer(cur_target, module, file_type, &mut err.as_mut_ptr(), &mut output_buf);
         if res == 1 {
-            let x = CStr::from_ptr(error_str);
+            let x = CStr::from_ptr(err.as_ptr() as *mut c_char);
             panic!("Getting LLVM IR failed! {:?}", x);
         }
         let start = llvm::core::LLVMGetBufferStart(output_buf);
@@ -340,8 +338,8 @@ unsafe fn optimize_module(module: LLVMModuleRef) -> Result<(), LlvmError> {
 unsafe fn create_exec_engine(module: LLVMModuleRef) -> Result<LLVMExecutionEngineRef, LlvmError> {
     let mut engine = 0 as LLVMExecutionEngineRef;
     let mut error_str = 0 as *mut c_char;
-    let mut options: LLVMMCJITCompilerOptions = std::mem::uninitialized();
-    let options_size = std::mem::size_of::<LLVMMCJITCompilerOptions>();
+    let mut options: LLVMMCJITCompilerOptions = mem::uninitialized();
+    let options_size = mem::size_of::<LLVMMCJITCompilerOptions>();
     llvm::execution_engine::LLVMInitializeMCJITCompilerOptions(&mut options, options_size);
     options.OptLevel = 2;
     let result_code = llvm::execution_engine::LLVMCreateMCJITCompilerForModule(&mut engine,
@@ -364,6 +362,6 @@ unsafe fn find_function(engine: LLVMExecutionEngineRef, name: &str) -> Result<I6
     if func_addr == 0 {
         return Err(LlvmError(format!("No function named {} in module", name)));
     }
-    let function: I64Func = std::mem::transmute(func_addr);
+    let function: I64Func = mem::transmute(func_addr);
     Ok(function)
 }

@@ -1,5 +1,4 @@
 
-extern crate easy_ll;
 extern crate libc;
 
 use std::cmp::max;
