@@ -130,7 +130,7 @@ class WeldObject(object):
             "\n".join(list(set(self.constants))) + "\n" + self.weld_code
         return text
 
-    def evaluate(self, restype, verbose=True, decode=True):
+    def evaluate(self, restype, verbose=True, decode=True, log_level=0):
         function = self.toWeldFunc()
 
         # Returns a wrapped ctypes Structure
@@ -138,6 +138,8 @@ class WeldObject(object):
             class Args(ctypes.Structure):
                 _fields_ = [e for e in encoded]
             return Args
+
+        cweld.set_log_level(log_level)
 
         # Encode each input argument. This is the positional argument list
         # which will be wrapped into a Weld struct and passed to the Weld API.

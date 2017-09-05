@@ -46,6 +46,7 @@ class c_weld_value(c_void_p):
 class WeldModule(c_void_p):
 
     def __init__(self, code, conf, err):
+        # weld.weld_set_log_level(5)
         weld_module_compile = weld.weld_module_compile
         weld_module_compile.argtypes = [
             c_char_p, c_weld_conf, c_weld_err]
@@ -166,3 +167,9 @@ class WeldError(c_void_p):
         weld_error_free.argtypes = [c_weld_err]
         weld_error_free.restype = None
         weld_error_free(self.error)
+
+def set_log_level(log_level):
+    '''
+    Sets the log_level for weld: 0 = No Logs, 1 = Error, 2 = Warn, 3 = Info, 4 = Debug, 5 = Trace.
+    '''
+    weld.weld_set_log_level(log_level)
