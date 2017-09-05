@@ -2534,10 +2534,10 @@ fn llvm_binop(op_kind: BinOpKind, ty: &Type) -> WeldResult<&'static str> {
                 Modulo if s.is_unsigned_integer() => Ok("urem"),
                 Modulo if s.is_float() => Ok("frem"),
 
-                Equal if s.is_integer() => Ok("icmp eq"),
+                Equal if s.is_integer() || s.is_bool() => Ok("icmp eq"),
                 Equal if s.is_float() => Ok("fcmp oeq"),
 
-                NotEqual if s.is_integer() => Ok("icmp ne"),
+                NotEqual if s.is_integer() || s.is_bool() => Ok("icmp ne"),
                 NotEqual if s.is_float() => Ok("fcmp one"),
 
                 LessThan if s.is_signed_integer() => Ok("icmp slt"),
@@ -2712,7 +2712,7 @@ fn predicate_only(code: &str) -> WeldResult<TypedExpr> {
     let mut e = parse_expr(code).unwrap();
     assert!(type_inference::infer_types(&mut e).is_ok());
     let mut typed_e = e.to_typed().unwrap();
-    
+
     let optstr = ["predicate"];
     let optpass = optstr.iter().map(|x| (*OPTIMIZATION_PASSES.get(x).unwrap()).clone()).collect();
 
