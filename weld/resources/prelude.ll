@@ -16,9 +16,6 @@ declare double @llvm.exp.f64(double)
 declare float @llvm.log.f32(float)
 declare double @llvm.log.f64(double)
 
-declare float @erff(float)
-declare double @erf(double)
-
 declare <4 x float> @llvm.sqrt.v4f32(<4 x float>)
 declare <8 x float> @llvm.sqrt.v8f32(<8 x float>)
 declare <4 x float> @llvm.log.v4f32(<4 x float>)
@@ -41,6 +38,9 @@ declare i64 @llvm.ctlz.i64(i64, i1)
 ; std library functions
 declare i8* @malloc(i64)
 declare void @qsort(i8*, i64, i64, i32 (i8*, i8*)*)
+declare i32 @memcmp(i8*, i8*, i64)
+declare float @erff(float)
+declare double @erf(double)
 
 ; Weld runtime functions
 declare void    @weld_runtime_init()

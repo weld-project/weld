@@ -1065,24 +1065,37 @@ impl LlvmGenerator {
         let name = self.vec_ids.next();
         self.vec_names.insert(elem.clone(), name.clone());
 
-		let vector_def = format!(include_str!("resources/vector.ll"),
+		self.prelude_code.add(format!(
+            include_str!("resources/vector/vector.ll"),
 			ELEM_PREFIX=&elem_prefix,
 			ELEM=&elem_ty,
-			NAME=&name.replace("%", ""));
-
-        self.prelude_code.add(&vector_def);
+			NAME=&name.replace("%", "")));
         self.prelude_code.add("\n");
 
-        // Supports vectorization, so add in SIMD extensions.
+        // If the vector contains scalars only, add in SIMD extensions.
         if elem.is_scalar() {
-            let simd_extension = format!(include_str!("resources/vvector.ll"),
+            self.prelude_code.add(format!(
+                include_str!("resources/vector/vvector.ll"),
                 ELEM=elem_ty,
                 NAME=&name.replace("%", ""),
-                VECSIZE=&format!("{}", llvm_simd_size(elem)?));
-
-            self.prelude_code.add(&simd_extension);
+                VECSIZE=&format!("{}", llvm_simd_size(elem)?)));
             self.prelude_code.add("\n");
         }
+
+        // Add the right comparison function for the vector. For vectors of unsigned chars,
+        // we can use memcmp, but for anything else we need element-by-element comparison.
+        if let &Scalar(ScalarKind::U8) = elem {
+            self.prelude_code.add(format!(
+                include_str!("resources/vector/vector_comparison_memcmp.ll"),
+                NAME=&name.replace("%", "")));
+        } else {
+            self.prelude_code.add(format!(
+                include_str!("resources/vector/vector_comparison.ll"),
+                ELEM_PREFIX=&elem_prefix,
+                ELEM=&elem_ty,
+                NAME=&name.replace("%", "")));
+        }
+
         Ok(())
     }
 
@@ -1455,6 +1468,7 @@ impl LlvmGenerator {
                                              &output_tmp, llvm_binop(op, ty)?, &ll_ty, &left_tmp, &right_tmp));
                         self.gen_store_var(&output_tmp, &output_ll_sym, &output_ll_ty, ctx);
                     }
+
                     Vector(_) => {
                         // We support BinOps between vectors as long as they're comparison operators
                         let (op_name, value) = llvm_binop_vector(op, ty)?;
@@ -1470,6 +1484,7 @@ impl LlvmGenerator {
                         ctx.code.add(format!("{} = icmp {} i32 {}, {}", output_tmp, op_name, tmp, value));
                         self.gen_store_var(&output_tmp, &output_ll_sym, &output_ll_ty, ctx);
                     }
+
                     _ => weld_err!("Illegal type {} in BinOp", print_type(ty))?,
                 }
             }

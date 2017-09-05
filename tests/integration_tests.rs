@@ -612,6 +612,90 @@ fn le_between_unsigned_vectors() {
     unsafe { free_value_and_module(ret_value) };
 }
 
+fn eq_between_u8_vectors() {
+    #[allow(dead_code)]
+    struct Args {
+        x: WeldVec<u8>,
+        y: WeldVec<u8>,
+    }
+    let conf = default_conf();
+
+    let code = "|e0: vec[u8], e1: vec[u8]| e0 == e1";
+    let input_vec1 = [1u8, 2u8, 3u8, 4u8, 5u8];
+    let input_vec2 = [1u8, 2u8, 3u8, 4u8, 5u8];
+    let ref input_data = Args {
+        x: WeldVec {
+            data: &input_vec1 as *const u8,
+            len: input_vec1.len() as i64,
+        },
+        y: WeldVec {
+            data: &input_vec2 as *const u8,
+            len: input_vec2.len() as i64,
+        },
+    };
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const bool };
+    let result = unsafe { *data };
+    assert_eq!(result, true);
+    unsafe { free_value_and_module(ret_value) };
+}
+
+fn eq_between_different_length_u8_vectors() {
+    #[allow(dead_code)]
+    struct Args {
+        x: WeldVec<u8>,
+        y: WeldVec<u8>,
+    }
+    let conf = default_conf();
+
+    let code = "|e0: vec[u8], e1: vec[u8]| e0 == e1";
+    let input_vec1 = [1u8, 2u8, 3u8, 4u8, 5u8];
+    let input_vec2 = [1u8, 2u8, 3u8, 4u8, 5u8, 6u8];
+    let ref input_data = Args {
+        x: WeldVec {
+            data: &input_vec1 as *const u8,
+            len: input_vec1.len() as i64,
+        },
+        y: WeldVec {
+            data: &input_vec2 as *const u8,
+            len: input_vec2.len() as i64,
+        },
+    };
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const bool };
+    let result = unsafe { *data };
+    assert_eq!(result, false);
+    unsafe { free_value_and_module(ret_value) };
+}
+
+fn le_between_u8_vectors() {
+    #[allow(dead_code)]
+    struct Args {
+        x: WeldVec<u8>,
+        y: WeldVec<u8>,
+    }
+    let conf = default_conf();
+
+    let code = "|e0: vec[u8], e1: vec[u8]| e0 <= e1";
+    let input_vec1 = [1u8, 2u8, 3u8, 4u8, 5u8];
+    let input_vec2 = [1u8, 2u8, 3u8, 255u8, 5u8];
+    let ref input_data = Args {
+        x: WeldVec {
+            data: &input_vec1 as *const u8,
+            len: input_vec1.len() as i64,
+        },
+        y: WeldVec {
+            data: &input_vec2 as *const u8,
+            len: input_vec2.len() as i64,
+        },
+    };
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const bool };
+    let result = unsafe { *data };
+    assert_eq!(result, true);
+    unsafe { free_value_and_module(ret_value) };
+}
+
 fn simple_vector_lookup() {
     let code = "|x:vec[i32]| lookup(x, 3L)";
     let conf = default_conf();
@@ -2124,6 +2208,9 @@ fn main() {
              ("lt_between_vectors", lt_between_vectors),
              ("le_between_vectors", le_between_vectors),
              ("le_between_unsigned_vectors", le_between_unsigned_vectors),
+             ("eq_between_u8_vectors", eq_between_u8_vectors),
+             ("eq_between_different_length_u8_vectors", eq_between_different_length_u8_vectors),
+             ("le_between_u8_vectors", le_between_u8_vectors),
              ("simple_vector_lookup", simple_vector_lookup),
              ("simple_vector_slice", simple_vector_slice),
              ("simple_log", simple_log),
