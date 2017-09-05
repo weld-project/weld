@@ -14,7 +14,6 @@ addons:
       - llvm-3.8
       - llvm-3.8-dev
       - clang-3.8
-      - clang-4.0
       - lib32z1-dev
       - python2.7
       - python3.6
