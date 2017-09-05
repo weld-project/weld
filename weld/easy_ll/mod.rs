@@ -10,6 +10,7 @@ use std::mem;
 use std::ops::Drop;
 use std::os::raw::c_char;
 use std::sync::{Once, ONCE_INIT};
+use std::ptr;
 
 use self::llvm::support::LLVMLoadLibraryPermanently;
 use self::llvm::prelude::{LLVMContextRef, LLVMModuleRef, LLVMMemoryBufferRef};
@@ -17,6 +18,7 @@ use self::llvm::execution_engine::{LLVMExecutionEngineRef, LLVMMCJITCompilerOpti
 use self::llvm::analysis::LLVMVerifierFailureAction;
 use self::llvm::target_machine::{LLVMCodeGenFileType, LLVMTargetMachineEmitToMemoryBuffer};
 use self::llvm::transforms::pass_manager_builder as pmb;
+use self::llvm::core::{LLVMGetBufferStart, LLVMPrintModuleToString};
 
 #[cfg(test)]
 mod tests;
@@ -109,21 +111,30 @@ pub fn load_library(libname: &str) -> Result<(), LlvmError> {
     }
 }
 
-fn output_llvm_ir(engine: LLVMExecutionEngineRef, module: LLVMModuleRef) -> String {
-    // Keep enough space for the llvm IR being created.
-    let mut v = [8 as i8; 200000];
-    let mut err = [8 as i8; 200];
+/// Outputs the target machine assembly based on the given engine and module using llvm-sys api.
+fn output_target_machine_assembly(engine: LLVMExecutionEngineRef, module: LLVMModuleRef) -> String {
+    // We create a pointer to a MemoryBuffer (MemoryBufferRef), and will pass its address to be
+    // modified by EmitToMemoryBuffer.
+    let mut output_buf : self::llvm::prelude::LLVMMemoryBufferRef = ptr::null_mut();
+    let mut err = ptr::null_mut();
     unsafe {
-        // Create MemoryBuffer with larger than required space for the llvm IR.
-        let mut output_buf = llvm::core::LLVMCreateMemoryBufferWithMemoryRange(v.as_mut_ptr(), v.len(), CString::new("rand").unwrap().as_ptr(), 0);
         let cur_target = LLVMGetExecutionEngineTargetMachine(engine);
         let file_type = LLVMCodeGenFileType::LLVMAssemblyFile;
-        let res = LLVMTargetMachineEmitToMemoryBuffer(cur_target, module, file_type, &mut err.as_mut_ptr(), &mut output_buf);
+        let res = LLVMTargetMachineEmitToMemoryBuffer(cur_target, module, file_type, &mut err, &mut output_buf);
         if res == 1 {
-            let x = CStr::from_ptr(err.as_ptr() as *mut c_char);
+            let x = CStr::from_ptr(err as *mut c_char);
             panic!("Getting LLVM IR failed! {:?}", x);
         }
-        let start = llvm::core::LLVMGetBufferStart(output_buf);
+        let start = LLVMGetBufferStart(output_buf);
+        let c_str: &CStr = CStr::from_ptr(start as *mut c_char);
+        c_str.to_str().unwrap().to_owned()
+    }
+}
+
+/// Outputs the LLVM IR for the given module.
+fn output_llvm_ir(module: LLVMModuleRef) -> String {
+    unsafe {
+        let start = LLVMPrintModuleToString(module);
         let c_str: &CStr = CStr::from_ptr(start as *mut c_char);
         c_str.to_str().unwrap().to_owned()
     }
@@ -157,6 +168,7 @@ pub fn compile_module(code: &str, bc_file: Option<&[u8]>) -> Result<CompiledModu
         // Parse the IR to get an LLVMModuleRef
         let module = parse_module_str(context, code)?;
         debug!("Done parsing module");
+        trace!("Non-Optimized LLVM IR, before linking bc file: \n = {}", output_llvm_ir(module));
 
         if let Some(s) = bc_file {
             let bc_module = parse_module_bytes(context, s)?;
@@ -171,11 +183,12 @@ pub fn compile_module(code: &str, bc_file: Option<&[u8]>) -> Result<CompiledModu
         debug!("Done validating module");
         optimize_module(module)?;
         debug!("Done optimizing module");
+        trace!("Optimized LLVM IR: \n = {}", output_llvm_ir(module));
 
         // Create an execution engine for the module and find its run function
         let engine = create_exec_engine(module)?;
         debug!("Done creating execution engine");
-        trace!("llvm ir for target:\n = {}", output_llvm_ir(engine, module));
+        trace!("Optimized Target Machine Assembly: \n = {}", output_target_machine_assembly(engine, module));
 
         result.engine = Some(engine);
         result.run_function = Some(find_function(engine, "run")?);
