@@ -79,7 +79,7 @@ $ ln -s /usr/local/bin/clang /usr/local/bin/clang-4.0
 $ ln -s /usr/local/bin/llvm-link /usr/local/bin/llvm-link-4.0
 ```
 
-Weld builds two dynamically linked libraries (`.so` files on Linux and `.dylib` files on macOS): `libweld` and `libweldrt`. Both of these libraries are found using `WELD_HOME`. By default, the libraries are in `$WELD_HOME/target/release` and `$WELD_HOME/weld_rt/target/release`.
+Weld builds two dynamically linked libraries (`.so` files on Linux and `.dylib` files on Mac): `libweld` and `libweldrt`. Both of these libraries need to be on your `LD_LIBRARY_PATH` (or `DYLD_LIBRARY_PATH` on a Mac) when running a program that uses Weld. By default, the libraries get placed in in `$WELD_HOME/target/release` or `$WELD_HOME/target/debug`.
 
 Finally, run the unit and integration tests:
 
@@ -96,25 +96,33 @@ The `docs/` directory contains documentation for the different components of Wel
 * [python.md](https://github.com/weld-project/weld/blob/master/docs/python.md) gives an overview of the Python API.
 * [tutorial.md](https://github.com/weld-project/weld/blob/master/docs/tutorial.md) contains a tutorial for how to build a small vector library using Weld.
 
+## Python Bindings
+
+Weld's python bindings are in [`python/weld`](https://github.com/weld-project/weld/tree/master/python/weld), with examples in [`examples/python`](https://github.com/weld-project/weld/tree/master/examples/python).
+To run any these programs, you will need Weld's runtime libraries (`libweld` and `libweldrt`) to be on your `LD_LIBRARY_PATH` or `DYLD_LIBRARY_PATH` (on Macs).
+
 ## Grizzly
 
 **Grizzly** is a subset of [Pandas](http://pandas.pydata.org/) integrated with Weld. Details on how to use Grizzly are in
 [`python/grizzly`](https://github.com/weld-project/weld/tree/master/python/grizzly).
 Some example workloads that make use of Grizzly are in [`examples/python/grizzly`](https://github.com/weld-project/weld/tree/master/examples/python/grizzly).
+To run Grizzly, you will also need the `WELD_HOME` environment variable to be set, because Grizzly needs to find its own native library through this variable.
 
-## Running an Interactive REPL
+## Testing
 
-* `cargo test` runs unit and integration tests. A test name substring filter can be used to run a subset of the tests:
+`cargo test` runs unit and integration tests. A test name substring filter can be used to run a subset of the tests:
 
    ```
    cargo test <substring to match in test name>
    ```
 
-* The `target/release/repl` program is a simple "shell" where one can type Weld programs and see
-  the results of parsing, macro substitution and type inference.
+## Interactive REPL
+
+The `target/release/repl` program is a simple "shell" where one can type Weld programs and see the results of parsing, macro substitution and type inference. Make sure to set `LD_LIBRARY_PATH` or `DYLD_LIBRARY_PATH` (on Macs) to point to your build directory before running it so that it can find the runtime libraries:
 
 Example `repl` session:
 ```
+$ LD_LIBRARY_PATH=target/debug ./target/debug/repl
 > let a = 5 + 2; a + a
 Raw structure: [...]
 

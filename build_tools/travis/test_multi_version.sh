@@ -26,6 +26,7 @@ cargo clean
 cargo build --release
 cargo test
 
+export LD_LIBRARY_PATH=`pwd`/target/release
 python python/grizzly/tests/grizzly_test.py
 python python/grizzly/tests/numpy_weld_test.py
 deactivate

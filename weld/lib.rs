@@ -242,6 +242,17 @@ pub unsafe extern "C" fn weld_module_compile(code: *const c_char,
     let code = CStr::from_ptr(code);
     let code = code.to_str().unwrap().trim();
 
+    // Let LLVM find symbols in libweldrt; it's okay to call this multiple times
+    let libweldrt = if cfg!(target_os="macos") {
+        "libweldrt.dylib"
+    } else if cfg!(target_os="windows") {
+        "libweltrt.dll"
+    } else {
+        "libweldrt.so"
+    };
+    easy_ll::load_library(libweldrt).unwrap();
+    info!("Loaded libweldrt in LLVM");
+
     info!("Started parsing program");
     let parsed = parser::parse_program(code);
     info!("Done parsing program");
@@ -252,7 +263,10 @@ pub unsafe extern "C" fn weld_module_compile(code: *const c_char,
     }
 
     info!("Started compiling program");
-    let module = llvm::compile_program(&parsed.unwrap(), &conf.optimization_passes);
+    let module = llvm::compile_program(
+        &parsed.unwrap(),
+        &conf.optimization_passes,
+        conf.llvm_optimization_level);
     info!("Done compiling program");
 
     if let Err(ref e) = module {
@@ -298,7 +312,7 @@ pub unsafe extern "C" fn weld_module_run(module: *mut WeldModule,
 
     let input = Box::new(llvm::WeldInputArgs {
                              input: arg.data as i64,
-                             nworkers: conf.threads as i32,
+                             nworkers: conf.threads,
                              mem_limit: conf.memory_limit,
                          });
     let ptr = Box::into_raw(input) as i64;

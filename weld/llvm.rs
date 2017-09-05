@@ -24,7 +24,7 @@ use super::sir::Terminator::*;
 use super::transforms;
 use super::type_inference;
 use super::util::IdGenerator;
-use super::util::LIB_WELD_RT;
+use super::util::WELD_INLINE_LIB;
 
 #[cfg(test)]
 use super::parser::*;
@@ -61,7 +61,8 @@ pub fn apply_opt_passes(expr: &mut TypedExpr, opt_passes: &Vec<Pass>) -> WeldRes
 }
 
 /// Generate a compiled LLVM module from a program whose body is a function.
-pub fn compile_program(program: &Program, opt_passes: &Vec<Pass>) -> WeldResult<easy_ll::CompiledModule> {
+pub fn compile_program(program: &Program, opt_passes: &Vec<Pass>, llvm_opt_level: u32)
+        -> WeldResult<easy_ll::CompiledModule> {
     let mut expr = macro_processor::process_program(program)?;
     debug!("After macro substitution:\n{}\n", print_typed_expr(&expr));
 
@@ -84,7 +85,10 @@ pub fn compile_program(program: &Program, opt_passes: &Vec<Pass>) -> WeldResult<
     debug!("LLVM program:\n{}\n", &llvm_code);
 
     debug!("Started compiling LLVM");
-    let module = try!(easy_ll::compile_module(&llvm_code, Some(LIB_WELD_RT)));
+    let module = try!(easy_ll::compile_module(
+        &llvm_code,
+        llvm_opt_level,
+        Some(WELD_INLINE_LIB)));
     debug!("Done compiling LLVM");
 
     debug!("Started runtime_init call");
@@ -1378,22 +1382,15 @@ impl LlvmGenerator {
         ctx.code.add(format!("; {}", statement));
         match *statement {
             MakeStruct { ref output, ref elems } => {
-                let mut cur_name = String::from("undef");
                 let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
-                for (i, elem) in elems.iter().enumerate() {
+                for (index, elem) in elems.iter().enumerate() {
                     let (elem_ll_ty, elem_ll_sym) = self.llvm_type_and_name(func, elem)?;
                     let elem_value = self.gen_load_var(&elem_ll_sym, &elem_ll_ty, ctx)?;
-                    let struct_name = ctx.var_ids.next();
-                    ctx.code.add(format!("{} = insertvalue {} {}, {} {}, {}",
-                                            &struct_name,
-                                            &output_ll_ty,
-                                            &cur_name,
-                                            &elem_ll_ty,
-                                            &elem_value,
-                                            i));
-                    cur_name = struct_name;
+                    let ptr_tmp = ctx.var_ids.next();
+                    ctx.code.add(format!("{} = getelementptr inbounds {}, {}* {}, i32 0, i32 {}",
+                        ptr_tmp, output_ll_ty, output_ll_ty, output_ll_sym, index));
+                    self.gen_store_var(&elem_value, &ptr_tmp, &elem_ll_ty, ctx);
                 }
-                self.gen_store_var(&cur_name, &output_ll_sym, &output_ll_ty, ctx);
             }
 
             CUDF { ref output, ref symbol_name, ref args } => {
@@ -1644,9 +1641,10 @@ impl LlvmGenerator {
             GetField { ref output, ref value, index } => {
                 let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
                 let (value_ll_ty, value_ll_sym) = self.llvm_type_and_name(func, value)?;
-                let struct_tmp = self.gen_load_var(&value_ll_sym, &value_ll_ty, ctx)?;
-                let res_tmp = ctx.var_ids.next();
-                ctx.code.add(format!("{} = extractvalue {} {}, {}", res_tmp, value_ll_ty, struct_tmp, index));
+                let ptr_tmp = ctx.var_ids.next();
+                ctx.code.add(format!("{} = getelementptr inbounds {}, {}* {}, i32 0, i32 {}",
+                    ptr_tmp, value_ll_ty, value_ll_ty, value_ll_sym, index));
+                let res_tmp = self.gen_load_var(&ptr_tmp, &output_ll_ty, ctx)?;
                 self.gen_store_var(&res_tmp, &output_ll_sym, &output_ll_ty, ctx);
             }
 
