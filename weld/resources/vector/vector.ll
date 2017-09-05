@@ -251,41 +251,6 @@ define i32 @{NAME}.vm.bld.hash(%{NAME}.vm.bld %bld) {{
   ret i32 0
 }}
 
-; Compare two vectors lexicographically.
-define i32 @{NAME}.cmp(%{NAME} %a, %{NAME} %b) {{
-entry:
-  %elemsA = extractvalue %{NAME} %a, 0
-  %elemsB = extractvalue %{NAME} %b, 0
-  %sizeA = extractvalue %{NAME} %a, 1
-  %sizeB = extractvalue %{NAME} %b, 1
-  %cond1 = icmp ult i64 %sizeA, %sizeB
-  %minSize = select i1 %cond1, i64 %sizeA, i64 %sizeB
-  %cond = icmp ult i64 0, %minSize
-  br i1 %cond, label %body, label %done
-
-body:
-  %i = phi i64 [ 0, %entry ], [ %i2, %body2 ]
-  %ptrA = getelementptr {ELEM}, {ELEM}* %elemsA, i64 %i
-  %ptrB = getelementptr {ELEM}, {ELEM}* %elemsB, i64 %i
-  %elemA = load {ELEM}, {ELEM}* %ptrA
-  %elemB = load {ELEM}, {ELEM}* %ptrB
-  %cmp = call i32 {ELEM_PREFIX}.cmp({ELEM} %elemA, {ELEM} %elemB)
-  %ne = icmp ne i32 %cmp, 0
-  br i1 %ne, label %return, label %body2
-
-return:
-  ret i32 %cmp
-
-body2:
-  %i2 = add i64 %i, 1
-  %cond2 = icmp ult i64 %i2, %minSize
-  br i1 %cond2, label %body, label %done
-
-done:
-  %res = call i32 @i64.cmp(i64 %sizeA, i64 %sizeB)
-  ret i32 %res
-}}
-
 ; Dummy comparison function; this is needed for structs that use these vecbuilders as fields.
 define i32 @{NAME}.bld.cmp(%{NAME}.bld %bld1, %{NAME}.bld %bld2) {{
   ret i32 -1
@@ -294,13 +259,6 @@ define i32 @{NAME}.bld.cmp(%{NAME}.bld %bld1, %{NAME}.bld %bld2) {{
 ; Dummy comparison function; this is needed for structs that use these vecmergers as fields.
 define i32 @{NAME}.vm.bld.cmp(%{NAME}.vm.bld %bld1, %{NAME}.vm.bld %bld2) {{
   ret i32 -1
-}}
-
-; Compare two vectors for equality.
-define i1 @{NAME}.eq(%{NAME} %a, %{NAME} %b) {{
-  %cmp = call i32 @{NAME}.cmp(%{NAME} %a, %{NAME} %b)
-  %res = icmp eq i32 %cmp, 0
-  ret i1 %res
 }}
 
 ; Dummy comparison function for builders.
