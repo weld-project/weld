@@ -27,7 +27,7 @@ lib_file = pkg_resources.resource_filename(__name__, lib_file)
 librt_file = pkg_resources.resource_filename(__name__, librt_file)
 
 lib_path, lib_filename = os.path.split(lib_file)
-os.chdir(lib_patj)
+os.chdir(lib_path)
 
 #
 #if system == 'Linux' or system == 'Windows':
