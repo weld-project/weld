@@ -8,17 +8,39 @@ import os
 import platform
 import copy
 
+import pkg_resources
+
 system = platform.system()
 if system == 'Linux':
     lib_file = "libweld.so"
+    librt_file = "libweldrt.so"
 elif system == 'Windows':
     lib_file = "libweld.dll"
+    librt_file = "libweldrt.dll"
 elif system == 'Darwin':
     lib_file = "libweld.dylib"
+    librt_file = "libweldrt.dylib"
 else:
     raise OSError("Unsupported platform {}", system)
 
+lib_file = pkg_resources.resource_filename(__name__, lib_file)
+librt_file = pkg_resources.resource_filename(__name__, librt_file)
+
+lib_path, lib_filename = os.path.split(lib_file)
+os.chdir(lib_patj)
+
+#
+#if system == 'Linux' or system == 'Windows':
+#    os.environ['LD_LIBRARY_PATH']=lib_path
+#elif system == 'Darwin':
+#    os.environ['DYLD_LIBRARY_PATH']=lib_path
+#else:
+#    raise OSError("Unsupported platform {}", system)
+
 # Load the Weld Dynamic Library.
+print(lib_file)
+print(librt_file)
+weldrt = CDLL(librt_file, mode=RTLD_GLOBAL)
 weld = CDLL(lib_file, mode=RTLD_GLOBAL)
 
 # Used for some type checking carried out by ctypes
