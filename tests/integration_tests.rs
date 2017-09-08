@@ -799,6 +799,20 @@ fn nested_if_statement_with_builders_loop() {
     unsafe { free_value_and_module(ret_value) };
 }
 
+fn empty_appender_loop() {
+    let code = "||result(for([]:vec[i32], merger[i32, +], |b, i, n| merge(b, n)))";
+    let conf = default_conf();
+
+    let ref input_data: i32 = 0;
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const i32 };
+    let result = unsafe { *data };
+    assert_eq!(result, 0);
+
+    unsafe { free_value_and_module(ret_value) };
+}
+
 fn simple_for_appender_loop() {
     #[allow(dead_code)]
     struct Args {
@@ -2219,6 +2233,7 @@ fn main() {
              ("exp_error", exp_error),
              ("simple_erf", simple_erf),
              ("simple_sqrt", simple_sqrt),
+             ("empty_appender_loop", empty_appender_loop),
              ("map_exp", map_exp),
              ("nested_if_statement_loop", nested_if_statement_loop),
              ("nested_if_statement_with_builders_loop", nested_if_statement_with_builders_loop),
