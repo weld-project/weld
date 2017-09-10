@@ -5,16 +5,16 @@ CFLAGS = -O3 -std=c++11 -Wall -fno-use-cxa-atexit -fPIC
 ifeq (${OS}, Darwin)
   # OS X
   CLANG ?= clang++-${LLVM_VERSION}
-	DYLIB = libweldrt.dylib
+	LIB = libweldrt.a
 else ifeq (${OS}, Linux)
   # Linux
   CLANG ?= clang++-${LLVM_VERSION}
-	DYLIB = libweldrt.so
+	LIB = libweldrt.a
 else
   $(error Unsupported platform: ${OS})
 endif
 
-all: ${DYLIB} inline.bc
+all: ${LIB} inline.bc
 
 inline.o: inline.cpp
 	${CLANG} ${CFLAGS} -c $< -o $@
@@ -31,15 +31,13 @@ merger.o: merger.cpp
 runtime.o: runtime.cpp
 	${CLANG} ${CFLAGS} -c $< -o $@
 
-${DYLIB}: vb.o merger.o runtime.o inline.o
-	${CLANG} -shared -o $@ $^
-	mkdir -p ../../target/release
-	cp ${DYLIB} ../../target/release
-	mkdir -p ../../target/debug
-	cp ${DYLIB} ../../target/debug
+weldrt.o: vb.o merger.o runtime.o inline.o
+	ld -r $^ -o $@
+
+${LIB}: weldrt.o
+	ar rcs $@ $^
 
 clean:
-	rm -f *.bc *.o ${DYLIB}
+	rm -f *.bc *.o ${LIB}
 
 .phony: all
-

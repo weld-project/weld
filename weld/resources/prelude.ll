@@ -43,16 +43,13 @@ declare float @erff(float)
 declare double @erf(double)
 
 ; Weld runtime functions
-declare void    @weld_runtime_init()
 
 declare i64     @weld_run_begin(void (%work_t*)*, i8*, i64, i32)
 declare i8*     @weld_run_get_result(i64)
-declare void    @weld_run_dispose(i64)
 
 declare i8*     @weld_run_malloc(i64, i64)
 declare i8*     @weld_run_realloc(i64, i8*, i64)
 declare void    @weld_run_free(i64, i8*)
-declare i64     @weld_run_memory_usage(i64)
 
 declare void    @weld_run_set_errno(i64, i64)
 declare i64     @weld_run_get_errno(i64)
@@ -73,21 +70,6 @@ declare %vb.out @weld_rt_result_vb(i8*)
 declare i8*     @weld_rt_new_merger(i64, i32)
 declare i8*     @weld_rt_get_merger_at_index(i8*, i64, i32)
 declare void    @weld_rt_free_merger(i8*)
-
-define i64 @run_dispose(i64 %run_id) {
-    call void @weld_run_dispose(i64 %run_id)
-    ret i64 0
-}
-
-define i64 @runtime_init(i64 %unused) {
-    call void @weld_runtime_init()
-    ret i64 0
-}
-
-define i64 @run_memory_usage(i64 %run_id) {
-    %res = call i64 @weld_run_memory_usage(i64 %run_id)
-    ret i64 %res
-}
 
 ; Parallel runtime structures
 ; work_t struct in runtime.h

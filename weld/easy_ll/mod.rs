@@ -79,12 +79,6 @@ impl CompiledModule {
     pub fn run(&self, arg: i64) -> i64 {
         (self.run_function.unwrap())(arg)
     }
-
-    /// Call a named function in the module. The function must take and return i64.
-    pub fn run_named(&self, function_name: &str, arg: i64) -> Result<i64, LlvmError> {
-        let func = unsafe { find_function(self.engine.unwrap(), function_name)? };
-        Ok(func(arg))
-    }
 }
 
 impl Drop for CompiledModule {
