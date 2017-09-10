@@ -25,7 +25,6 @@ use super::sir::Terminator::*;
 use super::transforms;
 use super::type_inference;
 use super::util::IdGenerator;
-use super::util::WELD_INLINE_LIB;
 
 #[cfg(test)]
 use super::parser::*;
@@ -88,8 +87,7 @@ pub fn compile_program(program: &Program, opt_passes: &Vec<Pass>, llvm_opt_level
     debug!("Started compiling LLVM");
     let module = try!(easy_ll::compile_module(
         &llvm_code,
-        llvm_opt_level,
-        Some(WELD_INLINE_LIB)));
+        llvm_opt_level));
     debug!("Done compiling LLVM");
 
     debug!("Started runtime_init call");

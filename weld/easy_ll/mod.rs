@@ -108,8 +108,7 @@ pub fn load_library(libname: &str) -> Result<(), LlvmError> {
 /// and returns `i64`, which will be called by `CompiledModule::run`.
 pub fn compile_module(
         code: &str,
-        optimization_level: u32,
-        bc_file: Option<&[u8]>)
+        optimization_level: u32)
         -> Result<CompiledModule, LlvmError> {
     unsafe {
         // Initialize LLVM
@@ -135,13 +134,6 @@ pub fn compile_module(
         // Parse the IR to get an LLVMModuleRef
         let module = parse_module_str(context, code)?;
         debug!("Done parsing module");
-
-        if let Some(s) = bc_file {
-            let bc_module = parse_module_bytes(context, s)?;
-            debug!("Done parsing bytecode file");
-            llvm::linker::LLVMLinkModules2(module, bc_module);
-            debug!("Done linking bytecode file");
-        }
 
         // Validate and optimize the module
         verify_module(module)?;
@@ -198,25 +190,6 @@ unsafe fn parse_module_helper(context: LLVMContextRef,
     }
 
     Ok(module)
-}
-
-/// Parse a buffer of IR bytecode into an `LLVMModuleRef` for the given context.
-unsafe fn parse_module_bytes(context: LLVMContextRef,
-                             code: &[u8])
-                             -> Result<LLVMModuleRef, LlvmError> {
-    // Create an LLVM memory buffer around the code
-    let code_len = code.len();
-    let name = CString::new("module")?;
-    let buffer = llvm::core::LLVMCreateMemoryBufferWithMemoryRange(code.as_ptr() as *const i8,
-                                                                   code_len,
-                                                                   name.as_ptr(),
-                                                                   0);
-
-    if buffer.is_null() {
-        return Err(LlvmError::new("LLVMCreateMemoryBufferWithMemoryRange failed"));
-    }
-
-    parse_module_helper(context, buffer)
 }
 
 /// Parse a string of IR code into an `LLVMModuleRef` for the given context.

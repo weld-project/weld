@@ -14,13 +14,7 @@ else
   $(error Unsupported platform: ${OS})
 endif
 
-all: ${LIB} inline.bc
-
-inline.o: inline.cpp
-	${CLANG} ${CFLAGS} -c $< -o $@
-
-inline.bc: inline.cpp
-	${CLANG} ${CFLAGS} -c -emit-llvm $< -o $@
+all: ${LIB}
 
 vb.o: vb.cpp
 	${CLANG} ${CFLAGS} -c $< -o $@
@@ -31,13 +25,16 @@ merger.o: merger.cpp
 runtime.o: runtime.cpp
 	${CLANG} ${CFLAGS} -c $< -o $@
 
-weldrt.o: vb.o merger.o runtime.o inline.o
+# We combine the different object files into one object file in order to prevent the linker from
+# eliminating seemingly unused object files when we create executable like the Repl or the
+# integration test executable.
+weldrt.o: vb.o merger.o runtime.o
 	ld -r $^ -o $@
 
 ${LIB}: weldrt.o
 	ar rcs $@ $^
 
 clean:
-	rm -f *.bc *.o ${LIB}
+	rm -f *.o *.a
 
 .phony: all
