@@ -2,4 +2,4 @@
 rustflags = [ "-C", "link-args=-Wl,-export_dynamic" ]
 
 [target.x86_64-unknown-linux-gnu]
-rustflags = [ "-C", "link-args=-Wl,-export_dynamic" ]
+rustflags = [ "-C", "link-args=-Wl,-export-dynamic" ]
