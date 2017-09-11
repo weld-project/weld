@@ -384,7 +384,7 @@ impl LlvmGenerator {
             ctx.code.add(format!("{} = sub i64 {}, 1", t0, num_iters_str));
             ctx.code.add(format!("{} = mul i64 {}, {}", t1, stride_str, t0));
             ctx.code.add(format!("{} = add i64 {}, {}", t2, t1, start_str));
-            ctx.code.add(format!("{} = icmp ult i64 {}, {}", cond, t2, data_size_ll_tmp));
+            ctx.code.add(format!("{} = icmp slt i64 {}, {}", cond, t2, data_size_ll_tmp));
             ctx
                 .code
                 .add(format!("br i1 {}, label {}, label %fn.boundcheckfailed", cond, next_bounds_check_label));
