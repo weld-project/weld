@@ -6,7 +6,7 @@ NUMPY_HEADER_INCLUDE = -I$(shell python -c "import numpy; print numpy.get_includ
 PYTHON_LDFLAGS = $(shell python-config --ldflags)
 
 ifeq (${NUMPY_HEADER_INCLUDE}, -I)
-  $(error NumPy is needed to be installed)
+  $(error Error: NumPy installation not found)
 endif
 
 ifeq (${OS}, Darwin)
