@@ -10,6 +10,7 @@ use std::result::Result;
 use std::mem;
 use std::ops::Drop;
 use std::os::raw::c_char;
+use std::ptr::null;
 use std::sync::{Once, ONCE_INIT};
 
 use self::llvm::support::LLVMLoadLibraryPermanently;
@@ -175,6 +176,10 @@ fn initialize() {
             return;
         }
         if llvm::target::LLVM_InitializeNativeAsmParser() != 0 {
+            INITIALIZE_FAILED = true;
+            return;
+        }
+        if LLVMLoadLibraryPermanently(null()) != 0 {
             INITIALIZE_FAILED = true;
             return;
         }
