@@ -6,34 +6,18 @@ import sys
 from setuptools import setup, Distribution
 import setuptools.command.build_ext as _build_ext
 
-weld_files = [
-    "../target/release/libweldrt.dylib",
-    "../target/release/libweld.dylib"
-]
-
+libweld = "../target/release/libweld.dylib"
 
 class build_ext(_build_ext.build_ext):
     def run(self):
-        check_file_notexists = False
-        for file in weld_files:
-            print(file)
-            if not os.path.exists(file):
-                check_file_notexists = True
-
-        if check_file_notexists:
+        if not os.path.exists(libweld):
             subprocess.call("cargo build --release", shell=True)
-        
-        for file in weld_files:
-            self.move_file(file)
+        self.move_file(libweld)
 
     def move_file(self, filename):
         source = filename
-        dir, name = os.path.split(source)
-        
+        dir, name = os.path.split(source)        
         destination = os.path.join(self.build_lib + "/weld/", name)
-        parent_directory = os.path.dirname(destination)
-        if not os.path.exists(parent_directory):
-            os.makedirs(parent_directory)
         print("Copying {} to {}".format(source, destination))
         shutil.copy(source, destination)
 
