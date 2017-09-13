@@ -39,7 +39,7 @@ class BinaryDistribution(Distribution):
 
 setup(name='weld',
       version='0.0.1',
-      packages=['weld'],
+      packages=['weld', 'grizzly'],
       cmdclass={"build_ext": build_ext},
       distclass=BinaryDistribution,
       url='https://github.com/weld-project/weld',
