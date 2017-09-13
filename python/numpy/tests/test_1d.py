@@ -2,98 +2,22 @@ import numpy as np
 import py.test
 import random
 from weldnumpy import *
+from test_utils import *
 
 '''
-TODO0: Decompose heavily repeated stuff, like the assert blocks and so on.
-
 TODO: New tests:
-    - reduce ufuncs: at least the supported ones.
+    - in binary ops --> for non-commutative ops need to make sure we're handling other/result
+      etc crap order correctly.
+    - make other and view be the same thing.
+
     - use np.add.reduce syntax for the reduce ufuncs.
     - getitem: lists and ndarrays + ints.
-    - error based tests: nan; underflow/overflow; unsupported types [true] * [...] etc;
     - long computational graphs - that segfault or take too long; will require implicit evaluation
       when the nested ops get too many.
     - edge/failing cases: out = ndarray for op involving weldarrays.
     - update elements of an array in a loop etc. --> setitem test.
     - setitem + views tests.
 '''
-
-UNARY_OPS = [np.exp, np.log, np.sqrt]
-# TODO: Add wa.erf - doesn't use the ufunc functionality of numpy so not doing it for
-# now.
-BINARY_OPS = [np.add, np.subtract, np.multiply, np.divide]
-REDUCE_UFUNCS = [np.add.reduce, np.multiply.reduce]
-
-# FIXME: weld mergers dont support non-commutative ops --> need to find a workaround for this.
-# REDUCE_UFUNCS = [np.add.reduce, np.subtract.reduce, np.multiply.reduce, np.divide.reduce]
-
-TYPES = ['float32', 'float64', 'int32', 'int64']
-NUM_ELS = 10
-
-# TODO: Create test with all other ufuncs.
-def random_arrays(num, dtype):
-    '''
-    Generates random Weld array, and numpy array of the given num elements.
-    '''
-    # np.random does not support specifying dtype, so this is a weird
-    # way to support both float/int random numbers
-    test = np.zeros((num), dtype=dtype)
-    test[:] = np.random.randn(*test.shape)
-    test = np.abs(test)
-    # at least add 1 so no 0's (o.w. divide errors)
-    random_add = np.random.randint(1, high=10, size=test.shape)
-    test = test + random_add
-    test = test.astype(dtype)
-
-    np_test = np.copy(test)
-    w = weldarray(test, verbose=False)
-
-    return np_test, w
-
-def given_arrays(l, dtype):
-    '''
-    @l: list.
-    returns a np array and a weldarray.
-    '''
-    test = np.array(l, dtype=dtype)
-    np_test = np.copy(test)
-    w = weldarray(test)
-
-    return np_test, w
-
-def test_unary_elemwise():
-    '''
-    Tests all the unary ops in UNARY_OPS.
-
-    FIXME: For now, unary ops seem to only be supported on floats.
-    '''
-    for op in UNARY_OPS:
-        for dtype in TYPES:
-            print(dtype)
-            # int still not supported for the unary ops in Weld.
-            if "int" in dtype:
-                continue
-            np_test, w = random_arrays(NUM_ELS, dtype)
-            w2 = op(w)
-            np_result = op(np_test)
-            w2_eval = w2.evaluate()
-
-            assert np.allclose(w2, np_result)
-            assert np.array_equal(w2_eval, np_result)
-
-def test_binary_elemwise():
-    '''
-    '''
-    for op in BINARY_OPS:
-        for dtype in TYPES:
-            np_test, w = random_arrays(NUM_ELS, dtype)
-            np_test2, w2 = random_arrays(NUM_ELS, dtype)
-            w3 = op(w, w2)
-            weld_result = w3.evaluate()
-            np_result = op(np_test, np_test2)
-            # Need array equal to keep matching types for weldarray, otherwise
-            # allclose tries to subtract floats from ints.
-            assert np.array_equal(weld_result, np_result)
 
 def test_multiple_array_creation():
     '''
@@ -111,6 +35,7 @@ def test_multiple_array_creation():
 
 def test_array_indexing():
     '''
+    FIXME:
     Need to decide: If a weldarray item is accessed - should we evaluateuate the
     whole array (for expected behaviour to match numpy) or not?
     '''
@@ -139,12 +64,6 @@ def test_type_conversion():
         w2 = np.add(w, w2)
         weld_result = w2.evaluate()
         assert weld_result.dtype == t
-
-def test_concat():
-    '''
-    Test concatenation of arrays - either Weld - Weld, or Weld - Numpy etc.
-    '''
-    pass
 
 def test_views_basic():
     '''
@@ -462,55 +381,6 @@ def test_views_overlap():
     assert np.allclose(w5, n5)
     assert np.allclose(w4, n4)
     assert np.allclose(w3, n3)
-
-def test_mix_np_weld_ops():
-    '''
-    Weld Ops + Numpy Ops - before executing any of the numpy ops, the
-    registered weld ops must be evaluateuated.
-    '''
-    np_test, w = random_arrays(NUM_ELS, 'float32')
-    np_test = np.exp(np_test)
-    np_result = np.sin(np_test)
-
-    w2 = np.exp(w)
-    w2 = np.sin(w2)
-    weld_result = w2.evaluate()
-    assert np.allclose(weld_result, np_result)
-
-
-def test_scalars():
-    '''
-    Special case of broadcasting rules - the scalar is applied to all the
-    Weldrray members.
-    '''
-    t = "int32"
-    print("t = ", t)
-    n, w = random_arrays(NUM_ELS, t)
-    n2 = n + 2
-    w2 = w + 2
-
-    w2 = w2.evaluate()
-    assert np.allclose(w2, n2)
-
-    # test by combining it with binary op.
-    n, w = random_arrays(NUM_ELS, t)
-    w += 10
-    n += 10
-
-    n2, w2 = random_arrays(NUM_ELS, t)
-
-    w = np.add(w, w2)
-    n = np.add(n, n2)
-
-    assert np.allclose(w, n)
-
-    t = "float32"
-    print("t = ", t)
-    np_test, w = random_arrays(NUM_ELS, t)
-    np_result = np_test + 2.00
-    w2 = w + 2.00
-    weld_result = w2.evaluate()
-    assert np.allclose(weld_result, np_result)
 
 def test_stale_add():
     '''
