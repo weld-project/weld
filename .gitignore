@@ -1,6 +1,9 @@
 target
 Cargo.lock
 .DS_Store
+\#*#
+.#*
+*~
 *.swp
 *.bc
 *.pyc
