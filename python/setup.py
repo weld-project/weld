@@ -1,4 +1,5 @@
 import os
+import platform
 import shutil
 import subprocess
 import sys
@@ -6,7 +7,18 @@ import sys
 from setuptools import setup, Distribution
 import setuptools.command.build_ext as _build_ext
 
-libweld = "../target/release/libweld.dylib"
+system = platform.system()
+if system == 'Linux':
+    libweld = "libweld.so"
+elif system == 'Windows':
+    libweld = "libweld.dll"
+elif system == 'Darwin':
+    libweld = "libweld.dylib"
+else:
+    raise OSError("Unsupported platform {}", system)
+
+
+libweld = "../target/release/" + libweld
 
 class build_ext(_build_ext.build_ext):
     def run(self):
