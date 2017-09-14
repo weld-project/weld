@@ -46,7 +46,6 @@ class c_weld_value(c_void_p):
 class WeldModule(c_void_p):
 
     def __init__(self, code, conf, err):
-        # weld.weld_set_log_level(5)
         weld_module_compile = weld.weld_module_compile
         weld_module_compile.argtypes = [
             c_char_p, c_weld_conf, c_weld_err]
