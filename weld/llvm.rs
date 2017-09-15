@@ -17,6 +17,7 @@ use super::macro_processor;
 use super::passes::*;
 use super::pretty_print::*;
 use super::program::Program;
+use super::runtime::*;
 use super::sir;
 use super::sir::*;
 use super::sir::Statement::*;
@@ -92,7 +93,9 @@ pub fn compile_program(program: &Program, opt_passes: &Vec<Pass>, llvm_opt_level
     debug!("Done compiling LLVM");
 
     debug!("Started runtime_init call");
-    module.run_named("runtime_init", 0).unwrap();
+    unsafe {
+        weld_runtime_init();
+    }
     debug!("Done runtime_init call");
 
     Ok(module)

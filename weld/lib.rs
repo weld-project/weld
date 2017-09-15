@@ -40,6 +40,7 @@ pub mod parser;
 pub mod partial_types;
 pub mod pretty_print;
 pub mod program;
+pub mod runtime;
 pub mod sir;
 pub mod tokenizer;
 pub mod transforms;
@@ -197,8 +198,7 @@ pub unsafe extern "C" fn weld_value_free(obj: *mut WeldValue) {
     }
     let value = &mut *obj;
     if let Some(run_id) = value.run_id {
-        let module = &mut *value.module.unwrap();
-        module.run_named("run_dispose", run_id).unwrap();
+        runtime::weld_run_dispose(run_id);
     }
     Box::from_raw(obj);
 }
@@ -213,8 +213,7 @@ pub unsafe extern "C" fn weld_value_memory_usage(obj: *mut WeldValue) -> libc::i
     }
     let value = &mut *obj;
     if let Some(run_id) = value.run_id {
-        let module = &mut *value.module.unwrap();
-        return module.run_named("run_memory_usage", run_id).unwrap_or(-1) as libc::int64_t;
+        return runtime::weld_run_memory_usage(run_id);
     } else {
         return -1 as libc::int64_t;
     }
@@ -241,17 +240,6 @@ pub unsafe extern "C" fn weld_module_compile(code: *const c_char,
 
     let code = CStr::from_ptr(code);
     let code = code.to_str().unwrap().trim();
-
-    // Let LLVM find symbols in libweldrt; it's okay to call this multiple times
-    let libweldrt = if cfg!(target_os="macos") {
-        "libweldrt.dylib"
-    } else if cfg!(target_os="windows") {
-        "libweltrt.dll"
-    } else {
-        "libweldrt.so"
-    };
-    easy_ll::load_library(libweldrt).unwrap();
-    info!("Loaded libweldrt in LLVM");
 
     info!("Started parsing program");
     let parsed = parser::parse_program(code);

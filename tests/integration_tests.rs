@@ -2196,6 +2196,42 @@ fn predicate_if_iff_annotated() {
     check_result_and_free(ret_value, expected);
 }
 
+fn nested_for_loops() {
+    #[derive(Clone)]
+    #[allow(dead_code)]
+    struct Row {
+        x: i64,
+        y: i32,
+    }
+
+    let code = "|ys:vec[i64]|result(for(ys, appender[{i64, i32}], |b0, i0, y0| for(ys, b0, |b1, i1, y1| if (y1 > y0, merge(b0, {y0, i32(y1)}), b0))))";
+    let conf = default_conf();
+
+    // Input data.
+    let ys = vec![1i64, 3i64, 4i64];
+    let ref input_data = WeldVec {
+        data: ys.as_ptr() as *const i64,
+        len: ys.len() as i64,
+    };
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<Row> };
+    let result = unsafe { (*data).clone() };
+
+    assert_eq!(result.len, 3i64);
+    let row = unsafe { (*result.data.offset(0)).clone() };
+    assert_eq!(row.x, 1i64);
+    assert_eq!(row.y, 3);
+    let row = unsafe { (*result.data.offset(1)).clone() };
+    assert_eq!(row.x, 1i64);
+    assert_eq!(row.y, 4);
+    let row = unsafe { (*result.data.offset(2)).clone() };
+    assert_eq!(row.x, 3i64);
+    assert_eq!(row.y, 4);
+
+    unsafe { free_value_and_module(ret_value) };
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     let tests: Vec<(&str, fn())> =
@@ -2278,7 +2314,8 @@ fn main() {
              ("outofmemory_error_test", outofmemory_error_test),
              ("simple_float_mod", simple_float_mod),
              ("simple_int_mod", simple_int_mod),
-             ("predicate_if_iff_annotated", predicate_if_iff_annotated)];
+             ("predicate_if_iff_annotated", predicate_if_iff_annotated),
+             ("nested_for_loops", nested_for_loops)];
 
     println!("");
     println!("running tests");
