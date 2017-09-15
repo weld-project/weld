@@ -450,6 +450,15 @@ pub struct Iter<T: TypeBounds> {
     pub kind: IterKind,
 }
 
+impl<T: TypeBounds> Iter<T> {
+    /// Returns true if this is a simple iterator with no start/stride/end specified
+    /// (i.e., it iterates over all the input data) and kind `ScalarIter`.
+    pub fn is_simple(&self) -> bool {
+        return self.start.is_none() && self.end.is_none() && self.stride.is_none() &&
+            self.kind == IterKind::ScalarIter;
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum ExprKind<T: TypeBounds> {
     // TODO: maybe all of these should take named parameters
@@ -640,6 +649,9 @@ pub type TypedExpr = Expr<Type>;
 
 /// A typed parameter.
 pub type TypedParameter = Parameter<Type>;
+
+/// A typed iterator.
+pub type TypedIter = Iter<Type>;
 
 impl<T: TypeBounds> Expr<T> {
     /// Get an iterator for the children of this expression.

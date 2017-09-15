@@ -57,8 +57,9 @@ lazy_static! {
         m.insert("inline-zip",
                  Pass::new(vec![transforms::inline_zips], "inline-zip"));
         m.insert("loop-fusion",
-                 Pass::new(vec![transforms::fuse_loops_horizontal,
+                 Pass::new(vec![/*transforms::fuse_loops_horizontal,*/
                                 transforms::fuse_loops_vertical,
+                                transforms::fuse_loops_2,
                                 transforms::simplify_get_field],
                  "loop-fusion"));
         m.insert("infer-size",

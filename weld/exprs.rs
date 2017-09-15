@@ -7,12 +7,12 @@ use super::ast::BuilderKind::*;
 use super::ast::LiteralKind::*;
 use super::error::*;
 
-fn new_expr(kind: ExprKind<Type>, ty: Type) -> WeldResult<Expr<Type>> {
+pub fn new_expr(kind: ExprKind<Type>, ty: Type) -> WeldResult<Expr<Type>> {
     Ok(Expr {
-           kind: kind,
-           ty: ty,
-           annotations: Annotations::new(),
-       })
+        kind: kind,
+        ty: ty,
+        annotations: Annotations::new(),
+    })
 }
 
 pub fn literal_expr(kind: LiteralKind) -> WeldResult<Expr<Type>> {
@@ -33,7 +33,7 @@ pub fn literal_expr(kind: LiteralKind) -> WeldResult<Expr<Type>> {
 }
 
 pub fn ident_expr(symbol: Symbol, ty: Type) -> WeldResult<Expr<Type>> {
-    new_expr(Ident(symbol.clone()), ty.clone())
+    new_expr(Ident(symbol), ty)
 }
 
 pub fn binop_expr(kind: BinOpKind, left: Expr<Type>, right: Expr<Type>) -> WeldResult<Expr<Type>> {
