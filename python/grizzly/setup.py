@@ -9,27 +9,24 @@ import setuptools.command.build_ext as _build_ext
 
 system = platform.system()
 if system == 'Linux':
-    libweld = "libweld.so"
+    numpy_convertor = "numpy_weld_convertor.so"
 elif system == 'Windows':
-    libweld = "libweld.dll"
+    numpy_convertor = "numpy_weld_convertor.dll"
 elif system == 'Darwin':
-    libweld = "libweld.dylib"
+    numpy_convertor = "numpy_weld_convertor.dylib"
 else:
     raise OSError("Unsupported platform {}", system)
 
-
-libweld = "../target/release/" + libweld
-
 class build_ext(_build_ext.build_ext):
     def run(self):
-        if not os.path.exists(libweld):
-            subprocess.call("cargo build --release", shell=True)
-        self.move_file(libweld)
+        if not os.path.exists("grizzly/" + numpy_convertor):
+            subprocess.call("cd grizzly && make && cd ..", shell=True)
+        self.move_file("grizzly/" + numpy_convertor, "grizzly")
 
-    def move_file(self, filename):
+    def move_file(self, filename, directory):
         source = filename
         dir, name = os.path.split(source)        
-        destination = os.path.join(self.build_lib + "/weld/", name)
+        destination = os.path.join(self.build_lib + "/" + directory + "/", name)
         print("Copying {} to {}".format(source, destination))
         shutil.copy(source, destination)
 
@@ -37,12 +34,12 @@ class BinaryDistribution(Distribution):
     def has_ext_modules(self):
         return True
 
-setup(name='weld',
+setup(name='grizzly',
       version='0.0.1',
-      packages=['weld', 'grizzly'],
+      packages=['grizzly'],
       cmdclass={"build_ext": build_ext},
       distclass=BinaryDistribution,
       url='https://github.com/weld-project/weld',
       author='Weld Developers',
       author_email='weld-group@lists.stanford.edu',
-      install_requires=['pandas', 'numpy'])
+      install_requires=['pyweld'])

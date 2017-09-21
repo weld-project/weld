@@ -9,6 +9,7 @@ import numpy as np
 import os
 import sys
 
+import pkg_resources
 
 numpy_to_weld_type_mapping = {
     'str': WeldVec(WeldChar()),
@@ -45,12 +46,9 @@ class NumPyEncoder(WeldObjectEncoder):
     def __init__(self):
         """Summary
         """
-        # TODO: Remove dependency on WELD_HOME environment variable.
-        if "WELD_HOME" not in os.environ:
-            raise Exception("WELD_HOME environment variable not set!")
-        self.utils = ctypes.PyDLL(to_shared_lib(
-            os.path.join(os.environ["WELD_HOME"] + "/python/grizzly/",
-                         "numpy_weld_convertor")))
+        lib = to_shared_lib("numpy_weld_convertor")
+        lib_file = pkg_resources.resource_filename(__name__, lib)
+        self.utils = ctypes.PyDLL(lib_file)
 
     def pyToWeldType(self, obj):
         """Summary
@@ -136,12 +134,9 @@ class NumPyDecoder(WeldObjectDecoder):
     def __init__(self):
         """Summary
         """
-        # TODO: Remove dependency on WELD_HOME environment variable.
-        if "WELD_HOME" not in os.environ:
-            raise Exception("WELD_HOME environment variable not set!")
-        self.utils = ctypes.PyDLL(to_shared_lib(
-            os.path.join(os.environ["WELD_HOME"] + "/python/grizzly",
-                         "numpy_weld_convertor")))
+        lib = to_shared_lib("numpy_weld_convertor")
+        lib_file = pkg_resources.resource_filename(__name__, lib)
+        self.utils = ctypes.PyDLL(lib_file)
 
     def decode(self, obj, restype):
         """Summary
