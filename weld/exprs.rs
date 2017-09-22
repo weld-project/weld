@@ -6,6 +6,7 @@ use super::ast::Type::*;
 use super::ast::BuilderKind::*;
 use super::ast::LiteralKind::*;
 use super::error::*;
+use super::pretty_print::print_type;
 
 pub fn new_expr(kind: ExprKind<Type>, ty: Type) -> WeldResult<Expr<Type>> {
     Ok(Expr {
@@ -381,7 +382,8 @@ pub fn for_expr(iters: Vec<Iter<Type>>, builder: Expr<Type>, func: Expr<Type>, v
                 vec_elem_tys[0].clone()
             };
             if *param_2_ty != elem_ty {
-                return weld_err!("Internal error: Mismatched types in for_expr - function elem type",);
+                return weld_err!("Internal error: Mismatched types in for_expr - function elem type {} != {}",
+                    print_type(param_2_ty), print_type(&elem_ty));
             }
         } else {
             let composite_ty = if vectorized {

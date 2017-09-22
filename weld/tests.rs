@@ -3,6 +3,7 @@ use super::partial_types::PartialType::Unknown;
 use super::parser::parse_expr;
 use super::pretty_print::*;
 use super::type_inference::*;
+use super::util::SymbolGenerator;
 
 // Transforms. TODO(shoumik) move these tests somewhere else?
 use super::transforms::fuse_loops_vertical;
@@ -236,7 +237,8 @@ fn simple_horizontal_loop_fusion() {
             result(for([1,2,3], appender, |b,i,e| merge(b, e+1))),
             result(for([1,2,3], appender,|b2,i2,e2| merge(b2,e2+1)))
         ), appender, |b,i,e| merge(b, e.$0+1))");
-    fuse_loops_horizontal(&mut e1);
+    let mut gen = SymbolGenerator::from_expression(&e1);
+    fuse_loops_horizontal(&mut e1, &mut gen);
     let e2 = typed_expression("for(result(for([1,2,3], appender, |b,i,e| merge(b, {e+1,e+1}))), \
                                appender, |b,i,e| merge(b, e.$0+1))");
     assert!(e1.compare_ignoring_symbols(&e2).unwrap());
@@ -247,7 +249,8 @@ fn simple_horizontal_loop_fusion() {
             result(for([1,2,3], appender,|b2,i2,e2| merge(b2,e2+2))),
             result(for([1,2,3], appender,|b3,i3,e3| merge(b3,e3+3)))
         ), appender, |b,i,e| merge(b, e.$0+1))");
-    fuse_loops_horizontal(&mut e1);
+    let mut gen = SymbolGenerator::from_expression(&e1);
+    fuse_loops_horizontal(&mut e1, &mut gen);
     let e2 = typed_expression("for(result(for([1,2,3], appender, |b,i,e| merge(b, \
                                {e+1,e+2,e+3}))), appender, |b,i,e| merge(b, e.$0+1))");
     assert!(e1.compare_ignoring_symbols(&e2).unwrap());
@@ -257,7 +260,8 @@ fn simple_horizontal_loop_fusion() {
             result(for(iter([1,2,3], 0L, 2L, 1L), appender, |b,i,e| merge(b, e+1))),
             result(for(iter([1,2,3], 0L, 2L, 1L), appender, |b,i,e| merge(b, e+2)))
         ), appender, |b,i,e| merge(b, e.$0+1))");
-    fuse_loops_horizontal(&mut e1);
+    let mut gen = SymbolGenerator::from_expression(&e1);
+    fuse_loops_horizontal(&mut e1, &mut gen);
     let e2 = typed_expression("for(result(for(iter([1,2,3], 0L, 2L, 1L), appender, |b,i,e| \
                                merge(b, {e+1,e+2}))), appender, |b,i,e| merge(b, e.$0+1))");
     assert!(e1.compare_ignoring_symbols(&e2).unwrap());
@@ -267,7 +271,8 @@ fn simple_horizontal_loop_fusion() {
             iter(result(for([1,2,3], appender, |b,i,e| merge(b, e+1))), 0L, 2L, 1L),
             iter(result(for([1,2,3], appender, |b,i,e| merge(b, e+2))), 0L, 2L, 1L)
         ), appender, |b,i,e| merge(b, e.$0+1))");
-    fuse_loops_horizontal(&mut e1);
+    let mut gen = SymbolGenerator::from_expression(&e1);
+    fuse_loops_horizontal(&mut e1, &mut gen);
     let e2 = typed_expression("for(iter(result(for([1,2,3], appender, |b,i,e| merge(b, \
                                {e+1,e+2}))), 0L, 2L, 1L), appender, |b,i,e| merge(b, e.$0+1))");
     assert!(e1.compare_ignoring_symbols(&e2).unwrap());
@@ -278,7 +283,8 @@ fn simple_horizontal_loop_fusion() {
             result(for([1,2,4], appender,|b2,i2,e2| merge(b2,e2+1)))
         ), appender, |b,i,e| merge(b, e.$0+1))");
     let e2 = e1.clone();
-    fuse_loops_horizontal(&mut e1);
+    let mut gen = SymbolGenerator::from_expression(&e1);
+    fuse_loops_horizontal(&mut e1, &mut gen);
     assert!(e1.compare_ignoring_symbols(&e2).unwrap());
 }
 
@@ -287,7 +293,8 @@ fn simple_vertical_loop_fusion() {
     // Two loops.
     let mut e1 = typed_expression("for(result(for([1,2,3], appender, |b,i,e| merge(b,e+2))), \
                                    appender, |b,h,f| merge(b, f+1))");
-    fuse_loops_vertical(&mut e1);
+    let mut gen = SymbolGenerator::from_expression(&e1);
+    fuse_loops_vertical(&mut e1, &mut gen);
     let e2 = typed_expression("for([1,2,3], appender, |b,i,e| merge(b, (e+2)+1))");
     println!("{}", print_expr_without_indent(&e1));
     assert!(e1.compare_ignoring_symbols(&e2).unwrap());
@@ -296,28 +303,32 @@ fn simple_vertical_loop_fusion() {
     let mut e1 = typed_expression("for(result(for(result(for([1,2,3], appender, |b,i,e| \
                                    merge(b,e+3))), appender, |b,i,e| merge(b,e+2))), appender, \
                                    |b,h,f| merge(b, f+1))");
-    fuse_loops_vertical(&mut e1);
+    let mut gen = SymbolGenerator::from_expression(&e1);
+    fuse_loops_vertical(&mut e1, &mut gen);
     let e2 = typed_expression("for([1,2,3], appender, |b,i,e| merge(b, (((e+3)+2)+1)))");
     assert!(e1.compare_ignoring_symbols(&e2).unwrap());
 
     // Merges in other positions, replace builder identifiers.
     let mut e1 = typed_expression("for(result(for([1,2,3], appender, |b,i,e| if(e>5, \
                                    merge(b,e+2), b))), appender, |b,h,f| merge(b, f+1))");
-    fuse_loops_vertical(&mut e1);
+    let mut gen = SymbolGenerator::from_expression(&e1);
+    fuse_loops_vertical(&mut e1, &mut gen);
     let e2 = typed_expression("for([1,2,3], appender, |b,i,e| if(e>5, merge(b, (e+2)+1), b))");
     assert!(e1.compare_ignoring_symbols(&e2).unwrap());
 
     // Make sure correct builder is chosen.
     let mut e1 = typed_expression("for(result(for([1,2,3], appender[i32], |b,i,e| \
                                    merge(b,e+2))), appender[f64], |b,h,f| merge(b, 1.0))");
-    fuse_loops_vertical(&mut e1);
+    let mut gen = SymbolGenerator::from_expression(&e1);
+    fuse_loops_vertical(&mut e1, &mut gen);
     let e2 = typed_expression("for([1,2,3], appender[f64], |b,i,e| merge(b, 1.0))");
     assert!(e1.compare_ignoring_symbols(&e2).unwrap());
 
     // Multiple inner loops.
     let mut e1 = typed_expression("for(result(for(zip([1,2,3],[4,5,6]), appender, |b,i,e| \
                                    merge(b,e.$0+2))), appender, |b,h,f| merge(b, f+1))");
-    fuse_loops_vertical(&mut e1);
+    let mut gen = SymbolGenerator::from_expression(&e1);
+    fuse_loops_vertical(&mut e1, &mut gen);
     let e2 = typed_expression("for(zip([1,2,3],[4,5,6]), appender, |b,i,e| merge(b, (e.$0+2)+1))");
     assert!(e1.compare_ignoring_symbols(&e2).unwrap());
 
@@ -325,7 +336,8 @@ fn simple_vertical_loop_fusion() {
     let mut e1 = typed_expression("let a = [1,2,3]; for(result(for(iter(a, 0L, len(a), 1L), \
                                    appender, |b,i,e| merge(b,e+2))), appender, |b,h,f| merge(b, \
                                    f+1))");
-    fuse_loops_vertical(&mut e1);
+    let mut gen = SymbolGenerator::from_expression(&e1);
+    fuse_loops_vertical(&mut e1, &mut gen);
     let e2 = typed_expression("let a = [1,2,3]; for(iter(a,0L,len(a),1L), appender, |b,i,e| \
                                merge(b, (e+2)+1))");
     assert!(e1.compare_ignoring_symbols(&e2).unwrap());
@@ -333,7 +345,8 @@ fn simple_vertical_loop_fusion() {
     // Inner data not consumed fully.
     let mut e1 = typed_expression("for(result(for(iter([1,2,3], 0L, 1L, 1L), appender, |b,i,e| \
                                    merge(b,e+2))), appender, |b,h,f| merge(b, f+1))");
-    fuse_loops_vertical(&mut e1);
+    let mut gen = SymbolGenerator::from_expression(&e1);
+    fuse_loops_vertical(&mut e1, &mut gen);
     // Loop fusion should fail.
     let e2 = typed_expression("for(result(for(iter([1,2,3], 0L, 1L, 1L), appender, |b,i,e| \
                                merge(b,e+2))), appender, |b,h,f| merge(b, f+1))");
@@ -342,27 +355,30 @@ fn simple_vertical_loop_fusion() {
 
 #[test]
 fn inline_lets() {
+    // We need to pass a SymbolGenerator to inline_let but it doesn't use it, so create a dummy one.
+    let mut gen = SymbolGenerator::new();
+
     let mut e1 = typed_expression("let a = 1; a + 2");
-    inline_let(&mut e1);
+    inline_let(&mut e1, &mut gen);
     let e2 = typed_expression("1 + 2");
     assert!(e1.compare_ignoring_symbols(&e2).unwrap());
 
     let mut e1 = typed_expression("let a = 1; a + a + 2");
     // The transform should fail since the identifier is used more than once.
-    inline_let(&mut e1);
+    inline_let(&mut e1, &mut gen);
     let e2 = typed_expression("let a = 1; a + a + 2");
     assert!(e1.compare_ignoring_symbols(&e2).unwrap());
 
     let mut e1 = typed_expression("let a = 1L; for([1L,2L,3L], appender, |b,i,e| merge(b, e + a \
                                    + 2L))");
-    inline_let(&mut e1);
+    inline_let(&mut e1, &mut gen);
     // The transform should fail since the identifier is used in a loop.
     let e2 = typed_expression("let a = 1L; for([1L,2L,3L], appender, |b,i,e| merge(b, e + a + \
                                2L))");
     assert!(e1.compare_ignoring_symbols(&e2).unwrap());
 
     let mut e1 = typed_expression("let a = 1; let b = 2; let c = 3; a + b + c");
-    inline_let(&mut e1);
+    inline_let(&mut e1, &mut gen);
     let e2 = typed_expression("1 + 2 + 3");
     assert!(e1.compare_ignoring_symbols(&e2).unwrap());
 }

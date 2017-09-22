@@ -247,17 +247,17 @@ fn make_select_for_kv(cond:  Expr<Type>,
                       ident: Expr<Type>) -> WeldResult<Option<Expr<Type>>> {
     let mut sym_gen = SymbolGenerator::from_expression(&kv);
     let name = sym_gen.new_symbol("k");
-    
+
     let kv_struct = exprs::ident_expr(name.clone(), kv.ty.clone())?;
     let kv_ident = exprs::makestruct_expr(vec![exprs::getfield_expr(kv_struct.clone(), 0)?, ident])?; // use the original key and the identity as the value
-    
+
     let sel = exprs::select_expr(cond, kv_struct, kv_ident)?;
     let le = exprs::let_expr(name, kv, sel)?; /* avoid copying key */
     return Ok(Some(le))
 }
 
 /// Predicate an `If` expression by checking for if(cond, merge(b, e), b) and transforms it to merge(b, select(cond, e,identity)).
-pub fn predicate(e: &mut Expr<Type>) {
+pub fn predicate(e: &mut Expr<Type>, _: &mut SymbolGenerator) {
     e.transform_and_continue_res(&mut |ref mut e| {
         if !(should_be_predicated(e)) {
             return Ok((None, true));
@@ -286,17 +286,17 @@ pub fn predicate(e: &mut Expr<Type>) {
                                         match *bk {
                                             BuilderKind::Merger(_, _)
                                                 | BuilderKind::VecMerger(_, _) => {
-                                                /* Change if(cond, merge(b, e), b) => 
+                                                /* Change if(cond, merge(b, e), b) =>
                                                 merge(b, select(cond, e, identity). */
                                                 let expr = exprs::merge_expr(*builder.clone(),
                                                                              exprs::select_expr(
                                                                                  *cond.clone(),
                                                                                  *value.clone(), x)?)?;
                                                 return Ok((Some(expr), true));
-                                                
+
                                             },
                                             BuilderKind::DictMerger(_, _, _) => {
-                                                /* For dictmerger, need to match identity element 
+                                                /* For dictmerger, need to match identity element
                                                 back to the key. */
                                                 let sel_expr = make_select_for_kv(*cond.clone(),
                                                                                   *value.clone(),
@@ -324,7 +324,7 @@ pub fn predicate(e: &mut Expr<Type>) {
 }
 
 /// Vectorize an expression.
-pub fn vectorize(expr: &mut Expr<Type>) {
+pub fn vectorize(expr: &mut Expr<Type>, gen: &mut SymbolGenerator) {
     let mut vectorized = false;
     // Used to create the identifiers which refer to the data items. These identifiers are
     // used to pull out the iter into a let statement. This lets us repeat the iter via an
@@ -354,8 +354,9 @@ pub fn vectorize(expr: &mut Expr<Type>) {
 
                         let data_names = iters
                             .iter()
-                            .map(|_| sym_gen.new_symbol("a"))
+                            .map(|_| gen.new_symbol("a"))
                             .collect::<Vec<_>>();
+
 
                         // Iterators for the vectorized loop.
                         let mut vec_iters = vec![];
@@ -421,69 +422,87 @@ pub fn has_vectorized_merge(expr: &TypedExpr) -> bool {
 
 #[test]
 fn simple_merger() {
-    let mut e = typed_expr("|v:vec[i32]| result(for(v, merger[i32,+], |b,i,e| merge(b,e+1)))");
-    vectorize(&mut e);
+    let mut e = typed_expr(
+        "|v:vec[i32]| result(for(v, merger[i32,+], |b,i,e| merge(b,e+1)))");
+    let mut gen = SymbolGenerator::from_expression(&e);
+    vectorize(&mut e, &mut gen);
     assert!(has_vectorized_merge(&e));
 }
 
 #[test]
 fn predicated_merger() {
-    let mut e = typed_expr("|v:vec[i32]| result(for(v, merger[i32,+], |b,i,e| @(predicate:true)if(e>0, merge(b,e), b)))");
-    predicate(&mut e);
-    vectorize(&mut e);
+    let mut e = typed_expr(
+        "|v:vec[i32]| result(for(v, merger[i32,+], |b,i,e| @(predicate:true)if(e>0, merge(b,e), b)))");
+    let mut gen = SymbolGenerator::from_expression(&e);
+    predicate(&mut e, &mut gen);
+    vectorize(&mut e, &mut gen);
     assert!(has_vectorized_merge(&e));
 }
 
 #[test]
 fn unpredicated_merger() {
     // This one shouldn't be vectorized since we didn't predicate it.
-    let mut e = typed_expr("|v:vec[i32]| result(for(v, merger[i32,+], |b,i,e| if(e>0, merge(b,e), b)))");
-    vectorize(&mut e);
+    let mut e = typed_expr(
+        "|v:vec[i32]| result(for(v, merger[i32,+], |b,i,e| if(e>0, merge(b,e), b)))");
+    let mut gen = SymbolGenerator::from_expression(&e);
+    vectorize(&mut e, &mut gen);
     assert!(!has_vectorized_merge(&e));
 }
 
 #[test]
 fn simple_appender() {
-    let mut e = typed_expr("|v:vec[i32]| result(for(v, appender[i32], |b,i,e| merge(b,e+1)))");
-    vectorize(&mut e);
+    let mut e = typed_expr(
+        "|v:vec[i32]| result(for(v, appender[i32], |b,i,e| merge(b,e+1)))");
+    let mut gen = SymbolGenerator::from_expression(&e);
+    vectorize(&mut e, &mut gen);
     assert!(has_vectorized_merge(&e));
 }
 
 #[test]
 fn predicated_appender() {
     // This code should NOT be vectorized because we can't predicate merges into vecbuilder.
-    let mut e = typed_expr("|v:vec[i32]| result(for(v, appender[i32], |b,i,e| @(predicate:true)if(e>0, merge(b,e), b)))");
-    predicate(&mut e);
-    vectorize(&mut e);
+    let mut e = typed_expr(
+        "|v:vec[i32]| result(for(v, appender[i32], |b,i,e| @(predicate:true)if(e>0, merge(b,e), b)))");
+    let mut gen = SymbolGenerator::from_expression(&e);
+    predicate(&mut e, &mut gen);
+    vectorize(&mut e, &mut gen);
     assert!(!has_vectorized_merge(&e));
 }
 
 #[test]
 fn non_vectorizable_type() {
     // This code should NOT be vectorized because we can't vectorize merges of vectors.
-    let mut e = typed_expr("|v:vec[i32]| result(for(v, appender[vec[i32]], |b,i,e| merge(b,v)))");
-    vectorize(&mut e);
+    let mut e = typed_expr(
+        "|v:vec[i32]| result(for(v, appender[vec[i32]], |b,i,e| merge(b,v)))");
+    let mut gen = SymbolGenerator::from_expression(&e);
+    vectorize(&mut e, &mut gen);
     assert!(!has_vectorized_merge(&e));
 }
 
 #[test]
 fn non_vectorizable_expr() {
     // This code should NOT be vectorized because we can't vectorize lookup().
-    let mut e = typed_expr("|v:vec[i32]| result(for(v, appender[i32], |b,i,e| merge(b,lookup(v,i))))");
-    vectorize(&mut e);
+    let mut e = typed_expr(
+        "|v:vec[i32]| result(for(v, appender[i32], |b,i,e| merge(b,lookup(v,i))))");
+    let mut gen = SymbolGenerator::from_expression(&e);
+    vectorize(&mut e, &mut gen);
     assert!(!has_vectorized_merge(&e));
 }
 
 #[test]
 fn zipped_input() {
-    let mut e = typed_expr("|v:vec[i32]| result(for(zip(v,v), appender[i32], |b,i,e| merge(b,e.$0+e.$1)))");
-    vectorize(&mut e);
+    let mut e = typed_expr(
+        "|v:vec[i32]| result(for(zip(v,v), appender[i32], |b,i,e| merge(b,e.$0+e.$1)))");
+    let mut gen = SymbolGenerator::from_expression(&e);
+    vectorize(&mut e, &mut gen);
     assert!(has_vectorized_merge(&e));
 }
 
 #[test]
 fn zips_in_body() {
-    let mut e = typed_expr("|v:vec[i32]| result(for(v, dictmerger[{i32,i32},i32,+], |b,i,e| merge(b,{{e,e},e})))");
-    vectorize(&mut e);
+    let mut e = typed_expr(
+        "|v:vec[i32]| result(for(v, dictmerger[{i32,i32},i32,+], |b,i,e| merge(b,{{e,e},e})))");
+    let mut gen = SymbolGenerator::from_expression(&e);
+    vectorize(&mut e, &mut gen);
     assert!(has_vectorized_merge(&e));
 }
