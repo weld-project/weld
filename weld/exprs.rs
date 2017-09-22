@@ -436,7 +436,7 @@ pub fn merge_expr(builder: Expr<Type>, value: Expr<Type>) -> WeldResult<Expr<Typ
             DictMerger(ref elem_ty1, ref elem_ty2, _) => {
                 if let Struct(ref v_ty) = value.ty {
                     if v_ty.len() < 2 { return err; }
-                    
+
                     if elem_ty1.as_ref() != &v_ty[0] {
                         return err;
                     }

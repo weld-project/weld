@@ -63,7 +63,9 @@ lazy_static! {
                  Pass::new(vec![/*transforms::fuse_loops_horizontal,
                                 transforms::fuse_loops_vertical,*/
                                 transforms::fuse_loops_2,
-                                transforms::simplify_get_field],
+                                transforms::move_merge_before_let,
+                                transforms::simplify_get_field,
+                                transforms::inline_let],
                  "loop-fusion"));
         m.insert("infer-size",
                  Pass::new(vec![transforms::infer_size],

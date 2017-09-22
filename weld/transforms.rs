@@ -583,7 +583,8 @@ pub fn fuse_loops_2(expr: &mut Expr<Type>, gen: &mut SymbolGenerator) {
                         for ref map_iter in map.iters {
                             // Check whether this iterator is already in our new_iters list; if so, reuse the old one
                             let iter_num;
-                            if let Some(pos) = new_iters.iter().position(|ref x| x == map_iter) {
+                            if let Some(pos) = new_iters.iter().position(
+                                    |x| iters_match_ignoring_symbols(x, map_iter).unwrap()) {
                                 iter_num = pos
                             } else {
                                 // If it is indeed a new iterator, remember its element type and assign it a symbol.
@@ -621,7 +622,8 @@ pub fn fuse_loops_2(expr: &mut Expr<Type>, gen: &mut SymbolGenerator) {
                     } else {
                         // Check whether this iterator is already in our new_iters list; if so, reuse the old one
                         let iter_num;
-                        if let Some(pos) = new_iters.iter().position(|x| *x == iters[i]) {
+                        if let Some(pos) = new_iters.iter().position(
+                                |x| iters_match_ignoring_symbols(x, &iters[i]).unwrap()) {
                             iter_num = pos
                         } else {
                             // If it is indeed a new iterator, remember its element type and assign it a symbol.
@@ -687,6 +689,44 @@ pub fn fuse_loops_2(expr: &mut Expr<Type>, gen: &mut SymbolGenerator) {
 
         None
     })
+}
+
+/// Replaces Let(name, value, Merge(builder, elem)) with Merge(builder, Let(name, value, elem)) to
+/// enable further pattern matching on map functions downstream. This is only allowed when the let
+/// statement is not defining some symbol that's used in the builder expression, so we check for that.
+pub fn move_merge_before_let(expr: &mut Expr<Type>, _: &mut SymbolGenerator) {
+    use super::exprs::*;
+    expr.transform_up(&mut |ref mut expr| {
+        if let Let { ref name, value: ref let_value, ref body } = expr.kind {
+            if let Merge { ref builder, value: ref merge_value } = body.kind {
+                if !builder.contains_symbol(name) {
+                    return Some(merge_expr(
+                        *builder.clone(),
+                        let_expr(name.clone(), *let_value.clone(), *merge_value.clone()).unwrap()
+                    ).unwrap());
+                }
+            }
+        }
+        return None;
+    });
+}
+
+/// Are two iterators equivalent ignoring symbols defined inside each one?
+fn iters_match_ignoring_symbols(iter1: &TypedIter, iter2: &TypedIter) -> WeldResult<bool> {
+    Ok(iter1.kind == iter2.kind &&
+        iter1.data.compare_ignoring_symbols(iter2.data.as_ref())? &&
+        options_match_ignoring_symbols(&iter1.start, &iter2.start)? &&
+        options_match_ignoring_symbols(&iter1.end, &iter2.end)? &&
+        options_match_ignoring_symbols(&iter1.stride, &iter2.stride)?)
+}
+
+/// Are two Option<Box<Expr>> equal ignoring symbols defined inside each one?
+fn options_match_ignoring_symbols(opt1: &Option<Box<TypedExpr>>, opt2: &Option<Box<TypedExpr>>) -> WeldResult<bool> {
+    match (opt1, opt2) {
+        (&None, &None) => Ok(true),
+        (&Some(ref e1), &Some(ref e2)) => e1.compare_ignoring_symbols(e2.as_ref()),
+        _ => Ok(false)
+    }
 }
 
 /// Given an iterator, returns whether the iterator consumes every element of its data vector.

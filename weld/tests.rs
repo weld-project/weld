@@ -215,11 +215,6 @@ fn compare_expressions() {
     let e2 = parse_expr("let b = 2; c").unwrap();
     assert!(!e1.compare_ignoring_symbols(&e2).unwrap());
 
-    // Undefined symbols cause equality check to return false.
-    let e1 = parse_expr("[1, 2, 3, d]").unwrap();
-    let e2 = parse_expr("[1, 2, 3, d]").unwrap();
-    assert!(e1.compare_ignoring_symbols(&e2).is_err());
-
     // Symbols can be substituted, so equal.
     let e1 = parse_expr("|a, b| a + b").unwrap();
     let e2 = parse_expr("|c, d| c + d").unwrap();
