@@ -8,54 +8,49 @@ Attributes:
 from encoders import *
 from weld.weldobject import *
 
-norm_factor_id_ = 1
 encoder_ = NumPyEncoder()
 decoder_ = NumPyDecoder()
 
 
-def div(array, other, type):
+def div(array, other, ty):
     """
     Normalizes the passed-in array by the passed in quantity.
 
     Args:
         array (WeldObject / Numpy.ndarray): Input array to normalize
         other (WeldObject / float): Normalization factor
-        type (WeldType): Type of each element in the input array
+        ty (WeldType): Type of each element in the input array
 
     Returns:
         A WeldObject representing this computation
     """
     weld_obj = WeldObject(encoder_, decoder_)
 
-    array_str = weld_obj.update(array)
+    array_var = weld_obj.update(array)
     if isinstance(array, WeldObject):
-        array_str = array.weld_code
+        array_var = "tmp%d" % array.objectId
+        weld_obj.dependencies[array_var] = array.weld_code
 
-    other_str = None
+    other_var = None
     if isinstance(other, WeldObject):
-        weld_obj.update(other)
-        global norm_factor_id_
-        constant_name = "norm_factor%d" % norm_factor_id_
-        constant = "let %s = (%s);" % (constant_name, other.weld_code)
-        norm_factor_id_ += 1
-        weld_obj.constants.append(constant)
-        other_str = constant_name
+        other_var = "tmp%d" % other.objectId
+        weld_obj.dependencies[other_var] = other.weld_code
     else:
-        other_str = ("%.2f" % other)
+        other_var = ("%.2f" % other)
 
     weld_template = """
        map(
          %(array)s,
-         |value| value / %(type)s(%(other)s)
+         |value| value / %(ty)s(%(other)s)
        )
     """
-    weld_obj.weld_code = weld_template % {"array": array_str,
-                                          "other": other_str,
-                                          "type": type}
+    weld_obj.weld_code = weld_template % {"array": array_var,
+                                          "other": other_var,
+                                          "ty": ty}
     return weld_obj
 
 
-def aggr(array, op, initial_value, type):
+def aggr(array, op, initial_value, ty):
     """
     Computes the aggregate of elements in the array.
 
@@ -63,7 +58,7 @@ def aggr(array, op, initial_value, type):
         array (WeldObject / Numpy.ndarray): Input array to aggregate
         op (str): Op string used to aggregate the array (+ / *)
         initial_value (int): Initial value for aggregation
-        type (WeldType): Type of each element in the input array
+        ty (WeldType): Type of each element in the input array
 
 
     Returns:
@@ -71,56 +66,59 @@ def aggr(array, op, initial_value, type):
     """
     weld_obj = WeldObject(encoder_, decoder_)
 
-    array_str = weld_obj.update(array)
+    array_var = weld_obj.update(array)
     if isinstance(array, WeldObject):
-        array_str = array.weld_code
+        array_var = "tmp%d" % array.objectId
+        weld_obj.dependencies[array_var] = array.weld_code
 
     weld_template = """
       result(
         for(
           %(array)s,
-          merger[%(type)s,%(op)s],
+          merger[%(ty)s,%(op)s],
           |b, i, e| merge(b, e)
         )
       )
     """
     weld_obj.weld_code = weld_template % {
-        "array": array_str, "type": type, "op": op}
+        "array": array_var, "ty": ty, "op": op}
     return weld_obj
 
 
-def dot(matrix, vector, matrix_type, vector_type):
+def dot(matrix, vector, matrix_ty, vector_ty):
     """
     Computes the dot product between a matrix and a vector.
 
     Args:
         matrix (WeldObject / Numpy.ndarray): 2-d input matrix
         vector (WeldObject / Numpy.ndarray): 1-d input vector
-        type (WeldType): Type of each element in the input matrix and vector
+        ty (WeldType): Type of each element in the input matrix and vector
 
     Returns:
         A WeldObject representing this computation
     """
     weld_obj = WeldObject(encoder_, decoder_)
 
-    matrix_str = weld_obj.update(matrix)
+    matrix_var = weld_obj.update(matrix)
     if isinstance(matrix, WeldObject):
-        matrix_str = matrix.weld_code
+        matrix_var = "tmp%d" % matrix.objectId
+        weld_obj.dependencies[matrix_var] = matrix.weld_code
 
-    vector_str = weld_obj.update(vector)
+    vector_var = weld_obj.update(vector)
     if isinstance(vector, WeldObject):
-        vector_str = vector.weld_code
+        vector_var = "tmp%d" % vector.objectId
+        weld_obj.dependencies[vector_var] = vector.weld_code
 
     weld_template = """
        map(
          %(matrix)s,
-         |row: vec[%(matrix_type)s]|
+         |row: vec[%(matrix_ty)s]|
            result(
              for(
                map(
                  zip(row, %(vector)s),
-                 |ele: {%(matrix_type)s, %(vector_type)s}|
-                   f64(ele.$0 * %(matrix_type)s(ele.$1))
+                 |ele: {%(matrix_ty)s, %(vector_ty)s}|
+                   f64(ele.$0 * %(matrix_ty)s(ele.$1))
                ),
                merger[f64,+],
                |b, i, e| merge(b, e)
@@ -128,35 +126,36 @@ def dot(matrix, vector, matrix_type, vector_type):
            )
        )
     """
-    weld_obj.weld_code = weld_template % {"matrix": matrix_str,
-                                          "vector": vector_str,
-                                          "matrix_type": matrix_type,
-                                          "vector_type": vector_type}
+    weld_obj.weld_code = weld_template % {"matrix": matrix_var,
+                                          "vector": vector_var,
+                                          "matrix_ty": matrix_ty,
+                                          "vector_ty": vector_ty}
     return weld_obj
 
 
-def exp(array, type):
+def exp(array, ty):
     """
     Computes the per-element exponenet of the passed-in array.
 
     Args:
         array (WeldObject / Numpy.ndarray): Input array
-        type (WeldType): Type of each element in the input array
+        ty (WeldType): Type of each element in the input array
 
     Returns:
         A WeldObject representing this computation
     """
     weld_obj = WeldObject(encoder_, decoder_)
 
-    array_str = weld_obj.update(array)
+    array_var = weld_obj.update(array)
     if isinstance(array, WeldObject):
-        array_str = array.weld_code
+        array_var = "tmp%d" % array.objectId
+        weld_obj.dependencies[array_var] = array.weld_code
 
     weld_template = """
        map(
          %(array)s,
-         |ele: %(type)s| exp(ele)
+         |ele: %(ty)s| exp(ele)
        )
     """
-    weld_obj.weld_code = weld_template % {"array": array_str, "type": type}
+    weld_obj.weld_code = weld_template % {"array": array_var, "ty": ty}
     return weld_obj

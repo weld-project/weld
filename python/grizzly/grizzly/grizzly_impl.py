@@ -12,22 +12,23 @@ encoder_ = NumPyEncoder()
 decoder_ = NumPyDecoder()
 
 
-def unique(array, type):
+def unique(array, ty):
     """
     Returns a new array-of-arrays with all duplicate arrays removed.
 
     Args:
         array (WeldObject / Numpy.ndarray): Input array
-        type (WeldType): Type of each element in the input array
+        ty (WeldType): Type of each element in the input array
 
     Returns:
         A WeldObject representing this computation
     """
     weld_obj = WeldObject(encoder_, decoder_)
 
-    array_str = weld_obj.update(array)
+    array_var = weld_obj.update(array)
     if isinstance(array, WeldObject):
-        array_str = array.weld_code
+        array_var = "tmp%d" % array.objectId
+        weld_obj.dependencies[array_var] = array.weld_code
 
     weld_template = """
        map(
@@ -36,21 +37,21 @@ def unique(array, type):
              for(
                map(
                  %(array)s,
-                 |p: %(type)s| {p,0}
+                 |p: %(ty)s| {p,0}
                ),
-               dictmerger[%(type)s,i32,+],
+               dictmerger[%(ty)s,i32,+],
                |b, i, e| merge(b,e)
              )
            )
          ),
-         |p: {%(type)s, i32}| p.$0
+         |p: {%(ty)s, i32}| p.$0
        )
     """
-    weld_obj.weld_code = weld_template % {"array": array_str, "type": type}
+    weld_obj.weld_code = weld_template % {"array": array_var, "ty": ty}
     return weld_obj
 
 
-def aggr(array, op, initial_value, type):
+def aggr(array, op, initial_value, ty):
     """
     Returns sum of elements in the array.
 
@@ -58,32 +59,33 @@ def aggr(array, op, initial_value, type):
         array (WeldObject / Numpy.ndarray): Input array
         op (str): Op string used to aggregate the array (+ / *)
         initial_value (int): Initial value for aggregation
-        type (WeldType): Type of each element in the input array
+        ty (WeldType): Type of each element in the input array
 
     Returns:
         A WeldObject representing this computation
     """
     weld_obj = WeldObject(encoder_, decoder_)
 
-    array_str = weld_obj.update(array)
+    array_var = weld_obj.update(array)
     if isinstance(array, WeldObject):
-        array_str = array.weld_code
+        array_var = "tmp%d" % array.objectId
+        weld_obj.dependencies[array_var] = array.weld_code
 
     weld_template = """
       result(
         for(
           %(array)s,
-          merger[%(type)s,%(op)s],
+          merger[%(ty)s,%(op)s],
           |b, i, e| merge(b, e)
         )
       )
     """
     weld_obj.weld_code = weld_template % {
-        "array": array_str, "type": type, "op": op}
+        "array": array_var, "ty": ty, "op": op}
     return weld_obj
 
 
-def mask(array, predicates, new_value, type):
+def mask(array, predicates, new_value, ty):
     """
     Returns a new array, with each element in the original array satisfying the
     passed-in predicate set to `new_value`
@@ -92,44 +94,47 @@ def mask(array, predicates, new_value, type):
         array (WeldObject / Numpy.ndarray): Input array
         predicates (WeldObject / Numpy.ndarray<bool>): Predicate set
         new_value (WeldObject / Numpy.ndarray / str): mask value
-        type (WeldType): Type of each element in the input array
+        ty (WeldType): Type of each element in the input array
 
     Returns:
         A WeldObject representing this computation
     """
     weld_obj = WeldObject(encoder_, decoder_)
 
-    array_str = weld_obj.update(array)
+    array_var = weld_obj.update(array)
     if isinstance(array, WeldObject):
-        array_str = array.weld_code
+        array_var = "tmp%d" % array.objectId
+        weld_obj.dependencies[array_var] = array.weld_code
 
-    predicates_str = weld_obj.update(predicates)
+    predicates_var = weld_obj.update(predicates)
     if isinstance(predicates, WeldObject):
-        predicates_str = predicates.weld_code
+        predicates_var = "tmp%d" % predicates.objectId
+        weld_obj.dependencies[predicates_var] = predicates.weld_code
 
-    if str(type).startswith("vec"):
-        new_value_str = weld_obj.update(new_value)
+    if str(ty).startswith("vec"):
+        new_value_var = weld_obj.update(new_value)
         if isinstance(new_value, WeldObject):
-            new_value_str = new_value.weld
+            new_value_var = "tmp%d" % new_value.objectId
+            weld_obj.dependencies[new_value_var] = new_value.weld
     else:
-        new_value_str = "%s(%s)" % (type, str(new_value))
+        new_value_var = "%s(%s)" % (ty, str(new_value))
 
     weld_template = """
        map(
          zip(%(array)s, %(predicates)s),
-         |p: {%(type)s, bool}| if (p.$1, %(new_value)s, p.$0)
+         |p: {%(ty)s, bool}| if (p.$1, %(new_value)s, p.$0)
        )
     """
     weld_obj.weld_code = weld_template % {
-        "array": array_str,
-        "predicates": predicates_str,
-        "new_value": new_value_str,
-        "type": type}
+        "array": array_var,
+        "predicates": predicates_var,
+        "new_value": new_value_var,
+        "ty": ty}
 
     return weld_obj
 
 
-def filter(array, predicates, type):
+def filter(array, predicates, ty):
     """
     Returns a new array, with each element in the original array satisfying the
     passed-in predicate set to `new_value`
@@ -137,20 +142,22 @@ def filter(array, predicates, type):
     Args:
         array (WeldObject / Numpy.ndarray): Input array
         predicates (WeldObject / Numpy.ndarray<bool>): Predicate set
-        type (WeldType): Type of each element in the input array
+        ty (WeldType): Type of each element in the input array
 
     Returns:
         A WeldObject representing this computation
     """
     weld_obj = WeldObject(encoder_, decoder_)
 
-    array_str = weld_obj.update(array)
+    array_var = weld_obj.update(array)
     if isinstance(array, WeldObject):
-        array_str = array.weld_code
+        array_var = "tmp%d" % array.objectId
+        weld_obj.dependencies[array_var] = array.weld_code
 
-    predicates_str = weld_obj.update(predicates)
+    predicates_var = weld_obj.update(predicates)
     if isinstance(predicates, WeldObject):
-        predicates_str = predicates.weld_code
+        predicates_var = "tmp%d" % predicates.objectId
+        weld_obj.dependencies[predicates_var] = predicates.weld_code
 
     weld_template = """
        result(
@@ -162,14 +169,14 @@ def filter(array, predicates, type):
        )
     """
     weld_obj.weld_code = weld_template % {
-        "array": array_str,
-        "predicates": predicates_str,
-        "type": type}
+        "array": array_var,
+        "predicates": predicates_var,
+        "ty": ty}
 
     return weld_obj
 
 
-def element_wise_op(array, other, op, type):
+def element_wise_op(array, other, op, ty):
     """
     Operation of series and other, element-wise (binary operator add)
 
@@ -177,20 +184,22 @@ def element_wise_op(array, other, op, type):
         array (WeldObject / Numpy.ndarray): Input array
         other (WeldObject / Numpy.ndarray): Second Input array
         op (str): Op string used to compute element-wise operation (+ / *)
-        type (WeldType): Type of each element in the input array
+        ty (WeldType): Type of each element in the input array
 
     Returns:
         A WeldObject representing this computation
     """
     weld_obj = WeldObject(encoder_, decoder_)
 
-    array_str = weld_obj.update(array)
+    array_var = weld_obj.update(array)
     if isinstance(array, WeldObject):
-        array_str = array.weld_code
+        array_var = "tmp%d" % array.objectId
+        weld_obj.dependencies[array_var] = array.weld_code
 
-    other_str = weld_obj.update(other)
+    other_var = weld_obj.update(other)
     if isinstance(other, WeldObject):
-        other_str = other.weld_code
+        other_var = "tmp%d" % array.objectId
+        weld_obj.dependencies[other_var] = other.weld_code
 
     weld_template = """
        map(
@@ -199,13 +208,13 @@ def element_wise_op(array, other, op, type):
        )
     """
 
-    weld_obj.weld_code = weld_template % {"array": array_str,
-                                          "other": other_str,
-                                          "type": type, "op": op}
+    weld_obj.weld_code = weld_template % {"array": array_var,
+                                          "other": other_var,
+                                          "ty": ty, "op": op}
     return weld_obj
 
 
-def compare(array, other, op, type_str):
+def compare(array, other, op, ty_str):
     """
     Performs passed-in comparison op between every element in the passed-in
     array and other, and returns an array of booleans.
@@ -214,40 +223,42 @@ def compare(array, other, op, type_str):
         array (WeldObject / Numpy.ndarray): Input array
         other (WeldObject / Numpy.ndarray): Second input array
         op (str): Op string used for element-wise comparison (== >= <= !=)
-        type (WeldType): Type of each element in the input array
+        ty (WeldType): Type of each element in the input array
 
     Returns:
         A WeldObject representing this computation
     """
     weld_obj = WeldObject(encoder_, decoder_)
 
-    array_str = weld_obj.update(array)
+    array_var = weld_obj.update(array)
     if isinstance(array, WeldObject):
-        array_str = array.weld_code
+        array_var = "tmp%d" % array.objectId
+        weld_obj.dependencies[array_var] = array.weld_code
 
     # Strings need to be encoded into vec[char] array.
     # Constants can be added directly to NVL snippet.
     if isinstance(other, str) or isinstance(other, WeldObject):
-        other_str = weld_obj.update(other)
+        other_var = weld_obj.update(other)
         if isinstance(other, WeldObject):
-            other_str = other.weld_code
+            other_var = "tmp%d" % tmp.objectId
+            weld_obj.dependencies[other_var] = other.weld_code
     else:
-        other_str = "%s(%s)" % (type_str, str(other))
+        other_var = "%s(%s)" % (ty_str, str(other))
 
     weld_template = """
        map(
          %(array)s,
-         |a: %(type)s| a %(op)s %(other)s
+         |a: %(ty)s| a %(op)s %(other)s
        )
     """
-    weld_obj.weld_code = weld_template % {"array": array_str,
-                                          "other": other_str,
-                                          "op": op, "type": type_str}
+    weld_obj.weld_code = weld_template % {"array": array_var,
+                                          "other": other_var,
+                                          "op": op, "ty": ty_str}
 
     return weld_obj
 
 
-def slice(array, start, size, type):
+def slice(array, start, size, ty):
     """
     Returns a new array-of-arrays with each array truncated, starting at
     index `start` for `length` characters.
@@ -256,64 +267,66 @@ def slice(array, start, size, type):
         array (WeldObject / Numpy.ndarray): Input array
         start (int): starting index
         size (int): length to truncate at
-        type (WeldType): Type of each element in the input array
+        ty (WeldType): Type of each element in the input array
 
     Returns:
         A WeldObject representing this computation
     """
     weld_obj = WeldObject(encoder_, decoder_)
 
-    array_str = weld_obj.update(array)
+    array_var = weld_obj.update(array)
     if isinstance(array, WeldObject):
-        array_str = array.weld_code
+        array_var = "tmp%d" % array.objectId
+        weld_obj.dependencies[array_var] = array.weld_code
 
     weld_template = """
        map(
          %(array)s,
-         |array: %(type)s| slice(array, %(start)dL, %(size)dL)
+         |array: %(ty)s| slice(array, %(start)dL, %(size)dL)
        )
     """
-    weld_obj.weld_code = weld_template % {"array": array_str, "start": start,
-                                          "type": type, "size": size}
+    weld_obj.weld_code = weld_template % {"array": array_var, "start": start,
+                                          "ty": ty, "size": size}
 
     return weld_obj
 
 
-def count(array, type):
+def count(array, ty):
     """
     Return number of non-NA/null observations in the Series
     TODO : Filter out NaN's once Weld supports NaN's
 
     Args:
         array (WeldObject / Numpy.ndarray): Input array
-        type (WeldType): Type of each element in the input array
+        ty (WeldType): Type of each element in the input array
 
     Returns:
         A WeldObject representing this computation
     """
     weld_obj = WeldObject(encoder_, decoder_)
 
-    array_str = weld_obj.update(array)
+    array_var = weld_obj.update(array)
     if isinstance(array, WeldObject):
-        array_str = array.weld_code
+        array_var = "tmp%d" % array.objectId
+        weld_obj.dependencies[array_var] = array.weld_code
 
     weld_template = """
      len(%(array)s)
   """
 
-    weld_obj.weld_code = weld_template % {"array": array_str}
+    weld_obj.weld_code = weld_template % {"array": array_var}
 
     return weld_obj
 
 
-def groupby_sum(columns, column_types, grouping_column):
+def groupby_sum(columns, column_tys, grouping_column):
     """
     Groups the given columns by the corresponding grouping column
     value, and aggregate by summing values.
 
     Args:
         columns (List<WeldObject>): List of columns as WeldObjects
-        column_types (List<str>): List of each column data type
+        column_tys (List<str>): List of each column data ty
         grouping_column (WeldObject): Column to group rest of columns by
 
     Returns:
@@ -321,25 +334,26 @@ def groupby_sum(columns, column_types, grouping_column):
     """
     weld_obj = WeldObject(encoder_, decoder_)
 
-    grouping_column_str = weld_obj.update(grouping_column)
+    grouping_column_var = weld_obj.update(grouping_column)
     if isinstance(grouping_column, WeldObject):
-        grouping_column_str = grouping_column.weld_code
+        grouping_column_var = grouping_column.weld_code
 
-    columns_str_list = []
+    columns_var_list = []
     for column in columns:
-        column_str = weld_obj.update(column)
+        column_var = weld_obj.update(column)
         if isinstance(column, WeldObject):
-            column_str = column.weld_code
-        columns_str_list.append(column_str)
+            column_var = "tmp%d" % column.objectId
+            weld_obj.dependencies[column_var] = column.weld_code
+        columns_var_list.append(column_var)
 
-    if len(columns_str_list) == 1:
-        columns_str = columns_str_list[0]
-        types_str = column_types[0]
+    if len(columns_var_list) == 1:
+        columns_var = columns_var_list[0]
+        tys_str = column_tys[0]
         result_str = "merge(b, e)"
     else:
         # TODO Support Multicolumn
-        columns_str = "zip(%s)" % ", ".join(columns_str_list)
-        types_str = "{%s}" % ", ".join(column_types)
+        columns_var = "zip(%s)" % ", ".join(columns_var_list)
+        tys_str = "{%s}" % ", ".join(column_tys)
         result_str_list = []
         for i in xrange(len(columns)):
             result_str_list.append("elem1.%d + elem2.%d" % (i, i))
@@ -350,46 +364,47 @@ def groupby_sum(columns, column_types, grouping_column):
        result(
          for(
            zip(%(grouping_column)s, %(columns)s),
-           dictmerger[vec[i8], %(type)s, +],
+           dictmerger[vec[i8], %(ty)s, +],
            |b, i, e| %(result)s
          )
        )
      )
   """
 
-    weld_obj.weld_code = weld_template % {"grouping_column": grouping_column_str,
-                                          "columns": columns_str,
+    weld_obj.weld_code = weld_template % {"grouping_column": grouping_column_var,
+                                          "columns": columns_var,
                                           "result": result_str,
-                                          "type": types_str}
+                                          "ty": tys_str}
     return weld_obj
 
 
-def get_column(columns, column_types, index):
+def get_column(columns, column_tys, index):
     """
     Get column corresponding to passed-in index from ptr returned
     by groupBySum.
 
     Args:
         columns (List<WeldObject>): List of columns as WeldObjects
-        column_types (List<str>): List of each column data type
+        column_tys (List<str>): List of each column data ty
         index (int): index of selected column
 
     Returns:
         A WeldObject representing this computation
     """
     weld_obj = WeldObject(encoder_, decoder_)
-    columns_str = weld_obj.update(columns, types=WeldVec(column_types), override=False)
+    columns_var = weld_obj.update(columns, tys=WeldVec(column_tys), override=False)
     if isinstance(columns, WeldObject):
-        columns_str = columns.weld_code
+        columns_var = "tmp%d" % columns.objectId
+        weld_obj.dependencies[columns_var] = columns.weld_code
 
     weld_template = """
      map(
        %(columns)s,
-       |elem: %(type)s| elem.$%(index)s
+       |elem: %(ty)s| elem.$%(index)s
      )
   """
 
-    weld_obj.weld_code = weld_template % {"columns": columns_str,
-                                          "type": column_types,
+    weld_obj.weld_code = weld_template % {"columns": columns_var,
+                                          "ty": column_tys,
                                           "index": index}
     return weld_obj
