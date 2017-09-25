@@ -24,6 +24,7 @@ install:
   - PATH=$PATH:/home/travis/.cargo/bin
   - pip install virtualenv==15.1.0
   - bash -e build_tools/travis/init_virtualenvs.sh 2.7 3.6
+  - git clone https://github.com/weld-project/weld-benchmarks.git
 
 script:
   - bash -e -x build_tools/travis/test_multi_version.sh 3.8 38.0.1 2.7

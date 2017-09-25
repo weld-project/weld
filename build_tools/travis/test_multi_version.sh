@@ -33,4 +33,7 @@ cargo test
 export LD_LIBRARY_PATH=`pwd`/target/release
 python python/grizzly/tests/grizzly_test.py
 python python/grizzly/tests/numpy_weld_test.py
+
+cd $WELD_HOME/weld-benchmarks; python run_benchmarks.py -b tpch_q1 tpch_q6 vector vector_sum -n 5 -f results.tsv -v -d
+cd $WELD_HOME
 deactivate
