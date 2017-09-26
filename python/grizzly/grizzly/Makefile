@@ -3,7 +3,7 @@ LLVM_VERSION=$(shell llvm-config --version | cut -d . -f 1,2)
 
 PYTHON_HEADER_INCLUDE = $(shell python-config --includes)
 NUMPY_HEADER_INCLUDE = -I$(shell python -c "import numpy; print numpy.get_include()" 2>/dev/null)
-PYTHON_LDFLAGS = $(shell python-config --ldflags)
+PYTHON_LDFLAGS=-L$(shell python -c "from distutils import sysconfig; print sysconfig.get_config_var('LIBDIR')" 2>/dev/null) -lpython2.7 -ldl -framework CoreFoundation
 
 ifeq (${NUMPY_HEADER_INCLUDE}, -I)
   $(error Error: NumPy installation not found)

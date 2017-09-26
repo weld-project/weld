@@ -6,6 +6,7 @@ import sys
 
 from setuptools import setup, Distribution
 import setuptools.command.build_ext as _build_ext
+from setuptools.command.install import install
 
 system = platform.system()
 if system == 'Linux':
@@ -17,18 +18,12 @@ elif system == 'Darwin':
 else:
     raise OSError("Unsupported platform {}", system)
 
-class build_ext(_build_ext.build_ext):
+class Install(install):
     def run(self):
-        if not os.path.exists("grizzly/" + numpy_convertor):
-            subprocess.call("cd grizzly && make && cd ..", shell=True)
-        self.move_file("grizzly/" + numpy_convertor, "grizzly")
-
-    def move_file(self, filename, directory):
-        source = filename
-        dir, name = os.path.split(source)        
-        destination = os.path.join(self.build_lib + "/" + directory + "/", name)
-        print("Copying {} to {}".format(source, destination))
-        shutil.copy(source, destination)
+        install.run(self)
+        protoc_command = ["make -C " + self.install_lib + "grizzly/"]
+        if subprocess.call(protoc_command, shell=True) != 0:
+            sys.exit(-1)
 
 class BinaryDistribution(Distribution):
     def has_ext_modules(self):
@@ -37,7 +32,8 @@ class BinaryDistribution(Distribution):
 setup(name='grizzly',
       version='0.0.1',
       packages=['grizzly'],
-      cmdclass={"build_ext": build_ext},
+      package_data = {'grizzly': ['numpy_weld_convertor.cpp', 'common.h', 'Makefile']},
+      cmdclass={"install": Install},
       distclass=BinaryDistribution,
       url='https://github.com/weld-project/weld',
       author='Weld Developers',
