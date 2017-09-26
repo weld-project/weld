@@ -21,7 +21,8 @@ else:
 class Install(install):
     def run(self):
         install.run(self)
-        protoc_command = ["make -C " + self.install_lib + "grizzly/"]
+        python_executable = sys.executable
+        protoc_command = ["make -C " + self.install_lib + "grizzly/ EXEC=" + python_executable]
         if subprocess.call(protoc_command, shell=True) != 0:
             sys.exit(-1)
 
