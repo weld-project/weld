@@ -2,6 +2,13 @@ language: rust
 sudo: required
 dist: trusty
 addons:
+  artifacts:
+    paths: ~/results
+    target_paths: $TRAVIS_BUILD_NUMBER
+    bucket: weld-travis-ci
+    s3_region: us-west-2
+    key: $AWS_ACCESS_KEY
+    secret: $AWS_SECRET_KEY
   apt:
     sources:
     - deadsnakes
@@ -17,11 +24,6 @@ addons:
     - python2.7
     - python3.6
     - python-tk
-  artifacts:
-    paths: ~/results
-    target_paths: $TRAVIS_BUILD_NUMBER
-    bucket: weld-travis-ci
-    s3_region: us-west-2
 install:
 - sudo rm -f `which llvm-config`
 - export WELD_HOME=`pwd`
