@@ -30,6 +30,8 @@ class build_ext(_build_ext.build_ext):
         source = filename
         dir, name = os.path.split(source)        
         destination = os.path.join(self.build_lib + "/" + directory + "/", name)
+        makedir = self.build_lib + "/" + directory
+        os.system("mkdir -p {}".format(makedir))
         print("Copying {} to {}".format(source, destination))
         shutil.copy(source, destination)
 

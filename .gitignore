@@ -20,3 +20,5 @@ python/build/
 python/dist
 python/grizzly.egg-info/
 examples/python/grizzly/data
+python/grizzly/grizzly.egg-info/
+python/pyweld/pyweld.egg-info/
