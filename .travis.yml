@@ -1,31 +1,39 @@
 language: rust
 sudo: required
 dist: trusty
-
 addons:
+  artifacts:
+    paths: results
+    target_paths: $TRAVIS_BUILD_NUMBER
+    bucket: weld-travis-ci
+    s3_region: us-west-2
+    key: $AWS_ACCESS_KEY
+    secret: $AWS_SECRET_KEY
   apt:
     sources:
-      - deadsnakes
-      - sourceline: 'deb http://llvm.org/apt/trusty/ llvm-toolchain-trusty-3.8 main'
-        key_url: 'http://llvm.org/apt/llvm-snapshot.gpg.key'
+    - deadsnakes
+    - sourceline: deb http://llvm.org/apt/trusty/ llvm-toolchain-trusty-3.8 main
+      key_url: http://llvm.org/apt/llvm-snapshot.gpg.key
     packages:
-      - gcc
-      - make
-      - llvm-3.8
-      - llvm-3.8-dev
-      - clang-3.8
-      - lib32z1-dev
-      - python2.7
-      - python3.6
-      - python-tk
-
+    - gcc
+    - make
+    - llvm-3.8
+    - llvm-3.8-dev
+    - clang-3.8
+    - lib32z1-dev
+    - python2.7
+    - python3.6
+    - python-tk
 install:
-  - sudo rm -f `which llvm-config`
-  - export WELD_HOME=`pwd`
-  - PATH=$PATH:/home/travis/.cargo/bin
-  - pip install virtualenv==15.1.0
-  - bash -e build_tools/travis/init_virtualenvs.sh 2.7 3.6
-  - git clone https://github.com/weld-project/weld-benchmarks.git
-
+- sudo rm -f `which llvm-config`
+- export WELD_HOME=`pwd`
+- PATH=$PATH:/home/travis/.cargo/bin
+- pip install virtualenv==15.1.0
+- bash -e build_tools/travis/init_virtualenvs.sh 2.7 3.6
+- git clone https://github.com/weld-project/weld-benchmarks.git
 script:
-  - bash -e -x build_tools/travis/test_multi_version.sh 3.8 38.0.1 2.7
+- bash -e -x build_tools/travis/test_multi_version.sh 3.8 38.0.1 2.7
+env:
+  global:
+  - secure: vK6LXPP76yTMbZ+uAkrjIU5JygA3Oo7iRoRZ9lnYskC4bvFd/R4i5ioN2mxBODzzxzKZTkCbnnhqKOE7P/ZL6C+a3R62zBdUhdZqGviXQZWdVjpl0ucJTMXueXRVnt+5oGQevtDeQx9i8b6FJ3fs5LurTgx6VtI0JD83xyJQRSh9fG+A9jaV1BTAC0fx35W9chzCQgeDhiMsQy5HN372fOYOXIa5ecf4dZ77dFHMHKwUYKeuEDamlMfei0B/nOUbIC+WcYE3ZKlh3o9KgkZlYfsWntZDOqvtHC5TpOqCikjfg5gctL8twuFf8woQgRGp4SA/emHyHWMfuI5jUDqi4WGSi1QldzWuDpJSYAuNdFgVg8UBxHDf+LSSrlyaCIvO6xKR8qK9UGv/uPP6FyV+vgmBH9QytnB/1CdA949J3zdSub8eMmDKoJ2hp2cAerDgVOwQRQzR+AVX4oAQptsa4SrSIJbXJRSuh7VN70n0rb0/qRDpzeDmXEXLH/1VnFM9bAOInMGhesEmcdHF0KK9iW6XcPqOjKcGU2w+oyLEJl5UzQqylz5qUVcr0ayXQ5wv1TsszIwXt5WVFn4mefh/oG3/o9MUPE5FI8nrh71QZcsdt8xE7SnSGoHhd6gajt5pnEdZeVgYNUtopDYSkHpSny8JR30e6HtTM8H++awJ4JY=
+  - secure: AVJjlWHohaJYv0zAXhuTCuBla+9VLwlHLjK8nwJYqgk/rePFxUzkP+u9V2rA8cFXt8JrB89+ufhK3ddin8EntiSrAhMYsOw4kgGZ9A4cK64kIVoab1XL4XBvYXpt76wvXBlKGihN42CNCFWruVFBqAkf2kc1Y4q6jij3AHJVudrWpEGGbMdhzYOCGCP+o7RNc4GysAQBZbZFC9xaR4mo9YG2QMWJS5hAHK6DNjiI48fdJMjAepqCBPaKtssrStzRvpjABbIXlCeSt0zPr12FB7VRzEa/sA6qJnC8+9hJqzJwNXm7+r7loDgs/dC7c75CL+235CNDzvbXp/7d9bv6dV0VW7eAbrSoOGkNfEnab4Dby2brVsM5cw2NgrInRG6En0LOCaeGlBibXIEmbGFw5NV1Zpit8kxPMBfsa/zmJFSRs/hhAgnYESH7RWEKoyflDi4Keew1QZavczW4U7mtYGo3x94X1qUwS+y7wZ8D2faENvgrKCsSsStP4x/B5hFidoR8RkZ/G344b+fy6yJKtN9vCK8m+bZ36BViwWG4K4QlEzs7tMy/VkEQBpLPkowzHH5494YCDKNQYqy1+Pvt70nXhG1UYCbQQKyAisQdhED6OE7kd0voC8Q2kLDR+Xc2L+IQmibLZfW07NdYKT3ZykDKy4iDbMGCletpLGCKB20=
