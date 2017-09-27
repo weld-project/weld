@@ -22,15 +22,19 @@ class Install(install):
     def run(self):
         install.run(self)
         python_executable = sys.executable
-        protoc_command = ["make -C " + self.install_lib + "grizzly/ EXEC=" + python_executable]
-        if subprocess.call(protoc_command, shell=True) != 0:
+        protoc_command_clean = ["make -C " + self.install_lib + "grizzly clean"]
+        if subprocess.call(protoc_command_clean, shell=True) != 0:
+            sys.exit(-1)
+
+        protoc_command_make = ["make -C " + self.install_lib + "grizzly/ EXEC=" + python_executable]
+        if subprocess.call(protoc_command_make, shell=True) != 0:
             sys.exit(-1)
 
 class BinaryDistribution(Distribution):
     def has_ext_modules(self):
         return True
 
-setup(name='grizzly',
+setup(name='pygrizzly',
       version='0.0.1',
       packages=['grizzly'],
       package_data = {'grizzly': ['numpy_weld_convertor.cpp', 'common.h', 'Makefile']},
