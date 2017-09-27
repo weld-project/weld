@@ -33,7 +33,7 @@ use super::parser::*;
 static PRELUDE_CODE: &'static str = include_str!("resources/prelude.ll");
 
 /// The default grain size for the parallel runtime.
-static DEFAULT_GRAIN_SIZE: i64 = 4096;
+static DEFAULT_GRAIN_SIZE: i64 = 16384;
 
 /// A wrapper for a struct passed as input to the Weld runtime.
 #[derive(Clone, Debug)]
