@@ -12,12 +12,20 @@ Make sure the `WELD_HOME` environment variable is set as detailed in the main
 
 If you want to install Weld's Python API and Grizzly in 'development' mode, run:
 ```bash
-$ python setup.py develop
+$ cd pyweld;  python setup.py develop; cd ..
+$ cd grizzly; python setup.py develop; cd ..
 ```
 
 Otherwise, run:
 ```bash
-$ python setup.py install
+$ cd pyweld;  python setup.py install; cd ..
+$ cd grizzly; python setup.py install; cd ..
+```
+
+Alternatively, you can install our pre-build PyPI packages,
+```bash
+$ pip install pyweld
+$ pip install pygrizzly
 ```
 
 ### Updating Weld and Grizzly
@@ -30,5 +38,6 @@ $ git pull
 If you installed Weld's Python API and Grizzly in 'install' mode, run:
 ```bash
 $ git pull
-$ python setup.py install
+$ cd pyweld;  python setup.py install; cd ..
+$ cd grizzly; python setup.py install; cd ..
 ```
