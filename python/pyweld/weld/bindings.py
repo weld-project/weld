@@ -8,6 +8,8 @@ import os
 import platform
 import copy
 
+import pkg_resources
+
 system = platform.system()
 if system == 'Linux':
     lib_file = "libweld.so"
@@ -18,7 +20,8 @@ elif system == 'Darwin':
 else:
     raise OSError("Unsupported platform {}", system)
 
-# Load the Weld Dynamic Library.
+lib_file = pkg_resources.resource_filename(__name__, lib_file)
+
 weld = CDLL(lib_file, mode=RTLD_GLOBAL)
 
 # Used for some type checking carried out by ctypes
