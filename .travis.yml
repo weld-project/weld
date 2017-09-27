@@ -17,6 +17,7 @@ addons:
       - lib32z1-dev
       - python2.7
       - python3.6
+      - python-tk
 
 install:
   - sudo rm -f `which llvm-config`

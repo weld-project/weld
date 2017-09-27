@@ -12,6 +12,7 @@ for v in $PYTHON_VERSIONS; do
   source "$VENV_HOME/python$v/bin/activate"
   pip install --upgrade pip setuptools wheel
   pip install --only-binary=numpy,pandas -r requirements.txt
+  pip install matplotlib seaborn
   deactivate
 done
 popd
