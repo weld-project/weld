@@ -45,11 +45,14 @@ define <{VECSIZE} x {ELEM}>* @{NAME}.bld.vectorMergePtr(%{NAME}.bld %bldPtr) {{
   ret <{VECSIZE} x {ELEM}>* %bldVectorPtr
 }}
 
-; Clear the vector by assigning each vector element to a user defined identity value.
-define void @{NAME}.bld.clearVector(%{NAME}.bld %bldPtr, {ELEM} %identity) {{
-    %vectorPtr = call <{VECSIZE} x {ELEM}>* @{NAME}.bld.vectorMergePtr(%{NAME}.bld %bldPtr)
-    %vector = load <{VECSIZE} x {ELEM}>, <{VECSIZE} x {ELEM}>* %vectorPtr
-    br label %entry
+; Clear the merger piece by assigning the scalar element and each vector element to
+; a user defined identity value.
+define void @{NAME}.bld.clearPiece(%{NAME}.bld %bldPtr, {ELEM} %identity) {{
+  %scalarPtr = call {ELEM}* @{NAME}.bld.scalarMergePtr(%{NAME}.bld %bldPtr)
+  store {ELEM} %identity, {ELEM}* %scalarPtr
+  %vectorPtr = call <{VECSIZE} x {ELEM}>* @{NAME}.bld.vectorMergePtr(%{NAME}.bld %bldPtr)
+  %vector = load <{VECSIZE} x {ELEM}>, <{VECSIZE} x {ELEM}>* %vectorPtr
+  br label %entry
 entry:
   %cond = icmp ult i32 0, {VECSIZE}
   br i1 %cond, label %body, label %done
