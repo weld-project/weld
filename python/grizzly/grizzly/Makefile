@@ -8,7 +8,7 @@ ifndef EXEC
   EXEC=python
 endif
 
-PYTHON_LDFLAGS=-L$(shell $(EXEC) -c "from distutils import sysconfig; print sysconfig.get_config_var('LIBDIR')" 2>/dev/null) -lpython2.7 -ldl -framework CoreFoundation
+PYTHON_LDFLAGS=-L$(shell $(EXEC) -c "from distutils import sysconfig; print sysconfig.get_config_var('LIBDIR')" 2>/dev/null) $(shell python-config --libs)
 
 ifeq (${NUMPY_HEADER_INCLUDE}, -I)
   $(error Error: NumPy installation not found)
