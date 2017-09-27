@@ -157,7 +157,7 @@ class WeldObject(object):
                 encoded.append(self.encoder.encode(self.context[name]))
         end = time.time()
         if verbose:
-            print "Total time encoding:", end - start
+            print "Python->Weld:", end - start
 
         start = time.time()
         Args = args_factory(zip(names, argtypes))
@@ -165,6 +165,7 @@ class WeldObject(object):
         for name, value in zip(names, encoded):
             setattr(weld_args, name, value)
 
+        start = time.time()
         void_ptr = ctypes.cast(ctypes.byref(weld_args), ctypes.c_void_p)
         arg = cweld.WeldValue(void_ptr)
         conf = cweld.WeldConf()
@@ -173,7 +174,11 @@ class WeldObject(object):
         if err.code() != 0:
             raise ValueError("Could not compile function {}: {}".format(
                 function, err.message()))
+        end = time.time()
+        if verbose:
+            print "Weld compile time:", end - start
 
+        start = time.time()
         conf = cweld.WeldConf()
         weld_num_threads = os.environ.get("WELD_NUM_THREADS", "1")
         conf.set("weld.threads", weld_num_threads)
@@ -188,7 +193,7 @@ class WeldObject(object):
         data = ctypes.cast(weld_ret.data(), ptrtype)
         end = time.time()
         if verbose:
-            print "Total time running:", end - start
+            print "Weld:", end - start
 
         start = time.time()
         if decode:
@@ -199,6 +204,6 @@ class WeldObject(object):
                 ctypes.c_int64)).contents.value
         end = time.time()
         if verbose:
-            print "Total time decoding:", end - start
+            print "Weld->Python:", end - start
 
         return result

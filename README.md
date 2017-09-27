@@ -8,6 +8,11 @@ Modern analytics applications combine multiple functions from different librarie
 
 You can join the discussion on Weld on our [Google Group](https://groups.google.com/forum/#!forum/weld-users) or post on the Weld mailing list at [weld-group@lists.stanford.edu](mailto:weld-group@lists.stanford.edu).
 
+
+## Current performance metrics
+
+![Current performance metrics](https://s3-us-west-2.amazonaws.com/weld-travis-ci/master/performance.png)
+
 ## Contents
 
   * [Building](#building)
