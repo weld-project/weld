@@ -6,6 +6,7 @@ import sys
 
 from setuptools import setup, Distribution
 import setuptools.command.build_ext as _build_ext
+from setuptools.extension import Extension
 
 system = platform.system()
 if system == 'Linux':
@@ -17,8 +18,10 @@ elif system == 'Darwin':
 else:
     raise OSError("Unsupported platform {}", system)
 
-libweld = os.environ["WELD_HOME"] + "/target/release/" + libweld
+libweld_dir = os.environ["WELD_HOME"] + "/target/release/"
+libweld = libweld_dir + libweld
 
+module1 = Extension('weld', sources=[], libraries=['weld'], library_dirs=[libweld_dir])
 
 class build_ext(_build_ext.build_ext):
     def run(self):
@@ -45,4 +48,5 @@ setup(name='pyweld',
       url='https://github.com/weld-project/weld',
       author='Weld Developers',
       author_email='weld-group@lists.stanford.edu',
-      install_requires=['pandas', 'numpy'])
+      install_requires=['pandas', 'numpy'],
+      ext_modules=[module1])
