@@ -10,13 +10,10 @@ import setuptools.command.build_ext as _build_ext
 system = platform.system()
 if system == 'Linux':
     libweld = "libweld.so"
-    numpy_convertor = "numpy_weld_convertor.so"
 elif system == 'Windows':
     libweld = "libweld.dll"
-    numpy_convertor = "numpy_weld_convertor.dll"
 elif system == 'Darwin':
     libweld = "libweld.dylib"
-    numpy_convertor = "numpy_weld_convertor.dylib"
 else:
     raise OSError("Unsupported platform {}", system)
 
