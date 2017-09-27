@@ -11,9 +11,13 @@ sudo ln -s /usr/bin/llvm-config-$LLVM_VERSION /usr/bin/llvm-config
 export WELD_HOME=`pwd`
 
 source $VENV_HOME/python$PYTHON_VERSION/bin/activate
-cd python
+cd python/pyweld
 python setup.py install
-cd ..
+cd ../..
+
+cd python/grizzly
+python setup.py install
+cd ../..
 
 # set llvm-sys crate version
 sed -i "s/llvm-sys = \".*\"/llvm-sys = \"$LLVM_SYS_VERSION\"/g" Cargo.toml
