@@ -18,16 +18,6 @@ concatenated to produce the correct output vector.
 
 using namespace std;
 
-struct vec_builder {
-  vector<vec_piece> pieces;
-  void *thread_curs;
-  int64_t elem_size;
-  int64_t starting_cap;
-  bool fixed_size;
-  void *fixed_vector;
-  pthread_mutex_t lock;
-};
-
 bool vp_compare(vec_piece one, vec_piece two) {
   for (int32_t i = 0; i < min(one.nest_len, two.nest_len); i++) {
     if (one.nest_idxs[i] != two.nest_idxs[i]) {
@@ -89,15 +79,6 @@ extern "C" void weld_rt_new_vb_piece(void *v, work_t *w) {
     cur_piece->capacity = vb->starting_cap; // larger than the real capacity for this task,
     // but it doesn't matter because the real capacity won't be reached in the fixed case
   }
-}
-
-// a non-full task executes in correct serial order (and by the same thread)
-// after its associated full task (and potentially other non-full tasks also
-// assicated with the same full task), so it can simply write into its full
-// task's piece (the cur_piece) without creating a new one
-extern "C" vec_piece *weld_rt_cur_vb_piece(void *v, int32_t my_id) {
-  vec_builder *vb = (vec_builder *)v;
-  return (vec_piece *)weld_rt_get_merger_at_index(vb->thread_curs, sizeof(vec_piece), my_id);
 }
 
 extern "C" vec_output weld_rt_result_vb(void *v) {

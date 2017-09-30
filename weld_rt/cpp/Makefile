@@ -1,19 +1,26 @@
 OS = $(shell uname -s)
 LLVM_VERSION = $(shell llvm-config --version | cut -d . -f 1,2)
 
-CFLAGS = -O0 -g -std=c++11 -Wall -fno-use-cxa-atexit -fPIC -flto
+CFLAGS = -O3 -std=c++11 -Wall -fno-use-cxa-atexit -fPIC
 ifeq (${OS}, Darwin)
   # OS X
   CLANG ?= clang++-${LLVM_VERSION}
+	LIB = libweldrt.a
 else ifeq (${OS}, Linux)
   # Linux
   CLANG ?= clang++-${LLVM_VERSION}
+	LIB = libweldrt.a
 else
   $(error Unsupported platform: ${OS})
 endif
 
+all: ${LIB} inline.bc
 
-all: libweldrt.bc
+inline.o: inline.cpp
+	${CLANG} ${CFLAGS} -c $< -o $@
+
+inline.bc: inline.cpp
+	${CLANG} ${CFLAGS} -c -emit-llvm $< -o $@
 
 vb.o: vb.cpp
 	${CLANG} ${CFLAGS} -c $< -o $@
@@ -24,11 +31,13 @@ merger.o: merger.cpp
 runtime.o: runtime.cpp
 	${CLANG} ${CFLAGS} -c $< -o $@
 
-libweldrt.bc: vb.o merger.o runtime.o
-	llvm-link-${LLVM_VERSION} $^ -o $@
+weldrt.o: vb.o merger.o runtime.o inline.o
+	ld -r $^ -o $@
+
+${LIB}: weldrt.o
+	ar rcs $@ $^
 
 clean:
-	rm -f *.bc *.o
+	rm -f *.bc *.o ${LIB}
 
 .phony: all
-

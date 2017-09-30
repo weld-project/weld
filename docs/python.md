@@ -5,13 +5,22 @@ The Python API is found under the `python/` directory. It provides convinient wr
 To use the Python API in 'development' mode, run the following from `$WELD_HOME/python`:
 
 ```bash
-$ python setup.py develop
+$ cd pyweld;  python setup.py develop; cd ..
+$ cd grizzly; python setup.py develop; cd ..
 ```
 
 Otherwise, run the following from `$WELD_HOME/python`:
 
 ```bash
-$ python setup.py install
+$ cd pyweld;  python setup.py install; cd ..
+$ cd grizzly; python setup.py install; cd ..
+```
+
+Alternatively, you can install our pre-built Python modules by running,
+
+```bash
+$ pip install pyweld
+$ pip install pygrizzly
 ```
 
 You should also follow the setup instructions [here](https://github.com/weld-project/weld/blob/master/README.md) (in particular, make sure `WELD_HOME` is set so the libraries Weld uses can be found). 

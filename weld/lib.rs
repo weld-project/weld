@@ -40,6 +40,7 @@ pub mod parser;
 pub mod partial_types;
 pub mod pretty_print;
 pub mod program;
+pub mod runtime;
 pub mod sir;
 pub mod tokenizer;
 pub mod transforms;
@@ -197,8 +198,7 @@ pub unsafe extern "C" fn weld_value_free(obj: *mut WeldValue) {
     }
     let value = &mut *obj;
     if let Some(run_id) = value.run_id {
-        let module = &mut *value.module.unwrap();
-        module.run_named("run_dispose", run_id).unwrap();
+        runtime::weld_run_dispose(run_id);
     }
     Box::from_raw(obj);
 }
@@ -213,8 +213,7 @@ pub unsafe extern "C" fn weld_value_memory_usage(obj: *mut WeldValue) -> libc::i
     }
     let value = &mut *obj;
     if let Some(run_id) = value.run_id {
-        let module = &mut *value.module.unwrap();
-        return module.run_named("run_memory_usage", run_id).unwrap_or(-1) as libc::int64_t;
+        return runtime::weld_run_memory_usage(run_id);
     } else {
         return -1 as libc::int64_t;
     }
@@ -252,7 +251,10 @@ pub unsafe extern "C" fn weld_module_compile(code: *const c_char,
     }
 
     info!("Started compiling program");
-    let module = llvm::compile_program(&parsed.unwrap(), &conf.optimization_passes);
+    let module = llvm::compile_program(
+        &parsed.unwrap(),
+        &conf.optimization_passes,
+        conf.llvm_optimization_level);
     info!("Done compiling program");
 
     if let Err(ref e) = module {
@@ -298,7 +300,7 @@ pub unsafe extern "C" fn weld_module_run(module: *mut WeldModule,
 
     let input = Box::new(llvm::WeldInputArgs {
                              input: arg.data as i64,
-                             nworkers: conf.threads as i32,
+                             nworkers: conf.threads,
                              mem_limit: conf.memory_limit,
                          });
     let ptr = Box::into_raw(input) as i64;

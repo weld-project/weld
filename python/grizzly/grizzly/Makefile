@@ -2,8 +2,18 @@ OS=$(shell uname -s)
 LLVM_VERSION=$(shell llvm-config --version | cut -d . -f 1,2)
 
 PYTHON_HEADER_INCLUDE = $(shell python-config --includes)
-NUMPY_HEADER_INCLUDE = -I$(shell python -c "import numpy; print numpy.get_include()")
-PYTHON_LDFLAGS = $(shell python-config --ldflags)
+NUMPY_HEADER_INCLUDE = -I$(shell python -c "import numpy; print numpy.get_include()" 2>/dev/null)
+
+ifndef EXEC
+  EXEC=python
+endif
+
+PYTHON_LDFLAGS=-L$(shell $(EXEC) -c "from distutils import sysconfig; print sysconfig.get_config_var('LIBDIR')" 2>/dev/null) $(shell python-config --libs)
+
+ifeq (${NUMPY_HEADER_INCLUDE}, -I)
+  $(error Error: NumPy installation not found)
+endif
+
 ifeq (${OS}, Darwin)
   # OS X
   CLANG ?= clang

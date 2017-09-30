@@ -11,9 +11,13 @@ sudo ln -s /usr/bin/llvm-config-$LLVM_VERSION /usr/bin/llvm-config
 export WELD_HOME=`pwd`
 
 source $VENV_HOME/python$PYTHON_VERSION/bin/activate
-cd python
+cd python/pyweld
 python setup.py install
-cd ..
+cd ../..
+
+cd python/grizzly
+python setup.py install
+cd ../..
 
 # set llvm-sys crate version
 sed -i "s/llvm-sys = \".*\"/llvm-sys = \"$LLVM_SYS_VERSION\"/g" Cargo.toml
@@ -26,6 +30,13 @@ cargo clean
 cargo build --release
 cargo test
 
+export LD_LIBRARY_PATH=`pwd`/target/release
 python python/grizzly/tests/grizzly_test.py
 python python/grizzly/tests/numpy_weld_test.py
+
+cd $WELD_HOME/weld-benchmarks; python run_benchmarks.py -b tpch_q1 tpch_q6 vector vector_sum -n 5 -f results.tsv -v -d -p performance.pdf
+mkdir -p $WELD_HOME/results
+mv performance.pdf $WELD_HOME/results
+mv results.tsv $WELD_HOME/results
+cd $WELD_HOME
 deactivate

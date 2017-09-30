@@ -9,7 +9,7 @@ use std::env;
 use super::ast::*;
 use super::ast::ExprKind::*;
 
-pub const LIB_WELD_RT: &'static [u8] = include_bytes!("../weld_rt/cpp/libweldrt.bc");
+pub const WELD_INLINE_LIB: &'static [u8] = include_bytes!("../weld_rt/cpp/inline.bc");
 const WELD_HOME: &'static str = "WELD_HOME";
 
 /// Utility struct that can track and generate unique IDs and symbols for use in an expression.

@@ -72,6 +72,8 @@ pthread_mutex_t global_lock;
 // allows each thread to retrieve its run ID
 pthread_key_t global_id;
 
+pthread_once_t runtime_is_initialized = PTHREAD_ONCE_INIT;
+
 struct run_data {
   pthread_mutex_t lock;
   int32_t n_workers;
@@ -95,10 +97,14 @@ typedef struct {
   int32_t thread_id;
 } thread_data;
 
-extern "C" void weld_runtime_init() {
+void init() {
   pthread_mutex_init(&global_lock, NULL);
   pthread_key_create(&global_id, NULL);
   runs = new map<int64_t, run_data*>;
+}
+
+extern "C" void weld_runtime_init() {
+  pthread_once(&runtime_is_initialized, init);
 }
 
 // *** weld_rt functions and helpers ***

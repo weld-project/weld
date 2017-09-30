@@ -1,5 +1,11 @@
-#ifndef _PARLIB_H_
-#define _PARLIB_H_
+#ifndef _WELD_RUNTIME_H_
+#define _WELD_RUNTIME_H_
+
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+#include <pthread.h>
+#include <vector>
 
 // work item
 struct work_t {
@@ -68,10 +74,20 @@ struct vec_piece {
   int32_t nest_len;
 };
 
-typedef struct {
+struct vec_output {
   void *data;
   int64_t size;
-} vec_output;
+};
+
+struct vec_builder {
+  std::vector<vec_piece> pieces;
+  void *thread_curs;
+  int64_t elem_size;
+  int64_t starting_cap;
+  bool fixed_size;
+  void *fixed_vector;
+  pthread_mutex_t lock;
+};
 
 extern "C" {
   void weld_runtime_init();
@@ -111,4 +127,14 @@ extern "C" {
   void weld_run_set_errno(int64_t run_id, int64_t err);
 }
 
-#endif
+// Helper defines for cache size
+#define CACHE_BITS 6
+#define CACHE_LINE (1 << CACHE_BITS)
+#define CACHE_MASK (~(CACHE_LINE - 1))
+
+inline int64_t num_cache_blocks(int64_t size) {
+  // ceil of number of blocks
+  return (size + (CACHE_LINE - 1)) >> CACHE_BITS;
+}
+
+#endif // _WELD_RUNTIME_H_

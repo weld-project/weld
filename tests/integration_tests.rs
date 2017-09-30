@@ -208,6 +208,27 @@ fn negated_arithmetic() {
     unsafe { free_value_and_module(ret_value) };
 }
 
+fn bool_eq() {
+    let code = "|| [(2 < 3) != (2 > 2), true == false]";
+
+    let conf = default_conf();
+
+    let ref input_data: i32 = 0;
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<bool> };
+    let result = unsafe { (*data).clone() };
+
+    assert_eq!(result.len, 2);
+
+    let bool1 = unsafe { (*result.data.offset(0)).clone() };
+    let bool2 = unsafe { (*result.data.offset(1)).clone() };
+    assert_eq!(bool1, true);
+    assert_eq!(bool2, false);
+
+    unsafe { free_value_and_module(ret_value) };
+}
+
 // TODO(shoumik): - Failing on Linux. Will fix in a in PR
 // For the C UDF integration test.
 // #[no_mangle]
@@ -591,6 +612,90 @@ fn le_between_unsigned_vectors() {
     unsafe { free_value_and_module(ret_value) };
 }
 
+fn eq_between_u8_vectors() {
+    #[allow(dead_code)]
+    struct Args {
+        x: WeldVec<u8>,
+        y: WeldVec<u8>,
+    }
+    let conf = default_conf();
+
+    let code = "|e0: vec[u8], e1: vec[u8]| e0 == e1";
+    let input_vec1 = [1u8, 2u8, 3u8, 4u8, 5u8];
+    let input_vec2 = [1u8, 2u8, 3u8, 4u8, 5u8];
+    let ref input_data = Args {
+        x: WeldVec {
+            data: &input_vec1 as *const u8,
+            len: input_vec1.len() as i64,
+        },
+        y: WeldVec {
+            data: &input_vec2 as *const u8,
+            len: input_vec2.len() as i64,
+        },
+    };
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const bool };
+    let result = unsafe { *data };
+    assert_eq!(result, true);
+    unsafe { free_value_and_module(ret_value) };
+}
+
+fn eq_between_different_length_u8_vectors() {
+    #[allow(dead_code)]
+    struct Args {
+        x: WeldVec<u8>,
+        y: WeldVec<u8>,
+    }
+    let conf = default_conf();
+
+    let code = "|e0: vec[u8], e1: vec[u8]| e0 == e1";
+    let input_vec1 = [1u8, 2u8, 3u8, 4u8, 5u8];
+    let input_vec2 = [1u8, 2u8, 3u8, 4u8, 5u8, 6u8];
+    let ref input_data = Args {
+        x: WeldVec {
+            data: &input_vec1 as *const u8,
+            len: input_vec1.len() as i64,
+        },
+        y: WeldVec {
+            data: &input_vec2 as *const u8,
+            len: input_vec2.len() as i64,
+        },
+    };
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const bool };
+    let result = unsafe { *data };
+    assert_eq!(result, false);
+    unsafe { free_value_and_module(ret_value) };
+}
+
+fn le_between_u8_vectors() {
+    #[allow(dead_code)]
+    struct Args {
+        x: WeldVec<u8>,
+        y: WeldVec<u8>,
+    }
+    let conf = default_conf();
+
+    let code = "|e0: vec[u8], e1: vec[u8]| e0 <= e1";
+    let input_vec1 = [1u8, 2u8, 3u8, 4u8, 5u8];
+    let input_vec2 = [1u8, 2u8, 3u8, 255u8, 5u8];
+    let ref input_data = Args {
+        x: WeldVec {
+            data: &input_vec1 as *const u8,
+            len: input_vec1.len() as i64,
+        },
+        y: WeldVec {
+            data: &input_vec2 as *const u8,
+            len: input_vec2.len() as i64,
+        },
+    };
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const bool };
+    let result = unsafe { *data };
+    assert_eq!(result, true);
+    unsafe { free_value_and_module(ret_value) };
+}
+
 fn simple_vector_lookup() {
     let code = "|x:vec[i32]| lookup(x, 3L)";
     let conf = default_conf();
@@ -691,6 +796,20 @@ fn nested_if_statement_with_builders_loop() {
     let result = unsafe { (*data).clone() };
     let output = 18;
     assert_eq!(result, output);
+    unsafe { free_value_and_module(ret_value) };
+}
+
+fn empty_appender_loop() {
+    let code = "||result(for([]:vec[i32], merger[i32, +], |b, i, n| merge(b, n)))";
+    let conf = default_conf();
+
+    let ref input_data: i32 = 0;
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const i32 };
+    let result = unsafe { *data };
+    assert_eq!(result, 0);
+
     unsafe { free_value_and_module(ret_value) };
 }
 
@@ -2077,6 +2196,42 @@ fn predicate_if_iff_annotated() {
     check_result_and_free(ret_value, expected);
 }
 
+fn nested_for_loops() {
+    #[derive(Clone)]
+    #[allow(dead_code)]
+    struct Row {
+        x: i64,
+        y: i32,
+    }
+
+    let code = "|ys:vec[i64]|result(for(ys, appender[{i64, i32}], |b0, i0, y0| for(ys, b0, |b1, i1, y1| if (y1 > y0, merge(b0, {y0, i32(y1)}), b0))))";
+    let conf = default_conf();
+
+    // Input data.
+    let ys = vec![1i64, 3i64, 4i64];
+    let ref input_data = WeldVec {
+        data: ys.as_ptr() as *const i64,
+        len: ys.len() as i64,
+    };
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<Row> };
+    let result = unsafe { (*data).clone() };
+
+    assert_eq!(result.len, 3i64);
+    let row = unsafe { (*result.data.offset(0)).clone() };
+    assert_eq!(row.x, 1i64);
+    assert_eq!(row.y, 3);
+    let row = unsafe { (*result.data.offset(1)).clone() };
+    assert_eq!(row.x, 1i64);
+    assert_eq!(row.y, 4);
+    let row = unsafe { (*result.data.offset(2)).clone() };
+    assert_eq!(row.x, 3i64);
+    assert_eq!(row.y, 4);
+
+    unsafe { free_value_and_module(ret_value) };
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     let tests: Vec<(&str, fn())> =
@@ -2085,6 +2240,7 @@ fn main() {
              ("negation", negation),
              ("negation_double", negation_double),
              ("negated_arithmetic", negated_arithmetic),
+             ("bool_eq", bool_eq),
              //("c_udf", c_udf),
              ("f64_cast", f64_cast),
              ("i32_cast", i32_cast),
@@ -2102,6 +2258,9 @@ fn main() {
              ("lt_between_vectors", lt_between_vectors),
              ("le_between_vectors", le_between_vectors),
              ("le_between_unsigned_vectors", le_between_unsigned_vectors),
+             ("eq_between_u8_vectors", eq_between_u8_vectors),
+             ("eq_between_different_length_u8_vectors", eq_between_different_length_u8_vectors),
+             ("le_between_u8_vectors", le_between_u8_vectors),
              ("simple_vector_lookup", simple_vector_lookup),
              ("simple_vector_slice", simple_vector_slice),
              ("simple_log", simple_log),
@@ -2110,6 +2269,7 @@ fn main() {
              ("exp_error", exp_error),
              ("simple_erf", simple_erf),
              ("simple_sqrt", simple_sqrt),
+             ("empty_appender_loop", empty_appender_loop),
              ("map_exp", map_exp),
              ("nested_if_statement_loop", nested_if_statement_loop),
              ("nested_if_statement_with_builders_loop", nested_if_statement_with_builders_loop),
@@ -2154,8 +2314,9 @@ fn main() {
              ("outofmemory_error_test", outofmemory_error_test),
              ("simple_float_mod", simple_float_mod),
              ("simple_int_mod", simple_int_mod),
-             ("predicate_if_iff_annotated", predicate_if_iff_annotated)];
-    
+             ("predicate_if_iff_annotated", predicate_if_iff_annotated),
+             ("nested_for_loops", nested_for_loops)];
+
     println!("");
     println!("running tests");
     let mut passed = 0;
