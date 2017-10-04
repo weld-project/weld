@@ -1,4 +1,3 @@
-// clang++-3.8 -O0 -g -Iinclude -I../weld_rt/cpp harness.cpp oom.ll ../weld_rt/cpp/runtime.cpp ../weld_rt/cpp/vb.cpp ../weld_rt/cpp/merger.cpp -o run
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -12,9 +11,9 @@
 #define BIG 1
 
 #ifdef BIG
-#define FILENAME "programs/crashing2-big.weld"
+#define FILENAME "../programs/crashing2-big.weld"
 #else
-#define FILENAME "programs/crashing2.weld"
+#define FILENAME "../programs/crashing2.weld"
 #endif
 
 #define SIZE 10000
@@ -141,6 +140,9 @@ int main(int argc, char **argv) {
 
   weld_error_t e = weld_error_new();
   weld_conf_t conf = weld_conf_new();
+
+  weld_conf_set(conf, "weld.threads", "1");
+
   weld_module_t m = weld_module_compile(program, conf, e);
   weld_conf_free(conf);
 
