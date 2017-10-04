@@ -16,7 +16,7 @@ You can join the discussion on Weld on our [Google Group](https://groups.google.
       - [Building Weld](#building-weld)
   * [Documentation](#documentation)
   * [Grizzly (Pandas on Weld)](#grizzly)
-  * [Running an Interactive REPL](#running-an-interactive-repl)
+  * [Running an Interactive REPL](#interactive-repl)
   * [Benchmarking](#benchmarking)
 
 ## Building
@@ -150,6 +150,8 @@ result(for([1,2],appender[i32],|b:appender[i32],x:i32|merge(b:appender[i32],(x:i
 
 Expression type: vec[i32]
 ```
+
+Passing a `Lambda` expression will also perform LLVM code generation - other expression types will only perform parsing, type inference, and IR transformations.
 
 ## Benchmarking
 
