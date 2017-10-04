@@ -12,9 +12,9 @@
 #define BIG 1
 
 #ifdef BIG
-#define FILENAME "programs/crashing2-big.weld"
+#define FILENAME "../programs/crashing2-big.weld"
 #else
-#define FILENAME "programs/crashing2.weld"
+#define FILENAME "../programs/crashing2.weld"
 #endif
 
 #define SIZE 10000
@@ -141,6 +141,9 @@ int main(int argc, char **argv) {
 
   weld_error_t e = weld_error_new();
   weld_conf_t conf = weld_conf_new();
+
+  weld_conf_set(conf, "weld.threads", "1");
+
   weld_module_t m = weld_module_compile(program, conf, e);
   weld_conf_free(conf);
 
