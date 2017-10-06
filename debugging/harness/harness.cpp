@@ -23,7 +23,7 @@ struct output {
   int64_t errno;
 };
 
-#define SIZE 1000000
+#define SIZE 1000
 //#define BIG 1
 
 struct s0 {

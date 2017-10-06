@@ -70,6 +70,10 @@ lazy_static! {
         m.insert("vectorize",
                  Pass::new(vec![vectorizer::vectorize],
                  "vectorize"));
+        m.insert("fix-iterate",
+                 Pass::new(vec![transforms::force_iterate_parallel_fors],
+                 "fix-iterate"));
+
         m
     };
 }

@@ -230,6 +230,7 @@ pub struct Annotations {
     vectorize: Option<bool>,
     tile_size: Option<i32>,
     grain_size: Option<i32>,
+    parallelize: Option<bool>,
 
     size: Option<i64>,
     branch_selectivity: Option<i32>, // Fractions of 10,000.
@@ -245,6 +246,7 @@ impl Annotations {
             vectorize: None,
             tile_size: None,
             grain_size: None,
+            parallelize: None,
             size: None,
             branch_selectivity: None,
             num_keys: None,
@@ -274,6 +276,14 @@ impl Annotations {
 
     pub fn set_vectorize(&mut self, vectorize: bool) {
         self.vectorize = Some(vectorize)
+    }
+
+    pub fn parallelize(&self) -> &Option<bool> {
+        &self.parallelize
+    }
+
+    pub fn set_parallelize(&mut self, parallelize: bool) {
+        self.parallelize = Some(parallelize)
     }
 
     pub fn tile_size(&self) -> &Option<i32> {
@@ -357,6 +367,9 @@ impl fmt::Display for Annotations {
         }
         if let Some(ref e) = self.vectorize {
             annotations.push(format!("vectorize:{}", e));
+        }
+        if let Some(ref e) = self.parallelize {
+            annotations.push(format!("parallelize:{}", e));
         }
         if let Some(ref e) = self.tile_size {
             annotations.push(format!("tile_size:{}", e));

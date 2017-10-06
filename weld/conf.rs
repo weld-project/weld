@@ -19,7 +19,7 @@ pub const DEFAULT_THREADS: i32 = 1;
 pub const DEFAULT_LLVM_OPTIMIZATION_LEVEL: u32 = 2;
 lazy_static! {
     pub static ref DEFAULT_OPTIMIZATION_PASSES: Vec<Pass> = {
-        let m = ["inline-apply", "inline-let", "inline-zip", "loop-fusion", "infer-size", "predicate", "vectorize"];
+        let m = ["inline-apply", "inline-let", "inline-zip", "loop-fusion", "infer-size", "predicate", "vectorize", "fix-iterate"];
         m.iter().map(|e| (*OPTIMIZATION_PASSES.get(e).unwrap()).clone()).collect()
     };
 }

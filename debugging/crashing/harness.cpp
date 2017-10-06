@@ -8,7 +8,7 @@
 #include "common.h"
 #include "weld.h"
 
-#define BIG 1
+//#define BIG 1
 
 #ifdef BIG
 #define FILENAME "../programs/crashing2-big.weld"
@@ -16,7 +16,7 @@
 #define FILENAME "../programs/crashing2.weld"
 #endif
 
-#define SIZE 10000
+#define SIZE 1000
 
 struct s0 {
   bool _1;
@@ -131,7 +131,9 @@ int main(int argc, char **argv) {
   memset(&a, 0, sizeof(a));
   a.kvs = make_vec<both>(SIZE);
   for (int i = 0; i < SIZE; i++) {
+    memset(&a.kvs.ptr[i], 0, sizeof(both));
     a.kvs.ptr[i]._1._2 = make_vec<i8>(100);
+    memset(a.kvs.ptr[i]._1._2.ptr, 0, sizeof(i8) * a.kvs.ptr[i]._1._2.size);
   }
 
   // This is the Weld program.

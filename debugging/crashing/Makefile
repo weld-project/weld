@@ -1,5 +1,5 @@
 CC=clang++
-FLAGS=-O0 -g -Iinclude -I../weld_rt/cpp 
+FLAGS=-O0 -g -Iinclude
 
 .PHONY: all
 
