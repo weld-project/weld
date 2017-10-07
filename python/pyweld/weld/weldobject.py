@@ -35,7 +35,7 @@ class WeldObjectEncoder(object):
 class WeldObjectDecoder(object):
     """
     An abstract class that must be overwridden by libraries. This class
-    is used to marshall objects from Weld types to Python types
+    is used to marshall objects from Weld types to Python types.
     """
     def decode(obj, restype):
         """
@@ -82,7 +82,7 @@ class WeldObject(object):
 
         # Weld program
         self.weld_code = ""
-        self.constants = []
+        self.dependencies = {}
 
         # Weld type, which represents the return type of this Weld program.
         # decoder must support decoding the return type. TODO.
@@ -100,23 +100,23 @@ class WeldObject(object):
     def __repr__(self):
         return self.weld_code + " " + str(self.context)
 
-    def update(self, value, types=None, override=True):
+    def update(self, value, tys=None, override=True):
         """
         Update this context. if value is another context,
         the names from that context are added into this one.
         Otherwise, a new name is assigned and returned.
 
-        TODO types for inputs.
+        TODO tys for inputs.
         """
         if isinstance(value, WeldObject):
             self.context.update(value.context)
-            self.constants.extend(value.constants)
+            self.dependencies.update(value.dependencies)
         else:
             name = "e" + str(WeldObject._var_num)
             WeldObject._var_num += 1
             self.context[name] = value
-            if types is not None and not override:
-                self.argtypes[name] = types
+            if tys is not None and not override:
+                self.argtypes[name] = tys
             return name
 
     def toWeldFunc(self):
@@ -126,8 +126,11 @@ class WeldObject(object):
                                       str(self.encoder.pyToWeldType(self.context[name])))
                     for name in names]
         header = "|" + ", ".join(arg_strs) + "|"
+        keys = self.dependencies.keys()
+        keys.sort()
         text = header + " " + \
-            "\n".join(list(set(self.constants))) + "\n" + self.weld_code
+            "\n".join(["let %s = (%s);" % (key, self.dependencies[key]) for key in
+                       keys]) + "\n" + self.weld_code
         return text
 
     def evaluate(self, restype, verbose=True, decode=True):
