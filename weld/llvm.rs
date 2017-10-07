@@ -101,6 +101,12 @@ pub fn compile_program(program: &Program, opt_passes: &Vec<Pass>, llvm_opt_level
     Ok(module)
 }
 
+/// Stores whether the code generator has created functions for a given type.
+pub struct HelperState {
+    hash_func: bool,
+    cmp_func: bool,
+}
+
 /// Generates LLVM code for one or more modules.
 pub struct LlvmGenerator {
     /// LLVM type name of the form %s0, %s1, etc for each struct generated.
@@ -131,6 +137,9 @@ pub struct LlvmGenerator {
 
     /// A CodeBuilder for body functions in the module.
     body_code: CodeBuilder,
+
+    /// Helper function state for types.
+    type_helpers: HashMap<Type, HelperState>,
 
     /// Functions we have already visited when generating code.
     visited: HashSet<sir::FunctionId>,
@@ -1054,6 +1063,12 @@ impl LlvmGenerator {
     // Routines for Code Generation of Statements and Blocks.
     //
     *********************************************************************************************/
+
+
+    /// Generates a `cmp` function for `ty` and any nested types it depends on.
+    fn gen_compare_function_call(&mut self, ty: &Type) -> WeldResult<()> {
+        Ok(())
+    }
 
     /// Generates a struct definition for the given field types.
     fn gen_struct_definition(&mut self, fields: &Vec<Type>) -> WeldResult<()> {
