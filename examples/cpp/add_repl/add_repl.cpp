@@ -11,6 +11,9 @@ int main() {
     // Compile Weld module.
     weld_error_t e = weld_error_new();
     weld_conf_t conf = weld_conf_new();
+
+    weld_conf_set(conf, "weld.compile.multithread_support", "false");
+
     weld_module_t m = weld_module_compile("|x:i64| x+5L", conf, e);
     weld_conf_free(conf);
 
