@@ -1,7 +1,7 @@
 import numpy as np
 import py.test
 import random
-from weldnumpy import *
+from weldnumpy import weldarray 
 
 '''
 TODO0: Decompose heavily repeated stuff, like the assert blocks and so on.
@@ -932,4 +932,47 @@ def test_reduce():
             n2 = r(n)
             w2 = r(w)
             assert np.allclose(n2, w2)
+
+def test_vectorization_bug():
+    '''
+    simplest case of a bug that seems to occur in more complicated programs with different order of
+    arrays etc. Seems to happen because of the vectorization pass.
+    '''
+    # minimum case to reproduce bug:
+    n, w = random_arrays(NUM_ELS, 'float32')
+    n2, w2 = random_arrays(NUM_ELS, 'float32')
+
+    n = n*2.0
+    w = w*2.0
+    
+    n2 = n + n2
+    w2 = w + w2
+
+    # Note: Here y + x produces the correct result! (weld IR given below) or if we evaluate y before.
+    n3 = n + n2
+    w3 = w + w2
+    # this produces correct result:
+    # w3 = w2 + w
+
+    w3 = w3.evaluate()
+    
+    assert np.allclose(n, w)
+    assert np.allclose(n2, w2)
+    assert np.allclose(n3, w3)
+
+def test_blackscholes_bug():
+    '''
+    Seems to happen because of the infer-size pass.
+    '''
+    n, w = random_arrays(NUM_ELS, 'float32')
+    n2, w2 = random_arrays(NUM_ELS, 'float32')
+    n3, w3 = random_arrays(NUM_ELS, 'float32')
+
+    n4 = n - (np.exp(n2) * n3)
+    w4 = w - (np.exp(w2) * w3)
+
+    assert np.allclose(n4, w4)
+
+
+
 
