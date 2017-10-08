@@ -1,8 +1,13 @@
 from weldarray import *
 from weldnumpy import *
 
-# FIXME: Should this be in weldnump? pytest gives errors when trying to import
-# weldarray in weldnumpy...so keeping it here for now.
+# importing everything from numpy so we can selectively over-ride the array creation routines, and
+# let other functions go to numpy.
+from numpy import *
+
+# since random in a module within numpy, we define a module that imports everything from random and
+# returns weldarrays instead of ndarrays.
+import weldrandom as random
 
 def array(arr, *args, **kwargs):
     '''
@@ -11,3 +16,4 @@ def array(arr, *args, **kwargs):
     '''
     return weldarray(np.array(arr, *args, **kwargs))
 
+# TODO: define other array creation routines like zeros, ones etc.
