@@ -535,14 +535,15 @@ impl LlvmGenerator {
         if par_for.innermost {
             // Determine whether to always call parallel, always call serial, or
             // choose based on the loop's size.
-            if par_for.parallelize {
+            if par_for.always_use_runtime {
                 ctx.code.add(format!("br label %for.par"));
-            }
-            else if self.multithreaded {
-                ctx.code.add(format!("{} = icmp ule i64 {}, {}", bound_cmp, num_iters_str, grain_size));
-                ctx.code.add(format!("br i1 {}, label %for.ser, label %for.par", bound_cmp));
             } else {
-                ctx.code.add(format!("br label %for.ser"));
+                if self.multithreaded {
+                    ctx.code.add(format!("{} = icmp ule i64 {}, {}", bound_cmp, num_iters_str, grain_size));
+                    ctx.code.add(format!("br i1 {}, label %for.ser, label %for.par", bound_cmp));
+                } else {
+                    ctx.code.add(format!("br label %for.ser"));
+                }
             }
             ctx.code.add(format!("for.ser:"));
             let mut body_arg_types = self.get_arg_str(&func.params, "")?;

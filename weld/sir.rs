@@ -106,7 +106,7 @@ pub struct ParallelForData {
     pub cont: FunctionId,
     pub innermost: bool,
     /// If `true`, always invoke parallel runtime for the loop.
-    pub parallelize: bool,
+    pub always_use_runtime: bool,
 }
 
 /// A terminating statement inside a basic block.
@@ -1206,7 +1206,7 @@ fn gen_expr(expr: &TypedExpr,
                                     body: body_func,
                                     cont: cont_func,
                                     innermost: is_innermost,
-                                    parallelize: expr.annotations.parallelize().unwrap_or(false),
+                                    always_use_runtime: expr.annotations.always_use_runtime().unwrap_or(false),
                                 });
                 Ok((cont_func, cont_block, builder_sym))
             } else {

@@ -666,7 +666,7 @@ pub fn force_iterate_parallel_fors(expr: &mut Expr<Type>) {
                 e.transform_and_continue(&mut |ref mut e| {
                    match e.kind {
                         For { .. } => {
-                            e.annotations.set_parallelize(true);
+                            e.annotations.set_always_use_runtime(true);
                             (None, true)
                         }
                         _ => (None, true)

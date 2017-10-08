@@ -255,7 +255,7 @@ pub unsafe extern "C" fn weld_module_compile(code: *const c_char,
         &parsed.unwrap(),
         &conf.optimization_passes,
         conf.llvm_optimization_level,
-        conf.threads > 1);
+        conf.support_multithread);
     info!("Done compiling program");
 
     if let Err(ref e) = module {
