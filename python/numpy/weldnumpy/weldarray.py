@@ -26,6 +26,7 @@ class weldarray(np.ndarray):
         # sharing memory with the ndarray/weldarry
         obj = np.asarray(input_array).view(cls)
         obj._gen_weldobj(input_array)
+
         obj._weld_type = SUPPORTED_DTYPES[str(input_array.dtype)]
         obj._verbose = verbose
 
@@ -33,6 +34,31 @@ class weldarray(np.ndarray):
         obj._weldarray_view = None
 
         return obj
+
+    def __array_finalize__(self, obj):
+        '''
+        array finalize will be called whenever a subclass of ndarray (e.g., weldarray) is created.
+        This can happen in many situations where it does not go through __new__, e.g.:
+            - np.float32(arr)
+            - arr.T
+        Thus, we want to generate the generic variables needed for the weldarray here.
+
+        @self: weldarray, current weldarray object being created.
+        @obj:  weldarray or ndarray, depending on whether the object is being created based on a
+        ndarray or a weldarray. If obj is a weldarray, then __new__ was not called for self, so we
+        should update the appropriate fields.
+
+        TODO: need to consider edge cases with views etc.
+        '''
+        if isinstance(obj, weldarray):
+            # self was not generated through a call to __new__ so we should update self's
+            # properties
+            self.name = obj.name
+            # TODO: Or maybe just set them equal to each other?
+            self._gen_weldobj(obj)
+            self._verbose = obj._verbose
+            self._weldarray_view = obj._weldarray_view
+            self._weld_type = obj._weld_type
 
     def __repr__(self):
         '''
@@ -230,7 +256,7 @@ class weldarray(np.ndarray):
             elif not str(scalars[0].dtype) in SUPPORTED_DTYPES:
                 return False
             else:
-                weld_type = types[str(scalars[0].dtype)]
+                weld_type = SUPPORTED_DTYPES[str(scalars[0].dtype)]
                 if weld_type != arrays[0]._weld_type:
                     return False
         # check ouput.

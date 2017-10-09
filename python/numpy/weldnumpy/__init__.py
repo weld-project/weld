@@ -8,6 +8,7 @@ from numpy import *
 # since random in a module within numpy, we define a module that imports everything from random and
 # returns weldarrays instead of ndarrays.
 import weldrandom as random
+import numpy as np
 
 def array(arr, *args, **kwargs):
     '''
