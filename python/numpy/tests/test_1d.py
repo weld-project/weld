@@ -1,7 +1,8 @@
 import numpy as np
 import py.test
 import random
-from weldnumpy import weldarray 
+from weldnumpy import weldarray, erf as welderf
+import scipy.special as ss
 
 '''
 TODO0: Decompose heavily repeated stuff, like the assert blocks and so on.
@@ -69,7 +70,6 @@ def test_unary_elemwise():
     '''
     for op in UNARY_OPS:
         for dtype in TYPES:
-            print(dtype)
             # int still not supported for the unary ops in Weld.
             if "int" in dtype:
                 continue
@@ -944,7 +944,7 @@ def test_vectorization_bug():
 
     n = n*2.0
     w = w*2.0
-    
+
     n2 = n + n2
     w2 = w + w2
 
@@ -955,7 +955,7 @@ def test_vectorization_bug():
     # w3 = w2 + w
 
     w3 = w3.evaluate()
-    
+
     assert np.allclose(n, w)
     assert np.allclose(n2, w2)
     assert np.allclose(n3, w3)
@@ -973,6 +973,25 @@ def test_blackscholes_bug():
 
     assert np.allclose(n4, w4)
 
+def test_erf():
+    '''
+    Separate test because numpy and weld have different functions for this right now.
+    '''
+    for dtype in TYPES:
+        # int still not supported for the unary ops in Weld.
+        if "int" in dtype:
+            continue
+        n, w = random_arrays(NUM_ELS, dtype)
 
+        n2 = ss.erf(n)
+        w2 = welderf(w)
 
+        w2_eval = w2.evaluate()
+
+        assert np.allclose(w2, n2)
+
+        # TODO: this works with all other unary ops but doesn't work with erf...need to debug it
+        # further. Might have something to do with the fact that erf is not routed through
+        # __array_ufunc__.
+        # assert np.array_equal(w2_eval, n2)
 

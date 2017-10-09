@@ -18,3 +18,13 @@ def array(arr, *args, **kwargs):
     return weldarray(np.array(arr, *args, **kwargs))
 
 # TODO: define other array creation routines like zeros, ones etc.
+
+# functions that don't exist in numpy
+def erf(weldarray):
+    '''
+    FIXME: This is kinda hacky because all other function are routed through __array_ufunc__ by
+    numpy and here we directly call _unary_op. In __array_ufun__ I was using properties of ufuncs,
+    like ufunc.__name__, so using that route would require special casing stuff. For now, this is
+    just the minimal case to make blackscholes work.
+    '''
+    return weldarray._unary_op('erf')
