@@ -105,6 +105,8 @@ pub struct ParallelForData {
     pub body: FunctionId,
     pub cont: FunctionId,
     pub innermost: bool,
+    /// If `true`, always invoke parallel runtime for the loop.
+    pub always_use_runtime: bool,
 }
 
 /// A terminating statement inside a basic block.
@@ -654,7 +656,7 @@ fn sir_param_correction(prog: &mut SirProgram) -> WeldResult<()> {
 }
 
 /// Convert an AST to a SIR program. Symbols must be unique in expr.
-pub fn ast_to_sir(expr: &TypedExpr) -> WeldResult<SirProgram> {
+pub fn ast_to_sir(expr: &TypedExpr, multithreaded: bool) -> WeldResult<SirProgram> {
     if let ExprKind::Lambda { ref params, ref body } = expr.kind {
         let mut prog = SirProgram::new(&expr.ty, params);
         prog.sym_gen = SymbolGenerator::from_expression(expr);
@@ -662,7 +664,7 @@ pub fn ast_to_sir(expr: &TypedExpr) -> WeldResult<SirProgram> {
             prog.funcs[0].params.insert(tp.name.clone(), tp.ty.clone());
         }
         let first_block = prog.funcs[0].add_block();
-        let (res_func, res_block, res_sym) = gen_expr(body, &mut prog, 0, first_block)?;
+        let (res_func, res_block, res_sym) = gen_expr(body, &mut prog, 0, first_block, multithreaded)?;
         prog.funcs[res_func].blocks[res_block].terminator = Terminator::ProgramReturn(res_sym);
         sir_param_correction(&mut prog)?;
         // second call is necessary in the case where there are loops in the call graph, since
@@ -680,7 +682,8 @@ pub fn ast_to_sir(expr: &TypedExpr) -> WeldResult<SirProgram> {
 fn gen_expr(expr: &TypedExpr,
             prog: &mut SirProgram,
             cur_func: FunctionId,
-            cur_block: BasicBlockId)
+            cur_block: BasicBlockId,
+            multithreaded: bool)
             -> WeldResult<(FunctionId, BasicBlockId, Symbol)> {
     use self::Statement::*;
     use self::Terminator::*;
@@ -701,13 +704,13 @@ fn gen_expr(expr: &TypedExpr,
             ref value,
             ref body,
         } => {
-            let (cur_func, cur_block, val_sym) = gen_expr(value, prog, cur_func, cur_block)?;
+            let (cur_func, cur_block, val_sym) = gen_expr(value, prog, cur_func, cur_block, multithreaded)?;
             prog.add_local_named(&value.ty, name, cur_func);
             prog.funcs[cur_func].blocks[cur_block].add_statement(Assign {
                                                                      output: name.clone(),
                                                                      value: val_sym,
                                                                  });
-            let (cur_func, cur_block, res_sym) = gen_expr(body, prog, cur_func, cur_block)?;
+            let (cur_func, cur_block, res_sym) = gen_expr(body, prog, cur_func, cur_block, multithreaded)?;
             Ok((cur_func, cur_block, res_sym))
         }
 
@@ -716,8 +719,8 @@ fn gen_expr(expr: &TypedExpr,
             ref left,
             ref right,
         } => {
-            let (cur_func, cur_block, left_sym) = gen_expr(left, prog, cur_func, cur_block)?;
-            let (cur_func, cur_block, right_sym) = gen_expr(right, prog, cur_func, cur_block)?;
+            let (cur_func, cur_block, left_sym) = gen_expr(left, prog, cur_func, cur_block, multithreaded)?;
+            let (cur_func, cur_block, right_sym) = gen_expr(right, prog, cur_func, cur_block, multithreaded)?;
             let res_sym = prog.add_local(&expr.ty, cur_func);
             prog.funcs[cur_func].blocks[cur_block].add_statement(BinOp {
                                                                      output: res_sym.clone(),
@@ -732,7 +735,7 @@ fn gen_expr(expr: &TypedExpr,
             kind,
             ref value,
         } => {
-            let (cur_func, cur_block, value_sym) = gen_expr(value, prog, cur_func, cur_block)?;
+            let (cur_func, cur_block, value_sym) = gen_expr(value, prog, cur_func, cur_block, multithreaded)?;
             let res_sym = prog.add_local(&expr.ty, cur_func);
             prog.funcs[cur_func].blocks[cur_block].add_statement(UnaryOp {
                 output: res_sym.clone(),
@@ -743,7 +746,7 @@ fn gen_expr(expr: &TypedExpr,
         }
 
         ExprKind::Negate(ref child_expr) => {
-            let (cur_func, cur_block, child_sym) = gen_expr(child_expr, prog, cur_func, cur_block)?;
+            let (cur_func, cur_block, child_sym) = gen_expr(child_expr, prog, cur_func, cur_block, multithreaded)?;
             let res_sym = prog.add_local(&expr.ty, cur_func);
             prog.funcs[cur_func].blocks[cur_block].add_statement(Negate {
                                                                      output: res_sym.clone(),
@@ -753,7 +756,7 @@ fn gen_expr(expr: &TypedExpr,
         }
 
         ExprKind::Broadcast(ref child_expr) => {
-            let (cur_func, cur_block, child_sym) = gen_expr(child_expr, prog, cur_func, cur_block)?;
+            let (cur_func, cur_block, child_sym) = gen_expr(child_expr, prog, cur_func, cur_block, multithreaded)?;
             let res_sym = prog.add_local(&expr.ty, cur_func);
             prog.funcs[cur_func].blocks[cur_block].add_statement(Broadcast {
                                                                      output: res_sym.clone(),
@@ -763,7 +766,7 @@ fn gen_expr(expr: &TypedExpr,
         }
 
         ExprKind::Cast { ref child_expr, .. } => {
-            let (cur_func, cur_block, child_sym) = gen_expr(child_expr, prog, cur_func, cur_block)?;
+            let (cur_func, cur_block, child_sym) = gen_expr(child_expr, prog, cur_func, cur_block, multithreaded)?;
             let res_sym = prog.add_local(&expr.ty, cur_func);
             prog.funcs[cur_func].blocks[cur_block].add_statement(Cast {
                                                                      output: res_sym.clone(),
@@ -776,8 +779,8 @@ fn gen_expr(expr: &TypedExpr,
             ref data,
             ref index,
         } => {
-            let (cur_func, cur_block, data_sym) = gen_expr(data, prog, cur_func, cur_block)?;
-            let (cur_func, cur_block, index_sym) = gen_expr(index, prog, cur_func, cur_block)?;
+            let (cur_func, cur_block, data_sym) = gen_expr(data, prog, cur_func, cur_block, multithreaded)?;
+            let (cur_func, cur_block, index_sym) = gen_expr(index, prog, cur_func, cur_block, multithreaded)?;
             let res_sym = prog.add_local(&expr.ty, cur_func);
             prog.funcs[cur_func].blocks[cur_block].add_statement(Lookup {
                                                                      output: res_sym.clone(),
@@ -788,8 +791,8 @@ fn gen_expr(expr: &TypedExpr,
         }
 
         ExprKind::KeyExists { ref data, ref key } => {
-            let (cur_func, cur_block, data_sym) = gen_expr(data, prog, cur_func, cur_block)?;
-            let (cur_func, cur_block, key_sym) = gen_expr(key, prog, cur_func, cur_block)?;
+            let (cur_func, cur_block, data_sym) = gen_expr(data, prog, cur_func, cur_block, multithreaded)?;
+            let (cur_func, cur_block, key_sym) = gen_expr(key, prog, cur_func, cur_block, multithreaded)?;
             let res_sym = prog.add_local(&expr.ty, cur_func);
             prog.funcs[cur_func].blocks[cur_block].add_statement(KeyExists {
                                                                      output: res_sym.clone(),
@@ -804,9 +807,9 @@ fn gen_expr(expr: &TypedExpr,
             ref index,
             ref size,
         } => {
-            let (cur_func, cur_block, data_sym) = gen_expr(data, prog, cur_func, cur_block)?;
-            let (cur_func, cur_block, index_sym) = gen_expr(index, prog, cur_func, cur_block)?;
-            let (cur_func, cur_block, size_sym) = gen_expr(size, prog, cur_func, cur_block)?;
+            let (cur_func, cur_block, data_sym) = gen_expr(data, prog, cur_func, cur_block, multithreaded)?;
+            let (cur_func, cur_block, index_sym) = gen_expr(index, prog, cur_func, cur_block, multithreaded)?;
+            let (cur_func, cur_block, size_sym) = gen_expr(size, prog, cur_func, cur_block, multithreaded)?;
             let res_sym = prog.add_local(&expr.ty, cur_func);
             prog.funcs[cur_func].blocks[cur_block].add_statement(Slice {
                                                                      output: res_sym.clone(),
@@ -822,9 +825,9 @@ fn gen_expr(expr: &TypedExpr,
             ref on_true,
             ref on_false,
         } => {
-            let (cur_func, cur_block, cond_sym) = gen_expr(cond, prog, cur_func, cur_block)?;
-            let (cur_func, cur_block, true_sym) = gen_expr(on_true, prog, cur_func, cur_block)?;
-            let (cur_func, cur_block, false_sym) = gen_expr(on_false, prog, cur_func, cur_block)?;
+            let (cur_func, cur_block, cond_sym) = gen_expr(cond, prog, cur_func, cur_block, multithreaded)?;
+            let (cur_func, cur_block, true_sym) = gen_expr(on_true, prog, cur_func, cur_block, multithreaded)?;
+            let (cur_func, cur_block, false_sym) = gen_expr(on_false, prog, cur_func, cur_block, multithreaded)?;
             let res_sym = prog.add_local(&expr.ty, cur_func);
             prog.funcs[cur_func].blocks[cur_block].add_statement(Select {
                                                                      output: res_sym.clone(),
@@ -835,7 +838,7 @@ fn gen_expr(expr: &TypedExpr,
             Ok((cur_func, cur_block, res_sym))
         }
         ExprKind::ToVec { ref child_expr } => {
-            let (cur_func, cur_block, child_sym) = gen_expr(child_expr, prog, cur_func, cur_block)?;
+            let (cur_func, cur_block, child_sym) = gen_expr(child_expr, prog, cur_func, cur_block, multithreaded)?;
             let res_sym = prog.add_local(&expr.ty, cur_func);
             prog.funcs[cur_func].blocks[cur_block].add_statement(ToVec {
                                                                      output: res_sym.clone(),
@@ -845,7 +848,7 @@ fn gen_expr(expr: &TypedExpr,
         }
 
         ExprKind::Length { ref data } => {
-            let (cur_func, cur_block, data_sym) = gen_expr(data, prog, cur_func, cur_block)?;
+            let (cur_func, cur_block, data_sym) = gen_expr(data, prog, cur_func, cur_block, multithreaded)?;
             let res_sym = prog.add_local(&expr.ty, cur_func);
             prog.funcs[cur_func].blocks[cur_block].add_statement(Length {
                                                                      output: res_sym.clone(),
@@ -859,7 +862,7 @@ fn gen_expr(expr: &TypedExpr,
             ref on_true,
             ref on_false,
         } => {
-            let (cur_func, cur_block, cond_sym) = gen_expr(cond, prog, cur_func, cur_block)?;
+            let (cur_func, cur_block, cond_sym) = gen_expr(cond, prog, cur_func, cur_block, multithreaded)?;
             let true_block = prog.funcs[cur_func].add_block();
             let false_block = prog.funcs[cur_func].add_block();
             prog.funcs[cur_func].blocks[cur_block].terminator = Branch {
@@ -867,9 +870,9 @@ fn gen_expr(expr: &TypedExpr,
                 on_true: true_block,
                 on_false: false_block,
             };
-            let (true_func, true_block, true_sym) = gen_expr(on_true, prog, cur_func, true_block)?;
+            let (true_func, true_block, true_sym) = gen_expr(on_true, prog, cur_func, true_block, multithreaded)?;
             let (false_func, false_block, false_sym) =
-                gen_expr(on_false, prog, cur_func, false_block)?;
+                gen_expr(on_false, prog, cur_func, false_block, multithreaded)?;
             let res_sym = prog.add_local(&expr.ty, true_func);
             prog.funcs[true_func].blocks[true_block].add_statement(Assign {
                                                                        output: res_sym.clone(),
@@ -902,7 +905,7 @@ fn gen_expr(expr: &TypedExpr,
             ref update_func,
         } => {
             // Generate the intial value.
-            let (cur_func, cur_block, initial_sym) = gen_expr(initial, prog, cur_func, cur_block)?;
+            let (cur_func, cur_block, initial_sym) = gen_expr(initial, prog, cur_func, cur_block, multithreaded)?;
 
             // Pull out the argument name and function body and validate that things type-check.
             let argument_sym;
@@ -934,6 +937,7 @@ fn gen_expr(expr: &TypedExpr,
             } else {
                 cur_func
             };
+
             let body_start_block = prog.funcs[body_start_func].add_block();
 
             // Jump to where the body starts
@@ -946,7 +950,7 @@ fn gen_expr(expr: &TypedExpr,
             // Generate the loop's body, which will work on argument_sym and produce result_sym.
             // The type of result_sym will be {ArgType, bool} and we will repeat the body if the bool is true.
             let (body_end_func, body_end_block, result_sym) =
-                gen_expr(func_body, prog, body_start_func, body_start_block)?;
+                gen_expr(func_body, prog, body_start_func, body_start_block, multithreaded)?;
 
             // After the body, unpack the {state, bool} struct into symbols argument_sym and continue_sym.
             let continue_sym = prog.add_local(&Scalar(ScalarKind::Bool), body_end_func);
@@ -984,8 +988,8 @@ fn gen_expr(expr: &TypedExpr,
             ref builder,
             ref value,
         } => {
-            let (cur_func, cur_block, builder_sym) = gen_expr(builder, prog, cur_func, cur_block)?;
-            let (cur_func, cur_block, elem_sym) = gen_expr(value, prog, cur_func, cur_block)?;
+            let (cur_func, cur_block, builder_sym) = gen_expr(builder, prog, cur_func, cur_block, multithreaded)?;
+            let (cur_func, cur_block, elem_sym) = gen_expr(value, prog, cur_func, cur_block, multithreaded)?;
             prog.funcs[cur_func].blocks[cur_block].add_statement(Merge {
                                                                      builder: builder_sym.clone(),
                                                                      value: elem_sym,
@@ -994,7 +998,7 @@ fn gen_expr(expr: &TypedExpr,
         }
 
         ExprKind::Res { ref builder } => {
-            let (cur_func, cur_block, builder_sym) = gen_expr(builder, prog, cur_func, cur_block)?;
+            let (cur_func, cur_block, builder_sym) = gen_expr(builder, prog, cur_func, cur_block, multithreaded)?;
             let res_sym = prog.add_local(&expr.ty, cur_func);
             prog.funcs[cur_func].blocks[cur_block].add_statement(Res {
                                                                      output: res_sym.clone(),
@@ -1005,7 +1009,7 @@ fn gen_expr(expr: &TypedExpr,
 
         ExprKind::NewBuilder(ref arg) => {
             let (cur_func, cur_block, arg_sym) = if let Some(ref a) = *arg {
-                let (cur_func, cur_block, arg_sym) = gen_expr(a, prog, cur_func, cur_block)?;
+                let (cur_func, cur_block, arg_sym) = gen_expr(a, prog, cur_func, cur_block, multithreaded)?;
                 (cur_func, cur_block, Some(arg_sym))
             } else {
                 (cur_func, cur_block, None)
@@ -1022,10 +1026,10 @@ fn gen_expr(expr: &TypedExpr,
         ExprKind::MakeStruct { ref elems } => {
             let mut syms = vec![];
             let (mut cur_func, mut cur_block, mut sym) =
-                gen_expr(&elems[0], prog, cur_func, cur_block)?;
+                gen_expr(&elems[0], prog, cur_func, cur_block, multithreaded)?;
             syms.push(sym);
             for elem in elems.iter().skip(1) {
-                let r = gen_expr(elem, prog, cur_func, cur_block)?;
+                let r = gen_expr(elem, prog, cur_func, cur_block, multithreaded)?;
                 cur_func = r.0;
                 cur_block = r.1;
                 sym = r.2;
@@ -1044,7 +1048,7 @@ fn gen_expr(expr: &TypedExpr,
             let mut cur_func = cur_func;
             let mut cur_block = cur_block;
             for elem in elems.iter() {
-                let r = gen_expr(elem, prog, cur_func, cur_block)?;
+                let r = gen_expr(elem, prog, cur_func, cur_block, multithreaded)?;
                 cur_func = r.0;
                 cur_block = r.1;
                 let sym = r.2;
@@ -1067,7 +1071,7 @@ fn gen_expr(expr: &TypedExpr,
             let mut cur_func = cur_func;
             let mut cur_block = cur_block;
             for arg in args.iter() {
-                let r = gen_expr(arg, prog, cur_func, cur_block)?;
+                let r = gen_expr(arg, prog, cur_func, cur_block, multithreaded)?;
                 cur_func = r.0;
                 cur_block = r.1;
                 let sym = r.2;
@@ -1083,7 +1087,7 @@ fn gen_expr(expr: &TypedExpr,
         }
 
         ExprKind::GetField { ref expr, index } => {
-            let (cur_func, cur_block, struct_sym) = gen_expr(expr, prog, cur_func, cur_block)?;
+            let (cur_func, cur_block, struct_sym) = gen_expr(expr, prog, cur_func, cur_block, multithreaded)?;
             let field_ty = match expr.ty {
                 super::ast::Type::Struct(ref v) => &v[index as usize],
                 _ => {
@@ -1110,7 +1114,7 @@ fn gen_expr(expr: &TypedExpr,
                        ref body,
                    } = func.kind {
                 let (cur_func, cur_block, builder_sym) =
-                    gen_expr(builder, prog, cur_func, cur_block)?;
+                    gen_expr(builder, prog, cur_func, cur_block, multithreaded)?;
                 let body_func = prog.add_func();
                 let body_block = prog.funcs[body_func].add_block();
                 prog.add_local_named(&params[0].ty, &params[0].name, body_func);
@@ -1123,7 +1127,7 @@ fn gen_expr(expr: &TypedExpr,
                 let mut cur_block = cur_block;
                 let mut pf_iters: Vec<ParallelForIter> = Vec::new();
                 for iter in iters.iter() {
-                    let data_res = gen_expr(&iter.data, prog, cur_func, cur_block)?;
+                    let data_res = gen_expr(&iter.data, prog, cur_func, cur_block, multithreaded)?;
                     cur_func = data_res.0;
                     cur_block = data_res.1;
                     prog.funcs[body_func]
@@ -1135,7 +1139,7 @@ fn gen_expr(expr: &TypedExpr,
                             Some(ref e) => e,
                             _ => weld_err!("Can't reach this")?,
                         };
-                        let start_res = gen_expr(&start_expr, prog, cur_func, cur_block)?;
+                        let start_res = gen_expr(&start_expr, prog, cur_func, cur_block, multithreaded)?;
                         cur_func = start_res.0;
                         cur_block = start_res.1;
                         prog.funcs[body_func]
@@ -1150,7 +1154,7 @@ fn gen_expr(expr: &TypedExpr,
                             Some(ref e) => e,
                             _ => weld_err!("Can't reach this")?,
                         };
-                        let end_res = gen_expr(&end_expr, prog, cur_func, cur_block)?;
+                        let end_res = gen_expr(&end_expr, prog, cur_func, cur_block, multithreaded)?;
                         cur_func = end_res.0;
                         cur_block = end_res.1;
                         prog.funcs[body_func]
@@ -1165,7 +1169,7 @@ fn gen_expr(expr: &TypedExpr,
                             Some(ref e) => e,
                             _ => weld_err!("Can't reach this")?,
                         };
-                        let stride_res = gen_expr(&stride_expr, prog, cur_func, cur_block)?;
+                        let stride_res = gen_expr(&stride_expr, prog, cur_func, cur_block, multithreaded)?;
                         cur_func = stride_res.0;
                         cur_block = stride_res.1;
                         prog.funcs[body_func]
@@ -1184,7 +1188,7 @@ fn gen_expr(expr: &TypedExpr,
                                   });
                 }
                 let (body_end_func, body_end_block, _) =
-                    gen_expr(body, prog, body_func, body_block)?;
+                    gen_expr(body, prog, body_func, body_block, multithreaded)?;
                 prog.funcs[body_end_func].blocks[body_end_block].terminator = EndFunction;
                 let cont_func = prog.add_func();
                 let cont_block = prog.funcs[cont_func].add_block();
@@ -1202,6 +1206,7 @@ fn gen_expr(expr: &TypedExpr,
                                     body: body_func,
                                     cont: cont_func,
                                     innermost: is_innermost,
+                                    always_use_runtime: expr.annotations.always_use_runtime().unwrap_or(false),
                                 });
                 Ok((cont_func, cont_block, builder_sym))
             } else {

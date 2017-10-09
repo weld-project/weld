@@ -62,7 +62,7 @@ pub fn apply_opt_passes(expr: &mut TypedExpr, opt_passes: &Vec<Pass>) -> WeldRes
 }
 
 /// Generate a compiled LLVM module from a program whose body is a function.
-pub fn compile_program(program: &Program, opt_passes: &Vec<Pass>, llvm_opt_level: u32)
+pub fn compile_program(program: &Program, opt_passes: &Vec<Pass>, llvm_opt_level: u32, multithreaded: bool)
         -> WeldResult<easy_ll::CompiledModule> {
     let mut expr = macro_processor::process_program(program)?;
     debug!("After macro substitution:\n{}\n", print_typed_expr(&expr));
@@ -75,12 +75,14 @@ pub fn compile_program(program: &Program, opt_passes: &Vec<Pass>, llvm_opt_level
     apply_opt_passes(&mut expr, opt_passes)?;
 
     transforms::uniquify(&mut expr)?;
-    debug!("After uniquify:\n{}\n", print_typed_expr(&expr));
+    debug!("After uniquify:\n{}\n", print_expr(&expr));
 
-    let sir_prog = sir::ast_to_sir(&expr)?;
+    let sir_prog = sir::ast_to_sir(&expr, multithreaded)?;
     debug!("SIR program:\n{}\n", &sir_prog);
 
     let mut gen = LlvmGenerator::new();
+    gen.multithreaded = multithreaded;
+
     gen.add_function_on_pointers("run", &sir_prog)?;
     let llvm_code = gen.result();
     debug!("LLVM program:\n{}\n", &llvm_code);
@@ -134,6 +136,10 @@ pub struct LlvmGenerator {
 
     /// Functions we have already visited when generating code.
     visited: HashSet<sir::FunctionId>,
+
+    /// Multithreaded configuration set during compilation. If unset, performs
+    /// single-threaded optimizations.
+    multithreaded: bool,
 }
 
 impl LlvmGenerator {
@@ -153,6 +159,7 @@ impl LlvmGenerator {
             prelude_var_ids: IdGenerator::new("%p.p"),
             body_code: CodeBuilder::new(),
             visited: HashSet::new(),
+            multithreaded: false,
         };
         generator.prelude_code.add(PRELUDE_CODE);
         generator.prelude_code.add("\n");
@@ -526,8 +533,18 @@ impl LlvmGenerator {
         let bound_cmp = ctx.var_ids.next();
         let mut grain_size = DEFAULT_GRAIN_SIZE;
         if par_for.innermost {
-            ctx.code.add(format!("{} = icmp ule i64 {}, {}", bound_cmp, num_iters_str, grain_size));
-            ctx.code.add(format!("br i1 {}, label %for.ser, label %for.par", bound_cmp));
+            // Determine whether to always call parallel, always call serial, or
+            // choose based on the loop's size.
+            if par_for.always_use_runtime {
+                ctx.code.add(format!("br label %for.par"));
+            } else {
+                if self.multithreaded {
+                    ctx.code.add(format!("{} = icmp ule i64 {}, {}", bound_cmp, num_iters_str, grain_size));
+                    ctx.code.add(format!("br i1 {}, label %for.ser, label %for.par", bound_cmp));
+                } else {
+                    ctx.code.add(format!("br label %for.ser"));
+                }
+            }
             ctx.code.add(format!("for.ser:"));
             let mut body_arg_types = self.get_arg_str(&func.params, "")?;
             body_arg_types.push_str(format!(", i64 0, i64 {}", num_iters_str).as_str());

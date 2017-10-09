@@ -10,16 +10,18 @@ use super::passes::Pass;
 // Keys used in textual representation of conf
 pub const MEMORY_LIMIT_KEY: &'static str = "weld.memory.limit";
 pub const THREADS_KEY: &'static str = "weld.threads";
+pub const SUPPORT_MULTITHREAD_KEY: &'static str = "weld.compile.multithread_support";
 pub const OPTIMIZATION_PASSES_KEY: &'static str = "weld.optimization.passes";
 pub const LLVM_OPTIMIZATION_LEVEL_KEY: &'static str = "weld.llvm.optimization.level";
 
 // Default values of each key
 pub const DEFAULT_MEMORY_LIMIT: i64 = 1000000000;
 pub const DEFAULT_THREADS: i32 = 1;
+pub const DEFAULT_SUPPORT_MULTITHREAD: bool = true;
 pub const DEFAULT_LLVM_OPTIMIZATION_LEVEL: u32 = 2;
 lazy_static! {
     pub static ref DEFAULT_OPTIMIZATION_PASSES: Vec<Pass> = {
-        let m = ["inline-apply", "inline-let", "inline-zip", "loop-fusion", "infer-size", "predicate", "vectorize"];
+        let m = ["inline-apply", "inline-let", "inline-zip", "loop-fusion", "infer-size", "predicate", "vectorize", "fix-iterate"];
         m.iter().map(|e| (*OPTIMIZATION_PASSES.get(e).unwrap()).clone()).collect()
     };
 }
@@ -28,11 +30,12 @@ lazy_static! {
 pub struct ParsedConf {
     pub memory_limit: i64,
     pub threads: i32,
+    pub support_multithread: bool,
     pub optimization_passes: Vec<Pass>,
     pub llvm_optimization_level: u32
 }
 
-/// Parse a configuration from a WeldConf key-value dictiomary.
+/// Parse a configuration from a WeldConf key-value dictionary.
 pub fn parse(conf: &WeldConf) -> WeldResult<ParsedConf> {
     let value = get_value(conf, MEMORY_LIMIT_KEY);
     let memory_limit = value.map(|s| parse_memory_limit(&s))
@@ -50,9 +53,14 @@ pub fn parse(conf: &WeldConf) -> WeldResult<ParsedConf> {
     let level = value.map(|s| parse_llvm_optimization_level(&s))
                       .unwrap_or(Ok(DEFAULT_LLVM_OPTIMIZATION_LEVEL))?;
 
+    let value = get_value(conf, SUPPORT_MULTITHREAD_KEY);
+    let support_multithread = value.map(|s| parse_support_multithread(&s))
+                      .unwrap_or(Ok(DEFAULT_SUPPORT_MULTITHREAD))?;
+
     Ok(ParsedConf {
         memory_limit: memory_limit,
         threads: threads,
+        support_multithread: support_multithread,
         optimization_passes: passes,
         llvm_optimization_level: level
     })
@@ -69,6 +77,14 @@ fn parse_threads(s: &str) -> WeldResult<i32> {
     match s.parse::<i32>() {
         Ok(v) if v > 0 => Ok(v),
         _ => weld_err!("Invalid number of threads: {}", s),
+    }
+}
+
+/// Parse multithread support.
+fn parse_support_multithread(s: &str) -> WeldResult<bool> {
+    match s.parse::<bool>() {
+        Ok(v) => Ok(v),
+        _ => weld_err!("Invalid value for support_multithread: {}", s),
     }
 }
 
