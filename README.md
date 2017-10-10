@@ -163,3 +163,7 @@ $ cargo bench [benchmark-name]
 
 If a benchmark name is not provided, all benchmarks are run.
 
+## Current performance metrics
+
+![Current performance metrics](https://s3-us-west-2.amazonaws.com/weld-travis-ci/master/performance.png)
+

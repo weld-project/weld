@@ -503,7 +503,7 @@ impl<'t> Parser<'t> {
         }
         let expr = try!(self.expr());
         if *self.next() != TCloseParen {
-            return weld_err!("Expected ')");
+            return weld_err!("Expected ')'");
         }
         let cast_expr = expr_box(Cast {
                                      kind: kind,
@@ -699,7 +699,7 @@ impl<'t> Parser<'t> {
             TOpenParen => {
                 let expr = try!(self.expr());
                 if *self.next() != TCloseParen {
-                    return weld_err!("Expected ')'");
+                    return weld_err!("Expected ')' after {:?}", expr);
                 }
                 Ok(expr)
             }
