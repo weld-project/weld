@@ -101,10 +101,21 @@ pub fn compile_program(program: &Program, opt_passes: &Vec<Pass>, llvm_opt_level
     Ok(module)
 }
 
-/// Stores whether the code generator has created functions for a given type.
+/// Stores whether the code generator has created certain helper functions for a given type.
 pub struct HelperState {
     hash_func: bool,
     cmp_func: bool,
+    eq_func: bool,
+}
+
+impl HelperState {
+    pub fn new() -> HelperState {
+        HelperState {
+            hash_func: false,
+            cmp_func: false,
+            eq_func: false,
+        }
+    }
 }
 
 /// Generates LLVM code for one or more modules.
@@ -162,6 +173,7 @@ impl LlvmGenerator {
             prelude_var_ids: IdGenerator::new("%p.p"),
             body_code: CodeBuilder::new(),
             visited: HashSet::new(),
+            type_helpers: HashMap::new(),
         };
         generator.prelude_code.add(PRELUDE_CODE);
         generator.prelude_code.add("\n");
@@ -1066,9 +1078,256 @@ impl LlvmGenerator {
 
 
     /// Generates a `cmp` function for `ty` and any nested types it depends on.
-    fn gen_compare_function_call(&mut self, ty: &Type) -> WeldResult<()> {
+    fn gen_cmp(&mut self, ty: &Type) -> WeldResult<()> {
+        // If we've already generated a function for this type, return.
+        { 
+            let helper_state = self.type_helpers.entry(ty.clone()).or_insert(HelperState::new());
+            if helper_state.cmp_func {
+                return Ok(());
+            }
+            helper_state.cmp_func = true;
+        } // these braces are necessary so the borrow for `helper_state` ends.
+        match *ty {
+            Struct(ref fields) => {
+                // Create comparison functions for each of the nested types.
+                let mut field_types: Vec<String> = Vec::new();
+                for f in fields.iter() {
+                    self.gen_cmp(f)?;
+                    field_types.push(self.llvm_type(f)?.to_string());
+                }
+                // Then, create the comparison function for the full struct, which just compares
+                // each field.
+                let name = self.struct_names.get(fields).unwrap();
+                self.prelude_code.add_line(format!(
+                        "define i32 {}.cmp({} %a, {} %b) {{", name.replace("%", "@"), name, name));
+                let mut label_ids = IdGenerator::new("%l");
+                for i in 0..field_types.len() {
+                    if let Simd(_) = fields[i] {
+                        continue;
+                    }
+                    let a_field = self.prelude_var_ids.next();
+                    let b_field = self.prelude_var_ids.next();
+                    let cmp = self.prelude_var_ids.next();
+                    let ne = self.prelude_var_ids.next();
+                    let field_ty_str = &field_types[i];
+                    let ret_label = label_ids.next();
+                    let post_label = label_ids.next();
+                    let field_prefix_str = format!("@{}", field_ty_str.replace("%", ""));
+                    self.prelude_code.add_line(format!("{} = extractvalue {} %a , {}", a_field, name, i));
+                    self.prelude_code.add_line(format!("{} = extractvalue {} %b, {}", b_field, name, i));
+                    self.prelude_code.add_line(format!("{} = call i32 {}.cmp({} {}, {} {})",
+                    cmp,
+                    field_prefix_str,
+                    field_ty_str,
+                    a_field,
+                    field_ty_str,
+                    b_field));
+                    self.prelude_code.add_line(format!("{} = icmp ne i32 {}, 0", ne, cmp));
+                    self.prelude_code.add_line(format!("br i1 {}, label {}, label {}", ne, ret_label, post_label));
+                    self.prelude_code.add_line(format!("{}:", ret_label.replace("%", "")));
+                    self.prelude_code.add_line(format!("ret i32 {}", cmp));
+                    self.prelude_code.add_line(format!("{}:", post_label.replace("%", "")));
+                }
+                self.prelude_code.add_line(format!("ret i32 0"));
+                self.prelude_code.add_line(format!("}}"));
+                self.prelude_code.add_line(format!(""));
+			}
+			Scalar(ref scalar_ty) => {
+				let ll_scalar_ty = llvm_scalar_kind(*scalar_ty);
+				let ll_cmp = if scalar_ty.is_float() {
+					"fcmp"
+				} else {
+					"icmp"
+				};
+
+				let ll_eq = llvm_eq(*scalar_ty);
+				let ll_lt = llvm_lt(*scalar_ty);
+
+                // Booleans are special cased.
+				if *scalar_ty != ScalarKind::Bool {
+					self.prelude_code.add_line(format!("define i32 @{ll_scalar_ty}.cmp({ll_scalar_ty} %a, {ll_scalar_ty} %b) alwaysinline {{
+					  %1 = {ll_cmp} {ll_eq} {ll_scalar_ty} %a, %b
+					  br i1 %1, label %eq, label %ne
+					eq:
+					  ret i32 0
+					ne:
+					  %2 = {ll_cmp} {ll_lt} {ll_scalar_ty} %a, %b
+					  %3 = select i1 %2, i32 -1, i32 1
+					  ret i32 %3
+				  }}",
+					ll_scalar_ty=ll_scalar_ty, ll_cmp=ll_cmp, ll_eq=ll_eq, ll_lt=ll_lt
+				));
+				} else {
+					self.prelude_code.add(format!("
+					define i32 @i1.cmp(i1 %a, i1 %b) {{
+					  %1 = icmp eq i1 %a, %b
+					  br i1 %1, label %eq, label %ne
+					eq:
+					  ret i32 0
+					ne:
+					  %2 = select i1 %b, i32 -1, i32 1
+					  ret i32 %2
+					}}"));
+				}
+            }
+            Simd(ref elem) => {
+
+            }
+            Dict(ref kt, ref vt) => {
+
+            }
+            Builder(ref bk, _) => {
+
+            }
+            Vector(ref elem) => {
+                // Add the right comparison function for the vector. For vectors of unsigned chars,
+                // we can use memcmp, but for anything else we need element-by-element comparison.
+                
+                self.gen_cmp(elem)?;
+                //self.gen_eq(elem)?;
+
+
+                let elem_ty = self.llvm_type(elem)?;
+                let elem_prefix = llvm_prefix(&elem_ty);
+                let name = self.vec_names.get(elem).unwrap();
+                if let Scalar(ScalarKind::U8) = *elem.as_ref() {
+                    self.prelude_code.add(format!(
+                            include_str!("resources/vector/vector_comparison_memcmp.ll"),
+                            NAME=&name.replace("%", "")));
+                } else {
+                    self.prelude_code.add(format!(
+                            include_str!("resources/vector/vector_comparison.ll"),
+                            ELEM_PREFIX=&elem_prefix,
+                            ELEM=&elem_ty,
+                            NAME=&name.replace("%", "")));
+                }
+
+                // Set this flag to true as well, since these templates also generate `eq`.
+                let mut helper_state = self.type_helpers.get_mut(ty).unwrap();
+                helper_state.eq_func = true;
+            }
+            _ => {
+                return weld_err!("Unsupported function `cmp` for type {:?}", ty);
+            }
+        };
         Ok(())
     }
+
+    /*
+    /// Generates an `eq` function for `ty` and any nested types it depends on.
+    fn gen_eq(&mut self, ty: &Type) -> WeldResult<()> {
+        let helper_state = self.type_helpers.entry(ty).or_insert(HelperState::new());
+        if helper_state.cmp_func {
+            return Ok(());
+        }
+
+        match ty {
+            Struct(ref fields) => {
+                // fields.foreach(gen_compare_function_call)?;
+                // Generate an equality function for the struct; unlike cmp we try to have fewer branches
+                for i in 0..field_types.len() {
+                    self.gen_eq(&fields[i])?;
+                }
+                let mut field_types: Vec<String> = Vec::new();
+                for f in fields {
+                    field_types.push(try!(self.llvm_type(f)).to_string());
+                }
+                let name = self.struct_names.get(fields).unwrap();
+                self.prelude_code.add_line(format!(
+                        "define i1 {}.eq({} %a, {} %b) {{", name.replace("%", "@"), name, name));
+                let mut label_ids = IdGenerator::new("%l");
+                for i in 0..field_types.len() {
+                    // TODO(shoumik): hack to prevent incorrect code gen for vectors.
+                    if let Simd(_) = fields[i] {
+                        continue;
+                    }
+                    let a_field = self.prelude_var_ids.next();
+                    let b_field = self.prelude_var_ids.next();
+                    let this_eq = self.prelude_var_ids.next();
+                    let field_ty_str = &field_types[i];
+                    let field_prefix_str = format!("@{}", field_ty_str.replace("%", ""));
+                    self.prelude_code.add_line(format!("{} = extractvalue {} %a , {}", a_field, name, i));
+                    self.prelude_code.add_line(format!("{} = extractvalue {} %b, {}", b_field, name, i));
+                    self.prelude_code.add_line(format!("{} = call i1 {}.eq({} {}, {} {})",
+                    this_eq,
+                    field_prefix_str,
+                    field_ty_str,
+                    a_field,
+                    field_ty_str,
+                    b_field));
+                    let on_ne = label_ids.next();
+                    let on_eq = label_ids.next();
+                    self.prelude_code.add_line(format!("br i1 {}, label {}, label {}", this_eq, on_eq, on_ne));
+                    self.prelude_code.add_line(format!("{}:", on_ne.replace("%", "")));
+                    self.prelude_code.add_line(format!("ret i1 0"));
+                    self.prelude_code.add_line(format!("{}:", on_eq.replace("%", "")));
+                }
+                self.prelude_code.add_line(format!("ret i1 1"));
+                self.prelude_code.add_line(format!("}}"));
+                self.prelude_code.add_line(format!(""));
+            }
+            _ => {
+                return weld_err!("Unsupported operator 'eq' for type {:?}", ty);
+            }
+        };
+
+        helper_state.eq_func = true;
+        Ok(())
+    }
+
+
+    /// Generates a `hash` function for `ty` and any nested types it depends on.
+    fn gen_hash(&mut self, ty: &Type) -> WeldResult<()> {
+        let helper_state = self.type_helpers.entry(ty).or_insert(HelperState::new());
+        if helper_state.cmp_func {
+            return Ok(());
+        }
+
+        match ty {
+            Struct(ref fields) => {
+                for i in 0..field_types.len() {
+                    self.gen_hash(&fields[i])?;
+                }
+                let mut field_types: Vec<String> = Vec::new();
+                for f in fields {
+                    field_types.push(try!(self.llvm_type(f)).to_string());
+                }
+                self.prelude_code
+                    .add_line(format!("define i32 {}.hash({} %value) {{", name.replace("%", "@"), name));
+                let mut res = "0".to_string();
+                for i in 0..field_types.len() {
+                    // TODO(shoumik): hack to prevent incorrect code gen for vectors.
+                    if let Simd(_) = fields[i] {
+                        continue;
+                    }
+                    let field = self.prelude_var_ids.next();
+                    let hash = self.prelude_var_ids.next();
+                    let new_res = self.prelude_var_ids.next();
+                    let field_ty_str = &field_types[i];
+                    let field_prefix_str = format!("@{}", field_ty_str.replace("%", ""));
+                    self.prelude_code.add_line(format!("{} = extractvalue {} %value, {}", field, name, i));
+                    self.prelude_code.add_line(format!("{} = call i32 {}.hash({} {})",
+                    hash,
+                    field_prefix_str,
+                    field_ty_str,
+                    field));
+                    self.prelude_code
+                        .add_line(format!("{} = call i32 @hash_combine(i32 {}, i32 {})", new_res, res, hash));
+                    res = new_res;
+                }
+                self.prelude_code.add_line(format!("ret i32 {}", res));
+                self.prelude_code.add_line(format!("}}"));
+                self.prelude_code.add_line(format!(""));
+            }
+            _ => {
+                return weld_err!("Unsupported operator 'hash' for type {}", ty);
+            }
+        };
+
+        helper_state.hash_func = true;
+        Ok(())
+    }
+        */
 
     /// Generates a struct definition for the given field types.
     fn gen_struct_definition(&mut self, fields: &Vec<Type>) -> WeldResult<()> {
@@ -1081,103 +1340,7 @@ impl LlvmGenerator {
         let field_types_str = field_types.join(", ");
         self.prelude_code.add(format!("{} = type {{ {} }}", name, field_types_str));
 
-        // Generate hash function for the struct.
-        self.prelude_code
-            .add_line(format!("define i32 {}.hash({} %value) {{", name.replace("%", "@"), name));
-        let mut res = "0".to_string();
-        for i in 0..field_types.len() {
-            // TODO(shoumik): hack to prevent incorrect code gen for vectors.
-            if let Simd(_) = fields[i] {
-                continue;
-            }
-            let field = self.prelude_var_ids.next();
-            let hash = self.prelude_var_ids.next();
-            let new_res = self.prelude_var_ids.next();
-            let field_ty_str = &field_types[i];
-            let field_prefix_str = format!("@{}", field_ty_str.replace("%", ""));
-            self.prelude_code.add_line(format!("{} = extractvalue {} %value, {}", field, name, i));
-            self.prelude_code.add_line(format!("{} = call i32 {}.hash({} {})",
-            hash,
-            field_prefix_str,
-            field_ty_str,
-            field));
-            self.prelude_code
-                .add_line(format!("{} = call i32 @hash_combine(i32 {}, i32 {})", new_res, res, hash));
-            res = new_res;
-        }
-        self.prelude_code.add_line(format!("ret i32 {}", res));
-        self.prelude_code.add_line(format!("}}"));
-        self.prelude_code.add_line(format!(""));
 
-        // Generate a comparison function for the struct
-        self.prelude_code.add_line(format!(
-                "define i32 {}.cmp({} %a, {} %b) {{", name.replace("%", "@"), name, name));
-        let mut label_ids = IdGenerator::new("%l");
-        for i in 0..field_types.len() {
-            // TODO(shoumik): hack to prevent incorrect code gen for vectors.
-            if let Simd(_) = fields[i] {
-                continue;
-            }
-            let a_field = self.prelude_var_ids.next();
-            let b_field = self.prelude_var_ids.next();
-            let cmp = self.prelude_var_ids.next();
-            let ne = self.prelude_var_ids.next();
-            let field_ty_str = &field_types[i];
-            let ret_label = label_ids.next();
-            let post_label = label_ids.next();
-            let field_prefix_str = format!("@{}", field_ty_str.replace("%", ""));
-            self.prelude_code.add_line(format!("{} = extractvalue {} %a , {}", a_field, name, i));
-            self.prelude_code.add_line(format!("{} = extractvalue {} %b, {}", b_field, name, i));
-            self.prelude_code.add_line(format!("{} = call i32 {}.cmp({} {}, {} {})",
-                cmp,
-                field_prefix_str,
-                field_ty_str,
-                a_field,
-                field_ty_str,
-                b_field));
-            self.prelude_code.add_line(format!("{} = icmp ne i32 {}, 0", ne, cmp));
-            self.prelude_code.add_line(format!("br i1 {}, label {}, label {}", ne, ret_label, post_label));
-            self.prelude_code.add_line(format!("{}:", ret_label.replace("%", "")));
-            self.prelude_code.add_line(format!("ret i32 {}", cmp));
-            self.prelude_code.add_line(format!("{}:", post_label.replace("%", "")));
-        }
-        self.prelude_code.add_line(format!("ret i32 0"));
-        self.prelude_code.add_line(format!("}}"));
-        self.prelude_code.add_line(format!(""));
-
-        // Generate an equality function for the struct; unlike cmp we try to have fewer branches
-        self.prelude_code.add_line(format!(
-                "define i1 {}.eq({} %a, {} %b) {{", name.replace("%", "@"), name, name));
-        let mut label_ids = IdGenerator::new("%l");
-        for i in 0..field_types.len() {
-            // TODO(shoumik): hack to prevent incorrect code gen for vectors.
-            if let Simd(_) = fields[i] {
-                continue;
-            }
-            let a_field = self.prelude_var_ids.next();
-            let b_field = self.prelude_var_ids.next();
-            let this_eq = self.prelude_var_ids.next();
-            let field_ty_str = &field_types[i];
-            let field_prefix_str = format!("@{}", field_ty_str.replace("%", ""));
-            self.prelude_code.add_line(format!("{} = extractvalue {} %a , {}", a_field, name, i));
-            self.prelude_code.add_line(format!("{} = extractvalue {} %b, {}", b_field, name, i));
-            self.prelude_code.add_line(format!("{} = call i1 {}.eq({} {}, {} {})",
-            this_eq,
-            field_prefix_str,
-            field_ty_str,
-            a_field,
-            field_ty_str,
-            b_field));
-            let on_ne = label_ids.next();
-            let on_eq = label_ids.next();
-            self.prelude_code.add_line(format!("br i1 {}, label {}, label {}", this_eq, on_eq, on_ne));
-            self.prelude_code.add_line(format!("{}:", on_ne.replace("%", "")));
-            self.prelude_code.add_line(format!("ret i1 0"));
-            self.prelude_code.add_line(format!("{}:", on_eq.replace("%", "")));
-        }
-        self.prelude_code.add_line(format!("ret i1 1"));
-        self.prelude_code.add_line(format!("}}"));
-        self.prelude_code.add_line(format!(""));
 
         // Add it into our map so we remember its name
         self.struct_names.insert(fields.clone(), name);
@@ -2636,6 +2799,24 @@ fn llvm_scalar_kind(k: ScalarKind) -> &'static str {
         U64 => "%u64",
         F32 => "float",
         F64 => "double",
+    }
+}
+
+/// Returns the LLVM equality function for the `ScalarKind` `k`.
+fn llvm_eq(k: ScalarKind) -> &'static str {
+    match k {
+        F32 | F64 => "oeq",
+        _ => "eq",
+    }
+}
+
+
+/// Returns the LLVM less than function for the `ScalarKind` `k`.
+fn llvm_lt(k: ScalarKind) -> &'static str {
+    match k {
+        F32 | F64 => "olt",
+        Bool | I8 | I16 | I32 | I64 => "slt",
+        U8 | U16 | U32 | U64 => "ult",
     }
 }
 
