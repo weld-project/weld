@@ -1154,21 +1154,21 @@ impl LlvmGenerator {
                 self.prelude_code.add_line(format!("ret i32 0"));
                 self.prelude_code.add_line(format!("}}"));
                 self.prelude_code.add_line(format!(""));
-			}
-			Scalar(ref scalar_ty) | Simd(ref scalar_ty) => {
-				let ll_ty = self.llvm_type(ty)?;
+            }
+            Scalar(ref scalar_ty) | Simd(ref scalar_ty) => {
+                let ll_ty = self.llvm_type(ty)?;
                 let ll_prefix = ll_ty.replace("%", "");
-				let ll_cmp = if scalar_ty.is_float() {
-					"fcmp"
-				} else {
-					"icmp"
-				};
+                let ll_cmp = if scalar_ty.is_float() {
+                    "fcmp"
+                } else {
+                    "icmp"
+                };
 
-				let ll_eq = llvm_eq(*scalar_ty);
-				let ll_lt = llvm_lt(*scalar_ty);
+                let ll_eq = llvm_eq(*scalar_ty);
+                let ll_lt = llvm_lt(*scalar_ty);
 
                 // Booleans are special cased.
-				if *scalar_ty != ScalarKind::Bool {
+                if *scalar_ty != ScalarKind::Bool {
                     self.prelude_code.add_line(format!("
                     define i32 @{ll_prefix}.cmp({ll_ty} %a, {ll_ty} %b) alwaysinline {{
                       %1 = {ll_cmp} {ll_eq} {ll_ty} %a, %b
@@ -1181,18 +1181,18 @@ impl LlvmGenerator {
                       ret i32 %3
                   }}",
                     ll_prefix=ll_prefix, ll_ty=ll_ty, ll_cmp=ll_cmp, ll_eq=ll_eq, ll_lt=ll_lt));
-				} else {
-					self.prelude_code.add(format!("
-					define i32 @i1.cmp(i1 %a, i1 %b) {{
-					  %1 = icmp eq i1 %a, %b
-					  br i1 %1, label %eq, label %ne
-					eq:
-					  ret i32 0
-					ne:
-					  %2 = select i1 %b, i32 -1, i32 1
-					  ret i32 %2
-					}}"));
-				}
+                } else {
+                    self.prelude_code.add(format!("
+                    define i32 @i1.cmp(i1 %a, i1 %b) {{
+                      %1 = icmp eq i1 %a, %b
+                      br i1 %1, label %eq, label %ne
+                    eq:
+                      ret i32 0
+                    ne:
+                      %2 = select i1 %b, i32 -1, i32 1
+                      ret i32 %2
+                    }}"));
+                }
             }
             Dict(_, _) => {
                 // Create a dummy comparison function for structs with the builder as a field.
@@ -1291,16 +1291,16 @@ impl LlvmGenerator {
                 self.prelude_code.add_line(format!("}}"));
                 self.prelude_code.add_line(format!(""));
             }
-			Scalar(ref scalar_ty) | Simd(ref scalar_ty) => {
-				let ll_ty = self.llvm_type(ty)?;
-				let ll_prefix = ll_ty.replace("%", "");
-				let ll_cmp = if scalar_ty.is_float() {
-					"fcmp"
-				} else {
-					"icmp"
-				};
+            Scalar(ref scalar_ty) | Simd(ref scalar_ty) => {
+                let ll_ty = self.llvm_type(ty)?;
+                let ll_prefix = ll_ty.replace("%", "");
+                let ll_cmp = if scalar_ty.is_float() {
+                    "fcmp"
+                } else {
+                    "icmp"
+                };
 
-				let ll_eq = llvm_eq(*scalar_ty);
+                let ll_eq = llvm_eq(*scalar_ty);
 
                 self.prelude_code.add_line(format!("
                     define i1 @{ll_prefix}.eq({ll_ty} %a, {ll_ty} %b) alwaysinline {{
@@ -1389,7 +1389,7 @@ impl LlvmGenerator {
                 self.prelude_code.add_line(format!("}}"));
                 self.prelude_code.add_line(format!(""));
             }
-			Scalar(_) | Simd(_) => {
+            Scalar(_) | Simd(_) => {
                 // These are pre-generated in the prelude.
             }
             Dict(_, _) => {
@@ -1448,10 +1448,10 @@ impl LlvmGenerator {
         let name = self.vec_ids.next();
         self.vec_names.insert(elem.clone(), name.clone());
 
-		self.prelude_code.add(format!(
+        self.prelude_code.add(format!(
             include_str!("resources/vector/vector.ll"),
-			ELEM=&elem_ty,
-			NAME=&name.replace("%", "")));
+            ELEM=&elem_ty,
+            NAME=&name.replace("%", "")));
         self.prelude_code.add("\n");
 
         // If the vector contains scalars only, add in SIMD extensions.
@@ -1541,18 +1541,18 @@ impl LlvmGenerator {
                 self.prelude_code.add(&dictmerger_def);
                 self.prelude_code.add("\n");
 
-				// Add the merge_op function for this dictmerger
-				let mut var_ids = IdGenerator::new("%t");
-				let mut merge_op_code = CodeBuilder::new();
-				merge_op_code.add(format!(
-					"define {} @{}.bld.merge_op({} %a, {} %b) alwaysinline {{",
-					value_ty, bld_ty_str.replace("%", ""), value_ty, value_ty));
-				let res = self.gen_merge_op_on_registers(
-					"%a", "%b", op, vt, &mut var_ids, &mut merge_op_code)?;
-				merge_op_code.add(format!("ret {} {}", value_ty, res));
-				merge_op_code.add("}");
-				self.prelude_code.add_code(&merge_op_code);
-				self.prelude_code.add("\n");
+                // Add the merge_op function for this dictmerger
+                let mut var_ids = IdGenerator::new("%t");
+                let mut merge_op_code = CodeBuilder::new();
+                merge_op_code.add(format!(
+                    "define {} @{}.bld.merge_op({} %a, {} %b) alwaysinline {{",
+                    value_ty, bld_ty_str.replace("%", ""), value_ty, value_ty));
+                let res = self.gen_merge_op_on_registers(
+                    "%a", "%b", op, vt, &mut var_ids, &mut merge_op_code)?;
+                merge_op_code.add(format!("ret {} {}", value_ty, res));
+                merge_op_code.add("}");
+                self.prelude_code.add_code(&merge_op_code);
+                self.prelude_code.add("\n");
 
                 self.bld_names.insert(bk.clone(), format!("{}.bld", bld_ty_str));
             }
@@ -1680,19 +1680,19 @@ impl LlvmGenerator {
     /// into it using a binary operation. `result_ptr` is the pointer into which the original value
     /// is read and the updated value will be stored. `merge_value` is the value to merge in, which
     /// should be a value in a register.
-	fn gen_merge_op(&mut self,
-					builder_ptr: &str,
-					merge_value: &str,
-					merge_ty_str: &str,
-					bin_op: &BinOpKind,
-					merge_ty: &Type,
-					ctx: &mut FunctionContext) -> WeldResult<()> {
-		let builder_value = self.gen_load_var(&builder_ptr, &merge_ty_str, ctx)?;
-		let result_reg = self.gen_merge_op_on_registers(
-			&builder_value, &merge_value, &bin_op, &merge_ty, &mut ctx.var_ids, &mut ctx.code)?;
-		self.gen_store_var(&result_reg, &builder_ptr, &merge_ty_str, ctx);
-		Ok(())
-	}
+    fn gen_merge_op(&mut self,
+                    builder_ptr: &str,
+                    merge_value: &str,
+                    merge_ty_str: &str,
+                    bin_op: &BinOpKind,
+                    merge_ty: &Type,
+                    ctx: &mut FunctionContext) -> WeldResult<()> {
+        let builder_value = self.gen_load_var(&builder_ptr, &merge_ty_str, ctx)?;
+        let result_reg = self.gen_merge_op_on_registers(
+            &builder_value, &merge_value, &bin_op, &merge_ty, &mut ctx.var_ids, &mut ctx.code)?;
+        self.gen_store_var(&result_reg, &builder_ptr, &merge_ty_str, ctx);
+        Ok(())
+    }
 
 
     /// Generate code to perform a unary operation on `child` and store the result in `output` (which should
@@ -2153,7 +2153,7 @@ impl LlvmGenerator {
                         let item_stack = ctx.var_ids.next();
                         ctx.add_alloca(&item_stack, &item_ll_ty)?;
                         let item_stack_sym = Symbol::new(&item_stack.replace("%", ""), 0);
-						self.gen_store_var(&item_tmp, &item_stack, &item_ll_ty, ctx);
+                        self.gen_store_var(&item_tmp, &item_stack, &item_ll_ty, ctx);
                         self.gen_merge(builder_kind, builder, &item_ty, &item_stack_sym, func, ctx)?;
                     }
                 }
