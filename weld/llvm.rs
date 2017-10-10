@@ -1052,10 +1052,10 @@ impl LlvmGenerator {
             Dict(ref key, ref value) => {
                 let elem = Box::new(Struct(vec![*key.clone(), *value.clone()]));
                 if self.dict_names.get(&elem) == None {
+                    self.gen_dict_definition(key, value)?;
                     // Generate a hash function and equality function for the key.
                     self.gen_hash(key)?;
                     self.gen_eq(key)?;
-                    self.gen_dict_definition(key, value)?;
                 }
                 self.dict_names.get(&elem).unwrap().to_string()
             }
@@ -1091,6 +1091,8 @@ impl LlvmGenerator {
             helper_state.cmp_func = true;
         } // these braces are necessary so the borrow for `helper_state` ends.
 
+        // Make sure the type is generated.
+        let _ = self.llvm_type(ty)?;
         match *ty {
             Struct(ref fields) => {
                 // Create comparison functions for each of the nested types.
@@ -1232,6 +1234,8 @@ impl LlvmGenerator {
             helper_state.eq_func = true;
         } // these braces are necessary so the borrow for `helper_state` ends.
 
+        // Make sure the type is generated.
+        let _ = self.llvm_type(ty)?;
         match *ty {
             Struct(ref fields) => {
                 // Create comparison functions for each of the nested types.
@@ -1326,6 +1330,8 @@ impl LlvmGenerator {
             helper_state.hash_func = true;
         } // these braces are necessary so the borrow for `helper_state` ends.
 
+        // Make sure the type is generated.
+        let _ = self.llvm_type(ty)?;
         match *ty {
             Struct(ref fields) => {
                 // Create comparison functions for each of the nested types.
