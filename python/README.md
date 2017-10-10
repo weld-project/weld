@@ -44,7 +44,7 @@ $ cd grizzly; python setup.py develop; cd ..
 
 Otherwise, run:
 ```bash
-# cd grizzly; python setup.py install; cd ..
+$ cd grizzly; python setup.py install; cd ..
 ```
 
 Grizzly is packaged as a source dstribution and so will include `numpy_weld_convertor.cpp`, `common.h`, and `Makefile`.
