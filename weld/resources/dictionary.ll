@@ -56,23 +56,6 @@ define %{NAME} @{NAME}.clone(%{NAME} %dict) {{
   ret %{NAME} %dict3
 }}
 
-; Dummy hash function; this is needed for structs that use these dictionaries as fields,
-; but it doesn't yet work! (Or technically it does, but is a very poor function.)
-define i32 @{NAME}.hash(%{NAME} %dict) {{
-  ret i32 0
-}}
-
-; Dummy comparison function; this is needed for structs that use these dictionaries as fields,
-; but it doesn't yet work!
-define i32 @{NAME}.cmp(%{NAME} %dict1, %{NAME} %dict2) {{
-  ret i32 -1
-}}
-
-; Dummy equality function (should call cmp when that is fully implemented)
-define i1 @{NAME}.eq(%{NAME} %dict1, %{NAME} %dict2) {{
-  ret i1 0
-}}
-
 ; Get the size of a dictionary.
 define i64 @{NAME}.size(%{NAME} %dict) {{
   %size = extractvalue %{NAME} %dict, 1
