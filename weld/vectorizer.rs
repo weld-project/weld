@@ -92,20 +92,13 @@ fn vectorize_expr(e: &mut Expr<Type>, broadcast_idens: &HashSet<Symbol>) -> Weld
 /// expressions which appear in a function body are vectorizable expressions (see
 /// `docs/vectorization.md` for details)
 fn vectorizable(for_loop: &Expr<Type>) -> WeldResult<HashSet<Symbol>> {
-    if let For {
-               ref iters,
-               builder: ref init_builder,
-               ref func,
-           } = for_loop.kind {
+    if let For { ref iters, builder: ref init_builder, ref func } = for_loop.kind {
         // Check if the iterators are consumed.
         if vectorizable_iters(&iters) {
             // Check if the builder is newly initialized.
             if let NewBuilder(_) = init_builder.kind {
                 // Check the loop function.
-                if let Lambda {
-                           ref params,
-                           ref body,
-                       } = func.kind {
+                if let Lambda { ref params, ref body } = func.kind {
                     let mut passed = true;
 
                     // Identifiers defined within the loop.
@@ -252,18 +245,15 @@ pub fn get_id_element(ty: &Type, op: &BinOpKind) -> WeldResult<Option<Expr<Type>
 fn make_select_for_kv(cond:  Expr<Type>,
                       kv:    Expr<Type>,
                       ident: Expr<Type>) -> WeldResult<Option<Expr<Type>>> {
-    if let MakeStruct{ ref elems } = kv.kind {
-        let mut sym_gen = SymbolGenerator::from_expression(&kv);
-        let name = sym_gen.new_symbol("k");
-        let kv_true = exprs::makestruct_expr(vec![elems[0].clone(), elems[1].clone()])?;
-        let kv_ident = exprs::makestruct_expr(vec![elems[0].clone(), ident])?;
-            
-        let sel = exprs::select_expr(cond, kv_true, kv_ident)?;
-        let le = exprs::let_expr(name, kv.clone(), sel)?; /* avoid copying key */
-        return Ok(Some(le))
-    }
-
-    Ok(None)
+    let mut sym_gen = SymbolGenerator::from_expression(&kv);
+    let name = sym_gen.new_symbol("k");
+    
+    let kv_struct = exprs::ident_expr(name.clone(), kv.ty.clone())?;
+    let kv_ident = exprs::makestruct_expr(vec![exprs::getfield_expr(kv_struct.clone(), 0)?, ident])?; // use the original key and the identity as the value
+    
+    let sel = exprs::select_expr(cond, kv_struct, kv_ident)?;
+    let le = exprs::let_expr(name, kv, sel)?; /* avoid copying key */
+    return Ok(Some(le))
 }
 
 /// Predicate an `If` expression by checking for if(cond, merge(b, e), b) and transforms it to merge(b, select(cond, e,identity)).
@@ -274,15 +264,8 @@ pub fn predicate(e: &mut Expr<Type>) {
         }
 
         // Predication for a value merged into a merger. This pattern checks for if(cond, merge(b, e), b).
-        if let If {
-                   ref cond,
-                   ref on_true,
-                   ref on_false,
-               } = e.kind {
-            if let Merge {
-                       ref builder,
-                       ref value,
-                   } = on_true.kind {
+        if let If { ref cond, ref on_true, ref on_false } = e.kind {
+            if let Merge { ref builder, ref value } = on_true.kind {
                 if let Ident(ref name) = on_false.kind {
                     if let Ident(ref name2) = builder.kind {
                         if name == name2 {
@@ -315,9 +298,9 @@ pub fn predicate(e: &mut Expr<Type>) {
                                             BuilderKind::DictMerger(_, _, _) => {
                                                 /* For dictmerger, need to match identity element 
                                                 back to the key. */
-                                                let mut sel_expr = make_select_for_kv(*cond.clone(),
-                                                                                      *value.clone(),
-                                                                                      x)?;
+                                                let sel_expr = make_select_for_kv(*cond.clone(),
+                                                                                  *value.clone(),
+                                                                                  x)?;
                                                 return Ok((sel_expr, true))
                                             }
                                             _ => {
@@ -348,16 +331,9 @@ pub fn vectorize(expr: &mut Expr<Type>) {
         //  loops for now.
         if let Res { builder: ref for_loop } = expr.kind {
             let ref broadcast_idens = vectorizable(for_loop)?;
-            if let For {
-                       ref iters,
-                       builder: ref init_builder,
-                       ref func,
-                   } = for_loop.kind {
+            if let For { ref iters, builder: ref init_builder, ref func } = for_loop.kind {
                 if let NewBuilder(_) = init_builder.kind {
-                    if let Lambda {
-                               ref params,
-                               ref body,
-                           } = func.kind {
+                    if let Lambda { ref params, ref body } = func.kind {
                         // This is the vectorized body.
                         let mut vectorized_body = body.clone();
                         vectorized_body.transform_and_continue(&mut |ref mut e| {

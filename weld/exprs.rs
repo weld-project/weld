@@ -29,7 +29,7 @@ pub fn literal_expr(kind: LiteralKind) -> WeldResult<Expr<Type>> {
                         U64Literal(_) => ScalarKind::U64,
                         F32Literal(_) => ScalarKind::F32,
                         F64Literal(_) => ScalarKind::F64,
-                    }))
+             }))
 }
 
 pub fn ident_expr(symbol: Symbol, ty: Type) -> WeldResult<Expr<Type>> {
@@ -55,8 +55,7 @@ pub fn unaryop_expr(kind: UnaryOpKind, value: Expr<Type>) -> WeldResult<Expr<Typ
     new_expr(UnaryOp {
                  kind: kind,
                  value: Box::new(value),
-             },
-             ty)
+             }, ty)
 }
 
 pub fn cast_expr(kind: ScalarKind, expr: Expr<Type>) -> WeldResult<Expr<Type>> {
@@ -336,10 +335,7 @@ pub fn newbuilder_expr(kind: BuilderKind, expr: Option<Expr<Type>>) -> WeldResul
 // TODO - the vectorized flag is temporary!
 pub fn for_expr(iters: Vec<Iter<Type>>, builder: Expr<Type>, func: Expr<Type>, vectorized: bool) -> WeldResult<Expr<Type>> {
 
-    let vec_tys = iters
-        .iter()
-        .map(|i| i.data.ty.clone())
-        .collect::<Vec<_>>();
+    let vec_tys = iters.iter().map(|i| i.data.ty.clone()).collect::<Vec<_>>();
     let mut vec_elem_tys = vec![];
     for ty in vec_tys.iter() {
         if let Vector(ref elem_ty) = *ty {
