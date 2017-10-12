@@ -5,21 +5,31 @@ class weldarray_view():
     '''
     This can be either a parent or a child.
     '''
-    def __init__(self, base_array, parent, start, end, idx):
+    def __init__(self, base_array, parent, idx):
         '''
-        TODO: Need to add more stuff / generalize to nd case.
         TODO: Can also just use w.base instead of storing base_array here.
         @base_array: base array from which all views are derived.
-        @parent: direct parent from which this view is generated.
-        @start:  starting index of view in base_array.
-        @end:    ending index of view in base_array.
-        @idx:    the slicing notation used to generate the view.
+        @parent: direct parent from which this view is generated. It is convenient to store this
+        for evaluation.
+        @segments: list of segments (of the parent array) that belong to this view.
+        @idx: the slicing notation used to generate the view (from the parent) - for convenience in
+        _eval.
         '''
         self.base_array = base_array
         self.parent = parent
-        self.start = start
-        self.end = end
         self.idx = idx
+        # FIXME: need to have an absolute start for this welview in the parent.  does not need to
+        # be here! Can just be a separate field in the weldarray, because not only views would have
+        # it.
+
+class segment():
+    '''
+    represents one segment of a view
+    '''
+    def __init__(self, start, stop, step):
+        self.start = start
+        self.stop = stop
+        self.step = step
 
 def is_view_child(view, par):
     '''
@@ -74,7 +84,7 @@ def get_supported_types():
 
 def get_supported_suffixes():
     '''
-    Right now weld supports int32, int64, float32, float64.      
+    Right now weld supports int32, int64, float32, float64.
     '''
     suffixes = {}
     suffixes['i32'] = ''
