@@ -34,6 +34,10 @@ impl fmt::Display for ReplCommands {
     }
 }
 
+/// Process teh `SetConf` command.
+///
+/// The argument is a key/value pair. The command sets the key/value pair for the REPL's
+/// configuration.
 fn process_setconf(conf: *mut WeldConf, key: String, value: String) {
     let key = CString::new(key).unwrap();
     let value = CString::new(value).unwrap();
@@ -42,6 +46,10 @@ fn process_setconf(conf: *mut WeldConf, key: String, value: String) {
     }
 }
 
+/// Process teh `GetConf` command.
+///
+/// The argument is a key in the configuration. The command returns the value of the key or `None`
+/// if no value is set.
 fn process_getconf(conf: *mut WeldConf, key: String) -> Option<String> {
     let key = CString::new(key).unwrap();
     unsafe {
