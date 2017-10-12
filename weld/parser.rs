@@ -23,18 +23,31 @@ use super::program::*;
 use super::tokenizer::*;
 use super::tokenizer::Token::*;
 
+use std::error::Error;
+
 #[cfg(test)]
 use super::pretty_print::*;
+
+/// Returns a formatted parse error if the parse failed, or returns the `res`.
+macro_rules! check_parse_error {
+    ($parser:expr, $res:expr) => ({
+        if $res.is_ok() && !$parser.is_done() {
+            return weld_err!("Unexpected token {} at {}", $parser.peek(), $parser.error_context());
+        } else if $res.is_err() {
+            return weld_err!("{} (at {})", $res.unwrap_err().description(), $parser.error_context());
+        } else {
+            $res
+        }
+    })
+}
 
 /// Parse the complete input string as a Weld program (optional macros plus one expression).
 pub fn parse_program(input: &str) -> WeldResult<Program> {
     let tokens = try!(tokenize(input));
     let mut parser = Parser::new(&tokens);
     let res = parser.program();
-    if res.is_ok() && !parser.is_done() {
-        return weld_err!("Unexpected token: {}", parser.peek());
-    }
-    res
+
+    check_parse_error!(parser, res)
 }
 
 /// Parse the complete input string as a list of macros.
@@ -42,10 +55,8 @@ pub fn parse_macros(input: &str) -> WeldResult<Vec<Macro>> {
     let tokens = try!(tokenize(input));
     let mut parser = Parser::new(&tokens);
     let res = parser.macros();
-    if res.is_ok() && !parser.is_done() {
-        return weld_err!("Unexpected token: {}", parser.peek());
-    }
-    res
+
+    check_parse_error!(parser, res)
 }
 
 /// Parse the complete input string as an expression.
@@ -53,10 +64,8 @@ pub fn parse_expr(input: &str) -> WeldResult<PartialExpr> {
     let tokens = try!(tokenize(input));
     let mut parser = Parser::new(&tokens);
     let res = parser.expr().map(|b| *b);
-    if res.is_ok() && !parser.is_done() {
-        return weld_err!("Unexpected token: {}", parser.peek());
-    }
-    res
+
+    check_parse_error!(parser, res)
 }
 
 /// Parse the complete input string as a PartialType.
@@ -64,10 +73,8 @@ pub fn parse_type(input: &str) -> WeldResult<PartialType> {
     let tokens = try!(tokenize(input));
     let mut parser = Parser::new(&tokens);
     let res = parser.type_();
-    if res.is_ok() && !parser.is_done() {
-        return weld_err!("Unexpected token: {}", parser.peek());
-    }
-    res
+
+    check_parse_error!(parser, res)
 }
 
 /// A stateful object that parses a sequence of tokens, tracking its position at each point.
@@ -88,6 +95,33 @@ impl<'t> Parser<'t> {
     /// Look at the next token to be parsed.
     fn peek(&self) -> &'t Token {
         &self.tokens[self.position]
+    }
+
+    /// Returns a string representing a context in the input.
+    fn error_context(&self) -> String {
+        let length = 10;
+        let mut string = String::from("");
+        let context_length = if self.position >= length {
+            string.push_str("...");
+            length
+        } else {
+            self.position
+        };
+
+        for i in (self.position - context_length)..self.position {
+            string.push_str(format!("{}", &self.tokens[i]).as_str());
+            if i != self.position - 1 && self.tokens[i+1].requires_space() {
+                if self.tokens[i].requires_space() {
+                    string.push_str(" ");
+                }
+            }
+        }
+
+        if self.position != self.tokens.len() {
+            string.push_str("...");
+        }
+
+        string
     }
 
     /// Consume and return the next token.
