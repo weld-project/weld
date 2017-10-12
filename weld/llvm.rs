@@ -3180,6 +3180,19 @@ fn predicate_iff_annotated() {
                expected);
 }
 
+
+#[test]
+fn predicate_dictmerger() {
+    /* Ensure predication is applied to mergers other than Merger. */
+
+    let code = "|v:vec[i32]| result(for(v, dictmerger[{i32, i32},i32,+], |b,i,e| @(predicate:true)if(e>0, merge(b,{{e,e},e*2}), b)))";
+    let typed_e = predicate_only(code);
+    assert!(typed_e.is_ok());
+    let expected = "|v:vec[i32]|result(for(v:vec[i32],dictmerger[{i32,i32},i32,+],|b:dictmerger[{i32,i32},i32,+],i:i64,e:i32|(let k:{{i32,i32},i32}=({{e:i32,e:i32},(e:i32*2)});select((e:i32>0),k:{{i32,i32},i32},{k:{{i32,i32},i32}.$0,0}))))";
+    assert_eq!(expected,
+               print_typed_expr_without_indent(&typed_e.unwrap()).as_str());
+}
+
 #[test]
 fn types() {
     let mut gen = LlvmGenerator::new();

@@ -19,7 +19,7 @@ use super::parser::*;
 use super::type_inference::*;
 
 /// Returns `true` if this is a set of iterators we can vectorize, `false` otherwise.
-/// 
+///
 /// We can vectorize an iterator if all of its iterators consume the entire collection.
 fn vectorizable_iters(iters: &Vec<Iter<Type>>) -> bool {
     for ref iter in iters {
@@ -27,8 +27,8 @@ fn vectorizable_iters(iters: &Vec<Iter<Type>>) -> bool {
             return false;
         }
         if let Vector(ref elem_ty) = iter.data.ty {
-            if let Scalar(_) = *elem_ty.as_ref() {}
-            else {
+            if let Scalar(_) = *elem_ty.as_ref() {
+            } else {
                 return false;
             }
         }
@@ -78,7 +78,7 @@ fn vectorize_expr(e: &mut Expr<Type>, broadcast_idens: &HashSet<Symbol>) -> Weld
         MakeStruct { .. } => {
             e.ty = e.ty.simd_type()?;
         }
-        _ => {},
+        _ => {}
     }
 
     if new_expr.is_some() {
@@ -90,7 +90,7 @@ fn vectorize_expr(e: &mut Expr<Type>, broadcast_idens: &HashSet<Symbol>) -> Weld
 
 /// Checks basic vectorizability for a loop - this is a strong check which ensure that the only
 /// expressions which appear in a function body are vectorizable expressions (see
-/// `docs/vectorization.md` for details) 
+/// `docs/vectorization.md` for details)
 fn vectorizable(for_loop: &Expr<Type>) -> WeldResult<HashSet<Symbol>> {
     if let For { ref iters, builder: ref init_builder, ref func } = for_loop.kind {
         // Check if the iterators are consumed.
@@ -111,30 +111,30 @@ fn vectorizable(for_loop: &Expr<Type>) -> WeldResult<HashSet<Symbol>> {
                     body.traverse(&mut |f| {
                         if passed {
                             match f.kind {
-                                Literal(_) => {},
+                                Literal(_) => {}
 
                                 Ident(ref name) => {
                                     if f.ty == params[1].ty && *name == params[1].name {
                                         // Used an index expression in the loop body.
                                         passed = false;
                                     }
-                                },
+                                }
 
-                                UnaryOp{ .. } => {},
-                                BinOp{ .. } => {},
+                                UnaryOp { .. } => {}
+                                BinOp { .. } => {}
 
-                                Let{ ref name, .. } => {
-                                    defined_in_loop.insert(name.clone()); 
-                                },
+                                Let { ref name, .. } => {
+                                    defined_in_loop.insert(name.clone());
+                                }
 
                                 // TODO: do we want to allow all GetFields and MakeStructs, or look inside them?
-                                GetField { .. } => {},
+                                GetField { .. } => {}
 
-                                MakeStruct { .. } => {},
+                                MakeStruct { .. } => {}
 
-                                Merge { .. } => {},
+                                Merge { .. } => {}
 
-                                Select { .. } => {},
+                                Select { .. } => {}
 
                                 _ => {
                                     passed = false;
@@ -150,17 +150,18 @@ fn vectorizable(for_loop: &Expr<Type>) -> WeldResult<HashSet<Symbol>> {
                     // If the data in the vector is not a Scalar, we can't vectorize it.
                     let mut check_arg_ty = false;
                     if let Scalar(_) = params[2].ty {
-                        check_arg_ty = true; 
-                    } 
-                    else if let Struct(ref field_tys) = params[2].ty {
-                        if field_tys.iter().all(|t| match *t {
-                            Scalar(_) => true,
-                            _ => false
-                        }) {
+                        check_arg_ty = true;
+                    } else if let Struct(ref field_tys) = params[2].ty {
+                        if field_tys
+                               .iter()
+                               .all(|t| match *t {
+                                        Scalar(_) => true,
+                                        _ => false,
+                                    }) {
                             check_arg_ty = true;
                         }
-                    } 
-                    
+                    }
+
                     if !check_arg_ty {
                         return weld_err!("Unsupported type");
                     }
@@ -170,18 +171,16 @@ fn vectorizable(for_loop: &Expr<Type>) -> WeldResult<HashSet<Symbol>> {
                     // Check if there are identifiers defined outside the loop. If so, we need to
                     // broadcast them to vectorize them.
                     let mut passed = true;
-                    body.traverse(&mut |e| {
-                        match e.kind {
-                            Ident(ref name) if !defined_in_loop.contains(name) => {
-                                if let Scalar(_) = e.ty {
-                                    idens.insert(name.clone());
-                                } else {
-                                    passed = false;
-                                }
-                            }
-                            _ => {}
-                        }
-                    });
+                    body.traverse(&mut |e| match e.kind {
+                                           Ident(ref name) if !defined_in_loop.contains(name) => {
+                                               if let Scalar(_) = e.ty {
+                                                   idens.insert(name.clone());
+                                               } else {
+                                                   passed = false;
+                                               }
+                                           }
+                                           _ => {}
+                                       });
 
                     if !passed {
                         return weld_err!("Unsupporte pattern: non-scalar identifier that must be broadcast");
@@ -197,11 +196,18 @@ fn vectorizable(for_loop: &Expr<Type>) -> WeldResult<HashSet<Symbol>> {
 pub fn should_be_predicated(e: &mut Expr<Type>) -> bool {
     match *(e.annotations.predicate()) {
         Some(false) | None => false,
-        _ => true
+        _ => true,
     }
 }
 
-pub fn get_id_element(sk: &ScalarKind, op: &BinOpKind) -> WeldResult<Option<Expr<Type>>> {
+pub fn get_id_element(ty: &Type, op: &BinOpKind) -> WeldResult<Option<Expr<Type>>> {
+    let ref sk = match *ty {
+        Scalar(sk) => sk,
+        _ => {
+            return Ok(None);
+        }
+    };
+
     /* Dummy element to merge when predicate fails. */
     let identity = match *op {
         BinOpKind::Add => {
@@ -232,8 +238,22 @@ pub fn get_id_element(sk: &ScalarKind, op: &BinOpKind) -> WeldResult<Option<Expr
             return Ok(None);
         }
     };
-    
+
     Ok(Some(identity))
+}
+
+fn make_select_for_kv(cond:  Expr<Type>,
+                      kv:    Expr<Type>,
+                      ident: Expr<Type>) -> WeldResult<Option<Expr<Type>>> {
+    let mut sym_gen = SymbolGenerator::from_expression(&kv);
+    let name = sym_gen.new_symbol("k");
+    
+    let kv_struct = exprs::ident_expr(name.clone(), kv.ty.clone())?;
+    let kv_ident = exprs::makestruct_expr(vec![exprs::getfield_expr(kv_struct.clone(), 0)?, ident])?; // use the original key and the identity as the value
+    
+    let sel = exprs::select_expr(cond, kv_struct, kv_ident)?;
+    let le = exprs::let_expr(name, kv, sel)?; /* avoid copying key */
+    return Ok(Some(le))
 }
 
 /// Predicate an `If` expression by checking for if(cond, merge(b, e), b) and transforms it to merge(b, select(cond, e,identity)).
@@ -242,7 +262,7 @@ pub fn predicate(e: &mut Expr<Type>) {
         if !(should_be_predicated(e)) {
             return Ok((None, true));
         }
-        
+
         // Predication for a value merged into a merger. This pattern checks for if(cond, merge(b, e), b).
         if let If { ref cond, ref on_true, ref on_false } = e.kind {
             if let Merge { ref builder, ref value } = on_true.kind {
@@ -250,22 +270,49 @@ pub fn predicate(e: &mut Expr<Type>) {
                     if let Ident(ref name2) = builder.kind {
                         if name == name2 {
                             if let Builder(ref bk, _) = builder.ty {
-                                if let BuilderKind::Merger(ref ty, ref op) = *bk {
-                                    if let Scalar(ref sk) = *ty.as_ref() {
-                                        // Merge in the identity element if the predicate fails (effectively merging in nothing)
-                                        let identity = get_id_element(sk, op)?;
-                                        let id_value = match identity {
-                                            Some(x) => x,
-                                            None => {
+                                // Merge in the identity element if the predicate fails (effectively merging in nothing)
+                                let (ty, op) = match *bk {
+                                    BuilderKind::Merger(ref ty, ref op) => (ty, op),
+                                    BuilderKind::DictMerger(_, ref ty2, ref op) => (ty2, op),
+                                    BuilderKind::VecMerger(ref ty, ref op) => (ty, op),
+                                    _ => {
+                                        return Ok((None, true));
+                                    }
+                                };
+
+                                let identity = get_id_element(ty.as_ref(), op)?;
+                                match identity {
+                                    Some(x) => {
+                                        match *bk {
+                                            BuilderKind::Merger(_, _)
+                                                | BuilderKind::VecMerger(_, _) => {
+                                                /* Change if(cond, merge(b, e), b) => 
+                                                merge(b, select(cond, e, identity). */
+                                                let expr = exprs::merge_expr(*builder.clone(),
+                                                                             exprs::select_expr(
+                                                                                 *cond.clone(),
+                                                                                 *value.clone(), x)?)?;
+                                                return Ok((Some(expr), true));
+                                                
+                                            },
+                                            BuilderKind::DictMerger(_, _, _) => {
+                                                /* For dictmerger, need to match identity element 
+                                                back to the key. */
+                                                let sel_expr = make_select_for_kv(*cond.clone(),
+                                                                                  *value.clone(),
+                                                                                  x)?;
+                                                return Ok((sel_expr, true))
+                                            }
+                                            _ => {
                                                 return Ok((None, true));
                                             }
-                                        };
-                                        
-                                        // Change if(cond, merge(b, e), b) => merge(b, select(cond, e, identity).
-                                        let expr = exprs::merge_expr(*builder.clone(), exprs::select_expr(*cond.clone(), *value.clone(), id_value)?)?;
-                                        return Ok((Some(expr), true));
+                                        }
                                     }
-                                }
+                                    None => {
+                                        return Ok((None, true));
+                                    }
+                                };
+
                             }
                         }
                     }
@@ -290,9 +337,9 @@ pub fn vectorize(expr: &mut Expr<Type>) {
                         // This is the vectorized body.
                         let mut vectorized_body = body.clone();
                         vectorized_body.transform_and_continue(&mut |ref mut e| {
-                            let cont = vectorize_expr(e, broadcast_idens).unwrap();
-                            (None, cont)
-                        });
+                                                                        let cont = vectorize_expr(e, broadcast_idens).unwrap();
+                                                                        (None, cont)
+                                                                    });
 
                         let mut vectorized_params = params.clone();
                         vectorized_params[2].ty = vectorized_params[2].ty.simd_type()?;
@@ -304,31 +351,33 @@ pub fn vectorize(expr: &mut Expr<Type>) {
                         // create the identifiers which refer to the data items.
                         let mut sym_gen = SymbolGenerator::from_expression(expr);
 
-                        let data_names = iters.iter().map(|_| {
-                            sym_gen.new_symbol("a")
-                        })
-                        .collect::<Vec<_>>();
+                        let data_names = iters
+                            .iter()
+                            .map(|_| sym_gen.new_symbol("a"))
+                            .collect::<Vec<_>>();
 
                         // Iterators for the vectorized loop.
                         let mut vec_iters = vec![];
                         for (e, n) in iters.iter().zip(&data_names) {
-                            vec_iters.push(
-                                Iter {
-                                    data: Box::new(exprs::ident_expr(n.clone(), e.data.ty.clone())?),
-                                    start: e.start.clone(),
-                                    end: e.end.clone(),
-                                    stride: e.stride.clone(),
-                                    kind: IterKind::SimdIter,
-                                });
+                            vec_iters.push(Iter {
+                                               data: Box::new(exprs::ident_expr(n.clone(), e.data.ty.clone())?),
+                                               start: e.start.clone(),
+                                               end: e.end.clone(),
+                                               stride: e.stride.clone(),
+                                               kind: IterKind::SimdIter,
+                                           });
                         }
 
                         // Iterators for the fringe loop. This is the same set of iterators, but with the
                         // IteratorKind changed to Fringe.
-                        let fringe_iters = vec_iters.iter_mut().map(|i| {
-                            let mut i = i.clone();
-                            i.kind = IterKind::FringeIter;
-                            i
-                        }).collect();
+                        let fringe_iters = vec_iters
+                            .iter_mut()
+                            .map(|i| {
+                                     let mut i = i.clone();
+                                     i.kind = IterKind::FringeIter;
+                                     i
+                                 })
+                            .collect();
 
                         let vectorized_loop = exprs::for_expr(vec_iters, *init_builder.clone(), vec_func, true)?;
                         let scalar_loop = exprs::for_expr(fringe_iters, vectorized_loop, *func.clone(), false)?;
@@ -363,26 +412,22 @@ fn typed_expr(code: &str) -> TypedExpr {
 #[cfg(test)]
 pub fn has_vectorized_merge(expr: &TypedExpr) -> bool {
     let mut found = false;
-    expr.traverse(&mut |ref e| {
-        if let Merge { ref value, .. } = e.kind {
-            found |= value.ty.is_simd();
-        }
-    });
+    expr.traverse(&mut |ref e| if let Merge { ref value, .. } = e.kind {
+                           found |= value.ty.is_simd();
+                       });
     found
 }
 
 #[test]
 fn simple_merger() {
-    let mut e = typed_expr(
-        "|v:vec[i32]| result(for(v, merger[i32,+], |b,i,e| merge(b,e+1)))");
+    let mut e = typed_expr("|v:vec[i32]| result(for(v, merger[i32,+], |b,i,e| merge(b,e+1)))");
     vectorize(&mut e);
     assert!(has_vectorized_merge(&e));
 }
 
 #[test]
 fn predicated_merger() {
-    let mut e = typed_expr(
-        "|v:vec[i32]| result(for(v, merger[i32,+], |b,i,e| @(predicate:true)if(e>0, merge(b,e), b)))");
+    let mut e = typed_expr("|v:vec[i32]| result(for(v, merger[i32,+], |b,i,e| @(predicate:true)if(e>0, merge(b,e), b)))");
     predicate(&mut e);
     vectorize(&mut e);
     assert!(has_vectorized_merge(&e));
@@ -391,16 +436,14 @@ fn predicated_merger() {
 #[test]
 fn unpredicated_merger() {
     // This one shouldn't be vectorized since we didn't predicate it.
-    let mut e = typed_expr(
-        "|v:vec[i32]| result(for(v, merger[i32,+], |b,i,e| if(e>0, merge(b,e), b)))");
+    let mut e = typed_expr("|v:vec[i32]| result(for(v, merger[i32,+], |b,i,e| if(e>0, merge(b,e), b)))");
     vectorize(&mut e);
     assert!(!has_vectorized_merge(&e));
 }
 
 #[test]
 fn simple_appender() {
-    let mut e = typed_expr(
-        "|v:vec[i32]| result(for(v, appender[i32], |b,i,e| merge(b,e+1)))");
+    let mut e = typed_expr("|v:vec[i32]| result(for(v, appender[i32], |b,i,e| merge(b,e+1)))");
     vectorize(&mut e);
     assert!(has_vectorized_merge(&e));
 }
@@ -408,8 +451,7 @@ fn simple_appender() {
 #[test]
 fn predicated_appender() {
     // This code should NOT be vectorized because we can't predicate merges into vecbuilder.
-    let mut e = typed_expr(
-        "|v:vec[i32]| result(for(v, appender[i32], |b,i,e| @(predicate:true)if(e>0, merge(b,e), b)))");
+    let mut e = typed_expr("|v:vec[i32]| result(for(v, appender[i32], |b,i,e| @(predicate:true)if(e>0, merge(b,e), b)))");
     predicate(&mut e);
     vectorize(&mut e);
     assert!(!has_vectorized_merge(&e));
@@ -418,8 +460,7 @@ fn predicated_appender() {
 #[test]
 fn non_vectorizable_type() {
     // This code should NOT be vectorized because we can't vectorize merges of vectors.
-    let mut e = typed_expr(
-        "|v:vec[i32]| result(for(v, appender[vec[i32]], |b,i,e| merge(b,v)))");
+    let mut e = typed_expr("|v:vec[i32]| result(for(v, appender[vec[i32]], |b,i,e| merge(b,v)))");
     vectorize(&mut e);
     assert!(!has_vectorized_merge(&e));
 }
@@ -427,24 +468,21 @@ fn non_vectorizable_type() {
 #[test]
 fn non_vectorizable_expr() {
     // This code should NOT be vectorized because we can't vectorize lookup().
-    let mut e = typed_expr(
-        "|v:vec[i32]| result(for(v, appender[i32], |b,i,e| merge(b,lookup(v,i))))");
+    let mut e = typed_expr("|v:vec[i32]| result(for(v, appender[i32], |b,i,e| merge(b,lookup(v,i))))");
     vectorize(&mut e);
     assert!(!has_vectorized_merge(&e));
 }
 
 #[test]
 fn zipped_input() {
-    let mut e = typed_expr(
-        "|v:vec[i32]| result(for(zip(v,v), appender[i32], |b,i,e| merge(b,e.$0+e.$1)))");
+    let mut e = typed_expr("|v:vec[i32]| result(for(zip(v,v), appender[i32], |b,i,e| merge(b,e.$0+e.$1)))");
     vectorize(&mut e);
     assert!(has_vectorized_merge(&e));
 }
 
 #[test]
 fn zips_in_body() {
-    let mut e = typed_expr(
-        "|v:vec[i32]| result(for(v, dictmerger[{i32,i32},i32,+], |b,i,e| merge(b,{{e,e},e})))");
+    let mut e = typed_expr("|v:vec[i32]| result(for(v, dictmerger[{i32,i32},i32,+], |b,i,e| merge(b,{{e,e},e})))");
     vectorize(&mut e);
     assert!(has_vectorized_merge(&e));
 }
