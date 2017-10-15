@@ -90,7 +90,7 @@ fn vectorize_expr(e: &mut Expr<Type>, broadcast_idens: &HashSet<Symbol>) -> Weld
 
 /// Checks basic vectorizability for a loop - this is a strong check which ensure that the only
 /// expressions which appear in a function body are vectorizable expressions (see
-/// `docs/vectorization.md` for details)
+/// `docs/internals/vectorization.md` for details)
 fn vectorizable(for_loop: &Expr<Type>) -> WeldResult<HashSet<Symbol>> {
     if let For { ref iters, builder: ref init_builder, ref func } = for_loop.kind {
         // Check if the iterators are consumed.
