@@ -34,7 +34,7 @@ impl fmt::Display for ReplCommands {
     }
 }
 
-/// Process teh `SetConf` command.
+/// Process the `SetConf` command.
 ///
 /// The argument is a key/value pair. The command sets the key/value pair for the REPL's
 /// configuration.
@@ -46,7 +46,7 @@ fn process_setconf(conf: *mut WeldConf, key: String, value: String) {
     }
 }
 
-/// Process teh `GetConf` command.
+/// Process the `GetConf` command.
 ///
 /// The argument is a key in the configuration. The command returns the value of the key or `None`
 /// if no value is set.
@@ -105,7 +105,7 @@ fn process_loadfile(arg: String) -> Result<String, String> {
 fn main() {
     weld_set_log_level(WeldLogLevel::Debug);
 
-    // This is the  conf we use for compilation.
+    // This is the conf we use for compilation.
     let conf = weld_conf_new();
 
     let home_path = env::home_dir().unwrap_or(PathBuf::new());
