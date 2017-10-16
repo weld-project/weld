@@ -29,6 +29,7 @@ macro_rules! weld_err {
     })
 }
 
+
 pub mod ast;
 pub mod code_builder;
 pub mod common;
@@ -403,9 +404,18 @@ pub extern "C" fn weld_set_log_level(level: WeldLogLevel) {
         _ => log::LogLevelFilter::Off
     };
 
-    let format = |rec: &log::LogRecord| {
+    let prefix = match level {
+        WeldLogLevel::Error => "\x1b[0;31merror\x1b[0m",
+        WeldLogLevel::Warn => "\x1b[0;33mwarn\x1b[0m",
+        WeldLogLevel::Info => "\x1b[0;33minfo\x1b[0m",
+        WeldLogLevel::Debug => "\x1b[0;32mdebug\x1b[0m",
+        WeldLogLevel::Trace => "\x1b[0;32mtrace\x1b[0m",
+        _ => "",
+    };
+
+    let format = move |rec: &log::LogRecord| {
         let date = chrono::Local::now().format("%T%.3f");
-        format!("{}: {}", date, rec.args())
+        format!("[{}] {}: {}", prefix, date, rec.args())
     };
 
     let mut builder = env_logger::LogBuilder::new();

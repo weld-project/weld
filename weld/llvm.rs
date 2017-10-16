@@ -56,7 +56,7 @@ pub struct WeldOutputArgs {
 pub fn apply_opt_passes(expr: &mut TypedExpr, opt_passes: &Vec<Pass>) -> WeldResult<()> {
     for pass in opt_passes {
         pass.transform(expr)?;
-        debug!("After {} pass:\n{}", pass.pass_name(), print_typed_expr(&expr));
+        trace!("After {} pass:\n{}", pass.pass_name(), print_typed_expr(&expr));
     }
     Ok(())
 }
@@ -65,17 +65,17 @@ pub fn apply_opt_passes(expr: &mut TypedExpr, opt_passes: &Vec<Pass>) -> WeldRes
 pub fn compile_program(program: &Program, opt_passes: &Vec<Pass>, llvm_opt_level: u32, multithreaded: bool)
         -> WeldResult<easy_ll::CompiledModule> {
     let mut expr = macro_processor::process_program(program)?;
-    debug!("After macro substitution:\n{}\n", print_typed_expr(&expr));
+    trace!("After macro substitution:\n{}\n", print_typed_expr(&expr));
 
     let _ = transforms::uniquify(&mut expr)?;
     type_inference::infer_types(&mut expr)?;
     let mut expr = expr.to_typed()?;
-    debug!("After type inference:\n{}\n", print_typed_expr(&expr));
+    trace!("After type inference:\n{}\n", print_typed_expr(&expr));
 
     apply_opt_passes(&mut expr, opt_passes)?;
 
     transforms::uniquify(&mut expr)?;
-    debug!("After uniquify:\n{}\n", print_expr(&expr));
+    debug!("Optimized Weld program:\n{}\n", print_expr(&expr));
 
     let sir_prog = sir::ast_to_sir(&expr, multithreaded)?;
     debug!("SIR program:\n{}\n", &sir_prog);
@@ -85,7 +85,7 @@ pub fn compile_program(program: &Program, opt_passes: &Vec<Pass>, llvm_opt_level
 
     gen.add_function_on_pointers("run", &sir_prog)?;
     let llvm_code = gen.result();
-    debug!("LLVM program:\n{}\n", &llvm_code);
+    trace!("LLVM program:\n{}\n", &llvm_code);
 
     debug!("Started compiling LLVM");
     let module = try!(easy_ll::compile_module(
