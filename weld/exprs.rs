@@ -29,7 +29,7 @@ pub fn literal_expr(kind: LiteralKind) -> WeldResult<Expr<Type>> {
                         U64Literal(_) => ScalarKind::U64,
                         F32Literal(_) => ScalarKind::F32,
                         F64Literal(_) => ScalarKind::F64,
-              }))
+             }))
 }
 
 pub fn ident_expr(symbol: Symbol, ty: Type) -> WeldResult<Expr<Type>> {
@@ -208,10 +208,7 @@ pub fn let_expr(name: Symbol, value: Expr<Type>, body: Expr<Type>) -> WeldResult
              ty)
 }
 
-pub fn if_expr(cond: Expr<Type>,
-               on_true: Expr<Type>,
-               on_false: Expr<Type>)
-               -> WeldResult<Expr<Type>> {
+pub fn if_expr(cond: Expr<Type>, on_true: Expr<Type>, on_false: Expr<Type>) -> WeldResult<Expr<Type>> {
     let err = weld_err!("Internal error: Mismatched types in if_expr");
     if cond.ty != Scalar(ScalarKind::Bool) {
         return err;
@@ -230,10 +227,7 @@ pub fn if_expr(cond: Expr<Type>,
              ty)
 }
 
-pub fn select_expr(cond: Expr<Type>,
-               on_true: Expr<Type>,
-               on_false: Expr<Type>)
-               -> WeldResult<Expr<Type>> {
+pub fn select_expr(cond: Expr<Type>, on_true: Expr<Type>, on_false: Expr<Type>) -> WeldResult<Expr<Type>> {
     let err = weld_err!("Internal error: Mismatched types in select_expr");
     if cond.ty != Scalar(ScalarKind::Bool) && cond.ty != Simd(ScalarKind::Bool) {
         return err;
@@ -284,10 +278,7 @@ pub fn apply_expr(func: Expr<Type>, params: Vec<Expr<Type>>) -> WeldResult<Expr<
              *ty.unwrap())
 }
 
-pub fn cudf_expr(sym_name: String,
-                 args: Vec<Expr<Type>>,
-                 return_ty: Type)
-                 -> WeldResult<Expr<Type>> {
+pub fn cudf_expr(sym_name: String, args: Vec<Expr<Type>>, return_ty: Type) -> WeldResult<Expr<Type>> {
     new_expr(CUDF {
                  sym_name: sym_name,
                  args: args,
@@ -342,10 +333,7 @@ pub fn newbuilder_expr(kind: BuilderKind, expr: Option<Expr<Type>>) -> WeldResul
 }
 
 // TODO - the vectorized flag is temporary!
-pub fn for_expr(iters: Vec<Iter<Type>>,
-                builder: Expr<Type>,
-                func: Expr<Type>, vectorized: bool)
-                -> WeldResult<Expr<Type>> {
+pub fn for_expr(iters: Vec<Iter<Type>>, builder: Expr<Type>, func: Expr<Type>, vectorized: bool) -> WeldResult<Expr<Type>> {
 
     let vec_tys = iters.iter().map(|i| i.data.ty.clone()).collect::<Vec<_>>();
     let mut vec_elem_tys = vec![];
@@ -443,7 +431,39 @@ pub fn merge_expr(builder: Expr<Type>, value: Expr<Type>) -> WeldResult<Expr<Typ
                     return err;
                 }
             }
-            // TODO other builders...
+            DictMerger(ref elem_ty1, ref elem_ty2, _) => {
+                if let Struct(ref v_ty) = value.ty {
+                    if v_ty.len() < 2 { return err; }
+                    
+                    if elem_ty1.as_ref() != &v_ty[0] {
+                        return err;
+                    }
+                    if elem_ty2.as_ref() != &v_ty[1] {
+                        return err;
+                    }
+                } else {
+                    return err;
+                }
+            }
+            GroupMerger(ref elem_ty1, ref elem_ty2) => {
+                if let Struct(ref v_ty) = value.ty {
+                    if v_ty.len() < 2 { return err; }
+
+                    if elem_ty1.as_ref() != &v_ty[0] {
+                        return err;
+                    }
+                    if elem_ty2.as_ref() != &v_ty[1] {
+                        return err;
+                    }
+                } else {
+                    return err;
+                }
+            }
+            VecMerger(ref elem_ty, _) => {
+                if elem_ty.as_ref() != &value.ty {
+                    return err;
+                }
+            }
             _ => {
                 return err;
             }

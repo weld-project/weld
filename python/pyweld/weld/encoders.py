@@ -6,6 +6,7 @@ Python types to Weld types.
 from types import *
 
 from weldobject import WeldObjectEncoder, WeldObjectDecoder
+import bindings as cweld
 
 import numpy as np
 import ctypes

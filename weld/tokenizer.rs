@@ -96,6 +96,47 @@ pub enum Token {
     TEndOfInput,
 }
 
+impl Token {
+    /// Returns whether this token requires a space preceding it when printing a
+    /// token stream.
+    pub fn requires_space(&self) -> bool {
+        use super::tokenizer::Token::*;
+        match *self {
+            TOpenParen |
+                TCloseParen |
+                TOpenBracket |
+                TCloseBracket |
+                TOpenBrace |
+                TCloseBrace |
+                TComma |
+                TPlus |
+                TMinus |
+                TTimes |
+                TDivide |
+                TModulo |
+                TEqual |
+                TBar |
+                TAtMark |
+                TDot |
+                TColon |
+                TSemicolon |
+                TQuestion |
+                TEqualEqual |
+                TNotEqual |
+                TLessThanOrEqual |
+                TGreaterThanOrEqual |
+                TLessThan |
+                TGreaterThan |
+                TLogicalAnd |
+                TLogicalOr |
+                TBitwiseAnd |
+                TXor |
+                TEndOfInput => false,
+            _ => true
+        }
+    }
+}
+
 /// Break up a string into tokens.
 pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
     lazy_static! {
