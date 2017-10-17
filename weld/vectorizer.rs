@@ -326,6 +326,12 @@ pub fn predicate(e: &mut Expr<Type>) {
 /// Vectorize an expression.
 pub fn vectorize(expr: &mut Expr<Type>) {
     let mut vectorized = false;
+    // Used to create the identifiers which refer to the data items. These identifiers are
+    // used to pull out the iter into a let statement. This lets us repeat the iter via an
+    // identifier in the vectorized loop later. Declaring this before any transformations so
+    // there is no clash of variable names.
+    let mut sym_gen = SymbolGenerator::from_expression(expr);
+
     expr.transform_and_continue_res(&mut |ref mut expr| {
         //  The Res is a stricter-than-necessary check, but prevents us from having to check nested
         //  loops for now.
@@ -345,11 +351,6 @@ pub fn vectorize(expr: &mut Expr<Type>) {
                         vectorized_params[2].ty = vectorized_params[2].ty.simd_type()?;
 
                         let vec_func = exprs::lambda_expr(vectorized_params, *vectorized_body)?;
-
-                        // Pull out the iter into a let statement. This lets us repeat the
-                        // iter via an identifier in the vectorized loop. Here, we just
-                        // create the identifiers which refer to the data items.
-                        let mut sym_gen = SymbolGenerator::from_expression(expr);
 
                         let data_names = iters
                             .iter()
