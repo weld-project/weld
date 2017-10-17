@@ -4,6 +4,10 @@ use std::collections::BTreeMap;
 
 use easy_ll;
 
+extern crate time;
+
+use time::PreciseTime;
+
 use common::WeldRuntimeErrno;
 
 use super::ast::*;
@@ -26,6 +30,8 @@ use super::transforms;
 use super::type_inference;
 use super::util::IdGenerator;
 use super::util::WELD_INLINE_LIB;
+
+use super::CompilationStats;
 
 #[cfg(test)]
 use super::parser::*;
@@ -53,52 +59,73 @@ pub struct WeldOutputArgs {
     pub errno: WeldRuntimeErrno,
 }
 
-pub fn apply_opt_passes(expr: &mut TypedExpr, opt_passes: &Vec<Pass>) -> WeldResult<()> {
+pub fn apply_opt_passes(expr: &mut TypedExpr, opt_passes: &Vec<Pass>, stats: &mut CompilationStats) -> WeldResult<()> {
     for pass in opt_passes {
+        let start = PreciseTime::now();
         pass.transform(expr)?;
+        let end = PreciseTime::now();
+        stats.pass_times.push((pass.pass_name(), start.to(end)));
         trace!("After {} pass:\n{}", pass.pass_name(), print_typed_expr(&expr));
     }
     Ok(())
 }
 
 /// Generate a compiled LLVM module from a program whose body is a function.
-pub fn compile_program(program: &Program, opt_passes: &Vec<Pass>, llvm_opt_level: u32, multithreaded: bool)
+pub fn compile_program(program: &Program, opt_passes: &Vec<Pass>, llvm_opt_level: u32, multithreaded: bool, stats: &mut CompilationStats)
         -> WeldResult<easy_ll::CompiledModule> {
     let mut expr = macro_processor::process_program(program)?;
     trace!("After macro substitution:\n{}\n", print_typed_expr(&expr));
 
-    let _ = transforms::uniquify(&mut expr)?;
+    transforms::uniquify(&mut expr)?;
+
+    let start = PreciseTime::now();
     type_inference::infer_types(&mut expr)?;
     let mut expr = expr.to_typed()?;
     trace!("After type inference:\n{}\n", print_typed_expr(&expr));
+    let end = PreciseTime::now();
+    stats.weld_times.push(("Type Inference".to_string(), start.to(end)));
 
-    apply_opt_passes(&mut expr, opt_passes)?;
+    apply_opt_passes(&mut expr, opt_passes, stats)?;
 
     transforms::uniquify(&mut expr)?;
     debug!("Optimized Weld program:\n{}\n", print_expr(&expr));
 
+    let start = PreciseTime::now();
     let sir_prog = sir::ast_to_sir(&expr, multithreaded)?;
     debug!("SIR program:\n{}\n", &sir_prog);
+    let end = PreciseTime::now();
+    stats.weld_times.push(("AST to SIR".to_string(), start.to(end)));
 
+    let start = PreciseTime::now();
     let mut gen = LlvmGenerator::new();
     gen.multithreaded = multithreaded;
 
     gen.add_function_on_pointers("run", &sir_prog)?;
     let llvm_code = gen.result();
     trace!("LLVM program:\n{}\n", &llvm_code);
+    let end = PreciseTime::now();
+    stats.weld_times.push(("LLVM Codegen".to_string(), start.to(end)));
 
     debug!("Started compiling LLVM");
-    let module = try!(easy_ll::compile_module(
+    let (module, llvm_times) = try!(easy_ll::compile_module(
         &llvm_code,
         llvm_opt_level,
         Some(WELD_INLINE_LIB)));
     debug!("Done compiling LLVM");
 
+    // Add LLVM statistics to the stats.
+    for &(ref name, ref time) in llvm_times.times.iter() {
+        stats.llvm_times.push((name.clone(), time.clone()));
+    }
+
+    let start = PreciseTime::now();
     debug!("Started runtime_init call");
     unsafe {
         weld_runtime_init();
     }
     debug!("Done runtime_init call");
+    let end = PreciseTime::now();
+    stats.weld_times.push(("Runtime Init".to_string(), start.to(end)));
 
     Ok(module)
 }

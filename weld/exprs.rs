@@ -464,9 +464,6 @@ pub fn merge_expr(builder: Expr<Type>, value: Expr<Type>) -> WeldResult<Expr<Typ
                     return err;
                 }
             }
-            _ => {
-                return err;
-            }
         }
     }
 
