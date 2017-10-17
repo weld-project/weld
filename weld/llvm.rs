@@ -76,7 +76,11 @@ pub fn compile_program(program: &Program, opt_passes: &Vec<Pass>, llvm_opt_level
     let mut expr = macro_processor::process_program(program)?;
     trace!("After macro substitution:\n{}\n", print_typed_expr(&expr));
 
+    let start = PreciseTime::now();
     transforms::uniquify(&mut expr)?;
+    let end = PreciseTime::now();
+
+    let mut uniquify_dur = start.to(end);
 
     let start = PreciseTime::now();
     type_inference::infer_types(&mut expr)?;
@@ -87,7 +91,13 @@ pub fn compile_program(program: &Program, opt_passes: &Vec<Pass>, llvm_opt_level
 
     apply_opt_passes(&mut expr, opt_passes, stats)?;
 
+    let start = PreciseTime::now();
     transforms::uniquify(&mut expr)?;
+    let end = PreciseTime::now();
+    uniquify_dur = uniquify_dur + start.to(end);
+
+    stats.weld_times.push(("Uniquify outside Passes".to_string(), uniquify_dur));
+
     debug!("Optimized Weld program:\n{}\n", print_expr(&expr));
 
     let start = PreciseTime::now();
