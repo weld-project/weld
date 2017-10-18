@@ -47,11 +47,13 @@ done:
 define void @{NAME}.bld.clearPieceGlobal(%{NAME}.bld.piecePtr %piecePtr, {ELEM} %identity) {{
   %result = call %{NAME}.bld.piece @{NAME}.bld.clearPieceInternal({ELEM} %identity)
   store %{NAME}.bld.piece %result, %{NAME}.bld.piecePtr %piecePtr
+  ret void
 }}
 
 define void @{NAME}.bld.clearPieceReg(%{NAME}.bld* %bldPtr, {ELEM} %identity) {{
-  %regPtr = getelementptr %{NAME}.bld, %{NAME}.bld* %bldPtr, i32 0, i32 0, i32 0
-  call void @{NAME}.bld.clearPieceGlobal(%{NAME}.bld.piecePtr %regPtr, {ELEM} %identity)
+  %regPtr = getelementptr %{NAME}.bld, %{NAME}.bld* %bldPtr, i32 0, i32 0
+  %reg = load %{NAME}.bld.piecePtr, %{NAME}.bld.piecePtr* %regPtr
+  call void @{NAME}.bld.clearPieceGlobal(%{NAME}.bld.piecePtr %reg, {ELEM} %identity)
   ret void
 }}
 
@@ -61,7 +63,7 @@ define void @{NAME}.bld.insertReg(%{NAME}.bld* %bldPtr, %{NAME}.bld.piecePtr %re
   ret void
 }}
 
-define void @{NAME}.bld.initGlobalIfNeeded(%{NAME}.bld* %bldPtr) {{
+define void @{NAME}.bld.initGlobalIfNeeded(%{NAME}.bld* %bldPtr, {ELEM} %identity) {{
   %bld = load %{NAME}.bld, %{NAME}.bld* %bldPtr
   %isGlobal = extractvalue %{NAME}.bld %bld, 2
   br i1 %isGlobal, label %done, label %cont
@@ -73,24 +75,21 @@ cont:
   %1 = insertvalue %{NAME}.bld %bld, i8* %bldGlobal, 1
   %2 = insertvalue %{NAME}.bld %1, i1 1, 2
   store %{NAME}.bld %2, %{NAME}.bld* %bldPtr
+  br label %body
+body:
+  %i = phi i32 [ 0, %cont ], [ %i2, %body ]
+  %curPiecePtr = call %{NAME}.bld.piecePtr @{NAME}.bld.getPtrIndexed(%{NAME}.bld* %bldPtr, i32 %i)
+  call void @{NAME}.bld.clearPieceGlobal(%{NAME}.bld.piecePtr %curPiecePtr, {ELEM} %identity)
+  %i2 = add i32 %i, 1
+  %cond2 = icmp ult i32 %i2, %nworkers
+  br i1 %cond2, label %body, label %done
 done:
   ret void
 }}
 
-; Initialize and return a new merger.
-define %{NAME}.bld @{NAME}.bld.new({ELEM} %identity) {{
-  ; TODO(shoumik): For now, mergers can only be scalars. We may need to do some
-  ; kind of initialization here like in the dictmerger if we allow more complex
-  ; merger types.
-  %piece = call %{NAME}.bld.piece @{NAME}.bld.clearPieceInternal({ELEM} %identity)
-  %1 = insertvalue %{NAME}.bld undef, %{NAME}.bld.piece %piece, 0
-  %2 = insertvalue %{NAME}.bld %1, i1 0, 2
-  ret %{NAME}.bld %2
-}}
-
 ; Returns a pointer to a scalar value that an element can be merged into. %bldPtr is
 ; a value retrieved via getPtrIndexed.
-define {ELEM}* @{NAME}.bld.scalarMergePtrForPiece(%{NAME}.piecePtr %piecePtr) {{
+define {ELEM}* @{NAME}.bld.scalarMergePtrForPiece(%{NAME}.bld.piecePtr %piecePtr) {{
   %bldScalarPtr = getelementptr %{NAME}.bld.piece, %{NAME}.bld.piecePtr %piecePtr, i32 0, i32 0
   ret {ELEM}* %bldScalarPtr
 }}
@@ -102,15 +101,33 @@ define <{VECSIZE} x {ELEM}>* @{NAME}.bld.vectorMergePtrForPiece(%{NAME}.bld.piec
   ret <{VECSIZE} x {ELEM}>* %bldVectorPtr
 }}
 
+; Initialize and return a new merger.
+define %{NAME}.bld @{NAME}.bld.new({ELEM} %identity, {ELEM} %init, %{NAME}.bld.piecePtr %reg) {{
+  ; TODO(shoumik): For now, mergers can only be scalars. We may need to do some
+  ; kind of initialization here like in the dictmerger if we allow more complex
+  ; merger types.
+  %piece = call %{NAME}.bld.piece @{NAME}.bld.clearPieceInternal({ELEM} %identity)
+  store %{NAME}.bld.piece %piece, %{NAME}.bld.piecePtr %reg
+  %scalarPtr = call {ELEM}* @{NAME}.bld.scalarMergePtrForPiece(%{NAME}.bld.piecePtr %reg)
+  store {ELEM} %init, {ELEM}* %scalarPtr
+  %1 = insertvalue %{NAME}.bld undef, %{NAME}.bld.piecePtr %reg, 0
+  %2 = insertvalue %{NAME}.bld %1, i1 0, 2
+  ret %{NAME}.bld %2
+}}
+
 ; Returns a pointer to a scalar value that an element can be merged into.
 define {ELEM}* @{NAME}.bld.scalarMergePtrForReg(%{NAME}.bld* %bldPtr) {{
-  %bldScalarPtr = getelementptr %{NAME}.bld, %{NAME}.bld* %bldPtr, i32 0, i32 0, i32 0, i32 0
+  %regPtr = getelementptr %{NAME}.bld, %{NAME}.bld* %bldPtr, i32 0, i32 0
+  %reg = load %{NAME}.bld.piecePtr, %{NAME}.bld.piecePtr* %regPtr
+  %bldScalarPtr = getelementptr %{NAME}.bld.piece, %{NAME}.bld.piecePtr %reg, i32 0, i32 0
   ret {ELEM}* %bldScalarPtr
 }}
 
 ; Returns a pointer to a vector value that an element can be merged into.
 define <{VECSIZE} x {ELEM}>* @{NAME}.bld.vectorMergePtrForReg(%{NAME}.bld* %bldPtr) {{
-  %bldVectorPtr = getelementptr %{NAME}.bld, %{NAME}.bld* %bldPtr, i32 0, i32 0, i32 0, i32 1
+  %regPtr = getelementptr %{NAME}.bld, %{NAME}.bld* %bldPtr, i32 0, i32 0
+  %reg = load %{NAME}.bld.piecePtr, %{NAME}.bld.piecePtr* %regPtr
+  %bldVectorPtr = getelementptr %{NAME}.bld.piece, %{NAME}.bld.piecePtr %reg, i32 0, i32 1
   ret <{VECSIZE} x {ELEM}>* %bldVectorPtr
 }}
 
@@ -118,4 +135,10 @@ define i1 @{NAME}.bld.isGlobal(%{NAME}.bld* %bldPtr) {{
   %bld = load %{NAME}.bld, %{NAME}.bld* %bldPtr
   %isGlobal = extractvalue %{NAME}.bld %bld, 2
   ret i1 %isGlobal
+}}
+
+define i8* @{NAME}.bld.getGlobal(%{NAME}.bld* %bldPtr) {{
+  %bld = load %{NAME}.bld, %{NAME}.bld* %bldPtr
+  %global = extractvalue %{NAME}.bld %bld, 1
+  ret i8* %global
 }}
