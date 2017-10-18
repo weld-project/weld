@@ -59,7 +59,7 @@ pub fn inline_zips(expr: &mut Expr<Type>) {
 /// A stack which keeps track of unique variables names and scoping information for symbols.
 struct SymbolStack {
     // The symbol stack.
-    stack: HashMap<String, Vec<i32>>,
+    stack: HashMap<Symbol, Vec<i32>>,
     // The next unique ID to assign to this name.
     next_unique_symbol: HashMap<String, i32>,
 }
@@ -72,37 +72,40 @@ impl SymbolStack {
         }
     }
 
-    /// Returns the symbol in the current scope for the given name, or an error if the symbol is
+    /// Returns the symbol in the current scope for the given symbol, or an error if the symbol is
     /// undefined.
-    fn symbol(&mut self, name: String) -> WeldResult<Symbol> {
-        match self.stack.entry(name.clone()) {
-            Entry::Occupied(ref ent) => Ok(Symbol::new(ent.key(), ent.get()
+    fn symbol(&mut self, sym: Symbol) -> WeldResult<Symbol> {
+        match self.stack.entry(sym.clone()) {
+            Entry::Occupied(ref ent) => Ok(Symbol::new(ent.key().name.as_str(), ent.get()
                                                        .last()
                                                        .map(|v| *v)
-                                                       .unwrap_or(0))),
-            _ => weld_err!("Undefined symbol name {}", name),
+                                                       .unwrap_or(ent.key().id))),
+            _ => weld_err!("Undefined symbol {}", sym),
         }
     }
 
 
     /// Push a new symbol onto the stack, assigning it a unique name. This enters a new scope for
     /// the name. The symbol can be retrieved with `symbol()`.
-    fn push_symbol(&mut self, name: String) {
-        let mut stack_entry = self.stack.entry(name.clone()).or_insert(Vec::new());
-        let mut next_entry = self.next_unique_symbol.entry(name).or_insert(-1);
-
-        *next_entry += 1;
+    fn push_symbol(&mut self, sym: Symbol) {
+        let mut stack_entry = self.stack.entry(sym.clone()).or_insert(Vec::new());
+        let mut next_entry = self.next_unique_symbol.entry(sym.name).or_insert(-1);
+        *next_entry += if sym.id > *next_entry {
+            sym.id + 1
+        } else {
+           *next_entry + 1 
+        };
         stack_entry.push(*next_entry);
     }
 
     /// Pop a symbol from the stack.
-    fn pop_symbol(&mut self, name: String) -> WeldResult<()> {
-        match self.stack.entry(name.clone()) {
+    fn pop_symbol(&mut self, sym: Symbol) -> WeldResult<()> {
+        match self.stack.entry(sym.clone()) {
             Entry::Occupied(mut ent) => {
                 ent.get_mut().pop();
                 Ok(())
             },
-            _ => weld_err!("Attempting to pop undefined symbol name {}", name)
+            _ => weld_err!("Attempting to pop undefined symbol {}", sym)
         }
     }
 }
@@ -110,43 +113,7 @@ impl SymbolStack {
 /// Modifies symbol names so each symbol is unique in the AST.  Returns an error if an undeclared
 /// symbol appears in the program.
 pub fn uniquify<T: TypeBounds>(expr: &mut Expr<T>) -> WeldResult<()> {
-    normalize_names(expr)?;
     uniquify_helper(expr, &mut SymbolStack::new())
-}
-
-/// Normalizes names so the id of each Symbol is 0. This disambiguates what the symbol stack
-/// tracks and what symbols exist in the program already.
-fn normalize_names<T: TypeBounds>(expr: &mut Expr<T>) -> WeldResult<()> {
-    let normalize = |a: &Symbol| format!("{}{}", a.name,
-                                        if a.id == 0 {
-                                            "".to_string()
-                                        } else {
-                                            format!("{}", a.id)
-                                        });
-    match expr.kind {
-        Lambda {ref mut params, .. } => {
-            // Update the parameter of the lambda with new names.
-            for param in params.iter_mut() {
-                let ref new_name = normalize(&param.name);
-                param.name = Symbol::name(new_name);
-            }
-        }
-        Let {ref mut name, .. } => {
-            let ref new_name = normalize(name);
-            *name = Symbol::name(new_name);
-        }
-        Ident(ref mut sym) => {
-            let ref new_name = normalize(sym);
-            *sym = Symbol::name(new_name);
-        }
-        _ => {}
-    }
-
-    for child in expr.children_mut() {
-        normalize_names(child)?;
-    }
-
-    Ok(())
 }
 
 /// The main helper function for uniquify, which uses `SymbolStack` to track scope and assign
@@ -156,18 +123,19 @@ fn uniquify_helper<T: TypeBounds>(expr: &mut Expr<T>, symbol_stack: &mut SymbolS
         // First, handle expressions which define *new* symbols - Let and Lambda
         Lambda {ref mut params, ref mut body} => {
             // Update the parameter of the lambda with new names.
+            let original_params = params.clone();
             for param in params.iter_mut() {
                 let ref mut sym = param.name;
-                symbol_stack.push_symbol(sym.name.clone());
-                *sym = symbol_stack.symbol(sym.name.clone())?;
+                symbol_stack.push_symbol(sym.clone());
+                *sym = symbol_stack.symbol(sym.clone())?;
             }
 
             // Then, uniquify the lambda using the newly pushed symbols.
             uniquify_helper(body, symbol_stack)?;
             
             // Finally, pop off the symbol names since they are out of scope now.
-            for param in params.iter_mut() {
-                symbol_stack.pop_symbol(param.name.name.clone())?;
+            for param in original_params.iter() {
+                symbol_stack.pop_symbol(param.name.clone())?;
             }
         }
         Let {ref mut name, ref mut value, ref mut body} => {
@@ -176,18 +144,19 @@ fn uniquify_helper<T: TypeBounds>(expr: &mut Expr<T>, symbol_stack: &mut SymbolS
             uniquify_helper(value, symbol_stack)?;
 
             // Now, push the Let's symbol name.
-            symbol_stack.push_symbol(name.name.clone());
-            *name = symbol_stack.symbol(name.name.clone())?;
+            symbol_stack.push_symbol(name.clone());
+            let original_name = name.clone();
+            *name = symbol_stack.symbol(name.clone())?;
 
             // uniquify the body with the new scope.
             uniquify_helper(body, symbol_stack)?;
 
             // Pop off the scope.
-            symbol_stack.pop_symbol(name.name.clone())?;
+            symbol_stack.pop_symbol(original_name)?;
         }
         // Now handle identifiers, which are changed to reflect new symbols.
         Ident(ref mut sym) => {
-            *sym = symbol_stack.symbol(sym.name.clone())?;
+            *sym = symbol_stack.symbol(sym.clone())?;
         }
         // For all other expressions, call uniquify_helper on the children.
         _ => {
