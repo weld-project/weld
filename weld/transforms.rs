@@ -76,10 +76,14 @@ impl SymbolStack {
     /// undefined.
     fn symbol(&mut self, sym: Symbol) -> WeldResult<Symbol> {
         match self.stack.entry(sym.clone()) {
-            Entry::Occupied(ref ent) => Ok(Symbol::new(ent.key().name.as_str(), ent.get()
-                                                       .last()
-                                                       .map(|v| *v)
-                                                       .unwrap_or(ent.key().id))),
+            Entry::Occupied(ref ent) => {
+                let name = ent.key().name.as_str();
+                let id = ent.get()
+                    .last()
+                    .map(|v| *v)
+                    .ok_or(WeldError::new(format!("Symbol {} is out of scope", &sym)))?;
+                Ok(Symbol::new(name, id))
+            }
             _ => weld_err!("Undefined symbol {}", sym),
         }
     }
@@ -90,8 +94,8 @@ impl SymbolStack {
     fn push_symbol(&mut self, sym: Symbol) {
         let mut stack_entry = self.stack.entry(sym.clone()).or_insert(Vec::new());
         let mut next_entry = self.next_unique_symbol.entry(sym.name).or_insert(-1);
-        *next_entry += if sym.id > *next_entry {
-            sym.id + 1
+        *next_entry = if sym.id > *next_entry {
+            sym.id
         } else {
            *next_entry + 1 
         };
