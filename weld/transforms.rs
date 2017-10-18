@@ -9,6 +9,7 @@ use super::error::*;
 use super::exprs;
 
 use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 
 use super::util::SymbolGenerator;
 
@@ -55,15 +56,68 @@ pub fn inline_zips(expr: &mut Expr<Type>) {
     });
 }
 
+struct SymbolStack {
+    // The symbol stack.
+    stack: HashMap<String, Vec<i32>>,
+    // The next unique ID to assign to this name.
+    next_unique_symbol: HashMap<String, i32>,
+}
+
+impl SymbolStack {
+    fn new() -> SymbolStack {
+        SymbolStack {
+            stack: HashMap::new(),
+            next_unique_symbol: HashMap::new(),
+        }
+    }
+
+    /// Returns the symbol in the current scope for the given name, or an error if the symbol is
+    /// undefined.
+    fn symbol(&mut self, name: String) -> WeldResult<Symbol> {
+        match self.stack.entry(name.clone()) {
+            Entry::Occupied(ref ent) => Ok(Symbol::new(ent.key(), ent.get()
+                                                       .last()
+                                                       .map(|v| *v)
+                                                       .unwrap_or(0))),
+            _ => weld_err!("Undefined symbol name {}", name),
+        }
+    }
+
+
+    /// Push a new symbol onto the stack, assigning it a unique name. This enters a new scope for
+    /// the name. The symbol can be retrieved with `symbol()`.
+    fn push_symbol(&mut self, name: String) -> WeldResult<()> {
+        let mut stack_entry = self.stack.entry(name.clone()).or_insert(Vec::new());
+        let mut next_entry = self.next_unique_symbol.entry(name).or_insert(-1);
+
+        *next_entry += 1;
+        stack_entry.push(*next_entry);
+        Ok(())
+    }
+
+    /// Pop a symbol from the stack, assigning it a unique name. This enters a new scope for
+    /// the name.
+    fn pop_symbol(&mut self, name: String) -> WeldResult<()> {
+        match self.stack.entry(name) {
+            Entry::Occupied(mut ent) => {
+                ent.get_mut().pop();
+            },
+            _ => {}
+        }
+        Ok(())
+    }
+}
+
 /// Modifies symbol names so each symbol is unique in the AST. This transform should be applied
 /// "up front" and downstream transforms shoud then use SymbolGenerator to generate new unique
 /// symbols.
 ///
 /// Returns an error if an undeclared symbol appears in the program.
 pub fn uniquify<T: TypeBounds>(expr: &mut Expr<T>) -> WeldResult<()> {
-    // Maps a string name to its current integer ID in the current scope.
+    // maps a Symbol to its current number -- Identifiers should be replaced to use
+    // this symbol. The identifier is effectively a stack, since it is incremented
+    // and decremented depending on the scope.
     let mut id_map: HashMap<Symbol, i32> = HashMap::new();
-    // Maps a symbol name to the the maximum ID observed for it.
     let mut max_ids: HashMap<String, i32> = HashMap::new();
     _uniquify(expr, &mut id_map, &mut max_ids)
 }
