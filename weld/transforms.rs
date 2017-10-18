@@ -138,8 +138,8 @@ fn uniquify_helper<T: TypeBounds>(expr: &mut Expr<T>, symbol_stack: &mut SymbolS
             uniquify_helper(body, symbol_stack)?;
             
             // Finally, pop off the symbol names since they are out of scope now.
-            for param in original_params.iter() {
-                symbol_stack.pop_symbol(param.name.clone())?;
+            for param in original_params {
+                symbol_stack.pop_symbol(param.name)?;
             }
         }
         Let {ref mut name, ref mut value, ref mut body} => {
@@ -169,7 +169,6 @@ fn uniquify_helper<T: TypeBounds>(expr: &mut Expr<T>, symbol_stack: &mut SymbolS
             }
         }
     }
-
     Ok(())
 }
 
