@@ -200,9 +200,9 @@ class GroupedDataFrameWeld(LazyOpResult):
     def __init__(
             self,
             expr,
-            grouping_column_name,
+            grouping_column_names,
             column_names,
-            grouping_column_type,
+            grouping_column_types,
             column_types):
         """Summary
 
@@ -214,17 +214,23 @@ class GroupedDataFrameWeld(LazyOpResult):
             column_types (TYPE): Description
         """
         self.expr = expr
-        self.grouping_column_name = grouping_column_name
+        self.grouping_column_name = grouping_column_names
         self.column_names = column_names
-        self.grouping_column_type = grouping_column_type
+        self.grouping_column_types = grouping_column_types
         self.column_types = column_types
         self.ptr = None
 
         self.dim = 1
-        column_types = self.column_types[0]
-        if len(self.column_types) > 1:
+        if len(self.column_types) == 1:
+            column_types = self.column_types[0]
+        else:
             column_types = WeldStruct(self.column_types)
-        self.weld_type = WeldStruct([self.grouping_column_type, column_types])
+
+        if len(self.grouping_column_types) == 1:
+            grouping_column_types = self.grouping_column_types[0]
+        else:
+            grouping_column_types = WeldStruct(self.grouping_column_types)
+        self.weld_type = WeldStruct([grouping_column_types, column_types])
 
     def get_column(self, column_name, column_type, index, verbose=True):
         """Summary
@@ -257,7 +263,7 @@ class GroupedDataFrameWeld(LazyOpResult):
         i = 0
         for column_name in self.column_names:
             if len(self.column_names) > 1:
-                index = "1.%d" % i
+                index = "1.$%d" % i
             else:
                 index = "1"
             df[column_name] = self.get_column(
@@ -751,27 +757,34 @@ class GroupByWeld:
         grouping_column_type (TYPE): Description
     """
 
-    def __init__(self, df, grouping_column_name):
+    def __init__(self, df, grouping_column_names):
         """Summary
 
         Args:
             df (TYPE): Description
             grouping_column_name (TYPE): Description
         """
-        self.grouping_column = None
-        self.grouping_column_type = None
-        column = df[grouping_column_name]
-        if isinstance(column, LazyOpResult):
-            self.grouping_column_type = column.weld_type
-            self.grouping_column = column.expr
-        elif isinstance(column, np.ndarray):
-            self.grouping_column_type = numpyImpl.numpy_to_weld_type_mapping[
-                str(column.dtype)]
-            self.grouping_column = column
+        self.grouping_columns = []
+        self.grouping_column_types = []
 
-        self.column_names = df._get_column_names()
-        self.column_names.remove(grouping_column_name)
-        self.grouping_column_name = grouping_column_name
+        if isinstance(grouping_column_names, str):
+            grouping_column_names = [grouping_column_names]
+        for column_name in grouping_column_names:
+            column = df[column_name]
+            if isinstance(column, LazyOpResult):
+                self.grouping_column_types.append(column.weld_type)
+                self.grouping_columns.append(column.expr)
+            elif isinstance(column, np.ndarray):
+                column_type = numpyImpl.numpy_to_weld_type_mapping[
+                    str(column.dtype)]
+                self.grouping_column_types.append(column_type)
+                self.grouping_columns.append(column)
+
+        self.grouping_column_names = grouping_column_names
+        self.column_names = []
+        for x in df._get_column_names():
+            if x not in self.grouping_column_names:
+                self.column_names.append(x)
 
         self.columns = []
         self.column_types = []
@@ -784,6 +797,7 @@ class GroupByWeld:
             elif isinstance(column, np.ndarray):
                 column_type = numpyImpl.numpy_to_weld_type_mapping[
                     str(column.dtype)]
+
             self.columns.append(column)
             self.column_types.append(column_type)
 
@@ -797,11 +811,12 @@ class GroupByWeld:
             grizzly_impl.groupby_sum(
                 self.columns,
                 self.column_types,
-                self.grouping_column
+                self.grouping_columns,
+                self.grouping_column_types
             ),
-            self.grouping_column_name,
+            self.grouping_column_names,
             self.column_names,
-            self.grouping_column_type,
+            self.grouping_column_types,
             self.column_types
         )
 

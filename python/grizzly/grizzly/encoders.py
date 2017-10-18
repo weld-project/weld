@@ -174,6 +174,8 @@ class NumPyDecoder(WeldObjectDecoder):
         # ctypes._structure
         if restype == WeldVec(WeldBit()):
             weld_to_numpy = self.utils.weld_to_numpy_bool_arr
+        elif restype == WeldVec(WeldLong()):
+            weld_to_numpy = self.utils.weld_to_numpy_long_arr
         elif restype == WeldVec(WeldDouble()):
             weld_to_numpy = self.utils.weld_to_numpy_double_arr
         elif restype == WeldVec(WeldVec(WeldChar())):
