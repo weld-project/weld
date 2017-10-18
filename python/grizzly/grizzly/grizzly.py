@@ -221,16 +221,31 @@ class GroupedDataFrameWeld(LazyOpResult):
         self.ptr = None
 
         self.dim = 1
-        if len(self.column_types) == 1:
-            column_types = self.column_types[0]
-        else:
-            column_types = WeldStruct(self.column_types)
+        if isinstance(self.column_types, list):
+            if len(self.column_types) == 1:
+                column_types = self.column_types[0]
+            else:
+                column_types = WeldStruct(self.column_types)
 
         if len(self.grouping_column_types) == 1:
             grouping_column_types = self.grouping_column_types[0]
         else:
             grouping_column_types = WeldStruct(self.grouping_column_types)
         self.weld_type = WeldStruct([grouping_column_types, column_types])
+
+    def slice(self, start, size):
+        return GroupedDataFrameWeld(
+            grizzly_impl.grouped_slice(
+                self.expr,
+                self.weld_type,
+                start,
+                size
+            ),
+            self.grouping_column_name,
+            self.column_names,
+            self.grouping_column_types,
+            self.column_types
+        )
 
     def get_column(self, column_name, column_type, index, verbose=True):
         """Summary
@@ -744,7 +759,6 @@ class StringSeriesWeld:
             self.column_name
         )
 
-
 class GroupByWeld:
     """Summary
 
@@ -820,6 +834,28 @@ class GroupByWeld:
             self.column_types
         )
 
+    def sort_values(self, by, ascending=False):
+        """Summary
+
+        Returns:
+            TYPE: Description
+        """
+        if len(self.column_types) == 1:
+            vec_type = [WeldVec(self.column_types[0])]
+
+        return GroupedDataFrameWeld(
+            grizzly_impl.groupby_sort(
+                self.columns,
+                self.column_types,
+                self.grouping_columns,
+                self.grouping_column_types
+            ),
+            self.grouping_column_names,
+            self.column_names,
+            self.grouping_column_types,
+            vec_type
+        )
+
     def mean(self):
         """Summary
 
@@ -835,3 +871,6 @@ class GroupByWeld:
             TYPE: Description
         """
         pass
+
+    def apply(self, func):
+        return func(self)

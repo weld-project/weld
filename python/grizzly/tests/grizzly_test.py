@@ -37,6 +37,13 @@ class PandasWeldTestMethods(unittest.TestCase):
         groupby = input.groupby(["a", "b"]).sum().evaluate(False)
         self.assertItemsEqual([5, 10], groupby.to_pandas()["c"])
 
+    def test_groupby_sort(self):
+        # test single column
+        df = pd.DataFrame({"a":[3,2,3,2], "b":[4,5,6,7]})
+        input = gr.DataFrameWeld(df)
+        groupby = input.groupby("a").sort_values(by="he").slice(0, 1).evaluate(False)
+        self.assertItemsEqual([5, 10], groupby.to_pandas()["b"])
+
     def test_unique(self):
         inp = gr.SeriesWeld(
             np.array(["aaa", "bbb", "aaa", "ccc"], dtype=str),
