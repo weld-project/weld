@@ -56,6 +56,7 @@ pub fn inline_zips(expr: &mut Expr<Type>) {
     });
 }
 
+/// A stack which keeps track of unique variables names and scoping information for symbols.
 struct SymbolStack {
     // The symbol stack.
     stack: HashMap<String, Vec<i32>>,
@@ -86,164 +87,117 @@ impl SymbolStack {
 
     /// Push a new symbol onto the stack, assigning it a unique name. This enters a new scope for
     /// the name. The symbol can be retrieved with `symbol()`.
-    fn push_symbol(&mut self, name: String) -> WeldResult<()> {
+    fn push_symbol(&mut self, name: String) {
         let mut stack_entry = self.stack.entry(name.clone()).or_insert(Vec::new());
         let mut next_entry = self.next_unique_symbol.entry(name).or_insert(-1);
 
         *next_entry += 1;
         stack_entry.push(*next_entry);
-        Ok(())
     }
 
-    /// Pop a symbol from the stack, assigning it a unique name. This enters a new scope for
-    /// the name.
+    /// Pop a symbol from the stack.
     fn pop_symbol(&mut self, name: String) -> WeldResult<()> {
-        match self.stack.entry(name) {
+        match self.stack.entry(name.clone()) {
             Entry::Occupied(mut ent) => {
                 ent.get_mut().pop();
+                Ok(())
             },
-            _ => {}
+            _ => weld_err!("Attempting to pop undefined symbol name {}", name)
         }
-        Ok(())
     }
 }
 
-/// Modifies symbol names so each symbol is unique in the AST. This transform should be applied
-/// "up front" and downstream transforms shoud then use SymbolGenerator to generate new unique
-/// symbols.
-///
-/// Returns an error if an undeclared symbol appears in the program.
+/// Modifies symbol names so each symbol is unique in the AST.  Returns an error if an undeclared
+/// symbol appears in the program.
 pub fn uniquify<T: TypeBounds>(expr: &mut Expr<T>) -> WeldResult<()> {
-    // maps a Symbol to its current number -- Identifiers should be replaced to use
-    // this symbol. The identifier is effectively a stack, since it is incremented
-    // and decremented depending on the scope.
-    let mut id_map: HashMap<Symbol, i32> = HashMap::new();
-    let mut max_ids: HashMap<String, i32> = HashMap::new();
-    _uniquify(expr, &mut id_map, &mut max_ids)
+    normalize_names(expr)?;
+    uniquify_helper(expr, &mut SymbolStack::new())
 }
 
-/// Helper function for uniquify.
-fn _uniquify<T: TypeBounds>(expr: &mut Expr<T>,
-                            id_map: &mut HashMap<Symbol, i32>,
-                            max_ids: &mut HashMap<String, i32>)
-                            -> WeldResult<()> {
-
-    // Given a newly defined Symbol sym, increments the symbol's ID and returns a new symbol.
-    let push_id =
-        |id_map: &mut HashMap<Symbol, i32>, max_ids: &mut HashMap<String, i32>, sym: &Symbol| {
-            let max_id = max_ids.entry(sym.name.clone()).or_insert(-1);
-            let id = id_map.entry(sym.clone()).or_insert(*max_id);
-            *max_id += 1;
-            if *id < *max_id {
-                *id = *max_id;
-            } else {
-                *max_id = *id;
+/// Normalizes names so the id of each Symbol is 0. This disambiguates what the symbol stack
+/// tracks and what symbols exist in the program already.
+fn normalize_names<T: TypeBounds>(expr: &mut Expr<T>) -> WeldResult<()> {
+    let normalize = |a: &Symbol| format!("{}{}", a.name,
+                                        if a.id == 0 {
+                                            "".to_string()
+                                        } else {
+                                            format!("{}", a.id)
+                                        });
+    match expr.kind {
+        Lambda {ref mut params, .. } => {
+            // Update the parameter of the lambda with new names.
+            for param in params.iter_mut() {
+                let ref new_name = normalize(&param.name);
+                param.name = Symbol::name(new_name);
             }
-            Symbol::new(&sym.name.clone(), *id)
-        };
-
-    // Decrements the ID for a given symbol name and returns the new symbol If the symbol is not
-    // found, it was undefined in the current expression.
-    let pop_id = |id_map: &mut HashMap<Symbol, i32>, sym: &Symbol| {
-        let id = id_map.entry(sym.clone()).or_insert(-1);
-        *id -= 1;
-        Symbol::new(&sym.name.clone(), *id)
-    };
-
-    // Returns the current ID for a given defined symbol. If the symbol is not found, it was
-    // undefined in the expression.
-    let get_id = |id_map: &mut HashMap<Symbol, i32>, sym: &Symbol| {
-        let id = match id_map.get(sym) {
-            Some(e) => e,
-            _ => {
-                return weld_err!("Undefined symbol {} in uniquify", sym.name);
-            }
-        };
-        Ok(Symbol::new(&sym.name.clone(), *id))
-    };
-
-    let mut retval = Ok(());
-
-    // Walk the expression tree, maintaining a map of the highest ID seen for a given
-    // symbol. The ID is incremented when a symbol is redefined in a new scope, and
-    // decremented when exiting the scope. Symbols seen in the original expression
-    // are tracked as keys.
-    expr.transform_and_continue(&mut |ref mut e| {
-        if let Ident(ref sym) = e.kind {
-            let gid = match get_id(id_map, sym) {
-                Ok(e) => e,
-                Err(err) => {
-                    retval = Err(err);
-                    return (None, false);
-                }
-            };
-            return (Some(Expr {
-                             ty: e.ty.clone(),
-                             kind: Ident(gid),
-                             annotations: Annotations::new(),
-                         }),
-                    false);
-        } else if let Lambda {
-                          ref mut params,
-                          ref mut body,
-                      } = e.kind {
-            // Create new parameters for the lambda that will replace this one.
-            let new_params = params
-                .iter()
-                .map(|ref p| {
-                         Parameter {
-                             ty: p.ty.clone(),
-                             name: push_id(id_map, max_ids, &p.name),
-                         }
-                     })
-                .collect::<Vec<_>>();
-
-            if let Err(err) = _uniquify(body, id_map, max_ids) {
-                retval = Err(err);
-                return (None, false);
-            }
-            for param in params.iter() {
-                pop_id(id_map, &param.name);
-            }
-
-            return (Some(Expr {
-                             ty: e.ty.clone(),
-                             kind: Lambda {
-                                 params: new_params,
-                                 body: body.clone(),
-                             },
-                             annotations: Annotations::new(),
-                         }),
-                    false);
-        } else if let Let {
-                          ref mut name,
-                          ref mut value,
-                          ref mut body,
-                      } = e.kind {
-            if let Err(err) = _uniquify(value, id_map, max_ids) {
-                retval = Err(err);
-                return (None, false);
-            }
-            let new_sym = push_id(id_map, max_ids, &name);
-            if let Err(err) = _uniquify(body, id_map, max_ids) {
-                retval = Err(err);
-                return (None, false);
-            }
-            pop_id(id_map, &name);
-            return (Some(Expr {
-                             ty: e.ty.clone(),
-                             kind: Let {
-                                 name: new_sym,
-                                 value: value.clone(),
-                                 body: body.clone(),
-                             },
-                             annotations: Annotations::new(),
-                         }),
-                    false);
         }
-        (None, true)
-    });
-    retval
+        Let {ref mut name, .. } => {
+            let ref new_name = normalize(name);
+            *name = Symbol::name(new_name);
+        }
+        Ident(ref mut sym) => {
+            let ref new_name = normalize(sym);
+            *sym = Symbol::name(new_name);
+        }
+        _ => {}
+    }
+
+    for child in expr.children_mut() {
+        _normalize_names(child)?;
+    }
+
+    Ok(())
+}
+
+/// The main helper function for uniquify, which uses `SymbolStack` to track scope and assign
+/// unique names to each symbol. The prerequisite is that each symbol has `id = 0`.
+fn uniquify_helper<T: TypeBounds>(expr: &mut Expr<T>, symbol_stack: &mut SymbolStack) -> WeldResult<()> {
+    match expr.kind {
+        // First, handle expressions which define *new* symbols - Let and Lambda
+        Lambda {ref mut params, ref mut body} => {
+            // Update the parameter of the lambda with new names.
+            for param in params.iter_mut() {
+                let ref mut sym = param.name;
+                symbol_stack.push_symbol(sym.name.clone());
+                *sym = symbol_stack.symbol(sym.name.clone())?;
+            }
+
+            // Then, uniquify the lambda using the newly pushed symbols.
+            _uniquify(body, symbol_stack)?;
+            
+            // Finally, pop off the symbol names since they are out of scope now.
+            for param in params.iter_mut() {
+                symbol_stack.pop_symbol(param.name.name.clone())?;
+            }
+        }
+        Let {ref mut name, ref mut value, ref mut body} => {
+            // First, uniquify the value *without* the updated stack, since the Let hasn't defined
+            // the symbol yet.
+            _uniquify(value, symbol_stack)?;
+
+            // Now, push the Let's symbol name.
+            symbol_stack.push_symbol(name.name.clone());
+            *name = symbol_stack.symbol(name.name.clone())?;
+
+            // uniquify the body with the new scope.
+            _uniquify(body, symbol_stack)?;
+
+            // Pop off the scope.
+            symbol_stack.pop_symbol(name.name.clone())?;
+        }
+        // Now handle identifiers, which are changed to reflect new symbols.
+        Ident(ref mut sym) => {
+            *sym = symbol_stack.symbol(sym.name.clone())?;
+        }
+        // For all other expressions, call _uniquify on the children.
+        _ => {
+            for child in expr.children_mut() {
+                _uniquify(child, symbol_stack)?;
+            }
+        }
+    }
+
+    Ok(())
 }
 
 /// Inlines Apply nodes whose argument is a Lambda expression. These often arise during macro

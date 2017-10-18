@@ -3183,7 +3183,7 @@ fn predicate_only(code: &str) -> WeldResult<TypedExpr> {
     let optstr = ["predicate"];
     let optpass = optstr.iter().map(|x| (*OPTIMIZATION_PASSES.get(x).unwrap()).clone()).collect();
 
-    apply_opt_passes(&mut typed_e, &optpass)?;
+    apply_opt_passes(&mut typed_e, &optpass, &mut CompilationStats::new())?;
 
     Ok(typed_e)
 }
