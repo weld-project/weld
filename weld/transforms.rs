@@ -143,7 +143,7 @@ fn normalize_names<T: TypeBounds>(expr: &mut Expr<T>) -> WeldResult<()> {
     }
 
     for child in expr.children_mut() {
-        _normalize_names(child)?;
+        normalize_names(child)?;
     }
 
     Ok(())
@@ -163,7 +163,7 @@ fn uniquify_helper<T: TypeBounds>(expr: &mut Expr<T>, symbol_stack: &mut SymbolS
             }
 
             // Then, uniquify the lambda using the newly pushed symbols.
-            _uniquify(body, symbol_stack)?;
+            uniquify_helper(body, symbol_stack)?;
             
             // Finally, pop off the symbol names since they are out of scope now.
             for param in params.iter_mut() {
@@ -173,14 +173,14 @@ fn uniquify_helper<T: TypeBounds>(expr: &mut Expr<T>, symbol_stack: &mut SymbolS
         Let {ref mut name, ref mut value, ref mut body} => {
             // First, uniquify the value *without* the updated stack, since the Let hasn't defined
             // the symbol yet.
-            _uniquify(value, symbol_stack)?;
+            uniquify_helper(value, symbol_stack)?;
 
             // Now, push the Let's symbol name.
             symbol_stack.push_symbol(name.name.clone());
             *name = symbol_stack.symbol(name.name.clone())?;
 
             // uniquify the body with the new scope.
-            _uniquify(body, symbol_stack)?;
+            uniquify_helper(body, symbol_stack)?;
 
             // Pop off the scope.
             symbol_stack.pop_symbol(name.name.clone())?;
@@ -189,10 +189,10 @@ fn uniquify_helper<T: TypeBounds>(expr: &mut Expr<T>, symbol_stack: &mut SymbolS
         Ident(ref mut sym) => {
             *sym = symbol_stack.symbol(sym.name.clone())?;
         }
-        // For all other expressions, call _uniquify on the children.
+        // For all other expressions, call uniquify_helper on the children.
         _ => {
             for child in expr.children_mut() {
-                _uniquify(child, symbol_stack)?;
+                uniquify_helper(child, symbol_stack)?;
             }
         }
     }
