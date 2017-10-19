@@ -5,6 +5,9 @@ extern crate libc;
 #[macro_use]
 extern crate lazy_static;
 
+extern crate clap;
+use clap::{Arg, App, SubCommand};
+
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
 use std::env;
@@ -21,6 +24,8 @@ use libc::c_char;
 use weld::*;
 use weld::common::*;
 
+const PROMPT: &'static str = ">>> ";
+
 enum ReplCommands {
     LoadFile,
     GetConf,
@@ -36,10 +41,6 @@ impl fmt::Display for ReplCommands {
         }
     }
 }
-
-const LOG_PROMPT: &'static str = "REPL Log Level ([none|\x1b[0;31merror\x1b[0m|\x1b[0;33mwarn\x1b[0m\
-          |\x1b[0;33minfo\x1b[0m|\x1b[0;32mdebug\x1b[0m(default)|\x1b[0;32mtrace\x1b[0m]): ";
-const PROMPT: &'static str = ">>> ";
 
 lazy_static! {
     static ref RESERVED_WORDS: HashMap<String, ReplCommands> = {
@@ -191,7 +192,33 @@ fn handle_string<'a>(command: &'a str, conf: *mut WeldConf) -> Option<String> {
 }
 
 fn main() {
-    let mut initialized = false;
+    let matches = App::new("Weld REPL")
+        .version("0.1.0")
+        .author("Weld authors <weld-group@cs.stanford.edu")
+        .about("A REPL for Weld")
+        .arg(Arg::with_name("loglevel")
+             .short("l")
+             .long("loglevel")
+             .value_name("LEVEL")
+             .help("Log level for the Weld compiler")
+             .takes_value(true))
+        .get_matches();
+
+    let log_level_str = matches.value_of("loglevel").unwrap_or("debug").to_lowercase();
+    let (log_level, log_str) = match log_level_str.as_str() {
+        "none" =>   (WeldLogLevel::Off,         "none"),
+        "error" =>  (WeldLogLevel::Error,       "\x1b[0;31merror\x1b[0m"),
+        "warn" =>   (WeldLogLevel::Warn,        "\x1b[0;33mwarn\x1b[0m"),
+        "info" =>   (WeldLogLevel::Info,        "\x1b[0;33minfo\x1b[0m"),
+        "debug" =>  (WeldLogLevel::Debug,       "\x1b[0;32mdebug\x1b[0m"), 
+        "trace" =>  (WeldLogLevel::Trace,       "\x1b[0;32mtrace\x1b[0m"),
+        ref s => {
+            println!("Unrecognized log level {}", s);
+            std::process::exit(1);
+        }
+    };
+    weld_set_log_level(log_level);
+    println!("Log Level set to '{}'", log_str);
 
     // This is the conf we use for compilation.
     let conf = weld_conf_new();
@@ -204,33 +231,6 @@ fn main() {
     if let Err(_) = rl.load_history(&history_file_path) {}
 
     loop {
-        // If the REPL is not initialized, read a log level first.
-        if !initialized {
-            // Don't save the log level in the history file.
-            if let Some(input) = read_input(&mut rl, LOG_PROMPT, false) {
-                let (log_level, log_str) = match input.to_lowercase().as_str() {
-                    "none" =>   (WeldLogLevel::Off,         "none"),
-                    "error" =>  (WeldLogLevel::Error,       "\x1b[0;31merror\x1b[0m"),
-                    "warn" =>   (WeldLogLevel::Warn,        "\x1b[0;33mwarn\x1b[0m"),
-                    "info" =>   (WeldLogLevel::Info,        "\x1b[0;33minfo\x1b[0m"),
-                    "debug" =>  (WeldLogLevel::Debug,       "\x1b[0;32mdebug\x1b[0m"), 
-                    "" =>       (WeldLogLevel::Debug,       "\x1b[0;32mdebug\x1b[0m (default)"), 
-                    "trace" =>  (WeldLogLevel::Trace,       "\x1b[0;32mtrace\x1b[0m"),
-                    ref s => {
-                        println!("Unrecognized log level {}", s);
-                        continue;
-                    }
-                };
-                weld_set_log_level(log_level);
-                println!("Log Level set to '{}'", log_str);
-                initialized = true;
-            } else {
-                break;
-            }
-            continue;
-        }
-
-
         // Check if the input was valid.
         let input = read_input(&mut rl, PROMPT, true);
         if input.is_none() {
