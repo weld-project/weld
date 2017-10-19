@@ -1,26 +1,35 @@
 //! Implements hashing for expressions, which can be used for comparing two expressions for
 //! equality.
 
+// Fast hash function used by Rust's compiler.
+extern crate fnv;
+
 use super::ast::*;
 use super::ast::ExprKind::*;
 use super::ast::LiteralKind::*;
 use super::error::*;
 
-use std::collections::HashMap;
-use std::collections::hash_map::{Entry, DefaultHasher};
+use std::collections::hash_map::Entry;
 use std::hash::{Hash, Hasher};
 
+use std::fmt;
+
 /// A signature which uniquely represents an Expression in a concise manner.
-#[derive(Debug)]
 pub struct ExprHash {
-    hasher: DefaultHasher,
+    hasher: fnv::FnvHasher,
+}
+
+impl fmt::Debug for ExprHash {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "ExprHash({})", self.hasher.finish())
+    }
 }
 
 impl ExprHash {
     /// Recurisvely computes signatures for an expression and each of its subexpressions.
     /// The precise symbol names defined within the expression are ignored.
     fn from_expr<'a, T: TypeBounds>(&mut self, expr: &'a Expr<T>,
-                                    symbol_positions: &mut HashMap<&'a Symbol, Vec<i32>>,
+                                    symbol_positions: &mut fnv::FnvHashMap<&'a Symbol, Vec<i32>>,
                                     max_id: &mut i32) -> WeldResult<()> {
         // In expressions that define new symbols, subexpressions will be handled in the match.
         let mut finished_subexpressions = false;
@@ -132,8 +141,8 @@ impl ExprHash {
 
     /// Create a signature from an expression.
     pub fn from<T:TypeBounds>(expr: &Expr<T>) -> WeldResult<ExprHash> {
-        let mut sig = ExprHash { hasher: DefaultHasher::new() };
-        let mut symbol_positions = HashMap::new();
+        let mut sig = ExprHash { hasher: fnv::FnvHasher::default() };
+        let mut symbol_positions = fnv::FnvHashMap::default();
         let mut max_id = 0;
         sig.from_expr(expr, &mut symbol_positions, &mut max_id)?;
         Ok(sig)

@@ -7,9 +7,6 @@ use super::expr_hash::*;
 
 use std::collections::HashMap;
 
-extern crate time;
-use time::PreciseTime;
-
 pub struct Pass {
     transforms: Vec<fn(&mut Expr<Type>)>,
     pass_name: String,
@@ -40,9 +37,7 @@ impl Pass {
             for transform in &self.transforms {
                 transform(&mut expr);
             }
-            let start = PreciseTime::now();
             let after = ExprHash::from(expr)?.value();
-            println!("{} ms", start.to(PreciseTime::now()).num_milliseconds());
             continue_pass = !(before == after);
             before = after;
         }
