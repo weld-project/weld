@@ -53,7 +53,7 @@ define void @{NAME}.bld.clearPiece(%{NAME}.bld.piecePtr %piecePtr, {ELEM} %ident
 define void @{NAME}.bld.clearStackPiece(%{NAME}.bld* %bldPtr, {ELEM} %identity) {{
   %stackPiecePtr = getelementptr %{NAME}.bld, %{NAME}.bld* %bldPtr, i32 0, i32 0
   %stackPiece = load %{NAME}.bld.piecePtr, %{NAME}.bld.piecePtr* %stackPiecePtr
-  call void @{NAME}.bld.clearPieceGlobal(%{NAME}.bld.piecePtr %stackPiece, {ELEM} %identity)
+  call void @{NAME}.bld.clearPiece(%{NAME}.bld.piecePtr %stackPiece, {ELEM} %identity)
   ret void
 }}
 
@@ -79,7 +79,7 @@ cont:
 body:
   %i = phi i32 [ 0, %cont ], [ %i2, %body ]
   %curPiecePtr = call %{NAME}.bld.piecePtr @{NAME}.bld.getPtrIndexed(%{NAME}.bld* %bldPtr, i32 %i)
-  call void @{NAME}.bld.clearPieceGlobal(%{NAME}.bld.piecePtr %curPiecePtr, {ELEM} %identity)
+  call void @{NAME}.bld.clearPiece(%{NAME}.bld.piecePtr %curPiecePtr, {ELEM} %identity)
   %i2 = add i32 %i, 1
   %cond2 = icmp ult i32 %i2, %nworkers
   br i1 %cond2, label %body, label %done
@@ -100,15 +100,15 @@ define <{VECSIZE} x {ELEM}>* @{NAME}.bld.vectorMergePtrForPiece(%{NAME}.bld.piec
 }}
 
 ; Initialize and return a new merger.
-define %{NAME}.bld @{NAME}.bld.new({ELEM} %identity, {ELEM} %init, %{NAME}.bld.piecePtr %reg) {{
+define %{NAME}.bld @{NAME}.bld.new({ELEM} %identity, {ELEM} %init, %{NAME}.bld.piecePtr %stackPiece) {{
   ; TODO(shoumik): For now, mergers can only be scalars. We may need to do some
   ; kind of initialization here like in the dictmerger if we allow more complex
   ; merger types.
   %piece = call %{NAME}.bld.piece @{NAME}.bld.clearPieceInternal({ELEM} %identity)
-  store %{NAME}.bld.piece %piece, %{NAME}.bld.piecePtr %reg
-  %scalarPtr = call {ELEM}* @{NAME}.bld.scalarMergePtrForPiece(%{NAME}.bld.piecePtr %reg)
+  store %{NAME}.bld.piece %piece, %{NAME}.bld.piecePtr %stackPiece
+  %scalarPtr = call {ELEM}* @{NAME}.bld.scalarMergePtrForPiece(%{NAME}.bld.piecePtr %stackPiece)
   store {ELEM} %init, {ELEM}* %scalarPtr
-  %1 = insertvalue %{NAME}.bld undef, %{NAME}.bld.piecePtr %reg, 0
+  %1 = insertvalue %{NAME}.bld undef, %{NAME}.bld.piecePtr %stackPiece, 0
   %2 = insertvalue %{NAME}.bld %1, i1 0, 2
   ret %{NAME}.bld %2
 }}

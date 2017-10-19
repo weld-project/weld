@@ -300,18 +300,18 @@ impl LlvmGenerator {
                             let bld_ll_ty = self.llvm_type(ty)?;
                             let bld_ll_sym = llvm_symbol(arg);
                             let bld_prefix = llvm_prefix(&bld_ll_ty);
-                            let bld_ll_reg_sym = format!("{}.stack", bld_ll_sym);
-                            let bld_ll_reg_ty = format!("{}.piece", bld_ll_ty);
+                            let bld_ll_stack_sym = format!("{}.stack", bld_ll_sym);
+                            let bld_ll_stack_ty = format!("{}.piece", bld_ll_ty);
                             let val_ll_scalar_ty = self.llvm_type(val_ty)?;
                             let iden_elem = binop_identity(*op, val_ty.as_ref())?;
-                            ctx.add_alloca(&bld_ll_reg_sym, &bld_ll_reg_ty)?;
+                            ctx.add_alloca(&bld_ll_stack_sym, &bld_ll_stack_ty)?;
                             ctx.code.add(format!(
                                 "call void {}.insertStackPiece({}* {}, {}.piecePtr {})",
                                 bld_prefix,
                                 bld_ll_ty,
                                 bld_ll_sym,
                                 bld_ll_ty,
-                                bld_ll_reg_sym));
+                                bld_ll_stack_sym));
                             ctx.code.add(format!(
                                 "call void {}.clearStackPiece({}* {}, {} {})",
                                 bld_prefix,
@@ -380,8 +380,8 @@ impl LlvmGenerator {
                             let bld_ptr_raw = ctx.var_ids.next();
                             let bld_ptr_scalar = ctx.var_ids.next();
                             let bld_ptr_simd = ctx.var_ids.next();
-                            let reg_ptr_scalar = ctx.var_ids.next();
-                            let reg_ptr_simd = ctx.var_ids.next();
+                            let stack_ptr_scalar = ctx.var_ids.next();
+                            let stack_ptr_simd = ctx.var_ids.next();
                             ctx.code.add(format!(
                                 "call void {}.initGlobalIfNeeded({}* {}{}, {} {})",
                                 bld_prefix,
@@ -414,7 +414,7 @@ impl LlvmGenerator {
                                 bld_ptr_raw));
                             ctx.code.add(format!(
                                 "{} = call {}* {}.vectorMergePtrForStackPiece({}* {}{})",
-                                reg_ptr_simd,
+                                stack_ptr_simd,
                                 val_ll_simd_ty,
                                 bld_prefix,
                                 bld_ll_ty,
@@ -422,16 +422,16 @@ impl LlvmGenerator {
                                 suffix));
                             ctx.code.add(format!(
                                 "{} = call {}* {}.scalarMergePtrForStackPiece({}* {}{})",
-                                reg_ptr_scalar,
+                                stack_ptr_scalar,
                                 val_ll_scalar_ty,
                                 bld_prefix,
                                 bld_ll_ty,
                                 bld_ll_sym,
                                 suffix));
-                            let reg_simd = self.gen_load_var(&reg_ptr_simd, &val_ll_simd_ty, ctx)?;
-                            let reg_scalar = self.gen_load_var(&reg_ptr_scalar, &val_ll_scalar_ty, ctx)?;
-                            self.gen_merge_op(&bld_ptr_simd, &reg_simd, &val_ll_simd_ty, op, &val_ty.simd_type()?, ctx)?;
-                            self.gen_merge_op(&bld_ptr_scalar, &reg_scalar, &val_ll_scalar_ty, op, val_ty, ctx)?;
+                            let stack_simd = self.gen_load_var(&stack_ptr_simd, &val_ll_simd_ty, ctx)?;
+                            let stack_scalar = self.gen_load_var(&stack_ptr_scalar, &val_ll_scalar_ty, ctx)?;
+                            self.gen_merge_op(&bld_ptr_simd, &stack_simd, &val_ll_simd_ty, op, &val_ty.simd_type()?, ctx)?;
+                            self.gen_merge_op(&bld_ptr_scalar, &stack_scalar, &val_ll_scalar_ty, op, val_ty, ctx)?;
                         }
                         _ => {}
                     }
@@ -460,8 +460,8 @@ impl LlvmGenerator {
                             let bld_ptr_raw = ctx.var_ids.next();
                             let bld_ptr_scalar = ctx.var_ids.next();
                             let bld_ptr_simd = ctx.var_ids.next();
-                            let reg_ptr_scalar = ctx.var_ids.next();
-                            let reg_ptr_simd = ctx.var_ids.next();
+                            let stack_ptr_scalar = ctx.var_ids.next();
+                            let stack_ptr_simd = ctx.var_ids.next();
                             let is_global = ctx.var_ids.next();
                             ctx.code.add(format!(
                                 "{} = call i1 {}.isGlobal({}* {})",
@@ -494,22 +494,22 @@ impl LlvmGenerator {
                                 bld_ptr_raw));
                             ctx.code.add(format!(
                                 "{} = call {}* {}.vectorMergePtrForStackPiece({}* {})",
-                                reg_ptr_simd,
+                                stack_ptr_simd,
                                 val_ll_simd_ty,
                                 bld_prefix,
                                 bld_ll_ty,
                                 bld_ll_sym));
                             ctx.code.add(format!(
                                 "{} = call {}* {}.scalarMergePtrForStackPiece({}* {})",
-                                reg_ptr_scalar,
+                                stack_ptr_scalar,
                                 val_ll_scalar_ty,
                                 bld_prefix,
                                 bld_ll_ty,
                                 bld_ll_sym));
-                            let reg_simd = self.gen_load_var(&reg_ptr_simd, &val_ll_simd_ty, ctx)?;
-                            let reg_scalar = self.gen_load_var(&reg_ptr_scalar, &val_ll_scalar_ty, ctx)?;
-                            self.gen_merge_op(&bld_ptr_simd, &reg_simd, &val_ll_simd_ty, op, &val_ty.simd_type()?, ctx)?;
-                            self.gen_merge_op(&bld_ptr_scalar, &reg_scalar, &val_ll_scalar_ty, op, val_ty, ctx)?;
+                            let stack_simd = self.gen_load_var(&stack_ptr_simd, &val_ll_simd_ty, ctx)?;
+                            let stack_scalar = self.gen_load_var(&stack_ptr_scalar, &val_ll_scalar_ty, ctx)?;
+                            self.gen_merge_op(&bld_ptr_simd, &stack_simd, &val_ll_simd_ty, op, &val_ty.simd_type()?, ctx)?;
+                            self.gen_merge_op(&bld_ptr_scalar, &stack_scalar, &val_ll_scalar_ty, op, val_ty, ctx)?;
                             ctx.code.add(format!("br label {}", next_label));
                             ctx.code.add(format!("{}:", next_label.replace("%", "")));
                         }
@@ -2836,11 +2836,11 @@ impl LlvmGenerator {
                     }
                     _ => iden_elem.clone(),
                 };
-                let bld_tmp_reg = format!("{}.stack", bld_tmp);
-                let bld_reg_ty_str = format!("{}.piece", bld_ty_str);
-                ctx.add_alloca(&bld_tmp_reg, &bld_reg_ty_str)?;
+                let bld_tmp_stack = format!("{}.stack", bld_tmp);
+                let bld_stack_ty_str = format!("{}.piece", bld_ty_str);
+                ctx.add_alloca(&bld_tmp_stack, &bld_stack_ty_str)?;
                 ctx.code.add(format!("{} = call {} {}.new({} {}, {} {}, {}* {})", bld_tmp, bld_ty_str,
-                    bld_prefix, elem_type, iden_elem, elem_type, init_elem, bld_reg_ty_str, bld_tmp_reg));
+                    bld_prefix, elem_type, iden_elem, elem_type, init_elem, bld_stack_ty_str, bld_tmp_stack));
                 self.gen_store_var(&bld_tmp, &llvm_symbol(output), &bld_ty_str, ctx);
             }
             DictMerger(_, _, _) => {

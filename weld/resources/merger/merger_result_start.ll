@@ -1,7 +1,7 @@
 ; Begin merger merge.
   {is_global} = call i1 {bld_prefix}.isGlobal({bld_ty_str}* {bld_sym})
-  {scalar_ptr} = call {elem_ty_str}* {bld_prefix}.scalarMergePtrForReg({bld_ty_str}* {bld_sym})
-  {vector_ptr} = call {elem_vec_ty_str}* {bld_prefix}.vectorMergePtrForReg({bld_ty_str}* {bld_sym})
+  {scalar_ptr} = call {elem_ty_str}* {bld_prefix}.scalarMergePtrForStackPiece({bld_ty_str}* {bld_sym})
+  {vector_ptr} = call {elem_vec_ty_str}* {bld_prefix}.vectorMergePtrForStackPiece({bld_ty_str}* {bld_sym})
   br i1 {is_global}, label %{entry}, label %{done}
 {entry}:
   {nworkers} = call i32 @weld_rt_get_nworkers()
