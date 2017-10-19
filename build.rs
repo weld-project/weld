@@ -7,22 +7,6 @@ fn main() {
     let status = Command::new("make")
         .arg("clean")
         .arg("-C")
-        .arg(format!("{}/python/grizzly/grizzly", project_dir))
-        .status()
-        .unwrap();
-    assert!(status.success());
-
-    let status = Command::new("make")
-        .arg("convertor")
-        .arg("-C")
-        .arg(format!("{}/python/grizzly/grizzly", project_dir))
-        .status()
-        .unwrap();
-    assert!(status.success());
-
-    let status = Command::new("make")
-        .arg("clean")
-        .arg("-C")
         .arg(format!("{}/weld_rt/cpp/", project_dir))
         .status()
         .unwrap();
