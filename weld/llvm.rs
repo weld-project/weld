@@ -306,14 +306,14 @@ impl LlvmGenerator {
                             let iden_elem = binop_identity(*op, val_ty.as_ref())?;
                             ctx.add_alloca(&bld_ll_reg_sym, &bld_ll_reg_ty)?;
                             ctx.code.add(format!(
-                                "call void {}.insertReg({}* {}, {}.piecePtr {})",
+                                "call void {}.insertStackPiece({}* {}, {}.piecePtr {})",
                                 bld_prefix,
                                 bld_ll_ty,
                                 bld_ll_sym,
                                 bld_ll_ty,
                                 bld_ll_reg_sym));
                             ctx.code.add(format!(
-                                "call void {}.clearPieceReg({}* {}, {} {})",
+                                "call void {}.clearStackPiece({}* {}, {} {})",
                                 bld_prefix,
                                 bld_ll_ty,
                                 bld_ll_sym,
@@ -347,7 +347,7 @@ impl LlvmGenerator {
                             let iden_elem = binop_identity(*op, val_ty.as_ref())?;
                             let bld_prefix = llvm_prefix(&bld_ll_ty);
                             ctx.code.add(format!(
-                                "call void {}.clearPieceGlobal({}* {}, {} {})",
+                                "call void {}.clearPiece({}* {}, {} {})",
                                 bld_prefix,
                                 bld_ll_reg_ty,
                                 bld_ll_reg_sym,
@@ -413,7 +413,7 @@ impl LlvmGenerator {
                                 bld_ll_ty,
                                 bld_ptr_raw));
                             ctx.code.add(format!(
-                                "{} = call {}* {}.vectorMergePtrForReg({}* {}{})",
+                                "{} = call {}* {}.vectorMergePtrForStackPiece({}* {}{})",
                                 reg_ptr_simd,
                                 val_ll_simd_ty,
                                 bld_prefix,
@@ -421,7 +421,7 @@ impl LlvmGenerator {
                                 bld_ll_sym,
                                 suffix));
                             ctx.code.add(format!(
-                                "{} = call {}* {}.scalarMergePtrForReg({}* {}{})",
+                                "{} = call {}* {}.scalarMergePtrForStackPiece({}* {}{})",
                                 reg_ptr_scalar,
                                 val_ll_scalar_ty,
                                 bld_prefix,
@@ -493,14 +493,14 @@ impl LlvmGenerator {
                                 bld_ll_ty,
                                 bld_ptr_raw));
                             ctx.code.add(format!(
-                                "{} = call {}* {}.vectorMergePtrForReg({}* {})",
+                                "{} = call {}* {}.vectorMergePtrForStackPiece({}* {})",
                                 reg_ptr_simd,
                                 val_ll_simd_ty,
                                 bld_prefix,
                                 bld_ll_ty,
                                 bld_ll_sym));
                             ctx.code.add(format!(
-                                "{} = call {}* {}.scalarMergePtrForReg({}* {})",
+                                "{} = call {}* {}.scalarMergePtrForStackPiece({}* {})",
                                 reg_ptr_scalar,
                                 val_ll_scalar_ty,
                                 bld_prefix,
@@ -541,14 +541,14 @@ impl LlvmGenerator {
                             let reg_ptr_scalar = ctx.var_ids.next();
                             let reg_ptr_simd = ctx.var_ids.next();
                             ctx.code.add(format!(
-                                "{} = call {}* {}.vectorMergePtrForReg({}* {})",
+                                "{} = call {}* {}.vectorMergePtrForStackPiece({}* {})",
                                 bld_ptr_simd,
                                 val_ll_simd_ty,
                                 bld_prefix,
                                 bld_ll_ty,
                                 bld_ll_sym));
                             ctx.code.add(format!(
-                                "{} = call {}* {}.scalarMergePtrForReg({}* {})",
+                                "{} = call {}* {}.scalarMergePtrForStackPiece({}* {})",
                                 bld_ptr_scalar,
                                 val_ll_scalar_ty,
                                 bld_prefix,
@@ -2333,7 +2333,7 @@ impl LlvmGenerator {
                     let merge_ptr = ctx.var_ids.next();
                     if !ctx.is_innermost {
                         ctx.code.add(format!(
-                            "{} = call {}* {}.vectorMergePtrForReg({}* {})",
+                            "{} = call {}* {}.vectorMergePtrForStackPiece({}* {})",
                             merge_ptr,
                             val_ll_ty,
                             bld_prefix,
@@ -2427,7 +2427,7 @@ impl LlvmGenerator {
                 let merge_ptr = ctx.var_ids.next();
                 if !ctx.is_innermost {
                     ctx.code.add(format!(
-                        "{} = call {}* {}.scalarMergePtrForReg({}* {})",
+                        "{} = call {}* {}.scalarMergePtrForStackPiece({}* {})",
                         merge_ptr,
                         val_ll_ty,
                         bld_prefix,

@@ -9,7 +9,7 @@
 %{NAME}.bld.piecePtr = type %{NAME}.bld.piece*
 %{NAME}.bld = type {{ %{NAME}.bld.piece*, i8*, i1 }} ; local version, global version, hasGlobal
 
-; Returns a pointer to builder data for index i (generally, i is the thread ID).
+; Returns a pointer to merger piece for index i (generally, i is the thread ID).
 define %{NAME}.bld.piecePtr @{NAME}.bld.getPtrIndexed(%{NAME}.bld* %bldPtr, i32 %i) alwaysinline {{
   %bld = load %{NAME}.bld, %{NAME}.bld* %bldPtr
   %mergerPtr = getelementptr %{NAME}.bld.piece, %{NAME}.bld.piece* null, i32 1
@@ -44,22 +44,22 @@ done:
 
 ; Clear the merger piece by assigning the scalar element and each vector element to
 ; a user defined identity value.
-define void @{NAME}.bld.clearPieceGlobal(%{NAME}.bld.piecePtr %piecePtr, {ELEM} %identity) {{
+define void @{NAME}.bld.clearPiece(%{NAME}.bld.piecePtr %piecePtr, {ELEM} %identity) {{
   %result = call %{NAME}.bld.piece @{NAME}.bld.clearPieceInternal({ELEM} %identity)
   store %{NAME}.bld.piece %result, %{NAME}.bld.piecePtr %piecePtr
   ret void
 }}
 
-define void @{NAME}.bld.clearPieceReg(%{NAME}.bld* %bldPtr, {ELEM} %identity) {{
-  %regPtr = getelementptr %{NAME}.bld, %{NAME}.bld* %bldPtr, i32 0, i32 0
-  %reg = load %{NAME}.bld.piecePtr, %{NAME}.bld.piecePtr* %regPtr
-  call void @{NAME}.bld.clearPieceGlobal(%{NAME}.bld.piecePtr %reg, {ELEM} %identity)
+define void @{NAME}.bld.clearStackPiece(%{NAME}.bld* %bldPtr, {ELEM} %identity) {{
+  %stackPiecePtr = getelementptr %{NAME}.bld, %{NAME}.bld* %bldPtr, i32 0, i32 0
+  %stackPiece = load %{NAME}.bld.piecePtr, %{NAME}.bld.piecePtr* %stackPiecePtr
+  call void @{NAME}.bld.clearPieceGlobal(%{NAME}.bld.piecePtr %stackPiece, {ELEM} %identity)
   ret void
 }}
 
-define void @{NAME}.bld.insertReg(%{NAME}.bld* %bldPtr, %{NAME}.bld.piecePtr %reg) {{
-  %regPtr = getelementptr %{NAME}.bld, %{NAME}.bld* %bldPtr, i32 0, i32 0
-  store %{NAME}.bld.piecePtr %reg, %{NAME}.bld.piecePtr* %regPtr
+define void @{NAME}.bld.insertStackPiece(%{NAME}.bld* %bldPtr, %{NAME}.bld.piecePtr %stackPiece) {{
+  %stackPiecePtr = getelementptr %{NAME}.bld, %{NAME}.bld* %bldPtr, i32 0, i32 0
+  store %{NAME}.bld.piecePtr %stackPiece, %{NAME}.bld.piecePtr* %stackPiecePtr
   ret void
 }}
 
@@ -87,15 +87,13 @@ done:
   ret void
 }}
 
-; Returns a pointer to a scalar value that an element can be merged into. %bldPtr is
-; a value retrieved via getPtrIndexed.
+; Returns a pointer to a scalar value that an element can be merged into.
 define {ELEM}* @{NAME}.bld.scalarMergePtrForPiece(%{NAME}.bld.piecePtr %piecePtr) {{
   %bldScalarPtr = getelementptr %{NAME}.bld.piece, %{NAME}.bld.piecePtr %piecePtr, i32 0, i32 0
   ret {ELEM}* %bldScalarPtr
 }}
 
-; Returns a pointer to a vector value that an element can be merged into. %bldPtr is
-; a value retrieved via getPtrIndexed.
+; Returns a pointer to a vector value that an element can be merged into.
 define <{VECSIZE} x {ELEM}>* @{NAME}.bld.vectorMergePtrForPiece(%{NAME}.bld.piecePtr %piecePtr) {{
   %bldVectorPtr = getelementptr %{NAME}.bld.piece, %{NAME}.bld.piecePtr %piecePtr, i32 0, i32 1
   ret <{VECSIZE} x {ELEM}>* %bldVectorPtr
@@ -116,18 +114,18 @@ define %{NAME}.bld @{NAME}.bld.new({ELEM} %identity, {ELEM} %init, %{NAME}.bld.p
 }}
 
 ; Returns a pointer to a scalar value that an element can be merged into.
-define {ELEM}* @{NAME}.bld.scalarMergePtrForReg(%{NAME}.bld* %bldPtr) {{
-  %regPtr = getelementptr %{NAME}.bld, %{NAME}.bld* %bldPtr, i32 0, i32 0
-  %reg = load %{NAME}.bld.piecePtr, %{NAME}.bld.piecePtr* %regPtr
-  %bldScalarPtr = getelementptr %{NAME}.bld.piece, %{NAME}.bld.piecePtr %reg, i32 0, i32 0
+define {ELEM}* @{NAME}.bld.scalarMergePtrForStackPiece(%{NAME}.bld* %bldPtr) {{
+  %stackPiecePtr = getelementptr %{NAME}.bld, %{NAME}.bld* %bldPtr, i32 0, i32 0
+  %stackPiece = load %{NAME}.bld.piecePtr, %{NAME}.bld.piecePtr* %stackPiecePtr
+  %bldScalarPtr = getelementptr %{NAME}.bld.piece, %{NAME}.bld.piecePtr %stackPiece, i32 0, i32 0
   ret {ELEM}* %bldScalarPtr
 }}
 
 ; Returns a pointer to a vector value that an element can be merged into.
-define <{VECSIZE} x {ELEM}>* @{NAME}.bld.vectorMergePtrForReg(%{NAME}.bld* %bldPtr) {{
-  %regPtr = getelementptr %{NAME}.bld, %{NAME}.bld* %bldPtr, i32 0, i32 0
-  %reg = load %{NAME}.bld.piecePtr, %{NAME}.bld.piecePtr* %regPtr
-  %bldVectorPtr = getelementptr %{NAME}.bld.piece, %{NAME}.bld.piecePtr %reg, i32 0, i32 1
+define <{VECSIZE} x {ELEM}>* @{NAME}.bld.vectorMergePtrForStackPiece(%{NAME}.bld* %bldPtr) {{
+  %stackPiecePtr = getelementptr %{NAME}.bld, %{NAME}.bld* %bldPtr, i32 0, i32 0
+  %stackPiece = load %{NAME}.bld.piecePtr, %{NAME}.bld.piecePtr* %stackPiecePtr
+  %bldVectorPtr = getelementptr %{NAME}.bld.piece, %{NAME}.bld.piecePtr %stackPiece, i32 0, i32 1
   ret <{VECSIZE} x {ELEM}>* %bldVectorPtr
 }}
 
