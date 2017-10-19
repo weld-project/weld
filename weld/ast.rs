@@ -2,6 +2,7 @@
 
 use std::vec;
 use std::fmt;
+use std::hash::Hash;
 
 use super::error::*;
 
@@ -405,7 +406,7 @@ pub enum BuilderKind {
     VecMerger(Box<Type>, BinOpKind),
 }
 
-pub trait TypeBounds: Clone + PartialEq {}
+pub trait TypeBounds: Clone + PartialEq + Hash {}
 
 impl TypeBounds for Type {}
 
@@ -534,6 +535,42 @@ pub enum ExprKind<T: TypeBounds> {
         value: Box<Expr<T>>,
     },
     Res { builder: Box<Expr<T>> },
+}
+
+impl<T: TypeBounds> ExprKind<T> {
+    /// Return a readable name for the kind which is independent of any subexpressions.
+    pub fn name(&self) -> &str {
+        use ast::ExprKind::*;
+        match *self {
+            Literal(_) => "Literal",
+            Ident(_) => "Ident",
+            Negate(_) => "Negate",
+            Broadcast(_) => "Broadcast",
+            BinOp{ .. } => "BinOp",
+            UnaryOp { .. } => "UnaryOp",
+            Cast { .. } => "Cast",
+            ToVec { .. } => "ToVec",
+            MakeStruct { .. } => "MakeStruct",
+            MakeVector { .. } => "MakeVector",
+            Zip { .. } => "Zip",
+            GetField { .. } => "GetField",
+            Length { .. } => "Length",
+            Lookup { .. } => "Lookup",
+            KeyExists { .. } => "KeyExists",
+            Slice { .. } => "Slice",
+            Let { .. } => "Let",
+            If { .. } => "If",
+            Iterate { .. } => "Iterate",
+            Select { .. } => "Select",
+            Lambda  { .. } => "Lambda",
+            Apply { .. } => "Apply",
+            CUDF { .. } => "CUDF", 
+            NewBuilder(_) => "NewBuilder",
+            For { .. } => "For",
+            Merge { .. } => "Merge",
+            Res { .. } => "Res",
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]

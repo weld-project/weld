@@ -3,7 +3,12 @@ use super::error::*;
 use super::transforms;
 use super::vectorizer;
 
+use super::expr_hash::*;
+
 use std::collections::HashMap;
+
+extern crate time;
+use time::PreciseTime;
 
 pub struct Pass {
     transforms: Vec<fn(&mut Expr<Type>)>,
@@ -29,15 +34,17 @@ impl Pass {
     }
 
     pub fn transform(&self, mut expr: &mut Expr<Type>) -> WeldResult<()> {
-        let mut expr_copy = expr.clone();
         let mut continue_pass = true;
+        let mut before = ExprHash::from(expr)?.value();
         while continue_pass {
             for transform in &self.transforms {
                 transform(&mut expr);
             }
-
-            continue_pass = !try!(expr.compare_ignoring_symbols(&expr_copy));
-            expr_copy = expr.clone();
+            let start = PreciseTime::now();
+            let after = ExprHash::from(expr)?.value();
+            println!("{} ms", start.to(PreciseTime::now()).num_milliseconds());
+            continue_pass = !(before == after);
+            before = after;
         }
         Ok(())
     }

@@ -8,10 +8,10 @@ use super::ast::LiteralKind::*;
 use super::error::*;
 use super::exprs;
 
+use super::util::SymbolGenerator;
+
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
-
-use super::util::SymbolGenerator;
 
 /// Inlines Zip expressions as collections of iters. Using Zips outside of a For loop is currently
 /// unsupported behavior. This transform handles the simple case of converting Zips in macros

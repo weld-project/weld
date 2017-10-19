@@ -51,6 +51,7 @@ pub mod type_inference;
 pub mod conf;
 pub mod util;
 pub mod exprs;
+pub mod expr_hash;
 
 // TODO not the right place for this.
 pub mod vectorizer;
