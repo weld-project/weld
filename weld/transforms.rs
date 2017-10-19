@@ -932,7 +932,7 @@ fn simple_merge(sym: &Symbol, expr: &Expr<Type>) -> bool {
 /// iteration, which can cause stack exhaustion.
 ///
 /// FIXME we need a long term solution to this!
-pub fn force_iterate_parallel_fors(expr: &mut Expr<Type>) {
+pub fn force_iterate_parallel_fors(expr: &mut Expr<Type>, _: &mut SymbolGenerator) {
     expr.transform_and_continue(&mut |ref mut e| {
         match e.kind {
              Iterate { .. } => {
