@@ -6,7 +6,7 @@ extern crate libc;
 extern crate lazy_static;
 
 extern crate clap;
-use clap::{Arg, App, SubCommand};
+use clap::{Arg, App};
 
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
