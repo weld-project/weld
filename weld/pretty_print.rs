@@ -275,11 +275,13 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>,
             ref body,
         } => {
             if typed {
-                format!("(let {}:{}=({});{})",
+                format!("(let {}:{}=({});\n{}{}\n{})",
                         name,
                         value.ty.print(),
                         print_expr_impl(value, typed, indent, should_indent),
-                        print_expr_impl(body, typed, indent, should_indent))
+                        indent_str,
+                        print_expr_impl(body, typed, indent + 2, should_indent),
+                        less_indent_str)
             } else {
                 format!("(let {}=({});{})",
                         name,

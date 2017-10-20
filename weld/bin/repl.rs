@@ -126,6 +126,7 @@ fn main() {
         match raw_readline {
             Ok(raw_readline) => {
                 rl.add_history_entry(&raw_readline);
+                rl.save_history(&history_file_path).unwrap();
                 readline = raw_readline;
             }
             Err(ReadlineError::Interrupted) => {

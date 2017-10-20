@@ -6,13 +6,14 @@ use super::ast::Type::*;
 use super::ast::BuilderKind::*;
 use super::ast::LiteralKind::*;
 use super::error::*;
+use super::pretty_print::print_type;
 
-fn new_expr(kind: ExprKind<Type>, ty: Type) -> WeldResult<Expr<Type>> {
+pub fn new_expr(kind: ExprKind<Type>, ty: Type) -> WeldResult<Expr<Type>> {
     Ok(Expr {
-           kind: kind,
-           ty: ty,
-           annotations: Annotations::new(),
-       })
+        kind: kind,
+        ty: ty,
+        annotations: Annotations::new(),
+    })
 }
 
 pub fn literal_expr(kind: LiteralKind) -> WeldResult<Expr<Type>> {
@@ -33,7 +34,7 @@ pub fn literal_expr(kind: LiteralKind) -> WeldResult<Expr<Type>> {
 }
 
 pub fn ident_expr(symbol: Symbol, ty: Type) -> WeldResult<Expr<Type>> {
-    new_expr(Ident(symbol.clone()), ty.clone())
+    new_expr(Ident(symbol), ty)
 }
 
 pub fn binop_expr(kind: BinOpKind, left: Expr<Type>, right: Expr<Type>) -> WeldResult<Expr<Type>> {
@@ -381,7 +382,8 @@ pub fn for_expr(iters: Vec<Iter<Type>>, builder: Expr<Type>, func: Expr<Type>, v
                 vec_elem_tys[0].clone()
             };
             if *param_2_ty != elem_ty {
-                return weld_err!("Internal error: Mismatched types in for_expr - function elem type",);
+                return weld_err!("Internal error: Mismatched types in for_expr - function elem type {} != {}",
+                    print_type(param_2_ty), print_type(&elem_ty));
             }
         } else {
             let composite_ty = if vectorized {
@@ -434,7 +436,7 @@ pub fn merge_expr(builder: Expr<Type>, value: Expr<Type>) -> WeldResult<Expr<Typ
             DictMerger(ref elem_ty1, ref elem_ty2, _) => {
                 if let Struct(ref v_ty) = value.ty {
                     if v_ty.len() < 2 { return err; }
-                    
+
                     if elem_ty1.as_ref() != &v_ty[0] {
                         return err;
                     }

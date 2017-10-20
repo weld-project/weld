@@ -25,6 +25,7 @@ use super::sir::Terminator::*;
 use super::transforms;
 use super::type_inference;
 use super::util::IdGenerator;
+use super::util::SymbolGenerator;
 use super::util::WELD_INLINE_LIB;
 
 #[cfg(test)]
@@ -54,9 +55,10 @@ pub struct WeldOutputArgs {
 }
 
 pub fn apply_opt_passes(expr: &mut TypedExpr, opt_passes: &Vec<Pass>) -> WeldResult<()> {
+    let mut gen = SymbolGenerator::from_expression(expr);
     for pass in opt_passes {
-        pass.transform(expr)?;
-        trace!("After {} pass:\n{}", pass.pass_name(), print_typed_expr(&expr));
+        pass.transform(expr, &mut gen)?;
+        debug!("After {} pass:\n{}", pass.pass_name(), print_typed_expr(&expr));
     }
     Ok(())
 }
@@ -74,8 +76,10 @@ pub fn compile_program(program: &Program, opt_passes: &Vec<Pass>, llvm_opt_level
 
     apply_opt_passes(&mut expr, opt_passes)?;
 
+    // TODO: this is probably not needed if opt_passes used a symbol generator properly;
+    // maybe just check whether they messed up?
     transforms::uniquify(&mut expr)?;
-    debug!("Optimized Weld program:\n{}\n", print_expr(&expr));
+    debug!("Optimized Weld program:\n{}\n", print_typed_expr(&expr));
 
     let sir_prog = sir::ast_to_sir(&expr, multithreaded)?;
     debug!("SIR program:\n{}\n", &sir_prog);
@@ -1100,7 +1104,7 @@ impl LlvmGenerator {
     /// Generates a `cmp` function for `ty` and any nested types it depends on.
     fn gen_cmp(&mut self, ty: &Type) -> WeldResult<()> {
         // If we've already generated a function for this type, return.
-        { 
+        {
             let helper_state = self.type_helpers.entry(ty.clone()).or_insert(HelperState::new());
             if helper_state.cmp_func {
                 return Ok(());
@@ -1243,7 +1247,7 @@ impl LlvmGenerator {
     /// Generates an `eq` function for `ty` and any nested types it depends on.
     fn gen_eq(&mut self, ty: &Type) -> WeldResult<()> {
         // If we've already generated a function for this type, return.
-        { 
+        {
             let helper_state = self.type_helpers.entry(ty.clone()).or_insert(HelperState::new());
             if helper_state.eq_func {
                 return Ok(());
@@ -1314,7 +1318,7 @@ impl LlvmGenerator {
                 let dict_name = self.dict_names.get(ty).unwrap();
                 self.prelude_code.add(format!("
                 define i1 @{NAME}.eq(%{NAME} %dict1, %{NAME} %dict2) {{
-                  ret i1 0 
+                  ret i1 0
                 }}", NAME=dict_name.replace("%", "")));
             }
             Builder(ref bk, _) => {
@@ -1322,7 +1326,7 @@ impl LlvmGenerator {
                 let bld_name = self.bld_names.get(bk).unwrap();
                 self.prelude_code.add(format!("
                 define i1 @{NAME}.cmp(%{NAME} %bld1, %{NAME} %bld2) {{
-                  ret i1 0 
+                  ret i1 0
                 }}", NAME=bld_name.replace("%", "")));
             }
             Vector(_) => {
@@ -1339,7 +1343,7 @@ impl LlvmGenerator {
     /// Generates a `hash` function for `ty` and any nested types it depends on.
     fn gen_hash(&mut self, ty: &Type) -> WeldResult<()> {
         // If we've already generated a function for this type, return.
-        { 
+        {
             let helper_state = self.type_helpers.entry(ty.clone()).or_insert(HelperState::new());
             if helper_state.hash_func {
                 return Ok(());
@@ -1854,7 +1858,7 @@ impl LlvmGenerator {
                         self.gen_store_var(&output_tmp, &output_ll_sym, &output_ll_ty, ctx);
                     }
 
-                    _ => weld_err!("Illegal type {} in BinOp", print_type(ty))?,
+                    _ => weld_err!("Illegal type {} in BinOp {}", print_type(ty), op)?,
                 }
             }
 

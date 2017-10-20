@@ -450,6 +450,15 @@ pub struct Iter<T: TypeBounds> {
     pub kind: IterKind,
 }
 
+impl<T: TypeBounds> Iter<T> {
+    /// Returns true if this is a simple iterator with no start/stride/end specified
+    /// (i.e., it iterates over all the input data) and kind `ScalarIter`.
+    pub fn is_simple(&self) -> bool {
+        return self.start.is_none() && self.end.is_none() && self.stride.is_none() &&
+            self.kind == IterKind::ScalarIter;
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum ExprKind<T: TypeBounds> {
     // TODO: maybe all of these should take named parameters
@@ -640,6 +649,9 @@ pub type TypedExpr = Expr<Type>;
 
 /// A typed parameter.
 pub type TypedParameter = Parameter<Type>;
+
+/// A typed iterator.
+pub type TypedIter = Iter<Type>;
 
 impl<T: TypeBounds> Expr<T> {
     /// Get an iterator for the children of this expression.
@@ -842,18 +854,20 @@ impl<T: TypeBounds> Expr<T> {
 
     /// Compares two expression trees, returning true if they are the same modulo symbol names.
     /// Symbols in the two expressions must have a one to one correspondance for the trees to be
-    /// considered equal. If an undefined symbol is encountered in &self during the comparison,
-    /// returns an error.
+    /// considered equal. If an undefined symbol is encountered during the comparison, it must
+    /// be the same in both expressions (e.g. for a symbol captured from an outer scope).
     pub fn compare_ignoring_symbols(&self, other: &Expr<T>) -> WeldResult<bool> {
         use self::ExprKind::*;
         use std::collections::HashMap;
         let mut sym_map: HashMap<&Symbol, &Symbol> = HashMap::new();
+        let mut reverse_sym_map: HashMap<&Symbol, &Symbol> = HashMap::new();
 
-        fn _compare_ignoring_symbols<'b, 'a, U: TypeBounds>(e1: &'a Expr<U>,
-                                                            e2: &'b Expr<U>,
-                                                            sym_map: &mut HashMap<&'a Symbol,
-                                                                                  &'b Symbol>)
-                                                            -> WeldResult<bool> {
+        fn _compare_ignoring_symbols<'b, 'a, U: TypeBounds>(
+                e1: &'a Expr<U>,
+                e2: &'b Expr<U>,
+                sym_map: &mut HashMap<&'a Symbol, &'b Symbol>,
+                reverse_sym_map: &mut HashMap<&'b Symbol, &'a Symbol>)
+                -> WeldResult<bool> {
             // First, check the type.
             if e1.ty != e2.ty {
                 return Ok(false);
@@ -861,16 +875,15 @@ impl<T: TypeBounds> Expr<T> {
             // Check the kind of each expression. same_kind is true if each *non-expression* field
             // is equal and the kind of the expression matches. Also records corresponding symbol names.
             let same_kind = match (&e1.kind, &e2.kind) {
-                (&BinOp { kind: ref kind1, .. }, &BinOp { kind: ref kind2, .. }) if kind1 ==
-                                                                                    kind2 => {
+                (&BinOp { kind: ref kind1, .. }, &BinOp { kind: ref kind2, .. }) if kind1 == kind2 => {
                     Ok(true)
                 }
                 (&UnaryOp { .. }, &UnaryOp { .. }) => Ok(true),
-                (&Cast { kind: ref kind1, .. }, &Cast { kind: ref kind2, .. }) if kind1 ==
-                                                                                  kind2 => Ok(true),
+                (&Cast { kind: ref kind1, .. }, &Cast { kind: ref kind2, .. }) if kind1 == kind2 => Ok(true),
                 (&ToVec { .. }, &ToVec { .. }) => Ok(true),
                 (&Let { name: ref sym1, .. }, &Let { name: ref sym2, .. }) => {
                     sym_map.insert(sym1, sym2);
+                    reverse_sym_map.insert(sym2, sym1);
                     Ok(true)
                 }
                 (&Lambda { params: ref params1, .. }, &Lambda { params: ref params2, .. }) => {
@@ -879,6 +892,7 @@ impl<T: TypeBounds> Expr<T> {
                        params1.iter().zip(params2).all(|t| t.0.ty == t.1.ty) {
                         for (p1, p2) in params1.iter().zip(params2) {
                             sym_map.insert(&p1.name, &p2.name);
+                            reverse_sym_map.insert(&p2.name, &p1.name);
                         }
                         Ok(true)
                     } else {
@@ -900,7 +914,7 @@ impl<T: TypeBounds> Expr<T> {
                 (&Slice { .. }, &Slice { .. }) => Ok(true),
                 (&Merge { .. }, &Merge { .. }) => Ok(true),
                 (&Res { .. }, &Res { .. }) => Ok(true),
-                (&For { .. }, &For { .. }) => Ok(true), // TODO need to check Iters?
+                (&For { .. }, &For { .. }) => Ok(true), // TODO need to check structure of Iters?
                 (&If { .. }, &If { .. }) => Ok(true),
                 (&Iterate { .. }, &Iterate { .. }) => Ok(true),
                 (&Select { .. }, &Select { .. }) => Ok(true),
@@ -923,8 +937,10 @@ impl<T: TypeBounds> Expr<T> {
                 (&Ident(ref l), &Ident(ref r)) => {
                     if let Some(lv) = sym_map.get(l) {
                         Ok(**lv == *r)
+                    } else if reverse_sym_map.contains_key(r) {
+                        Ok(false)   // r was defined in other expression but l wasn't defined in self.
                     } else {
-                        weld_err!("undefined symbol {} when comparing expressions", l)
+                        Ok(*l == *r)
                     }
                 }
                 _ => Ok(false), // all else fail.
@@ -942,14 +958,15 @@ impl<T: TypeBounds> Expr<T> {
                 return Ok(false);
             }
             for (c1, c2) in e1_children.iter().zip(e2_children) {
-                let res = _compare_ignoring_symbols(&c1, &c2, sym_map);
+                let res = _compare_ignoring_symbols(&c1, &c2, sym_map, reverse_sym_map);
                 if res.is_err() || !res.as_ref().unwrap() {
                     return res;
                 }
             }
             return Ok(true);
         }
-        _compare_ignoring_symbols(self, other, &mut sym_map)
+
+        _compare_ignoring_symbols(self, other, &mut sym_map, &mut reverse_sym_map)
     }
 
     /// Substitute Ident nodes with the given symbol for another expression, stopping when an
@@ -1021,6 +1038,19 @@ impl<T: TypeBounds> Expr<T> {
     }
 
     /// Recursively transforms an expression in place by running a function on it and optionally replacing it with another expression.
+    pub fn transform<F>(&mut self, func: &mut F)
+        where F: FnMut(&mut Expr<T>) -> Option<Expr<T>>
+    {
+        if let Some(e) = func(self) {
+            *self = e;
+            return self.transform(func);
+        }
+        for c in self.children_mut() {
+            c.transform(func);
+        }
+    }
+
+    /// Recursively transforms an expression in place by running a function on it and optionally replacing it with another expression.
     pub fn transform_and_continue<F>(&mut self, func: &mut F)
         where F: FnMut(&mut Expr<T>) -> (Option<Expr<T>>, bool)
     {
@@ -1045,37 +1075,36 @@ impl<T: TypeBounds> Expr<T> {
     /// Supports returning an error, which is treated as returning (None, false)
     pub fn transform_and_continue_res<F>(&mut self, func: &mut F)
         where F: FnMut(&mut Expr<T>) -> WeldResult<(Option<Expr<T>>, bool)>
-        {
-            if let Ok(result) = func(self) {
-                match result {
-                    (Some(e), true) => {
-                        *self = e;
-                        return self.transform_and_continue_res(func);
-                    }
-                    (Some(e), false) => {
-                        *self = e;
-                    }
-                    (None, true) => {
-                        for c in self.children_mut() {
-                            c.transform_and_continue_res(func);
-                        }
-                    }
-                    (None, false) => {}
+    {
+        if let Ok(result) = func(self) {
+            match result {
+                (Some(e), true) => {
+                    *self = e;
+                    return self.transform_and_continue_res(func);
                 }
+                (Some(e), false) => {
+                    *self = e;
+                }
+                (None, true) => {
+                    for c in self.children_mut() {
+                        c.transform_and_continue_res(func);
+                    }
+                }
+                (None, false) => {}
             }
         }
+    }
 
-
-    /// Recursively transforms an expression in place by running a function on it and optionally replacing it with another expression.
-    pub fn transform<F>(&mut self, func: &mut F)
+    /// Recursively transforms an expression in place by running a function first on its children, then on the root
+    /// expression itself; this can be more efficient than `transform` for some cases
+    pub fn transform_up<F>(&mut self, func: &mut F)
         where F: FnMut(&mut Expr<T>) -> Option<Expr<T>>
     {
-        if let Some(e) = func(self) {
-            *self = e;
-            return self.transform(func);
-        }
         for c in self.children_mut() {
             c.transform(func);
+        }
+        if let Some(e) = func(self) {
+            *self = e;
         }
     }
 

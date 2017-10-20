@@ -1,12 +1,15 @@
 use super::ast::*;
 use super::error::*;
 use super::transforms;
+use super::util::SymbolGenerator;
 use super::vectorizer;
 
 use std::collections::HashMap;
 
+pub type PassFunction = fn(&mut Expr<Type>, &mut SymbolGenerator);
+
 pub struct Pass {
-    transforms: Vec<fn(&mut Expr<Type>)>,
+    transforms: Vec<PassFunction>,
     pass_name: String,
 }
 
@@ -21,19 +24,19 @@ impl Clone for Pass {
 }
 
 impl Pass {
-    pub fn new(transforms: Vec<fn(&mut Expr<Type>)>, pass_name: &'static str) -> Pass {
+    pub fn new(transforms: Vec<PassFunction>, pass_name: &'static str) -> Pass {
         return Pass {
                    transforms: transforms,
                    pass_name: String::from(pass_name),
                };
     }
 
-    pub fn transform(&self, mut expr: &mut Expr<Type>) -> WeldResult<()> {
+    pub fn transform(&self, expr: &mut Expr<Type>, gen: &mut SymbolGenerator) -> WeldResult<()> {
         let mut expr_copy = expr.clone();
         let mut continue_pass = true;
         while continue_pass {
             for transform in &self.transforms {
-                transform(&mut expr);
+                transform(expr, gen);
             }
 
             continue_pass = !try!(expr.compare_ignoring_symbols(&expr_copy));
@@ -57,9 +60,12 @@ lazy_static! {
         m.insert("inline-zip",
                  Pass::new(vec![transforms::inline_zips], "inline-zip"));
         m.insert("loop-fusion",
-                 Pass::new(vec![transforms::fuse_loops_horizontal,
-                                transforms::fuse_loops_vertical,
-                                transforms::simplify_get_field],
+                 Pass::new(vec![/*transforms::fuse_loops_horizontal,
+                                transforms::fuse_loops_vertical,*/
+                                transforms::fuse_loops_2,
+                                transforms::move_merge_before_let,
+                                transforms::simplify_get_field,
+                                transforms::inline_let],
                  "loop-fusion"));
         m.insert("infer-size",
                  Pass::new(vec![transforms::infer_size],

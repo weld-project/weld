@@ -459,21 +459,29 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
                                func_id: FunctionId,
                                env: &mut HashMap<Symbol, Type>,
                                closure: &mut HashSet<Symbol>,
-                               visited: &mut HashSet<FunctionId>) {
-    // this is needed for cases where params are added outside of sir_param_correction and are not
+                               visited: &mut HashSet<FunctionId>) -> WeldResult<()> {
+    // This is needed for cases where params are added outside of sir_param_correction and are not
     // based on variable reads in the function (e.g. in the Iterate case);
     // and when there are loops in the call graph (also in the Iterate case)
     for (name, _) in &prog.funcs[func_id].params {
         closure.insert(name.clone());
     }
     if !visited.insert(func_id) {
-        return;
+        return Ok(());   // Already visited this function
     }
     for (name, ty) in &prog.funcs[func_id].params {
-        env.insert(name.clone(), ty.clone());
+        match env.insert(name.clone(), ty.clone()) {
+            Some(ref ty2) if ty2 != ty =>
+                return weld_err!("Duplicate name during AST-to-SIR: {} in F{}", name, func_id),
+            _ => {}
+        }
     }
     for (name, ty) in &prog.funcs[func_id].locals {
-        env.insert(name.clone(), ty.clone());
+        match env.insert(name.clone(), ty.clone()) {
+            Some(ref ty2) if ty2 != ty =>
+                return weld_err!("Duplicate name during AST-to-SIR: {} in F{}", name, func_id),
+            _ => {}
+        }
     }
     // All symbols are unique, so there is no need to remove stuff from env at any point.
     for block in prog.funcs[func_id].blocks.clone() {
@@ -613,11 +621,11 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
         match block.terminator {
             // make a recursive call for other functions referenced by the terminator
             ParallelFor(ref pf) => {
-                sir_param_correction_helper(prog, pf.body, env, &mut inner_closure, visited);
-                sir_param_correction_helper(prog, pf.cont, env, &mut inner_closure, visited);
+                sir_param_correction_helper(prog, pf.body, env, &mut inner_closure, visited)?;
+                sir_param_correction_helper(prog, pf.cont, env, &mut inner_closure, visited)?;
             }
             JumpFunction(jump_func) => {
-                sir_param_correction_helper(prog, jump_func, env, &mut inner_closure, visited);
+                sir_param_correction_helper(prog, jump_func, env, &mut inner_closure, visited)?;
             }
             Branch { .. } => {}
             JumpBlock(_) => {}
@@ -634,6 +642,7 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
             }
         }
     }
+    Ok(())
 }
 
 /// gen_expr may result in the use of symbols across function boundaries,
@@ -645,11 +654,11 @@ fn sir_param_correction(prog: &mut SirProgram) -> WeldResult<()> {
     let mut env = HashMap::new();
     let mut closure = HashSet::new();
     let mut visited = HashSet::new();
-    sir_param_correction_helper(prog, 0, &mut env, &mut closure, &mut visited);
+    sir_param_correction_helper(prog, 0, &mut env, &mut closure, &mut visited)?;
     let ref func = prog.funcs[0];
     for name in closure {
         if func.params.get(&name) == None {
-            weld_err!("Unbound symbol {}#{}", name.name, name.id)?;
+            return weld_err!("Unbound symbol {}#{}", name.name, name.id);
         }
     }
     Ok(())
@@ -667,7 +676,7 @@ pub fn ast_to_sir(expr: &TypedExpr, multithreaded: bool) -> WeldResult<SirProgra
         let (res_func, res_block, res_sym) = gen_expr(body, &mut prog, 0, first_block, multithreaded)?;
         prog.funcs[res_func].blocks[res_block].terminator = Terminator::ProgramReturn(res_sym);
         sir_param_correction(&mut prog)?;
-        // second call is necessary in the case where there are loops in the call graph, since
+        // Second call is necessary in the case where there are loops in the call graph, since
         // some parameter dependencies may not have been propagated through back edges
         sir_param_correction(&mut prog)?;
         Ok((prog))

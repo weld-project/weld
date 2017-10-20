@@ -17,7 +17,7 @@ use super::util::SymbolGenerator;
 /// such as map and filter into Iters in For loops.
 ///
 /// TODO(shoumik): Perhaps Zip should just be a macro? Then macros need to be ordered.
-pub fn inline_zips(expr: &mut Expr<Type>) {
+pub fn inline_zips(expr: &mut Expr<Type>, _: &mut SymbolGenerator) {
     expr.transform(&mut |ref mut e| {
         if let For {
                    ref mut iters,
@@ -202,7 +202,7 @@ fn _uniquify<T: TypeBounds>(expr: &mut Expr<T>,
 ///   it to a temporary as would happen with function application.
 /// - Does not complete inlining if some of the functions take functions as arguments (in that
 ///   case, the expressions after inlining may lead to more inlining).
-pub fn inline_apply<T: TypeBounds>(expr: &mut Expr<T>) {
+pub fn inline_apply<T: TypeBounds>(expr: &mut Expr<T>, _: &mut SymbolGenerator) {
     expr.transform(&mut |ref mut expr| {
         if let Apply {
                    ref func,
@@ -225,7 +225,7 @@ pub fn inline_apply<T: TypeBounds>(expr: &mut Expr<T>) {
 
 /// Inlines Let calls if the symbol defined by the Let statement is used
 /// less than one time.
-pub fn inline_let(expr: &mut Expr<Type>) {
+pub fn inline_let(expr: &mut Expr<Type>, _: &mut SymbolGenerator) {
     if let Ok(_) = uniquify(expr) {
         expr.transform(&mut |ref mut expr| {
             if let Let {
@@ -285,9 +285,8 @@ fn symbol_usage_count(sym: &Symbol, expr: &Expr<Type>) -> u32 {
 ///     - Like all Zip-based transforms, this function currently assumes that the output of each
 ///     expression in the Zip is the same length.
 ///
-pub fn fuse_loops_horizontal(expr: &mut Expr<Type>) {
+pub fn fuse_loops_horizontal(expr: &mut Expr<Type>, gen: &mut SymbolGenerator) {
     expr.transform(&mut |ref mut expr| {
-        let mut sym_gen = SymbolGenerator::from_expression(expr);
         if let For{iters: ref all_iters, builder: ref outer_bldr, func: ref outer_func} = expr.kind {
             if all_iters.len() > 1 {
                 // Vector of tuples containing the params and expressions of functions in nested lambdas.
@@ -346,9 +345,9 @@ pub fn fuse_loops_horizontal(expr: &mut Expr<Type>) {
                     // Parameters for the new fused function. Symbols names are generated using symbol
                     // names for the builder and element from an existing function.
                     let new_params = vec![
-                        Parameter{ty: builder_type.clone(), name: sym_gen.new_symbol(&lambdas[0].0[0].name.name)},
-                        Parameter{ty: Scalar(ScalarKind::I64), name: sym_gen.new_symbol(&lambdas[0].0[1].name.name)},
-                        Parameter{ty: func_elem_type.clone(), name: sym_gen.new_symbol(&lambdas[0].0[2].name.name)},
+                        Parameter{ty: builder_type.clone(), name: gen.new_symbol(&lambdas[0].0[0].name.name)},
+                        Parameter{ty: Scalar(ScalarKind::I64), name: gen.new_symbol(&lambdas[0].0[1].name.name)},
+                        Parameter{ty: func_elem_type.clone(), name: gen.new_symbol(&lambdas[0].0[2].name.name)},
                     ];
 
                     // Generate Ident expressions for the new symbols and substitute them in the
@@ -430,9 +429,8 @@ pub fn fuse_loops_horizontal(expr: &mut Expr<Type>) {
 
 /// Fuses loops where one for loop takes another as it's input, which prevents intermediate results
 /// from being materialized.
-pub fn fuse_loops_vertical(expr: &mut Expr<Type>) {
+pub fn fuse_loops_vertical(expr: &mut Expr<Type>, gen: &mut SymbolGenerator) {
     expr.transform_and_continue_res(&mut |ref mut expr| {
-        let mut sym_gen = SymbolGenerator::from_expression(expr);
         if let For { iters: ref all_iters, builder: ref bldr1, func: ref nested } = expr.kind {
             if all_iters.len() == 1 {
                 let ref iter1 = all_iters[0];
@@ -442,7 +440,7 @@ pub fn fuse_loops_vertical(expr: &mut Expr<Type>) {
                             if let NewBuilder(_) = bldr2.kind {
                                 if let Builder(ref kind, _) = bldr2.ty {
                                     if let Appender(_) = *kind {
-                                        let e = exprs::for_expr(iters2.clone(), *bldr1.clone(), replace_builder(lambda, nested, &mut sym_gen)?, false)?;
+                                        let e = exprs::for_expr(iters2.clone(), *bldr1.clone(), replace_builder(lambda, nested, gen)?, false)?;
                                         return Ok((Some(e), true));
                                     }
                                 }
@@ -454,6 +452,281 @@ pub fn fuse_loops_vertical(expr: &mut Expr<Type>) {
         }
         Ok((None, true))
     });
+}
+
+struct MergeSingle<'a> {
+    params: &'a Vec<TypedParameter>,
+    value: &'a TypedExpr
+}
+
+impl<'a> MergeSingle<'a> {
+    fn extract(expr: &'a TypedExpr) -> Option<MergeSingle<'a>> {
+        if let Lambda{ref params, ref body} = expr.kind {
+            if let Merge{ref builder, ref value} = body.kind {
+                match builder.kind {
+                    Ident(ref name) if *name == params[0].name =>
+                        return Some(MergeSingle{params, value}),
+                    _ => {}
+                }
+            }
+        }
+        return None
+    }
+}
+
+struct NewAppender<'a> {
+    elem_type: &'a Type
+}
+
+impl<'a> NewAppender<'a> {
+    fn extract(expr: &'a TypedExpr) -> Option<NewAppender<'a>> {
+        if let NewBuilder(_) = expr.kind {
+            if let Builder(Appender(ref elem_type), _) = expr.ty {
+                return Some(NewAppender{elem_type})
+            }
+        }
+        return None
+    }
+}
+
+struct ResForAppender<'a> {
+    iters: &'a Vec<Iter<Type>>,
+    func: &'a TypedExpr
+}
+
+impl<'a> ResForAppender<'a> {
+    fn extract(expr: &'a TypedExpr) -> Option<ResForAppender<'a>> {
+        if let Res{ref builder} = expr.kind {
+            if let For{ref iters, ref builder, ref func} = builder.kind {
+                if NewAppender::extract(builder).is_some() {
+                    return Some(ResForAppender{iters, func})
+                }
+            }
+        }
+        return None;
+    }
+}
+
+struct MapIter<'a> {
+    iters: &'a Vec<Iter<Type>>,
+    merge_params: &'a Vec<TypedParameter>,
+    merge_value: &'a TypedExpr
+}
+
+impl<'a> MapIter<'a> {
+    fn extract(iter: &'a TypedIter) -> Option<MapIter> {
+        if iter.is_simple() {
+            if let Some(rfa) = ResForAppender::extract(&iter.data) {
+                if rfa.iters.iter().all(|ref i| i.is_simple()) {
+                    if let Some(merge) = MergeSingle::extract(&rfa.func) {
+                        return Some(MapIter {
+                            iters: &rfa.iters,
+                            merge_params: merge.params,
+                            merge_value: merge.value
+                        });
+                    }
+                }
+            }
+        }
+        return None;
+    }
+}
+
+/// Gets rid of `result(for(d, appender, _))` expressions within the iterators in a loop, replacing them
+/// with direct iteration over the data (e.g. `d` here).
+///
+/// Caveats:
+///   - Like all Zip-based transforms, this function currently assumes that the output of each
+///     expression in the Zip is the same length.
+pub fn fuse_loops_2(expr: &mut Expr<Type>, gen: &mut SymbolGenerator) {
+    use super::exprs::*;
+    expr.transform(&mut |ref mut expr| {
+        if let For{ref iters, ref builder, ref func} = expr.kind {
+            if let Lambda{ref params, ref body} = func.kind {
+                // Check whether at least one iterator is over a map pattern, i.e., Res(For(new Appender)) with
+                // a simple merge operation.
+                if !iters.iter().any(|ref iter| MapIter::extract(iter).is_some()) {
+                    return None;
+                }
+
+                // Now that we know we have at least one nested map, create a new expression to replace the old
+                // one with. We start by figuring out our new list of iterators, then build a new lambda function
+                // that will call the old one but substitute some of the variables in it.
+                let mut new_iters: Vec<TypedIter> = Vec::new();
+                let mut new_elem_exprs: Vec<TypedExpr> = Vec::new();
+                let mut let_statements: Vec<(Symbol, TypedExpr)> = Vec::new();
+                let mut new_body = body.as_ref().clone();
+
+                let elem_types: Vec<Type>;
+                if let Struct(ref types) = params[2].ty {
+                    elem_types = types.clone();
+                } else {
+                    elem_types = vec![params[2].ty.clone()];
+                }
+                let mut new_elem_types: Vec<Type> = Vec::new();
+                let mut new_elem_symbols: Vec<Symbol> = Vec::new();
+
+                for i in 0..iters.len() {
+                    // Check whether this iter follows a map pattern, and if so, use that map's inner iter.
+                    if let Some(ref map) = MapIter::extract(&iters[i]) {
+                        // This was indeed a map pattern; we'll update it to apply the map function directly on the
+                        // element values we pull from those iterators in the upper-level loop.
+                        let mut value = map.merge_value.clone();
+                        let index_ident = ident_expr(params[1].name.clone(), params[1].ty.clone()).unwrap();
+                        value.substitute(&map.merge_params[1].name, &index_ident);
+
+                        // For each iterator in the original MapIter, figure out a local variable that will hold
+                        // the corresponding item.
+                        let mut map_elem_types: Vec<Type> = Vec::new();
+                        let mut map_elem_symbols: Vec<Symbol> = Vec::new();
+                        let mut map_elem_exprs: Vec<TypedExpr> = Vec::new();
+                        for ref map_iter in map.iters {
+                            // Check whether this iterator is already in our new_iters list; if so, reuse the old one
+                            let iter_num;
+                            if let Some(pos) = new_iters.iter().position(
+                                    |x| iters_match_ignoring_symbols(x, map_iter).unwrap()) {
+                                iter_num = pos
+                            } else {
+                                // If it is indeed a new iterator, remember its element type and assign it a symbol.
+                                new_iters.push((*map_iter).clone());
+                                let elem_type = match &map_iter.data.ty {
+                                    &Vector(ref ty) => ty,
+                                    _ => panic!("Iterator was not over a vector")
+                                };
+                                new_elem_types.push(elem_type.as_ref().clone());
+                                let new_elem_symbol = gen.new_symbol("tmp");
+                                new_elem_symbols.push(new_elem_symbol);
+                                iter_num = new_iters.len() - 1;
+                            }
+                            let elem_ident = ident_expr(
+                                new_elem_symbols[iter_num].clone(), new_elem_types[iter_num].clone()).unwrap();
+                            map_elem_types.push(new_elem_types[iter_num].clone());
+                            map_elem_symbols.push(new_elem_symbols[iter_num].clone());
+                            map_elem_exprs.push(elem_ident);
+                        }
+
+                        // If needed, add a Let statement to package the map_elems into a struct, and substitue
+                        // that into our value expression; otherwise just substitute the single symbol we're using
+                        if map_elem_exprs.len() > 1 {
+                            let struct_symbol = gen.new_symbol("tmp");
+                            let make_struct = makestruct_expr(map_elem_exprs).unwrap();
+                            let struct_ident = ident_expr(struct_symbol.clone(), make_struct.ty.clone()).unwrap();
+                            let_statements.push((struct_symbol, make_struct));
+                            value.substitute(&map.merge_params[2].name, &struct_ident);
+                        } else {
+                            value.substitute(&map.merge_params[2].name, &map_elem_exprs[0]);
+                        }
+
+                        // Push an expression for this element
+                        new_elem_exprs.push(value);
+                    } else {
+                        // Check whether this iterator is already in our new_iters list; if so, reuse the old one
+                        let iter_num;
+                        if let Some(pos) = new_iters.iter().position(
+                                |x| iters_match_ignoring_symbols(x, &iters[i]).unwrap()) {
+                            iter_num = pos
+                        } else {
+                            // If it is indeed a new iterator, remember its element type and assign it a symbol.
+                            new_iters.push(iters[i].clone());
+                            new_elem_types.push(elem_types[i].clone());
+                            let new_elem_symbol = gen.new_symbol("tmp");
+                            new_elem_symbols.push(new_elem_symbol);
+                            iter_num = new_iters.len() - 1;
+                        }
+                        // Push an expression for this element.
+                        let elem_ident = ident_expr(
+                            new_elem_symbols[iter_num].clone(), new_elem_types[iter_num].clone()).unwrap();
+                        new_elem_exprs.push(elem_ident);
+                    }
+                }
+
+                let new_param_type = if new_elem_types.len() > 1 {
+                    Struct(new_elem_types.clone())
+                } else {
+                    new_elem_types[0].clone()
+                };
+                let new_param_name = gen.new_symbol("data");
+                let new_param = Parameter{name: new_param_name.clone(), ty: new_param_type.clone()};
+
+                let new_params = vec![params[0].clone(), params[1].clone(), new_param];
+
+                // Add a let statement in front of the body that builds up the argument struct.
+                let old_param_expr = if new_elem_exprs.len() > 1 {
+                    makestruct_expr(new_elem_exprs.clone()).unwrap()
+                } else {
+                    new_elem_exprs[0].clone()
+                };
+                new_body = let_expr(params[2].name.clone(), old_param_expr, new_body).unwrap();
+
+                // Add any let statements we created for temporary structs.
+                for pair in let_statements.iter().rev() {
+                    new_body = let_expr(pair.0.clone(), pair.1.clone(), new_body).unwrap()
+                }
+
+                // Add let statements in front of the body that set the new_elem_symbols to new_elem_exprs.
+                let new_param_ident = ident_expr(new_param_name.clone(), new_param_type.clone()).unwrap();
+                if new_elem_types.len() > 1 {
+                    for i in (0..new_elem_types.len()).rev() {
+                        new_body = let_expr(
+                            new_elem_symbols[i].clone(),
+                            getfield_expr(new_param_ident.clone(), i as u32).unwrap(),
+                            new_body
+                        ).unwrap()
+                    }
+                } else {
+                    new_body = let_expr(
+                        new_elem_symbols[0].clone(),
+                        new_param_ident.clone(),
+                        new_body
+                    ).unwrap()
+                }
+
+                let new_func = lambda_expr(new_params, new_body).unwrap();
+                let result = for_expr(new_iters.clone(), builder.as_ref().clone(), new_func, false).unwrap();
+                return Some(result);
+            }
+        }
+
+        None
+    })
+}
+
+/// Replaces Let(name, value, Merge(builder, elem)) with Merge(builder, Let(name, value, elem)) to
+/// enable further pattern matching on map functions downstream. This is only allowed when the let
+/// statement is not defining some symbol that's used in the builder expression, so we check for that.
+pub fn move_merge_before_let(expr: &mut Expr<Type>, _: &mut SymbolGenerator) {
+    use super::exprs::*;
+    expr.transform_up(&mut |ref mut expr| {
+        if let Let { ref name, value: ref let_value, ref body } = expr.kind {
+            if let Merge { ref builder, value: ref merge_value } = body.kind {
+                if !builder.contains_symbol(name) {
+                    return Some(merge_expr(
+                        *builder.clone(),
+                        let_expr(name.clone(), *let_value.clone(), *merge_value.clone()).unwrap()
+                    ).unwrap());
+                }
+            }
+        }
+        return None;
+    });
+}
+
+/// Are two iterators equivalent ignoring symbols defined inside each one?
+fn iters_match_ignoring_symbols(iter1: &TypedIter, iter2: &TypedIter) -> WeldResult<bool> {
+    Ok(iter1.kind == iter2.kind &&
+        iter1.data.compare_ignoring_symbols(iter2.data.as_ref())? &&
+        options_match_ignoring_symbols(&iter1.start, &iter2.start)? &&
+        options_match_ignoring_symbols(&iter1.end, &iter2.end)? &&
+        options_match_ignoring_symbols(&iter1.stride, &iter2.stride)?)
+}
+
+/// Are two Option<Box<Expr>> equal ignoring symbols defined inside each one?
+fn options_match_ignoring_symbols(opt1: &Option<Box<TypedExpr>>, opt2: &Option<Box<TypedExpr>>) -> WeldResult<bool> {
+    match (opt1, opt2) {
+        (&None, &None) => Ok(true),
+        (&Some(ref e1), &Some(ref e2)) => e1.compare_ignoring_symbols(e2.as_ref()),
+        _ => Ok(false)
+    }
 }
 
 /// Given an iterator, returns whether the iterator consumes every element of its data vector.
@@ -527,7 +800,7 @@ fn replace_builder(lambda: &Expr<Type>,
                 Merge { ref builder, ref value } if same_iden(&(*builder).kind, &old_bldr.name) => {
                     let params: Vec<Expr<Type>> = vec![new_bldr.clone(), new_index.clone(), *value.clone()];
                     let mut expr = exprs::apply_expr(nested.clone(), params)?;
-                    inline_apply(&mut expr);
+                    inline_apply(&mut expr, sym_gen);
                     Ok((Some(expr), true))
                 }
                 For { iters: ref data, builder: ref bldr, ref func } if same_iden(&(*bldr).kind, &old_bldr.name) => {
@@ -586,7 +859,7 @@ fn match_types(root_ty: &Type, expr: &mut Expr<Type>) {
 
 /// Simplifies GetField(MakeStruct(*)) expressions, which can occur during loop fusion when some
 /// of the loops are zipping together multiple column vectors.
-pub fn simplify_get_field<T: TypeBounds>(expr: &mut Expr<T>) {
+pub fn simplify_get_field<T: TypeBounds>(expr: &mut Expr<T>, _: &mut SymbolGenerator) {
     expr.transform(&mut |ref mut expr| {
         if let GetField { ref expr, index } = expr.kind {
             if let MakeStruct { ref elems } = expr.kind {
@@ -598,7 +871,7 @@ pub fn simplify_get_field<T: TypeBounds>(expr: &mut Expr<T>) {
 }
 
 /// Infers the size of an `Appender` in a `For` loop.
-pub fn infer_size(expr: &mut Expr<Type>) {
+pub fn infer_size(expr: &mut Expr<Type>, _: &mut SymbolGenerator) {
     expr.transform_and_continue_res(&mut |ref mut expr| {
         if let For { ref iters, ref builder, ref func } = expr.kind {
             // This constraint prevents copying expensive iters.
@@ -659,7 +932,7 @@ fn simple_merge(sym: &Symbol, expr: &Expr<Type>) -> bool {
 /// iteration, which can cause stack exhaustion.
 ///
 /// FIXME we need a long term solution to this!
-pub fn force_iterate_parallel_fors(expr: &mut Expr<Type>) {
+pub fn force_iterate_parallel_fors(expr: &mut Expr<Type>, _: &mut SymbolGenerator) {
     expr.transform_and_continue(&mut |ref mut e| {
         match e.kind {
              Iterate { .. } => {
