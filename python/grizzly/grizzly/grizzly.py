@@ -127,7 +127,7 @@ class DataFrameWeld:
                     weld_type,
                     dim
                 )
-        raise Exception("Attr %s does not exist" % key)
+        raise AttributeError("Attr %s does not exist" % key)
 
     def _get_column_names(self):
         """Summary
@@ -311,7 +311,7 @@ class SeriesWeld(LazyOpResult):
                 self.df,
                 self.column_name
             )
-        raise Exception("Attr %s does not exist" % key)
+        raise AttributeError("Attr %s does not exist" % key)
 
     def unique(self):
         """Summary
