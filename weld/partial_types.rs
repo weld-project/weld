@@ -4,6 +4,7 @@ use std::vec::Vec;
 
 use super::ast::*;
 use super::error::*;
+use super::annotations::*;
 
 /// A partial data type, where some parameters may not be known.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]

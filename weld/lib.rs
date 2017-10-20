@@ -32,6 +32,7 @@ macro_rules! weld_err {
 }
 
 
+pub mod annotations;
 pub mod ast;
 pub mod code_builder;
 pub mod common;

@@ -6,6 +6,7 @@ use super::ast::Type::*;
 use super::ast::BuilderKind::*;
 use super::ast::LiteralKind::*;
 use super::error::*;
+use super::annotations::*;
 
 fn new_expr(kind: ExprKind<Type>, ty: Type) -> WeldResult<Expr<Type>> {
     Ok(Expr {

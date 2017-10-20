@@ -6,6 +6,7 @@ use super::ast::Type::*;
 use super::ast::BuilderKind::*;
 use super::ast::LiteralKind::*;
 use super::error::*;
+use super::annotations::*;
 use super::exprs;
 
 use super::util::SymbolGenerator;

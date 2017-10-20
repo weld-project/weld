@@ -30,6 +30,7 @@ use super::transforms;
 use super::type_inference;
 use super::util::IdGenerator;
 use super::util::WELD_INLINE_LIB;
+use super::annotations::*;
 
 use super::CompilationStats;
 
@@ -2632,7 +2633,7 @@ impl LlvmGenerator {
         let bld_prefix = llvm_prefix(&bld_ty_str);
 
         let mut builder_size = 16;
-        if let Some(ref e) = *annotations.size() {
+        if let Some(ref e) = annotations.size() {
             builder_size = e.clone();
         }
 
