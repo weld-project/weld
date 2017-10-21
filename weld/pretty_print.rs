@@ -135,6 +135,7 @@ fn print_iter_kind<T: PrintableType>(iter: &Iter<T>) -> &str {
         IterKind::ScalarIter => "",
         IterKind::SimdIter => "simd",
         IterKind::FringeIter => "fringe",
+        IterKind::NdIter => "nditer",
     }
 }
 
@@ -150,6 +151,7 @@ fn print_iters<T: PrintableType>(iters: &Vec<Iter<T>>,
         less_indent_str = "".to_string();
         indent_str = "".to_string();
     }
+    // TODO: Add appropriate stuff for NdIter
     for iter in iters {
         if let Some(_) = iter.start {
             iter_strs.push(format!("{}iter({},{},{},{})",

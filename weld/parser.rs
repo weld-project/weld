@@ -485,13 +485,15 @@ impl<'t> Parser<'t> {
     /// a vector expression (i.e., without an explicit iter(..).
     fn parse_iter(&mut self) -> WeldResult<Iter<PartialType>> {
         let iter: Token = self.peek().clone();
-        if *self.peek() == TScalarIter || *self.peek() == TSimdIter || *self.peek() == TFringeIter {
+        // TODO: Extract self.peek variable, or switch if-else order.
+        if *self.peek() == TScalarIter || *self.peek() == TSimdIter || *self.peek() == TFringeIter || *self.peek() == TNdIter {
             try!(self.consume(iter.clone()));
             try!(self.consume(TOpenParen));
             let data = try!(self.expr());
             let mut start = None;
             let mut end = None;
             let mut stride = None;
+            //let mut shapes = None;
             if *self.peek() == TComma {
                 try!(self.consume(TComma));
                 start = Some(try!(self.expr()));
@@ -499,15 +501,19 @@ impl<'t> Parser<'t> {
                 end = Some(try!(self.expr()));
                 try!(self.consume(TComma));
                 stride = Some(try!(self.expr()));
+                //try!(self.consume(TComma));
+                //shapes = Some(try!(self.expr()));
             }
             let iter = Iter {
                 data: data,
                 start: start,
                 end: end,
                 stride: stride,
+                //shapes: shapes,
                 kind: match iter {
                     TSimdIter => SimdIter,
                     TFringeIter => FringeIter,
+                    TNdIter => NdIter,
                     _ => ScalarIter,
                 },
             };
@@ -520,9 +526,11 @@ impl<'t> Parser<'t> {
                 start: None,
                 end: None,
                 stride: None,
+                //shapes: None,
                 kind: match iter {
                     TSimdIter => SimdIter,
                     TFringeIter => FringeIter,
+                    TNdIter => NdIter,
                     _ => ScalarIter,
                 },
             };

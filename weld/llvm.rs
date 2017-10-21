@@ -417,7 +417,9 @@ impl LlvmGenerator {
 
         let num_iters_str = ctx.var_ids.next();
         let mut fringe_start_str = None;
-        if par_for.data[0].kind == IterKind::SimdIter || par_for.data[0].kind == IterKind::ScalarIter {
+        
+        // TODO: Restructure checks so the common parts can go in else.
+        if par_for.data[0].kind == IterKind::SimdIter || par_for.data[0].kind == IterKind::ScalarIter || par_for.data[0].kind == IterKind::NdIter {
             if par_for.data[0].start.is_none() {
                 // set num_iters_str to len(first_data)
                 ctx.code.add(format!("{} = call i64 {}.size({} {})",
@@ -690,9 +692,10 @@ impl LlvmGenerator {
                     idx_tmp.clone()
                 }
             };
-
+            
+            // TODO: Nditer Start should be similar to ScalarIter.
             match iter.kind {
-                IterKind::ScalarIter | IterKind::FringeIter => {
+                IterKind::ScalarIter | IterKind::FringeIter | IterKind::NdIter => {
                     ctx.code.add(format!("{} = call {}* {}.at({} {}, i64 {})",
                     inner_elem_tmp_ptr,
                     &inner_elem_ty_str,

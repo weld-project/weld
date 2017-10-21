@@ -365,6 +365,7 @@ pub fn vectorize(expr: &mut Expr<Type>) {
                                                start: e.start.clone(),
                                                end: e.end.clone(),
                                                stride: e.stride.clone(),
+                                               //shapes: e.shapes.clone(),
                                                kind: IterKind::SimdIter,
                                            });
                         }

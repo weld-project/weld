@@ -92,6 +92,7 @@ pub struct ParallelForIter {
     pub start: Option<Symbol>,
     pub end: Option<Symbol>,
     pub stride: Option<Symbol>,
+    //pub shapes: Option<Symbol>,
     pub kind: IterKind,
 }
 
@@ -390,9 +391,11 @@ impl fmt::Display for ParallelForIter {
         let iterkind = match self.kind {
             IterKind::ScalarIter => "iter",
             IterKind::SimdIter => "simditer",
-            IterKind::FringeIter => "fringeiter"
+            IterKind::FringeIter => "fringeiter",
+            IterKind::NdIter => "nditer"
         };
-
+        
+        // TODO: Nditer.
         if self.start.is_some() {
             write!(f,
                    "{}({}, {}, {}, {})",
@@ -674,6 +677,36 @@ pub fn ast_to_sir(expr: &TypedExpr, multithreaded: bool) -> WeldResult<SirProgra
     } else {
         weld_err!("Expression passed to ast_to_sir was not a Lambda")
     }
+}
+
+/// Helper method for gen_expr.
+/// TODO: add more detail.
+fn _get_iter_sym(opt : &Option<Box<Expr<Type>>>,
+            prog: &mut SirProgram,
+            cur_func: &mut FunctionId,
+            cur_block: &mut BasicBlockId,
+            multithreaded: bool,
+            body_func: FunctionId) -> WeldResult<Option<Symbol>> {
+    println!("in _get iter sym!");
+    if opt.is_some() {
+        let opt_expr = match *opt {
+            Some(ref e) => e,
+            _ => weld_err!("Can't reach this")?,
+        };
+        let opt_res = gen_expr(&opt_expr, prog, *cur_func, *cur_block, multithreaded)?;
+        // pari: Originally, in gen_expr cur_func, and cur_block were also being set - but this
+        // does not seem to have any effect. Can't quite do it here, but could potentially return
+        // opt_res and do it if its really needed.
+        *cur_func = opt_res.0;
+        *cur_block = opt_res.1;
+        println!("cur block = {} ", cur_block);
+        prog.funcs[body_func]
+            .params
+            .insert(opt_res.2.clone(), opt_expr.ty.clone());
+        return Ok(Some(opt_res.2));
+    } else {
+        return Ok(None);
+    };
 }
 
 /// Generate code to compute the expression `expr` starting at the current tail of `cur_block`,
@@ -1133,57 +1166,17 @@ fn gen_expr(expr: &TypedExpr,
                     prog.funcs[body_func]
                         .params
                         .insert(data_res.2.clone(), iter.data.ty.clone());
-                    let start_sym = if iter.start.is_some() {
-                        // TODO is there a cleaner way to do this?
-                        let start_expr = match iter.start {
-                            Some(ref e) => e,
-                            _ => weld_err!("Can't reach this")?,
-                        };
-                        let start_res = gen_expr(&start_expr, prog, cur_func, cur_block, multithreaded)?;
-                        cur_func = start_res.0;
-                        cur_block = start_res.1;
-                        prog.funcs[body_func]
-                            .params
-                            .insert(start_res.2.clone(), start_expr.ty.clone());
-                        Some(start_res.2)
-                    } else {
-                        None
-                    };
-                    let end_sym = if iter.end.is_some() {
-                        let end_expr = match iter.end {
-                            Some(ref e) => e,
-                            _ => weld_err!("Can't reach this")?,
-                        };
-                        let end_res = gen_expr(&end_expr, prog, cur_func, cur_block, multithreaded)?;
-                        cur_func = end_res.0;
-                        cur_block = end_res.1;
-                        prog.funcs[body_func]
-                            .params
-                            .insert(end_res.2.clone(), end_expr.ty.clone());
-                        Some(end_res.2)
-                    } else {
-                        None
-                    };
-                    let stride_sym = if iter.stride.is_some() {
-                        let stride_expr = match iter.stride {
-                            Some(ref e) => e,
-                            _ => weld_err!("Can't reach this")?,
-                        };
-                        let stride_res = gen_expr(&stride_expr, prog, cur_func, cur_block, multithreaded)?;
-                        cur_func = stride_res.0;
-                        cur_block = stride_res.1;
-                        prog.funcs[body_func]
-                            .params
-                            .insert(stride_res.2.clone(), stride_expr.ty.clone());
-                        Some(stride_res.2)
-                    } else {
-                        None
-                    };
+                    let start_sym = try!(_get_iter_sym(&iter.start, prog, &mut cur_func, &mut cur_block, multithreaded, body_func));
+                    let end_sym = try!(_get_iter_sym(&iter.end, prog, &mut cur_func, &mut cur_block, multithreaded, body_func));
+                    let stride_sym = try!(_get_iter_sym(&iter.stride, prog, &mut cur_func, &mut cur_block, multithreaded, body_func));
+                    //let shapes_sym = try!(_get_iter_sym(&iter.shapes, prog, cur_func, cur_block, multithreaded, body_func));
+
                     pf_iters.push(ParallelForIter {
                                       data: data_res.2,
                                       start: start_sym,
                                       end: end_sym,
                                       stride: stride_sym,
+                                      //shapes: shapes_sym,
                                       kind: iter.kind.clone(),
                                   });
                 }

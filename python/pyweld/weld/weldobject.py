@@ -133,7 +133,7 @@ class WeldObject(object):
                        keys]) + "\n" + self.weld_code
         return text
 
-    def evaluate(self, restype, verbose=True, decode=True):
+    def evaluate(self, restype, verbose=False, decode=True):
         function = self.toWeldFunc()
 
         # Returns a wrapped ctypes Structure

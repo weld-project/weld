@@ -334,6 +334,7 @@ impl PartialExpr {
             } => {
                 let mut typed_iters = vec![];
                 for iter in iters {
+                    // TODO: decompose these?
                     let start = match iter.start {
                         Some(ref s) => Some(try!(typed_box(s))),
                         None => None,
@@ -346,11 +347,17 @@ impl PartialExpr {
                         Some(ref s) => Some(try!(typed_box(s))),
                         None => None,
                     };
+                    //let shapes = match iter.shapes {
+                        //Some(ref s) => Some(try!(typed_box(s))),
+                        //None => None,
+                    //};
+
                     let typed_iter = Iter {
                         data: try!(typed_box(&iter.data)),
                         start: start,
                         end: end,
                         stride: stride,
+                        //shapes: shapes,
                         kind: iter.kind.clone(),
                     };
                     typed_iters.push(typed_iter);

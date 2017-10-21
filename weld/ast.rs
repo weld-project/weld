@@ -425,6 +425,7 @@ pub enum IterKind {
     ScalarIter, // A standard scalar iterator.
     SimdIter, // A vector iterator.
     FringeIter, // A fringe iterator, handling the fringe of a vector iter.
+    NdIter,     // multi-dimensional nd-iter
 }
 
 impl fmt::Display for IterKind {
@@ -434,6 +435,7 @@ impl fmt::Display for IterKind {
             ScalarIter => "scalar",
             SimdIter => "vectorized",
             FringeIter => "fringe",
+            NdIter => "nditer",
         };
         f.write_str(text)
     }
@@ -447,6 +449,7 @@ pub struct Iter<T: TypeBounds> {
     pub start: Option<Box<Expr<T>>>,
     pub end: Option<Box<Expr<T>>>,
     pub stride: Option<Box<Expr<T>>>,
+    //pub shapes: Option<Box<Expr<T>>>,
     pub kind: IterKind,
 }
 
