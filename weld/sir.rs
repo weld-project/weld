@@ -92,7 +92,7 @@ pub struct ParallelForIter {
     pub start: Option<Symbol>,
     pub end: Option<Symbol>,
     pub stride: Option<Symbol>,
-    //pub shapes: Option<Symbol>,
+    pub shapes: Option<Symbol>,
     pub kind: IterKind,
 }
 
@@ -687,7 +687,6 @@ fn _get_iter_sym(opt : &Option<Box<Expr<Type>>>,
             cur_block: &mut BasicBlockId,
             multithreaded: bool,
             body_func: FunctionId) -> WeldResult<Option<Symbol>> {
-    println!("in _get iter sym!");
     if opt.is_some() {
         let opt_expr = match *opt {
             Some(ref e) => e,
@@ -695,11 +694,9 @@ fn _get_iter_sym(opt : &Option<Box<Expr<Type>>>,
         };
         let opt_res = gen_expr(&opt_expr, prog, *cur_func, *cur_block, multithreaded)?;
         // pari: Originally, in gen_expr cur_func, and cur_block were also being set - but this
-        // does not seem to have any effect. Can't quite do it here, but could potentially return
-        // opt_res and do it if its really needed.
+        // does not seem to have any effect. Could potentially remove this if it wasn't needed.
         *cur_func = opt_res.0;
         *cur_block = opt_res.1;
-        println!("cur block = {} ", cur_block);
         prog.funcs[body_func]
             .params
             .insert(opt_res.2.clone(), opt_expr.ty.clone());
@@ -1169,14 +1166,14 @@ fn gen_expr(expr: &TypedExpr,
                     let start_sym = try!(_get_iter_sym(&iter.start, prog, &mut cur_func, &mut cur_block, multithreaded, body_func));
                     let end_sym = try!(_get_iter_sym(&iter.end, prog, &mut cur_func, &mut cur_block, multithreaded, body_func));
                     let stride_sym = try!(_get_iter_sym(&iter.stride, prog, &mut cur_func, &mut cur_block, multithreaded, body_func));
-                    //let shapes_sym = try!(_get_iter_sym(&iter.shapes, prog, cur_func, cur_block, multithreaded, body_func));
+                    let shapes_sym = try!(_get_iter_sym(&iter.shapes, prog, &mut cur_func, &mut cur_block, multithreaded, body_func));
 
                     pf_iters.push(ParallelForIter {
                                       data: data_res.2,
                                       start: start_sym,
                                       end: end_sym,
                                       stride: stride_sym,
-                                      //shapes: shapes_sym,
+                                      shapes: shapes_sym,
                                       kind: iter.kind.clone(),
                                   });
                 }

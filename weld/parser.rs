@@ -490,10 +490,7 @@ impl<'t> Parser<'t> {
             try!(self.consume(iter.clone()));
             try!(self.consume(TOpenParen));
             let data = try!(self.expr());
-            let mut start = None;
-            let mut end = None;
-            let mut stride = None;
-            //let mut shapes = None;
+            let (mut start, mut end, mut stride, mut shapes) = (None, None, None, None);
             if *self.peek() == TComma {
                 try!(self.consume(TComma));
                 start = Some(try!(self.expr()));
@@ -501,15 +498,18 @@ impl<'t> Parser<'t> {
                 end = Some(try!(self.expr()));
                 try!(self.consume(TComma));
                 stride = Some(try!(self.expr()));
-                //try!(self.consume(TComma));
-                //shapes = Some(try!(self.expr()));
             }
+            if *self.peek() == TComma {
+                try!(self.consume(TComma));
+                shapes = Some(try!(self.expr()));
+            }
+
             let iter = Iter {
                 data: data,
                 start: start,
                 end: end,
                 stride: stride,
-                //shapes: shapes,
+                shapes: shapes,
                 kind: match iter {
                     TSimdIter => SimdIter,
                     TFringeIter => FringeIter,
@@ -526,7 +526,7 @@ impl<'t> Parser<'t> {
                 start: None,
                 end: None,
                 stride: None,
-                //shapes: None,
+                shapes: None,
                 kind: match iter {
                     TSimdIter => SimdIter,
                     TFringeIter => FringeIter,

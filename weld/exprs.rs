@@ -542,7 +542,7 @@ fn builder_exprs_test() {
         start: None,
         end: None,
         stride: None,
-        //shapes: None,
+        shapes: None,
         kind: IterKind::ScalarIter,
     };
 

@@ -449,7 +449,7 @@ pub struct Iter<T: TypeBounds> {
     pub start: Option<Box<Expr<T>>>,
     pub end: Option<Box<Expr<T>>>,
     pub stride: Option<Box<Expr<T>>>,
-    //pub shapes: Option<Box<Expr<T>>>,
+    pub shapes: Option<Box<Expr<T>>>,
     pub kind: IterKind,
 }
 

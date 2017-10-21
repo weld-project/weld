@@ -35,7 +35,7 @@ pub fn inline_zips(expr: &mut Expr<Type>) {
                                      start: None,
                                      end: None,
                                      stride: None,
-                                     //shapes: None,
+                                     shapes: None,
                                      kind: first_iter.kind.clone(),
                                  }
                              })
@@ -418,7 +418,7 @@ pub fn fuse_loops_horizontal(expr: &mut Expr<Type>) {
                             start: all_iters[0].start.clone(),
                             end: all_iters[0].end.clone(),
                             stride: all_iters[0].stride.clone(),
-                            //shapes: all_iters[0].shapes.clone(),
+                            shapes: all_iters[0].shapes.clone(),
                             kind: all_iters[0].kind.clone(),
                         }], builder: outer_bldr.clone(), func: outer_func.clone()},
                         annotations: Annotations::new(),
