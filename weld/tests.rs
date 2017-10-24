@@ -1,8 +1,9 @@
-use super::ast::{Annotations, Expr, Type, ExprKind, Symbol};
+use super::ast::{Expr, Type, ExprKind, Symbol};
 use super::partial_types::PartialType::Unknown;
 use super::parser::parse_expr;
 use super::pretty_print::*;
 use super::type_inference::*;
+use super::annotations::*;
 
 // Transforms. TODO(shoumik) move these tests somewhere else?
 use super::transforms::fuse_loops_vertical;

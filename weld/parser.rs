@@ -9,7 +9,6 @@ use super::ast::Symbol;
 use super::ast::Iter;
 use super::ast::BinOpKind::*;
 use super::ast::UnaryOpKind::*;
-use super::ast::BuilderImplementationKind::*;
 use super::ast::ExprKind::*;
 use super::ast::LiteralKind::*;
 use super::ast::ScalarKind;
@@ -563,8 +562,8 @@ impl<'t> Parser<'t> {
                                 let implementation = match *self.next() {
                                     TIdent(ref inner_value) => {
                                         match inner_value.as_ref() {
-                                            "global" => Global,
-                                            "local" => Local,
+                                            "global" => BuilderImplementationKind::Global,
+                                            "local" => BuilderImplementationKind::Local,
                                             _ => return weld_err!("Invalid implementation type"),
                                         }
                                     }

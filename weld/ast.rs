@@ -208,24 +208,6 @@ impl fmt::Display for ScalarKind {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum BuilderImplementationKind {
-    Local,
-    Global,
-}
-
-impl fmt::Display for BuilderImplementationKind {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use ast::BuilderImplementationKind::*;
-        let text = match *self {
-            Local => "local",
-            Global => "global",
-        };
-        f.write_str(text)
-    }
-}
-
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum BuilderKind {
     Appender(Box<Type>),
     Merger(Box<Type>, BinOpKind),

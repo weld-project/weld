@@ -3,8 +3,6 @@ use std::fmt;
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 
-use super::ast::BuilderImplementationKind;
-
 /// A kind of annotation that can be set on an expression.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum AnnotationKind {
@@ -17,20 +15,6 @@ pub enum AnnotationKind {
     Size,
     BranchSelectivity,
     NumKeys,
-}
-
-/// An internal representation of annotation values.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-enum AnnotationValue {
-    VBuilderImplementation(BuilderImplementationKind),
-    VTileSize(i32),
-    VGrainSize(i32),
-    VSize(i64),
-    VNumKeys(i64),
-    VBranchSelectivity(i32), // Fractions of 10,000
-    VPredicate,
-    VVectorize,
-    VAlwaysUseRuntime,
 }
 
 impl fmt::Display for AnnotationKind {
@@ -50,9 +34,55 @@ impl fmt::Display for AnnotationKind {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+/// A annotation value for the way a builder is implemented.
+pub enum BuilderImplementationKind {
+    Local,
+    Global,
+}
+
+impl fmt::Display for BuilderImplementationKind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use annotations::BuilderImplementationKind::*;
+        let text = match *self {
+            Local => "local",
+            Global => "global",
+        };
+        f.write_str(text)
+    }
+}
+
+/// An internal representation of annotation values.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+enum AnnotationValue {
+    VBuilderImplementation(BuilderImplementationKind),
+    VTileSize(i32),
+    VGrainSize(i32),
+    VSize(i64),
+    VNumKeys(i64),
+    VBranchSelectivity(i32), // Fractions of 10,000
+    VPredicate,
+    VVectorize,
+    VAlwaysUseRuntime,
+}
+
+
+
 impl fmt::Display for AnnotationValue {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self)
+       write!(f, "{}",
+              match *self {
+                   AnnotationValue::VBuilderImplementation(ref kind) => format!("{}", kind),
+                   AnnotationValue::VTileSize(ref v) => format!("{}", v),
+                   AnnotationValue::VGrainSize(ref v) => format!("{}", v),
+                   AnnotationValue::VSize(ref v) => format!("{}", v),
+                   AnnotationValue::VBranchSelectivity(ref v) => format!("{}", v),
+                   AnnotationValue::VNumKeys(ref v) => format!("{}", v),
+                   // These are flags, so their existence indicates that the value is `true`.
+                   AnnotationValue::VPredicate => "true".to_string(),
+                   AnnotationValue::VVectorize => "true".to_string(),
+                   AnnotationValue::VAlwaysUseRuntime => "true".to_string(),
+               })
     }
 }
 
@@ -221,6 +251,10 @@ impl fmt::Display for Annotations {
         for (ref kind, ref value) in self.values.iter() {
             annotations.push(format!("{}:{}", kind, value));
         }
+
+        // Sort the annotations alphabetically when displaying them so the result is deterministic.
+        annotations.sort();
+
         if annotations.len() == 0 {
             write!(f, "")
         } else {

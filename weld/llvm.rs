@@ -3205,7 +3205,7 @@ fn predicate_iff_annotated() {
     let code = "|v:vec[i32]| result(for(v, merger[i32,+], |b,i,e| @(predicate:false)if(e>0, merge(b,e), b)))";
     let typed_e = predicate_only(code);
     assert!(typed_e.is_ok());
-    let expected = "|v:vec[i32]|result(for(v:vec[i32],merger[i32,+],|b:merger[i32,+],i:i64,e:i32|@(predicate:false)if((e:i32>0),merge(b:merger[i32,+],e:i32),b:merger[i32,+])))";
+    let expected = "|v:vec[i32]|result(for(v:vec[i32],merger[i32,+],|b:merger[i32,+],i:i64,e:i32|if((e:i32>0),merge(b:merger[i32,+],e:i32),b:merger[i32,+])))";
     assert_eq!(print_typed_expr_without_indent(&typed_e.unwrap()).as_str(),
                expected);
 
