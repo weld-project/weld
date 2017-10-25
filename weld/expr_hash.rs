@@ -1,5 +1,11 @@
 //! Implements hashing for expressions, which can be used for comparing two expressions for
 //! equality.
+//! 
+//! Developers should use the `expr_hash` module when checking whether an AST has changed, or in
+//! other scenarios that would otherwise require cloning the AST. In general, computing a hash,
+//! modifying the AST, and then comparing the hash of the old AST to the new one is much faster
+//! than cloning the AST and then checking if the tree was mutated using
+//! `compare_ignoring_symbols`.
 
 // Fast hash function used by Rust's compiler.
 extern crate fnv;

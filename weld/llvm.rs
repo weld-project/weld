@@ -1375,7 +1375,6 @@ impl LlvmGenerator {
                   right_tmp: &str,
                   output_tmp: &str,
                   ty: &Type,
-                  func: &SirFunction,
                   ctx: &mut FunctionContext) -> WeldResult<()> {
         use super::ast::BinOpKind::*;
         match *ty {
@@ -2159,7 +2158,7 @@ impl LlvmGenerator {
                                                 &left_tmp.as_str(),
                                                 &right_tmp.as_str(),
                                                 &output_tmp.as_str(),
-                                                ty, func, ctx)?;
+                                                ty, ctx)?;
                             }
                             _ => {
                                 ctx.code.add(format!("{} = {} {} {}, {}",
