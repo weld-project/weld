@@ -85,7 +85,7 @@ pub fn compile_program(program: &Program, opt_passes: &Vec<Pass>, llvm_opt_level
 
     gen.add_function_on_pointers("run", &sir_prog)?;
     let llvm_code = gen.result();
-    debug!("LLVM program:\n{}\n", &llvm_code);
+    trace!("LLVM program:\n{}\n", &llvm_code);
 
     debug!("Started compiling LLVM");
     let module = try!(easy_ll::compile_module(
@@ -1097,11 +1097,11 @@ impl LlvmGenerator {
     *********************************************************************************************/
 
 
-    fn gen_minmax(&mut self, ll_ty: &String,
+    fn gen_minmax(&mut self, ll_ty: &str,
                   op: &BinOpKind,
-                  left_tmp: &String,
-                  right_tmp: &String,
-                  output_tmp: &String,
+                  left_tmp: &str,
+                  right_tmp: &str,
+                  output_tmp: &str,
                   ty: &Type,
                   func: &SirFunction,
                   ctx: &mut FunctionContext) -> WeldResult<()> {
@@ -1109,23 +1109,22 @@ impl LlvmGenerator {
         
         match *ty {
             Scalar(s) | Simd(s) => {
-                if s.is_signed_integer() | s.is_unsigned_integer() {
+                if s.is_integer() {
                     let sel_tmp = ctx.var_ids.next();
-
-                    match op {
-                        &Max => {
+                    match *op {
+                        Max => {
                             ctx.code.add(format!("{} = {} {} {}, {}",
                                                  &sel_tmp,
                                                  llvm_binop(GreaterThan, ty)?,
                                              &ll_ty, &left_tmp, &right_tmp));
                         }
-                        &Min => {
+                        Min => {
                             ctx.code.add(format!("{} = {} {} {}, {}",
                                                  &sel_tmp,
                                                  llvm_binop(LessThan, ty)?,
                                                  &ll_ty, &left_tmp, &right_tmp));
                         }
-                        _ => weld_err!("Illegal operation using Min/Max generator")?,
+                        _ => return weld_err!("Illegal operation using Min/Max generator"),
                     }
                     
                     ctx.code.add(format!("{} = select i1 {}, {} {}, {} {}",
@@ -1140,7 +1139,6 @@ impl LlvmGenerator {
                                          self.llvm_type(ty)?, &right_tmp));
                 }                
             }
-
             _ => weld_err!("Illegal type {} in Min/Max", print_type(ty))?,
         }
         
@@ -1886,7 +1884,11 @@ impl LlvmGenerator {
                         match op {
                             /* Special-case max and min, which don't have int intrinsics */
                             Max | Min => {
-                                self.gen_minmax(&ll_ty, &op, &left_tmp, &right_tmp, &output_tmp, ty, func, ctx)?;
+                                self.gen_minmax(&ll_ty.as_str(), &op,
+                                                &left_tmp.as_str(),
+                                                &right_tmp.as_str(),
+                                                &output_tmp.as_str(),
+                                                ty, func, ctx)?;
                             }
                             _ => {
                                 ctx.code.add(format!("{} = {} {} {}, {}",
