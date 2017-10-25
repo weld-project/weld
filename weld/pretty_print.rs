@@ -221,10 +221,22 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>,
             ref left,
             ref right,
         } => {
-            format!("({}{}{})",
-                    print_expr_impl(left, typed, indent, should_indent),
-                    kind,
-                    print_expr_impl(right, typed, indent, should_indent))
+            /* special-case max and min */
+            use super::ast::BinOpKind::*;
+            match kind {
+                Max | Min => {
+                    format!("{}({},{})",
+                            kind,
+                            print_expr_impl(left, typed, indent, should_indent),
+                            print_expr_impl(right, typed, indent, should_indent))
+                }
+                _ => {
+                    format!("({}{}{})",
+                            print_expr_impl(left, typed, indent, should_indent),
+                            kind,
+                            print_expr_impl(right, typed, indent, should_indent))
+                }
+            }
         }
 
         UnaryOp { kind, ref value } => {

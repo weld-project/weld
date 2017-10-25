@@ -85,7 +85,7 @@ pub fn compile_program(program: &Program, opt_passes: &Vec<Pass>, llvm_opt_level
 
     gen.add_function_on_pointers("run", &sir_prog)?;
     let llvm_code = gen.result();
-    trace!("LLVM program:\n{}\n", &llvm_code);
+    debug!("LLVM program:\n{}\n", &llvm_code);
 
     debug!("Started compiling LLVM");
     let module = try!(easy_ll::compile_module(
@@ -1097,6 +1097,54 @@ impl LlvmGenerator {
     *********************************************************************************************/
 
 
+    fn gen_minmax(&mut self, ll_ty: &String,
+                  op: &BinOpKind,
+                  left_tmp: &String,
+                  right_tmp: &String,
+                  output_tmp: &String,
+                  ty: &Type,
+                  func: &SirFunction,
+                  ctx: &mut FunctionContext) -> WeldResult<()> {
+        use super::ast::BinOpKind::*;
+        
+        match *ty {
+            Scalar(s) | Simd(s) => {
+                if s.is_signed_integer() | s.is_unsigned_integer() {
+                    let sel_tmp = ctx.var_ids.next();
+
+                    match op {
+                        &Max => {
+                            ctx.code.add(format!("{} = {} {} {}, {}",
+                                                 &sel_tmp,
+                                                 llvm_binop(GreaterThan, ty)?,
+                                             &ll_ty, &left_tmp, &right_tmp));
+                        }
+                        &Min => {
+                            ctx.code.add(format!("{} = {} {} {}, {}",
+                                                 &sel_tmp,
+                                                 llvm_binop(LessThan, ty)?,
+                                                 &ll_ty, &left_tmp, &right_tmp));
+                        }
+                        _ => weld_err!("Illegal operation using Min/Max generator")?,
+                    }
+                    
+                    ctx.code.add(format!("{} = select i1 {}, {} {}, {} {}",
+                                         &output_tmp, sel_tmp,
+                                         self.llvm_type(ty)?, left_tmp,
+                                         self.llvm_type(ty)?, right_tmp));
+                } else if s.is_float() { /* has one-line intrinsic */
+                    ctx.code.add(format!("{} = {} {} {}, {}",
+                                         &output_tmp, llvm_binop(*op, ty)?,
+                                         &ll_ty, &left_tmp, &right_tmp));
+                }                
+            }
+
+            _ => weld_err!("Illegal type {} in Min/Max", print_type(ty))?,
+        }
+        
+        Ok(())
+    }
+
     /// Generates a `cmp` function for `ty` and any nested types it depends on.
     fn gen_cmp(&mut self, ty: &Type) -> WeldResult<()> {
         // If we've already generated a function for this type, return.
@@ -1821,6 +1869,8 @@ impl LlvmGenerator {
             }
 
             BinOp { ref output, op, ref left, ref right } => {
+                use super::ast::BinOpKind::*;
+                    
                 let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
                 let ty = func.symbol_type(left)?;
                 // Assume the left and right operands have the same type.
@@ -1831,8 +1881,16 @@ impl LlvmGenerator {
                 let output_tmp = ctx.var_ids.next();
                 match *ty {
                     Scalar(_) | Simd(_) => {
-                        ctx.code.add(format!("{} = {} {} {}, {}",
-                                             &output_tmp, llvm_binop(op, ty)?, &ll_ty, &left_tmp, &right_tmp));
+                        match op {
+                            /* Special-case max and min, which don't have int intrinsics */
+                            Max | Min => {
+                                self.gen_minmax(&ll_ty, &op, &left_tmp, &right_tmp, &output_tmp, ty, func, ctx)?;
+                            }
+                            _ => {
+                                ctx.code.add(format!("{} = {} {} {}, {}",
+                                                     &output_tmp, llvm_binop(op, ty)?, &ll_ty, &left_tmp, &right_tmp));
+                            }
+                        }
                         self.gen_store_var(&output_tmp, &output_ll_sym, &output_ll_ty, ctx);
                     }
 
@@ -1844,16 +1902,16 @@ impl LlvmGenerator {
                         // Make sure a comparison function exists for this type.
                         self.gen_cmp(ty)?;
                         ctx.code.add(format!("{} = call i32 {}.cmp({} {}, {} {})",
-                                                tmp,
-                                                vec_prefix,
-                                                ll_ty,
-                                                left_tmp,
-                                                ll_ty,
-                                                right_tmp));
+                                             tmp,
+                                             vec_prefix,
+                                             ll_ty,
+                                             left_tmp,
+                                             ll_ty,
+                                             right_tmp));
                         ctx.code.add(format!("{} = icmp {} i32 {}, {}", output_tmp, op_name, tmp, value));
                         self.gen_store_var(&output_tmp, &output_ll_sym, &output_ll_ty, ctx);
                     }
-
+                    
                     _ => weld_err!("Illegal type {} in BinOp", print_type(ty))?,
                 }
             }
@@ -2991,6 +3049,12 @@ fn llvm_binop(op_kind: BinOpKind, ty: &Type) -> WeldResult<&'static str> {
                 BitwiseOr if s.is_integer() || s.is_bool() => Ok("or"),
 
                 Xor if s.is_integer() || s.is_bool() => Ok("xor"),
+
+                Min if s == F32 => Ok("@llvm.minnum.f32"),
+                Min if s == F64 => Ok("@llvm.minnum.f64"),
+
+                Max if s == F32 => Ok("@llvm.maxnum.f32"),
+                Max if s == F64 => Ok("@llvm.maxnum.f64"),
 
                 _ => return weld_err!("Unsupported binary op: {} on {}", op_kind, print_type(ty))
             }
