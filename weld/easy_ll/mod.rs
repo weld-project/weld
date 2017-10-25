@@ -1,7 +1,6 @@
 //! A very simple wrapper for LLVM that can JIT functions written as IR strings.
 
 extern crate llvm_sys as llvm;
-extern crate libc;
 
 use std::error::Error;
 use std::ffi::{CStr, CString, NulError};
@@ -11,12 +10,15 @@ use std::mem;
 use std::ops::Drop;
 use std::os::raw::c_char;
 use std::sync::{Once, ONCE_INIT};
+use std::ptr;
 
 use self::llvm::support::LLVMLoadLibraryPermanently;
 use self::llvm::prelude::{LLVMContextRef, LLVMModuleRef, LLVMMemoryBufferRef};
-use self::llvm::execution_engine::{LLVMExecutionEngineRef, LLVMMCJITCompilerOptions};
+use self::llvm::execution_engine::{LLVMExecutionEngineRef, LLVMMCJITCompilerOptions, LLVMGetExecutionEngineTargetMachine};
 use self::llvm::analysis::LLVMVerifierFailureAction;
+use self::llvm::target_machine::{LLVMCodeGenFileType, LLVMTargetMachineEmitToMemoryBuffer};
 use self::llvm::transforms::pass_manager_builder as pmb;
+use self::llvm::core::{LLVMGetBufferStart, LLVMPrintModuleToString};
 
 #[cfg(test)]
 mod tests;
@@ -103,6 +105,36 @@ pub fn load_library(libname: &str) -> Result<(), LlvmError> {
     }
 }
 
+/// Outputs the target machine assembly based on the given engine and module using llvm-sys api.
+fn output_target_machine_assembly(engine: LLVMExecutionEngineRef, module: LLVMModuleRef)
+    -> Result<String, LlvmError> {
+    // We create a pointer to a MemoryBuffer, and pass its address to be modified by
+    // EmitToMemoryBuffer.
+    let mut output_buf : self::llvm::prelude::LLVMMemoryBufferRef = ptr::null_mut();
+    let mut err = ptr::null_mut();
+    unsafe {
+        let cur_target = LLVMGetExecutionEngineTargetMachine(engine);
+        let file_type :LLVMCodeGenFileType = LLVMCodeGenFileType::LLVMAssemblyFile;
+        let res = LLVMTargetMachineEmitToMemoryBuffer(cur_target, module, file_type, &mut err, &mut output_buf);
+        if res == 1 {
+            let x = CStr::from_ptr(err as *mut c_char).to_string_lossy().into_owned();
+            return Err(LlvmError::new(format!("Getting LLVM IR failed with error {}", &x).as_ref()));
+        }
+        let start = LLVMGetBufferStart(output_buf);
+        let c_str: &CStr = CStr::from_ptr(start as *mut c_char);
+        Ok(c_str.to_string_lossy().into_owned())
+    }
+}
+
+/// Outputs the LLVM IR for the given module.
+fn output_llvm_ir(module: LLVMModuleRef) -> Result<String, LlvmError> {
+    unsafe {
+        let start = LLVMPrintModuleToString(module);
+        let c_str: &CStr = CStr::from_ptr(start as *mut c_char);
+        Ok(c_str.to_str().unwrap().to_owned())
+    }
+}
+
 /// Compile a string of LLVM IR (in human readable format) into a `CompiledModule` that can then
 /// be executed. The LLVM IR should contain an entry point function called `run` that takes `i64`
 /// and returns `i64`, which will be called by `CompiledModule::run`.
@@ -135,6 +167,7 @@ pub fn compile_module(
         // Parse the IR to get an LLVMModuleRef
         let module = parse_module_str(context, code)?;
         debug!("Done parsing module");
+        trace!("Non-Optimized LLVM IR, before linking bc file: \n = {}", try!(output_llvm_ir(module)));
 
         if let Some(s) = bc_file {
             let bc_module = parse_module_bytes(context, s)?;
@@ -149,10 +182,12 @@ pub fn compile_module(
         debug!("Done validating module");
         optimize_module(module, optimization_level)?;
         debug!("Done optimizing module");
+        trace!("Optimized LLVM IR: \n = {}", try!(output_llvm_ir(module)));
 
         // Create an execution engine for the module and find its run function
         let engine = create_exec_engine(module, optimization_level)?;
         debug!("Done creating execution engine");
+        trace!("Optimized Target Machine Assembly: \n = {}", try!(output_target_machine_assembly(engine, module)));
 
         result.engine = Some(engine);
         result.run_function = Some(find_function(engine, "run")?);

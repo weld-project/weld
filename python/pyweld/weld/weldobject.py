@@ -133,7 +133,12 @@ class WeldObject(object):
                        keys]) + "\n" + self.weld_code
         return text
 
-    def evaluate(self, restype, verbose=True, decode=True):
+    def evaluate(self, restype, verbose=False, decode=True):
+        '''
+        @restype: result weld type after the operations are evaluated. e.g., WeldVec(WeldInt). Some
+        operations (e.g., mean) can change the restype.
+        @verbose: used as a verbose flag for evaluate, and also as a log level for weld (0....5).
+        '''
         function = self.toWeldFunc()
 
         # Returns a wrapped ctypes Structure
@@ -141,6 +146,11 @@ class WeldObject(object):
             class Args(ctypes.Structure):
                 _fields_ = [e for e in encoded]
             return Args
+
+        if verbose:
+            # If verbose is True, then set log level to Info (3) or higher.
+            if verbose < 3: verbose = 3
+            cweld.set_log_level(verbose)
 
         # Encode each input argument. This is the positional argument list
         # which will be wrapped into a Weld struct and passed to the Weld API.

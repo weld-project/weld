@@ -161,3 +161,9 @@ class WeldError(c_void_p):
         weld_error_free.argtypes = [c_weld_err]
         weld_error_free.restype = None
         weld_error_free(self.error)
+
+def set_log_level(log_level):
+    '''
+    Sets the log_level for weld: 0 = No Logs, 1 = Error, 2 = Warn, 3 = Info, 4 = Debug, 5 = Trace.
+    '''
+    weld.weld_set_log_level(log_level)
