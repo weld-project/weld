@@ -1106,7 +1106,6 @@ impl LlvmGenerator {
                   func: &SirFunction,
                   ctx: &mut FunctionContext) -> WeldResult<()> {
         use super::ast::BinOpKind::*;
-        
         match *ty {
             Scalar(s) | Simd(s) => {
                 if s.is_integer() {
