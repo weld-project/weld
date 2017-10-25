@@ -431,7 +431,7 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
                     for i in [&mut iter.shapes].iter_mut() {
                         match **i {
                             Some(ref mut e) => {
-                                changed |= try!(push_complete_type(&mut e.ty, Scalar(I64), "iter"))
+                                changed |= try!(push_complete_type(&mut e.ty, Vector(Box::new(Scalar(I64))), "iter"))
                             }
                             None => return weld_err!("Impossible"),
                         };

@@ -681,7 +681,7 @@ pub fn ast_to_sir(expr: &TypedExpr, multithreaded: bool) -> WeldResult<SirProgra
 
 /// Helper method for gen_expr.
 /// TODO: add more detail.
-fn _get_iter_sym(opt : &Option<Box<Expr<Type>>>,
+fn get_iter_sym(opt : &Option<Box<Expr<Type>>>,
             prog: &mut SirProgram,
             cur_func: &mut FunctionId,
             cur_block: &mut BasicBlockId,
@@ -1163,10 +1163,10 @@ fn gen_expr(expr: &TypedExpr,
                     prog.funcs[body_func]
                         .params
                         .insert(data_res.2.clone(), iter.data.ty.clone());
-                    let start_sym = try!(_get_iter_sym(&iter.start, prog, &mut cur_func, &mut cur_block, multithreaded, body_func));
-                    let end_sym = try!(_get_iter_sym(&iter.end, prog, &mut cur_func, &mut cur_block, multithreaded, body_func));
-                    let stride_sym = try!(_get_iter_sym(&iter.stride, prog, &mut cur_func, &mut cur_block, multithreaded, body_func));
-                    let shapes_sym = try!(_get_iter_sym(&iter.shapes, prog, &mut cur_func, &mut cur_block, multithreaded, body_func));
+                    let start_sym = try!(get_iter_sym(&iter.start, prog, &mut cur_func, &mut cur_block, multithreaded, body_func));
+                    let end_sym = try!(get_iter_sym(&iter.end, prog, &mut cur_func, &mut cur_block, multithreaded, body_func));
+                    let stride_sym = try!(get_iter_sym(&iter.stride, prog, &mut cur_func, &mut cur_block, multithreaded, body_func));
+                    let shapes_sym = try!(get_iter_sym(&iter.shapes, prog, &mut cur_func, &mut cur_block, multithreaded, body_func));
 
                     pf_iters.push(ParallelForIter {
                                       data: data_res.2,
