@@ -1,8 +1,0 @@
-|x:vec[i32]|
-    result(
-        for(
-            map(x, |e| e * 4),
-            merger[i32,+],
-            |b,i,e| merge(b, e)
-        )
-    )

@@ -17,7 +17,6 @@ You can join the discussion on Weld on our [Google Group](https://groups.google.
   * [Documentation](#documentation)
   * [Grizzly (Pandas on Weld)](#grizzly)
   * [Running an Interactive REPL](#interactive-repl)
-  * [Benchmarking](#benchmarking)
 
 ## Building
 
@@ -152,16 +151,6 @@ Expression type: vec[i32]
 ```
 
 Passing a `Lambda` expression will also perform LLVM code generation - other expression types will only perform parsing, type inference, and IR transformations.
-
-## Benchmarking
-
-`cargo bench` runs benchmarks under the `benches/` directory. The results of the benchmarks are written to a file called `benches.csv`. To specify specific benchmarks to run:
-
-```
-$ cargo bench [benchmark-name]
-```
-
-If a benchmark name is not provided, all benchmarks are run.
 
 ## Current performance metrics
 
