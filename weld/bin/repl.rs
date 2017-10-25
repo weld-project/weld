@@ -151,10 +151,10 @@ fn read_input(rl: &mut Editor<()>, prompt: &str, history: bool) -> Option<String
 /// contains code or `None` if the command is fully processed.
 fn handle_string<'a>(command: &'a str, conf: *mut WeldConf) -> Option<String> {
     let mut tokens = command.splitn(2, " ");
-    let command = tokens.next().unwrap();
+    let repl_command = tokens.next().unwrap();
     let arg = tokens.next().unwrap_or("");
-    if RESERVED_WORDS.contains_key(command) {
-        let command = RESERVED_WORDS.get(command).unwrap();
+    if RESERVED_WORDS.contains_key(repl_command) {
+        let command = RESERVED_WORDS.get(repl_command).unwrap();
         match *command {
             ReplCommands::LoadFile => {
                 match process_loadfile(arg.to_string()) {
