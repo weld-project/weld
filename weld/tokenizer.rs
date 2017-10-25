@@ -262,7 +262,7 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
         } else if F64_RE.is_match(text) {
             match f64::from_str(text) {
                 Ok(value) => tokens.push(Token::TF64Literal(value)),
-                Err(_) => return weld_err!("Invalid f32 literal: {}", text),
+                Err(_) => return weld_err!("Invalid f64 literal: {}", text),
             }
         } else {
             tokens.push(match text {

@@ -1133,9 +1133,11 @@ impl LlvmGenerator {
                                          self.llvm_type(ty)?, left_tmp,
                                          self.llvm_type(ty)?, right_tmp));
                 } else if s.is_float() { /* has one-line intrinsic */
-                    ctx.code.add(format!("{} = {} {} {}, {}",
-                                         &output_tmp, llvm_binop(*op, ty)?,
-                                         &ll_ty, &left_tmp, &right_tmp));
+                    ctx.code.add(format!("{} = call {} {}({} {}, {} {})",
+                                         &output_tmp, &ll_ty,
+                                         llvm_binary_maxmin(*op, &s)?,
+                                         self.llvm_type(ty)?, &left_tmp,
+                                         self.llvm_type(ty)?, &right_tmp));
                 }                
             }
 
@@ -1766,7 +1768,7 @@ impl LlvmGenerator {
         }
         else if let Simd(ref ty) = *child_ty {
             let width = llvm_simd_size(child_ty)?;
-            // If an intrinsic exists for this SIMD op, use it.
+           // If an intrinsic exists for this SIMD op, use it.
             if let Ok(op_name) = llvm_simd_unaryop(op_kind, ty, width) {
                 let res_tmp = ctx.var_ids.next();
                 ctx.code.add(format!("{} = call {} {}({} {})", res_tmp, child_ll_ty, op_name, child_ll_ty, child_tmp));
@@ -3050,17 +3052,24 @@ fn llvm_binop(op_kind: BinOpKind, ty: &Type) -> WeldResult<&'static str> {
 
                 Xor if s.is_integer() || s.is_bool() => Ok("xor"),
 
-                Min if s == F32 => Ok("@llvm.minnum.f32"),
-                Min if s == F64 => Ok("@llvm.minnum.f64"),
-
-                Max if s == F32 => Ok("@llvm.maxnum.f32"),
-                Max if s == F64 => Ok("@llvm.maxnum.f64"),
-
                 _ => return weld_err!("Unsupported binary op: {} on {}", op_kind, print_type(ty))
             }
         }
 
         _ => return weld_err!("Unsupported binary op: {} on {}", op_kind, print_type(ty))
+    }
+}
+
+/// Return LLVM intrinsic for float max/min.
+fn llvm_binary_maxmin(op_kind: BinOpKind, ty: &ScalarKind) -> WeldResult<&'static str> {
+    match (op_kind, ty) {
+        (BinOpKind::Min, &F32) => Ok("@llvm.minnum.f32"),
+        (BinOpKind::Min, &F64) => Ok("@llvm.minnum.f64"),
+
+        (BinOpKind::Max, &F32) => Ok("@llvm.maxnum.f32"),
+        (BinOpKind::Max, &F64) => Ok("@llvm.maxnum.f64"),
+
+        _ => weld_err!("Unsupported binary op: {} on {}", op_kind, ty),
     }
 }
 

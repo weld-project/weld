@@ -35,6 +35,11 @@ declare double @llvm.sqrt.f64(double)
 
 declare i64 @llvm.ctlz.i64(i64, i1)
 
+declare float @llvm.maxnum.f32(float, float)
+declare double @llvm.maxnum.f64(double, double)
+declare float @llvm.minnum.f32(float, float)
+declare double @llvm.minnum.f64(double, double)
+
 ; std library functions
 declare i8* @malloc(i64)
 declare void @qsort(i8*, i64, i64, i32 (i8*, i8*)*)
