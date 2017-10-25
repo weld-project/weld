@@ -418,6 +418,8 @@ pub enum BinOpKind {
     BitwiseAnd,
     BitwiseOr,
     Xor,
+    Max,
+    Min,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -460,6 +462,8 @@ impl fmt::Display for BinOpKind {
             BitwiseAnd => "&",
             BitwiseOr => "|",
             Xor => "^",
+            Max => "max",
+            Min => "min",
         };
         f.write_str(text)
     }

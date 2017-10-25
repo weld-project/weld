@@ -1111,6 +1111,38 @@ impl<'t> Parser<'t> {
 
             TMinus => Ok(expr_box(Negate(try!(self.leaf_expr())), Annotations::new())),
 
+            TMin => {
+                try!(self.consume(TOpenParen));
+                let left = try!(self.expr());
+                try!(self.consume(TComma));
+                let right = try!(self.expr());
+                try!(self.consume(TCloseParen));
+                
+                let res = expr_box(BinOp {
+                    kind: Min,
+                    left: left,
+                    right: right,
+                }, Annotations::new());
+                
+                Ok(res)
+            }
+
+            TMax => {
+                try!(self.consume(TOpenParen));
+                let left = try!(self.expr());
+                try!(self.consume(TComma));
+                let right = try!(self.expr());
+                try!(self.consume(TCloseParen));
+                
+                let res = expr_box(BinOp {
+                    kind: Max,
+                    left: left,
+                    right: right,
+                }, Annotations::new());
+                
+                Ok(res)
+            }
+            
             ref other => weld_err!("Expected expression but got '{}'", other),
         }
     }

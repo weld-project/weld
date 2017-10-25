@@ -93,6 +93,8 @@ pub enum Token {
     TLogicalOr,
     TBitwiseAnd,
     TXor,
+    TMax,
+    TMin,
     TEndOfInput,
 }
 
@@ -131,6 +133,8 @@ impl Token {
                 TLogicalOr |
                 TBitwiseAnd |
                 TXor |
+                TMax |
+                TMin |
                 TEndOfInput => false,
             _ => true
         }
@@ -151,7 +155,7 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
             "^(if|for|zip|len|lookup|keyexists|slice|exp|log|erf|sqrt|simd|select|broadcast|\
              iterate|cudf|simditer|fringeiter|iter|merge|result|let|true|false|macro|\
              i8|i16|i32|i64|u8|u16|u32|u64|f32|f64|bool|vec|appender|merger|vecmerger|\
-             dictmerger|groupmerger|tovec)$").unwrap();
+             dictmerger|groupmerger|tovec|min|max)$").unwrap();
 
         static ref IDENT_RE: Regex = Regex::new(r"^[A-Za-z$_][A-Za-z0-9$_]*$").unwrap();
 
@@ -225,6 +229,8 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
                             "broadcast" => TBroadcast,
                             "true" => TBoolLiteral(true),
                             "false" => TBoolLiteral(false),
+                            "min" => TMin,
+                            "max" => TMax,
                             _ => return weld_err!("Invalid input token: {}", text),
                         });
 
@@ -256,7 +262,7 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
         } else if F64_RE.is_match(text) {
             match f64::from_str(text) {
                 Ok(value) => tokens.push(Token::TF64Literal(value)),
-                Err(_) => return weld_err!("Invalid f32 literal: {}", text),
+                Err(_) => return weld_err!("Invalid f64 literal: {}", text),
             }
         } else {
             tokens.push(match text {
@@ -392,6 +398,8 @@ impl fmt::Display for Token {
                     TLogicalOr => "||",
                     TBitwiseAnd => "&",
                     TXor => "^",
+                    TMin => "min",
+                    TMax => "max",
                     TEndOfInput => "<END>",
                 })
             }

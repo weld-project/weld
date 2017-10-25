@@ -382,6 +382,34 @@ fn if_statement() {
     unsafe { free_value_and_module(ret_value) };
 }
 
+fn float_min() {
+    let code = "|| min(3.1, 4.2)";
+    let conf = default_conf();
+
+    let ref input_data: f64 = 0.0;
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const f64 };
+    let result = unsafe { *data };
+    assert!(approx_equal(result, 3.1, 5));
+
+    unsafe { free_value_and_module(ret_value) };
+}
+
+fn maxmin() {
+    let code = "|| max(3, min(2, 4))";
+    let conf = default_conf();
+
+    let ref input_data: i32 = 0;
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const i32 };
+    let result = unsafe { *data };
+    assert_eq!(result, 3);
+
+    unsafe { free_value_and_module(ret_value) };
+}
+
 fn comparison() {
     let code = "|x:i32| if(x>10, x, 10)";
     let conf = default_conf();
@@ -2249,6 +2277,8 @@ fn main() {
              ("struct_vector_literals", struct_vector_literals),
              ("let_statement", let_statement),
              ("if_statement", if_statement),
+             ("float_min", float_min),
+             ("maxmin", maxmin),
              ("comparison", comparison),
              ("reused_variable", reused_variable),
              ("map_comparison", map_comparison),
