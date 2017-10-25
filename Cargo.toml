@@ -30,11 +30,6 @@ name = "repl"
 path = "weld/bin/repl.rs"
 bench = false
 
-[[bench]]
-name = "benches"
-path = "benches/benches.rs"
-harness = false
-
 [[test]]
 name = "integration_tests"
 path = "tests/integration_tests.rs"
