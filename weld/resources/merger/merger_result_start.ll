@@ -1,19 +1,16 @@
 ; Begin merger merge.
-  {t0} = call {bld_ty_str} {bld_prefix}.getPtrIndexed({bld_ty_str} {bld_tmp}, i32 0)
-  {scalar_ptr} = call {elem_ty_str}* {bld_prefix}.scalarMergePtr({bld_ty_str} {t0})
-  {vector_ptr} = call {elem_vec_ty_str}* {bld_prefix}.vectorMergePtr({bld_ty_str} {t0})
-  {first_scalar} = load {elem_ty_str}, {elem_ty_str}* {scalar_ptr}
-  {first_vector} = load {elem_vec_ty_str}, {elem_vec_ty_str}* {vector_ptr}
-  {nworkers} = call i32 @weld_rt_get_nworkers()
-  br label %{entry}
+  {is_global} = call i1 {bld_prefix}.isGlobal({bld_ty_str}* {bld_sym})
+  {scalar_ptr} = call {elem_ty_str}* {bld_prefix}.scalarMergePtrForStackPiece({bld_ty_str}* {bld_sym})
+  {vector_ptr} = call {elem_vec_ty_str}* {bld_prefix}.vectorMergePtrForStackPiece({bld_ty_str}* {bld_sym})
+  br i1 {is_global}, label %{entry}, label %{done}
 {entry}:
-  {cond} = icmp ult i32 1, {nworkers}
-  br i1 {cond}, label %{body}, label %{done}
+  {nworkers} = call i32 @weld_rt_get_nworkers()
+  br label %{body}
 {body}:
-  {i} = phi i32 [ 1, %{entry} ], [ {i2}, %{body} ]
-  {bld_ptr} = call {bld_ty_str} {bld_prefix}.getPtrIndexed({bld_ty_str} {bld_tmp}, i32 {i})
-  {val_scalar_ptr} = call {elem_ty_str}* {bld_prefix}.scalarMergePtr({bld_ty_str} {bld_ptr})
-  {val_vector_ptr} = call {elem_vec_ty_str}* {bld_prefix}.vectorMergePtr({bld_ty_str} {bld_ptr})
+  {i} = phi i32 [ 0, %{entry} ], [ {i2}, %{body} ]
+  {bld_ptr} = call {bld_ty_str}.piecePtr {bld_prefix}.getPtrIndexed({bld_ty_str}* {bld_sym}, i32 {i})
+  {val_scalar_ptr} = call {elem_ty_str}* {bld_prefix}.scalarMergePtrForPiece({bld_ty_str}.piecePtr {bld_ptr})
+  {val_vector_ptr} = call {elem_vec_ty_str}* {bld_prefix}.vectorMergePtrForPiece({bld_ty_str}.piecePtr {bld_ptr})
   {val_scalar} = load {elem_ty_str}, {elem_ty_str}* {val_scalar_ptr}
   {val_vector} = load {elem_vec_ty_str}, {elem_vec_ty_str}* {val_vector_ptr}
 ; begin generated merge
