@@ -14,6 +14,7 @@ use super::parser::*;
 use super::partial_types::*;
 use super::error::*;
 use super::util::SymbolGenerator;
+use super::annotations::*;
 
 #[cfg(test)]
 use super::pretty_print::*;

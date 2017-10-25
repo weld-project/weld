@@ -2,6 +2,12 @@ extern crate rustyline;
 extern crate weld;
 extern crate libc;
 
+#[macro_use]
+extern crate lazy_static;
+
+extern crate clap;
+use clap::{Arg, App};
+
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
 use std::env;
@@ -18,6 +24,8 @@ use libc::c_char;
 use weld::*;
 use weld::common::*;
 
+const PROMPT: &'static str = ">>> ";
+
 enum ReplCommands {
     LoadFile,
     GetConf,
@@ -32,6 +40,16 @@ impl fmt::Display for ReplCommands {
             ReplCommands::SetConf => write!(f, "setconf"),
         }
     }
+}
+
+lazy_static! {
+    static ref RESERVED_WORDS: HashMap<String, ReplCommands> = {
+        let mut m = HashMap::new();
+        m.insert(ReplCommands::LoadFile.to_string(), ReplCommands::LoadFile);
+        m.insert(ReplCommands::SetConf.to_string(), ReplCommands::SetConf);
+        m.insert(ReplCommands::GetConf.to_string(), ReplCommands::GetConf);
+        m
+    };
 }
 
 /// Process the `SetConf` command.
@@ -102,8 +120,105 @@ fn process_loadfile(arg: String) -> Result<String, String> {
     Ok(contents.trim().to_string())
 }
 
+/// Reads a line of input, returning the read line or `None` if an error occurred
+/// or the user exits.
+fn read_input(rl: &mut Editor<()>, prompt: &str, history: bool) -> Option<String> {
+    let raw_readline = rl.readline(prompt);
+    match raw_readline {
+        Ok(raw_readline) => {
+            if history {
+                rl.add_history_entry(&raw_readline);
+            }
+            let trimmed = raw_readline.trim();
+            Some(trimmed.to_string())
+        }
+        Err(ReadlineError::Interrupted) => {
+            println!("Exiting!");
+            None
+        }
+        Err(ReadlineError::Eof) => {
+            println!("Exiting!");
+            None
+        }
+        Err(err) => {
+            println!("Error: {:?}", err);
+            None
+        }
+    }
+}
+
+/// Handles a single string command. Returns a string if the command
+/// contains code or `None` if the command is fully processed.
+fn handle_string<'a>(command: &'a str, conf: *mut WeldConf) -> Option<String> {
+    let mut tokens = command.splitn(2, " ");
+    let command = tokens.next().unwrap();
+    let arg = tokens.next().unwrap_or("");
+    if RESERVED_WORDS.contains_key(command) {
+        let command = RESERVED_WORDS.get(command).unwrap();
+        match *command {
+            ReplCommands::LoadFile => {
+                match process_loadfile(arg.to_string()) {
+                    Err(s) => {
+                        println!("{}", s);
+                        None
+                    }
+                    Ok(code) => {
+                        Some(code)
+                    }
+                }
+            }
+            ReplCommands::SetConf => {
+                let mut setconf_args = arg.splitn(2, " ");
+                let key = setconf_args.next().unwrap_or("");
+                let value = setconf_args.next().unwrap_or("");
+                process_setconf(conf, key.to_string(), value.to_string());
+                None
+            }
+            ReplCommands::GetConf => {
+                let mut setconf_args = arg.splitn(2, " ");
+                let key = setconf_args.next().unwrap_or("");
+                let value = process_getconf(conf, key.to_string());
+                if let Some(s) = value {
+                    println!("{}={}", key, s);
+                } else {
+                    println!("{}=<unset>", key);
+                }
+                None
+            }
+        }
+    } else {
+        Some(command.to_string())
+    }
+}
+
 fn main() {
-    weld_set_log_level(WeldLogLevel::Debug);
+    let matches = App::new("Weld REPL")
+        .version("0.1.0")
+        .author("Weld authors <weld-group@cs.stanford.edu")
+        .about("A REPL for Weld")
+        .arg(Arg::with_name("loglevel")
+             .short("l")
+             .long("loglevel")
+             .value_name("LEVEL")
+             .help("Log level for the Weld compiler")
+             .takes_value(true))
+        .get_matches();
+
+    let log_level_str = matches.value_of("loglevel").unwrap_or("debug").to_lowercase();
+    let (log_level, log_str) = match log_level_str.as_str() {
+        "none" =>   (WeldLogLevel::Off,         "none"),
+        "error" =>  (WeldLogLevel::Error,       "\x1b[0;31merror\x1b[0m"),
+        "warn" =>   (WeldLogLevel::Warn,        "\x1b[0;33mwarn\x1b[0m"),
+        "info" =>   (WeldLogLevel::Info,        "\x1b[0;33minfo\x1b[0m"),
+        "debug" =>  (WeldLogLevel::Debug,       "\x1b[0;32mdebug\x1b[0m"), 
+        "trace" =>  (WeldLogLevel::Trace,       "\x1b[0;32mtrace\x1b[0m"),
+        ref s => {
+            println!("Unrecognized log level {}", s);
+            std::process::exit(1);
+        }
+    };
+    weld_set_log_level(log_level);
+    println!("Log Level set to '{}'", log_str);
 
     // This is the conf we use for compilation.
     let conf = weld_conf_new();
@@ -112,95 +227,37 @@ fn main() {
     let history_file_path = home_path.join(".weld_history");
     let history_file_path = history_file_path.to_str().unwrap_or(".weld_history");
 
-    let mut reserved_words = HashMap::new();
-    reserved_words.insert(ReplCommands::LoadFile.to_string(), ReplCommands::LoadFile);
-    reserved_words.insert(ReplCommands::SetConf.to_string(), ReplCommands::SetConf);
-    reserved_words.insert(ReplCommands::GetConf.to_string(), ReplCommands::GetConf);
-
     let mut rl = Editor::<()>::new();
     if let Err(_) = rl.load_history(&history_file_path) {}
 
     loop {
-        let raw_readline = rl.readline(">> ");
-        let readline;
-        match raw_readline {
-            Ok(raw_readline) => {
-                rl.add_history_entry(&raw_readline);
-                readline = raw_readline;
-            }
-            Err(ReadlineError::Interrupted) => {
-                println!("Exiting!");
-                break;
-            }
-            Err(ReadlineError::Eof) => {
-                println!("Exiting!");
-                break;
-            }
-            Err(err) => {
-                println!("Error: {:?}", err);
-                break;
-            }
+        // Check if the input was valid.
+        let input = read_input(&mut rl, PROMPT, true);
+        if input.is_none() {
+            break;
         }
-
-        let trimmed = readline.trim();
-        if trimmed == "" {
+        let input = input.unwrap();
+        if input == "" {
             continue;
         }
 
-        // Check whether the command is to load a file; if not, treat it as a program to run.
-        let mut tokens = trimmed.splitn(2, " ");
-        let command = tokens.next().unwrap();
-        let arg = tokens.next().unwrap_or("");
-        let code = if reserved_words.contains_key(command) {
-            let command = reserved_words.get(command).unwrap();
-            match *command {
-                ReplCommands::LoadFile => {
-                    match process_loadfile(arg.to_string()) {
-                        Err(s) => {
-                            println!("{}", s);
-                            continue;
-                        }
-                        Ok(code) => {
-                            code
-                        }
-                    }
-                }
-                ReplCommands::SetConf => {
-                    let mut setconf_args = arg.splitn(2, " ");
-                    let key = setconf_args.next().unwrap_or("");
-                    let value = setconf_args.next().unwrap_or("");
-                    process_setconf(conf, key.to_string(), value.to_string());
-                    "".to_string()
-                }
-                ReplCommands::GetConf => {
-                    let mut setconf_args = arg.splitn(2, " ");
-                    let key = setconf_args.next().unwrap_or("");
-                    let value = process_getconf(conf, key.to_string());
-                    if let Some(s) = value {
-                        println!("{}={}", key, s);
-                    } else {
-                        println!("{}=<unset>", key);
-                    }
-                    "".to_string()
-                }
-            }
-        } else {
-            trimmed.to_string()
-        };
-
-        if code.len() == 0 {
+        // Handle repl commands.
+        let code = handle_string(&input, conf);
+        if code.is_none() {
             continue;
         }
+        let code = code.unwrap();
 
+        // Process the code.
         unsafe {
             let code = CString::new(code).unwrap();
             let err = weld_error_new();
             let module = weld_module_compile(code.into_raw() as *const c_char, conf, err);
             if weld_error_code(err) != WeldRuntimeErrno::Success {
-                println!("Compile error: {}",
+                println!("REPL: Compile error: {}",
                     CStr::from_ptr(weld_error_message(err)).to_str().unwrap());
             } else {
-                println!("Program compiled successfully to LLVM");
+                println!("REPL: Program compiled successfully to LLVM");
                 weld_module_free(module);
             }
             weld_error_free(err);

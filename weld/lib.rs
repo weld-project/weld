@@ -1,4 +1,3 @@
-// Disable dead code macros in "build" mode but keep them on in "test" builds so that we don't
 // get spurious warnings for functions that are currently only used in tests. This is useful for
 // development but can be removed later.
 #![cfg_attr(not(test), allow(dead_code))]
@@ -13,6 +12,9 @@ extern crate regex;
 extern crate libc;
 extern crate env_logger;
 extern crate chrono;
+extern crate time;
+
+use self::time::{PreciseTime, Duration};
 
 use std::collections::HashMap;
 use std::error::Error;
@@ -30,6 +32,7 @@ macro_rules! weld_err {
 }
 
 
+pub mod annotations;
 pub mod ast;
 pub mod code_builder;
 pub mod common;
@@ -49,6 +52,7 @@ pub mod type_inference;
 pub mod conf;
 pub mod util;
 pub mod exprs;
+pub mod expr_hash;
 
 // TODO not the right place for this.
 pub mod vectorizer;
@@ -98,6 +102,69 @@ pub struct WeldConf {
 impl WeldConf {
     fn new() -> WeldConf {
         WeldConf { dict: HashMap::new() }
+    }
+}
+
+/// Tracks various compile-time statistics throughout the compiler.
+pub struct CompilationStats {
+    /// Running times for various Weld compiler components.
+    pub weld_times: Vec<(String, Duration)>,
+    /// Running times for Weld optimization passes.
+    pub pass_times: Vec<(String, Duration)>,
+    /// Running times for various LLVM components.
+    pub llvm_times: Vec<(String, Duration)>,
+}
+
+impl CompilationStats {
+    pub fn new() -> CompilationStats {
+        CompilationStats {
+            weld_times: Vec::new(),
+            pass_times: Vec::new(),
+            llvm_times: Vec::new(),
+        }
+    }
+
+    /// Formats a duration for printing the statistics, in terms of milliseconds and microseconds.
+    fn format_time(duration: &Duration) -> f64 {
+        if duration.num_milliseconds() == 0 {
+            if let Some(v) = duration.num_microseconds() {
+                (v as f64) / 1000.0
+            } else {
+                0.0
+            }
+        } else {
+            duration.num_milliseconds() as f64
+        }
+    }
+
+    /// Returns pretty-printed statistics stored in `self`.
+    pub fn pretty_print(&self) -> String {
+        let mut result = String::new();
+        result.push_str("Weld Compiler:\n");
+        let mut total = Duration::milliseconds(0);
+        for &(ref name, ref dur) in self.weld_times.iter() {
+            result.push_str(&format!("\t{}: {:.3} ms\n", name, CompilationStats::format_time(dur)));
+            total = total + *dur;
+        }
+        result.push_str(&format!("\t\x1b[0;32mWeld Compiler Total\x1b[0m {} ms\n", CompilationStats::format_time(&total)));
+
+        let mut total = Duration::milliseconds(0);
+        result.push_str("Weld Optimization Passes:\n");
+        for &(ref name, ref dur) in self.pass_times.iter() {
+            result.push_str(&format!("\t{}: {:.3} ms\n", name, CompilationStats::format_time(dur)));
+            total = total + *dur;
+        }
+        result.push_str(&format!("\t\x1b[0;32mWeld Optimization Passes Total\x1b[0m {} ms\n", CompilationStats::format_time(&total)));
+
+        let mut total = Duration::milliseconds(0);
+        result.push_str("LLVM:\n");
+        for &(ref name, ref dur) in self.llvm_times.iter() {
+            result.push_str(&format!("\t{}: {:.3} ms\n", name, CompilationStats::format_time(dur)));
+            total = total + *dur;
+        }
+        result.push_str(&format!("\t\x1b[0;32mLLVM Total\x1b[0m {} ms\n", CompilationStats::format_time(&total)));
+
+        result
     }
 }
 
@@ -231,6 +298,8 @@ pub unsafe extern "C" fn weld_module_compile(code: *const c_char,
     assert!(!err_ptr.is_null());
     let mut err = &mut *err_ptr;
 
+    let mut stats = CompilationStats::new();
+
     let conf = conf::parse(&*conf);
     if let Err(e) = conf {
         err.errno = WeldRuntimeErrno::ConfigurationError;
@@ -242,9 +311,13 @@ pub unsafe extern "C" fn weld_module_compile(code: *const c_char,
     let code = CStr::from_ptr(code);
     let code = code.to_str().unwrap().trim();
 
+    let start = PreciseTime::now();
     info!("Started parsing program");
     let parsed = parser::parse_program(code);
     info!("Done parsing program");
+    let end = PreciseTime::now();
+    stats.weld_times.push(("Parsing".to_string(), start.to(end)));
+
     if let Err(e) = parsed {
         err.errno = WeldRuntimeErrno::CompileError;
         err.message = CString::new(e.description().to_string()).unwrap();
@@ -256,7 +329,8 @@ pub unsafe extern "C" fn weld_module_compile(code: *const c_char,
         &parsed.unwrap(),
         &conf.optimization_passes,
         conf.llvm_optimization_level,
-        conf.support_multithread);
+        conf.support_multithread,
+        &mut stats);
     info!("Done compiling program");
 
     if let Err(ref e) = module {
@@ -264,6 +338,9 @@ pub unsafe extern "C" fn weld_module_compile(code: *const c_char,
         err.message = CString::new(e.description().to_string()).unwrap();
         return std::ptr::null_mut();
     }
+
+    debug!("\n{}\n", stats.pretty_print());
+
     info!("Done weld_module_compile");
     Box::into_raw(Box::new(module.unwrap()))
 }
@@ -404,16 +481,14 @@ pub extern "C" fn weld_set_log_level(level: WeldLogLevel) {
         _ => log::LogLevelFilter::Off
     };
 
-    let prefix = match level {
-        WeldLogLevel::Error => "\x1b[0;31merror\x1b[0m",
-        WeldLogLevel::Warn => "\x1b[0;33mwarn\x1b[0m",
-        WeldLogLevel::Info => "\x1b[0;33minfo\x1b[0m",
-        WeldLogLevel::Debug => "\x1b[0;32mdebug\x1b[0m",
-        WeldLogLevel::Trace => "\x1b[0;32mtrace\x1b[0m",
-        _ => "",
-    };
-
-    let format = move |rec: &log::LogRecord| {
+    let format = |rec: &log::LogRecord| {
+        let prefix = match rec.level() {
+            log::LogLevel::Error => "\x1b[0;31merror\x1b[0m",
+            log::LogLevel::Warn => "\x1b[0;33mwarn\x1b[0m",
+            log::LogLevel::Info => "\x1b[0;33minfo\x1b[0m",
+            log::LogLevel::Debug => "\x1b[0;32mdebug\x1b[0m",
+            log::LogLevel::Trace => "\x1b[0;32mtrace\x1b[0m",
+        };
         let date = chrono::Local::now().format("%T%.3f");
         format!("[{}] {}: {}", prefix, date, rec.args())
     };

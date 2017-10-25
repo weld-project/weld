@@ -2,6 +2,7 @@
 
 extern crate llvm_sys as llvm;
 extern crate libc;
+extern crate time;
 
 use std::error::Error;
 use std::ffi::{CStr, CString, NulError};
@@ -17,6 +18,8 @@ use self::llvm::prelude::{LLVMContextRef, LLVMModuleRef, LLVMMemoryBufferRef};
 use self::llvm::execution_engine::{LLVMExecutionEngineRef, LLVMMCJITCompilerOptions};
 use self::llvm::analysis::LLVMVerifierFailureAction;
 use self::llvm::transforms::pass_manager_builder as pmb;
+
+use time::{Duration, PreciseTime};
 
 #[cfg(test)]
 mod tests;
@@ -58,6 +61,20 @@ impl Error for LlvmError {
 impl From<NulError> for LlvmError {
     fn from(_: NulError) -> LlvmError {
         LlvmError::new("Null byte in string")
+    }
+}
+
+#[derive(Debug)]
+/// Stores timing information for various LLVM compilation stages.
+pub struct LlvmTimingInfo {
+    pub times: Vec<(String, Duration)>,
+}
+
+impl LlvmTimingInfo {
+    pub fn new() -> LlvmTimingInfo {
+        LlvmTimingInfo {
+            times: Vec::new(),
+        }
     }
 }
 
@@ -110,7 +127,10 @@ pub fn compile_module(
         code: &str,
         optimization_level: u32,
         bc_file: Option<&[u8]>)
-        -> Result<CompiledModule, LlvmError> {
+        -> Result<(CompiledModule, LlvmTimingInfo), LlvmError> {
+
+    let mut timing = LlvmTimingInfo::new();
+
     unsafe {
         // Initialize LLVM
         ONCE.call_once(|| initialize());
@@ -125,6 +145,7 @@ pub fn compile_module(
         }
         debug!("Done creating LLVM context");
 
+        let start = PreciseTime::now();
         // Create a CompiledModule to wrap the context and our result (will clean it on Drop).
         let mut result = CompiledModule {
             context: context,
@@ -134,31 +155,53 @@ pub fn compile_module(
 
         // Parse the IR to get an LLVMModuleRef
         let module = parse_module_str(context, code)?;
+        let end = PreciseTime::now();
+        timing.times.push(("IR Parsing".to_string(), start.to(end)));
         debug!("Done parsing module");
 
+        // Parse the bytecode file and link it.
+        let start = PreciseTime::now();
         if let Some(s) = bc_file {
             let bc_module = parse_module_bytes(context, s)?;
             debug!("Done parsing bytecode file");
             llvm::linker::LLVMLinkModules2(module, bc_module);
             debug!("Done linking bytecode file");
         }
+        let end = PreciseTime::now();
+        timing.times.push(("Bytecode Linking".to_string(), start.to(end)));
 
-        // Validate and optimize the module
+        // Validate the module
+        let start = PreciseTime::now();
         verify_module(module)?;
         check_run_function(module)?;
+        let end = PreciseTime::now();
+        timing.times.push(("Module Verification".to_string(), start.to(end)));
         debug!("Done validating module");
+
+        // Optimize the module.
+        let start = PreciseTime::now();
         optimize_module(module, optimization_level)?;
+        let end = PreciseTime::now();
+        timing.times.push(("Module Optimization".to_string(), start.to(end)));
         debug!("Done optimizing module");
 
+
         // Create an execution engine for the module and find its run function
+        let start = PreciseTime::now();
         let engine = create_exec_engine(module, optimization_level)?;
+        let end = PreciseTime::now();
+        timing.times.push(("Create Exec Engine".to_string(), start.to(end)));
         debug!("Done creating execution engine");
 
+        // Find the run function
+        let start = PreciseTime::now();
         result.engine = Some(engine);
         result.run_function = Some(find_function(engine, "run")?);
+        let end = PreciseTime::now();
+        timing.times.push(("Find Run Func Address".to_string(), start.to(end)));
         debug!("Done generating/finding run function");
 
-        Ok(result)
+        Ok((result, timing))
     }
 }
 

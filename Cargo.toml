@@ -18,7 +18,11 @@ csv = "0.15.0"
 log = "0.3.8"
 env_logger = "0.4.3"
 chrono = "0.4.0"
+time = "*"
 llvm-sys = "38.0.1"
+fnv = "1.0.5"
+clap = "*"
+
 
 [lib]
 path = "weld/lib.rs"

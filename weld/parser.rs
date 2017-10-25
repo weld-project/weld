@@ -5,12 +5,10 @@
 
 use std::vec::Vec;
 
-use super::ast::Annotations;
 use super::ast::Symbol;
 use super::ast::Iter;
 use super::ast::BinOpKind::*;
 use super::ast::UnaryOpKind::*;
-use super::ast::BuilderImplementationKind::*;
 use super::ast::ExprKind::*;
 use super::ast::LiteralKind::*;
 use super::ast::ScalarKind;
@@ -22,6 +20,8 @@ use super::partial_types::PartialType::*;
 use super::program::*;
 use super::tokenizer::*;
 use super::tokenizer::Token::*;
+
+use super::annotations::*;
 
 use std::error::Error;
 
@@ -562,8 +562,8 @@ impl<'t> Parser<'t> {
                                 let implementation = match *self.next() {
                                     TIdent(ref inner_value) => {
                                         match inner_value.as_ref() {
-                                            "global" => Global,
-                                            "local" => Local,
+                                            "global" => BuilderImplementationKind::Global,
+                                            "local" => BuilderImplementationKind::Local,
                                             _ => return weld_err!("Invalid implementation type"),
                                         }
                                     }
@@ -620,7 +620,7 @@ impl<'t> Parser<'t> {
                                 self.consume(TIdent("selectivity".to_string()))?;
                                 try!(self.consume(TColon));
                                 if let TF32Literal(l) = *self.next() {
-                                    annotations.set_selectivity((l * 100000.0) as i32);
+                                    annotations.set_branch_selectivity((l * 100000.0) as i32);
                                 } else {
                                     return weld_err!("Invalid selectivity (must be a f32)");
                                 }

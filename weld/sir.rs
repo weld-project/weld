@@ -1206,7 +1206,7 @@ fn gen_expr(expr: &TypedExpr,
                                     body: body_func,
                                     cont: cont_func,
                                     innermost: is_innermost,
-                                    always_use_runtime: expr.annotations.always_use_runtime().unwrap_or(false),
+                                    always_use_runtime: expr.annotations.always_use_runtime(),
                                 });
                 Ok((cont_func, cont_block, builder_sym))
             } else {
