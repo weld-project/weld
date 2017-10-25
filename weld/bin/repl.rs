@@ -56,7 +56,7 @@ lazy_static! {
 ///
 /// The argument is a key/value pair. The command sets the key/value pair for the REPL's
 /// configuration.
-fn process_setconf(conf: *mut WeldConf, key: String, value: String) {
+fn process_setconf(conf: *mut WeldConf, key: &str, value: &str) {
     let key = CString::new(key).unwrap();
     let value = CString::new(value).unwrap();
     unsafe {
@@ -68,7 +68,7 @@ fn process_setconf(conf: *mut WeldConf, key: String, value: String) {
 ///
 /// The argument is a key in the configuration. The command returns the value of the key or `None`
 /// if no value is set.
-fn process_getconf(conf: *mut WeldConf, key: String) -> Option<String> {
+fn process_getconf(conf: *mut WeldConf, key: &str) -> Option<String> {
     let key = CString::new(key).unwrap();
     unsafe {
         let val = weld_conf_get(conf, key.as_ptr());
@@ -171,13 +171,13 @@ fn handle_string<'a>(command: &'a str, conf: *mut WeldConf) -> Option<String> {
                 let mut setconf_args = arg.splitn(2, " ");
                 let key = setconf_args.next().unwrap_or("");
                 let value = setconf_args.next().unwrap_or("");
-                process_setconf(conf, key.to_string(), value.to_string());
+                process_setconf(conf, key, value);
                 None
             }
             ReplCommands::GetConf => {
                 let mut setconf_args = arg.splitn(2, " ");
                 let key = setconf_args.next().unwrap_or("");
-                let value = process_getconf(conf, key.to_string());
+                let value = process_getconf(conf, key);
                 if let Some(s) = value {
                     println!("{}={}", key, s);
                 } else {
@@ -192,6 +192,10 @@ fn handle_string<'a>(command: &'a str, conf: *mut WeldConf) -> Option<String> {
 }
 
 fn main() {
+
+    // This is the conf we use for compilation.
+    let conf = weld_conf_new();
+
     let matches = App::new("Weld REPL")
         .version("0.1.0")
         .author("Weld authors <weld-group@cs.stanford.edu")
@@ -202,8 +206,20 @@ fn main() {
              .value_name("LEVEL")
              .help("Log level for the Weld compiler")
              .takes_value(true))
+        .arg(Arg::with_name("logdir")
+             .short("D")
+             .long("logdir")
+             .value_name("DIR")
+             .help("Directory to write log demo")
+             .takes_value(true))
+        .arg(Arg::with_name("dumpcode")
+             .short("d")
+             .long("dumpcode")
+             .help("Dump code to file")
+             .takes_value(false))
         .get_matches();
 
+    // Parse the log level.
     let log_level_str = matches.value_of("loglevel").unwrap_or("debug").to_lowercase();
     let (log_level, log_str) = match log_level_str.as_str() {
         "none" =>   (WeldLogLevel::Off,         "none"),
@@ -217,11 +233,16 @@ fn main() {
             std::process::exit(1);
         }
     };
+
+    let logdir = matches.value_of("logdir").unwrap_or(".");
+    process_setconf(conf, "weld.compile.dumpCodeDir", logdir);
+
+    if matches.is_present("dumpcode") {
+        process_setconf(conf, "weld.compile.dumpCode", "true");
+    }
+
     weld_set_log_level(log_level);
     println!("Log Level set to '{}'", log_str);
-
-    // This is the conf we use for compilation.
-    let conf = weld_conf_new();
 
     let home_path = env::home_dir().unwrap_or(PathBuf::new());
     let history_file_path = home_path.join(".weld_history");
