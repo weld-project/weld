@@ -90,11 +90,11 @@ fn process_getconf(conf: *mut WeldConf, key: &str) -> Option<String> {
 ///
 /// The argument is a filename containing a Weld program. Returns the string
 /// representation of the program or an error with an error message.
-fn process_loadfile(arg: String) -> Result<String, String> {
+fn process_loadfile(arg: &str) -> Result<String, String> {
     if arg.len() == 0 {
         return Err("Error: expected argument for command 'load'".to_string());
     }
-    let path = Path::new(&arg);
+    let path = Path::new(arg);
     let path_display = path.display();
     let mut file;
     match File::open(&path) {
@@ -157,7 +157,7 @@ fn handle_string<'a>(command: &'a str, conf: *mut WeldConf) -> Option<String> {
         let command = RESERVED_WORDS.get(repl_command).unwrap();
         match *command {
             ReplCommands::LoadFile => {
-                match process_loadfile(arg.to_string()) {
+                match process_loadfile(arg) {
                     Err(s) => {
                         println!("{}", s);
                         None
@@ -191,6 +191,22 @@ fn handle_string<'a>(command: &'a str, conf: *mut WeldConf) -> Option<String> {
     }
 }
 
+fn process_code(code: &str, conf: *mut WeldConf) {
+    unsafe {
+        let code = CString::new(code).unwrap();
+        let err = weld_error_new();
+        let module = weld_module_compile(code.into_raw() as *const c_char, conf, err);
+        if weld_error_code(err) != WeldRuntimeErrno::Success {
+            println!("REPL: Compile error: {}",
+                     CStr::from_ptr(weld_error_message(err)).to_str().unwrap());
+        } else {
+            println!("REPL: Program compiled successfully to LLVM");
+            weld_module_free(module);
+        }
+        weld_error_free(err);
+    }
+}
+
 fn main() {
 
     // This is the conf we use for compilation.
@@ -217,6 +233,12 @@ fn main() {
              .long("dumpcode")
              .help("Dump code to file")
              .takes_value(false))
+        .arg(Arg::with_name("input")
+             .short("i")
+             .long("input")
+             .value_name("FILE")
+             .help("Run the REPL on the input and quit")
+             .takes_value(true))
         .get_matches();
 
     // Parse the log level.
@@ -244,6 +266,16 @@ fn main() {
     weld_set_log_level(log_level);
     println!("Log Level set to '{}'", log_str);
 
+    if let Some(filename) = matches.value_of("input") {
+        match process_loadfile(&filename) {
+            Ok(code) => process_code(&code, conf),
+            Err(err) => {
+                println!("{}", err);
+            }
+        }
+        return;
+    }
+
     let home_path = env::home_dir().unwrap_or(PathBuf::new());
     let history_file_path = home_path.join(".weld_history");
     let history_file_path = history_file_path.to_str().unwrap_or(".weld_history");
@@ -251,6 +283,7 @@ fn main() {
     let mut rl = Editor::<()>::new();
     if let Err(_) = rl.load_history(&history_file_path) {}
 
+    // Enter the REPL.
     loop {
         // Check if the input was valid.
         let input = read_input(&mut rl, PROMPT, true);
@@ -267,22 +300,9 @@ fn main() {
         if code.is_none() {
             continue;
         }
-        let code = code.unwrap();
 
         // Process the code.
-        unsafe {
-            let code = CString::new(code).unwrap();
-            let err = weld_error_new();
-            let module = weld_module_compile(code.into_raw() as *const c_char, conf, err);
-            if weld_error_code(err) != WeldRuntimeErrno::Success {
-                println!("REPL: Compile error: {}",
-                    CStr::from_ptr(weld_error_message(err)).to_str().unwrap());
-            } else {
-                println!("REPL: Program compiled successfully to LLVM");
-                weld_module_free(module);
-            }
-            weld_error_free(err);
-        }
+        process_code(&code.unwrap(), conf);
     }
 
     unsafe {
