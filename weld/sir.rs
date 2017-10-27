@@ -49,6 +49,10 @@ pub enum Statement {
         index: Symbol,
         size: Symbol,
     },
+    Sort {
+        output: Symbol,
+        child: Symbol,
+    },
     Select {
         output: Symbol,
         cond: Symbol,
@@ -267,6 +271,10 @@ impl fmt::Display for Statement {
                 ref index,
                 ref size,
             } => write!(f, "{} = slice({}, {}, {})", output, child, index, size),
+            Sort {
+                ref output,
+                ref child,
+            } => write!(f, "{} = sort({})", output, child),
             Select {
                 ref output,
                 ref cond,
@@ -527,6 +535,13 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
                     vars.push(index.clone());
                     vars.push(size.clone());
                 }
+                Sort {
+                    ref child,
+                    ..
+                } => {
+                    vars.push(child.clone());
+                }
+
                 Select {
                     ref cond,
                     ref on_true,
@@ -816,6 +831,18 @@ fn gen_expr(expr: &TypedExpr,
                                                                      child: data_sym,
                                                                      index: index_sym.clone(),
                                                                      size: size_sym.clone(),
+                                                                 });
+            Ok((cur_func, cur_block, res_sym))
+        }
+
+        ExprKind::Sort {
+            ref data,
+        } => {
+            let (cur_func, cur_block, data_sym) = gen_expr(data, prog, cur_func, cur_block, multithreaded)?;
+            let res_sym = prog.add_local(&expr.ty, cur_func);
+            prog.funcs[cur_func].blocks[cur_block].add_statement(Sort {
+                                                                     output: res_sym.clone(),
+                                                                     child: data_sym,
                                                                  });
             Ok((cur_func, cur_block, res_sym))
         }

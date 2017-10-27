@@ -303,6 +303,9 @@ pub enum ExprKind<T: TypeBounds> {
         index: Box<Expr<T>>,
         size: Box<Expr<T>>,
     },
+    Sort {
+        data: Box<Expr<T>>,
+    },
     Let {
         name: Symbol,
         value: Box<Expr<T>>,
@@ -370,6 +373,7 @@ impl<T: TypeBounds> ExprKind<T> {
             Lookup { .. } => "Lookup",
             KeyExists { .. } => "KeyExists",
             Slice { .. } => "Slice",
+            Sort { .. } => "Sort",
             Let { .. } => "Let",
             If { .. } => "If",
             Iterate { .. } => "Iterate",
@@ -528,6 +532,9 @@ impl<T: TypeBounds> Expr<T> {
                 ref index,
                 ref size,
             } => vec![data.as_ref(), index.as_ref(), size.as_ref()],
+            Sort {
+                ref data,
+            } => vec![data.as_ref()],
             Merge {
                 ref builder,
                 ref value,
@@ -628,6 +635,9 @@ impl<T: TypeBounds> Expr<T> {
                 ref mut index,
                 ref mut size,
             } => vec![data.as_mut(), index.as_mut(), size.as_mut()],
+            Sort {
+                ref mut data,
+            } => vec![data.as_mut()],
             Merge {
                 ref mut builder,
                 ref mut value,
@@ -751,6 +761,7 @@ impl<T: TypeBounds> Expr<T> {
                 (&Lookup { .. }, &Lookup { .. }) => Ok(true),
                 (&KeyExists { .. }, &KeyExists { .. }) => Ok(true),
                 (&Slice { .. }, &Slice { .. }) => Ok(true),
+                (&Sort { .. }, &Sort { .. }) => Ok(true),
                 (&Merge { .. }, &Merge { .. }) => Ok(true),
                 (&Res { .. }, &Res { .. }) => Ok(true),
                 (&For { .. }, &For { .. }) => Ok(true), // TODO need to check Iters?

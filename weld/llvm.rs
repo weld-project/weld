@@ -2384,6 +2384,23 @@ impl LlvmGenerator {
                 self.gen_store_var(&res_ptr, &output_ll_sym, &output_ll_ty, ctx);
             }
 
+            Sort { ref output, ref child } => {
+                let out_ty = func.symbol_type(output)?;
+                self.gen_cmp(out_ty)?;
+                let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
+                let (child_ll_ty, child_ll_sym) = self.llvm_type_and_name(func, child)?;
+                let vec_prefix = llvm_prefix(&child_ll_ty);
+                let child_tmp = self.gen_load_var(&child_ll_sym, &child_ll_ty, ctx)?;
+                let res_ptr = ctx.var_ids.next();
+                ctx.code.add(format!("{} = call {} {}.sort({} {})",
+                                                res_ptr,
+                                                output_ll_ty,
+                                                vec_prefix,
+                                                child_ll_ty,
+                                                child_tmp));
+                self.gen_store_var(&res_ptr, &output_ll_sym, &output_ll_ty, ctx);
+            }
+
             Select { ref output, ref cond, ref on_true, ref on_false } => {
                 let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
                 let (cond_ll_ty, cond_ll_sym) = self.llvm_type_and_name(func, cond)?;

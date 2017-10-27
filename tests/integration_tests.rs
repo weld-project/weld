@@ -2224,6 +2224,51 @@ fn predicate_if_iff_annotated() {
     check_result_and_free(ret_value, expected);
 }
 
+fn simple_sort() {
+    #[derive(Clone)]
+    #[allow(dead_code)]
+
+    let ys = vec![2, 3, 1, 4, 5];
+    let ref input_data = WeldVec {
+        data: ys.as_ptr() as *const i32,
+        len: ys.len() as i64,
+    };
+
+    let code = "|ys:vec[i32]| sort(ys)";
+    let conf = default_conf();
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<i32> };
+    let result = unsafe { (*data).clone() };
+
+    let expected = [1, 2, 3, 4, 5];
+    assert_eq!(result.len, expected.len() as i64);
+    for i in 0..(expected.len() as isize) {
+        assert_eq!(unsafe { *result.data.offset(i) }, expected[i as usize])
+    }
+
+    unsafe { free_value_and_module(ret_value) };
+
+    let ys = vec![2.0, 3.0, 1.0, 5.001, 5.0001];
+    let ref input_data = WeldVec {
+        data: ys.as_ptr() as *const f64,
+        len: ys.len() as i64,
+    };
+
+    let code = "|ys:vec[f64]| sort(ys)";
+    let conf = default_conf();
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<f64> };
+    let result = unsafe { (*data).clone() };
+
+    let expected = [1.0, 2.0, 3.0, 5.0001, 5.001];
+    assert_eq!(result.len, expected.len() as i64);
+    for i in 0..(expected.len() as isize) {
+        assert_eq!(unsafe { *result.data.offset(i) }, expected[i as usize])
+    }
+
+    unsafe { free_value_and_module(ret_value) };
+}
+
 fn nested_for_loops() {
     #[derive(Clone)]
     #[allow(dead_code)]
@@ -2345,7 +2390,8 @@ fn main() {
              ("simple_float_mod", simple_float_mod),
              ("simple_int_mod", simple_int_mod),
              ("predicate_if_iff_annotated", predicate_if_iff_annotated),
-             ("nested_for_loops", nested_for_loops)];
+             ("nested_for_loops", nested_for_loops),
+             ("simple_sort", simple_sort)];
 
     println!("");
     println!("running tests");

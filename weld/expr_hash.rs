@@ -129,7 +129,7 @@ impl ExprHash {
             // expression doesn't have a non-Expr field, it goes here.
             Negate(_) | Broadcast(_) | ToVec{ .. } | MakeStruct { .. } | MakeVector { .. } |
                 Zip { .. } | Length { .. } | Lookup { .. } | KeyExists { .. } |
-                Slice { .. } | If { .. } | Iterate { .. } | Select { .. } | Apply { .. } |
+                Slice { .. } | Sort { .. } | If { .. } | Iterate { .. } | Select { .. } | Apply { .. } |
                 NewBuilder(_) | Merge { .. } | Res { .. } => {}
         }
         if !finished_subexpressions {

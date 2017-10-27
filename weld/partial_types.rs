@@ -316,6 +316,14 @@ impl PartialExpr {
                 }
             }
 
+            Sort {
+                ref data,
+            } => {
+                Sort {
+                    data: try!(typed_box(data)),
+                }
+            }
+
             Merge {
                 ref builder,
                 ref value,

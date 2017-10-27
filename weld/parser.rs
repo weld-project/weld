@@ -943,6 +943,16 @@ impl<'t> Parser<'t> {
                             Annotations::new()))
             }
 
+            TSort => {
+                try!(self.consume(TOpenParen));
+                let data = try!(self.expr());
+                try!(self.consume(TCloseParen));
+                Ok(expr_box(Sort {
+                                data: data,
+                            },
+                            Annotations::new()))
+            }
+
             TExp => self.unary_leaf_expr("Exp"),
 
             TLog => self.unary_leaf_expr("Log"),

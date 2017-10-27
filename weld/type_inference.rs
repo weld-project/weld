@@ -304,6 +304,19 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             }
         }
 
+        Sort {
+            ref mut data,
+        } => {
+            if let Vector(_) = data.ty {
+                let mut changed = false;
+                changed |= try!(push_type(&mut expr.ty, &data.ty, "Sort"));
+                Ok(changed)
+            } else {
+                weld_err!("Internal error: Sort called on {:?}, must be called on vector",
+                          data.ty)
+            }
+        }
+
         Lookup {
             ref mut data,
             ref mut index,
@@ -1035,6 +1048,10 @@ fn infer_types_let() {
     assert_eq!(e.ty, Scalar(Bool));
 
     let mut e = parse_expr("let a = slice([1.0f, 2.0f, 3.0f], 0L, 2L);a").unwrap();
+    assert!(infer_types(&mut e).is_ok());
+    assert_eq!(e.ty, Vector(Box::new(Scalar(F32))));
+
+    let mut e = parse_expr("let a = sort([1.0f, 2.0f, 3.0f]);a").unwrap();
     assert!(infer_types(&mut e).is_ok());
     assert_eq!(e.ty, Vector(Box::new(Scalar(F32))));
 
