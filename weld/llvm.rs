@@ -2386,7 +2386,20 @@ impl LlvmGenerator {
 
             Sort { ref output, ref child } => {
                 let out_ty = func.symbol_type(output)?;
-                self.gen_cmp(out_ty)?;
+                match *out_ty {
+                    Vector(ref elem) => {
+                        self.gen_cmp(elem)?;
+                        let elem_ty = self.llvm_type(elem)?;
+                        let name = self.vec_names.get(elem).unwrap();
+                        self.prelude_code.add(format!(
+                                include_str!("resources/vector/vector_sort.ll"),
+                                ELEM=&elem_ty,
+                                NAME=&name.replace("%", "")));
+                    }
+                    _ => {
+                        return weld_err!("Unsupported function `sort` for type {:?}", out_ty);
+                    }
+                }
                 let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
                 let (child_ll_ty, child_ll_sym) = self.llvm_type_and_name(func, child)?;
                 let vec_prefix = llvm_prefix(&child_ll_ty);
