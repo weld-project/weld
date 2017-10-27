@@ -61,6 +61,31 @@ pub struct WeldOutputArgs {
     pub errno: WeldRuntimeErrno,
 }
 
+/// A compiled module holding the generated LLVM module and some additional
+/// information (e.g., the parameter and return types of the module).
+pub struct CompiledModule {
+    llvm_module: easy_ll::CompiledModule,
+    param_types: Vec<Type>,
+    return_type: Type,
+}
+
+impl CompiledModule {
+    /// Returns a mutable reference to the LLVM module.
+    pub fn llvm_mut(&mut self) -> &mut easy_ll::CompiledModule {
+        &mut self.llvm_module
+    }
+
+    /// Returns the parameter types of the module.
+    pub fn param_types(&self) -> &Vec<Type> {
+        &self.param_types
+    }
+
+    /// Returns the return type of the module.
+    pub fn return_type(&self) -> &Type {
+        &self.return_type
+    }
+}
+
 pub fn apply_opt_passes(expr: &mut TypedExpr, opt_passes: &Vec<Pass>, stats: &mut CompilationStats) -> WeldResult<()> {
     for pass in opt_passes {
         let start = PreciseTime::now();
@@ -74,7 +99,7 @@ pub fn apply_opt_passes(expr: &mut TypedExpr, opt_passes: &Vec<Pass>, stats: &mu
 
 /// Generate a compiled LLVM module from a program whose body is a function.
 pub fn compile_program(program: &Program, opt_passes: &Vec<Pass>, llvm_opt_level: u32, multithreaded: bool, stats: &mut CompilationStats)
-        -> WeldResult<easy_ll::CompiledModule> {
+        -> WeldResult<CompiledModule> {
     let mut expr = macro_processor::process_program(program)?;
     trace!("After macro substitution:\n{}\n", print_typed_expr(&expr));
 
@@ -139,7 +164,15 @@ pub fn compile_program(program: &Program, opt_passes: &Vec<Pass>, llvm_opt_level
     let end = PreciseTime::now();
     stats.weld_times.push(("Runtime Init".to_string(), start.to(end)));
 
-    Ok(module)
+    if let Function(ref param_tys, ref return_ty) = expr.ty {
+        Ok(CompiledModule {
+            llvm_module: module,
+            param_types: param_tys.clone(),
+            return_type: *return_ty.clone(),
+        })
+    } else {
+        unreachable!();
+    }
 }
 
 /// Stores whether the code generator has created certain helper functions for a given type.
