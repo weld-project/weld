@@ -183,8 +183,8 @@ weld_error_free(weld_error_t);
 ## Configurations
 
 A configuration specifies tunable parameters when generating and running code. The table below
-specifies some _runtime_ options that can be tuned by using configurations. Right now,
-configurations are not used during compile time.
+specifies some example that can be tuned by using configurations (where both keys and values
+are encoded as C strings.
 
   Configuration | Value
   ------------- | -------------

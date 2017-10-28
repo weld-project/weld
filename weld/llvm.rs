@@ -10,6 +10,10 @@ use time::PreciseTime;
 
 use common::WeldRuntimeErrno;
 
+use std::io::Write;
+use std::path::PathBuf;
+use std::fs::OpenOptions;
+
 use super::ast::*;
 use super::ast::Type::*;
 use super::ast::LiteralKind::*;
@@ -31,6 +35,8 @@ use super::type_inference;
 use super::util::IdGenerator;
 use super::util::WELD_INLINE_LIB;
 use super::annotations::*;
+
+use super::conf::ParsedConf;
 
 use super::CompilationStats;
 
@@ -98,7 +104,7 @@ pub fn apply_opt_passes(expr: &mut TypedExpr, opt_passes: &Vec<Pass>, stats: &mu
 }
 
 /// Generate a compiled LLVM module from a program whose body is a function.
-pub fn compile_program(program: &Program, opt_passes: &Vec<Pass>, llvm_opt_level: u32, multithreaded: bool, stats: &mut CompilationStats)
+pub fn compile_program(program: &Program, conf: &ParsedConf, stats: &mut CompilationStats)
         -> WeldResult<CompiledModule> {
     let mut expr = macro_processor::process_program(program)?;
     trace!("After macro substitution:\n{}\n", print_typed_expr(&expr));
@@ -116,7 +122,7 @@ pub fn compile_program(program: &Program, opt_passes: &Vec<Pass>, llvm_opt_level
     let end = PreciseTime::now();
     stats.weld_times.push(("Type Inference".to_string(), start.to(end)));
 
-    apply_opt_passes(&mut expr, opt_passes, stats)?;
+    apply_opt_passes(&mut expr, &conf.optimization_passes, stats)?;
 
     let start = PreciseTime::now();
     transforms::uniquify(&mut expr)?;
@@ -128,14 +134,14 @@ pub fn compile_program(program: &Program, opt_passes: &Vec<Pass>, llvm_opt_level
     debug!("Optimized Weld program:\n{}\n", print_expr(&expr));
 
     let start = PreciseTime::now();
-    let sir_prog = sir::ast_to_sir(&expr, multithreaded)?;
+    let sir_prog = sir::ast_to_sir(&expr, conf.support_multithread)?;
     debug!("SIR program:\n{}\n", &sir_prog);
     let end = PreciseTime::now();
     stats.weld_times.push(("AST to SIR".to_string(), start.to(end)));
 
     let start = PreciseTime::now();
     let mut gen = LlvmGenerator::new();
-    gen.multithreaded = multithreaded;
+    gen.multithreaded = conf.support_multithread;
 
     gen.add_function_on_pointers("run", &sir_prog)?;
     let llvm_code = gen.result();
@@ -146,7 +152,7 @@ pub fn compile_program(program: &Program, opt_passes: &Vec<Pass>, llvm_opt_level
     debug!("Started compiling LLVM");
     let (module, llvm_times) = try!(easy_ll::compile_module(
         &llvm_code,
-        llvm_opt_level,
+        conf.llvm_optimization_level,
         Some(WELD_INLINE_LIB)));
     debug!("Done compiling LLVM");
 
@@ -164,6 +170,16 @@ pub fn compile_program(program: &Program, opt_passes: &Vec<Pass>, llvm_opt_level
     let end = PreciseTime::now();
     stats.weld_times.push(("Runtime Init".to_string(), start.to(end)));
 
+    // Dump files if needed.
+    if conf.dump_code.enabled {
+        let ref timestamp = format!("{}", time::now().to_timespec().sec);
+        info!("Writing code to directory '{}' with timestamp {}", &conf.dump_code.dir.display(), timestamp);
+
+        write_code(&print_typed_expr(&expr), "weld", timestamp, &conf.dump_code.dir);
+        write_code(&format!("{}", &sir_prog), "sir", timestamp, &conf.dump_code.dir);
+        write_code(&llvm_code, "ll", timestamp, &conf.dump_code.dir);
+    }
+
     if let Function(ref param_tys, ref return_ty) = expr.ty {
         Ok(CompiledModule {
             llvm_module: module,
@@ -172,6 +188,29 @@ pub fn compile_program(program: &Program, opt_passes: &Vec<Pass>, llvm_opt_level
         })
     } else {
         unreachable!();
+    }
+}
+
+/// Writes code to a file specified by `PathBuf`. Writes a log message if it failed.
+fn write_code(code: &str, ext: &str, timestamp: &str, dir_path: &PathBuf) {
+    let mut options = OpenOptions::new();
+    options.write(true)
+        .create_new(true)
+        .create(true);
+    let ref mut path = dir_path.clone();
+    path.push(format!("code-{}", timestamp));
+    path.set_extension(ext);
+
+    let ref path_str = format!("{}", path.display());
+    match options.open(path) {
+        Ok(ref mut file) => {
+            if let Err(_) = file.write_all(code.as_bytes()) {
+                error!("Write failed: could not write code to file {}", path_str);
+            }
+        }
+        Err(_) => {
+            error!("Open failed: could not write code to file {}", path_str);
+        }
     }
 }
 
