@@ -1,10 +1,9 @@
 use std::fmt;
 
-use std::collections::HashMap;
-use std::hash::{Hash, Hasher};
+use std::collections::BTreeMap;
 
 /// A kind of annotation that can be set on an expression.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Ord, PartialOrd, PartialEq, Eq, Hash)]
 pub enum AnnotationKind {
     BuilderImplementation,
     Predicate,
@@ -34,7 +33,7 @@ impl fmt::Display for AnnotationKind {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Hash)]
 /// A annotation value for the way a builder is implemented.
 pub enum BuilderImplementationKind {
     Local,
@@ -53,7 +52,7 @@ impl fmt::Display for BuilderImplementationKind {
 }
 
 /// An internal representation of annotation values.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Hash)]
 enum AnnotationValue {
     VBuilderImplementation(BuilderImplementationKind),
     VTileSize(i32),
@@ -65,8 +64,6 @@ enum AnnotationValue {
     VVectorize,
     VAlwaysUseRuntime,
 }
-
-
 
 impl fmt::Display for AnnotationValue {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -86,15 +83,15 @@ impl fmt::Display for AnnotationValue {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Annotations {
-    values: HashMap<AnnotationKind, AnnotationValue>,
+    values: BTreeMap<AnnotationKind, AnnotationValue>,
 }
 
 impl Annotations {
     pub fn new() -> Annotations {
         return Annotations {
-            values: HashMap::new(), 
+            values: BTreeMap::new(),
         };
     }
 
@@ -214,34 +211,6 @@ impl Annotations {
 
     pub fn is_empty(&self) -> bool {
         return self.values.is_empty();
-    }
-}
-
-impl PartialEq for Annotations {
-    fn eq(&self, other: &Annotations) -> bool {
-        if self.values.len() != other.values.len() {
-            return false;
-        }
-        for (key, val) in self.values.iter() {
-            let val2 = other.values.get(key);
-            if val2.is_none() {
-                return false;
-            } else if val != val2.unwrap() {
-                return false;
-            }
-        }
-        return true;
-    }
-}
-
-impl Eq for Annotations {}
-
-impl Hash for Annotations {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        for (ref key, ref value) in self.values.iter() {
-            key.hash(state);
-            value.hash(state);
-        }
     }
 }
 
