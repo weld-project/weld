@@ -43,6 +43,9 @@ Expression type: vec[i32]
 
 Passing a `Lambda` expression will also perform LLVM code generation - other expression types will only perform parsing, type inference, and IR transformations.
 
+The REPL tool can also take a number of options (e.g., to compile a Weld program into LLVM or set the logging level).
+Run `target/release/repl --help` to see the available options.
+
 ## Header Generation
 
 The `target/release/hdrgen` program takes a Weld program and generates a C++ header file, containing the argument and return types for the Weld program. Example:
