@@ -92,8 +92,10 @@ pub struct ParallelForIter {
     pub start: Option<Symbol>,
     pub end: Option<Symbol>,
     pub stride: Option<Symbol>,
-    pub shapes: Option<Symbol>,
     pub kind: IterKind,
+    // NdIter specific fields
+    pub strides: Option<Symbol>,
+    pub shapes: Option<Symbol>,
 }
 
 #[derive(Clone)]
@@ -1163,18 +1165,26 @@ fn gen_expr(expr: &TypedExpr,
                     prog.funcs[body_func]
                         .params
                         .insert(data_res.2.clone(), iter.data.ty.clone());
-                    let start_sym = try!(get_iter_sym(&iter.start, prog, &mut cur_func, &mut cur_block, multithreaded, body_func));
-                    let end_sym = try!(get_iter_sym(&iter.end, prog, &mut cur_func, &mut cur_block, multithreaded, body_func));
-                    let stride_sym = try!(get_iter_sym(&iter.stride, prog, &mut cur_func, &mut cur_block, multithreaded, body_func));
-                    let shapes_sym = try!(get_iter_sym(&iter.shapes, prog, &mut cur_func, &mut cur_block, multithreaded, body_func));
+                    // TODO: if iterkind == NdIter, then get rid of end_sym, stride_sym
+                    let start_sym = try!(get_iter_sym(&iter.start, prog, &mut cur_func, &mut cur_block, 
+                                                      multithreaded, body_func));
+                    let end_sym = try!(get_iter_sym(&iter.end, prog, &mut cur_func, &mut cur_block, 
+                                                    multithreaded, body_func));
+                    let stride_sym = try!(get_iter_sym(&iter.stride, prog, &mut cur_func, &mut cur_block, 
+                                                       multithreaded, body_func));
+                    let shapes_sym = try!(get_iter_sym(&iter.shapes, prog, &mut cur_func, &mut cur_block, 
+                                                       multithreaded, body_func));
+                    let strides_sym = try!(get_iter_sym(&iter.strides, prog, &mut cur_func, &mut cur_block, 
+                                                        multithreaded, body_func));
 
                     pf_iters.push(ParallelForIter {
                                       data: data_res.2,
                                       start: start_sym,
                                       end: end_sym,
                                       stride: stride_sym,
-                                      shapes: shapes_sym,
                                       kind: iter.kind.clone(),
+                                      shapes: shapes_sym,
+                                      strides: strides_sym,
                                   });
                 }
                 let (body_end_func, body_end_block, _) =

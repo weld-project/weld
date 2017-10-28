@@ -542,8 +542,9 @@ fn builder_exprs_test() {
         start: None,
         end: None,
         stride: None,
-        shapes: None,
         kind: IterKind::ScalarIter,
+        shapes: None,
+        strides: None,
     };
 
     // Create a list of params for the for loop's function.

@@ -31,10 +31,7 @@ class NumpyArrayEncoder(WeldObjectEncoder):
         """
         Checks whether this NumPy array is supported by Weld.
         """
-        print("in _check: ", type(obj))
-        print(obj)
         assert isinstance(obj, np.ndarray)
-        assert obj.ndim == 1
 
     def encode(self, obj):
         self._check(obj)

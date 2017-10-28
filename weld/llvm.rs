@@ -30,13 +30,11 @@ use super::util::WELD_INLINE_LIB;
 #[cfg(test)]
 use super::parser::*;
 
-// TODO: use these instead of str 
 #[derive(Clone)]
 pub struct VecLLVMInfo {
     pub ty_str: String,
     pub arr_str: String,
     pub prefix: String,
-    // el_ty_str_str?
     pub len_str: String,
     pub el_ty_str: String,
 }
@@ -423,6 +421,7 @@ impl LlvmGenerator {
                                       ctx: &mut FunctionContext) -> WeldResult<(String, Option<String>)> {
         // Use the first data to compute the indexing.
         let first_data = &par_for.data[0].data;
+        let first_iter = &par_for.data[0];
         let data_str = llvm_symbol(&first_data);
         let data_ty_str = self.llvm_type(func.params.get(&first_data).unwrap())?;
         let data_prefix = llvm_prefix(&data_ty_str);
@@ -430,7 +429,76 @@ impl LlvmGenerator {
         let num_iters_str = ctx.var_ids.next();
         let mut fringe_start_str = None;
         
-        if par_for.data[0].kind == IterKind::SimdIter || par_for.data[0].kind == IterKind::ScalarIter || par_for.data[0].kind == IterKind::NdIter {
+        //if false {
+        if first_iter.kind == IterKind::NdIter {
+            /* llvm code for:
+             * end = shapes[0]*shapes[1]...*shapes[n-1] 
+             * num_iters_str = end - start */
+            let shapes_el_ty = self.llvm_type(&Scalar(I64))?;
+            //let shapes_llvm_info = self.get_array_llvm_info(func, ctx, first_iter.shapes.as_ref().unwrap(), 
+                                                            //shapes_el_ty)?; 
+            // FIXME: temporary, fix this.
+            let arr_str = llvm_symbol(first_iter.shapes.as_ref().unwrap());
+            let arr_ty_str = "%v1".to_string();
+            let arr_prefix = llvm_prefix(&arr_ty_str);
+            let len = ctx.var_ids.next();
+            ctx.code.add(format!("{} = extractvalue {} {}, 1 ", len, arr_ty_str, arr_str));
+            let shapes_llvm_info = VecLLVMInfo { 
+                    ty_str: arr_ty_str,
+                    arr_str: arr_str,
+                    prefix: arr_prefix,
+                    len_str: len,
+                    el_ty_str: shapes_el_ty,
+                    };
+            let prod_ptr = ctx.var_ids.next();
+            ctx.code.add(format!("{} = alloca i64", prod_ptr));
+            ctx.code.add(format!("store i64 1, i64* {}", prod_ptr)); 
+            let loop_name = "gen_num_iters_loop".to_string();
+            let (cur_i_ptr, cur_i) = self.add_llvm_for_loop(ctx, &loop_name, &"0".to_string(), 
+                                               &shapes_llvm_info.len_str, &"slt".to_string())?; 
+            let shapes_i = self.get_array_idx(ctx, shapes_llvm_info, &cur_i)?;
+            let prod = ctx.var_ids.next();
+            ctx.code.add(format!("{} = load i64, i64* {}", prod, prod_ptr));
+            let tmp_result = ctx.var_ids.next();
+            ctx.code.add(format!("{} = mul i64 {}, {}", tmp_result, prod, shapes_i)); 
+            /* store back in prod_ptr */
+            ctx.code.add(format!("store i64 {}, i64* {}", tmp_result, prod_ptr));
+            /* Loop body done, so now update cur_i, and jump back to loop.start. */
+            let tmp_cur_i = ctx.var_ids.next();
+            ctx.code.add(format!("{} = add i64 {}, {}", tmp_cur_i, cur_i, 1));
+            ctx.code.add(format!("store i64 {}, i64* {}", tmp_cur_i, cur_i_ptr));
+            ctx.code.add(format!("br label %{}.start", loop_name));
+            /* loop.end needs to be added */
+            ctx.code.add(format!("{}.end:", loop_name));
+            /* Now, prod_ptr should have the correct value for num_iters_str.
+             * Note: compared to the scalar/simd case, we don't need to consider start/end */
+            ctx.code.add(format!("{} = load i64, i64* {}", num_iters_str, prod_ptr));
+            ctx.code.add(format!("call void @fucking_print2(i64 100)"));
+            ctx.code.add(format!("call void @fucking_print2(i64 {})", num_iters_str));
+        } else if first_iter.kind == IterKind::FringeIter {
+            // FringeIter
+            // TODO(shoumik): Don't support non-unit stride right now.
+            if par_for.data[0].start.is_some() {
+                return weld_err!("fringe iterator does not support non-unit stride");
+            }
+            let arr_len = ctx.var_ids.next();
+            let tmp = ctx.var_ids.next();
+            let tmp2 = ctx.var_ids.next();
+            let vector_len = format!("{}", llvm_simd_size(func.symbol_type(&first_data)?)?);
+
+            ctx.code.add(format!("{} = call i64 {}.size({} {})", arr_len, data_prefix, data_ty_str, data_str));
+            // Compute the number of iterations:
+            // tmp = arr_len / llvm_simd_size
+            // tmp2 = tmp * llvm_simd_size
+            // num_iters = arr_len - llvm_simd_size
+            ctx.code.add(format!("{} = udiv i64 {}, {}", tmp, arr_len, vector_len));
+            // tmp2 is also where the iteration for the FringeIter starts.
+            ctx.code.add(format!("{} = mul i64 {}, {}", tmp2, tmp, vector_len));
+            // Compute the number of iterations.
+            ctx.code.add(format!("{} = sub i64 {}, {}", num_iters_str, arr_len, tmp2));
+            fringe_start_str = Some(tmp2);
+        } else {
+            /* Scalar or simd iter */
             if par_for.data[0].start.is_none() {
                 // set num_iters_str to len(first_data)
                 ctx.code.add(format!("{} = call i64 {}.size({} {})",
@@ -451,33 +519,8 @@ impl LlvmGenerator {
                 ctx.code.add(format!("{} = sub i64 {}, {}", diff_tmp, end_str, start_str));
                 ctx.code.add(format!("{} = udiv i64 {}, {}", num_iters_str, diff_tmp, stride_str));
             }
-        } else {
-            // FringeIter
-            // TODO(shoumik): Don't support non-unit stride right now.
-            if par_for.data[0].start.is_some() {
-                return weld_err!("fringe iterator does not support non-unit stride");
-            }
-            let arr_len = ctx.var_ids.next();
-            let tmp = ctx.var_ids.next();
-            let tmp2 = ctx.var_ids.next();
-            let vector_len = format!("{}", llvm_simd_size(func.symbol_type(&first_data)?)?);
-
-            ctx
-                .code
-                .add(format!("{} = call i64 {}.size({} {})", arr_len, data_prefix, data_ty_str, data_str));
-
-            // Compute the number of iterations:
-            // tmp = arr_len / llvm_simd_size
-            // tmp2 = tmp * llvm_simd_size
-            // num_iters = arr_len - llvm_simd_size
-            ctx.code.add(format!("{} = udiv i64 {}, {}", tmp, arr_len, vector_len));
-            // tmp2 is also where the iteration for the FringeIter starts.
-            ctx.code.add(format!("{} = mul i64 {}, {}", tmp2, tmp, vector_len));
-            // Compute the number of iterations.
-            ctx.code.add(format!("{} = sub i64 {}, {}", num_iters_str, arr_len, tmp2));
-
-            fringe_start_str = Some(tmp2);
         }
+        println!("code after gen num iters = {}", ctx.code.result());
         Ok((String::from(num_iters_str), fringe_start_str))
     }
 
@@ -531,12 +574,9 @@ impl LlvmGenerator {
             ctx.code.add(format!("{} = mul i64 {}, {}", t1, stride_str, t0));
             ctx.code.add(format!("{} = add i64 {}, {}", t2, t1, start_str));
             ctx.code.add(format!("{} = icmp slt i64 {}, {}", cond, t2, data_size_ll_tmp));
-            ctx
-                .code
-                .add(format!("br i1 {}, label {}, label %fn.boundcheckfailed", cond, next_bounds_check_label));
+            ctx.code.add(format!("br i1 {}, label {}, label %fn.boundcheckfailed", cond, next_bounds_check_label));
             ctx.code.add(format!("{}:", next_bounds_check_label.replace("%", "")));
         }
-
         // If we get here, the bounds check passed.
         ctx.code.add(format!("br label %fn.boundcheckpassed"));
         // Handle a bounds check fail.
@@ -611,10 +651,9 @@ impl LlvmGenerator {
     /// Weld), and based on the func and ctx, loads the value at index 'idx' of array and returns a
     /// string representing the value.
     fn get_array_idx(&mut self, 
-                     func: &SirFunction,
                      ctx: &mut FunctionContext,
                      llvm_info: VecLLVMInfo,
-                     idx: String) -> WeldResult<String> {
+                     idx: &String) -> WeldResult<String> {
         let arr_elem_tmp_ptr = ctx.var_ids.next();
         //let arr_elem_ty_str = self.llvm_type(el_ty_str)?;
         ctx.code.add(format!("{} = call {}* {}.at({} {}, i64 {})",
@@ -628,6 +667,7 @@ impl LlvmGenerator {
         Ok(self.gen_load_var(&arr_elem_tmp_ptr, &llvm_info.el_ty_str, ctx)?)
     }
 
+    /// TODO: describe.
     fn get_array_llvm_info(&mut self,
                            func: &SirFunction,
                            ctx: &mut FunctionContext,
@@ -648,6 +688,101 @@ impl LlvmGenerator {
         Ok(v)
     }
 
+    /// Adds generic for loop code for an llvm loop to ctx.
+    /// Returns the name of the loop variable 'i'.
+    fn add_llvm_for_loop(&mut self, 
+                        ctx: &mut FunctionContext,
+                        loop_name: &String,
+                        loop_start: &String,
+                        end_cmp: &String,
+                        cmp_type: &String) -> WeldResult<(String, String)> {
+        let cur_i_ptr = ctx.var_ids.next();
+        ctx.code.add(format!("{} = alloca i64", cur_i_ptr));
+        ctx.code.add(format!("store i64 {}, i64* {}", loop_start, cur_i_ptr));
+        ctx.code.add(format!("br label %{}.start", loop_name));
+        ctx.code.add(format!("{}.start:", loop_name));
+        /* compare cur_i_ptr with end condition at loop start */
+        let cur_i = ctx.var_ids.next();
+        ctx.code.add(format!("{} = load i64, i64* {}", cur_i, cur_i_ptr));
+        let cmp_str = ctx.var_ids.next();
+        ctx.code.add(format!("{} = icmp {} i64 {}, {}", cmp_str, cmp_type, cur_i, end_cmp));
+        ctx.code.add(format!("br i1 {}, label %{name}.body, label %{name}.end", cmp_str, name=loop_name));
+        ctx.code.add(format!("{}.body:", loop_name)); 
+        Ok((cur_i_ptr, cur_i))
+    }
+     
+    /// TODO: describe.
+    fn nditer_next_element(&mut self, 
+                           func: &SirFunction,
+                           ctx: &mut FunctionContext,
+                           iter: &ParallelForIter) -> WeldResult<String> {
+        self.print_counter(ctx);
+        let strides_el_ty = self.llvm_type(&Scalar(I64))?;
+        let strides_llvm_info = self.get_array_llvm_info(func, ctx, iter.strides.as_ref().unwrap(), 
+                                                         strides_el_ty)?;
+        /* sum += counter[i]*shapes[i] loop to find arr_idx of next element. */    
+        let sum_ptr = ctx.var_ids.next();
+        ctx.code.add(format!("{} = alloca i64", sum_ptr));
+        ctx.code.add(format!("store i64 0, i64* {}", sum_ptr));
+        let loop_name :String = "next_element_loop".to_string();
+        let (cur_i_ptr, cur_i) = self.add_llvm_for_loop(ctx, &loop_name, &"0".to_string(), 
+                                   &strides_llvm_info.len_str, &"slt".to_string())?;
+        /* sum += counter[i]*shapes[i] */
+        let tmp_sum = ctx.var_ids.next();
+        ctx.code.add(format!("{} = load i64, i64* {}", tmp_sum, sum_ptr));
+        let strides_i = self.get_array_idx(ctx, strides_llvm_info, &cur_i)?;
+        let counter_i_ptr = ctx.var_ids.next();
+        ctx.code.add(format!("{id} = getelementptr [{len} x i64], [{len} x i64]* %counter.idx, \
+                            i64 0, i64 {idx}", id = counter_i_ptr, len = "2", idx=cur_i)); 
+        let counter_i = ctx.var_ids.next();
+        ctx.code.add(format!("{} = load i64, i64* {}", counter_i, counter_i_ptr));
+        let tmp_prod = ctx.var_ids.next();
+        ctx.code.add(format!("{} = mul i64 {}, {}", tmp_prod, counter_i, strides_i));
+        let tmp_sum2 = ctx.var_ids.next();
+        ctx.code.add(format!("{} = add i64 {}, {}", tmp_sum2, tmp_sum, tmp_prod));
+        /* Load the correct value back into sum. Could be more efficient to use the tmp variables,
+         * but this stuff should be optimized by llvm anyway (?) */
+        ctx.code.add(format!("store i64 {}, i64* {}", tmp_sum2, sum_ptr));
+        
+        /* Update cur_i_ptr and go back to start */
+        let updated_cur_i = ctx.var_ids.next();
+        /* FIXME: do we need to read in cur_i again from cur_i_ptr? */
+        ctx.code.add(format!("{} = add i64 {}, 1", updated_cur_i, cur_i));
+        ctx.code.add(format!("store i64 {}, i64* {}", updated_cur_i, cur_i_ptr));
+        ctx.code.add(format!("br label %{}.start", loop_name));
+        ctx.code.add(format!("{}.end:", loop_name));
+
+        /* DEBUG */
+        ctx.code.add(format!("call void @fucking_print2(i64  1)"));
+        ctx.code.add(format!("call void @fucking_print(i64 * {})", sum_ptr));
+        
+        /* sum must be the correct offset right now. */
+        let offset = ctx.var_ids.next();
+        ctx.code.add(format!("{} = load i64, i64* {}", offset, sum_ptr));
+        /* next_idx = start + offset */
+        let start_str = self.gen_load_var(llvm_symbol(&iter.start.clone().unwrap()).as_str(), "i64", ctx)?; 
+        let final_idx = ctx.var_ids.next();
+        ctx.code.add(format!("{} = add i64 {}, {}", final_idx, start_str, offset));
+        ctx.code.add(format!("call void @fucking_print2(i64  2)"));
+        ctx.code.add(format!("call void @fucking_print2(i64  {})", final_idx));
+
+        /* final idx into original array that the iteration is on right now. */
+        Ok(final_idx)
+    }
+    
+    /// Helper debugging function.
+    fn print_counter(&mut self, 
+                     ctx: &mut FunctionContext) -> () { 
+        let shapes_len = 2;
+        ctx.code.add(format!("call void @fucking_print2(i64 10)"));
+        for x in 0..shapes_len {
+            let tmp_id = ctx.var_ids.next();
+            ctx.code.add(format!("{tmp_id} = getelementptr \
+                                [{len} x i64], [{len} x i64]* %counter.idx, \
+                                i64 0, i64 {idx}", tmp_id = tmp_id, len = shapes_len, idx=x)); 
+            ctx.code.add(format!("call void @fucking_print(i64 *{})", tmp_id));
+        }
+    }
     /// Generates the first half of the loop iteration code, which computes the index to iterate to
     /// and loads data before passing it to the loop body code.
     fn gen_loop_iteration_start(&mut self,
@@ -663,41 +798,54 @@ impl LlvmGenerator {
         ctx.add_alloca("%cur.idx", "i64")?;
         // TODO: check lower.idx semantics...
         ctx.code.add("store i64 %lower.idx, i64* %cur.idx");
-
-        // PN: removed the loop for now. Declaring this early so we can use it for accessing
+        // FIXME: removed the loop for now. Declaring this early so we can use it for accessing
         // iter.shapes etc.
         let i = 0;
         let iter = &par_for.data[0]; 
-        let shapes_el_ty = self.llvm_type(&Scalar(I64))?;
-        let shapes_llvm_info = self.get_array_llvm_info(func, ctx, iter.shapes.as_ref().unwrap(), shapes_el_ty)?;
 
         // TODO: can we use llvm_shapes.len here instead? Not sure how, because for allocation we
         // can't just use variable name.
-        let shapes_len : i64 = 3; 
+        let shapes_len : i64 = 2; 
         // let's declare a counter array.
+        // FIXME: use alloc_id everywhere or just hardcode counter.idx?
         let alloc_id = "%counter.idx";
         ctx.code.add(format!("{} = alloca [{} x i64]", alloc_id, shapes_len));
+
         // Initialize counter to zeros.
         // FIXME: zeroinitializer should work but I can't get syntax right?!
+        // FIXME: just use a llvm generated loop here
         for x in 0..shapes_len {
             let tmp_id = ctx.var_ids.next();
             ctx.code.add(format!("{tmp_id} = getelementptr \
                                 [{len} x i64], [{len} x i64]* %counter.idx, \
                                 i64 0, i64 {idx}", tmp_id = tmp_id, len = shapes_len, idx=x)); 
             ctx.code.add(format!("store i64 0, i64* {}", tmp_id));
-        } 
+        }
+        self.print_counter(ctx);
         // Declare loop body as counter etc. have already been initialized.
         ctx.code.add("br label %loop.start");
         ctx.code.add("loop.start:");
-        ctx.code.add(format!("{tmp_id} = getelementptr \
-                            [{len} x i64], [{len} x i64]* %counter.idx, \
-                            i64 0, i64 {idx}", tmp_id = "%fuck_this1", len = shapes_len, idx="1")); 
-        ctx.code.add("%fuck_this2 = load i64, i64* %fuck_this1");
         
         // Loop termination condition.
         // TODO: Keep this as it is, but ensure %upper.idx value is set correctly in other
         // function.
+        // TODO: do we even need idx tmp?
         let idx_tmp = self.gen_load_var("%cur.idx", "i64", ctx)?; 
+        
+        // Alternative end condition:
+        //let counter_idx = ctx.var_ids.next();
+        //let counter_ptr = ctx.var_ids.next();
+        //ctx.code.add(format!("{tmp_id} = getelementptr \
+                            //[{len} x i64], [{len} x i64]* %counter.idx, \
+                            //i64 0, i64 {idx}", tmp_id = counter_ptr, len = shapes_len, idx="0")); 
+        //ctx.code.add(format!("{} = load i64, i64* {}", counter_idx, counter_ptr));
+        //let shapes_el_ty = self.llvm_type(&Scalar(I64))?;
+        //let shapes_llvm_info = self.get_array_llvm_info(func, ctx, iter.shapes.as_ref().unwrap(), shapes_el_ty)?;
+        //let shapes_elem_str = self.get_array_idx(ctx, shapes_llvm_info, &"0".to_string())?;
+        //let elem_ty = func.locals.get(&par_for.data_arg).unwrap();
+        //let idx_cmp = ctx.var_ids.next();
+        //ctx.code.add(format!("{} = icmp ult i64 {}, {}", idx_cmp, counter_idx, shapes_elem_str));
+        
         let elem_ty = func.locals.get(&par_for.data_arg).unwrap();
         let idx_cmp = ctx.var_ids.next();
         ctx.code.add(format!("{} = icmp ult i64 {}, %upper.idx", idx_cmp, idx_tmp));
@@ -706,8 +854,7 @@ impl LlvmGenerator {
         // PN: what's the point of prev ref being declared as undef? Because it keeps changing in
         // later iterations?
         let mut prev_ref = String::from("undef");
-        let elem_ty_str = self.llvm_type(&elem_ty)?;
-        
+        let elem_ty_str = self.llvm_type(&elem_ty)?; 
         let inner_elem_ty_str = if par_for.data.len() == 1 {
             elem_ty_str.clone()
         } else {
@@ -719,31 +866,13 @@ impl LlvmGenerator {
         
         // PN: add another if branch for the NdIter kind here.
         let arr_idx = if iter.kind == IterKind::NdIter {
-            // TODO: Use sum += counter[i]*shapes[i] loop to find arr_idx
-
-            // PN: old stuff used for scalars.
-            // PN: wasn't offset being used later in the second function?
-            let offset = ctx.var_ids.next();
-            // PN: is this complicated clone.unwrap stuff really needed...
-            // PN: can i access the vector here in the same way as this?
-            let stride_str = self.gen_load_var(llvm_symbol(&iter.stride.clone().unwrap()).as_str(), "i64", ctx)?;
-            let start_str = self.gen_load_var(llvm_symbol(&iter.start.clone().unwrap()).as_str(), "i64", ctx)?;
-
-            // PN: offset = idx * stride; where idx is just +1'd every time.
-            //ctx.code.add(format!("{} = mul i64 {}, {}", offset, idx_tmp, shapes_elem_str));
-            ctx.code.add(format!("{} = mul i64 {}, {}", offset, idx_tmp, "%fuck_this2".to_string()));
-            
-            let final_idx = ctx.var_ids.next();
-            // PN: final_idx = start + offset;
-            ctx.code.add(format!("{} = add i64 {}, {}", final_idx, start_str, offset));
-            // PN: final idx that the iteration is on right now.
-            final_idx
+            self.nditer_next_element(func, ctx, iter).unwrap()
         } else {    
             idx_tmp.clone()
         };
 
         let data_llvm_info = self.get_array_llvm_info(func, ctx, &iter.data, inner_elem_ty_str)?;
-        let inner_elem_tmp = self.get_array_idx(func, ctx, data_llvm_info, arr_idx)?;
+        let inner_elem_tmp = self.get_array_idx(ctx, data_llvm_info, &arr_idx)?;
 
         if par_for.data.len() == 1 {
             prev_ref.clear();
@@ -756,14 +885,11 @@ impl LlvmGenerator {
         ctx.code.add(format!("store {} {}, {}* {}", &elem_ty_str, prev_ref, &elem_ty_str, elem_str));
         // updating the value of the current index, "i".
         ctx.code.add(format!("store i64 {}, i64* {}", idx_tmp, llvm_symbol(&par_for.idx_arg)));
-        println!("final code after gen loop start = {} ", ctx.code.result());
         Ok(())
     }
 
     /// Generates the second half of the loop iteration code, which updates the current index and
     /// jumps to the beginning of the loop if more iterations are left.
-    // PN CHECK: where is the jump to the beginning of the loop happening?
-    // PN: this can essentially be left unchanged if we calculate offset above?
     fn gen_loop_iteration_end(&mut self,
                               par_for: &ParallelForData,
                               func: &SirFunction,
@@ -806,14 +932,14 @@ impl LlvmGenerator {
                                  {tmp3} = load i64, i64* {tmp2}
                                  {tmp4} = add i64 {tmp3}, 1
                                  store i64 {tmp4}, i64* {tmp2}"
-                                 , i="%counter.i", counter_len="3", 
+                                 , i="%counter.i", counter_len="2", 
                                  counter="%counter.idx", tmp0="%tmp_0_test", tmp00=ctx.var_ids.next(),
                                  tmp01=ctx.var_ids.next(), tmp1="%cur_i", tmp2="%tmp_2_test",
                                  tmp3=ctx.var_ids.next(), tmp4="%tmp4_test"));
             // Need to break off the long sequence of llvm IR because no easy way to get ith element of shapes.
             // redoing some of the computations here, like accessing elements but I guess that
             // should be optimized by llvm later
-            let shapes_elem_str = self.get_array_idx(func, ctx, shapes_llvm_info, "%cur_i".to_string())?;
+            let shapes_elem_str = self.get_array_idx(ctx, shapes_llvm_info, &"%cur_i".to_string())?;
             ctx.code.add(format!("{tmp5} = load i64, i64* {i}
                                  {tmp6} = getelementptr inbounds [{counter_len} x i64], \
                                  [{counter_len} x i64]* {counter}, i64 0, i64 {tmp5}
@@ -826,7 +952,7 @@ impl LlvmGenerator {
                                  {tmp9} = sub i64 {tmp5}, 1
                                  store i64 {tmp9}, i64* {i}
                                  br label %counter_loop.start", 
-                                 shapes_elem = shapes_elem_str, counter_len="3", 
+                                 shapes_elem = shapes_elem_str, counter_len="2", 
                                  counter="%counter.idx", i = "%counter.i",
                                  tmp5 = ctx.var_ids.next(), tmp6 = ctx.var_ids.next(), tmp7 =
                                  ctx.var_ids.next(), tmp8 = ctx.var_ids.next(), tmp9 =
@@ -859,7 +985,6 @@ impl LlvmGenerator {
 
         // Get the current thread ID
         ctx.code.add(format!("%cur.tid = call i32 @weld_rt_thread_id()"));
-        println!("after gen header, code = {} ", ctx.code.result());
         Ok(())
     }
 
@@ -875,7 +1000,7 @@ impl LlvmGenerator {
                                  par_for: &ParallelForData,
                                  sir: &SirProgram,
                                  func: &SirFunction) -> WeldResult<()> {
-
+        // Pari: check how to create new ctx so args to func would be correct?
         let ref mut ctx = FunctionContext::new(false);
         let serial_arg_types = self.get_arg_str(&get_combined_params(sir, &par_for), "")?;
         ctx.code.add(format!("define void @f{}_wrapper({}) {{", func.id, serial_arg_types));
@@ -884,6 +1009,7 @@ impl LlvmGenerator {
         // Compute the number of iterations and the start point of a fringe iter if there is one.
         let (num_iters_str, fringe_start_str) = self.gen_num_iters_and_fringe_start(&par_for, func, ctx)?;
         // Check if the loops are in-bounds and throw an error if they are not.
+        // FIXME: Need to get this working right.
         self.gen_loop_bounds_check(fringe_start_str, &num_iters_str, &par_for, func, ctx)?;
         // Invoke the loop body (either by directly calling a function or starting the runtime).
         self.gen_invoke_loop_body(&num_iters_str, &par_for, sir, func, ctx)?;

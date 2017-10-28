@@ -365,11 +365,11 @@ pub fn vectorize(expr: &mut Expr<Type>) {
                                                start: e.start.clone(),
                                                end: e.end.clone(),
                                                stride: e.stride.clone(),
-                                               shapes: e.shapes.clone(),
                                                kind: IterKind::SimdIter,
+                                               shapes: e.shapes.clone(),
+                                               strides: e.strides.clone(),
                                            });
                         }
-
                         // Iterators for the fringe loop. This is the same set of iterators, but with the
                         // IteratorKind changed to Fringe.
                         let fringe_iters = vec_iters
