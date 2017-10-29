@@ -1,0 +1,8 @@
+//! Common transformations on expressions.
+
+pub mod loop_fusion;
+pub mod uniquify;
+pub mod inliner;
+pub mod size_inference;
+pub mod annotator;
+pub mod vectorizer;
