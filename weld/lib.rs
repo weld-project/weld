@@ -25,6 +25,7 @@ use common::WeldRuntimeErrno;
 use common::WeldLogLevel;
 
 /// Utility macro to create an Err result with a WeldError from a format string.
+#[macro_export]
 macro_rules! weld_err {
     ( $($arg:tt)* ) => ({
         ::std::result::Result::Err($crate::error::WeldError::new(format!($($arg)*)))
@@ -64,7 +65,7 @@ extern "C" {
 }
 
 /// A clean alias for a compiled LLVM module.
-pub type WeldModule = easy_ll::CompiledModule;
+pub type WeldModule = llvm::CompiledModule;
 
 /// An error passed as an opaque pointer using the runtime API.
 pub struct WeldError {
@@ -246,7 +247,7 @@ pub unsafe extern "C" fn weld_value_data(obj: *const WeldValue) -> *const c_void
 }
 
 #[no_mangle]
-/// Returns a pointer to the data wrapped by the given Weld value.
+/// Returns a pointer to the module owning the given Weld value.
 pub unsafe extern "C" fn weld_value_module(obj: *mut WeldValue) -> *mut WeldModule {
     assert!(!obj.is_null());
     let obj = &*obj;
@@ -354,7 +355,8 @@ pub unsafe extern "C" fn weld_module_run(module: *mut WeldModule,
     assert!(!arg.is_null());
     assert!(!err_ptr.is_null());
 
-    let module_callable = &mut *module;
+    let module_ref = &mut *module;
+    let module_callable = module_ref.llvm_mut();
     let arg = &*arg;
     let mut err = &mut *err_ptr;
 
@@ -405,7 +407,7 @@ pub unsafe extern "C" fn weld_module_run(module: *mut WeldModule,
 ///
 /// Freeing a module does not free the memory it may have allocated. Values returned by the module
 /// must be freed explicitly using `weld_value_free`.
-pub unsafe extern "C" fn weld_module_free(ptr: *mut easy_ll::CompiledModule) {
+pub unsafe extern "C" fn weld_module_free(ptr: *mut WeldModule) {
     if ptr.is_null() {
         return;
     }

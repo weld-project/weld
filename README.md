@@ -16,7 +16,7 @@ You can join the discussion on Weld on our [Google Group](https://groups.google.
       - [Building Weld](#building-weld)
   * [Documentation](#documentation)
   * [Grizzly (Pandas on Weld)](#grizzly)
-  * [Running an Interactive REPL](#interactive-repl)
+  * [Tools](#tools)
 
 ## Building
 
@@ -114,43 +114,12 @@ To run Grizzly, you will also need the `WELD_HOME` environment variable to be se
    cargo test <substring to match in test name>
    ```
 
-## Interactive REPL
+## Tools
 
-The `target/release/repl` program is a simple "shell" where one can type Weld programs and see the results of parsing, macro substitution and type inference.
-
-Example `repl` session:
-```
-$ ./target/debug/repl
-> let a = 5 + 2; a + a
-Raw structure: [...]
-
-After macro substitution:
-let a=((5+2));(a+a)
-
-After inlining applies:
-let a=((5+2));(a+a)
-
-After type inference:
-let a:i32=((5+2));(a:i32+a:i32)
-
-Expression type: i32
-
-> map([1, 2], |x| x+1)
-Raw structure: [...]
-
-After macro substitution:
-result(for([1,2],appender[?],|b,x|merge(b,(|x|(x+1))(x))))
-
-After inlining applies:
-result(for([1,2],appender[?],|b,x|merge(b,(x+1))))
-
-After type inference:
-result(for([1,2],appender[i32],|b:appender[i32],x:i32|merge(b:appender[i32],(x:i32+1))))
-
-Expression type: vec[i32]
-```
-
-Passing a `Lambda` expression will also perform LLVM code generation - other expression types will only perform parsing, type inference, and IR transformations.
+This repository contains a number of useful command line tools which are built
+automatically with the main Weld repository, including an interactive REPL for
+inspecting and debugging programs.  More information on those tools can be
+found under [docs/tools.md](https://github.com/weld-project/weld/tree/master/docs/tools.md).
 
 ## Current performance metrics
 
