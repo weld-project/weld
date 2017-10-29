@@ -55,9 +55,6 @@ pub mod util;
 pub mod exprs;
 pub mod expr_hash;
 
-// TODO not the right place for this.
-pub mod vectorizer;
-
 pub mod easy_ll;
 
 extern "C" {

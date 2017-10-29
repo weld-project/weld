@@ -30,7 +30,7 @@ use super::sir;
 use super::sir::*;
 use super::sir::Statement::*;
 use super::sir::Terminator::*;
-use super::transforms;
+use super::transforms::uniquify;
 use super::type_inference;
 use super::util::IdGenerator;
 use super::util::WELD_INLINE_LIB;
@@ -110,7 +110,7 @@ pub fn compile_program(program: &Program, conf: &ParsedConf, stats: &mut Compila
     trace!("After macro substitution:\n{}\n", print_typed_expr(&expr));
 
     let start = PreciseTime::now();
-    transforms::uniquify(&mut expr)?;
+    uniquify::uniquify(&mut expr)?;
     let end = PreciseTime::now();
 
     let mut uniquify_dur = start.to(end);
@@ -125,7 +125,7 @@ pub fn compile_program(program: &Program, conf: &ParsedConf, stats: &mut Compila
     apply_opt_passes(&mut expr, &conf.optimization_passes, stats)?;
 
     let start = PreciseTime::now();
-    transforms::uniquify(&mut expr)?;
+    uniquify::uniquify(&mut expr)?;
     let end = PreciseTime::now();
     uniquify_dur = uniquify_dur + start.to(end);
 
