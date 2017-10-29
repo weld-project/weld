@@ -52,6 +52,7 @@ pub enum Statement {
     Sort {
         output: Symbol,
         child: Symbol,
+        keyfunc: SirFunction,
     },
     Select {
         output: Symbol,
@@ -137,6 +138,7 @@ pub struct BasicBlock {
     pub terminator: Terminator,
 }
 
+#[derive(Clone)]
 pub struct SirFunction {
     pub id: FunctionId,
     pub params: HashMap<Symbol, Type>,
@@ -274,6 +276,7 @@ impl fmt::Display for Statement {
             Sort {
                 ref output,
                 ref child,
+                ..
             } => write!(f, "{} = sort({})", output, child),
             Select {
                 ref output,
@@ -541,7 +544,6 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
                 } => {
                     vars.push(child.clone());
                 }
-
                 Select {
                     ref cond,
                     ref on_true,
@@ -837,14 +839,29 @@ fn gen_expr(expr: &TypedExpr,
 
         ExprKind::Sort {
             ref data,
+            ref keyfunc,
         } => {
-            let (cur_func, cur_block, data_sym) = gen_expr(data, prog, cur_func, cur_block, multithreaded)?;
-            let res_sym = prog.add_local(&expr.ty, cur_func);
-            prog.funcs[cur_func].blocks[cur_block].add_statement(Sort {
-                                                                     output: res_sym.clone(),
-                                                                     child: data_sym,
-                                                                 });
-            Ok((cur_func, cur_block, res_sym))
+            if let ExprKind::Lambda {
+                       ref params,
+                       ref body,
+            } = keyfunc.kind {
+                let keyfunc_id = prog.add_func();
+                let keyblock = prog.funcs[keyfunc_id].add_block();
+                let (keyfunc_id, keyblock, key_sym) = gen_expr(body, prog, keyfunc_id, keyblock, multithreaded)?;
+                prog.funcs[keyfunc_id].params.insert(params[0].name.clone(), params[0].ty.clone());
+                prog.funcs[keyfunc_id].blocks[keyblock].terminator = Terminator::ProgramReturn(key_sym.clone());
+                let (cur_func, cur_block, data_sym) = gen_expr(data, prog, cur_func, cur_block, multithreaded)?;
+                let key_function = prog.funcs[keyfunc_id].clone();
+                let res_sym = prog.add_local(&expr.ty, cur_func);
+                prog.funcs[cur_func].blocks[cur_block].add_statement(Sort {
+                    output: res_sym.clone(),
+                    child: data_sym,
+                    keyfunc: key_function
+                });
+                Ok((cur_func, cur_block, res_sym))
+            } else {
+                weld_err!("Sort key function expected lambda type, instead {:?} provided", keyfunc.ty)
+            }
         }
 
         ExprKind::Select {

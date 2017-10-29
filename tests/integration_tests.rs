@@ -2234,7 +2234,7 @@ fn simple_sort() {
         len: ys.len() as i64,
     };
 
-    let code = "|ys:vec[i32]| sort(ys)";
+    let code = "|ys:vec[i32]| sort(ys, |x:i32| x + 1)";
     let conf = default_conf();
     let ret_value = compile_and_run(code, conf, input_data);
     let data = unsafe { weld_value_data(ret_value) as *const WeldVec<i32> };
@@ -2242,6 +2242,7 @@ fn simple_sort() {
 
     let expected = [1, 2, 3, 4, 5];
     assert_eq!(result.len, expected.len() as i64);
+
     for i in 0..(expected.len() as isize) {
         assert_eq!(unsafe { *result.data.offset(i) }, expected[i as usize])
     }
@@ -2254,7 +2255,7 @@ fn simple_sort() {
         len: ys.len() as i64,
     };
 
-    let code = "|ys:vec[f64]| sort(ys)";
+    let code = "|ys:vec[f64]| sort(ys, |x:f64| x)";
     let conf = default_conf();
     let ret_value = compile_and_run(code, conf, input_data);
     let data = unsafe { weld_value_data(ret_value) as *const WeldVec<f64> };
@@ -2264,6 +2265,64 @@ fn simple_sort() {
     assert_eq!(result.len, expected.len() as i64);
     for i in 0..(expected.len() as isize) {
         assert_eq!(unsafe { *result.data.offset(i) }, expected[i as usize])
+    }
+
+    let code = "|ys:vec[f64]| sort(ys, |x:f64| 1.0 / exp(-1.0*x))";
+    let conf = default_conf();
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<f64> };
+    let result = unsafe { (*data).clone() };
+
+    assert_eq!(result.len, expected.len() as i64);
+    for i in 0..(expected.len() as isize) {
+        assert_eq!(unsafe { *result.data.offset(i) }, expected[i as usize])
+    }
+
+    unsafe { free_value_and_module(ret_value) };
+}
+
+fn complex_sort() {
+    #[derive(Clone)]
+    #[allow(dead_code)]
+    struct Args {
+        x: WeldVec<i32>,
+        y: WeldVec<i32>,
+    }
+    let ys = vec![5, 4, 3, 2, 1];
+    let xs = vec![1, 2, 3, 4, 5];
+    let ref input_data = Args {
+        x: WeldVec {
+            data: ys.as_ptr() as *const i32,
+            len: ys.len() as i64,
+        },
+        y: WeldVec {
+            data: xs.as_ptr() as *const i32,
+            len: xs.len() as i64,
+        }
+    };
+
+    let code = "|ys:vec[i32], xs:vec[i32]|
+                  sort(
+                    result(
+                      for(
+                        zip(xs,ys),
+                        appender[{i32,i32}],
+                        |b,i,e| merge(b, e)
+                      )
+                    ),
+                    |x:{i32, i32}| x.$0
+                )";
+    let conf = default_conf();
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<Pair<i32, i32>> };
+    let result = unsafe { (*data).clone() };
+
+    let expected = [[1, 5], [2, 4], [3, 3], [4, 2], [5, 1]];
+    assert_eq!(result.len, expected.len() as i64);
+
+    for i in 0..(expected.len() as isize) {
+        assert_eq!(unsafe { (*result.data.offset(i)).ele1 }, expected[i as usize][0]);
+        assert_eq!(unsafe { (*result.data.offset(i)).ele2 }, expected[i as usize][1]);
     }
 
     unsafe { free_value_and_module(ret_value) };
@@ -2391,7 +2450,8 @@ fn main() {
              ("simple_int_mod", simple_int_mod),
              ("predicate_if_iff_annotated", predicate_if_iff_annotated),
              ("nested_for_loops", nested_for_loops),
-             ("simple_sort", simple_sort)];
+             ("simple_sort", simple_sort),
+             ("complex_sort", complex_sort)];
 
     println!("");
     println!("running tests");

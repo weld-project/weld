@@ -3,7 +3,8 @@
 ; Parameters:
 ; - NAME: name to give generated type, without % or @ prefix
 ; - ELEM: LLVM type of the element (e.g. i32 or %MyStruct)
-
+; - FUNC: the key function (must return scalar)
+; - KEY: type returned by FUNC (must be scalar)
 define %{NAME} @{NAME}.sort(%{NAME} %vec) {{
   %res = call %{NAME} @{NAME}.clone(%{NAME} %vec)
   %elements = extractvalue %{NAME} %res, 0
@@ -18,10 +19,8 @@ define %{NAME} @{NAME}.sort(%{NAME} %vec) {{
 define i32 @{NAME}.helper(i8* %p1, i8* %p2) {{
   %kv1 = bitcast i8* %p1 to {ELEM}*
   %kv2 = bitcast i8* %p2 to {ELEM}*
-  %kPtr1 = getelementptr {ELEM}, {ELEM}* %kv1, i64 0
-  %kPtr2 = getelementptr {ELEM}, {ELEM}* %kv2, i64 0
-  %k1 = load {ELEM}, {ELEM}* %kPtr1
-  %k2 = load {ELEM}, {ELEM}* %kPtr2
-  %res = call i32 @{ELEM}.cmp({ELEM} %k1, {ELEM} %k2)
+  %ev1 = call {KEY} {FUNC}({ELEM}* %kv1)
+  %ev2 = call {KEY} {FUNC}({ELEM}* %kv2)
+  %res = call i32 @{KEY}.cmp({KEY} %ev1, {KEY} %ev2)
   ret i32 %res
 }}

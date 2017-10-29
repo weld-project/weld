@@ -946,9 +946,12 @@ impl<'t> Parser<'t> {
             TSort => {
                 try!(self.consume(TOpenParen));
                 let data = try!(self.expr());
+                try!(self.consume(TComma));
+                let keyfunc = try!(self.expr());
                 try!(self.consume(TCloseParen));
                 Ok(expr_box(Sort {
                                 data: data,
+                                keyfunc: keyfunc,
                             },
                             Annotations::new()))
             }

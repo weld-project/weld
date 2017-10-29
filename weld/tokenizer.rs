@@ -576,10 +576,17 @@ fn basic_tokenize() {
                     TOpenBracket,
                     TCloseBracket,
                     TEndOfInput]);
-    assert_eq!(tokenize("sort(a)").unwrap(),
+    assert_eq!(tokenize("sort(a, |x:i32| x)").unwrap(),
                vec![TSort,
                     TOpenParen,
                     TIdent("a".into()),
+                    TComma,
+                    TBar,
+                    TIdent("x".into()),
+                    TColon,
+                    TI32,
+                    TBar,
+                    TIdent("x".into()),
                     TCloseParen,
                     TEndOfInput]);
 }

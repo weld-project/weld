@@ -318,9 +318,11 @@ impl PartialExpr {
 
             Sort {
                 ref data,
+                ref keyfunc,
             } => {
                 Sort {
                     data: try!(typed_box(data)),
+                    keyfunc: try!(typed_box(keyfunc)),
                 }
             }
 

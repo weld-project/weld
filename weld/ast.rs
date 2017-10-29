@@ -305,6 +305,7 @@ pub enum ExprKind<T: TypeBounds> {
     },
     Sort {
         data: Box<Expr<T>>,
+        keyfunc: Box<Expr<T>>,
     },
     Let {
         name: Symbol,
@@ -534,7 +535,8 @@ impl<T: TypeBounds> Expr<T> {
             } => vec![data.as_ref(), index.as_ref(), size.as_ref()],
             Sort {
                 ref data,
-            } => vec![data.as_ref()],
+                ref keyfunc,
+            } => vec![data.as_ref(), keyfunc.as_ref()],
             Merge {
                 ref builder,
                 ref value,
@@ -637,7 +639,8 @@ impl<T: TypeBounds> Expr<T> {
             } => vec![data.as_mut(), index.as_mut(), size.as_mut()],
             Sort {
                 ref mut data,
-            } => vec![data.as_mut()],
+                ref mut keyfunc,
+            } => vec![data.as_mut(), keyfunc.as_mut()],
             Merge {
                 ref mut builder,
                 ref mut value,
