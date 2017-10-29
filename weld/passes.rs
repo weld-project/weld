@@ -1,7 +1,11 @@
 use super::ast::*;
 use super::error::*;
-use super::transforms;
-use super::vectorizer;
+
+use super::transforms::loop_fusion;
+use super::transforms::inliner;
+use super::transforms::size_inference;
+use super::transforms::annotator;
+use super::transforms::vectorizer;
 
 use super::expr_hash::*;
 
@@ -53,18 +57,18 @@ lazy_static! {
     pub static ref OPTIMIZATION_PASSES: HashMap<&'static str, Pass> = {
         let mut m = HashMap::new();
         m.insert("inline-apply",
-                 Pass::new(vec![transforms::inline_apply], "inline-apply"));
+                 Pass::new(vec![inliner::inline_apply], "inline-apply"));
         m.insert("inline-let",
-                 Pass::new(vec![transforms::inline_let], "inline-let"));
+                 Pass::new(vec![inliner::inline_let], "inline-let"));
         m.insert("inline-zip",
-                 Pass::new(vec![transforms::inline_zips], "inline-zip"));
+                 Pass::new(vec![inliner::inline_zips], "inline-zip"));
         m.insert("loop-fusion",
-                 Pass::new(vec![transforms::fuse_loops_horizontal,
-                                transforms::fuse_loops_vertical,
-                                transforms::simplify_get_field],
+                 Pass::new(vec![loop_fusion::fuse_loops_horizontal,
+                                loop_fusion::fuse_loops_vertical,
+                                inliner::inline_get_field],
                  "loop-fusion"));
         m.insert("infer-size",
-                 Pass::new(vec![transforms::infer_size],
+                 Pass::new(vec![size_inference::infer_size],
                  "infer-size"));
         m.insert("predicate",
                  Pass::new(vec![vectorizer::predicate],
@@ -73,7 +77,7 @@ lazy_static! {
                  Pass::new(vec![vectorizer::vectorize],
                  "vectorize"));
         m.insert("fix-iterate",
-                 Pass::new(vec![transforms::force_iterate_parallel_fors],
+                 Pass::new(vec![annotator::force_iterate_parallel_fors],
                  "fix-iterate"));
 
         m

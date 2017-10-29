@@ -6,10 +6,10 @@ use super::type_inference::*;
 use super::annotations::*;
 
 // Transforms. TODO(shoumik) move these tests somewhere else?
-use super::transforms::fuse_loops_vertical;
-use super::transforms::fuse_loops_horizontal;
-use super::transforms::inline_let;
-use super::transforms::uniquify;
+use super::transforms::loop_fusion::fuse_loops_vertical;
+use super::transforms::loop_fusion::fuse_loops_horizontal;
+use super::transforms::inliner::inline_let;
+use super::transforms::uniquify::uniquify;
 
 /// Returns a typed expression.
 #[cfg(test)]
