@@ -418,7 +418,6 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
                 elem_types.push(elem_type);
                 if iter.start.is_some() {
                     for i in [&mut iter.start, &mut iter.end, &mut iter.stride].iter_mut() {
-                    //for i in [&mut iter.start].iter_mut() {
                         match **i {
                             Some(ref mut e) => {
                                 changed |= try!(push_complete_type(&mut e.ty, Scalar(I64), "iter"))
