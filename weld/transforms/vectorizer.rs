@@ -95,6 +95,73 @@ pub fn vectorize(expr: &mut Expr<Type>) {
     });
 }
 
+/// Predicate an `If` expression by checking for if(cond, merge(b, e), b) and transforms it to merge(b, select(cond, e,identity)).
+pub fn predicate(e: &mut Expr<Type>) {
+    e.transform_and_continue_res(&mut |ref mut e| {
+        if !(should_be_predicated(e)) {
+            return Ok((None, true));
+        }
+
+        // Predication for a value merged into a merger. This pattern checks for if(cond, merge(b, e), b).
+        if let If { ref cond, ref on_true, ref on_false } = e.kind {
+            if let Merge { ref builder, ref value } = on_true.kind {
+                if let Ident(ref name) = on_false.kind {
+                    if let Ident(ref name2) = builder.kind {
+                        if name == name2 {
+                            if let Builder(ref bk, _) = builder.ty {
+                                // Merge in the identity element if the predicate fails (effectively merging in nothing)
+                                let (ty, op) = match *bk {
+                                    BuilderKind::Merger(ref ty, ref op) => (ty, op),
+                                    BuilderKind::DictMerger(_, ref ty2, ref op) => (ty2, op),
+                                    BuilderKind::VecMerger(ref ty, ref op) => (ty, op),
+                                    _ => {
+                                        return Ok((None, true));
+                                    }
+                                };
+
+                                let identity = get_id_element(ty.as_ref(), op)?;
+                                match identity {
+                                    Some(x) => {
+                                        match *bk {
+                                            BuilderKind::Merger(_, _)
+                                                | BuilderKind::VecMerger(_, _) => {
+                                                /* Change if(cond, merge(b, e), b) => 
+                                                merge(b, select(cond, e, identity). */
+                                                let expr = exprs::merge_expr(*builder.clone(),
+                                                                             exprs::select_expr(
+                                                                                 *cond.clone(),
+                                                                                 *value.clone(), x)?)?;
+                                                return Ok((Some(expr), true));
+                                                
+                                            },
+                                            BuilderKind::DictMerger(_, _, _) => {
+                                                /* For dictmerger, need to match identity element 
+                                                back to the key. */
+                                                let sel_expr = make_select_for_kv(*cond.clone(),
+                                                                                  *value.clone(),
+                                                                                  x)?;
+                                                return Ok((sel_expr, true))
+                                            }
+                                            _ => {
+                                                return Ok((None, true));
+                                            }
+                                        }
+                                    }
+                                    None => {
+                                        return Ok((None, true));
+                                    }
+                                };
+
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Ok((None, true))
+    });
+}
+
 /// Returns `true` if this is a set of iterators we can vectorize, `false` otherwise.
 ///
 /// We can vectorize an iterator if all of its iterators consume the entire collection.
@@ -163,7 +230,6 @@ fn vectorize_expr(e: &mut Expr<Type>, broadcast_idens: &HashSet<Symbol>) -> Weld
     }
     Ok(cont)
 }
-
 
 /// Checks basic vectorizability for a loop - this is a strong check which ensure that the only
 /// expressions which appear in a function body are vectorizable expressions (see
@@ -270,11 +336,11 @@ fn vectorizable(for_loop: &Expr<Type>) -> WeldResult<HashSet<Symbol>> {
     return weld_err!("Unsupported pattern");
 }
 
-pub fn should_be_predicated(e: &mut Expr<Type>) -> bool {
+fn should_be_predicated(e: &mut Expr<Type>) -> bool {
     e.annotations.predicate()
 }
 
-pub fn get_id_element(ty: &Type, op: &BinOpKind) -> WeldResult<Option<Expr<Type>>> {
+fn get_id_element(ty: &Type, op: &BinOpKind) -> WeldResult<Option<Expr<Type>>> {
     let ref sk = match *ty {
         Scalar(sk) => sk,
         _ => {
@@ -330,72 +396,7 @@ fn make_select_for_kv(cond:  Expr<Type>,
     return Ok(Some(le))
 }
 
-/// Predicate an `If` expression by checking for if(cond, merge(b, e), b) and transforms it to merge(b, select(cond, e,identity)).
-pub fn predicate(e: &mut Expr<Type>) {
-    e.transform_and_continue_res(&mut |ref mut e| {
-        if !(should_be_predicated(e)) {
-            return Ok((None, true));
-        }
 
-        // Predication for a value merged into a merger. This pattern checks for if(cond, merge(b, e), b).
-        if let If { ref cond, ref on_true, ref on_false } = e.kind {
-            if let Merge { ref builder, ref value } = on_true.kind {
-                if let Ident(ref name) = on_false.kind {
-                    if let Ident(ref name2) = builder.kind {
-                        if name == name2 {
-                            if let Builder(ref bk, _) = builder.ty {
-                                // Merge in the identity element if the predicate fails (effectively merging in nothing)
-                                let (ty, op) = match *bk {
-                                    BuilderKind::Merger(ref ty, ref op) => (ty, op),
-                                    BuilderKind::DictMerger(_, ref ty2, ref op) => (ty2, op),
-                                    BuilderKind::VecMerger(ref ty, ref op) => (ty, op),
-                                    _ => {
-                                        return Ok((None, true));
-                                    }
-                                };
-
-                                let identity = get_id_element(ty.as_ref(), op)?;
-                                match identity {
-                                    Some(x) => {
-                                        match *bk {
-                                            BuilderKind::Merger(_, _)
-                                                | BuilderKind::VecMerger(_, _) => {
-                                                /* Change if(cond, merge(b, e), b) => 
-                                                merge(b, select(cond, e, identity). */
-                                                let expr = exprs::merge_expr(*builder.clone(),
-                                                                             exprs::select_expr(
-                                                                                 *cond.clone(),
-                                                                                 *value.clone(), x)?)?;
-                                                return Ok((Some(expr), true));
-                                                
-                                            },
-                                            BuilderKind::DictMerger(_, _, _) => {
-                                                /* For dictmerger, need to match identity element 
-                                                back to the key. */
-                                                let sel_expr = make_select_for_kv(*cond.clone(),
-                                                                                  *value.clone(),
-                                                                                  x)?;
-                                                return Ok((sel_expr, true))
-                                            }
-                                            _ => {
-                                                return Ok((None, true));
-                                            }
-                                        }
-                                    }
-                                    None => {
-                                        return Ok((None, true));
-                                    }
-                                };
-
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        Ok((None, true))
-    });
-}
 
 /// Parse and perform type inference on an expression.
 #[cfg(test)]
@@ -408,7 +409,7 @@ fn typed_expr(code: &str) -> TypedExpr {
 /// Check whether a function has a vectorized Merge call. We'll use this to check whether function
 /// bodies got vectorized.
 #[cfg(test)]
-pub fn has_vectorized_merge(expr: &TypedExpr) -> bool {
+fn has_vectorized_merge(expr: &TypedExpr) -> bool {
     let mut found = false;
     expr.traverse(&mut |ref e| if let Merge { ref value, .. } = e.kind {
                            found |= value.ty.is_simd();
