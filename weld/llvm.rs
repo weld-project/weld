@@ -451,18 +451,10 @@ impl LlvmGenerator {
             /* store back in prod_ptr */
             ctx.code.add(format!("store i64 {}, i64* {}", tmp_result, prod_ptr));
             /* Loop body done, so now update cur_i, and jump back to loop.start. */
-            //let tmp_cur_i = ctx.var_ids.next();
-            //ctx.code.add(format!("{} = add i64 {}, {}", tmp_cur_i, cur_i, 1));
-            //ctx.code.add(format!("store i64 {}, i64* {}", tmp_cur_i, cur_i_ptr));
-            //ctx.code.add(format!("br label %{}.start", loop_name));
-            /* loop.end needs to be added */
-            //ctx.code.add(format!("{}.end:", loop_name));
             self.add_llvm_for_loop_end(ctx, &loop_name, &cur_i_ptr, &cur_i, "add");
             /* Now, prod_ptr should have the correct value for num_iters_str.
              * Note: compared to the scalar/simd case, we don't need to consider start/end */
             ctx.code.add(format!("{} = load i64, i64* {}", num_iters_str, prod_ptr));
-            //ctx.code.add(format!("call void @fucking_print2(i64 100)"));
-            //ctx.code.add(format!("call void @fucking_print2(i64 {})", num_iters_str));
         } else if first_iter.kind == IterKind::FringeIter {
             // FringeIter
             // TODO(shoumik): Don't support non-unit stride right now.
@@ -490,10 +482,7 @@ impl LlvmGenerator {
             if par_for.data[0].start.is_none() {
                 // set num_iters_str to len(first_data)
                 ctx.code.add(format!("{} = call i64 {}.size({} {})",
-                num_iters_str,
-                data_prefix,
-                data_ty_str,
-                data_str));
+                num_iters_str, data_prefix, data_ty_str, data_str));
             } else {
                 // TODO(shoumik): Don't support non-unit stride right now.
                 if par_for.data[0].kind == IterKind::SimdIter {
@@ -513,7 +502,6 @@ impl LlvmGenerator {
 
     /// Generates a bounds check for a parallel for loop by ensuring that the number of iterations
     /// does not cause an out of bounds error with the given start and stride.
-    ///
     /// Follows gen_num_iters_and_fringe_start
     /// Precedes gen_invoke_loop_body
     fn gen_loop_bounds_check(&mut self,
@@ -565,6 +553,7 @@ impl LlvmGenerator {
                 ctx.code.add(format!("{} = load i64, i64* {}", final_offset, offset_ptr));
                 ctx.code.add(format!("call void @fucking_print2(i64 36000)",));
                 ctx.code.add(format!("call void @fucking_print2(i64 {})", final_offset));
+                ctx.code.add(format!("call void @fucking_print2(i64 {})", start_str));
                 ctx.code.add(format!("{} = add i64 {}, {}", max_iter_str, start_str, final_offset));
                 ctx.code.add(format!("call void @fucking_print2(i64 {})", max_iter_str));
                 ctx.code.add(format!("call void @fucking_print2(i64 {})", data_llvm_info.len_str));
@@ -704,13 +693,8 @@ impl LlvmGenerator {
             "at"
         };
         ctx.code.add(format!("{} = call {}* {}.{}({} {}, i64 {})",
-                    arr_elem_tmp_ptr,
-                    &llvm_info.el_ty_str,
-                    llvm_info.prefix,
-                    at,
-                    &llvm_info.ty_str,
-                    llvm_info.arr_str,
-                    idx)); 
+                    arr_elem_tmp_ptr, &llvm_info.el_ty_str, llvm_info.prefix,
+                    at, &llvm_info.ty_str, llvm_info.arr_str, idx)); 
         // Loading the cur element from the data array.
         Ok(self.gen_load_var(&arr_elem_tmp_ptr, &llvm_info.el_ty_str, ctx)?)
     }
@@ -739,11 +723,11 @@ impl LlvmGenerator {
         let len = ctx.var_ids.next();
         ctx.code.add(format!("{} = extractvalue {} {}, 1 ", len, arr_ty_str, arr_str));
         let v = VecLLVMInfo { 
-                ty_str: arr_ty_str,
-                arr_str: arr_str,
-                prefix: arr_prefix,
-                len_str: len,
-                el_ty_str: el_ty_str,
+                    ty_str: arr_ty_str,
+                    arr_str: arr_str,
+                    prefix: arr_prefix,
+                    len_str: len,
+                    el_ty_str: el_ty_str,
                 };
         Ok(v)
     }
@@ -779,7 +763,7 @@ impl LlvmGenerator {
                         cur_i_ptr: &str,
                         cur_i: &str,
                         incr_op: &str) {
-        /* Add i+=1 and jump back to loop start */
+        /* cur_i = incr_op cur_i, 1 and jump back to loop start */
         let tmp_cur_i = ctx.var_ids.next();
         ctx.code.add(format!("{} = {} i64 {}, {}", tmp_cur_i, incr_op, cur_i, 1));
         ctx.code.add(format!("store i64 {}, i64* {}", tmp_cur_i, cur_i_ptr));
@@ -789,12 +773,11 @@ impl LlvmGenerator {
     } 
 
     /// Calculates the next element when performing a non-contiguous iteration. Essentially does
-    /// dot(counter, strides)
+    /// idx = start + dot(counter, strides)
     fn nditer_next_element(&mut self, 
                            func: &SirFunction,
                            ctx: &mut FunctionContext,
                            iter: &ParallelForIter) -> WeldResult<String> {
-        self.print_counter(ctx);
         let strides_el_ty = self.llvm_type(&Scalar(I64))?;
         let strides_llvm_info = self.get_array_llvm_info(func, ctx, iter.strides.as_ref().unwrap(), 
                                                          strides_el_ty, true)?;
@@ -822,12 +805,7 @@ impl LlvmGenerator {
          * but this stuff should be optimized by llvm anyway (?) */
         ctx.code.add(format!("store i64 {}, i64* {}", tmp_sum2, sum_ptr)); 
         /* Update cur_i_ptr and go back to start */
-        self.add_llvm_for_loop_end(ctx, &loop_name, &cur_i_ptr, &cur_i, "add");
-
-        /* DEBUG */
-        //ctx.code.add(format!("call void @fucking_print2(i64  10000)"));
-        //ctx.code.add(format!("call void @fucking_print(i64 * {})", sum_ptr));
-        
+        self.add_llvm_for_loop_end(ctx, &loop_name, &cur_i_ptr, &cur_i, "add"); 
         /* sum must be the correct offset right now. */
         let offset = ctx.var_ids.next();
         ctx.code.add(format!("{} = load i64, i64* {}", offset, sum_ptr));
@@ -835,9 +813,6 @@ impl LlvmGenerator {
         let start_str = self.gen_load_var(llvm_symbol(&iter.start.clone().unwrap()).as_str(), "i64", ctx)?; 
         let final_idx = ctx.var_ids.next();
         ctx.code.add(format!("{} = add i64 {}, {}", final_idx, start_str, offset));
-        //ctx.code.add(format!("call void @fucking_print2(i64  20000)"));
-        //ctx.code.add(format!("call void @fucking_print2(i64  {})", final_idx));
-
         /* final idx into original array that the iteration is on right now. */
         Ok(final_idx)
     }
@@ -881,7 +856,7 @@ impl LlvmGenerator {
          * Keeping it the same in nditer, and ensuring "num_iterations" value is set correctly in
          * gen_num_iters_and_fringe_start.*/
         let idx_tmp = self.gen_load_var("%cur.idx", "i64", ctx)?;  
-        //TODO: how will this affect nditer?
+        //TODO pari: how will this affect nditer?
         if !par_for.innermost {
             let work_idx_ptr = ctx.var_ids.next();
             ctx.code.add(format!(
@@ -1008,7 +983,6 @@ impl LlvmGenerator {
         ctx.code.add(format!("{} = add i64 {}, {}", idx_inc, idx_tmp, format!("{}", fetch_width)));
         ctx.code.add(format!("store i64 {}, i64* %cur.idx", idx_inc));
         // Nditer case: need to update the n-d counter as well.
-        // TODO pari: Switch this massive blob to use add_llvm_loop etc.
         if (par_for.data.len() == 1) && par_for.data[0].kind == IterKind::NdIter {
             let iter = &par_for.data[0];
             // Add the counter incrementing loop here and break to label %loop.start when done.

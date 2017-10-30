@@ -426,7 +426,7 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
                         };
                     }
                 }
-                // FIXME pari: decompose this.
+                /* For Nd-Iter */
                 if iter.shapes.is_some() {
                     for i in [&mut iter.shapes, &mut iter.strides].iter_mut() {
                         match **i {
