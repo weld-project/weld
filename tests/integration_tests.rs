@@ -2443,7 +2443,7 @@ fn main() {
              ("simple_int_mod", simple_int_mod),
              ("predicate_if_iff_annotated", predicate_if_iff_annotated),
              ("nested_for_loops", nested_for_loops),
-             ("nditer_basic_op_test", nditer_basic_test),
+             ("nditer_basic_op_test", nditer_basic_op_test),
              ("nditer_zip", nditer_zip),];
 
     println!("");
