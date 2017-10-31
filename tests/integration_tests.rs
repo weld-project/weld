@@ -2255,7 +2255,7 @@ fn simple_sort() {
         len: ys.len() as i64,
     };
 
-    let code = "|ys:vec[f64]| sort(ys, |x:f64| x)";
+    let code = "|ys:vec[f64]| sort(sort(ys, |x:f64| x), |x:f64| x)";
     let conf = default_conf();
     let ret_value = compile_and_run(code, conf, input_data);
     let data = unsafe { weld_value_data(ret_value) as *const WeldVec<f64> };

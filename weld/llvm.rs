@@ -2387,6 +2387,8 @@ impl LlvmGenerator {
             Sort { ref output, ref child, ref keyfunc } => {
                 // keyfunc is an actual SirFunction
                 let out_ty = func.symbol_type(output)?;
+                let function_id = ctx.var_ids.next();
+                let func_str = &function_id.replace("%", "");
                 match *out_ty {
                     Vector(ref elem_ty) => {
                         let elem_ll_ty = self.llvm_type(elem_ty)?;
@@ -2435,11 +2437,8 @@ impl LlvmGenerator {
                         }
 
                         // Add key function and sort prelude code
-                        let mut func_gen = IdGenerator::new("%keyfunc");
-                        let function_id = func_gen.next();
-                        let func_str = llvm_prefix(&&function_id);
                         self.prelude_code.add(format!(
-                            "define {} {}({}) {{",
+                            "define {} @{}({}) {{",
                             key_ll_ty,
                             func_str,
                             str_args));
@@ -2465,10 +2464,11 @@ impl LlvmGenerator {
                 let vec_prefix = llvm_prefix(&child_ll_ty);
                 let child_tmp = self.gen_load_var(&child_ll_sym, &child_ll_ty, ctx)?;
                 let res_ptr = ctx.var_ids.next();
-                ctx.code.add(format!("{} = call {} {}.sort({} {})",
+                ctx.code.add(format!("{} = call {} {}.{}.sort({} {})",
                                      res_ptr,
                                      output_ll_ty,
                                      vec_prefix,
+                                     func_str,
                                      child_ll_ty,
                                      child_tmp));
                 self.gen_store_var(&res_ptr, &output_ll_sym, &output_ll_ty, ctx);
