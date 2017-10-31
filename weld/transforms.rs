@@ -613,6 +613,8 @@ pub fn infer_size(expr: &mut Expr<Type>) {
                             let ref builder_symbol = params[0].name.clone();
                             if simple_merge(builder_symbol, body) {
                                 // Compute the inferred length based on the iter.
+                                // TODO pari: For Nditer, need to figure out how to calculate length based only
+                                // on shapes instead of end/stride.
                                 let length = if let Some(ref start) = iters[0].start {
                                     let e = exprs::binop_expr(BinOpKind::Subtract,
                                                               *iters[0].end.as_ref().unwrap().clone(),

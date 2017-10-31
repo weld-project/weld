@@ -334,7 +334,6 @@ impl PartialExpr {
             } => {
                 let mut typed_iters = vec![];
                 for iter in iters {
-                    // TODOp: decompose these?
                     let start = match iter.start {
                         Some(ref s) => Some(try!(typed_box(s))),
                         None => None,

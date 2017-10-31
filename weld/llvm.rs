@@ -1013,10 +1013,10 @@ impl LlvmGenerator {
                                  {tmp4} = add i64 {tmp3}, 1
                                  store i64 {tmp4}, i64* {tmp2}"
                                  , i="%counter.i", counter_len=shapes_llvm_info.len_str, 
-                                 counter="%counter.idx", tmp0="%tmp_0_test", tmp00=ctx.var_ids.next(),
-                                 tmp01=ctx.var_ids.next(), tmp1="%cur_i", tmp2="%tmp_2_test",
-                                 tmp3=ctx.var_ids.next(), tmp4="%tmp4_test"));
-            // Need to break off the long sequence of llvm IR because no easy way to get ith element of shapes.
+                                 counter="%counter.idx", tmp0=ctx.var_ids.next(), tmp00=ctx.var_ids.next(),
+                                 tmp01=ctx.var_ids.next(), tmp1="%cur_i", tmp2=ctx.var_ids.next(),
+                                 tmp3=ctx.var_ids.next(), tmp4=ctx.var_ids.next()));
+            /* Need to break off the long sequence of llvm IR because no easy way to get ith element of shapes. */
             let shapes_elem_str = self.get_array_idx(ctx, shapes_llvm_info, false, &"%cur_i".to_string())?;
             ctx.code.add(format!("{tmp5} = load i64, i64* {i}
                                  {tmp6} = getelementptr i64, i64* {counter}, i64 {tmp5} 

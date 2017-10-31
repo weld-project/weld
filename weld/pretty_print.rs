@@ -151,9 +151,29 @@ fn print_iters<T: PrintableType>(iters: &Vec<Iter<T>>,
         less_indent_str = "".to_string();
         indent_str = "".to_string();
     }
-    // TODO: Add appropriate stuff for NdIter
     for iter in iters {
-        if let Some(_) = iter.start {
+        if iter.kind == IterKind::NdIter {
+            /* Need to check this first because NdIter also has iter.start */
+            iter_strs.push(format!("{}iter({},{},{},{})",
+                                   print_iter_kind(iter),
+                                   print_expr_impl(iter.data.as_ref(),
+                                                   typed,
+                                                   indent,
+                                                   should_indent),
+                                   print_expr_impl(iter.start.as_ref().unwrap(),
+                                                   typed,
+                                                   indent,
+                                                   should_indent),
+                                   print_expr_impl(iter.shapes.as_ref().unwrap(),
+                                                   typed,
+                                                   indent,
+                                                   should_indent),
+                                   print_expr_impl(iter.strides.as_ref().unwrap(),
+                                                   typed,
+                                                   indent,
+                                                   should_indent),
+                                    ));
+        } else if let Some(_) = iter.start {
             iter_strs.push(format!("{}iter({},{},{},{})",
                                    print_iter_kind(iter),
                                    print_expr_impl(iter.data.as_ref(),

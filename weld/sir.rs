@@ -397,8 +397,17 @@ impl fmt::Display for ParallelForIter {
             IterKind::NdIter => "nditer"
         };
         
-        // TODO: Nditer.
-        if self.start.is_some() {
+        if self.shapes.is_some() {
+            /* NdIter. Note: end or stride aren't important here, so skpping those.
+             * */
+            write!(f,
+                   "{}({}, {}, {}, {})",
+                   iterkind,
+                   self.data,
+                   self.start.clone().unwrap(),
+                   self.shapes.clone().unwrap(),
+                   self.strides.clone().unwrap())
+        } else if self.start.is_some() {
             write!(f,
                    "{}({}, {}, {}, {})",
                    iterkind,
@@ -593,7 +602,13 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
             ParallelFor(ref pf) => {
                 for iter in pf.data.iter() {
                     vars.push(iter.data.clone());
-                    if iter.start.is_some() {
+                    if iter.shapes.is_some() {
+                        vars.push(iter.start.clone().unwrap());
+                        vars.push(iter.end.clone().unwrap());
+                        vars.push(iter.stride.clone().unwrap());
+                        vars.push(iter.shapes.clone().unwrap());
+                        vars.push(iter.strides.clone().unwrap());
+                    } else if iter.start.is_some() {
                         vars.push(iter.start.clone().unwrap());
                         vars.push(iter.end.clone().unwrap());
                         vars.push(iter.stride.clone().unwrap());
@@ -681,8 +696,9 @@ pub fn ast_to_sir(expr: &TypedExpr, multithreaded: bool) -> WeldResult<SirProgra
     }
 }
 
-/// Helper method for gen_expr.
-/// TODO: add more detail.
+/// Helper method for gen_expr. Used to process the fields of ParallelForIter, like "start",
+/// "shape" etc. Returns None, or the Symbol associated with the field. It also resets values for
+/// cur_func, and cur_block.
 fn get_iter_sym(opt : &Option<Box<Expr<Type>>>,
             prog: &mut SirProgram,
             cur_func: &mut FunctionId,
@@ -695,8 +711,10 @@ fn get_iter_sym(opt : &Option<Box<Expr<Type>>>,
             _ => weld_err!("Can't reach this")?,
         };
         let opt_res = gen_expr(&opt_expr, prog, *cur_func, *cur_block, multithreaded)?;
-        // pari: Originally, in gen_expr cur_func, and cur_block were also being set - but this
-        // does not seem to have any effect. Could potentially remove this if it wasn't needed.
+        /* TODO pari: Originally, in gen_expr cur_func, and cur_block were also being set - but this
+        does not seem to have any effect. Could potentially remove this if it wasn't needed? All
+        the tests seem to pass fine without it as well.
+        */
         *cur_func = opt_res.0;
         *cur_block = opt_res.1;
         prog.funcs[body_func]
@@ -1165,7 +1183,6 @@ fn gen_expr(expr: &TypedExpr,
                     prog.funcs[body_func]
                         .params
                         .insert(data_res.2.clone(), iter.data.ty.clone());
-                    // TODO: if iterkind == NdIter, then get rid of end_sym, stride_sym
                     let start_sym = try!(get_iter_sym(&iter.start, prog, &mut cur_func, &mut cur_block, 
                                                       multithreaded, body_func));
                     let end_sym = try!(get_iter_sym(&iter.end, prog, &mut cur_func, &mut cur_block, 

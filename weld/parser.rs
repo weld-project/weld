@@ -485,7 +485,6 @@ impl<'t> Parser<'t> {
     /// a vector expression (i.e., without an explicit iter(..).
     fn parse_iter(&mut self) -> WeldResult<Iter<PartialType>> {
         let iter: Token = self.peek().clone();
-        // TODO: Extract self.peek variable, or switch if-else order.
         if *self.peek() == TScalarIter || *self.peek() == TSimdIter || *self.peek() == TFringeIter || *self.peek() == TNdIter {
             try!(self.consume(iter.clone()));
             try!(self.consume(TOpenParen));
