@@ -5,12 +5,10 @@
 
 use std::vec::Vec;
 
-use super::ast::Annotations;
 use super::ast::Symbol;
 use super::ast::Iter;
 use super::ast::BinOpKind::*;
 use super::ast::UnaryOpKind::*;
-use super::ast::BuilderImplementationKind::*;
 use super::ast::ExprKind::*;
 use super::ast::LiteralKind::*;
 use super::ast::ScalarKind;
@@ -22,6 +20,8 @@ use super::partial_types::PartialType::*;
 use super::program::*;
 use super::tokenizer::*;
 use super::tokenizer::Token::*;
+
+use super::annotations::*;
 
 use std::error::Error;
 
@@ -573,8 +573,8 @@ impl<'t> Parser<'t> {
                                 let implementation = match *self.next() {
                                     TIdent(ref inner_value) => {
                                         match inner_value.as_ref() {
-                                            "global" => Global,
-                                            "local" => Local,
+                                            "global" => BuilderImplementationKind::Global,
+                                            "local" => BuilderImplementationKind::Local,
                                             _ => return weld_err!("Invalid implementation type"),
                                         }
                                     }
@@ -631,7 +631,7 @@ impl<'t> Parser<'t> {
                                 self.consume(TIdent("selectivity".to_string()))?;
                                 try!(self.consume(TColon));
                                 if let TF32Literal(l) = *self.next() {
-                                    annotations.set_selectivity((l * 100000.0) as i32);
+                                    annotations.set_branch_selectivity((l * 100000.0) as i32);
                                 } else {
                                     return weld_err!("Invalid selectivity (must be a f32)");
                                 }
@@ -1122,6 +1122,38 @@ impl<'t> Parser<'t> {
 
             TMinus => Ok(expr_box(Negate(try!(self.leaf_expr())), Annotations::new())),
 
+            TMin => {
+                try!(self.consume(TOpenParen));
+                let left = try!(self.expr());
+                try!(self.consume(TComma));
+                let right = try!(self.expr());
+                try!(self.consume(TCloseParen));
+                
+                let res = expr_box(BinOp {
+                    kind: Min,
+                    left: left,
+                    right: right,
+                }, Annotations::new());
+                
+                Ok(res)
+            }
+
+            TMax => {
+                try!(self.consume(TOpenParen));
+                let left = try!(self.expr());
+                try!(self.consume(TComma));
+                let right = try!(self.expr());
+                try!(self.consume(TCloseParen));
+                
+                let res = expr_box(BinOp {
+                    kind: Max,
+                    left: left,
+                    right: right,
+                }, Annotations::new());
+                
+                Ok(res)
+            }
+            
             ref other => weld_err!("Expected expression but got '{}'", other),
         }
     }

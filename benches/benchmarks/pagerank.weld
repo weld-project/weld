@@ -1,8 +1,0 @@
-|in: vec[vec[i32]], r: vec[i32]|
-    map(in, |v|
-        result(for(
-            v,
-            merger[i32,+],
-            |b,i,e| merge(b, lookup(r, i64(e)))
-        ))
-    )

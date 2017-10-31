@@ -6,6 +6,7 @@ use super::ast::Type::*;
 use super::ast::BuilderKind::*;
 use super::ast::LiteralKind::*;
 use super::error::*;
+use super::annotations::*;
 
 fn new_expr(kind: ExprKind<Type>, ty: Type) -> WeldResult<Expr<Type>> {
     Ok(Expr {
@@ -463,9 +464,6 @@ pub fn merge_expr(builder: Expr<Type>, value: Expr<Type>) -> WeldResult<Expr<Typ
                 if elem_ty.as_ref() != &value.ty {
                     return err;
                 }
-            }
-            _ => {
-                return err;
             }
         }
     }

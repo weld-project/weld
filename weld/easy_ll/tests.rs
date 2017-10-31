@@ -17,7 +17,7 @@ fn basic_use() {
        }
     ", 2, None);
     assert!(module.is_ok());
-    assert_eq!(module.unwrap().run(42), 44);
+    assert_eq!(module.unwrap().0.run(42), 44);
 }
 
 #[test]

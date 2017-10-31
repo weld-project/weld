@@ -62,7 +62,8 @@ The core language consists of the following expressions:
   `f32` | `1.0f`, `1.0F`
   `f64` | `1.0`
 
-* Arithmetic expressions, e.g. `a + b`, `a - b`, `-a`, `a & b`, etc.
+* Arithmetic expressions, e.g., `a + b`, `a - b`, `-a`, `a & b`, `min(a,b)`, `max(a,b)`, etc.
+* Some math expressions, e.g., `exp`, `sqrt`, `log`.
 * Let expressions, which introduce a new variable. The syntax for these is `let name = expr; body`. This evaluates `expr`, assigns it to the variable `name`, and then evaluates `body` with that binding and returns its result.
 * `if(condition, on_true, on_false)`, which evaluates `on_true` or `on_false` based on the value of `condition`.
 * `iterate(initial_value, update_func)`, which performs a sequential loop. `initial_value`  can be any type `T`, and `update_func` must be of type `T => {T, bool}`. We call `update_func` repeatedly on the value until the boolean it returns is `false`, and then return the `T` field in its output as the final value of the expression.

@@ -12,7 +12,7 @@ use super::partial_types::PartialBuilderKind::*;
 use super::error::*;
 
 #[cfg(test)]
-use super::ast::Annotations;
+use super::annotations::Annotations;
 #[cfg(test)]
 use super::ast::BinOpKind::*;
 #[cfg(test)]
