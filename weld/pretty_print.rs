@@ -364,6 +364,15 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>,
                     print_expr_impl(size, typed, indent, should_indent))
         }
 
+        Sort {
+            ref data,
+            ref keyfunc,
+        } => {
+            format!("sort({}, {})",
+                    print_expr_impl(data, typed, indent, should_indent),
+                    print_expr_impl(keyfunc, typed, indent, should_indent))
+        }
+
         Lambda {
             ref params,
             ref body,

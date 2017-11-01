@@ -304,6 +304,27 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             }
         }
 
+        Sort {
+            ref mut data,
+            ref mut keyfunc,
+        } => {
+            if let Vector(ref elem_type) = data.ty {
+                let mut changed = false;
+                if let Function(ref mut params, _) = keyfunc.ty {
+                    if params.len() == 1 {
+                        changed |= try!(push_type(&mut params[0], &elem_type, "Sort key return"));
+                    } else {
+                        return weld_err!("Internal error: Sort key has too many parameters");
+                    }
+                }
+                changed |= try!(push_type(&mut expr.ty, &data.ty, "Sort"));
+                Ok(changed)
+            } else {
+                weld_err!("Internal error: Sort called on {:?}, must be called on vector",
+                          data.ty)
+            }
+        }
+
         Lookup {
             ref mut data,
             ref mut index,
@@ -1035,6 +1056,10 @@ fn infer_types_let() {
     assert_eq!(e.ty, Scalar(Bool));
 
     let mut e = parse_expr("let a = slice([1.0f, 2.0f, 3.0f], 0L, 2L);a").unwrap();
+    assert!(infer_types(&mut e).is_ok());
+    assert_eq!(e.ty, Vector(Box::new(Scalar(F32))));
+
+    let mut e = parse_expr("let a = sort([1.0f, 2.0f, 3.0f], |x:f32| x);a").unwrap();
     assert!(infer_types(&mut e).is_ok());
     assert_eq!(e.ty, Vector(Box::new(Scalar(F32))));
 
