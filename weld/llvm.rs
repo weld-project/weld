@@ -2384,6 +2384,96 @@ impl LlvmGenerator {
                 self.gen_store_var(&res_ptr, &output_ll_sym, &output_ll_ty, ctx);
             }
 
+            Sort { ref output, ref child, ref keyfunc } => {
+                // keyfunc is an actual SirFunction
+                let out_ty = func.symbol_type(output)?;
+                let function_id = ctx.var_ids.next();
+                let func_str = &function_id.replace("%", "");
+                match *out_ty {
+                    Vector(ref elem_ty) => {
+                        let elem_ll_ty = self.llvm_type(elem_ty)?;
+                        let mut str_args = String::from("");
+                        let param_syms: Vec<_> = keyfunc.params.keys().collect();
+                        if param_syms.len() == 1 {
+                            let param_ty = keyfunc.symbol_type(param_syms[0])?;
+                            if *param_ty == **elem_ty {
+                                let (param_ll_ty, param_ll_sym) = self.llvm_type_and_name(keyfunc, param_syms[0])?;
+                                str_args.push_str(&format!("{}* {}", param_ll_ty, param_ll_sym));
+                            } else {
+                                return weld_err!("Type mismatch: vector:{ } and sort key parameter:{ }",
+                                                 print_type(&**elem_ty), print_type(&*param_ty));
+                            }
+                        }
+
+                        // Check that type of key is scalar
+                        let key_ll_sym;
+                        let key_ll_ty;
+                        let last_block = keyfunc.blocks.last().unwrap();
+                        if let Terminator::ProgramReturn(ref key_sym) = last_block.terminator {
+                            let key_ty = keyfunc.symbol_type(key_sym)?;
+                            if let Scalar(_) = *key_ty {
+                                self.gen_cmp(key_ty)?;
+                                let (key_ll_tyc, key_ll_symc) = self.llvm_type_and_name(keyfunc, key_sym)?;
+                                key_ll_ty = key_ll_tyc;
+                                key_ll_sym = key_ll_symc;
+                            } else {
+                                return weld_err!("Sort key function must have scalar return type");
+                            }
+                        } else {
+                            return weld_err!("Sort key Function must have return type");
+                        }
+
+                        // Generate prelude code
+                        let mut keyfunc_ctx = &mut FunctionContext::new(false);
+                        for (arg, ty) in keyfunc.locals.iter() {
+                            let arg_str = llvm_symbol(&arg);
+                            let ty_str = self.llvm_type(&ty)?;
+                            keyfunc_ctx.add_alloca(&arg_str, &ty_str)?;
+                        }
+                        for b in keyfunc.blocks.iter() {
+                            for s in b.statements.iter() {
+                                self.gen_statement(s, keyfunc, keyfunc_ctx)?
+                            }
+                        }
+
+                        // Add key function and sort prelude code
+                        self.prelude_code.add(format!(
+                            "define {} @{}({}) {{",
+                            key_ll_ty,
+                            func_str,
+                            str_args));
+                        self.prelude_code.add(keyfunc_ctx.alloca_code.result());
+                        self.prelude_code.add(keyfunc_ctx.code.result());
+                        self.prelude_code.add(format!("{}.ret = load {}, {}* {}", key_ll_sym, key_ll_ty, key_ll_ty, key_ll_sym));
+                        self.prelude_code.add(format!("ret {} {}.ret\n}}", key_ll_ty, key_ll_sym));
+                        let name = self.vec_names.get(elem_ty).unwrap();
+                        self.prelude_code.add(format!(
+                            include_str!("resources/vector/vector_sort.ll"),
+                            ELEM=&elem_ll_ty,
+                            KEY=&key_ll_ty,
+                            FUNC=&func_str,
+                            NAME=&name.replace("%", "")));
+                    }
+                    _ => {
+                        return weld_err!("Unsupported function `sort` for type {:?}", out_ty);
+                    }
+                }
+
+                let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
+                let (child_ll_ty, child_ll_sym) = self.llvm_type_and_name(func, child)?;
+                let vec_prefix = llvm_prefix(&child_ll_ty);
+                let child_tmp = self.gen_load_var(&child_ll_sym, &child_ll_ty, ctx)?;
+                let res_ptr = ctx.var_ids.next();
+                ctx.code.add(format!("{} = call {} {}.{}.sort({} {})",
+                                     res_ptr,
+                                     output_ll_ty,
+                                     vec_prefix,
+                                     func_str,
+                                     child_ll_ty,
+                                     child_tmp));
+                self.gen_store_var(&res_ptr, &output_ll_sym, &output_ll_ty, ctx);
+            }
+
             Select { ref output, ref cond, ref on_true, ref on_false } => {
                 let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
                 let (cond_ll_ty, cond_ll_sym) = self.llvm_type_and_name(func, cond)?;

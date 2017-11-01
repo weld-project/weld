@@ -50,6 +50,7 @@ pub enum Token {
     TLookup,
     TKeyExists,
     TSlice,
+    TSort,
     TExp,
     TSimd,
     TSelect,
@@ -152,7 +153,7 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
 
         // Regular expressions for various types of tokens.
         static ref KEYWORD_RE: Regex = Regex::new(
-            "^(if|for|zip|len|lookup|keyexists|slice|exp|log|erf|sqrt|simd|select|broadcast|\
+            "^(if|for|zip|len|lookup|keyexists|slice|sort|exp|log|erf|sqrt|simd|select|broadcast|\
              iterate|cudf|simditer|fringeiter|iter|merge|result|let|true|false|macro|\
              i8|i16|i32|i64|u8|u16|u32|u64|f32|f64|bool|vec|appender|merger|vecmerger|\
              dictmerger|groupmerger|tovec|min|max)$").unwrap();
@@ -219,6 +220,7 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
                             "lookup" => TLookup,
                             "keyexists" => TKeyExists,
                             "slice" => TSlice,
+                            "sort" => TSort,
                             "exp" => TExp,
                             "log" => TLog,
                             "erf" => TErf,
@@ -361,6 +363,7 @@ impl fmt::Display for Token {
                     TLookup => "lookup",
                     TKeyExists => "keyexists",
                     TSlice => "slice",
+                    TSort => "sort",
                     TExp => "exp",
                     TLog => "log",
                     TErf => "erf",
@@ -572,5 +575,18 @@ fn basic_tokenize() {
                     TAtMark,
                     TOpenBracket,
                     TCloseBracket,
+                    TEndOfInput]);
+    assert_eq!(tokenize("sort(a, |x:i32| x)").unwrap(),
+               vec![TSort,
+                    TOpenParen,
+                    TIdent("a".into()),
+                    TComma,
+                    TBar,
+                    TIdent("x".into()),
+                    TColon,
+                    TI32,
+                    TBar,
+                    TIdent("x".into()),
+                    TCloseParen,
                     TEndOfInput]);
 }
