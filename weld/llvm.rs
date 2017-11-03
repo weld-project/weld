@@ -350,17 +350,20 @@ impl LlvmGenerator {
     /// types. The order of arguments is assumed to be sorted by the symbol name.
     fn gen_unload_arg_struct(&mut self, params: &HashMap<Symbol, Type>, suffix: &str, ctx: &mut FunctionContext) -> WeldResult<()> {
         let params_sorted: BTreeMap<&Symbol, &Type> = params.iter().collect();
-        let ll_ty = self.llvm_type(&Struct(params_sorted.iter().map(|p| p.1.clone()).cloned().collect()))?;
-        let storage_typed = ctx.var_ids.next();
-        let storage = ctx.var_ids.next();
+        let ref struct_ty = Struct(params_sorted.iter().map(|p| p.1.clone()).cloned().collect());
+        let arg_struct_ll_ty = self.llvm_type(struct_ty)?;
+        let storage_ptr = ctx.var_ids.next();
         let work_data_ptr = ctx.var_ids.next();
         let work_data = ctx.var_ids.next();
         ctx.code.add(format!("{} = getelementptr %work_t, %work_t* %cur.work, i32 0, i32 0", work_data_ptr));
         ctx.code.add(format!("{} = load i8*, i8** {}", work_data, work_data_ptr));
-        ctx.code.add(format!("{} = bitcast i8* {} to {}*", storage_typed, work_data, ll_ty));
-        ctx.code.add(format!("{} = load {}, {}* {}", storage, ll_ty, ll_ty, storage_typed));
-        for (i, (arg, _)) in params_sorted.iter().enumerate() {
-            ctx.code.add(format!("{}{} = extractvalue {} {}, {}", llvm_symbol(arg), suffix, ll_ty, storage, i));
+        ctx.code.add(format!("{} = bitcast i8* {} to {}*", storage_ptr, work_data, arg_struct_ll_ty));
+        for (i, (arg, ty)) in params_sorted.iter().enumerate() {
+            let ptr_tmp = ctx.var_ids.next();
+            let arg_ll_ty = self.llvm_type(ty)?;
+            ctx.code.add(format!("{} = getelementptr inbounds {}, {}* {}, i32 0, i32 {}",
+                ptr_tmp, arg_struct_ll_ty, arg_struct_ll_ty, storage_ptr, i));
+            ctx.code.add(format!("{}{} = load {}, {}* {}", llvm_symbol(arg), suffix, arg_ll_ty, arg_ll_ty, ptr_tmp));
         }
         Ok(())
     }
@@ -725,7 +728,6 @@ impl LlvmGenerator {
         ctx.code.add(format!("store {} {}, {}* {}", ll_ty, prev_ref, ll_ty, struct_storage_typed));
         Ok(struct_storage)
     }
-
 
     /// Generates code to compute the number of iterations the given loop will execute. Returns an
     /// LLVM register name representing the number of iterations and, if the iterator is a
