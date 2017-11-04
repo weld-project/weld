@@ -839,12 +839,13 @@ impl LlvmGenerator {
                                  ctx: &mut FunctionContext) -> WeldResult<()> {
 
         if !(par_for.data.len() == 1 && par_for.data[0].start.is_none()) {
-            for iter in par_for.data.iter() {
+            for (i, iter) in par_for.data.iter().enumerate() {
                 if iter.kind == IterKind::NdIter {
                     /* Note: here we can't use num_iters_str as a proxy for end as the array may not be
                      * contiguous */
                     let data_llvm_info = self.get_array_llvm_info(func, ctx, &iter.data, "".to_string(), false)?;
-                    /* int offset = 0;
+                    /* Equivalent C code is:
+                     * int offset = 0;
                      * for (i = 0; i < len(shapes); i++) {
                      *     int max_i = shapes[i] - 1;
                      *     int stride_i = strides[i];
@@ -860,7 +861,7 @@ impl LlvmGenerator {
                     let offset_ptr = ctx.var_ids.next();
                     ctx.code.add(format!("{} = alloca i64", offset_ptr));
                     ctx.code.add(format!("store i64 0, i64* {}", offset_ptr));
-                    let loop_name = "boundscheck_loop";
+                    let loop_name = format!("boundscheck_loop{}", i);
                     let (cur_i_ptr, cur_i) = self.add_llvm_for_loop_start(ctx, &loop_name, "0",
                                                &strides_llvm_info.len_str, "slt")?;
                     let shapes_i = self.get_array_idx(ctx, shapes_llvm_info, false, &cur_i)?;
@@ -1101,10 +1102,14 @@ impl LlvmGenerator {
 
     /// Calculates the next element when performing a non-contiguous iteration. Essentially does
     /// idx = start + dot(counter, strides)
+    /// @i: For zipped iters, nditer_next_element may be called for each individual iter.
+    /// Since this involves declaring a new loop to do the dot product, we need 'i', to get unique
+    /// names for each of the zipped values.
     fn nditer_next_element(&mut self,
                            func: &SirFunction,
                            ctx: &mut FunctionContext,
-                           iter: &ParallelForIter) -> WeldResult<String> {
+                           iter: &ParallelForIter,
+                           i: String) -> WeldResult<String> {
         let strides_el_ty = self.llvm_type(&Scalar(I64))?;
         let strides_llvm_info = self.get_array_llvm_info(func, ctx, iter.strides.as_ref().unwrap(), 
                                                          strides_el_ty, true)?;
@@ -1112,7 +1117,7 @@ impl LlvmGenerator {
         let sum_ptr = ctx.var_ids.next();
         ctx.code.add(format!("{} = alloca i64", sum_ptr));
         ctx.code.add(format!("store i64 0, i64* {}", sum_ptr));
-        let loop_name = "next_element_loop";
+        let loop_name = format!("next_element_loop{}", i);
         let (cur_i_ptr, cur_i) = self.add_llvm_for_loop_start(ctx, &loop_name, "0",
                                    &strides_llvm_info.len_str, "slt")?;
         /* sum += counter[i]*strides[i] */
@@ -1233,7 +1238,7 @@ impl LlvmGenerator {
             let data_llvm_info = self.get_array_llvm_info(func, ctx, &iter.data, inner_elem_ty_str.clone(), true)?;
             /* idx into the original array at iteration %cur.i */
             let arr_idx = if iter.kind == IterKind::NdIter {
-                self.nditer_next_element(func, ctx, iter).unwrap()
+                self.nditer_next_element(func, ctx, iter, i.to_string()).unwrap()
             } else if iter.start.is_some() {
                 // TODO(shoumik) implement. This needs to be a gather instead of a
                 // sequential load.
