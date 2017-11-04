@@ -2224,6 +2224,110 @@ fn predicate_if_iff_annotated() {
     check_result_and_free(ret_value, expected);
 }
 
+fn simple_sort() {
+    #[derive(Clone)]
+    #[allow(dead_code)]
+
+    let ys = vec![2, 3, 1, 4, 5];
+    let ref input_data = WeldVec {
+        data: ys.as_ptr() as *const i32,
+        len: ys.len() as i64,
+    };
+
+    let code = "|ys:vec[i32]| sort(ys, |x:i32| x + 1)";
+    let conf = default_conf();
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<i32> };
+    let result = unsafe { (*data).clone() };
+
+    let expected = [1, 2, 3, 4, 5];
+    assert_eq!(result.len, expected.len() as i64);
+
+    for i in 0..(expected.len() as isize) {
+        assert_eq!(unsafe { *result.data.offset(i) }, expected[i as usize])
+    }
+
+    unsafe { free_value_and_module(ret_value) };
+
+    let ys = vec![2.0, 3.0, 1.0, 5.001, 5.0001];
+    let ref input_data = WeldVec {
+        data: ys.as_ptr() as *const f64,
+        len: ys.len() as i64,
+    };
+
+    let code = "|ys:vec[f64]| sort(sort(ys, |x:f64| x), |x:f64| x)";
+    let conf = default_conf();
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<f64> };
+    let result = unsafe { (*data).clone() };
+
+    let expected = [1.0, 2.0, 3.0, 5.0001, 5.001];
+    assert_eq!(result.len, expected.len() as i64);
+    for i in 0..(expected.len() as isize) {
+        assert_eq!(unsafe { *result.data.offset(i) }, expected[i as usize])
+    }
+
+    let code = "|ys:vec[f64]| sort(ys, |x:f64| 1.0 / exp(-1.0*x))";
+    let conf = default_conf();
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<f64> };
+    let result = unsafe { (*data).clone() };
+
+    assert_eq!(result.len, expected.len() as i64);
+    for i in 0..(expected.len() as isize) {
+        assert_eq!(unsafe { *result.data.offset(i) }, expected[i as usize])
+    }
+
+    unsafe { free_value_and_module(ret_value) };
+}
+
+fn complex_sort() {
+    #[derive(Clone)]
+    #[allow(dead_code)]
+    struct Args {
+        x: WeldVec<i32>,
+        y: WeldVec<i32>,
+    }
+    let ys = vec![5, 4, 3, 2, 1];
+    let xs = vec![1, 2, 3, 4, 5];
+    let ref input_data = Args {
+        x: WeldVec {
+            data: ys.as_ptr() as *const i32,
+            len: ys.len() as i64,
+        },
+        y: WeldVec {
+            data: xs.as_ptr() as *const i32,
+            len: xs.len() as i64,
+        }
+    };
+
+    let code = "|ys:vec[i32], xs:vec[i32]|
+                  sort(
+                    result(
+                      for(
+                        zip(xs,ys),
+                        appender[{i32,i32}],
+                        |b,i,e| merge(b, e)
+                      )
+                    ),
+                    |x:{i32, i32}| x.$0
+                )";
+    let conf = default_conf();
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<Pair<i32, i32>> };
+    let result = unsafe { (*data).clone() };
+
+    let expected = [[1, 5], [2, 4], [3, 3], [4, 2], [5, 1]];
+    assert_eq!(result.len, expected.len() as i64);
+
+    for i in 0..(expected.len() as isize) {
+        assert_eq!(unsafe { (*result.data.offset(i)).ele1 }, expected[i as usize][0]);
+        assert_eq!(unsafe { (*result.data.offset(i)).ele2 }, expected[i as usize][1]);
+    }
+
+    unsafe { free_value_and_module(ret_value) };
+}
+
 fn nested_for_loops() {
     #[derive(Clone)]
     #[allow(dead_code)]
@@ -2261,7 +2365,8 @@ fn nested_for_loops() {
 }
 
 /// Helper function for nditer - in order to simulate the behaviour of numpy's non-contiguous
-/// multi-dimensional arrays.
+/// multi-dimensional arrays using counter, strides.
+/// returns idx = dot(counter, strides)
 fn get_idx(counter: [i64;3], strides: [i64;3]) -> i64 {
     let mut sum:i64 = 0;
     for i in 0..3 {
@@ -2269,7 +2374,11 @@ fn get_idx(counter: [i64;3], strides: [i64;3]) -> i64 {
     }
     return sum;
 }
-/// How counter updates in numpy arrays / and similarly in the nditer implementation.
+/// increments counter as in numpy / and nditer implementation. For e.g.,
+/// let shapes :[i64; 3] = [2, 3, 4];
+/// Now counter would start from (0,0,0).
+/// Each index would go upto shapes, and then reset to 0. 
+/// eg. (0,0,0), (0,0,1), (0,0,2), (0,0,3), (0,1,0) etc.
 fn update_counter(mut counter: [i64; 3], shapes: [i64; 3]) -> [i64; 3] {
     let v = vec![2, 1, 0];
     for i in v {
@@ -2301,7 +2410,12 @@ fn nditer_basic_op_test() {
     for i in 0..100 {
         x[i] = i as f64;
     }
-    let strides :[i64; 3] = [5, 2, 10];
+    /* Number of elements to go forward in each index to get to next element. 
+     * These are arbitrarily chosen here for testing purposes so get_idx can simulate the behaviour
+     * nditer should be doing (idx = dot(counter, strides).
+     */
+    let strides :[i64; 3] = [5, 2, 3];
+    // nditer with this shape will contain: 2*3*4 = 24 elements.
     let shapes :[i64; 3] = [2, 3, 4];
     let mut counter :[i64; 3] = [0, 0, 0];
 
@@ -2323,11 +2437,13 @@ fn nditer_basic_op_test() {
     let data = unsafe { weld_value_data(ret_value) as *const WeldVec<f64> };
     let result = unsafe { (*data).clone() };
     for i in 0..(result.len as isize) {
+        /* next idx for the original array, x, based on how numpy would behave with the given
+         * shapes/strides */
         let idx = get_idx(counter, strides);
         assert_eq!(unsafe { *result.data.offset(i) }, x[idx as usize].ln());
+        /* update counter according to the numpy above */
         counter = update_counter(counter, shapes);
     }
-
     unsafe { free_value_and_module(ret_value) };
 }
 
@@ -2339,16 +2455,16 @@ fn nditer_zip() {
         shapes: WeldVec<i64>,
         strides: WeldVec<i64>,
     }
+    let code = "|x:vec[i64], y:vec[i64], shapes:vec[i64], strides:vec[i64]| result(for(zip(nditer(x,0L,24L,1L, shapes, strides), nditer(y,0L,24L,1L,shapes,strides)),  \
+    appender, |b,i,e| merge(b,e.$0+e.$1)))";
 
-    let code = "|x:vec[i64], y:vec[i64], shapes:vec[i64], strides:vec[i64]| result(for(zip(nditer(x,0L,24L,1L, shapes, strides), y), appender, |b,i,e|
-                merge(b,e.$0+e.$1)))";
     let conf = default_conf();
     let mut x :[i64; 100] = [5; 100];
-    let mut y :[i64; 24] = [0; 24];
+    let mut y :[i64; 100] = [0; 100];
     for i in 0..100 {
         x[i] = i as i64 + 5;
     }
-    for i in 0..24 {
+    for i in 0..100 {
         y[i] = i as i64;
     }
 
@@ -2381,7 +2497,7 @@ fn nditer_zip() {
 
     for i in 0..(result.len as isize) {
         let idx = get_idx(counter, strides);
-        assert_eq!(unsafe { *result.data.offset(i) }, x[idx as usize] + y[i as usize]);
+        assert_eq!(unsafe { *result.data.offset(i) }, x[idx as usize] + y[idx as usize]);
         counter = update_counter(counter, shapes);
     }
     unsafe { free_value_and_module(ret_value) };
@@ -2474,7 +2590,9 @@ fn main() {
              ("predicate_if_iff_annotated", predicate_if_iff_annotated),
              ("nested_for_loops", nested_for_loops),
              ("nditer_basic_op_test", nditer_basic_op_test),
-             ("nditer_zip", nditer_zip),];
+             ("nditer_zip", nditer_zip),
+             ("simple_sort", simple_sort),
+             ("complex_sort", complex_sort),];
 
     println!("");
     println!("running tests");

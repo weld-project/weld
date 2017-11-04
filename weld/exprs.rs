@@ -199,6 +199,32 @@ pub fn slice_expr(data: Expr<Type>, index: Expr<Type>, size: Expr<Type>) -> Weld
              ty)
 }
 
+pub fn sort_expr(data: Expr<Type>, keyfunc: Expr<Type>) -> WeldResult<Expr<Type>> {
+    let mut type_checked = false;
+
+    if let Vector(ref vec_ty) = data.ty {
+        if let Function(ref params, ref body) = keyfunc.ty {
+            if params.len() == 1 && params[0] == **vec_ty {
+                if let Scalar(_) = **body {
+                    type_checked = true;
+                }
+
+            }
+        }
+    }
+
+    if !type_checked {
+        return weld_err!("Internal error: Mismatched types in sort_expr")
+    }
+
+    let ty = data.ty.clone();
+    new_expr(Sort {
+                 data: Box::new(data),
+                 keyfunc: Box::new(keyfunc),
+             },
+             ty)
+}
+
 pub fn let_expr(name: Symbol, value: Expr<Type>, body: Expr<Type>) -> WeldResult<Expr<Type>> {
     let ty = body.ty.clone();
     new_expr(Let {
