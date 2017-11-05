@@ -268,6 +268,29 @@ class GroupedDataFrameWeld(LazyOpResult):
             1
         ).evaluate(verbose=verbose)
 
+    def reset_index(self, inplace=True, drop=True):
+        """ Flattens the grouped data structure.
+
+        Flattens the grouped data structure.
+        What is returned is a DataFrameWeld object.
+        """
+        if len(self.column_types) == 1:
+            vectype = self.column_types[0]
+            if isinstance(vectype, WeldVec):
+                elem_type = vectype.elemType
+                if isinstance(elem_type, WeldStruct):
+                    self.column_types = elem_type.fieldTypes
+                else:
+                    self.column_types = elem_type
+                group_type = WeldStruct(self.grouping_column_types)
+                value_type = WeldStruct(self.column_types)
+                self.weld_type = WeldStruct([group_type, value_type])
+                self.expr = grizzly_impl.flatten_group(
+                    self.expr,
+                    self.column_types,
+                    self.grouping_column_types
+                )
+
     def evaluate(self, verbose=True):
         """Summary
 
@@ -284,6 +307,20 @@ class GroupedDataFrameWeld(LazyOpResult):
             df[column_name] = self.get_column(
                 column_name,
                 self.column_types[i],
+                index,
+                verbose=verbose
+            )
+            i += 1
+
+        i = 0
+        for column_name in self.grouping_column_name:
+            if len(self.column_names) > 1:
+                index = "0.$%d" % i
+            else:
+                index = "0"
+            df[column_name] = self.get_column(
+                column_name,
+                self.grouping_column_types[i],
                 index,
                 verbose=verbose
             )
@@ -834,7 +871,7 @@ class GroupByWeld:
             self.column_types
         )
 
-    def sort_values(self, by, ascending=False):
+    def sort_values(self, by, ascending=True):
         """Summary
 
         Returns:
@@ -842,13 +879,22 @@ class GroupByWeld:
         """
         if len(self.column_types) == 1:
             vec_type = [WeldVec(self.column_types[0])]
+        else:
+            vec_type = [WeldVec(WeldStruct(self.column_types))]
+
+        if len(self.column_names) > 1:
+            key_index = self.column_names.index(by)
+        else :
+            key_index = None
 
         return GroupedDataFrameWeld(
             grizzly_impl.groupby_sort(
                 self.columns,
                 self.column_types,
                 self.grouping_columns,
-                self.grouping_column_types
+                self.grouping_column_types,
+                key_index,
+                ascending
             ),
             self.grouping_column_names,
             self.column_names,

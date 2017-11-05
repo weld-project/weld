@@ -419,7 +419,7 @@ def groupby_sum(columns, column_tys, grouping_columns, grouping_column_tys):
                                           "gty": grouping_column_ty_str}
     return weld_obj
 
-def groupby_sort(columns, column_tys, grouping_columns, grouping_column_tys):
+def groupby_sort(columns, column_tys, grouping_columns, grouping_column_tys, key_index, ascending):
     """
     Groups the given columns by the corresponding grouping column
     value, and aggregate by summing values.
@@ -499,7 +499,18 @@ def groupby_sort(columns, column_tys, grouping_columns, grouping_column_tys):
         value_str = "{%s}" % ", ".join(value_str_list)
         result_str_list = [key_str, value_str]
         result_str = "merge(b, {%s})" % ", ".join(result_str_list)
+
+    if key_index == None:
+        key_str = "x"
+    else :
+        key_str = "x.$%d" % key_index
+
+    if ascending == False:
+        print "backwards"
+        key_str = key_str + "* %s(-1)" % column_tys[key_index]
+
     weld_template = """
+    map(
      tovec(
        result(
          for(
@@ -508,15 +519,71 @@ def groupby_sort(columns, column_tys, grouping_columns, grouping_column_tys):
            |b, i, e| %(result)s
          )
        )
-     )
+     ),
+    |a:{%(gty)s, vec[%(ty)s]}| {a.$0, sort(a.$1, |x:%(ty)s| %(key_str)s)}
+    )
   """
 
     weld_obj.weld_code = weld_template % {"grouping_column": grouping_column_var,
                                           "columns": columns_var,
                                           "result": result_str,
                                           "ty": tys_str,
+                                          "gty": grouping_column_ty_str,
+                                          "key_str": key_str}
+    return weld_obj
+
+def flatten_group(expr, column_tys, grouping_column_tys):
+    """
+    Groups the given columns by the corresponding grouping column
+    value, and aggregate by summing values.
+
+    Args:
+        columns (List<WeldObject>): List of columns as WeldObjects
+        column_tys (List<str>): List of each column data ty
+        grouping_column (WeldObject): Column to group rest of columns by
+
+    Returns:
+          A WeldObject representing this computation
+    """
+    weld_obj = WeldObject(encoder_, decoder_)
+
+    group_var = weld_obj.update(expr)
+
+    num_group_cols = len(grouping_column_tys)
+    if num_group_cols == 1:
+        grouping_column_ty_str = "%s" % grouping_column_tys[0]
+        grouping_column_key_str = "a.$0"
+    else:
+        grouping_column_tys = [str(ty) for ty in grouping_column_tys]
+        grouping_column_ty_str = ", ".join(grouping_column_tys)
+        grouping_column_ty_str = "{%s}" % grouping_column_ty_str
+        grouping_column_keys = ["a.$0.$%s" % i for i in range(0, num_group_cols)]
+        grouping_column_key_str = "{%s}" % ", ".join(grouping_column_keys)
+
+    if len(column_tys) == 1:
+        tys_str = "%s" % column_tys[0]
+        column_values_str = "b.$1"
+    else:
+        column_tys = [str(ty) for ty in column_tys]
+
+        tys_str = "{%s}" % ", ".join(column_tys)
+        column_values = ["b.$%s" % i for i in range(0, len(column_tys))]
+        column_values_str = "{%s}" % ", ".join(column_values)
+
+    weld_template = """
+    flatten(
+      map(
+        sort(%(group_vec)s, |x:{%(gty)s, vec[%(ty)s]}| x.$0),
+        |a:{%(gty)s, vec[%(ty)s]}| map(a.$1, |b:%(ty)s| {%(gkeys)s, %(gvals)s})
+      )
+    )
+  """
+
+    weld_obj.weld_code = weld_template % {"group_vec": expr.weld_code,
+                                          "gkeys": grouping_column_key_str,
+                                          "gvals": column_values_str,
+                                          "ty": tys_str,
                                           "gty": grouping_column_ty_str}
-    print weld_obj.weld_code
     return weld_obj
 
 def grouped_slice(expr, type, start, size):
@@ -539,13 +606,12 @@ def grouped_slice(expr, type, start, size):
            %(vec)s,
            |b: %(type)s| {b.$0, slice(b.$1, i64(%(start)s), i64(%(size)s))}
          )
-  """
+    """
 
     weld_obj.weld_code = weld_template % {"vec": expr.weld_code,
                                           "type": type,
                                           "start": str(start),
                                           "size": str(size)}
-    print weld_obj.weld_code
     return weld_obj
 
 
@@ -578,5 +644,4 @@ def get_column(columns, column_tys, index):
     weld_obj.weld_code = weld_template % {"columns": columns_var,
                                           "ty": column_tys,
                                           "index": index}
-    print weld_obj.weld_code
     return weld_obj
