@@ -21,11 +21,11 @@ class WeldObjectEncoder(object):
     def encode(obj):
         """
         Encodes an object. All objects encodable by this encoder should return
-        a valid Weld type using pyToWeldType.
+        a valid Weld type using py_to_weld_type.
         """
         raise NotImplementedError
 
-    def pyToWeldType(obj):
+    def py_to_weld_type(obj):
         """
         Returns a WeldType corresponding to a Python object
         """
@@ -142,7 +142,7 @@ class WeldObject(object):
         names = self.context.keys()
         names.sort()
         arg_strs = ["{0}: {1}".format(str(name),
-                                      str(self.encoder.pyToWeldType(self.context[name])))
+                                      str(self.encoder.py_to_weld_type(self.context[name])))
                     for name in names]
         header = "|" + ", ".join(arg_strs) + "|"
         keys = self.dependencies.keys()
@@ -172,7 +172,7 @@ class WeldObject(object):
                 argtypes.append(self.argtypes[name].cTypeClass)
                 encoded.append(self.context[name])
             else:
-                argtypes.append(self.encoder.pyToWeldType(
+                argtypes.append(self.encoder.py_to_weld_type(
                     self.context[name]).cTypeClass)
                 encoded.append(self.encoder.encode(self.context[name]))
         end = time.time()

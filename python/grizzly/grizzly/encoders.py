@@ -50,7 +50,7 @@ class NumPyEncoder(WeldObjectEncoder):
         lib_file = pkg_resources.resource_filename(__name__, lib)
         self.utils = ctypes.PyDLL(lib_file)
 
-    def pyToWeldType(self, obj):
+    def py_to_weld_type(self, obj):
         """Summary
 
         Args:
@@ -118,7 +118,7 @@ class NumPyEncoder(WeldObjectEncoder):
         else:
             raise Exception("Unable to encode; invalid object type")
 
-        numpy_to_weld.restype = self.pyToWeldType(obj).cTypeClass
+        numpy_to_weld.restype = self.py_to_weld_type(obj).cTypeClass
         numpy_to_weld.argtypes = [py_object]
         weld_vec = numpy_to_weld(obj)
         return weld_vec
