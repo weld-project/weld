@@ -69,7 +69,7 @@ def aggr(array, op, initial_value, ty):
     array_var = weld_obj.update(array)
     if isinstance(array, WeldObject):
         array_var = array.objectId
-        weld_obj.dependencies[array_var] = array.weld_code
+        weld_obj.dependencies[array_var] = array
 
     weld_template = """
       result(
