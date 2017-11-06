@@ -336,7 +336,8 @@ def groupby_sum(columns, column_tys, grouping_column):
 
     grouping_column_var = weld_obj.update(grouping_column)
     if isinstance(grouping_column, WeldObject):
-        grouping_column_var = grouping_column.weld_code
+        grouping_column_var = grouping_column.objectId
+        weld_obj.dependencies[grouping_column_var] = grouping_column
 
     columns_var_list = []
     for column in columns:
