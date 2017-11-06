@@ -122,21 +122,21 @@ class WeldObject(object):
     def getLetStatements(self):
         queue = [self]
         visited = set()
-        letStatementsList = []
+        allLetStatements = []
         while len(queue) > 0:
             curObj = queue.pop()
             curObjId = curObj.objectId
             if curObjId in visited:
                 continue
-            newDependencyEntries = ["let %s = (%s);" % (key, curObj.dependencies[key])
-                                    for key in sorted(curObj.dependencies.keys())]
-            letStatementsList.insert(0, newDependencyEntries)
+            letStatements = ["let %s = (%s);" % (key, curObj.dependencies[key].weld_code)
+                             for key in sorted(curObj.dependencies.keys())]
+            allLetStatements.insert(0, letStatements)
             for dependency in curObj.dependencies.values():
                 queue.append(dependency)
             visited.add(curObjId)
         flatten = lambda l: [item for sublist in l for item in sublist]
-        dependenciesList = flatten(letStatementsList)
-        return "\n".join(dependenciesList)
+        allLetStatements = flatten(allLetStatements)
+        return "\n".join(allLetStatements)
 
     def toWeldFunc(self):
         names = self.context.keys()
