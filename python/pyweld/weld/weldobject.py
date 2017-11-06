@@ -89,7 +89,7 @@ class WeldObject(object):
         self.dataType = None
 
         # Assign a unique ID to the context
-        self.objectId = WeldObject._obj_id
+        self.objectId = "obj%d" % WeldObject._obj_id
         WeldObject._obj_id += 1
 
         # Maps name -> input data
@@ -119,6 +119,25 @@ class WeldObject(object):
                 self.argtypes[name] = tys
             return name
 
+    def getLetStatements(self):
+        queue = [self]
+        visited = set()
+        letStatementsList = []
+        while len(queue) > 0:
+            curObj = queue.pop()
+            curObjId = curObj.objectId
+            if curObjId in visited:
+                continue
+            newDependencyEntries = ["let %s = (%s);" % (key, curObj.dependencies[key])
+                                    for key in sorted(curObj.dependencies.keys())]
+            letStatementsList.insert(0, newDependencyEntries)
+            for dependency in curObj.dependencies.values():
+                queue.append(dependency)
+            visited.add(curObjId)
+        flatten = lambda l: [item for sublist in l for item in sublist]
+        dependenciesList = flatten(letStatementsList)
+        return "\n".join(dependenciesList)
+
     def toWeldFunc(self):
         names = self.context.keys()
         names.sort()
@@ -128,9 +147,7 @@ class WeldObject(object):
         header = "|" + ", ".join(arg_strs) + "|"
         keys = self.dependencies.keys()
         keys.sort()
-        text = header + " " + \
-            "\n".join(["let %s = (%s);" % (key, self.dependencies[key]) for key in
-                       keys]) + "\n" + self.weld_code
+        text = header + " " + self.getLetStatements() + "\n" + self.weld_code
         return text
 
     def evaluate(self, restype, verbose=True, decode=True):
