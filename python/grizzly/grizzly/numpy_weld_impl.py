@@ -28,12 +28,12 @@ def div(array, other, ty):
 
     array_var = weld_obj.update(array)
     if isinstance(array, WeldObject):
-        array_var = array.objectId
+        array_var = array.obj_id
         weld_obj.dependencies[array_var] = array
 
     other_var = None
     if isinstance(other, WeldObject):
-        other_var = other.objectId
+        other_var = other.obj_id
         weld_obj.dependencies[other_var] = other
     else:
         other_var = ("%.2f" % other)
@@ -68,7 +68,7 @@ def aggr(array, op, initial_value, ty):
 
     array_var = weld_obj.update(array)
     if isinstance(array, WeldObject):
-        array_var = array.objectId
+        array_var = array.obj_id
         weld_obj.dependencies[array_var] = array
 
     weld_template = """
@@ -101,12 +101,12 @@ def dot(matrix, vector, matrix_ty, vector_ty):
 
     matrix_var = weld_obj.update(matrix)
     if isinstance(matrix, WeldObject):
-        matrix_var = matrix.objectId
+        matrix_var = matrix.obj_id
         weld_obj.dependencies[matrix_var] = matrix
 
     vector_var = weld_obj.update(vector)
     if isinstance(vector, WeldObject):
-        vector_var = vector.objectId
+        vector_var = vector.obj_id
         weld_obj.dependencies[vector_var] = vector
 
     weld_template = """
@@ -148,7 +148,7 @@ def exp(array, ty):
 
     array_var = weld_obj.update(array)
     if isinstance(array, WeldObject):
-        array_var = array.objectId
+        array_var = array.obj_id
         weld_obj.dependencies[array_var] = array
 
     weld_template = """

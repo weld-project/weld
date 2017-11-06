@@ -89,7 +89,7 @@ class WeldObject(object):
         self.dataType = None
 
         # Assign a unique ID to the context
-        self.objectId = "obj%d" % WeldObject._obj_id
+        self.obj_id = "obj%d" % WeldObject._obj_id
         WeldObject._obj_id += 1
 
         # Maps name -> input data
@@ -119,26 +119,26 @@ class WeldObject(object):
                 self.argtypes[name] = tys
             return name
 
-    def getLetStatements(self):
+    def get_let_statements(self):
         queue = [self]
         visited = set()
-        allLetStatements = []
+        all_let_statements = []
         while len(queue) > 0:
-            curObj = queue.pop()
-            curObjId = curObj.objectId
-            if curObjId in visited:
+            cur_obj = queue.pop()
+            cur_obj_id = cur_obj.obj_id
+            if cur_obj_id in visited:
                 continue
-            letStatements = ["let %s = (%s);" % (key, curObj.dependencies[key].weld_code)
-                             for key in sorted(curObj.dependencies.keys())]
-            allLetStatements.insert(0, letStatements)
-            for dependency in curObj.dependencies.values():
+            let_statements = ["let %s = (%s);" % (key, cur_obj.dependencies[key].weld_code)
+                             for key in sorted(cur_obj.dependencies.keys())]
+            all_let_statements.insert(0, let_statements)
+            for dependency in cur_obj.dependencies.values():
                 queue.append(dependency)
-            visited.add(curObjId)
+            visited.add(cur_obj_id)
         flatten = lambda l: [item for sublist in l for item in sublist]
-        allLetStatements = flatten(allLetStatements)
-        return "\n".join(allLetStatements)
+        all_let_statements = flatten(all_let_statements)
+        return "\n".join(all_let_statements)
 
-    def toWeldFunc(self):
+    def to_weld_func(self):
         names = self.context.keys()
         names.sort()
         arg_strs = ["{0}: {1}".format(str(name),
@@ -147,11 +147,11 @@ class WeldObject(object):
         header = "|" + ", ".join(arg_strs) + "|"
         keys = self.dependencies.keys()
         keys.sort()
-        text = header + " " + self.getLetStatements() + "\n" + self.weld_code
+        text = header + " " + self.get_let_statements() + "\n" + self.weld_code
         return text
 
     def evaluate(self, restype, verbose=True, decode=True):
-        function = self.toWeldFunc()
+        function = self.to_weld_func()
 
         # Returns a wrapped ctypes Structure
         def args_factory(encoded):
