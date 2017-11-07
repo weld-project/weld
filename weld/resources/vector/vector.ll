@@ -143,9 +143,11 @@ define void @{NAME}.bld.newPiece(%{NAME}.bld %bldPtr, %work_t* %cur.work) {{
 define %{NAME}.bld @{NAME}.bld.merge(%{NAME}.bld %bldPtr, {ELEM} %value, i32 %myId) {{
 entry:
   %curPiecePtr = call %vb.vp* @weld_rt_cur_vb_piece(i8* %bldPtr, i32 %myId)
-  %curPiece = load %vb.vp, %vb.vp* %curPiecePtr
-  %size = extractvalue %vb.vp %curPiece, 1
-  %capacity = extractvalue %vb.vp %curPiece, 2
+  %bytesPtr = getelementptr inbounds %vb.vp, %vb.vp* %curPiecePtr, i32 0, i32 0
+  %sizePtr = getelementptr inbounds %vb.vp, %vb.vp* %curPiecePtr, i32 0, i32 1
+  %capacityPtr = getelementptr inbounds %vb.vp, %vb.vp* %curPiecePtr, i32 0, i32 2
+  %size = load i64, i64* %sizePtr
+  %capacity = load i64, i64* %capacityPtr
   %full = icmp eq i64 %size, %capacity
   br i1 %full, label %onFull, label %finish
 
@@ -153,23 +155,21 @@ onFull:
   %newCapacity = mul i64 %capacity, 2
   %elemSizePtr = getelementptr {ELEM}, {ELEM}* null, i32 1
   %elemSize = ptrtoint {ELEM}* %elemSizePtr to i64
-  %bytes = extractvalue %vb.vp %curPiece, 0
+  %bytes = load i8*, i8** %bytesPtr
   %allocSize = mul i64 %elemSize, %newCapacity
   %runId = call i64 @weld_rt_get_run_id()
   %newBytes = call i8* @weld_run_realloc(i64 %runId, i8* %bytes, i64 %allocSize)
-  %curPiece1 = insertvalue %vb.vp %curPiece, i8* %newBytes, 0
-  %curPiece2 = insertvalue %vb.vp %curPiece1, i64 %newCapacity, 2
+  store i8* %newBytes, i8** %bytesPtr
+  store i64 %newCapacity, i64* %capacityPtr
   br label %finish
 
 finish:
-  %curPiece3 = phi %vb.vp [ %curPiece, %entry ], [ %curPiece2, %onFull ]
-  %bytes1 = extractvalue %vb.vp %curPiece3, 0
+  %bytes1 = load i8*, i8** %bytesPtr
   %elements = bitcast i8* %bytes1 to {ELEM}*
   %insertPtr = getelementptr {ELEM}, {ELEM}* %elements, i64 %size
   store {ELEM} %value, {ELEM}* %insertPtr
   %newSize = add i64 %size, 1
-  %curPiece4 = insertvalue %vb.vp %curPiece3, i64 %newSize, 1
-  store %vb.vp %curPiece4, %vb.vp* %curPiecePtr
+  store i64 %newSize, i64* %sizePtr
   ret %{NAME}.bld %bldPtr
 }}
 
@@ -185,13 +185,13 @@ define %{NAME} @{NAME}.bld.result(%{NAME}.bld %bldPtr) {{
 }}
 
 ; Get the length of a vector.
-define i64 @{NAME}.size(%{NAME} %vec) {{
+define i64 @{NAME}.size(%{NAME} %vec) alwaysinline {{
   %size = extractvalue %{NAME} %vec, 1
   ret i64 %size
 }}
 
 ; Get a pointer to the index'th element.
-define {ELEM}* @{NAME}.at(%{NAME} %vec, i64 %index) {{
+define {ELEM}* @{NAME}.at(%{NAME} %vec, i64 %index) alwaysinline {{
   %elements = extractvalue %{NAME} %vec, 0
   %ptr = getelementptr {ELEM}, {ELEM}* %elements, i64 %index
   ret {ELEM}* %ptr
@@ -199,18 +199,18 @@ define {ELEM}* @{NAME}.at(%{NAME} %vec, i64 %index) {{
 
 
 ; Get the length of a VecBuilder.
-define i64 @{NAME}.bld.size(%{NAME}.bld %bldPtr, i32 %myId) {{
+define i64 @{NAME}.bld.size(%{NAME}.bld nocapture %bldPtr, i32 %myId) readonly nounwind norecurse {{
   %curPiecePtr = call %vb.vp* @weld_rt_cur_vb_piece(i8* %bldPtr, i32 %myId)
-  %curPiece = load %vb.vp, %vb.vp* %curPiecePtr
-  %size = extractvalue %vb.vp %curPiece, 1
+  %sizePtr = getelementptr inbounds %vb.vp, %vb.vp* %curPiecePtr, i32 0, i32 1
+  %size = load i64, i64* %sizePtr
   ret i64 %size
 }}
 
 ; Get a pointer to the index'th element of a VecBuilder.
-define {ELEM}* @{NAME}.bld.at(%{NAME}.bld %bldPtr, i64 %index, i32 %myId) {{
+define {ELEM}* @{NAME}.bld.at(%{NAME}.bld nocapture %bldPtr, i64 %index, i32 %myId) readonly nounwind norecurse {{
   %curPiecePtr = call %vb.vp* @weld_rt_cur_vb_piece(i8* %bldPtr, i32 %myId)
-  %curPiece = load %vb.vp, %vb.vp* %curPiecePtr
-  %bytes = extractvalue %vb.vp %curPiece, 0
+  %bytesPtr = getelementptr inbounds %vb.vp, %vb.vp* %curPiecePtr, i32 0, i32 0
+  %bytes = load i8*, i8** %bytesPtr
   %elements = bitcast i8* %bytes to {ELEM}*
   %ptr = getelementptr {ELEM}, {ELEM}* %elements, i64 %index
   ret {ELEM}* %ptr

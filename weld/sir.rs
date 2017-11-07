@@ -14,7 +14,7 @@ pub type BasicBlockId = usize;
 pub type FunctionId = usize;
 
 /// A non-terminating statement inside a basic block.
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub enum Statement {
     BinOp {
         output: Symbol,
@@ -91,7 +91,7 @@ pub enum Statement {
     },
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub struct ParallelForIter {
     pub data: Symbol,
     pub start: Option<Symbol>,
@@ -100,7 +100,7 @@ pub struct ParallelForIter {
     pub kind: IterKind,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub struct ParallelForData {
     pub data: Vec<ParallelForIter>,
     pub builder: Symbol,
@@ -115,7 +115,7 @@ pub struct ParallelForData {
 }
 
 /// A terminating statement inside a basic block.
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub enum Terminator {
     Branch {
         cond: Symbol,
@@ -131,18 +131,18 @@ pub enum Terminator {
 }
 
 /// A basic block inside a SIR program
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub struct BasicBlock {
     pub id: BasicBlockId,
     pub statements: Vec<Statement>,
     pub terminator: Terminator,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub struct SirFunction {
     pub id: FunctionId,
-    pub params: HashMap<Symbol, Type>,
-    pub locals: HashMap<Symbol, Type>,
+    pub params: BTreeMap<Symbol, Type>,
+    pub locals: BTreeMap<Symbol, Type>,
     pub blocks: Vec<BasicBlock>,
 }
 
@@ -175,7 +175,7 @@ impl SirProgram {
             top_params: top_params.clone(),
             sym_gen: SymbolGenerator::new(),
         };
-        /// add main
+        // Add the main function.
         prog.add_func();
         prog
     }
@@ -183,9 +183,9 @@ impl SirProgram {
     pub fn add_func(&mut self) -> FunctionId {
         let func = SirFunction {
             id: self.funcs.len(),
-            params: HashMap::new(),
+            params: BTreeMap::new(),
             blocks: vec![],
-            locals: HashMap::new(),
+            locals: BTreeMap::new(),
         };
         self.funcs.push(func);
         self.funcs.len() - 1

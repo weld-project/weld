@@ -56,9 +56,8 @@ impl ExprHash {
                     U16Literal(v) => v.hash(&mut self.hasher),
                     U32Literal(v) => v.hash(&mut self.hasher),
                     U64Literal(v) => v.hash(&mut self.hasher),
-                    // TODO Later versions of rust can use `to_bits`
-                    F32Literal(v) => (v as u32).hash(&mut self.hasher),
-                    F64Literal(v) => (v as u64).hash(&mut self.hasher),
+                    F32Literal(v) => v.hash(&mut self.hasher),
+                    F64Literal(v) => v.hash(&mut self.hasher),
                 }
             }
             Ident(ref sym) => {

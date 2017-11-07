@@ -525,7 +525,7 @@ use super::pretty_print::*;
 fn literal_test() {
     let expr = literal_expr(LiteralKind::I32Literal(1)).unwrap();
     assert_eq!(print_expr_without_indent(&expr), "1");
-    let expr = literal_expr(LiteralKind::F32Literal(1.0)).unwrap();
+    let expr = literal_expr(LiteralKind::F32Literal(1f32.to_bits())).unwrap();
     assert_eq!(print_expr_without_indent(&expr), "1.0F");
 
 }
@@ -549,7 +549,7 @@ fn builder_exprs_test() {
     assert_eq!(builder.ty, builder_type);
 
     let i32_literal = literal_expr(LiteralKind::I32Literal(5)).unwrap();
-    let f32_literal = literal_expr(LiteralKind::F32Literal(5.0)).unwrap();
+    let f32_literal = literal_expr(LiteralKind::F32Literal(5f32.to_bits())).unwrap();
 
     // Construct a Merge expression.
     let merge = merge_expr(builder.clone(), i32_literal.clone()).unwrap();

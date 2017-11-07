@@ -699,8 +699,8 @@ impl<'t> Parser<'t> {
             TI8Literal(v) => Ok(expr_box(Literal(I8Literal(v)), Annotations::new())),
             TI32Literal(v) => Ok(expr_box(Literal(I32Literal(v)), Annotations::new())),
             TI64Literal(v) => Ok(expr_box(Literal(I64Literal(v)), Annotations::new())),
-            TF32Literal(v) => Ok(expr_box(Literal(F32Literal(v)), Annotations::new())),
-            TF64Literal(v) => Ok(expr_box(Literal(F64Literal(v)), Annotations::new())),
+            TF32Literal(v) => Ok(expr_box(Literal(F32Literal(v.to_bits())), Annotations::new())),
+            TF64Literal(v) => Ok(expr_box(Literal(F64Literal(v.to_bits())), Annotations::new())),
             TBoolLiteral(v) => Ok(expr_box(Literal(BoolLiteral(v)), Annotations::new())),
 
             TI8 => Ok(self.parse_cast(ScalarKind::I8)?),
