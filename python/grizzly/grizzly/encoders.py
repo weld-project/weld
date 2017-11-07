@@ -118,7 +118,7 @@ class NumPyEncoder(WeldObjectEncoder):
         else:
             raise Exception("Unable to encode; invalid object type")
 
-        numpy_to_weld.restype = self.py_to_weld_type(obj).cTypeClass
+        numpy_to_weld.restype = self.py_to_weld_type(obj).ctype_class
         numpy_to_weld.argtypes = [py_object]
         weld_vec = numpy_to_weld(obj)
         return weld_vec
@@ -155,7 +155,7 @@ class NumPyDecoder(WeldObjectDecoder):
             data = obj
         else:
             data = cweld.WeldValue(obj).data()
-        result = ctypes.cast(data, ctypes.POINTER(restype.cTypeClass)).contents
+        result = ctypes.cast(data, ctypes.POINTER(restype.ctype_class)).contents
 
         if restype == WeldInt():
             data = cweld.WeldValue(obj).data()
@@ -174,7 +174,7 @@ class NumPyDecoder(WeldObjectDecoder):
             result = ctypes.cast(data, ctypes.POINTER(c_double)).contents.value
             return float(result)
 
-        # Obj is a WeldVec(WeldInt()).cTypeClass, which is a subclass of
+        # Obj is a WeldVec(WeldInt()).ctype_class, which is a subclass of
         # ctypes._structure
         if restype == WeldVec(WeldBit()):
             weld_to_numpy = self.utils.weld_to_numpy_bool_arr
@@ -194,14 +194,14 @@ class NumPyDecoder(WeldObjectDecoder):
             ret_vecs = []
             for field_type in restype.field_types:
                 ret_vec = self.decode(data, field_type, raw_ptr=True)
-                data += sizeof(field_type.cTypeClass())
+                data += sizeof(field_type.ctype_class())
                 ret_vecs.append(ret_vec)
             return tuple(ret_vecs)
         else:
             raise Exception("Unable to decode; invalid return type")
 
         weld_to_numpy.restype = py_object
-        weld_to_numpy.argtypes = [restype.cTypeClass]
+        weld_to_numpy.argtypes = [restype.ctype_class]
 
         ret_vec = weld_to_numpy(result)
         return ret_vec

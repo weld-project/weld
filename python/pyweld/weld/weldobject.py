@@ -40,7 +40,7 @@ class WeldObjectDecoder(object):
     def decode(obj, restype):
         """
         Decodes obj, assuming object is of type `restype`. obj's Python
-        type is ctypes.POINTER(restype.cTypeClass).
+        type is ctypes.POINTER(restype.ctype_class).
         """
         raise NotImplementedError
 
@@ -171,11 +171,11 @@ class WeldObject(object):
         argtypes = []
         for name in names:
             if name in self.argtypes:
-                argtypes.append(self.argtypes[name].cTypeClass)
+                argtypes.append(self.argtypes[name].ctype_class)
                 encoded.append(self.context[name])
             else:
                 argtypes.append(self.encoder.py_to_weld_type(
-                    self.context[name]).cTypeClass)
+                    self.context[name]).ctype_class)
                 encoded.append(self.encoder.encode(self.context[name]))
         end = time.time()
         if verbose:
@@ -211,7 +211,7 @@ class WeldObject(object):
             raise ValueError(("Error while running function,\n{}\n\n"
                               "Error message: {}").format(
                 function, err.message()))
-        ptrtype = POINTER(restype.cTypeClass)
+        ptrtype = POINTER(restype.ctype_class)
         data = ctypes.cast(weld_ret.data(), ptrtype)
         end = time.time()
         if verbose:

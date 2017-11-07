@@ -41,7 +41,7 @@ class WeldType(object):
         return hash(other) == hash(self)
 
     @property
-    def cTypeClass(self):
+    def ctype_class(self):
         """
         Returns a class representing this type's ctype representation.
 
@@ -64,7 +64,7 @@ class WeldChar(WeldType):
         return "i8"
 
     @property
-    def cTypeClass(self):
+    def ctype_class(self):
         """Summary
 
         Returns:
@@ -86,7 +86,7 @@ class WeldBit(WeldType):
         return "bool"
 
     @property
-    def cTypeClass(self):
+    def ctype_class(self):
         """Summary
 
         Returns:
@@ -108,7 +108,7 @@ class WeldInt(WeldType):
         return "i32"
 
     @property
-    def cTypeClass(self):
+    def ctype_class(self):
         """Summary
 
         Returns:
@@ -130,7 +130,7 @@ class WeldLong(WeldType):
         return "i64"
 
     @property
-    def cTypeClass(self):
+    def ctype_class(self):
         """Summary
 
         Returns:
@@ -152,7 +152,7 @@ class WeldFloat(WeldType):
         return "f32"
 
     @property
-    def cTypeClass(self):
+    def ctype_class(self):
         return c_float
 
 
@@ -169,7 +169,7 @@ class WeldDouble(WeldType):
         return "f64"
 
     @property
-    def cTypeClass(self):
+    def ctype_class(self):
         """Summary
 
         Returns:
@@ -206,7 +206,7 @@ class WeldVec(WeldType):
         return "vec[%s]" % str(self.elemType)
 
     @property
-    def cTypeClass(self):
+    def ctype_class(self):
         """Summary
 
         Returns:
@@ -225,7 +225,7 @@ class WeldVec(WeldType):
                 """Summary
                 """
                 _fields_ = [
-                    ("ptr", POINTER(elemType.cTypeClass)),
+                    ("ptr", POINTER(elemType.ctype_class)),
                     ("size", c_long),
                 ]
             return Vec
@@ -261,7 +261,7 @@ class WeldStruct(WeldType):
         return "{" + ",".join([str(f) for f in self.field_types]) + "}"
 
     @property
-    def cTypeClass(self):
+    def ctype_class(self):
         """Summary
 
         Returns:
@@ -279,7 +279,7 @@ class WeldStruct(WeldType):
             class Struct(Structure):
                 """Summary
                 """
-                _fields_ = [(str(i), t.cTypeClass)
+                _fields_ = [(str(i), t.ctype_class)
                             for i, t in enumerate(field_types)]
             return Struct
 
