@@ -85,16 +85,13 @@ class NumPyEncoder(WeldObjectEncoder):
         return base
 
     def encode(self, obj):
-        """Summary
+        """Converts Python object to Weld object.
 
         Args:
-            obj (TYPE): Description
+            obj: Python object that needs to be converted to Weld format
 
         Returns:
-            TYPE: Description
-
-        Raises:
-            Exception: Description
+            Weld formatted object
         """
         if isinstance(obj, np.ndarray):
             if obj.ndim == 1 and obj.dtype == 'int32':
@@ -139,17 +136,16 @@ class NumPyDecoder(WeldObjectDecoder):
         self.utils = ctypes.PyDLL(lib_file)
 
     def decode(self, obj, restype, raw_ptr=False):
-        """Summary
+        """Converts Weld object to Python object.
 
         Args:
-            obj (TYPE): Description
-            restype (TYPE): Description
+            obj: Result of Weld computation that needs to be decoded
+            restype: Type of Weld computation result
+            raw_ptr: Boolean indicating whether obj needs to be extracted
+                     from WeldValue or not
 
         Returns:
-            TYPE: Description
-
-        Raises:
-            Exception: Description
+            Python object representing result of the Weld computation
         """
         if raw_ptr:
             data = obj
@@ -192,6 +188,8 @@ class NumPyDecoder(WeldObjectDecoder):
             weld_to_numpy = self.utils.weld_to_numpy_int_arr
         elif isinstance(restype, WeldStruct):
             ret_vecs = []
+            # Iterate through all fields in the struct, and recursively call
+            # decode.
             for field_type in restype.field_types:
                 ret_vec = self.decode(data, field_type, raw_ptr=True)
                 data += sizeof(field_type.ctype_class())
