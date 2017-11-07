@@ -23,15 +23,13 @@ def get_top1000(group):
 start0 = time.time()
 grouped = names.groupby(['year', 'sex'])
 top1000 = grouped.apply(get_top1000)
-print top1000
-end0 = time.time()
 
 # Drop the group index, not needed
 top1000.reset_index(inplace=True, drop=True)
+end0 = time.time()
+
 start1 = time.time()
-
 all_names = pd.Series(top1000.name.unique())
-
 lesley_like = all_names[all_names.str.lower().str.contains('lesl')]
 
 filtered = top1000[top1000.name.isin(lesley_like)]

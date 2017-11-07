@@ -271,6 +271,8 @@ class GroupedDataFrameWeld(LazyOpResult):
     def reset_index(self, inplace=True, drop=True):
         """ Flattens the grouped data structure.
 
+        #TODO: The parameters here are meaningless
+
         Flattens the grouped data structure.
         What is returned is a DataFrameWeld object.
         """
@@ -280,10 +282,15 @@ class GroupedDataFrameWeld(LazyOpResult):
                 elem_type = vectype.elemType
                 if isinstance(elem_type, WeldStruct):
                     self.column_types = elem_type.fieldTypes
+                    value_type = WeldStruct(self.column_types)
                 else:
                     self.column_types = elem_type
-                group_type = WeldStruct(self.grouping_column_types)
-                value_type = WeldStruct(self.column_types)
+                    value_type = elem_type
+                if len(self.grouping_column_types) == 1:
+                    group_type = self.grouping_column_types[0]
+                else:
+                    group_type = WeldStruct(self.grouping_column_types)
+
                 self.weld_type = WeldStruct([group_type, value_type])
                 self.expr = grizzly_impl.flatten_group(
                     self.expr,
@@ -314,7 +321,7 @@ class GroupedDataFrameWeld(LazyOpResult):
 
         i = 0
         for column_name in self.grouping_column_name:
-            if len(self.column_names) > 1:
+            if len(self.grouping_column_name) > 1:
                 index = "0.$%d" % i
             else:
                 index = "0"
@@ -353,6 +360,18 @@ class SeriesWeld(LazyOpResult):
         self.dim = 1
         self.df = df
         self.column_name = column_name
+
+    def __getitem__(self, predicates):
+        """Summary
+
+        Args:
+            predicates (TYPE): Description
+            new_value (TYPE): Description
+
+        Returns:
+            TYPE: Description
+        """
+        return self.filter(predicates)
 
     def __setitem__(self, predicates, new_value):
         """Summary
@@ -394,14 +413,74 @@ class SeriesWeld(LazyOpResult):
         Returns:
             TYPE: Description
         """
-        return LazyOpResult(
+        return SeriesWeld(
             grizzly_impl.unique(
                 self.expr,
                 self.weld_type
             ),
             self.weld_type,
-            self.dim
+            self.df,
+            self.column_name
         )
+
+    def lower(self):
+        """Summary
+
+        Returns:
+            TYPE: Description
+        """
+        # TODO : Bug in nested map operating on strings
+        # TODO : Check that self.weld_type is a string type
+        vectype = self.weld_type
+        if isinstance(vectype, WeldVec):
+            elem_type = vectype.elemType
+            if isinstance(elem_type, WeldChar):
+                        return SeriesWeld(
+                            grizzly_impl.to_lower(
+                                self.expr,
+                                elem_type
+                            ),
+                            self.weld_type,
+                            self.df,
+                            self.column_name
+                        )
+        raise Exception("Cannot call to_lower on non string type")
+
+    def contains(self, string):
+        """Summary
+
+        Returns:
+        TYPE: Description
+        """
+        # Check that self.weld_type is a string type
+        vectype = self.weld_type
+        if isinstance(vectype, WeldVec):
+            elem_type = vectype.elemType
+            if isinstance(elem_type, WeldChar):
+                return SeriesWeld(
+                    grizzly_impl.contains(
+                        self.expr,
+                        elem_type,
+                        string
+                    ),
+                    WeldBit(),
+                    self.df,
+                    self.column_name
+                )
+        raise Exception("Cannot call to_lower on non string type")
+
+    def isin(self, ls):
+        if isinstance(ls, SeriesWeld):
+            if self.weld_type == ls.weld_type:
+                return SeriesWeld(
+                    grizzly_impl.isin(self.expr,
+                                      ls.expr,
+                                      self.weld_type),
+                    WeldBit(),
+                    self.df,
+                    self.column_name
+                )
+        raise Exception("Cannot call isin on different typed list")
 
     def prod(self):
         """Summary

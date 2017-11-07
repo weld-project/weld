@@ -175,6 +175,54 @@ def filter(array, predicates, ty):
 
     return weld_obj
 
+def isin(array, predicates, ty):
+    """ Checks if elements in array is also in predicates
+    
+    # TODO: better parameter naming
+
+    Args:
+        array (WeldObject / Numpy.ndarray): Input array
+        predicates (WeldObject / Numpy.ndarray<bool>): Predicate set
+        ty (WeldType): Type of each element in the input array
+
+    Returns:
+        A WeldObject representing this computation
+    """
+    weld_obj = WeldObject(encoder_, decoder_)
+
+    array_var = weld_obj.update(array)
+    if isinstance(array, WeldObject):
+        array_var = "tmp%d" % array.objectId
+        weld_obj.dependencies[array_var] = array.weld_code
+
+    predicates_var = weld_obj.update(predicates)
+    if isinstance(predicates, WeldObject):
+        predicates_var = "tmp%d" % predicates.objectId
+        weld_obj.dependencies[predicates_var] = predicates.weld_code
+    weld_template = """
+    let check_dict =
+      result(
+        for(
+          map(
+            %(predicate)s,
+            |p: %(ty)s| {p,0}
+          ),
+        dictmerger[%(ty)s,i32,+],
+        |b, i, e| merge(b,e)
+        )
+      );
+      map(
+        %(array)s,
+        |x: %(ty)s| keyexists(check_dict, x)
+      )
+    """
+    weld_obj.weld_code = weld_template % {
+        "array": array_var,
+        "predicate": predicates_var,
+        "ty": ty}
+
+    return weld_obj
+
 
 def element_wise_op(array, other, op, ty):
     """
@@ -213,6 +261,39 @@ def element_wise_op(array, other, op, ty):
                                           "ty": ty, "op": op}
     return weld_obj
 
+def zip_columns(columns):
+    """
+    Zip together multiple columns.
+
+    Args:
+        array (WeldObject / Numpy.ndarray): Input array
+        other (WeldObject / Numpy.ndarray): Second Input array
+        op (str): Op string used to compute element-wise operation (+ / *)
+        ty (WeldType): Type of each element in the input array
+
+    Returns:
+        A WeldObject representing this computation
+    """
+    weld_obj = WeldObject(encoder_, decoder_)
+    colummn_vars = []
+    for column in columns:
+        col_var = weld_obj.update(column)
+        if isinstance(column, WeldObject):
+            col_var = "tmp%d" % column.objectId
+            col_obj.dependencies[col_var] = column.weld_code
+        column_vars.append(col_var)
+
+    weld_template = """
+       map(
+         zip(%(array)s, %(other)s),
+         |a| a.$0 %(op)s a.$1
+       )
+    """
+
+    weld_obj.weld_code = weld_template % {"array": array_var,
+                                          "other": other_var,
+                                          "ty": ty, "op": op}
+    return weld_obj
 
 def compare(array, other, op, ty_str):
     """
@@ -287,6 +368,75 @@ def slice(array, start, size, ty):
     """
     weld_obj.weld_code = weld_template % {"array": array_var, "start": start,
                                           "ty": ty, "size": size}
+
+    return weld_obj
+
+def to_lower(array, ty):
+    """
+    Returns a new array of strings that are converted to lowercase
+
+    Args:
+        array (WeldObject / Numpy.ndarray): Input array
+        start (int): starting index
+        size (int): length to truncate at
+        ty (WeldType): Type of each element in the input array
+
+    Returns:
+        A WeldObject representing this computation
+    """
+    weld_obj = WeldObject(encoder_, decoder_)
+
+    array_var = weld_obj.update(array)
+    if isinstance(array, WeldObject):
+        array_var = "tmp%d" % array.objectId
+        weld_obj.dependencies[array_var] = array.weld_code
+
+    weld_template = """
+       map(
+         %(array)s,
+         |array: vec[%(ty)s]| map(array, |b:%(ty)s| if(b <= i8(90), b, b))
+       )
+    """
+    weld_obj.weld_code = weld_template % {"array": array_var, "ty": ty}
+
+    return weld_obj
+
+def contains(array, ty, string):
+    """
+    Checks if given string is contained in each string in the array.
+    Output is a vec of booleans.
+
+    Args:
+        array (WeldObject / Numpy.ndarray): Input array
+        start (int): starting index
+        size (int): length to truncate at
+        ty (WeldType): Type of each element in the input array
+
+    Returns:
+        A WeldObject representing this computation
+    """
+    weld_obj = WeldObject(encoder_, decoder_)
+
+    string_obj = weld_obj.update(string)
+    if isinstance(string, WeldObject):
+        string_obj =  "tmp%d" % string.objectId
+        weld_obj.dependencies[string_obj] = string.weld_code
+
+    array_var = weld_obj.update(array)
+    if isinstance(array, WeldObject):
+        array_var = "tmp%d" % array.objectId
+        weld_obj.dependencies[array_var] = array.weld_code
+
+    (start, end) = 0, len(string)
+    weld_template = """
+       map(
+         %(array)s,
+         |str: vec[%(ty)s]| slice(str, i64(%(start)s), i64(%(end)s)) == %(cmpstr)s
+       )
+    """
+    weld_obj.weld_code = weld_template % {"array": array_var, "ty": ty,
+                                          "start": start, "end": end,
+                                          "cmpstr": string_obj}
 
     return weld_obj
 
@@ -442,8 +592,9 @@ def groupby_sort(columns, column_tys, grouping_columns, grouping_column_tys, key
         grouping_column_vars = []
         for column in grouping_columns:
             column_var = weld_obj.update(column)
-            if isinstance(column_var, WeldObject):
-                column_var = column_var.weld_code
+            if isinstance(column, WeldObject):
+                column_var = "tmp%d" % column.objectId
+                weld_obj.dependencies[column_var] = column.weld_code
             grouping_column_vars.append(column_var)
         grouping_column_var = ", ".join(grouping_column_vars)
         grouping_column_tys = [str(ty) for ty in grouping_column_tys]
@@ -570,10 +721,13 @@ def flatten_group(expr, column_tys, grouping_column_tys):
         column_values = ["b.$%s" % i for i in range(0, len(column_tys))]
         column_values_str = "{%s}" % ", ".join(column_values)
 
+    # TODO: The output in pandas keps the keys sorted (even if keys are structs)
+    # We need to allow keyfunctions in sort by clauses to be able to compare structs.
+    # sort(%(group_vec)s, |x:{%(gty)s, vec[%(ty)s]}| x.$0),
     weld_template = """
     flatten(
       map(
-        sort(%(group_vec)s, |x:{%(gty)s, vec[%(ty)s]}| x.$0),
+        %(group_vec)s,
         |a:{%(gty)s, vec[%(ty)s]}| map(a.$1, |b:%(ty)s| {%(gkeys)s, %(gvals)s})
       )
     )

@@ -18,32 +18,30 @@ names = pd.concat(pieces, ignore_index=True)
 print "Size of names: %d" % len(names)
 
 def get_top1000(group):
-    return group.sort_values(by='births', ascending=False).slice(0,1000)
+    return group.sort_values(by='births', ascending=False).slice(0, 1000)
 
 #Time preprocessing step
 start0 = time.time()
-names = gr.DataFrameWeld(names)
-grouped = names.groupby(['year', 'sex'])
-top1000 = grouped.apply(get_top1000).evaluate(True)
-end0 = time.time()
+grouped = gr.DataFrameWeld(names).groupby(['year', 'sex'])
+top1000 = grouped.apply(get_top1000)
 
 # Drop the group index, not needed
-# Does nothing in NVL
 top1000.reset_index(inplace=True, drop=True)
+top1000 = top1000.evaluate(verbose=True).to_pandas()
+end0 = time.time()
+
 start1 = time.time()
 top1000 = gr.DataFrameWeld(top1000)
-top1000names = top1000.name
-
+top1000names = top1000['name']
 all_names = top1000names.unique()
-
-lesley_like = all_names[all_names.lower().contains('lesl')]
+lesley_like = all_names.filter(all_names.contains('Lesl'))
 
 filtered = top1000[top1000names.isin(lesley_like)]
+filtered.evaluate()
+# table = filtered.pivot_table('births', index='year',
+#                              columns='sex', aggfunc='sum')
 
-table = filtered.pivot_table('births', index='year',
-                             columns='sex', aggfunc='sum')
-
-table = table.div(table.sum(1), axis=0)
+# table = table.div(table.sum(1), axis=0)
 end1= time.time()
 
 print "Time taken by preprocess portion: %.5f" %(end0 - start0)
