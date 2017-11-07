@@ -194,8 +194,7 @@ class NumPyDecoder(WeldObjectDecoder):
             ret_vecs = []
             for field_type in restype.field_types:
                 ret_vec = self.decode(data, field_type, raw_ptr=True)
-                data = byref(ctypes.cast(data, ctypes.POINTER(ctypes.c_char)),
-                             sizeof(field_type.cTypeClass()))
+                data += sizeof(field_type.cTypeClass())
                 ret_vecs.append(ret_vec)
             return tuple(ret_vecs)
         else:
