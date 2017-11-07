@@ -75,6 +75,7 @@ class WeldObject(object):
     # Counter for assigning variable names
     _var_num = 0
     _obj_id = 100
+    _registry = {}
 
     def __init__(self, encoder, decoder):
         self.encoder = encoder
@@ -108,8 +109,14 @@ class WeldObject(object):
             self.context.update(value.context)
             self.dependencies.update(value.dependencies)
         else:
-            name = "e" + str(WeldObject._var_num)
-            WeldObject._var_num += 1
+            # Ensure that the same inputs always have same names
+            value_str = str(value)
+            if value_str in WeldObject._registry:
+                name = WeldObject._registry[value_str]
+            else:
+                name = "_inp%d" % WeldObject._var_num
+                WeldObject._var_num += 1
+                WeldObject._registry[value_str] = name
             self.context[name] = value
             if tys is not None and not override:
                 self.argtypes[name] = tys
