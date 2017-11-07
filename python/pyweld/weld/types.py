@@ -239,18 +239,18 @@ class WeldStruct(WeldType):
     """Summary
 
     Attributes:
-        fieldTypes (TYPE): Description
+        field_types (TYPE): Description
     """
     _singletons = {}
 
-    def __init__(self, fieldTypes):
+    def __init__(self, field_types):
         """Summary
 
         Args:
-            fieldTypes (TYPE): Description
+            field_types (TYPE): Description
         """
-        assert False not in [isinstance(e, WeldType) for e in fieldTypes]
-        self.fieldTypes = fieldTypes
+        assert False not in [isinstance(e, WeldType) for e in field_types]
+        self.field_types = field_types
 
     def __str__(self):
         """Summary
@@ -258,7 +258,7 @@ class WeldStruct(WeldType):
         Returns:
             TYPE: Description
         """
-        return "{" + ",".join([str(f) for f in self.fieldTypes]) + "}"
+        return "{" + ",".join([str(f) for f in self.field_types]) + "}"
 
     @property
     def cTypeClass(self):
@@ -267,11 +267,11 @@ class WeldStruct(WeldType):
         Returns:
             TYPE: Description
         """
-        def struct_factory(fieldTypes):
+        def struct_factory(field_types):
             """Summary
 
             Args:
-                fieldTypes (TYPE): Description
+                field_types (TYPE): Description
 
             Returns:
                 TYPE: Description
@@ -280,10 +280,10 @@ class WeldStruct(WeldType):
                 """Summary
                 """
                 _fields_ = [(str(i), t.cTypeClass)
-                            for i, t in enumerate(fieldTypes)]
+                            for i, t in enumerate(field_types)]
             return Struct
 
-        if frozenset(self.fieldTypes) not in WeldVec._singletons:
+        if frozenset(self.field_types) not in WeldVec._singletons:
             WeldStruct._singletons[
-                frozenset(self.fieldTypes)] = struct_factory(self.fieldTypes)
-        return WeldStruct._singletons[frozenset(self.fieldTypes)]
+                frozenset(self.field_types)] = struct_factory(self.field_types)
+        return WeldStruct._singletons[frozenset(self.field_types)]

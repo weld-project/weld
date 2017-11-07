@@ -77,6 +77,19 @@ class PandasWeldTestMethods(unittest.TestCase):
                     predicates,
                     "eeee").evaluate(False)))
 
+    def test_eq_and_mask_grouped(self):
+        input = gr.SeriesWeld(
+            np.array([4, 3, 2, 1, 3], dtype=np.int32),
+            gr.WeldInt())
+        predicates = input == 3
+        expected_output = ["aaaa", "eeee", "aa", "cccc"]
+        output = gr.group(
+            [predicates,
+             input.sum()]
+        ).evaluate(False)
+        self.assertSequenceEqual([False, True, False, False, True], list(output[0]))
+        self.assertEqual(13, output[1])
+
     def test_slice(self):
         input = gr.SeriesWeld(
             np.array(["aaaaaa", "bbbbbb", "aaaaaaa", "cccccccc"], dtype=str),

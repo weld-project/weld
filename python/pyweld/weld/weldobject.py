@@ -84,10 +84,6 @@ class WeldObject(object):
         self.weld_code = ""
         self.dependencies = {}
 
-        # Weld type, which represents the return type of this Weld program.
-        # decoder must support decoding the return type. TODO.
-        self.dataType = None
-
         # Assign a unique ID to the context
         self.obj_id = "obj%d" % WeldObject._obj_id
         WeldObject._obj_id += 1
@@ -122,21 +118,20 @@ class WeldObject(object):
     def get_let_statements(self):
         queue = [self]
         visited = set()
-        all_let_statements = []
+        let_statements = []
+        is_first = True
         while len(queue) > 0:
             cur_obj = queue.pop()
             cur_obj_id = cur_obj.obj_id
             if cur_obj_id in visited:
                 continue
-            let_statements = ["let %s = (%s);" % (key, cur_obj.dependencies[key].weld_code)
-                             for key in sorted(cur_obj.dependencies.keys())]
-            all_let_statements.insert(0, let_statements)
-            for dependency in cur_obj.dependencies.values():
-                queue.append(dependency)
+            if not is_first:
+                let_statements.insert(0, "let %s = (%s);" % (cur_obj_id, cur_obj.weld_code))
+            is_first = False
+            for key in sorted(cur_obj.dependencies.keys()):
+                queue.append(cur_obj.dependencies[key])
             visited.add(cur_obj_id)
-        flatten = lambda l: [item for sublist in l for item in sublist]
-        all_let_statements = flatten(all_let_statements)
-        return "\n".join(all_let_statements)
+        return "\n".join(let_statements)
 
     def to_weld_func(self):
         names = self.context.keys()

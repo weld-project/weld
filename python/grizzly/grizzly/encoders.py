@@ -138,7 +138,7 @@ class NumPyDecoder(WeldObjectDecoder):
         lib_file = pkg_resources.resource_filename(__name__, lib)
         self.utils = ctypes.PyDLL(lib_file)
 
-    def decode(self, obj, restype):
+    def decode(self, obj, restype, raw_ptr=False):
         """Summary
 
         Args:
@@ -151,6 +151,12 @@ class NumPyDecoder(WeldObjectDecoder):
         Raises:
             Exception: Description
         """
+        if raw_ptr:
+            data = obj
+        else:
+            data = cweld.WeldValue(obj).data()
+        result = ctypes.cast(data, ctypes.POINTER(restype.cTypeClass)).contents
+
         if restype == WeldInt():
             data = cweld.WeldValue(obj).data()
             result = ctypes.cast(data, ctypes.POINTER(c_int)).contents.value
@@ -184,13 +190,19 @@ class NumPyDecoder(WeldObjectDecoder):
             weld_to_numpy = self.utils.weld_to_numpy_double_arr_arr
         elif restype == WeldVec(WeldInt()):
             weld_to_numpy = self.utils.weld_to_numpy_int_arr
+        elif isinstance(restype, WeldStruct):
+            ret_vecs = []
+            for field_type in restype.field_types:
+                ret_vec = self.decode(data, field_type, raw_ptr=True)
+                data = byref(ctypes.cast(data, ctypes.POINTER(ctypes.c_char)),
+                             sizeof(field_type.cTypeClass()))
+                ret_vecs.append(ret_vec)
+            return tuple(ret_vecs)
         else:
             raise Exception("Unable to decode; invalid return type")
 
         weld_to_numpy.restype = py_object
         weld_to_numpy.argtypes = [restype.cTypeClass]
 
-        data = cweld.WeldValue(obj).data()
-        result = ctypes.cast(data, ctypes.POINTER(restype.cTypeClass)).contents
         ret_vec = weld_to_numpy(result)
         return ret_vec
