@@ -2,7 +2,6 @@
 
 use std::fmt;
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::collections::hash_map::Entry;
 
 use super::ast::*;
 use super::ast::Type::*;
@@ -16,80 +15,77 @@ pub type FunctionId = usize;
 
 /// A non-terminating statement inside a basic block.
 #[derive(Clone, PartialEq, Eq, Hash)]
-pub enum Statement {
+pub enum StatementKind {
+    Assign(Symbol),
+    AssignLiteral(LiteralKind),
     BinOp {
-        output: Symbol,
         op: BinOpKind,
         left: Symbol,
         right: Symbol,
     },
-    UnaryOp {
-        output: Symbol,
-        op: UnaryOpKind,
-        child: Symbol,
+    Broadcast(Symbol),
+    Cast(Symbol),
+    CUDF {
+        symbol_name: String,
+        args: Vec<Symbol>,
     },
-    Negate { output: Symbol, child: Symbol },
-    Broadcast { output: Symbol, child: Symbol },
-    Cast {
-        output: Symbol,
-        child: Symbol,
-    },
-    Lookup {
-        output: Symbol,
-        child: Symbol,
-        index: Symbol,
+    GetField {
+        value: Symbol,
+        index: u32,
     },
     KeyExists {
-        output: Symbol,
         child: Symbol,
         key: Symbol,
     },
+    Length(Symbol),
+    Lookup {
+        child: Symbol,
+        index: Symbol,
+    },
+    MakeStruct(Vec<Symbol>),
+    MakeVector(Vec<Symbol>),
+    Merge { builder: Symbol, value: Symbol },
+    Negate(Symbol),
+    NewBuilder {
+        arg: Option<Symbol>,
+        ty: Type,
+    },
+    Res(Symbol),
+    Select {
+        cond: Symbol,
+        on_true: Symbol,
+        on_false: Symbol,
+    },
     Slice {
-        output: Symbol,
         child: Symbol,
         index: Symbol,
         size: Symbol,
     },
     Sort {
-        output: Symbol,
         child: Symbol,
         keyfunc: SirFunction,
     },
-    Select {
-        output: Symbol,
-        cond: Symbol,
-        on_true: Symbol,
-        on_false: Symbol,
-    },
-    CUDF {
-        output: Symbol,
-        symbol_name: String,
-        args: Vec<Symbol>,
-    },
-    ToVec { output: Symbol, child: Symbol },
-    Length { output: Symbol, child: Symbol },
-    Assign { output: Symbol, value: Symbol },
-    AssignLiteral { output: Symbol, value: LiteralKind },
-    Merge { builder: Symbol, value: Symbol },
-    Res { output: Symbol, builder: Symbol },
-    NewBuilder {
-        output: Symbol,
-        arg: Option<Symbol>,
-        ty: Type,
-    },
-    MakeStruct {
-        output: Symbol,
-        elems: Vec<Symbol>,
-    },
-    MakeVector {
-        output: Symbol,
-        elems: Vec<Symbol>,
-    },
-    GetField {
-        output: Symbol,
-        value: Symbol,
-        index: u32,
-    },
+    ToVec(Symbol),
+    UnaryOp {
+        op: UnaryOpKind,
+        child: Symbol,
+    }
+}
+
+/// A single statement in the SIR, with a RHS statement kind and an optional LHS output symbol.
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct Statement {
+    pub output: Option<Symbol>,
+    pub kind: StatementKind,
+}
+
+impl Statement {
+    fn new(output: Option<Symbol>, kind: StatementKind) -> Statement {
+        Statement {
+            output: output,
+            kind: kind,
+        }
+    }
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -223,94 +219,53 @@ impl BasicBlock {
     }
 }
 
-impl fmt::Display for Statement {
+impl fmt::Display for StatementKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use self::Statement::*;
+        use self::StatementKind::*;
         match *self {
+            Assign(ref value) => write!(f, "{}", value),
+            AssignLiteral(ref value) => write!(f, "{}", print_literal(value)),
             BinOp {
-                ref output,
                 ref op,
                 ref left,
-                ref right,
+                ref right
+            } => write!(f, "{} {} {}", op, left, right),
+            Broadcast(ref child) => write!(f, "broadcast({})", child),
+            Cast(ref child) => write!(f, "cast({})", child),
+            CUDF {
+                ref symbol_name,
+                ref args,
             } => {
                 write!(f,
-                       "{} = {} {} {}",
-                       output,
-                       op,
-                       left,
-                       right)
+                       "cudf[{}]{}",
+                       symbol_name,
+                       join("(", ", ", ")", args.iter().map(|e| format!("{}", e))))
             }
-            UnaryOp {
-                ref output,
-                ref op,
-                ref child,
-            } => write!(f, "{} = {}({})", output, op, child),
-            Negate {
-                ref output,
-                ref child,
-            } => write!(f, "{} = -{}", output, child),
-            Broadcast {
-                ref output,
-                ref child,
-            } => write!(f, "{} = broadcast({})", output, child),
-            Cast {
-                ref output,
-                ref child,
-            } => write!(f, "{} = cast({})", output, child),
-            Lookup {
-                ref output,
-                ref child,
-                ref index,
-            } => write!(f, "{} = lookup({}, {})", output, child, index),
+            GetField {
+                ref value,
+                index,
+            } => write!(f, "{}.${}", value, index),
             KeyExists {
-                ref output,
                 ref child,
                 ref key,
-            } => write!(f, "{} = keyexists({}, {})", output, child, key),
-            Slice {
-                ref output,
-                ref child,
-                ref index,
-                ref size,
-            } => write!(f, "{} = slice({}, {}, {})", output, child, index, size),
-            Sort {
-                ref output,
-                ref child,
-                ..
-            } => write!(f, "{} = sort({})", output, child),
-            Select {
-                ref output,
-                ref cond,
-                ref on_true,
-                ref on_false,
-            } => write!(f, "{} = select({}, {}, {})", output, cond, on_true, on_false),
-            ToVec {
-                ref output,
-                ref child,
-            } => write!(f, "{} = toVec({})", output, child),
-            Length {
-                ref output,
-                ref child,
-                ..
-            } => write!(f, "{} = len({})", output, child),
-            Assign {
-                ref output,
-                ref value,
-            } => write!(f, "{} = {}", output, value),
-            AssignLiteral {
-                ref output,
-                ref value,
-            } => write!(f, "{} = {}", output, print_literal(value)),
+            } => write!(f, "keyexists({}, {})", child, key),
+            Length(ref child) => write!(f, "len({})", child),
+            MakeStruct(ref elems) => {
+                write!(f,
+                       "{}",
+                       join("{", ",", "}", elems.iter().map(|e| format!("{}", e))))
+            }
+            MakeVector(ref elems) => {
+                write!(f,
+                       "{}",
+                       join("[", ", ", "]", elems.iter().map(|e| format!("{}", e))))
+            }
             Merge {
                 ref builder,
                 ref value,
             } => write!(f, "merge({}, {})", builder, value),
-            Res {
-                ref output,
-                ref builder,
-            } => write!(f, "{} = result({})", output, builder),
+            Negate(ref child) => write!(f, "-{}", child),
             NewBuilder {
-                ref output,
                 ref arg,
                 ref ty,
             } => {
@@ -319,43 +274,40 @@ impl fmt::Display for Statement {
                 } else {
                     "".to_string()
                 };
-                write!(f, "{} = new {}({})", output, print_type(ty), arg_str)
+                write!(f, "new {}({})", print_type(ty), arg_str)
             }
-            MakeStruct {
-                ref output,
-                ref elems,
-            } => {
-                write!(f,
-                       "{} = {}",
-                       output,
-                       join("{", ",", "}", elems.iter().map(|e| format!("{}", e))))
-            }
-            MakeVector {
-                ref output,
-                ref elems,
-            } => {
-                write!(f,
-                       "{} = {}",
-                       output,
-                       join("[", ", ", "]", elems.iter().map(|e| format!("{}", e))))
-            }
-            CUDF {
-                ref output,
-                ref args,
-                ref symbol_name,
-                ..
-            } => {
-                write!(f,
-                       "{} = cudf[{}]{}",
-                       output,
-                       symbol_name,
-                       join("(", ", ", ")", args.iter().map(|e| format!("{}", e))))
-            }
-            GetField {
-                ref output,
-                ref value,
-                index,
-            } => write!(f, "{} = {}.${}", output, value, index),
+            Lookup {
+                ref child,
+                ref index,
+            } => write!(f, "lookup({}, {})", child, index),
+            Res(ref builder) => write!(f, "result({})", builder),
+            Select {
+                ref cond,
+                ref on_true,
+                ref on_false,
+            } => write!(f, "select({}, {}, {})", cond, on_true, on_false),
+            Slice {
+                ref child,
+                ref index,
+                ref size,
+            } => write!(f, "slice({}, {}, {})", child, index, size),
+            Sort{ ref child, .. } => write!(f, "sort({})", child),
+            ToVec(ref child) => write!(f, "toVec({})", child),
+            UnaryOp {
+                ref op,
+                ref child
+            } => write!(f, "{}({})", op, child),
+
+        }
+    }
+}
+
+impl fmt::Display for Statement {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if let Some(ref sym) = self.output {
+            write!(f, "{} = {}", sym, self.kind)
+        } else {
+            write!(f, "{}", self.kind)
         }
     }
 }
@@ -486,12 +438,13 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
     for (name, ty) in &prog.funcs[func_id].locals {
         env.insert(name.clone(), ty.clone());
     }
+
     // All symbols are unique, so there is no need to remove stuff from env at any point.
     for block in prog.funcs[func_id].blocks.clone() {
         let mut vars = vec![];
         for statement in &block.statements {
-            use self::Statement::*;
-            match *statement {
+            use self::StatementKind::*;
+            match statement.kind {
                 // push any existing symbols that are used (but not assigned) by the statement
                 BinOp {
                     ref left,
@@ -507,24 +460,23 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
                 } => {
                     vars.push(child.clone());
                 }
-                Cast { ref child, .. } => {
+                Cast(ref child) => {
                     vars.push(child.clone());
                 }
-                Negate { ref child, .. } => {
+                Negate(ref child) => {
                     vars.push(child.clone());
                 }
-                Broadcast { ref child, .. } => {
+                Broadcast(ref child) => {
                     vars.push(child.clone());
                 }
                 Lookup {
                     ref child,
                     ref index,
-                    ..
                 } => {
                     vars.push(child.clone());
                     vars.push(index.clone());
                 }
-                KeyExists { ref child, ref key, .. } => {
+                KeyExists { ref child, ref key } => {
                     vars.push(child.clone());
                     vars.push(key.clone());
                 }
@@ -532,7 +484,6 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
                     ref child,
                     ref index,
                     ref size,
-                    ..
                 } => {
                     vars.push(child.clone());
                     vars.push(index.clone());
@@ -548,19 +499,20 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
                     ref cond,
                     ref on_true,
                     ref on_false,
-                    ..
                 } => {
                     vars.push(cond.clone());
                     vars.push(on_true.clone());
                     vars.push(on_false.clone());
                 }
-                ToVec { ref child, .. } => {
+                ToVec(ref child) => {
                     vars.push(child.clone());
                 }
-                Length { ref child, .. } => {
+                Length(ref child) => {
                     vars.push(child.clone());
                 }
-                Assign { ref value, .. } => vars.push(value.clone()),
+                Assign(ref value) => {
+                    vars.push(value.clone());
+                }
                 Merge {
                     ref builder,
                     ref value,
@@ -568,7 +520,7 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
                     vars.push(builder.clone());
                     vars.push(value.clone());
                 }
-                Res { ref builder, .. } => vars.push(builder.clone()),
+                Res(ref builder) => vars.push(builder.clone()),
                 GetField { ref value, .. } => vars.push(value.clone()),
                 AssignLiteral { .. } => {}
                 NewBuilder { ref arg, .. } => {
@@ -576,17 +528,20 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
                         vars.push(a.clone());
                     }
                 }
-                MakeStruct { ref elems, .. } => {
+                MakeStruct(ref elems) => {
                     for elem in elems {
                         vars.push(elem.clone());
                     }
                 }
-                MakeVector { ref elems, .. } => {
+                MakeVector(ref elems) => {
                     for elem in elems {
                         vars.push(elem.clone());
                     }
                 }
-                CUDF { ref args, .. } => {
+                CUDF {
+                    ref args,
+                    ..
+                } => {
                     for arg in args {
                         vars.push(arg.clone());
                     }
@@ -681,7 +636,7 @@ pub fn ast_to_sir(expr: &TypedExpr, multithreaded: bool) -> WeldResult<SirProgra
             prog.funcs[0].params.insert(tp.name.clone(), tp.ty.clone());
         }
         let first_block = prog.funcs[0].add_block();
-        let (res_func, res_block, res_sym) = gen_expr(body, &mut prog, &mut HashMap::new(), &mut HashMap::new(), 0, first_block, multithreaded)?;
+        let (res_func, res_block, res_sym) = gen_expr(body, &mut prog, 0, first_block, multithreaded)?;
         prog.funcs[res_func].blocks[res_block].terminator = Terminator::ProgramReturn(res_sym);
         sir_param_correction(&mut prog)?;
         // second call is necessary in the case where there are loops in the call graph, since
@@ -693,40 +648,26 @@ pub fn ast_to_sir(expr: &TypedExpr, multithreaded: bool) -> WeldResult<SirProgra
     }
 }
 
-// cur_func -> { statement -> symbol } ?
-
 /// Generate code to compute the expression `expr` starting at the current tail of `cur_block`,
 /// possibly creating new basic blocks and functions in the process. Return the function and
 /// basic block that the expression will be ready in, and its symbol therein.
 fn gen_expr(expr: &TypedExpr,
             prog: &mut SirProgram,
-            literal_map: &mut HashMap<(FunctionId, LiteralKind), Symbol>,
-            getfield_map: &mut HashMap<(FunctionId, Symbol, u32), Symbol>,
             cur_func: FunctionId,
             cur_block: BasicBlockId,
             multithreaded: bool)
             -> WeldResult<(FunctionId, BasicBlockId, Symbol)> {
-    use self::Statement::*;
+    use self::StatementKind::*;
     use self::Terminator::*;
 
     match expr.kind {
         ExprKind::Ident(ref sym) => Ok((cur_func, cur_block, sym.clone())),
 
         ExprKind::Literal(lit) => {
-            let res_sym = match literal_map.entry((cur_func, lit)) {
-                Entry::Occupied(ref e) => {
-                    e.get().clone()
-                }
-                Entry::Vacant(entry) => {
-                    let res_sym = prog.add_local(&expr.ty, cur_func);
-                    prog.funcs[cur_func].blocks[cur_block].add_statement(AssignLiteral {
-                        output: res_sym.clone(),
-                        value: lit,
-                    });
-                    entry.insert(res_sym.clone());
-                    res_sym
-                }
-            };
+            let res_sym = prog.add_local(&expr.ty, cur_func);
+            prog.funcs[cur_func].blocks[cur_block].add_statement(
+                Statement::new(Some(res_sym.clone()), AssignLiteral(lit))
+                );
             Ok((cur_func, cur_block, res_sym))
         }
 
@@ -735,13 +676,14 @@ fn gen_expr(expr: &TypedExpr,
             ref value,
             ref body,
         } => {
-            let (cur_func, cur_block, val_sym) = gen_expr(value, prog, literal_map,getfield_map, cur_func, cur_block, multithreaded)?;
+            let (cur_func, cur_block, val_sym) = gen_expr(value, prog, cur_func, cur_block, multithreaded)?;
+
             prog.add_local_named(&value.ty, name, cur_func);
-            prog.funcs[cur_func].blocks[cur_block].add_statement(Assign {
-                                                                     output: name.clone(),
-                                                                     value: val_sym,
-                                                                 });
-            let (cur_func, cur_block, res_sym) = gen_expr(body, prog, literal_map,getfield_map, cur_func, cur_block, multithreaded)?;
+            prog.funcs[cur_func].blocks[cur_block].add_statement(
+                Statement::new(Some(name.clone()), Assign(val_sym))
+                );
+
+            let (cur_func, cur_block, res_sym) = gen_expr(body, prog, cur_func, cur_block, multithreaded)?;
             Ok((cur_func, cur_block, res_sym))
         }
 
@@ -750,15 +692,17 @@ fn gen_expr(expr: &TypedExpr,
             ref left,
             ref right,
         } => {
-            let (cur_func, cur_block, left_sym) = gen_expr(left, prog, literal_map,getfield_map, cur_func, cur_block, multithreaded)?;
-            let (cur_func, cur_block, right_sym) = gen_expr(right, prog, literal_map,getfield_map, cur_func, cur_block, multithreaded)?;
+            let (cur_func, cur_block, left_sym) = gen_expr(left, prog, cur_func, cur_block, multithreaded)?;
+            let (cur_func, cur_block, right_sym) = gen_expr(right, prog, cur_func, cur_block, multithreaded)?;
             let res_sym = prog.add_local(&expr.ty, cur_func);
-            prog.funcs[cur_func].blocks[cur_block].add_statement(BinOp {
-                                                                     output: res_sym.clone(),
-                                                                     op: kind,
-                                                                     left: left_sym,
-                                                                     right: right_sym,
-                                                                 });
+            prog.funcs[cur_func].blocks[cur_block].add_statement(
+                Statement::new(Some(res_sym.clone()),
+                               BinOp {
+                                   op: kind,
+                                   left: left_sym,
+                                   right: right_sym,
+                               })
+                );
             Ok((cur_func, cur_block, res_sym))
         }
 
@@ -766,70 +710,69 @@ fn gen_expr(expr: &TypedExpr,
             kind,
             ref value,
         } => {
-            let (cur_func, cur_block, value_sym) = gen_expr(value, prog, literal_map,getfield_map, cur_func, cur_block, multithreaded)?;
+            let (cur_func, cur_block, value_sym) = gen_expr(value, prog, cur_func, cur_block, multithreaded)?;
             let res_sym = prog.add_local(&expr.ty, cur_func);
-            prog.funcs[cur_func].blocks[cur_block].add_statement(UnaryOp {
-                output: res_sym.clone(),
-                op: kind,
-                child: value_sym,
-            });
+            prog.funcs[cur_func].blocks[cur_block].add_statement(
+                Statement::new(Some(res_sym.clone()),
+                                UnaryOp {
+                                    op: kind,
+                                    child: value_sym,
+                                })
+                );
             Ok((cur_func, cur_block, res_sym))
         }
 
         ExprKind::Negate(ref child_expr) => {
-            let (cur_func, cur_block, child_sym) = gen_expr(child_expr, prog, literal_map,getfield_map, cur_func, cur_block, multithreaded)?;
+            let (cur_func, cur_block, child_sym) = gen_expr(child_expr, prog, cur_func, cur_block, multithreaded)?;
             let res_sym = prog.add_local(&expr.ty, cur_func);
-            prog.funcs[cur_func].blocks[cur_block].add_statement(Negate {
-                                                                     output: res_sym.clone(),
-                                                                     child: child_sym,
-                                                                 });
+            prog.funcs[cur_func].blocks[cur_block].add_statement(
+                Statement::new(Some(res_sym.clone()), Negate(child_sym))
+                );
             Ok((cur_func, cur_block, res_sym))
         }
 
         ExprKind::Broadcast(ref child_expr) => {
-            let (cur_func, cur_block, child_sym) = gen_expr(child_expr, prog, literal_map,getfield_map, cur_func, cur_block, multithreaded)?;
+            let (cur_func, cur_block, child_sym) = gen_expr(child_expr, prog, cur_func, cur_block, multithreaded)?;
             let res_sym = prog.add_local(&expr.ty, cur_func);
-            prog.funcs[cur_func].blocks[cur_block].add_statement(Broadcast {
-                                                                     output: res_sym.clone(),
-                                                                     child: child_sym,
-                                                                 });
+            prog.funcs[cur_func].blocks[cur_block].add_statement(
+                Statement::new(Some(res_sym.clone()), Broadcast(child_sym))
+                );
             Ok((cur_func, cur_block, res_sym))
         }
 
-        ExprKind::Cast { ref child_expr, .. } => {
-            let (cur_func, cur_block, child_sym) = gen_expr(child_expr, prog, literal_map,getfield_map,cur_func, cur_block, multithreaded)?;
+        ExprKind::Cast {ref child_expr, .. } => {
+            let (cur_func, cur_block, child_sym) = gen_expr(child_expr, prog, cur_func, cur_block, multithreaded)?;
             let res_sym = prog.add_local(&expr.ty, cur_func);
-            prog.funcs[cur_func].blocks[cur_block].add_statement(Cast {
-                                                                     output: res_sym.clone(),
-                                                                     child: child_sym,
-                                                                 });
+            prog.funcs[cur_func].blocks[cur_block].add_statement(
+                Statement::new(Some(res_sym.clone()), Cast(child_sym))
+                );
             Ok((cur_func, cur_block, res_sym))
         }
+
+
 
         ExprKind::Lookup {
             ref data,
             ref index,
         } => {
-            let (cur_func, cur_block, data_sym) = gen_expr(data, prog, literal_map,getfield_map, cur_func, cur_block, multithreaded)?;
-            let (cur_func, cur_block, index_sym) = gen_expr(index, prog, literal_map,getfield_map,cur_func, cur_block, multithreaded)?;
+            let (cur_func, cur_block, data_sym) = gen_expr(data, prog, cur_func, cur_block, multithreaded)?;
+            let (cur_func, cur_block, index_sym) = gen_expr(index, prog, cur_func, cur_block, multithreaded)?;
             let res_sym = prog.add_local(&expr.ty, cur_func);
-            prog.funcs[cur_func].blocks[cur_block].add_statement(Lookup {
-                                                                     output: res_sym.clone(),
+            prog.funcs[cur_func].blocks[cur_block].add_statement(Statement::new(Some(res_sym.clone()), Lookup {
                                                                      child: data_sym,
                                                                      index: index_sym.clone(),
-                                                                 });
+                                                                 }));
             Ok((cur_func, cur_block, res_sym))
         }
 
         ExprKind::KeyExists { ref data, ref key } => {
-            let (cur_func, cur_block, data_sym) = gen_expr(data, prog, literal_map,getfield_map,cur_func, cur_block, multithreaded)?;
-            let (cur_func, cur_block, key_sym) = gen_expr(key, prog, literal_map,getfield_map,cur_func, cur_block, multithreaded)?;
+            let (cur_func, cur_block, data_sym) = gen_expr(data, prog, cur_func, cur_block, multithreaded)?;
+            let (cur_func, cur_block, key_sym) = gen_expr(key, prog, cur_func, cur_block, multithreaded)?;
             let res_sym = prog.add_local(&expr.ty, cur_func);
-            prog.funcs[cur_func].blocks[cur_block].add_statement(KeyExists {
-                                                                     output: res_sym.clone(),
+            prog.funcs[cur_func].blocks[cur_block].add_statement(Statement::new(Some(res_sym.clone()), KeyExists {
                                                                      child: data_sym,
                                                                      key: key_sym.clone(),
-                                                                 });
+                                                                 }));
             Ok((cur_func, cur_block, res_sym))
         }
 
@@ -838,16 +781,15 @@ fn gen_expr(expr: &TypedExpr,
             ref index,
             ref size,
         } => {
-            let (cur_func, cur_block, data_sym) = gen_expr(data, prog, literal_map,getfield_map,cur_func, cur_block, multithreaded)?;
-            let (cur_func, cur_block, index_sym) = gen_expr(index, prog, literal_map,getfield_map,cur_func, cur_block, multithreaded)?;
-            let (cur_func, cur_block, size_sym) = gen_expr(size, prog, literal_map,getfield_map,cur_func, cur_block, multithreaded)?;
+            let (cur_func, cur_block, data_sym) = gen_expr(data, prog, cur_func, cur_block, multithreaded)?;
+            let (cur_func, cur_block, index_sym) = gen_expr(index, prog, cur_func, cur_block, multithreaded)?;
+            let (cur_func, cur_block, size_sym) = gen_expr(size, prog, cur_func, cur_block, multithreaded)?;
             let res_sym = prog.add_local(&expr.ty, cur_func);
-            prog.funcs[cur_func].blocks[cur_block].add_statement(Slice {
-                                                                     output: res_sym.clone(),
+            prog.funcs[cur_func].blocks[cur_block].add_statement(Statement::new(Some(res_sym.clone()), Slice {
                                                                      child: data_sym,
                                                                      index: index_sym.clone(),
                                                                      size: size_sym.clone(),
-                                                                 });
+                                                                 }));
             Ok((cur_func, cur_block, res_sym))
         }
 
@@ -861,17 +803,19 @@ fn gen_expr(expr: &TypedExpr,
             } = keyfunc.kind {
                 let keyfunc_id = prog.add_func();
                 let keyblock = prog.funcs[keyfunc_id].add_block();
-                let (keyfunc_id, keyblock, key_sym) = gen_expr(body, prog, literal_map,getfield_map,keyfunc_id, keyblock, multithreaded)?;
+                let (keyfunc_id, keyblock, key_sym) = gen_expr(body, prog, keyfunc_id, keyblock, multithreaded)?;
+
                 prog.funcs[keyfunc_id].params.insert(params[0].name.clone(), params[0].ty.clone());
                 prog.funcs[keyfunc_id].blocks[keyblock].terminator = Terminator::ProgramReturn(key_sym.clone());
-                let (cur_func, cur_block, data_sym) = gen_expr(data, prog, literal_map,getfield_map,cur_func, cur_block, multithreaded)?;
+
+                let (cur_func, cur_block, data_sym) = gen_expr(data, prog, cur_func, cur_block, multithreaded)?;
                 let key_function = prog.funcs[keyfunc_id].clone();
                 let res_sym = prog.add_local(&expr.ty, cur_func);
-                prog.funcs[cur_func].blocks[cur_block].add_statement(Sort {
-                    output: res_sym.clone(),
+
+                prog.funcs[cur_func].blocks[cur_block].add_statement(Statement::new(Some(res_sym.clone()), Sort {
                     child: data_sym,
                     keyfunc: key_function
-                });
+                }));
                 Ok((cur_func, cur_block, res_sym))
             } else {
                 weld_err!("Sort key function expected lambda type, instead {:?} provided", keyfunc.ty)
@@ -883,35 +827,34 @@ fn gen_expr(expr: &TypedExpr,
             ref on_true,
             ref on_false,
         } => {
-            let (cur_func, cur_block, cond_sym) = gen_expr(cond, prog, literal_map,getfield_map,cur_func, cur_block, multithreaded)?;
-            let (cur_func, cur_block, true_sym) = gen_expr(on_true, prog, literal_map,getfield_map,cur_func, cur_block, multithreaded)?;
-            let (cur_func, cur_block, false_sym) = gen_expr(on_false, prog, literal_map,getfield_map,cur_func, cur_block, multithreaded)?;
+            let (cur_func, cur_block, cond_sym) = gen_expr(cond, prog, cur_func, cur_block, multithreaded)?;
+            let (cur_func, cur_block, true_sym) = gen_expr(on_true, prog, cur_func, cur_block, multithreaded)?;
+            let (cur_func, cur_block, false_sym) = gen_expr(on_false, prog, cur_func, cur_block, multithreaded)?;
             let res_sym = prog.add_local(&expr.ty, cur_func);
-            prog.funcs[cur_func].blocks[cur_block].add_statement(Select {
-                                                                     output: res_sym.clone(),
+            prog.funcs[cur_func].blocks[cur_block].add_statement(Statement::new(Some(res_sym.clone()), Select {
                                                                      cond: cond_sym,
                                                                      on_true: true_sym.clone(),
                                                                      on_false: false_sym.clone(),
-                                                                 });
-            Ok((cur_func, cur_block, res_sym))
-        }
-        ExprKind::ToVec { ref child_expr } => {
-            let (cur_func, cur_block, child_sym) = gen_expr(child_expr, prog, literal_map,getfield_map, cur_func, cur_block, multithreaded)?;
-            let res_sym = prog.add_local(&expr.ty, cur_func);
-            prog.funcs[cur_func].blocks[cur_block].add_statement(ToVec {
-                                                                     output: res_sym.clone(),
-                                                                     child: child_sym,
-                                                                 });
+                                                                 }));
             Ok((cur_func, cur_block, res_sym))
         }
 
-        ExprKind::Length { ref data } => {
-            let (cur_func, cur_block, data_sym) = gen_expr(data, prog, literal_map,getfield_map,cur_func, cur_block, multithreaded)?;
+        ExprKind::ToVec { ref child_expr } => {
+            let (cur_func, cur_block, child_sym) = gen_expr(child_expr, prog, cur_func, cur_block, multithreaded)?;
             let res_sym = prog.add_local(&expr.ty, cur_func);
-            prog.funcs[cur_func].blocks[cur_block].add_statement(Length {
-                                                                     output: res_sym.clone(),
-                                                                     child: data_sym,
-                                                                 });
+            prog.funcs[cur_func].blocks[cur_block].add_statement(
+                Statement::new(Some(res_sym.clone()), ToVec(child_sym))
+                );
+            Ok((cur_func, cur_block, res_sym))
+        }
+
+
+        ExprKind::Length { ref data } => {
+            let (cur_func, cur_block, child_sym) = gen_expr(data, prog, cur_func, cur_block, multithreaded)?;
+            let res_sym = prog.add_local(&expr.ty, cur_func);
+            prog.funcs[cur_func].blocks[cur_block].add_statement(
+                Statement::new(Some(res_sym.clone()), Length(child_sym))
+                );
             Ok((cur_func, cur_block, res_sym))
         }
 
@@ -920,7 +863,7 @@ fn gen_expr(expr: &TypedExpr,
             ref on_true,
             ref on_false,
         } => {
-            let (cur_func, cur_block, cond_sym) = gen_expr(cond, prog, literal_map,getfield_map,cur_func, cur_block, multithreaded)?;
+            let (cur_func, cur_block, cond_sym) = gen_expr(cond, prog, cur_func, cur_block, multithreaded)?;
             let true_block = prog.funcs[cur_func].add_block();
             let false_block = prog.funcs[cur_func].add_block();
             prog.funcs[cur_func].blocks[cur_block].terminator = Branch {
@@ -928,18 +871,13 @@ fn gen_expr(expr: &TypedExpr,
                 on_true: true_block,
                 on_false: false_block,
             };
-            let (true_func, true_block, true_sym) = gen_expr(on_true, prog, literal_map,getfield_map,cur_func, true_block, multithreaded)?;
+            let (true_func, true_block, true_sym) = gen_expr(on_true, prog, cur_func, true_block, multithreaded)?;
             let (false_func, false_block, false_sym) =
-                gen_expr(on_false, prog, literal_map,getfield_map,cur_func, false_block, multithreaded)?;
+                gen_expr(on_false, prog, cur_func, false_block, multithreaded)?;
             let res_sym = prog.add_local(&expr.ty, true_func);
-            prog.funcs[true_func].blocks[true_block].add_statement(Assign {
-                                                                       output: res_sym.clone(),
-                                                                       value: true_sym,
-                                                                   });
-            prog.funcs[false_func].blocks[false_block].add_statement(Assign {
-                                                                         output: res_sym.clone(),
-                                                                         value: false_sym,
-                                                                     });
+            prog.funcs[true_func].blocks[true_block].add_statement(Statement::new(Some(res_sym.clone()), Assign(true_sym)));
+            prog.funcs[false_func].blocks[false_block].add_statement(Statement::new(Some(res_sym.clone()), Assign(false_sym)));
+
             if true_func != cur_func || false_func != cur_func {
                 // TODO we probably want a better for name for this symbol than whatever res_sym is
                 prog.add_local_named(&expr.ty, &res_sym, false_func);
@@ -963,7 +901,7 @@ fn gen_expr(expr: &TypedExpr,
             ref update_func,
         } => {
             // Generate the intial value.
-            let (cur_func, cur_block, initial_sym) = gen_expr(initial, prog, literal_map,getfield_map,cur_func, cur_block, multithreaded)?;
+            let (cur_func, cur_block, initial_sym) = gen_expr(initial, prog, cur_func, cur_block, multithreaded)?;
 
             // Pull out the argument name and function body and validate that things type-check.
             let argument_sym;
@@ -982,8 +920,8 @@ fn gen_expr(expr: &TypedExpr,
                 }
                 _ => return weld_err!("Argument of Iterate was not a Lambda")
             }
-            prog.funcs[cur_func].blocks[cur_block].add_statement(
-                Assign { output: argument_sym.clone(), value: initial_sym });
+
+            prog.funcs[cur_func].blocks[cur_block].add_statement(Statement::new(Some(argument_sym.clone()), Assign(initial_sym)));
 
             // Check whether the function's body contains any parallel loops. If so, we should put the loop body
             // in a new function because we'll need to jump back to it from continuations. If not, we can just
@@ -1008,7 +946,7 @@ fn gen_expr(expr: &TypedExpr,
             // Generate the loop's body, which will work on argument_sym and produce result_sym.
             // The type of result_sym will be {ArgType, bool} and we will repeat the body if the bool is true.
             let (body_end_func, body_end_block, result_sym) =
-                gen_expr(func_body, prog, literal_map,getfield_map,body_start_func, body_start_block, multithreaded)?;
+                gen_expr(func_body, prog, body_start_func, body_start_block, multithreaded)?;
 
             // After the body, unpack the {state, bool} struct into symbols argument_sym and continue_sym.
             let continue_sym = prog.add_local(&Scalar(ScalarKind::Bool), body_end_func);
@@ -1018,9 +956,9 @@ fn gen_expr(expr: &TypedExpr,
                 prog.funcs[body_end_func].params.insert(argument_sym.clone(), initial.ty.clone());
             }
             prog.funcs[body_end_func].blocks[body_end_block].add_statement(
-                GetField { output: argument_sym.clone(), value: result_sym.clone(), index: 0 });
+                Statement::new(Some(argument_sym.clone()), GetField { value: result_sym.clone(), index: 0 }));
             prog.funcs[body_end_func].blocks[body_end_block].add_statement(
-                GetField { output: continue_sym.clone(), value: result_sym.clone(), index: 1 });
+                Statement::new(Some(continue_sym.clone()), GetField { value: result_sym.clone(), index: 1 }));
 
             // Create two more blocks so we can branch on continue_sym
             let repeat_block = prog.funcs[body_end_func].add_block();
@@ -1046,58 +984,51 @@ fn gen_expr(expr: &TypedExpr,
             ref builder,
             ref value,
         } => {
-            let (cur_func, cur_block, builder_sym) = gen_expr(builder, prog, literal_map,getfield_map,cur_func, cur_block, multithreaded)?;
-            let (cur_func, cur_block, elem_sym) = gen_expr(value, prog, literal_map,getfield_map,cur_func, cur_block, multithreaded)?;
-            prog.funcs[cur_func].blocks[cur_block].add_statement(Merge {
+            let (cur_func, cur_block, builder_sym) = gen_expr(builder, prog, cur_func, cur_block, multithreaded)?;
+            let (cur_func, cur_block, elem_sym) = gen_expr(value, prog, cur_func, cur_block, multithreaded)?;
+            prog.funcs[cur_func].blocks[cur_block].add_statement(Statement::new(None, Merge {
                                                                      builder: builder_sym.clone(),
                                                                      value: elem_sym,
-                                                                 });
+                                                                 }));
             Ok((cur_func, cur_block, builder_sym))
         }
 
         ExprKind::Res { ref builder } => {
-            let (cur_func, cur_block, builder_sym) = gen_expr(builder, prog, literal_map,getfield_map,cur_func, cur_block, multithreaded)?;
+            let (cur_func, cur_block, builder_sym) = gen_expr(builder, prog, cur_func, cur_block, multithreaded)?;
             let res_sym = prog.add_local(&expr.ty, cur_func);
-            prog.funcs[cur_func].blocks[cur_block].add_statement(Res {
-                                                                     output: res_sym.clone(),
-                                                                     builder: builder_sym,
-                                                                 });
+            prog.funcs[cur_func].blocks[cur_block].add_statement(Statement::new(Some(res_sym.clone()), Res(builder_sym)));
             Ok((cur_func, cur_block, res_sym))
         }
 
         ExprKind::NewBuilder(ref arg) => {
             let (cur_func, cur_block, arg_sym) = if let Some(ref a) = *arg {
-                let (cur_func, cur_block, arg_sym) = gen_expr(a, prog, literal_map,getfield_map,cur_func, cur_block, multithreaded)?;
+                let (cur_func, cur_block, arg_sym) = gen_expr(a, prog, cur_func, cur_block, multithreaded)?;
                 (cur_func, cur_block, Some(arg_sym))
             } else {
                 (cur_func, cur_block, None)
             };
             let res_sym = prog.add_local(&expr.ty, cur_func);
-            prog.funcs[cur_func].blocks[cur_block].add_statement(NewBuilder {
-                                                                     output: res_sym.clone(),
+            prog.funcs[cur_func].blocks[cur_block].add_statement(Statement::new(Some(res_sym.clone()), NewBuilder {
                                                                      arg: arg_sym,
                                                                      ty: expr.ty.clone(),
-                                                                 });
+                                                                 }));
             Ok((cur_func, cur_block, res_sym))
         }
 
         ExprKind::MakeStruct { ref elems } => {
             let mut syms = vec![];
             let (mut cur_func, mut cur_block, mut sym) =
-                gen_expr(&elems[0], prog, literal_map,getfield_map, cur_func, cur_block, multithreaded)?;
+                gen_expr(&elems[0], prog, cur_func, cur_block, multithreaded)?;
             syms.push(sym);
             for elem in elems.iter().skip(1) {
-                let r = gen_expr(elem, prog, literal_map,getfield_map,cur_func, cur_block, multithreaded)?;
+                let r = gen_expr(elem, prog, cur_func, cur_block, multithreaded)?;
                 cur_func = r.0;
                 cur_block = r.1;
                 sym = r.2;
                 syms.push(sym);
             }
             let res_sym = prog.add_local(&expr.ty, cur_func);
-            prog.funcs[cur_func].blocks[cur_block].add_statement(MakeStruct {
-                                                                     output: res_sym.clone(),
-                                                                     elems: syms,
-                                                                 });
+            prog.funcs[cur_func].blocks[cur_block].add_statement(Statement::new(Some(res_sym.clone()), MakeStruct(syms)));
             Ok((cur_func, cur_block, res_sym))
         }
 
@@ -1106,17 +1037,14 @@ fn gen_expr(expr: &TypedExpr,
             let mut cur_func = cur_func;
             let mut cur_block = cur_block;
             for elem in elems.iter() {
-                let r = gen_expr(elem, prog, literal_map,getfield_map,cur_func, cur_block, multithreaded)?;
+                let r = gen_expr(elem, prog, cur_func, cur_block, multithreaded)?;
                 cur_func = r.0;
                 cur_block = r.1;
                 let sym = r.2;
                 syms.push(sym);
             }
             let res_sym = prog.add_local(&expr.ty, cur_func);
-            prog.funcs[cur_func].blocks[cur_block].add_statement(MakeVector {
-                                                                     output: res_sym.clone(),
-                                                                     elems: syms
-                                                                 });
+            prog.funcs[cur_func].blocks[cur_block].add_statement(Statement::new(Some(res_sym.clone()), MakeVector(syms)));
             Ok((cur_func, cur_block, res_sym))
         }
 
@@ -1129,48 +1057,34 @@ fn gen_expr(expr: &TypedExpr,
             let mut cur_func = cur_func;
             let mut cur_block = cur_block;
             for arg in args.iter() {
-                let r = gen_expr(arg, prog, literal_map,getfield_map,cur_func, cur_block, multithreaded)?;
+                let r = gen_expr(arg, prog, cur_func, cur_block, multithreaded)?;
                 cur_func = r.0;
                 cur_block = r.1;
                 let sym = r.2;
                 syms.push(sym);
             }
             let res_sym = prog.add_local(&expr.ty, cur_func);
-            prog.funcs[cur_func].blocks[cur_block].add_statement(CUDF {
-                                                                     output: res_sym.clone(),
+            prog.funcs[cur_func].blocks[cur_block].add_statement(Statement::new(Some(res_sym.clone()), CUDF {
                                                                      args: syms,
                                                                      symbol_name: sym_name.clone(),
-                                                                 });
+                                                                 }));
             Ok((cur_func, cur_block, res_sym))
         }
 
         ExprKind::GetField { ref expr, index } => {
-            // If in the map, return the symbol for it.
-            // Else: Generate it and add it to the map.
-            let (cur_func, cur_block, struct_sym) = gen_expr(expr, prog, literal_map,getfield_map,cur_func, cur_block, multithreaded)?;
-
-            let res_sym = match getfield_map.entry((cur_func, struct_sym.clone(), index)) {
-                Entry::Occupied(ref e) => {
-                    e.get().clone()
-                }
-                Entry::Vacant(entry) => {
-                    let field_ty = match expr.ty {
-                        super::ast::Type::Struct(ref v) => &v[index as usize],
-                        _ => {
-                            weld_err!("Internal error: tried to get field of type {}",
-                                      print_type(&expr.ty))?
-                        }
-                    };
-                    let res_sym = prog.add_local(&field_ty, cur_func);
-                    prog.funcs[cur_func].blocks[cur_block].add_statement(GetField {
-                        output: res_sym.clone(),
-                        value: struct_sym,
-                        index: index,
-                    });
-                    entry.insert(res_sym.clone());
-                    res_sym
+            let (cur_func, cur_block, struct_sym) = gen_expr(expr, prog, cur_func, cur_block, multithreaded)?;
+            let field_ty = match expr.ty {
+                super::ast::Type::Struct(ref v) => &v[index as usize],
+                _ => {
+                    weld_err!("Internal error: tried to get field of type {}",
+                              print_type(&expr.ty))?
                 }
             };
+            let res_sym = prog.add_local(&field_ty, cur_func);
+            prog.funcs[cur_func].blocks[cur_block].add_statement(Statement::new(Some(res_sym.clone()), GetField {
+                value: struct_sym,
+                index: index,
+            }));
             Ok((cur_func, cur_block, res_sym))
         }
 
@@ -1184,7 +1098,7 @@ fn gen_expr(expr: &TypedExpr,
                        ref body,
                    } = func.kind {
                 let (cur_func, cur_block, builder_sym) =
-                    gen_expr(builder, prog, literal_map,getfield_map,cur_func, cur_block, multithreaded)?;
+                    gen_expr(builder, prog, cur_func, cur_block, multithreaded)?;
                 let body_func = prog.add_func();
                 let body_block = prog.funcs[body_func].add_block();
                 prog.add_local_named(&params[0].ty, &params[0].name, body_func);
@@ -1197,7 +1111,7 @@ fn gen_expr(expr: &TypedExpr,
                 let mut cur_block = cur_block;
                 let mut pf_iters: Vec<ParallelForIter> = Vec::new();
                 for iter in iters.iter() {
-                    let data_res = gen_expr(&iter.data, prog, literal_map,getfield_map,cur_func, cur_block, multithreaded)?;
+                    let data_res = gen_expr(&iter.data, prog, cur_func, cur_block, multithreaded)?;
                     cur_func = data_res.0;
                     cur_block = data_res.1;
                     prog.funcs[body_func]
@@ -1209,7 +1123,7 @@ fn gen_expr(expr: &TypedExpr,
                             Some(ref e) => e,
                             _ => weld_err!("Can't reach this")?,
                         };
-                        let start_res = gen_expr(&start_expr, prog, literal_map,getfield_map,cur_func, cur_block, multithreaded)?;
+                        let start_res = gen_expr(&start_expr, prog, cur_func, cur_block, multithreaded)?;
                         cur_func = start_res.0;
                         cur_block = start_res.1;
                         prog.funcs[body_func]
@@ -1224,7 +1138,7 @@ fn gen_expr(expr: &TypedExpr,
                             Some(ref e) => e,
                             _ => weld_err!("Can't reach this")?,
                         };
-                        let end_res = gen_expr(&end_expr, prog, literal_map,getfield_map,cur_func, cur_block, multithreaded)?;
+                        let end_res = gen_expr(&end_expr, prog, cur_func, cur_block, multithreaded)?;
                         cur_func = end_res.0;
                         cur_block = end_res.1;
                         prog.funcs[body_func]
@@ -1239,7 +1153,7 @@ fn gen_expr(expr: &TypedExpr,
                             Some(ref e) => e,
                             _ => weld_err!("Can't reach this")?,
                         };
-                        let stride_res = gen_expr(&stride_expr, prog, literal_map,getfield_map,cur_func, cur_block, multithreaded)?;
+                        let stride_res = gen_expr(&stride_expr, prog, cur_func, cur_block, multithreaded)?;
                         cur_func = stride_res.0;
                         cur_block = stride_res.1;
                         prog.funcs[body_func]
@@ -1258,7 +1172,7 @@ fn gen_expr(expr: &TypedExpr,
                                   });
                 }
                 let (body_end_func, body_end_block, _) =
-                    gen_expr(body, prog, literal_map,getfield_map,body_func, body_block, multithreaded)?;
+                    gen_expr(body, prog, body_func, body_block, multithreaded)?;
                 prog.funcs[body_end_func].blocks[body_end_block].terminator = EndFunction;
                 let cont_func = prog.add_func();
                 let cont_block = prog.funcs[cont_func].add_block();
