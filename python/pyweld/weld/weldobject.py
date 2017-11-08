@@ -21,11 +21,11 @@ class WeldObjectEncoder(object):
     def encode(obj):
         """
         Encodes an object. All objects encodable by this encoder should return
-        a valid Weld type using pyToWeldType.
+        a valid Weld type using py_to_weld_type.
         """
         raise NotImplementedError
 
-    def pyToWeldType(obj):
+    def py_to_weld_type(obj):
         """
         Returns a WeldType corresponding to a Python object
         """
@@ -40,7 +40,7 @@ class WeldObjectDecoder(object):
     def decode(obj, restype):
         """
         Decodes obj, assuming object is of type `restype`. obj's Python
-        type is ctypes.POINTER(restype.cTypeClass).
+        type is ctypes.POINTER(restype.ctype_class).
         """
         raise NotImplementedError
 
@@ -75,6 +75,7 @@ class WeldObject(object):
     # Counter for assigning variable names
     _var_num = 0
     _obj_id = 100
+    _registry = {}
 
     def __init__(self, encoder, decoder):
         self.encoder = encoder
@@ -84,12 +85,8 @@ class WeldObject(object):
         self.weld_code = ""
         self.dependencies = {}
 
-        # Weld type, which represents the return type of this Weld program.
-        # decoder must support decoding the return type. TODO.
-        self.dataType = None
-
         # Assign a unique ID to the context
-        self.objectId = WeldObject._obj_id
+        self.obj_id = "obj%d" % WeldObject._obj_id
         WeldObject._obj_id += 1
 
         # Maps name -> input data
@@ -112,29 +109,53 @@ class WeldObject(object):
             self.context.update(value.context)
             self.dependencies.update(value.dependencies)
         else:
-            name = "e" + str(WeldObject._var_num)
-            WeldObject._var_num += 1
+            # Ensure that the same inputs always have same names
+            value_str = str(value)
+            if value_str in WeldObject._registry:
+                name = WeldObject._registry[value_str]
+            else:
+                name = "_inp%d" % WeldObject._var_num
+                WeldObject._var_num += 1
+                WeldObject._registry[value_str] = name
             self.context[name] = value
             if tys is not None and not override:
                 self.argtypes[name] = tys
             return name
 
-    def toWeldFunc(self):
+    def get_let_statements(self):
+        queue = [self]
+        visited = set()
+        let_statements = []
+        is_first = True
+        while len(queue) > 0:
+            cur_obj = queue.pop()
+            cur_obj_id = cur_obj.obj_id
+            if cur_obj_id in visited:
+                continue
+            if not is_first:
+                let_statements.insert(0, "let %s = (%s);" % (cur_obj_id, cur_obj.weld_code))
+            is_first = False
+            for key in sorted(cur_obj.dependencies.keys()):
+                queue.append(cur_obj.dependencies[key])
+            visited.add(cur_obj_id)
+        let_statements.sort()  # To ensure that let statements are in the right
+                               # order in the final generated program
+        return "\n".join(let_statements)
+
+    def to_weld_func(self):
         names = self.context.keys()
         names.sort()
         arg_strs = ["{0}: {1}".format(str(name),
-                                      str(self.encoder.pyToWeldType(self.context[name])))
+                                      str(self.encoder.py_to_weld_type(self.context[name])))
                     for name in names]
         header = "|" + ", ".join(arg_strs) + "|"
         keys = self.dependencies.keys()
         keys.sort()
-        text = header + " " + \
-            "\n".join(["let %s = (%s);" % (key, self.dependencies[key]) for key in
-                       keys]) + "\n" + self.weld_code
+        text = header + " " + self.get_let_statements() + "\n" + self.weld_code
         return text
 
     def evaluate(self, restype, verbose=True, decode=True):
-        function = self.toWeldFunc()
+        function = self.to_weld_func()
 
         # Returns a wrapped ctypes Structure
         def args_factory(encoded):
@@ -152,11 +173,11 @@ class WeldObject(object):
         argtypes = []
         for name in names:
             if name in self.argtypes:
-                argtypes.append(self.argtypes[name].cTypeClass)
+                argtypes.append(self.argtypes[name].ctype_class)
                 encoded.append(self.context[name])
             else:
-                argtypes.append(self.encoder.pyToWeldType(
-                    self.context[name]).cTypeClass)
+                argtypes.append(self.encoder.py_to_weld_type(
+                    self.context[name]).ctype_class)
                 encoded.append(self.encoder.encode(self.context[name]))
         end = time.time()
         if verbose:
@@ -192,7 +213,7 @@ class WeldObject(object):
             raise ValueError(("Error while running function,\n{}\n\n"
                               "Error message: {}").format(
                 function, err.message()))
-        ptrtype = POINTER(restype.cTypeClass)
+        ptrtype = POINTER(restype.ctype_class)
         data = ctypes.cast(weld_ret.data(), ptrtype)
         end = time.time()
         if verbose:

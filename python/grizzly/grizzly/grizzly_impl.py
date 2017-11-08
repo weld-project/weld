@@ -27,8 +27,8 @@ def unique(array, ty):
 
     array_var = weld_obj.update(array)
     if isinstance(array, WeldObject):
-        array_var = "tmp%d" % array.objectId
-        weld_obj.dependencies[array_var] = array.weld_code
+        array_var = array.obj_id
+        weld_obj.dependencies[array_var] = array
 
     weld_template = """
        map(
@@ -68,8 +68,8 @@ def aggr(array, op, initial_value, ty):
 
     array_var = weld_obj.update(array)
     if isinstance(array, WeldObject):
-        array_var = "tmp%d" % array.objectId
-        weld_obj.dependencies[array_var] = array.weld_code
+        array_var = array.obj_id
+        weld_obj.dependencies[array_var] = array
 
     weld_template = """
       result(
@@ -103,19 +103,19 @@ def mask(array, predicates, new_value, ty):
 
     array_var = weld_obj.update(array)
     if isinstance(array, WeldObject):
-        array_var = "tmp%d" % array.objectId
-        weld_obj.dependencies[array_var] = array.weld_code
+        array_var = array.obj_id
+        weld_obj.dependencies[array_var] = array
 
     predicates_var = weld_obj.update(predicates)
     if isinstance(predicates, WeldObject):
-        predicates_var = "tmp%d" % predicates.objectId
-        weld_obj.dependencies[predicates_var] = predicates.weld_code
+        predicates_var = predicates.obj_id
+        weld_obj.dependencies[predicates_var] = predicates
 
     if str(ty).startswith("vec"):
         new_value_var = weld_obj.update(new_value)
         if isinstance(new_value, WeldObject):
-            new_value_var = "tmp%d" % new_value.objectId
-            weld_obj.dependencies[new_value_var] = new_value.weld
+            new_value_var = new_value.obj_id
+            weld_obj.dependencies[new_value_var] = new_value
     else:
         new_value_var = "%s(%s)" % (ty, str(new_value))
 
@@ -151,13 +151,13 @@ def filter(array, predicates, ty):
 
     array_var = weld_obj.update(array)
     if isinstance(array, WeldObject):
-        array_var = "tmp%d" % array.objectId
-        weld_obj.dependencies[array_var] = array.weld_code
+        array_var = array.obj_id
+        weld_obj.dependencies[array_var] = array
 
     predicates_var = weld_obj.update(predicates)
     if isinstance(predicates, WeldObject):
-        predicates_var = "tmp%d" % predicates.objectId
-        weld_obj.dependencies[predicates_var] = predicates.weld_code
+        predicates_var = predicates.obj_id
+        weld_obj.dependencies[predicates_var] = predicates
 
     weld_template = """
        result(
@@ -193,13 +193,13 @@ def element_wise_op(array, other, op, ty):
 
     array_var = weld_obj.update(array)
     if isinstance(array, WeldObject):
-        array_var = "tmp%d" % array.objectId
-        weld_obj.dependencies[array_var] = array.weld_code
+        array_var = array.obj_id
+        weld_obj.dependencies[array_var] = array
 
     other_var = weld_obj.update(other)
     if isinstance(other, WeldObject):
-        other_var = "tmp%d" % array.objectId
-        weld_obj.dependencies[other_var] = other.weld_code
+        other_var = array.obj_id
+        weld_obj.dependencies[other_var] = other
 
     weld_template = """
        map(
@@ -232,16 +232,16 @@ def compare(array, other, op, ty_str):
 
     array_var = weld_obj.update(array)
     if isinstance(array, WeldObject):
-        array_var = "tmp%d" % array.objectId
-        weld_obj.dependencies[array_var] = array.weld_code
+        array_var = array.obj_id
+        weld_obj.dependencies[array_var] = array
 
     # Strings need to be encoded into vec[char] array.
     # Constants can be added directly to NVL snippet.
     if isinstance(other, str) or isinstance(other, WeldObject):
         other_var = weld_obj.update(other)
         if isinstance(other, WeldObject):
-            other_var = "tmp%d" % tmp.objectId
-            weld_obj.dependencies[other_var] = other.weld_code
+            other_var = tmp.obj_id
+            weld_obj.dependencies[other_var] = other
     else:
         other_var = "%s(%s)" % (ty_str, str(other))
 
@@ -276,8 +276,8 @@ def slice(array, start, size, ty):
 
     array_var = weld_obj.update(array)
     if isinstance(array, WeldObject):
-        array_var = "tmp%d" % array.objectId
-        weld_obj.dependencies[array_var] = array.weld_code
+        array_var = array.obj_id
+        weld_obj.dependencies[array_var] = array
 
     weld_template = """
        map(
@@ -307,8 +307,8 @@ def count(array, ty):
 
     array_var = weld_obj.update(array)
     if isinstance(array, WeldObject):
-        array_var = "tmp%d" % array.objectId
-        weld_obj.dependencies[array_var] = array.weld_code
+        array_var = array.obj_id
+        weld_obj.dependencies[array_var] = array
 
     weld_template = """
      len(%(array)s)
@@ -336,14 +336,15 @@ def groupby_sum(columns, column_tys, grouping_column):
 
     grouping_column_var = weld_obj.update(grouping_column)
     if isinstance(grouping_column, WeldObject):
-        grouping_column_var = grouping_column.weld_code
+        grouping_column_var = grouping_column.obj_id
+        weld_obj.dependencies[grouping_column_var] = grouping_column
 
     columns_var_list = []
     for column in columns:
         column_var = weld_obj.update(column)
         if isinstance(column, WeldObject):
-            column_var = "tmp%d" % column.objectId
-            weld_obj.dependencies[column_var] = column.weld_code
+            column_var = column.obj_id
+            weld_obj.dependencies[column_var] = column
         columns_var_list.append(column_var)
 
     if len(columns_var_list) == 1:
@@ -394,8 +395,8 @@ def get_column(columns, column_tys, index):
     weld_obj = WeldObject(encoder_, decoder_)
     columns_var = weld_obj.update(columns, tys=WeldVec(column_tys), override=False)
     if isinstance(columns, WeldObject):
-        columns_var = "tmp%d" % columns.objectId
-        weld_obj.dependencies[columns_var] = columns.weld_code
+        columns_var = columns.obj_id
+        weld_obj.dependencies[columns_var] = columns
 
     weld_template = """
      map(

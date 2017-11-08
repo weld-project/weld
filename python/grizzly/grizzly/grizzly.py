@@ -2,8 +2,25 @@ import numpy as np
 import pandas as pd
 
 import grizzly_impl
-from lazy_op import LazyOpResult
+from lazy_op import LazyOpResult, to_weld_type
 from weld.weldobject import *
+
+
+def group(exprs):
+    weld_type = [to_weld_type(expr.weld_type, expr.dim) for expr in exprs]
+    exprs = [expr.expr for expr in exprs]
+    weld_obj = WeldObject(grizzly_impl.encoder_, grizzly_impl.decoder_)
+    weld_type = WeldStruct(weld_type)
+    dim = 0
+
+    expr_names = [expr.obj_id for expr in exprs]
+    for expr in exprs:
+        weld_obj.update(expr)
+    weld_obj.weld_code = "{%s}" % ", ".join(expr_names)
+    for expr in exprs:
+        weld_obj.dependencies[expr.obj_id] = expr
+
+    return LazyOpResult(weld_obj, weld_type, dim)
 
 
 class DataFrameWeld:
