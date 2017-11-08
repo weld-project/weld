@@ -1247,7 +1247,7 @@ impl LlvmGenerator {
             return Ok(());
         }
 
-        let mut ctx = &mut FunctionContext::new(false);
+        let ctx = &mut FunctionContext::new(false);
         let arg_types = self.get_arg_str(&func.params, ".in")?;
 
         self.gen_function_header(&arg_types, func, ctx)?;
@@ -1602,7 +1602,7 @@ impl LlvmGenerator {
                             NAME=&name.replace("%", "")));
                 }
                 // Set this flag to true as well, since these templates also generate `eq`.
-                let mut helper_state = self.type_helpers.get_mut(ty).unwrap();
+                let helper_state = self.type_helpers.get_mut(ty).unwrap();
                 helper_state.eq_func = true;
             }
             _ => {
@@ -2406,7 +2406,7 @@ impl LlvmGenerator {
                         }
 
                         // Generate prelude code
-                        let mut keyfunc_ctx = &mut FunctionContext::new(false);
+                        let keyfunc_ctx = &mut FunctionContext::new(false);
                         for (arg, ty) in keyfunc.locals.iter() {
                             let arg_str = llvm_symbol(&arg);
                             let ty_str = self.llvm_type(&ty)?;

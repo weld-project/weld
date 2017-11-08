@@ -50,8 +50,8 @@ impl SymbolStack {
     /// Push a new symbol onto the stack, assigning it a unique name. This enters a new scope for
     /// the name. The symbol can be retrieved with `symbol()`.
     fn push_symbol(&mut self, sym: Symbol) {
-        let mut stack_entry = self.stack.entry(sym.clone()).or_insert(Vec::new());
-        let mut next_entry = self.next_unique_symbol.entry(sym.name).or_insert(-1);
+        let stack_entry = self.stack.entry(sym.clone()).or_insert(Vec::new());
+        let next_entry = self.next_unique_symbol.entry(sym.name).or_insert(-1);
         *next_entry = if sym.id > *next_entry {
             sym.id
         } else {

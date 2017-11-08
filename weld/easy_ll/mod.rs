@@ -345,10 +345,9 @@ unsafe fn optimize_module(module: LLVMModuleRef, optimization_level: u32)
     if builder.is_null() {
         return Err(LlvmError::new("LLVMPassManagerBuilderCreate returned null"));
     }
-    // TODO: not clear we need both Module and LTO calls here; just LTO might work
+
     pmb::LLVMPassManagerBuilderSetOptLevel(builder, optimization_level);
-    pmb::LLVMPassManagerBuilderPopulateModulePassManager(builder, manager);
-    //pmb::LLVMPassManagerBuilderPopulateLTOPassManager(builder, manager, 1, 1);
+    pmb::LLVMPassManagerBuilderPopulateLTOPassManager(builder, manager, 1, 1);
     pmb::LLVMPassManagerBuilderDispose(builder);
     llvm::core::LLVMRunPassManager(manager, module);
     llvm::core::LLVMDisposePassManager(manager);
