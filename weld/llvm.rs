@@ -2408,7 +2408,7 @@ impl LlvmGenerator {
                         }
 
                         // Generate prelude code
-                        let mut keyfunc_ctx = &mut FunctionContext::new(false);
+                        let keyfunc_ctx = &mut FunctionContext::new(false);
                         for (arg, ty) in keyfunc.locals.iter() {
                             let arg_str = llvm_symbol(&arg);
                             let ty_str = self.llvm_type(&ty)?;

@@ -45,20 +45,6 @@ pub enum StatementKind {
     Lookup {
         child: Symbol,
         index: Symbol,
-        size: Symbol,
-    },
-    Select {
-        cond: Symbol,
-        on_true: Symbol,
-        on_false: Symbol,
-    },
-    CUDF {
-        symbol_name: String,
-        args: Vec<Symbol>,
-    },
-    Sort {
-        child: Symbol,
-        keyfunc: SirFunction,
     },
     MakeStruct(Vec<Symbol>),
     MakeVector(Vec<Symbol>),
