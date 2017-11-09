@@ -41,7 +41,7 @@ class WeldType(object):
         return hash(other) == hash(self)
 
     @property
-    def cTypeClass(self):
+    def ctype_class(self):
         """
         Returns a class representing this type's ctype representation.
 
@@ -64,7 +64,7 @@ class WeldChar(WeldType):
         return "i8"
 
     @property
-    def cTypeClass(self):
+    def ctype_class(self):
         """Summary
 
         Returns:
@@ -86,7 +86,7 @@ class WeldBit(WeldType):
         return "bool"
 
     @property
-    def cTypeClass(self):
+    def ctype_class(self):
         """Summary
 
         Returns:
@@ -108,7 +108,7 @@ class WeldInt(WeldType):
         return "i32"
 
     @property
-    def cTypeClass(self):
+    def ctype_class(self):
         """Summary
 
         Returns:
@@ -130,7 +130,7 @@ class WeldLong(WeldType):
         return "i64"
 
     @property
-    def cTypeClass(self):
+    def ctype_class(self):
         """Summary
 
         Returns:
@@ -152,7 +152,7 @@ class WeldFloat(WeldType):
         return "f32"
 
     @property
-    def cTypeClass(self):
+    def ctype_class(self):
         return c_float
 
 
@@ -169,7 +169,7 @@ class WeldDouble(WeldType):
         return "f64"
 
     @property
-    def cTypeClass(self):
+    def ctype_class(self):
         """Summary
 
         Returns:
@@ -206,7 +206,7 @@ class WeldVec(WeldType):
         return "vec[%s]" % str(self.elemType)
 
     @property
-    def cTypeClass(self):
+    def ctype_class(self):
         """Summary
 
         Returns:
@@ -225,7 +225,7 @@ class WeldVec(WeldType):
                 """Summary
                 """
                 _fields_ = [
-                    ("ptr", POINTER(elemType.cTypeClass)),
+                    ("ptr", POINTER(elemType.ctype_class)),
                     ("size", c_long),
                 ]
             return Vec
@@ -239,18 +239,18 @@ class WeldStruct(WeldType):
     """Summary
 
     Attributes:
-        fieldTypes (TYPE): Description
+        field_types (TYPE): Description
     """
     _singletons = {}
 
-    def __init__(self, fieldTypes):
+    def __init__(self, field_types):
         """Summary
 
         Args:
-            fieldTypes (TYPE): Description
+            field_types (TYPE): Description
         """
-        assert False not in [isinstance(e, WeldType) for e in fieldTypes]
-        self.fieldTypes = fieldTypes
+        assert False not in [isinstance(e, WeldType) for e in field_types]
+        self.field_types = field_types
 
     def __str__(self):
         """Summary
@@ -258,20 +258,20 @@ class WeldStruct(WeldType):
         Returns:
             TYPE: Description
         """
-        return "{" + ",".join([str(f) for f in self.fieldTypes]) + "}"
+        return "{" + ",".join([str(f) for f in self.field_types]) + "}"
 
     @property
-    def cTypeClass(self):
+    def ctype_class(self):
         """Summary
 
         Returns:
             TYPE: Description
         """
-        def struct_factory(fieldTypes):
+        def struct_factory(field_types):
             """Summary
 
             Args:
-                fieldTypes (TYPE): Description
+                field_types (TYPE): Description
 
             Returns:
                 TYPE: Description
@@ -279,11 +279,11 @@ class WeldStruct(WeldType):
             class Struct(Structure):
                 """Summary
                 """
-                _fields_ = [(str(i), t.cTypeClass)
-                            for i, t in enumerate(fieldTypes)]
+                _fields_ = [(str(i), t.ctype_class)
+                            for i, t in enumerate(field_types)]
             return Struct
 
-        if frozenset(self.fieldTypes) not in WeldVec._singletons:
+        if frozenset(self.field_types) not in WeldVec._singletons:
             WeldStruct._singletons[
-                frozenset(self.fieldTypes)] = struct_factory(self.fieldTypes)
-        return WeldStruct._singletons[frozenset(self.fieldTypes)]
+                frozenset(self.field_types)] = struct_factory(self.field_types)
+        return WeldStruct._singletons[frozenset(self.field_types)]

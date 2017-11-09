@@ -37,13 +37,13 @@ class NumpyArrayEncoder(WeldObjectEncoder):
     def encode(self, obj):
         self._check(obj)
         elem_type = dtype_to_weld_type(obj.dtype)
-        c_class = WeldVec(elem_type).cTypeClass
-        elem_class = elem_type.cTypeClass
+        c_class = WeldVec(elem_type).ctype_class
+        elem_class = elem_type.ctype_class
         ptr = obj.ctypes.data_as(POINTER(elem_class))
         size = ctypes.c_int64(len(obj))
         return c_class(ptr=ptr, size=size)
 
-    def pyToWeldType(self, obj):
+    def py_to_weld_type(self, obj):
         self._check(obj)
         return WeldVec(dtype_to_weld_type(obj.dtype))
 
@@ -74,7 +74,7 @@ class NumpyArrayDecoder(WeldObjectDecoder):
         obj = obj.contents
         size = obj.size
         data = obj.ptr
-        dtype = restype.elemType.cTypeClass
+        dtype = restype.elemType.ctype_class
 
         if restype == WeldVec(WeldInt()) or restype == WeldVec(WeldFloat()):
             # these have same sizes.

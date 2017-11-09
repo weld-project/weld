@@ -45,6 +45,20 @@ pub enum StatementKind {
     Lookup {
         child: Symbol,
         index: Symbol,
+        size: Symbol,
+    },
+    Select {
+        cond: Symbol,
+        on_true: Symbol,
+        on_false: Symbol,
+    },
+    CUDF {
+        symbol_name: String,
+        args: Vec<Symbol>,
+    },
+    Sort {
+        child: Symbol,
+        keyfunc: SirFunction,
     },
     MakeStruct(Vec<Symbol>),
     MakeVector(Vec<Symbol>),
@@ -880,7 +894,6 @@ fn gen_expr(expr: &TypedExpr,
                 weld_err!("Sort key function expected lambda type, instead {:?} provided", keyfunc.ty)
             }
         }
-
         ExprKind::Select {
             ref cond,
             ref on_true,
