@@ -261,7 +261,7 @@ def element_wise_op(array, other, op, ty):
                                           "ty": ty, "op": op}
     return weld_obj
 
-def zip_columns(columns):
+def zip_filter(columns, predicates):
     """
     Zip together multiple columns.
 
@@ -275,7 +275,7 @@ def zip_columns(columns):
         A WeldObject representing this computation
     """
     weld_obj = WeldObject(encoder_, decoder_)
-    colummn_vars = []
+    column_vars = []
     for column in columns:
         col_var = weld_obj.update(column)
         if isinstance(column, WeldObject):
@@ -283,16 +283,29 @@ def zip_columns(columns):
             col_obj.dependencies[col_var] = column.weld_code
         column_vars.append(col_var)
 
+    predicates_var = weld_obj.update(predicates)
+    if isinstance(predicates, WeldObject):
+        predicates_var = "tmp%d" % predicates.objectId
+        weld_obj.dependencies[predicates_var] = predicates.weld_code
+
+    arrays = ", ".join(column_vars)
+
+    struct_inner = ", ".join(["e.$%s" % i for i in range(1, len(columns) + 1)])
     weld_template = """
-       map(
-         zip(%(array)s, %(other)s),
-         |a| a.$0 %(op)s a.$1
+       result(
+         for(
+           zip(%(predicates)s, %(array)s),
+           appender,
+           |b, i, e| if (e.$0, merge(b, {%(struct)s}), b)
+         )
        )
     """
+    weld_obj.weld_code = weld_template % {
+        "array": arrays,
+        "predicates": predicates_var,
+        "struct": struct_inner
+    }
 
-    weld_obj.weld_code = weld_template % {"array": array_var,
-                                          "other": other_var,
-                                          "ty": ty, "op": op}
     return weld_obj
 
 def compare(array, other, op, ty_str):
@@ -468,6 +481,47 @@ def count(array, ty):
 
     return weld_obj
 
+def pivot_table(expr, value_index, value_ty, index_index, index_ty, columns_index, columns_ty, aggfunc):
+    """
+    Constructs a pivot table where the index_index and columns_index are used as keys and the value_index is used as the value which is aggregated.
+    """
+
+    weld_obj = WeldObject(encoder_, decoder_)
+
+    if aggfunc == 'sum':
+        op = '+'
+    else:
+        raise Exception("Aggregate operation %s not supported." % op)
+
+    zip_var = weld_obj.update(expr)
+    if isinstance(expr, WeldObject):
+        zip_var = "tmp%d" % expr.objectId
+        weld_obj.dependencies[zip_var] = expr.weld_code
+
+    weld_template = """
+    map(
+      tovec(
+        result(
+          for(
+            %(zip_expr)s,
+            dictmerger[{%(ity)s, %(cty)s}, %(vty)s, +],
+            |b, i, e| merge(b, {{e.$%(id)s, e.$%(cd)s}, e.$%(vd)s})
+          )
+        )
+      ),
+     |x : {{%(ity)s, %(cty)s}, %(vty)s}| {x.$0.$0, x.$0.$1, x.$1}
+   )
+  """
+
+    weld_obj.weld_code = weld_template % {"zip_expr": zip_var,
+                                          "ity": index_ty,
+                                          "cty": columns_ty,
+                                          "vty": value_ty,
+                                          "id": index_index,
+                                          "cd": columns_index,
+                                          "vd": value_index
+    }
+    return weld_obj
 
 def groupby_sum(columns, column_tys, grouping_columns, grouping_column_tys):
     """

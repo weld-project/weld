@@ -17,7 +17,7 @@ names = pd.concat(pieces, ignore_index=True)
 print "Size of names: %d" % len(names)
 
 def get_top1000(group):
-    return group.sort_values(by='births', ascending=False)[0:1000]
+    return group.sort_values(by='births', ascending=False)[0:10000]
 
 #Time preprocessing step
 start0 = time.time()

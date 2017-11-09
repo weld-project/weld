@@ -27,20 +27,22 @@ top1000 = grouped.apply(get_top1000)
 
 # Drop the group index, not needed
 top1000.reset_index(inplace=True, drop=True)
-top1000 = top1000.evaluate(verbose=True).to_pandas()
+top1000 = top1000.evaluate().to_pandas()
 end0 = time.time()
 
 start1 = time.time()
+lent = len(top1000)
 top1000 = gr.DataFrameWeld(top1000)
 top1000names = top1000['name']
 all_names = top1000names.unique()
 lesley_like = all_names.filter(all_names.contains('Lesl'))
 
-filtered = top1000[top1000names.isin(lesley_like)]
-filtered.evaluate()
-# table = filtered.pivot_table('births', index='year',
-#                              columns='sex', aggfunc='sum')
+filtered = top1000.filter(top1000names.isin(lesley_like))
 
+table = filtered.pivot_table('births', index='year',
+                              columns='sex', aggfunc='sum')
+
+print table.evaluate().to_pandas()
 # table = table.div(table.sum(1), axis=0)
 end1= time.time()
 

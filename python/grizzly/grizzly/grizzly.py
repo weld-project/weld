@@ -5,6 +5,78 @@ import grizzly_impl
 from lazy_op import LazyOpResult, to_weld_type
 from weld.weldobject import *
 
+class DataFrameWeldExpr:
+    def __init__(self, expr, column_names, weld_type):
+        if isinstance(weld_type, WeldStruct):
+           self.column_types = weld_type.fieldTypes
+           self.weld_type = weld_type
+        else:
+            raise Exception("DataFrameWeldExpr can only except struct types")
+
+        self.expr = expr
+        self.column_names = column_names
+        self.colindex_map = {name:i for i, name in enumerate(column_names)}
+
+    def pivot_table(self, values, index, columns, aggfunc='sum'):
+        value_index = self.colindex_map[values]
+        index_index = self.colindex_map[index]
+        columns_index = self.colindex_map[columns]
+
+        return DataFrameWeldExpr(
+            grizzly_impl.pivot_table(
+                self.expr,
+                value_index,
+                self.column_types[value_index],
+                index_index,
+                self.column_types[index_index],
+                columns_index,
+                self.column_types[columns_index],
+                aggfunc
+            ),
+            [index, columns, values],
+            WeldStruct([self.column_types[index_index], self.column_types[columns_index], self.column_types[value_index]])
+        )
+
+    def evaluate(self, verbose=True):
+        """Summary
+
+        Returns:
+            TYPE: Description
+        """
+        df = pd.DataFrame(columns=[])
+        i = 0
+        for column_name in self.column_names:
+            index = i
+            df[column_name] = self.get_column(
+                column_name,
+                self.column_types[i],
+                index,
+                verbose=verbose
+            )
+            i += 1
+
+        return DataFrameWeld(df)
+
+    def get_column(self, column_name, column_type, index, verbose=True):
+        """Summary
+
+        Args:
+            column_name (TYPE): Description
+            column_type (TYPE): Description
+            index (TYPE): Description
+
+        Returns:
+            TYPE: Description
+        """
+        return LazyOpResult(
+            grizzly_impl.get_column(
+                self.expr,
+                self.weld_type,
+                index
+            ),
+            column_type,
+            1
+        ).evaluate(verbose=verbose)
 
 def group(exprs):
     weld_type = [to_weld_type(expr.weld_type, expr.dim) for expr in exprs]
@@ -30,9 +102,10 @@ class DataFrameWeld:
         df (TYPE): Description
         predicates (TYPE): Description
         unmaterialized_cols (TYPE): Description
+        expr (TYPE): Description
     """
 
-    def __init__(self, df, predicates=None):
+    def __init__(self, df, predicates=None, expr=None):
         self.df = df
         self.unmaterialized_cols = dict()
         self.predicates = predicates
@@ -116,21 +189,10 @@ class DataFrameWeld:
                 key
             )
 
-    def __getattr__(self, key):
-        """Summary
-
-        Args:
-            key (TYPE): Description
-
-        Returns:
-            TYPE: Description
-
-        Raises:
-            Exception: Description
-        """
-        if key == 'values':
-            if self.predicates is None:
-                return self.df.values
+    @property
+    def value():
+        if self.predicates is None:
+            return self.df.values
             if isinstance(self.df.values, np.ndarray):
                 weld_type = grizzly_impl.numpy_to_weld_type_mapping[
                     str(self.df.values.dtype)]
@@ -144,7 +206,6 @@ class DataFrameWeld:
                     weld_type,
                     dim
                 )
-        raise AttributeError("Attr %s does not exist" % key)
 
     def _get_column_names(self):
         """Summary
@@ -158,6 +219,42 @@ class DataFrameWeld:
         for column in self.unmaterialized_cols:
             column_names.add(column)
         return list(column_names)
+
+    def filter(self, predicates):
+        """Summary
+
+        Args:
+            grouping_column_name (TYPE): Description
+
+        Returns:
+            TYPE: Description
+        """
+        tys = []
+        for col_name, raw_column in self.raw_columns.items():
+            dtype = str(raw_column.dtype)
+            if dtype == 'object' or dtype == '|S64':
+                weld_type = WeldVec(WeldChar())
+            else:
+                weld_type = grizzly_impl.numpy_to_weld_type_mapping[dtype]
+            tys.append(weld_type)
+
+        if len(tys) == 1:
+            weld_type = tys[0]
+        else:
+            weld_type = WeldStruct(tys)
+
+        if isinstance(predicates, SeriesWeld):
+            predicates = predicates.expr
+
+        return DataFrameWeldExpr(
+            grizzly_impl.zip_filter(
+                self.raw_columns.values(),
+                predicates
+            ),
+            self.raw_columns.keys(),
+            weld_type
+        )
+
 
     def groupby(self, grouping_column_name):
         """Summary
