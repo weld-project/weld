@@ -31,6 +31,7 @@ use super::sir::*;
 use super::sir::Statement;
 use super::sir::StatementKind::*;
 use super::sir::Terminator::*;
+use super::sir::optimizations;
 use super::transforms::uniquify;
 use super::type_inference;
 use super::util::IdGenerator;
@@ -119,8 +120,8 @@ pub fn compile_program(program: &Program, conf: &ParsedConf, stats: &mut Compila
     let start = PreciseTime::now();
     type_inference::infer_types(&mut expr)?;
     let mut expr = expr.to_typed()?;
-    trace!("After type inference:\n{}\n", print_typed_expr(&expr));
     let end = PreciseTime::now();
+    trace!("After type inference:\n{}\n", print_typed_expr(&expr));
     stats.weld_times.push(("Type Inference".to_string(), start.to(end)));
 
     apply_opt_passes(&mut expr, &conf.optimization_passes, stats)?;
@@ -135,10 +136,19 @@ pub fn compile_program(program: &Program, conf: &ParsedConf, stats: &mut Compila
     debug!("Optimized Weld program:\n{}\n", print_expr(&expr));
 
     let start = PreciseTime::now();
-    let sir_prog = sir::ast_to_sir(&expr, conf.support_multithread)?;
-    debug!("SIR program:\n{}\n", &sir_prog);
+    let mut sir_prog = sir::ast_to_sir(&expr, conf.support_multithread)?;
     let end = PreciseTime::now();
+    debug!("SIR program:\n{}\n", &sir_prog);
     stats.weld_times.push(("AST to SIR".to_string(), start.to(end)));
+
+    // Optimizations over the SIR.
+    // TODO(shoumik): A pass manager like the one used over the AST representation will eventually
+    // be useful.
+    let start = PreciseTime::now();
+    optimizations::fold_constants::fold_constants(&mut sir_prog)?;
+    let end = PreciseTime::now();
+    debug!("Optimized SIR program:\n{}\n", &sir_prog);
+    stats.weld_times.push(("SIR Optimization".to_string(), start.to(end)));
 
     let start = PreciseTime::now();
     let mut gen = LlvmGenerator::new();
@@ -146,8 +156,8 @@ pub fn compile_program(program: &Program, conf: &ParsedConf, stats: &mut Compila
 
     gen.add_function_on_pointers("run", &sir_prog)?;
     let llvm_code = gen.result();
-    trace!("LLVM program:\n{}\n", &llvm_code);
     let end = PreciseTime::now();
+    trace!("LLVM program:\n{}\n", &llvm_code);
     stats.weld_times.push(("LLVM Codegen".to_string(), start.to(end)));
 
     debug!("Started compiling LLVM");
@@ -162,20 +172,19 @@ pub fn compile_program(program: &Program, conf: &ParsedConf, stats: &mut Compila
         stats.llvm_times.push((name.clone(), time.clone()));
     }
 
-    let start = PreciseTime::now();
     debug!("Started runtime_init call");
+    let start = PreciseTime::now();
     unsafe {
         weld_runtime_init();
     }
-    debug!("Done runtime_init call");
     let end = PreciseTime::now();
+    debug!("Done runtime_init call");
     stats.weld_times.push(("Runtime Init".to_string(), start.to(end)));
 
     // Dump files if needed.
     if conf.dump_code.enabled {
         let ref timestamp = format!("{}", time::now().to_timespec().sec);
         info!("Writing code to directory '{}' with timestamp {}", &conf.dump_code.dir.display(), timestamp);
-
         write_code(&print_typed_expr(&expr), "weld", timestamp, &conf.dump_code.dir);
         write_code(&format!("{}", &sir_prog), "sir", timestamp, &conf.dump_code.dir);
         write_code(&llvm_code, "ll", timestamp, &conf.dump_code.dir);

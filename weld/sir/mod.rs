@@ -4,6 +4,8 @@ use std::fmt;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::collections::hash_map::Entry;
 
+use std::vec;
+
 use super::ast::*;
 use super::ast::Type::*;
 use super::error::*;
@@ -12,6 +14,7 @@ use super::util::SymbolGenerator;
 
 extern crate fnv;
 
+pub mod optimizations;
 
 // TODO: make these wrapper types so that you can't pass in the wrong value by mistake
 pub type BasicBlockId = usize;
@@ -76,6 +79,117 @@ pub enum StatementKind {
     }
 }
 
+impl StatementKind {
+    pub fn children(&self) -> vec::IntoIter<&Symbol> {
+        use self::StatementKind::*;
+        let mut vars = vec![];
+        match *self {
+            // push any existing symbols that are used (but not assigned) by the statement
+            BinOp {
+                ref left,
+                ref right,
+                ..
+            } => {
+                vars.push(left);
+                vars.push(right);
+            }
+            UnaryOp {
+                ref child,
+                ..
+            } => {
+                vars.push(child);
+            }
+            Cast(ref child) => {
+                vars.push(child);
+            }
+            Negate(ref child) => {
+                vars.push(child);
+            }
+            Broadcast(ref child) => {
+                vars.push(child);
+            }
+            Lookup {
+                ref child,
+                ref index,
+            } => {
+                vars.push(child);
+                vars.push(index);
+            }
+            KeyExists { ref child, ref key } => {
+                vars.push(child);
+                vars.push(key);
+            }
+            Slice {
+                ref child,
+                ref index,
+                ref size,
+            } => {
+                vars.push(child);
+                vars.push(index);
+                vars.push(size);
+            }
+            Sort {
+                ref child,
+                ..
+            } => {
+                vars.push(child);
+            }
+            Select {
+                ref cond,
+                ref on_true,
+                ref on_false,
+            } => {
+                vars.push(cond);
+                vars.push(on_true);
+                vars.push(on_false);
+            }
+            ToVec(ref child) => {
+                vars.push(child);
+            }
+            Length(ref child) => {
+                vars.push(child);
+            }
+            Assign(ref value) => {
+                vars.push(value);
+            }
+            Merge {
+                ref builder,
+                ref value,
+            } => {
+                vars.push(builder);
+                vars.push(value);
+            }
+            Res(ref builder) => vars.push(builder),
+            GetField { ref value, .. } => vars.push(value),
+            AssignLiteral { .. } => {}
+            NewBuilder { ref arg, .. } => {
+                if let Some(ref a) = *arg {
+                    vars.push(a);
+                }
+            }
+            MakeStruct(ref elems) => {
+                for elem in elems {
+                    vars.push(elem);
+                }
+            }
+            MakeVector(ref elems) => {
+                for elem in elems {
+                    vars.push(elem);
+                }
+            }
+            CUDF {
+                ref args,
+                ..
+            } => {
+                for arg in args {
+                    vars.push(arg);
+                }
+            }
+        }
+        vars.into_iter()
+    }
+}
+
 /// A single statement in the SIR, with a RHS statement kind and an optional LHS output symbol.
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct Statement {
@@ -84,7 +198,7 @@ pub struct Statement {
 }
 
 impl Statement {
-    fn new(output: Option<Symbol>, kind: StatementKind) -> Statement {
+    pub fn new(output: Option<Symbol>, kind: StatementKind) -> Statement {
         Statement {
             output: output,
             kind: kind,
@@ -109,7 +223,7 @@ struct StatementTracker {
 
 impl StatementTracker {
 
-    fn new() -> StatementTracker {
+    pub fn new() -> StatementTracker {
         StatementTracker {
             generated: fnv::FnvHashMap::default(),
         }
@@ -200,6 +314,42 @@ pub enum Terminator {
     EndFunction,
     ParallelFor(ParallelForData),
     Crash,
+}
+
+impl Terminator {
+    /// Returns Symbols that the `Terminator` depends on.
+    pub fn children(&self) -> vec::IntoIter<&Symbol> {
+        use self::Terminator::*;
+        let mut vars = vec![];
+        match *self {
+            Branch { ref cond, .. } => {
+                vars.push(cond);
+            }
+            ProgramReturn(ref sym) => {
+                vars.push(sym);
+            }
+            ParallelFor(ref data) => {
+                vars.push(&data.builder);
+                vars.push(&data.data_arg);
+                vars.push(&data.builder_arg);
+                vars.push(&data.idx_arg);
+                for iter in data.data.iter() {
+                    vars.push(&iter.data);
+                    if let Some(ref sym) = iter.start {
+                        vars.push(sym);
+                    }
+                    if let Some(ref sym) = iter.end {
+                        vars.push(sym);
+                    }
+                    if let Some(ref sym) = iter.stride {
+                        vars.push(sym);
+                    }
+                }
+            }
+            _ => {}
+        };
+        vars.into_iter()
+    }
 }
 
 /// A basic block inside a SIR program
@@ -518,110 +668,7 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
     for block in prog.funcs[func_id].blocks.clone() {
         let mut vars = vec![];
         for statement in &block.statements {
-            use self::StatementKind::*;
-            match statement.kind {
-                // push any existing symbols that are used (but not assigned) by the statement
-                BinOp {
-                    ref left,
-                    ref right,
-                    ..
-                } => {
-                    vars.push(left.clone());
-                    vars.push(right.clone());
-                }
-                UnaryOp {
-                    ref child,
-                    ..
-                } => {
-                    vars.push(child.clone());
-                }
-                Cast(ref child) => {
-                    vars.push(child.clone());
-                }
-                Negate(ref child) => {
-                    vars.push(child.clone());
-                }
-                Broadcast(ref child) => {
-                    vars.push(child.clone());
-                }
-                Lookup {
-                    ref child,
-                    ref index,
-                } => {
-                    vars.push(child.clone());
-                    vars.push(index.clone());
-                }
-                KeyExists { ref child, ref key } => {
-                    vars.push(child.clone());
-                    vars.push(key.clone());
-                }
-                Slice {
-                    ref child,
-                    ref index,
-                    ref size,
-                } => {
-                    vars.push(child.clone());
-                    vars.push(index.clone());
-                    vars.push(size.clone());
-                }
-                Sort {
-                    ref child,
-                    ..
-                } => {
-                    vars.push(child.clone());
-                }
-                Select {
-                    ref cond,
-                    ref on_true,
-                    ref on_false,
-                } => {
-                    vars.push(cond.clone());
-                    vars.push(on_true.clone());
-                    vars.push(on_false.clone());
-                }
-                ToVec(ref child) => {
-                    vars.push(child.clone());
-                }
-                Length(ref child) => {
-                    vars.push(child.clone());
-                }
-                Assign(ref value) => {
-                    vars.push(value.clone());
-                }
-                Merge {
-                    ref builder,
-                    ref value,
-                } => {
-                    vars.push(builder.clone());
-                    vars.push(value.clone());
-                }
-                Res(ref builder) => vars.push(builder.clone()),
-                GetField { ref value, .. } => vars.push(value.clone()),
-                AssignLiteral { .. } => {}
-                NewBuilder { ref arg, .. } => {
-                    if let Some(ref a) = *arg {
-                        vars.push(a.clone());
-                    }
-                }
-                MakeStruct(ref elems) => {
-                    for elem in elems {
-                        vars.push(elem.clone());
-                    }
-                }
-                MakeVector(ref elems) => {
-                    for elem in elems {
-                        vars.push(elem.clone());
-                    }
-                }
-                CUDF {
-                    ref args,
-                    ..
-                } => {
-                    for arg in args {
-                        vars.push(arg.clone());
-                    }
-                }
-            }
+            vars.extend(statement.kind.children().cloned());
         }
         use self::Terminator::*;
         match block.terminator {
