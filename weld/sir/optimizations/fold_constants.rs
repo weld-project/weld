@@ -9,7 +9,7 @@
 //! existence of these symbols.
 //! 
 //! 2. It will not remove symbols which are used as parameters to a function (though this can
-//!    probably be changed to support a simple inteprocedural constant simpliciation).
+//!    probably be changed to support a simple inteprocedural constant simplification).
 
 use std::collections::BTreeMap;
 
