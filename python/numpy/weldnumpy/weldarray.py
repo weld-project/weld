@@ -1,6 +1,9 @@
 from weld.weldobject import *
 from weld.encoders import NumpyArrayEncoder, NumpyArrayDecoder
 from weldnumpy import *
+import numpy as np
+
+assert np.__version__ >= 1.13, "minimum numpy version needed"
 
 class weldarray(np.ndarray):
     '''
@@ -408,6 +411,10 @@ class weldarray(np.ndarray):
             # use default type for all weldarray operations
             restype = WeldVec(self._weld_type)
         arr = self.weldobj.evaluate(restype, verbose=self._verbose)
+        # Ensures that multi-dimensional arrays are treated correctly.
+        # TODO: This will not work for non-contiguous arrays.
+        arr.shape = self.shape
+        arr.strides = self.strides
         # Now that the evaluation is done - create new weldobject for self,
         # initalized from the returned arr.
         self._gen_weldobj(arr)
