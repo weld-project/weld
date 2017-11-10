@@ -5,7 +5,7 @@ class weldarray_view():
     '''
     This can be either a parent or a child.
     '''
-    def __init__(self, base_array, parent, start, end, idx):
+    def __init__(self, base_array, parent, start, end, idx, shape=None, strides=None):
         '''
         TODO: Need to add more stuff / generalize to nd case.
         TODO: Can also just use w.base instead of storing base_array here.
@@ -17,9 +17,12 @@ class weldarray_view():
         '''
         self.base_array = base_array
         self.parent = parent
+        # TODO: should we try to separate 1d views with multi-d views?
         self.start = start
         self.end = end
         self.idx = idx
+        self.shape = shape
+        self.strides = strides
 
 def is_view_child(view, par):
     '''

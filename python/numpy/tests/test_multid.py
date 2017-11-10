@@ -47,27 +47,45 @@ def get_idx(shape):
     return tuple(idx)
 
 def test_views_non_contig_basic():
-    shape = (5,5,5)
-    n, w = random_arrays(shape, 'float32')
-    idx = get_idx(shape)
+    # shape = (5,5,5)
+    shape = (10,10)
+    n, w = random_arrays(shape, 'float64')
+    # idx = get_idx(shape)
+    # idx = (slice(0, 3, 1), slice(0, 2, 1), slice(0, 3, 1))
+    idx = (slice(0, 5, 1), slice(0, 4, 1))
 
     n2 = n[idx]
     w2 = w[idx]
-
+    
     # useful test to add.
     assert w2.shape == n2.shape
     assert w2.flags == n2.flags
     assert w2.strides == n2.strides
+    
+    print('w: ', w)
+    print('n: ', n)
 
+    print('w2: ', w2)
+    print('n2: ', n2)
+
+    
     # test unary op.
     n3 = np.log(n2)
     w3 = np.log(w2)
     w3 = w3.evaluate()
+    
+    print(w3.shape)
+    print('n3.shape: ', n3.shape)
+    print('w3 = ', w3)
+    print('n3 = ', n3)
+
+    assert np.allclose(n, w)
+    assert np.allclose(n3, w3)
+    # for i in range(n3.shape[0]):
+        # for j in range(n3.shape[1]):
+            # assert n3[i][j] == w3[i][j], 'test'
 
     # test binary op.
-
-    assert np.allclose(n3, w3)
-    assert np.allclose(n, w)
 
 # def test_views_non_contig_inplace_unary():
     # for shape in ND_SHAPES:
@@ -280,3 +298,4 @@ More advanced tests.
 '''
 Broadcasting based tests.
 '''
+test_views_non_contig_basic()
