@@ -9,7 +9,9 @@
 ; - KV_VEC: name of vector of KV_STRUCTs (should be generated outside)
 ; - KV_VEC_PREFIX: prefix for helper functions of KV_VEC
 
-%{NAME}.entry = type {{ i1, {KEY}, {VALUE} }}        ; isFilled, key, value
+; isFilled, key, value (packed so that C code can easily store it in a byte array without
+; considering padding)
+%{NAME}.entry = type <{{ i8, {KEY}, {VALUE} }}>
 %{NAME}.slot = type %{NAME}.entry*                ; handle to an entry in the API
 %{NAME} = type {{ %{NAME}.entry*, i64, i64 }}  ; entries, size, capacity
 
@@ -65,7 +67,8 @@ define i64 @{NAME}.size(%{NAME} %dict) {{
 ; Check whether a slot is filled.
 define i1 @{NAME}.slot.filled(%{NAME}.slot %slot) {{
   %filledPtr = getelementptr %{NAME}.entry, %{NAME}.slot %slot, i64 0, i32 0
-  %filled = load i1, i1* %filledPtr
+  %filled_i8 = load i8, i8* %filledPtr
+  %filled = trunc i8 %filled_i8 to i1
   ret i1 %filled
 }}
 
