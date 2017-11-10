@@ -4,9 +4,9 @@ use ast::*;
 use ast::ExprKind::*;
 use error::*;
 
-use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 
+extern crate fnv;
 
 /// Modifies symbol names so each symbol is unique in the AST.  Returns an error if an undeclared
 /// symbol appears in the program.
@@ -17,16 +17,16 @@ pub fn uniquify<T: TypeBounds>(expr: &mut Expr<T>) -> WeldResult<()> {
 /// A stack which keeps track of unique variables names and scoping information for symbols.
 struct SymbolStack {
     // The symbol stack.
-    stack: HashMap<Symbol, Vec<i32>>,
+    stack: fnv::FnvHashMap<Symbol, Vec<i32>>,
     // The next unique ID to assign to this name.
-    next_unique_symbol: HashMap<String, i32>,
+    next_unique_symbol: fnv::FnvHashMap<String, i32>,
 }
 
 impl SymbolStack {
     fn new() -> SymbolStack {
         SymbolStack {
-            stack: HashMap::new(),
-            next_unique_symbol: HashMap::new(),
+            stack: fnv::FnvHashMap::default(),
+            next_unique_symbol: fnv::FnvHashMap::default(),
         }
     }
 

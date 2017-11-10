@@ -1,10 +1,10 @@
-use std::collections::HashMap;
 use std::collections::HashSet;
 use std::collections::BTreeMap;
 
 use easy_ll;
 
 extern crate time;
+extern crate fnv;
 
 use time::PreciseTime;
 
@@ -145,7 +145,10 @@ pub fn compile_program(program: &Program, conf: &ParsedConf, stats: &mut Compila
     // TODO(shoumik): A pass manager like the one used over the AST representation will eventually
     // be useful.
     let start = PreciseTime::now();
-    optimizations::fold_constants::fold_constants(&mut sir_prog)?;
+    if conf.enable_sir_opt {
+        debug!("Applying SIR optimizations");
+        optimizations::fold_constants::fold_constants(&mut sir_prog)?;
+    }
     let end = PreciseTime::now();
     debug!("Optimized SIR program:\n{}\n", &sir_prog);
     stats.weld_times.push(("SIR Optimization".to_string(), start.to(end)));
@@ -244,26 +247,26 @@ impl HelperState {
 /// Generates LLVM code for one or more modules.
 pub struct LlvmGenerator {
     /// LLVM type name of the form %s0, %s1, etc for each struct generated.
-    struct_names: HashMap<Vec<Type>, String>,
+    struct_names: fnv::FnvHashMap<Vec<Type>, String>,
     struct_ids: IdGenerator,
 
     /// LLVM type name of the form %v0, %v1, etc for each vec generated.
-    vec_names: HashMap<Type, String>,
+    vec_names: fnv::FnvHashMap<Type, String>,
     vec_ids: IdGenerator,
 
     // LLVM type names for each merger type.
-    merger_names: HashMap<Type, String>,
+    merger_names: fnv::FnvHashMap<Type, String>,
     merger_ids: IdGenerator,
 
     /// LLVM type name of the form %d0, %d1, etc for each dict generated.
-    dict_names: HashMap<Type, String>,
+    dict_names: fnv::FnvHashMap<Type, String>,
     dict_ids: IdGenerator,
 
     /// Set of declared CUDFs.
     cudf_names: HashSet<String>,
 
     /// LLVM type names for various builder types
-    bld_names: HashMap<BuilderKind, String>,
+    bld_names: fnv::FnvHashMap<BuilderKind, String>,
 
     /// A CodeBuilder and ID generator for prelude functions such as type and struct definitions.
     prelude_code: CodeBuilder,
@@ -273,7 +276,7 @@ pub struct LlvmGenerator {
     body_code: CodeBuilder,
 
     /// Helper function state for types.
-    type_helpers: HashMap<Type, HelperState>,
+    type_helpers: fnv::FnvHashMap<Type, HelperState>,
 
     /// Functions we have already visited when generating code.
     visited: HashSet<sir::FunctionId>,
@@ -286,21 +289,21 @@ pub struct LlvmGenerator {
 impl LlvmGenerator {
     pub fn new() -> LlvmGenerator {
         let mut generator = LlvmGenerator {
-            struct_names: HashMap::new(),
+            struct_names: fnv::FnvHashMap::default(),
             struct_ids: IdGenerator::new("%s"),
-            vec_names: HashMap::new(),
+            vec_names: fnv::FnvHashMap::default(),
             vec_ids: IdGenerator::new("%v"),
-            merger_names: HashMap::new(),
+            merger_names: fnv::FnvHashMap::default(),
             merger_ids: IdGenerator::new("%m"),
-            dict_names: HashMap::new(),
+            dict_names: fnv::FnvHashMap::default(),
             dict_ids: IdGenerator::new("%d"),
             cudf_names: HashSet::new(),
-            bld_names: HashMap::new(),
+            bld_names: fnv::FnvHashMap::default(),
             prelude_code: CodeBuilder::new(),
             prelude_var_ids: IdGenerator::new("%p.p"),
             body_code: CodeBuilder::new(),
             visited: HashSet::new(),
-            type_helpers: HashMap::new(),
+            type_helpers: fnv::FnvHashMap::default(),
             multithreaded: false,
         };
         generator.prelude_code.add(PRELUDE_CODE);
@@ -1313,7 +1316,7 @@ impl LlvmGenerator {
             args_type = args_type
         ));
 
-        let mut arg_pos_map: HashMap<Symbol, usize> = HashMap::new();
+        let mut arg_pos_map: fnv::FnvHashMap<Symbol, usize> = fnv::FnvHashMap::default();
         for (i, a) in sir.top_params.iter().enumerate() {
             arg_pos_map.insert(a.name.clone(), i);
         }

@@ -19,6 +19,8 @@ use sir::*;
 extern crate fnv;
 
 /// Evaluates a binary operation over two literals, returning a new literal.
+// TODO(shoumik): Maybe we should just implement this as a method or as traits (e.g., Add, Sub,
+// etc.) on LiteralKind? Not every literal implements every binop, however...
 fn evaluate_binop(kind: BinOpKind, left: LiteralKind, right: LiteralKind) -> WeldResult<LiteralKind> {
     use ast::LiteralKind::*;
     use ast::BinOpKind::*;
