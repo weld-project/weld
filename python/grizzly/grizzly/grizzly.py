@@ -8,7 +8,7 @@ from weld.weldobject import *
 class DataFrameWeldExpr:
     def __init__(self, expr, column_names, weld_type):
         if isinstance(weld_type, WeldStruct):
-           self.column_types = weld_type.fieldTypes
+           self.column_types = weld_type.field_types
            self.weld_type = weld_type
         else:
             raise Exception("DataFrameWeldExpr can only except struct types")
@@ -378,7 +378,7 @@ class GroupedDataFrameWeld(LazyOpResult):
             if isinstance(vectype, WeldVec):
                 elem_type = vectype.elemType
                 if isinstance(elem_type, WeldStruct):
-                    self.column_types = elem_type.fieldTypes
+                    self.column_types = elem_type.field_types
                     value_type = WeldStruct(self.column_types)
                 else:
                     self.column_types = elem_type

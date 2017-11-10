@@ -192,13 +192,13 @@ def isin(array, predicates, ty):
 
     array_var = weld_obj.update(array)
     if isinstance(array, WeldObject):
-        array_var = "tmp%d" % array.objectId
-        weld_obj.dependencies[array_var] = array.weld_code
+        array_var = array.obj_id
+        weld_obj.dependencies[array_var] = array
 
     predicates_var = weld_obj.update(predicates)
     if isinstance(predicates, WeldObject):
-        predicates_var = "tmp%d" % predicates.objectId
-        weld_obj.dependencies[predicates_var] = predicates.weld_code
+        predicates_var = predicates.obj_id
+        weld_obj.dependencies[predicates_var] = predicates
     weld_template = """
     let check_dict =
       result(
@@ -279,14 +279,14 @@ def zip_filter(columns, predicates):
     for column in columns:
         col_var = weld_obj.update(column)
         if isinstance(column, WeldObject):
-            col_var = "tmp%d" % column.objectId
-            col_obj.dependencies[col_var] = column.weld_code
+            col_var = column.obj_id
+            col_obj.dependencies[col_var] = column
         column_vars.append(col_var)
 
     predicates_var = weld_obj.update(predicates)
     if isinstance(predicates, WeldObject):
-        predicates_var = "tmp%d" % predicates.objectId
-        weld_obj.dependencies[predicates_var] = predicates.weld_code
+        predicates_var = predicates.obj_id
+        weld_obj.dependencies[predicates_var] = predicates
 
     arrays = ", ".join(column_vars)
 
@@ -401,8 +401,8 @@ def to_lower(array, ty):
 
     array_var = weld_obj.update(array)
     if isinstance(array, WeldObject):
-        array_var = "tmp%d" % array.objectId
-        weld_obj.dependencies[array_var] = array.weld_code
+        array_var = array.obj_id
+        weld_obj.dependencies[array_var] = array
 
     weld_template = """
        map(
@@ -432,13 +432,13 @@ def contains(array, ty, string):
 
     string_obj = weld_obj.update(string)
     if isinstance(string, WeldObject):
-        string_obj =  "tmp%d" % string.objectId
-        weld_obj.dependencies[string_obj] = string.weld_code
+        string_obj =  string.obj_id
+        weld_obj.dependencies[string_obj] = string
 
     array_var = weld_obj.update(array)
     if isinstance(array, WeldObject):
-        array_var = "tmp%d" % array.objectId
-        weld_obj.dependencies[array_var] = array.weld_code
+        array_var = array.obj_id
+        weld_obj.dependencies[array_var] = array
 
     (start, end) = 0, len(string)
     weld_template = """
@@ -495,8 +495,8 @@ def pivot_table(expr, value_index, value_ty, index_index, index_ty, columns_inde
 
     zip_var = weld_obj.update(expr)
     if isinstance(expr, WeldObject):
-        zip_var = "tmp%d" % expr.objectId
-        weld_obj.dependencies[zip_var] = expr.weld_code
+        zip_var = expr.obj_id
+        weld_obj.dependencies[zip_var] = expr
 
     weld_template = """
     map(
@@ -647,8 +647,8 @@ def groupby_sort(columns, column_tys, grouping_columns, grouping_column_tys, key
         for column in grouping_columns:
             column_var = weld_obj.update(column)
             if isinstance(column, WeldObject):
-                column_var = "tmp%d" % column.objectId
-                weld_obj.dependencies[column_var] = column.weld_code
+                column_var = column.obj_id
+                weld_obj.dependencies[column_var] = column
             grouping_column_vars.append(column_var)
         grouping_column_var = ", ".join(grouping_column_vars)
         grouping_column_tys = [str(ty) for ty in grouping_column_tys]
@@ -659,8 +659,8 @@ def groupby_sort(columns, column_tys, grouping_columns, grouping_column_tys, key
     for column in columns:
         column_var = weld_obj.update(column)
         if isinstance(column, WeldObject):
-            column_var = "tmp%d" % column.objectId
-            weld_obj.dependencies[column_var] = column.weld_code
+            column_var = column.obj_id
+            weld_obj.dependencies[column_var] = column
         columns_var_list.append(column_var)
 
     if len(columns_var_list) == 1 and len(grouping_columns) == 1:
