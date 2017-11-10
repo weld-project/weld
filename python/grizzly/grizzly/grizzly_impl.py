@@ -499,19 +499,24 @@ def pivot_table(expr, value_index, value_ty, index_index, index_ty, columns_inde
         weld_obj.dependencies[zip_var] = expr
 
     weld_template = """
-    map(
-      tovec(
-        result(
-          for(
-            %(zip_expr)s,
-            dictmerger[{%(ity)s, %(cty)s}, %(vty)s, +],
-            |b, i, e| merge(b, {{e.$%(id)s, e.$%(cd)s}, e.$%(vd)s})
-          )
-        )
-      ),
-     |x : {{%(ity)s, %(cty)s}, %(vty)s}| {x.$0.$0, x.$0.$1, x.$1}
-   )
-  """
+    let bs = for(
+      %(zip_expr)s,
+      {dictmerger[{%(ity)s,%(cty)s},%(vty)s,+], dictmerger[%(ity)s,i64,+], dictmerger[%(cty)s,i64,+]},
+      |b, i, e| {merge(b.$0, {{e.$%(id)s, e.$%(cd)s}, e.$%(vd)s}),
+                 merge(b.$1, {e.$%(id)s, 1L}),
+                 merge(b.$2, {e.$%(cd)s, 1L})}
+    );
+    let agg_dict = result(bs.$0);
+    let ind_vec = sort(map(tovec(result(bs.$1)), |x| x.$0), |x| x);
+    let col_vec = map(tovec(result(bs.$2)), |x| x.$0);
+
+    let pivot = map(
+      col_vec,
+      |x:%(cty)s|
+        map(ind_vec, |y:%(ity)s| lookup(agg_dict, {y, x}))
+    );
+    {ind_vec, pivot, col_vec}
+    """
 
     weld_obj.weld_code = weld_template % {"zip_expr": zip_var,
                                           "ity": index_ty,
@@ -519,8 +524,68 @@ def pivot_table(expr, value_index, value_ty, index_index, index_ty, columns_inde
                                           "vty": value_ty,
                                           "id": index_index,
                                           "cd": columns_index,
-                                          "vd": value_index
+                                          "vd": value_index}
+    return weld_obj
+
+def pivot_sum(pivot, value_type):
+    weld_obj = WeldObject(encoder_, decoder_)
+
+    pivot_var = weld_obj.update(pivot)
+    if isinstance(pivot, WeldObject):
+        pivot_var = pivot.obj_id
+        weld_obj.dependencies[pivot_var] = pivot
+
+    weld_template = """
+      result(for(
+        %(piv)s.$0,
+        appender[%(pty)s],
+        |b1,i1,e1|
+          merge(b1,
+            result(for(
+              %(piv)s.$1,
+              merger[%(pty)s,+],
+              |b2, i2, e2| merge(b2, lookup(e2, i1))
+            ))
+          )
+       ))
+    """
+
+    weld_obj.weld_code = weld_template % {"piv":pivot_var,
+                                         "pty":value_type}
+    return weld_obj
+
+def pivot_div(pivot, series, vec_type, val_type):
+    weld_obj = WeldObject(encoder_, decoder_)
+
+    pivot_var = weld_obj.update(pivot)
+    if isinstance(pivot, WeldObject):
+        pivot_var = pivot.obj_id
+        weld_obj.dependencies[pivot_var] = pivot
+
+    series_var = weld_obj.update(series)
+    if isinstance(series, WeldObject):
+        series_var = series.obj_id
+        weld_obj.dependencies[series_var] = series
+
+    weld_template = """
+    {%(piv)s.$0,
+      map(
+        %(piv)s.$1,
+        |v:%(vty)s|
+          result(for(
+            v,
+            appender[f64],
+            |b, i, e| merge(b, f64(e) / f64(lookup(%(srs)s, i)))
+          ))
+      ),
+     %(piv)s.$2
     }
+    """
+
+    weld_obj.weld_code = weld_template % {"piv":pivot_var,
+                                          "pty":val_type,
+                                          "vty":vec_type,
+                                          "srs":series_var}
     return weld_obj
 
 def groupby_sum(columns, column_tys, grouping_columns, grouping_column_tys):
@@ -711,7 +776,6 @@ def groupby_sort(columns, column_tys, grouping_columns, grouping_column_tys, key
         key_str = "x.$%d" % key_index
 
     if ascending == False:
-        print "backwards"
         key_str = key_str + "* %s(-1)" % column_tys[key_index]
 
     weld_template = """

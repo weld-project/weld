@@ -42,9 +42,10 @@ filtered = top1000.filter(top1000names.isin(lesley_like))
 table = filtered.pivot_table('births', index='year',
                               columns='sex', aggfunc='sum')
 
+table = table.div(table.sum(1), axis=0)
 print table.evaluate().to_pandas()
-# table = table.div(table.sum(1), axis=0)
 end1= time.time()
+
 
 print "Time taken by preprocess portion: %.5f" %(end0 - start0)
 print "Time taken by analysis portion  : %.5f" % (end1- start1)

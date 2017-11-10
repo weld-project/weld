@@ -6,7 +6,7 @@ from lazy_op import LazyOpResult, to_weld_type
 from weld.weldobject import *
 
 class DataFrameWeldExpr:
-    def __init__(self, expr, column_names, weld_type):
+    def __init__(self, expr, column_names, weld_type, is_pivot=False):
         if isinstance(weld_type, WeldStruct):
            self.column_types = weld_type.field_types
            self.weld_type = weld_type
@@ -16,12 +16,16 @@ class DataFrameWeldExpr:
         self.expr = expr
         self.column_names = column_names
         self.colindex_map = {name:i for i, name in enumerate(column_names)}
+        self.is_pivot = is_pivot
 
     def pivot_table(self, values, index, columns, aggfunc='sum'):
         value_index = self.colindex_map[values]
         index_index = self.colindex_map[index]
         columns_index = self.colindex_map[columns]
 
+        ind_ty = to_weld_type(self.column_types[index_index], 1)
+        piv_ty = to_weld_type(self.column_types[value_index], 2)
+        col_ty = to_weld_type(self.column_types[columns_index], 1)
         return DataFrameWeldExpr(
             grizzly_impl.pivot_table(
                 self.expr,
@@ -34,8 +38,52 @@ class DataFrameWeldExpr:
                 aggfunc
             ),
             [index, columns, values],
-            WeldStruct([self.column_types[index_index], self.column_types[columns_index], self.column_types[value_index]])
+            WeldStruct([ind_ty, piv_ty, col_ty]),
+            is_pivot=True
         )
+
+    def sum(self, axis):
+        if axis == 1:
+            if self.is_pivot:
+                if isinstance(self.column_types[1], WeldVec):
+                    elem_type = self.column_types[1].elemType
+                    value_type = elem_type.elemType
+                    return SeriesWeld(
+                        grizzly_impl.pivot_sum(
+                            self.expr,
+                            value_type
+                        ),
+                        value_type
+                    )
+            else:
+                raise Exception("Sum for non-pivot table data frames not supported")
+        elif axis == 0:
+            raise Exception("Sum not implemented yet for axis = 0")
+
+    def div(self, series, axis):
+        if axis == 0:
+            if self.is_pivot:
+                if isinstance(self.column_types[1], WeldVec):
+                    elem_type = self.column_types[1].elemType
+                    value_type = elem_type.elemType
+                    ind_ty = self.column_types[0]
+                    piv_ty = to_weld_type(WeldDouble(), 2)
+                    col_ty = self.column_types[2]
+                    return DataFrameWeldExpr(
+                        grizzly_impl.pivot_div(
+                            self.expr,
+                            series.expr,
+                            elem_type,
+                            value_type,
+                        ),
+                        self.column_names,
+                        WeldStruct([ind_ty, piv_ty, col_ty]),
+                        is_pivot=True
+                    )
+            else:
+                raise Exception("Div for non-pivot table data frames not supported")
+        elif axis == 1:
+            raise Exception("Div not implemented yet for axis = 0")
 
     def evaluate(self, verbose=True):
         """Summary
@@ -43,19 +91,32 @@ class DataFrameWeldExpr:
         Returns:
             TYPE: Description
         """
-        df = pd.DataFrame(columns=[])
-        i = 0
-        for column_name in self.column_names:
-            index = i
-            df[column_name] = self.get_column(
-                column_name,
-                self.column_types[i],
-                index,
-                verbose=verbose
-            )
-            i += 1
+        if self.is_pivot:
+            index, pivot, columns = LazyOpResult(
+                self.expr,
+                self.weld_type,
+                0
+            ).evaluate(verbose=verbose)
+            df = pd.DataFrame(columns=[])
+            df[self.column_names[0]] = index
+            df.set_index(self.column_names[0], drop=True)
+            for i, column_name in enumerate(columns):
+                df[column_name] = pivot[i]
+            return DataFrameWeld(df)
+        else:
+            df = pd.DataFrame(columns=[])
+            i = 0
+            for column_name in self.column_names:
+                index = i
+                df[column_name] = self.get_column(
+                    column_name,
+                    self.column_types[i],
+                    index,
+                    verbose=verbose
+                )
+                i += 1
 
-        return DataFrameWeld(df)
+                return DataFrameWeld(df)
 
     def get_column(self, column_name, column_type, index, verbose=True):
         """Summary
@@ -363,7 +424,7 @@ class GroupedDataFrameWeld(LazyOpResult):
             ),
             column_type,
             1
-        ).evaluate(verbose=verbose)
+        )
 
     def reset_index(self, inplace=True, drop=True):
         """ Flattens the grouped data structure.
@@ -401,20 +462,21 @@ class GroupedDataFrameWeld(LazyOpResult):
         Returns:
             TYPE: Description
         """
-        df = pd.DataFrame(columns=[])
         i = 0
+        exprs = []
         for column_name in self.column_names:
             if len(self.column_names) > 1:
                 index = "1.$%d" % i
             else:
                 index = "1"
-            df[column_name] = self.get_column(
+            expr = self.get_column(
                 column_name,
                 self.column_types[i],
                 index,
                 verbose=verbose
             )
             i += 1
+            exprs.append(expr)
 
         i = 0
         for column_name in self.grouping_column_name:
@@ -422,13 +484,20 @@ class GroupedDataFrameWeld(LazyOpResult):
                 index = "0.$%d" % i
             else:
                 index = "0"
-            df[column_name] = self.get_column(
+            expr = self.get_column(
                 column_name,
                 self.grouping_column_types[i],
                 index,
                 verbose=verbose
             )
+            exprs.append(expr)
             i += 1
+
+        result = group(exprs).evaluate(verbose=True)
+        df = pd.DataFrame(columns=[])
+        all_columns = self.column_names + self.grouping_column_name
+        for i, column_name in enumerate(all_columns):
+            df[column_name] = result[i]
         return DataFrameWeld(df)
 
 

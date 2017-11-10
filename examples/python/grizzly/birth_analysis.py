@@ -40,6 +40,6 @@ table = filtered.pivot_table('births', index='year',
 table = table.div(table.sum(1), axis=0)
 end1 = time.time()
 
-
+print table
 print "Time taken by preprocess portion:   %.5f" % (end0 - start0)
 print "Time taken by analysis portion  :   %.5f" % (end1 - start1)
