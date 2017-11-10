@@ -1,10 +1,10 @@
-use std::collections::HashMap;
 use std::collections::HashSet;
 use std::collections::BTreeMap;
 
 use easy_ll;
 
 extern crate time;
+extern crate fnv;
 
 use time::PreciseTime;
 
@@ -28,8 +28,10 @@ use super::program::Program;
 use super::runtime::*;
 use super::sir;
 use super::sir::*;
-use super::sir::Statement::*;
+use super::sir::Statement;
+use super::sir::StatementKind::*;
 use super::sir::Terminator::*;
+use super::sir::optimizations;
 use super::transforms::uniquify;
 use super::type_inference;
 use super::util::IdGenerator;
@@ -118,8 +120,8 @@ pub fn compile_program(program: &Program, conf: &ParsedConf, stats: &mut Compila
     let start = PreciseTime::now();
     type_inference::infer_types(&mut expr)?;
     let mut expr = expr.to_typed()?;
-    trace!("After type inference:\n{}\n", print_typed_expr(&expr));
     let end = PreciseTime::now();
+    trace!("After type inference:\n{}\n", print_typed_expr(&expr));
     stats.weld_times.push(("Type Inference".to_string(), start.to(end)));
 
     apply_opt_passes(&mut expr, &conf.optimization_passes, stats)?;
@@ -134,10 +136,22 @@ pub fn compile_program(program: &Program, conf: &ParsedConf, stats: &mut Compila
     debug!("Optimized Weld program:\n{}\n", print_expr(&expr));
 
     let start = PreciseTime::now();
-    let sir_prog = sir::ast_to_sir(&expr, conf.support_multithread)?;
-    debug!("SIR program:\n{}\n", &sir_prog);
+    let mut sir_prog = sir::ast_to_sir(&expr, conf.support_multithread)?;
     let end = PreciseTime::now();
+    debug!("SIR program:\n{}\n", &sir_prog);
     stats.weld_times.push(("AST to SIR".to_string(), start.to(end)));
+
+    // Optimizations over the SIR.
+    // TODO(shoumik): A pass manager like the one used over the AST representation will eventually
+    // be useful.
+    let start = PreciseTime::now();
+    if conf.enable_sir_opt {
+        debug!("Applying SIR optimizations");
+        optimizations::fold_constants::fold_constants(&mut sir_prog)?;
+    }
+    let end = PreciseTime::now();
+    debug!("Optimized SIR program:\n{}\n", &sir_prog);
+    stats.weld_times.push(("SIR Optimization".to_string(), start.to(end)));
 
     let start = PreciseTime::now();
     let mut gen = LlvmGenerator::new();
@@ -145,8 +159,8 @@ pub fn compile_program(program: &Program, conf: &ParsedConf, stats: &mut Compila
 
     gen.add_function_on_pointers("run", &sir_prog)?;
     let llvm_code = gen.result();
-    trace!("LLVM program:\n{}\n", &llvm_code);
     let end = PreciseTime::now();
+    trace!("LLVM program:\n{}\n", &llvm_code);
     stats.weld_times.push(("LLVM Codegen".to_string(), start.to(end)));
 
     debug!("Started compiling LLVM");
@@ -161,20 +175,19 @@ pub fn compile_program(program: &Program, conf: &ParsedConf, stats: &mut Compila
         stats.llvm_times.push((name.clone(), time.clone()));
     }
 
-    let start = PreciseTime::now();
     debug!("Started runtime_init call");
+    let start = PreciseTime::now();
     unsafe {
         weld_runtime_init();
     }
-    debug!("Done runtime_init call");
     let end = PreciseTime::now();
+    debug!("Done runtime_init call");
     stats.weld_times.push(("Runtime Init".to_string(), start.to(end)));
 
     // Dump files if needed.
     if conf.dump_code.enabled {
         let ref timestamp = format!("{}", time::now().to_timespec().sec);
         info!("Writing code to directory '{}' with timestamp {}", &conf.dump_code.dir.display(), timestamp);
-
         write_code(&print_typed_expr(&expr), "weld", timestamp, &conf.dump_code.dir);
         write_code(&format!("{}", &sir_prog), "sir", timestamp, &conf.dump_code.dir);
         write_code(&llvm_code, "ll", timestamp, &conf.dump_code.dir);
@@ -234,26 +247,26 @@ impl HelperState {
 /// Generates LLVM code for one or more modules.
 pub struct LlvmGenerator {
     /// LLVM type name of the form %s0, %s1, etc for each struct generated.
-    struct_names: HashMap<Vec<Type>, String>,
+    struct_names: fnv::FnvHashMap<Vec<Type>, String>,
     struct_ids: IdGenerator,
 
     /// LLVM type name of the form %v0, %v1, etc for each vec generated.
-    vec_names: HashMap<Type, String>,
+    vec_names: fnv::FnvHashMap<Type, String>,
     vec_ids: IdGenerator,
 
     // LLVM type names for each merger type.
-    merger_names: HashMap<Type, String>,
+    merger_names: fnv::FnvHashMap<Type, String>,
     merger_ids: IdGenerator,
 
     /// LLVM type name of the form %d0, %d1, etc for each dict generated.
-    dict_names: HashMap<Type, String>,
+    dict_names: fnv::FnvHashMap<Type, String>,
     dict_ids: IdGenerator,
 
     /// Set of declared CUDFs.
     cudf_names: HashSet<String>,
 
     /// LLVM type names for various builder types
-    bld_names: HashMap<BuilderKind, String>,
+    bld_names: fnv::FnvHashMap<BuilderKind, String>,
 
     /// A CodeBuilder and ID generator for prelude functions such as type and struct definitions.
     prelude_code: CodeBuilder,
@@ -263,7 +276,7 @@ pub struct LlvmGenerator {
     body_code: CodeBuilder,
 
     /// Helper function state for types.
-    type_helpers: HashMap<Type, HelperState>,
+    type_helpers: fnv::FnvHashMap<Type, HelperState>,
 
     /// Functions we have already visited when generating code.
     visited: HashSet<sir::FunctionId>,
@@ -276,21 +289,21 @@ pub struct LlvmGenerator {
 impl LlvmGenerator {
     pub fn new() -> LlvmGenerator {
         let mut generator = LlvmGenerator {
-            struct_names: HashMap::new(),
+            struct_names: fnv::FnvHashMap::default(),
             struct_ids: IdGenerator::new("%s"),
-            vec_names: HashMap::new(),
+            vec_names: fnv::FnvHashMap::default(),
             vec_ids: IdGenerator::new("%v"),
-            merger_names: HashMap::new(),
+            merger_names: fnv::FnvHashMap::default(),
             merger_ids: IdGenerator::new("%m"),
-            dict_names: HashMap::new(),
+            dict_names: fnv::FnvHashMap::default(),
             dict_ids: IdGenerator::new("%d"),
             cudf_names: HashSet::new(),
-            bld_names: HashMap::new(),
+            bld_names: fnv::FnvHashMap::default(),
             prelude_code: CodeBuilder::new(),
             prelude_var_ids: IdGenerator::new("%p.p"),
             body_code: CodeBuilder::new(),
             visited: HashSet::new(),
-            type_helpers: HashMap::new(),
+            type_helpers: fnv::FnvHashMap::default(),
             multithreaded: false,
         };
         generator.prelude_code.add(PRELUDE_CODE);
@@ -312,9 +325,8 @@ impl LlvmGenerator {
     /// Given a set of parameters and a suffix, returns a string used to represent LLVM function
     /// arguments. Each argument has the given suffix. Argument names are sorted by their symbol
     /// name.
-    fn get_arg_str(&mut self, params: &HashMap<Symbol, Type>, suffix: &str) -> WeldResult<String> {
+    fn get_arg_str(&mut self, params_sorted: &BTreeMap<Symbol, Type>, suffix: &str) -> WeldResult<String> {
         let mut arg_types = String::new();
-        let params_sorted: BTreeMap<&Symbol, &Type> = params.iter().collect();
         for (arg, ty) in params_sorted.iter() {
             let arg_str = format!("{} {}{}, ", self.llvm_type(&ty)?, llvm_symbol(&arg), suffix);
             arg_types.push_str(&arg_str);
@@ -323,9 +335,8 @@ impl LlvmGenerator {
         Ok(arg_types)
     }
 
-    fn gen_store_args(&mut self, params: &HashMap<Symbol, Type>, input_suffix: &str, stored_suffix: &str,
+    fn gen_store_args(&mut self, params_sorted: &BTreeMap<Symbol, Type>, input_suffix: &str, stored_suffix: &str,
         ctx: &mut FunctionContext) -> WeldResult<()> {
-        let params_sorted: BTreeMap<&Symbol, &Type> = params.iter().collect();
         for (_, (arg, ty)) in params_sorted.iter().enumerate() {
             let ll_ty = self.llvm_type(ty)?;
             let ll_sym = format!("{}{}", llvm_symbol(arg), stored_suffix);
@@ -335,9 +346,8 @@ impl LlvmGenerator {
         Ok(())
     }
 
-    fn gen_load_args(&mut self, params: &HashMap<Symbol, Type>, loaded_suffix: &str, stored_suffix: &str,
+    fn gen_load_args(&mut self, params_sorted: &BTreeMap<Symbol, Type>, loaded_suffix: &str, stored_suffix: &str,
         ctx: &mut FunctionContext) -> WeldResult<()> {
-        let params_sorted: BTreeMap<&Symbol, &Type> = params.iter().collect();
         for (_, (arg, ty)) in params_sorted.iter().enumerate() {
             let ll_ty = self.llvm_type(ty)?;
             ctx.code.add(format!("{}{} = load {}, {}* {}{}", llvm_symbol(arg), loaded_suffix, ll_ty, ll_ty, llvm_symbol(arg),
@@ -348,36 +358,37 @@ impl LlvmGenerator {
 
     /// Generates code to unpack a struct containing a set of arguments with the given symbols and
     /// types. The order of arguments is assumed to be sorted by the symbol name.
-    fn gen_unload_arg_struct(&mut self, params: &HashMap<Symbol, Type>, suffix: &str, ctx: &mut FunctionContext) -> WeldResult<()> {
-        let params_sorted: BTreeMap<&Symbol, &Type> = params.iter().collect();
-        let ll_ty = self.llvm_type(&Struct(params_sorted.iter().map(|p| p.1.clone()).cloned().collect()))?;
-        let storage_typed = ctx.var_ids.next();
-        let storage = ctx.var_ids.next();
+    fn gen_unload_arg_struct(&mut self, params_sorted: &BTreeMap<Symbol, Type>, suffix: &str, ctx: &mut FunctionContext) -> WeldResult<()> {
+        let ref struct_ty = Struct(params_sorted.values().map(|e| e.clone()).collect());
+        let arg_struct_ll_ty = self.llvm_type(struct_ty)?;
+        let storage_ptr = ctx.var_ids.next();
         let work_data_ptr = ctx.var_ids.next();
         let work_data = ctx.var_ids.next();
-        ctx.code.add(format!("{} = getelementptr %work_t, %work_t* %cur.work, i32 0, i32 0", work_data_ptr));
+        ctx.code.add(format!("{} = getelementptr inbounds %work_t, %work_t* %cur.work, i32 0, i32 0", work_data_ptr));
         ctx.code.add(format!("{} = load i8*, i8** {}", work_data, work_data_ptr));
-        ctx.code.add(format!("{} = bitcast i8* {} to {}*", storage_typed, work_data, ll_ty));
-        ctx.code.add(format!("{} = load {}, {}* {}", storage, ll_ty, ll_ty, storage_typed));
-        for (i, (arg, _)) in params_sorted.iter().enumerate() {
-            ctx.code.add(format!("{}{} = extractvalue {} {}, {}", llvm_symbol(arg), suffix, ll_ty, storage, i));
+        ctx.code.add(format!("{} = bitcast i8* {} to {}*", storage_ptr, work_data, arg_struct_ll_ty));
+        for (i, (arg, ty)) in params_sorted.iter().enumerate() {
+            let ptr_tmp = ctx.var_ids.next();
+            let arg_ll_ty = self.llvm_type(ty)?;
+            ctx.code.add(format!("{} = getelementptr inbounds {}, {}* {}, i32 0, i32 {}",
+                ptr_tmp, arg_struct_ll_ty, arg_struct_ll_ty, storage_ptr, i));
+            ctx.code.add(format!("{}{} = load {}, {}* {}", llvm_symbol(arg), suffix, arg_ll_ty, arg_ll_ty, ptr_tmp));
         }
         Ok(())
     }
 
     /// Generates code to create new pieces for the appender.
-    fn gen_create_new_vb_pieces(&mut self, params: &HashMap<Symbol, Type>, suffix: &str, ctx: &mut FunctionContext) -> WeldResult<()> {
+    fn gen_create_new_vb_pieces(&mut self, params_sorted: &BTreeMap<Symbol, Type>, suffix: &str, ctx: &mut FunctionContext) -> WeldResult<()> {
         let full_task_ptr = ctx.var_ids.next();
         let full_task_int = ctx.var_ids.next();
         let full_task_bit = ctx.var_ids.next();
-        ctx.code.add(format!("{} = getelementptr %work_t, %work_t* %cur.work, i32 0, i32 4", full_task_ptr));
+        ctx.code.add(format!("{} = getelementptr inbounds %work_t, %work_t* %cur.work, i32 0, i32 4", full_task_ptr));
         ctx.code.add(format!("{} = load i32, i32* {}", full_task_int, full_task_ptr));
         ctx.code.add(format!("{} = trunc i32 {} to i1", full_task_bit, full_task_int));
         ctx.code.add(format!("br i1 {}, label %new_pieces, label %fn_call", full_task_bit));
         ctx.code.add("new_pieces:");
-        let params_sorted: BTreeMap<&Symbol, &Type> = params.iter().collect();
         for (arg, ty) in params_sorted.iter() {
-            match **ty {
+            match *ty {
                 Builder(ref bk, _) => {
                     match *bk {
                         Appender(_) => {
@@ -400,10 +411,9 @@ impl LlvmGenerator {
     }
 
     /// Generates code to create new stack-based storage for mergers at the start of a serial code sequence.
-    fn gen_create_stack_mergers(&mut self, params: &HashMap<Symbol, Type>, ctx: &mut FunctionContext) -> WeldResult<()> {
-        let params_sorted: BTreeMap<&Symbol, &Type> = params.iter().collect();
+    fn gen_create_stack_mergers(&mut self, params_sorted: &BTreeMap<Symbol, Type>, ctx: &mut FunctionContext) -> WeldResult<()> {
         for (arg, ty) in params_sorted.iter() {
-            match **ty {
+            match *ty {
                 Builder(ref bk, _) => {
                     match *bk {
                         Merger(ref val_ty, ref op) => {
@@ -441,10 +451,9 @@ impl LlvmGenerator {
     }
 
     /// Generates code to create register-based mergers to be used inside innermost loops.
-    fn gen_create_new_merger_regs(&mut self, params: &HashMap<Symbol, Type>, ctx: &mut FunctionContext) -> WeldResult<()> {
-        let params_sorted: BTreeMap<&Symbol, &Type> = params.iter().collect();
+    fn gen_create_new_merger_regs(&mut self, params_sorted: &BTreeMap<Symbol, Type>, ctx: &mut FunctionContext) -> WeldResult<()> {
         for (arg, ty) in params_sorted.iter() {
-            match **ty {
+            match *ty {
                 Builder(ref bk, _) => {
                     match *bk {
                         Merger(ref val_ty, ref op) => {
@@ -474,10 +483,9 @@ impl LlvmGenerator {
     }
 
     /// Generates code to create global mergers when parallel work is about to be spawned.
-    fn gen_create_global_mergers(&mut self, params: &HashMap<Symbol, Type>, suffix: &str, ctx: &mut FunctionContext) -> WeldResult<()> {
-        let params_sorted: BTreeMap<&Symbol, &Type> = params.iter().collect();
+    fn gen_create_global_mergers(&mut self, params_sorted: &BTreeMap<Symbol, Type>, suffix: &str, ctx: &mut FunctionContext) -> WeldResult<()> {
         for (arg, ty) in params_sorted.iter() {
-            match **ty {
+            match *ty {
                 Builder(ref bk, _) => {
                     match *bk {
                         Merger(ref val_ty, ref op) => {
@@ -553,10 +561,9 @@ impl LlvmGenerator {
     }
 
     /// Generates code to store stack-based mergers back to their global counterparts if they exist.
-    fn gen_store_stack_mergers(&mut self, params: &HashMap<Symbol, Type>, ctx: &mut FunctionContext) -> WeldResult<()> {
-        let params_sorted: BTreeMap<&Symbol, &Type> = params.iter().collect();
+    fn gen_store_stack_mergers(&mut self, params_sorted: &BTreeMap<Symbol, Type>, ctx: &mut FunctionContext) -> WeldResult<()> {
         for (arg, ty) in params_sorted.iter() {
-            match **ty {
+            match *ty {
                 Builder(ref bk, _) => {
                     match *bk {
                         Merger(ref val_ty, ref op) => {
@@ -633,10 +640,9 @@ impl LlvmGenerator {
     }
 
     /// Generates code to store register-based mergers back to their stack-based counterparts.
-    fn gen_store_merger_regs(&mut self, params: &HashMap<Symbol, Type>, ctx: &mut FunctionContext) -> WeldResult<()> {
-        let params_sorted: BTreeMap<&Symbol, &Type> = params.iter().collect();
+    fn gen_store_merger_regs(&mut self, params_sorted: &BTreeMap<Symbol, Type>, ctx: &mut FunctionContext) -> WeldResult<()> {
         for (arg, ty) in params_sorted.iter() {
-            match **ty {
+            match *ty {
                 Builder(ref bk, _) => {
                     match *bk {
                         Merger(ref val_ty, ref op) => {
@@ -695,10 +701,9 @@ impl LlvmGenerator {
     /// Generates code which, given the arguments with symbols and types, creates a struct with the
     /// arguments. The order of the strut elements is sorted by the symbol names. Returns the LLVM
     /// name of the i8* pointer pointing to the created struct.
-    fn gen_create_arg_struct(&mut self, params: &HashMap<Symbol, Type>, suffix: &str, ctx: &mut FunctionContext) -> WeldResult<String> {
-        let params_sorted: BTreeMap<&Symbol, &Type> = params.iter().collect();
+    fn gen_create_arg_struct(&mut self, params_sorted: &BTreeMap<Symbol, Type>, suffix: &str, ctx: &mut FunctionContext) -> WeldResult<String> {
         let mut prev_ref = String::from("undef");
-        let ll_ty = self.llvm_type(&Struct(params_sorted.iter().map(|p| p.1.clone()).cloned().collect()))?
+        let ll_ty = self.llvm_type(&Struct(params_sorted.values().map(|e| e.clone()).collect()))?
             .to_string();
         for (i, (arg, ty)) in params_sorted.iter().enumerate() {
             let next_ref = ctx.var_ids.next();
@@ -717,7 +722,7 @@ impl LlvmGenerator {
         let struct_size = ctx.var_ids.next();
         let struct_storage = ctx.var_ids.next();
         let struct_storage_typed = ctx.var_ids.next();
-        ctx.code.add(format!("{} = getelementptr {}, {}* null, i32 1", struct_size_ptr, ll_ty, ll_ty));
+        ctx.code.add(format!("{} = getelementptr inbounds {}, {}* null, i32 1", struct_size_ptr, ll_ty, ll_ty));
         ctx.code.add(format!("{} = ptrtoint {}* {} to i64", struct_size, ll_ty, struct_size_ptr));
         // we use regular malloc here because this pointer will always be freed by parlib
         ctx.code.add(format!("{} = call i8* @malloc(i64 {})", struct_storage, struct_size));
@@ -725,7 +730,6 @@ impl LlvmGenerator {
         ctx.code.add(format!("store {} {}, {}* {}", ll_ty, prev_ref, ll_ty, struct_storage_typed));
         Ok(struct_storage)
     }
-
 
     /// Generates code to compute the number of iterations the given loop will execute. Returns an
     /// LLVM register name representing the number of iterations and, if the iterator is a
@@ -773,24 +777,15 @@ impl LlvmGenerator {
             }
             let arr_len = ctx.var_ids.next();
             let tmp = ctx.var_ids.next();
-            let tmp2 = ctx.var_ids.next();
             let vector_len = format!("{}", llvm_simd_size(func.symbol_type(&first_data)?)?);
 
-            ctx
-                .code
-                .add(format!("{} = call i64 {}.size({} {})", arr_len, data_prefix, data_ty_str, data_str));
+            ctx.code.add(format!("{} = call i64 {}.size({} {})", arr_len, data_prefix, data_ty_str, data_str));
 
-            // Compute the number of iterations:
-            // tmp = arr_len / llvm_simd_size
-            // tmp2 = tmp * llvm_simd_size
-            // num_iters = arr_len - llvm_simd_size
-            ctx.code.add(format!("{} = udiv i64 {}, {}", tmp, arr_len, vector_len));
-            // tmp2 is also where the iteration for the FringeIter starts.
-            ctx.code.add(format!("{} = mul i64 {}, {}", tmp2, tmp, vector_len));
-            // Compute the number of iterations.
-            ctx.code.add(format!("{} = sub i64 {}, {}", num_iters_str, arr_len, tmp2));
-
-            fringe_start_str = Some(tmp2);
+            // num_iters = arr_len % llvm_simd_size // number of iterations
+            // tmp2 = arr_len - num_iters // start index
+            ctx.code.add(format!("{} = urem i64 {}, {}", num_iters_str, arr_len, vector_len));
+            ctx.code.add(format!("{} = sub nuw nsw i64 {}, {}", tmp, arr_len, num_iters_str));
+            fringe_start_str = Some(tmp);
         }
         Ok((String::from(num_iters_str), fringe_start_str))
     }
@@ -838,7 +833,7 @@ impl LlvmGenerator {
                 // t0 = sub i64 num_iters, 1
                 // t1 = mul i64 stride, t0
                 // t2 = add i64 t1, start
-                // cond = icmp lte i64 t1, size
+                // cond = icmp lte i64 t2, size
                 // br i1 cond, label %nextCheck, label %checkFailed
                 // nextCheck:
                 // (loop)
@@ -945,7 +940,7 @@ impl LlvmGenerator {
         if !par_for.innermost {
             let work_idx_ptr = ctx.var_ids.next();
             ctx.code.add(format!(
-                    "{} = getelementptr %work_t, %work_t* %cur.work, i32 0, i32 3",
+                    "{} = getelementptr inbounds %work_t, %work_t* %cur.work, i32 0, i32 3",
                     work_idx_ptr
                     ));
             ctx.code.add(format!("store i64 {}, i64* {}", idx_tmp, work_idx_ptr));
@@ -959,7 +954,7 @@ impl LlvmGenerator {
             let check_with_vec = ctx.var_ids.next();
             let vector_len = format!("{}", llvm_simd_size(&elem_ty)?);
             // Would need to compute stride, etc. here.
-            ctx.code.add(format!("{} = add i64 {}, {}", check_with_vec, idx_tmp, vector_len));
+            ctx.code.add(format!("{} = add nuw nsw i64 {}, {}", check_with_vec, idx_tmp, vector_len));
             ctx.code.add(format!("{} = icmp ule i64 {}, %upper.idx", idx_cmp, check_with_vec));
         } else {
             ctx.code.add(format!("{} = icmp ult i64 {}, %upper.idx", idx_cmp, idx_tmp));
@@ -991,9 +986,9 @@ impl LlvmGenerator {
                 let offset = ctx.var_ids.next();
                 let stride_str = self.gen_load_var(llvm_symbol(&iter.stride.clone().unwrap()).as_str(), "i64", ctx)?;
                 let start_str = self.gen_load_var(llvm_symbol(&iter.start.clone().unwrap()).as_str(), "i64", ctx)?;
-                ctx.code.add(format!("{} = mul i64 {}, {}", offset, idx_tmp, stride_str));
                 let final_idx = ctx.var_ids.next();
-                ctx.code.add(format!("{} = add i64 {}, {}", final_idx, start_str, offset));
+                ctx.code.add(format!("{} = mul nsw nuw i64 {}, {}", offset, idx_tmp, stride_str));
+                ctx.code.add(format!("{} = add nsw nuw i64 {}, {}", final_idx, start_str, offset));
                 final_idx
             } else {
                 if iter.kind == IterKind::FringeIter {
@@ -1085,7 +1080,7 @@ impl LlvmGenerator {
         ctx.code.add("loop.terminator:");
         let idx_tmp = self.gen_load_var("%cur.idx", "i64", ctx)?;
         let idx_inc = ctx.var_ids.next();
-        ctx.code.add(format!("{} = add i64 {}, {}", idx_inc, idx_tmp, format!("{}", fetch_width)));
+        ctx.code.add(format!("{} = add nsw nuw i64 {}, {}", idx_inc, idx_tmp, format!("{}", fetch_width)));
         ctx.code.add(format!("store i64 {}, i64* %cur.idx", idx_inc));
         ctx.code.add("br label %loop.start");
         ctx.code.add("loop.end:");
@@ -1265,7 +1260,7 @@ impl LlvmGenerator {
             return Ok(());
         }
 
-        let mut ctx = &mut FunctionContext::new(false);
+        let ctx = &mut FunctionContext::new(false);
         let arg_types = self.get_arg_str(&func.params, ".in")?;
 
         self.gen_function_header(&arg_types, func, ctx)?;
@@ -1321,7 +1316,7 @@ impl LlvmGenerator {
             args_type = args_type
         ));
 
-        let mut arg_pos_map: HashMap<Symbol, usize> = HashMap::new();
+        let mut arg_pos_map: fnv::FnvHashMap<Symbol, usize> = fnv::FnvHashMap::default();
         for (i, a) in sir.top_params.iter().enumerate() {
             arg_pos_map.insert(a.name.clone(), i);
         }
@@ -1468,7 +1463,7 @@ impl LlvmGenerator {
                         }
                         _ => return weld_err!("Illegal operation using Min/Max generator"),
                     }
-                    
+
                     ctx.code.add(format!("{} = select i1 {}, {} {}, {} {}",
                                          &output_tmp, sel_tmp,
                                          self.llvm_type(ty)?, left_tmp,
@@ -1479,18 +1474,18 @@ impl LlvmGenerator {
                                          llvm_binary_maxmin(*op, &s)?,
                                          self.llvm_type(ty)?, &left_tmp,
                                          self.llvm_type(ty)?, &right_tmp));
-                }                
+                }
             }
             _ => weld_err!("Illegal type {} in Min/Max", print_type(ty))?,
         }
-        
+
         Ok(())
     }
 
     /// Generates a `cmp` function for `ty` and any nested types it depends on.
     fn gen_cmp(&mut self, ty: &Type) -> WeldResult<()> {
         // If we've already generated a function for this type, return.
-        { 
+        {
             let helper_state = self.type_helpers.entry(ty.clone()).or_insert(HelperState::new());
             if helper_state.cmp_func {
                 return Ok(());
@@ -1620,7 +1615,7 @@ impl LlvmGenerator {
                             NAME=&name.replace("%", "")));
                 }
                 // Set this flag to true as well, since these templates also generate `eq`.
-                let mut helper_state = self.type_helpers.get_mut(ty).unwrap();
+                let helper_state = self.type_helpers.get_mut(ty).unwrap();
                 helper_state.eq_func = true;
             }
             _ => {
@@ -1633,7 +1628,7 @@ impl LlvmGenerator {
     /// Generates an `eq` function for `ty` and any nested types it depends on.
     fn gen_eq(&mut self, ty: &Type) -> WeldResult<()> {
         // If we've already generated a function for this type, return.
-        { 
+        {
             let helper_state = self.type_helpers.entry(ty.clone()).or_insert(HelperState::new());
             if helper_state.eq_func {
                 return Ok(());
@@ -1704,7 +1699,7 @@ impl LlvmGenerator {
                 let dict_name = self.dict_names.get(ty).unwrap();
                 self.prelude_code.add(format!("
                 define i1 @{NAME}.eq(%{NAME} %dict1, %{NAME} %dict2) {{
-                  ret i1 0 
+                  ret i1 0
                 }}", NAME=dict_name.replace("%", "")));
             }
             Builder(ref bk, _) => {
@@ -1712,7 +1707,7 @@ impl LlvmGenerator {
                 let bld_name = self.bld_names.get(bk).unwrap();
                 self.prelude_code.add(format!("
                 define i1 @{NAME}.cmp(%{NAME} %bld1, %{NAME} %bld2) {{
-                  ret i1 0 
+                  ret i1 0
                 }}", NAME=bld_name.replace("%", "")));
             }
             Vector(_) => {
@@ -1729,7 +1724,7 @@ impl LlvmGenerator {
     /// Generates a `hash` function for `ty` and any nested types it depends on.
     fn gen_hash(&mut self, ty: &Type) -> WeldResult<()> {
         // If we've already generated a function for this type, return.
-        { 
+        {
             let helper_state = self.type_helpers.entry(ty.clone()).or_insert(HelperState::new());
             if helper_state.hash_func {
                 return Ok(());
@@ -2149,9 +2144,10 @@ impl LlvmGenerator {
 
     /// Generate code for a single statement, appending it to the code in a FunctionContext.
     fn gen_statement(&mut self, statement: &Statement, func: &SirFunction, ctx: &mut FunctionContext) -> WeldResult<()> {
+        let ref output = statement.output.clone().unwrap_or(Symbol::new("unused", 0));
         ctx.code.add(format!("; {}", statement));
-        match *statement {
-            MakeStruct { ref output, ref elems } => {
+        match statement.kind {
+            MakeStruct(ref elems) => {
                 let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
                 for (index, elem) in elems.iter().enumerate() {
                     let (elem_ll_ty, elem_ll_sym) = self.llvm_type_and_name(func, elem)?;
@@ -2163,7 +2159,7 @@ impl LlvmGenerator {
                 }
             }
 
-            CUDF { ref output, ref symbol_name, ref args } => {
+            CUDF { ref symbol_name, ref args } => {
                 let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
                 if !self.cudf_names.contains(symbol_name) {
                     let mut arg_tys = vec![];
@@ -2187,7 +2183,7 @@ impl LlvmGenerator {
                 ctx.code.add(format!("call void @{}({})", symbol_name, parameters));
             }
 
-            MakeVector { ref output, ref elems } => {
+            MakeVector(ref elems) => {
                 let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
                 let output_ty = func.symbol_type(output)?;
                 // Pull the element type from output instead of elems because elems could be empty.
@@ -2210,9 +2206,9 @@ impl LlvmGenerator {
                 self.gen_store_var(&vec, &output_ll_sym, &output_ll_ty, ctx);
             }
 
-            BinOp { ref output, op, ref left, ref right } => {
+            BinOp { op, ref left, ref right } => {
                 use super::ast::BinOpKind::*;
-                    
+
                 let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
                 let ty = func.symbol_type(left)?;
                 // Assume the left and right operands have the same type.
@@ -2257,12 +2253,12 @@ impl LlvmGenerator {
                         ctx.code.add(format!("{} = icmp {} i32 {}, {}", output_tmp, op_name, tmp, value));
                         self.gen_store_var(&output_tmp, &output_ll_sym, &output_ll_ty, ctx);
                     }
-                    
+
                     _ => weld_err!("Illegal type {} in BinOp", print_type(ty))?,
                 }
             }
 
-            Broadcast { ref output, ref child } => {
+            Broadcast(ref child) => {
                 let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
                 let (child_ll_ty, child_ll_sym) = self.llvm_type_and_name(func, child)?;
                 let child_ty = func.symbol_type(child)?;
@@ -2277,11 +2273,11 @@ impl LlvmGenerator {
                 self.gen_store_var(&prev_name, &output_ll_sym, &output_ll_ty, ctx);
             }
 
-            UnaryOp { ref output, op, ref child, } => {
+            UnaryOp { op, ref child, } => {
                 self.gen_unary_op(ctx, func, output, child, op)?
             }
 
-            Negate { ref output, ref child } => {
+            Negate(ref child) => {
                 let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
                 let output_ty = func.symbol_type(output)?;
                 let zero = match *output_ty {
@@ -2295,7 +2291,7 @@ impl LlvmGenerator {
                 self.gen_store_var(&value, &output_ll_sym, &output_ll_ty, ctx);
             }
 
-            Cast { ref output, ref child } => {
+            Cast(ref child) => {
                 let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
                 let (child_ll_ty, child_ll_sym) = self.llvm_type_and_name(func, child)?;
                 let output_ty = func.symbol_type(output)?;
@@ -2313,7 +2309,7 @@ impl LlvmGenerator {
                 }
             }
 
-            Lookup { ref output, ref child, ref index } => {
+            Lookup { ref child, ref index } => {
                 let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
                 let (child_ll_ty, child_ll_sym) = self.llvm_type_and_name(func, child)?;
                 let (index_ll_ty, index_ll_sym) = self.llvm_type_and_name(func, index)?;
@@ -2345,7 +2341,7 @@ impl LlvmGenerator {
                 }
             }
 
-            KeyExists { ref output, ref child, ref key } => {
+            KeyExists { ref child, ref key } => {
                 let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
                 let (child_ll_ty, child_ll_sym) = self.llvm_type_and_name(func, child)?;
                 let (key_ll_ty, key_ll_sym) = self.llvm_type_and_name(func, key)?;
@@ -2363,7 +2359,7 @@ impl LlvmGenerator {
                 self.gen_store_var(&res_tmp, &output_ll_sym, &output_ll_ty, ctx);
             }
 
-            Slice { ref output, ref child, ref index, ref size } => {
+            Slice { ref child, ref index, ref size } => {
                 let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
                 let (child_ll_ty, child_ll_sym) = self.llvm_type_and_name(func, child)?;
                 let (index_ll_ty, index_ll_sym) = self.llvm_type_and_name(func, index)?;
@@ -2384,7 +2380,7 @@ impl LlvmGenerator {
                 self.gen_store_var(&res_ptr, &output_ll_sym, &output_ll_ty, ctx);
             }
 
-            Sort { ref output, ref child, ref keyfunc } => {
+            Sort { ref child, ref keyfunc } => {
                 // keyfunc is an actual SirFunction
                 let out_ty = func.symbol_type(output)?;
                 let function_id = ctx.var_ids.next();
@@ -2424,7 +2420,7 @@ impl LlvmGenerator {
                         }
 
                         // Generate prelude code
-                        let mut keyfunc_ctx = &mut FunctionContext::new(false);
+                        let keyfunc_ctx = &mut FunctionContext::new(false);
                         for (arg, ty) in keyfunc.locals.iter() {
                             let arg_str = llvm_symbol(&arg);
                             let ty_str = self.llvm_type(&ty)?;
@@ -2474,7 +2470,7 @@ impl LlvmGenerator {
                 self.gen_store_var(&res_ptr, &output_ll_sym, &output_ll_ty, ctx);
             }
 
-            Select { ref output, ref cond, ref on_true, ref on_false } => {
+            Select { ref cond, ref on_true, ref on_false } => {
                 let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
                 let (cond_ll_ty, cond_ll_sym) = self.llvm_type_and_name(func, cond)?;
                 let (on_true_ll_ty, on_true_ll_sym) = self.llvm_type_and_name(func, on_true)?;
@@ -2488,7 +2484,7 @@ impl LlvmGenerator {
                 self.gen_store_var(&tmp, &output_ll_sym, &output_ll_ty, ctx);
             }
 
-            ToVec { ref output, ref child } => {
+            ToVec(ref child) => {
                 let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
                 let (child_ll_ty, child_ll_sym) = self.llvm_type_and_name(func, child)?;
                 let dict_prefix = llvm_prefix(&child_ll_ty);
@@ -2499,7 +2495,7 @@ impl LlvmGenerator {
                 self.gen_store_var(&res_tmp, &output_ll_sym, &output_ll_ty, ctx);
             }
 
-            Length { ref output, ref child } => {
+            Length(ref child) => {
                 let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
                 let (child_ll_ty, child_ll_sym) = self.llvm_type_and_name(func, child)?;
                 let vec_prefix = llvm_prefix(&child_ll_ty);
@@ -2509,14 +2505,14 @@ impl LlvmGenerator {
                 self.gen_store_var(&res_tmp, &output_ll_sym, &output_ll_ty, ctx);
             }
 
-            Assign { ref output, ref value } => {
+            Assign(ref value) => {
                 let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
                 let (value_ll_ty, value_ll_sym) = self.llvm_type_and_name(func, value)?;
                 let val_tmp = self.gen_load_var(&value_ll_sym, &value_ll_ty, ctx)?;
                 self.gen_store_var(&val_tmp, &output_ll_sym, &output_ll_ty, ctx);
             }
 
-            GetField { ref output, ref value, index } => {
+            GetField { ref value, index } => {
                 let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
                 let (value_ll_ty, value_ll_sym) = self.llvm_type_and_name(func, value)?;
                 let ptr_tmp = ctx.var_ids.next();
@@ -2526,7 +2522,7 @@ impl LlvmGenerator {
                 self.gen_store_var(&res_tmp, &output_ll_sym, &output_ll_ty, ctx);
             }
 
-            AssignLiteral { ref output, ref value } => {
+            AssignLiteral(ref value) => {
                 let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
                 let output_ty = func.symbol_type(output)?;
                 if let Simd(_) = *output_ty {
@@ -2547,7 +2543,7 @@ impl LlvmGenerator {
                 }
             }
 
-            Res { ref output, ref builder } => {
+            Res(ref builder) => {
                 let bld_ty = func.symbol_type(builder)?;
                 if let Builder(ref bld_kind, _) = *bld_ty {
                     self.gen_result(bld_kind, builder, output, func, ctx)?;
@@ -2556,7 +2552,7 @@ impl LlvmGenerator {
                 }
             }
 
-            NewBuilder { ref output, ref arg, ref ty } => {
+            NewBuilder { ref arg, ref ty } => {
                 if let Builder(ref bld_kind, ref annotations) = *ty {
                     self.gen_new_builder(bld_kind, annotations, arg, output, func, ctx)?;
                 } else {
@@ -3174,8 +3170,7 @@ impl LlvmGenerator {
                 // Generate the functions to execute the loop
                 self.gen_par_for_functions(pf, sir, &sir.funcs[pf.body])?;
                 // Call into the loop.
-                let params = get_combined_params(sir, pf);
-                let params_sorted: BTreeMap<&Symbol, &Type> = params.iter().collect();
+                let params_sorted = get_combined_params(sir, pf);
                 let mut arg_types = String::new();
                 for (arg, ty) in params_sorted.iter() {
                     let ll_ty = self.llvm_type(&ty)?;
@@ -3194,7 +3189,7 @@ impl LlvmGenerator {
 
             JumpFunction(func) => {
                 self.gen_top_level_function(sir, &sir.funcs[func])?;
-                let params_sorted: BTreeMap<&Symbol, &Type> = sir.funcs[func].params.iter().collect();
+                let ref params_sorted = sir.funcs[func].params;
                 let mut arg_types = String::new();
                 for (arg, ty) in params_sorted.iter() {
                     let ll_ty = self.llvm_type(&ty)?;
@@ -3350,8 +3345,8 @@ fn llvm_literal(k: LiteralKind) -> String {
         U16Literal(l) => format!("{}", l),
         U32Literal(l) => format!("{}", l),
         U64Literal(l) => format!("{}", l),
-        F32Literal(l) => format!("{:.30e}", l),
-        F64Literal(l) => format!("{:.30e}", l),
+        F32Literal(l) => format!("{:.30e}", f32::from_bits(l)),
+        F64Literal(l) => format!("{:.30e}", f64::from_bits(l)),
     }.to_string()
 }
 
@@ -3576,7 +3571,7 @@ impl FunctionContext {
     }
 }
 
-fn get_combined_params(sir: &SirProgram, par_for: &ParallelForData) -> HashMap<Symbol, Type> {
+fn get_combined_params(sir: &SirProgram, par_for: &ParallelForData) -> BTreeMap<Symbol, Type> {
     let mut body_params = sir.funcs[par_for.body].params.clone();
     for (arg, ty) in sir.funcs[par_for.cont].params.iter() {
         body_params.insert(arg.clone(), ty.clone());

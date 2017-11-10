@@ -502,7 +502,7 @@ pub fn print_vector_literal(lit: &LiteralKind) -> String {
         U32Literal(v) => format!("<{}, {}, ..>", v, v),
         U64Literal(v) => format!("<{}, {}, ..>", v, v),
         F32Literal(v) => {
-            let mut res = format!("{}", v);
+            let mut res = format!("{}", f32::from_bits(v));
             // Hack to disambiguate from integers.
             if !res.contains(".") {
                 res.push_str(".0");
@@ -511,7 +511,7 @@ pub fn print_vector_literal(lit: &LiteralKind) -> String {
             format!("<{}, {}, ..>", &res, &res)
         }
         F64Literal(v) => {
-            let mut res = format!("{}", v);
+            let mut res = format!("{}", f64::from_bits(v));
             // Hack to disambiguate from integers.
             if !res.contains(".") {
                 res.push_str(".0");
@@ -534,7 +534,7 @@ pub fn print_literal(lit: &LiteralKind) -> String {
         U32Literal(v) => format!("{}", v),
         U64Literal(v) => format!("{}", v),
         F32Literal(v) => {
-            let mut res = format!("{}", v);
+            let mut res = format!("{}", f32::from_bits(v));
             // Hack to disambiguate from integers.
             if !res.contains(".") {
                 res.push_str(".0");
@@ -543,7 +543,7 @@ pub fn print_literal(lit: &LiteralKind) -> String {
             res
         }
         F64Literal(v) => {
-            let mut res = format!("{}", v);
+            let mut res = format!("{}", f64::from_bits(v));
             // Hack to disambiguate from integers.
             if !res.contains(".") {
                 res.push_str(".0");

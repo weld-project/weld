@@ -4,9 +4,9 @@ use ast::*;
 use ast::ExprKind::*;
 use error::*;
 
-use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 
+extern crate fnv;
 
 /// Modifies symbol names so each symbol is unique in the AST.  Returns an error if an undeclared
 /// symbol appears in the program.
@@ -17,16 +17,16 @@ pub fn uniquify<T: TypeBounds>(expr: &mut Expr<T>) -> WeldResult<()> {
 /// A stack which keeps track of unique variables names and scoping information for symbols.
 struct SymbolStack {
     // The symbol stack.
-    stack: HashMap<Symbol, Vec<i32>>,
+    stack: fnv::FnvHashMap<Symbol, Vec<i32>>,
     // The next unique ID to assign to this name.
-    next_unique_symbol: HashMap<String, i32>,
+    next_unique_symbol: fnv::FnvHashMap<String, i32>,
 }
 
 impl SymbolStack {
     fn new() -> SymbolStack {
         SymbolStack {
-            stack: HashMap::new(),
-            next_unique_symbol: HashMap::new(),
+            stack: fnv::FnvHashMap::default(),
+            next_unique_symbol: fnv::FnvHashMap::default(),
         }
     }
 
@@ -50,8 +50,8 @@ impl SymbolStack {
     /// Push a new symbol onto the stack, assigning it a unique name. This enters a new scope for
     /// the name. The symbol can be retrieved with `symbol()`.
     fn push_symbol(&mut self, sym: Symbol) {
-        let mut stack_entry = self.stack.entry(sym.clone()).or_insert(Vec::new());
-        let mut next_entry = self.next_unique_symbol.entry(sym.name).or_insert(-1);
+        let stack_entry = self.stack.entry(sym.clone()).or_insert(Vec::new());
+        let next_entry = self.next_unique_symbol.entry(sym.name).or_insert(-1);
         *next_entry = if sym.id > *next_entry {
             sym.id
         } else {
