@@ -251,9 +251,10 @@ class DataFrameWeld:
             )
 
     @property
-    def value():
+    def values(self):
         if self.predicates is None:
             return self.df.values
+        else:
             if isinstance(self.df.values, np.ndarray):
                 weld_type = grizzly_impl.numpy_to_weld_type_mapping[
                     str(self.df.values.dtype)]
