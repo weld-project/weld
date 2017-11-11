@@ -2357,7 +2357,7 @@ fn nested_appender_loop() {
 
     let expect = [r0, r1, r2, r3, r4];
 
-    // Just computes the identity.
+    // Computes the identity.
     let code = "|e0: vec[vec[i32]]| map(e0, |x:vec[i32]| map(x, |y:i32| y))";
     let conf = default_conf();
 
@@ -2365,7 +2365,7 @@ fn nested_appender_loop() {
     let data = unsafe { weld_value_data(ret_value) as *const WeldVec<WeldVec<i32>> };
     let result = unsafe { (*data).clone() };
 
-    // Make sure we get the same hting back, since the code just computes the identity.
+    // Make sure we get the same thing back.
     assert_eq!(result.len, 5);
     for i in 0..(result.len as isize) {
         let inner = unsafe { result.data.offset(i) };
