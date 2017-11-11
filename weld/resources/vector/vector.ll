@@ -130,12 +130,17 @@ define %{NAME}.bld @{NAME}.bld.new(i64 %capacity, %work_t* %cur.work, i32 %fixed
   %elemSizePtr = getelementptr {ELEM}, {ELEM}* null, i32 1
   %elemSize = ptrtoint {ELEM}* %elemSizePtr to i64
   %newVb = call i8* @weld_rt_new_vb(i64 %elemSize, i64 %capacity, i32 %fixedSize)
-  call void @{NAME}.bld.newPiece(%{NAME}.bld %newVb, %work_t* %cur.work)
+  call void @{NAME}.bld.newPieceInit(%{NAME}.bld %newVb, %work_t* %cur.work)
   ret %{NAME}.bld %newVb
 }}
 
+define void @{NAME}.bld.newPieceInit(%{NAME}.bld %bldPtr, %work_t* %cur.work) {{
+  call void @weld_rt_new_vb_piece(i8* %bldPtr, %work_t* %cur.work, i32 1)
+  ret void
+}}
+
 define void @{NAME}.bld.newPiece(%{NAME}.bld %bldPtr, %work_t* %cur.work) {{
-  call void @weld_rt_new_vb_piece(i8* %bldPtr, %work_t* %cur.work)
+  call void @weld_rt_new_vb_piece(i8* %bldPtr, %work_t* %cur.work, i32 0)
   ret void
 }}
 
