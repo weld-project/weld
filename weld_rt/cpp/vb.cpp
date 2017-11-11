@@ -74,8 +74,9 @@ extern "C" void weld_rt_new_vb_piece(void *v, work_t *w, int32_t is_init_piece) 
     cur_piece->size = 0;
     cur_piece->capacity = vb->starting_cap;
   } else {
-    // if initial piece (created right after vb is created), w->cur_idx won't be set to the
-    // value we want (0)
+    // If this is the initial piece (i.e. the one created right after the vb is created),
+    // we want to use an offset of 0. Only for pieces created for new tasks should an
+    // offset of w->cur_idx be used.
     cur_piece->data = (uint8_t *)vb->fixed_vector +
       (is_init_piece ? 0 : vb->elem_size * w->cur_idx);
     cur_piece->size = 0;
