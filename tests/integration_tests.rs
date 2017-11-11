@@ -34,6 +34,15 @@ struct WeldVec<T> {
     len: i64,
 }
 
+impl<T> WeldVec<T> {
+    fn new(ptr: *const T, len: i64) -> WeldVec<T> {
+        WeldVec {
+            data: ptr,
+            len: len
+        }
+    }
+}
+
 #[derive(Clone)]
 #[allow(dead_code)]
 #[repr(C)]
@@ -2328,6 +2337,46 @@ fn complex_sort() {
     unsafe { free_value_and_module(ret_value) };
 }
 
+fn nested_appender_loop() {
+    let size = 100;
+    let r0 = vec![0; size as usize];
+    let r1 = vec![1; size as usize];
+    let r2 = vec![2; size as usize];
+    let r3 = vec![3; size as usize];
+    let r4 = vec![4; size as usize];
+
+    // Wrap the arrays in WeldVecs.
+    let wv0 = WeldVec::new(r0.as_ptr() as *const i32, r0.len() as i64);
+    let wv1 = WeldVec::new(r1.as_ptr() as *const i32, r1.len() as i64);
+    let wv2 = WeldVec::new(r2.as_ptr() as *const i32, r2.len() as i64);
+    let wv3 = WeldVec::new(r3.as_ptr() as *const i32, r3.len() as i64);
+    let wv4 = WeldVec::new(r4.as_ptr() as *const i32, r4.len() as i64);
+
+    let input_data = [wv0, wv1, wv2, wv3, wv4];
+    let ref arg = WeldVec::new(input_data.as_ptr() as *const WeldVec<WeldVec<i32>>, input_data.len() as i64);
+
+    let expect = [r0, r1, r2, r3, r4];
+
+    // Computes the identity.
+    let code = "|e0: vec[vec[i32]]| map(e0, |x:vec[i32]| map(x, |y:i32| y))";
+    let conf = default_conf();
+
+    let ret_value = compile_and_run(code, conf, arg);
+    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<WeldVec<i32>> };
+    let result = unsafe { (*data).clone() };
+
+    // Make sure we get the same thing back.
+    assert_eq!(result.len, 5);
+    for i in 0..(result.len as isize) {
+        let inner = unsafe { result.data.offset(i) };
+        let inner_length = unsafe { (*inner).len };
+        assert_eq!(inner_length, size);
+        for j in 0..(inner_length as isize) {
+            assert_eq!(unsafe { *((*inner).data.offset(i)) }, expect[i as usize][j as usize]);
+        }
+    }
+}
+
 fn nested_for_loops() {
     #[derive(Clone)]
     #[allow(dead_code)]
@@ -2450,6 +2499,7 @@ fn main() {
              ("simple_int_mod", simple_int_mod),
              ("predicate_if_iff_annotated", predicate_if_iff_annotated),
              ("nested_for_loops", nested_for_loops),
+             ("nested_appender_loop", nested_appender_loop),
              ("simple_sort", simple_sort),
              ("complex_sort", complex_sort)];
 
