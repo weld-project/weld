@@ -156,6 +156,15 @@ pub fn compile_program(program: &Program, conf: &ParsedConf, stats: &mut Compila
     let start = PreciseTime::now();
     let mut gen = LlvmGenerator::new();
     gen.multithreaded = conf.support_multithread;
+    gen.trace_run = conf.trace_run;
+
+    if !gen.multithreaded {
+        info!("Generating code without multithreading support");
+    }
+
+    if gen.trace_run {
+        info!("Generating code with SIR tracing");
+    }
 
     gen.add_function_on_pointers("run", &sir_prog)?;
     let llvm_code = gen.result();
@@ -284,6 +293,10 @@ pub struct LlvmGenerator {
     /// Multithreaded configuration set during compilation. If unset, performs
     /// single-threaded optimizations.
     multithreaded: bool,
+
+    /// If true, compiles the program so that, at runtime, the generated program
+    /// prints each SIR statement before evaluating it.
+    trace_run: bool,
 }
 
 impl LlvmGenerator {
@@ -305,6 +318,7 @@ impl LlvmGenerator {
             visited: HashSet::new(),
             type_helpers: fnv::FnvHashMap::default(),
             multithreaded: false,
+            trace_run: false
         };
         generator.prelude_code.add(PRELUDE_CODE);
         generator.prelude_code.add("\n");
@@ -2146,6 +2160,9 @@ impl LlvmGenerator {
     fn gen_statement(&mut self, statement: &Statement, func: &SirFunction, ctx: &mut FunctionContext) -> WeldResult<()> {
         let ref output = statement.output.clone().unwrap_or(Symbol::new("unused", 0));
         ctx.code.add(format!("; {}", statement));
+        if self.trace_run {
+            self.gen_puts(&format!("  {}", statement), ctx);
+        }
         match statement.kind {
             MakeStruct(ref elems) => {
                 let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
@@ -3158,6 +3175,9 @@ impl LlvmGenerator {
                       ctx: &mut FunctionContext)
                       -> WeldResult<()> {
         ctx.code.add(format!("; {}", terminator));
+        if self.trace_run {
+            self.gen_puts(&format!("  {}", terminator), ctx);
+        }
         match *terminator {
             Branch { ref cond, on_true, on_false } => {
                 let cond_tmp = self.gen_load_var(llvm_symbol(cond).as_str(), "i1", ctx)?;
@@ -3284,6 +3304,21 @@ impl LlvmGenerator {
 
             _ => weld_err!("Invalid type for gen_simd_extract: {:?}", simd_type)
         }
+    }
+
+    /// Generate a puts() call to print text at runtime.
+    fn gen_puts(&mut self, text: &str, ctx: &mut FunctionContext) {
+        let global = self.prelude_var_ids.next().replace("%", "@");
+        let text = text.replace("\\", "\\\\").replace("\"", "\\\"");
+        let len = text.len() + 1;
+        self.prelude_code.add(format!(
+            "{} = private unnamed_addr constant [{} x i8] c\"{}\\00\"",
+            global, len, text));
+        let local = ctx.var_ids.next();
+        ctx.code.add(format!(
+            "{} = getelementptr [{} x i8], [{} x i8]* {}, i32 0, i32 0",
+            local, len, len, global));
+        ctx.code.add(format!("call i32 @puts(i8* {})", local));
     }
 }
 

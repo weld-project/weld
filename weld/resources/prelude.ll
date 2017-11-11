@@ -47,6 +47,8 @@ declare i32 @memcmp(i8*, i8*, i64)
 declare float @erff(float)
 declare double @erf(double)
 
+declare i32 @puts(i8* nocapture) nounwind
+
 ; Weld runtime functions
 
 declare i64     @weld_run_begin(void (%work_t*)*, i8*, i64, i32)
