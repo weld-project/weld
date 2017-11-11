@@ -461,7 +461,7 @@ pub fn merge_expr(builder: Expr<Type>, value: Expr<Type>) -> WeldResult<Expr<Typ
             DictMerger(ref elem_ty1, ref elem_ty2, _) => {
                 if let Struct(ref v_ty) = value.ty {
                     if v_ty.len() < 2 { return err; }
-                    
+
                     if elem_ty1.as_ref() != &v_ty[0] {
                         return err;
                     }
@@ -487,7 +487,17 @@ pub fn merge_expr(builder: Expr<Type>, value: Expr<Type>) -> WeldResult<Expr<Typ
                 }
             }
             VecMerger(ref elem_ty, _) => {
-                if elem_ty.as_ref() != &value.ty {
+                if let Struct(ref tys) = value.ty {
+                    if tys.len() != 2 {
+                        return err;
+                    }
+                    if tys[0] != Scalar(ScalarKind::I64) {
+                        return err;
+                    }
+                    if &tys[1] != elem_ty.as_ref() {
+                        return err;
+                    }
+                } else {
                     return err;
                 }
             }
