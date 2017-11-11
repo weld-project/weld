@@ -161,9 +161,13 @@ def test_views_update_child():
     Updates both parents and child to put more strain.
     '''
     def asserts(w, n, w2, n2):
-        assert np.allclose(w[2:5], w2.evaluate())
-        assert np.allclose(w2.evaluate(), n2)
         assert np.allclose(w, n)
+        assert np.allclose(w2.evaluate(), n2)
+        
+        print('w[2:5]: ', w[2:5])
+        print('w2: ', w2.evaluate())
+
+        assert np.allclose(w[2:5], w2.evaluate())
 
     NUM_ELS = 10
     n, w = random_arrays(NUM_ELS, 'float32')
@@ -176,6 +180,7 @@ def test_views_update_child():
     n2 = np.exp(n2, out=n2)
 
     asserts(w, n, w2, n2)
+    print('unary asserts done!')
 
     # binary part
     n3, w3 = random_arrays(3, 'float32')
@@ -995,3 +1000,4 @@ def test_erf():
         # __array_ufunc__.
         # assert np.array_equal(w2_eval, n2)
 
+test_views_update_child()

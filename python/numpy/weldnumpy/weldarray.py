@@ -125,8 +125,8 @@ class weldarray(np.ndarray):
                 ret._weldarray_view = weldarray_view(base_array, self, start, end, idx)
 
             return ret
+
         elif isinstance(idx, tuple):
-            print('idx = ', idx)
             ret = self.view(np.ndarray).__getitem__(idx)
             if not is_view_child(ret.view(np.ndarray), self.view(np.ndarray)):
                 # FIXME:
@@ -371,7 +371,6 @@ class weldarray(np.ndarray):
 
         # check for supported ops.
         if ufunc.__name__ in UNARY_OPS:
-            print('unary op!')
             assert(len(input_args) == 1)
             return self._unary_op(UNARY_OPS[ufunc.__name__], result=output)
 
@@ -434,18 +433,17 @@ class weldarray(np.ndarray):
         '''
         # This check has to happen before the caching - as the weldobj/code for views is never updated.
         # TODO: Need to change this condition specifically for in place ops.
-        # if self._weldarray_view:
+        if self._weldarray_view:
             # _eval parent and return appropriate idx.
             # TODO: Clearly more efficient to _eval the base array as the parent would eventually have to do
             # it - but this makes it more convenient to deal with different indexing strategies.
-            # arr = self._weldarray_view.parent._eval()
-            # return arr[self._weldarray_view.idx]
+            arr = self._weldarray_view.parent._eval()
+            return arr[self._weldarray_view.idx]
 
         # Caching
         if self.name == self.weldobj.weld_code:
             # No new ops have been registered. Avoid creating unneccessary new copies with
             # weldobj.evaluate()
-            print('cached value')
             return self.weldobj.context[self.name]
 
         if restype is None:
@@ -453,20 +451,22 @@ class weldarray(np.ndarray):
             restype = WeldVec(self._weld_type)
         arr = self.weldobj.evaluate(restype, verbose=self._verbose)
         
-        print(type(arr))
-        print(arr.shape)
-        print(arr.strides)
-
         # TODO: this is specifically for non-inplace ops. need to make that clearer.
-        if self._weldarray_view:
-            print('before reshaping, arr: ', arr)
+        if self._weldarray_view and len(self.shape) > 1:
+            # results from non contiguous arrays, non-inplace ops. 
+            # TODO: need to ensure this is only for non-inplace ops
             arr = arr.reshape(tuple(self._weldarray_view.shape))
-            print('after reshaping, arr: ', arr)
-        else:
+        elif hasattr(arr, '__len__'):
             # Ensures that multi-dimensional arrays are treated correctly.
-            # TODO: This will not work for non-contiguous arrays.
+            # TODO: Might not work for cases in which result of a n-d array op is a (n-1) array...
             arr.shape = self.shape
             arr.strides = self.strides
+        else:
+            # TODO: check
+            # floats and other values being returned.
+            self._gen_weldobj(arr) 
+            return arr
+
         # Now that the evaluation is done - create new weldobject for self,
         # initalized from the returned arr.
         self._gen_weldobj(arr)
@@ -483,15 +483,8 @@ class weldarray(np.ndarray):
             # result = weldarray(self._weldarray_view.parent._eval()[idx], verbose=self._verbose)
             view = self._weldarray_view 
             # TODO: Not sure we need to call eval here?
-            result = weldarray(self._weldarray_view.parent._eval()[idx])
+            result = weldarray(self._weldarray_view.parent._eval())
             result._weldarray_view = view
-
-            # print(type(result))
-            # print(result.shape)
-            # print(result.strides)
-            # print(result)
-            # print(result._weldarray_view.shape)
-            # exit(0)
         else:
             result = weldarray(self, verbose=self._verbose)
         return result
@@ -512,23 +505,16 @@ class weldarray(np.ndarray):
             # template = 'map({arr}, |z : {type}| {unop}(z))'
             template = 'result(for({arr}, appender,|b,i,e| merge(b,{unop}(e))))'
 
-            # views_template = "result(for({arr1}, appender,|b,i,e| if \
-            # (i >= {start}L & i < {end}L,merge(b,{update_str}),merge(b,e))))"
-
             nditer_arr = 'nditer({arr},{start}L,{end}L,1L,{shapes},{strides})'
 
             if res._weldarray_view:
-                print('gotta set it up for views')
                 shapes = res.weldobj.update(res._weldarray_view.shape)
                 strides = res.weldobj.update(res._weldarray_view.strides)
-                print(res._weldarray_view.shape)
-                print(res._weldarray_view.strides)
                 arr = nditer_arr.format(arr = res.weldobj.weld_code,
                                         start = res._weldarray_view.start,
                                         end = res._weldarray_view.end,
                                         shapes = shapes,
                                         strides = strides)
-                print('arr = ', arr)
             else:
                 arr = res.weldobj.weld_code
             code = template.format(arr  = arr,
@@ -628,7 +614,6 @@ class weldarray(np.ndarray):
             # New array being created, so don't deal with views.
             result = self._get_result()
         else:
-            assert False, 'lets just not support this for now'
             # for a view, we only update the parent array.
             if result._weldarray_view:
                 self._update_views_binary(result, other, binop)
