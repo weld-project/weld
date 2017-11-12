@@ -1000,4 +1000,5 @@ def test_erf():
         # __array_ufunc__.
         # assert np.array_equal(w2_eval, n2)
 
-test_views_update_child()
+# test_views_update_child()
+test_views_mess()

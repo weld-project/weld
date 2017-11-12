@@ -433,6 +433,8 @@ class weldarray(np.ndarray):
         '''
         # This check has to happen before the caching - as the weldobj/code for views is never updated.
         # TODO: Need to change this condition specifically for in place ops.
+        # Case 1: we are evaluating an in place on in an array. So need to evaluate the parent and
+        # return the appropriate index.
         if self._weldarray_view:
             # _eval parent and return appropriate idx.
             # TODO: Clearly more efficient to _eval the base array as the parent would eventually have to do
@@ -451,16 +453,19 @@ class weldarray(np.ndarray):
             restype = WeldVec(self._weld_type)
         arr = self.weldobj.evaluate(restype, verbose=self._verbose)
         
-        # TODO: this is specifically for non-inplace ops. need to make that clearer.
-        if self._weldarray_view and len(self.shape) > 1:
-            # results from non contiguous arrays, non-inplace ops. 
-            # TODO: need to ensure this is only for non-inplace ops
-            arr = arr.reshape(tuple(self._weldarray_view.shape))
-        elif hasattr(arr, '__len__'):
-            # Ensures that multi-dimensional arrays are treated correctly.
-            # TODO: Might not work for cases in which result of a n-d array op is a (n-1) array...
-            arr.shape = self.shape
-            arr.strides = self.strides
+        # CASE 2: non-contiguous arrays, after eval it became a contiguous result array.
+        # if not self.flags.C_CONTIGUOUS:
+            # arr = arr.reshape(tuple(self._weldarray_view.shape))
+        # # CASE 3: General case for multi-dimensional arrays. Contiguous input array, contiguous
+        # # result, but need to change shape/strides. 
+        # # TODO: maybe just a general reshape thing would work too?
+        # elif hasattr(arr, '__len__'):
+            # # Ensures that multi-dimensional arrays are treated correctly.
+            # # TODO: Might not work for cases in which result of a n-d array op is a (n-1) array...
+            # arr.shape = self.shape
+            # arr.strides = self.strides
+        if hasattr(arr, '__len__'):
+            arr = arr.reshape(self.shape)
         else:
             # TODO: check
             # floats and other values being returned.
@@ -480,11 +485,11 @@ class weldarray(np.ndarray):
         '''
         if self._weldarray_view:
             idx = self._weldarray_view.idx
-            # result = weldarray(self._weldarray_view.parent._eval()[idx], verbose=self._verbose)
-            view = self._weldarray_view 
-            # TODO: Not sure we need to call eval here?
-            result = weldarray(self._weldarray_view.parent._eval())
-            result._weldarray_view = view
+            result = weldarray(self._weldarray_view.parent._eval()[idx], verbose=self._verbose)
+            # view = self._weldarray_view 
+            # # TODO: Not sure we need to call eval here?
+            # result = weldarray(self._weldarray_view.parent._eval())
+            # result._weldarray_view = view
         else:
             result = weldarray(self, verbose=self._verbose)
         return result
@@ -502,17 +507,16 @@ class weldarray(np.ndarray):
             @res: weldarray to be updated.
             @unop: str, operator applied to res.
             '''
-            # template = 'map({arr}, |z : {type}| {unop}(z))'
             template = 'result(for({arr}, appender,|b,i,e| merge(b,{unop}(e))))'
-
             nditer_arr = 'nditer({arr},{start}L,{end}L,1L,{shapes},{strides})'
 
-            if res._weldarray_view:
-                shapes = res.weldobj.update(res._weldarray_view.shape)
-                strides = res.weldobj.update(res._weldarray_view.strides)
-                arr = nditer_arr.format(arr = res.weldobj.weld_code,
-                                        start = res._weldarray_view.start,
-                                        end = res._weldarray_view.end,
+            if self._weldarray_view and not self.flags.contiguous:
+                print('update array unary ops')
+                shapes = res.weldobj.update(self._weldarray_view.shape)
+                strides = res.weldobj.update(self._weldarray_view.strides)
+                arr = nditer_arr.format(arr = self.weldobj.weld_code,
+                                        start = self._weldarray_view.start,
+                                        end = self._weldarray_view.end,
                                         shapes = shapes,
                                         strides = strides)
             else:
@@ -525,14 +529,14 @@ class weldarray(np.ndarray):
         if result is None:
             result = self._get_result()
         else:
-            # in place op. If is a view, just update base array and return.
+            # in place op + view, just update base array and return.
             if result._weldarray_view:
                 v = result._weldarray_view
                 update_str = '{unop}(e)'.format(unop=unop)
                 v.base_array._update_range(v.start, v.end, update_str)
-                return result
-
+                return result 
         # back to updating result array
+        result.weldobj.update(self.weldobj)
         _update_array_unary_op(result, unop)
         return result
 

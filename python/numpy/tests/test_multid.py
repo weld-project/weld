@@ -23,9 +23,9 @@ TODO tests:
 # ND_SHAPES = [(5,3,4), (5,4), (6,4,7,3)]
 ND_SHAPES = [(5,3,4), (3,4)]
 
-def get_idx(shape):
+def get_noncontig_idx(shape):
     '''
-    TODO: Need to generate idxs based on the shape parameter...
+    Returns indices that make an array with shape, 'shape', become a non contiguous array.
 
     Just gives a bunch of random multi-d indices.
     Things to test:
@@ -33,24 +33,35 @@ def get_idx(shape):
         - different types of indexing styles (None, :, ... etc.)
         - different sizes, strides etc.
     '''
-    idx = []
+    # idx = []
+    
+    for i in range(5):
+        idx = []
+        for s in shape:
+            # 5 tries to get non-contiguous array
+            print('s: ', s)
+            start = random.randint(0, s-1)
+            stop = random.randint(start+1, s)
+            # step = random.randint(0, 3)
+            step = 1
+            idx.append(slice(start, stop, step))
 
-    for s in shape:
-        print('s: ', s)
-        start = random.randint(0, s-1)
-        stop = random.randint(start+1, s)
-        # step = random.randint(0, 3)
-        step = 1
-        idx.append(slice(start, stop, step))
+        idx = tuple(idx)
+        a, _ = random_arrays(shape, 'float32')
+        b = a[idx]
+        if not b.flags.contiguous:
+            break
 
-
-    return tuple(idx)
+    return idx
 
 def test_views_non_contig_basic():
     shape = (5,5,5)
     # shape = (3,3)
     n, w = random_arrays(shape, 'float64')
-    idx = get_idx(shape)
+    idx = get_noncontig_idx(shape)
+    # idx = (slice(0, 3, 1), slice(0, 2, 1), slice(0, 3, 1))
+    # idx = (slice(0, 3, 1), slice(0, 2, 1))
+
     n2 = n[idx]
     w2 = w[idx]
     
@@ -87,7 +98,7 @@ def test_views_non_contig_basic():
 # def test_views_non_contig_inplace_unary():
     # for shape in ND_SHAPES:
         # n, w = random_arrays(shape, 'float32')
-        # idx = get_idx(shape)
+        # idx = get_noncontig_idx(shape)
 
         # n2 = n[idx]
         # w2 = w[idx]
@@ -106,10 +117,14 @@ def test_views_non_contig_newarray_binary():
         - contig + non-contig
         - non-contig + non-contig
     '''
+    ND_SHAPES = [(5,5)] 
+    BINARY_OPS = [np.add]
+
     for shape in ND_SHAPES:
         n, w = random_arrays(shape, 'float32')
         n2, w2 = random_arrays(shape, 'float32')
-        idx = get_idx(shape)
+        idx = get_noncontig_idx(shape)
+
         nv1 = n[idx]
         wv1 = w[idx]
         nv2 = n2[idx]
@@ -141,7 +156,7 @@ def test_views_non_contig_newarray_binary():
     # for shape in ND_SHAPES:
         # n, w = random_arrays(shape, 'float32')
         # n2, w2 = random_arrays(shape, 'float32')
-        # idx = get_idx(shape)
+        # idx = get_noncontig_idx(shape)
         # print('idx : ', idx)
 
         # nv1 = n[idx]
@@ -196,7 +211,7 @@ def test_views_non_contig_newarray_binary():
     # for shape in ND_SHAPES:
         # n, w = random_arrays(shape, 'float32')
         # n2, w2 = random_arrays(shape, 'float32')
-        # idx = get_idx(shape)
+        # idx = get_noncontig_idx(shape)
         # # TODO: write test.
         # pass
 
@@ -206,7 +221,7 @@ def test_views_non_contig_newarray_binary():
     # for shape in ND_SHAPES:
         # n, w = random_arrays(shape, 'float32')
         # n2, w2 = random_arrays(shape, 'float32')
-        # idx = get_idx(shape)
+        # idx = get_noncontig_idx(shape)
 
         # nv1 = n[idx]
         # wv1 = w[idx]
@@ -250,7 +265,7 @@ def test_views_non_contig_newarray_binary():
     # for shape in ND_SHAPES:
         # n, w = random_arrays(shape, 'float32')
         # n2, w2 = random_arrays(shape, 'float32')
-        # idx = get_idx(shape)
+        # idx = get_noncontig_idx(shape)
         # nv1 = n[idx]
         # wv1 = w[idx]
         # nv2 = n2[idx]
@@ -295,4 +310,5 @@ More advanced tests.
 '''
 Broadcasting based tests.
 '''
-test_views_non_contig_basic()
+# test_views_non_contig_basic()
+# test_views_non_contig_newarray_binary()
