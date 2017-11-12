@@ -39,7 +39,6 @@ def get_noncontig_idx(shape):
         idx = []
         for s in shape:
             # 5 tries to get non-contiguous array
-            print('s: ', s)
             start = random.randint(0, s-1)
             stop = random.randint(start+1, s)
             # step = random.randint(0, 3)
@@ -55,43 +54,24 @@ def get_noncontig_idx(shape):
     return idx
 
 def test_views_non_contig_basic():
-    shape = (5,5,5)
-    # shape = (3,3)
-    n, w = random_arrays(shape, 'float64')
-    idx = get_noncontig_idx(shape)
-    # idx = (slice(0, 3, 1), slice(0, 2, 1), slice(0, 3, 1))
-    # idx = (slice(0, 3, 1), slice(0, 2, 1))
+    # shape = (5,5,5)
+    for shape in ND_SHAPES:
+        n, w = random_arrays(shape, 'float64')
+        idx = get_noncontig_idx(shape)
+        n2 = n[idx]
+        w2 = w[idx]
+     
+        # useful test to add.
+        assert w2.shape == n2.shape
+        assert w2.flags == n2.flags
+        assert w2.strides == n2.strides
+        # test unary op.
+        n3 = np.sqrt(n2)
+        w3 = np.sqrt(w2)
+        w3 = w3.evaluate()
 
-    n2 = n[idx]
-    w2 = w[idx]
-    
-    # useful test to add.
-    assert w2.shape == n2.shape
-    assert w2.flags == n2.flags
-    assert w2.strides == n2.strides
-    
-    print('w: ', w)
-    print('n: ', n)
-
-    print('w2: ', w2)
-    print('n2: ', n2)
-
-    
-    # test unary op.
-    n3 = np.sqrt(n2)
-    w3 = np.sqrt(w2)
-    w3 = w3.evaluate()
-    
-    # print(w3.shape)
-    # print('n3.shape: ', n3.shape)
-    print('w3 = ', w3)
-    print('n3 = ', n3)
-
-    # assert np.allclose(n, w)
-    # assert np.allclose(n3, w3)
-    # for i in range(n3.shape[0]):
-        # for j in range(n3.shape[1]):
-            # assert n3[i][j] == w3[i][j], 'test'
+        assert np.allclose(n, w)
+        assert np.allclose(n3, w3)
 
     # test binary op.
 
@@ -117,13 +97,13 @@ def test_views_non_contig_newarray_binary():
         - contig + non-contig
         - non-contig + non-contig
     '''
-    ND_SHAPES = [(5,5)] 
+    ND_SHAPES = [(3,3)] 
     BINARY_OPS = [np.add]
 
     for shape in ND_SHAPES:
-        n, w = random_arrays(shape, 'float32')
-        n2, w2 = random_arrays(shape, 'float32')
-        idx = get_noncontig_idx(shape)
+        n, w = random_arrays(shape, 'float64')
+        n2, w2 = random_arrays(shape, 'float64')
+        idx = (slice(0,3,1), slice(2,3,1))
 
         nv1 = n[idx]
         wv1 = w[idx]
@@ -131,16 +111,18 @@ def test_views_non_contig_newarray_binary():
         wv2 = w2[idx]
 
         for op in BINARY_OPS:
-            print('op = ', op)
             nv3 = op(nv1, nv2)
             wv3 = op(wv1, wv2)
             wv3 = wv3.evaluate()
 
-            assert nv3.shape == wv3.shape, 'shape not same'
-
-            assert np.allclose(nv2, wv2)
-            assert np.allclose(nv1, wv1)
+            assert nv3.shape == wv3.shape, 'shape not same' 
             assert np.allclose(nv3, wv3)
+            # FIXME: Need to try and make it so we don't have to call evaluate when using
+            # array_equal, or when its on non-views.
+            assert np.allclose(nv1, wv1.evaluate())
+            assert np.allclose(nv2, wv2.evaluate())
+            assert np.array_equal(nv1, wv1)
+            assert np.array_equal(nv2, wv2)
 
 # def test_views_non_contig_inplace_binary1():
     # '''
@@ -310,5 +292,6 @@ More advanced tests.
 '''
 Broadcasting based tests.
 '''
+
 # test_views_non_contig_basic()
-# test_views_non_contig_newarray_binary()
+test_views_non_contig_newarray_binary()

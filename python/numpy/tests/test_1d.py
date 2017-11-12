@@ -180,11 +180,9 @@ def test_views_update_child():
     n2 = np.exp(n2, out=n2)
 
     asserts(w, n, w2, n2)
-    print('unary asserts done!')
-
     # binary part
     n3, w3 = random_arrays(3, 'float32')
-
+    
     n2 = np.add(n2, n3, out=n2)
     w2 = np.add(w2, w3, out=w2)
     w2.evaluate()
@@ -1001,4 +999,4 @@ def test_erf():
         # assert np.array_equal(w2_eval, n2)
 
 # test_views_update_child()
-test_views_mess()
+# test_views_mess()

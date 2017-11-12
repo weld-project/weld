@@ -159,7 +159,6 @@ class weldarray(np.ndarray):
             end += start
 
             # ret is a view, so initialize its weldview.
-            print('start = ', start)
             ret._weldarray_view = weldarray_view(base_array, self, start, end, idx,
                     shape=shape, strides=strides)
             return ret
@@ -193,6 +192,7 @@ class weldarray(np.ndarray):
         When self is a view, update parent instead.
         TODO: This is work in progress, although it does seem to be mostly functionally correct for now.
         '''
+        print('WARNING: setitem can be realllly slow with the current implementation!!!!!!')
         def _update_single_entry(arr, index, val):
             '''
             @start: index to update.
@@ -384,7 +384,8 @@ class weldarray(np.ndarray):
                 other_arg = input_args[0]
                 assert input_args[1].name == self.name
 
-            return self._binary_op(other_arg, BINARY_OPS[ufunc.__name__], result=output)
+            # return self._binary_op2(other_arg, BINARY_OPS[ufunc.__name__], result=output)
+            return self._binary_op(input_args[0], input_args[1], BINARY_OPS[ufunc.__name__], result=output)
 
     def _handle_reduce(self, ufunc, input_args, outputs):
         '''
@@ -453,17 +454,6 @@ class weldarray(np.ndarray):
             restype = WeldVec(self._weld_type)
         arr = self.weldobj.evaluate(restype, verbose=self._verbose)
         
-        # CASE 2: non-contiguous arrays, after eval it became a contiguous result array.
-        # if not self.flags.C_CONTIGUOUS:
-            # arr = arr.reshape(tuple(self._weldarray_view.shape))
-        # # CASE 3: General case for multi-dimensional arrays. Contiguous input array, contiguous
-        # # result, but need to change shape/strides. 
-        # # TODO: maybe just a general reshape thing would work too?
-        # elif hasattr(arr, '__len__'):
-            # # Ensures that multi-dimensional arrays are treated correctly.
-            # # TODO: Might not work for cases in which result of a n-d array op is a (n-1) array...
-            # arr.shape = self.shape
-            # arr.strides = self.strides
         if hasattr(arr, '__len__'):
             arr = arr.reshape(self.shape)
         else:
@@ -494,6 +484,37 @@ class weldarray(np.ndarray):
             result = weldarray(self, verbose=self._verbose)
         return result
 
+
+    def _get_array_iter_code(self, res):
+        '''
+        @self: the weld array we want to loop over.
+        @res: the result array so we can add the appropriate weldarray contexts to it.
+        ''' 
+        nditer_arr = 'nditer({arr},{start}L,{end}L,1L,{shapes},{strides})'
+        if self._weldarray_view and not self.flags.contiguous:
+            shapes = res.weldobj.update(self._weldarray_view.shape)
+            strides = res.weldobj.update(self._weldarray_view.strides)
+            # Note: the start/end/shapes/strides symbols for nditer are valid if we start from
+            # the base array.
+            arr = nditer_arr.format(arr = self._weldarray_view.base_array.weldobj.weld_code,
+                                    start = self._weldarray_view.start,
+                                    end = self._weldarray_view.end,
+                                    shapes = shapes,
+                                    strides = strides)
+            res.weldobj.update(self._weldarray_view.base_array.weldobj)
+            # TODO: Have a separate case for contiguous views. Check this further -- maybe we
+            # can change self._get_result too?
+            # could actually use nditer here as well but that is less efficient...In this case,
+            # we can also change the else condition to only be self.weldobj.weld_code.
+        elif self._weldarray_view and self.flags.contiguous:
+            # here we are implicitly assuming that in _get_result we did:
+            # result = self._weldarray_view.parent._eval()[idx]
+            arr = res.weldobj.weld_code
+        else:
+            arr = self.weldobj.weld_code
+            res.weldobj.update(self.weldobj)
+        return arr
+
     def _unary_op(self, unop, result=None):
         '''
         @unop: str, weld IR for the given function.
@@ -508,24 +529,10 @@ class weldarray(np.ndarray):
             @unop: str, operator applied to res.
             '''
             template = 'result(for({arr}, appender,|b,i,e| merge(b,{unop}(e))))'
-            nditer_arr = 'nditer({arr},{start}L,{end}L,1L,{shapes},{strides})'
-
-            if self._weldarray_view and not self.flags.contiguous:
-                print('update array unary ops')
-                shapes = res.weldobj.update(self._weldarray_view.shape)
-                strides = res.weldobj.update(self._weldarray_view.strides)
-                arr = nditer_arr.format(arr = self.weldobj.weld_code,
-                                        start = self._weldarray_view.start,
-                                        end = self._weldarray_view.end,
-                                        shapes = shapes,
-                                        strides = strides)
-            else:
-                arr = res.weldobj.weld_code
-            code = template.format(arr  = arr,
-                                   # type = res._weld_type.__str__(),
-                                   unop = unop)
+            arr = self._get_array_iter_code(res)
+            code = template.format(arr = arr, unop = unop)
             res.weldobj.weld_code = code
-
+        
         if result is None:
             result = self._get_result()
         else:
@@ -538,21 +545,6 @@ class weldarray(np.ndarray):
         # back to updating result array
         result.weldobj.update(self.weldobj)
         _update_array_unary_op(result, unop)
-        return result
-
-    def _scalar_binary_op(self, other, binop, result):
-        '''
-        Helper function for _binary_op.
-        @other, scalar values (i32, i64, f32, f64).
-        @result: weldarray to store results in.
-        '''
-        template = 'map({arr}, |z: {type}| z {binop} {other}{suffix})'
-        weld_type = result._weld_type.__str__()
-        result.weldobj.weld_code = template.format(arr = result.weldobj.weld_code,
-                                                  type =  weld_type,
-                                                  binop = binop,
-                                                  other = str(other),
-                                                  suffix = DTYPE_SUFFIXES[weld_type])
         return result
 
     def _update_range(self, start, end, update_str, strides=1):
@@ -571,69 +563,108 @@ class weldarray(np.ndarray):
                                                       end   = end,
                                                       update_str = update_str)
 
-    def _update_views_binary(self, result, other, binop):
+    def _binary_op(self, input1, input2, binop, result=None):
         '''
-        @result: weldarray that is being updated
-        @other: weldarray or scalar. (result binop other)
-        @binop: str, operation to perform.
-
-        FIXME: the common indexing pattern for parent/child in _update_view might be too expensive
-        (uses if statements (unneccessary checks when updating child) and wouldn't be ideal to
-        update a large parent).
-        '''
-        update_str_template = '{e2}{binop}e'
-        v = result._weldarray_view
-        if isinstance(other, weldarray):
-            lookup_ind = 'i-{st}'.format(st=v.start)
-            # update the base array to include the context from other
-            v.base_array.weldobj.update(other.weldobj)
-            e2 = 'lookup({arr2},{i}L)'.format(arr2 = other.weldobj.weld_code, i = lookup_ind)
-        else:
-            # other is just a scalar.
-            e2 = str(other) + DTYPE_SUFFIXES[result._weld_type.__str__()]
-
-        update_str = update_str_template.format(e2 = e2, binop=binop)
-        v.base_array._update_range(v.start, v.end, update_str)
-
-    def _binary_op(self, other, binop, result=None):
-        '''
-        @other: ndarray, weldarray or scalar.
-        @binop: str, one of the weld supported binop.
+        @input1:
+        @input2:
         @result: output array. If it has been specified by the caller, then
         don't allocate new array.
+        
+        TODO: Explain Scenario 1 (non-inplace op) and 4 cases + Scenario 2 (inplace op) and its
+        cases and how we deal with them.
         '''
-        if isinstance(other, weldarray):
-            if other._weldarray_view:
-                idx = other._weldarray_view.idx
-                other = weldarray(other._weldarray_view.parent._eval()[idx],verbose=self._verbose)
+        def _update_input(inp):
+            '''
+            TODO: can we avoid these?
+            1. evaluate the parent if it is a view.
+            2. convert either to weldarray if they are a numpy array. 
+            '''
+            if isinstance(inp, np.ndarray) and not isinstance(inp, weldarray):
+                # TODO: could optimize this by skipping conversion to weldarray.
+                # turn it into weldarray - for convenience, as this reduces to the
+                # case of other being a weldarray.
+                inp = weldarray(inp)
+            return inp
 
-        elif isinstance(other, np.ndarray):
-            # TODO: could optimize this by skipping conversion to weldarray.
-            # turn it into weldarray - for convenience, as this reduces to the
-            # case of other being a weldarray.
-            other = weldarray(other)
+        def _scalar_binary_op(input1, input2, binop, result):
+            '''
+            Helper function for _binary_op.
+            @other, scalar values (i32, i64, f32, f64).
+            @result: weldarray to store results in.
+            '''
+            # which of these is the scalar?
+            if not hasattr(input2, "__len__"):
+                template = 'map({arr}, |z: {type}| z {binop} {scalar}{suffix})'
+                arr = input1._get_array_iter_code(result)
+                scalar = input2
+            else:
+                template = 'map({arr}, |z: {type}| {scalar}{suffix} {binop} z)'
+                arr = input2._get_array_iter_code(result)
+                scalar = input1
 
-        # Dealing with views. This is the same for other being scalar or weldarray.
-        if result is None:
-            # New array being created, so don't deal with views.
-            result = self._get_result()
-        else:
-            # for a view, we only update the parent array.
-            if result._weldarray_view:
-                self._update_views_binary(result, other, binop)
-                return result
+            weld_type = result._weld_type.__str__()
+            result.weldobj.weld_code = template.format(arr = arr,
+                                                      type =  weld_type,
+                                                      binop = binop,
+                                                      scalar = str(scalar),
+                                                      suffix = DTYPE_SUFFIXES[weld_type])
+            return result
 
+        def _update_views_binary(result, other, binop):
+            '''
+            @result: weldarray that is being updated
+            @other: weldarray or scalar. (result binop other)
+            @binop: str, operation to perform.
+
+            FIXME: the common indexing pattern for parent/child in _update_view might be too expensive
+            (uses if statements (unneccessary checks when updating child) and wouldn't be ideal to
+            update a large parent).
+            '''
+            # we should not update result as that would evaluate the parent array - since we are
+            # only adding more inplace ops, that should not be needed.
+            other = _update_input(other)
+            update_str_template = '{e2}{binop}e'
+            v = result._weldarray_view
+            if isinstance(other, weldarray):
+                lookup_ind = 'i-{st}'.format(st=v.start)
+                # update the base array to include the context from other
+                v.base_array.weldobj.update(other.weldobj)
+                e2 = 'lookup({arr2},{i}L)'.format(arr2 = other.weldobj.weld_code, i = lookup_ind)
+            else:
+                # other is just a scalar.
+                e2 = str(other) + DTYPE_SUFFIXES[result._weld_type.__str__()]
+            update_str = update_str_template.format(e2 = e2, binop=binop)
+            v.base_array._update_range(v.start, v.end, update_str)
+
+        # Scenario 1: Inplace Op
+        if result is not None and result._weldarray_view:
+            # which one of inputs is result?
+            if isinstance(input1, weldarray) and input1.name == result.name:
+                _update_views_binary(result, input2, binop)
+            else:
+                assert input2.name == result.name, 'has to be the case'
+                _update_views_binary(result, input1, binop)
+            return result
+
+        # Scenario 2b: Non-Inplace ops.
+        elif result is None:
+            result = self._get_result() 
+        
+        # Scenario 2: Non Inplace Op + Inplace Op on a non-view.
+
+        input1 = _update_input(input1)
+        input2 = _update_input(input2) 
         # scalars (i32, i64, f32, f64...)
-        if not hasattr(other, "__len__"):
-            return self._scalar_binary_op(other, binop, result)
-
-        result.weldobj.update(other.weldobj)
-        # @arr{i}: latest array based on the ops registered on operand{i}. {{
-        # is used for escaping { for format.
-        template = 'map(zip({arr1},{arr2}), |z: {{{type1},{type2}}}| z.$0 {binop} z.$1)'
-        result.weldobj.weld_code = template.format(arr1 = result.weldobj.weld_code,
-                                                  arr2  = other.weldobj.weld_code,
-                                                  type1 = result._weld_type.__str__(),
-                                                  type2 = other._weld_type.__str__(),
-                                                  binop = binop)
+        if not hasattr(input1, "__len__") or not hasattr(input2, "__len__"):
+            _scalar_binary_op(input1, input2, binop, result)
+        else:
+            # update result's weldobj with the arrays it needs. We can be sure that both the
+            # inputs are weldarrays by this point.
+            arr1 = input1._get_array_iter_code(result)
+            arr2 = input2._get_array_iter_code(result)
+            template2 = 'result(for(zip({arr1},{arr2}), appender,|b,i,e| merge(b,e.$0 \
+            {binop} e.$1)))'
+            result.weldobj.weld_code = template2.format(arr1 = arr1,
+                                                      arr2  = arr2,
+                                                      binop = binop)
         return result
