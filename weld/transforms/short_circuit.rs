@@ -98,6 +98,19 @@ fn complex_and_or() {
 }
 
 #[test]
+fn complex_and_or_2() {
+    let mut e = typed_expr("|x:i32| (x > 5 && x < 10) || (x == 15)");
+    short_circuit_booleans(&mut e);
+    let ref expect = typed_expr("|x:i32|
+                    if(
+                        if (x > 5, x < 10, false),
+                        true,
+                        (x == 15)
+                    )");
+    assert!(e.compare_ignoring_symbols(expect).unwrap());
+}
+
+#[test]
 fn predicated_if() {
     let mut e = typed_expr("|x:i32| @(predicate:true) if (x > 5 && x < 10, x > 3 || x < 4, false)");
     short_circuit_booleans(&mut e);
