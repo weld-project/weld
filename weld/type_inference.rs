@@ -56,22 +56,42 @@ fn infer_up(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> {
 
     // For Lets and Lambdas, add the identifiers they (re-)define to env
     let mut old_bindings: Vec<(Symbol, Option<PartialType>)> = Vec::new();
-    match expr.kind {
+    let finished = match expr.kind {
         Let {
-            ref name,
-            ref value,
-            ..
+            ref mut name,
+            ref mut value,
+            ref mut body
         } => {
-            old_bindings.push((name.clone(), env.insert(name.clone(), value.ty.clone())));
-        }
+            // Infer the type of the value before updating the binding.
+            changed |= try!(infer_up(value, env));
 
+            // Update the binding, saving the old one.
+            let old_binding = env.insert(name.clone(), value.ty.clone());
+
+            // Then, infer the type of the body (with the new binding).
+            changed |= try!(infer_up(body, env));
+
+            // Undo the changes to the bindings.
+            match old_binding {
+                Some(old) => env.insert(name.clone(), old),
+                None => env.remove(name),
+            };
+            // Finished! Infer own type outside the match to avoid double mutable borrow.
+            true
+        }
         Lambda { ref params, .. } => {
             for p in params {
                 old_bindings.push((p.name.clone(), env.insert(p.name.clone(), p.ty.clone())));
             }
+            false
         }
+        _ => false,
+    };
 
-        _ => (),
+    // Done! Only for Lets for now.
+    if finished {
+        changed |= infer_locally(expr, env)?;
+        return Ok(changed);
     }
 
     // Infer types of children first (with new environment)
@@ -89,7 +109,6 @@ fn infer_up(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> {
 
     // Infer our type
     changed |= try!(infer_locally(expr, env));
-
     Ok(changed)
 }
 
