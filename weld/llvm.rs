@@ -2434,8 +2434,75 @@ impl LlvmGenerator {
                             if let Scalar(_) = *key_ty {
                                 self.gen_cmp(key_ty)?;
                                 let (key_ll_tyc, key_ll_symc) = self.llvm_type_and_name(keyfunc, key_sym)?;
+                                key_ll_ty = key_ll_tyc.replace("%", "");
+                                key_ll_sym = key_ll_symc;
+                                // Generate prelude code
+                                let keyfunc_ctx = &mut FunctionContext::new(false);
+                                for (arg, ty) in keyfunc.locals.iter() {
+                                    let arg_str = llvm_symbol(&arg);
+                                    let ty_str = self.llvm_type(&ty)?;
+                                    keyfunc_ctx.add_alloca(&arg_str, &ty_str)?;
+                                }
+                                for b in keyfunc.blocks.iter() {
+                                    for s in b.statements.iter() {
+                                        self.gen_statement(s, keyfunc, keyfunc_ctx)?
+                                    }
+                                }
+                                // Add key function and sort prelude code
+                                self.prelude_code.add(format!(
+                                    "define {} @{}({}) {{",
+                                    key_ll_ty,
+                                    func_str,
+                                    str_args));
+                                self.prelude_code.add(keyfunc_ctx.alloca_code.result());
+                                self.prelude_code.add(keyfunc_ctx.code.result());
+                                self.prelude_code.add(format!("{}.ret = load {}, {}* {}",
+                                                              key_ll_sym, key_ll_ty, key_ll_ty, key_ll_sym));
+                                self.prelude_code.add(format!("ret {} {}.ret\n}}", key_ll_ty, key_ll_sym));
+                                let name = self.vec_names.get(elem_ty).unwrap();
+                                self.prelude_code.add(format!(
+                                    include_str!("resources/vector/vector_sort.ll"),
+                                    ELEM=&elem_ll_ty,
+                                    KEY=&key_ll_ty,
+                                    RAWKEY=&key_ll_ty,
+                                    FUNC=&func_str,
+                                    NAME=&name.replace("%", "")));
+                            } else if let Vector(_) = *key_ty {
+                                self.gen_cmp(key_ty)?;
+                                let (key_ll_tyc, key_ll_symc) = self.llvm_type_and_name(keyfunc, key_sym)?;
                                 key_ll_ty = key_ll_tyc;
                                 key_ll_sym = key_ll_symc;
+                                // Generate prelude code
+                                let keyfunc_ctx = &mut FunctionContext::new(false);
+                                for (arg, ty) in keyfunc.locals.iter() {
+                                    let arg_str = llvm_symbol(&arg);
+                                    let ty_str = self.llvm_type(&ty)?;
+                                    keyfunc_ctx.add_alloca(&arg_str, &ty_str)?;
+                                }
+                                for b in keyfunc.blocks.iter() {
+                                    for s in b.statements.iter() {
+                                        self.gen_statement(s, keyfunc, keyfunc_ctx)?
+                                    }
+                                }
+                                // Add key function and sort prelude code
+                                self.prelude_code.add(format!(
+                                    "define {} @{}({}) {{",
+                                    key_ll_ty,
+                                    func_str,
+                                    str_args));
+                                self.prelude_code.add(keyfunc_ctx.alloca_code.result());
+                                self.prelude_code.add(keyfunc_ctx.code.result());
+                                self.prelude_code.add(format!("{}.ret = load {}, {}* {}",
+                                                              key_ll_sym, key_ll_ty, key_ll_ty, key_ll_sym));
+                                self.prelude_code.add(format!("ret {} {}.ret\n}}", key_ll_ty, key_ll_sym));
+                                let name = self.vec_names.get(elem_ty).unwrap();
+                                self.prelude_code.add(format!(
+                                    include_str!("resources/vector/vector_sort.ll"),
+                                    ELEM=&elem_ll_ty,
+                                    KEY=&key_ll_ty,
+                                    RAWKEY=&key_ll_ty.replace("%", ""),
+                                    FUNC=&func_str,
+                                    NAME=&name.replace("%", "")));
                             } else {
                                 return weld_err!("Sort key function must have scalar return type");
                             }
@@ -2443,36 +2510,6 @@ impl LlvmGenerator {
                             return weld_err!("Sort key Function must have return type");
                         }
 
-                        // Generate prelude code
-                        let keyfunc_ctx = &mut FunctionContext::new(false);
-                        for (arg, ty) in keyfunc.locals.iter() {
-                            let arg_str = llvm_symbol(&arg);
-                            let ty_str = self.llvm_type(&ty)?;
-                            keyfunc_ctx.add_alloca(&arg_str, &ty_str)?;
-                        }
-                        for b in keyfunc.blocks.iter() {
-                            for s in b.statements.iter() {
-                                self.gen_statement(s, keyfunc, keyfunc_ctx)?
-                            }
-                        }
-
-                        // Add key function and sort prelude code
-                        self.prelude_code.add(format!(
-                            "define {} @{}({}) {{",
-                            key_ll_ty,
-                            func_str,
-                            str_args));
-                        self.prelude_code.add(keyfunc_ctx.alloca_code.result());
-                        self.prelude_code.add(keyfunc_ctx.code.result());
-                        self.prelude_code.add(format!("{}.ret = load {}, {}* {}", key_ll_sym, key_ll_ty, key_ll_ty, key_ll_sym));
-                        self.prelude_code.add(format!("ret {} {}.ret\n}}", key_ll_ty, key_ll_sym));
-                        let name = self.vec_names.get(elem_ty).unwrap();
-                        self.prelude_code.add(format!(
-                            include_str!("resources/vector/vector_sort.ll"),
-                            ELEM=&elem_ll_ty,
-                            KEY=&key_ll_ty,
-                            FUNC=&func_str,
-                            NAME=&name.replace("%", "")));
                     }
                     _ => {
                         return weld_err!("Unsupported function `sort` for type {:?}", out_ty);
