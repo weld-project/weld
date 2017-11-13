@@ -5,6 +5,32 @@ import grizzly_impl
 from lazy_op import LazyOpResult, to_weld_type
 from weld.weldobject import *
 
+class DataFrameWeldLoc:
+    def __init__(self, df):
+        self.df = df
+
+    def __getitem__(self, key):
+        if isinstance(key, SeriesWeld):
+            # We're going to assume that the first column in these dataframes
+            # is an index column. This assumption does not hold throughout grizzly,
+            # so we should fix that moving forward.
+            index_expr = grizzly_impl.get_field(self.df.expr, 0)
+            if self.df.is_pivot:
+                index_type, pivot_type, column_type = self.df.column_types
+                index_elem_type = index_type.elemType
+                index_expr_predicate = grizzly_impl.isin(index_expr, key.expr, index_elem_type)
+                return DataFrameWeldExpr(
+                    grizzly_impl.pivot_filter(
+                        self.df.expr,
+                        index_expr_predicate
+                    ),
+                    self.df.column_names,
+                    self.df.weld_type,
+                    is_pivot=True
+                )
+            # TODO : Need to implement for non-pivot tables
+        raise Exception("Cannot invoke getitem on an object that is not SeriesWeld")
+
 class DataFrameWeldExpr:
     def __init__(self, expr, column_names, weld_type, is_pivot=False):
         if isinstance(weld_type, WeldStruct):
@@ -18,13 +44,17 @@ class DataFrameWeldExpr:
         self.colindex_map = {name:i for i, name in enumerate(column_names)}
         self.is_pivot = is_pivot
 
+    @property
+    def loc(self):
+        return DataFrameWeldLoc(self)
+
     def pivot_table(self, values, index, columns, aggfunc='sum'):
         value_index = self.colindex_map[values]
         index_index = self.colindex_map[index]
         columns_index = self.colindex_map[columns]
 
         ind_ty = to_weld_type(self.column_types[index_index], 1)
-        piv_ty = to_weld_type(self.column_types[value_index], 2)
+        piv_ty = to_weld_type(WeldDouble(), 2)
         col_ty = to_weld_type(self.column_types[columns_index], 1)
         return DataFrameWeldExpr(
             grizzly_impl.pivot_table(
@@ -97,12 +127,10 @@ class DataFrameWeldExpr:
                 self.weld_type,
                 0
             ).evaluate(verbose=verbose)
-            df = pd.DataFrame(columns=[])
-            df[self.column_names[0]] = index
-            df.set_index(self.column_names[0], drop=True)
+            df_dict = {}
             for i, column_name in enumerate(columns):
-                df[column_name] = pivot[i]
-            return DataFrameWeld(df)
+                df_dict[column_name] = pivot[i]
+            return DataFrameWeld(pd.DataFrame(df_dict, index=index))
         else:
             df = pd.DataFrame(columns=[])
             i = 0
@@ -309,14 +337,38 @@ class DataFrameWeld:
             predicates = predicates.expr
 
         return DataFrameWeldExpr(
-            grizzly_impl.zip_filter(
-                self.raw_columns.values(),
+            grizzly_impl.filter(
+                grizzly_impl.zip_columns(
+                    self.raw_columns.values(),
+                ),
                 predicates
             ),
             self.raw_columns.keys(),
             weld_type
         )
 
+    def pivot_table(self, values, index, columns, aggfunc='sum'):
+        tys = []
+        for col_name, raw_column in self.raw_columns.items():
+            dtype = str(raw_column.dtype)
+            if dtype == 'object' or dtype == '|S64':
+                weld_type = WeldVec(WeldChar())
+            else:
+                weld_type = grizzly_impl.numpy_to_weld_type_mapping[dtype]
+            tys.append(weld_type)
+
+        if len(tys) == 1:
+            weld_type = tys[0]
+        else:
+            weld_type = WeldStruct(tys)
+
+        return DataFrameWeldExpr(
+            grizzly_impl.zip_columns(
+                self.raw_columns.values(),
+            ),
+            self.raw_columns.keys(),
+            weld_type
+        ).pivot_table(values, index, columns, aggfunc)
 
     def groupby(self, grouping_column_name):
         """Summary
@@ -513,9 +565,10 @@ class SeriesWeld(LazyOpResult):
         weld_type (TYPE): Description
     """
 
-    def __init__(self, expr, weld_type, df=None, column_name=None):
+    def __init__(self, expr, weld_type, df=None, column_name=None, index_type=None, index_name=None):
         """Summary
 
+        TODO: Implement an actual Index Object like how Pandas does
         Args:
             expr (TYPE): Description
             weld_type (TYPE): Description
@@ -527,6 +580,8 @@ class SeriesWeld(LazyOpResult):
         self.dim = 1
         self.df = df
         self.column_name = column_name
+        self.index_type = index_type
+        self.index_name = index_name
 
     def __getitem__(self, predicates):
         """Summary
@@ -553,7 +608,7 @@ class SeriesWeld(LazyOpResult):
         if self.df is not None and self.column_name is not None:
             self.df[self.column_name] = self.mask(predicates, new_value)
 
-    def __getattr__(self, key):
+    def __getattribute__(self, key):
         """Summary
 
         Args:
@@ -573,6 +628,34 @@ class SeriesWeld(LazyOpResult):
                 self.column_name
             )
         raise AttributeError("Attr %s does not exist" % key)
+
+    @property
+    def index(self):
+        if self.index_type is not None:
+            return SeriesWeld(
+                grizzly_impl.get_field(
+                    self.expr,
+                    0
+                ),
+                self.index_type,
+                self.df,
+                self.index_name
+            )
+        raise Exception("No index value present")
+
+    def evaluate(self, verbose=False):
+        if self.index_type is not None:
+            index, column = LazyOpResult(
+                self.expr,
+                WeldStruct([WeldVec(self.index_type), WeldVec(self.weld_type)]),
+                0
+            ).evaluate(verbose=verbose)
+            series = pd.Series(column, index)
+            series.index.rename(self.index_name, True)
+            return series
+        else:
+            column = LazyOpResult.evaluate(self, verbose=verbose)
+            return pd.Series(column)
 
     def unique(self):
         """Summary
@@ -939,9 +1022,13 @@ class SeriesWeld(LazyOpResult):
         Returns:
             TYPE: Description
         """
+        if self.index_type is not None:
+            expr = grizzly_impl.get_field(self.expr, 1)
+        else:
+            expr = self.expr
         return SeriesWeld(
             grizzly_impl.compare(
-                self.expr,
+                expr,
                 other,
                 ">=",
                 self.weld_type
@@ -1155,6 +1242,31 @@ class GroupByWeld:
             TYPE: Description
         """
         pass
+
+    def size(self):
+        """Returns the sizes of the groups as series.
+
+        Returns:
+            TYPE: Description
+        """
+        if len(self.grouping_column_types) > 1:
+            index_type = WeldStruct([self.grouping_column_types])
+            # Figure out what to use for multi-key index name
+            # index_name = ??
+        else:
+            index_type = self.grouping_column_types[0]
+            index_name = self.grouping_column_names[0]
+        return SeriesWeld(
+            grizzly_impl.groupby_size(
+                self.columns,
+                self.column_types,
+                self.grouping_columns,
+                self.grouping_column_types
+            ),
+            WeldLong(),
+            index_type=index_type,
+            index_name=index_name
+        )
 
     def count(self):
         """Summary

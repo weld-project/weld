@@ -17,7 +17,7 @@ names = pd.concat(pieces, ignore_index=True)
 print "Size of names: %d" % len(names)
 
 def get_top1000(group):
-    return group.sort_values(by='births', ascending=False)[0:10000]
+    return group.sort_values(by='births', ascending=False)[0:1000]
 
 #Time preprocessing step
 start0 = time.time()
@@ -38,8 +38,8 @@ table = filtered.pivot_table('births', index='year',
                              columns='sex', aggfunc='sum')
 
 table = table.div(table.sum(1), axis=0)
+print table
 end1 = time.time()
 
-print table
 print "Time taken by preprocess portion:   %.5f" % (end0 - start0)
 print "Time taken by analysis portion  :   %.5f" % (end1 - start1)

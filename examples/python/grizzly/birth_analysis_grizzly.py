@@ -27,11 +27,10 @@ top1000 = grouped.apply(get_top1000)
 
 # Drop the group index, not needed
 top1000.reset_index(inplace=True, drop=True)
-top1000 = top1000.evaluate().to_pandas()
+top1000 = top1000.evaluate(True).to_pandas()
 end0 = time.time()
 
 start1 = time.time()
-lent = len(top1000)
 top1000 = gr.DataFrameWeld(top1000)
 top1000names = top1000['name']
 all_names = top1000names.unique()
@@ -43,9 +42,8 @@ table = filtered.pivot_table('births', index='year',
                               columns='sex', aggfunc='sum')
 
 table = table.div(table.sum(1), axis=0)
-print table.evaluate().to_pandas()
+print table.evaluate(True).to_pandas()
 end1= time.time()
-
 
 print "Time taken by preprocess portion: %.5f" %(end0 - start0)
 print "Time taken by analysis portion  : %.5f" % (end1- start1)

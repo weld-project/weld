@@ -11,6 +11,24 @@ from weld.weldobject import *
 encoder_ = NumPyEncoder()
 decoder_ = NumPyDecoder()
 
+def get_field(expr, field):
+    """ Fetch a field from a struct expr
+
+    """
+    weld_obj = WeldObject(encoder_, decoder_)
+
+    struct_var = weld_obj.update(expr)
+    if isinstance(expr, WeldObject):
+        struct_var = expr.obj_id
+        weld_obj.dependencies[struct_var] = expr
+
+    weld_template = """
+      %(struct)s.$%(field)s
+    """
+
+    weld_obj.weld_code = weld_template % {"struct":struct_var,
+                                          "field":field}
+    return weld_obj
 
 def unique(array, ty):
     """
@@ -134,7 +152,7 @@ def mask(array, predicates, new_value, ty):
     return weld_obj
 
 
-def filter(array, predicates, ty):
+def filter(array, predicates, ty=None):
     """
     Returns a new array, with each element in the original array satisfying the
     passed-in predicate set to `new_value`
@@ -170,8 +188,61 @@ def filter(array, predicates, ty):
     """
     weld_obj.weld_code = weld_template % {
         "array": array_var,
-        "predicates": predicates_var,
-        "ty": ty}
+        "predicates": predicates_var}
+
+    return weld_obj
+
+def pivot_filter(pivot_array, predicates, ty=None):
+    """
+    Returns a new array, with each element in the original array satisfying the
+    passed-in predicate set to `new_value`
+
+    Args:
+        array (WeldObject / Numpy.ndarray): Input array
+        predicates (WeldObject / Numpy.ndarray<bool>): Predicate set
+        ty (WeldType): Type of each element in the input array
+
+    Returns:
+        A WeldObject representing this computation
+    """
+    weld_obj = WeldObject(encoder_, decoder_)
+
+    pivot_array_var = weld_obj.update(pivot_array)
+    if isinstance(pivot_array, WeldObject):
+        pivot_array_var = pivot_array.obj_id
+        weld_obj.dependencies[pivot_array_var] = pivot_array
+
+    predicates_var = weld_obj.update(predicates)
+    if isinstance(predicates, WeldObject):
+        predicates_var = predicates.obj_id
+        weld_obj.dependencies[predicates_var] = predicates
+
+    weld_template = """
+    let index_filtered =
+      result(
+        for(
+          zip(%(array)s.$0, %(predicates)s),
+          appender,
+          |b, i, e| if (e.$1, merge(b, e.$0), b)
+        )
+      );
+    let pivot_filtered =
+      map(
+        %(array)s.$1,
+        |x|
+          result(
+            for(
+              zip(x, %(predicates)s),
+              appender,
+              |b, i, e| if (e.$1, merge(b, e.$0), b)
+            )
+          )
+      );
+    {index_filtered, pivot_filtered, %(array)s.$2}
+    """
+    weld_obj.weld_code = weld_template % {
+        "array": pivot_array_var,
+        "predicates": predicates_var}
 
     return weld_obj
 
@@ -261,7 +332,7 @@ def element_wise_op(array, other, op, ty):
                                           "ty": ty, "op": op}
     return weld_obj
 
-def zip_filter(columns, predicates):
+def zip_columns(columns):
     """
     Zip together multiple columns.
 
@@ -283,27 +354,19 @@ def zip_filter(columns, predicates):
             col_obj.dependencies[col_var] = column
         column_vars.append(col_var)
 
-    predicates_var = weld_obj.update(predicates)
-    if isinstance(predicates, WeldObject):
-        predicates_var = predicates.obj_id
-        weld_obj.dependencies[predicates_var] = predicates
-
     arrays = ", ".join(column_vars)
 
-    struct_inner = ", ".join(["e.$%s" % i for i in range(1, len(columns) + 1)])
     weld_template = """
        result(
          for(
-           zip(%(predicates)s, %(array)s),
+           zip(%(array)s),
            appender,
-           |b, i, e| if (e.$0, merge(b, {%(struct)s}), b)
+           |b, i, e| merge(b, e)
          )
        )
     """
     weld_obj.weld_code = weld_template % {
         "array": arrays,
-        "predicates": predicates_var,
-        "struct": struct_inner
     }
 
     return weld_obj
@@ -490,8 +553,10 @@ def pivot_table(expr, value_index, value_ty, index_index, index_ty, columns_inde
 
     if aggfunc == 'sum':
         op = '+'
+    elif aggfunc == 'mean':
+        op = '+'
     else:
-        raise Exception("Aggregate operation %s not supported." % op)
+        raise Exception("Aggregate operation %s not supported." % aggfunc)
 
     zip_var = weld_obj.update(expr)
     if isinstance(expr, WeldObject):
@@ -513,7 +578,7 @@ def pivot_table(expr, value_index, value_ty, index_index, index_ty, columns_inde
     let pivot = map(
       col_vec,
       |x:%(cty)s|
-        map(ind_vec, |y:%(ity)s| lookup(agg_dict, {y, x}))
+        map(ind_vec, |y:%(ity)s| f64(lookup(agg_dict, {y, x})))
     );
     {ind_vec, pivot, col_vec}
     """
@@ -685,6 +750,68 @@ def groupby_sum(columns, column_tys, grouping_columns, grouping_column_tys):
                                           "columns": columns_var,
                                           "result": result_str,
                                           "ty": tys_str,
+                                          "gty": grouping_column_ty_str}
+    return weld_obj
+
+def groupby_size(columns, column_tys, grouping_columns, grouping_column_tys):
+    """
+    Groups the given columns by the corresponding grouping column
+    value, and aggregate by summing values.
+
+    Args:
+        columns (List<WeldObject>): List of columns as WeldObjects
+        column_tys (List<str>): List of each column data ty
+        grouping_column (WeldObject): Column to group rest of columns by
+
+    Returns:
+          A WeldObject representing this computation
+    """
+    weld_obj = WeldObject(encoder_, decoder_)
+
+    if len(grouping_columns) == 1 and len(grouping_column_tys) == 1:
+        grouping_column_var = weld_obj.update(grouping_columns[0])
+        if isinstance(grouping_columns[0], WeldObject):
+            grouping_column_var = grouping_columns[0].weld_code
+        grouping_column_ty_str = "%s" % grouping_column_tys[0]
+    else:
+        grouping_column_vars = []
+        for column in grouping_columns:
+            column_var = weld_obj.update(column)
+            if isinstance(column_var, WeldObject):
+                column_var = column_var.weld_code
+            grouping_column_vars.append(column_var)
+        grouping_column_var = ", ".join(grouping_column_vars)
+        grouping_column_var = "zip(%s)" % grouping_column_var
+        grouping_column_tys = [str(ty) for ty in grouping_column_tys]
+        grouping_column_ty_str = ", ".join(grouping_column_tys)
+        grouping_column_ty_str = "{%s}" % grouping_column_ty_str
+
+    weld_template = """
+    let group = sort(
+      tovec(
+        result(
+          for(
+            %(grouping_column)s,
+            dictmerger[%(gty)s, i64, +],
+            |b, i, e| merge(b, {e, 1L})
+          )
+        )
+      ),
+      |x:{%(gty)s, i64}| x.$0
+    );
+    {
+      map(
+      group,
+        |x:{%(gty)s,i64}| x.$0
+      ),
+      map(
+        group,
+        |x:{%(gty)s,i64}| x.$1
+      )
+    }
+  """
+
+    weld_obj.weld_code = weld_template % {"grouping_column": grouping_column_var,
                                           "gty": grouping_column_ty_str}
     return weld_obj
 
