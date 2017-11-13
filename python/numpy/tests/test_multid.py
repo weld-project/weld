@@ -315,15 +315,21 @@ def test_transpose_ops():
     # being used as import weldnumpy as np, and then this stuff would work fine.
     n2 = transpose(n)
     w2 = transpose(w)
+
+    assert n2.shape == w2.shape
+
     np.allclose(n2, w2)
     n3 = np.sqrt(n2)
     w3 = np.sqrt(w2)
     w3 = w3.evaluate()
+    
+    assert n3.shape == w3.shape
+    print('n3 assert done')
 
     n4 = n3 - n2
     w4 = w3 - w2
     w4 = w4.evaluate()
-
+    
     np.allclose(n3, w3)
     np.allclose(n2, w2)
     np.allclose(n, w)
@@ -396,10 +402,39 @@ def test_broadcasting_bug():
     assert np.allclose(w3, w4)
     assert np.allclose(w4, n3)
 
-# test_transpose_simple()
-# test_views_non_contig_basic()
-# test_views_non_contig_newarray_binary()
-# test_broadcasting_simple()
-# test_broadcasting_bug()
+def test_broadcasting_nbody_bug():
+    '''
+    Transpose + broadcasting --> shapes don't seem to match.
+    '''
+    n, w = random_arrays(100, 'float64')
+    a = transpose(n[np.newaxis,:])
+    b = transpose(w[np.newaxis,:])
+    
+    print(a[0])
+    print(b[0])
+
+    numpy_dx = a - n
+    weld_dx = b - w
+
+    weld_dx = weld_dx.evaluate()
+    
+    assert numpy_dx.shape == weld_dx.shape, 'shapes must match!'
+    assert np.allclose(numpy_dx, weld_dx)
+    assert np.array_equal(numpy_dx, weld_dx)
+
+def test_sum_axis():
+    n, w = random_arrays((20,20), 'float64')
+    n2 = np.sum(n, axis=0)
+    n3 = np.sum(n)
+    w2 = np.sum(w, axis=0)
+    print('w2: ', w2)
+    print('n2: ', n2)
+    print('n3: ', n3)
+    
+    assert np.allclose(w2, n2)
+
+def test_ops_axis():
+    pass
+
+test_broadcasting_nbody_bug()
 # test_transpose_ops()
-test_transpose_inplace()
