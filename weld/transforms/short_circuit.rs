@@ -112,8 +112,3 @@ fn predicated_if() {
                     )");
     assert!(e.compare_ignoring_symbols(expect).unwrap());
 }
-
-
-
-
-
