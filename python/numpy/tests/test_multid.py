@@ -34,7 +34,7 @@ def get_noncontig_idx(shape):
         - different sizes, strides etc.
     '''
     # idx = []
-    
+
     for i in range(5):
         idx = []
         for s in shape:
@@ -60,7 +60,7 @@ def test_views_non_contig_basic():
         idx = get_noncontig_idx(shape)
         n2 = n[idx]
         w2 = w[idx]
-     
+
         # useful test to add.
         assert w2.shape == n2.shape
         assert w2.flags == n2.flags
@@ -97,7 +97,7 @@ def test_views_non_contig_newarray_binary():
         - contig + non-contig
         - non-contig + non-contig
     '''
-    ND_SHAPES = [(3,3)] 
+    ND_SHAPES = [(3,3)]
     BINARY_OPS = [np.add]
 
     for shape in ND_SHAPES:
@@ -115,7 +115,7 @@ def test_views_non_contig_newarray_binary():
             wv3 = op(wv1, wv2)
             wv3 = wv3.evaluate()
 
-            assert nv3.shape == wv3.shape, 'shape not same' 
+            assert nv3.shape == wv3.shape, 'shape not same'
             assert np.allclose(nv3, wv3)
             # FIXME: Need to try and make it so we don't have to call evaluate when using
             # array_equal, or when its on non-views.
@@ -290,8 +290,74 @@ More advanced tests.
 '''
 
 '''
-Broadcasting based tests.
+Array transformations based tests.
 '''
+def test_transpose_simple():
+    n, w = random_arrays((10,10), 'float64')
+    # n2 = n.T
+    # w2 = w.T
 
+    # slightly awkward because otherwise numpy's transpose will be called...ideally, weldnumpy is
+    # being used as import weldnumpy as np, and then this stuff would work fine.
+    n2 = transpose(n)
+    w2 = transpose(w)
+
+    assert n2.shape == w2.shape
+    assert w2.strides == n2.strides
+    # import test
+    assert w2._weldarray_view is not None, 'should not be None!'
+
+def test_transpose_ops():
+    '''
+    TODO: do a bunch of things after the transpose. _get_result and views would have to deal
+    correctly without a specific index...
+    '''
+    pass
+
+def test_broadcasting_simple():
+    n, w = random_arrays((1,10), 'float32')
+    n2, w2 = random_arrays((10,1), 'float32')
+
+    # broadcasting should apply to these
+    n3 = n2 + n
+    w3 = w2 + w
+    w4 = w + w2
+    w3 = w3.evaluate()
+    w4 = w4.evaluate()
+    assert isinstance(w3, weldarray)
+    assert w3.shape == n3.shape == w4.shape
+    assert w3.strides == n3.strides == w4.strides
+    assert np.allclose(w3.evaluate(), n3)
+    assert np.allclose(w4, n3)
+    assert np.allclose(w4, w3)
+
+def test_broadcasting_bug():
+    '''
+    In this case, only one of the arrays is being broadcasted. Some subtle-ish bug seems to show up
+    here.
+    '''
+    n, w = random_arrays((3,2), 'float32')
+    n2, w2 = random_arrays(2, 'float32')
+
+    # broadcasting should apply to these
+    n3 = n2 + n
+    w3 = w + w2
+    w4 = w2 + w
+
+    w3 = w3.evaluate()
+    w4 = w4.evaluate()
+
+    assert isinstance(w3, weldarray)
+    assert w3.shape == n3.shape == w4.shape
+
+    assert w3.strides == n3.strides == w4.strides
+    # finally test values too, why not
+    assert np.allclose(w3, n3)
+    assert np.allclose(w3, w4)
+    assert np.allclose(w4, n3)
+
+# test_transpose_simple()
 # test_views_non_contig_basic()
-test_views_non_contig_newarray_binary()
+# test_views_non_contig_newarray_binary()
+# test_broadcasting_simple()
+# test_broadcasting_bug()

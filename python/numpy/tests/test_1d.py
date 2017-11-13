@@ -163,7 +163,7 @@ def test_views_update_child():
     def asserts(w, n, w2, n2):
         assert np.allclose(w, n)
         assert np.allclose(w2.evaluate(), n2)
-        
+
         print('w[2:5]: ', w[2:5])
         print('w2: ', w2.evaluate())
 
@@ -182,7 +182,7 @@ def test_views_update_child():
     asserts(w, n, w2, n2)
     # binary part
     n3, w3 = random_arrays(3, 'float32')
-    
+
     n2 = np.add(n2, n3, out=n2)
     w2 = np.add(w2, w3, out=w2)
     w2.evaluate()

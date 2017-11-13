@@ -17,7 +17,51 @@ def array(arr, *args, **kwargs):
     '''
     return weldarray(np.array(arr, *args, **kwargs))
 
-# TODO: define other array creation routines like zeros, ones etc.
+def zeros(*args, **kwargs):
+    return weldarray(np.zeros(*args, **kwargs))
+
+def zeros_like(*args, **kwargs):
+    return weldarray(np.zeros_like(*args, **kwargs))
+
+def ones(*args, **kwargs):
+    return weldarray(np.ones(*args, **kwargs))
+
+def ones_like(*args, **kwargs):
+    return weldarray(np.ones_like(*args, **kwargs))
+
+def full(*args, **kwargs):
+    return weldarray(np.full(*args, **kwargs))
+
+def full_like(*args, **kwargs):
+    return weldarray(np.full_like(*args, **kwargs))
+
+def empty(*args, **kwargs):
+    return weldarray(np.empty(*args, **kwargs))
+
+def empty_like(*args, **kwargs):
+    return weldarray(np.empty_like(*args, **kwargs))
+
+def eye(*args, **kwargs):
+    return weldarray(np.eye(*args, **kwargs))
+
+def identity(*args, **kwargs):
+    return weldarray(np.identity(*args, **kwargs))
+
+'''
+Transformation routines:
+    1. transpose
+    2. vstack
+    3. hstack
+'''
+def transpose(*args, **kwargs):
+    print('in our transpose!')
+    input1 = args[0]
+    print(type(input1))
+    w = np.transpose(*args, **kwargs)
+    # create the weldarray view.
+    if isinstance(input1, weldarray):
+        w = input1._gen_weldview(w)
+    return w
 
 # functions that don't exist in numpy
 def erf(weldarray):
