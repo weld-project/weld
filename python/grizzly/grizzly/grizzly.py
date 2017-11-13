@@ -608,7 +608,7 @@ class SeriesWeld(LazyOpResult):
         if self.df is not None and self.column_name is not None:
             self.df[self.column_name] = self.mask(predicates, new_value)
 
-    def __getattribute__(self, key):
+    def __getattr__(self, key):
         """Summary
 
         Args:
