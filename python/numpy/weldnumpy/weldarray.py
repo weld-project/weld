@@ -236,37 +236,34 @@ class weldarray(np.ndarray):
         When self is a view, update parent instead.
         TODO: This is work in progress, although it does seem to be mostly functionally correct for now.
         '''
-        ret = self._eval()
-        ret_item = ret.__setitem__(idx, val)
-        return weldarray(ret)
+        def _update_single_entry(arr, index, val):
+            '''
+            @start: index to update.
+            @val: new val for index.
+            called from idx = int, or list.
+            '''
+            # update just one element
+            suffix = DTYPE_SUFFIXES[self._weld_type.__str__()]
+            update_str = str(val) + suffix
+            arr._update_range(index, index+1, update_str)
 
-        # print('WARNING: setitem can be realllly slow with the current implementation!!!!!!')
-        # def _update_single_entry(arr, index, val):
-            # '''
-            # @start: index to update.
-            # @val: new val for index.
-            # called from idx = int, or list.
-            # '''
-            # # update just one element
-            # suffix = DTYPE_SUFFIXES[self._weld_type.__str__()]
-            # update_str = str(val) + suffix
-            # arr._update_range(index, index+1, update_str)
-
+        # Offloading to numpy method:
         # if isinstance(idx, slice):
-            # if idx.step is None: step = 1
-            # else: step = idx.step
-            # # FIXME: hacky - need to check exact mechanisms b/w getitem and setitem calls further.
-            # # + it seems like numpy calls getitem and evaluates the value, and then sets it to the
-            # # correct value here (?) - this seems like a waste.
-            # if self._weldarray_view:
-                # for i, e in enumerate(range(idx.start, idx.stop, step)):
-                    # _update_single_entry(self._weldarray_view.base_array, e, val[i])
+            # if self._weldarray_view is not None:
+                # print('weldarray view exists: ')
+                # view_idx = self._weldarray_view.idx
+                # # base_array = self._weldarray_view.base_array._eval().view(np.ndarray)
+                # base_array = self._weldarray_view.base_array.view(np.ndarray)
+                # # update the idx.
+                # new_start = idx.start + self._weldarray_view.start
+                # new_stop = idx.stop + self._weldarray_view.start
+                # new_idx = slice(new_start, new_stop, idx.step)
+                # base_array.__setitem__(new_idx, val)
+                # # base_array.__setitem__(idx, val)
+                # ret = base_array[view_idx]
             # else:
-                # # FIXME: In general, this sucks for performance - instead add the list as an array to the
-                # # weldobject context and use lookup on it for the weld IR code.
-                # # just update it for each element in the list
-                # for i, e in enumerate(range(idx.start, idx.stop, step)):
-                    # _update_single_entry(self, e, val[i])
+                # ret = self._eval()
+                # ret.__setitem__(idx, val)
 
         # elif isinstance(idx, np.ndarray) or isinstance(idx, list):
             # # just update it for each element in the list
@@ -277,6 +274,35 @@ class weldarray(np.ndarray):
             # _update_single_entry(self, idx, val)
         # else:
             # assert False, 'idx type not supported'
+
+        print('WARNING: setitem can be realllly slow with the current implementation')
+        if isinstance(idx, slice):
+            if idx.step is None: step = 1
+            else: step = idx.step
+            # FIXME: hacky - need to check exact mechanisms b/w getitem and setitem calls further.
+            # + it seems like numpy calls getitem and evaluates the value, and then sets it to the
+            # correct value here (?) - this seems like a waste.
+            if self._weldarray_view:
+                for i, e in enumerate(range(idx.start, idx.stop, step)):
+                    # the index should be appropriate for the base array
+                    e += self._weldarray_view.start
+                    _update_single_entry(self._weldarray_view.base_array, e, val[i])
+            else:
+                # FIXME: In general, this sucks for performance - instead add the list as an array to the
+                # weldobject context and use lookup on it for the weld IR code.
+                # just update it for each element in the list
+                for i, e in enumerate(range(idx.start, idx.stop, step)):
+                    _update_single_entry(self, e, val[i])
+
+        elif isinstance(idx, np.ndarray) or isinstance(idx, list):
+            # just update it for each element in the list
+            for i, e in enumerate(idx):
+                _update_single_entry(self, e, val[i])
+
+        elif isinstance(idx, int):
+            _update_single_entry(self, idx, val)
+        else:
+            assert False, 'idx type not supported'
 
     def _gen_weldobj(self, arr):
         '''
@@ -485,11 +511,16 @@ class weldarray(np.ndarray):
         # Case 1: we are evaluating an in place on in an array. So need to evaluate the parent and
         # return the appropriate index.
         if self._weldarray_view:
-            # _eval parent and return appropriate idx.
-            # TODO: Clearly more efficient to _eval the base array as the parent would eventually have to do
-            # it - but this makes it more convenient to deal with different indexing strategies.
-            arr = self._weldarray_view.parent._eval()
-            return arr[self._weldarray_view.idx]
+            idx = self._weldarray_view.idx
+            if idx:
+                # _eval parent and return appropriate idx.
+                # TODO: Clearly more efficient to _eval the base array as the parent would eventually have to do
+                # it - but this makes it more convenient to deal with different indexing strategies.
+                arr = self._weldarray_view.parent._eval()
+                return arr[self._weldarray_view.idx]
+            else:
+                # XXX hacky!! FIXME: need to have a better way and more general to deal with transposes.
+                return self.view(np.ndarray)
 
         # Caching
         if self.name == self.weldobj.weld_code:
@@ -526,7 +557,7 @@ class weldarray(np.ndarray):
             if idx is not None:
                 result = weldarray(self._weldarray_view.parent._eval()[idx], verbose=self._verbose)
             else:
-                assert False, 'should not happen?'
+                result = weldarray(self)
         else:
             result = weldarray(self, verbose=self._verbose)
         return result

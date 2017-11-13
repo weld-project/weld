@@ -762,16 +762,29 @@ def test_setitem_views():
     etc?
     '''
     n, w = random_arrays(NUM_ELS, 'float32')
-    n2 = n[0:4]
-    w2 = w[0:4]
+    # n2 = n[0:4]
+    # w2 = w[0:4]
+    n2 = n[1:5]
+    w2 = w[1:5]
 
     n2[0:2:1] = [5.0, 2.0]
     w2[0:2:1] = [5.0, 2.0]
-
+    
+    assert np.allclose(n, w)
     assert np.allclose(n2, w2)
 
     n2[0:3:1] += 10.0
     w2[0:3:1] += 10.0
+    
+    w2 = w2.evaluate()
+    w = w.evaluate()
+
+    print('n: ', n)
+    print('w: ', w)
+    print('n2: ', n2)
+    print('w2: ', w2)
+
+    assert np.allclose(n, w)
     assert np.allclose(n2, w2)
 
 def test_iterator():
@@ -1000,3 +1013,4 @@ def test_erf():
 
 # test_views_update_child()
 # test_views_mess()
+# test_setitem_views()

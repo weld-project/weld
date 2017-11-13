@@ -294,9 +294,6 @@ Array transformations based tests.
 '''
 def test_transpose_simple():
     n, w = random_arrays((10,10), 'float64')
-    # n2 = n.T
-    # w2 = w.T
-
     # slightly awkward because otherwise numpy's transpose will be called...ideally, weldnumpy is
     # being used as import weldnumpy as np, and then this stuff would work fine.
     n2 = transpose(n)
@@ -311,8 +308,51 @@ def test_transpose_ops():
     '''
     TODO: do a bunch of things after the transpose. _get_result and views would have to deal
     correctly without a specific index...
+    This kinds works but the support is pretty flimsy...
     '''
-    pass
+    n, w = random_arrays((10,5), 'float64')
+    # slightly awkward because otherwise numpy's transpose will be called...ideally, weldnumpy is
+    # being used as import weldnumpy as np, and then this stuff would work fine.
+    n2 = transpose(n)
+    w2 = transpose(w)
+    np.allclose(n2, w2)
+    n3 = np.sqrt(n2)
+    w3 = np.sqrt(w2)
+    w3 = w3.evaluate()
+
+    n4 = n3 - n2
+    w4 = w3 - w2
+    w4 = w4.evaluate()
+
+    np.allclose(n3, w3)
+    np.allclose(n2, w2)
+    np.allclose(n, w)
+    np.allclose(w4, n4)
+
+def test_transpose_inplace():
+    '''
+    kinda surprised but this actually seems to just work.
+    TODO: Need to dig deeper to find edge cases.
+    '''
+    n, w = random_arrays((10,5), 'float64')
+    # slightly awkward because otherwise numpy's transpose will be called...ideally, weldnumpy is
+    # being used as import weldnumpy as np, and then this stuff would work fine.
+    n2 = transpose(n)
+    w2 = transpose(w)
+    n3 = np.sqrt(n2, out=n2)
+    w3 = np.sqrt(w2, out=w2)
+    w3 = w3.evaluate()
+
+    np.allclose(n3, w3)
+    np.allclose(n2, w2)
+    np.allclose(n, w)
+
+    n4, w4 = random_arrays(n2.shape, 'float64')
+
+    n3 -= n4
+    w3 -= w4
+    w4 = w4.evaluate()
+    np.allclose(w4, n4)
 
 def test_broadcasting_simple():
     n, w = random_arrays((1,10), 'float32')
@@ -361,3 +401,5 @@ def test_broadcasting_bug():
 # test_views_non_contig_newarray_binary()
 # test_broadcasting_simple()
 # test_broadcasting_bug()
+# test_transpose_ops()
+test_transpose_inplace()
