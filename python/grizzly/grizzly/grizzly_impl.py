@@ -373,6 +373,63 @@ def unzip_columns(expr, column_types):
                                           "result": result_string}
     return weld_obj
 
+def sort(expr, field = None, keytype=None, ascending=True):
+    """
+    Sorts the vector.
+    If the field parameter is provided then the sort
+    operators on a vector of structs where the sort key
+    is the field of the struct.
+
+    Args:
+      expr (WeldObject)
+      field (Int)
+    """
+    weld_obj = WeldObject(encoder_, decoder_)
+
+    expr_var = weld_obj.update(expr)
+    if isinstance(expr, WeldObject):
+        expr_var = expr.obj_id
+        weld_obj.dependencies[expr_var] = expr
+
+    if field is not None:
+        key_str = "x.$%s" % field
+    else:
+        key_str = "x"
+
+    if not ascending:
+        # The type is not necessarily f64.
+        key_str = key_str + "* %s(-1)" % keytype
+
+    weld_template = """
+    sort(%(expr)s, |x| %(key)s)
+    """
+    weld_obj.weld_code = weld_template % {"expr":expr_var, "key":key_str}
+    return weld_obj
+
+def slice_vec(expr, start, stop):
+    """
+    Slices the vector.
+
+    Args:
+      expr (WeldObject)
+      start (Long)
+      stop (Long)
+    """
+    weld_obj = WeldObject(encoder_, decoder_)
+
+    expr_var = weld_obj.update(expr)
+    if isinstance(expr, WeldObject):
+        expr_var = expr.obj_id
+        weld_obj.dependencies[expr_var] = expr
+
+    weld_template = """
+    slice(%(expr)s, %(start)sL, %(stop)sL)
+    """
+    weld_obj.weld_code = weld_template % {"expr":expr_var,
+                                          "start":start,
+                                          "stop":stop}
+    return weld_obj
+
 def zip_columns(columns):
     """
     Zip together multiple columns.
@@ -389,7 +446,7 @@ def zip_columns(columns):
         col_var = weld_obj.update(column)
         if isinstance(column, WeldObject):
             col_var = column.obj_id
-            col_obj.dependencies[col_var] = column
+            weld_obj.dependencies[col_var] = column
         column_vars.append(col_var)
 
     arrays = ", ".join(column_vars)

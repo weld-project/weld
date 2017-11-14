@@ -31,6 +31,41 @@ class DataFrameWeldLoc:
             # TODO : Need to implement for non-pivot tables
         raise Exception("Cannot invoke getitem on an object that is not SeriesWeld")
 
+class WeldLocIndexer:
+    def __init__(self, grizzly_obj):
+        # If index_type field of grizzly_obj is None
+        # then we assume normal 0 - 1 indexing
+        self.grizzly_obj = grizzly_obj
+
+    def __getitem__(self, key):
+        if isinstance(self.grizzly_obj, SeriesWeld):
+            series = self.grizzly_obj
+            if isinstance(key, SeriesWeld):
+                if series.index_type is not None:
+                    index_expr = grizzly_impl.get_field(series.expr, 0)
+                    column_expr = grizzly_impl.get_field(series.expr, 1)
+                    zip_expr = grizzly_impl.zip_columns([index_expr, column_expr])
+                    predicate_expr = grizzly_impl.isin(index_expr, key.expr, series.index_type)
+                    filtered_expr = grizzly_impl.filter(
+                        zip_expr,
+                        predicate_expr
+                    )
+                    unzip_expr = grizzly_impl.unzip_columns(
+                        filtered_expr,
+                        [series.index_type, series.weld_type]
+                    )
+                    return SeriesWeld(
+                        unzip_expr,
+                        series.weld_type,
+                        series.df,
+                        series.column_name,
+                        series.index_type,
+                        series.index_name
+                    )
+
+            # TODO : Need to implement for non-pivot tables
+        raise Exception("Cannot invoke getitem on non SeriesWeld object")
+
 class DataFrameWeldExpr:
     # TODO We need to merge this with the original DataFrameWeld class
     def __init__(self, expr, column_names, weld_type, is_pivot=False):
@@ -643,7 +678,7 @@ class SeriesWeld(LazyOpResult):
         self.index_type = index_type
         self.index_name = index_name
 
-    def __getitem__(self, predicates):
+    def __getitem__(self, key):
         """Summary
 
         Args:
@@ -653,7 +688,39 @@ class SeriesWeld(LazyOpResult):
         Returns:
             TYPE: Description
         """
-        return self.filter(predicates)
+        if isinstance(key, slice):
+            start = key.start
+            # TODO : We currently do nothing with step
+            step = key.step
+            stop = key.stop
+            if self.index_type is not None:
+                index_expr = grizzly_impl.get_field(self.expr, 0)
+                column_expr = grizzly_impl.get_field(self.expr, 1)
+                zip_expr = grizzly_impl.zip_columns([index_expr, column_expr])
+                sliced_expr = grizzly_impl.slice_vec(zip_expr, start, stop)
+                unzip_expr = grizzly_impl.unzip_columns(
+                    sliced_expr,
+                    [self.index_type, self.weld_type]
+                )
+                return SeriesWeld(
+                    unzip_expr,
+                    self.weld_type,
+                    self.df,
+                    self.column_name,
+                    self.index_type,
+                    self.index_name
+                )
+            else:
+                return SeriesWeld(
+                    grizzly_impl.slice_vec(
+                        self.expr,
+                        start,
+                        stop
+                    )
+                )
+        else:
+            # By default we return as if the key were predicates to filter by
+            return self.filter(key)
 
     def __setitem__(self, predicates, new_value):
         """Summary
@@ -667,6 +734,12 @@ class SeriesWeld(LazyOpResult):
         """
         if self.df is not None and self.column_name is not None:
             self.df[self.column_name] = self.mask(predicates, new_value)
+
+    @property
+    def loc(self):
+        return WeldLocIndexer(
+            self
+        )
 
     def __getattr__(self, key):
         """Summary
@@ -717,6 +790,31 @@ class SeriesWeld(LazyOpResult):
         else:
             column = LazyOpResult.evaluate(self, verbose=verbose)
             return pd.Series(column)
+
+    def sort_values(self, ascending=False):
+        """ Sorts the values of this series
+
+        """
+        if self.index_type is not None:
+            index_expr = grizzly_impl.get_field(self.expr, 0)
+            column_expr = grizzly_impl.get_field(self.expr, 1)
+            zip_expr = grizzly_impl.zip_columns([index_expr, column_expr])
+            result_expr = grizzly_impl.sort(zip_expr, 1, self.weld_type, ascending)
+            unzip_expr = grizzly_impl.unzip_columns(
+                result_expr,
+                [self.index_type, self.weld_type]
+            )
+            return SeriesWeld(
+                unzip_expr,
+                self.weld_type,
+                self.df,
+                self.column_name,
+                self.index_type,
+                self.index_name
+            )
+        else:
+            result_expr = grizzly_impl.sort(self.expr)
+            # TODO need to finish this
 
     def unique(self):
         """Summary

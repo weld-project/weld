@@ -31,15 +31,13 @@ print "Time to merge and create pivot table:", time.time() - start
 
 ratings_by_title = data.groupby('title').size()
 active_titles = ratings_by_title.index[ratings_by_title >= 250]
-
 mean_ratings = mean_ratings.loc[active_titles]
 mean_ratings['diff'] = mean_ratings['M'] - mean_ratings['F']
 sorted_by_diff = mean_ratings.sort_values(by='diff')
 rating_std_by_title = data.groupby('title')['rating'].std()
 
 rating_std_by_title = rating_std_by_title.loc[active_titles]
-print rating_std_by_title.evaluate(True)
-print rating_std_by_title.sort_values(ascending=False)[:10]
+print rating_std_by_title.sort_values(ascending=False)[0:10].evaluate(True)
 end = time.time()
 
 print "Total time taken:", (end - start)

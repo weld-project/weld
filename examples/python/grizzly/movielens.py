@@ -35,7 +35,6 @@ mean_ratings['diff'] = mean_ratings['M'] - mean_ratings['F']
 sorted_by_diff = mean_ratings.sort_values(by='diff')
 rating_std_by_title = data.groupby('title')['rating'].std()
 rating_std_by_title = rating_std_by_title.loc[active_titles]
-print rating_std_by_title
 print rating_std_by_title.sort_values(ascending=False)[:10]
 end = time.time()
 
