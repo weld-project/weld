@@ -332,15 +332,53 @@ def element_wise_op(array, other, op, ty):
                                           "ty": ty, "op": op}
     return weld_obj
 
+def unzip_columns(expr, column_types):
+    """
+    Zip together multiple columns.
+
+    Args:
+        columns (WeldObject / Numpy.ndarray): lust of columns
+
+    Returns:
+        A WeldObject representing this computation
+    """
+    weld_obj = WeldObject(encoder_, decoder_)
+    column_appenders = []
+    struct_fields = []
+    result_fields = []
+    for i, column_type in enumerate(column_types):
+        column_appenders.append("appender[%s]" % column_type)
+        struct_fields.append("merge(b.$%s, e.$%s)" % (i, i))
+        result_fields.append("result(unzip_builder.$%s)" % i)
+    appender_string = "{%s}" % ", ".join(column_appenders)
+    struct_string = "{%s}" % ", ".join(struct_fields)
+    result_string = "{%s}" % ", ".join(result_fields)
+    expr_var = weld_obj.update(expr)
+    if isinstance(expr, WeldObject):
+        expr_var = expr.obj_id
+        weld_obj.dependencies[expr_var] = expr
+
+    weld_template = """
+    let unzip_builder = for(
+      %(expr)s,
+      %(appenders)s,
+      |b,i,e| %(struct_builder)s
+    );
+    %(result)s
+    """
+
+    weld_obj.weld_code = weld_template % {"expr": expr_var,
+                                          "appenders": appender_string,
+                                          "struct_builder": struct_string,
+                                          "result": result_string}
+    return weld_obj
+
 def zip_columns(columns):
     """
     Zip together multiple columns.
 
     Args:
-        array (WeldObject / Numpy.ndarray): Input array
-        other (WeldObject / Numpy.ndarray): Second Input array
-        op (str): Op string used to compute element-wise operation (+ / *)
-        ty (WeldType): Type of each element in the input array
+        columns (WeldObject / Numpy.ndarray): lust of columns
 
     Returns:
         A WeldObject representing this computation
@@ -960,6 +998,7 @@ def groupby_std(columns, column_tys, grouping_columns, grouping_column_tys):
         result_str = "merge(b, {%s, 1L})" % ", ".join(result_str_list)
         # TODO Need to implement exponent operator
         # The mean dict's e.$1.$0 assumes this is a scalar vector and not a struct vector
+        # Also pandas normalizes by n - 1
     weld_template = """
     let sum_dict = result(
       for(
