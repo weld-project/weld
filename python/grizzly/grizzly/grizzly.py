@@ -614,7 +614,6 @@ class GroupedDataFrameWeld(LazyOpResult):
             df[column_name] = result[i]
         return DataFrameWeld(df)
 
-
 class SeriesWeld(LazyOpResult):
     """Summary
 
@@ -1228,6 +1227,42 @@ class StringSeriesWeld:
             self.column_name
         )
 
+class GroupByWeldSeries:
+    """Summary
+
+    Attributes:
+        column_name
+        column_type
+        column,
+        grouping_column
+    """
+
+    def __init__(self, name, column, column_type, grouping_column_names, grouping_columns, grouping_column_types):
+        self.name = name
+        self.column = column
+        self.column_type = column_type
+        self.grouping_column_names = grouping_column_names
+        self.grouping_columns = grouping_columns
+        self.grouping_column_types = grouping_column_types
+
+    def std(self):
+        """Standard deviation
+
+        Note that is by default normalizd by n - 1
+        """
+        return GroupedDataFrameWeld(
+            grizzly_impl.groupby_std(
+                [self.column],
+                [self.column_type],
+                self.grouping_columns,
+                self.grouping_column_types
+            ),
+            self.grouping_column_names,
+            [self.name],
+            self.grouping_column_types,
+            [WeldDouble()]
+        )
+
 class GroupByWeld:
     """Summary
 
@@ -1247,6 +1282,7 @@ class GroupByWeld:
             df (TYPE): Description
             grouping_column_name (TYPE): Description
         """
+        self.df = df
         self.grouping_columns = []
         self.grouping_column_types = []
 
@@ -1283,6 +1319,17 @@ class GroupByWeld:
 
             self.columns.append(column)
             self.column_types.append(column_type)
+
+    def __getitem__(self, item):
+        item_index = self.column_names.index(item)
+        return GroupByWeldSeries(
+            item,
+            self.columns[item_index],
+            self.column_types[item_index],
+            self.grouping_column_names,
+            self.grouping_columns,
+            self.grouping_column_types
+        )
 
     def sum(self):
         """Summary

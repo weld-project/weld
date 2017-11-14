@@ -875,6 +875,126 @@ def groupby_sum(columns, column_tys, grouping_columns, grouping_column_tys):
                                           "gty": grouping_column_ty_str}
     return weld_obj
 
+def groupby_std(columns, column_tys, grouping_columns, grouping_column_tys):
+    """
+    Groups the given columns by the corresponding grouping column
+    value, and aggregate by summing values.
+
+    Args:
+        columns (List<WeldObject>): List of columns as WeldObjects
+        column_tys (List<str>): List of each column data ty
+        grouping_column (WeldObject): Column to group rest of columns by
+
+    Returns:
+          A WeldObject representing this computation
+    """
+    weld_obj = WeldObject(encoder_, decoder_)
+
+    if len(grouping_columns) == 1 and len(grouping_column_tys) == 1:
+        grouping_column_var = weld_obj.update(grouping_columns[0])
+        if isinstance(grouping_columns[0], WeldObject):
+            grouping_column_var = grouping_columns[0].weld_code
+        grouping_column_ty_str = "%s" % grouping_column_tys[0]
+    else:
+        grouping_column_vars = []
+        for column in grouping_columns:
+            column_var = weld_obj.update(column)
+            if isinstance(column_var, WeldObject):
+                column_var = column_var.weld_code
+            grouping_column_vars.append(column_var)
+        grouping_column_var = ", ".join(grouping_column_vars)
+        grouping_column_tys = [str(ty) for ty in grouping_column_tys]
+        grouping_column_ty_str = ", ".join(grouping_column_tys)
+        grouping_column_ty_str = "{%s}" % grouping_column_ty_str
+
+    columns_var_list = []
+    for column in columns:
+        column_var = weld_obj.update(column)
+        if isinstance(column, WeldObject):
+            column_var = column.obj_id
+            weld_obj.dependencies[column_var] = column
+        columns_var_list.append(column_var)
+
+    if len(columns_var_list) == 1 and len(grouping_columns) == 1:
+        columns_var = columns_var_list[0]
+        tys_str = column_tys[0]
+        result_str = "merge(b, {e.$0, {e.$1, 1L}})"
+        # TODO : The above change needs to apply for all result strings
+        # These currently break at the moment
+    elif len(columns_var_list) == 1 and len(grouping_columns) > 1:
+        columns_var = columns_var_list[0]
+        tys_str = column_tys[0]
+        key_str_list = []
+        for i in xrange(0, len(grouping_columns)):
+            key_str_list.append("e.$%d" % i)
+        key_str = "{%s}" % ", ".join(key_str_list)
+        value_str = "e.$" + str(len(grouping_columns))
+        result_str_list = [key_str, value_str]
+        result_str = "merge(b, {%s, 1L})" % ", ".join(result_str_list)
+    elif len(columns_var_list) > 1 and len(grouping_columns) == 1:
+        columns_var = "%s" % ", ".join(columns_var_list)
+        column_tys = [str(ty) for ty in column_tys]
+        tys_str = "{%s}" % ", ".join(column_tys)
+        key_str = "e.$0"
+        value_str_list = []
+        for i in xrange(1, len(columns) + 1):
+            value_str_list.append("e.$%d" % i)
+        value_str = "{%s}" % ", ".join(value_str_list)
+        result_str_list = [key_str, value_str]
+        result_str = "merge(b, {%s, 1L})" % ", ".join(result_str_list)
+    else:
+        columns_var = "%s" % ", ".join(columns_var_list)
+        column_tys = [str(ty) for ty in column_tys]
+        tys_str = "{%s}" % ", ".join(column_tys)
+        key_str_list = []
+        key_size = len(grouping_columns)
+        value_size = len(columns)
+        for i in xrange(0, key_size):
+            key_str_list.append("e.$%d" % i)
+        key_str = "{%s}" % ", ".join(key_str_list)
+        value_str_list = []
+        for i in xrange(key_size, key_size + value_size):
+            value_str_list.append("e.$%d" % i)
+        value_str = "{%s}" % ", ".join(value_str_list)
+        result_str_list = [key_str, value_str]
+        result_str = "merge(b, {%s, 1L})" % ", ".join(result_str_list)
+        # TODO Need to implement exponent operator
+        # The mean dict's e.$1.$0 assumes this is a scalar vector and not a struct vector
+    weld_template = """
+    let sum_dict = result(
+      for(
+        zip(%(grouping_column)s, %(columns)s),
+        dictmerger[%(gty)s, {%(ty)s, i64}, +],
+        |b, i, e| %(result)s
+      )
+    );
+    let mean_dict = result(
+      for(
+        tovec(sum_dict),
+        dictmerger[%(gty)s, f64, +],
+        |b, i, e| merge(b, {e.$0, f64(e.$1.$0) / f64(e.$1.$1)})
+      )
+    );
+    let std_dict = result(
+      for(
+        zip(%(grouping_column)s, %(columns)s),
+        dictmerger[%(gty)s, f64, +],
+        |b, i, e| merge(b, {e.$0, (let m = lookup(mean_dict, e.$0); (f64(e.$1) - m)* (f64(e.$1) - m))})
+    ));
+    map(
+      sort(tovec(std_dict), |x| x.$0),
+      |x| {x.$0, sqrt((x.$1 / f64(lookup(sum_dict, x.$0).$1 - 1L)))}
+    )
+  """
+
+
+    weld_obj.weld_code = weld_template % {"grouping_column": grouping_column_var,
+                                          "columns": columns_var,
+                                          "result": result_str,
+                                          "ty": tys_str,
+                                          "gty": grouping_column_ty_str}
+    return weld_obj
+
 def groupby_size(columns, column_tys, grouping_columns, grouping_column_tys):
     """
     Groups the given columns by the corresponding grouping column
