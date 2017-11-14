@@ -645,39 +645,56 @@ def pivot_table(expr, value_index, value_ty, index_index, index_ty, columns_inde
     """
 
     weld_obj = WeldObject(encoder_, decoder_)
-
-    if aggfunc == 'sum':
-        op = '+'
-    elif aggfunc == 'mean':
-        op = '+'
-    else:
-        raise Exception("Aggregate operation %s not supported." % aggfunc)
-
+    print aggfunc
     zip_var = weld_obj.update(expr)
     if isinstance(expr, WeldObject):
         zip_var = expr.obj_id
         weld_obj.dependencies[zip_var] = expr
 
-    # Note we use the column_index_dict
-    # to lookup the column names in a pivot table.
-    weld_template = """
-    let bs = for(
-      %(zip_expr)s,
-      {dictmerger[{%(ity)s,%(cty)s},%(vty)s,+], dictmerger[%(ity)s,i64,+], dictmerger[%(cty)s,i64,+]},
-      |b, i, e| {merge(b.$0, {{e.$%(id)s, e.$%(cd)s}, e.$%(vd)s}),
-                 merge(b.$1, {e.$%(id)s, 1L}),
-                 merge(b.$2, {e.$%(cd)s, 1L})}
-    );
-    let agg_dict = result(bs.$0);
-    let ind_vec = sort(map(tovec(result(bs.$1)), |x| x.$0), |x| x);
-    let col_vec = sort(map(tovec(result(bs.$2)), |x| x.$0), |x| x);
-    let pivot = map(
-      col_vec,
-      |x:%(cty)s|
-        map(ind_vec, |y:%(ity)s| f64(lookup(agg_dict, {y, x})))
-    );
-    {ind_vec, pivot, col_vec}
+    if aggfunc == 'sum':
+        weld_template = """
+          let bs = for(
+            %(zip_expr)s,
+            {dictmerger[{%(ity)s,%(cty)s},%(vty)s,+], dictmerger[%(ity)s,i64,+], dictmerger[%(cty)s,i64,+]},
+            |b, i, e| {merge(b.$0, {{e.$%(id)s, e.$%(cd)s}, e.$%(vd)s}),
+                       merge(b.$1, {e.$%(id)s, 1L}),
+                       merge(b.$2, {e.$%(cd)s, 1L})}
+          );
+          let agg_dict = result(bs.$0);
+          let ind_vec = sort(map(tovec(result(bs.$1)), |x| x.$0), |x| x);
+          let col_vec = map(tovec(result(bs.$2)), |x| x.$0);
+          let pivot = map(
+            col_vec,
+            |x:%(cty)s|
+            map(ind_vec, |y:%(ity)s| f64(lookup(agg_dict, {y, x})))
+        );
+        {ind_vec, pivot, col_vec}
     """
+    elif aggfunc == 'mean':
+        weld_template = """
+          let bs = for(
+            %(zip_expr)s,
+            {dictmerger[{%(ity)s,%(cty)s},{%(vty)s, i64},+], dictmerger[%(ity)s,i64,+], dictmerger[%(cty)s,i64,+]},
+            |b, i, e| {merge(b.$0, {{e.$%(id)s, e.$%(cd)s}, {e.$%(vd)s, 1L}}),
+                       merge(b.$1, {e.$%(id)s, 1L}),
+                       merge(b.$2, {e.$%(cd)s, 1L})}
+          );
+          let agg_dict = result(bs.$0);
+          let ind_vec = sort(map(tovec(result(bs.$1)), |x| x.$0), |x| x);
+          let col_vec = map(tovec(result(bs.$2)), |x| x.$0);
+          let pivot = map(
+            col_vec,
+            |x:%(cty)s|
+            map(ind_vec, |y:%(ity)s| (
+              let sum_len_pair = lookup(agg_dict, {y, x});
+              f64(sum_len_pair.$0) / f64(sum_len_pair.$1))
+            )
+        );
+        {ind_vec, pivot, col_vec}
+    """
+
+    else:
+        raise Exception("Aggregate operation %s not supported." % aggfunc)
 
     weld_obj.weld_code = weld_template % {"zip_expr": zip_var,
                                           "ity": index_ty,

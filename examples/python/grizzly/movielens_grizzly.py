@@ -25,8 +25,6 @@ print "Time to merge:", (time.time() - start)
 data = gr.DataFrameWeld(data)
 mean_ratings = data.pivot_table('rating', index='title', columns='gender',
                                 aggfunc='mean')
-# TODO implement the mean operator
-
 print "Time to merge and create pivot table:", time.time() - start
 
 ratings_by_title = data.groupby('title').size()
