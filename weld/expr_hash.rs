@@ -56,9 +56,8 @@ impl ExprHash {
                     U16Literal(v) => v.hash(&mut self.hasher),
                     U32Literal(v) => v.hash(&mut self.hasher),
                     U64Literal(v) => v.hash(&mut self.hasher),
-                    // TODO Later versions of rust can use `to_bits`
-                    F32Literal(v) => (v as u32).hash(&mut self.hasher),
-                    F64Literal(v) => (v as u64).hash(&mut self.hasher),
+                    F32Literal(v) => v.hash(&mut self.hasher),
+                    F64Literal(v) => v.hash(&mut self.hasher),
                 }
             }
             Ident(ref sym) => {
@@ -91,27 +90,27 @@ impl ExprHash {
                 // Do the value before pushing onto the symbol staack.
                 self.from_expr(value, symbol_positions, max_id)?;
                 {
-                    let mut entry = symbol_positions.entry(name).or_insert(Vec::new());
+                    let entry = symbol_positions.entry(name).or_insert(Vec::new());
                     entry.push(*max_id);
                     *max_id += 1;
                 } // brackets to end the borrow.
                 self.from_expr(body, symbol_positions, max_id)?;
                 // pop the stack.
-                let mut entry = symbol_positions.entry(name).or_insert(Vec::new());
+                let entry = symbol_positions.entry(name).or_insert(Vec::new());
                 let _ = entry.pop();
                 finished_subexpressions = true;
             }
             Lambda { ref params, ref body } => {
                 // Push the stack for each param.
                 for param in params.iter() {
-                    let mut entry = symbol_positions.entry(&param.name).or_insert(Vec::new());
+                    let entry = symbol_positions.entry(&param.name).or_insert(Vec::new());
                     entry.push(*max_id);
                     *max_id += 1;
                 }
                 self.from_expr(body, symbol_positions, max_id)?;
                 // Pop the stack.
                 for param in params.iter() {
-                    let mut entry = symbol_positions.entry(&param.name).or_insert(Vec::new());
+                    let entry = symbol_positions.entry(&param.name).or_insert(Vec::new());
                     entry.pop();
                 }
                 finished_subexpressions = true;

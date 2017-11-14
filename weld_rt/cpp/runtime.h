@@ -103,7 +103,7 @@ extern "C" {
   void weld_rt_set_result(void *res);
 
   void *weld_rt_new_vb(int64_t elem_size, int64_t starting_cap, int32_t fixed_size);
-  void weld_rt_new_vb_piece(void *v, work_t *w);
+  void weld_rt_new_vb_piece(void *v, work_t *w, int32_t is_init_piece);
   vec_piece *weld_rt_cur_vb_piece(void *v, int32_t my_id);
   vec_output weld_rt_result_vb(void *v);
 
