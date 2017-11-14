@@ -67,7 +67,7 @@ lazy_static! {
                  Pass::new(vec![inliner::inline_zips], "inline-zip"));
         m.insert("loop-fusion",
                  Pass::new(vec![loop_fusion::fuse_loops_vertical,
-                                loop_fusion::fuse_loops_horizontal,
+                                loop_fusion_2::fuse_loops_2,
                                 loop_fusion_2::move_merge_before_let,
                                 inliner::inline_get_field,
                                 inliner::inline_let],
