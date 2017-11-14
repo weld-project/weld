@@ -357,8 +357,8 @@ fn get_id_element(ty: &Type, op: &BinOpKind) -> WeldResult<Option<Expr<Type>>> {
                 ScalarKind::I8 => exprs::literal_expr(LiteralKind::I8Literal(0))?,
                 ScalarKind::I32 => exprs::literal_expr(LiteralKind::I32Literal(0))?,
                 ScalarKind::I64 => exprs::literal_expr(LiteralKind::I64Literal(0))?,
-                ScalarKind::F32 => exprs::literal_expr(LiteralKind::F32Literal(0.0))?,
-                ScalarKind::F64 => exprs::literal_expr(LiteralKind::F64Literal(0.0))?,
+                ScalarKind::F32 => exprs::literal_expr(LiteralKind::F32Literal(0f32.to_bits()))?,
+                ScalarKind::F64 => exprs::literal_expr(LiteralKind::F64Literal(0f64.to_bits()))?,
                 _ => {
                     return Ok(None);
                 }
@@ -369,8 +369,8 @@ fn get_id_element(ty: &Type, op: &BinOpKind) -> WeldResult<Option<Expr<Type>>> {
                 ScalarKind::I8 => exprs::literal_expr(LiteralKind::I8Literal(1))?,
                 ScalarKind::I32 => exprs::literal_expr(LiteralKind::I32Literal(1))?,
                 ScalarKind::I64 => exprs::literal_expr(LiteralKind::I64Literal(1))?,
-                ScalarKind::F32 => exprs::literal_expr(LiteralKind::F32Literal(1.0))?,
-                ScalarKind::F64 => exprs::literal_expr(LiteralKind::F64Literal(1.0))?,
+                ScalarKind::F32 => exprs::literal_expr(LiteralKind::F32Literal(1f32.to_bits()))?,
+                ScalarKind::F64 => exprs::literal_expr(LiteralKind::F64Literal(1f64.to_bits()))?,
                 _ => {
                     return Ok(None);
                 }
@@ -380,7 +380,6 @@ fn get_id_element(ty: &Type, op: &BinOpKind) -> WeldResult<Option<Expr<Type>>> {
             return Ok(None);
         }
     };
-
     Ok(Some(identity))
 }
 

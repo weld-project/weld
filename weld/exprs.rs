@@ -461,7 +461,7 @@ pub fn merge_expr(builder: Expr<Type>, value: Expr<Type>) -> WeldResult<Expr<Typ
             DictMerger(ref elem_ty1, ref elem_ty2, _) => {
                 if let Struct(ref v_ty) = value.ty {
                     if v_ty.len() < 2 { return err; }
-                    
+
                     if elem_ty1.as_ref() != &v_ty[0] {
                         return err;
                     }
@@ -487,7 +487,17 @@ pub fn merge_expr(builder: Expr<Type>, value: Expr<Type>) -> WeldResult<Expr<Typ
                 }
             }
             VecMerger(ref elem_ty, _) => {
-                if elem_ty.as_ref() != &value.ty {
+                if let Struct(ref tys) = value.ty {
+                    if tys.len() != 2 {
+                        return err;
+                    }
+                    if tys[0] != Scalar(ScalarKind::I64) {
+                        return err;
+                    }
+                    if &tys[1] != elem_ty.as_ref() {
+                        return err;
+                    }
+                } else {
                     return err;
                 }
             }
@@ -525,7 +535,7 @@ use super::pretty_print::*;
 fn literal_test() {
     let expr = literal_expr(LiteralKind::I32Literal(1)).unwrap();
     assert_eq!(print_expr_without_indent(&expr), "1");
-    let expr = literal_expr(LiteralKind::F32Literal(1.0)).unwrap();
+    let expr = literal_expr(LiteralKind::F32Literal(1f32.to_bits())).unwrap();
     assert_eq!(print_expr_without_indent(&expr), "1.0F");
 
 }
@@ -549,7 +559,7 @@ fn builder_exprs_test() {
     assert_eq!(builder.ty, builder_type);
 
     let i32_literal = literal_expr(LiteralKind::I32Literal(5)).unwrap();
-    let f32_literal = literal_expr(LiteralKind::F32Literal(5.0)).unwrap();
+    let f32_literal = literal_expr(LiteralKind::F32Literal(5f32.to_bits())).unwrap();
 
     // Construct a Merge expression.
     let merge = merge_expr(builder.clone(), i32_literal.clone()).unwrap();

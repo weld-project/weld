@@ -206,16 +206,22 @@ impl<'t> Parser<'t> {
         let name = try!(self.symbol());
         let ty = try!(self.optional_type());
         try!(self.consume(TEqual));
-        let value = try!(self.operator_expr());
+        let mut value = try!(self.operator_expr());
+
+        // If a type was found, assign it (even if the value already has a known type).
+        // Type inference will catch any type mismatches later on.
+        if ty != Unknown {
+            value.ty = ty;
+        }
+
         try!(self.consume(TSemicolon));
         let body = try!(self.expr());
-        let mut expr = expr_box(Let {
+        let expr = expr_box(Let {
                                     name: name,
                                     value: value,
                                     body: body,
                                 },
                                 Annotations::new());
-        expr.ty = ty;
         Ok(expr)
     }
 
@@ -710,8 +716,8 @@ impl<'t> Parser<'t> {
             TI8Literal(v) => Ok(expr_box(Literal(I8Literal(v)), Annotations::new())),
             TI32Literal(v) => Ok(expr_box(Literal(I32Literal(v)), Annotations::new())),
             TI64Literal(v) => Ok(expr_box(Literal(I64Literal(v)), Annotations::new())),
-            TF32Literal(v) => Ok(expr_box(Literal(F32Literal(v)), Annotations::new())),
-            TF64Literal(v) => Ok(expr_box(Literal(F64Literal(v)), Annotations::new())),
+            TF32Literal(v) => Ok(expr_box(Literal(F32Literal(v.to_bits())), Annotations::new())),
+            TF64Literal(v) => Ok(expr_box(Literal(F64Literal(v.to_bits())), Annotations::new())),
             TBoolLiteral(v) => Ok(expr_box(Literal(BoolLiteral(v)), Annotations::new())),
 
             TI8 => Ok(self.parse_cast(ScalarKind::I8)?),

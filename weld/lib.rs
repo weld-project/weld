@@ -199,7 +199,7 @@ pub unsafe extern "C" fn weld_conf_set(ptr: *mut WeldConf,
                                        key: *const c_char,
                                        value: *const c_char) {
     assert!(!ptr.is_null());
-    let mut conf = &mut *ptr;
+    let conf = &mut *ptr;
 
     let key = CStr::from_ptr(key);
     let key = key.to_owned();
@@ -294,7 +294,7 @@ pub unsafe extern "C" fn weld_module_compile(code: *const c_char,
     info!("Started weld_module_compile");
     assert!(!code.is_null());
     assert!(!err_ptr.is_null());
-    let mut err = &mut *err_ptr;
+    let err = &mut *err_ptr;
 
     let mut stats = CompilationStats::new();
 
@@ -355,7 +355,7 @@ pub unsafe extern "C" fn weld_module_run(module: *mut WeldModule,
     let module_ref = &mut *module;
     let module_callable = module_ref.llvm_mut();
     let arg = &*arg;
-    let mut err = &mut *err_ptr;
+    let err = &mut *err_ptr;
 
     let conf = conf::parse(&*conf);
     if let Err(e) = conf {
@@ -452,7 +452,7 @@ pub unsafe extern "C" fn weld_error_free(err: *mut WeldError) {
 /// This function is safe to call multiple times on the same library file.
 pub unsafe extern "C" fn weld_load_library(filename: *const c_char, err: *mut WeldError) {
     assert!(!err.is_null());
-    let mut err = &mut *err;
+    let err = &mut *err;
     let filename = CStr::from_ptr(filename);
     let filename = filename.to_str().unwrap();
     if let Err(e) = easy_ll::load_library(filename) {
