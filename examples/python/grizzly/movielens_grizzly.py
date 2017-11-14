@@ -26,7 +26,6 @@ data = gr.DataFrameWeld(data)
 mean_ratings = data.pivot_table('rating', index='title', columns='gender',
                                 aggfunc='mean')
 # TODO implement the mean operator
-print mean_ratings.evaluate(True).to_pandas()
 
 print "Time to merge and create pivot table:", time.time() - start
 
@@ -34,10 +33,8 @@ ratings_by_title = data.groupby('title').size()
 active_titles = ratings_by_title.index[ratings_by_title >= 250]
 
 mean_ratings = mean_ratings.loc[active_titles]
-print mean_ratings.evaluate(True).to_pandas()
-sys.exit()
-
 mean_ratings['diff'] = mean_ratings['M'] - mean_ratings['F']
+print mean_ratings.evaluate(True).to_pandas()
 sorted_by_diff = mean_ratings.sort_values(by='diff')
 rating_std_by_title = data.groupby('title')['rating'].std()
 rating_std_by_title = rating_std_by_title.loc[active_titles]

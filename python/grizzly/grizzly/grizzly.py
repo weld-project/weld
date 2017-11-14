@@ -32,6 +32,7 @@ class DataFrameWeldLoc:
         raise Exception("Cannot invoke getitem on an object that is not SeriesWeld")
 
 class DataFrameWeldExpr:
+    # TODO We need to merge this with the original DataFrameWeld class
     def __init__(self, expr, column_names, weld_type, is_pivot=False):
         if isinstance(weld_type, WeldStruct):
            self.column_types = weld_type.field_types
@@ -43,6 +44,50 @@ class DataFrameWeldExpr:
         self.column_names = column_names
         self.colindex_map = {name:i for i, name in enumerate(column_names)}
         self.is_pivot = is_pivot
+
+    def __setitem__(self, key, item):
+        if self.is_pivot:
+            # Note that if this is a pivot table,
+            # We have to modify the structure of the pivot table
+            # that is append item to nested vector of vectors
+            # and update the col_vec field
+            # Also setitem appends a new item to the pivot table
+            # Modifying an existing item is not implemented yet
+            # TODO if pivot table check that the column being added
+            # is same type
+            if isinstance(item, SeriesWeld):
+                if item.index_type is not None:
+                    item_expr = grizzly_impl.get_field(item.expr, 1)
+                else:
+                    item_expr = item.expr
+                self.expr = grizzly_impl.set_pivot_column(
+                    self.expr,
+                    key,
+                    item_expr,
+                    self.column_types[1].elemType,
+                    self.column_types[2].elemType
+                )
+        else:
+            raise Exception("Setitem not implemented for non-pivot table")
+
+    def __getitem__(self, item):
+        if self.is_pivot:
+            # Note that if this is a pivot table,
+            # then we can't check if the item is in the column
+            # since we have not materialized the unique column values
+            # Note if
+            return SeriesWeld(
+                grizzly_impl.get_pivot_column(
+                    self.expr,
+                    item,
+                    self.column_types[2].elemType
+                ),
+                self.column_types[1].elemType.elemType,
+                df=None,
+                column_name=None,
+                index_type=self.column_types[0].elemType,
+                index_name=self.column_names[0]
+            )
 
     @property
     def loc(self):
@@ -641,7 +686,8 @@ class SeriesWeld(LazyOpResult):
                 self.df,
                 self.index_name
             )
-        raise Exception("No index value present")
+        # TODO : Make all series have a series attribute
+        raise Exception("No index present")
 
     def evaluate(self, verbose=False):
         if self.index_type is not None:
@@ -857,6 +903,43 @@ class SeriesWeld(LazyOpResult):
             self.df,
             self.column_name
         )
+
+    def __sub__(self, other):
+        # TODO subtractionw without index variables
+        if self.index_type is not None:
+            index = grizzly_impl.get_field(self.expr, 0)
+            expr1 = grizzly_impl.get_field(self.expr, 1)
+        else:
+            expr1 = self.expr
+        if other.index_type is not None:
+            index2 = grizzly_impl.get_field(other.expr, 0)
+            expr2 = grizzly_impl.get_field(other.expr, 1)
+        else:
+            expr2 = other.expr
+        index_expr = LazyOpResult(index, self.index_type, 0)
+        sub_expr = SeriesWeld(
+            grizzly_impl.element_wise_op(
+                expr1,
+                expr2,
+                "-",
+                self.weld_type
+            ),
+            self.weld_type,
+            self.df,
+            self.column_name
+        )
+
+        index_sub_expr = group([index_expr, sub_expr])
+        return SeriesWeld(
+            index_sub_expr.expr,
+            self.weld_type,
+            self.df,
+            self.column_name,
+            self.index_type,
+            self.index_name
+        )
+        # We also need to ensure that both indexes of the subtracted
+        # columns are compatible
 
     def sub(self, other):
         """Summary

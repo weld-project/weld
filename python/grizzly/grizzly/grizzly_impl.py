@@ -317,7 +317,7 @@ def element_wise_op(array, other, op, ty):
 
     other_var = weld_obj.update(other)
     if isinstance(other, WeldObject):
-        other_var = array.obj_id
+        other_var = other.obj_id
         weld_obj.dependencies[other_var] = other
 
     weld_template = """
@@ -563,6 +563,8 @@ def pivot_table(expr, value_index, value_ty, index_index, index_ty, columns_inde
         zip_var = expr.obj_id
         weld_obj.dependencies[zip_var] = expr
 
+    # Note we use the column_index_dict
+    # to lookup the column names in a pivot table.
     weld_template = """
     let bs = for(
       %(zip_expr)s,
@@ -574,7 +576,6 @@ def pivot_table(expr, value_index, value_ty, index_index, index_ty, columns_inde
     let agg_dict = result(bs.$0);
     let ind_vec = sort(map(tovec(result(bs.$1)), |x| x.$0), |x| x);
     let col_vec = map(tovec(result(bs.$2)), |x| x.$0);
-
     let pivot = map(
       col_vec,
       |x:%(cty)s|
@@ -590,6 +591,75 @@ def pivot_table(expr, value_index, value_ty, index_index, index_ty, columns_inde
                                           "id": index_index,
                                           "cd": columns_index,
                                           "vd": value_index}
+    return weld_obj
+
+def get_pivot_column(pivot, column_name, column_type):
+    weld_obj = WeldObject(encoder_, decoder_)
+
+    pivot_var = weld_obj.update(pivot)
+    if isinstance(pivot, WeldObject):
+        pivot_var = pivot.obj_id
+        weld_obj.dependencies[pivot_var] = pivot
+
+    column_name_var = weld_obj.update(column_name)
+    if isinstance(column_name, WeldObject):
+        column_name_var = column_name.obj_id
+        weld_obj.dependencies[column_name_var] = column_name
+
+    weld_template = """
+      let col_dict = result(for(
+        %(piv)s.$2,
+        dictmerger[%(cty)s,i64,+],
+        |b, i, e| merge(b, {e, i})
+      ));
+    {%(piv)s.$0, lookup(%(piv)s.$1, lookup(col_dict, %(colnm)s))}
+    """
+
+    weld_obj.weld_code = weld_template % {"piv":pivot_var,
+                                          "cty":column_type,
+                                          "colnm":column_name_var}
+    return weld_obj
+
+def set_pivot_column(pivot, column_name, item, pivot_type, column_type):
+    weld_obj = WeldObject(encoder_, decoder_)
+
+    pivot_var = weld_obj.update(pivot)
+    if isinstance(pivot, WeldObject):
+        pivot_var = pivot.obj_id
+        weld_obj.dependencies[pivot_var] = pivot
+
+    column_name_var = weld_obj.update(column_name)
+    if isinstance(column_name, WeldObject):
+        column_name_var = column_name.obj_id
+        weld_obj.dependencies[column_name_var] = column_name
+
+    item_var = weld_obj.update(item)
+    if isinstance(item, WeldObject):
+        item_var = item.obj_id
+        weld_obj.dependencies[item_var] = item
+
+    weld_template = """
+    let pv_cols = for(
+      %(piv)s.$1,
+      appender[%(pvty)s],
+      |b, i, e| merge(b, e)
+    );
+    let col_names = for(
+      %(piv)s.$2,
+      appender[%(cty)s],
+      |b, i, e| merge(b, e)
+    );
+    let new_pivot_cols = result(merge(pv_cols, %(item)s));
+    let new_col_names = result(merge(col_names, %(colnm)s));
+
+    {%(piv)s.$0, new_pivot_cols, new_col_names}
+    """
+
+    weld_obj.weld_code = weld_template % {"piv":pivot_var,
+                                          "cty":column_type,
+                                          "pvty":pivot_type,
+                                          "item":item_var,
+                                          "colnm":column_name_var}
     return weld_obj
 
 def pivot_sum(pivot, value_type):
