@@ -1434,7 +1434,7 @@ impl LlvmGenerator {
         // Compute the number of iterations and the start point of a fringe iter if there is one.
         let (num_iters_str, fringe_start_str) = self.gen_num_iters_and_fringe_start(&par_for, func, ctx)?;
         // Check if the loops are in-bounds and throw an error if they are not.
-        //self.gen_loop_bounds_check(fringe_start_str, &num_iters_str, &par_for, func, ctx)?;
+        self.gen_loop_bounds_check(fringe_start_str, &num_iters_str, &par_for, func, ctx)?;
         // Invoke the loop body (either by directly calling a function or starting the runtime).
         self.gen_invoke_loop_body(&num_iters_str, &par_for, sir, func, ctx)?;
 

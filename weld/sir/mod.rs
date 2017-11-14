@@ -49,18 +49,6 @@ pub enum StatementKind {
         child: Symbol,
         index: Symbol,
     },
-    Sort {
-        output: Symbol,
-        child: Symbol,
-        keyfunc: SirFunction,
-    },
-    Select {
-        output: Symbol,
-        cond: Symbol,
-        on_true: Symbol,
-        on_false: Symbol,
-    },
-
     MakeStruct(Vec<Symbol>),
     MakeVector(Vec<Symbol>),
     Merge { builder: Symbol, value: Symbol },
@@ -808,6 +796,7 @@ fn get_iter_sym(opt : &Option<Box<Expr<Type>>>,
             prog: &mut SirProgram,
             cur_func: &mut FunctionId,
             cur_block: &mut BasicBlockId,
+            tracker: &mut StatementTracker,
             multithreaded: bool,
             body_func: FunctionId) -> WeldResult<Option<Symbol>> {
     if opt.is_some() {
@@ -815,7 +804,7 @@ fn get_iter_sym(opt : &Option<Box<Expr<Type>>>,
             Some(ref e) => e,
             _ => weld_err!("Can't reach this")?,
         };
-        let opt_res = gen_expr(&opt_expr, prog, *cur_func, *cur_block, multithreaded)?;
+        let opt_res = gen_expr(&opt_expr, prog, *cur_func, *cur_block, tracker, multithreaded)?;
         /* TODO pari: Originally, in gen_expr cur_func, and cur_block were also being set - but this
         does not seem to have any effect. Could potentially remove this if it wasn't needed? All
         the tests seem to pass fine without it as well.
