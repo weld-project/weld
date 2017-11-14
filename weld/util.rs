@@ -1,8 +1,8 @@
 
 extern crate libc;
+extern crate fnv;
 
 use std::cmp::max;
-use std::collections::HashMap;
 
 use std::env;
 
@@ -16,20 +16,20 @@ const WELD_HOME: &'static str = "WELD_HOME";
 /// Each SymbolGenerator tracks the maximum ID used for every symbol name, and can be used to
 /// create new symbols with the same name but a unique ID.
 pub struct SymbolGenerator {
-    id_map: HashMap<String, i32>,
+    id_map: fnv::FnvHashMap<String, i32>,
 }
 
 impl SymbolGenerator {
     /// Initialize a SymbolGenerator with no existing symbols.
     pub fn new() -> SymbolGenerator {
-        SymbolGenerator { id_map: HashMap::new() }
+        SymbolGenerator { id_map: fnv::FnvHashMap::default() }
     }
 
     /// Initialize a SymbolGenerator from all the symbols defined in an expression.
     pub fn from_expression<T: TypeBounds>(expr: &Expr<T>) -> SymbolGenerator {
-        let mut id_map: HashMap<String, i32> = HashMap::new();
+        let mut id_map: fnv::FnvHashMap<String, i32> = fnv::FnvHashMap::default();
 
-        let update_id = |id_map: &mut HashMap<String, i32>, symbol: &Symbol| {
+        let update_id = |id_map: &mut fnv::FnvHashMap<String, i32>, symbol: &Symbol| {
             let id = id_map.entry(symbol.name.clone()).or_insert(0);
             *id = max(*id, symbol.id);
         };

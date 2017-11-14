@@ -12,7 +12,18 @@ int main() {
     weld_error_t e = weld_error_new();
     weld_conf_t conf = weld_conf_new();
 
-    weld_conf_set(conf, "weld.compile.multithread_support", "false");
+    // Some example configuration parameters.
+    
+    // Disable multithreading support
+    weld_conf_set(conf, "weld.compile.multithreadSupport", "false");
+
+    // Print out the SIR while we execute. This is useful for debugging a crashing
+    // program.
+    weld_conf_set(conf, "weld.compile.traceExecution", "true");
+
+    // Set a small 1KB memory memory limit for the runtime. We don't need more than
+    // that for this simple program!
+    weld_conf_set(conf, "weld.memory.limit", "1024");
 
     weld_module_t m = weld_module_compile("|x:i64| x+5L", conf, e);
     weld_conf_free(conf);

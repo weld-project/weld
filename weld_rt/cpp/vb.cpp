@@ -51,7 +51,7 @@ extern "C" void *weld_rt_new_vb(int64_t elem_size, int64_t starting_cap, int32_t
   return vb;
 }
 
-extern "C" void weld_rt_new_vb_piece(void *v, work_t *w) {
+extern "C" void weld_rt_new_vb_piece(void *v, work_t *w, int32_t is_init_piece) {
   vec_builder *vb = (vec_builder *)v;
   vec_piece *cur_piece = (vec_piece *)weld_rt_get_merger_at_index(vb->thread_curs, sizeof(vec_piece),
     weld_rt_thread_id());
@@ -74,7 +74,11 @@ extern "C" void weld_rt_new_vb_piece(void *v, work_t *w) {
     cur_piece->size = 0;
     cur_piece->capacity = vb->starting_cap;
   } else {
-    cur_piece->data = (uint8_t *)vb->fixed_vector + vb->elem_size * w->cur_idx;
+    // If this is the initial piece (i.e. the one created right after the vb is created),
+    // we want to use an offset of 0. Only for pieces created for new tasks should an
+    // offset of w->cur_idx be used.
+    cur_piece->data = (uint8_t *)vb->fixed_vector +
+      (is_init_piece ? 0 : vb->elem_size * w->cur_idx);
     cur_piece->size = 0;
     cur_piece->capacity = vb->starting_cap; // larger than the real capacity for this task,
     // but it doesn't matter because the real capacity won't be reached in the fixed case
