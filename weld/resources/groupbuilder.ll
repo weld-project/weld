@@ -17,8 +17,9 @@
 
 define {DICT} @{NAME}({KV_VEC}.bld %pairs) {{
 entry:
-  %size = call i64 {KV_VEC_PREFIX}.bld.size({KV_VEC}.bld %pairs, i32 0)
-  %elements = call %{KV_STRUCT}* {KV_VEC_PREFIX}.bld.at({KV_VEC}.bld %pairs, i64 0, i32 0)
+  %constructed = call {KV_VEC} {KV_VEC_PREFIX}.bld.result({KV_VEC}.bld %pairs)
+  %size = call i64 {KV_VEC_PREFIX}.size({KV_VEC} %constructed)
+  %elements = call %{KV_STRUCT}* {KV_VEC_PREFIX}.at({KV_VEC} %constructed, i64 0)
   %elementsRaw = bitcast %{KV_STRUCT}* %elements to i8*
   %elemPtr = getelementptr %{KV_STRUCT}, %{KV_STRUCT}* null, i64 1
   %elemSize = ptrtoint %{KV_STRUCT}* %elemPtr to i64
@@ -79,6 +80,8 @@ copyLoopDone:
   br label %outerLoop
 
 done:
+  %rid = call i64 @weld_rt_get_run_id()
+  call void @weld_run_free(i64 %rid, i8* %elementsRaw)
   ret {DICT} %dict2
 }}
 
