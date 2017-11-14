@@ -575,7 +575,7 @@ def pivot_table(expr, value_index, value_ty, index_index, index_ty, columns_inde
     );
     let agg_dict = result(bs.$0);
     let ind_vec = sort(map(tovec(result(bs.$1)), |x| x.$0), |x| x);
-    let col_vec = map(tovec(result(bs.$2)), |x| x.$0);
+    let col_vec = sort(map(tovec(result(bs.$2)), |x| x.$0), |x| x);
     let pivot = map(
       col_vec,
       |x:%(cty)s|
@@ -618,6 +618,58 @@ def get_pivot_column(pivot, column_name, column_type):
     weld_obj.weld_code = weld_template % {"piv":pivot_var,
                                           "cty":column_type,
                                           "colnm":column_name_var}
+    return weld_obj
+
+def pivot_sort(pivot, column_name, column_type, pivot_type):
+    weld_obj = WeldObject(encoder_, decoder_)
+
+    pivot_var = weld_obj.update(pivot)
+    if isinstance(pivot, WeldObject):
+        pivot_var = pivot.obj_id
+        weld_obj.dependencies[pivot_var] = pivot
+
+    column_name_var = weld_obj.update(column_name)
+    if isinstance(column_name, WeldObject):
+        column_name_var = column_name.obj_id
+        weld_obj.dependencies[column_name_var] = column_name
+
+    weld_template = """
+      let col_dict = result(for(
+        %(piv)s.$2,
+        dictmerger[%(cty)s,i64,+],
+        |b, i, e| merge(b, {e, i})
+      ));
+      let key_col = lookup(%(piv)s.$1, 2L);
+      let sorted_indices = map(
+        sort(
+          result(
+            for(
+              key_col,
+              appender[{%(pvty)s,i64}],
+              |b,i,e| merge(b, {e,i})
+            )
+          ),
+          |x| x.$0
+        ),
+        |x| x.$1
+      );
+      let new_piv = map(
+        %(piv)s.$1,
+        |x| result(
+          for(
+            x,
+            appender[%(pvty)s],
+            |b,i,e| merge(b, lookup(x, lookup(sorted_indices, i)))
+          )
+        )
+      );
+    {%(piv)s.$0, new_piv, %(piv)s.$2}
+    """
+
+    weld_obj.weld_code = weld_template % {"piv": pivot_var,
+                                          "cty": column_type,
+                                          "colnm": column_name_var,
+                                          "pvty": pivot_type}
     return weld_obj
 
 def set_pivot_column(pivot, column_name, item, pivot_type, column_type):

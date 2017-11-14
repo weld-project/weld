@@ -2449,9 +2449,11 @@ impl LlvmGenerator {
                                     }
                                 }
                                 // Add key function and sort prelude code
+                                let name = self.vec_names.get(elem_ty).unwrap();
                                 self.prelude_code.add(format!(
-                                    "define {} @{}({}) {{",
+                                    "define {} @{}.{}({}) {{",
                                     key_ll_ty,
+                                    &name.replace("%", ""),
                                     func_str,
                                     str_args));
                                 self.prelude_code.add(keyfunc_ctx.alloca_code.result());
@@ -2459,7 +2461,6 @@ impl LlvmGenerator {
                                 self.prelude_code.add(format!("{}.ret = load {}, {}* {}",
                                                               key_ll_sym, key_ll_ty, key_ll_ty, key_ll_sym));
                                 self.prelude_code.add(format!("ret {} {}.ret\n}}", key_ll_ty, key_ll_sym));
-                                let name = self.vec_names.get(elem_ty).unwrap();
                                 self.prelude_code.add(format!(
                                     include_str!("resources/vector/vector_sort.ll"),
                                     ELEM=&elem_ll_ty,
@@ -2485,9 +2486,11 @@ impl LlvmGenerator {
                                     }
                                 }
                                 // Add key function and sort prelude code
+                                let name = self.vec_names.get(elem_ty).unwrap();
                                 self.prelude_code.add(format!(
-                                    "define {} @{}({}) {{",
+                                    "define {} @{}.{}({}) {{",
                                     key_ll_ty,
+                                    &name.replace("%", ""),
                                     func_str,
                                     str_args));
                                 self.prelude_code.add(keyfunc_ctx.alloca_code.result());
@@ -2495,7 +2498,6 @@ impl LlvmGenerator {
                                 self.prelude_code.add(format!("{}.ret = load {}, {}* {}",
                                                               key_ll_sym, key_ll_ty, key_ll_ty, key_ll_sym));
                                 self.prelude_code.add(format!("ret {} {}.ret\n}}", key_ll_ty, key_ll_sym));
-                                let name = self.vec_names.get(elem_ty).unwrap();
                                 self.prelude_code.add(format!(
                                     include_str!("resources/vector/vector_sort.ll"),
                                     ELEM=&elem_ll_ty,

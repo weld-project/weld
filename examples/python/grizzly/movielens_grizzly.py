@@ -34,8 +34,8 @@ active_titles = ratings_by_title.index[ratings_by_title >= 250]
 
 mean_ratings = mean_ratings.loc[active_titles]
 mean_ratings['diff'] = mean_ratings['M'] - mean_ratings['F']
-print mean_ratings.evaluate(True).to_pandas()
 sorted_by_diff = mean_ratings.sort_values(by='diff')
+print sorted_by_diff.evaluate(True).to_pandas()
 rating_std_by_title = data.groupby('title')['rating'].std()
 rating_std_by_title = rating_std_by_title.loc[active_titles]
 

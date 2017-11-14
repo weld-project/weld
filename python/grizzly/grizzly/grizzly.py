@@ -160,6 +160,22 @@ class DataFrameWeldExpr:
         elif axis == 1:
             raise Exception("Div not implemented yet for axis = 0")
 
+    def sort_values(self, by):
+        if self.is_pivot:
+            return DataFrameWeldExpr(
+                grizzly_impl.pivot_sort(
+                    self.expr,
+                    by,
+                    self.column_types[2].elemType,
+                    self.column_types[1].elemType.elemType
+                ),
+                self.column_names,
+                self.weld_type,
+                is_pivot=True
+            )
+        else:
+            raise Expcetion("sort_values needs to be implemented for non pivot tables")
+
     def evaluate(self, verbose=True):
         """Summary
 
