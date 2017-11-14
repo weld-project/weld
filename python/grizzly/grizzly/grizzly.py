@@ -164,7 +164,6 @@ class DataFrameWeldExpr:
             rest_types_d2.append(df2.column_types[i])
 
         new_types = key_index_types + rest_types_d1 + rest_types_d2
-        print new_column_names
         return DataFrameWeldExpr(
             grizzly_impl.join(
                 self.expr,
