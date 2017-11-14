@@ -19,8 +19,12 @@ movies = pd.read_table('data/ml-1m/movies.dat', sep='::', header=None,
                        names=mnames)
 
 start = time.time()
+ratings = gr.DataFrameWeld(ratings)
+users = gr.DataFrameWeld(users)
+movies = gr.DataFrameWeld(movies)
 
-data = pd.merge(pd.merge(ratings, users), movies)
+data = gr.merge(gr.merge(ratings, users), movies).evaluate(True).to_pandas()
+print data
 print "Time to merge:", (time.time() - start)
 data = gr.DataFrameWeld(data)
 mean_ratings = data.pivot_table('rating', index='title', columns='gender',

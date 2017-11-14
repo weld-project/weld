@@ -639,13 +639,78 @@ def count(array, ty):
 
     return weld_obj
 
+def join(expr1, expr2, d1_keys, d2_keys, keys_type, d1_vals, df1_vals_ty, d2_vals, df2_vals_ty):
+    """
+       Computes a join on two tables
+    """
+    weld_obj = WeldObject(encoder_, decoder_)
+
+    df1_var = weld_obj.update(expr1)
+    if isinstance(expr1, WeldObject):
+        df1_var = expr1.obj_id
+        weld_obj.dependencies[df1_var] = expr1
+
+    df2_var = weld_obj.update(expr2)
+    if isinstance(expr2, WeldObject):
+        df2_var = expr2.obj_id
+        weld_obj.dependencies[df2_var] = expr2
+
+    d1_key_fields = ", ".join(["e.$%s" % k for k in d1_keys])
+    if len(d1_keys) > 1:
+        d1_key_struct = "{%s}" % (d1_key_fields)
+    else:
+        d1_key_struct = d1_key_fields
+
+    d1_val_fields = ", ".join(["e.$%s" % k for k in d1_vals])
+
+    d2_key_fields = ", ".join(["e.$%s" % k for k in d2_keys])
+    if len(d2_keys) > 1:
+        d2_key_struct = "{%s}" % (d2_key_fields)
+    else:
+        d2_key_struct = d2_key_fields
+
+    d2_val_fields = ", ".join(["e.$%s" % k for k in d2_vals])
+    d2_val_fields2 = ", ".join(["e2.$%s" % i for i, k in enumerate(d2_vals)])
+    d2_val_struct = "{%s}" % (d2_val_fields)
+
+    weld_template = """
+    let df2_join_table = result(
+      for(
+        %(df2)s,
+        groupmerger[%(kty)s, %(df2ty)s],
+        |b, i, e| merge(b, {%(df2key)s, %(df2vals)s})
+      )
+    );
+
+    result(for(
+      %(df1)s,
+      appender,
+      |b, i, e|
+        for(
+          lookup(df2_join_table, %(df1key)s),
+          b,
+          |b2, i2, e2| merge(b, {%(df1key)s, %(df1vals)s, %(df2vals2)s})
+        )
+    ))
+    """
+
+    weld_obj.weld_code = weld_template % {"df1":df1_var,
+                                          "df1key":d1_key_struct,
+                                          "df1vals": d1_val_fields,
+                                          "df2":df2_var,
+                                          "kty":keys_type,
+                                          "df2ty":df2_vals_ty,
+                                          "df2key":d2_key_struct,
+                                          "df2vals":d2_val_struct,
+                                          "df2vals2":d2_val_fields2}
+    return weld_obj
+
 def pivot_table(expr, value_index, value_ty, index_index, index_ty, columns_index, columns_ty, aggfunc):
     """
     Constructs a pivot table where the index_index and columns_index are used as keys and the value_index is used as the value which is aggregated.
     """
 
     weld_obj = WeldObject(encoder_, decoder_)
-    print aggfunc
     zip_var = weld_obj.update(expr)
     if isinstance(expr, WeldObject):
         zip_var = expr.obj_id

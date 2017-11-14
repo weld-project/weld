@@ -19,7 +19,7 @@ movies = pd.read_table('data/ml-1m/movies.dat', sep='::', header=None,
 
 start = time.time()
 data = pd.merge(pd.merge(ratings, users), movies)
-
+print data
 print "Time to merge:", (time.time() - start)
 # TODO: Change this back to mean
 mean_ratings = data.pivot_table('rating', index='title', columns='gender',

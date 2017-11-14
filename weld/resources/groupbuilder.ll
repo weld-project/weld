@@ -13,9 +13,11 @@
 ; - VALUE_VEC: name of vector of VALUEs
 ; - VALUE_VEC_PREFIX: prefix for helper functions of VALUE_VEC
 ; - DICT: name of generated dictionary (of (key, vec[value]))
+; - DICTTY: The type variable of the dictionary. This is solely for the purpose of avoiding name collision.
+;           when there are two different groupbuilders. TODO: Look for cleaner solution.
 ; - DICT_PREFIX: prefix for helper functions of DICT
 
-define {DICT} @{NAME}({KV_VEC}.bld %pairs) {{
+define {DICT} @{DICTTY}.{NAME}({KV_VEC}.bld %pairs) {{
 entry:
   %constructed = call {KV_VEC} {KV_VEC_PREFIX}.bld.result({KV_VEC}.bld %pairs)
   %size = call i64 {KV_VEC_PREFIX}.size({KV_VEC} %constructed)
@@ -23,7 +25,7 @@ entry:
   %elementsRaw = bitcast %{KV_STRUCT}* %elements to i8*
   %elemPtr = getelementptr %{KV_STRUCT}, %{KV_STRUCT}* null, i64 1
   %elemSize = ptrtoint %{KV_STRUCT}* %elemPtr to i64
-  call void @qsort(i8* %elementsRaw, i64 %size, i64 %elemSize, i32 (i8*, i8*)* @{NAME}.helper)
+  call void @qsort(i8* %elementsRaw, i64 %size, i64 %elemSize, i32 (i8*, i8*)* @{DICTTY}.{NAME}.helper)
   %dict = call {DICT} {DICT_PREFIX}.new(i64 16)
   br label %outerLoop
 
@@ -86,7 +88,7 @@ done:
 }}
 
 ; Helper function that compares two {KV_STRUCT}* by key (but takes i8* for use with qsort).
-define i32 @{NAME}.helper(i8* %p1, i8* %p2) {{
+define i32 @{DICTTY}.{NAME}.helper(i8* %p1, i8* %p2) {{
   %kv1 = bitcast i8* %p1 to %{KV_STRUCT}*
   %kv2 = bitcast i8* %p2 to %{KV_STRUCT}*
   %kPtr1 = getelementptr %{KV_STRUCT}, %{KV_STRUCT}* %kv1, i64 0, i32 0

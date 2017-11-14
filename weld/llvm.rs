@@ -2953,8 +2953,7 @@ impl LlvmGenerator {
             }
 
             GroupMerger(ref kt, ref vt) => {
-                let mut func_gen = IdGenerator::new("%func");
-                let function_id = func_gen.next();
+                let function_id = ctx.var_ids.next();
                 let func_str = llvm_prefix(&&function_id);
                 let bld_ty = Dict(kt.clone(), Box::new(Vector(vt.clone())));
                 let elem = Box::new(Struct(vec![*kt.clone(), *vt.clone()]));
@@ -2977,6 +2976,7 @@ impl LlvmGenerator {
 
                 let groupmerger_def = format!(include_str!("resources/groupbuilder.ll"),
                     NAME=&function_id.replace("%", ""),
+                    DICTTY=&bld_ty_str.replace("%", ""),
                     KEY_PREFIX=&key_prefix,
                     KEY=&key_ty,
                     VALUE_VEC_PREFIX=&value_vec_prefix,
@@ -2992,10 +2992,11 @@ impl LlvmGenerator {
                 let res_ty_str = self.llvm_type(&res_ty)?;
                 let bld_tmp = self.gen_load_var(llvm_symbol(builder).as_str(), &kv_vec_builder_ty, ctx)?;
                 let res_tmp = ctx.var_ids.next();
-                ctx.code.add(format!("{} = call {} {}({} {})",
+                ctx.code.add(format!("{} = call {} @{}.{}({} {})",
                                       res_tmp,
                                       bld_ty_str,
-                                      func_str,
+                                      bld_ty_str.replace("%", ""),
+                                      func_str.replace("@", ""),
                                       kv_vec_builder_ty,
                                       bld_tmp));
                 self.gen_store_var(&res_tmp, &llvm_symbol(output), &res_ty_str, ctx);

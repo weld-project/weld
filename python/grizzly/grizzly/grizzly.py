@@ -128,6 +128,59 @@ class DataFrameWeldExpr:
     def loc(self):
         return DataFrameWeldLoc(self)
 
+    def merge(self, df2):
+        if not isinstance(df2, DataFrameWeldExpr):
+            raise Exception("df2 must be of type DataFrameWeldExpr")
+
+        keys_d1 = set(self.colindex_map.keys())
+        keys_d2 = set(df2.colindex_map.keys())
+        join_keys = keys_d1 & keys_d2
+        key_index_d1 = [self.colindex_map[key] for key in join_keys]
+        key_index_d2 = [df2.colindex_map[key] for key in join_keys]
+        rest_keys_d1 = keys_d1.difference(join_keys)
+        rest_keys_d2 = keys_d2.difference(join_keys)
+        rest_index_d1 = [self.colindex_map[key] for key in rest_keys_d1]
+        rest_index_d2 = [df2.colindex_map[key] for key in rest_keys_d2]
+
+        new_column_names = list(join_keys) + list(rest_keys_d1) + list(rest_keys_d2)
+
+        # We add the key column first, followed by those in self, and finally df2
+
+        key_index_types = []
+        for i in key_index_d1:
+            key_index_types.append(self.column_types[i])
+
+        if len(key_index_types) > 1:
+            join_keys_type = WeldStruct(key_index_types)
+        else:
+            join_keys_type = key_index_types[0]
+
+        rest_types_d1 = []
+        for i in rest_index_d1:
+            rest_types_d1.append(self.column_types[i])
+
+        rest_types_d2 = []
+        for i in rest_index_d2:
+            rest_types_d2.append(df2.column_types[i])
+
+        new_types = key_index_types + rest_types_d1 + rest_types_d2
+        print new_column_names
+        return DataFrameWeldExpr(
+            grizzly_impl.join(
+                self.expr,
+                df2.expr,
+                key_index_d1,
+                key_index_d2,
+                join_keys_type,
+                rest_index_d1,
+                WeldStruct(rest_types_d1),
+                rest_index_d2,
+                WeldStruct(rest_types_d2)
+            ),
+            new_column_names,
+            WeldStruct(new_types)
+        )
+
     def pivot_table(self, values, index, columns, aggfunc='sum'):
         value_index = self.colindex_map[values]
         index_index = self.colindex_map[index]
@@ -229,18 +282,23 @@ class DataFrameWeldExpr:
             return DataFrameWeld(pd.DataFrame(df_dict, index=index))
         else:
             df = pd.DataFrame(columns=[])
-            i = 0
-            for column_name in self.column_names:
-                index = i
-                df[column_name] = self.get_column(
-                    column_name,
-                    self.column_types[i],
-                    index,
-                    verbose=verbose
-                )
-                i += 1
+            weldvec_type_list = []
+            for type in self.column_types:
+                weldvec_type_list.append(WeldVec(type))
 
-                return DataFrameWeld(df)
+            columns = LazyOpResult(
+                grizzly_impl.unzip_columns(
+                    self.expr,
+                    self.column_types
+                ),
+                WeldStruct(weldvec_type_list),
+                0
+            ).evaluate(verbose=verbose)
+
+            for i, column_name in enumerate(self.column_names):
+                df[column_name] = columns[i]
+
+            return DataFrameWeld(df)
 
     def get_column(self, column_name, column_type, index, verbose=True):
         """Summary
@@ -262,6 +320,53 @@ class DataFrameWeldExpr:
             column_type,
             1
         ).evaluate(verbose=verbose)
+
+def merge(df1, df2):
+    if isinstance(df1, DataFrameWeld):
+        # TODO need to passin filtering by predicates as well here
+        tys = []
+        for col_name, raw_column in df1.raw_columns.items():
+            dtype = str(raw_column.dtype)
+            if dtype == 'object' or dtype == '|S64':
+                weld_type = WeldVec(WeldChar())
+            else:
+                weld_type = grizzly_impl.numpy_to_weld_type_mapping[dtype]
+            tys.append(weld_type)
+
+        if len(tys) == 1:
+            weld_type = tys[0]
+        else:
+            weld_type = WeldStruct(tys)
+
+        df1 = DataFrameWeldExpr(
+            grizzly_impl.zip_columns(
+                df1.raw_columns.values()
+            ),
+            df1.raw_columns.keys(),
+            weld_type
+        )
+    if isinstance(df2, DataFrameWeld):
+        tys = []
+        for col_name, raw_column in df2.raw_columns.items():
+            dtype = str(raw_column.dtype)
+            if dtype == 'object' or dtype == '|S64':
+                weld_type = WeldVec(WeldChar())
+            else:
+                weld_type = grizzly_impl.numpy_to_weld_type_mapping[dtype]
+            tys.append(weld_type)
+
+        if len(tys) == 1:
+            weld_type = tys[0]
+        else:
+            weld_type = WeldStruct(tys)
+        df2 = DataFrameWeldExpr(
+            grizzly_impl.zip_columns(
+                df2.raw_columns.values()
+            ),
+            df2.raw_columns.keys(),
+            weld_type
+        )
+    return df1.merge(df2)
 
 def group(exprs):
     weld_type = [to_weld_type(expr.weld_type, expr.dim) for expr in exprs]
