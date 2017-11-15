@@ -54,9 +54,7 @@ Transformation routines:
     3. hstack
 '''
 def transpose(*args, **kwargs):
-    print('in our transpose!')
     input1 = args[0]
-    print(type(input1))
     w = np.transpose(*args, **kwargs)
     # create the weldarray view.
     if isinstance(input1, weldarray):

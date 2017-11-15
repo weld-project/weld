@@ -83,6 +83,7 @@ class WeldObject(object):
 
         # Weld program
         self.weld_code = ""
+        self.inplace_weld_code = None
         self.dependencies = {}
 
         # Assign a unique ID to the context
@@ -130,16 +131,27 @@ class WeldObject(object):
         while len(queue) > 0:
             cur_obj = queue.pop()
             cur_obj_id = cur_obj.obj_id
+            # print('cur obj id = ', cur_obj_id)
             if cur_obj_id in visited:
                 continue
-            if not is_first:
+            if is_first and cur_obj.inplace_weld_code is not None:
+                let_statements.insert(0, "let %s = (%s);" % (cur_obj_id, cur_obj.inplace_weld_code))
+            elif not is_first:
                 let_statements.insert(0, "let %s = (%s);" % (cur_obj_id, cur_obj.weld_code))
+
+            # if not is_first:
+                # let_statements.insert(0, "let %s = (%s);" % (cur_obj_id, cur_obj.weld_code))
+
             is_first = False
             for key in sorted(cur_obj.dependencies.keys()):
+                # print('key = ', key)
                 queue.append(cur_obj.dependencies[key])
             visited.add(cur_obj_id)
         let_statements.sort()  # To ensure that let statements are in the right
                                # order in the final generated program
+
+        # for s in let_statements:
+            # print('s: ', s)
         return "\n".join(let_statements)
 
     def to_weld_func(self):
@@ -152,6 +164,8 @@ class WeldObject(object):
         keys = self.dependencies.keys()
         keys.sort()
         text = header + " " + self.get_let_statements() + "\n" + self.weld_code
+        # print('final code: ')
+        # print(text)
         return text
 
     def evaluate(self, restype, verbose=True, decode=True):

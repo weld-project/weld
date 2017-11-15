@@ -96,7 +96,6 @@ class weldarray(np.ndarray):
             base_array = self
             par_start = 0
         else:
-            # FIXME: Should be simply passing the start arg and base array to _get_segments.
             # assert False, 'nested views, need to fix this still'
             base_array = self._weldarray_view.base_array
             par_start = self._weldarray_view.start
@@ -105,11 +104,8 @@ class weldarray(np.ndarray):
         start = (addr(new_arr) - addr(self)) / self.itemsize
         # TODO: temporarily needed.
         end = 1
-        stride = 1
-        shape = np.array(new_arr.shape)
-        strides = np.array(new_arr.strides)
-        for i, s in enumerate(strides):
-            strides[i] = s / self.itemsize
+        shape = new_arr.shape
+        strides = new_arr.strides
         for s in shape:
             end = end*s
         end += start
@@ -118,7 +114,6 @@ class weldarray(np.ndarray):
         new_arr._weldarray_view = weldarray_view(base_array, self, start, end, idx,
                 shape=shape, strides=strides)
         return new_arr
-
 
     def __getitem__(self, idx):
         '''
@@ -175,38 +170,13 @@ class weldarray(np.ndarray):
             if not is_view_child(ret.view(np.ndarray), self.view(np.ndarray)):
                 # FIXME: transpose case here...
                 # just create new weldarray and return i guess?
+                # if isinstance(ret, np.ndarray):
+                    # return weldarray(ret)
+                # else:
+                    # return ret
                 assert False, 'view is not child'
+
             return self._gen_weldview(ret, idx)
-
-            # ret = weldarray(ret, verbose=self._verbose)
-            # # FIXME: Do stuff with views being grandchildren here.
-            # # now let's create the weldarray view with the starts/stops/steps
-            # if self._weldarray_view is None:
-                # base_array = self
-                # par_start = 0
-            # else:
-                # # FIXME: Should be simply passing the start arg and base array to _get_segments.
-                # assert False, 'nested views, need to fix this still'
-                # # base_array = self._weldarray_view.base_array
-                # # par_start = self._weldarray_view.start
-
-            # # FIXME: cleaner way to calculate start?
-            # start = (addr(ret) - addr(self)) / self.itemsize
-            # # TODO: temporarily needed.
-            # end = 1
-            # stride = 1
-            # shape = np.array(ret.shape)
-            # strides = np.array(ret.strides)
-            # for i, s in enumerate(strides):
-                # strides[i] = s / self.itemsize
-            # for s in shape:
-                # end = end*s
-            # end += start
-
-            # # ret is a view, so initialize its weldview.
-            # ret._weldarray_view = weldarray_view(base_array, self, start, end, idx,
-                    # shape=shape, strides=strides)
-            # return ret
 
         elif isinstance(idx, np.ndarray) or isinstance(idx, list):
             # FIXME: This could be a view if list is contig numbers? Test + update.
@@ -248,20 +218,17 @@ class weldarray(np.ndarray):
             update_str = str(val) + suffix
             arr._update_range(index, index+1, update_str)
         
-        # print('WARNING: offloading setitem to numpy...in place ops arent quite working well here')
+        print('WARNING: offloading setitem to numpy...in place ops arent quite working well here')
         # Offloading to numpy method:
         if isinstance(idx, slice):
             if self._weldarray_view is not None:
                 view_idx = self._weldarray_view.idx
-                # base_array = self._weldarray_view.base_array._eval().view(np.ndarray)
-                base_array = self._weldarray_view.base_array.view(np.ndarray)
-                # update the idx.
-                new_start = idx.start + self._weldarray_view.start
-                new_stop = idx.stop + self._weldarray_view.start
-                new_idx = slice(new_start, new_stop, idx.step)
-                base_array.__setitem__(new_idx, val)
-                # base_array.__setitem__(idx, val)
+                view_strides = self._weldarray_view.strides
+                # TODO: not sure which of these to do.
+                base_array = self._weldarray_view.base_array._eval().view(np.ndarray)
                 ret = base_array[view_idx]
+                ret.strides = view_strides
+                ret.__setitem__(idx, val)
             else:
                 ret = self._eval()
                 ret.__setitem__(idx, val)
@@ -337,8 +304,10 @@ class weldarray(np.ndarray):
         will just pass it on to numpy.
         '''
         if len(input_args) > 2:
+            print('WARNING: Length of input args > 2. Will be offloaded to numpy')
             return False
         if 'axis' in kwargs and kwargs['axis'] is not None:
+            print('WARNING: axis kwargs not None. Will be offloaded to numpy')
             return False
 
         arrays = []
@@ -346,16 +315,21 @@ class weldarray(np.ndarray):
         for i in input_args:
             if isinstance(i, np.ndarray):
                 if not str(i.dtype) in SUPPORTED_DTYPES:
+                    print('WARNING {} not in supported dtypes. Will be offloaded to \
+                            numpy'.format(str(i.dtype)))
                     return False
                 if len(i) == 0:
+                    print('WARNING: length 0 array. Will be offloaded to numpy')
                     return False
                 arrays.append(i)
             elif isinstance(i, list):
+                print('WARNING: input is a list. Will be offloaded to numpy')
                 return False
             else:
                 scalars.append(i)
 
         if len(arrays) == 2 and arrays[0].dtype != arrays[1].dtype:
+            print('WARNING: array dtypes do not match. Will be offloaded to numpy')
             return False
 
         # handle all scalar based tests here - later will just assume that scalar type is correct,
@@ -365,6 +339,7 @@ class weldarray(np.ndarray):
         elif len(arrays) == 1 and len(scalars) == 1:
             # need to test for bool before int because it True would be instance of int as well.
             if isinstance(scalars[0], bool):
+                print('WARNING: scalar input is boolean. Will be offloaded to numpy')
                 return False
             elif isinstance(scalars[0], float):
                 pass
@@ -372,11 +347,15 @@ class weldarray(np.ndarray):
                 pass
             # assuming its np.float32 etc.
             elif not str(scalars[0].dtype) in SUPPORTED_DTYPES:
+                print('WARNING: scalar dtype not in supported dtypes. Will be offloaded to numpy')
                 return False
             else:
-                weld_type = SUPPORTED_DTYPES[str(scalars[0].dtype)]
-                if weld_type != arrays[0]._weld_type:
+                scalar_weld_type = SUPPORTED_DTYPES[str(scalars[0].dtype)]
+                array_weld_type = arrays[0]._weld_type
+                if scalar_weld_type != array_weld_type:
+                    print('WARNING: scalar weld type {} != array weld type {}'.format(scalar_weld_type, array_weld_type))
                     return False
+ 
         # check ouput.
         if outputs:
             # if the output is not weldarray, then let np deal with it.
@@ -393,10 +372,10 @@ class weldarray(np.ndarray):
         TODO: support other type of methods?
         @method: call, __reduce__,
         '''
-
         input_args = [inp for inp in inputs]
         outputs = kwargs.pop('out', None)
         supported = self._process_ufunc_inputs(input_args, outputs, kwargs)
+
         output = None
         if supported and method == '__call__':
             output = self._handle_call(ufunc, input_args, outputs, kwargs)
@@ -412,7 +391,7 @@ class weldarray(np.ndarray):
         '''
         relegate responsibility of executing ufunc to numpy.
         '''
-        # print('WARNING: ufunc being offloaded to numpy', ufunc)
+        print('WARNING: ufunc being offloaded to numpy', ufunc)
         # Relegating the work to numpy. If input arg is weldarray, evaluate it,
         # and convert to ndarray before passing to super()
         for i, arg_ in enumerate(input_args):
@@ -510,18 +489,23 @@ class weldarray(np.ndarray):
         Internal call - used at various points to implicitly evaluate self. Users should instead
         call evaluate which would return a weldarray as expected. This returns an ndarray.
         '''
+        # print('!!!!!!!!!!!!!!!!IN _EVAL!!!!!!!!!!!!!!!!!!!!!!!!!!')
         # This check has to happen before the caching - as the weldobj/code for views is never updated.
         # TODO: Need to change this condition specifically for in place ops.
         # Case 1: we are evaluating an in place on in an array. So need to evaluate the parent and
         # return the appropriate index.
         if self._weldarray_view:
             idx = self._weldarray_view.idx
+            strides = self._weldarray_view.strides
             if idx:
+                assert strides is not None, 'both should have values'
                 # _eval parent and return appropriate idx.
                 # TODO: Clearly more efficient to _eval the base array as the parent would eventually have to do
                 # it - but this makes it more convenient to deal with different indexing strategies.
                 arr = self._weldarray_view.parent._eval()
-                return arr[self._weldarray_view.idx]
+                arr = arr[self._weldarray_view.idx]
+                arr.strides = strides
+                return arr
             else:
                 # XXX hacky!! FIXME: need to have a better way and more general to deal with transposes.
                 print('hacky eval transpose...')
@@ -531,6 +515,7 @@ class weldarray(np.ndarray):
         if self.name == self.weldobj.weld_code:
             # No new ops have been registered. Avoid creating unneccessary new copies with
             # weldobj.evaluate()
+            # print('name == weld code')
             return self.weldobj.context[self.name]
 
         if restype is None:
@@ -539,6 +524,7 @@ class weldarray(np.ndarray):
         arr = self.weldobj.evaluate(restype, verbose=self._verbose)
 
         if hasattr(arr, '__len__'):
+            # print('reshape to ', self._real_shape)
             arr = arr.reshape(self._real_shape)
         else:
             # TODO: check
@@ -573,16 +559,23 @@ class weldarray(np.ndarray):
         @self: the weld array we want to loop over.
         @res: the result array so we can add the appropriate weldarray contexts to it.
         '''
-        nditer_arr = 'nditer({arr},{start}L,{end}L,1L,{shapes},{strides})'
+        nditer_arr = 'nditer({arr},{start}L,{end}L,1L,{shape},{strides})'
         if self._weldarray_view and not self.flags.contiguous:
-            shapes = res.weldobj.update(self._weldarray_view.shape)
-            strides = res.weldobj.update(self._weldarray_view.strides)
+
+            shape = np.array(self._weldarray_view.shape)
+            strides = np.array(self._weldarray_view.strides)
+
+            for i, s in enumerate(strides):
+                strides[i] = s / self.itemsize
+
+            shape = res.weldobj.update(shape)
+            strides = res.weldobj.update(strides)
             # Note: the start/end/shapes/strides symbols for nditer are valid if we start from
             # the base array.
             arr = nditer_arr.format(arr = self._weldarray_view.base_array.weldobj.weld_code,
                                     start = self._weldarray_view.start,
                                     end = self._weldarray_view.end,
-                                    shapes = shapes,
+                                    shape = shape,
                                     strides = strides)
             res.weldobj.update(self._weldarray_view.base_array.weldobj)
             # TODO: Have a separate case for contiguous views. Check this further -- maybe we
@@ -592,10 +585,19 @@ class weldarray(np.ndarray):
         elif self._weldarray_view and self.flags.contiguous:
             # here we are implicitly assuming that in _get_result we did:
             # result = self._weldarray_view.parent._eval()[idx]
+            # Old code:
             arr = res.weldobj.weld_code
+            # arr = res.weldobj.obj_id
+            # res.weldobj.update(self.weldobj) 
+            # res.weldobj.dependencies[self.weldobj.obj_id] = self.weldobj 
         else:
-            arr = self.weldobj.weld_code
-            res.weldobj.update(self.weldobj)
+            # arr = self.weldobj.weld_code
+            # Add id, and update dependencies for the returned array.
+            assert isinstance(self, weldarray)
+            arr = self.weldobj.obj_id
+            res.weldobj.update(self.weldobj) 
+            res.weldobj.dependencies[self.weldobj.obj_id] = self.weldobj 
+
         return arr
 
     def _unary_op(self, unop, result=None):
@@ -625,6 +627,13 @@ class weldarray(np.ndarray):
                 update_str = '{unop}(e)'.format(unop=unop)
                 v.base_array._update_range(v.start, v.end, update_str)
                 return result
+            else:
+                result = weldarray(result)
+            # This does not quite work with nested in place ops I think?
+            # else:
+                # print('setting up inplace weld code!')
+                # result.weldobj.inplace_weld_code = result.weldobj.weld_code
+
         # back to updating result array
         result.weldobj.update(self.weldobj)
         _update_array_unary_op(result, unop)
@@ -677,13 +686,13 @@ class weldarray(np.ndarray):
             '''
             # which of these is the scalar?
             if not hasattr(input2, "__len__"):
-                template = 'result(for({arr}, appender,|b,i,e| merge(b,e {binop} \
-                {scalar}{suffix})))'
+                template = ('result(for({arr}, appender,|b,i,e| merge(b,e {binop}'
+                '{scalar}{suffix})))')
                 arr = input1._get_array_iter_code(result)
                 scalar = input2
             else:
-                template = 'result(for({arr}, appender,|b,i,e| merge(b,{scalar}{suffix} {binop} \
-                e)))'
+                template = ('result(for({arr}, appender,|b,i,e| merge(b,{scalar}{suffix} {binop}'
+                'e)))')
                 arr = input2._get_array_iter_code(result)
                 scalar = input1
             weld_type = result._weld_type.__str__()
@@ -753,6 +762,11 @@ class weldarray(np.ndarray):
         # Scenario 2b: Non-Inplace ops.
         if result is None:
             result = self._get_result()
+        else:
+            # TODO: TODO this or not TODO?
+            # print('setting up inplace weld code!')
+            # result.weldobj.inplace_weld_code = result.weldobj.weld_code
+            result = weldarray(result)
 
         # Scenario 2: Non Inplace Op + Inplace Op on a non-view.
         input1 = _update_input(input1)
@@ -773,8 +787,8 @@ class weldarray(np.ndarray):
             # inputs are weldarrays by this point.
             arr1 = input1._get_array_iter_code(result)
             arr2 = input2._get_array_iter_code(result)
-            template2 = 'result(for(zip({arr1},{arr2}), appender,|b,i,e| merge(b,e.$0 \
-            {binop} e.$1)))'
+            template2 = ('result(for(zip({arr1},{arr2}), appender,|b,i,e| merge(b,e.$0'
+            ' {binop} e.$1)))')
             result.weldobj.weld_code = template2.format(arr1 = arr1,
                                                         arr2  = arr2,
                                                         binop = binop)

@@ -89,6 +89,7 @@ def test_binary_elemwise():
             np_test, w = random_arrays(NUM_ELS, dtype)
             np_test2, w2 = random_arrays(NUM_ELS, dtype)
             w3 = op(w, w2)
+            # print('w3.code: ', w3.weldobj.weld_code)
             weld_result = w3.evaluate()
             np_result = op(np_test, np_test2)
             # Need array equal to keep matching types for weldarray, otherwise
@@ -201,9 +202,13 @@ def test_views_update_parent():
     effected in the view-child as well.
     '''
     def asserts(w, n, w2, n2):
+        # print('w: ', w)
+        # print('n: ', n)
+        # print('w2: ', w2.evaluate())
+        # print('n2: ', n2)
+        assert np.allclose(w, n)
         assert np.allclose(w[2:4], w2.evaluate())
         assert np.allclose(w2.evaluate(), n2)
-        assert np.allclose(w, n)
 
     n, w = random_arrays(NUM_ELS, 'float32')
     w2 = w[2:4]
@@ -212,16 +217,17 @@ def test_views_update_parent():
     w = np.exp(w, out=w)
     n = np.exp(n, out=n)
     w2.evaluate()
-
-    print(w2)
-    print(w[2:4])
+    
+    print('w.code: ', w.weldobj.weld_code)
     # w2 should have been updated too.
+    print('before first asserts')
     asserts(w, n, w2, n2)
 
     n3, w3 = random_arrays(NUM_ELS, 'float32')
     w = np.add(w, w3, out=w)
     n = np.add(n, n3, out=n)
 
+    print 'before final asserts'
     asserts(w, n, w2, n2)
     assert np.allclose(w3, n3)
 
@@ -654,7 +660,8 @@ def test_getitem_evaluate():
 
     n += n2
     w += w2
-
+    
+    print('w.code: ', w.weldobj.weld_code)
     assert n[0] == w[0]
 
 def test_implicit_evaluate():
@@ -1014,3 +1021,9 @@ def test_erf():
 # test_views_update_child()
 # test_views_mess()
 # test_setitem_views()
+# test_unary_elemwise()
+# test_scalars()
+# test_binary_elemwise()
+# test_getitem_evaluate()
+test_inplace_assignment()
+# test_views_update_parent()

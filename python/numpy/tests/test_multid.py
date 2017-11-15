@@ -4,6 +4,30 @@ import random
 from weldnumpy import *
 from test_utils import *
 
+def diagonal(ary, offset=0):
+    """
+    from bohrium guys.
+    """
+    if ary.ndim != 2:
+        raise Exception("diagonal only supports 2 dimensions\n")
+    if offset < 0:
+        offset = -offset
+        if (ary.shape[0]-offset) > ary.shape[1]:
+            ary_diag = ary[offset, :]
+        else:
+            ary_diag = ary[offset:, 0]
+    else:
+        if ary.shape[1]-offset > ary.shape[0]:
+            ary_diag = ary[:, offset]
+        else:
+            ary_diag = ary[0, offset:]
+    ary_diag.strides = (ary.strides[0]+ary.strides[1],)
+    if isinstance(ary_diag, weldarray):
+        ary_diag._weldarray_view.strides = ary_diag.strides
+
+    return ary_diag
+
+
 '''
 General Notes:
     - Two multi-dim contig arrays with different strides/shapes isn't possible.
@@ -415,7 +439,6 @@ def test_broadcasting_nbody_bug():
 
     numpy_dx = a - n
     weld_dx = b - w
-
     weld_dx = weld_dx.evaluate()
     
     assert numpy_dx.shape == weld_dx.shape, 'shapes must match!'
@@ -436,5 +459,28 @@ def test_sum_axis():
 def test_ops_axis():
     pass
 
-test_broadcasting_nbody_bug()
-# test_transpose_ops()
+def test_diagonal():
+    n, w = random_arrays((5,5), 'float64')
+    n2 = diagonal(n)
+    w2 = diagonal(w)
+    # w2 = w2.evaluate()
+
+    assert n2.shape == w2.shape
+    assert n2.strides == w2.strides
+    assert np.array_equal(n2, w2)
+
+def test_diagonal_setitem():
+    '''
+    functionality required for nbody .
+    '''
+
+    n, w = random_arrays((5,5), 'float64')
+    n2 = diagonal(n)
+    w2 = diagonal(w)
+    n2[:] = 1.0
+    w2[:] = 1.0
+
+    assert np.array_equal(n2, w2)
+    assert np.array_equal(n, w)
+
+# test_diagonal_setitem()
