@@ -333,10 +333,6 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
                 }
                 changed |= try!(push_type(&mut expr.ty, &data.ty, "Sort"));
                 Ok(changed)
-            } else if data.ty == Unknown {
-                // TODO : The type inferencing is giving unkowns for
-                // let x : vec[{a, b}]
-                Ok(false)
             } else {
                 weld_err!("Internal error: Sort called on {:?}, must be called on vector",
                           data.ty)
