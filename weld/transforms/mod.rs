@@ -6,3 +6,4 @@ pub mod inliner;
 pub mod size_inference;
 pub mod annotator;
 pub mod vectorizer;
+pub mod short_circuit;
