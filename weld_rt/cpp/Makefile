@@ -25,13 +25,16 @@ inline.bc: inline.cpp
 vb.o: vb.cpp
 	${CLANG} ${CFLAGS} -c $< -o $@
 
+dict.o: dict.cpp
+	${CLANG} ${CFLAGS} -c $< -o $@
+
 merger.o: merger.cpp
 	${CLANG} ${CFLAGS} -c $< -o $@
 
 runtime.o: runtime.cpp
 	${CLANG} ${CFLAGS} -c $< -o $@
 
-weldrt.o: vb.o merger.o runtime.o inline.o
+weldrt.o: vb.o dict.o merger.o runtime.o inline.o
 	ld -r $^ -o $@
 
 ${LIB}: weldrt.o

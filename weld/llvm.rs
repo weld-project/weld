@@ -1877,7 +1877,6 @@ impl LlvmGenerator {
         let kv_struct_ty = self.llvm_type(&elem)?;
         let kv_vec = Box::new(Vector(elem.clone()));
         let kv_vec_ty = self.llvm_type(&kv_vec)?;
-        let kv_vec_prefix = llvm_prefix(&&kv_vec_ty);
 
         let dict_def = format!(include_str!("resources/dictionary.ll"),
             NAME=&name.replace("%", ""),
@@ -1885,7 +1884,6 @@ impl LlvmGenerator {
             KEY_PREFIX=&key_prefix,
             VALUE=&value_ty,
             KV_STRUCT=&kv_struct_ty,
-            KV_VEC_PREFIX=&kv_vec_prefix,
             KV_VEC=&kv_vec_ty);
 
         self.prelude_code.add(&dict_def);
@@ -1925,17 +1923,12 @@ impl LlvmGenerator {
                 let kv_struct_ty = self.llvm_type(&elem)?;
                 let key_ty = self.llvm_type(kt)?;
                 let value_ty = self.llvm_type(vt)?;
-                let kv_vec = Box::new(Vector(elem.clone()));
-                let kv_vec_ty = self.llvm_type(&kv_vec)?;
-                let kv_vec_prefix = llvm_prefix(&&kv_vec_ty);
 
                 let dictmerger_def = format!(include_str!("resources/dictmerger.ll"),
                     NAME=&bld_ty_str.replace("%", ""),
                     KEY=&key_ty,
                     VALUE=&value_ty,
-                    KV_STRUCT=&kv_struct_ty.replace("%", ""),
-                    KV_VEC_PREFIX=&kv_vec_prefix,
-                    KV_VEC=&kv_vec_ty);
+                    KV_STRUCT=&kv_struct_ty.replace("%", ""));
 
                 self.prelude_code.add(&dictmerger_def);
                 self.prelude_code.add("\n");
@@ -2719,7 +2712,7 @@ impl LlvmGenerator {
                 let bld_tmp = self.gen_load_var(&bld_ll_sym, &bld_ll_ty, ctx)?;
                 let val_tmp = self.gen_load_var(&val_ll_sym, &val_ll_ty, ctx)?;
                 ctx.code.add(format!(
-                    "call {} {}.merge({} {}, {} {}, i32 %cur.tid)",
+                    "call {} {}.merge({} {}, {} {})",
                     bld_ll_ty,
                     bld_prefix,
                     bld_ll_ty,

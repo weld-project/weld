@@ -1,11 +1,12 @@
 #include "runtime.h"
+#include "assert.h"
 
 struct simple_dict {
   void *data;
   int64_t size;
   int64_t capacity;
   bool full; // only local dicts should be marked as full
-}
+};
 
 struct weld_dict {
   void *dicts; // one dict per thread plus a global dict
@@ -17,14 +18,14 @@ struct weld_dict {
   int64_t cur_slot_in_dict;
   bool finalized; // all keys have been moved to global
   pthread_mutex_t global_lock;
-}
+};
 
 inline int32_t slot_size(weld_dict *wd) {
   return sizeof(int32_t) /* space for key hash */ +
     sizeof(uint8_t) /* space for `filled` field */ + wd->key_size + wd->val_size;
 }
 
-inline int32_t kv_size(weld_dict *wd, int32_t post_key_paddings) {
+inline int32_t kv_size(weld_dict *wd, int32_t post_key_padding) {
   return wd->key_size + post_key_padding + wd->val_size;
 }
 
@@ -101,7 +102,7 @@ inline void *simple_dict_lookup(weld_dict *wd, simple_dict *sd, int32_t hash, vo
     void *cur_slot = slot_at((first_offset + i) & (sd->capacity - 1), wd, sd);
     if (*filled_at(cur_slot)) {
       if (collision_possible && *hash_at(cur_slot) == hash &&
-        memcmp(key, key_at(slot), wd->key_size) == 0) {
+        memcmp(key, key_at(cur_slot), wd->key_size) == 0) {
         return cur_slot;
       }
     } else {
@@ -147,12 +148,10 @@ extern "C" void *weld_rt_dict_lookup(void *d, int32_t hash, void *key) {
   return simple_dict_lookup(wd, global, hash, key, true);
 }
 
-// Can only be called when not finalized.
-extern "C" void *weld_rt_dict_put(void *d, void *slot) {
+extern "C" void weld_rt_dict_put(void *d, void *slot) {
   weld_dict *wd = (weld_dict *)d;
   uint8_t old_filled = *filled_at(slot);
-  assert(old_filled || !wd->finalized);
-  if (!wd->finalized && !old_filled) {
+  if (!old_filled) {
     *filled_at(slot) = 1;
     if (slot_in_local(wd, slot)) {
       simple_dict *local = get_local_dict(wd);
@@ -169,12 +168,16 @@ extern "C" void *weld_rt_dict_put(void *d, void *slot) {
       if (should_resize_dict_at_size(global->size, global)) {
         resize_dict(wd, global);
       }
-      pthread_mutex_unlock(&wd->global_lock);
+      if (!wd->finalized) {
+        pthread_mutex_unlock(&wd->global_lock);
+      }
     }
+  } else if (!wd->finalized && !slot_in_local(wd, slot)) {
+    pthread_mutex_unlock(&wd->global_lock);
   }
 }
 
-inline bool advance_finalize_iterator(weld_dict *wd) {
+inline void advance_finalize_iterator(weld_dict *wd) {
   wd->cur_slot_in_dict++;
   if (wd->cur_slot_in_dict == get_dict_at_index(wd, wd->cur_local_dict)->capacity) {
     wd->cur_local_dict++;
@@ -184,6 +187,9 @@ inline bool advance_finalize_iterator(weld_dict *wd) {
 
 extern "C" void *weld_rt_dict_finalize_next_local_slot(void *d) {
   weld_dict *wd = (weld_dict *)d;
+  wd->finalized = true; // immediately mark as finalized ... we expect the client to keep
+  // calling this method until it returns NULL, and only after this perform other operations
+  // on the dictionary
   while (wd->cur_local_dict != weld_rt_get_nworkers()) {
     simple_dict *cur_dict = get_dict_at_index(wd, wd->cur_local_dict);
     void *next_slot = slot_at(wd->cur_slot_in_dict, wd, cur_dict);
@@ -192,17 +198,17 @@ extern "C" void *weld_rt_dict_finalize_next_local_slot(void *d) {
       return next_slot;
     }
   }
-  wd->finalized = true;
   return NULL;
 }
 
 extern "C" void *weld_rt_dict_finalize_global_slot_for_local(void *d, void *local_slot) {
-  return simple_dict_lookup((weld_dict *)d, get_global_dict((weld_dict *)d), *hash_at(slot),
-    key_at(slot), true);
+  void *global_slot = weld_rt_dict_lookup((weld_dict *)d, *hash_at(local_slot), key_at(local_slot));
+  return global_slot;
 }
 
-extern "C" void *weld_rt_dict_to_array(void *d, int32_t post_key_padding) {
+extern "C" void *weld_rt_dict_to_array(void *d, int32_t value_offset_in_struct) {
   weld_dict *wd = (weld_dict *)d;
+  int32_t post_key_padding = value_offset_in_struct - wd->key_size;
   assert(wd->finalized);
   simple_dict *global = get_global_dict(wd);
   void *array = malloc(global->size * kv_size(wd, post_key_padding));
