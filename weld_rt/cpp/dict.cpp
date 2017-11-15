@@ -205,6 +205,11 @@ extern "C" void *weld_rt_dict_finalize_next_local_slot(void *d) {
   return NULL;
 }
 
+extern "C" void *weld_rt_dict_finalize_global_slot_for_local(void *d, void *local_slot) {
+  void *global_slot = weld_rt_dict_lookup((weld_dict *)d, *hash_at(local_slot), key_at(local_slot));
+  return global_slot;
+}
+
 extern "C" void *weld_rt_dict_to_array(void *d, int32_t value_offset_in_struct) {
   weld_dict *wd = (weld_dict *)d;
   int32_t post_key_padding = value_offset_in_struct - wd->key_size;
@@ -224,11 +229,6 @@ extern "C" void *weld_rt_dict_to_array(void *d, int32_t value_offset_in_struct) 
   }
   assert(next_arr_slot == global->size);
   return array;
-}
-
-extern "C" void slot_print_filled(void *slot) {
-  printf("print slot filled: %d\n", *filled_at(slot));
-  printf("print slot: %p\n", slot);
 }
 
 extern "C" int64_t weld_rt_dict_get_size(void *d) {
