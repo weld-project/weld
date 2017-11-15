@@ -21,10 +21,9 @@ start = time.time()
 data = pd.merge(pd.merge(ratings, users), movies)
 print data
 print "Time to merge:", (time.time() - start)
-# TODO: Change this back to mean
+start = time.time()
 mean_ratings = data.pivot_table('rating', index='title', columns='gender',
                                 aggfunc='mean')
-print "Time to merge and create pivot table:", time.time() - start
 
 ratings_by_title = data.groupby('title').size()
 active_titles = ratings_by_title.index[ratings_by_title >= 250]
@@ -37,4 +36,4 @@ rating_std_by_title = rating_std_by_title.loc[active_titles]
 print rating_std_by_title.sort_values(ascending=False)[:10]
 end = time.time()
 
-print "Total time taken:", (end - start)
+print "Time for analysis:", (end - start)
