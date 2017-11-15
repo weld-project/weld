@@ -21,8 +21,8 @@ struct weld_dict {
 };
 
 inline int32_t slot_size(weld_dict *wd) {
-  return sizeof(int32_t) /* space for key hash */ +
-    sizeof(uint8_t) /* space for `filled` field */ + wd->key_size + wd->val_size;
+  return sizeof(uint8_t) /* space for `filled` field */ + wd->key_size + wd->val_size +
+    sizeof(int32_t) /* space for key hash */;
 }
 
 inline int32_t kv_size(weld_dict *wd, int32_t post_key_padding) {
@@ -38,19 +38,19 @@ inline void *slot_at(int64_t slot_offset, weld_dict *wd, simple_dict *sd) {
 }
 
 inline void *key_at(void *slot) {
-  return (void *)((uint8_t *)slot + sizeof(int32_t) + sizeof(uint8_t));
+  return (void *)((uint8_t *)slot + sizeof(uint8_t));
 }
 
 inline void *val_at(weld_dict *wd, void *slot) {
-  return (void *)((uint8_t *)slot + sizeof(int32_t) + sizeof(uint8_t) + wd->key_size);
+  return (void *)((uint8_t *)slot + sizeof(uint8_t) + wd->key_size);
 }
 
-inline int32_t *hash_at(void *slot) {
-  return (int32_t *)slot;
+inline int32_t *hash_at(weld_dict *wd, void *slot) {
+  return (int32_t *)((uint8_t *)slot + sizeof(uint8_t) + wd->key_size + wd->val_size);
 }
 
 inline uint8_t *filled_at(void *slot) {
-  return (uint8_t *)slot + sizeof(int32_t);
+  return (uint8_t *)slot;
 }
 
 inline bool slot_in_local(weld_dict *wd, void *slot) {
@@ -79,7 +79,8 @@ inline simple_dict *get_global_dict(weld_dict *wd) {
 }
 
 extern "C" void *weld_rt_dict_new(int32_t key_size, int32_t val_size, int64_t max_local_bytes, int64_t capacity) {
-  weld_dict *wd = (weld_dict *)calloc(1, sizeof(weld_dict));
+  weld_dict *wd = (weld_dict *)weld_run_malloc(weld_rt_get_run_id(), sizeof(weld_dict));
+  memset(wd, 0, sizeof(weld_dict));
   wd->key_size = key_size;
   wd->val_size = val_size;
   wd->max_local_bytes = max_local_bytes;
@@ -88,7 +89,8 @@ extern "C" void *weld_rt_dict_new(int32_t key_size, int32_t val_size, int64_t ma
     simple_dict *d = get_dict_at_index(wd, i);
     d->size = 0;
     d->capacity = capacity;
-    d->data = calloc(capacity, slot_size(wd));
+    d->data = weld_run_malloc(weld_rt_get_run_id(), capacity * slot_size(wd));
+    memset(d->data, 0, capacity * slot_size(wd));
   }
   pthread_mutex_init(&wd->global_lock, NULL);
   return (void *)wd;
@@ -101,12 +103,12 @@ inline void *simple_dict_lookup(weld_dict *wd, simple_dict *sd, int32_t hash, vo
     // can do the bitwise and because capacity is always a power of two
     void *cur_slot = slot_at((first_offset + i) & (sd->capacity - 1), wd, sd);
     if (*filled_at(cur_slot)) {
-      if (collision_possible && *hash_at(cur_slot) == hash &&
+      if (collision_possible && *hash_at(wd, cur_slot) == hash &&
         memcmp(key, key_at(cur_slot), wd->key_size) == 0) {
         return cur_slot;
       }
     } else {
-      *hash_at(cur_slot) = hash; // store hash here in case we end up filling this slot (no
+      *hash_at(wd, cur_slot) = hash; // store hash here in case we end up filling this slot (no
       // problem if not)
       return cur_slot;
     }
@@ -119,15 +121,17 @@ inline void resize_dict(weld_dict *wd, simple_dict *sd) {
   void *old_data = sd->data;
   int64_t old_capacity = sd->capacity;
   sd->capacity *= 2;
-  sd->data = calloc(sd->capacity, slot_size(wd));
+  sd->data = weld_run_malloc(weld_rt_get_run_id(), sd->capacity * slot_size(wd));
+  memset(sd->data, 0, sd->capacity * slot_size(wd));
   for (int64_t i = 0; i < old_capacity; i++) {
     void *old_slot = slot_at_with_data(i, wd, old_data);
     if (*filled_at(old_slot)) {
       // will never compare the keys when collision_possible = false so can pass NULL
-      void *new_slot = simple_dict_lookup(wd, sd, *hash_at(old_slot), NULL, false);
+      void *new_slot = simple_dict_lookup(wd, sd, *hash_at(wd, old_slot), NULL, false);
       memcpy(new_slot, old_slot, slot_size(wd));
     }
   }
+  weld_run_free(weld_rt_get_run_id(), old_data);
 }
 
 // Can only be doing a lookup to examine value if dict is already finalized. Otherwise must
@@ -201,17 +205,12 @@ extern "C" void *weld_rt_dict_finalize_next_local_slot(void *d) {
   return NULL;
 }
 
-extern "C" void *weld_rt_dict_finalize_global_slot_for_local(void *d, void *local_slot) {
-  void *global_slot = weld_rt_dict_lookup((weld_dict *)d, *hash_at(local_slot), key_at(local_slot));
-  return global_slot;
-}
-
 extern "C" void *weld_rt_dict_to_array(void *d, int32_t value_offset_in_struct) {
   weld_dict *wd = (weld_dict *)d;
   int32_t post_key_padding = value_offset_in_struct - wd->key_size;
   assert(wd->finalized);
   simple_dict *global = get_global_dict(wd);
-  void *array = malloc(global->size * kv_size(wd, post_key_padding));
+  void *array = weld_run_malloc(weld_rt_get_run_id(), global->size * kv_size(wd, post_key_padding));
   int64_t next_arr_slot = 0;
   for (int64_t i = 0; i < global->capacity; i++) {
     void *cur_slot = slot_at(i, wd, global);
@@ -227,6 +226,11 @@ extern "C" void *weld_rt_dict_to_array(void *d, int32_t value_offset_in_struct) 
   return array;
 }
 
+extern "C" void slot_print_filled(void *slot) {
+  printf("print slot filled: %d\n", *filled_at(slot));
+  printf("print slot: %p\n", slot);
+}
+
 extern "C" int64_t weld_rt_dict_get_size(void *d) {
   weld_dict *wd = (weld_dict *)d;
   assert(wd->finalized);
@@ -237,9 +241,9 @@ extern "C" void weld_rt_dict_free(void *d) {
   weld_dict *wd = (weld_dict *)d;
   for (int32_t i = 0; i < weld_rt_get_nworkers() + 1; i++) {
     simple_dict *d = get_dict_at_index(wd, i);
-    free(d->data);
+    weld_run_free(weld_rt_get_run_id(), d->data);
   }
   weld_rt_free_merger(wd->dicts);
   pthread_mutex_destroy(&wd->global_lock);
-  free(wd);
+  weld_run_free(weld_rt_get_run_id(), wd);
 }
