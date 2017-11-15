@@ -113,10 +113,10 @@ extern "C" {
 
   void *weld_rt_dict_new(int32_t key_size, int32_t val_size, int64_t max_local_bytes, int64_t capacity);
   void *weld_rt_dict_lookup(void *d, int32_t hash, void *key);
-  void *weld_rt_dict_put(void *d, void *slot);
+  void weld_rt_dict_put(void *d, void *slot);
   void *weld_rt_dict_finalize_next_local_slot(void *d);
   void *weld_rt_dict_finalize_global_slot_for_local(void *d, void *local_slot);
-  void *weld_rt_dict_to_array(void *d, int32_t post_key_padding);
+  void *weld_rt_dict_to_array(void *d, int32_t value_offset_in_struct);
   int64_t weld_rt_dict_get_size(void *d);
   void weld_rt_dict_free(void *d);
 
