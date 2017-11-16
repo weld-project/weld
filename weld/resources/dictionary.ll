@@ -67,7 +67,7 @@ define %{NAME}.slot @{NAME}.lookup(%{NAME} %dict, {KEY} %key) {{
   %keyPtr = alloca {KEY}
   store {KEY} %key, {KEY}* %keyPtr
   %rawHash = call i32 {KEY_PREFIX}.hash({KEY} %key)
-  %finalizedHash = call i32 @hash_finalize(i32 %raw_hash)
+  %finalizedHash = call i32 @hash_finalize(i32 %rawHash)
   %keyPtrRaw = bitcast {KEY}* %keyPtr to i8*
   %slotRaw = call i8* @weld_rt_dict_lookup(i8* %dict, i32 %finalizedHash, i8* %keyPtrRaw)
   %slot = bitcast i8* %slotRaw to %{NAME}.slot

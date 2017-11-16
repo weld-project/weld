@@ -123,7 +123,7 @@ extern "C" {
   void *weld_rt_gb_new(int32_t key_size, int32_t val_size, int64_t max_local_bytes, int64_t capacity);
   void weld_rt_gb_merge(void *b, void *key, int32_t hash, void *value);
   void *weld_rt_gb_result(void *b);
-  void *weld_rt_gb_free(void *gb);
+  void weld_rt_gb_free(void *gb);
 
   // weld_run functions can be called both from a runtime thread and before/after a Weld computation is
   // executed

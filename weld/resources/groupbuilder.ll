@@ -5,7 +5,7 @@
 ; - KEY: LLVM type of key (e.g. i32 or %MyStruct)
 ; - KEY_PREFIX
 ; - VALUE: LLVM type of value (e.g. i32 or %MyStruct)
-; - KV_STRUCT: LLVM type of {key, value} struct
+; - KV_STRUCT: LLVM type of key,value struct
 
 %{NAME}.gbld = type i8*
 
@@ -31,13 +31,13 @@ define %{NAME}.gbld @{NAME}.gbld.merge(%{NAME}.gbld %gbld, %{KV_STRUCT} %keyValu
   %keyPtrRaw = bitcast {KEY}* %keyPtr to i8*
   %valuePtrRaw = bitcast {VALUE}* %valuePtr to i8*
   %rawHash = call i32 {KEY_PREFIX}.hash({KEY} %key)
-  %finalizedHash = call i32 @hash_finalize(i32 %raw_hash)
+  %finalizedHash = call i32 @hash_finalize(i32 %rawHash)
   call void @weld_rt_gb_merge(%{NAME}.gbld %gbld, i8* %keyPtrRaw, i32 %finalizedHash, i8* %valuePtrRaw)
-  ret %{NAME}.bld %gbld
+  ret %{NAME}.gbld %gbld
 }}
 
 ; Complete building a groupbuilder
-define %{NAME} @{NAME}.bld.result(%{NAME}.gbld %gbld) {{
-  %result = call i8* weld_rt_gb_result(i8* %gbld)
+define %{NAME} @{NAME}.gbld.result(%{NAME}.gbld %gbld) {{
+  %result = call i8* @weld_rt_gb_result(i8* %gbld)
   ret %{NAME} %result
 }}
