@@ -85,6 +85,7 @@ inline simple_dict *get_global_dict(weld_dict *wd) {
 
 extern "C" void *weld_rt_dict_new(int32_t key_size, int32_t key_array_el_size, int32_t val_size,
   int32_t to_array_true_val_size, int64_t max_local_bytes, int64_t capacity) {
+  assert(capacity > 0 && (capacity & (capacity - 1)) == 0); // power of 2 check
   weld_dict *wd = (weld_dict *)weld_run_malloc(weld_rt_get_run_id(), sizeof(weld_dict));
   memset(wd, 0, sizeof(weld_dict));
   wd->key_size = key_size;
@@ -116,13 +117,13 @@ inline bool keys_equal(weld_dict *wd, void *key1, void *key2) {
 }
 
 inline void *simple_dict_lookup(weld_dict *wd, simple_dict *sd, int32_t hash, void *key,
-  bool collision_possible) {
-  int64_t first_offset = hash % sd->capacity;
+  bool match_possible) {
+  // can do the bitwise and because capacity is always a power of two
+  int64_t first_offset = hash & (sd->capacity - 1);
   for (int64_t i = 0; i < sd->capacity; i++) {
-    // can do the bitwise and because capacity is always a power of two
     void *cur_slot = slot_at((first_offset + i) & (sd->capacity - 1), wd, sd);
     if (*filled_at(cur_slot)) {
-      if (collision_possible && *hash_at(wd, cur_slot) == hash &&
+      if (match_possible && *hash_at(wd, cur_slot) == hash &&
         keys_equal(wd, key, key_at(cur_slot))) {
         return cur_slot;
       }
