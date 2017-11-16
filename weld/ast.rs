@@ -76,6 +76,17 @@ impl Type {
         }
     }
 
+    // Return whether this is scalar or (potentially arbitrarily nested) struct of
+    // scalars.
+    pub fn is_nested_struct_of_scalars(&self) -> bool {
+        use self::Type::*;
+        match *self {
+            Scalar(_) => true,
+            Struct(ref fields) => fields.iter().all(|f| f.is_nested_struct_of_scalars()),
+            _ => false
+        }
+    }
+
     /// Get the vectorized version of a type, if it is vectorizable.
     pub fn simd_type(&self) -> WeldResult<Type> {
         use self::Type::*;
