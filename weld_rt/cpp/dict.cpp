@@ -1,5 +1,6 @@
 #include "runtime.h"
 #include "assert.h"
+#include <algorithm>
 
 struct simple_dict {
   void *data;
@@ -246,4 +247,90 @@ extern "C" void weld_rt_dict_free(void *d) {
   weld_rt_free_merger(wd->dicts);
   pthread_mutex_destroy(&wd->global_lock);
   weld_run_free(weld_rt_get_run_id(), wd);
+}
+
+/* GroupBuilder */
+
+struct weld_arr {
+  void *data;
+  int64_t size;
+};
+
+struct weld_arr_growable {
+  weld_arr a;
+  int64_t capacity;
+};
+
+struct weld_gb {
+  void *wd;
+  int32_t val_size;
+};
+
+extern "C" void *weld_rt_gb_new(int32_t key_size, int32_t val_size, int64_t max_local_bytes,
+  int64_t capacity) {
+  weld_gb *gb = (weld_gb *)weld_run_malloc(weld_rt_get_run_id(), sizeof(weld_gb));
+  gb->wd = weld_rt_dict_new(key_size, sizeof(weld_arr_growable), max_local_bytes, capacity);
+  gb->val_size = val_size;
+  return (void *)gb;
+}
+
+inline void resize_weld_arr(weld_gb *gb, weld_arr_growable *arr, int64_t new_cap) {
+  void *old_data = arr->a.data;
+  arr->a.data = weld_run_malloc(weld_rt_get_run_id(), new_cap * gb->val_size);
+  memcpy(arr->a.data, old_data, arr->a.size * gb->val_size);
+  arr->capacity = new_cap;
+  weld_run_free(weld_rt_get_run_id(), old_data);
+}
+
+inline void *el_at(weld_gb *gb, weld_arr_growable *arr, int64_t i) {
+  return (void *)((uint8_t *)arr->a.data + i * gb->val_size);
+}
+
+extern "C" void weld_rt_gb_merge(void *b, void *key, int32_t hash, void *value) {
+  weld_gb *gb = (weld_gb *)b;
+  void *slot = weld_rt_dict_lookup(gb->wd, hash, key);
+  weld_dict *wd = (weld_dict *)gb->wd;
+  weld_arr_growable *arr = (weld_arr_growable *)val_at(wd, slot);
+  if (*filled_at(slot)) {
+    if (arr->capacity == arr->a.size) {
+      resize_weld_arr(gb, arr, arr->capacity * 2);
+    }
+  } else {
+    arr->capacity = 16;
+    arr->a.data = weld_run_malloc(weld_rt_get_run_id(), arr->capacity * gb->val_size);
+  }
+  memcpy(el_at(gb, arr, arr->a.size), value, gb->val_size);
+  arr->a.size++;
+  weld_rt_dict_put(gb->wd, slot);
+}
+
+extern "C" void *weld_rt_gb_result(void *b) {
+  weld_gb *gb = (weld_gb *)b;
+  weld_dict *wd = (weld_dict *)gb->wd;
+  void *local_slot;
+  while ((local_slot = weld_rt_dict_finalize_next_local_slot(gb->wd)) != NULL) {
+    weld_arr_growable *local_arr = (weld_arr_growable *)val_at(wd, local_slot);
+    void *global_slot = weld_rt_dict_finalize_global_slot_for_local(gb->wd, local_slot);
+    weld_arr_growable *global_arr = (weld_arr_growable *)val_at(wd, global_slot);
+    if (*filled_at(global_slot)) {
+      if (local_arr->a.size + global_arr->a.size > global_arr->capacity) {
+        resize_weld_arr(gb, global_arr,
+          std::max(global_arr->capacity * 2, local_arr->a.size + global_arr->a.size));
+      }
+    } else {
+      global_arr->capacity = math::max(16, local_arr->a.size);
+      global_arr->a.data = weld_run_malloc(weld_rt_get_run_id(),
+        global_arr->capacity * gb->val_size);
+    }
+    memcpy(el_at(gb, global_arr, global_arr->a.size), local_arr->a.data,
+      gb->val_size * local_arr->a.size);
+    global_arr->a.size += local_arr->a.size;
+    weld_rt_dict_put(gb->wd, global_slot);
+    weld_run_free(weld_rt_get_run_id(), local_arr->a.data);
+  }
+  return gb->wd;
+}
+
+extern "C" void *weld_rt_gb_free(void *gb) {
+  weld_run_free(weld_rt_get_run_id(), gb);
 }

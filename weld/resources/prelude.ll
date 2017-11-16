@@ -115,6 +115,11 @@ declare i8*     @weld_rt_dict_to_array(i8*, i32)
 declare i64     @weld_rt_dict_get_size(i8*)
 declare void    @weld_rt_dict_free(i8*)
 
+declare i8*     @weld_rt_gb_new(i32, i32, i64, i64)
+declare void    @weld_rt_gb_merge(i8*, i8*, i32, i8*)
+declare i8*     @weld_rt_gb_result(i8*)
+declare i8*     @weld_rt_gb_free(i8*)
+
 ; Parallel runtime structures
 ; work_t struct in runtime.h
 %work_t = type { i8*, i64, i64, i64, i32, i64*, i64*, i32, i64, void (%work_t*)*, %work_t*, i32, i32, i32 }
