@@ -1877,10 +1877,16 @@ impl LlvmGenerator {
         let kv_struct_ty = self.llvm_type(&elem)?;
         let kv_vec = Box::new(Vector(elem.clone()));
         let kv_vec_ty = self.llvm_type(&kv_vec)?;
+        let key_array_el_size =
+            match *key {
+                Vector(_) => format!("call i32 {}.elSize()", key_prefix),
+                _ => "add i32 0, 0".to_string()
+            };
 
         let dict_def = format!(include_str!("resources/dictionary.ll"),
             NAME=&name.replace("%", ""),
             KEY=&key_ty,
+            KEY_ARRAY_EL_SIZE_EXPR=&key_array_el_size,
             KEY_PREFIX=&key_prefix,
             VALUE=&value_ty,
             KV_STRUCT=&kv_struct_ty,
@@ -1957,10 +1963,16 @@ impl LlvmGenerator {
                 let vec = Box::new(Vector(vt.clone()));
                 let bld = Dict(kt.clone(), vec);
                 let bld_ty = self.llvm_type(&bld)?;
+                let key_array_el_size =
+                    match **kt {
+                        Vector(_) => format!("call i32 {}.elSize()", key_prefix),
+                        _ => "add i32 0, 0".to_string()
+                    };
 
                 let groupmerger_def = format!(include_str!("resources/groupbuilder.ll"),
                     NAME=&bld_ty.replace("%", ""),
                     KEY=&key_ty,
+                    KEY_ARRAY_EL_SIZE_EXPR=&key_array_el_size,
                     KEY_PREFIX=&key_prefix,
                     VALUE=&value_ty,
                     KV_STRUCT=&kv_struct_ty.replace("%", ""));

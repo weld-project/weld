@@ -12,6 +12,7 @@ struct simple_dict {
 struct weld_dict {
   void *dicts; // one dict per thread plus a global dict
   int32_t key_size;
+  int32_t key_array_el_size;
   int32_t val_size;
   int32_t to_array_true_val_size; // might discard some trailing part of the value when
   // converting to array (useful for groupbuilder)
@@ -21,6 +22,11 @@ struct weld_dict {
   int64_t cur_slot_in_dict;
   bool finalized; // all keys have been moved to global
   pthread_mutex_t global_lock;
+};
+
+struct weld_arr {
+  void *data;
+  int64_t size;
 };
 
 inline int32_t slot_size(weld_dict *wd) {
@@ -81,11 +87,12 @@ inline simple_dict *get_global_dict(weld_dict *wd) {
   return get_dict_at_index(wd, weld_rt_get_nworkers());
 }
 
-extern "C" void *weld_rt_dict_new(int32_t key_size, int32_t val_size, int32_t to_array_true_val_size,
-  int64_t max_local_bytes, int64_t capacity) {
+extern "C" void *weld_rt_dict_new(int32_t key_size, int32_t key_array_el_size, int32_t val_size,
+  int32_t to_array_true_val_size, int64_t max_local_bytes, int64_t capacity) {
   weld_dict *wd = (weld_dict *)weld_run_malloc(weld_rt_get_run_id(), sizeof(weld_dict));
   memset(wd, 0, sizeof(weld_dict));
   wd->key_size = key_size;
+  wd->key_array_el_size = key_array_el_size;
   wd->val_size = val_size;
   wd->to_array_true_val_size = to_array_true_val_size;
   wd->max_local_bytes = max_local_bytes;
@@ -101,6 +108,17 @@ extern "C" void *weld_rt_dict_new(int32_t key_size, int32_t val_size, int32_t to
   return (void *)wd;
 }
 
+inline bool keys_equal(weld_dict *wd, void *key1, void *key2) {
+  if (wd->key_array_el_size != 0) {
+    weld_arr *arr1 = (weld_arr *)key1;
+    weld_arr *arr2 = (weld_arr *)key2;
+    return arr1->size == arr2->size &&
+      memcmp(arr1->data, arr2->data, arr1->size * wd->key_array_el_size) == 0;
+  } else {
+    return memcmp(key1, key2, wd->key_size) == 0;
+  }
+}
+
 inline void *simple_dict_lookup(weld_dict *wd, simple_dict *sd, int32_t hash, void *key,
   bool collision_possible) {
   int64_t first_offset = hash % sd->capacity;
@@ -109,7 +127,7 @@ inline void *simple_dict_lookup(weld_dict *wd, simple_dict *sd, int32_t hash, vo
     void *cur_slot = slot_at((first_offset + i) & (sd->capacity - 1), wd, sd);
     if (*filled_at(cur_slot)) {
       if (collision_possible && *hash_at(wd, cur_slot) == hash &&
-        memcmp(key, key_at(cur_slot), wd->key_size) == 0) {
+        keys_equal(wd, key, key_at(cur_slot))) {
         return cur_slot;
       }
     } else {
@@ -256,11 +274,6 @@ extern "C" void weld_rt_dict_free(void *d) {
 
 /* GroupBuilder */
 
-struct weld_arr {
-  void *data;
-  int64_t size;
-};
-
 struct weld_arr_growable {
   weld_arr a;
   int64_t capacity;
@@ -271,11 +284,11 @@ struct weld_gb {
   int32_t val_size;
 };
 
-extern "C" void *weld_rt_gb_new(int32_t key_size, int32_t val_size, int64_t max_local_bytes,
-  int64_t capacity) {
+extern "C" void *weld_rt_gb_new(int32_t key_size, int32_t key_array_el_size, int32_t val_size,
+  int64_t max_local_bytes, int64_t capacity) {
   weld_gb *gb = (weld_gb *)weld_run_malloc(weld_rt_get_run_id(), sizeof(weld_gb));
-  gb->wd = weld_rt_dict_new(key_size, sizeof(weld_arr_growable), sizeof(weld_arr),
-    max_local_bytes, capacity);
+  gb->wd = weld_rt_dict_new(key_size, key_array_el_size, sizeof(weld_arr_growable),
+    sizeof(weld_arr), max_local_bytes, capacity);
   gb->val_size = val_size;
   return (void *)gb;
 }
