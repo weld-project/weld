@@ -22,7 +22,7 @@ define %{NAME} @{NAME}.new(i64 %capacity) {{
   %keySize = ptrtoint {KEY}* %keySizePtr to i32
   %valSizePtr = getelementptr {VALUE}, {VALUE}* null, i32 1
   %valSize = ptrtoint {VALUE}* %valSizePtr to i32
-  %dict = call i8* @weld_rt_dict_new(i32 %keySize, i32 %valSize, i64 100000, i64 %capacity)
+  %dict = call i8* @weld_rt_dict_new(i32 %keySize, i32 %valSize, i32 %valSize, i64 100000, i64 %capacity)
   ret %{NAME} %dict
 }}
 
