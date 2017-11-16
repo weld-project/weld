@@ -1868,6 +1868,14 @@ impl LlvmGenerator {
     /// Generates a dictionary definition with the given element type, key type `key`, and  value
     /// type `value`.
     fn gen_dict_definition(&mut self, key: &Type, value: &Type) -> WeldResult<()> {
+        let key_valid =
+            match *key {
+                Vector(ref inner) => inner.is_nested_struct_of_scalars(),
+                ref other => other.is_nested_struct_of_scalars()
+            };
+        if !key_valid {
+            return weld_err!("Internal error: invalid dictionary key type {}", print_type(key));
+        }
         let elem = Box::new(Struct(vec![key.clone(), value.clone()]));
         let key_ty = self.llvm_type(key)?;
         let value_ty = self.llvm_type(value)?;
