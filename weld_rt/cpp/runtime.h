@@ -120,6 +120,11 @@ extern "C" {
   int64_t weld_rt_dict_get_size(void *d);
   void weld_rt_dict_free(void *d);
 
+  void *weld_rt_gb_new(int32_t key_size, int32_t val_size, int64_t max_local_bytes, int64_t capacity);
+  void weld_rt_gb_merge(void *b, void *key, int32_t hash, void *value);
+  void *weld_rt_gb_result(void *b);
+  void *weld_rt_gb_free(void *gb);
+
   // weld_run functions can be called both from a runtime thread and before/after a Weld computation is
   // executed
   int64_t weld_run_begin(void (*run)(work_t*), void* data, int64_t mem_limit, int32_t n_workers);

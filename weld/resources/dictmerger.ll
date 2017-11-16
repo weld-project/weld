@@ -41,7 +41,7 @@ done:
   ret %{NAME}.bld %bld
 }}
 
-; Complete building a vector, trimming any extra space left while growing it.
+; Complete building a dictionary
 define %{NAME} @{NAME}.bld.result(%{NAME}.bld %bld) {{
 start:
   br label %entry
