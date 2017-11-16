@@ -1953,20 +1953,19 @@ impl LlvmGenerator {
                 let key_prefix = llvm_prefix(&key_ty);
                 let value_ty = self.llvm_type(vt)?;
                 let kv_struct = Box::new(Struct(vec![*kt.clone(), *vt.clone()]));
-                let kv_struct_ty = self.llvm_type(&elem)?;
-                let vec = Vector(vt.clone());
-                let vec_ty = self.llvm_type(&vec)?;
-                let bld = Dict(kt.clone(), vec.clone());
+                let kv_struct_ty = self.llvm_type(&kv_struct)?;
+                let vec = Box::new(Vector(vt.clone()));
+                let bld = Dict(kt.clone(), vec);
                 let bld_ty = self.llvm_type(&bld)?;
 
-                let dictmerger_def = format!(include_str!("resources/groupbuilder.ll"),
+                let groupmerger_def = format!(include_str!("resources/groupbuilder.ll"),
                     NAME=&bld_ty.replace("%", ""),
                     KEY=&key_ty,
                     KEY_PREFIX=&key_prefix,
                     VALUE=&value_ty,
                     KV_STRUCT=&kv_struct_ty.replace("%", ""));
 
-                self.prelude_code.add(&dictmerger_def);
+                self.prelude_code.add(&groupmerger_def);
                 self.prelude_code.add("\n");
                 self.bld_names.insert(bk.clone(), format!("{}.gbld", bld_ty));
             }

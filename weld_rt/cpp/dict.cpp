@@ -115,6 +115,7 @@ inline void *simple_dict_lookup(weld_dict *wd, simple_dict *sd, int32_t hash, vo
     }
   }
   // should never reach this
+  assert(false);
   return NULL;
 }
 
@@ -147,6 +148,7 @@ extern "C" void *weld_rt_dict_lookup(void *d, int32_t hash, void *key) {
     }
   }
   if (!wd->finalized) {
+    // take the lock since if we are not finalized, there are still writes going on
     pthread_mutex_lock(&wd->global_lock);
   }
   simple_dict *global = get_global_dict(wd);
@@ -164,7 +166,7 @@ extern "C" void weld_rt_dict_put(void *d, void *slot) {
       if (should_resize_dict_at_size(local->size, local)) {
         resize_dict(wd, local);
       } else if (should_resize_dict_at_size(local->size + 1, local) &&
-        local->capacity * 2 > wd->max_local_bytes) {
+        local->capacity * 2 * slot_size(wd) > wd->max_local_bytes) {
         local->full = true;
       }
     } else {
@@ -173,11 +175,9 @@ extern "C" void weld_rt_dict_put(void *d, void *slot) {
       if (should_resize_dict_at_size(global->size, global)) {
         resize_dict(wd, global);
       }
-      if (!wd->finalized) {
-        pthread_mutex_unlock(&wd->global_lock);
-      }
     }
-  } else if (!wd->finalized && !slot_in_local(wd, slot)) {
+  }
+  if (!wd->finalized && !slot_in_local(wd, slot)) {
     pthread_mutex_unlock(&wd->global_lock);
   }
 }
@@ -318,7 +318,7 @@ extern "C" void *weld_rt_gb_result(void *b) {
           std::max(global_arr->capacity * 2, local_arr->a.size + global_arr->a.size));
       }
     } else {
-      global_arr->capacity = math::max(16, local_arr->a.size);
+      global_arr->capacity = std::max((int64_t)16, local_arr->a.size);
       global_arr->a.data = weld_run_malloc(weld_rt_get_run_id(),
         global_arr->capacity * gb->val_size);
     }
@@ -331,6 +331,6 @@ extern "C" void *weld_rt_gb_result(void *b) {
   return gb->wd;
 }
 
-extern "C" void *weld_rt_gb_free(void *gb) {
+extern "C" void weld_rt_gb_free(void *gb) {
   weld_run_free(weld_rt_get_run_id(), gb);
 }

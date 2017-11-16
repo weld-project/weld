@@ -118,7 +118,7 @@ declare void    @weld_rt_dict_free(i8*)
 declare i8*     @weld_rt_gb_new(i32, i32, i64, i64)
 declare void    @weld_rt_gb_merge(i8*, i8*, i32, i8*)
 declare i8*     @weld_rt_gb_result(i8*)
-declare i8*     @weld_rt_gb_free(i8*)
+declare void    @weld_rt_gb_free(i8*)
 
 ; Parallel runtime structures
 ; work_t struct in runtime.h
