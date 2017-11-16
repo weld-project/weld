@@ -129,7 +129,7 @@ impl ExprHash {
             Negate(_) | Broadcast(_) | ToVec{ .. } | MakeStruct { .. } | MakeVector { .. } |
                 Zip { .. } | Length { .. } | Lookup { .. } | KeyExists { .. } |
                 Slice { .. } | Sort { .. } | If { .. } | Iterate { .. } | Select { .. } | Apply { .. } |
-                NewBuilder(_) | Merge { .. } | Res { .. } => {}
+                NewBuilder(_) | Merge { .. } | Res { .. } | Powi { .. } => {}
         }
         if !finished_subexpressions {
             for child in expr.children() {
