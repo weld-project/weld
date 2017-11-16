@@ -170,7 +170,13 @@ class WeldObject(object):
 
     def evaluate(self, restype, verbose=True, decode=True):
         function = self.to_weld_func()
-
+        with open ("/Users/parimarjann/tmp_func.txt", "r") as myfile:
+            function = myfile.readlines()
+        verbose = True
+        f = open("/Users/parimarjann/tmp_func.txt", "r") 
+        function = f.read()
+        
+        # print(function)
         # Returns a wrapped ctypes Structure
         def args_factory(encoded):
             class Args(ctypes.Structure):

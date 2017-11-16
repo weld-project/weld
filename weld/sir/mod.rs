@@ -30,6 +30,10 @@ pub enum StatementKind {
         left: Symbol,
         right: Symbol,
     },
+    Powi {
+        value: Symbol,
+        power: Symbol,
+    },
     Broadcast(Symbol),
     Cast(Symbol),
     CUDF {
@@ -98,6 +102,13 @@ impl StatementKind {
                 ..
             } => {
                 vars.push(child);
+            }
+            Powi {
+                ref value,
+                ref power,
+            } => {
+                vars.push(value);
+                vars.push(power);
             }
             Cast(ref child) => {
                 vars.push(child);
@@ -458,6 +469,11 @@ impl fmt::Display for StatementKind {
                 ref left,
                 ref right
             } => write!(f, "{} {} {}", op, left, right),
+            Powi {
+                ref value,
+                ref power,
+            } => write!(f, "{} {}", value, power),
+
             Broadcast(ref child) => write!(f, "broadcast({})", child),
             Cast(ref child) => write!(f, "cast({})", child),
             CUDF {
@@ -867,6 +883,19 @@ fn gen_expr(expr: &TypedExpr,
                 op: kind,
                 left: left_sym,
                 right: right_sym,
+            };
+            let res_sym = tracker.symbol_for_statement(prog, cur_func, cur_block, &expr.ty, kind);
+            Ok((cur_func, cur_block, res_sym))
+        }
+        ExprKind::Powi {
+            ref value,
+            ref power,
+        } => {
+            let (cur_func, cur_block, value_sym) = gen_expr(value, prog, cur_func, cur_block, tracker, multithreaded)?;
+            let (cur_func, cur_block, power_sym) = gen_expr(power, prog, cur_func, cur_block, tracker, multithreaded)?;
+            let kind = Powi {
+                value: value_sym,
+                power: power_sym,
             };
             let res_sym = tracker.symbol_for_statement(prog, cur_func, cur_block, &expr.ty, kind);
             Ok((cur_func, cur_block, res_sym))

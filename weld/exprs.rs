@@ -51,6 +51,16 @@ pub fn binop_expr(kind: BinOpKind, left: Expr<Type>, right: Expr<Type>) -> WeldR
     }
 }
 
+/// TODO: Need to check types etc maybe?
+pub fn powi_expr(value: Expr<Type>, power: Expr<Type>) -> WeldResult<Expr<Type>> {
+    let ty = value.ty.clone();
+    new_expr(Powi {
+                 value: Box::new(value),
+                 power: Box::new(power),
+             },
+             ty)
+}
+
 pub fn unaryop_expr(kind: UnaryOpKind, value: Expr<Type>) -> WeldResult<Expr<Type>> {
     let ty = value.ty.clone();
     new_expr(UnaryOp {

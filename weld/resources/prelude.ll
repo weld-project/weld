@@ -33,6 +33,9 @@ declare <4 x double> @llvm.exp.v4f64(<4 x double>)
 declare float @llvm.sqrt.f32(float)
 declare double @llvm.sqrt.f64(double)
 
+declare double @llvm.powi.f64(double, i32)
+declare float @llvm.powi.f32(float, i32)
+
 declare i64 @llvm.ctlz.i64(i64, i1)
 
 declare float @llvm.maxnum.f32(float, float)

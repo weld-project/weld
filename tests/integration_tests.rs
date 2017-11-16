@@ -2552,6 +2552,20 @@ fn nditer_zip() {
     unsafe { free_value_and_module(ret_value) };
 }
 
+fn simple_powi() {
+    //let code = "|x:f64| powi(x, i64(2))";
+    let code = "|x:f64| powi(x, 2)";
+    let conf = default_conf();
+    let input = 2.0;
+    let ret_value = compile_and_run(code, conf, &input);
+    let data = unsafe { weld_value_data(ret_value) as *const f64 };
+    let result = unsafe { (*data).clone() };
+    let output = 4.0;
+    println!("result = {}", result);
+    assert!(approx_equal(output, result, 5));
+    unsafe { free_value_and_module(ret_value) };
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     let tests: Vec<(&str, fn())> =
@@ -2642,7 +2656,8 @@ fn main() {
              ("nditer_zip", nditer_zip),
              ("simple_sort", simple_sort),
              ("complex_sort", complex_sort),
-             ("nested_appender_loop", nested_appender_loop)];
+             ("nested_appender_loop", nested_appender_loop),
+             ("simple_powi", simple_powi),];
 
     println!("");
     println!("running tests");

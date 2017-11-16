@@ -266,6 +266,11 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>,
                     kind,
                     print_expr_impl(value, typed, indent, should_indent))
         }
+        Powi {ref value, ref power} => {
+            format!("powi({}, {}",
+                    print_expr_impl(value, typed, indent, should_indent),
+                    print_expr_impl(power, typed, indent, should_indent))
+        }
 
         Negate(ref e) => format!("(-{})", print_expr_impl(e, typed, indent, should_indent)),
 

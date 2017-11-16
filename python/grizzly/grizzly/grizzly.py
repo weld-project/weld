@@ -5,7 +5,6 @@ import grizzly_impl
 from lazy_op import LazyOpResult, to_weld_type
 from weld.weldobject import *
 
-
 def group(exprs):
     weld_type = [to_weld_type(expr.weld_type, expr.dim) for expr in exprs]
     exprs = [expr.expr for expr in exprs]
