@@ -111,7 +111,7 @@ declare i8*     @weld_rt_dict_lookup(i8*, i32, i8*)
 declare void    @weld_rt_dict_put(i8*, i8*)
 declare i8*     @weld_rt_dict_finalize_next_local_slot(i8*)
 declare i8*     @weld_rt_dict_finalize_global_slot_for_local(i8*, i8*)
-declare i8*     @weld_rt_dict_to_array(i8*, i32)
+declare i8*     @weld_rt_dict_to_array(i8*, i32, i32)
 declare i64     @weld_rt_dict_get_size(i8*)
 declare void    @weld_rt_dict_free(i8*)
 
