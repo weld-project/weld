@@ -256,16 +256,10 @@ pub fn fuse_loops_2(expr: &mut Expr<Type>) {
 /// statement is not defining some symbol that's used in the builder expression, so we check for that.
 pub fn move_merge_before_let(expr: &mut Expr<Type>) {
     use exprs::*;
-    use pretty_print::*;
-    println!("{}", print_typed_expr(expr));
     expr.transform_up(&mut |ref mut expr| {
         if let Let { ref name, value: ref let_value, ref body } = expr.kind {
-            println!("Type of Let: {:?}", expr.ty);
             if let Merge { ref builder, value: ref merge_value } = body.kind {
                 if !builder.contains_symbol(name) {
-                    println!("Name: {}", name);
-                    println!("Type of Builder: {:?}", builder.ty);
-                    println!("Type of Merged Value {:?}", merge_value.ty);
                     return Some(merge_expr(
                         *builder.clone(),
                         let_expr(name.clone(), *let_value.clone(), *merge_value.clone()).unwrap()
@@ -274,6 +268,77 @@ pub fn move_merge_before_let(expr: &mut Expr<Type>) {
             }
         }
         return None;
+    });
+}
+
+/// Checks whether a For loop is simple enough to be fused.
+fn is_fusable_expr(expr: &TypedExpr) -> bool {
+    if let Some(rfa) = ResForAppender::extract(expr) {
+        if rfa.iters.iter().all(|ref i| i.is_simple()) {
+            if let Some(_) = MergeSingle::extract(&rfa.func) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+/// Checks if a name binding can be fused with the loop its contained in.
+fn only_used_in_zip(name: &Symbol, expr: &TypedExpr) -> bool {
+    // Number of times the name appears in `expr`.
+    let mut total_count = 0;
+    // Number of times the name appears in a Zip in `expr`.
+    let mut iters_count = 0;
+    expr.traverse(&mut |ref expr| {
+        match expr.kind {
+            Ident(ref name1) if name == name1 => {
+                total_count += 1;
+            }
+            For { ref iters, .. } => {
+                for iter in iters.iter() {
+                    match iter.data.kind {
+                        Ident(ref name1) if name == name1 => {
+                            iters_count += 1;
+                        }
+                        _ => ()
+                    }
+                }
+            }
+            Length { ref data } => {
+                if let Ident(ref name1) = data.kind {
+                    if name1 == name {
+                        total_count -= 1;
+                    }
+                }
+            }
+            _ => ()
+        };
+    });
+    (iters_count == total_count)
+}
+
+/// Aggressively inlines let statements in cases which allow loop fusion to fire. This inliner is
+/// aggressive because it will replace identifiers which appear more than once after being defined.
+/// However, the inliner will only fire if eventually, the inlined loop will be fused.
+pub fn aggressive_inline_let(expr: &mut TypedExpr) {
+    let mut subbed_one = false;
+    expr.transform_up(&mut |ref mut expr| {
+        if subbed_one {
+            return None;
+        }
+        if let Let { ref mut name, ref mut value, ref mut body } = expr.kind {
+            if !is_fusable_expr(value) {
+                return None;
+            } else if !only_used_in_zip(name, body) {
+                return None;
+            }
+            let mut new_body = body.as_ref().clone();
+            new_body.substitute(name, value);
+            subbed_one = true;
+            Some(new_body)
+        } else {
+            None
+        }
     });
 }
 
