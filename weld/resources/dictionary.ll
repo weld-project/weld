@@ -24,7 +24,7 @@ define %{NAME} @{NAME}.new(i64 %capacity) {{
   %valSizePtr = getelementptr {VALUE}, {VALUE}* null, i32 1
   %valSize = ptrtoint {VALUE}* %valSizePtr to i32
   %keyArrayElSize = {KEY_ARRAY_EL_SIZE_EXPR}
-  %dict = call i8* @weld_rt_dict_new(i32 %keySize, i32 %keyArrayElSize, i32 %valSize, i32 %valSize, i64 100000, i64 %capacity)
+  %dict = call i8* @weld_rt_dict_new(i32 %keySize, i32 %keyArrayElSize, i32 %valSize, i32 %valSize, i64 1000000, i64 %capacity)
   ret %{NAME} %dict
 }}
 
