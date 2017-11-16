@@ -13,6 +13,8 @@ struct weld_dict {
   void *dicts; // one dict per thread plus a global dict
   int32_t key_size;
   int32_t val_size;
+  int32_t to_array_true_val_size; // might discard some trailing part of the value when
+  // converting to array (useful for groupbuilder)
   int64_t max_local_bytes;
   // following two fields are used when finalizing dict (merging all locals into global)
   int32_t cur_local_dict;
@@ -26,8 +28,8 @@ inline int32_t slot_size(weld_dict *wd) {
     sizeof(int32_t) /* space for key hash */;
 }
 
-inline int32_t kv_size(weld_dict *wd, int32_t post_key_padding) {
-  return wd->key_size + post_key_padding + wd->val_size;
+inline int32_t to_array_kv_size(weld_dict *wd, int32_t post_key_padding) {
+  return wd->key_size + post_key_padding + wd->to_array_true_val_size;
 }
 
 inline void *slot_at_with_data(int64_t slot_offset, weld_dict *wd, void *data) {
@@ -79,11 +81,13 @@ inline simple_dict *get_global_dict(weld_dict *wd) {
   return get_dict_at_index(wd, weld_rt_get_nworkers());
 }
 
-extern "C" void *weld_rt_dict_new(int32_t key_size, int32_t val_size, int64_t max_local_bytes, int64_t capacity) {
+extern "C" void *weld_rt_dict_new(int32_t key_size, int32_t val_size, int32_t to_array_true_val_size,
+  int64_t max_local_bytes, int64_t capacity) {
   weld_dict *wd = (weld_dict *)weld_run_malloc(weld_rt_get_run_id(), sizeof(weld_dict));
   memset(wd, 0, sizeof(weld_dict));
   wd->key_size = key_size;
   wd->val_size = val_size;
+  wd->to_array_true_val_size = to_array_true_val_size;
   wd->max_local_bytes = max_local_bytes;
   wd->dicts = weld_rt_new_merger(sizeof(simple_dict), weld_rt_get_nworkers() + 1);
   for (int32_t i = 0; i < weld_rt_get_nworkers() + 1; i++) {
@@ -216,15 +220,16 @@ extern "C" void *weld_rt_dict_to_array(void *d, int32_t value_offset_in_struct) 
   int32_t post_key_padding = value_offset_in_struct - wd->key_size;
   assert(wd->finalized);
   simple_dict *global = get_global_dict(wd);
-  void *array = weld_run_malloc(weld_rt_get_run_id(), global->size * kv_size(wd, post_key_padding));
+  void *array = weld_run_malloc(weld_rt_get_run_id(),
+    global->size * to_array_kv_size(wd, post_key_padding));
   int64_t next_arr_slot = 0;
   for (int64_t i = 0; i < global->capacity; i++) {
     void *cur_slot = slot_at(i, wd, global);
     if (*filled_at(cur_slot)) {
-      memcpy((uint8_t *)array + next_arr_slot * kv_size(wd, post_key_padding), key_at(cur_slot),
-        wd->key_size);
-      memcpy((uint8_t *)array + next_arr_slot * kv_size(wd, post_key_padding) + wd->key_size +
-        post_key_padding, val_at(wd, cur_slot), wd->val_size);
+      memcpy((uint8_t *)array + next_arr_slot * to_array_kv_size(wd, post_key_padding),
+        key_at(cur_slot), wd->key_size);
+      memcpy((uint8_t *)array + next_arr_slot * to_array_kv_size(wd, post_key_padding) +
+        wd->key_size + post_key_padding, val_at(wd, cur_slot), wd->to_array_true_val_size);
       next_arr_slot++;
     }
   }
@@ -269,7 +274,8 @@ struct weld_gb {
 extern "C" void *weld_rt_gb_new(int32_t key_size, int32_t val_size, int64_t max_local_bytes,
   int64_t capacity) {
   weld_gb *gb = (weld_gb *)weld_run_malloc(weld_rt_get_run_id(), sizeof(weld_gb));
-  gb->wd = weld_rt_dict_new(key_size, sizeof(weld_arr_growable), max_local_bytes, capacity);
+  gb->wd = weld_rt_dict_new(key_size, sizeof(weld_arr_growable), sizeof(weld_arr),
+    max_local_bytes, capacity);
   gb->val_size = val_size;
   return (void *)gb;
 }
@@ -298,6 +304,8 @@ extern "C" void weld_rt_gb_merge(void *b, void *key, int32_t hash, void *value) 
   } else {
     arr->capacity = 16;
     arr->a.data = weld_run_malloc(weld_rt_get_run_id(), arr->capacity * gb->val_size);
+    arr->a.size = 0;
+    memcpy(key_at(slot), key, wd->key_size);
   }
   memcpy(el_at(gb, arr, arr->a.size), value, gb->val_size);
   arr->a.size++;
@@ -321,6 +329,8 @@ extern "C" void *weld_rt_gb_result(void *b) {
       global_arr->capacity = std::max((int64_t)16, local_arr->a.size);
       global_arr->a.data = weld_run_malloc(weld_rt_get_run_id(),
         global_arr->capacity * gb->val_size);
+      global_arr->a.size = 0;
+      memcpy(key_at(global_slot), key_at(local_slot), wd->key_size);
     }
     memcpy(el_at(gb, global_arr, global_arr->a.size), local_arr->a.data,
       gb->val_size * local_arr->a.size);

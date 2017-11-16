@@ -111,7 +111,8 @@ extern "C" {
   void *weld_rt_get_merger_at_index(void *m, int64_t size, int32_t i);
   void weld_rt_free_merger(void *m);
 
-  void *weld_rt_dict_new(int32_t key_size, int32_t val_size, int64_t max_local_bytes, int64_t capacity);
+  void *weld_rt_dict_new(int32_t key_size, int32_t val_size, int32_t to_array_true_val_size,
+    int64_t max_local_bytes, int64_t capacity);
   void *weld_rt_dict_lookup(void *d, int32_t hash, void *key);
   void weld_rt_dict_put(void *d, void *slot);
   void *weld_rt_dict_finalize_next_local_slot(void *d);
