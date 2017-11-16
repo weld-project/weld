@@ -3,6 +3,7 @@
 ; Parameters:
 ; - NAME: name to give generated type, without % or @ prefix
 ; - KEY: LLVM type of key (e.g. i32 or %MyStruct)
+; - KEY_ARRAY_EL_SIZE_EXPR: if key is an array, expression for size of single array element (otherwise 0)
 ; - KEY_PREFIX
 ; - VALUE: LLVM type of value (e.g. i32 or %MyStruct)
 ; - KV_STRUCT: LLVM type of key,value struct
@@ -16,7 +17,8 @@ define %{NAME}.gbld @{NAME}.gbld.new(i64 %capacity) {{
   %keySize = ptrtoint {KEY}* %keySizePtr to i32
   %valSizePtr = getelementptr {VALUE}, {VALUE}* null, i32 1
   %valSize = ptrtoint {VALUE}* %valSizePtr to i32
-  %gbld = call i8* @weld_rt_gb_new(i32 %keySize, i32 %valSize, i64 100000, i64 %capacity)
+  %keyArrayElSize = {KEY_ARRAY_EL_SIZE_EXPR}
+  %gbld = call i8* @weld_rt_gb_new(i32 %keySize, i32 %keyArrayElSize, i32 %valSize, i64 100000, i64 %capacity)
   ret %{NAME}.gbld %gbld
 }}
 
