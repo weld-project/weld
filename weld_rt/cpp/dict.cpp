@@ -34,10 +34,6 @@ inline int32_t slot_size(weld_dict *wd) {
     sizeof(int32_t) /* space for key hash */;
 }
 
-inline int32_t to_array_kv_size(weld_dict *wd, int32_t post_key_padding) {
-  return wd->key_size + post_key_padding + wd->to_array_true_val_size;
-}
-
 inline void *slot_at_with_data(int64_t slot_offset, weld_dict *wd, void *data) {
   return (void *)((uint8_t *)data + slot_offset * slot_size(wd));
 }
@@ -233,20 +229,20 @@ extern "C" void *weld_rt_dict_finalize_global_slot_for_local(void *d, void *loca
   return weld_rt_dict_lookup(wd, *hash_at(wd, local_slot), key_at(local_slot));
 }
 
-extern "C" void *weld_rt_dict_to_array(void *d, int32_t value_offset_in_struct) {
+extern "C" void *weld_rt_dict_to_array(void *d, int32_t value_offset_in_struct, int32_t struct_size) {
   weld_dict *wd = (weld_dict *)d;
   int32_t post_key_padding = value_offset_in_struct - wd->key_size;
   assert(wd->finalized);
   simple_dict *global = get_global_dict(wd);
   void *array = weld_run_malloc(weld_rt_get_run_id(),
-    global->size * to_array_kv_size(wd, post_key_padding));
+    global->size * struct_size);
   int64_t next_arr_slot = 0;
   for (int64_t i = 0; i < global->capacity; i++) {
     void *cur_slot = slot_at(i, wd, global);
     if (*filled_at(cur_slot)) {
-      memcpy((uint8_t *)array + next_arr_slot * to_array_kv_size(wd, post_key_padding),
+      memcpy((uint8_t *)array + next_arr_slot * struct_size,
         key_at(cur_slot), wd->key_size);
-      memcpy((uint8_t *)array + next_arr_slot * to_array_kv_size(wd, post_key_padding) +
+      memcpy((uint8_t *)array + next_arr_slot * struct_size +
         wd->key_size + post_key_padding, val_at(wd, cur_slot), wd->to_array_true_val_size);
       next_arr_slot++;
     }

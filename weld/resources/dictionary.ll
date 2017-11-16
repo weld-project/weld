@@ -93,7 +93,9 @@ define %{NAME} @{NAME}.put(%{NAME} %dict, %{NAME}.slot %slot, {KEY} %key, {VALUE
 define {KV_VEC} @{NAME}.tovec(%{NAME} %dict) {{
   %valOffsetPtr = getelementptr {KV_STRUCT}, {KV_STRUCT}* null, i32 0, i32 1
   %valOffset = ptrtoint {VALUE}* %valOffsetPtr to i32
-  %arrRaw = call i8* @weld_rt_dict_to_array(i8* %dict, i32 %valOffset)
+  %structSizePtr = getelementptr {KV_STRUCT}, {KV_STRUCT}* null, i32 1
+  %structSize = ptrtoint {KV_STRUCT}* %structSizePtr to i32
+  %arrRaw = call i8* @weld_rt_dict_to_array(i8* %dict, i32 %valOffset, i32 %structSize)
   %arr = bitcast i8* %arrRaw to {KV_STRUCT}*
   %size = call i64 @weld_rt_dict_get_size(i8* %dict)
   %1 = insertvalue {KV_VEC} undef, {KV_STRUCT}* %arr, 0

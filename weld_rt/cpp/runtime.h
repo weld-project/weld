@@ -117,7 +117,7 @@ extern "C" {
   void weld_rt_dict_put(void *d, void *slot);
   void *weld_rt_dict_finalize_next_local_slot(void *d);
   void *weld_rt_dict_finalize_global_slot_for_local(void *d, void *local_slot);
-  void *weld_rt_dict_to_array(void *d, int32_t value_offset_in_struct);
+  void *weld_rt_dict_to_array(void *d, int32_t value_offset_in_struct, int32_t struct_size);
   int64_t weld_rt_dict_get_size(void *d);
   void weld_rt_dict_free(void *d);
 
