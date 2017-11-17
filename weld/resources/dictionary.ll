@@ -3,7 +3,6 @@
 ; Parameters:
 ; - NAME: name to give generated type, without % or @ prefix
 ; - KEY: LLVM type of key (e.g. i32 or %MyStruct)
-; - KEY_ARRAY_EL_SIZE_EXPR: if key is an array, expression for size of single array element (otherwise 0)
 ; - VALUE: LLVM type of value (e.g. i32 or %MyStruct)
 ; - KEY_PREFIX: prefix for helper functions of key (e.g. @i32 or @MyStruct)
 ; - KV_STRUCT: name of struct holding {{KEY, VALUE}} (should be generated outside)
@@ -23,8 +22,8 @@ define %{NAME} @{NAME}.new(i64 %capacity) {{
   %keySize = ptrtoint {KEY}* %keySizePtr to i32
   %valSizePtr = getelementptr {VALUE}, {VALUE}* null, i32 1
   %valSize = ptrtoint {VALUE}* %valSizePtr to i32
-  %keyArrayElSize = {KEY_ARRAY_EL_SIZE_EXPR}
-  %dict = call i8* @weld_rt_dict_new(i32 %keySize, i32 %keyArrayElSize, i32 %valSize, i32 %valSize, i64 1000000, i64 %capacity)
+  %dict = call i8* @weld_rt_dict_new(i32 %keySize, i32 (i8*, i8*)* {KEY_PREFIX}.eq_on_pointers,
+    i32 %valSize, i32 %valSize, i64 1000000, i64 %capacity)
   ret %{NAME} %dict
 }}
 
