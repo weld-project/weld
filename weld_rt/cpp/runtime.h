@@ -111,7 +111,7 @@ extern "C" {
   void *weld_rt_get_merger_at_index(void *m, int64_t size, int32_t i);
   void weld_rt_free_merger(void *m);
 
-  void *weld_rt_dict_new(int32_t key_size, int32_t key_array_el_size, int32_t val_size,
+  void *weld_rt_dict_new(int32_t key_size, int32_t (*keys_eq)(void *, void *), int32_t val_size,
     int32_t to_array_true_val_size, int64_t max_local_bytes, int64_t capacity);
   void *weld_rt_dict_lookup(void *d, int32_t hash, void *key);
   void weld_rt_dict_put(void *d, void *slot);
@@ -121,7 +121,7 @@ extern "C" {
   int64_t weld_rt_dict_get_size(void *d);
   void weld_rt_dict_free(void *d);
 
-  void *weld_rt_gb_new(int32_t key_size, int32_t key_array_el_size, int32_t val_size,
+  void *weld_rt_gb_new(int32_t key_size, int32_t (*keys_eq)(void *, void *), int32_t val_size,
     int64_t max_local_bytes, int64_t capacity);
   void weld_rt_gb_merge(void *b, void *key, int32_t hash, void *value);
   void *weld_rt_gb_result(void *b);

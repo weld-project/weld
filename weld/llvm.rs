@@ -1868,14 +1868,6 @@ impl LlvmGenerator {
     /// Generates a dictionary definition with the given element type, key type `key`, and  value
     /// type `value`.
     fn gen_dict_definition(&mut self, key: &Type, value: &Type) -> WeldResult<()> {
-        let key_valid =
-            match *key {
-                Vector(ref inner) => inner.is_nested_struct_of_scalars(),
-                ref other => other.is_nested_struct_of_scalars()
-            };
-        if !key_valid {
-            return weld_err!("Internal error: invalid dictionary key type {}", print_type(key));
-        }
         let elem = Box::new(Struct(vec![key.clone(), value.clone()]));
         let key_ty = self.llvm_type(key)?;
         let value_ty = self.llvm_type(value)?;
@@ -1885,16 +1877,16 @@ impl LlvmGenerator {
         let kv_struct_ty = self.llvm_type(&elem)?;
         let kv_vec = Box::new(Vector(elem.clone()));
         let kv_vec_ty = self.llvm_type(&kv_vec)?;
-        let key_array_el_size =
-            match *key {
-                Vector(_) => format!("call i32 {}.elSize()", key_prefix),
-                _ => "add i32 0, 0".to_string()
-            };
+
+        let eq_code = format!(include_str!("resources/eq_on_pointers.ll"),
+            KEY=&key_ty,
+            KEY_PREFIX=&key_prefix);
+        self.prelude_code.add(&eq_code);
+        self.prelude_code.add("\n");
 
         let dict_def = format!(include_str!("resources/dictionary.ll"),
             NAME=&name.replace("%", ""),
             KEY=&key_ty,
-            KEY_ARRAY_EL_SIZE_EXPR=&key_array_el_size,
             KEY_PREFIX=&key_prefix,
             VALUE=&value_ty,
             KV_STRUCT=&kv_struct_ty,
@@ -1971,16 +1963,10 @@ impl LlvmGenerator {
                 let vec = Box::new(Vector(vt.clone()));
                 let bld = Dict(kt.clone(), vec);
                 let bld_ty = self.llvm_type(&bld)?;
-                let key_array_el_size =
-                    match **kt {
-                        Vector(_) => format!("call i32 {}.elSize()", key_prefix),
-                        _ => "add i32 0, 0".to_string()
-                    };
 
                 let groupmerger_def = format!(include_str!("resources/groupbuilder.ll"),
                     NAME=&bld_ty.replace("%", ""),
                     KEY=&key_ty,
-                    KEY_ARRAY_EL_SIZE_EXPR=&key_array_el_size,
                     KEY_PREFIX=&key_prefix,
                     VALUE=&value_ty,
                     KV_STRUCT=&kv_struct_ty.replace("%", ""));
