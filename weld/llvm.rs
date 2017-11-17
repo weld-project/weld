@@ -1732,6 +1732,13 @@ impl LlvmGenerator {
                 return weld_err!("Unsupported function `eq` for type {:?}", ty);
             }
         };
+        let ll_ty = self.llvm_type(ty)?;
+        let ll_prefix = llvm_prefix(&ll_ty);
+        let eq_on_pointers = format!(include_str!("resources/eq_on_pointers.ll"),
+            TYPE=&ll_ty,
+            TYPE_PREFIX=&ll_prefix);
+        self.prelude_code.add(&eq_on_pointers);
+        self.prelude_code.add("\n");
         Ok(())
     }
 
@@ -1877,12 +1884,6 @@ impl LlvmGenerator {
         let kv_struct_ty = self.llvm_type(&elem)?;
         let kv_vec = Box::new(Vector(elem.clone()));
         let kv_vec_ty = self.llvm_type(&kv_vec)?;
-
-        let eq_code = format!(include_str!("resources/eq_on_pointers.ll"),
-            KEY=&key_ty,
-            KEY_PREFIX=&key_prefix);
-        self.prelude_code.add(&eq_code);
-        self.prelude_code.add("\n");
 
         let dict_def = format!(include_str!("resources/dictionary.ll"),
             NAME=&name.replace("%", ""),
