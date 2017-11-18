@@ -2447,9 +2447,9 @@ fn update_counter(mut counter: [i64; 3], shapes: [i64; 3]) -> [i64; 3] {
 /// fine.
 fn nditer_basic_op_test() {
     struct Args {
-        x: WeldVec<f64>,
-        shapes: WeldVec<i64>,
-        strides: WeldVec<i64>,
+        _x: WeldVec<f64>,
+        _shapes: WeldVec<i64>,
+        _strides: WeldVec<i64>,
     }
     let code = "|x:vec[f64], shapes:vec[i64], strides:vec[i64]| result(for(nditer(x,0L,24L,1L,shapes,strides), appender, |b,i,e|
                 merge(b,log(e))))";
@@ -2469,15 +2469,15 @@ fn nditer_basic_op_test() {
     let mut counter :[i64; 3] = [0, 0, 0];
 
     let ref input_data = Args {
-        x: WeldVec {
+        _x: WeldVec {
             data: &x as *const f64,
             len: x.len() as i64,
         },
-        shapes: WeldVec {
+        _shapes: WeldVec {
             data: &shapes as *const i64,
             len: shapes.len() as i64,
         },
-        strides: WeldVec {
+        _strides: WeldVec {
             data: &strides as *const i64,
             len: strides.len() as i64,
         },
@@ -2553,15 +2553,13 @@ fn nditer_zip() {
 }
 
 fn simple_powi() {
-    //let code = "|x:f64| powi(x, i64(2))";
-    let code = "|x:f64| powi(x, 2)";
+    let code = "|x:f64| powi(x, 3)";
     let conf = default_conf();
-    let input = 2.0;
+    let input = 3.0f64;
     let ret_value = compile_and_run(code, conf, &input);
     let data = unsafe { weld_value_data(ret_value) as *const f64 };
     let result = unsafe { (*data).clone() };
-    let output = 4.0;
-    println!("result = {}", result);
+    let output = 27.0f64;
     assert!(approx_equal(output, result, 5));
     unsafe { free_value_and_module(ret_value) };
 }
