@@ -4,8 +4,8 @@
 
 struct simple_dict {
   void *data;
-  int64_t size;
-  int64_t capacity;
+  volatile int64_t size;
+  volatile int64_t capacity;
   bool full; // only local dicts should be marked as full
 };
 
@@ -21,12 +21,12 @@ struct weld_dict {
   int32_t cur_local_dict;
   int64_t cur_slot_in_dict;
   bool finalized; // all keys have been moved to global
-  pthread_mutex_t global_lock;
+  pthread_rwlock_t global_lock;
 };
 
 inline int32_t slot_size(weld_dict *wd) {
   return sizeof(uint8_t) /* space for `filled` field */ + wd->key_size + wd->val_size +
-    sizeof(int32_t) /* space for key hash */;
+    sizeof(int32_t) /* space for key hash */ + sizeof(uint8_t) /* space for slot lock */;
 }
 
 inline void *slot_at_with_data(int64_t slot_offset, weld_dict *wd, void *data) {
@@ -51,6 +51,11 @@ inline int32_t *hash_at(weld_dict *wd, void *slot) {
 
 inline uint8_t *filled_at(void *slot) {
   return (uint8_t *)slot;
+}
+
+inline uint8_t *lock_at(weld_dict *wd, void *slot) {
+  return (uint8_t *)((uint8_t *)slot + sizeof(uint8_t) + wd->key_size + wd->val_size
+    + sizeof(int32_t));
 }
 
 inline bool slot_in_local(weld_dict *wd, void *slot) {
@@ -97,7 +102,7 @@ extern "C" void *weld_rt_dict_new(int32_t key_size, int32_t (*keys_eq)(void *, v
     d->data = weld_run_malloc(weld_rt_get_run_id(), capacity * slot_size(wd));
     memset(d->data, 0, capacity * slot_size(wd));
   }
-  pthread_mutex_init(&wd->global_lock, NULL);
+  pthread_rwlock_init(&wd->global_lock, NULL);
   return (void *)wd;
 }
 
@@ -153,10 +158,14 @@ extern "C" void *weld_rt_dict_lookup(void *d, int32_t hash, void *key) {
   }
   if (!wd->finalized) {
     // take the lock since if we are not finalized, there are still writes going on
-    pthread_mutex_lock(&wd->global_lock);
+    pthread_rwlock_rdlock(&wd->global_lock);
   }
   simple_dict *global = get_global_dict(wd);
-  return simple_dict_lookup(wd, global, hash, key, true);
+  void *slot = simple_dict_lookup(wd, global, hash, key, true);
+  if (!wd->finalized) {
+    while (!__sync_bool_compare_and_swap(lock_at(wd, slot), 0, 1)) {}
+  }
+  return slot;
 }
 
 extern "C" void weld_rt_dict_put(void *d, void *slot) {
@@ -175,14 +184,28 @@ extern "C" void weld_rt_dict_put(void *d, void *slot) {
       }
     } else {
       simple_dict *global = get_global_dict(wd);
-      global->size++;
+      if (!wd->finalized) {
+        *lock_at(wd, slot) = 0;
+        __sync_fetch_and_add(&global->size, 1);
+      } else{
+        global->size++;
+      }
       if (should_resize_dict_at_size(global->size, global)) {
-        resize_dict(wd, global);
+        if (!wd->finalized) {
+          pthread_rwlock_unlock(&wd->global_lock);
+          pthread_rwlock_wrlock(&wd->global_lock);
+        }
+        if (should_resize_dict_at_size(global->size, global)) {
+          resize_dict(wd, global);
+        }
+      }
+      if (!wd->finalized) {
+        pthread_rwlock_unlock(&wd->global_lock);
       }
     }
-  }
-  if (!wd->finalized && !slot_in_local(wd, slot)) {
-    pthread_mutex_unlock(&wd->global_lock);
+  } else if (!wd->finalized && !slot_in_local(wd, slot)) {
+    *lock_at(wd, slot) = 0;
+    pthread_rwlock_unlock(&wd->global_lock);
   }
 }
 
@@ -250,7 +273,7 @@ extern "C" void weld_rt_dict_free(void *d) {
     weld_run_free(weld_rt_get_run_id(), d->data);
   }
   weld_rt_free_merger(wd->dicts);
-  pthread_mutex_destroy(&wd->global_lock);
+  pthread_rwlock_destroy(&wd->global_lock);
   weld_run_free(weld_rt_get_run_id(), wd);
 }
 
