@@ -108,10 +108,14 @@ extern "C" void *weld_rt_dict_new(int32_t key_size, int32_t (*keys_eq)(void *, v
 
 inline void *simple_dict_lookup(weld_dict *wd, simple_dict *sd, int32_t hash, void *key,
   bool match_possible) {
+  bool is_global = get_global_dict(wd) == sd;
   // can do the bitwise and because capacity is always a power of two
   int64_t first_offset = hash & (sd->capacity - 1);
   for (int64_t i = 0; i < sd->capacity; i++) {
     void *cur_slot = slot_at((first_offset + i) & (sd->capacity - 1), wd, sd);
+    if (!wd->finalized && is_global) {
+      while (!__sync_bool_compare_and_swap(lock_at(wd, slot), 0, 1)) {}
+    }
     if (*filled_at(cur_slot)) {
       if (match_possible && *hash_at(wd, cur_slot) == hash &&
         wd->keys_eq(key, key_at(cur_slot))) {
@@ -121,6 +125,9 @@ inline void *simple_dict_lookup(weld_dict *wd, simple_dict *sd, int32_t hash, vo
       *hash_at(wd, cur_slot) = hash; // store hash here in case we end up filling this slot (no
       // problem if not)
       return cur_slot;
+    }
+    if (!wd->finalized && is_global) {
+      *lock_at(wd, slot) = 0;
     }
   }
   // should never reach this
@@ -161,11 +168,7 @@ extern "C" void *weld_rt_dict_lookup(void *d, int32_t hash, void *key) {
     pthread_rwlock_rdlock(&wd->global_lock);
   }
   simple_dict *global = get_global_dict(wd);
-  void *slot = simple_dict_lookup(wd, global, hash, key, true);
-  if (!wd->finalized) {
-    while (!__sync_bool_compare_and_swap(lock_at(wd, slot), 0, 1)) {}
-  }
-  return slot;
+  return simple_dict_lookup(wd, global, hash, key, true);
 }
 
 extern "C" void weld_rt_dict_put(void *d, void *slot) {
