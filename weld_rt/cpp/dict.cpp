@@ -114,7 +114,7 @@ inline void *simple_dict_lookup(weld_dict *wd, simple_dict *sd, int32_t hash, vo
   for (int64_t i = 0; i < sd->capacity; i++) {
     void *cur_slot = slot_at((first_offset + i) & (sd->capacity - 1), wd, sd);
     if (!wd->finalized && is_global) {
-      while (!__sync_bool_compare_and_swap(lock_at(wd, slot), 0, 1)) {}
+      while (!__sync_bool_compare_and_swap(lock_at(wd, cur_slot), 0, 1)) {}
     }
     if (*filled_at(cur_slot)) {
       if (match_possible && *hash_at(wd, cur_slot) == hash &&
@@ -127,7 +127,7 @@ inline void *simple_dict_lookup(weld_dict *wd, simple_dict *sd, int32_t hash, vo
       return cur_slot;
     }
     if (!wd->finalized && is_global) {
-      *lock_at(wd, slot) = 0;
+      *lock_at(wd, cur_slot) = 0;
     }
   }
   // should never reach this
