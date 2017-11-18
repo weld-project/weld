@@ -2283,11 +2283,17 @@ impl LlvmGenerator {
                 let value_tmp = self.gen_load_var(&value_ll_sym, &value_ty, ctx)?;
 
                 let power_ll_sym = llvm_symbol(power);
-                //let (power_ty, _) = self.llvm_type_and_name(func, value)?;
-                //let power_tmp = self.gen_load_var(&power_ll_sym, &power_ty, ctx)?;
+                /* power is always of type i32. */
                 let power_tmp = self.gen_load_var(&power_ll_sym, "i32", ctx)?;
                 let output_tmp = ctx.var_ids.next();
-                let op_name = "@llvm.powi.f64";
+                println!("output_ll_ty = {} ", output_ll_ty);
+                let op_name = match output_ll_ty.as_ref() {
+                                 "double" => Ok("@llvm.powi.f64"),
+                                 "float" => Ok("@llvm.powi.f32"),
+                                 _ => weld_err!("fail type {}", output_ll_ty)
+                              }?;
+
+                println!("op name = {} ", op_name);
                 match *ty {
                     Scalar(_) | Simd(_) => {
                             ctx.code.add(format!("{} = call {} {}({} {}, i32 {})",
