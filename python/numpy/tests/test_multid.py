@@ -4,6 +4,10 @@ import random
 from weldnumpy import *
 from test_utils import *
 
+'''
+Need to add a bunch of _real_shape invariance based tests.
+'''
+
 def diagonal(ary, offset=0):
     """
     from bohrium guys.
@@ -442,15 +446,25 @@ def test_broadcasting_nbody_bug():
     assert np.allclose(numpy_dx, weld_dx)
     assert np.array_equal(numpy_dx, weld_dx)
 
-def test_sum_axis():
-    n, w = random_arrays((20,20), 'float64')
+def test_sum_axis0_simple():
+    '''
+    Just a 2d contiguous array, so the simplest of all cases.
+    TODO: need to generalize this for arbitrary dimensions, and for non-contiguous arrays.
+    '''
+    n, w = random_arrays((7,11), 'float64')
     n2 = np.sum(n, axis=0)
-    n3 = np.sum(n)
     w2 = np.sum(w, axis=0)
-    print('w2: ', w2)
-    print('n2: ', n2)
-    print('n3: ', n3)
-    
+    w2 = w2.evaluate()
+    assert np.allclose(w2, n2)
+
+def test_sum_axis1_simple():
+    '''
+    switching the axis. 
+    '''
+    n, w = random_arrays((18,17), 'float64')
+    n2 = np.sum(n, axis=1)
+    w2 = np.sum(w, axis=1)
+    w2 = w2.evaluate()
     assert np.allclose(w2, n2)
 
 def test_ops_axis():
@@ -505,5 +519,6 @@ def test_nbody_bug2():
 
     assert np.allclose(nr2, wr2)
 
-# test_nbody_bug2()
+def test_less_than():
+    n, w = random_arrays(10, 'float64')
 

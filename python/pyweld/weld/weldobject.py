@@ -170,7 +170,6 @@ class WeldObject(object):
 
     def evaluate(self, restype, verbose=False, decode=True):
         function = self.to_weld_func()
-        verbose = True
         # Returns a wrapped ctypes Structure
         def args_factory(encoded):
             class Args(ctypes.Structure):

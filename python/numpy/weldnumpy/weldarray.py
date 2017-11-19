@@ -20,7 +20,7 @@ class weldarray(np.ndarray):
     use __array_finalize (besides __array_finalize__ also adds a function call to the creation of a
     new array, which adds to the overhead compared to numpy for initializing arrays)
     '''
-    def __new__(cls, input_array, verbose=True, *args, **kwargs):
+    def __new__(cls, input_array, verbose=False, *args, **kwargs):
         '''
         @input_array: original ndarray from which the new array is derived.
         '''
@@ -224,7 +224,6 @@ class weldarray(np.ndarray):
         print('WARNING: offloading setitem to numpy...in place ops arent quite working well here')
         # Offloading to numpy method:
         if isinstance(idx, slice):
-            print('idx = slice')
             if self._weldarray_view is not None:
                 view_idx = self._weldarray_view.idx
                 view_strides = self._weldarray_view.strides
@@ -320,9 +319,6 @@ class weldarray(np.ndarray):
         '''
         if len(input_args) > 2:
             print('WARNING: Length of input args > 2. Will be offloaded to numpy')
-            return False
-        if 'axis' in kwargs and kwargs['axis'] is not None:
-            print('WARNING: axis kwargs not None. Will be offloaded to numpy')
             return False
 
         arrays = []
@@ -467,6 +463,7 @@ class weldarray(np.ndarray):
                 power = input_args[1]
             return self._power_op(power, result=output)
         return None
+
     def _handle_reduce(self, ufunc, input_args, outputs, kwargs):
         '''
         TODO: describe.
@@ -476,12 +473,16 @@ class weldarray(np.ndarray):
         safer anyway.
         np supports reduce only for binary ops.
         '''
+        return None
         # input_args[0] must be self so it can be ignored.
         assert len(input_args) == 1
+        print('in handle reduce')
         if outputs: output = outputs[0]
         else: output = None
+        axis = kwargs['axis']
+
         if ufunc.__name__ in BINARY_OPS:
-            return self._reduce_op(BINARY_OPS[ufunc.__name__], result=output)
+            return self._reduce_op(BINARY_OPS[ufunc.__name__], axis=axis, result=output)
 
     def evaluate(self):
         '''
@@ -504,13 +505,13 @@ class weldarray(np.ndarray):
         '''
         global eval_calls
         eval_calls += 1
-        # print('!!!!!!!!!!!!!!!!IN _EVAL!!!!!!!!!!!!!!!!!!!!!!!!!!')
-        # print('evals = ', eval_calls)
+        print('evals = ', eval_calls)
         # This check has to happen before the caching - as the weldobj/code for views is never updated.
         # TODO: Need to change this condition specifically for in place ops.
         # Case 1: we are evaluating an in place on in an array. So need to evaluate the parent and
         # return the appropriate index.
         if self._weldarray_view:
+            print('view')
             idx = self._weldarray_view.idx
             strides = self._weldarray_view.strides
             if idx:
@@ -531,7 +532,6 @@ class weldarray(np.ndarray):
         if self.name == self.weldobj.weld_code:
             # No new ops have been registered. Avoid creating unneccessary new copies with
             # weldobj.evaluate()
-            # print('name == weld code')
             return self.weldobj.context[self.name]
 
         if restype is None:
@@ -540,7 +540,6 @@ class weldarray(np.ndarray):
         arr = self.weldobj.evaluate(restype, verbose=self._verbose)
         
         if hasattr(arr, '__len__'):
-            # print('reshape to ', self._real_shape)
             arr = arr.reshape(self._real_shape)
         else:
             # TODO: check
@@ -568,7 +567,6 @@ class weldarray(np.ndarray):
         else:
             result = weldarray(self, verbose=self._verbose)
         return result
-
 
     def _get_array_iter_code(self, res):
         '''
@@ -615,16 +613,56 @@ class weldarray(np.ndarray):
 
         return arr
 
-    def _reduce_op(self, op, result=None):
+    def _reduce_op(self, op, axis=None, result=None):
         '''
         TODO: support for multidimensional arrays.
         '''
         assert result is None, 'have not tested this yet'
-        template = 'result(for({arr},merger[{type}, {op}], |b, i, e| merge(b, e)))'
-        self.weldobj.weld_code = template.format(arr = self.weldobj.weld_code,
-                                                 type = self._weld_type.__str__(),
-                                                 op  = op)
-        return self._eval(restype = self._weld_type)
+        if axis is None:
+            template = 'result(for({arr},merger[{type}, {op}], |b, i, e| merge(b, e)))'
+            self.weldobj.weld_code = template.format(arr = self.weldobj.weld_code,
+                                                     type = self._weld_type.__str__(),
+                                                     op  = op)
+            return self._eval(restype = self._weld_type)
+        # reducing along an axis.
+        # FIXME: Right now, only supporting the simplest of cases - 2d arrays, with axis=0.
+        # Loop over an outer appender, = dimensions of output --> and then merge each row in the
+        # inner for loop.
+        other_axis = (axis + 1) % 2
+        template = ('result(for({dim_arr}, appender, |b,i,e| merge(b, result(for(iter({arr},'
+                    '{start},{end}L,{stride}L), merger[{type}, {op}], |b2, i2, e2| merge(b2,'
+                    'e2))))))') 
+        rows = self.shape[axis]
+        columns = self.shape[other_axis]
+        outer_stride = self.strides[axis] / self.itemsize
+        inner_stride = self.strides[other_axis] / self.itemsize
+
+        start = 'i*{}L'.format(inner_stride)
+        stride = str(outer_stride)
+        # FIXME: Technically, I think this should work as well but is it a bug in weld? It seems
+        # like iter(e0, 0, 3, 4) would fail because end should be exactly 4 or above.
+        # end = str(outer_stride*self.shape[0]+1)
+        end = 'i*{}L + {}L*{}'.format(inner_stride, outer_stride, rows)
+        dim_arr = np.array(range(self.shape[other_axis])) 
+        # declare an output array
+        # TODO: is this best way?
+        result = self._get_result()
+        result._real_shape = (self.shape[other_axis],)
+
+        arr = self._get_array_iter_code(result)
+        dim_arr_name = result.weldobj.update(dim_arr, SUPPORTED_DTYPES[str(dim_arr.dtype)])
+
+        code = template.format(dim_arr = dim_arr_name,
+                               arr = arr,
+                               start = start, 
+                               end = end,
+                               stride = stride,
+                               type = self._weld_type.__str__(),
+                               op = op)
+        result.weldobj.weld_code = code
+        # exit(0)
+        return result
+        
 
     def _power_op(self, power, result=None):
         '''
@@ -731,16 +769,20 @@ class weldarray(np.ndarray):
                 '{scalar}{suffix})))')
                 arr = input1._get_array_iter_code(result)
                 scalar = input2
+                real_shape = input1._real_shape
             else:
                 template = ('result(for({arr}, appender,|b,i,e| merge(b,{scalar}{suffix} {binop}'
                 'e)))')
                 arr = input2._get_array_iter_code(result)
                 scalar = input1
+                real_shape = input2._real_shape
+
             weld_type = result._weld_type.__str__()
             result.weldobj.weld_code = template.format(arr = arr,
                                                       binop = binop,
                                                       scalar = str(scalar),
                                                       suffix = DTYPE_SUFFIXES[weld_type])
+            result._real_shape = real_shape
             return result
 
         def _update_views_binary(result, other, binop):
@@ -816,8 +858,13 @@ class weldarray(np.ndarray):
         # Broadcasting arrays here because it (probably?) won't work with the way we're doing
         # inplace ops.
         if isinstance(input1, np.ndarray) and isinstance(input2, np.ndarray):
-            if (input1.shape != input2.shape):
+            # we need to compare real shapes because the operations are lazily evaluated so shapes
+            # could be changing...
+            if (input1._real_shape != input2._real_shape):
                 # need to broadcast the arrays!
+                print('BROADCAST-ING!!!!')
+                # print('inpu1: ', input1)
+                # print('input2: ', input2)
                 input1, input2 = broadcast_arrays(input1, input2)
 
         # scalars (i32, i64, f32, f64...)
@@ -835,6 +882,6 @@ class weldarray(np.ndarray):
                                                         binop = binop)
             # Important to have the correct shape. Since we have already done broadcast, this must
             # be right.
-            assert input1.shape == input2.shape, 'test shapes of inputs'
-            result._real_shape = input1.shape
+            assert input1._real_shape == input2._real_shape, 'test shapes of inputs'
+            result._real_shape = input1._real_shape
         return result
