@@ -167,9 +167,9 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
                 Unknown => push_type(&mut expr.ty, &value.ty, "UnaryOp"),
                 _ => return weld_err!("Internal error: {} called on non-scalar or non-float", op),
             }
-        }
-        
-        // FIXME: pari. do we need to push complete type for power too? j
+        } 
+
+        // FIXME: pari. do we need to push complete type for power too?
         Powi { 
             ref mut value,
             ..

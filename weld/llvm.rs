@@ -2286,14 +2286,11 @@ impl LlvmGenerator {
                 /* power is always of type i32. */
                 let power_tmp = self.gen_load_var(&power_ll_sym, "i32", ctx)?;
                 let output_tmp = ctx.var_ids.next();
-                println!("output_ll_ty = {} ", output_ll_ty);
                 let op_name = match output_ll_ty.as_ref() {
                                  "double" => Ok("@llvm.powi.f64"),
                                  "float" => Ok("@llvm.powi.f32"),
                                  _ => weld_err!("fail type {}", output_ll_ty)
                               }?;
-
-                println!("op name = {} ", op_name);
                 match *ty {
                     Scalar(_) | Simd(_) => {
                             ctx.code.add(format!("{} = call {} {}({} {}, i32 {})",
@@ -2303,7 +2300,6 @@ impl LlvmGenerator {
                     _ => weld_err!("Illegal type {} in Powi", print_type(ty))?,
                 }
             }
-
 
             Broadcast(ref child) => {
                 let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
