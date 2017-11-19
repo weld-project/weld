@@ -20,7 +20,21 @@ use libc::{c_char, c_void};
 
 /// Compares a and b, and returns true if their difference is less than 0.000...1 (cmp_decimals)
 fn approx_equal(a: f64, b: f64, cmp_decimals: u32) -> bool {
+    if a == b {
+        return true;
+    }
     let thresh = 0.1 / ((10i32.pow(cmp_decimals)) as f64);
+    let diff = (a - b).abs();
+    diff <= thresh
+}
+
+
+/// Compares a and b, and returns true if their difference is less than 0.000...1 (cmp_decimals)
+fn approx_equal_f32(a: f32, b: f32, cmp_decimals: u32) -> bool {
+    if a == b {
+        return true;
+    }
+    let thresh = 0.1 / ((10i32.pow(cmp_decimals)) as f32);
     let diff = (a - b).abs();
     diff <= thresh
 }
@@ -1814,6 +1828,7 @@ fn simple_erf() {
     unsafe { free_value_and_module(ret_value) };
 }
 
+
 fn simple_sqrt() {
     let code = "|x:f64| sqrt(x)";
     let conf = default_conf();
@@ -1825,6 +1840,50 @@ fn simple_sqrt() {
     let output = 2.0f64;
     assert!(approx_equal(output, result, 5));
     unsafe { free_value_and_module(ret_value) };
+}
+
+fn simple_trig() {
+    fn check_trig_f32(op: &str, input: f32, expect: f32) {
+        let code = format!("|x:f32| {}(x)", op);
+        let conf = default_conf();
+        let ret_value = compile_and_run(&code, conf, &input);
+        let data = unsafe { weld_value_data(ret_value) as *const f32 };
+        let result = unsafe { (*data).clone() };
+        assert!(approx_equal_f32(expect, result, 5));
+        unsafe { free_value_and_module(ret_value) };
+    }
+
+    fn check_trig_f64(op: &str, input: f64, expect: f64) {
+        let code = format!("|x:f64| {}(x)", op);
+        let conf = default_conf();
+        let ret_value = compile_and_run(&code, conf, &input);
+        let data = unsafe { weld_value_data(ret_value) as *const f64 };
+        let result = unsafe { (*data).clone() };
+        assert!(approx_equal(expect, result, 5));
+        unsafe { free_value_and_module(ret_value) };
+    }
+
+    let inp: f32 = 1.0;
+    check_trig_f32("sin", inp, inp.sin());
+    check_trig_f32("cos", inp, inp.cos());
+    check_trig_f32("tan", inp, inp.tan());
+    check_trig_f32("asin", inp, inp.asin());
+    check_trig_f32("acos", inp, inp.acos());
+    check_trig_f32("atan", inp, inp.atan());
+    check_trig_f32("sinh", inp, inp.sinh());
+    check_trig_f32("cosh", inp, inp.cosh());
+    check_trig_f32("tanh", inp, inp.tanh());
+
+    let inp: f64 = 1.0;
+    check_trig_f64("sin", inp, inp.sin());
+    check_trig_f64("cos", inp, inp.cos());
+    check_trig_f64("tan", inp, inp.tan());
+    check_trig_f64("asin", inp, inp.asin());
+    check_trig_f64("acos", inp, inp.acos());
+    check_trig_f64("atan", inp, inp.atan());
+    check_trig_f64("sinh", inp, inp.sinh());
+    check_trig_f64("cosh", inp, inp.cosh());
+    check_trig_f64("tanh", inp, inp.tanh());
 }
 
 fn map_exp() {
@@ -2452,6 +2511,7 @@ fn main() {
              ("exp_error", exp_error),
              ("simple_erf", simple_erf),
              ("simple_sqrt", simple_sqrt),
+             ("simple_trig", simple_trig),
              ("empty_appender_loop", empty_appender_loop),
              ("map_exp", map_exp),
              ("nested_if_statement_loop", nested_if_statement_loop),
