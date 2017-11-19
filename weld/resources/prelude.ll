@@ -33,6 +33,12 @@ declare <4 x double> @llvm.exp.v4f64(<4 x double>)
 declare float @llvm.sqrt.f32(float)
 declare double @llvm.sqrt.f64(double)
 
+
+declare float     @llvm.sin.f32(float  %Val)
+declare double    @llvm.sin.f64(double %Val)
+declare float     @llvm.cos.f32(float  %Val)
+declare double    @llvm.cos.f64(double %Val)
+
 declare i64 @llvm.ctlz.i64(i64, i1)
 
 declare float @llvm.maxnum.f32(float, float)
@@ -46,6 +52,24 @@ declare void @qsort(i8*, i64, i64, i32 (i8*, i8*)*)
 declare i32 @memcmp(i8*, i8*, i64)
 declare float @erff(float)
 declare double @erf(double)
+
+; Trigonometry functions without LLVM intrinsics.
+declare float @tanf(float)
+declare double @tan(double)
+
+declare float @asinf(float)
+declare double @asin(double)
+declare float @acosf(float)
+declare double @acos(double)
+declare float @atanf(float)
+declare double @atan(double)
+
+declare float @sinhf(float)
+declare double @sinh(double)
+declare float @coshf(float)
+declare double @cosh(double)
+declare float @tanhf(float)
+declare double @tanh(double)
 
 declare i32 @puts(i8* nocapture) nounwind
 

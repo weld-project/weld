@@ -52,6 +52,15 @@ pub enum Token {
     TSlice,
     TSort,
     TExp,
+    TSin,
+    TCos,
+    TTan,
+    TASin,
+    TACos,
+    TATan,
+    TSinh,
+    TCosh,
+    TTanh,
     TSimd,
     TSelect,
     TBroadcast,
@@ -153,7 +162,8 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
 
         // Regular expressions for various types of tokens.
         static ref KEYWORD_RE: Regex = Regex::new(
-            "^(if|for|zip|len|lookup|keyexists|slice|sort|exp|log|erf|sqrt|simd|select|broadcast|\
+            "^(if|for|zip|len|lookup|keyexists|slice|sort|exp|sin|cos|tan|asin|acos|atan|sinh|cosh|tanh|\
+            log|erf|sqrt|simd|select|broadcast|\
              iterate|cudf|simditer|fringeiter|iter|merge|result|let|true|false|macro|\
              i8|i16|i32|i64|u8|u16|u32|u64|f32|f64|bool|vec|appender|merger|vecmerger|\
              dictmerger|groupmerger|tovec|min|max)$").unwrap();
@@ -222,6 +232,15 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
                             "slice" => TSlice,
                             "sort" => TSort,
                             "exp" => TExp,
+                            "sin" => TSin,
+                            "cos" => TCos,
+                            "tan" => TTan,
+                            "asin" => TASin,
+                            "acos" => TACos,
+                            "atan" => TATan,
+                            "sinh" => TSinh,
+                            "cosh" => TCosh,
+                            "tanh" => TTanh,
                             "log" => TLog,
                             "erf" => TErf,
                             "sqrt" => TSqrt,
@@ -365,6 +384,15 @@ impl fmt::Display for Token {
                     TSlice => "slice",
                     TSort => "sort",
                     TExp => "exp",
+                    TSin => "sin",
+                    TCos => "cos",
+                    TTan => "tan",
+                    TASin => "asin",
+                    TACos => "atan",
+                    TATan => "acos",
+                    TSinh => "sinh",
+                    TCosh => "cosh",
+                    TTanh => "tanh",
                     TLog => "log",
                     TErf => "erf",
                     TSqrt => "sqrt",

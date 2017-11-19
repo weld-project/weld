@@ -8,6 +8,7 @@ use std::vec::Vec;
 use super::ast::Symbol;
 use super::ast::Iter;
 use super::ast::BinOpKind::*;
+use super::ast::UnaryOpKind;
 use super::ast::UnaryOpKind::*;
 use super::ast::ExprKind::*;
 use super::ast::LiteralKind::*;
@@ -657,45 +658,41 @@ impl<'t> Parser<'t> {
         Ok(())
     }
 
+    /// Helper function which returns the `UnaryOpKind` for a token.
+    fn unary_op_kind_for_token(&self, token: Token) -> WeldResult<UnaryOpKind> {
+        let kind = match token {
+            TExp => Exp,
+            TLog => Log,
+            TSqrt => Sqrt,
+            TErf => Erf,
+            TSin => Sin,
+            TCos => Cos,
+            TTan => Tan,
+            TASin => ASin,
+            TACos => ACos,
+            TATan => ATan,
+            TSinh => Sinh,
+            TCosh => Cosh,
+            TTanh => Tanh,
+            _ => {
+                return weld_err!("Invalid token for UnaryOp");
+            }
+        };
+        Ok(kind)
+    }
+
     /// Helper function for leaf_expr as all functions with unary args follow same pattern.
-    fn unary_leaf_expr(&mut self, func_name: &str) -> WeldResult<Box<PartialExpr>> {
+    fn unary_leaf_expr(&mut self, token: Token) -> WeldResult<Box<PartialExpr>> {
         try!(self.consume(TOpenParen));
         let value = try!(self.expr());
         try!(self.consume(TCloseParen));
-
-        match func_name {
-            "Exp" => {
-                Ok(expr_box(UnaryOp {
-                                kind: Exp,
-                                value: value,
-                            },
-                            Annotations::new()))
-            }
-            "Log" => {
-                Ok(expr_box(UnaryOp {
-                                kind: Log,
-                                value: value,
-                            },
-                            Annotations::new()))
-            }
-            "Sqrt" => {
-                Ok(expr_box(UnaryOp {
-                                kind: Sqrt,
-                                value: value,
-                            },
-                            Annotations::new()))
-            }
-            "Erf" => {
-                Ok(expr_box(UnaryOp {
-                                kind: Erf,
-                                value: value,
-                            },
-                            Annotations::new()))
-            }
-            "Res" => Ok(expr_box(Res { builder: value }, Annotations::new())),
-            _ => weld_err!("Expr type {} is not a unary leaf expr", func_name),
-        }
+        let kind = self.unary_op_kind_for_token(token)?;
+        Ok(expr_box(UnaryOp {
+            kind: kind,
+            value: value,
+        }, Annotations::new()))
     }
+
     /// Parse a terminal expression at the bottom of the precedence chain.
     fn leaf_expr(&mut self) -> WeldResult<Box<PartialExpr>> {
         let mut annotations = Annotations::new();
@@ -962,13 +959,19 @@ impl<'t> Parser<'t> {
                             Annotations::new()))
             }
 
-            TExp => self.unary_leaf_expr("Exp"),
-
-            TLog => self.unary_leaf_expr("Log"),
-
-            TErf => self.unary_leaf_expr("Erf"),
-
-            TSqrt => self.unary_leaf_expr("Sqrt"),
+            TExp => self.unary_leaf_expr(TExp),
+            TLog => self.unary_leaf_expr(TLog),
+            TErf => self.unary_leaf_expr(TErf),
+            TSqrt => self.unary_leaf_expr(TSqrt),
+            TSin => self.unary_leaf_expr(TSin),
+            TCos => self.unary_leaf_expr(TCos),
+            TTan => self.unary_leaf_expr(TTan),
+            TASin => self.unary_leaf_expr(TASin),
+            TACos => self.unary_leaf_expr(TACos),
+            TATan => self.unary_leaf_expr(TATan),
+            TSinh => self.unary_leaf_expr(TSinh),
+            TCosh => self.unary_leaf_expr(TCosh),
+            TTanh => self.unary_leaf_expr(TTanh),
 
             TMerge => {
                 try!(self.consume(TOpenParen));
@@ -983,7 +986,12 @@ impl<'t> Parser<'t> {
                             Annotations::new()))
             }
 
-            TResult => self.unary_leaf_expr("Res"),
+            TResult => {
+                try!(self.consume(TOpenParen));
+                let value = try!(self.expr());
+                try!(self.consume(TCloseParen));
+                Ok(expr_box(Res { builder: value }, Annotations::new()))
+            }
 
             TAppender => {
                 let mut elem_type = Unknown;

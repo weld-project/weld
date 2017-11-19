@@ -3489,6 +3489,31 @@ fn llvm_scalar_unaryop(op_kind: UnaryOpKind, ty: &ScalarKind) -> WeldResult<&'st
         (UnaryOpKind::Sqrt, &F32) => Ok("@llvm.sqrt.f32"),
         (UnaryOpKind::Sqrt, &F64) => Ok("@llvm.sqrt.f64"),
 
+        (UnaryOpKind::Sin, &F32) => Ok("@llvm.sin.f32"),
+        (UnaryOpKind::Sin, &F64) => Ok("@llvm.sin.f64"),
+
+        (UnaryOpKind::Cos, &F32) => Ok("@llvm.cos.f32"),
+        (UnaryOpKind::Cos, &F64) => Ok("@llvm.cos.f64"),
+
+        (UnaryOpKind::Tan, &F32) => Ok("@tanf"),
+        (UnaryOpKind::Tan, &F64) => Ok("@tan"),
+
+        (UnaryOpKind::ASin, &F32) => Ok("@asinf"),
+        (UnaryOpKind::ASin, &F64) => Ok("@asin"),
+        (UnaryOpKind::ACos, &F32) => Ok("@acosf"),
+        (UnaryOpKind::ACos, &F64) => Ok("@acos"),
+        (UnaryOpKind::ATan, &F32) => Ok("@atanf"),
+        (UnaryOpKind::ATan, &F64) => Ok("@atan"),
+
+        (UnaryOpKind::Sinh, &F32) => Ok("@sinhf"),
+        (UnaryOpKind::Sinh, &F64) => Ok("@sinh"),
+        (UnaryOpKind::Cosh, &F32) => Ok("@coshf"),
+        (UnaryOpKind::Cosh, &F64) => Ok("@cosh"),
+        (UnaryOpKind::Tanh, &F32) => Ok("@tanhf"),
+        (UnaryOpKind::Tanh, &F64) => Ok("@tanh"),
+
+
+
         (UnaryOpKind::Erf, &F32) => Ok("@erff"),
         (UnaryOpKind::Erf, &F64) => Ok("@erf"),
 
