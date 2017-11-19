@@ -2275,6 +2275,32 @@ impl LlvmGenerator {
                 }
             }
 
+            Powi { ref value, ref power} => {
+                let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
+                let ty = func.symbol_type(value)?;
+                // Assume the left and right operands have the same type.
+                let (value_ty, value_ll_sym) = self.llvm_type_and_name(func, value)?;
+                let value_tmp = self.gen_load_var(&value_ll_sym, &value_ty, ctx)?;
+
+                let power_ll_sym = llvm_symbol(power);
+                /* power is always of type i32. */
+                let power_tmp = self.gen_load_var(&power_ll_sym, "i32", ctx)?;
+                let output_tmp = ctx.var_ids.next();
+                let op_name = match output_ll_ty.as_ref() {
+                                 "double" => Ok("@llvm.powi.f64"),
+                                 "float" => Ok("@llvm.powi.f32"),
+                                 _ => weld_err!("fail type {}", output_ll_ty)
+                              }?;
+                match *ty {
+                    Scalar(_) | Simd(_) => {
+                            ctx.code.add(format!("{} = call {} {}({} {}, i32 {})",
+                                &output_tmp, &value_ty, &op_name, &value_ty, &value_tmp, &power_tmp));
+                            self.gen_store_var(&output_tmp, &output_ll_sym, &output_ll_ty, ctx);
+                        }                        
+                    _ => weld_err!("Illegal type {} in Powi", print_type(ty))?,
+                }
+            }
+
             Broadcast(ref child) => {
                 let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
                 let (child_ll_ty, child_ll_sym) = self.llvm_type_and_name(func, child)?;
@@ -2293,7 +2319,7 @@ impl LlvmGenerator {
             UnaryOp { op, ref child, } => {
                 self.gen_unary_op(ctx, func, output, child, op)?
             }
-
+            
             Negate(ref child) => {
                 let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
                 let output_ty = func.symbol_type(output)?;

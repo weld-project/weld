@@ -223,6 +223,16 @@ impl PartialExpr {
                 }
             }
 
+            Powi {
+                ref value,
+                ref power,
+            } => {
+                Powi {
+                    value: try!(typed_box(value)),
+                    power: try!(typed_box(power)),
+                }
+            }
+
             UnaryOp { kind, ref value } => {
                 UnaryOp {
                     kind: kind,

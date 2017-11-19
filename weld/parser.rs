@@ -969,6 +969,21 @@ impl<'t> Parser<'t> {
             TErf => self.unary_leaf_expr("Erf"),
 
             TSqrt => self.unary_leaf_expr("Sqrt"),
+            
+            // FIXME: is this needed here?
+            TPowi => {
+                try!(self.consume(TOpenParen));
+                let value = try!(self.expr());
+                try!(self.consume(TComma));
+                let power = try!(self.expr());
+                try!(self.consume(TCloseParen));
+
+                Ok(expr_box(Powi {
+                                value: value,
+                                power: power,
+                            },
+                            Annotations::new()))
+            }
 
             TMerge => {
                 try!(self.consume(TOpenParen));

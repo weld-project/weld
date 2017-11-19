@@ -2413,6 +2413,18 @@ fn nested_for_loops() {
     unsafe { free_value_and_module(ret_value) };
 }
 
+fn simple_powi() {
+    let code = "|x:f64| powi(x, 3)";
+    let conf = default_conf();
+    let input = 3.0f64;
+    let ret_value = compile_and_run(code, conf, &input);
+    let data = unsafe { weld_value_data(ret_value) as *const f64 };
+    let result = unsafe { (*data).clone() };
+    let output = 27.0f64;
+    assert!(approx_equal(output, result, 5));
+    unsafe { free_value_and_module(ret_value) };
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     let tests: Vec<(&str, fn())> =
@@ -2501,7 +2513,9 @@ fn main() {
              ("nested_for_loops", nested_for_loops),
              ("nested_appender_loop", nested_appender_loop),
              ("simple_sort", simple_sort),
-             ("complex_sort", complex_sort)];
+             ("complex_sort", complex_sort),
+             ("nested_appender_loop", nested_appender_loop),
+             ("simple_powi", simple_powi),];
 
     println!("");
     println!("running tests");
