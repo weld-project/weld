@@ -434,9 +434,6 @@ def test_broadcasting_nbody_bug():
     a = transpose(n[np.newaxis,:])
     b = transpose(w[np.newaxis,:])
     
-    print(a[0])
-    print(b[0])
-
     numpy_dx = a - n
     weld_dx = b - w
     weld_dx = weld_dx.evaluate()
@@ -483,4 +480,30 @@ def test_diagonal_setitem():
     assert np.array_equal(n2, w2)
     assert np.array_equal(n, w)
 
-# test_diagonal_setitem()
+def test_nbody_bug2():
+    n, w = random_arrays(100, 'float64')
+    a = transpose(n[np.newaxis,:])
+    b = transpose(w[np.newaxis,:])
+    
+    ndx = a - n
+    wdx = b - w
+    
+    print(wdx.shape)
+    print(wdx._real_shape)
+
+    nr = np.sqrt(ndx**2)
+    wr = np.sqrt(wdx**2)
+    wr._real_shape = wdx._real_shape
+
+    # wr = wr.evaluate()
+    # assert np.allclose(nr, wr)
+
+    nr2 = nr**3
+    wr2 = wr**3
+    wr2._real_shape = wr._real_shape
+    wr2 = wr2.evaluate()
+
+    assert np.allclose(nr2, wr2)
+
+# test_nbody_bug2()
+

@@ -105,14 +105,35 @@ def test_shapes():
     '''
     for SHAPE in SHAPES:
         n, w = random_arrays(SHAPE, 'float32')
-        print('view: ', w._weldarray_view)
         n = np.exp(n)
         w = np.exp(w)
-        print('view: ', w._weldarray_view)
         w = w.evaluate()
 
         assert n.shape == w.shape
         assert n.ndim == w.ndim
         assert n.size == w.size
         assert np.array_equal(w, n)
+
+def test_square():
+    '''
+    square, and other powers.
+    '''
+    for s in SHAPES:
+        n, w = random_arrays(s, 'float32')
+        n2 = np.square(n)
+        w2 = np.square(w)
+        assert np.allclose(n2, w2)
+
+def test_powers():
+    '''
+    square, and other powers.
+    '''
+    POWERS = [3, 5, 8];
+    for s in SHAPES:
+        for p in POWERS:
+            n, w = random_arrays(s, 'float32')
+            n2 = np.power(n, p)
+            w2 = np.power(w, p)
+            assert np.allclose(n2, w2)
+
 

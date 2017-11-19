@@ -93,3 +93,26 @@ BINARY_OPS = get_supported_binary_ops()
 UNARY_OPS = get_supported_unary_ops()
 SUPPORTED_DTYPES = get_supported_types()
 DTYPE_SUFFIXES = get_supported_suffixes()
+
+
+# XXX: FIXME get rid of this.
+def random_arrays(shape, dtype):
+    '''
+    Generates random Weld array, and numpy array of the given num elements.
+    '''
+    # np.random does not support specifying dtype, so this is a weird
+    # way to support both float/int random numbers
+    test = np.zeros((shape), dtype=dtype)
+    test[:] = np.random.randn(*test.shape)
+    test = np.abs(test)
+    # at least add 1 so no 0's (o.w. divide errors)
+    random_add = np.random.randint(1, high=10, size=test.shape)
+    test = test + random_add
+    test = test.astype(dtype)
+
+    np_test = np.copy(test)
+    # w = weldarray(test, verbose=False)
+
+    return np_test
+
+

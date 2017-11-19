@@ -676,123 +676,129 @@ def test_implicit_evaluate():
 
     assert np.allclose(w3, n3)
 
-def test_setitem_basic():
-    '''
-    set an arbitrary item in the array after registering ops on it.
-    '''
-    # TODO: run this on all types.
-    n, w = random_arrays(NUM_ELS, 'float32')
-    n[0] = 5.0
-    w[0] = 5.0
-    assert np.allclose(n, w)
-
-    n[0] += 10.0
-    w[0] += 10.0
-    assert np.allclose(n, w)
-
-    n[2] -= 5.0
-    w[2] -= 5.0
-
-    assert np.allclose(n, w)
-
-def test_setitem_slice():
-    '''
-    '''
-    n, w = random_arrays(NUM_ELS, 'float32')
-
-    n[0:2] = [5.0, 2.0]
-    w[0:2] = [5.0, 2.0]
-    assert np.allclose(n, w)
-
-    n[4:6] += 10.0
-    w[4:6] += 10.0
-    assert np.allclose(n, w)
-
-def test_setitem_strides():
-    '''
-    TODO: make more complicated versions which do multiple types of changes on strides at once.
-    TODO2: need to support different strides.
-    '''
-    n, w = random_arrays(NUM_ELS, 'float32')
-
-    n[0:2:1] = [5.0, 2.0]
-    w[0:2:1] = [5.0, 2.0]
-    print('w: ', w)
-    print('n: ', n)
-    assert np.allclose(n, w)
-
-    n[5:8:1] += 10.0
-    w[5:8:1] += 10.0
-    assert np.allclose(n, w)
-
-def test_setitem_list():
-    '''
-    '''
-    n, w = random_arrays(NUM_ELS, 'float32')
-    a = [0, 3]
-
-    n[a] = [5.0, 13.0]
-    w[a] = [5.0, 13.0]
-
-    print('n: ', n)
-    print('w: ', w)
-    assert np.allclose(n, w)
-
-def test_setitem_weird_indexing():
-    '''
-    try to confuse the weldarray with different indexing patterns.
-    '''
-    pass
-
-def test_setitem_mix():
-    '''
-    Mix all setitem stuff / and other ops.
-    '''
-    n, w = random_arrays(NUM_ELS, 'float32')
-    n = np.sqrt(n)
-    w = np.sqrt(w)
+# def test_setitem_basic():
+    # '''
+    # set an arbitrary item in the array after registering ops on it.
+    # '''
+    # # TODO: run this on all types.
+    # n, w = random_arrays(NUM_ELS, 'float32')
+    # n[0] = 5.0
+    # w[0] = 5.0
     # assert np.allclose(n, w)
 
-    n, w = random_arrays(NUM_ELS, 'float32')
+    # n[0] += 10.0
+    # w[0] += 10.0
+    # assert np.allclose(n, w)
 
-    n[0:2] = [5.0, 2.0]
-    w[0:2] = [5.0, 2.0]
-    assert np.allclose(n, w)
+    # n[2] -= 5.0
+    # w[2] -= 5.0
 
-    n[4:6] += 10.0
-    w[4:6] += 10.0
-    assert np.allclose(n, w)
+    # assert np.allclose(n, w)
 
-def test_setitem_views():
-    '''
-    What if you use setitem on a view? Will the changes be correctly propagated to the base array
-    etc?
-    '''
-    n, w = random_arrays(NUM_ELS, 'float32')
-    # n2 = n[0:4]
-    # w2 = w[0:4]
-    n2 = n[1:5]
-    w2 = w[1:5]
+# def test_setitem_slice():
+    # '''
+    # '''
+    # n, w = random_arrays(NUM_ELS, 'float32')
 
-    n2[0:2:1] = [5.0, 2.0]
-    w2[0:2:1] = [5.0, 2.0]
+    # n[0:2] = [5.0, 2.0]
+    # w[0:2] = [5.0, 2.0]
+    # assert np.allclose(n, w)
+
+    # n[4:6] += 10.0
+    # w[4:6] += 10.0
+    # assert np.allclose(n, w)
+
+# def test_setitem_strides():
+    # '''
+    # TODO: make more complicated versions which do multiple types of changes on strides at once.
+    # TODO2: need to support different strides.
+    # '''
+    # n, w = random_arrays(NUM_ELS, 'float32')
+
+    # n[0:2:1] = [5.0, 2.0]
+    # w[0:2:1] = [5.0, 2.0]
+    # print('w: ', w)
+    # print('n: ', n)
+    # assert np.allclose(n, w)
+
+    # n[5:8:1] += 10.0
+    # w[5:8:1] += 10.0
+    # assert np.allclose(n, w)
+
+# def test_setitem_list():
+    # '''
+    # '''
+    # n, w = random_arrays(NUM_ELS, 'float32')
+    # a = [0, 3]
+
+    # n[a] = [5.0, 13.0]
+    # w[a] = [5.0, 13.0]
+
+    # print('n: ', n)
+    # print('w: ', w)
+    # assert np.allclose(n, w)
+
+# def test_setitem_weird_indexing():
+    # '''
+    # try to confuse the weldarray with different indexing patterns.
+    # '''
+    # pass
+
+# def test_setitem_mix():
+    # '''
+    # Mix all setitem stuff / and other ops.
+    # '''
+    # n, w = random_arrays(NUM_ELS, 'float32')
+    # n = np.sqrt(n)
+    # w = np.sqrt(w)
+    # # assert np.allclose(n, w)
+
+    # n, w = random_arrays(NUM_ELS, 'float32')
+
+    # n[0:2] = [5.0, 2.0]
+    # w[0:2] = [5.0, 2.0]
+    # assert np.allclose(n, w)
+
+    # n[4:6] += 10.0
+    # w[4:6] += 10.0
+    # assert np.allclose(n, w)
+
+# def test_setitem_views():
+    # '''
+    # What if you use setitem on a view? Will the changes be correctly propagated to the base array
+    # etc?
+    # '''
+    # NUM_ELS = 6
+    # n, w = random_arrays(NUM_ELS, 'float32')
+    # # n2 = n[0:4]
+    # # w2 = w[0:4]
+    # n2 = n[1:5]
+    # w2 = w[1:5]
+
+    # n2[0:2:1] = [5.0, 2.0]
+    # w2[0:2:1] = [5.0, 2.0]
     
-    assert np.allclose(n, w)
-    assert np.allclose(n2, w2)
+    # print('before first asserts')
+    # assert np.allclose(n, w)
+    # assert np.allclose(n2, w2)
+    # print('after first asserts')
+    # print('w2: ', w2)
+    # # w2 = w2.evaluate()
+    # # w = w.evaluate()
 
-    n2[0:3:1] += 10.0
-    w2[0:3:1] += 10.0
+    # n2[0:3:1] += 10.0
+    # w2[0:3:1] += 10.0
     
-    w2 = w2.evaluate()
-    w = w.evaluate()
+    # w2 = w2.evaluate()
+    # w = w.evaluate()
 
-    print('n: ', n)
-    print('w: ', w)
-    print('n2: ', n2)
-    print('w2: ', w2)
+    # print('n: ', n)
+    # print('w: ', w)
+    # print('n2: ', n2)
+    # print('w2: ', w2)
 
-    assert np.allclose(n, w)
-    assert np.allclose(n2, w2)
+    # assert np.allclose(n, w)
+    # assert np.allclose(n2, w2)
 
 def test_iterator():
     n, w = random_arrays(NUM_ELS, 'float32')
@@ -985,7 +991,6 @@ def test_vectorization_bug():
 
 def test_blackscholes_bug():
     '''
-    Seems to happen because of the infer-size pass.
     '''
     n, w = random_arrays(NUM_ELS, 'float32')
     n2, w2 = random_arrays(NUM_ELS, 'float32')
@@ -1018,12 +1023,4 @@ def test_erf():
         # __array_ufunc__.
         # assert np.array_equal(w2_eval, n2)
 
-# test_views_update_child()
-# test_views_mess()
-# test_setitem_views()
-# test_unary_elemwise()
-# test_scalars()
-# test_binary_elemwise()
-# test_getitem_evaluate()
-test_inplace_assignment()
-# test_views_update_parent()
+test_blackscholes_bug()

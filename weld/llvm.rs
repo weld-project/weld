@@ -112,6 +112,7 @@ pub fn apply_opt_passes(expr: &mut TypedExpr, opt_passes: &Vec<Pass>, stats: &mu
         stats.pass_times.push((pass.pass_name(), start.to(end)));
         trace!("After {} pass:\n{}", pass.pass_name(), print_typed_expr(&expr));
     }
+    //println!("After all passes:\n{}", print_typed_expr(&expr));
     Ok(())
 }
 
@@ -2575,14 +2576,11 @@ impl LlvmGenerator {
                 /* power is always of type i32. */
                 let power_tmp = self.gen_load_var(&power_ll_sym, "i32", ctx)?;
                 let output_tmp = ctx.var_ids.next();
-                println!("output_ll_ty = {} ", output_ll_ty);
                 let op_name = match output_ll_ty.as_ref() {
                                  "double" => Ok("@llvm.powi.f64"),
                                  "float" => Ok("@llvm.powi.f32"),
                                  _ => weld_err!("fail type {}", output_ll_ty)
                               }?;
-
-                println!("op name = {} ", op_name);
                 match *ty {
                     Scalar(_) | Simd(_) => {
                             ctx.code.add(format!("{} = call {} {}({} {}, i32 {})",
