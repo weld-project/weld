@@ -1,7 +1,9 @@
 import numpy as np
 from weldnumpy import *
 
+# TODO: combine unary and trig ops.
 UNARY_OPS = [np.exp, np.log, np.sqrt]
+TRIG_OPS = [np.sin, np.cos]
 # TODO: Add wa.erf - doesn't use the ufunc functionality of numpy so not doing it for
 # now.
 BINARY_OPS = [np.add, np.subtract, np.multiply, np.divide]

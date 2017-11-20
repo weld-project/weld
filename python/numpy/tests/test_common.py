@@ -168,5 +168,13 @@ def test_less_invert():
 
     assert np.allclose(w2.view(np.ndarray), n2)
 
-# test_less()
-test_less_invert()
+def test_trig():
+    for s in SHAPES:
+        for op in TRIG_OPS:
+            n, w = random_arrays(s, 'float64')
+            n2 = op(n)
+            w2 = op(w)
+
+            assert np.allclose(n2, w2)
+
+test_trig()

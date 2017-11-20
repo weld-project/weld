@@ -64,6 +64,8 @@ def get_supported_unary_ops():
     unary_ops[np.exp.__name__] = 'exp'
     unary_ops[np.log.__name__] = 'log'
     unary_ops[np.sqrt.__name__] = 'sqrt'
+    unary_ops[np.sin.__name__] = 'sin'
+    unary_ops[np.cos.__name__] = 'cos'
     return unary_ops
 
 def get_supported_cmp_ops():

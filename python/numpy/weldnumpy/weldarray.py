@@ -403,6 +403,7 @@ class weldarray(np.ndarray):
             output = self._handle_reduce(ufunc, input_args, outputs, kwargs)
 
         if output is not None:
+            print('ufunc was supported ', ufunc)
             return output
 
         return self._handle_numpy(ufunc, method, input_args, outputs, kwargs)
