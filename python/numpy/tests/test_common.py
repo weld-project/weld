@@ -69,6 +69,7 @@ def test_scalars():
     Weldrray members.
     '''
     for SHAPE in SHAPES:
+        print('shape = ', SHAPE)
         t = "int32"
         print("t = ", t)
         n, w = random_arrays(SHAPE, t)
@@ -136,4 +137,24 @@ def test_powers():
             w2 = np.power(w, p)
             assert np.allclose(n2, w2)
 
+def test_less():
 
+    # for s in SHAPES:
+        # for op in CMP_OPS:
+
+    s = 10
+    op = np.less 
+    print('op = ', op)
+    n, w = random_arrays(s, 'float64')
+    print('n = ', n)
+
+    n2 = op(n, 4.0)
+    w2 = op(w, 4.0)
+    w2 = w2.evaluate()
+    # casting it as a ndarray because weld does not support arithmetic between booleans / and
+    # numbers;
+    assert np.allclose(w2.view(np.ndarray), n2)
+
+
+test_less()
+# test_scalars()

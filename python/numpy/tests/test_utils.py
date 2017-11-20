@@ -6,6 +6,7 @@ UNARY_OPS = [np.exp, np.log, np.sqrt]
 # now.
 BINARY_OPS = [np.add, np.subtract, np.multiply, np.divide]
 REDUCE_UFUNCS = [np.add.reduce, np.multiply.reduce]
+CMP_OPS = [np.less, np.less_equal, np.greater, np.greater_equal]
 
 TYPES = ['float32', 'float64', 'int32', 'int64']
 SHAPES = [10, (2,2), (3,7), (9,1,4), (2,5,7,2)]

@@ -53,6 +53,7 @@ def get_supported_binary_ops():
     binary_ops[np.subtract.__name__] = '-'
     binary_ops[np.multiply.__name__] = '*'
     binary_ops[np.divide.__name__] = '/'
+
     return binary_ops
 
 def get_supported_unary_ops():
@@ -64,6 +65,14 @@ def get_supported_unary_ops():
     unary_ops[np.log.__name__] = 'log'
     unary_ops[np.sqrt.__name__] = 'sqrt'
     return unary_ops
+
+def get_supported_cmp_ops():
+    cmp_ops = {}
+    cmp_ops[np.less_equal.__name__] = '<='
+    cmp_ops[np.less.__name__] = '<'
+    cmp_ops[np.greater_equal.__name__] = '>='
+    cmp_ops[np.greater.__name__] = '>'
+    return cmp_ops
 
 def get_supported_types():
     '''
@@ -91,6 +100,7 @@ def get_supported_suffixes():
 # Global variables for the WeldArray type, used for lookups
 BINARY_OPS = get_supported_binary_ops()
 UNARY_OPS = get_supported_unary_ops()
+CMP_OPS = get_supported_cmp_ops()
 SUPPORTED_DTYPES = get_supported_types()
 DTYPE_SUFFIXES = get_supported_suffixes()
 

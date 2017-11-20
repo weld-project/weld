@@ -455,14 +455,38 @@ class weldarray(np.ndarray):
                     result=output) 
         
         elif ufunc.__name__ == 'square' or ufunc.__name__ == 'power':
-            # return None
             if ufunc.__name__ == 'square':
                 # power arg is implied
                 power = 2
             else:
                 power = input_args[1]
             return self._power_op(power, result=output)
+        
+        # FIXME: Not doing this because numpy returns Boolean array -- and if we do that, then we can't
+        # multiply it with f64 arrays in weld because of type mismatch.
+        # elif ufunc.__name__ in CMP_OPS:
+            # return self._cmp_op(input_args[1], CMP_OPS[ufunc.__name__], result=output)
+
         return None
+    
+    def _cmp_op(self, input2, op, result):
+        '''
+        Only really works for floats right now.
+        '''
+        assert result is None, 'TODO: support this'
+        if result is None:
+            result = self._get_result()
+        template = ('result(for({arr}, appender,|b,i,e| if (e {op} {input2}{suffix},'
+                'merge(b,1.0{suffix}),merge(b,0.0{suffix}))))')
+
+        arr = self._get_array_iter_code(result)
+        code = template.format(arr = arr,
+                               op = op,
+                               input2 = input2,
+                               suffix = DTYPE_SUFFIXES[self._weld_type])
+        print('code: ', code)
+        result.weldobj.weld_code = code
+        return result
 
     def _handle_reduce(self, ufunc, input_args, outputs, kwargs):
         '''
@@ -473,7 +497,6 @@ class weldarray(np.ndarray):
         safer anyway.
         np supports reduce only for binary ops.
         '''
-        return None
         # input_args[0] must be self so it can be ignored.
         assert len(input_args) == 1
         print('in handle reduce')
@@ -504,14 +527,11 @@ class weldarray(np.ndarray):
         call evaluate which would return a weldarray as expected. This returns an ndarray.
         '''
         global eval_calls
-        eval_calls += 1
-        print('evals = ', eval_calls)
         # This check has to happen before the caching - as the weldobj/code for views is never updated.
         # TODO: Need to change this condition specifically for in place ops.
         # Case 1: we are evaluating an in place on in an array. So need to evaluate the parent and
         # return the appropriate index.
         if self._weldarray_view:
-            print('view')
             idx = self._weldarray_view.idx
             strides = self._weldarray_view.strides
             if idx:
@@ -862,9 +882,6 @@ class weldarray(np.ndarray):
             # could be changing...
             if (input1._real_shape != input2._real_shape):
                 # need to broadcast the arrays!
-                print('BROADCAST-ING!!!!')
-                # print('inpu1: ', input1)
-                # print('input2: ', input2)
                 input1, input2 = broadcast_arrays(input1, input2)
 
         # scalars (i32, i64, f32, f64...)
