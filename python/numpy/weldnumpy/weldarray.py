@@ -7,6 +7,7 @@ from copy import deepcopy
 eval_calls = 0
 assert np.__version__ >= 1.13, "minimum numpy version needed"
 
+# TODO: wherever real shape is used, need to ensure that we are not passing in ndarrays there.
 class weldarray(np.ndarray):
     '''
     A new weldarray can be created in three ways:
@@ -323,6 +324,7 @@ class weldarray(np.ndarray):
 
         arrays = []
         scalars = []
+        shapes = []
         for i in input_args:
             if isinstance(i, np.ndarray):
                 if not str(i.dtype) in SUPPORTED_DTYPES:
@@ -332,6 +334,11 @@ class weldarray(np.ndarray):
                 if len(i) == 0:
                     print('WARNING: length 0 array. Will be offloaded to numpy')
                     return False
+                if isinstance(i, weldarray):
+                    shapes.append(i._real_shape)
+                else:
+                    shapes.append(i.shape)
+
                 arrays.append(i)
             elif isinstance(i, list):
                 print('WARNING: input is a list. Will be offloaded to numpy')
@@ -341,6 +348,9 @@ class weldarray(np.ndarray):
 
         if len(arrays) == 2 and arrays[0].dtype != arrays[1].dtype:
             print('WARNING: array dtypes do not match. Will be offloaded to numpy')
+            return False
+        elif len(arrays) == 2 and shapes[0] != shapes[1]:
+            print('WARNING: array shapes dont match. Will probably need to be broadcast')
             return False
 
         # handle all scalar based tests here - later will just assume that scalar type is correct,
@@ -497,6 +507,9 @@ class weldarray(np.ndarray):
         safer anyway.
         np supports reduce only for binary ops.
         '''
+        print('WARNING: not handling reduce because numpy seems to be faster')
+        return None
+
         # input_args[0] must be self so it can be ignored.
         assert len(input_args) == 1
         print('in handle reduce')
@@ -881,6 +894,7 @@ class weldarray(np.ndarray):
             # we need to compare real shapes because the operations are lazily evaluated so shapes
             # could be changing...
             if (input1._real_shape != input2._real_shape):
+                print('broadcasting!')
                 # need to broadcast the arrays!
                 input1, input2 = broadcast_arrays(input1, input2)
 
