@@ -465,17 +465,18 @@ class weldarray(np.ndarray):
         # FIXME: Not doing this because numpy returns Boolean array -- and if we do that, then we can't
         # multiply it with f64 arrays in weld because of type mismatch.
         # elif ufunc.__name__ in CMP_OPS:
-            # return self._cmp_op(input_args[1], CMP_OPS[ufunc.__name__], result=output)
+            # return self._cmp_op(input_args[1], ufunc.__name__, result=output)
 
         return None
     
-    def _cmp_op(self, input2, op, result):
+    def _cmp_op(self, input2, op, result=None):
         '''
         Only really works for floats right now.
         '''
         assert result is None, 'TODO: support this'
         if result is None:
             result = self._get_result()
+        op = CMP_OPS[op]
         template = ('result(for({arr}, appender,|b,i,e| if (e {op} {input2}{suffix},'
                 'merge(b,1.0{suffix}),merge(b,0.0{suffix}))))')
 
@@ -484,7 +485,6 @@ class weldarray(np.ndarray):
                                op = op,
                                input2 = input2,
                                suffix = DTYPE_SUFFIXES[self._weld_type])
-        print('code: ', code)
         result.weldobj.weld_code = code
         return result
 

@@ -144,17 +144,29 @@ def test_less():
 
     s = 10
     op = np.less 
-    print('op = ', op)
     n, w = random_arrays(s, 'float64')
     print('n = ', n)
 
     n2 = op(n, 4.0)
-    w2 = op(w, 4.0)
+    w2 = w._cmp_op(4.0, op.__name__, None)
     w2 = w2.evaluate()
     # casting it as a ndarray because weld does not support arithmetic between booleans / and
     # numbers;
     assert np.allclose(w2.view(np.ndarray), n2)
 
+def test_less_invert():
+    s = 10
+    cmp_val = 4.0
+    n, w = random_arrays(s, 'float64')
+    n2 = np.less(n, cmp_val)
+    n2 = ~n2
+    print(n2)
 
-test_less()
-# test_scalars()
+    w2 = w._cmp_op(cmp_val, np.greater.__name__)
+    w2 = w2.evaluate()
+    print(w2)
+
+    assert np.allclose(w2.view(np.ndarray), n2)
+
+# test_less()
+test_less_invert()

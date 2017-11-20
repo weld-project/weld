@@ -434,17 +434,20 @@ def test_broadcasting_nbody_bug():
     '''
     Transpose + broadcasting --> shapes don't seem to match.
     '''
-    n, w = random_arrays(100, 'float64')
-    a = transpose(n[np.newaxis,:])
+    n, w = random_arrays(1000, 'float64')
+    a = np.transpose(n[np.newaxis,:])
     b = transpose(w[np.newaxis,:])
+    b = b.evaluate()
+    print(type(b))
+    assert np.allclose(a, b)
     
     numpy_dx = a - n
     weld_dx = b - w
     weld_dx = weld_dx.evaluate()
     
     assert numpy_dx.shape == weld_dx.shape, 'shapes must match!'
-    assert np.allclose(numpy_dx, weld_dx)
     assert np.array_equal(numpy_dx, weld_dx)
+    assert np.allclose(numpy_dx, weld_dx)
 
 def test_sum_axis0_simple():
     '''
@@ -522,3 +525,4 @@ def test_nbody_bug2():
 def test_less_than():
     n, w = random_arrays(10, 'float64')
 
+test_broadcasting_nbody_bug()
