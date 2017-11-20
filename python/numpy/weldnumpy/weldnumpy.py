@@ -66,6 +66,14 @@ def get_supported_unary_ops():
     unary_ops[np.sqrt.__name__] = 'sqrt'
     unary_ops[np.sin.__name__] = 'sin'
     unary_ops[np.cos.__name__] = 'cos'
+    unary_ops[np.tan.__name__] = 'tan'
+    unary_ops[np.arccos.__name__] = 'acos'
+    unary_ops[np.arcsin.__name__] = 'asin'
+    unary_ops[np.arctan.__name__] = 'atan' 
+    unary_ops[np.sinh.__name__] = 'sinh'
+    unary_ops[np.cosh.__name__] = 'cosh'
+    unary_ops[np.tanh.__name__] = 'thanh'
+
     return unary_ops
 
 def get_supported_cmp_ops():

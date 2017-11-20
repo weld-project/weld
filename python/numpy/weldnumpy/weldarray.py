@@ -253,7 +253,7 @@ class weldarray(np.ndarray):
                 _update_single_entry(self, e, val[i])
 
         elif isinstance(idx, int):
-            printf("WARNING: setitem, with idx is an int. This will be very SLOW")
+            print("WARNING: setitem, with idx is an int. This will be very SLOW")
             _update_single_entry(self, idx, val)
         else:
             assert False, 'idx type not supported'
