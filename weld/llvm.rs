@@ -1485,7 +1485,7 @@ impl LlvmGenerator {
                 } else if s.is_float() { /* has one-line intrinsic */
                     ctx.code.add(format!("{} = call {} {}({} {}, {} {})",
                                          &output_tmp, &ll_ty,
-                                         llvm_binary_maxmin(*op, &s)?,
+                                         llvm_binary_intrinsic(*op, &s)?,
                                          self.llvm_type(ty)?, &left_tmp,
                                          self.llvm_type(ty)?, &right_tmp));
                 }
@@ -2225,7 +2225,6 @@ impl LlvmGenerator {
 
             BinOp { op, ref left, ref right } => {
                 use super::ast::BinOpKind::*;
-
                 let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
                 let ty = func.symbol_type(left)?;
                 // Assume the left and right operands have the same type.
@@ -2235,15 +2234,23 @@ impl LlvmGenerator {
                 let right_tmp = self.gen_load_var(&right_ll_sym, &ll_ty, ctx)?;
                 let output_tmp = ctx.var_ids.next();
                 match *ty {
-                    Scalar(_) | Simd(_) => {
+                    Scalar(s) | Simd(s) => {
                         match op {
-                            /* Special-case max and min, which don't have int intrinsics */
+                            // Special-case max and min, which don't have int intrinsics
                             Max | Min => {
                                 self.gen_minmax(&ll_ty.as_str(), &op,
                                                 &left_tmp.as_str(),
                                                 &right_tmp.as_str(),
                                                 &output_tmp.as_str(),
                                                 ty, ctx)?;
+                            }
+                            // Pow only support for floating point.
+                            Pow if s.is_float() => {
+                                    ctx.code.add(format!("{} = call {} {}({} {}, {} {})",
+                                    &output_tmp, &ll_ty,
+                                    llvm_binary_intrinsic(op, &s)?,
+                                    self.llvm_type(ty)?, &left_tmp,
+                                    self.llvm_type(ty)?, &right_tmp));
                             }
                             _ => {
                                 ctx.code.add(format!("{} = {} {} {}, {}",
@@ -3465,13 +3472,16 @@ fn llvm_binop(op_kind: BinOpKind, ty: &Type) -> WeldResult<&'static str> {
 }
 
 /// Return LLVM intrinsic for float max/min.
-fn llvm_binary_maxmin(op_kind: BinOpKind, ty: &ScalarKind) -> WeldResult<&'static str> {
+fn llvm_binary_intrinsic(op_kind: BinOpKind, ty: &ScalarKind) -> WeldResult<&'static str> {
     match (op_kind, ty) {
         (BinOpKind::Min, &F32) => Ok("@llvm.minnum.f32"),
         (BinOpKind::Min, &F64) => Ok("@llvm.minnum.f64"),
 
         (BinOpKind::Max, &F32) => Ok("@llvm.maxnum.f32"),
         (BinOpKind::Max, &F64) => Ok("@llvm.maxnum.f64"),
+
+        (BinOpKind::Pow, &F32) => Ok("@llvm.pow.f32"),
+        (BinOpKind::Pow, &F64) => Ok("@llvm.pow.f64"),
 
         _ => weld_err!("Unsupported binary op: {} on {}", op_kind, ty),
     }

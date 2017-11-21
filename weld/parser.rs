@@ -1169,6 +1169,21 @@ impl<'t> Parser<'t> {
                 
                 Ok(res)
             }
+
+            TPow => {
+                try!(self.consume(TOpenParen));
+                let left = try!(self.expr());
+                try!(self.consume(TComma));
+                let right = try!(self.expr());
+                try!(self.consume(TCloseParen));
+                
+                let res = expr_box(BinOp {
+                    kind: Pow,
+                    left: left,
+                    right: right,
+                }, Annotations::new());
+                Ok(res)
+            }
             
             ref other => weld_err!("Expected expression but got '{}'", other),
         }

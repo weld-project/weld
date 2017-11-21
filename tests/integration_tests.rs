@@ -1842,6 +1842,20 @@ fn simple_sqrt() {
     unsafe { free_value_and_module(ret_value) };
 }
 
+fn simple_pow() {
+    use std::f64;
+    let code = "|x:f64| pow(x, 2.0)";
+    let conf = default_conf();
+    let input = 4.0;
+    let ret_value = compile_and_run(code, conf, &input);
+    let data = unsafe { weld_value_data(ret_value) as *const f64 };
+
+    let result = unsafe { (*data).clone() };
+    assert!(approx_equal(16.0, result, 5));
+    unsafe { free_value_and_module(ret_value) };
+}
+
+
 fn simple_trig() {
     fn check_trig_f32(op: &str, input: f32, expect: f32) {
         let code = format!("|x:f32| {}(x)", op);
@@ -2511,6 +2525,7 @@ fn main() {
              ("exp_error", exp_error),
              ("simple_erf", simple_erf),
              ("simple_sqrt", simple_sqrt),
+             ("simple_pow", simple_pow),
              ("simple_trig", simple_trig),
              ("empty_appender_loop", empty_appender_loop),
              ("map_exp", map_exp),
