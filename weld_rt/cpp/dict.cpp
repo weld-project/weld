@@ -25,6 +25,7 @@ struct weld_dict {
   int64_t cur_slot_in_dict;
   bool finalized; // all keys have been moved to global
   pthread_rwlock_t global_lock;
+  int32_t n_workers;
 };
 
 inline int32_t slot_size(weld_dict *wd) {
@@ -83,7 +84,7 @@ inline simple_dict *get_local_dict(weld_dict *wd) {
 }
 
 inline simple_dict *get_global_dict(weld_dict *wd) {
-  return get_dict_at_index(wd, weld_rt_get_nworkers());
+  return get_dict_at_index(wd, wd->n_workers);
 }
 
 extern "C" void *weld_rt_dict_new(int32_t key_size, int32_t (*keys_eq)(void *, void *),
@@ -97,8 +98,9 @@ extern "C" void *weld_rt_dict_new(int32_t key_size, int32_t (*keys_eq)(void *, v
   wd->val_size = val_size;
   wd->to_array_true_val_size = to_array_true_val_size;
   wd->max_local_bytes = max_local_bytes;
-  wd->dicts = weld_rt_new_merger(sizeof(simple_dict), weld_rt_get_nworkers() + 1);
-  for (int32_t i = 0; i < weld_rt_get_nworkers() + 1; i++) {
+  wd->n_workers = weld_rt_get_nworkers();
+  wd->dicts = weld_rt_new_merger(sizeof(simple_dict), wd->n_workers + 1);
+  for (int32_t i = 0; i < wd->n_workers + 1; i++) {
     simple_dict *d = get_dict_at_index(wd, i);
     d->size = 0;
     d->capacity = capacity;
@@ -240,7 +242,7 @@ extern "C" void *weld_rt_dict_finalize_next_local_slot(void *d) {
   wd->finalized = true; // immediately mark as finalized ... we expect the client to keep
   // calling this method until it returns NULL, and only after this perform other operations
   // on the dictionary
-  while (wd->cur_local_dict != weld_rt_get_nworkers()) {
+  while (wd->cur_local_dict != wd->n_workers) {
     simple_dict *cur_dict = get_dict_at_index(wd, wd->cur_local_dict);
     void *next_slot = slot_at(wd->cur_slot_in_dict, wd, cur_dict);
     advance_finalize_iterator(wd);
@@ -286,7 +288,7 @@ extern "C" int64_t weld_rt_dict_get_size(void *d) {
 
 extern "C" void weld_rt_dict_free(void *d) {
   weld_dict *wd = (weld_dict *)d;
-  for (int32_t i = 0; i < weld_rt_get_nworkers() + 1; i++) {
+  for (int32_t i = 0; i < wd->n_workers + 1; i++) {
     simple_dict *d = get_dict_at_index(wd, i);
     weld_run_free(weld_rt_get_run_id(), d->data);
   }
