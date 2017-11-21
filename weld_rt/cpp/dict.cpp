@@ -2,6 +2,9 @@
 #include "assert.h"
 #include <algorithm>
 
+// power of 2
+#define LOCK_GRANULARITY 16
+
 struct simple_dict {
   void *data;
   volatile int64_t size;
@@ -106,15 +109,30 @@ extern "C" void *weld_rt_dict_new(int32_t key_size, int32_t (*keys_eq)(void *, v
   return (void *)wd;
 }
 
+inline bool lockable_slot_idx(int64_t idx) {
+  return (idx & (LOCK_GRANULARITY - 1)) == 0;
+}
+
+inline uint8_t *lock_for_slot(weld_dict *wd, simple_dict *sd, void *slot) {
+  int64_t idx = ((intptr_t)slot - (intptr_t)sd->data) / slot_size(wd);
+  return lock_at(wd, slot_at(idx & ~(LOCK_GRANULARITY - 1), wd, sd));
+}
+
 inline void *simple_dict_lookup(weld_dict *wd, simple_dict *sd, int32_t hash, void *key,
   bool match_possible) {
   bool is_global = get_global_dict(wd) == sd;
   // can do the bitwise and because capacity is always a power of two
   int64_t first_offset = hash & (sd->capacity - 1);
+  uint8_t *prev_lock = NULL;
   for (int64_t i = 0; i < sd->capacity; i++) {
-    void *cur_slot = slot_at((first_offset + i) & (sd->capacity - 1), wd, sd);
-    if (!wd->finalized && is_global) {
-      while (!__sync_bool_compare_and_swap(lock_at(wd, cur_slot), 0, 1)) {}
+    int64_t idx = (first_offset + i) & (sd->capacity - 1);
+    void *cur_slot = slot_at(idx, wd, sd);
+    if (!wd->finalized && is_global && (i == 0 || lockable_slot_idx(idx))) {
+      if (prev_lock != NULL) {
+        *prev_lock = 0;
+      }
+      prev_lock = lock_for_slot(wd, sd, cur_slot);
+      while (!__sync_bool_compare_and_swap(prev_lock, 0, 1)) {}
     }
     if (*filled_at(cur_slot)) {
       if (match_possible && *hash_at(wd, cur_slot) == hash &&
@@ -125,9 +143,6 @@ inline void *simple_dict_lookup(weld_dict *wd, simple_dict *sd, int32_t hash, vo
       *hash_at(wd, cur_slot) = hash; // store hash here in case we end up filling this slot (no
       // problem if not)
       return cur_slot;
-    }
-    if (!wd->finalized && is_global) {
-      *lock_at(wd, cur_slot) = 0;
     }
   }
   // should never reach this
@@ -188,7 +203,7 @@ extern "C" void weld_rt_dict_put(void *d, void *slot) {
     } else {
       simple_dict *global = get_global_dict(wd);
       if (!wd->finalized) {
-        *lock_at(wd, slot) = 0;
+        *lock_for_slot(wd, global, slot) = 0;
         __sync_fetch_and_add(&global->size, 1);
       } else{
         global->size++;
@@ -207,7 +222,7 @@ extern "C" void weld_rt_dict_put(void *d, void *slot) {
       }
     }
   } else if (!wd->finalized && !slot_in_local(wd, slot)) {
-    *lock_at(wd, slot) = 0;
+    *lock_for_slot(wd, get_global_dict(wd), slot) = 0;
     pthread_rwlock_unlock(&wd->global_lock);
   }
 }
