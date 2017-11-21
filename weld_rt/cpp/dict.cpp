@@ -119,7 +119,7 @@ inline uint8_t *lock_for_slot(weld_dict *wd, simple_dict *sd, void *slot) {
 }
 
 inline void *simple_dict_lookup(weld_dict *wd, simple_dict *sd, int32_t hash, void *key,
-  bool match_possible) {
+  bool match_possible, bool lock_global_slots) {
   bool is_global = get_global_dict(wd) == sd;
   // can do the bitwise and because capacity is always a power of two
   int64_t first_offset = hash & (sd->capacity - 1);
@@ -127,7 +127,7 @@ inline void *simple_dict_lookup(weld_dict *wd, simple_dict *sd, int32_t hash, vo
   for (int64_t i = 0; i < sd->capacity; i++) {
     int64_t idx = (first_offset + i) & (sd->capacity - 1);
     void *cur_slot = slot_at(idx, wd, sd);
-    if (!wd->finalized && is_global && (i == 0 || lockable_slot_idx(idx))) {
+    if (!wd->finalized && is_global && lock_global_slots && (i == 0 || lockable_slot_idx(idx))) {
       if (prev_lock != NULL) {
         *prev_lock = 0;
       }
@@ -160,7 +160,7 @@ inline void resize_dict(weld_dict *wd, simple_dict *sd) {
     void *old_slot = slot_at_with_data(i, wd, old_data);
     if (*filled_at(old_slot)) {
       // will never compare the keys when collision_possible = false so can pass NULL
-      void *new_slot = simple_dict_lookup(wd, sd, *hash_at(wd, old_slot), NULL, false);
+      void *new_slot = simple_dict_lookup(wd, sd, *hash_at(wd, old_slot), NULL, false, false);
       memcpy(new_slot, old_slot, slot_size(wd));
     }
   }
@@ -173,7 +173,7 @@ extern "C" void *weld_rt_dict_lookup(void *d, int32_t hash, void *key) {
   weld_dict *wd = (weld_dict *)d;
   if (!wd->finalized) {
     simple_dict *sd = get_local_dict(wd);
-    void *slot = simple_dict_lookup(wd, sd, hash, key, true);
+    void *slot = simple_dict_lookup(wd, sd, hash, key, true, true);
     if (!sd->full || *filled_at(slot)) {
       return slot;
     }
@@ -183,7 +183,7 @@ extern "C" void *weld_rt_dict_lookup(void *d, int32_t hash, void *key) {
     pthread_rwlock_rdlock(&wd->global_lock);
   }
   simple_dict *global = get_global_dict(wd);
-  return simple_dict_lookup(wd, global, hash, key, true);
+  return simple_dict_lookup(wd, global, hash, key, true, true);
 }
 
 extern "C" void weld_rt_dict_put(void *d, void *slot) {
