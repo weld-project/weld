@@ -427,6 +427,7 @@ pub enum BinOpKind {
     Xor,
     Max,
     Min,
+    Pow,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -480,6 +481,7 @@ impl fmt::Display for BinOpKind {
             Xor => "^",
             Max => "max",
             Min => "min",
+            Pow => "pow",
         };
         f.write_str(text)
     }

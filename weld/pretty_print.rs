@@ -224,7 +224,7 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>,
             /* special-case max and min */
             use super::ast::BinOpKind::*;
             match kind {
-                Max | Min => {
+                Max | Min | Pow => {
                     format!("{}({},{})",
                             kind,
                             print_expr_impl(left, typed, indent, should_indent),
