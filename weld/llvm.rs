@@ -417,6 +417,30 @@ impl LlvmGenerator {
                         _ => {}
                     }
                 }
+                Struct(ref fields) => {
+                    for (i, f) in fields.iter().enumerate() {
+                        match *f {
+                            Builder(ref bk, _) => {
+                                match *bk {
+                                    Appender(_) => {
+                                        let struct_ty = self.llvm_type(ty)?;
+                                        let bld_ty_str = self.llvm_type(f)?;
+                                        let bld_prefix = llvm_prefix(&bld_ty_str);
+                                        let bld_sym = ctx.var_ids.next();
+                                        ctx.code.add(format!("{} = extractvalue {} {}{}, {}", bld_sym, struct_ty,
+                                            llvm_symbol(arg), suffix, i));
+                                        ctx.code.add(format!("call void {}.newPiece({} {}, %work_t* %cur.work)",
+                                                            bld_prefix,
+                                                            bld_ty_str,
+                                                            bld_sym));
+                                    }
+                                    _ => {}
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
                 _ => {}
             }
         }
