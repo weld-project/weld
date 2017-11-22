@@ -171,6 +171,7 @@ class WeldObject(object):
         start = time.time()
         encoded = []
         argtypes = []
+        weld_num_threads = int(os.environ.get("WELD_NUM_THREADS", "1"))
         for name in names:
             if name in self.argtypes:
                 argtypes.append(self.argtypes[name].ctype_class)
@@ -178,7 +179,7 @@ class WeldObject(object):
             else:
                 argtypes.append(self.encoder.py_to_weld_type(
                     self.context[name]).ctype_class)
-                encoded.append(self.encoder.encode(self.context[name]))
+                encoded.append(self.encoder.encode(self.context[name], weld_num_threads))
         end = time.time()
         if verbose:
             print "Python->Weld:", end - start
@@ -208,8 +209,7 @@ class WeldObject(object):
 
         start = time.time()
         conf = cweld.WeldConf()
-        weld_num_threads = os.environ.get("WELD_NUM_THREADS", "1")
-        conf.set("weld.threads", weld_num_threads)
+        conf.set("weld.threads", str(weld_num_threads))
         conf.set("weld.memory.limit", "100000000000")
         err = cweld.WeldError()
         weld_ret = module.run(conf, arg, err)

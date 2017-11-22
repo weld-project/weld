@@ -1326,7 +1326,7 @@ def groupby_sort(columns, column_tys, grouping_columns, grouping_column_tys, key
         key_str = key_str + "* %s(-1)" % column_tys[key_index]
 
     weld_template = """
-    map(
+    @(grain_size:1)map(
      tovec(
        result(
          for(

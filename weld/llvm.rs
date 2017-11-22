@@ -913,7 +913,7 @@ impl LlvmGenerator {
             ctx.code.add(format!("br label %fn.end"));
         } else {
             ctx.code.add("br label %for.par");
-            grain_size = DEFAULT_OUTER_GRAIN_SIZE;
+            grain_size = 1;
         }
         ctx.code.add(format!("for.par:"));
         self.gen_create_global_mergers(&func.params, ".ptr", &mut ctx)?;
@@ -2466,7 +2466,7 @@ impl LlvmGenerator {
                                 // Add key function and sort prelude code
                                 let name = self.vec_names.get(elem_ty).unwrap();
                                 self.prelude_code.add(format!(
-                                    "define {} @{}.{}({}) {{",
+                                    "define {} @{}.{}({}) alwaysinline {{",
                                     key_ll_ty,
                                     &name.replace("%", ""),
                                     func_str,
