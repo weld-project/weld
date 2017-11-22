@@ -31,7 +31,7 @@ pub const DEFAULT_TRACE_RUN: bool = false;
 
 lazy_static! {
     pub static ref DEFAULT_OPTIMIZATION_PASSES: Vec<Pass> = {
-        let m = ["inline-apply", "inline-let", "inline-zip", "loop-fusion", "infer-size", "short-circuit-booleans", "predicate", "vectorize", "fix-iterate"];
+        let m = ["loop-fusion", "infer-size", "short-circuit-booleans", "predicate", "vectorize", "fix-iterate"];
         m.iter().map(|e| (*OPTIMIZATION_PASSES.get(e).unwrap()).clone()).collect()
     };
     pub static ref DEFAULT_DUMP_CODE_DIR: PathBuf = Path::new(".").to_path_buf();
@@ -66,8 +66,13 @@ pub fn parse(conf: &WeldConf) -> WeldResult<ParsedConf> {
                        .unwrap_or(Ok(DEFAULT_THREADS))?;
 
     let value = get_value(conf, OPTIMIZATION_PASSES_KEY);
-    let passes = value.map(|s| parse_passes(&s))
+    let mut passes = value.map(|s| parse_passes(&s))
                       .unwrap_or(Ok(DEFAULT_OPTIMIZATION_PASSES.clone()))?;
+
+    // Insert mandatory passes to the beginning.
+    passes.insert(0, OPTIMIZATION_PASSES.get("inline-zip").unwrap().clone());
+    passes.insert(0, OPTIMIZATION_PASSES.get("inline-let").unwrap().clone());
+    passes.insert(0, OPTIMIZATION_PASSES.get("inline-apply").unwrap().clone());
 
     let value = get_value(conf, LLVM_OPTIMIZATION_LEVEL_KEY);
     let level = value.map(|s| parse_llvm_optimization_level(&s))
@@ -153,6 +158,7 @@ fn parse_passes(s: &str) -> WeldResult<Vec<Pass>> {
         return Ok(vec![]); // Special case because split() creates an empty piece here
     }
     let mut result = vec![];
+
     for piece in s.split(",") {
         match OPTIMIZATION_PASSES.get(piece) {
             Some(pass) => result.push(pass.clone()),

@@ -118,7 +118,7 @@ class WeldConf(c_void_p):
         weld_conf_get.argtypes = [c_weld_conf, c_char_p]
         weld_conf_get.restype = c_char_p
         val = weld_conf_get(self.conf, key)
-        return copy.copy(val.value)
+        return copy.copy(val)
 
     def set(self, key, value):
         key = c_char_p(key)
@@ -161,3 +161,22 @@ class WeldError(c_void_p):
         weld_error_free.argtypes = [c_weld_err]
         weld_error_free.restype = None
         weld_error_free(self.error)
+
+WeldLogLevelOff = 0
+WeldLogLevelError = 1
+WeldLogLevelWarn = 2
+WeldLogLevelInfo = 3
+WeldLogLevelDebug = 4
+WeldLogLevelTrace = 5
+
+def weld_set_log_level(log_level):
+     """
+     Sets the log_level for Weld:
+        0 = No Logs,
+        1 = Error,
+        2 = Warn,
+        3 = Info,
+        4 = Debug,
+        5 = Trace.
+     """
+     weld.weld_set_log_level(log_level)
