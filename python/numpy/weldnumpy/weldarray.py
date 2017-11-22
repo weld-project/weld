@@ -7,6 +7,7 @@ from copy import deepcopy
 eval_calls = 0
 assert np.__version__ >= 1.13, "minimum numpy version needed"
 
+
 # TODO: wherever real shape is used, need to ensure that we are not passing in ndarrays there.
 class weldarray(np.ndarray):
     '''
@@ -571,7 +572,7 @@ class weldarray(np.ndarray):
         if restype is None:
             # use default type for all weldarray operations
             restype = WeldVec(self._weld_type)
-        arr = self.weldobj.evaluate(restype, verbose=self._verbose)
+        arr = self.weldobj.evaluate(restype, verbose=self._verbose, passes=CUR_PASSES)
         
         if hasattr(arr, '__len__'):
             arr = arr.reshape(self._real_shape)

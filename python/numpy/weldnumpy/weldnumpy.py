@@ -1,6 +1,11 @@
 import numpy as np
 from weld.types import *
 
+ALL_PASSES = ["loop-fusion", "infer-size", "short-circuit-booleans", "predicate", "vectorize",
+        "fix-iterate"]
+
+CUR_PASSES = ALL_PASSES
+
 class weldarray_view():
     '''
     This can be either a parent or a child.
@@ -134,5 +139,12 @@ def random_arrays(shape, dtype):
     # w = weldarray(test, verbose=False)
 
     return np_test
+
+def remove_pass(pass_name):
+    global CUR_PASSES
+    for l in CUR_PASSES:
+        if pass_name in l:
+            CUR_PASSES.remove(l)
+            break
 
 
