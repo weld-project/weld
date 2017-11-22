@@ -2,6 +2,7 @@ use super::ast::*;
 use super::error::*;
 
 use super::transforms::loop_fusion;
+use super::transforms::loop_fusion_2;
 use super::transforms::inliner;
 use super::transforms::size_inference;
 use super::transforms::short_circuit;
@@ -12,8 +13,10 @@ use super::expr_hash::*;
 
 use std::collections::HashMap;
 
+pub type PassFn = fn(&mut Expr<Type>);
+
 pub struct Pass {
-    transforms: Vec<fn(&mut Expr<Type>)>,
+    transforms: Vec<PassFn>,
     pass_name: String,
 }
 
@@ -28,7 +31,7 @@ impl Clone for Pass {
 }
 
 impl Pass {
-    pub fn new(transforms: Vec<fn(&mut Expr<Type>)>, pass_name: &'static str) -> Pass {
+    pub fn new(transforms: Vec<PassFn>, pass_name: &'static str) -> Pass {
         return Pass {
                    transforms: transforms,
                    pass_name: String::from(pass_name),
@@ -64,9 +67,12 @@ lazy_static! {
         m.insert("inline-zip",
                  Pass::new(vec![inliner::inline_zips], "inline-zip"));
         m.insert("loop-fusion",
-                 Pass::new(vec![loop_fusion::fuse_loops_horizontal,
-                                loop_fusion::fuse_loops_vertical,
-                                inliner::inline_get_field],
+                 Pass::new(vec![loop_fusion::fuse_loops_vertical,
+                                loop_fusion_2::fuse_loops_2,
+                                loop_fusion_2::move_merge_before_let,
+                                inliner::inline_get_field,
+                                inliner::inline_let,
+                                loop_fusion_2::aggressive_inline_let],
                  "loop-fusion"));
         m.insert("infer-size",
                  Pass::new(vec![size_inference::infer_size],
