@@ -172,8 +172,6 @@ class WeldObject(object):
         verbose = True
         function = self.to_weld_func()
 
-        cweld.weld_set_log_level(cweld.WeldLogLevelTrace)
-
         # Returns a wrapped ctypes Structure
         def args_factory(encoded):
             class Args(ctypes.Structure):
