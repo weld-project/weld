@@ -4,6 +4,7 @@
 
 // power of 2
 #define LOCK_GRANULARITY 16
+#define MAX_LOCAL_PROBES 1
 
 struct simple_dict {
   void *data;
@@ -25,7 +26,7 @@ struct weld_dict {
   int64_t cur_slot_in_dict;
   bool finalized; // all keys have been moved to global
   pthread_rwlock_t global_lock;
-  int32_t n_workers;
+  int32_t n_workers; // save this here so we don't have to repeatedly call runtime for it
 };
 
 inline int32_t slot_size(weld_dict *wd) {
@@ -105,6 +106,7 @@ extern "C" void *weld_rt_dict_new(int32_t key_size, int32_t (*keys_eq)(void *, v
     d->size = 0;
     d->capacity = capacity;
     d->data = weld_run_malloc(weld_rt_get_run_id(), capacity * slot_size(wd));
+    d->full = max_local_bytes == 0;
     memset(d->data, 0, capacity * slot_size(wd));
   }
   pthread_rwlock_init(&wd->global_lock, NULL);
@@ -121,12 +123,12 @@ inline uint8_t *lock_for_slot(weld_dict *wd, simple_dict *sd, void *slot) {
 }
 
 inline void *simple_dict_lookup(weld_dict *wd, simple_dict *sd, int32_t hash, void *key,
-  bool match_possible, bool lock_global_slots) {
+  bool match_possible, bool lock_global_slots, int64_t max_probes) {
   bool is_global = get_global_dict(wd) == sd;
   // can do the bitwise and because capacity is always a power of two
   int64_t first_offset = hash & (sd->capacity - 1);
   uint8_t *prev_lock = NULL;
-  for (int64_t i = 0; i < sd->capacity; i++) {
+  for (int64_t i = 0; i < max_probes; i++) {
     int64_t idx = (first_offset + i) & (sd->capacity - 1);
     void *cur_slot = slot_at(idx, wd, sd);
     if (!wd->finalized && is_global && lock_global_slots && (i == 0 || lockable_slot_idx(idx))) {
@@ -147,8 +149,9 @@ inline void *simple_dict_lookup(weld_dict *wd, simple_dict *sd, int32_t hash, vo
       return cur_slot;
     }
   }
-  // should never reach this
-  assert(false);
+  if (prev_lock != NULL) {
+    *prev_lock = 0;
+  }
   return NULL;
 }
 
@@ -162,7 +165,8 @@ inline void resize_dict(weld_dict *wd, simple_dict *sd) {
     void *old_slot = slot_at_with_data(i, wd, old_data);
     if (*filled_at(old_slot)) {
       // will never compare the keys when collision_possible = false so can pass NULL
-      void *new_slot = simple_dict_lookup(wd, sd, *hash_at(wd, old_slot), NULL, false, false);
+      void *new_slot = simple_dict_lookup(wd, sd, *hash_at(wd, old_slot), NULL, false, false,
+        sd->capacity);
       memcpy(new_slot, old_slot, slot_size(wd));
     }
   }
@@ -175,8 +179,9 @@ extern "C" void *weld_rt_dict_lookup(void *d, int32_t hash, void *key) {
   weld_dict *wd = (weld_dict *)d;
   if (!wd->finalized) {
     simple_dict *sd = get_local_dict(wd);
-    void *slot = simple_dict_lookup(wd, sd, hash, key, true, true);
-    if (!sd->full || *filled_at(slot)) {
+    void *slot = simple_dict_lookup(wd, sd, hash, key, true, true,
+      sd->full ? MAX_LOCAL_PROBES : sd->capacity);
+    if (!sd->full || (slot != NULL && *filled_at(slot))) {
       return slot;
     }
   }
@@ -185,7 +190,7 @@ extern "C" void *weld_rt_dict_lookup(void *d, int32_t hash, void *key) {
     pthread_rwlock_rdlock(&wd->global_lock);
   }
   simple_dict *global = get_global_dict(wd);
-  return simple_dict_lookup(wd, global, hash, key, true, true);
+  return simple_dict_lookup(wd, global, hash, key, true, true, global->capacity);
 }
 
 extern "C" void weld_rt_dict_put(void *d, void *slot) {
