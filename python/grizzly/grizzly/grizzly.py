@@ -263,7 +263,7 @@ class DataFrameWeldExpr:
         else:
             raise Expcetion("sort_values needs to be implemented for non pivot tables")
 
-    def evaluate(self, verbose=True):
+    def evaluate(self, verbose=True, passes=None):
         """Summary
 
         Returns:
@@ -274,7 +274,7 @@ class DataFrameWeldExpr:
                 self.expr,
                 self.weld_type,
                 0
-            ).evaluate(verbose=verbose)
+            ).evaluate(verbose=verbose, passes=passes)
             df_dict = {}
             for i, column_name in enumerate(columns):
                 df_dict[column_name] = pivot[i]
@@ -292,7 +292,7 @@ class DataFrameWeldExpr:
                 ),
                 WeldStruct(weldvec_type_list),
                 0
-            ).evaluate(verbose=verbose)
+            ).evaluate(verbose=verbose, passes=passes)
 
             for i, column_name in enumerate(self.column_names):
                 df[column_name] = columns[i]
@@ -709,7 +709,7 @@ class GroupedDataFrameWeld(LazyOpResult):
                     self.grouping_column_types
                 )
 
-    def evaluate(self, verbose=True):
+    def evaluate(self, verbose=True, passes=None):
         """Summary
 
         Returns:
@@ -745,8 +745,7 @@ class GroupedDataFrameWeld(LazyOpResult):
             )
             exprs.append(expr)
             i += 1
-
-        result = group(exprs).evaluate(verbose=True)
+        result = group(exprs).evaluate(verbose=True, passes=passes)
         df = pd.DataFrame(columns=[])
         all_columns = self.column_names + self.grouping_column_name
         for i, column_name in enumerate(all_columns):
@@ -881,18 +880,18 @@ class SeriesWeld(LazyOpResult):
         # TODO : Make all series have a series attribute
         raise Exception("No index present")
 
-    def evaluate(self, verbose=False):
+    def evaluate(self, verbose=False, passes=None):
         if self.index_type is not None:
             index, column = LazyOpResult(
                 self.expr,
                 WeldStruct([WeldVec(self.index_type), WeldVec(self.weld_type)]),
                 0
-            ).evaluate(verbose=verbose)
+            ).evaluate(verbose=verbose, passes=passes)
             series = pd.Series(column, index)
             series.index.rename(self.index_name, True)
             return series
         else:
-            column = LazyOpResult.evaluate(self, verbose=verbose)
+            column = LazyOpResult.evaluate(self, verbose=verbose, passes=passes)
             return pd.Series(column)
 
     def sort_values(self, ascending=False):
