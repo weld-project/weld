@@ -169,6 +169,7 @@ class WeldObject(object):
         return text
 
     def evaluate(self, restype, verbose=False, decode=True):
+	verbose = True
         function = self.to_weld_func()
         # Returns a wrapped ctypes Structure
         def args_factory(encoded):
@@ -218,8 +219,12 @@ class WeldObject(object):
         start = time.time()
         conf = cweld.WeldConf()
         weld_num_threads = os.environ.get("WELD_NUM_THREADS", "1")
+	print("weld num threads = ", weld_num_threads)
         conf.set("weld.threads", weld_num_threads)
-        conf.set("weld.memory.limit", "100000000000")
+	mem_limit = "1000000000000"
+        conf.set("weld.memory.limit", mem_limit)
+	print("weld mem limit = ", mem_limit)
+
         err = cweld.WeldError()
         weld_ret = module.run(conf, arg, err)
         if err.code() != 0:
