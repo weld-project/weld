@@ -437,6 +437,7 @@ pub enum BinOpKind {
     Xor,
     Max,
     Min,
+    Pow,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -444,6 +445,15 @@ pub enum UnaryOpKind {
     Exp,
     Log,
     Sqrt,
+    Sin,
+    Cos,
+    Tan,
+    ASin,
+    ACos,
+    ATan,
+    Sinh,
+    Cosh,
+    Tanh,
     Erf,
 }
 
@@ -481,6 +491,7 @@ impl fmt::Display for BinOpKind {
             Xor => "^",
             Max => "max",
             Min => "min",
+            Pow => "pow",
         };
         f.write_str(text)
     }
@@ -488,14 +499,8 @@ impl fmt::Display for BinOpKind {
 
 impl fmt::Display for UnaryOpKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use ast::UnaryOpKind::*;
-        let text = match *self {
-            Exp => "exp",
-            Log => "log",
-            Sqrt => "sqrt",
-            Erf => "erf",
-        };
-        f.write_str(text)
+        let text = format!("{:?}", self);
+        f.write_str(text.to_lowercase().as_ref())
     }
 }
 

@@ -5,6 +5,7 @@ use super::transforms::loop_fusion;
 use super::transforms::loop_fusion_2;
 use super::transforms::inliner;
 use super::transforms::size_inference;
+use super::transforms::short_circuit;
 use super::transforms::annotator;
 use super::transforms::vectorizer;
 
@@ -76,6 +77,9 @@ lazy_static! {
         m.insert("infer-size",
                  Pass::new(vec![size_inference::infer_size],
                  "infer-size"));
+        m.insert("short-circuit-booleans",
+                 Pass::new(vec![short_circuit::short_circuit_booleans],
+                 "short-circuit-booleans"));
         m.insert("predicate",
                  Pass::new(vec![vectorizer::predicate],
                  "predicate"));

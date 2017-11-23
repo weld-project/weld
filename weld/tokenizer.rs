@@ -52,6 +52,15 @@ pub enum Token {
     TSlice,
     TSort,
     TExp,
+    TSin,
+    TCos,
+    TTan,
+    TASin,
+    TACos,
+    TATan,
+    TSinh,
+    TCosh,
+    TTanh,
     TSimd,
     TSelect,
     TBroadcast,
@@ -96,6 +105,7 @@ pub enum Token {
     TXor,
     TMax,
     TMin,
+    TPow,
     TEndOfInput,
 }
 
@@ -136,6 +146,7 @@ impl Token {
                 TXor |
                 TMax |
                 TMin |
+                TPow |
                 TEndOfInput => false,
             _ => true
         }
@@ -153,10 +164,11 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
 
         // Regular expressions for various types of tokens.
         static ref KEYWORD_RE: Regex = Regex::new(
-            "^(if|for|zip|len|lookup|keyexists|slice|sort|exp|log|erf|sqrt|simd|select|broadcast|\
+            "^(if|for|zip|len|lookup|keyexists|slice|sort|exp|sin|cos|tan|asin|acos|atan|sinh|cosh|tanh|\
+            log|erf|sqrt|simd|select|broadcast|\
              iterate|cudf|simditer|fringeiter|iter|merge|result|let|true|false|macro|\
              i8|i16|i32|i64|u8|u16|u32|u64|f32|f64|bool|vec|appender|merger|vecmerger|\
-             dictmerger|groupmerger|tovec|min|max)$").unwrap();
+             dictmerger|groupmerger|tovec|min|max|pow)$").unwrap();
 
         static ref IDENT_RE: Regex = Regex::new(r"^[A-Za-z$_][A-Za-z0-9$_]*$").unwrap();
 
@@ -222,6 +234,15 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
                             "slice" => TSlice,
                             "sort" => TSort,
                             "exp" => TExp,
+                            "sin" => TSin,
+                            "cos" => TCos,
+                            "tan" => TTan,
+                            "asin" => TASin,
+                            "acos" => TACos,
+                            "atan" => TATan,
+                            "sinh" => TSinh,
+                            "cosh" => TCosh,
+                            "tanh" => TTanh,
                             "log" => TLog,
                             "erf" => TErf,
                             "sqrt" => TSqrt,
@@ -233,6 +254,7 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
                             "false" => TBoolLiteral(false),
                             "min" => TMin,
                             "max" => TMax,
+                            "pow" => TPow,
                             _ => return weld_err!("Invalid input token: {}", text),
                         });
 
@@ -365,6 +387,15 @@ impl fmt::Display for Token {
                     TSlice => "slice",
                     TSort => "sort",
                     TExp => "exp",
+                    TSin => "sin",
+                    TCos => "cos",
+                    TTan => "tan",
+                    TASin => "asin",
+                    TACos => "atan",
+                    TATan => "acos",
+                    TSinh => "sinh",
+                    TCosh => "cosh",
+                    TTanh => "tanh",
                     TLog => "log",
                     TErf => "erf",
                     TSqrt => "sqrt",
@@ -403,6 +434,7 @@ impl fmt::Display for Token {
                     TXor => "^",
                     TMin => "min",
                     TMax => "max",
+                    TPow => "pow",
                     TEndOfInput => "<END>",
                 })
             }
