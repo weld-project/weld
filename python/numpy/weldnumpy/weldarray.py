@@ -222,8 +222,8 @@ class weldarray(np.ndarray):
             suffix = DTYPE_SUFFIXES[self._weld_type.__str__()]
             update_str = str(val) + suffix
             arr._update_range(index, index+1, update_str)
-        
-        print('WARNING: offloading setitem to numpy...in place ops arent quite working well here')
+         
+        if self._verbose: print('WARNING: offloading setitem to numpy...in place ops arent quite working well here')
         # Offloading to numpy method:
         if isinstance(idx, slice):
             if self._weldarray_view is not None:
@@ -248,13 +248,12 @@ class weldarray(np.ndarray):
                 # print('finally ret = ', ret)
 
         elif isinstance(idx, np.ndarray) or isinstance(idx, list):
-            print('idx is an array!!!')
             # just update it for each element in the list
             for i, e in enumerate(idx):
                 _update_single_entry(self, e, val[i])
 
         elif isinstance(idx, int):
-            print("WARNING: setitem, with idx is an int. This will be very SLOW")
+            if self._verbose: print("WARNING: setitem, with idx is an int. This will be very SLOW")
             _update_single_entry(self, idx, val)
         else:
             assert False, 'idx type not supported'
@@ -320,7 +319,7 @@ class weldarray(np.ndarray):
         will just pass it on to numpy.
         '''
         if len(input_args) > 2:
-            print('WARNING: Length of input args > 2. Will be offloaded to numpy')
+            if self._verbose: print('WARNING: Length of input args > 2. Will be offloaded to numpy')
             return False
 
         arrays = []
@@ -329,11 +328,11 @@ class weldarray(np.ndarray):
         for i in input_args:
             if isinstance(i, np.ndarray):
                 if not str(i.dtype) in SUPPORTED_DTYPES:
-                    print('WARNING {} not in supported dtypes. Will be offloaded to \
+                    if self._verbose: print('WARNING {} not in supported dtypes. Will be offloaded to \
                             numpy'.format(str(i.dtype)))
                     return False
                 if len(i) == 0:
-                    print('WARNING: length 0 array. Will be offloaded to numpy')
+                    if self._verbose: print('WARNING: length 0 array. Will be offloaded to numpy')
                     return False
                 if isinstance(i, weldarray):
                     shapes.append(i._real_shape)
@@ -342,16 +341,16 @@ class weldarray(np.ndarray):
 
                 arrays.append(i)
             elif isinstance(i, list):
-                print('WARNING: input is a list. Will be offloaded to numpy')
+                if self._verbose: print('WARNING: input is a list. Will be offloaded to numpy')
                 return False
             else:
                 scalars.append(i)
 
         if len(arrays) == 2 and arrays[0].dtype != arrays[1].dtype:
-            print('WARNING: array dtypes do not match. Will be offloaded to numpy')
+            if self._verbose: print('WARNING: array dtypes do not match. Will be offloaded to numpy')
             return False
         elif len(arrays) == 2 and shapes[0] != shapes[1]:
-            print('WARNING: array shapes dont match. Will probably need to be broadcast')
+            if self._verbose: print('WARNING: array shapes dont match. Will probably need to be broadcast')
             return False
 
         # handle all scalar based tests here - later will just assume that scalar type is correct,
@@ -361,7 +360,7 @@ class weldarray(np.ndarray):
         elif len(arrays) == 1 and len(scalars) == 1:
             # need to test for bool before int because it True would be instance of int as well.
             if isinstance(scalars[0], bool):
-                print('WARNING: scalar input is boolean. Will be offloaded to numpy')
+                if self._verbose: print('WARNING: scalar input is boolean. Will be offloaded to numpy')
                 return False
             elif isinstance(scalars[0], float):
                 pass
@@ -369,13 +368,13 @@ class weldarray(np.ndarray):
                 pass
             # assuming its np.float32 etc.
             elif not str(scalars[0].dtype) in SUPPORTED_DTYPES:
-                print('WARNING: scalar dtype not in supported dtypes. Will be offloaded to numpy')
+                if self._verbose: print('WARNING: scalar dtype not in supported dtypes. Will be offloaded to numpy')
                 return False
             else:
                 scalar_weld_type = SUPPORTED_DTYPES[str(scalars[0].dtype)]
                 array_weld_type = arrays[0]._weld_type
                 if scalar_weld_type != array_weld_type:
-                    print('WARNING: scalar weld type {} != array weld type {}'.format(scalar_weld_type, array_weld_type))
+                    if self._verbose: print('WARNING: scalar weld type {} != array weld type {}'.format(scalar_weld_type, array_weld_type))
                     return False
  
         # check ouput.
@@ -404,7 +403,7 @@ class weldarray(np.ndarray):
             output = self._handle_reduce(ufunc, input_args, outputs, kwargs)
 
         if output is not None:
-            print('ufunc was supported ', ufunc)
+            if self._verbose: print('ufunc was supported ', ufunc)
             return output
 
         return self._handle_numpy(ufunc, method, input_args, outputs, kwargs)
@@ -413,7 +412,7 @@ class weldarray(np.ndarray):
         '''
         relegate responsibility of executing ufunc to numpy.
         '''
-        print('WARNING: ufunc being offloaded to numpy', ufunc)
+        if self._verbose: print('WARNING: ufunc being offloaded to numpy', ufunc)
         # Relegating the work to numpy. If input arg is weldarray, evaluate it,
         # and convert to ndarray before passing to super()
         for i, arg_ in enumerate(input_args):
@@ -509,12 +508,12 @@ class weldarray(np.ndarray):
         safer anyway.
         np supports reduce only for binary ops.
         '''
-        print('WARNING: not handling reduce because numpy seems to be faster')
+        if self._verbose: print('WARNING: not handling reduce because numpy seems to be faster')
         return None
 
         # input_args[0] must be self so it can be ignored.
         assert len(input_args) == 1
-        print('in handle reduce')
+        if self._verbose: print('in handle reduce')
         if outputs: output = outputs[0]
         else: output = None
         axis = kwargs['axis']
@@ -560,7 +559,7 @@ class weldarray(np.ndarray):
                 return arr
             else:
                 # XXX hacky!! FIXME: need to have a better way and more general to deal with transposes.
-                print('hacky eval transpose...')
+                if self._verbose: print('hacky eval transpose...')
                 return self.view(np.ndarray)
 
         # Caching
@@ -695,7 +694,6 @@ class weldarray(np.ndarray):
                                type = self._weld_type.__str__(),
                                op = op)
         result.weldobj.weld_code = code
-        # exit(0)
         return result
         
 
@@ -896,7 +894,7 @@ class weldarray(np.ndarray):
             # we need to compare real shapes because the operations are lazily evaluated so shapes
             # could be changing...
             if (input1._real_shape != input2._real_shape):
-                print('broadcasting!')
+                if self._verbose: print('broadcasting!')
                 # need to broadcast the arrays!
                 input1, input2 = broadcast_arrays(input1, input2)
 
