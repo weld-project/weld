@@ -4,7 +4,7 @@
 
 // power of 2
 #define LOCK_GRANULARITY 16
-#define MAX_LOCAL_PROBES 1
+#define MAX_LOCAL_PROBES 5
 
 struct simple_dict {
   void *data;
@@ -177,7 +177,7 @@ inline void resize_dict(weld_dict *wd, simple_dict *sd) {
 // be for the purposes of merging.
 extern "C" void *weld_rt_dict_lookup(void *d, int32_t hash, void *key) {
   weld_dict *wd = (weld_dict *)d;
-  if (!wd->finalized) {
+  if (!wd->finalized && wd->max_local_bytes > 0) {
     simple_dict *sd = get_local_dict(wd);
     void *slot = simple_dict_lookup(wd, sd, hash, key, true, true,
       sd->full ? MAX_LOCAL_PROBES : sd->capacity);
