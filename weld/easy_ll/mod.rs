@@ -13,9 +13,14 @@ use std::ops::Drop;
 use std::os::raw::c_char;
 use std::sync::{Once, ONCE_INIT};
 
+use std::ptr;
+
 use self::llvm::support::LLVMLoadLibraryPermanently;
 use self::llvm::prelude::{LLVMContextRef, LLVMModuleRef, LLVMMemoryBufferRef};
-use self::llvm::execution_engine::{LLVMExecutionEngineRef, LLVMMCJITCompilerOptions};
+use self::llvm::execution_engine::{LLVMExecutionEngineRef, LLVMMCJITCompilerOptions, LLVMGetExecutionEngineTargetMachine};
+
+use self::llvm::target_machine::{LLVMCodeGenFileType, LLVMTargetMachineEmitToMemoryBuffer};
+use self::llvm::core::{LLVMGetBufferStart, LLVMPrintModuleToString};
 use self::llvm::analysis::LLVMVerifierFailureAction;
 use self::llvm::transforms::pass_manager_builder as pmb;
 
@@ -91,6 +96,21 @@ pub struct CompiledModule {
     run_function: Option<I64Func>,
 }
 
+/// Generated code saved a string. This can be dumped to a file later.
+#[derive(Debug)]
+pub struct CodeDump {
+    pub optimized_llvm: String,
+    pub assembly: String,
+}
+
+#[derive(Debug)]
+/// The return type of `compile_module`.
+pub struct Compiled {
+   pub module: CompiledModule,
+   pub code: Option<CodeDump>,
+   pub timing: LlvmTimingInfo,
+}
+
 impl CompiledModule {
     /// Call the module's `run` function, which must take and return i64.
     pub fn run(&self, arg: i64) -> i64 {
@@ -126,8 +146,9 @@ pub fn load_library(libname: &str) -> Result<(), LlvmError> {
 pub fn compile_module(
         code: &str,
         optimization_level: u32,
+        dump_code: bool,
         bc_file: Option<&[u8]>)
-        -> Result<(CompiledModule, LlvmTimingInfo), LlvmError> {
+        -> Result<Compiled, LlvmError> {
 
     let mut timing = LlvmTimingInfo::new();
 
@@ -185,7 +206,6 @@ pub fn compile_module(
         timing.times.push(("Module Optimization".to_string(), start.to(end)));
         debug!("Done optimizing module");
 
-
         // Create an execution engine for the module and find its run function
         let start = PreciseTime::now();
         let engine = create_exec_engine(module, optimization_level)?;
@@ -201,7 +221,20 @@ pub fn compile_module(
         timing.times.push(("Find Run Func Address".to_string(), start.to(end)));
         debug!("Done generating/finding run function");
 
-        Ok((result, timing))
+        let code = if dump_code {
+            let ir = output_llvm_ir(module)?;
+            let assembly = output_target_machine_assembly(engine, module)?;
+            Some(CodeDump { optimized_llvm: ir, assembly: assembly })
+        } else {
+            None
+        };
+
+        let result = Compiled {
+            module: result,
+            code: code,
+            timing: timing
+        };
+        Ok(result)
     }
 }
 
@@ -382,4 +415,31 @@ unsafe fn find_function(engine: LLVMExecutionEngineRef, name: &str) -> Result<I6
     }
     let function: I64Func = mem::transmute(func_addr);
     Ok(function)
+}
+
+
+/// Outputs the target machine assembly based on the given engine and module.
+unsafe fn output_target_machine_assembly(engine: LLVMExecutionEngineRef, module: LLVMModuleRef)
+    -> Result<String, LlvmError> {
+    // We create a pointer to a MemoryBuffer, and pass its address to be modified by
+    // EmitToMemoryBuffer.
+    let mut output_buf : self::llvm::prelude::LLVMMemoryBufferRef = ptr::null_mut();
+    let mut err = ptr::null_mut();
+    let cur_target = LLVMGetExecutionEngineTargetMachine(engine);
+    let file_type :LLVMCodeGenFileType = LLVMCodeGenFileType::LLVMAssemblyFile;
+    let res = LLVMTargetMachineEmitToMemoryBuffer(cur_target, module, file_type, &mut err, &mut output_buf);
+    if res == 1 {
+        let x = CStr::from_ptr(err as *mut c_char).to_string_lossy().into_owned();
+        return Err(LlvmError::new(format!("Getting LLVM IR failed with error {}", &x).as_ref()));
+    }
+    let start = LLVMGetBufferStart(output_buf);
+    let c_str: &CStr = CStr::from_ptr(start as *mut c_char);
+    Ok(c_str.to_string_lossy().into_owned())
+}
+
+/// Outputs the LLVM IR for the given module.
+unsafe fn output_llvm_ir(module: LLVMModuleRef) -> Result<String, LlvmError> {
+    let start = LLVMPrintModuleToString(module);
+    let c_str: &CStr = CStr::from_ptr(start as *mut c_char);
+    Ok(c_str.to_str().unwrap().to_owned())
 }

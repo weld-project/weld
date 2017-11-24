@@ -173,11 +173,16 @@ pub fn compile_program(program: &Program, conf: &ParsedConf, stats: &mut Compila
     stats.weld_times.push(("LLVM Codegen".to_string(), start.to(end)));
 
     debug!("Started compiling LLVM");
-    let (module, llvm_times) = try!(easy_ll::compile_module(
+    let compiled = try!(easy_ll::compile_module(
         &llvm_code,
         conf.llvm_optimization_level,
+        conf.dump_code.enabled,
         Some(WELD_INLINE_LIB)));
     debug!("Done compiling LLVM");
+
+    let module = compiled.module;
+    let llvm_times = compiled.timing;
+    let llvm_op_code = compiled.code;
 
     // Add LLVM statistics to the stats.
     for &(ref name, ref time) in llvm_times.times.iter() {
@@ -200,6 +205,12 @@ pub fn compile_program(program: &Program, conf: &ParsedConf, stats: &mut Compila
         write_code(&print_typed_expr(&expr), "weld", timestamp, &conf.dump_code.dir);
         write_code(&format!("{}", &sir_prog), "sir", timestamp, &conf.dump_code.dir);
         write_code(&llvm_code, "ll", timestamp, &conf.dump_code.dir);
+
+        let llvm_op_code = llvm_op_code.unwrap();
+
+        // Write the optimized LLVM code and assembly.
+        write_code(&llvm_op_code.optimized_llvm, "ll", format!("{}-opt", timestamp).as_ref(), &conf.dump_code.dir);
+        write_code(&llvm_op_code.assembly, "S", format!("{}-opt", timestamp).as_ref(), &conf.dump_code.dir);
     }
 
     if let Function(ref param_tys, ref return_ty) = expr.ty {
