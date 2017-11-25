@@ -100,6 +100,8 @@ class NumPyEncoder(WeldObjectEncoder):
                 numpy_to_weld = self.utils.numpy_to_weld_long_arr
             elif obj.ndim == 1 and obj.dtype == 'float64':
                 numpy_to_weld = self.utils.numpy_to_weld_double_arr
+            elif obj.ndim == 1 and obj.dtype == 'float32':
+                numpy_to_weld = self.utils.numpy_to_weld_float_arr
             elif obj.ndim == 2 and obj.dtype == 'int32':
                 numpy_to_weld = self.utils.numpy_to_weld_int_arr_arr
             elif obj.ndim == 2 and obj.dtype == 'int64':
@@ -174,6 +176,8 @@ class NumPyDecoder(WeldObjectDecoder):
         # ctypes._structure
         if restype == WeldVec(WeldBit()):
             weld_to_numpy = self.utils.weld_to_numpy_bool_arr
+        elif restype == WeldVec(WeldFloat()):
+            weld_to_numpy = self.utils.weld_to_numpy_float_arr
         elif restype == WeldVec(WeldDouble()):
             weld_to_numpy = self.utils.weld_to_numpy_double_arr
         elif restype == WeldVec(WeldVec(WeldChar())):
@@ -182,6 +186,8 @@ class NumPyDecoder(WeldObjectDecoder):
             weld_to_numpy = self.utils.weld_to_numpy_int_arr_arr
         elif restype == WeldVec(WeldVec(WeldLong())):
             weld_to_numpy = self.utils.weld_to_numpy_long_arr_arr
+        elif restype == WeldVec(WeldVec(WeldFloat())):
+            weld_to_numpy = self.utils.weld_to_numpy_float_arr_arr
         elif restype == WeldVec(WeldVec(WeldDouble())):
             weld_to_numpy = self.utils.weld_to_numpy_double_arr_arr
         elif restype == WeldVec(WeldInt()):
@@ -196,7 +202,7 @@ class NumPyDecoder(WeldObjectDecoder):
                 ret_vecs.append(ret_vec)
             return tuple(ret_vecs)
         else:
-            raise Exception("Unable to decode; invalid return type")
+            raise Exception("Unable to decode; invalid return type {}", str(restype))
 
         weld_to_numpy.restype = py_object
         weld_to_numpy.argtypes = [restype.ctype_class]

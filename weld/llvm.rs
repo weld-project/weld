@@ -183,11 +183,16 @@ pub fn compile_program(program: &Program, conf: &ParsedConf, stats: &mut Compila
     stats.weld_times.push(("LLVM Codegen".to_string(), start.to(end)));
 
     debug!("Started compiling LLVM");
-    let (module, llvm_times) = try!(easy_ll::compile_module(
+    let compiled = try!(easy_ll::compile_module(
         &llvm_code,
         conf.llvm_optimization_level,
+        conf.dump_code.enabled,
         Some(WELD_INLINE_LIB)));
     debug!("Done compiling LLVM");
+
+    let module = compiled.module;
+    let llvm_times = compiled.timing;
+    let llvm_op_code = compiled.code;
 
     // Add LLVM statistics to the stats.
     for &(ref name, ref time) in llvm_times.times.iter() {
@@ -210,6 +215,12 @@ pub fn compile_program(program: &Program, conf: &ParsedConf, stats: &mut Compila
         write_code(&print_typed_expr(&expr), "weld", timestamp, &conf.dump_code.dir);
         write_code(&format!("{}", &sir_prog), "sir", timestamp, &conf.dump_code.dir);
         write_code(&llvm_code, "ll", timestamp, &conf.dump_code.dir);
+
+        let llvm_op_code = llvm_op_code.unwrap();
+
+        // Write the optimized LLVM code and assembly.
+        write_code(&llvm_op_code.optimized_llvm, "ll", format!("{}-opt", timestamp).as_ref(), &conf.dump_code.dir);
+        write_code(&llvm_op_code.assembly, "S", format!("{}-opt", timestamp).as_ref(), &conf.dump_code.dir);
     }
 
     if let Function(ref param_tys, ref return_ty) = expr.ty {
@@ -1774,7 +1785,7 @@ impl LlvmGenerator {
                 } else if s.is_float() { /* has one-line intrinsic */
                     ctx.code.add(format!("{} = call {} {}({} {}, {} {})",
                                          &output_tmp, &ll_ty,
-                                         llvm_binary_maxmin(*op, &s)?,
+                                         llvm_binary_intrinsic(*op, &s)?,
                                          self.llvm_type(ty)?, &left_tmp,
                                          self.llvm_type(ty)?, &right_tmp));
                 }
@@ -2514,7 +2525,6 @@ impl LlvmGenerator {
 
             BinOp { op, ref left, ref right } => {
                 use super::ast::BinOpKind::*;
-
                 let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
                 let ty = func.symbol_type(left)?;
                 // Assume the left and right operands have the same type.
@@ -2524,15 +2534,23 @@ impl LlvmGenerator {
                 let right_tmp = self.gen_load_var(&right_ll_sym, &ll_ty, ctx)?;
                 let output_tmp = ctx.var_ids.next();
                 match *ty {
-                    Scalar(_) | Simd(_) => {
+                    Scalar(s) | Simd(s) => {
                         match op {
-                            /* Special-case max and min, which don't have int intrinsics */
+                            // Special-case max and min, which don't have int intrinsics
                             Max | Min => {
                                 self.gen_minmax(&ll_ty.as_str(), &op,
                                                 &left_tmp.as_str(),
                                                 &right_tmp.as_str(),
                                                 &output_tmp.as_str(),
                                                 ty, ctx)?;
+                            }
+                            // Pow only support for floating point.
+                            Pow if s.is_float() => {
+                                    ctx.code.add(format!("{} = call {} {}({} {}, {} {})",
+                                    &output_tmp, &ll_ty,
+                                    llvm_binary_intrinsic(op, &s)?,
+                                    self.llvm_type(ty)?, &left_tmp,
+                                    self.llvm_type(ty)?, &right_tmp));
                             }
                             _ => {
                                 ctx.code.add(format!("{} = {} {} {}, {}",
@@ -3779,13 +3797,16 @@ fn llvm_binop(op_kind: BinOpKind, ty: &Type) -> WeldResult<&'static str> {
 }
 
 /// Return LLVM intrinsic for float max/min.
-fn llvm_binary_maxmin(op_kind: BinOpKind, ty: &ScalarKind) -> WeldResult<&'static str> {
+fn llvm_binary_intrinsic(op_kind: BinOpKind, ty: &ScalarKind) -> WeldResult<&'static str> {
     match (op_kind, ty) {
         (BinOpKind::Min, &F32) => Ok("@llvm.minnum.f32"),
         (BinOpKind::Min, &F64) => Ok("@llvm.minnum.f64"),
 
         (BinOpKind::Max, &F32) => Ok("@llvm.maxnum.f32"),
         (BinOpKind::Max, &F64) => Ok("@llvm.maxnum.f64"),
+
+        (BinOpKind::Pow, &F32) => Ok("@llvm.pow.f32"),
+        (BinOpKind::Pow, &F64) => Ok("@llvm.pow.f64"),
 
         _ => weld_err!("Unsupported binary op: {} on {}", op_kind, ty),
     }
@@ -3825,9 +3846,6 @@ fn llvm_scalar_unaryop(op_kind: UnaryOpKind, ty: &ScalarKind) -> WeldResult<&'st
         (UnaryOpKind::Cosh, &F64) => Ok("@cosh"),
         (UnaryOpKind::Tanh, &F32) => Ok("@tanhf"),
         (UnaryOpKind::Tanh, &F64) => Ok("@tanh"),
-
-
-
         (UnaryOpKind::Erf, &F32) => Ok("@erff"),
         (UnaryOpKind::Erf, &F64) => Ok("@erf"),
 
@@ -3852,6 +3870,8 @@ fn llvm_simd_unaryop(op_kind: UnaryOpKind, ty: &ScalarKind, width: u32) -> WeldR
         (UnaryOpKind::Exp, &F32, 8) => Ok("@llvm.exp.v8f32"),
         (UnaryOpKind::Exp, &F64, 2) => Ok("@llvm.exp.v2f64"),
         (UnaryOpKind::Exp, &F64, 4) => Ok("@llvm.exp.v4f64"),
+
+        (UnaryOpKind::Erf, &F64, 4) => Ok("@erf256_pd"),
 
         _ => weld_err!("Unsupported unary op: {} on <{} x {}>", op_kind, width, ty),
     }

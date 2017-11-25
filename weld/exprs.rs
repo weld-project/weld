@@ -501,7 +501,7 @@ pub fn merge_expr(builder: Expr<Type>, value: Expr<Type>) -> WeldResult<Expr<Typ
             VecMerger(ref elem_ty, _) => {
                 if let Struct(ref tys) = value.ty {
                     if tys.len() != 2 {
-                        return err; 
+                        return err;
                     }
                     if tys[0] != Scalar(ScalarKind::I64) {
                         return err;

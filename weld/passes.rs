@@ -72,7 +72,8 @@ lazy_static! {
                                 loop_fusion_2::move_merge_before_let,
                                 inliner::inline_get_field,
                                 inliner::inline_let,
-                                loop_fusion_2::aggressive_inline_let],
+                                loop_fusion_2::aggressive_inline_let,
+                                loop_fusion_2::merge_makestruct_loops],
                  "loop-fusion"));
         m.insert("infer-size",
                  Pass::new(vec![size_inference::infer_size],

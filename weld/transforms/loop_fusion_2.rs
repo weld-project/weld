@@ -10,6 +10,8 @@ use super::uniquify;
 
 use util::SymbolGenerator;
 
+extern crate fnv;
+
 struct MergeSingle<'a> {
     params: &'a Vec<TypedParameter>,
     value: &'a TypedExpr
@@ -339,6 +341,168 @@ pub fn aggressive_inline_let(expr: &mut TypedExpr) {
         } else {
             None
         }
+    });
+}
+
+/// Merges { result(for(appender, result(for(appender( } over the same set of loops into
+/// a single loop of result(for({appender,appender} ...)).
+///
+/// TODO this can definitely be generalized to capture more cases (e.g., the result doesn't
+/// necessarily need to be in a `MakeStruct` expression).
+///
+/// Prerequisites: Expression is uniquified.
+/// Caveats: This transformation will only fire if each vector in the iterator is bound to an
+/// identifier.
+pub fn merge_makestruct_loops(expr: &mut TypedExpr) {
+    use exprs::*;
+    super::uniquify::uniquify(expr).unwrap();
+    expr.transform(&mut |ref mut expr| {
+        if let MakeStruct { ref elems } = expr.kind {
+            // Each member of the `GetStruct` must be a ResForAppender pattern.
+            if elems.len() > 2 || !elems.iter().all(|ref e| ResForAppender::extract(e).is_some()) {
+                return None;
+            }
+            let rfas: Vec<_> = elems.iter().map(|ref e| ResForAppender::extract(e).unwrap()).collect();
+
+            // Make sure all the iterators are simple, and each map just has a single merge.
+            if !rfas.iter().all(|ref rfa| rfa.iters.iter().all(|ref iter| iter.is_simple()) && MergeSingle::extract(rfa.func).is_some()) {
+                return None;
+            }
+
+            // For each Iter, holds a map from name -> index. The indices are required to rewrite
+            // struct accesses. Also keep a HashSet of the identifiers in each iterator.
+            let mut ident_indices = vec![];
+            let mut idents = vec![];
+
+            // This is the "authoratative map", i.e., the GetField indexing every other body will be transformed
+            // to use. It maps the *index to the name* (reverse of all the other maps).
+            let mut first_rfa_map = fnv::FnvHashMap::default();
+
+            for (i, rfa) in rfas.iter().enumerate() {
+                let mut map = fnv::FnvHashMap::default();
+                let mut set = fnv::FnvHashSet::default();
+                for (j, iter) in rfa.iters.iter().enumerate() {
+                    if let Ident(ref name) = iter.data.kind {
+                        map.insert(j, name);
+                        set.insert(name);
+                        // Only for first one.
+                        if i == 0 {
+                            first_rfa_map.insert(name, j);
+                        }
+                    } else {
+                        return None;
+                    }
+                }
+                ident_indices.push(map);
+                idents.push(set);
+            }
+
+            // For the future when we may support iteration over ranges.
+            if idents.len() == 0 {
+                return None;
+            }
+
+            // Now, make sure each iterator has the same set of vectors (but perhaps in a different
+            // ordering).
+            if !idents.iter().all(|e| idents[0] == *e) {
+                return None;
+            }
+
+            //
+            // We now have a struct of ResForAppender patterns over the same data. Rewrite this to be a
+            // ResForAppender over a struct of appender.
+            //
+
+            // Safe to unwrap since we checked it above.
+            let first_ma = MergeSingle::extract(rfas[0].func).unwrap();
+
+            // Construct the new builder type for the loop/etc.
+
+            // For each RFA, get the first parameter of the builder function and copy its type.
+            let types: Vec<_> = rfas.iter().map(|ref rfa| MergeSingle::extract(rfa.func).unwrap().params[0].ty.clone()).collect();
+            let final_builder_ty = Struct(types);
+
+            let mut bodies = vec![];
+
+            for (i, rfa) in rfas.iter().enumerate() {
+
+                let ma = MergeSingle::extract(rfa.func).unwrap();
+                let mut new_body = ma.value.clone();
+
+                // If the element is a Struct that Zips multiple vectors, we need to rewrite the
+                // indexing to match the first body. This handles zips over the same vectors in a
+                // different order (which could be common if upstream transforms shuffle things around).
+                if rfa.iters.len() > 1 {
+
+                    let ref rev_map = ident_indices[i];
+
+                    // third parameter is the element.
+                    let ref elem_name = ma.params[2];
+
+                    // This will be a no-op for the first iterator.
+                    new_body.transform(&mut |ref mut e| {
+                        if let GetField { ref mut expr, ref mut index } = e.kind {
+                            if let Ident(ref name) = expr.kind {
+                                if *name == elem_name.name && expr.ty == elem_name.ty {
+                                    // Get the vector identifier this index refers to.
+                                    let vec_name = rev_map.get(&(*index as usize)).unwrap();
+                                    let change_to = first_rfa_map.get(vec_name).unwrap();
+                                    *index = *change_to as u32;
+                                }
+                            }
+                        }
+                        // Expression is modified in place.
+                        None
+                    });
+                }
+
+                // Substitute the parameter names to use the ones from the first body.
+                // Skip the first one since that's the builder, and since this is matching a
+                // MergeSingle pattern, we shouldn't have any builders in here.
+                for (j, ref param) in ma.params.iter().enumerate() {
+                    let ref replacement = ident_expr(first_ma.params[j].name.clone(), param.ty.clone()).unwrap();
+                    new_body.substitute(&param.name, replacement);
+                }
+                // Add the new merge expression to the list of bodies.
+                let builder_expr = getfield_expr(ident_expr(first_ma.params[0].name.clone(), final_builder_ty.clone()).unwrap(), i as u32).unwrap();
+                bodies.push(merge_expr(builder_expr, new_body).unwrap());
+            }
+
+            let final_iters = rfas[0].iters.clone();
+            let mut newbuilders = vec![];
+
+            // Pull out the new builders and clone them into a vector.
+            for elem in elems.iter() {
+                if let Res{ ref builder } = elem.kind {
+                    if let For{ref builder, .. } = builder.kind {
+                        newbuilders.push(builder.as_ref().clone());
+                    }
+                }
+            }
+
+            // Since we extracted RFAs from all of them...
+            assert!(newbuilders.len() == elems.len());
+
+            // Build the function and final body.
+            let final_body = makestruct_expr(bodies).unwrap();
+            let mut final_params = first_ma.params.clone();
+            final_params[0].ty = final_builder_ty.clone();
+
+            let final_func = lambda_expr(final_params, final_body).unwrap();
+            let final_loop = for_expr(final_iters, makestruct_expr(newbuilders).unwrap() , final_func, false).unwrap();
+
+            let mut gen = SymbolGenerator::from_expression(expr);
+            let struct_name = gen.new_symbol("tmp");
+
+            let builder_iden = ident_expr(struct_name.clone(), final_builder_ty).unwrap();
+
+            let results = (0..rfas.len()).map(|i| result_expr(getfield_expr(builder_iden.clone(), i as u32).unwrap()).unwrap()).collect();
+            let results = makestruct_expr(results).unwrap();
+            let final_expr = let_expr(struct_name, final_loop, results).unwrap();
+
+            return Some(final_expr);
+        }
+        None
     });
 }
 

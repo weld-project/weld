@@ -996,7 +996,6 @@ impl<'t> Parser<'t> {
                             },
                             Annotations::new()))
             }
-
             TMerge => {
                 try!(self.consume(TOpenParen));
                 let builder = try!(self.expr());
@@ -1191,6 +1190,21 @@ impl<'t> Parser<'t> {
                     right: right,
                 }, Annotations::new());
                 
+                Ok(res)
+            }
+
+            TPow => {
+                try!(self.consume(TOpenParen));
+                let left = try!(self.expr());
+                try!(self.consume(TComma));
+                let right = try!(self.expr());
+                try!(self.consume(TCloseParen));
+                
+                let res = expr_box(BinOp {
+                    kind: Pow,
+                    left: left,
+                    right: right,
+                }, Annotations::new());
                 Ok(res)
             }
             

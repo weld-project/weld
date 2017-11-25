@@ -107,6 +107,7 @@ pub enum Token {
     TXor,
     TMax,
     TMin,
+    TPow,
     TEndOfInput,
 }
 
@@ -147,6 +148,7 @@ impl Token {
                 TXor |
                 TMax |
                 TMin |
+                TPow |
                 TEndOfInput => false,
             _ => true
         }
@@ -256,6 +258,7 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
                             "false" => TBoolLiteral(false),
                             "min" => TMin,
                             "max" => TMax,
+                            "pow" => TPow,
                             _ => return weld_err!("Invalid input token: {}", text),
                         });
 
@@ -437,6 +440,7 @@ impl fmt::Display for Token {
                     TXor => "^",
                     TMin => "min",
                     TMax => "max",
+                    TPow => "pow",
                     TEndOfInput => "<END>",
                 })
             }

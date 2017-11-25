@@ -30,6 +30,8 @@ declare <4 x double> @llvm.log.v4f64(<4 x double>)
 declare <2 x double> @llvm.exp.v2f64(<2 x double>)
 declare <4 x double> @llvm.exp.v4f64(<4 x double>)
 
+declare <4 x double> @llvm.fabs.v4f64(<4 x double>)
+
 declare float @llvm.sqrt.f32(float)
 declare double @llvm.sqrt.f64(double)
 
@@ -72,6 +74,10 @@ declare float @coshf(float)
 declare double @cosh(double)
 declare float @tanhf(float)
 declare double @tanh(double)
+
+; Power
+; declare float @llvm.pow.f32(float, float)
+; declare double @llvm.pow.f64(double, double)
 
 declare i32 @puts(i8* nocapture) nounwind
 
@@ -198,4 +204,27 @@ define i32 @double.hash(double %arg) {
   %1 = bitcast double %arg to i64
   %2 = call i32 @i64.hash(i64 %1)
   ret i32 %2
+}
+
+; ERF implementation for <4 x double> based on https://www.johndcook.com/blog/cpp_erf/
+define <4 x double> @erf256_pd(<4 x double> %iinp) {
+  %i4 = call <4 x double> @llvm.fabs.v4f64(<4 x double> %iinp)
+  %i5 = fmul <4 x double> %i4, <double 3.275911e-01, double 3.275911e-01, double 3.275911e-01, double 3.275911e-01>
+  %i6 = fadd <4 x double> %i5, <double 1.000000e+00, double 1.000000e+00, double 1.000000e+00, double 1.000000e+00>
+  %i7 = fdiv <4 x double> <double 1.000000e+00, double 1.000000e+00, double 1.000000e+00, double 1.000000e+00>, %i6
+  %i8 = fmul <4 x double> %i7, <double 0x3FF0FB844255A12D, double 0x3FF0FB844255A12D, double 0x3FF0FB844255A12D, double 0x3FF0FB844255A12D>
+  %i9 = fadd <4 x double> %i8, <double 0xBFF7401C57014C39, double 0xBFF7401C57014C39, double 0xBFF7401C57014C39, double 0xBFF7401C57014C39>
+  %i10 = fmul <4 x double> %i7, %i9
+  %i11 = fadd <4 x double> %i10, <double 0x3FF6BE1C55BAE157, double 0x3FF6BE1C55BAE157, double 0x3FF6BE1C55BAE157, double 0x3FF6BE1C55BAE157>
+  %i12 = fmul <4 x double> %i7, %i11
+  %i13 = fadd <4 x double> %i12, <double 0xBFD23531CC3C1469, double 0xBFD23531CC3C1469, double 0xBFD23531CC3C1469, double 0xBFD23531CC3C1469>
+  %i14 = fmul <4 x double> %i7, %i13
+  %i15 = fadd <4 x double> %i14, <double 0x3FD04F20C6EC5A7E, double 0x3FD04F20C6EC5A7E, double 0x3FD04F20C6EC5A7E, double 0x3FD04F20C6EC5A7E>
+  %i16 = fmul <4 x double> %i7, %i15
+  %i17 = fmul <4 x double> %iinp, %iinp
+  %i18 = fsub <4 x double> <double -0.000000e+00, double -0.000000e+00, double -0.000000e+00, double -0.000000e+00>, %i17
+  %i19 = call <4 x double> @llvm.exp.v4f64(<4 x double> %i18)
+  %i20 = fmul <4 x double> %i19, %i16
+  %i21 = fsub <4 x double> <double 1.000000e+00, double 1.000000e+00, double 1.000000e+00, double 1.000000e+00>, %i20
+  ret <4 x double> %i21
 }

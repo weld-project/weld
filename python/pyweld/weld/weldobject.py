@@ -212,7 +212,8 @@ class WeldObject(object):
 
         if passes is not None:
             conf.set("weld.optimization.passes", ",".join(passes))
-
+        # conf.set("weld.compile.dumpCode", "true")
+        # conf.set("weld.compile.multithreadSupport", "false")
         module = cweld.WeldModule(function, conf, err)
         if err.code() != 0:
             raise ValueError("Could not compile function {}: {}".format(
