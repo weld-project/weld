@@ -36,11 +36,19 @@ fn newbuilder_with_size(builder: &TypedExpr, vector: &TypedExpr) -> Option<Typed
     None
 }
 
+fn func_has_simple_merge(expr: &TypedExpr) -> bool {
+    if let Lambda { ref params, ref body } = expr.kind {
+        simple_merge(&params[0].name, body)
+    } else {
+        false
+    }
+}
+
 /// Infers the size of an `Appender` in a `For` loop.
 pub fn infer_size(expr: &mut Expr<Type>) {
     expr.transform_up(&mut |ref mut expr| {
-        if let For { ref mut iters, ref mut builder, .. } = expr.kind {
-            if iters.len() > 0 && iters.iter().all(|ref iter| iter.is_simple()) {
+        if let For { ref mut iters, ref mut builder, ref mut func } = expr.kind {
+            if iters.len() > 0 && iters.iter().all(|ref iter| iter.is_simple()) && func_has_simple_merge(func) {
                 if let Ident(_) = iters[0].data.kind {
                     if let Some(newbuilder) = newbuilder_with_size(builder, iters[0].data.as_ref()) {
                         *builder = Box::new(newbuilder);
