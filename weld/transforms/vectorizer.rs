@@ -161,21 +161,12 @@ pub fn predicate(e: &mut Expr<Type>) {
 ///
 /// We can vectorize an iterator if all of its iterators consume the entire collection.
 fn vectorizable_iters(iters: &Vec<Iter<Type>>) -> bool {
-    for ref iter in iters {
-        if iter.start.is_some() || iter.end.is_some() || iter.stride.is_some() {
-            return false;
+    iters.iter().all(|ref iter| {
+        iter.start.is_none() && iter.end.is_none() && iter.stride.is_none() && match iter.data.ty {
+            Vector(ref elem) if elem.is_scalar() => true,
+            _ => false,
         }
-        if let Vector(ref elem_ty) = iter.data.ty {
-            if let Scalar(_) = *elem_ty.as_ref() {
-            } else {
-                return false;
-            }
-        }
-        if iter.kind != IterKind::ScalarIter {
-            return false;
-        }
-    }
-    true
+    })
 }
 
 /// Vectorizes an expression in-place, also changing its type if needed.
