@@ -164,6 +164,29 @@ pub fn predicate_simple_expr(e: &mut Expr<Type>) {
             return Ok((None, true));
         }
 
+        // Check if any sub-expression has a builder; if so bail out in order to not break linearity.
+        let mut safe = true;
+        e.traverse(&mut |ref sub_expr| {
+            match sub_expr.kind {
+                Merge { .. } => {
+                    safe = false;
+                },
+                Res { .. } => {
+                    safe = false;
+                },
+                For { .. } => {
+                    safe = false;
+                },
+                NewBuilder(_) => {
+                    safe = false;
+                },
+                _ => {}
+            }
+        });
+        if !safe {
+            return Ok((None, true));
+        }
+
         // This pattern checks for if(cond, scalar1, scalar2).
         if let If { ref cond, ref on_true, ref on_false } = e.kind {
             if let Scalar(_) = on_true.ty {
