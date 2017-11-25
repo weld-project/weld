@@ -31,6 +31,20 @@ weld::vec<long> numpy_to_weld_long_arr(PyObject* in) {
     return t;
 }
 
+
+/**
+ * Converts numpy array to Weld vector.
+ */
+extern "C"
+weld::vec<float> numpy_to_weld_float_arr(PyObject* in) {
+    PyArrayObject* inp = (PyArrayObject*) in;
+    int64_t dimension = (int64_t) PyArray_DIMS(inp)[0];
+    weld::vec<float> t;
+    t.size = dimension;
+    t.ptr = (float*) PyArray_DATA(inp);
+    return t;
+}
+
 /**
  * Converts numpy array to Weld vector.
  */
@@ -195,8 +209,21 @@ PyObject* weld_to_numpy_long_arr(weld::vec<long> inp) {
     return out;
 }
 
+
 /**
  * Converts Weld vector to numpy float array.
+ */
+extern "C"
+PyObject* weld_to_numpy_float_arr(weld::vec<float> inp) {
+    Py_Initialize();
+    npy_intp size = {inp.size};
+    _import_array();
+    PyObject* out = PyArray_SimpleNewFromData(1, &size, NPY_FLOAT, (char*)inp.ptr);
+    return out;
+}
+
+/**
+ * Converts Weld vector to numpy double array.
  */
 extern "C"
 PyObject* weld_to_numpy_double_arr(weld::vec<double> inp) {

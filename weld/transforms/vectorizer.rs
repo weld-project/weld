@@ -30,10 +30,8 @@ pub fn vectorize(expr: &mut Expr<Type>) {
     expr.transform_and_continue_res(&mut |ref mut expr| {
         //  The Res is a stricter-than-necessary check, but prevents us from having to check nested
         //  loops for now.
-        if let Res { builder: ref for_loop } = expr.kind {
-            let ref broadcast_idens = vectorizable(for_loop)?;
-            if let For { ref iters, builder: ref init_builder, ref func } = for_loop.kind {
-                if let NewBuilder(_) = init_builder.kind {
+        if let Some(ref broadcast_idens) = vectorizable(expr) {
+            if let For { ref iters, builder: ref init_builder, ref func } = expr.kind {
                     if let Lambda { ref params, ref body } = func.kind {
                         // This is the vectorized body.
                         let mut vectorized_body = body.clone();
@@ -77,16 +75,13 @@ pub fn vectorize(expr: &mut Expr<Type>) {
 
                         let vectorized_loop = exprs::for_expr(vec_iters, *init_builder.clone(), vec_func, true)?;
                         let scalar_loop = exprs::for_expr(fringe_iters, vectorized_loop, *func.clone(), false)?;
-                        let result = exprs::result_expr(scalar_loop)?;
-
-                        let mut prev_expr = result;
+                        let mut prev_expr = scalar_loop;
                         for (iter, name) in iters.iter().zip(data_names).rev() {
                             prev_expr = exprs::let_expr(name.clone(), *iter.data.clone(), prev_expr)?;
                         }
 
                         vectorized = true;
                         return Ok((Some(prev_expr), false));
-                    }
                 }
             }
         }
@@ -231,15 +226,25 @@ fn vectorize_expr(e: &mut Expr<Type>, broadcast_idens: &HashSet<Symbol>) -> Weld
     Ok(cont)
 }
 
+fn vectorizable_newbuilder(expr: &TypedExpr) -> bool {
+    if let NewBuilder(_) = expr.kind {
+        return true;
+    }
+    if let MakeStruct { ref elems } = expr.kind {
+        return elems.iter().all(|ref e| vectorizable_newbuilder(e));
+    }
+    false
+}
+
 /// Checks basic vectorizability for a loop - this is a strong check which ensure that the only
 /// expressions which appear in a function body are vectorizable expressions (see
 /// `docs/internals/vectorization.md` for details)
-fn vectorizable(for_loop: &Expr<Type>) -> WeldResult<HashSet<Symbol>> {
+fn vectorizable(for_loop: &Expr<Type>) -> Option<HashSet<Symbol>> {
     if let For { ref iters, builder: ref init_builder, ref func } = for_loop.kind {
         // Check if the iterators are consumed.
         if vectorizable_iters(&iters) {
             // Check if the builder is newly initialized.
-            if let NewBuilder(_) = init_builder.kind {
+            if vectorizable_newbuilder(init_builder) {
                 // Check the loop function.
                 if let Lambda { ref params, ref body } = func.kind {
                     let mut passed = true;
@@ -287,7 +292,8 @@ fn vectorizable(for_loop: &Expr<Type>) -> WeldResult<HashSet<Symbol>> {
                     });
 
                     if !passed {
-                        return weld_err!("Unsupported pattern");
+                        trace!("Vectorization failed due to unsupported expression in loop body");
+                        return None;
                     }
 
                     // If the data in the vector is not a Scalar, we can't vectorize it.
@@ -306,7 +312,8 @@ fn vectorizable(for_loop: &Expr<Type>) -> WeldResult<HashSet<Symbol>> {
                     }
 
                     if !check_arg_ty {
-                        return weld_err!("Unsupported type");
+                        trace!("Vectorization failed due to unsupported type");
+                        return None;
                     }
 
                     let mut idens = HashSet::new();
@@ -326,14 +333,16 @@ fn vectorizable(for_loop: &Expr<Type>) -> WeldResult<HashSet<Symbol>> {
                                        });
 
                     if !passed {
-                        return weld_err!("Unsupporte pattern: non-scalar identifier that must be broadcast");
+                        trace!("Unsupported pattern: non-scalar identifier that must be broadcast");
+                        return None;
                     }
-                    return Ok(idens);
+                    return Some(idens);
                 }
             }
         }
     }
-    return weld_err!("Unsupported pattern");
+    trace!("Vectorization failed due to unsupported pattern");
+    None
 }
 
 fn should_be_predicated(e: &mut Expr<Type>) -> bool {

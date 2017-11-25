@@ -157,6 +157,31 @@ class WeldObject(object):
     def evaluate(self, restype, verbose=True, decode=True, passes=None):
         function = self.to_weld_func()
 
+        function = """
+|vprice: vec[f32], vstrike: vec[f32], vt: vec[f32], vrate: vec[f32], vvol: vec[f32]|
+  let c05 = 3.0f;
+  let c10 = 1.5f;
+  let r = for(
+    zip(vprice, vstrike, vt, vrate, vvol),
+    {appender[f32](len(vprice)) ,appender[f32](len(vprice))},
+    |b,i,e|
+      let rsig = e.$3 + e.$4 * e.$4 * c05;
+      let vol_sqrt = e.$4 * sqrt(e.$2);
+      let d1 = (log(e.$0 / e.$1) + rsig * e.$2) / vol_sqrt;
+      let d2 = d1 - vol_sqrt;
+
+      let d11 = c05 + c05 + erf(d1 * 1.0f);
+      let d22 = c05 + c05 + erf(d2 * 1.0f);
+      let e_rt = exp(e.$3 * e.$2);
+
+      {
+        merge(b.$0, e.$0 * d11 - e_rt * e.$1 * d22),
+        merge(b.$1, e_rt * e.$1 * (c10 - d22) - e.$0 * (c10 - d11))
+      }
+    );
+  {result(r.$0), result(r.$1)}
+  """
+
         # Returns a wrapped ctypes Structure
         def args_factory(encoded):
             class Args(ctypes.Structure):
@@ -197,6 +222,9 @@ class WeldObject(object):
 
         if passes is not None:
             conf.set("weld.optimization.passes", ",".join(passes))
+
+        conf.set("weld.compile.dumpCode", "true")
+        conf.set("weld.compile.multithreadSupport", "false")
 
         module = cweld.WeldModule(function, conf, err)
         if err.code() != 0:
