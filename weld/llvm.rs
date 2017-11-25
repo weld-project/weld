@@ -3533,8 +3533,6 @@ fn llvm_scalar_unaryop(op_kind: UnaryOpKind, ty: &ScalarKind) -> WeldResult<&'st
         (UnaryOpKind::Tanh, &F32) => Ok("@tanhf"),
         (UnaryOpKind::Tanh, &F64) => Ok("@tanh"),
 
-
-
         (UnaryOpKind::Erf, &F32) => Ok("@erff"),
         (UnaryOpKind::Erf, &F64) => Ok("@erf"),
 
@@ -3559,6 +3557,8 @@ fn llvm_simd_unaryop(op_kind: UnaryOpKind, ty: &ScalarKind, width: u32) -> WeldR
         (UnaryOpKind::Exp, &F32, 8) => Ok("@llvm.exp.v8f32"),
         (UnaryOpKind::Exp, &F64, 2) => Ok("@llvm.exp.v2f64"),
         (UnaryOpKind::Exp, &F64, 4) => Ok("@llvm.exp.v4f64"),
+
+        (UnaryOpKind::Erf, &F64, 4) => Ok("@erf256_pd"),
 
         _ => weld_err!("Unsupported unary op: {} on <{} x {}>", op_kind, width, ty),
     }
