@@ -91,7 +91,7 @@ pub fn vectorize(expr: &mut Expr<Type>) {
 }
 
 /// Predicate an `If` expression by checking for if(cond, merge(b, e), b) and transforms it to merge(b, select(cond, e,identity)).
-pub fn predicate(e: &mut Expr<Type>) {
+pub fn predicate_merge_expr(e: &mut Expr<Type>) {
     e.transform_and_continue_res(&mut |ref mut e| {
         if !(should_be_predicated(e)) {
             return Ok((None, true));
@@ -150,6 +150,38 @@ pub fn predicate(e: &mut Expr<Type>) {
                             }
                         }
                     }
+                }
+            }
+        }
+        Ok((None, true))
+    });
+}
+
+/// Predicate an `If` expression by checking for if(cond, scalar1, scalar2) and transforms it to select(cond, scalar1, scalar2).
+pub fn predicate_simple_expr(e: &mut Expr<Type>) {
+    e.transform_and_continue_res(&mut |ref mut e| {
+        if !(should_be_predicated(e)) {
+            return Ok((None, true));
+        }
+
+        // This pattern checks for if(cond, scalar1, scalar2).
+        if let If { ref cond, ref on_true, ref on_false } = e.kind {
+            // Check if any sub-expression has a builder; if so bail out in order to not break linearity.
+            let mut safe = true;
+            on_true.traverse(&mut |ref sub_expr| if sub_expr.kind.is_builder_expr() {
+                safe = false;
+            });
+            on_false.traverse(&mut |ref sub_expr| if sub_expr.kind.is_builder_expr() {
+                safe = false;
+            });
+            if !safe {
+                return Ok((None, true));
+            }
+
+            if let Scalar(_) = on_true.ty {
+                if let Scalar(_) = on_false.ty {
+                    let expr = exprs::select_expr(*cond.clone(), *on_true.clone(), *on_false.clone())?;
+                    return Ok((Some(expr), true));
                 }
             }
         }
@@ -426,7 +458,7 @@ fn simple_merger() {
 #[test]
 fn predicated_merger() {
     let mut e = typed_expr("|v:vec[i32]| result(for(v, merger[i32,+], |b,i,e| @(predicate:true)if(e>0, merge(b,e), b)))");
-    predicate(&mut e);
+    predicate_merge_expr(&mut e);
     vectorize(&mut e);
     assert!(has_vectorized_merge(&e));
 }
@@ -450,7 +482,7 @@ fn simple_appender() {
 fn predicated_appender() {
     // This code should NOT be vectorized because we can't predicate merges into vecbuilder.
     let mut e = typed_expr("|v:vec[i32]| result(for(v, appender[i32], |b,i,e| @(predicate:true)if(e>0, merge(b,e), b)))");
-    predicate(&mut e);
+    predicate_merge_expr(&mut e);
     vectorize(&mut e);
     assert!(!has_vectorized_merge(&e));
 }

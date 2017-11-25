@@ -388,6 +388,14 @@ impl<T: TypeBounds> ExprKind<T> {
             Res { .. } => "Res",
         }
     }
+
+    pub fn is_builder_expr(&self) -> bool {
+        use ast::ExprKind::*;
+        match *self {
+            Merge { .. } | Res { .. } | For { .. } | NewBuilder(_) => true,
+            _ => false,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
