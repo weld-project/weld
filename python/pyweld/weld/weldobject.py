@@ -95,7 +95,7 @@ class WeldObject(object):
         self.argtypes = {}
 
     def __repr__(self):
-        return self.weld_code + " " + str(self.context)
+        return self.weld_code + " " + str(self.context) + " " + str([obj_id for obj_id in self.dependencies])
 
     def update(self, value, tys=None, override=True):
         """
@@ -107,7 +107,6 @@ class WeldObject(object):
         """
         if isinstance(value, WeldObject):
             self.context.update(value.context)
-            self.dependencies.update(value.dependencies)
         else:
             # Ensure that the same inputs always have same names
             value_str = str(value)
