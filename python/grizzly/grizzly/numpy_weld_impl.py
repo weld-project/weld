@@ -105,9 +105,12 @@ def dot(matrix, vector, matrix_ty, vector_ty):
         weld_obj.dependencies[matrix_var] = matrix
 
     vector_var = weld_obj.update(vector)
+    loopsize_annotation = ""
     if isinstance(vector, WeldObject):
         vector_var = vector.obj_id
         weld_obj.dependencies[vector_var] = vector
+    if isinstance(vector, np.ndarray):
+        loopsize_annotation = "@(loopsize: %d)" % len(vector)
 
     weld_template = """
        map(
@@ -115,6 +118,7 @@ def dot(matrix, vector, matrix_ty, vector_ty):
          |row: vec[%(matrix_ty)s]|
            result(
              for(
+               %(loopsize_annotation)s
                map(
                  zip(row, %(vector)s),
                  |ele: {%(matrix_ty)s, %(vector_ty)s}|
@@ -129,7 +133,8 @@ def dot(matrix, vector, matrix_ty, vector_ty):
     weld_obj.weld_code = weld_template % {"matrix": matrix_var,
                                           "vector": vector_var,
                                           "matrix_ty": matrix_ty,
-                                          "vector_ty": vector_ty}
+                                          "vector_ty": vector_ty,
+                                          "loopsize_annotation": loopsize_annotation}
     return weld_obj
 
 
