@@ -84,6 +84,8 @@ class DataFrameWeld:
             return DataFrameWeld(self.df[key], self.predicates)
         elif isinstance(key, SeriesWeld):
             # Can also apply predicate to a dataframe
+            if self.predicates is not None:
+                return DataFrameWeld(self.df, key.per_element_and(self.predicates))
             return DataFrameWeld(self.df, key)
         raise Exception("Invalid type in __getitem__")
 
@@ -533,6 +535,29 @@ class SeriesWeld(LazyOpResult):
                 self.expr,
                 other,
                 "/",
+                self.weld_type
+            ),
+            self.weld_type,
+            self.df,
+            self.column_name
+        )
+
+    def per_element_and(self, other):
+        """Summary
+
+        Args:
+            other (TYPE): Description
+
+        Returns:
+            TYPE: Description
+        """
+        if isinstance(other, SeriesWeld):
+            other = other.expr
+        return SeriesWeld(
+            grizzly_impl.element_wise_op(
+                self.expr,
+                other,
+                "&&",
                 self.weld_type
             ),
             self.weld_type,

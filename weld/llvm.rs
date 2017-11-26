@@ -2014,7 +2014,7 @@ impl LlvmGenerator {
 
         let value_str = llvm_literal(*kind);
         let elem_ty_str = match *kind {
-            BoolLiteral(_) => "bool",
+            BoolLiteral(_) => "i1",
             I8Literal(_) => "i8",
             I16Literal(_) => "i16",
             I32Literal(_) => "i32",
@@ -3672,6 +3672,25 @@ fn predicate_only(code: &str) -> WeldResult<TypedExpr> {
     apply_opt_passes(&mut typed_e, &optpass, &mut CompilationStats::new())?;
 
     Ok(typed_e)
+}
+
+#[test]
+fn simple_predicate() {
+    /* Ensure that the simple_predicate transform works. */
+    let code = "|v1:vec[i32],v2:vec[bool]| result(for(zip(v1, v2), merger[i32,+], |b,i,e| merge(b, @(predicate:true) if(e.$1, e.$0, 0))))";
+    let typed_e = predicate_only(code);
+    assert!(typed_e.is_ok());
+    let expected = "|v1:vec[i32],v2:vec[bool]|result(for(zip(v1:vec[i32],v2:vec[bool]),merger[i32,+],|b:merger[i32,+],i:i64,e:{i32,bool}|merge(b:merger[i32,+],select(e:{i32,bool}.$1,e:{i32,bool}.$0,0))))";
+    assert_eq!(print_typed_expr_without_indent(&typed_e.unwrap()).as_str(),
+               expected);
+
+    /* Ensure that the simple_predicate transform doesn't change the program if on_true or on_false contains a builder expression. */
+    let code = "|v1:vec[i32],v2:vec[bool]| result(for(v2, appender, |b,i,e| merge(b, @(predicate:true) if(e, result(for(v1, merger[i32,+], |b2,i2,e2| merge(b2,e2))), 0))))";
+    let typed_e = predicate_only(code);
+    assert!(typed_e.is_ok());
+    let expected = "|v1:vec[i32],v2:vec[bool]|result(for(v2:vec[bool],appender[i32],|b:appender[i32],i:i64,e:bool|merge(b:appender[i32],@(predicate:true)if(e:bool,result(for(v1:vec[i32],merger[i32,+],|b2:merger[i32,+],i2:i64,e2:i32|merge(b2:merger[i32,+],e2:i32))),0))))";
+    assert_eq!(print_typed_expr_without_indent(&typed_e.unwrap()).as_str(),
+               expected);
 }
 
 #[test]
