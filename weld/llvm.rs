@@ -2014,7 +2014,7 @@ impl LlvmGenerator {
 
         let value_str = llvm_literal(*kind);
         let elem_ty_str = match *kind {
-            BoolLiteral(_) => "bool",
+            BoolLiteral(_) => "i1",
             I8Literal(_) => "i8",
             I16Literal(_) => "i16",
             I32Literal(_) => "i32",
