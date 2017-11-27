@@ -141,6 +141,20 @@ impl<'t> Parser<'t> {
         }
     }
 
+    /// Consume the next token and check that it equals `expected`. If not, return an Err.
+    /// Calling functions can pass in an error to display to the user.
+    fn consume_with_err(&mut self, expected: Token, fn_str: &str, err_str: &str) -> WeldResult<()> {
+        if *self.next() != expected {
+            if err_str.len() > 0 {
+                weld_err!("Expected '{}' in {}: {}", expected, fn_str, err_str)
+            } else {
+                weld_err!("Expected '{}' in {}", expected, fn_str)
+            }
+        } else {
+            Ok(())
+        }
+    }
+
     /// Are we done parsing all the input?
     fn is_done(&self) -> bool {
         self.position == self.tokens.len() || *self.peek() == TEndOfInput
