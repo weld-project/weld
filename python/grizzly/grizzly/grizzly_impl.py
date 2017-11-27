@@ -565,7 +565,7 @@ def to_lower(array, ty):
     weld_template = """
        map(
          %(array)s,
-         |array: vec[%(ty)s]| map(array, |b:%(ty)s| if(b <= i8(90), b, b))
+         |array: vec[i8]| map(array, |b:i8| if(b <= i8(90), b + i8(32), b))
        )
     """
     weld_obj.weld_code = weld_template % {"array": array_var, "ty": ty}
@@ -599,10 +599,24 @@ def contains(array, ty, string):
         weld_obj.dependencies[array_var] = array
 
     (start, end) = 0, len(string)
+    # Some odd bug where iterating on str and slicing str results
+    # in a segfault
     weld_template = """
        map(
          %(array)s,
-         |str: vec[%(ty)s]| slice(str, i64(%(start)s), i64(%(end)s)) == %(cmpstr)s
+         |str: vec[%(ty)s]|
+           let tstr = str;
+           result(
+             for(
+               str,
+               merger[i8,+](i8(0)),
+               |b,i,e|
+                 if(slice(tstr, i, i64(%(end)s)) == %(cmpstr)s,
+                    merge(b, i8(1)),
+                    b
+                 )
+              )
+            ) > i8(0)
        )
     """
     weld_obj.weld_code = weld_template % {"array": array_var, "ty": ty,
