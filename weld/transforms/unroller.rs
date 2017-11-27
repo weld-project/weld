@@ -88,10 +88,14 @@ impl<'a> MapIter<'a> {
 }
 
 // TODO When should the transformation be applied?
+// 1. Has the loopsize annotation.
+// 2. loopsize annotation is below some threshold (lets say 4-8 for now)
+// 3. Loop follows the ResForAppender/SimpleMerge pattern.
+// 4. The SimpleMerge pattern does not contain any other builder expressions (e.g., nested loops).
 
 /// Takes a `MergeSingle` and returns a list of expressions which replace the element
 /// in the merge with a Lookup.
-fn unroll_values(merge_single: &'a MergeSingle, iters: &'a Vec<TypedIter>, loopsize: usize) -> WeldResult<Vec<TypedExpr>> {
+fn unroll_values<'a>(merge_single: &'a MergeSingle, iters: &'a Vec<TypedIter>, loopsize: usize) -> WeldResult<Vec<TypedExpr>> {
     if merge_single.params.len() != 3 {
         return weld_err!("Expected three parameters to Merge function");
     }
@@ -105,6 +109,7 @@ fn unroll_values(merge_single: &'a MergeSingle, iters: &'a Vec<TypedIter>, loops
         let mut value = merge_single.value.clone();
         value.transform(&mut |ref mut e| {
             match e.kind {
+                // TODO the index value can also be handled here rather easily.
                 Ident(ref name) if name == elem_symbol && iters.len() == 1 {
                     // There is a single iterator, which means the type of the element is the type
                     // of the iterator's data. Replace it with a lookup into the vector.
