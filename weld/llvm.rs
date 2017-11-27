@@ -48,8 +48,8 @@ use super::parser::*;
 static PRELUDE_CODE: &'static str = include_str!("resources/prelude.ll");
 
 /// The default grain size for the parallel runtime.
-static DEFAULT_INNER_GRAIN_SIZE: i64 = 16384;
-static DEFAULT_OUTER_GRAIN_SIZE: i64 = 4096;
+static DEFAULT_INNER_GRAIN_SIZE: i32 = 16384;
+static DEFAULT_OUTER_GRAIN_SIZE: i32 = 4096;
 
 /// A wrapper for a struct passed as input to the Weld runtime.
 #[derive(Clone, Debug)]
@@ -402,6 +402,38 @@ impl LlvmGenerator {
         Ok(())
     }
 
+    fn gen_create_new_vb_pieces_helper(&mut self, sym: &str, ty: &Type, inner_ctx: &mut FunctionContext,
+        outer_ctx: &mut FunctionContext) -> WeldResult<(bool)> {
+        let mut has_builder = false;
+        match *ty {
+            Builder(ref bk, _) => {
+                match *bk {
+                    Appender(_) => {
+                        let bld_ty_str = self.llvm_type(ty)?;
+                        let bld_prefix = llvm_prefix(&bld_ty_str);
+                        inner_ctx.code.add(format!("call void {}.newPiece({} {}, %work_t* %cur.work)",
+                                                bld_prefix,
+                                                bld_ty_str,
+                                                sym));
+                        has_builder = true;
+                    }
+                    _ => {}
+                }
+            }
+            Struct(ref fields) => {
+                for (i, f) in fields.iter().enumerate() {
+                    let struct_ty = self.llvm_type(ty)?;
+                    let bld_sym = outer_ctx.var_ids.next();
+                    inner_ctx.code.add(format!("{} = extractvalue {} {}, {}", bld_sym, struct_ty,
+                        sym, i));
+                    has_builder |= self.gen_create_new_vb_pieces_helper(&bld_sym, f, inner_ctx, outer_ctx)?;
+                }
+            }
+            _ => {}
+        }
+        Ok(has_builder)
+    }
+
     /// Generates code to create new pieces for the appender.
     fn gen_create_new_vb_pieces(&mut self, params_sorted: &BTreeMap<Symbol, Type>, suffix: &str, ctx: &mut FunctionContext) -> WeldResult<()> {
         let full_task_ptr = ctx.var_ids.next();
@@ -413,63 +445,72 @@ impl LlvmGenerator {
         ctx.code.add(format!("br i1 {}, label %new_pieces, label %fn_call", full_task_bit));
         ctx.code.add("new_pieces:");
         for (arg, ty) in params_sorted.iter() {
-            match *ty {
-                Builder(ref bk, _) => {
-                    match *bk {
-                        Appender(_) => {
-                            let bld_ty_str = self.llvm_type(ty)?;
-                            let bld_prefix = llvm_prefix(&bld_ty_str);
-                            ctx.code.add(format!("call void {}.newPiece({} {}{}, %work_t* %cur.work)",
-                                                 bld_prefix,
-                                                 bld_ty_str,
-                                                 llvm_symbol(arg),
-                                                 suffix));
-                        }
-                        _ => {}
-                    }
-                }
-                _ => {}
+            let inner_ctx = &mut FunctionContext::new(false);
+            let has_builder = self.gen_create_new_vb_pieces_helper(
+                format!("{}{}", llvm_symbol(arg), suffix).as_str(), ty, inner_ctx, ctx)?;
+            if has_builder {
+                ctx.code.add(&inner_ctx.code.result());
             }
         }
         ctx.code.add("br label %fn_call");
         Ok(())
     }
 
+    fn gen_create_stack_mergers_helper(&mut self, sym: &str, ty: &Type, inner_ctx: &mut FunctionContext,
+        outer_ctx: &mut FunctionContext) -> WeldResult<(bool)> {
+        let mut has_builder = false;
+        match *ty {
+            Builder(ref bk, _) => {
+                match *bk {
+                    Merger(ref val_ty, ref op) => {
+                        let bld_ll_ty = self.llvm_type(ty)?;
+                        let bld_prefix = llvm_prefix(&bld_ll_ty);
+                        let bld_ll_stack_sym = format!("{}.stack", sym);
+                        let bld_ll_stack_ty = format!("{}.piece", bld_ll_ty);
+                        let val_ll_scalar_ty = self.llvm_type(val_ty)?;
+                        let iden_elem = binop_identity(*op, val_ty.as_ref())?;
+                        outer_ctx.add_alloca(&bld_ll_stack_sym, &bld_ll_stack_ty)?;
+                        inner_ctx.code.add(format!(
+                            "call void {}.insertStackPiece({}* {}, {}.piecePtr {})",
+                            bld_prefix,
+                            bld_ll_ty,
+                            sym,
+                            bld_ll_ty,
+                            bld_ll_stack_sym));
+                        inner_ctx.code.add(format!(
+                            "call void {}.clearStackPiece({}* {}, {} {})",
+                            bld_prefix,
+                            bld_ll_ty,
+                            sym,
+                            val_ll_scalar_ty,
+                            iden_elem
+                            ));
+                        has_builder = true;
+                    }
+                    _ => {}
+                }
+            }
+            Struct(ref fields) => {
+                for (i, f) in fields.iter().enumerate() {
+                    let struct_ty = self.llvm_type(ty)?;
+                    let bld_sym = outer_ctx.var_ids.next();
+                    inner_ctx.code.add(format!("{} = getelementptr {}, {}* {}, i32 0, i32 {}", bld_sym, struct_ty,
+                        struct_ty, sym, i));
+                    has_builder |= self.gen_create_stack_mergers_helper(&bld_sym, f, inner_ctx, outer_ctx)?;
+                }
+            }
+            _ => {}
+        }
+        Ok(has_builder)
+    }
+
     /// Generates code to create new stack-based storage for mergers at the start of a serial code sequence.
     fn gen_create_stack_mergers(&mut self, params_sorted: &BTreeMap<Symbol, Type>, ctx: &mut FunctionContext) -> WeldResult<()> {
         for (arg, ty) in params_sorted.iter() {
-            match *ty {
-                Builder(ref bk, _) => {
-                    match *bk {
-                        Merger(ref val_ty, ref op) => {
-                            let bld_ll_ty = self.llvm_type(ty)?;
-                            let bld_ll_sym = llvm_symbol(arg);
-                            let bld_prefix = llvm_prefix(&bld_ll_ty);
-                            let bld_ll_stack_sym = format!("{}.stack", bld_ll_sym);
-                            let bld_ll_stack_ty = format!("{}.piece", bld_ll_ty);
-                            let val_ll_scalar_ty = self.llvm_type(val_ty)?;
-                            let iden_elem = binop_identity(*op, val_ty.as_ref())?;
-                            ctx.add_alloca(&bld_ll_stack_sym, &bld_ll_stack_ty)?;
-                            ctx.code.add(format!(
-                                "call void {}.insertStackPiece({}* {}, {}.piecePtr {})",
-                                bld_prefix,
-                                bld_ll_ty,
-                                bld_ll_sym,
-                                bld_ll_ty,
-                                bld_ll_stack_sym));
-                            ctx.code.add(format!(
-                                "call void {}.clearStackPiece({}* {}, {} {})",
-                                bld_prefix,
-                                bld_ll_ty,
-                                bld_ll_sym,
-                                val_ll_scalar_ty,
-                                iden_elem
-                                ));
-                        }
-                        _ => {}
-                    }
-                }
-                _ => {}
+            let inner_ctx = &mut FunctionContext::new(false);
+            let has_builder = self.gen_create_stack_mergers_helper(&llvm_symbol(arg), ty, inner_ctx, ctx)?;
+            if has_builder {
+                ctx.code.add(&inner_ctx.code.result());
             }
         }
         Ok(())
@@ -901,7 +942,16 @@ impl LlvmGenerator {
                           func: &SirFunction,
                           mut ctx: &mut FunctionContext) -> WeldResult<()> {
         let bound_cmp = ctx.var_ids.next();
-        let mut grain_size = DEFAULT_INNER_GRAIN_SIZE;
+        let grain_size = match par_for.grain_size {
+            Some(size) => size,
+            None => {
+                if par_for.innermost {
+                    DEFAULT_INNER_GRAIN_SIZE
+                } else {
+                    DEFAULT_OUTER_GRAIN_SIZE
+                }
+            }
+        };
         if par_for.innermost {
             // Determine whether to always call parallel, always call serial, or
             // choose based on the loop's size.
@@ -924,7 +974,6 @@ impl LlvmGenerator {
             ctx.code.add(format!("br label %fn.end"));
         } else {
             ctx.code.add("br label %for.par");
-            grain_size = DEFAULT_OUTER_GRAIN_SIZE;
         }
         ctx.code.add(format!("for.par:"));
         self.gen_create_global_mergers(&func.params, ".ptr", &mut ctx)?;
