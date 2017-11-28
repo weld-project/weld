@@ -976,6 +976,7 @@ impl LlvmGenerator {
             ctx.code.add(format!("call void @f{}({}, i32 %cur.tid)", par_for.cont, cont_arg_types));
             ctx.code.add(format!("br label %fn.end"));
         } else {
+            // at least one task is always created for outer loops
             ctx.code.add("br label %for.par");
         }
         ctx.code.add(format!("for.par:"));

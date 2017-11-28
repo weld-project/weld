@@ -199,9 +199,9 @@ static inline bool try_steal(int32_t my_id, run_data *rd) {
   }
 }
 
-// called once task function returns
-// decrease the dependency count of the continuation, run the continuation
-// if necessary, or signal the end of the computation if we are done
+// Called once task function returns.
+// Decrease the dependency count of the continuation, run the continuation
+// if necessary, or signal the end of the computation if we are done.
 static inline void finish_task(work_t *task, int32_t my_id, run_data *rd) {
   if (task->cont == NULL) {
     if (!task->continued) {
@@ -213,7 +213,11 @@ static inline void finish_task(work_t *task, int32_t my_id, run_data *rd) {
   } else {
     int32_t previous = __sync_fetch_and_sub(&task->cont->deps, 1);
     if (previous == 1) {
-      // run the continuation since we are the last dependency
+      // Enqueue the continuation since we are the last dependency.
+      // Always make it full for simplicity ... technically if there are
+      // any tasks left on our queue we know it's safe to not make this full,
+      // since we must have executed all of this task's predecessors in order
+      // without any of them having been stolen.
       set_full_task(task->cont);
       pthread_spin_lock(rd->all_work_queue_locks + my_id);
       (rd->all_work_queues + my_id)->push_front(task->cont);
@@ -277,12 +281,16 @@ extern "C" void weld_rt_start_loop(work_t *w, void *body_data, void *cont_data, 
       w->continued = true;
     }
   }
-  set_full_task(body_task);
 
   work_t *possible_new_outer_task = NULL;
+  // If current task is a loop body with multiple iterations left, we want
+  // to create a task for the remaining iterations so that they execute after
+  // the inner loop being created now (or are stolen by another thread, in which
+  // case new nest data will be created).
   if (w != NULL && w->lower != w->upper && w->upper - w->cur_idx > 1) {
     possible_new_outer_task = clone_task(w);
     possible_new_outer_task->lower = w->cur_idx + 1;
+    possible_new_outer_task->cur_idx = w->cur_idx + 1;
     // ensure that w immediately ends, and possible_new_outer_task contains whatever remained
     w->cur_idx = w->upper - 1;
     set_cont(possible_new_outer_task, w->cont);

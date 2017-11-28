@@ -18,13 +18,12 @@ struct work_t {
   // set in the user program -- the current iteration index this task is on,
   // 0 if not a loop body task
   int64_t cur_idx;
-  // true if task was directly stolen from another queue, is the head (earliest in serial order)
-  // task of a loop instance, or is a continuation.
+  // true if task was directly stolen from another queue or is a continuation.
   // If true, we need to set the nest_* fields so that we can create a new piece for
   // this task and its siblings in any associative builders.
-  // Tasks that are not full tasks (non-stolen, non-head tasks of loop instances) do not need
-  // separate nest_* fields because they will be executed in serial order (and by the same thread)
-  // after their associated full tasks and can share these full tasks' pieces (and nest_* fields)
+  // Tasks that are not full tasks do not need separate nest_* fields because they
+  // will be executed in serial order (and by the same thread)
+  // after their associated full tasks and can share these full tasks' pieces
   // in any associative builders.
   int32_t full_task; // boolean
   // The list of loop indices of all containing loops for this task.
