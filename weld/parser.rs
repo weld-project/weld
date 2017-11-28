@@ -620,7 +620,16 @@ impl<'t> Parser<'t> {
                                 if let TI64Literal(l) = *self.next() {
                                     annotations.set_size(l);
                                 } else {
-                                    return weld_err!("Invalid vector size (must be a i32)");
+                                    return weld_err!("Invalid vector size (must be a i64)");
+                                }
+                            }
+                            "loopsize" => {
+                                self.consume(TIdent("loopsize".to_string()))?;
+                                try!(self.consume(TColon));
+                                if let TI64Literal(l) = *self.next() {
+                                    annotations.set_loopsize(l);
+                                } else {
+                                    return weld_err!("Invalid vector size (must be a i64)");
                                 }
                             }
                             "selectivity" => {
@@ -638,7 +647,7 @@ impl<'t> Parser<'t> {
                                 if let TI64Literal(l) = *self.next() {
                                     annotations.set_num_keys(l);
                                 } else {
-                                    return weld_err!("Invalid number of keys (must be a i32)");
+                                    return weld_err!("Invalid number of keys (must be a i64)");
                                 }
                             }
                             _ => return weld_err!("Invalid annotation type"),

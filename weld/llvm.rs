@@ -100,7 +100,7 @@ pub fn apply_opt_passes(expr: &mut TypedExpr, opt_passes: &Vec<Pass>, stats: &mu
         pass.transform(expr)?;
         let end = PreciseTime::now();
         stats.pass_times.push((pass.pass_name(), start.to(end)));
-        trace!("After {} pass:\n{}", pass.pass_name(), print_typed_expr(&expr));
+        debug!("After {} pass:\n{}", pass.pass_name(), print_typed_expr(&expr));
     }
     Ok(())
 }
@@ -109,7 +109,7 @@ pub fn apply_opt_passes(expr: &mut TypedExpr, opt_passes: &Vec<Pass>, stats: &mu
 pub fn compile_program(program: &Program, conf: &ParsedConf, stats: &mut CompilationStats)
         -> WeldResult<CompiledModule> {
     let mut expr = macro_processor::process_program(program)?;
-    trace!("After macro substitution:\n{}\n", print_typed_expr(&expr));
+    debug!("After macro substitution:\n{}\n", print_typed_expr(&expr));
 
     let start = PreciseTime::now();
     uniquify::uniquify(&mut expr)?;
@@ -121,7 +121,7 @@ pub fn compile_program(program: &Program, conf: &ParsedConf, stats: &mut Compila
     type_inference::infer_types(&mut expr)?;
     let mut expr = expr.to_typed()?;
     let end = PreciseTime::now();
-    trace!("After type inference:\n{}\n", print_typed_expr(&expr));
+    debug!("After type inference:\n{}\n", print_typed_expr(&expr));
     stats.weld_times.push(("Type Inference".to_string(), start.to(end)));
 
     apply_opt_passes(&mut expr, &conf.optimization_passes, stats)?;
@@ -146,7 +146,7 @@ pub fn compile_program(program: &Program, conf: &ParsedConf, stats: &mut Compila
     // be useful.
     let start = PreciseTime::now();
     if conf.enable_sir_opt {
-        debug!("Applying SIR optimizations");
+        info!("Applying SIR optimizations");
         optimizations::fold_constants::fold_constants(&mut sir_prog)?;
     }
     let end = PreciseTime::now();

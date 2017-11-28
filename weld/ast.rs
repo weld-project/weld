@@ -511,6 +511,9 @@ pub struct Parameter<T: TypeBounds> {
 /// A typed expression struct.
 pub type TypedExpr = Expr<Type>;
 
+/// A typed iter struct.
+pub type TypedIter = Iter<Type>;
+
 /// A typed parameter.
 pub type TypedParameter = Parameter<Type>;
 
