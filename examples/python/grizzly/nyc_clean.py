@@ -64,11 +64,6 @@ def run(filename, use_grizzly):
     if 'passenger_count' in cols:
         ft = ft[ft['passenger_count'] <= 3]
 
-    # If we use grizzly, evaluate.
-    if use_grizzly:
-        print ft
-        ft = ft[('pickup_datetime', True)].evaluate()
-
     end = time.time()
     print "Removed " + str(databegin-len(ft)) + " bad records."
     print "{} seconds".format(end - start)

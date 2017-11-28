@@ -164,6 +164,15 @@ class DataFrameWeld:
             column_names.add(column)
         return list(column_names)
 
+    def __len__(self):
+        if self.predicates is not None:
+            return LazyOpResult(
+                grizzly_impl.num_true(self.predicates.expr),
+                WeldInt(),
+                0
+            ).evaluate()
+        return len(self.df)
+
     def groupby(self, grouping_column_name):
         """Summary
 

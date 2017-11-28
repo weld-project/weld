@@ -290,6 +290,26 @@ def slice(array, start, size, ty):
 
     return weld_obj
 
+def num_true(predicates):
+    """Count the number of times a predicate passes."""
+    weld_obj = WeldObject(encoder_, decoder_)
+
+    predicates_var = weld_obj.update(predicates)
+    if isinstance(predicates, WeldObject):
+        predicates_var = predicates.obj_id
+        weld_obj.dependencies[predicates_var] = predicates
+
+    weld_template = """
+      result(
+        for(
+          %(predicates)s,
+          merger[i32,+],
+          |b, i, e| if (e, merge(b, 1), b)
+        )
+      )
+    """
+    weld_obj.weld_code = weld_template % {"predicates": predicates_var}
+    return weld_obj
 
 def count(array, ty):
     """
