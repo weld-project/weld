@@ -13,8 +13,6 @@ use ast::Type::*;
 use error::*;
 use exprs::*;
 
-use annotations::*;
-
 use super::uniquify::uniquify;
 
 /// Maximum number of iterations this transformation will unroll.
@@ -23,10 +21,11 @@ pub const UNROLL_LIMIT: i64 = 8;
 /// A simple map pattern, which is a Result(For(.. with a single merge expression as the
 /// For loop's function body.
 struct UnrollPattern<'a> {
+    loop_size: i64,
     iters: &'a Vec<TypedIter>,
     builder_kind: &'a BuilderKind,
     merge_params: &'a Vec<TypedParameter>,
-    merge_value: &'a TypedExpr
+    merge_value: &'a TypedExpr,
 }
 
 impl<'a> UnrollPattern<'a> {
@@ -35,21 +34,26 @@ impl<'a> UnrollPattern<'a> {
     // TODO check annotation cutoff.
     fn extract(expr: &'a TypedExpr) -> Option<UnrollPattern> {
         if let Res { ref builder } = expr.kind {
-            if let For { ref iters, ref builder, ref func } = builder.kind {
-                if let Builder(ref bk, _) = builder.ty {
-                    if let Lambda {ref params, ref body} = func.kind {
-                        if let Merge { builder: ref builder2, ref value} = body.kind {
-                            match builder2.kind {
-                                Ident(ref name) if *name == params[0].name => {
-                                    return Some(UnrollPattern {
-                                        iters: iters,
-                                        builder_kind: bk,
-                                        merge_params: params,
-                                        merge_value: value,
-                                    });
-                                }
-                                _ => {
-                                    return None;
+            if let Some(loopsize) = builder.annotations.loopsize() {
+                if loopsize <= UNROLL_LIMIT {
+                    if let For { ref iters, ref builder, ref func } = builder.kind {
+                        if let Builder(ref bk, _) = builder.ty {
+                            if let Lambda {ref params, ref body} = func.kind {
+                                if let Merge { builder: ref builder2, ref value} = body.kind {
+                                    match builder2.kind {
+                                        Ident(ref name) if *name == params[0].name => {
+                                            return Some(UnrollPattern {
+                                                loop_size: loopsize,
+                                                iters: iters,
+                                                builder_kind: bk,
+                                                merge_params: params,
+                                                merge_value: value,
+                                            });
+                                        }
+                                        _ => {
+                                            return None;
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -67,7 +71,7 @@ pub fn unroll_static_loop(expr: &mut TypedExpr) {
     }
     expr.transform(&mut |ref mut expr| {
         if let Some(pat) = UnrollPattern::extract(expr) {
-            let vals = unroll_values(pat.merge_params, pat.merge_value, pat.iters, 4);
+            let vals = unroll_values(pat.merge_params, pat.merge_value, pat.iters, pat.loop_size);
             if vals.is_err() {
                 trace!("Unroller error: {}", vals.unwrap_err().description());
                 return None;
@@ -98,7 +102,7 @@ fn is_same_ident(expr: &TypedExpr, other: &TypedExpr) -> bool {
 
 /// Takes a `MergeSingle` and returns a list of expressions which replace the element
 /// in the merge with a Lookup.
-fn unroll_values(parameters: &Vec<TypedParameter>, value: &TypedExpr, iters: &Vec<TypedIter>, loopsize: usize) -> WeldResult<Vec<TypedExpr>> {
+fn unroll_values(parameters: &Vec<TypedParameter>, value: &TypedExpr, iters: &Vec<TypedIter>, loopsize: i64) -> WeldResult<Vec<TypedExpr>> {
     if parameters.len() != 3 {
         return weld_err!("Expected three parameters to Merge function");
     }

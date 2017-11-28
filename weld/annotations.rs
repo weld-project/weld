@@ -12,6 +12,7 @@ pub enum AnnotationKind {
     GrainSize,
     AlwaysUseRuntime,
     Size,
+    LoopSize,
     BranchSelectivity,
     NumKeys,
 }
@@ -24,6 +25,7 @@ impl fmt::Display for AnnotationKind {
                    AnnotationKind::TileSize => "tile_size",
                    AnnotationKind::GrainSize => "grain_size",
                    AnnotationKind::Size => "size",
+                   AnnotationKind::LoopSize => "loopsize",
                    AnnotationKind::BranchSelectivity => "branch_selectivity",
                    AnnotationKind::NumKeys => "num_keys",
                    AnnotationKind::Predicate => "predicate",
@@ -58,6 +60,7 @@ enum AnnotationValue {
     VTileSize(i32),
     VGrainSize(i32),
     VSize(i64),
+    VLoopSize(i64),
     VNumKeys(i64),
     VBranchSelectivity(i32), // Fractions of 10,000
     VPredicate,
@@ -73,6 +76,7 @@ impl fmt::Display for AnnotationValue {
                    AnnotationValue::VTileSize(ref v) => format!("{}", v),
                    AnnotationValue::VGrainSize(ref v) => format!("{}", v),
                    AnnotationValue::VSize(ref v) => format!("{}", v),
+                   AnnotationValue::VLoopSize(ref v) => format!("{}", v),
                    AnnotationValue::VBranchSelectivity(ref v) => format!("{}", v),
                    AnnotationValue::VNumKeys(ref v) => format!("{}", v),
                    // These are flags, so their existence indicates that the value is `true`.
@@ -145,6 +149,19 @@ impl Annotations {
 
     pub fn set_size(&mut self, value: i64) {
         self.values.insert(AnnotationKind::Size, AnnotationValue::VSize(value));
+    }
+
+    pub fn loopsize(&self) -> Option<i64> {
+        if let Some(s) = self.values.get(&AnnotationKind::LoopSize) {
+            if let AnnotationValue::VLoopSize(ref s) = *s {
+                return Some(s.clone());
+            }
+        }
+        None
+    }
+
+    pub fn set_loopsize(&mut self, value: i64) {
+        self.values.insert(AnnotationKind::LoopSize, AnnotationValue::VLoopSize(value));
     }
 
     pub fn num_keys(&self) -> Option<i64> {
