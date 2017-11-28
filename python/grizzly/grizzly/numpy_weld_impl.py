@@ -125,10 +125,10 @@ def dot(matrix, vector, matrix_ty, vector_ty):
                    appender,
                    |b2, i2, e2: {%(matrix_ty)s, %(vector_ty)s}|
                      merge(b2, f64(e2.$0 * %(matrix_ty)s(e2.$1)))
-                 ),
-                 merger[f64,+],
-                 |b, i, e| merge(b, e)
-               )
+                 )
+               ),
+               merger[f64,+],
+               |b, i, e| merge(b, e)
              )
            )
        )
