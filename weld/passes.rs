@@ -7,6 +7,7 @@ use super::transforms::size_inference;
 use super::transforms::short_circuit;
 use super::transforms::annotator;
 use super::transforms::vectorizer;
+use super::transforms::unroller;
 
 use super::expr_hash::*;
 
@@ -68,6 +69,9 @@ lazy_static! {
                                 loop_fusion::fuse_loops_vertical,
                                 inliner::inline_get_field],
                  "loop-fusion"));
+        m.insert("unroll-static-loop",
+                 Pass::new(vec![unroller::unroll_static_loop],
+                 "unroll-static-loop"));
         m.insert("infer-size",
                  Pass::new(vec![size_inference::infer_size],
                  "infer-size"));

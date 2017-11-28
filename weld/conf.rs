@@ -31,7 +31,7 @@ pub const DEFAULT_TRACE_RUN: bool = false;
 
 lazy_static! {
     pub static ref DEFAULT_OPTIMIZATION_PASSES: Vec<Pass> = {
-        let m = ["loop-fusion", "infer-size", "short-circuit-booleans", "predicate", "vectorize", "fix-iterate"];
+        let m = ["loop-fusion", "unroll-static-loop", "infer-size", "short-circuit-booleans", "predicate", "vectorize", "fix-iterate"];
         m.iter().map(|e| (*OPTIMIZATION_PASSES.get(e).unwrap()).clone()).collect()
     };
     pub static ref DEFAULT_DUMP_CODE_DIR: PathBuf = Path::new(".").to_path_buf();
