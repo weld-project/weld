@@ -236,6 +236,13 @@ static inline void set_cont(work_t *w, work_t *cont) {
   __sync_fetch_and_add(&cont->deps, 1);
 }
 
+static inline work_t *clone_task(work_t *task) {
+  work_t *clone = (work_t *)malloc(sizeof(work_t));
+  memcpy(clone, task, sizeof(work_t));
+  clone->full_task = false;
+  return clone;
+}
+
 // called from generated code to schedule a for loop with the given body and continuation
 // the data pointers store the closures for the body and continuation
 // lower and upper give the iteration range for the loop
@@ -272,18 +279,23 @@ extern "C" void weld_rt_start_loop(work_t *w, void *body_data, void *cont_data, 
   }
   set_full_task(body_task);
 
+  work_t *possible_new_outer_task = NULL;
+  if (w != NULL && w->lower != w->upper && w->upper - w->cur_idx > 1) {
+    possible_new_outer_task = clone_task(w);
+    possible_new_outer_task->lower = w->cur_idx + 1;
+    // ensure that w immediately ends, and possible_new_outer_task contains whatever remained
+    w->cur_idx = w->upper - 1;
+    set_cont(possible_new_outer_task, w->cont);
+  }
+
   int32_t my_id = weld_rt_thread_id();
   run_data *rd = get_run_data();
   pthread_spin_lock(rd->all_work_queue_locks + my_id);
+  if (possible_new_outer_task != NULL) {
+    (rd->all_work_queues + my_id)->push_front(possible_new_outer_task);
+  }
   (rd->all_work_queues + my_id)->push_front(body_task);
   pthread_spin_unlock(rd->all_work_queue_locks + my_id);
-}
-
-static inline work_t *clone_task(work_t *task) {
-  work_t *clone = (work_t *)malloc(sizeof(work_t));
-  memcpy(clone, task, sizeof(work_t));
-  clone->full_task = false;
-  return clone;
 }
 
 // repeatedly break off the second half of the task into a new task
