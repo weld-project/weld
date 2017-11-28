@@ -57,5 +57,6 @@ class LazyOpResult:
                     self.dim),
                 verbose,
                 decode,
-                passes)
+                passes=passes)
+
         return self.expr

@@ -298,6 +298,7 @@ pub struct ParallelForData {
     pub innermost: bool,
     /// If `true`, always invoke parallel runtime for the loop.
     pub always_use_runtime: bool,
+    pub grain_size: Option<i32>
 }
 
 /// A terminating statement inside a basic block.
@@ -1295,6 +1296,7 @@ fn gen_expr(expr: &TypedExpr,
                                     cont: cont_func,
                                     innermost: is_innermost,
                                     always_use_runtime: expr.annotations.always_use_runtime(),
+                                    grain_size: expr.annotations.grain_size().clone()
                                 });
                 Ok((cont_func, cont_block, builder_sym))
             } else {
