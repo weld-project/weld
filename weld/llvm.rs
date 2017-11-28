@@ -58,8 +58,8 @@ pub struct VecLLVMInfo {
 static PRELUDE_CODE: &'static str = include_str!("resources/prelude.ll");
 
 /// The default grain size for the parallel runtime.
-static DEFAULT_INNER_GRAIN_SIZE: i64 = 16384;
-static DEFAULT_OUTER_GRAIN_SIZE: i64 = 4096;
+static DEFAULT_INNER_GRAIN_SIZE: i32 = 16384;
+static DEFAULT_OUTER_GRAIN_SIZE: i32 = 4096;
 
 /// A wrapper for a struct passed as input to the Weld runtime.
 #[derive(Clone, Debug)]
@@ -110,7 +110,7 @@ pub fn apply_opt_passes(expr: &mut TypedExpr, opt_passes: &Vec<Pass>, stats: &mu
         pass.transform(expr)?;
         let end = PreciseTime::now();
         stats.pass_times.push((pass.pass_name(), start.to(end)));
-        trace!("After {} pass:\n{}", pass.pass_name(), print_typed_expr(&expr));
+        debug!("After {} pass:\n{}", pass.pass_name(), print_typed_expr(&expr));
     }
     Ok(())
 }
@@ -119,7 +119,7 @@ pub fn apply_opt_passes(expr: &mut TypedExpr, opt_passes: &Vec<Pass>, stats: &mu
 pub fn compile_program(program: &Program, conf: &ParsedConf, stats: &mut CompilationStats)
         -> WeldResult<CompiledModule> {
     let mut expr = macro_processor::process_program(program)?;
-    trace!("After macro substitution:\n{}\n", print_typed_expr(&expr));
+    debug!("After macro substitution:\n{}\n", print_typed_expr(&expr));
 
     let start = PreciseTime::now();
     uniquify::uniquify(&mut expr)?;
@@ -131,7 +131,7 @@ pub fn compile_program(program: &Program, conf: &ParsedConf, stats: &mut Compila
     type_inference::infer_types(&mut expr)?;
     let mut expr = expr.to_typed()?;
     let end = PreciseTime::now();
-    trace!("After type inference:\n{}\n", print_typed_expr(&expr));
+    debug!("After type inference:\n{}\n", print_typed_expr(&expr));
     stats.weld_times.push(("Type Inference".to_string(), start.to(end)));
 
     apply_opt_passes(&mut expr, &conf.optimization_passes, stats)?;
@@ -156,7 +156,7 @@ pub fn compile_program(program: &Program, conf: &ParsedConf, stats: &mut Compila
     // be useful.
     let start = PreciseTime::now();
     if conf.enable_sir_opt {
-        debug!("Applying SIR optimizations");
+        info!("Applying SIR optimizations");
         optimizations::fold_constants::fold_constants(&mut sir_prog)?;
     }
     let end = PreciseTime::now();
@@ -412,6 +412,38 @@ impl LlvmGenerator {
         Ok(())
     }
 
+    fn gen_create_new_vb_pieces_helper(&mut self, sym: &str, ty: &Type, inner_ctx: &mut FunctionContext,
+        outer_ctx: &mut FunctionContext) -> WeldResult<(bool)> {
+        let mut has_builder = false;
+        match *ty {
+            Builder(ref bk, _) => {
+                match *bk {
+                    Appender(_) => {
+                        let bld_ty_str = self.llvm_type(ty)?;
+                        let bld_prefix = llvm_prefix(&bld_ty_str);
+                        inner_ctx.code.add(format!("call void {}.newPiece({} {}, %work_t* %cur.work)",
+                                                bld_prefix,
+                                                bld_ty_str,
+                                                sym));
+                        has_builder = true;
+                    }
+                    _ => {}
+                }
+            }
+            Struct(ref fields) => {
+                for (i, f) in fields.iter().enumerate() {
+                    let struct_ty = self.llvm_type(ty)?;
+                    let bld_sym = outer_ctx.var_ids.next();
+                    inner_ctx.code.add(format!("{} = extractvalue {} {}, {}", bld_sym, struct_ty,
+                        sym, i));
+                    has_builder |= self.gen_create_new_vb_pieces_helper(&bld_sym, f, inner_ctx, outer_ctx)?;
+                }
+            }
+            _ => {}
+        }
+        Ok(has_builder)
+    }
+
     /// Generates code to create new pieces for the appender.
     fn gen_create_new_vb_pieces(&mut self, params_sorted: &BTreeMap<Symbol, Type>, suffix: &str, ctx: &mut FunctionContext) -> WeldResult<()> {
         let full_task_ptr = ctx.var_ids.next();
@@ -423,63 +455,72 @@ impl LlvmGenerator {
         ctx.code.add(format!("br i1 {}, label %new_pieces, label %fn_call", full_task_bit));
         ctx.code.add("new_pieces:");
         for (arg, ty) in params_sorted.iter() {
-            match *ty {
-                Builder(ref bk, _) => {
-                    match *bk {
-                        Appender(_) => {
-                            let bld_ty_str = self.llvm_type(ty)?;
-                            let bld_prefix = llvm_prefix(&bld_ty_str);
-                            ctx.code.add(format!("call void {}.newPiece({} {}{}, %work_t* %cur.work)",
-                                                 bld_prefix,
-                                                 bld_ty_str,
-                                                 llvm_symbol(arg),
-                                                 suffix));
-                        }
-                        _ => {}
-                    }
-                }
-                _ => {}
+            let inner_ctx = &mut FunctionContext::new(false);
+            let has_builder = self.gen_create_new_vb_pieces_helper(
+                format!("{}{}", llvm_symbol(arg), suffix).as_str(), ty, inner_ctx, ctx)?;
+            if has_builder {
+                ctx.code.add(&inner_ctx.code.result());
             }
         }
         ctx.code.add("br label %fn_call");
         Ok(())
     }
 
+    fn gen_create_stack_mergers_helper(&mut self, sym: &str, ty: &Type, inner_ctx: &mut FunctionContext,
+        outer_ctx: &mut FunctionContext) -> WeldResult<(bool)> {
+        let mut has_builder = false;
+        match *ty {
+            Builder(ref bk, _) => {
+                match *bk {
+                    Merger(ref val_ty, ref op) => {
+                        let bld_ll_ty = self.llvm_type(ty)?;
+                        let bld_prefix = llvm_prefix(&bld_ll_ty);
+                        let bld_ll_stack_sym = format!("{}.stack", sym);
+                        let bld_ll_stack_ty = format!("{}.piece", bld_ll_ty);
+                        let val_ll_scalar_ty = self.llvm_type(val_ty)?;
+                        let iden_elem = binop_identity(*op, val_ty.as_ref())?;
+                        outer_ctx.add_alloca(&bld_ll_stack_sym, &bld_ll_stack_ty)?;
+                        inner_ctx.code.add(format!(
+                            "call void {}.insertStackPiece({}* {}, {}.piecePtr {})",
+                            bld_prefix,
+                            bld_ll_ty,
+                            sym,
+                            bld_ll_ty,
+                            bld_ll_stack_sym));
+                        inner_ctx.code.add(format!(
+                            "call void {}.clearStackPiece({}* {}, {} {})",
+                            bld_prefix,
+                            bld_ll_ty,
+                            sym,
+                            val_ll_scalar_ty,
+                            iden_elem
+                            ));
+                        has_builder = true;
+                    }
+                    _ => {}
+                }
+            }
+            Struct(ref fields) => {
+                for (i, f) in fields.iter().enumerate() {
+                    let struct_ty = self.llvm_type(ty)?;
+                    let bld_sym = outer_ctx.var_ids.next();
+                    inner_ctx.code.add(format!("{} = getelementptr {}, {}* {}, i32 0, i32 {}", bld_sym, struct_ty,
+                        struct_ty, sym, i));
+                    has_builder |= self.gen_create_stack_mergers_helper(&bld_sym, f, inner_ctx, outer_ctx)?;
+                }
+            }
+            _ => {}
+        }
+        Ok(has_builder)
+    }
+
     /// Generates code to create new stack-based storage for mergers at the start of a serial code sequence.
     fn gen_create_stack_mergers(&mut self, params_sorted: &BTreeMap<Symbol, Type>, ctx: &mut FunctionContext) -> WeldResult<()> {
         for (arg, ty) in params_sorted.iter() {
-            match *ty {
-                Builder(ref bk, _) => {
-                    match *bk {
-                        Merger(ref val_ty, ref op) => {
-                            let bld_ll_ty = self.llvm_type(ty)?;
-                            let bld_ll_sym = llvm_symbol(arg);
-                            let bld_prefix = llvm_prefix(&bld_ll_ty);
-                            let bld_ll_stack_sym = format!("{}.stack", bld_ll_sym);
-                            let bld_ll_stack_ty = format!("{}.piece", bld_ll_ty);
-                            let val_ll_scalar_ty = self.llvm_type(val_ty)?;
-                            let iden_elem = binop_identity(*op, val_ty.as_ref())?;
-                            ctx.add_alloca(&bld_ll_stack_sym, &bld_ll_stack_ty)?;
-                            ctx.code.add(format!(
-                                "call void {}.insertStackPiece({}* {}, {}.piecePtr {})",
-                                bld_prefix,
-                                bld_ll_ty,
-                                bld_ll_sym,
-                                bld_ll_ty,
-                                bld_ll_stack_sym));
-                            ctx.code.add(format!(
-                                "call void {}.clearStackPiece({}* {}, {} {})",
-                                bld_prefix,
-                                bld_ll_ty,
-                                bld_ll_sym,
-                                val_ll_scalar_ty,
-                                iden_elem
-                                ));
-                        }
-                        _ => {}
-                    }
-                }
-                _ => {}
+            let inner_ctx = &mut FunctionContext::new(false);
+            let has_builder = self.gen_create_stack_mergers_helper(&llvm_symbol(arg), ty, inner_ctx, ctx)?;
+            if has_builder {
+                ctx.code.add(&inner_ctx.code.result());
             }
         }
         Ok(())
@@ -982,7 +1023,16 @@ impl LlvmGenerator {
                           func: &SirFunction,
                           mut ctx: &mut FunctionContext) -> WeldResult<()> {
         let bound_cmp = ctx.var_ids.next();
-        let mut grain_size = DEFAULT_INNER_GRAIN_SIZE;
+        let grain_size = match par_for.grain_size {
+            Some(size) => size,
+            None => {
+                if par_for.innermost {
+                    DEFAULT_INNER_GRAIN_SIZE
+                } else {
+                    DEFAULT_OUTER_GRAIN_SIZE
+                }
+            }
+        };
         if par_for.innermost {
             // Determine whether to always call parallel, always call serial, or
             // choose based on the loop's size.
@@ -1005,7 +1055,6 @@ impl LlvmGenerator {
             ctx.code.add(format!("br label %fn.end"));
         } else {
             ctx.code.add("br label %for.par");
-            grain_size = DEFAULT_OUTER_GRAIN_SIZE;
         }
         ctx.code.add(format!("for.par:"));
         self.gen_create_global_mergers(&func.params, ".ptr", &mut ctx)?;
@@ -2032,6 +2081,13 @@ impl LlvmGenerator {
                 return weld_err!("Unsupported function `eq` for type {:?}", ty);
             }
         };
+        let ll_ty = self.llvm_type(ty)?;
+        let ll_prefix = llvm_prefix(&ll_ty);
+        let eq_on_pointers = format!(include_str!("resources/eq_on_pointers.ll"),
+            TYPE=&ll_ty,
+            TYPE_PREFIX=&ll_prefix);
+        self.prelude_code.add(&eq_on_pointers);
+        self.prelude_code.add("\n");
         Ok(())
     }
 
@@ -2177,7 +2233,6 @@ impl LlvmGenerator {
         let kv_struct_ty = self.llvm_type(&elem)?;
         let kv_vec = Box::new(Vector(elem.clone()));
         let kv_vec_ty = self.llvm_type(&kv_vec)?;
-        let kv_vec_prefix = llvm_prefix(&&kv_vec_ty);
 
         let dict_def = format!(include_str!("resources/dictionary.ll"),
             NAME=&name.replace("%", ""),
@@ -2185,7 +2240,6 @@ impl LlvmGenerator {
             KEY_PREFIX=&key_prefix,
             VALUE=&value_ty,
             KV_STRUCT=&kv_struct_ty,
-            KV_VEC_PREFIX=&kv_vec_prefix,
             KV_VEC=&kv_vec_ty);
 
         self.prelude_code.add(&dict_def);
@@ -2225,17 +2279,12 @@ impl LlvmGenerator {
                 let kv_struct_ty = self.llvm_type(&elem)?;
                 let key_ty = self.llvm_type(kt)?;
                 let value_ty = self.llvm_type(vt)?;
-                let kv_vec = Box::new(Vector(elem.clone()));
-                let kv_vec_ty = self.llvm_type(&kv_vec)?;
-                let kv_vec_prefix = llvm_prefix(&&kv_vec_ty);
 
                 let dictmerger_def = format!(include_str!("resources/dictmerger.ll"),
                     NAME=&bld_ty_str.replace("%", ""),
                     KEY=&key_ty,
                     VALUE=&value_ty,
-                    KV_STRUCT=&kv_struct_ty.replace("%", ""),
-                    KV_VEC_PREFIX=&kv_vec_prefix,
-                    KV_VEC=&kv_vec_ty);
+                    KV_STRUCT=&kv_struct_ty.replace("%", ""));
 
                 self.prelude_code.add(&dictmerger_def);
                 self.prelude_code.add("\n");
@@ -2256,10 +2305,25 @@ impl LlvmGenerator {
                 self.bld_names.insert(bk.clone(), format!("{}.bld", bld_ty_str));
             }
             GroupMerger(ref kt, ref vt) => {
-                let elem = Box::new(Struct(vec![*kt.clone(), *vt.clone()]));
-                let bld_ty = Vector(elem.clone());
-                let bld_ty_str = self.llvm_type(&bld_ty)?;
-                self.bld_names.insert(bk.clone(), format!("{}.bld", bld_ty_str));
+                let key_ty = self.llvm_type(kt)?;
+                let key_prefix = llvm_prefix(&key_ty);
+                let value_ty = self.llvm_type(vt)?;
+                let kv_struct = Box::new(Struct(vec![*kt.clone(), *vt.clone()]));
+                let kv_struct_ty = self.llvm_type(&kv_struct)?;
+                let vec = Box::new(Vector(vt.clone()));
+                let bld = Dict(kt.clone(), vec);
+                let bld_ty = self.llvm_type(&bld)?;
+
+                let groupmerger_def = format!(include_str!("resources/groupbuilder.ll"),
+                    NAME=&bld_ty.replace("%", ""),
+                    KEY=&key_ty,
+                    KEY_PREFIX=&key_prefix,
+                    VALUE=&value_ty,
+                    KV_STRUCT=&kv_struct_ty.replace("%", ""));
+
+                self.prelude_code.add(&groupmerger_def);
+                self.prelude_code.add("\n");
+                self.bld_names.insert(bk.clone(), format!("{}.gbld", bld_ty));
             }
             VecMerger(ref elem, _) => {
                 let bld_ty = Vector(elem.clone());
@@ -2303,7 +2367,7 @@ impl LlvmGenerator {
 
         let value_str = llvm_literal(*kind);
         let elem_ty_str = match *kind {
-            BoolLiteral(_) => "bool",
+            BoolLiteral(_) => "i1",
             I8Literal(_) => "i8",
             I16Literal(_) => "i16",
             I32Literal(_) => "i32",
@@ -3001,24 +3065,11 @@ impl LlvmGenerator {
                                         val_tmp));
             }
 
-            DictMerger(_, _, _) => {
+            DictMerger(_, _, _) | GroupMerger(_, _) => {
                 let bld_tmp = self.gen_load_var(&bld_ll_sym, &bld_ll_ty, ctx)?;
                 let val_tmp = self.gen_load_var(&val_ll_sym, &val_ll_ty, ctx)?;
                 ctx.code.add(format!(
-                    "call {} {}.merge({} {}, {} {}, i32 %cur.tid)",
-                    bld_ll_ty,
-                    bld_prefix,
-                    bld_ll_ty,
-                    bld_tmp,
-                    val_ll_ty,
-                    val_tmp));
-            }
-
-            GroupMerger(_, _) => {
-                let bld_tmp = self.gen_load_var(&bld_ll_sym, &bld_ll_ty, ctx)?;
-                let val_tmp = self.gen_load_var(&val_ll_sym, &val_ll_ty, ctx)?;
-                ctx.code.add(format!(
-                    "call {} {}.merge({} {}, {} {}, i32 %cur.tid)",
+                    "call {} {}.merge({} {}, {} {})",
                     bld_ll_ty,
                     bld_prefix,
                     bld_ll_ty,
@@ -3221,7 +3272,7 @@ impl LlvmGenerator {
                         done_v=done_label_v));
             }
 
-            DictMerger(_, _, _) => {
+            DictMerger(_, _, _) | GroupMerger(_, _) => {
                 let bld_ty_str = self.llvm_type(&bld_ty)?;
                 let bld_prefix = llvm_prefix(&bld_ty_str);
                 let res_ty_str = self.llvm_type(&res_ty)?;
@@ -3235,55 +3286,6 @@ impl LlvmGenerator {
                                         bld_ty_str,
                                         bld_tmp));
 
-                self.gen_store_var(&res_tmp, &llvm_symbol(output), &res_ty_str, ctx);
-            }
-
-            GroupMerger(ref kt, ref vt) => {
-                let mut func_gen = IdGenerator::new("%func");
-                let function_id = func_gen.next();
-                let func_str = llvm_prefix(&&function_id);
-                let bld_ty = Dict(kt.clone(), Box::new(Vector(vt.clone())));
-                let elem = Box::new(Struct(vec![*kt.clone(), *vt.clone()]));
-                let bld_ty_str = self.llvm_type(&bld_ty)?;
-                let kv_struct_ty = self.llvm_type(&elem)?;
-                let key_ty = self.llvm_type(kt)?;
-                let value_ty = self.llvm_type(vt)?;
-                let value_vec_ty = self.llvm_type(&Box::new(Vector(vt.clone())))?;
-                let kv_vec = Box::new(Vector(elem.clone()));
-                let kv_vec_ty = self.llvm_type(&kv_vec)?;
-                let kv_vec_builder_ty = format!("{}.bld", &kv_vec_ty);
-                let key_prefix = llvm_prefix(&&key_ty);
-                let kv_vec_prefix = llvm_prefix(&&kv_vec_ty);
-                let value_vec_prefix = llvm_prefix(&&value_vec_ty);
-                let dict_prefix = llvm_prefix(&&bld_ty_str);
-
-                // Required for result calls.
-                self.gen_eq(kt)?;
-                self.gen_cmp(kt)?;
-
-                let groupmerger_def = format!(include_str!("resources/groupbuilder.ll"),
-                    NAME=&function_id.replace("%", ""),
-                    KEY_PREFIX=&key_prefix,
-                    KEY=&key_ty,
-                    VALUE_VEC_PREFIX=&value_vec_prefix,
-                    VALUE_VEC=&value_vec_ty,
-                    VALUE=&value_ty,
-                    KV_STRUCT=&kv_struct_ty.replace("%", ""),
-                    KV_VEC_PREFIX=&kv_vec_prefix,
-                    KV_VEC=&kv_vec_ty,
-                    DICT_PREFIX=&dict_prefix,
-                    DICT=&bld_ty_str);
-
-                self.prelude_code.add(&groupmerger_def);
-                let res_ty_str = self.llvm_type(&res_ty)?;
-                let bld_tmp = self.gen_load_var(llvm_symbol(builder).as_str(), &kv_vec_builder_ty, ctx)?;
-                let res_tmp = ctx.var_ids.next();
-                ctx.code.add(format!("{} = call {} {}({} {})",
-                                      res_tmp,
-                                      bld_ty_str,
-                                      func_str,
-                                      kv_vec_builder_ty,
-                                      bld_tmp));
                 self.gen_store_var(&res_tmp, &llvm_symbol(output), &res_ty_str, ctx);
             }
 
@@ -3448,25 +3450,13 @@ impl LlvmGenerator {
                     bld_prefix, elem_type, iden_elem, elem_type, init_elem, bld_stack_ty_str, bld_tmp_stack));
                 self.gen_store_var(&bld_tmp, &llvm_symbol(output), &bld_ty_str, ctx);
             }
-            DictMerger(_, _, _) => {
+            DictMerger(_, _, _) | GroupMerger(_, _) => {
                 let bld_tmp = ctx.var_ids.next();
                 ctx.code.add(format!("{} = call {} {}.new(i64 {})",
                                         bld_tmp,
                                         bld_ty_str,
                                         bld_prefix,
                                         builder_size));
-                self.gen_store_var(&bld_tmp, &llvm_symbol(output), &bld_ty_str, ctx);
-            }
-            GroupMerger(_, _) => {
-                let bld_tmp = ctx.var_ids.next();
-                ctx.code.add(format!(
-                    "{} = call {} {}.new(i64 {}, %work_t* \
-                                    %cur.work, i32 0)",
-                    bld_tmp,
-                    bld_ty_str,
-                    bld_prefix,
-                    builder_size
-                ));
                 self.gen_store_var(&bld_tmp, &llvm_symbol(output), &bld_ty_str, ctx);
             }
             VecMerger(ref elem, ref op) => {
@@ -3985,6 +3975,25 @@ fn predicate_only(code: &str) -> WeldResult<TypedExpr> {
     apply_opt_passes(&mut typed_e, &optpass, &mut CompilationStats::new())?;
 
     Ok(typed_e)
+}
+
+#[test]
+fn simple_predicate() {
+    /* Ensure that the simple_predicate transform works. */
+    let code = "|v1:vec[i32],v2:vec[bool]| result(for(zip(v1, v2), merger[i32,+], |b,i,e| merge(b, @(predicate:true) if(e.$1, e.$0, 0))))";
+    let typed_e = predicate_only(code);
+    assert!(typed_e.is_ok());
+    let expected = "|v1:vec[i32],v2:vec[bool]|result(for(zip(v1:vec[i32],v2:vec[bool]),merger[i32,+],|b:merger[i32,+],i:i64,e:{i32,bool}|merge(b:merger[i32,+],select(e:{i32,bool}.$1,e:{i32,bool}.$0,0))))";
+    assert_eq!(print_typed_expr_without_indent(&typed_e.unwrap()).as_str(),
+               expected);
+
+    /* Ensure that the simple_predicate transform doesn't change the program if on_true or on_false contains a builder expression. */
+    let code = "|v1:vec[i32],v2:vec[bool]| result(for(v2, appender, |b,i,e| merge(b, @(predicate:true) if(e, result(for(v1, merger[i32,+], |b2,i2,e2| merge(b2,e2))), 0))))";
+    let typed_e = predicate_only(code);
+    assert!(typed_e.is_ok());
+    let expected = "|v1:vec[i32],v2:vec[bool]|result(for(v2:vec[bool],appender[i32],|b:appender[i32],i:i64,e:bool|merge(b:appender[i32],@(predicate:true)if(e:bool,result(for(v1:vec[i32],merger[i32,+],|b2:merger[i32,+],i2:i64,e2:i32|merge(b2:merger[i32,+],e2:i32))),0))))";
+    assert_eq!(print_typed_expr_without_indent(&typed_e.unwrap()).as_str(),
+               expected);
 }
 
 #[test]

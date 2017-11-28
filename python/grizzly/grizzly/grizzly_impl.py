@@ -198,7 +198,7 @@ def element_wise_op(array, other, op, ty):
 
     other_var = weld_obj.update(other)
     if isinstance(other, WeldObject):
-        other_var = array.obj_id
+        other_var = other.obj_id
         weld_obj.dependencies[other_var] = other
 
     weld_template = """

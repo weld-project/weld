@@ -96,7 +96,7 @@ class WeldObject(object):
         self.argtypes = {}
 
     def __repr__(self):
-        return self.weld_code + " " + str(self.context)
+        return self.weld_code + " " + str(self.context) + " " + str([obj_id for obj_id in self.dependencies])
 
     def update(self, value, tys=None, override=True):
         """
@@ -108,7 +108,6 @@ class WeldObject(object):
         """
         if isinstance(value, WeldObject):
             self.context.update(value.context)
-            self.dependencies.update(value.dependencies)
         else:
             # Ensure that the same inputs always have same names
             value_str = str(value)
@@ -224,7 +223,7 @@ class WeldObject(object):
 
         start = time.time()
         conf = cweld.WeldConf()
-        weld_num_threads = os.environ.get("WELD_NUM_THREADS", "1")
+        weld_num_threads = os.environ.get("WELD_NUM_THREADS", "8")
 	print("weld num threads = ", weld_num_threads)
         conf.set("weld.threads", weld_num_threads)
 	mem_limit = "1000000000000"
