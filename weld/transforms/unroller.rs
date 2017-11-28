@@ -30,8 +30,6 @@ struct UnrollPattern<'a> {
 
 impl<'a> UnrollPattern<'a> {
     /// Extracts a `UnrollPattern` from the expression, or returns `None`.
-    // TODO check annotation.
-    // TODO check annotation cutoff.
     fn extract(expr: &'a TypedExpr) -> Option<UnrollPattern> {
         if let Res { ref builder } = expr.kind {
             if let Some(loopsize) = builder.annotations.loopsize() {
@@ -132,8 +130,8 @@ fn unroll_values(parameters: &Vec<TypedParameter>, value: &TypedExpr, vectors: &
         let mut unrolled_value = value.clone();
         unrolled_value.transform(&mut |ref mut e| {
             match e.kind {
-                // TODO identifiers using the index value could also be handled here.
                 Ident(ref name) if name == index_symbol => {
+                    // Index identifiers can be handled by just substituting a static index.
                     Some(literal_expr(LiteralKind::I64Literal(i as i64)).unwrap())
                 }
                 Ident(ref name) if name == elem_symbol && vectors.len() == 1 => {
