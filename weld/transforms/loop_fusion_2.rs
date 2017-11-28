@@ -244,7 +244,8 @@ pub fn fuse_loops_2(expr: &mut Expr<Type>) {
                 }
 
                 let new_func = lambda_expr(new_params, new_body).unwrap();
-                let result = for_expr(new_iters.clone(), builder.as_ref().clone(), new_func, false).unwrap();
+                let mut result = for_expr(new_iters.clone(), builder.as_ref().clone(), new_func, false).unwrap();
+                result.annotations = expr.annotations.clone();
                 return Some(result);
             }
         }

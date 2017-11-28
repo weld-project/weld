@@ -9,63 +9,41 @@
 ; - KV_VEC: name of vector of KV_STRUCTs (should be generated outside)
 ; - KV_VEC_PREFIX: prefix for helper functions of KV_VEC
 
-%{NAME}.entry = type {{ i1, {KEY}, {VALUE} }}        ; isFilled, key, value
+; isFilled, key, value (packed so that C code can easily store it in a byte array without
+; considering padding)
+%{NAME}.entry = type <{{ i8, {KEY}, {VALUE} }}>
 %{NAME}.slot = type %{NAME}.entry*                ; handle to an entry in the API
-%{NAME} = type {{ %{NAME}.entry*, i64, i64 }}  ; entries, size, capacity
+%{NAME} = type i8*  ; entries, size, capacity
 
 ; Initialize and return a new dictionary with the given initial capacity.
 ; The capacity must be a power of 2.
 define %{NAME} @{NAME}.new(i64 %capacity) {{
-  %entrySizePtr = getelementptr %{NAME}.entry, %{NAME}.entry* null, i32 1
-  %entrySize = ptrtoint %{NAME}.entry* %entrySizePtr to i64
-  %allocSize = mul i64 %entrySize, %capacity
-  %runId = call i64 @weld_rt_get_run_id()
-  %bytes = call i8* @weld_run_malloc(i64 %runId, i64 %allocSize)
-  ; Memset all the bytes to 0 to set the isFilled fields to 0
-  call void @llvm.memset.p0i8.i64(i8* %bytes, i8 0, i64 %allocSize, i32 8, i1 0)
-  %entries = bitcast i8* %bytes to %{NAME}.entry*
-  %1 = insertvalue %{NAME} undef, %{NAME}.entry* %entries, 0
-  %2 = insertvalue %{NAME} %1, i64 0, 1
-  %3 = insertvalue %{NAME} %2, i64 %capacity, 2
-  ret %{NAME} %3
+  %keySizePtr = getelementptr {KEY}, {KEY}* null, i32 1
+  %keySize = ptrtoint {KEY}* %keySizePtr to i32
+  %valSizePtr = getelementptr {VALUE}, {VALUE}* null, i32 1
+  %valSize = ptrtoint {VALUE}* %valSizePtr to i32
+  %dict = call i8* @weld_rt_dict_new(i32 %keySize, i32 (i8*, i8*)* {KEY_PREFIX}.eq_on_pointers,
+    i32 %valSize, i32 %valSize, i64 1000000, i64 %capacity)
+  ret %{NAME} %dict
 }}
 
 ; Free dictionary
 define void @{NAME}.free(%{NAME} %dict) {{
-  %runId = call i64 @weld_rt_get_run_id()
-  %entries = extractvalue %{NAME} %dict, 0
-  %bytes = bitcast %{NAME}.entry* %entries to i8*
-  call void @weld_run_free(i64 %runId, i8* %bytes)
+  call void @weld_rt_dict_free(i8* %dict)
   ret void
-}}
-
-; Clone a dictionary.
-define %{NAME} @{NAME}.clone(%{NAME} %dict) {{
-  %entries = extractvalue %{NAME} %dict, 0
-  %size = extractvalue %{NAME} %dict, 1
-  %capacity = extractvalue %{NAME} %dict, 2
-  %entrySizePtr = getelementptr %{NAME}.entry, %{NAME}.entry* null, i32 1
-  %entrySize = ptrtoint %{NAME}.entry* %entrySizePtr to i64
-  %allocSize = mul i64 %entrySize, %capacity
-  %bytes = bitcast %{NAME}.entry* %entries to i8*
-  %dict2 = call %{NAME} @{NAME}.new(i64 %capacity)
-  %entries2 = extractvalue %{NAME} %dict2, 0
-  %bytes2 = bitcast %{NAME}.entry* %entries2 to i8*
-  call void @llvm.memcpy.p0i8.p0i8.i64(i8* %bytes2, i8* %bytes, i64 %allocSize, i32 8, i1 0)
-  %dict3 = insertvalue %{NAME} %dict2, i64 %size, 1
-  ret %{NAME} %dict3
 }}
 
 ; Get the size of a dictionary.
 define i64 @{NAME}.size(%{NAME} %dict) {{
-  %size = extractvalue %{NAME} %dict, 1
+  %size = call i64 @weld_rt_dict_get_size(i8* %dict)
   ret i64 %size
 }}
 
 ; Check whether a slot is filled.
 define i1 @{NAME}.slot.filled(%{NAME}.slot %slot) {{
   %filledPtr = getelementptr %{NAME}.entry, %{NAME}.slot %slot, i64 0, i32 0
-  %filled = load i1, i1* %filledPtr
+  %filled_i8 = load i8, i8* %filledPtr
+  %filled = trunc i8 %filled_i8 to i1
   ret i1 %filled
 }}
 
@@ -87,133 +65,39 @@ define {VALUE} @{NAME}.slot.value(%{NAME}.slot %slot) {{
 ; used to tell whether the entry is filled, get its value, etc, and the put()
 ; function may be used to put a new value into the slot.
 define %{NAME}.slot @{NAME}.lookup(%{NAME} %dict, {KEY} %key) {{
-entry:
-  %entries = extractvalue %{NAME} %dict, 0
-  %capacity = extractvalue %{NAME} %dict, 2
-  %mask = sub i64 %capacity, 1
-  %raw_hash = call i32 {KEY_PREFIX}.hash({KEY} %key)
-  %finalized_hash = call i32 @hash_finalize(i32 %raw_hash)
-  %hash = zext i32 %raw_hash to i64
-  br label %body
-
-body:
-  %h = phi i64 [ %hash, %entry ], [ %h2, %body2 ]
-  %pos = and i64 %h, %mask
-  %ptr = getelementptr %{NAME}.entry, %{NAME}.entry* %entries, i64 %pos
-  %filledPtr = getelementptr %{NAME}.entry, %{NAME}.entry* %ptr, i64 0, i32 0
-  %filled = load i1, i1* %filledPtr
-  %filled32 = zext i1 %filled to i32
-  br i1 %filled, label %body2, label %done
-
-body2:
-  %keyPtr = getelementptr %{NAME}.entry, %{NAME}.entry* %ptr, i64 0, i32 1
-  %elemKey = load {KEY}, {KEY}* %keyPtr
-  %eq = call i1 {KEY_PREFIX}.eq({KEY} %key, {KEY} %elemKey)
-  %h2 = add i64 %h, 1
-  br i1 %eq, label %done, label %body
-
-done:
-  ret %{NAME}.slot %ptr
+  %keyPtr = alloca {KEY}
+  store {KEY} %key, {KEY}* %keyPtr
+  %rawHash = call i32 {KEY_PREFIX}.hash({KEY} %key)
+  %finalizedHash = call i32 @hash_finalize(i32 %rawHash)
+  %keyPtrRaw = bitcast {KEY}* %keyPtr to i8*
+  %slotRaw = call i8* @weld_rt_dict_lookup(i8* %dict, i32 %finalizedHash, i8* %keyPtrRaw)
+  %slot = bitcast i8* %slotRaw to %{NAME}.slot
+  ret %{NAME}.slot %slot
 }}
 
 ; Set the key and value at a given slot. The slot is assumed to have been
 ; returned by a lookup() on the same key provided here, and any old value for
 ; the key will be replaced. A new %{NAME} is returned reusing the same storage.
 define %{NAME} @{NAME}.put(%{NAME} %dict, %{NAME}.slot %slot, {KEY} %key, {VALUE} %value) {{
-start:
-  %entries = extractvalue %{NAME} %dict, 0
-  %size = extractvalue %{NAME} %dict, 1
-  %capacity = extractvalue %{NAME} %dict, 2
-  %filledPtr = getelementptr %{NAME}.entry, %{NAME}.entry* %slot, i64 0, i32 0
-  %filled = load i1, i1* %filledPtr
   %keyPtr = getelementptr %{NAME}.entry, %{NAME}.entry* %slot, i64 0, i32 1
   %valuePtr = getelementptr %{NAME}.entry, %{NAME}.entry* %slot, i64 0, i32 2
-  br i1 %filled, label %update, label %addNew
-
-update:
-  store i1 1, i1* %filledPtr
   store {KEY} %key, {KEY}* %keyPtr
   store {VALUE} %value, {VALUE}* %valuePtr
+  %slotRaw = bitcast %{NAME}.slot %slot to i8*
+  call void @weld_rt_dict_put(i8* %dict, i8* %slotRaw)
   ret %{NAME} %dict
-
-addNew:
-  ; Add the entry into the empty slot
-  store i1 1, i1* %filledPtr
-  store {KEY} %key, {KEY}* %keyPtr
-  store {VALUE} %value, {VALUE}* %valuePtr
-  %incSize = add i64 %size, 1
-  ; Check whether table is at least 70% full; this means 10 * size >= 7 * capacity
-  %v1 = mul i64 %size, 10
-  %v2 = mul i64 %capacity, 7
-  %full = icmp sge i64 %v1, %v2
-  br i1 %full, label %onFull, label %returnCurrent
-
-returnCurrent:
-  %dict2 = insertvalue %{NAME} %dict, i64 %incSize, 1
-  ret %{NAME} %dict2
-
-onFull:
-  %newCapacity = mul i64 %capacity, 2
-  %newDict = call %{NAME} @{NAME}.new(i64 %newCapacity)
-  ; Loop over old elements and insert them into newDict
-  br label %body
-
-body:
-  %i = phi i64 [ 0, %onFull ], [ %i2, %body2 ], [ %i2, %moveEntry ]
-  %newDict2 = phi %{NAME} [ %newDict, %onFull ], [ %newDict2, %body2 ], [ %newDict3, %moveEntry ]
-  %comp = icmp eq i64 %i, %capacity
-  br i1 %comp, label %done, label %body2
-
-body2:
-  %i2 = add i64 %i, 1
-  %entryPtr = getelementptr %{NAME}.entry, %{NAME}.entry* %entries, i64 %i
-  %entry = load %{NAME}.entry, %{NAME}.entry* %entryPtr
-  %entryFilled = extractvalue %{NAME}.entry %entry, 0
-  br i1 %entryFilled, label %moveEntry, label %body
-
-moveEntry:
-  %entryKey = extractvalue %{NAME}.entry %entry, 1
-  %entryValue = extractvalue %{NAME}.entry %entry, 2
-  %newSlot = call %{NAME}.slot @{NAME}.lookup(%{NAME} %newDict, {KEY} %entryKey)
-  %newDict3 = call %{NAME} @{NAME}.put(%{NAME} %newDict2, %{NAME}.slot %newSlot, {KEY} %entryKey, {VALUE} %entryValue)
-  br label %body
-
-done:
-  ret %{NAME} %newDict2
 }}
 
 ; Get the entries of a dictionary as a vector.
 define {KV_VEC} @{NAME}.tovec(%{NAME} %dict) {{
-entry:
-  %entries = extractvalue %{NAME} %dict, 0
-  %size = extractvalue %{NAME} %dict, 1
-  %capacity = extractvalue %{NAME} %dict, 2
-  %vec = call {KV_VEC} {KV_VEC_PREFIX}.new(i64 %size)
-  br label %body
-
-body:
-  %i = phi i64 [ 0, %entry ], [ %i2, %body2 ], [ %i2, %body3 ]
-  %j = phi i64 [ 0, %entry ], [ %j, %body2 ], [ %j2, %body3 ]
-  %i2 = add i64 %i, 1
-  %comp = icmp uge i64 %i, %capacity
-  br i1 %comp, label %done, label %body2
-
-body2:
-  %entPtr = getelementptr %{NAME}.entry, %{NAME}.entry* %entries, i64 %i
-  %ent = load %{NAME}.entry, %{NAME}.entry* %entPtr
-  %filled = extractvalue %{NAME}.entry %ent, 0
-  br i1 %filled, label %body3, label %body
-
-body3:
-  %elemPtr = call {KV_STRUCT}* {KV_VEC_PREFIX}.at({KV_VEC} %vec, i64 %j)
-  %k = extractvalue %{NAME}.entry %ent, 1
-  %v = extractvalue %{NAME}.entry %ent, 2
-  %kv = insertvalue {KV_STRUCT} undef, {KEY} %k, 0
-  %kv2 = insertvalue {KV_STRUCT} %kv, {VALUE} %v, 1
-  store {KV_STRUCT} %kv2, {KV_STRUCT}* %elemPtr
-  %j2 = add i64 %j, 1
-  br label %body
-
-done:
-  ret {KV_VEC} %vec
+  %valOffsetPtr = getelementptr {KV_STRUCT}, {KV_STRUCT}* null, i32 0, i32 1
+  %valOffset = ptrtoint {VALUE}* %valOffsetPtr to i32
+  %structSizePtr = getelementptr {KV_STRUCT}, {KV_STRUCT}* null, i32 1
+  %structSize = ptrtoint {KV_STRUCT}* %structSizePtr to i32
+  %arrRaw = call i8* @weld_rt_dict_to_array(i8* %dict, i32 %valOffset, i32 %structSize)
+  %arr = bitcast i8* %arrRaw to {KV_STRUCT}*
+  %size = call i64 @weld_rt_dict_get_size(i8* %dict)
+  %1 = insertvalue {KV_VEC} undef, {KV_STRUCT}* %arr, 0
+  %2 = insertvalue {KV_VEC} %1, i64 %size, 1
+  ret {KV_VEC} %2
 }}

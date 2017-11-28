@@ -93,6 +93,12 @@ define void @{NAME}.zero(%{NAME} %v) {{
   ret void
 }}
 
+define i32 @{NAME}.elSize() {{
+  %elemSizePtr = getelementptr {ELEM}, {ELEM}* null, i32 1
+  %elemSize = ptrtoint {ELEM}* %elemSizePtr to i32
+  ret i32 %elemSize
+}}
+
 ; Clone a vector.
 define %{NAME} @{NAME}.clone(%{NAME} %vec) {{
   %elements = extractvalue %{NAME} %vec, 0
