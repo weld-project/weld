@@ -17,7 +17,7 @@ define %{NAME}.gbld @{NAME}.gbld.new(i64 %capacity) {{
   %valSizePtr = getelementptr {VALUE}, {VALUE}* null, i32 1
   %valSize = ptrtoint {VALUE}* %valSizePtr to i32
   %gbld = call i8* @weld_rt_gb_new(i32 %keySize, i32 (i8*, i8*)* {KEY_PREFIX}.eq_on_pointers,
-    i32 %valSize, i64 1000000, i64 %capacity)
+    i32 %valSize, i64 100000000, i64 %capacity)
   ret %{NAME}.gbld %gbld
 }}
 

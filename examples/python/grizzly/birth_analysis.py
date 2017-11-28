@@ -7,7 +7,7 @@ years = range(1880, 2011)
 pieces = []
 columns = ['year', 'name', 'sex', 'births']
 for year in years:
-    path = 'data/names100/yob%d.txt' % year
+    path = 'data/names10/yob%d.txt' % year
     frame = pd.read_csv(path, names=columns)
     pieces.append(frame)
 
