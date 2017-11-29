@@ -64,11 +64,12 @@ def run(filename, use_grizzly):
     if 'passenger_count' in cols:
         ft = ft[ft['passenger_count'] <= 3]
 
-    end = time.time()
     print "Removed " + str(databegin-len(ft)) + " bad records."
+    end = time.time()
+
     print "{} seconds".format(end - start)
 
-    return end - start, ft
+    return end - start
 
 if __name__ == "__main__":
     import argparse
@@ -81,6 +82,6 @@ if __name__ == "__main__":
 
     print "File={} Grizzly={}".format(args.filename, args.grizzly)
 
-    time, result = run(args.filename, args.grizzly)
+    time = run(args.filename, args.grizzly)
 
 
