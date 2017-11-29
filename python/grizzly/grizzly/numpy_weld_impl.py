@@ -117,6 +117,7 @@ def dot(matrix, vector, matrix_ty, vector_ty):
          %(matrix)s,
          |row: vec[%(matrix_ty)s]|
            result(
+             %(loopsize_annotation)s
              for(
                result(
                  %(loopsize_annotation)s
