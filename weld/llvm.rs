@@ -205,7 +205,7 @@ pub fn compile_program(program: &Program, conf: &ParsedConf, stats: &mut Compila
     if conf.dump_code.enabled {
         let ref timestamp = format!("{}", time::now().to_timespec().sec);
         info!("Writing code to directory '{}' with timestamp {}", &conf.dump_code.dir.display(), timestamp);
-        write_code(&print_typed_expr(&expr), "weld", timestamp, &conf.dump_code.dir);
+        write_code(&print_expr(&expr), "weld", timestamp, &conf.dump_code.dir);
         write_code(&format!("{}", &sir_prog), "sir", timestamp, &conf.dump_code.dir);
         write_code(&llvm_code, "ll", timestamp, &conf.dump_code.dir);
 

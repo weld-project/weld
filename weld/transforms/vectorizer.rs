@@ -93,9 +93,6 @@ pub fn vectorize(expr: &mut Expr<Type>) {
 /// Predicate an `If` expression by checking for if(cond, merge(b, e), b) and transforms it to merge(b, select(cond, e,identity)).
 pub fn predicate_merge_expr(e: &mut Expr<Type>) {
     e.transform_and_continue_res(&mut |ref mut e| {
-        if !(should_be_predicated(e)) {
-            return Ok((None, true));
-        }
 
         // Predication for a value merged into a merger. This pattern checks for if(cond, merge(b, e), b).
         if let If { ref cond, ref on_true, ref on_false } = e.kind {
@@ -160,9 +157,6 @@ pub fn predicate_merge_expr(e: &mut Expr<Type>) {
 /// Predicate an `If` expression by checking for if(cond, scalar1, scalar2) and transforms it to select(cond, scalar1, scalar2).
 pub fn predicate_simple_expr(e: &mut Expr<Type>) {
     e.transform_and_continue_res(&mut |ref mut e| {
-        if !(should_be_predicated(e)) {
-            return Ok((None, true));
-        }
 
         // This pattern checks for if(cond, scalar1, scalar2).
         if let If { ref cond, ref on_true, ref on_false } = e.kind {
@@ -224,6 +218,9 @@ fn vectorize_expr(e: &mut Expr<Type>, broadcast_idens: &HashSet<Symbol>) -> Weld
             } else if let Struct(_) = e.ty {
                 e.ty = e.ty.simd_type()?;
             }
+        }
+        Let { .. } => {
+            e.ty = e.ty.simd_type()?;
         }
         GetField { .. } => {
             e.ty = e.ty.simd_type()?;
