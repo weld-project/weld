@@ -32,15 +32,13 @@ impl<'a> MergeSingle<'a> {
     }
 }
 
-struct NewAppender<'a> {
-    elem_type: &'a Type
-}
+struct NewAppender;
 
-impl<'a> NewAppender<'a> {
-    fn extract(expr: &'a TypedExpr) -> Option<NewAppender<'a>> {
+impl NewAppender {
+    fn extract(expr: &TypedExpr) -> Option<NewAppender> {
         if let NewBuilder(_) = expr.kind {
-            if let Builder(Appender(ref elem_type), _) = expr.ty {
-                return Some(NewAppender{elem_type})
+            if let Builder(Appender(_), _) = expr.ty {
+                return Some(NewAppender)
             }
         }
         return None
