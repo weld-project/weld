@@ -67,4 +67,35 @@ extern "C" {
     pub fn weld_run_get_errno(run_id: int64_t) -> int64_t;
     #[no_mangle]
     pub fn weld_run_set_errno(run_id: int64_t, err: int64_t);
+    #[no_mangle]
+    pub fn weld_rt_dict_new(key_size: int32_t,
+        keys_eq: extern "C" fn(*mut c_void, *mut c_void) -> int32_t, val_size: int32_t,
+        to_array_true_val_size: int32_t, max_local_bytes: int64_t,
+        capacity: int64_t) -> *mut c_void;
+    #[no_mangle]
+    pub fn weld_rt_dict_lookup(d: *mut c_void, hash: int32_t, key: *mut c_void) -> *mut c_void;
+    #[no_mangle]
+    pub fn weld_rt_dict_put(d: *mut c_void, slot: *mut c_void);
+    #[no_mangle]
+    pub fn weld_rt_dict_finalize_next_local_slot(d: *mut c_void) -> *mut c_void;
+    #[no_mangle]
+    pub fn weld_rt_dict_finalize_global_slot_for_local(d: *mut c_void, local_slot: *mut c_void)
+        -> *mut c_void;
+    #[no_mangle]
+    pub fn weld_rt_dict_to_array(d: *mut c_void, value_offset_in_struct: int32_t,
+        struct_size: int32_t) -> *mut c_void;
+    #[no_mangle]
+    pub fn weld_rt_dict_get_size(d: *mut c_void) -> int64_t;
+    #[no_mangle]
+    pub fn weld_rt_dict_free(d: *mut c_void);
+    #[no_mangle]
+    pub fn weld_rt_gb_new(key_size: int32_t,
+        keys_eq: extern "C" fn(*mut c_void, *mut c_void) -> int32_t, val_size: int32_t,
+        max_local_bytes: int64_t, capacity: int64_t) -> *mut c_void;
+    #[no_mangle]
+    pub fn weld_rt_gb_merge(b: *mut c_void, key: *mut c_void, hash: int32_t, value: *mut c_void);
+    #[no_mangle]
+    pub fn weld_rt_gb_result(b: *mut c_void) -> *mut c_void;
+    #[no_mangle]
+    pub fn weld_rt_gb_free(gb: *mut c_void);
 }
