@@ -143,7 +143,7 @@ define i32 @hash_combine(i32 %start, i32 %value) alwaysinline {
   ret i32 %2
 }
 
-; Mixes the bits in a hash code, similar to Java's HashMap
+; Mixes the bits in a hash code, taken from Guava's Murmur3_32.fmix
 define i32 @hash_finalize(i32) {
   %2 = lshr i32 %0, 16
   %3 = xor i32 %2, %0
