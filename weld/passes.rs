@@ -2,6 +2,7 @@ use super::ast::*;
 use super::error::*;
 
 use super::transforms::loop_fusion;
+use super::transforms::loop_fusion_2;
 use super::transforms::inliner;
 use super::transforms::size_inference;
 use super::transforms::short_circuit;
@@ -13,35 +14,64 @@ use super::expr_hash::*;
 
 use std::collections::HashMap;
 
-pub struct Pass {
-    transforms: Vec<fn(&mut Expr<Type>)>,
-    pass_name: String,
+pub type PassFn = fn(&mut Expr<Type>);
+
+/// A single IR to IR transformation.
+pub struct Transformation {
+    pub func: PassFn,
+    pub experimental: bool,
 }
 
-/// Manually implement Clone for Pass because it cannot be #derived due to the fn type inside it.
-impl Clone for Pass {
-    fn clone(&self) -> Pass {
-        Pass {
-            transforms: self.transforms.iter().map(|p| *p).collect::<Vec<_>>(),
-            pass_name: self.pass_name.clone()
+/// Manually implement Clone for Transformation because it cannot be #derived due to the fn type inside it.
+impl Clone for Transformation {
+    fn clone(&self) -> Transformation {
+        Transformation {
+            func: self.func,
+            experimental: self.experimental,
         }
     }
 }
 
-impl Pass {
-    pub fn new(transforms: Vec<fn(&mut Expr<Type>)>, pass_name: &'static str) -> Pass {
-        return Pass {
-                   transforms: transforms,
-                   pass_name: String::from(pass_name),
-               };
+impl Transformation {
+    pub fn new(func: PassFn) -> Transformation {
+        Transformation {
+            func: func,
+            experimental: false,
+        }
     }
 
-    pub fn transform(&self, mut expr: &mut Expr<Type>) -> WeldResult<()> {
+    pub fn new_experimental(func: PassFn) -> Transformation {
+        Transformation {
+            func: func,
+            experimental: true,
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct Pass {
+    transforms: Vec<Transformation>,
+    pass_name: String,
+}
+
+impl Pass {
+    pub fn new(transforms: Vec<Transformation>, pass_name: &'static str) -> Pass {
+        Pass {
+            transforms: transforms,
+            pass_name: String::from(pass_name),
+        }
+    }
+
+    pub fn transform(&self, mut expr: &mut Expr<Type>, use_experimental: bool) -> WeldResult<()> {
         let mut continue_pass = true;
         let mut before = ExprHash::from(expr)?.value();
         while continue_pass {
-            for transform in &self.transforms {
-                transform(&mut expr);
+            for transform in self.transforms.iter() {
+                // Skip experimental transformations unless the flag is explicitly set.
+                if transform.experimental && !use_experimental {
+                    continue;
+                }
+                (transform.func)(&mut expr);
             }
             let after = ExprHash::from(expr)?.value();
             continue_pass = !(before == after);
@@ -59,35 +89,39 @@ lazy_static! {
     pub static ref OPTIMIZATION_PASSES: HashMap<&'static str, Pass> = {
         let mut m = HashMap::new();
         m.insert("inline-apply",
-                 Pass::new(vec![inliner::inline_apply], "inline-apply"));
+                 Pass::new(vec![Transformation::new(inliner::inline_apply)], "inline-apply"));
         m.insert("inline-let",
-                 Pass::new(vec![inliner::inline_let], "inline-let"));
+                 Pass::new(vec![Transformation::new(inliner::inline_let)], "inline-let"));
         m.insert("inline-zip",
-                 Pass::new(vec![inliner::inline_zips], "inline-zip"));
+                 Pass::new(vec![Transformation::new(inliner::inline_zips)], "inline-zip"));
         m.insert("loop-fusion",
-                 Pass::new(vec![loop_fusion::fuse_loops_horizontal,
-                                loop_fusion::fuse_loops_vertical,
-                                inliner::inline_get_field],
+                 Pass::new(vec![Transformation::new(loop_fusion::fuse_loops_vertical),
+                                Transformation::new(loop_fusion_2::fuse_loops_2),
+                                Transformation::new(loop_fusion_2::move_merge_before_let),
+                                Transformation::new(inliner::inline_get_field),
+                                Transformation::new(inliner::inline_let),
+                                Transformation::new_experimental(loop_fusion_2::aggressive_inline_let),
+                                Transformation::new_experimental(loop_fusion_2::merge_makestruct_loops)],
                  "loop-fusion"));
         m.insert("unroll-static-loop",
-                 Pass::new(vec![unroller::unroll_static_loop],
+                 Pass::new(vec![Transformation::new(unroller::unroll_static_loop)],
                  "unroll-static-loop"));
         m.insert("infer-size",
-                 Pass::new(vec![size_inference::infer_size],
+                 Pass::new(vec![Transformation::new(size_inference::infer_size)],
                  "infer-size"));
         m.insert("short-circuit-booleans",
-                 Pass::new(vec![short_circuit::short_circuit_booleans],
+                 Pass::new(vec![Transformation::new(short_circuit::short_circuit_booleans)],
                  "short-circuit-booleans"));
         m.insert("predicate",
-                 Pass::new(vec![vectorizer::predicate_merge_expr, vectorizer::predicate_simple_expr],
+                 Pass::new(vec![Transformation::new(vectorizer::predicate_merge_expr),
+                                Transformation::new(vectorizer::predicate_simple_expr)],
                  "predicate"));
         m.insert("vectorize",
-                 Pass::new(vec![vectorizer::vectorize],
+                 Pass::new(vec![Transformation::new(vectorizer::vectorize)],
                  "vectorize"));
         m.insert("fix-iterate",
-                 Pass::new(vec![annotator::force_iterate_parallel_fors],
+                 Pass::new(vec![Transformation::new(annotator::force_iterate_parallel_fors)],
                  "fix-iterate"));
-
         m
     };
 }

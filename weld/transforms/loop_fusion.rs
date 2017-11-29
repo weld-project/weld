@@ -192,7 +192,8 @@ pub fn fuse_loops_vertical(expr: &mut Expr<Type>) {
                             if let NewBuilder(_) = bldr2.kind {
                                 if let Builder(ref kind, _) = bldr2.ty {
                                     if let Appender(_) = *kind {
-                                        let e = exprs::for_expr(iters2.clone(), *bldr1.clone(), replace_builder(lambda, nested, &mut sym_gen)?, false)?;
+                                        let mut e = exprs::for_expr(iters2.clone(), *bldr1.clone(), replace_builder(lambda, nested, &mut sym_gen)?, false)?;
+                                        e.annotations = expr.annotations.clone();
                                         return Ok((Some(e), true));
                                     }
                                 }

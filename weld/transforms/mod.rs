@@ -1,6 +1,7 @@
 //! Common transformations on expressions.
 
 pub mod loop_fusion;
+pub mod loop_fusion_2;
 pub mod uniquify;
 pub mod inliner;
 pub mod size_inference;

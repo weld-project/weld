@@ -15,6 +15,7 @@ pub const THREADS_KEY: &'static str = "weld.threads";
 pub const SUPPORT_MULTITHREAD_KEY: &'static str = "weld.compile.multithreadSupport";
 pub const TRACE_RUN_KEY: &'static str = "weld.compile.traceExecution";
 pub const OPTIMIZATION_PASSES_KEY: &'static str = "weld.optimization.passes";
+pub const EXPERIMENTAL_PASSES_KEY: &'static str = "weld.optimization.applyExperimentalTransforms";
 pub const SIR_OPT_KEY: &'static str = "weld.optimization.sirOptimization";
 pub const LLVM_OPTIMIZATION_LEVEL_KEY: &'static str = "weld.llvm.optimization.level";
 pub const DUMP_CODE_KEY: &'static str = "weld.compile.dumpCode";
@@ -28,6 +29,7 @@ pub const DEFAULT_SIR_OPT: bool = true;
 pub const DEFAULT_LLVM_OPTIMIZATION_LEVEL: u32 = 2;
 pub const DEFAULT_DUMP_CODE: bool = false;
 pub const DEFAULT_TRACE_RUN: bool = false;
+pub const DEFAULT_EXPERIMENTAL_PASSES: bool = false;
 
 lazy_static! {
     pub static ref DEFAULT_OPTIMIZATION_PASSES: Vec<Pass> = {
@@ -50,6 +52,7 @@ pub struct ParsedConf {
     pub support_multithread: bool,
     pub trace_run: bool,
     pub enable_sir_opt: bool,
+    pub enable_experimental_passes: bool,
     pub optimization_passes: Vec<Pass>,
     pub llvm_optimization_level: u32,
     pub dump_code: DumpCodeConf,
@@ -94,6 +97,10 @@ pub fn parse(conf: &WeldConf) -> WeldResult<ParsedConf> {
     let sir_opt_enabled = value.map(|s| parse_bool_flag(&s, "Invalid flag for sirOptimization"))
                       .unwrap_or(Ok(DEFAULT_SIR_OPT))?;
 
+    let value = get_value(conf, EXPERIMENTAL_PASSES_KEY);
+    let enable_experimental_passes = value.map(|s| parse_bool_flag(&s, "Invalid flag for applyExperimentalPasses"))
+                      .unwrap_or(Ok(DEFAULT_EXPERIMENTAL_PASSES))?;
+
     let value = get_value(conf, TRACE_RUN_KEY);
     let trace_run = value.map(|s| parse_bool_flag(&s, "Invalid flag for trace.run"))
                       .unwrap_or(Ok(DEFAULT_TRACE_RUN))?;
@@ -104,6 +111,7 @@ pub fn parse(conf: &WeldConf) -> WeldResult<ParsedConf> {
         support_multithread: support_multithread,
         trace_run: trace_run,
         enable_sir_opt: sir_opt_enabled,
+        enable_experimental_passes: enable_experimental_passes,
         optimization_passes: passes,
         llvm_optimization_level: level,
         dump_code: DumpCodeConf {

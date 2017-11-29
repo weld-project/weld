@@ -71,7 +71,7 @@ pub fn unroll_static_loop(expr: &mut TypedExpr) {
     }
 
     let mut sym_gen = SymbolGenerator::from_expression(expr);
-    expr.transform(&mut |ref mut expr| {
+    expr.transform_up(&mut |ref mut expr| {
         if let Some(pat) = UnrollPattern::extract(expr) {
 
             // Create a vector of identifiers which will bind to the iterator data.

@@ -94,10 +94,13 @@ impl CompiledModule {
     }
 }
 
-pub fn apply_opt_passes(expr: &mut TypedExpr, opt_passes: &Vec<Pass>, stats: &mut CompilationStats) -> WeldResult<()> {
+pub fn apply_opt_passes(expr: &mut TypedExpr,
+                        opt_passes: &Vec<Pass>,
+                        stats: &mut CompilationStats,
+                        use_experimental: bool) -> WeldResult<()> {
     for pass in opt_passes {
         let start = PreciseTime::now();
-        pass.transform(expr)?;
+        pass.transform(expr, use_experimental)?;
         let end = PreciseTime::now();
         stats.pass_times.push((pass.pass_name(), start.to(end)));
         debug!("After {} pass:\n{}", pass.pass_name(), print_typed_expr(&expr));
@@ -124,7 +127,7 @@ pub fn compile_program(program: &Program, conf: &ParsedConf, stats: &mut Compila
     debug!("After type inference:\n{}\n", print_typed_expr(&expr));
     stats.weld_times.push(("Type Inference".to_string(), start.to(end)));
 
-    apply_opt_passes(&mut expr, &conf.optimization_passes, stats)?;
+    apply_opt_passes(&mut expr, &conf.optimization_passes, stats, conf.enable_experimental_passes)?;
 
     let start = PreciseTime::now();
     uniquify::uniquify(&mut expr)?;
@@ -3659,7 +3662,7 @@ fn predicate_only(code: &str) -> WeldResult<TypedExpr> {
     let optstr = ["predicate"];
     let optpass = optstr.iter().map(|x| (*OPTIMIZATION_PASSES.get(x).unwrap()).clone()).collect();
 
-    apply_opt_passes(&mut typed_e, &optpass, &mut CompilationStats::new())?;
+    apply_opt_passes(&mut typed_e, &optpass, &mut CompilationStats::new(), false)?;
 
     Ok(typed_e)
 }
