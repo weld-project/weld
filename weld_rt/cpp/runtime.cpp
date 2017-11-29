@@ -214,11 +214,15 @@ static inline void finish_task(work_t *task, int32_t my_id, run_data *rd) {
     int32_t previous = __sync_fetch_and_sub(&task->cont->deps, 1);
     if (previous == 1) {
       // Enqueue the continuation since we are the last dependency.
-      // Always make it full for simplicity ... technically if there are
-      // any tasks left on our queue we know it's safe to not make this full,
-      // since we must have executed all of this task's predecessors in order
-      // without any of them having been stolen.
-      set_full_task(task->cont);
+      // If there are any tasks left on our queue we know it's safe
+      // to not make this full, since we must have executed all of
+      // this task's predecessors in order without any of them having been stolen.
+      pthread_spin_lock(rd->all_work_queue_locks + my_id);
+      bool queue_empty = (rd->all_work_queues + my_id)->empty();
+      pthread_spin_unlock(rd->all_work_queue_locks + my_id);
+      if (queue_empty) {
+        set_full_task(task->cont);
+      }
       pthread_spin_lock(rd->all_work_queue_locks + my_id);
       (rd->all_work_queues + my_id)->push_front(task->cont);
       pthread_spin_unlock(rd->all_work_queue_locks + my_id);
