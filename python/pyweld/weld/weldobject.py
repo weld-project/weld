@@ -153,7 +153,8 @@ class WeldObject(object):
         text = header + " " + self.get_let_statements() + "\n" + self.weld_code
         return text
 
-    def evaluate(self, restype, verbose=True, decode=True, passes=None):
+    def evaluate(self, restype, verbose=True, decode=True, passes=None,
+                 num_threads=1, apply_experimental_transforms=False):
         function = self.to_weld_func()
 
         # Returns a wrapped ctypes Structure
@@ -170,7 +171,6 @@ class WeldObject(object):
         start = time.time()
         encoded = []
         argtypes = []
-        weld_num_threads = int(os.environ.get("WELD_NUM_THREADS", "1"))
         for name in names:
             if name in self.argtypes:
                 argtypes.append(self.argtypes[name].ctype_class)
@@ -178,7 +178,7 @@ class WeldObject(object):
             else:
                 argtypes.append(self.encoder.py_to_weld_type(
                     self.context[name]).ctype_class)
-                encoded.append(self.encoder.encode(self.context[name], weld_num_threads))
+                encoded.append(self.encoder.encode(self.context[name], num_threads))
         end = time.time()
         if verbose:
             print "Python->Weld:", end - start
@@ -208,8 +208,10 @@ class WeldObject(object):
 
         start = time.time()
         conf = cweld.WeldConf()
-        conf.set("weld.threads", str(weld_num_threads))
+        conf.set("weld.threads", str(num_threads))
         conf.set("weld.memory.limit", "100000000000")
+        conf.set("weld.optimization.applyExperimentalTransforms",
+                 "true" if apply_experimental_transforms else "false")
         err = cweld.WeldError()
         weld_ret = module.run(conf, arg, err)
         if err.code() != 0:
