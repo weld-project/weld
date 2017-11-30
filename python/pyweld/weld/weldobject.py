@@ -196,7 +196,10 @@ class WeldObject(object):
         err = cweld.WeldError()
 
         if passes is not None:
-            conf.set("weld.optimization.passes", ",".join(passes))
+            passes = ",".join(passes)
+            passes = passes.strip()
+            if passes != "":
+                conf.set("weld.optimization.passes", passes)
 
         module = cweld.WeldModule(function, conf, err)
         if err.code() != 0:

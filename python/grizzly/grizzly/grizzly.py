@@ -134,7 +134,7 @@ class DataFrameWeld:
             values = np.copy(self.df.values, order='C')
             if self.predicates is None:
                 return values
-            if isinstance(values, np.ndarray):
+            if isinstance(self.df.values, np.ndarray):
                 weld_type = grizzly_impl.numpy_to_weld_type_mapping[
                     str(values.dtype)]
                 dim = values.ndim

@@ -116,7 +116,7 @@ class NumPyEncoder(WeldObjectEncoder):
             raise Exception("Unable to encode; invalid object type")
 
         numpy_to_weld.restype = self.py_to_weld_type(obj).ctype_class
-        numpy_to_weld.argtypes = [py_object]
+        numpy_to_weld.argtypes = [py_object, WeldInt().ctype_class]
         weld_vec = numpy_to_weld(obj, num_threads)
         return weld_vec
 
