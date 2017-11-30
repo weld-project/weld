@@ -286,25 +286,38 @@ extern "C" void weld_rt_start_loop(work_t *w, void *body_data, void *cont_data, 
     }
   }
 
-  work_t *possible_new_outer_task = NULL;
+  work_t *new_outer_task1 = NULL;
+  work_t *new_outer_task2 = NULL;
   // If current task is a loop body with multiple iterations left, we want
-  // to create a task for the remaining iterations so that they execute after
+  // to create tasks for the remaining iterations so that they execute after
   // the inner loop being created now (or are stolen by another thread, in which
-  // case new nest data will be created).
+  // case new nest data will be created so their execution order is unimportant).
   if (w != NULL && w->lower != w->upper && w->upper - w->cur_idx > 1) {
-    possible_new_outer_task = clone_task(w);
-    possible_new_outer_task->lower = w->cur_idx + 1;
-    possible_new_outer_task->cur_idx = w->cur_idx + 1;
+    new_outer_task1 = clone_task(w);
+    new_outer_task1->lower = w->cur_idx + 1;
+    new_outer_task1->cur_idx = w->cur_idx + 1;
+    set_cont(new_outer_task1, w->cont);
+    // always split into two tasks if possible
+    if (new_outer_task1->upper - new_outer_task1->lower > 1) {
+      new_outer_task2 = clone_task(new_outer_task1);
+      int64_t mid = (new_outer_task1->lower + new_outer_task1->upper) / 2;
+      new_outer_task1->upper = mid;
+      new_outer_task2->lower = mid;
+      new_outer_task2->cur_idx = mid;
+      set_cont(new_outer_task2, w->cont);
+    }
     // ensure that w immediately ends, and possible_new_outer_task contains whatever remained
     w->cur_idx = w->upper - 1;
-    set_cont(possible_new_outer_task, w->cont);
   }
 
   int32_t my_id = weld_rt_thread_id();
   run_data *rd = get_run_data();
   pthread_spin_lock(rd->all_work_queue_locks + my_id);
-  if (possible_new_outer_task != NULL) {
-    (rd->all_work_queues + my_id)->push_front(possible_new_outer_task);
+  if (new_outer_task2 != NULL) {
+    (rd->all_work_queues + my_id)->push_front(new_outer_task2);
+  }
+  if (new_outer_task1 != NULL) {
+    (rd->all_work_queues + my_id)->push_front(new_outer_task1);
   }
   (rd->all_work_queues + my_id)->push_front(body_task);
   pthread_spin_unlock(rd->all_work_queue_locks + my_id);
@@ -320,7 +333,8 @@ static inline void split_task(work_t *task, int32_t my_id, run_data *rd) {
     // The inner loop may be subject to vectorization, so modify the bounds to make the task size
     // divisible by the SIMD vector size.
     if (task->grain_size > 2 * MAX_SIMD_SIZE) {
-        mid = (mid / MAX_SIMD_SIZE) * MAX_SIMD_SIZE;
+      // Assumes that all vectorized inner loops have grain_size > 2 * MAX_SIMD_SIZE.
+      mid = (mid / MAX_SIMD_SIZE) * MAX_SIMD_SIZE;
     }
 
     task->upper = mid;
