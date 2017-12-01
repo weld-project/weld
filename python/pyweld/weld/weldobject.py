@@ -198,8 +198,6 @@ class WeldObject(object):
         conf = cweld.WeldConf()
         err = cweld.WeldError()
 
-        conf.set("weld.optimization.applyExperimentalTransforms", "true")
-
         if passes is not None:
             conf.set("weld.optimization.passes", ",".join(passes))
 
