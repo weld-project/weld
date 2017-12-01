@@ -20,7 +20,7 @@ CSV_DEFAULT = "data/yellow_tripdata_2014-01.csv"
 # Use Pandas by default.
 GRIZZLY_DEFAULT = False
 
-def run(filename, use_grizzly):
+def run(filename, use_grizzly, passes=None, threads=1):
     """
     Loads data, prints the number of initial rows, and wraps the DataFrame
     as a DataFrameWeld if use_grizzly is True.
@@ -68,7 +68,12 @@ def run(filename, use_grizzly):
 
     print "Starting timed run..."
 
-    length = len(ft)
+    if use_grizzly:
+        print "Evaluating Length with Grizzly..."
+        length = ft.len(passes=passes, threads=threads)
+    else:
+        length = len(ft)
+
     end = time.time()
 
     print "Length:", length
@@ -85,11 +90,19 @@ if __name__ == "__main__":
 
     parser.add_argument('-g', '--grizzly', action='store_true')
     parser.add_argument('-f', '--filename', type=str, default=CSV_DEFAULT)
+    parser.add_argument('-p', '--passes', type=str, default=None)
+    parser.add_argument('-t', '--threads', type=int, default=1)
 
     args = parser.parse_args()
 
-    print "File={} Grizzly={}".format(args.filename, args.grizzly)
+    print "File={} Grizzly={} Threads={}".format(args.filename, args.grizzly, args.threads)
 
-    time = run(args.filename, args.grizzly)
+    if args.passes is not None:
+        passes = [p.strip().lower() for p in args.passes.split(",")]
+        print "Passes:", passes
+    else:
+        passes = None
+
+    time = run(args.filename, args.grizzly, passes=passes, threads=str(args.threads))
 
 

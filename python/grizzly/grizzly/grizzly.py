@@ -162,14 +162,17 @@ class DataFrameWeld:
             column_names.add(column)
         return list(column_names)
 
-    def __len__(self):
+    def len(self, passes=None, threads=1):
         if self.predicates is not None:
             return LazyOpResult(
                 grizzly_impl.num_true(self.predicates.expr),
                 WeldInt(),
                 0
-            ).evaluate()
+            ).evaluate(passes=passes, num_threads=threads) 
         return len(self.df)
+
+    def __len__(self):
+        return self.len()
 
     def groupby(self, grouping_column_name):
         """Summary
