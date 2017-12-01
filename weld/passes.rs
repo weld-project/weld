@@ -109,13 +109,21 @@ lazy_static! {
         m.insert("infer-size",
                  Pass::new(vec![Transformation::new(size_inference::infer_size)],
                  "infer-size"));
+        m.insert("inline-literals",
+                 Pass::new(vec![Transformation::new(inliner::inline_negate),
+                                Transformation::new(inliner::inline_cast)],
+                 "inline-literals"));
+        m.insert("unroll-structs",
+                 Pass::new(vec![Transformation::new(inliner::unroll_structs)],
+                 "unroll-structs"));
+        m.insert("predicate",
+                 Pass::new(vec![Transformation::new(vectorizer::predicate_merge_expr),
+                                Transformation::new(vectorizer::predicate_simple_expr),
+                                Transformation::new(vectorizer::convert_to_bitwise)],
+                 "predicate"));
         m.insert("short-circuit-booleans",
                  Pass::new(vec![Transformation::new(short_circuit::short_circuit_booleans)],
                  "short-circuit-booleans"));
-        m.insert("predicate",
-                 Pass::new(vec![Transformation::new(vectorizer::predicate_merge_expr),
-                                Transformation::new(vectorizer::predicate_simple_expr)],
-                 "predicate"));
         m.insert("vectorize",
                  Pass::new(vec![Transformation::new(vectorizer::vectorize)],
                  "vectorize"));

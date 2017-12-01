@@ -39,8 +39,6 @@ class DataFrameWeld:
         self.raw_columns = dict()
         for key in self.df:
             raw_column = self.df[key].values
-            if raw_column.dtype == object:
-                raw_column = np.array(self.df[key], dtype=str)
             self.raw_columns[key] = raw_column
 
     def __getitem__(self, key):

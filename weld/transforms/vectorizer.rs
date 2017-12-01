@@ -93,6 +93,9 @@ pub fn vectorize(expr: &mut Expr<Type>) {
 /// Predicate an `If` expression by checking for if(cond, merge(b, e), b) and transforms it to merge(b, select(cond, e,identity)).
 pub fn predicate_merge_expr(e: &mut Expr<Type>) {
     e.transform_and_continue_res(&mut |ref mut e| {
+        if !should_be_predicated(e) {
+            return Ok((None, true));
+        }
 
         // Predication for a value merged into a merger. This pattern checks for if(cond, merge(b, e), b).
         if let If { ref cond, ref on_true, ref on_false } = e.kind {
@@ -157,6 +160,9 @@ pub fn predicate_merge_expr(e: &mut Expr<Type>) {
 /// Predicate an `If` expression by checking for if(cond, scalar1, scalar2) and transforms it to select(cond, scalar1, scalar2).
 pub fn predicate_simple_expr(e: &mut Expr<Type>) {
     e.transform_and_continue_res(&mut |ref mut e| {
+        if !should_be_predicated(e) {
+            return Ok((None, true));
+        }
 
         // This pattern checks for if(cond, scalar1, scalar2).
         if let If { ref cond, ref on_true, ref on_false } = e.kind {
@@ -181,6 +187,26 @@ pub fn predicate_simple_expr(e: &mut Expr<Type>) {
         }
         Ok((None, true))
     });
+}
+
+/// Convert logical operators to bitwise operators.
+pub fn convert_to_bitwise(expr: &mut TypedExpr) {
+    use ast::BinOpKind::*;
+    expr.transform_up(&mut |ref mut expr| {
+        if !should_be_predicated(expr) {
+            return None;
+        }
+        match expr.kind {
+            BinOp { ref mut kind, .. } if *kind == LogicalAnd => {
+                *kind = BitwiseAnd;
+            }
+            BinOp { ref mut kind, .. } if *kind == LogicalOr => {
+                *kind = BitwiseOr;
+            }
+            _ => ()
+        };
+        None
+    })
 }
 
 /// Returns `true` if this is a set of iterators we can vectorize, `false` otherwise.
@@ -366,7 +392,8 @@ fn vectorizable(for_loop: &Expr<Type>) -> Option<HashSet<Symbol>> {
 }
 
 fn should_be_predicated(e: &mut Expr<Type>) -> bool {
-    e.annotations.predicate()
+    true
+    //e.annotations.predicate()
 }
 
 fn get_id_element(ty: &Type, op: &BinOpKind) -> WeldResult<Option<Expr<Type>>> {

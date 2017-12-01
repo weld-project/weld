@@ -12,6 +12,7 @@ import time
 import bindings as cweld
 from types import *
 
+PASSES_DEFAULT = ["loop-fusion", "unroll-static-loop", "infer-size", "inline-literals", "unroll-structs", "predicate", "short-circuit-booleans", "vectorize", "fix-iterate"]
 
 class WeldObjectEncoder(object):
     """
@@ -27,7 +28,7 @@ class WeldObjectEncoder(object):
 
     def py_to_weld_type(obj):
         """
-        Returns a WeldType corresponding to a Python object
+        Return a WeldType corresponding to a Python object
         """
         raise NotImplementedError
 
@@ -153,10 +154,13 @@ class WeldObject(object):
         text = header + " " + self.get_let_statements() + "\n" + self.weld_code
         return text
 
-    def evaluate(self, restype, verbose=True, decode=True, passes=None):
+    def evaluate(self, restype, verbose=True, decode=True, passes=PASSES_DEFAULT):
         function = self.to_weld_func()
 
-        print function
+        passes = PASSES_DEFAULT
+
+        #print function
+        cweld.weld_set_log_level(cweld.WeldLogLevelDebug)
 
         # Returns a wrapped ctypes Structure
         def args_factory(encoded):

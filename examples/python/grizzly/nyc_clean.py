@@ -44,10 +44,12 @@ def run(filename, use_grizzly):
     if use_grizzly:
         ft = gr.DataFrameWeld(ft)
 
+    print "Starting timed run..."
     start = time.time()
 
     if 'trip_distance' in cols:
         ft = ft[ft['trip_distance'] != 0]
+
     if 'total_amount' in cols:
         ft = ft[ft['total_amount'] != 0]
 
@@ -64,8 +66,14 @@ def run(filename, use_grizzly):
     if 'passenger_count' in cols:
         ft = ft[ft['passenger_count'] <= 3]
 
-    print "Removed " + str(databegin-len(ft)) + " bad records."
+    print "Starting timed run..."
+
+    length = len(ft)
     end = time.time()
+
+    print "Length:", length
+
+    print "Removed " + str(databegin - length) + " bad records."
 
     print "{} seconds".format(end - start)
 
