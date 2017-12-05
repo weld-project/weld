@@ -962,8 +962,8 @@ fn simple_parallel_for_multi_appender_loop() {
 }
 
 fn complex_parallel_for_appender_loop() {
-    let code = "|x:vec[i32]| let a=appender[i64]; let b=merge(a,0L); let r=for(x,b,|b,i,e|
-                let c=merge(b,1L); let d=for(x,c,|b,i,e| if(i<1L, merge(b,i), b)); merge(d, 2L));
+    let code = "|x:vec[i32]| let a=appender[i64]; let b=merge(a,0L); let r=@(grain_size: 100)for(x,b,|b,i,e|
+                let c=merge(b,1L); let d=@(grain_size: 100)for(x,c,|b,i,e| if(i<1L, merge(b,i), b)); merge(d, 2L));
                 result(merge(r,3L))";
     let conf = many_threads_conf();
 

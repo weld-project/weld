@@ -976,6 +976,7 @@ impl LlvmGenerator {
             ctx.code.add(format!("call void @f{}({}, i32 %cur.tid)", par_for.cont, cont_arg_types));
             ctx.code.add(format!("br label %fn.end"));
         } else {
+            // at least one task is always created for outer loops
             ctx.code.add("br label %for.par");
         }
         ctx.code.add(format!("for.par:"));
@@ -1009,19 +1010,15 @@ impl LlvmGenerator {
         let bld_param_str = llvm_symbol(&par_for.builder);
         let bld_arg_str = llvm_symbol(&par_for.builder_arg);
         ctx.code.add(format!("store {} {}.in, {}* {}", &bld_ty_str, bld_param_str, &bld_ty_str, bld_arg_str));
-        ctx.add_alloca("%cur.idx", "i64")?;
+        if par_for.innermost {
+            ctx.add_alloca("%cur.idx", "i64")?;
+        } else {
+            ctx.code.add("%cur.idx = getelementptr inbounds %work_t, %work_t* %cur.work, i32 0, i32 3");
+        }
         ctx.code.add("store i64 %lower.idx, i64* %cur.idx");
         ctx.code.add("br label %loop.start");
         ctx.code.add("loop.start:");
         let idx_tmp = self.gen_load_var("%cur.idx", "i64", ctx)?;
-        if !par_for.innermost {
-            let work_idx_ptr = ctx.var_ids.next();
-            ctx.code.add(format!(
-                    "{} = getelementptr inbounds %work_t, %work_t* %cur.work, i32 0, i32 3",
-                    work_idx_ptr
-                    ));
-            ctx.code.add(format!("store i64 {}, i64* {}", idx_tmp, work_idx_ptr));
-        }
 
         let elem_ty = func.locals.get(&par_for.data_arg).unwrap();
 
