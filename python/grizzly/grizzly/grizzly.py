@@ -131,15 +131,16 @@ class DataFrameWeld:
             Exception: Description
         """
         if key == 'values':
+            values = np.copy(self.df.values, order='C')
             if self.predicates is None:
-                return self.df.values
+                return values
             if isinstance(self.df.values, np.ndarray):
                 weld_type = grizzly_impl.numpy_to_weld_type_mapping[
-                    str(self.df.values.dtype)]
-                dim = self.df.values.ndim
+                    str(values.dtype)]
+                dim = values.ndim
                 return LazyOpResult(
                     grizzly_impl.filter(
-                        self.df.values,
+                        values,
                         self.predicates.expr,
                         weld_type
                     ),

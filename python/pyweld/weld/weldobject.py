@@ -178,7 +178,7 @@ class WeldObject(object):
             else:
                 argtypes.append(self.encoder.py_to_weld_type(
                     self.context[name]).ctype_class)
-                encoded.append(self.encoder.encode(self.context[name]))
+                encoded.append(self.encoder.encode(self.context[name], num_threads))
         end = time.time()
         if verbose:
             print "Python->Weld:", end - start
