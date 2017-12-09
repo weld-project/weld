@@ -1,6 +1,8 @@
 from weld.weldobject import *
 from weld.encoders import NumpyArrayEncoder, NumpyArrayDecoder
+# FIXME: get rid of import * asap.
 from weldnumpy import *
+import weldnumpy as wn
 import numpy as np
 from copy import deepcopy
 
@@ -412,7 +414,8 @@ class weldarray(np.ndarray):
         '''
         relegate responsibility of executing ufunc to numpy.
         '''
-        if self._verbose: print('WARNING: ufunc being offloaded to numpy', ufunc)
+        # if self._verbose: print('WARNING: ufunc being offloaded to numpy', ufunc)
+        print('WARNING: ufunc being offloaded to numpy', ufunc)
         # Relegating the work to numpy. If input arg is weldarray, evaluate it,
         # and convert to ndarray before passing to super()
         for i, arg_ in enumerate(input_args):
@@ -449,11 +452,11 @@ class weldarray(np.ndarray):
         else: output = None
 
         # check for supported ops.
-        if ufunc.__name__ in UNARY_OPS:
+        if ufunc.__name__ in wn.UNARY_OPS:
             assert(len(input_args) == 1)
             print('supported op: ', ufunc.__name__)
-            return self._unary_op(UNARY_OPS[ufunc.__name__], result=output)
-        elif ufunc.__name__ in BINARY_OPS:
+            return self._unary_op(wn.UNARY_OPS[ufunc.__name__], result=output)
+        elif ufunc.__name__ in wn.BINARY_OPS:
             # weldarray can be first or second arg.
             if isinstance(input_args[0], weldarray):
                 # first arg is weldarray, must be self
@@ -464,7 +467,7 @@ class weldarray(np.ndarray):
                 assert input_args[1].name == self.name
 
             print('supported op: ', ufunc.__name__)
-            return self._binary_op(input_args[0], input_args[1], BINARY_OPS[ufunc.__name__],
+            return self._binary_op(input_args[0], input_args[1], wn.BINARY_OPS[ufunc.__name__],
                     result=output) 
         
         elif ufunc.__name__ == 'square' or ufunc.__name__ == 'power':
@@ -479,7 +482,7 @@ class weldarray(np.ndarray):
         
         # FIXME: Not doing this because numpy returns Boolean array -- and if we do that, then we can't
         # multiply it with f64 arrays in weld because of type mismatch.
-        # elif ufunc.__name__ in CMP_OPS:
+        # elif ufunc.__name__ in wn.CMP_OPS:
             # return self._cmp_op(input_args[1], ufunc.__name__, result=output)
 
         return None
@@ -491,7 +494,7 @@ class weldarray(np.ndarray):
         assert result is None, 'TODO: support this'
         if result is None:
             result = self._get_result()
-        op = CMP_OPS[op]
+        op = wn.CMP_OPS[op]
         template = ('result(for({arr}, appender,|b,i,e| if (e {op} {input2}{suffix},'
                 'merge(b,1.0{suffix}),merge(b,0.0{suffix}))))')
 
@@ -522,8 +525,8 @@ class weldarray(np.ndarray):
         else: output = None
         axis = kwargs['axis']
 
-        if ufunc.__name__ in BINARY_OPS:
-            return self._reduce_op(BINARY_OPS[ufunc.__name__], axis=axis, result=output)
+        if ufunc.__name__ in wn.BINARY_OPS:
+            return self._reduce_op(wn.BINARY_OPS[ufunc.__name__], axis=axis, result=output)
 
     def evaluate(self):
         '''

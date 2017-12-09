@@ -158,6 +158,7 @@ def add_ops(ops):
     '''
     @ops: list of strings, where string would be the op.__name__ of the numpy op.
     '''
+    print("in add ops: ", UNARY_OPS)
     global BINARY_OPS, UNARY_OPS, CMP_OPS
     unary_ops = get_supported_unary_ops()
     binary_ops = get_supported_binary_ops()
