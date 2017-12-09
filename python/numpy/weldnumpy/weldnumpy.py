@@ -146,5 +146,29 @@ def remove_pass(pass_name):
         if pass_name in l:
             CUR_PASSES.remove(l)
             break
+# Stuff for the incremental integration study.
+def remove_all_ops():
+    global BINARY_OPS, UNARY_OPS, CMP_OPS
+    print('removing all ops!')
+    BINARY_OPS = {}
+    UNARY_OPS = {}
+    CMP_OPS = {}
 
-
+def add_ops(ops):
+    '''
+    @ops: list of strings, where string would be the op.__name__ of the numpy op.
+    '''
+    global BINARY_OPS, UNARY_OPS, CMP_OPS
+    unary_ops = get_supported_unary_ops()
+    binary_ops = get_supported_binary_ops()
+    cmp_ops = get_supported_cmp_ops()
+    for op in ops:
+        if op in binary_ops:
+            print('adding binary op ', op)
+            BINARY_OPS[op] = binary_ops[op]
+        elif op in unary_ops:
+            print('adding unary op ', op)
+            UNARY_OPS[op] = unary_ops[op]
+        elif op in cmp_ops:
+            print('adding cmp op ', op)
+            CMP_OPS[op] = cmp_ops[op]

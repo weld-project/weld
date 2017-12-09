@@ -451,6 +451,7 @@ class weldarray(np.ndarray):
         # check for supported ops.
         if ufunc.__name__ in UNARY_OPS:
             assert(len(input_args) == 1)
+            print('supported op: ', ufunc.__name__)
             return self._unary_op(UNARY_OPS[ufunc.__name__], result=output)
         elif ufunc.__name__ in BINARY_OPS:
             # weldarray can be first or second arg.
@@ -462,6 +463,7 @@ class weldarray(np.ndarray):
                 other_arg = input_args[0]
                 assert input_args[1].name == self.name
 
+            print('supported op: ', ufunc.__name__)
             return self._binary_op(input_args[0], input_args[1], BINARY_OPS[ufunc.__name__],
                     result=output) 
         
@@ -471,6 +473,8 @@ class weldarray(np.ndarray):
                 power = 2
             else:
                 power = input_args[1]
+
+            print('supported op: ', ufunc.__name__)
             return self._power_op(power, result=output)
         
         # FIXME: Not doing this because numpy returns Boolean array -- and if we do that, then we can't

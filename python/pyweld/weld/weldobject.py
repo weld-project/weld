@@ -223,7 +223,7 @@ class WeldObject(object):
 
         start = time.time()
         conf = cweld.WeldConf()
-        weld_num_threads = os.environ.get("WELD_NUM_THREADS", "8")
+        weld_num_threads = os.environ.get("WELD_NUM_THREADS", "1")
 	print("weld num threads = ", weld_num_threads)
         conf.set("weld.threads", weld_num_threads)
 	mem_limit = "1000000000000"
