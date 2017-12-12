@@ -2390,7 +2390,7 @@ impl LlvmGenerator {
                 self.gen_store_var(&value, &output_ll_sym, &output_ll_ty, ctx);
             }
 
-            Cast(ref child) => {
+            Cast(ref child, _) => {
                 let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
                 let (child_ll_ty, child_ll_sym) = self.llvm_type_and_name(func, child)?;
                 let output_ty = func.symbol_type(output)?;
