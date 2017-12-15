@@ -3144,7 +3144,7 @@ impl LlvmGenerator {
                     let (arg_ll_ty, arg_ll_sym) = self.llvm_type_and_name(func, sym)?;
                     self.gen_load_var(&arg_ll_sym, &arg_ll_ty, ctx)?
                 } else {
-                    format!("{}", 5000000000i64)
+                    format!("{}", 100000000)
                 };
                 ctx.code.add(format!("{} = call {} {}.new(i64 {}, i64 {})",
                                         bld_tmp,

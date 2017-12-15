@@ -1635,7 +1635,7 @@ fn simple_parallel_for_dictmerger_loop_helper(use_local: bool) {
 
     let code = format!("|x:vec[i32], y:vec[i32]| tovec(result(@(grain_size: 100)for(zip(x,y),
                 dictmerger[i32,i32,+]({}L), |b,i,e| merge(b, e))))",
-                if use_local { 5000000000i64 } else { 0i64 });
+                if use_local { 100000000 } else { 0 });
     let conf = many_threads_conf();
 
     const DICT_SIZE: usize = 8192;
