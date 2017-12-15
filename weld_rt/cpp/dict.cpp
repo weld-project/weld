@@ -32,8 +32,8 @@ struct weld_dict {
   int32_t to_array_true_val_size; // might discard some trailing part of the value when
   // converting to array (useful for groupbuilder)
   int64_t max_local_bytes;
-  bool finalized; // writes by the client are complete; subsequent writes will be performed only into the global
-  // by the finalizing thread, after which the dictionary becomes read-only
+  bool finalized; // multithreaded writes by the client are complete; all subsequent writes will be by a single
+  // thread to the global table
   pthread_rwlock_t global_lock;
   int32_t n_workers; // save this here so we don't have to repeatedly call runtime for it
 };
@@ -128,6 +128,11 @@ extern "C" void *weld_rt_dict_new(int32_t key_size, int32_t (*keys_eq)(void *, v
   wd->to_array_true_val_size = to_array_true_val_size;
   wd->max_local_bytes = max_local_bytes;
   wd->n_workers = weld_rt_get_nworkers();
+  if (wd->n_workers == 1) {
+    // should always write directly to global (unbatched, unlocked) in this situation
+    wd->max_local_bytes = 0;
+    wd->finalized = true;
+  }
   wd->dicts = weld_rt_new_merger(sizeof(simple_dict), wd->n_workers + 1);
   wd->global_buffers = weld_rt_new_merger(sizeof(global_buffer), wd->n_workers);
   for (int32_t i = 0; i < wd->n_workers + 1; i++) {
@@ -141,7 +146,7 @@ extern "C" void *weld_rt_dict_new(int32_t key_size, int32_t (*keys_eq)(void *, v
     d->size = 0;
     d->capacity = capacity;
     d->data = weld_run_malloc(weld_rt_get_run_id(), d->capacity * slot_size(wd));
-    d->full = max_local_bytes == 0;
+    d->full = wd->max_local_bytes == 0;
     memset(d->data, 0, d->capacity * slot_size(wd));
   }
   pthread_rwlock_init(&wd->global_lock, NULL);
@@ -318,9 +323,12 @@ extern "C" void weld_rt_dict_merge(void *d, int32_t hash, void *key, void *value
   }
 }
 
+// Merge tuples from the local dicts into the global dict and finalize this dictionary.
 extern "C" void weld_rt_dict_finalize(void *d) {
   weld_dict *wd = (weld_dict *)d;
-  assert(!wd->finalized);
+  if (wd->finalized) {
+    return;
+  }
   wd->finalized = true;
   int64_t max_cap = 0;
   for (int32_t i = 0; i < wd->n_workers; i++) {
@@ -329,6 +337,8 @@ extern "C" void weld_rt_dict_finalize(void *d) {
       max_cap = sd->capacity;
     }
   }
+  // set global dict capacity to maximum of local dict capacities to reduce
+  // number of resizings during the merging process
   resize_dict(wd, get_global_dict(wd), max_cap);
   for (int32_t i = 0; i < wd->n_workers; i++) {
     drain_global_buffer(wd, get_global_buffer_at_index(wd, i));
