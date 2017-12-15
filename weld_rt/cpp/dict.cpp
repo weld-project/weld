@@ -33,7 +33,8 @@ struct weld_dict {
   int32_t to_array_true_val_size; // might discard some trailing part of the value when
   // converting to array (useful for groupbuilder)
   int64_t max_local_bytes;
-  bool finalized; // all keys have been moved to global
+  bool finalized; // writes by the client are complete; subsequent writes will be performed only into the global
+  // by the finalizing thread, after which the dictionary becomes read-only
   pthread_rwlock_t global_lock;
   int32_t n_workers; // save this here so we don't have to repeatedly call runtime for it
 };
@@ -211,8 +212,6 @@ inline void resize_dict(weld_dict *wd, simple_dict *sd, int64_t target_cap) {
   weld_run_free(weld_rt_get_run_id(), old_data);
 }
 
-// Can only be doing a lookup to examine value if dict is already finalized. Otherwise must
-// be for the purposes of merging.
 extern "C" void *weld_rt_dict_lookup(void *d, int32_t hash, void *key) {
   weld_dict *wd = (weld_dict *)d;
   if (!wd->finalized && wd->max_local_bytes > 0) {
@@ -226,7 +225,6 @@ extern "C" void *weld_rt_dict_lookup(void *d, int32_t hash, void *key) {
   if (!wd->finalized) {
     global_buffer *buf = get_my_global_buffer(wd);
     void *buf_slot = slot_at_with_data(buf->size, wd, buf->data);
-    *hash_at(wd, buf_slot) = hash;
     return buf_slot;
   } else {
     simple_dict *global = get_global_dict(wd);
@@ -324,6 +322,7 @@ extern "C" void weld_rt_dict_merge(void *d, int32_t hash, void *key, void *value
 extern "C" void weld_rt_dict_finalize(void *d) {
   weld_dict *wd = (weld_dict *)d;
   assert(!wd->finalized);
+  wd->finalized = true;
   int64_t max_cap = 0;
   for (int32_t i = 0; i < wd->n_workers; i++) {
     simple_dict *sd = get_dict_at_index(wd, i);
@@ -335,7 +334,6 @@ extern "C" void weld_rt_dict_finalize(void *d) {
   for (int32_t i = 0; i < wd->n_workers; i++) {
     drain_global_buffer(wd, get_global_buffer_at_index(wd, i));
   }
-  wd->finalized = true;
 
   for (int32_t i = 0; i < wd->n_workers; i++) {
     simple_dict *cur_dict = get_dict_at_index(wd, i);
