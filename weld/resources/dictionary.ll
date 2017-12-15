@@ -17,13 +17,15 @@
 
 ; Initialize and return a new dictionary with the given initial capacity.
 ; The capacity must be a power of 2.
-define %{NAME} @{NAME}.new(i64 %capacity) {{
+define %{NAME} @{NAME}.new(i64 %capacity, i64 %maxLocalBytes, void (i8*, i32, i8*, i8*)* %mergeNewVal,
+  void (i8*, i32, i8*, i8*)* %mergeValsFinalize, i8* %metadata) {{
   %keySizePtr = getelementptr {KEY}, {KEY}* null, i32 1
   %keySize = ptrtoint {KEY}* %keySizePtr to i32
   %valSizePtr = getelementptr {VALUE}, {VALUE}* null, i32 1
   %valSize = ptrtoint {VALUE}* %valSizePtr to i32
   %dict = call i8* @weld_rt_dict_new(i32 %keySize, i32 (i8*, i8*)* {KEY_PREFIX}.eq_on_pointers,
-    i32 %valSize, i32 %valSize, i64 1000000, i64 %capacity)
+    void (i8*, i32, i8*, i8*)* %mergeNewVal, void (i8*, i32, i8*, i8*)* %mergeValsFinalize,
+    i8* %metadata, i32 %valSize, i32 %valSize, i64 %maxLocalBytes, i64 %capacity)
   ret %{NAME} %dict
 }}
 
@@ -73,19 +75,6 @@ define %{NAME}.slot @{NAME}.lookup(%{NAME} %dict, {KEY} %key) {{
   %slotRaw = call i8* @weld_rt_dict_lookup(i8* %dict, i32 %finalizedHash, i8* %keyPtrRaw)
   %slot = bitcast i8* %slotRaw to %{NAME}.slot
   ret %{NAME}.slot %slot
-}}
-
-; Set the key and value at a given slot. The slot is assumed to have been
-; returned by a lookup() on the same key provided here, and any old value for
-; the key will be replaced. A new %{NAME} is returned reusing the same storage.
-define %{NAME} @{NAME}.put(%{NAME} %dict, %{NAME}.slot %slot, {KEY} %key, {VALUE} %value) {{
-  %keyPtr = getelementptr %{NAME}.entry, %{NAME}.entry* %slot, i64 0, i32 1
-  %valuePtr = getelementptr %{NAME}.entry, %{NAME}.entry* %slot, i64 0, i32 2
-  store {KEY} %key, {KEY}* %keyPtr
-  store {VALUE} %value, {VALUE}* %valuePtr
-  %slotRaw = bitcast %{NAME}.slot %slot to i8*
-  call void @weld_rt_dict_put(i8* %dict, i8* %slotRaw)
-  ret %{NAME} %dict
 }}
 
 ; Get the entries of a dictionary as a vector.
