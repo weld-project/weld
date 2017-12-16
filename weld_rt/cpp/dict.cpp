@@ -38,6 +38,14 @@ struct weld_dict {
   int32_t n_workers; // save this here so we don't have to repeatedly call runtime for it
 };
 
+// Second hash (similar to Java's HashMap)for inserting items into the global dict.
+// It is not used for inserts into the local dicts.
+// This reduces collisions when merging items from the local dicts into the global dict.
+inline int32_t hash_global(uint32_t h) {
+  h ^= (h >> 20) ^ (h >> 12);
+  return h ^ (h >> 7) ^ (h >> 4);
+}
+
 inline int32_t slot_size(weld_dict *wd) {
   return sizeof(uint8_t) /* space for `filled` field */ + wd->key_size + wd->val_size +
     sizeof(int32_t) /* space for key hash */ + sizeof(uint8_t) /* space for slot lock */;
@@ -216,24 +224,32 @@ inline void resize_dict(weld_dict *wd, simple_dict *sd, int64_t target_cap) {
   weld_run_free(weld_rt_get_run_id(), old_data);
 }
 
-extern "C" void *weld_rt_dict_lookup(void *d, int32_t hash, void *key) {
-  weld_dict *wd = (weld_dict *)d;
+// Adjusts hash if the returned slot is in the global dict. The hash passed in here
+// must have been computed using only the client's hash function.
+static void *weld_dict_lookup_helper(weld_dict *wd, int32_t *hash, void *key) {
   if (!wd->finalized && wd->max_local_bytes > 0) {
     simple_dict *sd = get_local_dict(wd);
-    void *slot = simple_dict_lookup(wd, sd, hash, key, true, true,
+    void *slot = simple_dict_lookup(wd, sd, *hash, key, true, true,
       sd->full ? MAX_LOCAL_PROBES : sd->capacity);
     if (!sd->full || (slot != NULL && *filled_at(slot))) {
       return slot;
     }
   }
+  *hash = hash_global(*hash);
   if (!wd->finalized) {
     global_buffer *buf = get_my_global_buffer(wd);
     void *buf_slot = slot_at_with_data(buf->size, wd, buf->data);
     return buf_slot;
   } else {
     simple_dict *global = get_global_dict(wd);
-    return simple_dict_lookup(wd, global, hash, key, true, true, global->capacity);
+    return simple_dict_lookup(wd, global, *hash, key, true, true, global->capacity);
   }
+}
+
+extern "C" void *weld_rt_dict_lookup(void *d, int32_t hash, void *key) {
+  weld_dict *wd = (weld_dict *)d;
+  assert(wd->finalized);
+  return weld_dict_lookup_helper(wd, &hash, key);
 }
 
 static void dict_put_single(weld_dict *wd, void *slot) {
@@ -293,8 +309,7 @@ static void drain_global_buffer(weld_dict *wd, global_buffer *b) {
   for (int32_t i = 0; i < b->size; i++) {
     void *buf_slot = slot_at_with_data(i, wd, b->data);
     int32_t hash = *hash_at(wd, buf_slot);
-    // need simple_dict_lookup here instead of weld_rt_dict_lookup because we don't want to waste
-    // any time scanning the local dict
+    // need simple_dict_lookup here because we want to go directly to the global dict
     void *global_slot = simple_dict_lookup(wd, global, hash, key_at(buf_slot), true, true, global->capacity);
     merge_into_slot(wd, wd->merge_new_val, global_slot, hash, key_at(buf_slot), val_at(wd, buf_slot));
     dict_put_single(wd, global_slot);
@@ -307,7 +322,7 @@ static void drain_global_buffer(weld_dict *wd, global_buffer *b) {
 
 extern "C" void weld_rt_dict_merge(void *d, int32_t hash, void *key, void *value) {
   weld_dict *wd = (weld_dict *)d;
-  void *slot = weld_rt_dict_lookup(d, hash, key);
+  void *slot = weld_dict_lookup_helper(wd, &hash, key);
   if (slot_in_global_buffer(wd, slot)) {
     *hash_at(wd, slot) = hash;
     memcpy(key_at(slot), key, wd->key_size);
@@ -349,7 +364,7 @@ extern "C" void weld_rt_dict_finalize(void *d) {
     for (int64_t j = 0; j < cur_dict->capacity; j++) {
       void *next_slot = slot_at(j, wd, cur_dict);
       if (*filled_at(next_slot)) {
-        void *global_slot = weld_rt_dict_lookup(wd, *hash_at(wd, next_slot), key_at(next_slot));
+        void *global_slot = weld_dict_lookup_helper(wd, hash_at(wd, next_slot), key_at(next_slot));
         merge_into_slot(wd, wd->merge_vals_finalize, global_slot, *hash_at(wd, next_slot), key_at(next_slot),
           val_at(wd, next_slot));
         dict_put_single(wd, global_slot);
