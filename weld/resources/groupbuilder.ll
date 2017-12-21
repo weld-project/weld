@@ -11,13 +11,13 @@
 
 ; Initialize and return a new groupbuilder with the given initial capacity.
 ; The capacity must be a power of 2.
-define %{NAME}.gbld @{NAME}.gbld.new(i64 %capacity) {{
+define %{NAME}.gbld @{NAME}.gbld.new(i64 %capacity, i64 %maxLocalBytes) {{
   %keySizePtr = getelementptr {KEY}, {KEY}* null, i32 1
   %keySize = ptrtoint {KEY}* %keySizePtr to i32
   %valSizePtr = getelementptr {VALUE}, {VALUE}* null, i32 1
   %valSize = ptrtoint {VALUE}* %valSizePtr to i32
   %gbld = call i8* @weld_rt_gb_new(i32 %keySize, i32 (i8*, i8*)* {KEY_PREFIX}.eq_on_pointers,
-    i32 %valSize, i64 1000000, i64 %capacity)
+    i32 %valSize, i64 %maxLocalBytes, i64 %capacity)
   ret %{NAME}.gbld %gbld
 }}
 

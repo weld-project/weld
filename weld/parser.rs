@@ -1084,7 +1084,16 @@ impl<'t> Parser<'t> {
                 }
                 try!(self.consume(TCloseBracket));
 
-                let mut expr = expr_box(NewBuilder(None), Annotations::new());
+                let arg = if *self.peek() == TOpenParen {
+                    self.consume(TOpenParen)?;
+                    let arg = self.expr()?;
+                    self.consume(TCloseParen)?;
+                    Some(arg)
+                } else {
+                    None
+                };
+
+                let mut expr = expr_box(NewBuilder(arg), Annotations::new());
                 expr.ty = Builder(DictMerger(Box::new(key_type.clone()),
                                              Box::new(value_type.clone()),
                                              Box::new(Struct(vec![key_type.clone(),

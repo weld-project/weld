@@ -1,10 +1,11 @@
 #include "runtime.h"
 #include "assert.h"
-#include <algorithm>
+#include "stdio.h"
 
 // power of 2
 #define LOCK_GRANULARITY 16
 #define MAX_LOCAL_PROBES 5
+#define GLOBAL_BATCH_SIZE 128
 
 struct simple_dict {
   void *data;
@@ -13,18 +14,26 @@ struct simple_dict {
   bool full; // only local dicts should be marked as full
 };
 
+// per-thread buffer for global writes to reduce overhead of taking rw_lock
+struct global_buffer {
+  void *data;
+  int32_t size;
+};
+
 struct weld_dict {
   void *dicts; // one dict per thread plus a global dict
+  void *global_buffers;
   int32_t key_size;
   int32_t (*keys_eq)(void *, void *);
+  void (*merge_new_val)(void *, int32_t, void *, void *);
+  void (*merge_vals_finalize)(void *, int32_t, void *, void *);
+  void *metadata; // passed into the above two functions
   int32_t val_size;
   int32_t to_array_true_val_size; // might discard some trailing part of the value when
   // converting to array (useful for groupbuilder)
   int64_t max_local_bytes;
-  // following two fields are used when finalizing dict (merging all locals into global)
-  int32_t cur_local_dict;
-  int64_t cur_slot_in_dict;
-  bool finalized; // all keys have been moved to global
+  bool finalized; // multithreaded writes by the client are complete; all subsequent writes will be by a single
+  // thread to the global table
   pthread_rwlock_t global_lock;
   int32_t n_workers; // save this here so we don't have to repeatedly call runtime for it
 };
@@ -80,6 +89,21 @@ inline simple_dict *get_dict_at_index(weld_dict *wd, int32_t i) {
   return (simple_dict *)weld_rt_get_merger_at_index(wd->dicts, sizeof(simple_dict), i);
 }
 
+inline global_buffer *get_global_buffer_at_index(weld_dict *wd, int32_t i) {
+  return (global_buffer *)weld_rt_get_merger_at_index(wd->global_buffers, sizeof(global_buffer), i);
+}
+
+inline global_buffer *get_my_global_buffer(weld_dict *wd) {
+  return get_global_buffer_at_index(wd, weld_rt_thread_id());
+}
+
+inline bool slot_in_global_buffer(weld_dict *wd, void *slot) {
+  global_buffer *my_buf = get_my_global_buffer(wd);
+  intptr_t slot_int = (intptr_t)slot;
+  return slot_int >= (intptr_t)my_buf->data &&
+    slot_int < (intptr_t)((uint8_t *)my_buf->data + slot_size(wd) * GLOBAL_BATCH_SIZE);
+}
+
 inline simple_dict *get_local_dict(weld_dict *wd) {
   return get_dict_at_index(wd, weld_rt_thread_id());
 }
@@ -89,25 +113,41 @@ inline simple_dict *get_global_dict(weld_dict *wd) {
 }
 
 extern "C" void *weld_rt_dict_new(int32_t key_size, int32_t (*keys_eq)(void *, void *),
-  int32_t val_size, int32_t to_array_true_val_size, int64_t max_local_bytes,
-  int64_t capacity) {
+  void (*merge_new_val)(void *, int32_t, void *, void *),
+  void (*merge_vals_finalize)(void *, int32_t, void *, void *), void *metadata,
+  int32_t val_size, int32_t to_array_true_val_size, int64_t max_local_bytes, int64_t capacity) {
   assert(capacity > 0 && (capacity & (capacity - 1)) == 0); // power of 2 check
   weld_dict *wd = (weld_dict *)weld_run_malloc(weld_rt_get_run_id(), sizeof(weld_dict));
   memset(wd, 0, sizeof(weld_dict));
   wd->key_size = key_size;
   wd->keys_eq = keys_eq;
+  wd->merge_new_val = merge_new_val;
+  wd->merge_vals_finalize = merge_vals_finalize;
+  wd->metadata = metadata;
   wd->val_size = val_size;
   wd->to_array_true_val_size = to_array_true_val_size;
   wd->max_local_bytes = max_local_bytes;
   wd->n_workers = weld_rt_get_nworkers();
+  if (wd->n_workers == 1) {
+    // should always write directly to global (unbatched, unlocked) in this situation
+    wd->max_local_bytes = 0;
+    wd->finalized = true;
+  }
   wd->dicts = weld_rt_new_merger(sizeof(simple_dict), wd->n_workers + 1);
+  wd->global_buffers = weld_rt_new_merger(sizeof(global_buffer), wd->n_workers);
   for (int32_t i = 0; i < wd->n_workers + 1; i++) {
+    if (i != wd->n_workers) {
+      global_buffer *b = get_global_buffer_at_index(wd, i);
+      b->data = weld_run_malloc(weld_rt_get_run_id(), GLOBAL_BATCH_SIZE * slot_size(wd));
+      memset(b->data, 0, GLOBAL_BATCH_SIZE * slot_size(wd));
+      b->size = 0;
+    }
     simple_dict *d = get_dict_at_index(wd, i);
     d->size = 0;
     d->capacity = capacity;
-    d->data = weld_run_malloc(weld_rt_get_run_id(), capacity * slot_size(wd));
-    d->full = max_local_bytes == 0;
-    memset(d->data, 0, capacity * slot_size(wd));
+    d->data = weld_run_malloc(weld_rt_get_run_id(), d->capacity * slot_size(wd));
+    d->full = wd->max_local_bytes == 0;
+    memset(d->data, 0, d->capacity * slot_size(wd));
   }
   pthread_rwlock_init(&wd->global_lock, NULL);
   return (void *)wd;
@@ -144,8 +184,6 @@ inline void *simple_dict_lookup(weld_dict *wd, simple_dict *sd, int32_t hash, vo
         return cur_slot;
       }
     } else {
-      *hash_at(wd, cur_slot) = hash; // store hash here in case we end up filling this slot (no
-      // problem if not)
       return cur_slot;
     }
   }
@@ -155,10 +193,15 @@ inline void *simple_dict_lookup(weld_dict *wd, simple_dict *sd, int32_t hash, vo
   return NULL;
 }
 
-inline void resize_dict(weld_dict *wd, simple_dict *sd) {
+inline void resize_dict(weld_dict *wd, simple_dict *sd, int64_t target_cap) {
+  if (sd->capacity >= target_cap) {
+    return;
+  }
   void *old_data = sd->data;
   int64_t old_capacity = sd->capacity;
-  sd->capacity *= 2;
+  while (sd->capacity < target_cap) {
+    sd->capacity *= 2;
+  }
   sd->data = weld_run_malloc(weld_rt_get_run_id(), sd->capacity * slot_size(wd));
   memset(sd->data, 0, sd->capacity * slot_size(wd));
   for (int64_t i = 0; i < old_capacity; i++) {
@@ -173,8 +216,6 @@ inline void resize_dict(weld_dict *wd, simple_dict *sd) {
   weld_run_free(weld_rt_get_run_id(), old_data);
 }
 
-// Can only be doing a lookup to examine value if dict is already finalized. Otherwise must
-// be for the purposes of merging.
 extern "C" void *weld_rt_dict_lookup(void *d, int32_t hash, void *key) {
   weld_dict *wd = (weld_dict *)d;
   if (!wd->finalized && wd->max_local_bytes > 0) {
@@ -186,15 +227,16 @@ extern "C" void *weld_rt_dict_lookup(void *d, int32_t hash, void *key) {
     }
   }
   if (!wd->finalized) {
-    // take the lock since if we are not finalized, there are still writes going on
-    pthread_rwlock_rdlock(&wd->global_lock);
+    global_buffer *buf = get_my_global_buffer(wd);
+    void *buf_slot = slot_at_with_data(buf->size, wd, buf->data);
+    return buf_slot;
+  } else {
+    simple_dict *global = get_global_dict(wd);
+    return simple_dict_lookup(wd, global, hash, key, true, true, global->capacity);
   }
-  simple_dict *global = get_global_dict(wd);
-  return simple_dict_lookup(wd, global, hash, key, true, true, global->capacity);
 }
 
-extern "C" void weld_rt_dict_put(void *d, void *slot) {
-  weld_dict *wd = (weld_dict *)d;
+static void dict_put_single(weld_dict *wd, void *slot) {
   uint8_t old_filled = *filled_at(slot);
   if (!old_filled) {
     *filled_at(slot) = 1;
@@ -202,7 +244,7 @@ extern "C" void weld_rt_dict_put(void *d, void *slot) {
       simple_dict *local = get_local_dict(wd);
       local->size++;
       if (should_resize_dict_at_size(local->size, local)) {
-        resize_dict(wd, local);
+        resize_dict(wd, local, local->capacity * 2);
       } else if (should_resize_dict_at_size(local->size + 1, local) &&
         local->capacity * 2 * slot_size(wd) > wd->max_local_bytes) {
         local->full = true;
@@ -221,46 +263,99 @@ extern "C" void weld_rt_dict_put(void *d, void *slot) {
           pthread_rwlock_wrlock(&wd->global_lock);
         }
         if (should_resize_dict_at_size(global->size, global)) {
-          resize_dict(wd, global);
+          resize_dict(wd, global, global->capacity * 2);
         }
-      }
-      if (!wd->finalized) {
-        pthread_rwlock_unlock(&wd->global_lock);
+        if (!wd->finalized) {
+          pthread_rwlock_unlock(&wd->global_lock);
+          pthread_rwlock_rdlock(&wd->global_lock);
+        }
       }
     }
   } else if (!wd->finalized && !slot_in_local(wd, slot)) {
     *lock_for_slot(wd, get_global_dict(wd), slot) = 0;
+  }
+}
+
+static void merge_into_slot(weld_dict *wd, void (*merge_fn)(void *, int32_t, void *, void *),
+  void *slot, int32_t hash, void *key, void *value) {
+  if (!*filled_at(slot)) {
+    memcpy(key_at(slot), key, wd->key_size);
+    *hash_at(wd, slot) = hash;
+  }
+  merge_fn(wd->metadata, *filled_at(slot), val_at(wd, slot), value);
+}
+
+static void drain_global_buffer(weld_dict *wd, global_buffer *b) {
+  simple_dict *global = get_global_dict(wd);
+  if (!wd->finalized) {
+    pthread_rwlock_rdlock(&wd->global_lock);
+  }
+  for (int32_t i = 0; i < b->size; i++) {
+    void *buf_slot = slot_at_with_data(i, wd, b->data);
+    int32_t hash = *hash_at(wd, buf_slot);
+    // need simple_dict_lookup here instead of weld_rt_dict_lookup because we don't want to waste
+    // any time scanning the local dict
+    void *global_slot = simple_dict_lookup(wd, global, hash, key_at(buf_slot), true, true, global->capacity);
+    merge_into_slot(wd, wd->merge_new_val, global_slot, hash, key_at(buf_slot), val_at(wd, buf_slot));
+    dict_put_single(wd, global_slot);
+  }
+  if (!wd->finalized) {
     pthread_rwlock_unlock(&wd->global_lock);
   }
+  b->size = 0;
 }
 
-inline void advance_finalize_iterator(weld_dict *wd) {
-  wd->cur_slot_in_dict++;
-  if (wd->cur_slot_in_dict == get_dict_at_index(wd, wd->cur_local_dict)->capacity) {
-    wd->cur_local_dict++;
-    wd->cur_slot_in_dict = 0;
+extern "C" void weld_rt_dict_merge(void *d, int32_t hash, void *key, void *value) {
+  weld_dict *wd = (weld_dict *)d;
+  void *slot = weld_rt_dict_lookup(d, hash, key);
+  if (slot_in_global_buffer(wd, slot)) {
+    *hash_at(wd, slot) = hash;
+    memcpy(key_at(slot), key, wd->key_size);
+    memcpy(val_at(wd, slot), value, wd->val_size);
+    global_buffer *my_buf = get_my_global_buffer(wd);
+    my_buf->size++;
+    if (my_buf->size == GLOBAL_BATCH_SIZE) {
+      drain_global_buffer(wd, my_buf);
+    }
+  } else {
+    merge_into_slot(wd, wd->merge_new_val, slot, hash, key, value);
+    dict_put_single(wd, slot);
   }
 }
 
-extern "C" void *weld_rt_dict_finalize_next_local_slot(void *d) {
+// Merge tuples from the local dicts into the global dict and finalize this dictionary.
+extern "C" void weld_rt_dict_finalize(void *d) {
   weld_dict *wd = (weld_dict *)d;
-  wd->finalized = true; // immediately mark as finalized ... we expect the client to keep
-  // calling this method until it returns NULL, and only after this perform other operations
-  // on the dictionary
-  while (wd->cur_local_dict != wd->n_workers) {
-    simple_dict *cur_dict = get_dict_at_index(wd, wd->cur_local_dict);
-    void *next_slot = slot_at(wd->cur_slot_in_dict, wd, cur_dict);
-    advance_finalize_iterator(wd);
-    if (*filled_at(next_slot)) {
-      return next_slot;
+  if (wd->finalized) {
+    return;
+  }
+  wd->finalized = true;
+  int64_t max_cap = 0;
+  for (int32_t i = 0; i < wd->n_workers; i++) {
+    simple_dict *sd = get_dict_at_index(wd, i);
+    if (sd->capacity > max_cap) {
+      max_cap = sd->capacity;
     }
   }
-  return NULL;
-}
+  // set global dict capacity to maximum of local dict capacities to reduce
+  // number of resizings during the merging process
+  resize_dict(wd, get_global_dict(wd), max_cap);
+  for (int32_t i = 0; i < wd->n_workers; i++) {
+    drain_global_buffer(wd, get_global_buffer_at_index(wd, i));
+  }
 
-extern "C" void *weld_rt_dict_finalize_global_slot_for_local(void *d, void *local_slot) {
-  weld_dict *wd = (weld_dict *)d;
-  return weld_rt_dict_lookup(wd, *hash_at(wd, local_slot), key_at(local_slot));
+  for (int32_t i = 0; i < wd->n_workers; i++) {
+    simple_dict *cur_dict = get_dict_at_index(wd, i);
+    for (int64_t j = 0; j < cur_dict->capacity; j++) {
+      void *next_slot = slot_at(j, wd, cur_dict);
+      if (*filled_at(next_slot)) {
+        void *global_slot = weld_rt_dict_lookup(wd, *hash_at(wd, next_slot), key_at(next_slot));
+        merge_into_slot(wd, wd->merge_vals_finalize, global_slot, *hash_at(wd, next_slot), key_at(next_slot),
+          val_at(wd, next_slot));
+        dict_put_single(wd, global_slot);
+      }
+    }
+  }
 }
 
 extern "C" void *weld_rt_dict_to_array(void *d, int32_t value_offset_in_struct, int32_t struct_size) {
@@ -299,96 +394,8 @@ extern "C" void weld_rt_dict_free(void *d) {
   }
   weld_rt_free_merger(wd->dicts);
   pthread_rwlock_destroy(&wd->global_lock);
+  if (wd->metadata != NULL) {
+    weld_run_free(weld_rt_get_run_id(), wd->metadata);
+  }
   weld_run_free(weld_rt_get_run_id(), wd);
-}
-
-/* GroupBuilder */
-
-struct weld_arr {
-  void *data;
-  int64_t size;
-};
-
-struct weld_arr_growable {
-  weld_arr a;
-  int64_t capacity;
-};
-
-struct weld_gb {
-  void *wd;
-  int32_t val_size;
-};
-
-extern "C" void *weld_rt_gb_new(int32_t key_size, int32_t (*keys_eq)(void *, void *),
-  int32_t val_size, int64_t max_local_bytes, int64_t capacity) {
-  weld_gb *gb = (weld_gb *)weld_run_malloc(weld_rt_get_run_id(), sizeof(weld_gb));
-  gb->wd = weld_rt_dict_new(key_size, keys_eq, sizeof(weld_arr_growable),
-    sizeof(weld_arr), max_local_bytes, capacity);
-  gb->val_size = val_size;
-  return (void *)gb;
-}
-
-inline void resize_weld_arr(weld_gb *gb, weld_arr_growable *arr, int64_t new_cap) {
-  void *old_data = arr->a.data;
-  arr->a.data = weld_run_malloc(weld_rt_get_run_id(), new_cap * gb->val_size);
-  memcpy(arr->a.data, old_data, arr->a.size * gb->val_size);
-  arr->capacity = new_cap;
-  weld_run_free(weld_rt_get_run_id(), old_data);
-}
-
-inline void *el_at(weld_gb *gb, weld_arr_growable *arr, int64_t i) {
-  return (void *)((uint8_t *)arr->a.data + i * gb->val_size);
-}
-
-extern "C" void weld_rt_gb_merge(void *b, void *key, int32_t hash, void *value) {
-  weld_gb *gb = (weld_gb *)b;
-  void *slot = weld_rt_dict_lookup(gb->wd, hash, key);
-  weld_dict *wd = (weld_dict *)gb->wd;
-  weld_arr_growable *arr = (weld_arr_growable *)val_at(wd, slot);
-  if (*filled_at(slot)) {
-    if (arr->capacity == arr->a.size) {
-      resize_weld_arr(gb, arr, arr->capacity * 2);
-    }
-  } else {
-    arr->capacity = 16;
-    arr->a.data = weld_run_malloc(weld_rt_get_run_id(), arr->capacity * gb->val_size);
-    arr->a.size = 0;
-    memcpy(key_at(slot), key, wd->key_size);
-  }
-  memcpy(el_at(gb, arr, arr->a.size), value, gb->val_size);
-  arr->a.size++;
-  weld_rt_dict_put(gb->wd, slot);
-}
-
-extern "C" void *weld_rt_gb_result(void *b) {
-  weld_gb *gb = (weld_gb *)b;
-  weld_dict *wd = (weld_dict *)gb->wd;
-  void *local_slot;
-  while ((local_slot = weld_rt_dict_finalize_next_local_slot(gb->wd)) != NULL) {
-    weld_arr_growable *local_arr = (weld_arr_growable *)val_at(wd, local_slot);
-    void *global_slot = weld_rt_dict_finalize_global_slot_for_local(gb->wd, local_slot);
-    weld_arr_growable *global_arr = (weld_arr_growable *)val_at(wd, global_slot);
-    if (*filled_at(global_slot)) {
-      if (local_arr->a.size + global_arr->a.size > global_arr->capacity) {
-        resize_weld_arr(gb, global_arr,
-          std::max(global_arr->capacity * 2, local_arr->a.size + global_arr->a.size));
-      }
-    } else {
-      global_arr->capacity = std::max((int64_t)16, local_arr->a.size);
-      global_arr->a.data = weld_run_malloc(weld_rt_get_run_id(),
-        global_arr->capacity * gb->val_size);
-      global_arr->a.size = 0;
-      memcpy(key_at(global_slot), key_at(local_slot), wd->key_size);
-    }
-    memcpy(el_at(gb, global_arr, global_arr->a.size), local_arr->a.data,
-      gb->val_size * local_arr->a.size);
-    global_arr->a.size += local_arr->a.size;
-    weld_rt_dict_put(gb->wd, global_slot);
-    weld_run_free(weld_rt_get_run_id(), local_arr->a.data);
-  }
-  return gb->wd;
-}
-
-extern "C" void weld_rt_gb_free(void *gb) {
-  weld_run_free(weld_rt_get_run_id(), gb);
 }
