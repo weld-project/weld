@@ -2,7 +2,7 @@
 
 [![Build Status](https://travis-ci.org/weld-project/weld.svg?branch=master)](https://travis-ci.org/weld-project/weld)
 
-Weld is a language and runtime for improving the performance of data-intensive applications. It optimizes across libraries and functions by expressing the core computations in libraries using a common intermediate representation, and optimizing across each framework.
+Weld is a language and runtime for improving the performance of data-intensive applications. It optimizes across libraries and functions by expressing the core computations in libraries using a common intermediate representation and optimizing across each framework.
 
 Modern analytics applications combine multiple functions from different libraries and frameworks to build complex workflows. Even though individual functions can achieve high performance in isolation, the performance of the combined workflow is often an order of magnitude below hardware limits due to extensive data movement across the functions. Weld’s take on solving this problem is to lazily build up a computation for the entire workflow, and then optimizing and evaluating it only when a result is needed.
 
@@ -22,17 +22,17 @@ You can join the discussion on Weld on our [Google Group](https://groups.google.
 
 To build Weld, you need [Rust 1.20 or higher](http://rust-lang.org) and [LLVM](http://llvm.org) 3.8 or newer.
 
-To install Rust, follow the steps [here](https://rustup.rs). You can verify that Rust was installed correctly on your system by typing `rustc` into your shell.
+To install Rust, follow the steps [here](https://rustup.rs). You can verify that Rust was installed correctly on your system by typing `rust` into your shell.
 
 #### MacOS LLVM Installation
 
-To install LLVM on macOS, first install [Homebrew](https://brew.sh/). Then:
+To install LLVM on macOS, first, install [Homebrew](https://brew.sh/). Then:
 
 ```bash
 $ brew install llvm@3.8
 ```
 
-Weld's dependencies require `llvm-config`, so you may need to create a symbolic link so the correct `llvm-config` is picked up (note that you might need to add `sudo` at the start of this command):
+Weld's dependencies require `llvm-config`, so you may need to create a symbolic link to the correct `llvm-config` is picked up (note that you might need to add `sudo` at the start of this command):
 
 ```bash
 $ ln -s /usr/local/bin/llvm-config-3.8 /usr/local/bin/llvm-config
@@ -40,7 +40,7 @@ $ ln -s /usr/local/bin/llvm-config-3.8 /usr/local/bin/llvm-config
 
 To make sure this worked correctly, run `llvm-config --version`. You should see `3.8.x` or newer.
 
-Enter the `weld_rt/cpp` directory and try running `make`. If the command fails with errors related to missing header files, you may need to install XCode and/or XCode Command Line Tools. Run `xcode-select --install` to do this.
+Enter the `weld_rt/cpp` directory and try running `make`. If the command fails with errors related to missing header files, you may need to install XCode and/or XCode Command Line Tools. Run `Xcode-select --install` to do this.
 
 #### Ubuntu LLVM Installation
 
@@ -93,7 +93,7 @@ The `docs/` directory contains documentation for the different components of Wel
 * [language.md](https://github.com/weld-project/weld/blob/master/docs/language.md) describes the syntax of the Weld IR.
 * [api.md](https://github.com/weld-project/weld/blob/master/docs/api.md) describes the low-level C API for interfacing with Weld.
 * [python.md](https://github.com/weld-project/weld/blob/master/docs/python.md) gives an overview of the Python API.
-* [tutorial.md](https://github.com/weld-project/weld/blob/master/docs/tutorial.md) contains a tutorial for how to build a small vector library using Weld.
+* [tutorial.md](https://github.com/weld-project/weld/blob/master/docs/tutorial.md) contains a tutorial on how to build a small vector library using Weld.
 
 ## Python Bindings
 
