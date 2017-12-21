@@ -113,6 +113,15 @@ pub fn fold_constants(prog: &mut SirProgram) -> WeldResult<()> {
 fn fold_constants_in_function(func: &mut SirFunction, global_params: &fnv::FnvHashSet<Symbol>) -> WeldResult<()> {
     use sir::StatementKind::*;
 
+    let mut assignment_counts: fnv::FnvHashMap<Symbol, i32> = fnv::FnvHashMap::default();
+    for block in func.blocks.iter_mut() {
+        for statement in block.statements.iter_mut() {
+            if statement.output.is_some() {
+                let assignment_count = assignment_counts.entry(statement.output.clone().unwrap()).or_insert(0);
+                *assignment_count += 1;
+            }
+        }
+    }
     // Maps a Symbol to a known literal value.
     let mut values: fnv::FnvHashMap<Symbol, LiteralKind> = fnv::FnvHashMap::default();
     // Set of used symbols in a function.
@@ -120,21 +129,29 @@ fn fold_constants_in_function(func: &mut SirFunction, global_params: &fnv::FnvHa
 
     for block in func.blocks.iter_mut() {
         for statement in block.statements.iter_mut() {
-            let replaced = match statement.kind {
+            let replacement_lit = match statement.kind {
                 // Literal value - add it to the map
                 AssignLiteral(ref lit) => {
-                    values.insert(statement.output.clone().unwrap(), *lit);
-                    true
+                    let output_sym = statement.output.clone().unwrap();
+                    if *assignment_counts.get(&output_sym).unwrap() == 1 {
+                        values.insert(output_sym, *lit);
+                        Some(*lit)
+                    } else {
+                        None
+                    }
                 },
                 // Aliases
                 Assign(ref sym) => {
                     // contains_key instead of get to avoid double mutable borrow
                     if values.contains_key(sym) {
+                        let output_sym = statement.output.clone().unwrap();
                         let value = *values.get(sym).unwrap();
-                        values.insert(statement.output.clone().unwrap(), value);
-                        true
+                        if *assignment_counts.get(&output_sym).unwrap() == 1 {
+                            values.insert(output_sym, value);
+                        }
+                        Some(value)
                     } else {
-                        false 
+                        None
                     }
                 }
                 BinOp { ref op, ref left, ref right } if values.contains_key(left) && values.contains_key(right) => {
@@ -143,22 +160,24 @@ fn fold_constants_in_function(func: &mut SirFunction, global_params: &fnv::FnvHa
                     // If this throws an error, it just means that we don't support evaluating the
                     // expression right now.
                     if let Ok(result) = evaluate_binop(*op, left_val, right_val) {
-                        values.insert(statement.output.clone().unwrap(), result);
-                        true
+                        let output_sym = statement.output.clone().unwrap();
+                        if *assignment_counts.get(&output_sym).unwrap() == 1 {
+                            values.insert(output_sym, result);
+                        }
+                        Some(result)
                     } else {
-                        false
+                        None
                     }
                 }
                 // Unsupported for now
-                _ => false
+                _ => None
             };
 
-            if replaced {
+            if replacement_lit.is_some() {
                 // If this is true, we computed a constant value for this statement. Replace it
                 // with that constant value.
-                let output_sym = statement.output.clone().unwrap();
-                let kind = AssignLiteral(*values.get(&output_sym).unwrap());
-                let new_statement = Statement::new(Some(output_sym), kind);
+                let kind = AssignLiteral(replacement_lit.unwrap());
+                let new_statement = Statement::new(statement.output.clone(), kind);
                 *statement = new_statement;
             } else {
                 // We didn't replace this statement with an AssignLiteral, so record the symbols
