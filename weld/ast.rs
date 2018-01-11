@@ -35,7 +35,7 @@ impl fmt::Display for Symbol {
         if self.id == 0 {
             write!(f, "{}", self.name)
         } else {
-            write!(f, "{}#{}", self.name, self.id)
+            write!(f, "{}__{}", self.name, self.id)
         }
     }
 }
