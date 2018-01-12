@@ -525,4 +525,3 @@ def test_nbody_bug2():
 def test_less_than():
     n, w = random_arrays(10, 'float64')
 
-test_broadcasting_nbody_bug()

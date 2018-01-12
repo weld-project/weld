@@ -33,6 +33,13 @@ class weldarray(np.ndarray):
         assert str(input_array.dtype) in SUPPORTED_DTYPES
 
         # sharing memory with the ndarray/weldarry
+        # if isinstance(input_array, weldarray): 
+            # obj = weldarray(np.empty(input_array.shape))
+            # obj = np.empty(input_array.shape).view(cls)
+        # else:
+            # obj = np.asarray(input_array).view(cls)
+        
+        # original stuff:
         obj = np.asarray(input_array).view(cls)
         obj._gen_weldobj(input_array)
 
@@ -227,57 +234,27 @@ class weldarray(np.ndarray):
          
         if self._verbose: print('WARNING: offloading setitem to numpy...in place ops arent quite working well here')
         # Offloading to numpy method:
-        if isinstance(idx, slice):
-            if self._weldarray_view is not None:
-                view_idx = self._weldarray_view.idx
-                view_strides = self._weldarray_view.strides
-                # TODO: not sure which of these to do.
-                base_array = self._weldarray_view.base_array._eval().view(np.ndarray)
-                ret = base_array[view_idx]
-                ret.strides = view_strides
-                # print('ret before setitem: ', ret)
-                ret.__setitem__(idx, val)
-                # print('val = ', val)
-                # print('ret: ', ret)
-                # print('base array: ', base_array)
-            else:
-                # print('in else')
-                # print('val = ', val)
-                # print('before eval, ret = ', self)
-                ret = self._eval()
-                # print('before set item, ret = ', ret)
-                ret.__setitem__(idx, val)
-                # print('finally ret = ', ret)
-
-        elif isinstance(idx, np.ndarray) or isinstance(idx, list):
-            # just update it for each element in the list
-            for i, e in enumerate(idx):
-                _update_single_entry(self, e, val[i])
-
-        elif isinstance(idx, int):
-            if self._verbose: print("WARNING: setitem, with idx is an int. This will be very SLOW")
-            _update_single_entry(self, idx, val)
-        else:
-            assert False, 'idx type not supported'
-
-        # print('WARNING: setitem can be realllly slow with the current implementation')
         # if isinstance(idx, slice):
-            # if idx.step is None: step = 1
-            # else: step = idx.step
-            # # FIXME: hacky - need to check exact mechanisms b/w getitem and setitem calls further.
-            # # + it seems like numpy calls getitem and evaluates the value, and then sets it to the
-            # # correct value here (?) - this seems like a waste.
-            # if self._weldarray_view:
-                # for i, e in enumerate(range(idx.start, idx.stop, step)):
-                    # # the index should be appropriate for the base array
-                    # e += self._weldarray_view.start
-                    # _update_single_entry(self._weldarray_view.base_array, e, val[i])
+            # if self._weldarray_view is not None:
+                # view_idx = self._weldarray_view.idx
+                # view_strides = self._weldarray_view.strides
+                # # TODO: not sure which of these to do.
+                # base_array = self._weldarray_view.base_array._eval().view(np.ndarray)
+                # ret = base_array[view_idx]
+                # ret.strides = view_strides
+                # # print('ret before setitem: ', ret)
+                # ret.__setitem__(idx, val)
+                # # print('val = ', val)
+                # # print('ret: ', ret)
+                # # print('base array: ', base_array)
             # else:
-                # # FIXME: In general, this sucks for performance - instead add the list as an array to the
-                # # weldobject context and use lookup on it for the weld IR code.
-                # # just update it for each element in the list
-                # for i, e in enumerate(range(idx.start, idx.stop, step)):
-                    # _update_single_entry(self, e, val[i])
+                # # print('in else')
+                # # print('val = ', val)
+                # # print('before eval, ret = ', self)
+                # ret = self._eval()
+                # # print('before set item, ret = ', ret)
+                # ret.__setitem__(idx, val)
+                # # print('finally ret = ', ret)
 
         # elif isinstance(idx, np.ndarray) or isinstance(idx, list):
             # # just update it for each element in the list
@@ -285,9 +262,39 @@ class weldarray(np.ndarray):
                 # _update_single_entry(self, e, val[i])
 
         # elif isinstance(idx, int):
+            # if self._verbose: print("WARNING: setitem, with idx is an int. This will be very SLOW")
             # _update_single_entry(self, idx, val)
         # else:
             # assert False, 'idx type not supported'
+
+        print('WARNING: setitem can be realllly slow with the current implementation')
+        if isinstance(idx, slice):
+            if idx.step is None: step = 1
+            else: step = idx.step
+            # FIXME: hacky - need to check exact mechanisms b/w getitem and setitem calls further.
+            # + it seems like numpy calls getitem and evaluates the value, and then sets it to the
+            # correct value here (?) - this seems like a waste.
+            if self._weldarray_view:
+                for i, e in enumerate(range(idx.start, idx.stop, step)):
+                    # the index should be appropriate for the base array
+                    e += self._weldarray_view.start
+                    _update_single_entry(self._weldarray_view.base_array, e, val[i])
+            else:
+                # FIXME: In general, this sucks for performance - instead add the list as an array to the
+                # weldobject context and use lookup on it for the weld IR code.
+                # just update it for each element in the list
+                for i, e in enumerate(range(idx.start, idx.stop, step)):
+                    _update_single_entry(self, e, val[i])
+
+        elif isinstance(idx, np.ndarray) or isinstance(idx, list):
+            # just update it for each element in the list
+            for i, e in enumerate(idx):
+                _update_single_entry(self, e, val[i])
+
+        elif isinstance(idx, int):
+            _update_single_entry(self, idx, val)
+        else:
+            assert False, 'idx type not supported'
 
     def _gen_weldobj(self, arr):
         '''
