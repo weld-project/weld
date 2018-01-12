@@ -498,7 +498,7 @@ impl<'t> Parser<'t> {
                 try!(self.consume(TComma));
                 stride = Some(try!(self.expr()));
             }
-            if *self.peek() == TComma {
+            if iter == TNdIter && *self.peek() == TComma {
                 try!(self.consume(TComma));
                 shapes = Some(try!(self.expr()));
                 try!(self.consume(TComma));
