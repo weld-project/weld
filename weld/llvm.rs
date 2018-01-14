@@ -822,7 +822,6 @@ impl LlvmGenerator {
         let data_str = llvm_symbol(&first_data);
         let data_ty_str = self.llvm_type(func.params.get(&first_data).unwrap())?;
         let data_prefix = llvm_prefix(&data_ty_str);
-
         let num_iters_str = ctx.var_ids.next();
         let mut fringe_start_str = None;
         
@@ -836,7 +835,6 @@ impl LlvmGenerator {
             let prod_ptr = ctx.var_ids.next();
             ctx.code.add(format!("{} = alloca i64", prod_ptr));
             ctx.code.add(format!("store i64 1, i64* {}", prod_ptr)); 
-            //let loop_name = "gen_num_iters_loop".to_string();
             let loop_name = "gen_num_iters_loop";
             let (cur_i_ptr, cur_i) = self.add_llvm_for_loop_start(ctx, &loop_name, "0", 
                                                &shapes_llvm_info.len_str, "slt")?;
@@ -1611,7 +1609,6 @@ impl LlvmGenerator {
 
         // Generate functions which call the continuation and wrapper functions
         // used by the runtime to call the loop body.
-        //ctx.code.add("call i8 @free(i8* %malloc_counter)");
         self.gen_loop_wrapper_function(&par_for, sir, func)?;
         self.gen_parallel_runtime_callback_function(func)?;
         self.gen_loop_continuation_function(&par_for, sir)?;
