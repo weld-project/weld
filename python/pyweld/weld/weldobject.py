@@ -130,27 +130,17 @@ class WeldObject(object):
         while len(queue) > 0:
             cur_obj = queue.pop()
             cur_obj_id = cur_obj.obj_id
-            # print('cur obj id = ', cur_obj_id)
             if cur_obj_id in visited:
                 continue
-            if is_first and cur_obj.inplace_weld_code is not None:
-                let_statements.insert(0, "let %s = (%s);" % (cur_obj_id, cur_obj.inplace_weld_code))
-            elif not is_first:
+            if not is_first:
                 let_statements.insert(0, "let %s = (%s);" % (cur_obj_id, cur_obj.weld_code))
-
-            # if not is_first:
-                # let_statements.insert(0, "let %s = (%s);" % (cur_obj_id, cur_obj.weld_code))
-
             is_first = False
             for key in sorted(cur_obj.dependencies.keys()):
-                # print('key = ', key)
                 queue.append(cur_obj.dependencies[key])
             visited.add(cur_obj_id)
         let_statements.sort()  # To ensure that let statements are in the right
                                # order in the final generated program
 
-        # for s in let_statements:
-            # print('s: ', s)
         return "\n".join(let_statements)
 
     def to_weld_func(self):
@@ -163,12 +153,9 @@ class WeldObject(object):
         keys = self.dependencies.keys()
         keys.sort()
         text = header + " " + self.get_let_statements() + "\n" + self.weld_code
-        # print('final code: ')
-        # print(text)
         return text
 
     def evaluate(self, restype, verbose=True, decode=True, passes=None):
-        verbose = True
         function = self.to_weld_func()
 
         # Returns a wrapped ctypes Structure
@@ -224,11 +211,9 @@ class WeldObject(object):
         start = time.time()
         conf = cweld.WeldConf()
         weld_num_threads = os.environ.get("WELD_NUM_THREADS", "1")
-	print("weld num threads = ", weld_num_threads)
         conf.set("weld.threads", weld_num_threads)
 	mem_limit = "1000000000000"
         conf.set("weld.memory.limit", mem_limit)
-	print("weld mem limit = ", mem_limit)
 
         err = cweld.WeldError()
         weld_ret = module.run(conf, arg, err)

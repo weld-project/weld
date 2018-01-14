@@ -26,6 +26,8 @@ class weldarray_view():
         self.start = start
         self.end = end
         self.idx = idx
+
+        # these are used exclusively for nditer -- and non-contiguous arrays.
         self.shape = shape
         self.strides = strides
 

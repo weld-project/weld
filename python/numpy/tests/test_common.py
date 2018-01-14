@@ -176,5 +176,3 @@ def test_trig():
             w2 = op(w)
 
             assert np.allclose(n2, w2)
-
-test_trig()
