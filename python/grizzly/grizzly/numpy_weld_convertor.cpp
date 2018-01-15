@@ -3,7 +3,8 @@
 #include "common.h"
 #include <cstdlib>
 #include <cstdio>
-#include <omp.h>
+
+//#include <omp.h> //uncomment to enable parallel encode
 
 using namespace std;
 
@@ -184,7 +185,7 @@ weld::vec<weld::vec<double> > numpy_to_weld_double_arr_arr(PyObject* in, int num
       }
     }
 
-#pragma omp parallel for
+    // #pragma omp parallel for // uncomment to enable parallel encode
     for (int i = 0; i < num_threads; i++) {
       numpy_to_weld_double_arr_arr_helper(&args[i]);
     }
@@ -246,7 +247,7 @@ weld::vec<weld::vec<uint8_t> > numpy_to_weld_char_arr_arr(PyObject* in, int num_
     }
   }
 
-#pragma omp parallel for
+  // #pragma omp parallel for // uncomment to enable parallel encode
   for (int i = 0; i < num_threads; i++) {
     numpy_to_weld_char_arr_arr_helper(&args[i]);
   }

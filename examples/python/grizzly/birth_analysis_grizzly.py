@@ -7,10 +7,12 @@ import sys
 passes = ["loop-fusion", "infer-size", "short-circuit-booleans", "predicate", "vectorize", "fix-iterate"]
 years = range(1880, 2011)
 pieces = []
-columns = ['year', 'name', 'sex', 'births']
+#columns = ['year', 'name', 'sex', 'births']
+columns = ['name', 'sex', 'births']
 for year in years:
-    path = 'data/names10/yob%d.txt' % year
+    path = 'data/names/yob%d.txt' % year
     frame = pd.read_csv(path, names=columns)
+    frame['year'] = year
     pieces.append(frame)
 
 # Concatenate everything into a single DataFram
@@ -43,8 +45,9 @@ table = filtered.pivot_table('births', index='year',
                               columns='sex', aggfunc='sum')
 
 table = table.div(table.sum(1), axis=0)
-table.evaluate(True, passes=passes)
-end1= time.time()
+end1 = time.time()
+print table.evaluate(True, passes=passes).to_pandas()
+
 
 print "Time taken by preprocess portion: %.5f" %(end0 - start0)
 print "Time taken by analysis portion  : %.5f" % (end1- start1)

@@ -5,10 +5,17 @@ import time
 
 years = range(1880, 2011)
 pieces = []
-columns = ['year', 'name', 'sex', 'births']
+# Note that in a modification to the workload,
+# we added a year key to each line of the record.
+# This introduced more years and hence more keys
+# when performing the groupby.
+# The replications scripts show how this was done.
+#columns = ['year', 'name', 'sex', 'births']
+columns = ['name', 'sex', 'births']
 for year in years:
-    path = 'data/names10/yob%d.txt' % year
+    path = 'data/names/yob%d.txt' % year
     frame = pd.read_csv(path, names=columns)
+    frame['year'] = year
     pieces.append(frame)
 
 # Concatenate everything into a single DataFrame
@@ -18,7 +25,7 @@ print "Size of names: %d" % len(names)
 def get_top1000(group):
     # Note that there is a slight difference that arises
     # with the name 'Leslyn', year '25' missing as the ordering
-    # in pandas for rows witht he same 'sort' value changes.
+    # in pandas for rows with he same 'sort' value changes.
     return group.sort_values(by='births', ascending=False)[0:1000]
 
 #Time preprocessing step
@@ -38,8 +45,9 @@ table = filtered.pivot_table('births', index='year',
                              columns='sex', aggfunc='sum')
 
 table = table.div(table.sum(1), axis=0)
-#print table
 end1 = time.time()
+print table
+
 
 print "Time taken by preprocess portion:   %.5f" % (end0 - start0)
 print "Time taken by analysis portion  :   %.5f" % (end1 - start1)
