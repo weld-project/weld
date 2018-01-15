@@ -153,7 +153,8 @@ class WeldObject(object):
         text = header + " " + self.get_let_statements() + "\n" + self.weld_code
         return text
 
-    def evaluate(self, restype, verbose=True, decode=True, passes=None):
+    def evaluate(self, restype, verbose=True, decode=True, passes=None,
+                 num_threads=1, apply_experimental_transforms=False):
         function = self.to_weld_func()
 
         # Returns a wrapped ctypes Structure
@@ -196,7 +197,10 @@ class WeldObject(object):
         err = cweld.WeldError()
 
         if passes is not None:
-            conf.set("weld.optimization.passes", ",".join(passes))
+            passes = ",".join(passes)
+            passes = passes.strip()
+            if passes != "":
+                conf.set("weld.optimization.passes", passes)
 
         module = cweld.WeldModule(function, conf, err)
         if err.code() != 0:
@@ -208,8 +212,10 @@ class WeldObject(object):
 
         start = time.time()
         conf = cweld.WeldConf()
-        conf.set("weld.threads", str(weld_num_threads))
+        conf.set("weld.threads", str(num_threads))
         conf.set("weld.memory.limit", "100000000000")
+        conf.set("weld.optimization.applyExperimentalTransforms",
+                 "true" if apply_experimental_transforms else "false")
         err = cweld.WeldError()
         weld_ret = module.run(conf, arg, err)
         if err.code() != 0:

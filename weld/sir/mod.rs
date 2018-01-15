@@ -31,7 +31,7 @@ pub enum StatementKind {
         right: Symbol,
     },
     Broadcast(Symbol),
-    Cast(Symbol),
+    Cast(Symbol, Type),
     CUDF {
         symbol_name: String,
         args: Vec<Symbol>,
@@ -99,7 +99,7 @@ impl StatementKind {
             } => {
                 vars.push(child);
             }
-            Cast(ref child) => {
+            Cast(ref child, _) => {
                 vars.push(child);
             }
             Negate(ref child) => {
@@ -457,7 +457,7 @@ impl fmt::Display for StatementKind {
                 ref right
             } => write!(f, "{} {} {}", op, left, right),
             Broadcast(ref child) => write!(f, "broadcast({})", child),
-            Cast(ref child) => write!(f, "cast({})", child),
+            Cast(ref child, ref ty) => write!(f, "cast({}, {})", child, print_type(ty)),
             CUDF {
                 ref symbol_name,
                 ref args,
@@ -852,7 +852,7 @@ fn gen_expr(expr: &TypedExpr,
 
         ExprKind::Cast {ref child_expr, .. } => {
             let (cur_func, cur_block, child_sym) = gen_expr(child_expr, prog, cur_func, cur_block, tracker, multithreaded)?;
-            let kind = Cast(child_sym);
+            let kind = Cast(child_sym, expr.ty.clone());
             let res_sym = tracker.symbol_for_statement(prog, cur_func, cur_block, &expr.ty, kind);
             Ok((cur_func, cur_block, res_sym))
         }

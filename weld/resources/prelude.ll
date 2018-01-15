@@ -106,11 +106,11 @@ declare i8*     @weld_rt_new_merger(i64, i32)
 declare i8*     @weld_rt_get_merger_at_index(i8*, i64, i32)
 declare void    @weld_rt_free_merger(i8*)
 
-declare i8*     @weld_rt_dict_new(i32, i32 (i8*, i8*)*, i32, i32, i64, i64)
+declare i8*     @weld_rt_dict_new(i32, i32 (i8*, i8*)*, void (i8*, i32, i8*, i8*)*,
+                                  void (i8*, i32, i8*, i8*)*, i8*, i32, i32, i64, i64)
 declare i8*     @weld_rt_dict_lookup(i8*, i32, i8*)
-declare void    @weld_rt_dict_put(i8*, i8*)
-declare i8*     @weld_rt_dict_finalize_next_local_slot(i8*)
-declare i8*     @weld_rt_dict_finalize_global_slot_for_local(i8*, i8*)
+declare void    @weld_rt_dict_merge(i8*, i32, i8*, i8*)
+declare void    @weld_rt_dict_finalize(i8*)
 declare i8*     @weld_rt_dict_to_array(i8*, i32, i32)
 declare i64     @weld_rt_dict_get_size(i8*)
 declare void    @weld_rt_dict_free(i8*)
@@ -143,19 +143,17 @@ define i32 @hash_combine(i32 %start, i32 %value) alwaysinline {
   ret i32 %2
 }
 
-; Mixes the bits in a hash code, similar to Java's HashMap
-define i32 @hash_finalize(i32 %hash) {
-  ; h ^= (h >>> 20) ^ (h >>> 12);
-  ; return h ^ (h >>> 7) ^ (h >>> 4);
-  %1 = lshr i32 %hash, 20
-  %2 = lshr i32 %hash, 12
-  %3 = xor i32 %hash, %1
-  %h2 = xor i32 %3, %2
-  %4 = lshr i32 %h2, 7
-  %5 = lshr i32 %h2, 4
-  %6 = xor i32 %h2, %4
-  %res = xor i32 %6, %5
-  ret i32 %res
+; Mixes the bits in a hash code, taken from Guava's Murmur3_32.fmix
+define i32 @hash_finalize(i32) {
+  %2 = lshr i32 %0, 16
+  %3 = xor i32 %2, %0
+  %4 = mul i32 %3, -2048144789
+  %5 = lshr i32 %4, 13
+  %6 = xor i32 %5, %4
+  %7 = mul i32 %6, -1028477387
+  %8 = lshr i32 %7, 16
+  %9 = xor i32 %8, %7
+  ret i32 %9
 }
 
 define i32 @i64.hash(i64 %arg) {

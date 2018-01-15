@@ -94,13 +94,16 @@ impl CompiledModule {
     }
 }
 
-pub fn apply_opt_passes(expr: &mut TypedExpr, opt_passes: &Vec<Pass>, stats: &mut CompilationStats) -> WeldResult<()> {
+pub fn apply_opt_passes(expr: &mut TypedExpr,
+                        opt_passes: &Vec<Pass>,
+                        stats: &mut CompilationStats,
+                        use_experimental: bool) -> WeldResult<()> {
     for pass in opt_passes {
         let start = PreciseTime::now();
-        pass.transform(expr)?;
+        pass.transform(expr, use_experimental)?;
         let end = PreciseTime::now();
         stats.pass_times.push((pass.pass_name(), start.to(end)));
-        trace!("After {} pass:\n{}", pass.pass_name(), print_typed_expr(&expr));
+        debug!("After {} pass:\n{}", pass.pass_name(), print_typed_expr(&expr));
     }
     Ok(())
 }
@@ -109,7 +112,7 @@ pub fn apply_opt_passes(expr: &mut TypedExpr, opt_passes: &Vec<Pass>, stats: &mu
 pub fn compile_program(program: &Program, conf: &ParsedConf, stats: &mut CompilationStats)
         -> WeldResult<CompiledModule> {
     let mut expr = macro_processor::process_program(program)?;
-    trace!("After macro substitution:\n{}\n", print_typed_expr(&expr));
+    debug!("After macro substitution:\n{}\n", print_typed_expr(&expr));
 
     let start = PreciseTime::now();
     uniquify::uniquify(&mut expr)?;
@@ -121,10 +124,10 @@ pub fn compile_program(program: &Program, conf: &ParsedConf, stats: &mut Compila
     type_inference::infer_types(&mut expr)?;
     let mut expr = expr.to_typed()?;
     let end = PreciseTime::now();
-    trace!("After type inference:\n{}\n", print_typed_expr(&expr));
+    debug!("After type inference:\n{}\n", print_typed_expr(&expr));
     stats.weld_times.push(("Type Inference".to_string(), start.to(end)));
 
-    apply_opt_passes(&mut expr, &conf.optimization_passes, stats)?;
+    apply_opt_passes(&mut expr, &conf.optimization_passes, stats, conf.enable_experimental_passes)?;
 
     let start = PreciseTime::now();
     uniquify::uniquify(&mut expr)?;
@@ -146,7 +149,7 @@ pub fn compile_program(program: &Program, conf: &ParsedConf, stats: &mut Compila
     // be useful.
     let start = PreciseTime::now();
     if conf.enable_sir_opt {
-        debug!("Applying SIR optimizations");
+        info!("Applying SIR optimizations");
         optimizations::fold_constants::fold_constants(&mut sir_prog)?;
     }
     let end = PreciseTime::now();
@@ -973,6 +976,7 @@ impl LlvmGenerator {
             ctx.code.add(format!("call void @f{}({}, i32 %cur.tid)", par_for.cont, cont_arg_types));
             ctx.code.add(format!("br label %fn.end"));
         } else {
+            // at least one task is always created for outer loops
             ctx.code.add("br label %for.par");
         }
         ctx.code.add(format!("for.par:"));
@@ -1006,19 +1010,15 @@ impl LlvmGenerator {
         let bld_param_str = llvm_symbol(&par_for.builder);
         let bld_arg_str = llvm_symbol(&par_for.builder_arg);
         ctx.code.add(format!("store {} {}.in, {}* {}", &bld_ty_str, bld_param_str, &bld_ty_str, bld_arg_str));
-        ctx.add_alloca("%cur.idx", "i64")?;
+        if par_for.innermost {
+            ctx.add_alloca("%cur.idx", "i64")?;
+        } else {
+            ctx.code.add("%cur.idx = getelementptr inbounds %work_t, %work_t* %cur.work, i32 0, i32 3");
+        }
         ctx.code.add("store i64 %lower.idx, i64* %cur.idx");
         ctx.code.add("br label %loop.start");
         ctx.code.add("loop.start:");
         let idx_tmp = self.gen_load_var("%cur.idx", "i64", ctx)?;
-        if !par_for.innermost {
-            let work_idx_ptr = ctx.var_ids.next();
-            ctx.code.add(format!(
-                    "{} = getelementptr inbounds %work_t, %work_t* %cur.work, i32 0, i32 3",
-                    work_idx_ptr
-                    ));
-            ctx.code.add(format!("store i64 {}, i64* {}", idx_tmp, work_idx_ptr));
-        }
 
         let elem_ty = func.locals.get(&par_for.data_arg).unwrap();
 
@@ -1989,11 +1989,13 @@ impl LlvmGenerator {
                 let elem = Box::new(Struct(vec![*kt.clone(), *vt.clone()]));
                 let kv_struct_ty = self.llvm_type(&elem)?;
                 let key_ty = self.llvm_type(kt)?;
+                let key_prefix = llvm_prefix(&key_ty);
                 let value_ty = self.llvm_type(vt)?;
 
                 let dictmerger_def = format!(include_str!("resources/dictmerger.ll"),
                     NAME=&bld_ty_str.replace("%", ""),
                     KEY=&key_ty,
+                    KEY_PREFIX=&key_prefix,
                     VALUE=&value_ty,
                     KV_STRUCT=&kv_struct_ty.replace("%", ""));
 
@@ -2390,7 +2392,7 @@ impl LlvmGenerator {
                 self.gen_store_var(&value, &output_ll_sym, &output_ll_ty, ctx);
             }
 
-            Cast(ref child) => {
+            Cast(ref child, _) => {
                 let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
                 let (child_ll_ty, child_ll_sym) = self.llvm_type_and_name(func, child)?;
                 let output_ty = func.symbol_type(output)?;
@@ -3177,11 +3179,18 @@ impl LlvmGenerator {
             }
             DictMerger(_, _, _) | GroupMerger(_, _) => {
                 let bld_tmp = ctx.var_ids.next();
-                ctx.code.add(format!("{} = call {} {}.new(i64 {})",
+                let max_local_bytes = if let Some(ref sym) = *arg {
+                    let (arg_ll_ty, arg_ll_sym) = self.llvm_type_and_name(func, sym)?;
+                    self.gen_load_var(&arg_ll_sym, &arg_ll_ty, ctx)?
+                } else {
+                    format!("{}", 100000000)
+                };
+                ctx.code.add(format!("{} = call {} {}.new(i64 {}, i64 {})",
                                         bld_tmp,
                                         bld_ty_str,
                                         bld_prefix,
-                                        builder_size));
+                                        builder_size,
+                                        max_local_bytes));
                 self.gen_store_var(&bld_tmp, &llvm_symbol(output), &bld_ty_str, ctx);
             }
             VecMerger(ref elem, ref op) => {
@@ -3698,7 +3707,7 @@ fn predicate_only(code: &str) -> WeldResult<TypedExpr> {
     let optstr = ["predicate"];
     let optpass = optstr.iter().map(|x| (*OPTIMIZATION_PASSES.get(x).unwrap()).clone()).collect();
 
-    apply_opt_passes(&mut typed_e, &optpass, &mut CompilationStats::new())?;
+    apply_opt_passes(&mut typed_e, &optpass, &mut CompilationStats::new(), false)?;
 
     Ok(typed_e)
 }
