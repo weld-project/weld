@@ -207,11 +207,15 @@ void *numpy_to_weld_char_arr_arr_helper(void* args_) {
   struct numpy_to_weld_char_arr_arr_args* args = (struct numpy_to_weld_char_arr_arr_args*) args_;
   uint8_t* ptr = args->ptr;
   const PyArrayObject* inp = args->inp;
+  uint8_t* data = (uint8_t *) PyArray_DATA(inp);
   weld::vec<weld::vec<uint8_t> >* t = args->t;
   for (int i = args->start; i < args->end; i++) {
     t->ptr[i].size = (int64_t) strlen((char *) ptr);
-    t->ptr[i].ptr = (uint8_t *)(inp->data + i * inp->strides[0]);
-    ptr += (inp->strides[0]);
+    if ((int) inp->dimensions[1] < t->ptr[i].size) {
+      t->ptr[i].size = (int) inp->dimensions[1];
+    }
+    t->ptr[i].ptr = (uint8_t *)(data + i * inp->strides[0]);
+    ptr += (PyArray_STRIDES(inp)[0]);
   }
 }
 
@@ -224,13 +228,13 @@ weld::vec<weld::vec<uint8_t> > numpy_to_weld_char_arr_arr(PyObject* in, int num_
   int64_t dimension = (int64_t) PyArray_DIMS(inp)[0];
   weld::vec<weld::vec<uint8_t> > t;
   t = weld::make_vec<weld::vec<uint8_t> >(dimension);
-  uint8_t* ptr = (uint8_t *) inp->data;
+  uint8_t* ptr = (uint8_t *) PyArray_DATA(inp);
   struct numpy_to_weld_char_arr_arr_args args[num_threads];
   int fringe_length = t.size % num_threads;
 
   for (int i = 0; i < num_threads; i++) {
     args[i].inp = inp;
-    args[i].ptr = (uint8_t *) inp->data;
+    args[i].ptr = (uint8_t *) PyArray_DATA(inp);
     args[i].t = &t;
     args[i].start = (t.size / num_threads) * i;
     if (i < fringe_length) {
