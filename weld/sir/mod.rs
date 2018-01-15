@@ -787,8 +787,8 @@ fn gen_expr(expr: &TypedExpr,
     match expr.kind {
         ExprKind::Ident(ref sym) => Ok((cur_func, cur_block, sym.clone())),
 
-        ExprKind::Literal(lit) => {
-            let kind = AssignLiteral(lit);
+        ExprKind::Literal(ref lit) => {
+            let kind = AssignLiteral(lit.clone());
             let res_sym = tracker.symbol_for_statement(prog, cur_func, cur_block, &expr.ty, kind);
             Ok((cur_func, cur_block, res_sym))
         }

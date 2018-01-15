@@ -131,6 +131,9 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
 
         Literal(BoolLiteral(_)) => push_complete_type(&mut expr.ty, Scalar(Bool), "BoolLiteral"),
 
+        Literal(StringLiteral(_)) => push_complete_type(&mut expr.ty, Vector(Box::new(Scalar(I8))),
+                                                        "StringLiteral"),
+        
         BinOp {
             kind: op,
             ref mut left,
