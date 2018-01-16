@@ -1917,9 +1917,9 @@ impl LlvmGenerator {
         
         let global = self.prelude_var_ids.next().replace("%", "@");
         let text = self.escape_str(string);
-        let len = text.len() + 1;
+        let len = text.len();
         self.prelude_code.add(format!(
-            "{} = private unnamed_addr constant [{} x i8] c\"{}\\00\"",
+            "{} = private unnamed_addr constant [{} x i8] c\"{}\"",
             global, len, text));
         self.string_names.insert(string.to_string(), global);
         Ok(())
@@ -1943,7 +1943,7 @@ impl LlvmGenerator {
 
     fn string_literal(&mut self, string: &str, vec_ty: &str, ctx: &mut FunctionContext) -> WeldResult<String> {
         let global = self.get_string_ptr(string).unwrap();
-        let len = self.escape_str(string).len() + 1;
+        let len = self.escape_str(string).len();
         let local = ctx.var_ids.next();
         ctx.code.add(format!(
             "{} = getelementptr [{} x i8], [{} x i8]* {}, i32 0, i32 0",
@@ -3386,6 +3386,7 @@ impl LlvmGenerator {
     }
 
     /// Generate a puts() call to print text at runtime.
+    /// Note that unlike StringLiteral constants, gen_puts generates a null-terminated string.
     fn gen_puts(&mut self, text: &str, ctx: &mut FunctionContext) {
         let global = self.prelude_var_ids.next().replace("%", "@");
         let text = text.replace("\\", "\\\\").replace("\"", "\\\"");

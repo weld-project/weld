@@ -174,8 +174,8 @@ fn basic_string() {
     let ret_value = compile_and_run(code, conf, input_data);
     let data = unsafe { weld_value_data(ret_value) as *const WeldVec<u8> };
     let result = unsafe { (*data).clone() };
-    assert_eq!(result.len, 9);
-    unsafe { assert_eq!(str::from_utf8(slice::from_raw_parts(result.data, result.len as usize)).unwrap(), "test str\u{0}"); }
+    assert_eq!(result.len, 8);
+    unsafe { assert_eq!(str::from_utf8(slice::from_raw_parts(result.data, result.len as usize)).unwrap(), "test str"); }
 
     unsafe { free_value_and_module(ret_value) };
 }
