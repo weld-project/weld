@@ -6,6 +6,7 @@
 //! matched greedily in an order that ensures the "largest" one wins first; for example, the
 //! string '1e-5' is parsed as a f64 literal, not as ('1e', '-', '5').
 
+use std::ascii::AsciiExt;
 use std::fmt;
 use std::str::FromStr;
 use std::vec::Vec;
@@ -261,7 +262,11 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
                         });
 
         } else if STRLIT_RE.is_match(text) {
-            tokens.push(TStringLiteral(text.trim_matches('"').to_string())); // Trim off quotes before tokenizing
+            let string = text.trim_matches('"').to_string();
+            if !(string.is_ascii()) {
+                return weld_err!("Weld strings must be valid ASCII");
+            }
+            tokens.push(TStringLiteral(string)); // Trim off quotes before tokenizing
         } else if IDENT_RE.is_match(text) {
             tokens.push(TIdent(text.to_string()));
         } else if I8_BASE_10_RE.is_match(text) {

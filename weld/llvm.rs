@@ -1,3 +1,4 @@
+use std::ascii::AsciiExt;
 use std::collections::HashSet;
 use std::collections::BTreeMap;
 
@@ -1896,13 +1897,12 @@ impl LlvmGenerator {
         Ok(())
     }
 
-    fn escape_str(&self, string: &String) -> String {
-        let mut ret = string.clone();
-        ret.replace("\\", "\\\\").replace("\"", "\\\"")
+    fn escape_str(&self, string: &str) -> String {
+        string.replace("\\", "\\\\").replace("\"", "\\\"")
     }
-
+    
     /// Retrieve the stored pointer for a String constant or create one if it doesn't exist.
-    fn get_string_ptr(&mut self, string: &String) -> WeldResult<String> {
+    fn get_string_ptr(&mut self, string: &str) -> WeldResult<String> {
         if self.string_names.get(string) == None {
             self.gen_string_definition(string)?;
         }
@@ -1910,14 +1910,18 @@ impl LlvmGenerator {
     }
 
     /// Generates a global pointer for a String constant.
-    fn gen_string_definition(&mut self, string: &String) -> WeldResult<()> {
+    fn gen_string_definition(&mut self, string: &str) -> WeldResult<()> {
+        if !(string.is_ascii()) {
+            return weld_err!("Weld strings must be valid ASCII");
+        }
+        
         let global = self.prelude_var_ids.next().replace("%", "@");
         let text = self.escape_str(string);
         let len = text.len() + 1;
         self.prelude_code.add(format!(
             "{} = private unnamed_addr constant [{} x i8] c\"{}\\00\"",
             global, len, text));
-        self.string_names.insert((*string).clone(), global);
+        self.string_names.insert(string.to_string(), global);
         Ok(())
     }
 
@@ -1937,7 +1941,7 @@ impl LlvmGenerator {
         Ok(())
     }
 
-    fn string_literal(&mut self, string: &String, vec_ty: &String, ctx: &mut FunctionContext) -> WeldResult<String> {
+    fn string_literal(&mut self, string: &str, vec_ty: &str, ctx: &mut FunctionContext) -> WeldResult<String> {
         let global = self.get_string_ptr(string).unwrap();
         let len = self.escape_str(string).len() + 1;
         let local = ctx.var_ids.next();
@@ -2679,8 +2683,8 @@ impl LlvmGenerator {
                 if let Simd(_) = *output_ty {
                     self.gen_simd_literal(&output_ll_sym, value, output_ty, ctx)?;
                 } else {
-                    match value {
-                        &StringLiteral(ref string) => {
+                    match *value {
+                        StringLiteral(ref string) => {
                             let ref value = self.string_literal(string, &output_ll_ty, ctx).unwrap();
                             self.gen_store_var(value.as_str(), &output_ll_sym, &output_ll_ty, ctx);
                         }

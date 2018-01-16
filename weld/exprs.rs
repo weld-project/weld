@@ -31,7 +31,7 @@ pub fn literal_expr(kind: LiteralKind) -> WeldResult<Expr<Type>> {
                  U64Literal(_) => Scalar(ScalarKind::U64),
                  F32Literal(_) => Scalar(ScalarKind::F32),
                  F64Literal(_) => Scalar(ScalarKind::F64),
-                 StringLiteral(_) => Vector(Box::new(Scalar(ScalarKind::U8))),
+                 StringLiteral(_) => Vector(Box::new(Scalar(ScalarKind::I8))),
              })
 }
 
