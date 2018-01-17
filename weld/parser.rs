@@ -4,6 +4,7 @@
 //! backtracking, so we simply track a position as we go and keep incrementing it.
 
 use std::vec::Vec;
+use std::cmp::min;
 
 use super::ast::Symbol;
 use super::ast::Iter;
@@ -109,8 +110,12 @@ impl<'t> Parser<'t> {
             self.position
         };
 
-        for i in (self.position - context_length)..self.position {
-            string.push_str(format!("{}", &self.tokens[i]).as_str());
+        for i in (self.position - context_length)..min((self.position + context_length), self.tokens.len()) {
+            if i == self.position { 
+                string.push_str(format!("\x1b[1;31m{}\x1b[0m", &self.tokens[i]).as_str());
+            } else {
+                string.push_str(format!("{}", &self.tokens[i]).as_str());
+            }
             if i != self.position - 1 && self.tokens[i+1].requires_space() {
                 if self.tokens[i].requires_space() {
                     string.push_str(" ");
