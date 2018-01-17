@@ -15,6 +15,7 @@ use super::ast::ExprKind::*;
 use super::ast::LiteralKind::*;
 use super::ast::ScalarKind;
 use super::ast::IterKind::*;
+use super::colors;
 use super::error::*;
 use super::partial_types::*;
 use super::partial_types::PartialBuilderKind::*;
@@ -111,10 +112,11 @@ impl<'t> Parser<'t> {
         };
 
         for i in (self.position - context_length)..min((self.position + context_length), self.tokens.len()) {
+            let token_str = format!("{}", &self.tokens[i]);
             if i == self.position { 
-                string.push_str(format!("\x1b[1;31m{}\x1b[0m", &self.tokens[i]).as_str());
+                string.push_str(colors::format_color(colors::Color::BoldRed, token_str.as_str()).as_str());
             } else {
-                string.push_str(format!("{}", &self.tokens[i]).as_str());
+                string.push_str(format!("{}", token_str.as_str()).as_str());
             }
             if i != self.position - 1 && self.tokens[i+1].requires_space() {
                 if self.tokens[i].requires_space() {
