@@ -3,8 +3,8 @@ from weld.types import *
 
 ALL_PASSES = ["loop-fusion", "infer-size", "short-circuit-booleans", "predicate", "vectorize",
         "fix-iterate"]
-
 CUR_PASSES = ALL_PASSES
+offload_setitem = False
 
 class weldarray_view():
     '''
@@ -160,7 +160,6 @@ def add_ops(ops):
     '''
     @ops: list of strings, where string would be the op.__name__ of the numpy op.
     '''
-    print("in add ops: ", UNARY_OPS)
     global BINARY_OPS, UNARY_OPS, CMP_OPS
     unary_ops = get_supported_unary_ops()
     binary_ops = get_supported_binary_ops()
@@ -175,3 +174,7 @@ def add_ops(ops):
         elif op in cmp_ops:
             print('adding cmp op ', op)
             CMP_OPS[op] = cmp_ops[op]
+
+def set_offload_setitem(val):
+    global offload_setitem
+    offload_setitem = val

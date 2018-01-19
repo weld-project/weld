@@ -982,4 +982,3 @@ def test_views_inplace_evaluate():
     # Originally, we were not preserving the _weldarray_view after evaluate.
     assert w2._weldarray_view is not None
 
-test_setitem_basic()

@@ -82,7 +82,6 @@ def get_noncontig_idx(shape):
     return idx
 
 def test_views_non_contig_basic():
-    # shape = (5,5,5)
     for shape in ND_SHAPES:
         n, w = random_arrays(shape, 'float64')
         idx = get_noncontig_idx(shape)
@@ -98,24 +97,67 @@ def test_views_non_contig_basic():
         w3 = np.sqrt(w2)
         w3 = w3.evaluate()
 
+        assert np.array_equal(n, w)
+        assert np.array_equal(n2, w2)
+        assert np.array_equal(n3, w3)
+
+        # allclose seems harder to get to work!
         assert np.allclose(n, w)
+        assert np.allclose(n2, w2)
         assert np.allclose(n3, w3)
 
     # test binary op.
 
-# def test_views_non_contig_inplace_unary():
-    # for shape in ND_SHAPES:
-        # n, w = random_arrays(shape, 'float32')
-        # idx = get_noncontig_idx(shape)
+def test_views_non_contig_no_op():
+    '''
+    This just requires the sub/mult etc. used for allclose to work.
+    '''
+    for shape in ND_SHAPES:
+        n, w = random_arrays(shape, 'float32')
+        idx = get_noncontig_idx(shape)
+
+        n2 = n[idx]
+        w2 = w[idx]
+
+        assert w2._weldarray_view is not None
+        w2 = w2.evaluate()
+        assert w2._weldarray_view is not None
+
+        assert n2.shape == w2.shape
+        assert n2.strides == w2.strides
+
+        assert np.allclose(n, w)
+        assert np.array_equal(n2, w2)
+        print("************array equal done************")
+        # assert np.allclose(n2, w2)
+        assert np.allclose(n2, w2.evaluate())
+
+def test_views_non_contig_inplace_unary():
+    ND_SHAPES = [(3,3)]
+    for shape in ND_SHAPES:
+        n, w = random_arrays(shape, 'float64')
+        idx = get_noncontig_idx(shape)
 
         # n2 = n[idx]
         # w2 = w[idx]
+        n2 = n[idx]
+        w2 = w[idx]
 
-        # # unary op test.
-        # n2 = np.sqrt(n2, out=n2)
-        # w2 = np.sqrt(w2, out=w2)
+        # unary op test.
+        n2 = np.sqrt(n2, out=n2)
+        w2 = np.sqrt(w2, out=w2)
+        assert n2.shape == w2.shape
+        assert n2.strides == w2.strides
 
-        # assert np.allclose(n2, w2)
+        print('w: ', w)
+        print('n: ', n)
+
+        print('w2: ', w2)
+        print('n2: ', n2)
+
+        w2 = w2.evaluate()
+        assert np.array_equal(n2, w2)
+        # assert np.allclose(n2, w2.evaluate())
         # assert np.allclose(n, w)
 
 def test_views_non_contig_newarray_binary():
@@ -152,55 +194,51 @@ def test_views_non_contig_newarray_binary():
             assert np.array_equal(nv1, wv1)
             assert np.array_equal(nv2, wv2)
 
-# def test_views_non_contig_inplace_binary1():
-    # '''
-    # TODO: separate out case with updated other into new test.
+def test_views_non_contig_inplace_binary1():
+    '''
+    FIXME: This fails sometimes...
+    TODO: separate out case with updated other into new test.
 
-    # binary involves a few cases that we need to test:
-    # In place ops, consider the case:
-        # - non-contig + non-contig
+    binary involves a few cases that we need to test:
+    In place ops, consider the case:
+        - non-contig + non-contig
 
-    # Note: these don't test for performance, for instance, if the non-contig array is being
-    # evaluated with the max contiguity etc.
-    # '''
-    # for shape in ND_SHAPES:
-        # n, w = random_arrays(shape, 'float32')
-        # n2, w2 = random_arrays(shape, 'float32')
-        # idx = get_noncontig_idx(shape)
-        # print('idx : ', idx)
+    Note: these don't test for performance, for instance, if the non-contig array is being
+    evaluated with the max contiguity etc.
+    '''
+    for shape in ND_SHAPES:
+        n, w = random_arrays(shape, 'float32')
+        n2, w2 = random_arrays(shape, 'float32')
+        idx = get_noncontig_idx(shape)
+        print('idx : ', idx)
 
-        # nv1 = n[idx]
-        # wv1 = w[idx]
-        # nv2 = n2[idx]
-        # wv2 = w2[idx]
+        nv1 = n[idx]
+        wv1 = w[idx]
+        nv2 = n2[idx]
+        wv2 = w2[idx]
 
-        # # update other from before.
-        # # important: we need to make sure the case with the second array having some operations
-        # # stored in it is dealt with.
-        # wv2 = np.sqrt(wv2, out=wv2)
-        # nv2 = np.sqrt(nv2, out=nv2)
+        # update other from before.
+        # important: we need to make sure the case with the second array having some operations
+        # stored in it is dealt with.
+        wv2 = np.sqrt(wv2, out=wv2)
+        nv2 = np.sqrt(nv2, out=nv2)
 
-        # for op in BINARY_OPS:
-            # print('op = ', op)
-            # nv1 = op(nv1, nv2, out=nv1)
-            # wv1 = op(wv1, wv2, out=wv1)
+        for op in BINARY_OPS:
+            print('op = ', op)
+            nv1 = op(nv1, nv2, out=nv1)
+            wv1 = op(wv1, wv2, out=wv1)
 
-            # # when we evaluate a weldarray_view, the view properties (parent array etc) must be preserved in the
-            # # returned array.
-            # wv1 = wv1.evaluate()
+            # when we evaluate a weldarray_view, the view properties (parent array etc) must be preserved in the
+            # returned array.
+            wv1 = wv1.evaluate()
 
-            # # print(wv1.flags)
-            # # print(wv1._weldarray_weldview)
-            # # print('nv1: ', nv1)
-            # # print('wv1: ', wv1)
+            assert np.allclose(nv2, wv2.evaluate())
+            assert np.allclose(nv1, wv1)
+            assert np.allclose(n, w)
+            assert np.allclose(n2, w2)
 
-            # assert np.allclose(nv2, wv2)
-            # assert np.allclose(nv1, wv1)
-            # assert np.allclose(n, w)
-            # assert np.allclose(n2, w2)
-
-            # print('***********ENDED op {} ************'.format(op))
-        # print('***********ENDED shape {} ************'.format(shape))
+            print('***********ENDED op {} ************'.format(op))
+        print('***********ENDED shape {} ************'.format(shape))
 
 # def test_views_non_contig_inplace_binary2():
     # '''
@@ -225,47 +263,55 @@ def test_views_non_contig_newarray_binary():
         # # TODO: write test.
         # pass
 
-# def test_views_non_contig_inplace_other_updates():
-    # '''
-    # '''
-    # for shape in ND_SHAPES:
-        # n, w = random_arrays(shape, 'float32')
-        # n2, w2 = random_arrays(shape, 'float32')
-        # idx = get_noncontig_idx(shape)
+def test_views_non_contig_inplace_other_updates():
+    '''
+    FIXME: This fails because non-contig in place updates.
+        - if non-contiguous array has in place update, then we offload to numpy --- but at least
+          right now, there is no way to keep the _weldarray_view of the non-contiguous view intact!
+        - potentially some other problems here too!
+    '''
+    for shape in ND_SHAPES:
+        n, w = random_arrays(shape, 'float32')
+        n2, w2 = random_arrays(shape, 'float32')
+        idx = get_noncontig_idx(shape)
 
-        # nv1 = n[idx]
-        # wv1 = w[idx]
-        # nv2 = n2[idx]
-        # wv2 = w2[idx]
+        nv1 = n[idx]
+        wv1 = w[idx]
+        nv2 = n2[idx]
+        wv2 = w2[idx]
+        assert wv2._weldarray_view is not None
 
-        # # update other from before.
-        # # important: we need to make sure the case with the second array having some operations
-        # # stored in it is dealt with.
-        # wv2 = np.sqrt(wv2, out=wv2)
-        # nv2 = np.sqrt(nv2, out=nv2)
-        # # wv2 = wv2.evaluate()
-
-        # op = np.subtract
-        # nv1 = op(nv1, nv2, out=nv1)
-        # wv1 = op(wv1, wv2, out=wv1)
-
-        # nv2 = np.log(nv2, out=nv2)
-        # wv2 = np.log(wv2, out=wv2)
+        # update other from before.
+        # important: we need to make sure the case with the second array having some operations
+        # stored in it is dealt with.
+        wv2 = np.sqrt(wv2, out=wv2)
+        nv2 = np.sqrt(nv2, out=nv2)
         # wv2 = wv2.evaluate()
+        assert wv2._weldarray_view is not None
 
-        # n2 = np.sqrt(n2, out=n2)
-        # w2 = np.sqrt(w2, out=w2)
+        op = np.subtract
+        nv1 = op(nv1, nv2, out=nv1)
+        wv1 = op(wv1, wv2, out=wv1)
 
-        # # when we evaluate a weldarray_view, the view properties (parent array etc) must be preserved in the
-        # # returned array.
-        # wv1 = wv1.evaluate()
+        nv2 = np.log(nv2, out=nv2)
+        wv2 = np.log(wv2, out=wv2)
+        wv2 = wv2.evaluate()
 
-        # assert np.allclose(nv2, wv2)
-        # assert np.allclose(nv1, wv1)
-        # assert np.allclose(n, w)
-        # assert np.allclose(n2, w2)
+        n2 = np.sqrt(n2, out=n2)
+        w2 = np.sqrt(w2, out=w2)
 
-        # print('***********ENDED shape {} ************'.format(shape))
+        # when we evaluate a weldarray_view, the view properties (parent array etc) must be preserved in the
+        # returned array.
+        wv1 = wv1.evaluate()
+        assert wv2._weldarray_view is not None
+
+        assert np.array_equal(nv2, wv2)
+        assert np.allclose(nv2, wv2)
+        assert np.allclose(nv1, wv1)
+        assert np.allclose(n, w)
+        assert np.allclose(n2, w2)
+
+        print('***********ENDED shape {} ************'.format(shape))
 
 
 # def test_views_non_contig_inplace_binary_mess():
@@ -350,14 +396,14 @@ def test_transpose_ops():
     n3 = np.sqrt(n2)
     w3 = np.sqrt(w2)
     w3 = w3.evaluate()
-    
+
     assert n3.shape == w3.shape
     print('n3 assert done')
 
     n4 = n3 - n2
     w4 = w3 - w2
     w4 = w4.evaluate()
-    
+
     np.allclose(n3, w3)
     np.allclose(n2, w2)
     np.allclose(n, w)
@@ -440,11 +486,11 @@ def test_broadcasting_nbody_bug():
     b = b.evaluate()
     print(type(b))
     assert np.allclose(a, b)
-    
+
     numpy_dx = a - n
     weld_dx = b - w
     weld_dx = weld_dx.evaluate()
-    
+
     assert numpy_dx.shape == weld_dx.shape, 'shapes must match!'
     assert np.array_equal(numpy_dx, weld_dx)
     assert np.allclose(numpy_dx, weld_dx)
@@ -462,7 +508,7 @@ def test_sum_axis0_simple():
 
 def test_sum_axis1_simple():
     '''
-    switching the axis. 
+    switching the axis.
     '''
     n, w = random_arrays((18,17), 'float64')
     n2 = np.sum(n, axis=1)
@@ -487,13 +533,13 @@ def test_diagonal_setitem():
     '''
     functionality required for nbody .
     '''
-
+    wn.set_offload_setitem(True)
     n, w = random_arrays((5,5), 'float64')
     n2 = diagonal(n)
     w2 = diagonal(w)
     n2[:] = 1.0
     w2[:] = 1.0
-
+    wn.set_offload_setitem(False)
     assert np.array_equal(n2, w2)
     assert np.array_equal(n, w)
 
@@ -501,10 +547,10 @@ def test_nbody_bug2():
     n, w = random_arrays(100, 'float64')
     a = transpose(n[np.newaxis,:])
     b = transpose(w[np.newaxis,:])
-    
+
     ndx = a - n
     wdx = b - w
-    
+
     print(wdx.shape)
     print(wdx._real_shape)
 
@@ -525,3 +571,6 @@ def test_nbody_bug2():
 def test_less_than():
     n, w = random_arrays(10, 'float64')
 
+# test_views_non_contig_basic()
+# test_views_non_contig_no_op()
+# test_views_non_contig_inplace_other_updates()

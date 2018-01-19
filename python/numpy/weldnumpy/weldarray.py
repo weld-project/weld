@@ -1,5 +1,4 @@
 from weld.weldobject import WeldObject
-# FIXME: get rid of import *.
 from weld.encoders import NumpyArrayEncoder, NumpyArrayDecoder
 from weldnumpy import *
 import weldnumpy as wn
@@ -30,18 +29,17 @@ class weldarray(np.ndarray):
         # TODO: Add support for lists / ints.
         assert isinstance(input_array, np.ndarray), 'only support ndarrays'
         assert str(input_array.dtype) in SUPPORTED_DTYPES
-
-        # sharing memory with the ndarray/weldarry
+        # Trying to get np.empty instead of shared memory to work --- need to find the best place
+        # to do something like this.
         # if isinstance(input_array, weldarray):
-            # obj = weldarray(np.empty(input_array.shape))
+            # # obj = weldarray(np.empty(input_array.shape))
             # obj = np.empty(input_array.shape).view(cls)
         # else:
             # obj = np.asarray(input_array).view(cls)
 
-        # original stuff:
+        # sharing memory with the ndarray/weldarry
         obj = np.asarray(input_array).view(cls)
         obj._gen_weldobj(input_array)
-
         obj._weld_type = SUPPORTED_DTYPES[str(input_array.dtype)]
         obj._verbose = verbose
 
@@ -231,68 +229,69 @@ class weldarray(np.ndarray):
             update_str = str(val) + suffix
             arr._update_range(index, index+1, update_str)
 
-        if self._verbose: print('WARNING: offloading setitem to numpy...in place ops arent quite working well here')
-        # Offloading to numpy method:
-        # if isinstance(idx, slice):
-            # if self._weldarray_view is not None:
-                # view_idx = self._weldarray_view.idx
-                # view_strides = self._weldarray_view.strides
-                # # TODO: not sure which of these to do.
-                # base_array = self._weldarray_view.base_array._eval().view(np.ndarray)
-                # ret = base_array[view_idx]
-                # ret.strides = view_strides
-                # # print('ret before setitem: ', ret)
-                # ret.__setitem__(idx, val)
-                # # print('val = ', val)
-                # # print('ret: ', ret)
-                # # print('base array: ', base_array)
-            # else:
-                # # print('in else')
-                # # print('val = ', val)
-                # # print('before eval, ret = ', self)
-                # ret = self._eval()
-                # # print('before set item, ret = ', ret)
-                # ret.__setitem__(idx, val)
-                # # print('finally ret = ', ret)
+        if wn.offload_setitem:
+            if self._verbose: print('WARNING: offloading setitem to numpy...in place ops arent quite working well here')
+            # Offloading to numpy method:
+            if isinstance(idx, slice):
+                if self._weldarray_view is not None:
+                    view_idx = self._weldarray_view.idx
+                    view_strides = self._weldarray_view.strides
+                    # TODO: not sure which of these to do.
+                    base_array = self._weldarray_view.base_array._eval().view(np.ndarray)
+                    ret = base_array[view_idx]
+                    ret.strides = view_strides
+                    # print('ret before setitem: ', ret)
+                    ret.__setitem__(idx, val)
+                    # print('val = ', val)
+                    # print('ret: ', ret)
+                    # print('base array: ', base_array)
+                else:
+                    # print('in else')
+                    # print('val = ', val)
+                    # print('before eval, ret = ', self)
+                    ret = self._eval()
+                    # print('before set item, ret = ', ret)
+                    ret.__setitem__(idx, val)
+                    # print('finally ret = ', ret)
 
-        # elif isinstance(idx, np.ndarray) or isinstance(idx, list):
-            # # just update it for each element in the list
-            # for i, e in enumerate(idx):
-                # _update_single_entry(self, e, val[i])
-
-        # elif isinstance(idx, int):
-            # if self._verbose: print("WARNING: setitem, with idx is an int. This will be very SLOW")
-            # _update_single_entry(self, idx, val)
-        # else:
-            # assert False, 'idx type not supported'
-
-        if isinstance(idx, slice):
-            if idx.step is None: step = 1
-            else: step = idx.step
-            # FIXME: hacky - need to check exact mechanisms b/w getitem and setitem calls further.
-            # + it seems like numpy calls getitem and evaluates the value, and then sets it to the
-            # correct value here (?) - this seems like a waste.
-            if self._weldarray_view:
-                for i, e in enumerate(range(idx.start, idx.stop, step)):
-                    # the index should be appropriate for the base array
-                    e += self._weldarray_view.start
-                    _update_single_entry(self._weldarray_view.base_array, e, val[i])
-            else:
-                # FIXME: In general, this sucks for performance - instead add the list as an array to the
-                # weldobject context and use lookup on it for the weld IR code.
+            elif isinstance(idx, np.ndarray) or isinstance(idx, list):
                 # just update it for each element in the list
-                for i, e in enumerate(range(idx.start, idx.stop, step)):
+                for i, e in enumerate(idx):
                     _update_single_entry(self, e, val[i])
 
-        elif isinstance(idx, np.ndarray) or isinstance(idx, list):
-            # just update it for each element in the list
-            for i, e in enumerate(idx):
-                _update_single_entry(self, e, val[i])
-
-        elif isinstance(idx, int):
-            _update_single_entry(self, idx, val)
+            elif isinstance(idx, int):
+                if self._verbose: print("WARNING: setitem, with idx is an int. This will be very SLOW")
+                _update_single_entry(self, idx, val)
+            else:
+                assert False, 'idx type not supported'
         else:
-            assert False, 'idx type not supported'
+            if isinstance(idx, slice):
+                if idx.step is None: step = 1
+                else: step = idx.step
+                # FIXME: hacky - need to check exact mechanisms b/w getitem and setitem calls further.
+                # + it seems like numpy calls getitem and evaluates the value, and then sets it to the
+                # correct value here (?) - this seems like a waste.
+                if self._weldarray_view:
+                    for i, e in enumerate(range(idx.start, idx.stop, step)):
+                        # the index should be appropriate for the base array
+                        e += self._weldarray_view.start
+                        _update_single_entry(self._weldarray_view.base_array, e, val[i])
+                else:
+                    # FIXME: In general, this sucks for performance - instead add the list as an array to the
+                    # weldobject context and use lookup on it for the weld IR code.
+                    # just update it for each element in the list
+                    for i, e in enumerate(range(idx.start, idx.stop, step)):
+                        _update_single_entry(self, e, val[i])
+
+            elif isinstance(idx, np.ndarray) or isinstance(idx, list):
+                # just update it for each element in the list
+                for i, e in enumerate(idx):
+                    _update_single_entry(self, e, val[i])
+
+            elif isinstance(idx, int):
+                _update_single_entry(self, idx, val)
+            else:
+                assert False, 'idx type not supported'
 
     def _gen_weldobj(self, arr):
         '''
@@ -333,6 +332,10 @@ class weldarray(np.ndarray):
         scalars = []
         shapes = []
         for i in input_args:
+            # FIXME: Need to decide if we want to keep in this measure OR not?
+            if isinstance(i, np.ndarray) and not isinstance(i, weldarray):
+                return False
+
             if isinstance(i, np.ndarray):
                 if not str(i.dtype) in SUPPORTED_DTYPES:
                     if self._verbose: print('WARNING {} not in supported dtypes. Will be offloaded to \
@@ -345,6 +348,9 @@ class weldarray(np.ndarray):
                     shapes.append(i._real_shape)
                 else:
                     shapes.append(i.shape)
+                if outputs and not (outputs[0] is None or i.flags.contiguous):
+                    # Inplace ops for non-contiguous inputs not supported
+                    return False
 
                 arrays.append(i)
             elif isinstance(i, list):
@@ -400,6 +406,7 @@ class weldarray(np.ndarray):
         TODO: support other type of methods?
         @method: call, __reduce__,
         '''
+        print(ufunc)
         input_args = [inp for inp in inputs]
         outputs = kwargs.pop('out', None)
         supported = self._process_ufunc_inputs(input_args, outputs, kwargs)
@@ -462,14 +469,6 @@ class weldarray(np.ndarray):
             return self._unary_op(wn.UNARY_OPS[ufunc.__name__], result=output)
         elif ufunc.__name__ in wn.BINARY_OPS:
             # weldarray can be first or second arg.
-            if isinstance(input_args[0], weldarray):
-                # first arg is weldarray, must be self
-                assert input_args[0].name == self.name
-                other_arg = input_args[1]
-            else:
-                other_arg = input_args[0]
-                assert input_args[1].name == self.name
-
             if self._verbose: print('supported op: ', ufunc.__name__)
             return self._binary_op(input_args[0], input_args[1], wn.BINARY_OPS[ufunc.__name__],
                     result=output)
@@ -611,8 +610,10 @@ class weldarray(np.ndarray):
         base_array would store those).
         '''
         if self._weldarray_view:
+            print("_weldarray VIEW")
             idx = self._weldarray_view.idx
             if idx is not None:
+                print("idx not NONE")
                 result = weldarray(self._weldarray_view.parent._eval()[idx], verbose=self._verbose)
             else:
                 result = weldarray(self)
@@ -756,10 +757,9 @@ class weldarray(np.ndarray):
     def _unary_op(self, unop, result=None):
         '''
         @unop: str, weld IR for the given function.
-        @result: output array.
-
-        Create a new array, and updates weldobj.weld_code with the code for
-        unop.
+        @result: output array - if it is an inplace op then this must be specified already.
+        @ret: the result array. If result is not None, then the same array will be returned after
+        the new operation is registered with it.
         '''
         def _update_array_unary_op(res, unop):
             '''
@@ -779,7 +779,6 @@ class weldarray(np.ndarray):
             # TODO: make general _get_result() function for in place ops.
             # in place op + view, just update base array and return.
             if result._weldarray_view:
-                # FIXME: Only deals with contiguous views
                 v = result._weldarray_view
                 update_str = '{unop}(e)'.format(unop=unop)
                 v.base_array._update_range(v.start, v.end, update_str)
