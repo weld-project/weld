@@ -3679,7 +3679,7 @@ fn simple_predicate() {
     let code = "|v1:vec[i32],v2:vec[bool]| result(for(zip(v1, v2), merger[i32,+], |b,i,e| merge(b, @(predicate:true) if(e.$1, e.$0, 0))))";
     let typed_e = predicate_only(code);
     assert!(typed_e.is_ok());
-    let expected = "|v1:vec[i32],v2:vec[bool]|result(for(zip(v1:vec[i32],v2:vec[bool]),merger[i32,+],|b:merger[i32,+],i:i64,e:{i32,bool}|merge(b:merger[i32,+],select(e:{i32,bool}.$1,e:{i32,bool}.$0,0))))";
+    let expected = "|v1:vec[i32],v2:vec[bool]|result(for(zip(v1:vec[i32],v2:vec[bool]),merger[i32,+],|b:merger[i32,+],i:i64,e:{i32,bool}|merge(b:merger[i32,+],select(e.$1,e.$0,0))))";
     assert_eq!(print_typed_expr_without_indent(&typed_e.unwrap()).as_str(),
                expected);
 
@@ -3729,7 +3729,7 @@ fn predicate_dictmerger() {
     let code = "|v:vec[i32]| result(for(v, dictmerger[{i32, i32},i32,+], |b,i,e| @(predicate:true)if(e>0, merge(b,{{e,e},e*2}), b)))";
     let typed_e = predicate_only(code);
     assert!(typed_e.is_ok());
-    let expected = "|v:vec[i32]|result(for(v:vec[i32],dictmerger[{i32,i32},i32,+],|b:dictmerger[{i32,i32},i32,+],i:i64,e:i32|(let k:{{i32,i32},i32}=({{e:i32,e:i32},(e:i32*2)});select((e:i32>0),k:{{i32,i32},i32},{k:{{i32,i32},i32}.$0,0}))))";
+    let expected = "|v:vec[i32]|result(for(v:vec[i32],dictmerger[{i32,i32},i32,+],|b:dictmerger[{i32,i32},i32,+],i:i64,e:i32|(let k:{{i32,i32},i32}=({{e:i32,e:i32},(e:i32*2)});select((e:i32>0),k:{{i32,i32},i32},{k.$0,0}))))";
     assert_eq!(expected,
                print_typed_expr_without_indent(&typed_e.unwrap()).as_str());
 }
