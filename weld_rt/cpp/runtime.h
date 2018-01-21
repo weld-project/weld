@@ -18,13 +18,12 @@ struct work_t {
   // set in the user program -- the current iteration index this task is on,
   // 0 if not a loop body task
   int64_t cur_idx;
-  // true if task was directly stolen from another queue, is the head (earliest in serial order)
-  // task of a loop instance, or is a continuation.
+  // true if task was directly stolen from another queue or is a continuation.
   // If true, we need to set the nest_* fields so that we can create a new piece for
   // this task and its siblings in any associative builders.
-  // Tasks that are not full tasks (non-stolen, non-head tasks of loop instances) do not need
-  // separate nest_* fields because they will be executed in serial order (and by the same thread)
-  // after their associated full tasks and can share these full tasks' pieces (and nest_* fields)
+  // Tasks that are not full tasks do not need separate nest_* fields because they
+  // will be executed in serial order (and by the same thread)
+  // after their associated full tasks and can share these full tasks' pieces
   // in any associative builders.
   int32_t full_task; // boolean
   // The list of loop indices of all containing loops for this task.
@@ -103,7 +102,7 @@ extern "C" {
   void weld_rt_set_result(void *res);
 
   void *weld_rt_new_vb(int64_t elem_size, int64_t starting_cap, int32_t fixed_size);
-  void weld_rt_new_vb_piece(void *v, work_t *w);
+  void weld_rt_new_vb_piece(void *v, work_t *w, int32_t is_init_piece);
   vec_piece *weld_rt_cur_vb_piece(void *v, int32_t my_id);
   vec_output weld_rt_result_vb(void *v);
 
@@ -111,6 +110,22 @@ extern "C" {
   void *weld_rt_get_merger_at_index(void *m, int64_t size, int32_t i);
   void weld_rt_free_merger(void *m);
 
+  void *weld_rt_dict_new(int32_t key_size, int32_t (*keys_eq)(void *, void *),
+    void (*merge_new_val)(void *, int32_t, void *, void *),
+    void (*merge_vals_finalize)(void *, int32_t, void *, void *), void *metadata, int32_t val_size,
+    int32_t to_array_true_val_size, int64_t max_local_bytes, int64_t capacity);
+  void *weld_rt_dict_lookup(void *d, int32_t hash, void *key);
+  void weld_rt_dict_merge(void *d, int32_t hash, void *key, void *value);
+  void weld_rt_dict_finalize(void *d);
+  void *weld_rt_dict_to_array(void *d, int32_t value_offset_in_struct, int32_t struct_size);
+  int64_t weld_rt_dict_get_size(void *d);
+  void weld_rt_dict_free(void *d);
+
+  void *weld_rt_gb_new(int32_t key_size, int32_t (*keys_eq)(void *, void *),
+    int32_t val_size, int64_t max_local_bytes, int64_t capacity);
+  void weld_rt_gb_merge(void *b, void *key, int32_t hash, void *value);
+  void *weld_rt_gb_result(void *b);
+  void weld_rt_gb_free(void *gb);
 
   // weld_run functions can be called both from a runtime thread and before/after a Weld computation is
   // executed

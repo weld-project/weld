@@ -56,22 +56,42 @@ fn infer_up(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> {
 
     // For Lets and Lambdas, add the identifiers they (re-)define to env
     let mut old_bindings: Vec<(Symbol, Option<PartialType>)> = Vec::new();
-    match expr.kind {
+    let finished = match expr.kind {
         Let {
-            ref name,
-            ref value,
-            ..
+            ref mut name,
+            ref mut value,
+            ref mut body
         } => {
-            old_bindings.push((name.clone(), env.insert(name.clone(), value.ty.clone())));
-        }
+            // Infer the type of the value before updating the binding.
+            changed |= try!(infer_up(value, env));
 
+            // Update the binding, saving the old one.
+            let old_binding = env.insert(name.clone(), value.ty.clone());
+
+            // Then, infer the type of the body (with the new binding).
+            changed |= try!(infer_up(body, env));
+
+            // Undo the changes to the bindings.
+            match old_binding {
+                Some(old) => env.insert(name.clone(), old),
+                None => env.remove(name),
+            };
+            // Finished! Infer own type outside the match to avoid double mutable borrow.
+            true
+        }
         Lambda { ref params, .. } => {
             for p in params {
                 old_bindings.push((p.name.clone(), env.insert(p.name.clone(), p.ty.clone())));
             }
+            false
         }
+        _ => false,
+    };
 
-        _ => (),
+    // Done! Only for Lets for now.
+    if finished {
+        changed |= infer_locally(expr, env)?;
+        return Ok(changed);
     }
 
     // Infer types of children first (with new environment)
@@ -89,7 +109,6 @@ fn infer_up(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> {
 
     // Infer our type
     changed |= try!(infer_locally(expr, env));
-
     Ok(changed)
 }
 
@@ -154,21 +173,16 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
 
         ToVec { ref mut child_expr } => {
             let mut changed = false;
-
             let base_type = Vector(Box::new(Struct(vec![Unknown, Unknown])));
-            changed |= try!(push_type(&mut expr.ty, &base_type, "ToVec"));
-
+            changed |= push_type(&mut expr.ty, &base_type, "ToVec")?;
             if let Vector(ref mut elem_type) = expr.ty {
                 if let Struct(ref mut field_types) = **elem_type {
                     if let Dict(ref key_type, ref value_type) = child_expr.ty {
-                        for (field_ty, child_expr_field) in
-                            field_types
+                        for (field_ty, child_expr_field) in field_types
                                 .iter_mut()
                                 .zip(vec![key_type.clone(), value_type.clone()].iter_mut()) {
                             changed |= try!(push_type(field_ty, child_expr_field, "ToVec"));
                         }
-                    } else {
-                        return weld_err!("Internal error: toVec argument needs to be a dict");
                     }
                 } else {
                     return weld_err!("Internal error: vector field in toVec return type is not a \
@@ -820,36 +834,13 @@ fn push_type(dest: &mut PartialType, src: &PartialType, context: &str) -> WeldRe
                 Builder(GroupMerger(ref src_key_ty, ref src_value_ty, ref src_merge_ty),
                         ref src_annotations) => {
                     let mut changed = false;
-                    changed |= try!(push_type(dest_key_ty.as_mut(), src_key_ty.as_ref(), context));
-                    changed |=
-                        try!(push_type(dest_value_ty.as_mut(), src_value_ty.as_ref(), context));
-                    changed |=
-                        try!(push_type(dest_merge_ty.as_mut(), src_merge_ty.as_ref(), context));
+                    changed |= push_type(dest_key_ty.as_mut(), src_key_ty.as_ref(), context)?;
+                    changed |= push_type(dest_value_ty.as_mut(), src_value_ty.as_ref(), context)?;
+                    changed |= push_type(dest_merge_ty.as_mut(), src_merge_ty.as_ref(), context)?;
                     if *dest_annotations != *src_annotations {
                         if !src_annotations.is_empty() {
                             *dest_annotations = src_annotations.clone();
                             changed |= true;
-                        }
-                    }
-
-                    // For now, any commutative-merge builder only supports either a single scalar
-                    // or a struct of scalars.
-                    match **dest_value_ty {
-                        Struct(ref tys) => {
-                            for ty in tys {
-                                match *ty {
-                                    Scalar(_) => {}
-                                    _ => {
-                                        return weld_err!("Commutatitive merge builders only \
-                                                          support structs with scalars");
-                                    }
-                                }
-                            }
-                        }
-                        Scalar(_) => {}
-                        _ => {
-                            return weld_err!("Commutatitive merge builders only support scalars \
-                                              or structs of scalars");
                         }
                     }
                     Ok(changed)
@@ -949,7 +940,7 @@ fn sync_types(t1: &mut PartialType, t2: &mut PartialType, error: &str) -> WeldRe
 #[test]
 fn infer_types_simple() {
     let int_lit = expr_box(Literal(I32Literal(1)), Annotations::new());
-    let float_lit = expr_box(Literal(F32Literal(1.0)), Annotations::new());
+    let float_lit = expr_box(Literal(F32Literal(1f32.to_bits())), Annotations::new());
     let bool_lit = expr_box(Literal(BoolLiteral(false)), Annotations::new());
     let sum = expr_box(BinOp {
                            kind: Add,

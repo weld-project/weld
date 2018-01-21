@@ -199,9 +199,9 @@ static inline bool try_steal(int32_t my_id, run_data *rd) {
   }
 }
 
-// called once task function returns
-// decrease the dependency count of the continuation, run the continuation
-// if necessary, or signal the end of the computation if we are done
+// Called once task function returns.
+// Decrease the dependency count of the continuation, run the continuation
+// if necessary, or signal the end of the computation if we are done.
 static inline void finish_task(work_t *task, int32_t my_id, run_data *rd) {
   if (task->cont == NULL) {
     if (!task->continued) {
@@ -213,8 +213,16 @@ static inline void finish_task(work_t *task, int32_t my_id, run_data *rd) {
   } else {
     int32_t previous = __sync_fetch_and_sub(&task->cont->deps, 1);
     if (previous == 1) {
-      // run the continuation since we are the last dependency
-      set_full_task(task->cont);
+      // Enqueue the continuation since we are the last dependency.
+      // If there are any tasks left on our queue we know it's safe
+      // to not make this full, since we must have executed all of
+      // this task's predecessors in order without any of them having been stolen.
+      pthread_spin_lock(rd->all_work_queue_locks + my_id);
+      bool queue_empty = (rd->all_work_queues + my_id)->empty();
+      pthread_spin_unlock(rd->all_work_queue_locks + my_id);
+      if (queue_empty) {
+        set_full_task(task->cont);
+      }
       pthread_spin_lock(rd->all_work_queue_locks + my_id);
       (rd->all_work_queues + my_id)->push_front(task->cont);
       pthread_spin_unlock(rd->all_work_queue_locks + my_id);
@@ -234,6 +242,13 @@ static inline void finish_task(work_t *task, int32_t my_id, run_data *rd) {
 static inline void set_cont(work_t *w, work_t *cont) {
   w->cont = cont;
   __sync_fetch_and_add(&cont->deps, 1);
+}
+
+static inline work_t *clone_task(work_t *task) {
+  work_t *clone = (work_t *)malloc(sizeof(work_t));
+  memcpy(clone, task, sizeof(work_t));
+  clone->full_task = false;
+  return clone;
 }
 
 // called from generated code to schedule a for loop with the given body and continuation
@@ -270,20 +285,42 @@ extern "C" void weld_rt_start_loop(work_t *w, void *body_data, void *cont_data, 
       w->continued = true;
     }
   }
-  set_full_task(body_task);
+
+  work_t *new_outer_task1 = NULL;
+  work_t *new_outer_task2 = NULL;
+  // If current task is a loop body with multiple iterations left, we want
+  // to create tasks for the remaining iterations so that they execute after
+  // the inner loop being created now (or are stolen by another thread, in which
+  // case new nest data will be created so their execution order is unimportant).
+  if (w != NULL && w->lower != w->upper && w->upper - w->cur_idx > 1) {
+    new_outer_task1 = clone_task(w);
+    new_outer_task1->lower = w->cur_idx + 1;
+    new_outer_task1->cur_idx = w->cur_idx + 1;
+    set_cont(new_outer_task1, w->cont);
+    // always split into two tasks if possible
+    if (new_outer_task1->upper - new_outer_task1->lower > 1) {
+      new_outer_task2 = clone_task(new_outer_task1);
+      int64_t mid = (new_outer_task1->lower + new_outer_task1->upper) / 2;
+      new_outer_task1->upper = mid;
+      new_outer_task2->lower = mid;
+      new_outer_task2->cur_idx = mid;
+      set_cont(new_outer_task2, w->cont);
+    }
+    // ensure that w immediately ends, and possible_new_outer_task contains whatever remained
+    w->cur_idx = w->upper - 1;
+  }
 
   int32_t my_id = weld_rt_thread_id();
   run_data *rd = get_run_data();
   pthread_spin_lock(rd->all_work_queue_locks + my_id);
+  if (new_outer_task2 != NULL) {
+    (rd->all_work_queues + my_id)->push_front(new_outer_task2);
+  }
+  if (new_outer_task1 != NULL) {
+    (rd->all_work_queues + my_id)->push_front(new_outer_task1);
+  }
   (rd->all_work_queues + my_id)->push_front(body_task);
   pthread_spin_unlock(rd->all_work_queue_locks + my_id);
-}
-
-static inline work_t *clone_task(work_t *task) {
-  work_t *clone = (work_t *)malloc(sizeof(work_t));
-  memcpy(clone, task, sizeof(work_t));
-  clone->full_task = false;
-  return clone;
 }
 
 // repeatedly break off the second half of the task into a new task
@@ -296,7 +333,8 @@ static inline void split_task(work_t *task, int32_t my_id, run_data *rd) {
     // The inner loop may be subject to vectorization, so modify the bounds to make the task size
     // divisible by the SIMD vector size.
     if (task->grain_size > 2 * MAX_SIMD_SIZE) {
-        mid = (mid / MAX_SIMD_SIZE) * MAX_SIMD_SIZE;
+      // Assumes that all vectorized inner loops have grain_size > 2 * MAX_SIMD_SIZE.
+      mid = (mid / MAX_SIMD_SIZE) * MAX_SIMD_SIZE;
     }
 
     task->upper = mid;

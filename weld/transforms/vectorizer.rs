@@ -30,10 +30,8 @@ pub fn vectorize(expr: &mut Expr<Type>) {
     expr.transform_and_continue_res(&mut |ref mut expr| {
         //  The Res is a stricter-than-necessary check, but prevents us from having to check nested
         //  loops for now.
-        if let Res { builder: ref for_loop } = expr.kind {
-            let ref broadcast_idens = vectorizable(for_loop)?;
-            if let For { ref iters, builder: ref init_builder, ref func } = for_loop.kind {
-                if let NewBuilder(_) = init_builder.kind {
+        if let Some(ref broadcast_idens) = vectorizable(expr) {
+            if let For { ref iters, builder: ref init_builder, ref func } = expr.kind {
                     if let Lambda { ref params, ref body } = func.kind {
                         // This is the vectorized body.
                         let mut vectorized_body = body.clone();
@@ -79,16 +77,13 @@ pub fn vectorize(expr: &mut Expr<Type>) {
 
                         let vectorized_loop = exprs::for_expr(vec_iters, *init_builder.clone(), vec_func, true)?;
                         let scalar_loop = exprs::for_expr(fringe_iters, vectorized_loop, *func.clone(), false)?;
-                        let result = exprs::result_expr(scalar_loop)?;
-
-                        let mut prev_expr = result;
+                        let mut prev_expr = scalar_loop;
                         for (iter, name) in iters.iter().zip(data_names).rev() {
                             prev_expr = exprs::let_expr(name.clone(), *iter.data.clone(), prev_expr)?;
                         }
 
                         vectorized = true;
                         return Ok((Some(prev_expr), false));
-                    }
                 }
             }
         }
@@ -98,7 +93,7 @@ pub fn vectorize(expr: &mut Expr<Type>) {
 }
 
 /// Predicate an `If` expression by checking for if(cond, merge(b, e), b) and transforms it to merge(b, select(cond, e,identity)).
-pub fn predicate(e: &mut Expr<Type>) {
+pub fn predicate_merge_expr(e: &mut Expr<Type>) {
     e.transform_and_continue_res(&mut |ref mut e| {
         if !(should_be_predicated(e)) {
             return Ok((None, true));
@@ -164,25 +159,48 @@ pub fn predicate(e: &mut Expr<Type>) {
     });
 }
 
+/// Predicate an `If` expression by checking for if(cond, scalar1, scalar2) and transforms it to select(cond, scalar1, scalar2).
+pub fn predicate_simple_expr(e: &mut Expr<Type>) {
+    e.transform_and_continue_res(&mut |ref mut e| {
+        if !(should_be_predicated(e)) {
+            return Ok((None, true));
+        }
+
+        // This pattern checks for if(cond, scalar1, scalar2).
+        if let If { ref cond, ref on_true, ref on_false } = e.kind {
+            // Check if any sub-expression has a builder; if so bail out in order to not break linearity.
+            let mut safe = true;
+            on_true.traverse(&mut |ref sub_expr| if sub_expr.kind.is_builder_expr() {
+                safe = false;
+            });
+            on_false.traverse(&mut |ref sub_expr| if sub_expr.kind.is_builder_expr() {
+                safe = false;
+            });
+            if !safe {
+                return Ok((None, true));
+            }
+
+            if let Scalar(_) = on_true.ty {
+                if let Scalar(_) = on_false.ty {
+                    let expr = exprs::select_expr(*cond.clone(), *on_true.clone(), *on_false.clone())?;
+                    return Ok((Some(expr), true));
+                }
+            }
+        }
+        Ok((None, true))
+    });
+}
+
 /// Returns `true` if this is a set of iterators we can vectorize, `false` otherwise.
 ///
 /// We can vectorize an iterator if all of its iterators consume the entire collection.
 fn vectorizable_iters(iters: &Vec<Iter<Type>>) -> bool {
-    for ref iter in iters {
-        if iter.start.is_some() || iter.end.is_some() || iter.stride.is_some() {
-            return false;
+    iters.iter().all(|ref iter| {
+        iter.start.is_none() && iter.end.is_none() && iter.stride.is_none() && match iter.data.ty {
+            Vector(ref elem) if elem.is_scalar() => true,
+            _ => false,
         }
-        if let Vector(ref elem_ty) = iter.data.ty {
-            if let Scalar(_) = *elem_ty.as_ref() {
-            } else {
-                return false;
-            }
-        }
-        if iter.kind != IterKind::ScalarIter {
-            return false;
-        }
-    }
-    true
+    })
 }
 
 /// Vectorizes an expression in-place, also changing its type if needed.
@@ -233,15 +251,25 @@ fn vectorize_expr(e: &mut Expr<Type>, broadcast_idens: &HashSet<Symbol>) -> Weld
     Ok(cont)
 }
 
+fn vectorizable_newbuilder(expr: &TypedExpr) -> bool {
+    if let NewBuilder(_) = expr.kind {
+        return true;
+    }
+    if let MakeStruct { ref elems } = expr.kind {
+        return elems.iter().all(|ref e| vectorizable_newbuilder(e));
+    }
+    false
+}
+
 /// Checks basic vectorizability for a loop - this is a strong check which ensure that the only
 /// expressions which appear in a function body are vectorizable expressions (see
 /// `docs/internals/vectorization.md` for details)
-fn vectorizable(for_loop: &Expr<Type>) -> WeldResult<HashSet<Symbol>> {
+fn vectorizable(for_loop: &Expr<Type>) -> Option<HashSet<Symbol>> {
     if let For { ref iters, builder: ref init_builder, ref func } = for_loop.kind {
         // Check if the iterators are consumed.
         if vectorizable_iters(&iters) {
             // Check if the builder is newly initialized.
-            if let NewBuilder(_) = init_builder.kind {
+            if vectorizable_newbuilder(init_builder) {
                 // Check the loop function.
                 if let Lambda { ref params, ref body } = func.kind {
                     let mut passed = true;
@@ -289,7 +317,8 @@ fn vectorizable(for_loop: &Expr<Type>) -> WeldResult<HashSet<Symbol>> {
                     });
 
                     if !passed {
-                        return weld_err!("Unsupported pattern");
+                        trace!("Vectorization failed due to unsupported expression in loop body");
+                        return None;
                     }
 
                     // If the data in the vector is not a Scalar, we can't vectorize it.
@@ -308,7 +337,8 @@ fn vectorizable(for_loop: &Expr<Type>) -> WeldResult<HashSet<Symbol>> {
                     }
 
                     if !check_arg_ty {
-                        return weld_err!("Unsupported type");
+                        trace!("Vectorization failed due to unsupported type");
+                        return None;
                     }
 
                     let mut idens = HashSet::new();
@@ -328,14 +358,16 @@ fn vectorizable(for_loop: &Expr<Type>) -> WeldResult<HashSet<Symbol>> {
                                        });
 
                     if !passed {
-                        return weld_err!("Unsupporte pattern: non-scalar identifier that must be broadcast");
+                        trace!("Unsupported pattern: non-scalar identifier that must be broadcast");
+                        return None;
                     }
-                    return Ok(idens);
+                    return Some(idens);
                 }
             }
         }
     }
-    return weld_err!("Unsupported pattern");
+    trace!("Vectorization failed due to unsupported pattern");
+    None
 }
 
 fn should_be_predicated(e: &mut Expr<Type>) -> bool {
@@ -357,8 +389,8 @@ fn get_id_element(ty: &Type, op: &BinOpKind) -> WeldResult<Option<Expr<Type>>> {
                 ScalarKind::I8 => exprs::literal_expr(LiteralKind::I8Literal(0))?,
                 ScalarKind::I32 => exprs::literal_expr(LiteralKind::I32Literal(0))?,
                 ScalarKind::I64 => exprs::literal_expr(LiteralKind::I64Literal(0))?,
-                ScalarKind::F32 => exprs::literal_expr(LiteralKind::F32Literal(0.0))?,
-                ScalarKind::F64 => exprs::literal_expr(LiteralKind::F64Literal(0.0))?,
+                ScalarKind::F32 => exprs::literal_expr(LiteralKind::F32Literal(0f32.to_bits()))?,
+                ScalarKind::F64 => exprs::literal_expr(LiteralKind::F64Literal(0f64.to_bits()))?,
                 _ => {
                     return Ok(None);
                 }
@@ -369,8 +401,8 @@ fn get_id_element(ty: &Type, op: &BinOpKind) -> WeldResult<Option<Expr<Type>>> {
                 ScalarKind::I8 => exprs::literal_expr(LiteralKind::I8Literal(1))?,
                 ScalarKind::I32 => exprs::literal_expr(LiteralKind::I32Literal(1))?,
                 ScalarKind::I64 => exprs::literal_expr(LiteralKind::I64Literal(1))?,
-                ScalarKind::F32 => exprs::literal_expr(LiteralKind::F32Literal(1.0))?,
-                ScalarKind::F64 => exprs::literal_expr(LiteralKind::F64Literal(1.0))?,
+                ScalarKind::F32 => exprs::literal_expr(LiteralKind::F32Literal(1f32.to_bits()))?,
+                ScalarKind::F64 => exprs::literal_expr(LiteralKind::F64Literal(1f64.to_bits()))?,
                 _ => {
                     return Ok(None);
                 }
@@ -380,7 +412,6 @@ fn get_id_element(ty: &Type, op: &BinOpKind) -> WeldResult<Option<Expr<Type>>> {
             return Ok(None);
         }
     };
-
     Ok(Some(identity))
 }
 
@@ -429,7 +460,7 @@ fn simple_merger() {
 #[test]
 fn predicated_merger() {
     let mut e = typed_expr("|v:vec[i32]| result(for(v, merger[i32,+], |b,i,e| @(predicate:true)if(e>0, merge(b,e), b)))");
-    predicate(&mut e);
+    predicate_merge_expr(&mut e);
     vectorize(&mut e);
     assert!(has_vectorized_merge(&e));
 }
@@ -453,7 +484,7 @@ fn simple_appender() {
 fn predicated_appender() {
     // This code should NOT be vectorized because we can't predicate merges into vecbuilder.
     let mut e = typed_expr("|v:vec[i32]| result(for(v, appender[i32], |b,i,e| @(predicate:true)if(e>0, merge(b,e), b)))");
-    predicate(&mut e);
+    predicate_merge_expr(&mut e);
     vectorize(&mut e);
     assert!(!has_vectorized_merge(&e));
 }
