@@ -65,7 +65,6 @@ def test_start():
     a = orig[0:20:1,0:20:1]
 
     start = (wn.addr(a) - wn.addr(orig)) / a.itemsize
-    # assert not a.flags.contiguous
     orig = wn.array(orig)
     z = np.copy(a)
     z = np.exp(z)
