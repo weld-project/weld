@@ -59,7 +59,7 @@ pub fn vectorize(expr: &mut Expr<Type>) {
                                                end: e.end.clone(),
                                                stride: e.stride.clone(),
                                                kind: IterKind::SimdIter,
-                                               shapes: e.shapes.clone(),
+                                               shape: e.shape.clone(),
                                                strides: e.strides.clone(),
                                            });
                         }

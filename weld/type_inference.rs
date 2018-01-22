@@ -462,8 +462,8 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
                     }
                 }
                 /* For Nd-Iter */
-                if iter.shapes.is_some() {
-                    for i in [&mut iter.shapes, &mut iter.strides].iter_mut() {
+                if iter.shape.is_some() {
+                    for i in [&mut iter.shape, &mut iter.strides].iter_mut() {
                         match **i {
                             Some(ref mut e) => {
                                 changed |= try!(push_complete_type(&mut e.ty, Vector(Box::new(Scalar(I64))), "iter"))

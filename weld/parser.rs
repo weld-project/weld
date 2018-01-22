@@ -496,7 +496,7 @@ impl<'t> Parser<'t> {
             try!(self.consume(iter.clone()));
             try!(self.consume(TOpenParen));
             let data = try!(self.expr());
-            let (mut start, mut end, mut stride, mut shapes, mut strides) = (None, None, None, None, None);
+            let (mut start, mut end, mut stride, mut shape, mut strides) = (None, None, None, None, None);
             if *self.peek() == TComma {
                 try!(self.consume(TComma));
                 start = Some(try!(self.expr()));
@@ -507,7 +507,7 @@ impl<'t> Parser<'t> {
             }
             if iter == TNdIter && *self.peek() == TComma {
                 try!(self.consume(TComma));
-                shapes = Some(try!(self.expr()));
+                shape = Some(try!(self.expr()));
                 try!(self.consume(TComma));
                 strides = Some(try!(self.expr()));
             }
@@ -523,7 +523,7 @@ impl<'t> Parser<'t> {
                     TNdIter => NdIter,
                     _ => ScalarIter,
                 },
-                shapes: shapes,
+                shape: shape,
                 strides: strides,
             };
             try!(self.consume(TCloseParen));
@@ -541,7 +541,7 @@ impl<'t> Parser<'t> {
                     TNdIter => NdIter,
                     _ => ScalarIter,
                 },
-                shapes: None,
+                shape: None,
                 strides: None,
             };
             Ok(iter)

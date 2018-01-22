@@ -265,9 +265,8 @@ pub struct Iter<T: TypeBounds> {
     pub kind: IterKind,
     // NdIter specific fields
     pub strides: Option<Box<Expr<T>>>,
-    pub shapes: Option<Box<Expr<T>>>,
+    pub shape: Option<Box<Expr<T>>>,
 }
-
 
 impl<T: TypeBounds> Iter<T> {
     /// Returns true if this is a simple iterator with no start/stride/end specified

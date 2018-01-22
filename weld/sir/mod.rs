@@ -286,7 +286,7 @@ pub struct ParallelForIter {
     pub kind: IterKind,
     // NdIter specific fields
     pub strides: Option<Symbol>,
-    pub shapes: Option<Symbol>,
+    pub shape: Option<Symbol>,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -585,7 +585,7 @@ impl fmt::Display for ParallelForIter {
             IterKind::NdIter => "nditer"
         };
         
-        if self.shapes.is_some() {
+        if self.shape.is_some() {
             /* NdIter. Note: end or stride aren't important here, so skpping those.
              * */
             write!(f,
@@ -593,7 +593,7 @@ impl fmt::Display for ParallelForIter {
                    iterkind,
                    self.data,
                    self.start.clone().unwrap(),
-                   self.shapes.clone().unwrap(),
+                   self.shape.clone().unwrap(),
                    self.strides.clone().unwrap())
         } else if self.start.is_some() {
             write!(f,
@@ -696,11 +696,11 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
             ParallelFor(ref pf) => {
                 for iter in pf.data.iter() {
                     vars.push(iter.data.clone());
-                    if iter.shapes.is_some() {
+                    if iter.shape.is_some() {
                         vars.push(iter.start.clone().unwrap());
                         vars.push(iter.end.clone().unwrap());
                         vars.push(iter.stride.clone().unwrap());
-                        vars.push(iter.shapes.clone().unwrap());
+                        vars.push(iter.shape.clone().unwrap());
                         vars.push(iter.strides.clone().unwrap());
                     } else if iter.start.is_some() {
                         vars.push(iter.start.clone().unwrap());
@@ -1278,7 +1278,7 @@ fn gen_expr(expr: &TypedExpr,
                                                     tracker, multithreaded, body_func));
                     let stride_sym = try!(get_iter_sym(&iter.stride, prog, &mut cur_func, &mut cur_block, 
                                                        tracker, multithreaded, body_func));
-                    let shapes_sym = try!(get_iter_sym(&iter.shapes, prog, &mut cur_func, &mut cur_block, 
+                    let shape_sym = try!(get_iter_sym(&iter.shape, prog, &mut cur_func, &mut cur_block, 
                                                        tracker, multithreaded, body_func));
                     let strides_sym = try!(get_iter_sym(&iter.strides, prog, &mut cur_func, &mut cur_block, 
                                                         tracker, multithreaded, body_func));
@@ -1288,7 +1288,7 @@ fn gen_expr(expr: &TypedExpr,
                                       end: end_sym,
                                       stride: stride_sym,
                                       kind: iter.kind.clone(),
-                                      shapes: shapes_sym,
+                                      shape: shape_sym,
                                       strides: strides_sym,
                                   });
                 }

@@ -357,7 +357,7 @@ impl PartialExpr {
                         Some(ref s) => Some(try!(typed_box(s))),
                         None => None,
                     };
-                    let shapes = match iter.shapes {
+                    let shape = match iter.shape {
                         Some(ref s) => Some(try!(typed_box(s))),
                         None => None,
                     };
@@ -372,7 +372,7 @@ impl PartialExpr {
                         end: end,
                         stride: stride,
                         kind: iter.kind.clone(),
-                        shapes: shapes,
+                        shape: shape,
                         strides: strides,
                     };
                     typed_iters.push(typed_iter);
