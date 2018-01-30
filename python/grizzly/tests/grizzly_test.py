@@ -35,12 +35,12 @@ class PandasWeldTestMethods(unittest.TestCase):
         groupby = input.groupby(["a", "b"]).sum().evaluate(False)
         self.assertItemsEqual([5, 10], groupby.to_pandas()["c"])
 
-    # def test_filter_self(self):
-    #     k = np.array(["A", "b", "D", "F", "e", "A", "A", "ac"], dtype=str)
-    #     s = np.array(["A", "b", "D", "F", "e", "A", "A", "ac"], dtype=str)
-    #     df = pd.DataFrame({"k":k, "s":s})
-    #     grs = gr.DataFrameWeld(df)
-    #     grs = grs["k"].unique()
+    def test_filter_self(self):
+        k = np.array(["A", "b", "D", "F", "e", "A", "A", "ac"], dtype=str)
+        s = np.array(["A", "b", "D", "F", "e", "A", "A", "ac"], dtype=str)
+        df = pd.DataFrame({"k":k, "s":s})
+        grs = gr.DataFrameWeld(df)
+        grs = grs["k"].unique()
 
     # def test_filter_self(self):
     #     input = gr.SeriesWeld(np.array(["False", "True", "True", "False"], dtype=str),gr.WeldVec(gr.WeldChar()))
@@ -59,12 +59,12 @@ class PandasWeldTestMethods(unittest.TestCase):
         mdf.reset_index(inplace=True, drop=True)
         self.assertItemsEqual(groupby, mdf)
 
-    def test_unique(self):
-        inp = gr.SeriesWeld(
-            np.array(["aaa", "bbb", "aaa", "ccc"], dtype=str),
-            gr.WeldVec(gr.WeldChar()))
-        self.assertItemsEqual(["aaa", "bbb", "ccc"],
-                              inp.unique().evaluate(False))
+    # def test_unique(self):
+    #     inp = gr.SeriesWeld(
+    #         np.array(["aaa", "bbb", "aaa", "ccc"], dtype=str),
+    #         gr.WeldVec(gr.WeldChar()))
+    #     self.assertItemsEqual(["aaa", "bbb", "ccc"],
+    #                           inp.unique().evaluate(False))
 
     def test_sum(self):
         inp = gr.SeriesWeld(
@@ -76,14 +76,14 @@ class PandasWeldTestMethods(unittest.TestCase):
             np.array([1, 2, 3, 4, 5], dtype=np.int32), gr.WeldInt())
         self.assertEqual(5, inp.count().evaluate(False))
 
-    def test_eq(self):
-        inp = gr.SeriesWeld(
-            np.array(["aaaa", "bbb", "aa", "cccc"], dtype=str),
-            gr.WeldVec(gr.WeldChar()))
-        expected_output = [True, False, False, False]
-        self.assertSequenceEqual(
-            expected_output, list(
-                (inp == "aaaa").evaluate(False)))
+    # def test_eq(self):
+    #     inp = gr.SeriesWeld(
+    #         np.array(["aaaa", "bbb", "aa", "cccc"], dtype=str),
+    #         gr.WeldVec(gr.WeldChar()))
+    #     expected_output = [True, False, False, False]
+    #     self.assertSequenceEqual(
+    #         expected_output, list(
+    #             (inp == "aaaa").evaluate(False)))
 
     def test_simpler_eq(self):
         inp = gr.SeriesWeld(
@@ -93,40 +93,40 @@ class PandasWeldTestMethods(unittest.TestCase):
             expected_output, list(
                 (inp == 100).evaluate(False)))
 
-    def test_mask(self):
-        inp = gr.SeriesWeld(
-            np.array(["aaaa", "bbb", "aa", "cccc"], dtype=str),
-            gr.WeldVec(gr.WeldChar()))
-        predicates = np.array([True, False, False, True], dtype=bool)
-        expected_output = ["bbbb", "bbb", "aa", "bbbb"]
-        self.assertSequenceEqual(
-            expected_output,
-            list(
-                inp.mask(
-                    predicates,
-                    "bbbb").evaluate(False)))
+    # def test_mask(self):
+    #     inp = gr.SeriesWeld(
+    #         np.array(["aaaa", "bbb", "aa", "cccc"], dtype=str),
+    #         gr.WeldVec(gr.WeldChar()))
+    #     predicates = np.array([True, False, False, True], dtype=bool)
+    #     expected_output = ["bbbb", "bbb", "aa", "bbbb"]
+    #     self.assertSequenceEqual(
+    #         expected_output,
+    #         list(
+    #             inp.mask(
+    #                 predicates,
+    #                 "bbbb").evaluate(False)))
 
-    def test_filter(self):
-        inp = gr.SeriesWeld(
-            np.array(["aaaa", "bbb", "aa", "cccc"], dtype=str),
-            gr.WeldVec(gr.WeldChar()))
-        predicates = np.array([True, False, False, True], dtype=bool)
-        expected_output = ["aaaa", "cccc"]
-        self.assertSequenceEqual(expected_output, list(
-            inp.filter(predicates).evaluate(False)))
+    # def test_filter(self):
+    #     inp = gr.SeriesWeld(
+    #         np.array(["aaaa", "bbb", "aa", "cccc"], dtype=str),
+    #         gr.WeldVec(gr.WeldChar()))
+    #     predicates = np.array([True, False, False, True], dtype=bool)
+    #     expected_output = ["aaaa", "cccc"]
+    #     self.assertSequenceEqual(expected_output, list(
+    #         inp.filter(predicates).evaluate(False)))
 
-    def test_eq_and_mask(self):
-        inp = gr.SeriesWeld(
-            np.array(["aaaa", "bbb", "aa", "cccc"], dtype=str),
-            gr.WeldVec(gr.WeldChar()))
-        predicates = inp == "bbb"
-        expected_output = ["aaaa", "eeee", "aa", "cccc"]
-        self.assertSequenceEqual(
-            expected_output,
-            list(
-                inp.mask(
-                    predicates,
-                    "eeee").evaluate(False)))
+    # def test_eq_and_mask(self):
+    #     inp = gr.SeriesWeld(
+    #         np.array(["aaaa", "bbb", "aa", "cccc"], dtype=str),
+    #         gr.WeldVec(gr.WeldChar()))
+    #     predicates = inp == "bbb"
+    #     expected_output = ["aaaa", "eeee", "aa", "cccc"]
+    #     self.assertSequenceEqual(
+    #         expected_output,
+    #         list(
+    #             inp.mask(
+    #                 predicates,
+    #                 "eeee").evaluate(False)))
 
     def test_eq_and_mask_grouped(self):
         inp = gr.SeriesWeld(
@@ -152,28 +152,28 @@ class PandasWeldTestMethods(unittest.TestCase):
         self.assertSequenceEqual([False, True, False, False, True], list(output[0]))
         self.assertEqual(13, output[1])
 
-    def test_eq_and_mask_grouped_strings(self):
-        inp = gr.SeriesWeld(
-            np.array(["aaaa", "bbb", "aa", "cccc"], dtype=str),
-            gr.WeldVec(gr.WeldChar()))
-        predicates = inp == "bbb"
-        expected_output = ["aaaa", "eeee", "aa", "cccc"]
-        output = gr.group(
-            [predicates,
-             inp.mask(predicates, "eeee")]
-        ).evaluate(False)
-        self.assertSequenceEqual([False, True, False, False], list(output[0]))
-        self.assertSequenceEqual(["aaaa", "eeee", "aa", "cccc"], list(output[1]))
+    # def test_eq_and_mask_grouped_strings(self):
+    #     inp = gr.SeriesWeld(
+    #         np.array(["aaaa", "bbb", "aa", "cccc"], dtype=str),
+    #         gr.WeldVec(gr.WeldChar()))
+    #     predicates = inp == "bbb"
+    #     expected_output = ["aaaa", "eeee", "aa", "cccc"]
+    #     output = gr.group(
+    #         [predicates,
+    #          inp.mask(predicates, "eeee")]
+    #     ).evaluate(False)
+    #     self.assertSequenceEqual([False, True, False, False], list(output[0]))
+    #     self.assertSequenceEqual(["aaaa", "eeee", "aa", "cccc"], list(output[1]))
 
-    def test_slice(self):
-        inp = gr.SeriesWeld(
-            np.array(["aaaaaa", "bbbbbb", "aaaaaaa", "cccccccc"], dtype=str),
-            gr.WeldVec(gr.WeldChar()))
-        expected_output = ["aaa", "bbb", "aaa", "ccc"]
-        self.assertSequenceEqual(
-            expected_output, list(
-                inp.str.slice(
-                    1, 3).evaluate(False)))
+    # def test_slice(self):
+    #     inp = gr.SeriesWeld(
+    #         np.array(["aaaaaa", "bbbbbb", "aaaaaaa", "cccccccc"], dtype=str),
+    #         gr.WeldVec(gr.WeldChar()))
+    #     expected_output = ["aaa", "bbb", "aaa", "ccc"]
+    #     self.assertSequenceEqual(
+    #         expected_output, list(
+    #             inp.str.slice(
+    #                 1, 3).evaluate(False)))
 
     def test_add(self):
         inp = gr.SeriesWeld(
