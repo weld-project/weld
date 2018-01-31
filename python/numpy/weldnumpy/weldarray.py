@@ -29,13 +29,6 @@ class weldarray(np.ndarray):
         # TODO: Add support for lists / ints.
         assert isinstance(input_array, np.ndarray), 'only support ndarrays'
         assert str(input_array.dtype) in SUPPORTED_DTYPES
-        # Trying to get np.empty instead of shared memory to work --- need to find the best place
-        # to do something like this.
-        # if isinstance(input_array, weldarray):
-            # # obj = weldarray(np.empty(input_array.shape))
-            # obj = np.empty(input_array.shape).view(cls)
-        # else:
-            # obj = np.asarray(input_array).view(cls)
 
         # sharing memory with the ndarray/weldarry
         obj = np.asarray(input_array).view(cls)
@@ -255,6 +248,7 @@ class weldarray(np.ndarray):
                     # print('finally ret = ', ret)
 
             elif isinstance(idx, np.ndarray) or isinstance(idx, list):
+                # FIXME: upload this as well.
                 # just update it for each element in the list
                 for i, e in enumerate(idx):
                     _update_single_entry(self, e, val[i])
@@ -406,7 +400,6 @@ class weldarray(np.ndarray):
         TODO: support other type of methods?
         @method: call, __reduce__,
         '''
-        print(ufunc)
         input_args = [inp for inp in inputs]
         outputs = kwargs.pop('out', None)
         supported = self._process_ufunc_inputs(input_args, outputs, kwargs)
@@ -596,10 +589,20 @@ class weldarray(np.ndarray):
             arr = arr.reshape(self._real_shape)
         else:
             # floats and other values being returned.
-            return arr
+            return arr 
+
+        # Important to free memory here! Without this, some code like:
+        #       >>> a = np.exp(a)
+        #       >>> a = a.evaluate()
+        # was leading to a huge memory leak as a's original array still had a
+        # reference to the old array, so python's garbage collector did not
+        # collect it for free-ing.
+        del(self.weldobj.context[self.name])
 
         # Now that the evaluation is done - create new weldobject for self,
-        # initalized from the returned arr.
+        # initalized from the returned arr. We want to be able to support users
+        # not having to catch the return value to evaluate call - especially
+        # since we do it many times internally as well.
         self._gen_weldobj(arr)
         return arr
 
@@ -610,10 +613,8 @@ class weldarray(np.ndarray):
         base_array would store those).
         '''
         if self._weldarray_view:
-            print("_weldarray VIEW")
             idx = self._weldarray_view.idx
             if idx is not None:
-                print("idx not NONE")
                 result = weldarray(self._weldarray_view.parent._eval()[idx], verbose=self._verbose)
             else:
                 result = weldarray(self)
@@ -901,6 +902,7 @@ class weldarray(np.ndarray):
                     return orig_arr._gen_weldview(arr)
                 else:
                     return orig_arr
+            print('broad cast arrays!')
             arr1_b, arr2_b = np.broadcast_arrays(arr1, arr2)
             arr1_b = finalize_array(arr1_b, arr1)
             arr2_b = finalize_array(arr2_b, arr2)

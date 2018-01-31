@@ -151,7 +151,6 @@ def remove_pass(pass_name):
 # Stuff for the incremental integration study.
 def remove_all_ops():
     global BINARY_OPS, UNARY_OPS, CMP_OPS
-    print('removing all ops!')
     BINARY_OPS = {}
     UNARY_OPS = {}
     CMP_OPS = {}
@@ -166,13 +165,10 @@ def add_ops(ops):
     cmp_ops = get_supported_cmp_ops()
     for op in ops:
         if op in binary_ops:
-            print('adding binary op ', op)
             BINARY_OPS[op] = binary_ops[op]
         elif op in unary_ops:
-            print('adding unary op ', op)
             UNARY_OPS[op] = unary_ops[op]
         elif op in cmp_ops:
-            print('adding cmp op ', op)
             CMP_OPS[op] = cmp_ops[op]
 
 def set_offload_setitem(val):
