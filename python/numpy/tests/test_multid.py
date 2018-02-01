@@ -482,6 +482,11 @@ def test_broadcasting_nbody_bug():
     '''
     n, w = random_arrays(1000, 'float64')
     a = np.transpose(n[np.newaxis,:])
+    print(w._real_shape)
+    w2 = w[np.newaxis,:]
+    print(type(w2))
+    print(w2.shape)
+    # print(w2._real_shape)
     b = transpose(w[np.newaxis,:])
     b = b.evaluate()
     print(type(b))
@@ -571,6 +576,4 @@ def test_nbody_bug2():
 def test_less_than():
     n, w = random_arrays(10, 'float64')
 
-# test_views_non_contig_basic()
-# test_views_non_contig_no_op()
-# test_views_non_contig_inplace_other_updates()
+# test_diagonal_setitem()

@@ -43,7 +43,7 @@ def random_arrays(num, dtype):
     test = test.astype(dtype)
 
     np_test = np.copy(test)
-    w = weldarray(test, verbose=False)
+    w = weldarray(test, verbose=True)
 
     return np_test, w
 
@@ -337,7 +337,6 @@ def test_views_mess():
     num_views = 10
 
     n, w = random_arrays(NUM_ELS, 'float32')
-
     # in order to avoid sqrt running into bad values
     w += 1000.00
     n += 1000.00
@@ -372,7 +371,7 @@ def test_views_mess():
         n2, w2 = random_arrays(len(np_views[i]), 'float32')
         weld_views[i] = np.add(weld_views[i], w2, out=weld_views[i])
         np_views[i] = np.add(np_views[i], n2, out=np_views[i])
-        # weld_views[i].evaluate()
+        weld_views[i].evaluate()
 
         a = np.log(weld_views[i].evaluate())
         b = np.log(np_views[i])
@@ -382,7 +381,11 @@ def test_views_mess():
     n = np.sqrt(n, out=n)
 
     assert np.allclose(n, w)
-    assert np.array_equal(w.evaluate(), n)
+    # assert np.array_equal(w.evaluate(), n)
+    for i, _ in enumerate(w):
+        assert w[i] == n[i]
+
+    # assert np.array_equal(n, w.evaluate())
 
     # TODO: Add stuff with grandchildren, and so on.
     for i in range(num_views):
@@ -675,12 +678,19 @@ def test_setitem_slice():
     '''
     n, w = random_arrays(NUM_ELS, 'float32')
 
+    n[0:2] += 1.0
+    w[0:2] += 1.0
     n[0:2] = [5.0, 2.0]
     w[0:2] = [5.0, 2.0]
     assert np.allclose(n, w)
 
     n[4:6] += 10.0
+    # w2 = w[4:6]
     w[4:6] += 10.0
+    w = w.evaluate()
+    print('n: ', n)
+    print('w: ', w)
+
     assert np.allclose(n, w)
 
 def test_setitem_strides():
@@ -739,19 +749,33 @@ def test_setitem_views():
     '''
     NUM_ELS = 6
     n, w = random_arrays(NUM_ELS, 'float32')
+
     n2 = n[1:5]
     w2 = w[1:5]
 
+    # first add stuff to be evaluated
+    n += 2.0
+    w += 2.0
+
     n2[0:2:1] = [5.0, 2.0]
     w2[0:2:1] = [5.0, 2.0]
-    assert np.allclose(n, w)
+
+    assert np.allclose(n, w.evaluate())
     assert np.allclose(n2, w2.evaluate())
+
+    print('going to call += ')
+    print('going to call += ')
+    print('going to call += ')
     n2[0:3:1] += 10.0
     w2[0:3:1] += 10.0
-    w2 = w2.evaluate()
+
+    print('n2: ', n2)
+    print('w2: ', w2)
+
     w = w.evaluate()
-    assert np.allclose(n, w)
+    w2 = w2.evaluate()
     assert np.allclose(n2, w2)
+    assert np.allclose(n, w)
 
 def test_iterator():
     n, w = random_arrays(NUM_ELS, 'float32')
@@ -982,3 +1006,44 @@ def test_views_inplace_evaluate():
     # Originally, we were not preserving the _weldarray_view after evaluate.
     assert w2._weldarray_view is not None
 
+def test_array_equal():
+    '''
+    np.array_equal DOES Not pass subclasses along while evaluating -- and on our side, this
+    fails because of a subtle reason somehow...
+    '''
+    n, w = random_arrays(NUM_ELS, 'float32')
+    # in order to avoid sqrt running into bad values
+    w += 1000.00
+    n += 1000.00
+    w = np.log(w)
+    n = np.log(n)
+
+    # allclose OR w.evaluate() first, and then array_equal leads to mysterious failing (unless
+    # we return a new weldarray from evaluate ...)
+    print(w.weldobj.context)
+    w.evaluate()
+    assert np.allclose(n, w)
+    assert np.array_equal(n,w.evaluate())
+
+def test_setitem_float():
+    '''
+    can't automatically assume value to be added is a list as we were doing.
+    '''
+    n, w = random_arrays(NUM_ELS, 'float32')
+    n[0:5:1] = 2.0
+    w[0:5:1] = 2.0
+    assert np.allclose(n, w)
+
+def test_setitem_list():
+    '''
+    idx is a list.
+    '''
+    n, w = random_arrays(10, 'float32')
+    n[[2,4]] = 4.0
+    w[[2,4]] = 4.0
+    assert np.allclose(n, w)
+    n[2] = 2.0
+    w[2] = 2.0
+    assert np.allclose(n, w)
+
+test_setitem_views()

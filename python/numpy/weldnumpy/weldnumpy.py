@@ -1,10 +1,12 @@
 import numpy as np
 from weld.types import *
+from distutils.version import StrictVersion
+assert StrictVersion(np.__version__) >= StrictVersion('1.13')
 
 ALL_PASSES = ["loop-fusion", "infer-size", "short-circuit-booleans", "predicate", "vectorize",
         "fix-iterate"]
 CUR_PASSES = ALL_PASSES
-offload_setitem = False
+offload_setitem = True
 
 class weldarray_view():
     '''
