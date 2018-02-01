@@ -147,7 +147,6 @@ class weldarray(np.ndarray):
                 - TODO: explain stuff + similarities/differences with slices.
         '''
         # Need to cast it as ndarray view before calling ndarray's __getitem__ implementation.
-        print('getitem')
         if isinstance(idx, slice):
             # TODO: The way we treat views now, views don't need their own weldobj - just the
             # weldview object. Could be a minor optimization.
@@ -210,8 +209,8 @@ class weldarray(np.ndarray):
             - slice
             - ndarray
             - int
-
-        When self is a view, update parent instead.
+        In general, we follow the strategy of offloading everything to NumPy
+        after evaluating the stored operations.
         '''
         def _update_single_entry(arr, index, val):
             '''
@@ -362,7 +361,11 @@ class weldarray(np.ndarray):
         scalars = []
         shapes = []
         for i in input_args:
-            # FIXME: Need to decide if we want to keep in this measure OR not?
+            # FIXME: This enforces that if ndarray op weldarray, then we force
+            # evaluation with weldarray. Usually, this does not seem required,
+            # but somehow, in cases with non-contiguous arrays, it seems to
+            # fail otherwise. Might just be a bug in weldnumpy, will need to
+            # explore further.
             if isinstance(i, np.ndarray) and not isinstance(i, weldarray):
                 return False
 

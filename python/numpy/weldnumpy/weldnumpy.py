@@ -1,4 +1,5 @@
 import numpy as np
+import scipy.special as ss
 from weld.types import *
 from distutils.version import StrictVersion
 assert StrictVersion(np.__version__) >= StrictVersion('1.13')
@@ -82,7 +83,8 @@ def get_supported_unary_ops():
     unary_ops[np.sinh.__name__] = 'sinh'
     unary_ops[np.cosh.__name__] = 'cosh'
     unary_ops[np.tanh.__name__] = 'thanh'
-
+    # scipy functions also seem to be routed through ufuncs!
+    unary_ops[ss.erf.__name__] = 'erf'
     return unary_ops
 
 def get_supported_cmp_ops():

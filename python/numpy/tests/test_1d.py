@@ -1,7 +1,7 @@
 import numpy as np
 import py.test
 import random
-from weldnumpy import weldarray, erf as welderf
+from weldnumpy import weldarray
 import scipy.special as ss
 
 '''
@@ -981,7 +981,7 @@ def test_erf():
         n, w = random_arrays(NUM_ELS, dtype)
 
         n2 = ss.erf(n)
-        w2 = welderf(w)
+        w2 = ss.erf(w)
 
         w2_eval = w2.evaluate()
 
@@ -1045,5 +1045,3 @@ def test_setitem_list():
     n[2] = 2.0
     w[2] = 2.0
     assert np.allclose(n, w)
-
-test_setitem_views()
