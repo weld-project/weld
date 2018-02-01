@@ -157,8 +157,8 @@ def test_views_non_contig_inplace_unary():
 
         w2 = w2.evaluate()
         assert np.array_equal(n2, w2)
-        # assert np.allclose(n2, w2.evaluate())
-        # assert np.allclose(n, w)
+        assert np.allclose(n2, w2.evaluate())
+        assert np.allclose(n, w)
 
 def test_views_non_contig_newarray_binary():
     '''
@@ -532,19 +532,21 @@ def test_diagonal():
 
     assert n2.shape == w2.shape
     assert n2.strides == w2.strides
+    assert np.allclose(n2, w2)
     assert np.array_equal(n2, w2)
 
 def test_diagonal_setitem():
     '''
     functionality required for nbody .
     '''
-    wn.set_offload_setitem(True)
+    # wn.set_offload_setitem(True)
     n, w = random_arrays((5,5), 'float64')
     n2 = diagonal(n)
     w2 = diagonal(w)
     n2[:] = 1.0
     w2[:] = 1.0
-    wn.set_offload_setitem(False)
+    # wn.set_offload_setitem(False)
+    assert np.allclose(n2, w2)
     assert np.array_equal(n2, w2)
     assert np.array_equal(n, w)
 
@@ -575,5 +577,3 @@ def test_nbody_bug2():
 
 def test_less_than():
     n, w = random_arrays(10, 'float64')
-
-# test_diagonal_setitem()

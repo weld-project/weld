@@ -43,7 +43,7 @@ def random_arrays(num, dtype):
     test = test.astype(dtype)
 
     np_test = np.copy(test)
-    w = weldarray(test, verbose=True)
+    w = weldarray(test, verbose=False)
 
     return np_test, w
 
@@ -1045,3 +1045,14 @@ def test_setitem_list():
     n[2] = 2.0
     w[2] = 2.0
     assert np.allclose(n, w)
+
+def test_too_many_ops():
+    '''
+    causes segault because there are too many ops for the weld graph to handle.
+    '''
+    n, w = random_arrays(10, 'float32')
+    for i in range(1000):
+        w += 10.0
+        n += 10.0
+    w = w.evaluate()
+    assert np.allclose(w, n)

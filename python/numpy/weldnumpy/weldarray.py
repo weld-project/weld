@@ -43,6 +43,10 @@ class weldarray(np.ndarray):
             obj._real_shape = input_array._real_shape
         else:
             obj._real_shape = obj.shape
+        if hasattr(input_array, '_num_registered_ops'):
+            obj._num_registered_ops = input_array._num_registered_ops
+        else:
+            obj._num_registered_ops = 0
 
         return obj
 
@@ -443,6 +447,11 @@ class weldarray(np.ndarray):
         outputs = kwargs.pop('out', None)
         supported = self._process_ufunc_inputs(input_args, outputs, kwargs)
         output = None
+
+        if self._num_registered_ops > 100:
+            # force evaluation internally.
+            self._eval()
+
         if supported and method == '__call__':
             output = self._handle_call(ufunc, input_args, outputs, kwargs)
         elif supported and method == 'reduce':
@@ -450,6 +459,7 @@ class weldarray(np.ndarray):
 
         if output is not None:
             if self._verbose: print('ufunc was supported ', ufunc)
+            output._num_registered_ops += 1
             return output
 
         return self._handle_numpy(ufunc, method, input_args, outputs, kwargs)
@@ -591,6 +601,8 @@ class weldarray(np.ndarray):
         - View: If self is a view, then evaluates the parent array, and returns the aprropriate index from
         the result. Here, the behaviour is slightly different - it returns a weldarray
         '''
+        # all registered ops will be cleared after this
+        self._num_registered_ops = 0
         # This check has to happen before the caching - as the weldobj/code for views is never updated.
         # TODO: Need to change this condition specifically for in place ops.
         # Case 1: we are evaluating an in place on in an array. So need to evaluate the parent and
