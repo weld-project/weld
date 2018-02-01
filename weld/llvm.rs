@@ -1,3 +1,4 @@
+use std::ascii::AsciiExt;
 use std::collections::HashSet;
 use std::collections::BTreeMap;
 
@@ -291,6 +292,9 @@ pub struct LlvmGenerator {
     /// LLVM type names for various builder types
     bld_names: fnv::FnvHashMap<BuilderKind, String>,
 
+    /// Pointer name for each declared string constant.
+    string_names: fnv::FnvHashMap<String, String>,
+    
     /// A CodeBuilder and ID generator for prelude functions such as type and struct definitions.
     prelude_code: CodeBuilder,
     prelude_var_ids: IdGenerator,
@@ -326,6 +330,7 @@ impl LlvmGenerator {
             dict_ids: IdGenerator::new("%d"),
             cudf_names: HashSet::new(),
             bld_names: fnv::FnvHashMap::default(),
+            string_names: fnv::FnvHashMap::default(),
             prelude_code: CodeBuilder::new(),
             prelude_var_ids: IdGenerator::new("%p.p"),
             body_code: CodeBuilder::new(),
@@ -1892,6 +1897,34 @@ impl LlvmGenerator {
         Ok(())
     }
 
+    fn escape_str(&self, string: &str) -> String {
+        string.replace("\\", "\\\\").replace("\"", "\\\"")
+    }
+    
+    /// Retrieve the stored pointer for a String constant or create one if it doesn't exist.
+    fn get_string_ptr(&mut self, string: &str) -> WeldResult<String> {
+        if self.string_names.get(string) == None {
+            self.gen_string_definition(string)?;
+        }
+        Ok(self.string_names.get(string).unwrap().to_string())
+    }
+
+    /// Generates a global pointer for a String constant.
+    fn gen_string_definition(&mut self, string: &str) -> WeldResult<()> {
+        if !(string.is_ascii()) {
+            return weld_err!("Weld strings must be valid ASCII");
+        }
+        
+        let global = self.prelude_var_ids.next().replace("%", "@");
+        let text = self.escape_str(string);
+        let len = text.len();
+        self.prelude_code.add(format!(
+            "{} = private unnamed_addr constant [{} x i8] c\"{}\"",
+            global, len, text));
+        self.string_names.insert(string.to_string(), global);
+        Ok(())
+    }
+
     /// Generates a struct definition for the given field types.
     fn gen_struct_definition(&mut self, fields: &Vec<Type>) -> WeldResult<()> {
         // Declare the struct in prelude_code
@@ -1906,6 +1939,24 @@ impl LlvmGenerator {
         // Add it into our map so we remember its name
         self.struct_names.insert(fields.clone(), name);
         Ok(())
+    }
+
+    fn string_literal(&mut self, string: &str, vec_ty: &str, ctx: &mut FunctionContext) -> WeldResult<String> {
+        let global = self.get_string_ptr(string).unwrap();
+        let len = self.escape_str(string).len();
+        let local = ctx.var_ids.next();
+        ctx.code.add(format!(
+            "{} = getelementptr [{} x i8], [{} x i8]* {}, i32 0, i32 0",
+            local, len, len, global));
+        let tmp_vec = ctx.var_ids.next();
+        ctx.code.add(format!(
+            "{} = insertvalue {} undef, i8* {}, 0",
+            tmp_vec, vec_ty, local));
+        let tmp_vec2 = ctx.var_ids.next();
+        ctx.code.add(format!(
+            "{} = insertvalue {} {}, i64 {}, 1",
+            tmp_vec2, vec_ty, tmp_vec, len));
+        Ok(tmp_vec2)
     }
 
     /// Generates a vector definition with the given type.
@@ -2078,7 +2129,7 @@ impl LlvmGenerator {
         let vec_ty_str = self.llvm_type(vec_ty)?;
         let size_str = format!("{}", size);
 
-        let value_str = llvm_literal(*kind);
+        let value_str = llvm_literal((*kind).clone()).unwrap();
         let elem_ty_str = match *kind {
             BoolLiteral(_) => "i1",
             I8Literal(_) => "i8",
@@ -2091,6 +2142,9 @@ impl LlvmGenerator {
             U64Literal(_) => "i64",
             F32Literal(_) => "float",
             F64Literal(_) => "double",
+            StringLiteral(_) => {
+                return weld_err!("Cannot create SIMD StringLiteral");
+            }
         }.to_string();
 
         let insert_str = format!("insertelement <{size} x {elem}> $NAME, {elem} {value}, i32 $INDEX",
@@ -2629,8 +2683,16 @@ impl LlvmGenerator {
                 if let Simd(_) = *output_ty {
                     self.gen_simd_literal(&output_ll_sym, value, output_ty, ctx)?;
                 } else {
-                    let ref value = llvm_literal(*value);
-                    self.gen_store_var(value, &output_ll_sym, &output_ll_ty, ctx);
+                    match *value {
+                        StringLiteral(ref string) => {
+                            let ref value = self.string_literal(string, &output_ll_ty, ctx).unwrap();
+                            self.gen_store_var(value.as_str(), &output_ll_sym, &output_ll_ty, ctx);
+                        }
+                        _ => {
+                            let ref value = llvm_literal((*value).clone()).unwrap();
+                            self.gen_store_var(value, &output_ll_sym, &output_ll_ty, ctx);
+                        }
+                    }
                 }
             }
 
@@ -3324,6 +3386,7 @@ impl LlvmGenerator {
     }
 
     /// Generate a puts() call to print text at runtime.
+    /// Note that unlike StringLiteral constants, gen_puts generates a null-terminated string.
     fn gen_puts(&mut self, text: &str, ctx: &mut FunctionContext) {
         let global = self.prelude_var_ids.next().replace("%", "@");
         let text = text.replace("\\", "\\\\").replace("\"", "\\\"");
@@ -3386,8 +3449,8 @@ fn llvm_lt(k: ScalarKind) -> &'static str {
 }
 
 /// Returns an LLVM formatted String for a literal.
-fn llvm_literal(k: LiteralKind) -> String {
-    match k {
+fn llvm_literal(k: LiteralKind) -> WeldResult<String> {
+    let res = match k {
         BoolLiteral(l) => format!("{}", if l { 1 } else { 0 }),
         I8Literal(l) => format!("{}", l),
         I16Literal(l) => format!("{}", l),
@@ -3399,7 +3462,11 @@ fn llvm_literal(k: LiteralKind) -> String {
         U64Literal(l) => format!("{}", l),
         F32Literal(l) => format!("{:.30e}", f32::from_bits(l)),
         F64Literal(l) => format!("{:.30e}", f64::from_bits(l)),
-    }.to_string()
+        StringLiteral(_) => {
+            return weld_err!("String literal must be declared as global constant in LLVM");
+        }
+    }.to_string();
+    Ok(res)
 }
 
 /// Return the LLVM version of a Weld symbol (encoding any special characters for LLVM).

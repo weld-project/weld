@@ -722,6 +722,8 @@ impl<'t> Parser<'t> {
             TF32Literal(v) => Ok(expr_box(Literal(F32Literal(v.to_bits())), Annotations::new())),
             TF64Literal(v) => Ok(expr_box(Literal(F64Literal(v.to_bits())), Annotations::new())),
             TBoolLiteral(v) => Ok(expr_box(Literal(BoolLiteral(v)), Annotations::new())),
+            TStringLiteral(ref v) => Ok(expr_box(Literal(StringLiteral(v.clone())),
+                                                 Annotations::new())),
 
             TI8 => Ok(self.parse_cast(ScalarKind::I8)?),
             TI16 => Ok(self.parse_cast(ScalarKind::I16)?),

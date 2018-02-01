@@ -518,6 +518,7 @@ pub fn print_vector_literal(lit: &LiteralKind) -> String {
             }
             format!("<{}, {}, ..>", &res, &res)
         }
+        StringLiteral(ref v) => format!("<{}, {}, ..>", v, v),
     }
 }
 
@@ -550,6 +551,7 @@ pub fn print_literal(lit: &LiteralKind) -> String {
             }
             res
         }
+        StringLiteral(ref v) => format!("\"{}\"", v),
     }
 }
 
