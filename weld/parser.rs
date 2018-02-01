@@ -4,6 +4,7 @@
 //! backtracking, so we simply track a position as we go and keep incrementing it.
 
 use std::vec::Vec;
+use std::cmp::min;
 
 use super::ast::Symbol;
 use super::ast::Iter;
@@ -14,6 +15,7 @@ use super::ast::ExprKind::*;
 use super::ast::LiteralKind::*;
 use super::ast::ScalarKind;
 use super::ast::IterKind::*;
+use super::colors::*;
 use super::error::*;
 use super::partial_types::*;
 use super::partial_types::PartialBuilderKind::*;
@@ -109,8 +111,14 @@ impl<'t> Parser<'t> {
             self.position
         };
 
-        for i in (self.position - context_length)..self.position {
-            string.push_str(format!("{}", &self.tokens[i]).as_str());
+        for i in (self.position - context_length)..min((self.position + context_length), self.tokens.len()-1) {
+            let token_str = format!("{}", &self.tokens[i]);
+            if i == self.position { 
+                string.push_str(format_color(Color::BoldRed, token_str.as_str()).as_str());
+            } else {
+                string.push_str(format!("{}", token_str.as_str()).as_str());
+            }
+
             if i != self.position - 1 && self.tokens[i+1].requires_space() {
                 if self.tokens[i].requires_space() {
                     string.push_str(" ");

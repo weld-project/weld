@@ -329,7 +329,7 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>,
 
         GetField { ref expr, index } => {
             format!("{}.${}",
-                    print_expr_impl(expr, typed, indent, should_indent),
+                    print_expr_impl(expr, false, indent, should_indent),
                     index)
         }
 
