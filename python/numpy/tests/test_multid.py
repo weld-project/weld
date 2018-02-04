@@ -2,6 +2,7 @@ import numpy as np
 import py.test
 import random
 from weldnumpy import *
+import weldnumpy as wn
 from test_utils import *
 
 '''
@@ -333,12 +334,23 @@ General Tests.
 '''
 def test_reshape():
     n, w = random_arrays(36, 'float32')
-    n = n.reshape((6,6))
-    w = w.reshape((6,6))
+    n = reshape(n, (6,6))
+    w = reshape(w, (6,6))
 
     assert isinstance(w, weldarray)
     assert w.shape == n.shape
     assert w.strides == n.strides
+    w._real_shape = w.shape
+
+    assert np.allclose(n, w)
+
+    n2, w2 = random_arrays((6,6), 'float32')
+    n = reshape(n2, 36)
+    w = reshape(w2, 36)
+    assert isinstance(w, weldarray)
+    assert w.shape == n.shape
+    assert w.strides == n.strides
+    assert np.allclose(n, w)
 
 '''
 TODO: Set up multi-dimensional array creation routines.
@@ -577,3 +589,28 @@ def test_nbody_bug2():
 
 def test_less_than():
     n, w = random_arrays(10, 'float64')
+
+def test_for_loop():
+    n, w = random_arrays((5,5), 'float64')
+    for i, ni in enumerate(n):
+        assert np.allclose(ni,w[i])
+
+def test_for_loop_reshape():
+    n, w = random_arrays((5,5), 'float64')
+    n2 = n.reshape(5*5)
+    for i, wi in enumerate(w.reshape(5*5)):
+        np.allclose(wi, n2[i])
+
+def test_tictactoe_reshape():
+    '''
+    weird behaviour for reshape before, test was taken from tictactoe
+    implementation in rl algorithms repo.
+    '''
+    n, w = random_arrays((5,5), 'float64')
+    w2 = w.reshape(5*5)
+
+    # ensures that for loops on reshaped arrays work as expected
+    for i in w.reshape(5*5):
+        if i == -1:
+            print('woot')
+        assert isinstance(i, np.float64)

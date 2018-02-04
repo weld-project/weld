@@ -46,17 +46,3 @@ def eye(*args, **kwargs):
 
 def identity(*args, **kwargs):
     return weldarray(np.identity(*args, **kwargs))
-
-'''
-Transformation routines:
-    1. transpose
-    2. vstack
-    3. hstack
-'''
-def transpose(*args, **kwargs):
-    input1 = args[0]
-    w = np.transpose(*args, **kwargs)
-    # create the weldarray view.
-    if isinstance(input1, weldarray):
-        w = input1._gen_weldview(w)
-    return w

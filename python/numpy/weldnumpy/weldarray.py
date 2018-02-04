@@ -50,6 +50,53 @@ class weldarray(np.ndarray):
 
         return obj
 
+    def transpose(self, *args, **kwargs):
+        '''
+        numpy's transpose checks if the particular array subclass being
+        transposed has an implementation for transpose -- and calls it if the
+        subclass does. This is weldarray's implementation - we cast the array
+        to a ndarray for transposing, and then generate the relevant views etc.
+        for weldarray.
+
+        FIXME: do we need to evaluate the older array always? Need to add more
+        test cases to test different scenarios, but it seems safer to force
+        evaluation for now.
+        '''
+        # since we can't modify tuples, need to make it a list to change the
+        # first arg to a list
+        args_list = list(args)
+        new_arr = self._eval()
+        args_list[0] = new_arr.view(np.ndarray)
+        args = tuple(args_list)
+        # let numpy handle transposing.
+        transposed = np.transpose(*args, **kwargs)
+        real_shape = transposed.shape
+        # create the weldarray view and initialize relevant fields of weldarray
+        if isinstance(self, weldarray):
+            transposed = self._gen_weldview(transposed)
+            transposed._real_shape = real_shape
+        return transposed
+
+    def reshape(self, *args, **kwargs):
+        '''
+        numpy's reshape checks if the particular array subclass being
+        reshaped has an implementation for reshape -- and calls it if the
+        subclass does. Similar to the transpose implementation above.
+        '''
+        # force evaluation, just in case. Should not be strictly neccessary but
+        # then there would be edge cases to think about.
+        new_arr = self._eval()
+        new_args = list(args)
+        if isinstance(args[0], weldarray):
+            # case when np.reshape(w, shape) used
+            new_args[0] = new_arr
+        else:
+            # this is the case when w.reshape(shape) used
+            new_args.insert(0, new_arr)
+        new_args = tuple(new_args)
+        reshaped_arr = np.reshape(*new_args, **kwargs)
+        return weldarray(reshaped_arr)
+
     def __array_finalize__(self, obj):
         '''
         array finalize will be called whenever a subclass of ndarray (e.g., weldarray) is created.
@@ -74,6 +121,9 @@ class weldarray(np.ndarray):
             self._verbose = obj._verbose
             self._weldarray_view = obj._weldarray_view
             self._weld_type = obj._weld_type
+            # in case of ndarray.T it doesn't seem like self.shape or obj.shape
+            # is correct at this stage
+            self._real_shape = self.shape
 
     def __repr__(self):
         '''
@@ -96,7 +146,8 @@ class weldarray(np.ndarray):
         @idx: the idx used to create the view. Not really needed - because there are cases when
         this function is being used from outside __getitem__, e.g., for views created by
         broadcasting, or transposes.
-        TODO: maybe don't need to return anything?
+        FIXME: Want to do this so that we can modify self's weldarray view
+        directly?
         @returns: new_arr with the weldview being generated.
         '''
         new_arr = weldarray(new_arr, verbose=self._verbose)
@@ -111,7 +162,8 @@ class weldarray(np.ndarray):
             par_start = self._weldarray_view.start
 
         # FIXME: cleaner way to calculate start?
-        start = (addr(new_arr) - addr(self)) / self.itemsize
+        start = (addr(new_arr) - addr(base_array)) / self.itemsize
+        start += par_start
         # TODO: temporarily needed.
         end = 1
         shape = new_arr.shape
@@ -188,7 +240,12 @@ class weldarray(np.ndarray):
                 # else:
                     # return ret
                 # assert False, 'view is not child'
-            return self._gen_weldview(ret, idx)
+            if isinstance(ret, np.ndarray):
+                return self._gen_weldview(ret, idx)
+            else:
+                # in gradient_descent_example.py, we were getting a float at
+                # this point
+                return ret
 
         elif isinstance(idx, np.ndarray) or isinstance(idx, list):
             # FIXME: This could be a view if list is contig numbers? Test + update.
@@ -256,7 +313,7 @@ class weldarray(np.ndarray):
                 else: stop = idx.stop
                 if idx.start is None: start = 0
                 else: start = idx.start
-                
+
                 # surprisingly enough, doing latest_arr_i.__setitem__(idx, val)
                 # fails here for the case when we do a[..] += 5. It appears that
                 # += is implemented as:
@@ -270,7 +327,7 @@ class weldarray(np.ndarray):
                 # Somehow, switching the setitem call to explicitly looping
                 # over the array and setting each element to val (which has
                 # already been calculated to the correct value in both cases)
-                # seems to work just fine. 
+                # seems to work just fine.
                 # TODO: look further into NumPy's setitem implementation to see
                 # what is going wrong.
                 for val_i, latest_arr_i  in enumerate(range(start, stop, step)):
@@ -447,7 +504,6 @@ class weldarray(np.ndarray):
         outputs = kwargs.pop('out', None)
         supported = self._process_ufunc_inputs(input_args, outputs, kwargs)
         output = None
-
         if self._num_registered_ops > 100:
             # force evaluation internally.
             self._eval()
@@ -629,6 +685,7 @@ class weldarray(np.ndarray):
         if self.name == self.weldobj.weld_code:
             # No new ops have been registered. Avoid creating unneccessary new copies with
             # weldobj.evaluate()
+            ret = self.weldobj.context[self.name]
             return self.weldobj.context[self.name]
 
         if restype is None:
