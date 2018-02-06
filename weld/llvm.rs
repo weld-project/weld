@@ -2375,13 +2375,41 @@ impl LlvmGenerator {
                                                 &output_tmp.as_str(),
                                                 ty, ctx)?;
                             }
-                            // Pow only support for floating point.
-                            Pow if s.is_float() => {
+                            // Pow only supported for floating point.
+                            Pow if ty.is_scalar() && s.is_float() => {
                                     ctx.code.add(format!("{} = call {} {}({} {}, {} {})",
                                     &output_tmp, &ll_ty,
                                     llvm_binary_intrinsic(op, &s)?,
                                     self.llvm_type(ty)?, &left_tmp,
                                     self.llvm_type(ty)?, &right_tmp));
+                            }
+                            Pow if ty.is_simd() && s.is_float() => {
+                                // Unroll and apply the scalar op, and then pack back into vector
+                                let scalar_ll_ty = self.llvm_type(&Scalar(s))?;
+                                let simd_ll_ty = self.llvm_type(ty)?;
+                                let mut prev_tmp = "undef".to_string();
+                                let width = llvm_simd_size(&Scalar(s))?;
+                                for i in 0..width {
+                                    let left_elem_tmp = self.gen_simd_extract(ty, &left_tmp, i, ctx)?;
+                                    let right_elem_tmp = self.gen_simd_extract(ty, &right_tmp, i, ctx)?;
+                                    let val_tmp = ctx.var_ids.next();
+                                     ctx.code.add(format!("{} = call {} {}({} {}, {} {})",
+                                                                &val_tmp,
+                                                                &scalar_ll_ty,
+                                                                llvm_binary_intrinsic(op, &s)?,
+                                                                scalar_ll_ty,
+                                                                &left_elem_tmp,
+                                                                scalar_ll_ty,
+                                                                &right_elem_tmp));
+                                    let next = if i == width - 1 {
+                                        output_tmp.clone()
+                                    } else {
+                                        ctx.var_ids.next()
+                                    };
+                                    ctx.code.add(format!("{} = insertelement {} {}, {} {}, i32 {}",
+                                                         next, simd_ll_ty, prev_tmp, scalar_ll_ty, val_tmp, i));
+                                    prev_tmp = next;
+                                }
                             }
                             _ => {
                                 ctx.code.add(format!("{} = {} {} {}, {}",
