@@ -6,6 +6,12 @@ from lazy_op import LazyOpResult, to_weld_type
 from weld.weldobject import *
 
 class DataFrameWeldLoc:
+    """
+    Label location based indexer for selection by label for dataframe objects.
+
+    Attributes:
+        df (TYPE): The DataFrame  being indexed into.
+    """
     def __init__(self, df):
         self.df = df
 
@@ -32,6 +38,12 @@ class DataFrameWeldLoc:
         raise Exception("Cannot invoke getitem on an object that is not SeriesWeld")
 
 class WeldLocIndexer:
+    """
+    Label location based indexer for selection by label for Series objects.
+
+    Attributes:
+        grizzly_obj (TYPE): The Series being indexed into.
+    """
     def __init__(self, grizzly_obj):
         # If index_type field of grizzly_obj is None
         # then we assume normal 0 - 1 indexing
@@ -62,7 +74,6 @@ class WeldLocIndexer:
                         series.index_type,
                         series.index_name
                     )
-
             # TODO : Need to implement for non-pivot tables
         raise Exception("Cannot invoke getitem on non SeriesWeld object")
 

@@ -20,7 +20,7 @@ movies = pd.read_table('data/ml-1m/movies.dat', sep='::', header=None,
 start = time.time()
 data = pd.merge(pd.merge(ratings, users), movies)
 end = time.time()
-print data
+
 start1 = time.time()
 mean_ratings = data.pivot_table('rating', index='title', columns='gender',
                                 aggfunc='mean')

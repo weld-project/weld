@@ -7,7 +7,6 @@ import sys
 passes = ["loop-fusion", "infer-size", "short-circuit-booleans", "predicate", "vectorize", "fix-iterate"]
 years = range(1880, 2011)
 pieces = []
-#columns = ['year', 'name', 'sex', 'births']
 columns = ['name', 'sex', 'births']
 for year in years:
     path = 'data/names/yob%d.txt' % year
@@ -22,10 +21,10 @@ print "Size of names: %d" % len(names)
 def get_top1000(group):
     # Note that there is a slight difference that arises
     # with the name 'Leslyn', year '25' missing as the ordering
-    # in pandas for rows witht he same 'sort' value changes.
+    # in pandas for rows with the same 'sort' value changes.
     return group.sort_values(by='births', ascending=False).slice(0, 1000)
 
-#Time preprocessing step
+# Time preprocessing step
 start0 = time.time()
 grouped = gr.DataFrameWeld(names).groupby(['year', 'sex'])
 top1000 = grouped.apply(get_top1000)

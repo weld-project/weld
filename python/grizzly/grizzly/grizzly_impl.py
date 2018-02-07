@@ -334,7 +334,7 @@ def element_wise_op(array, other, op, ty):
 
 def unzip_columns(expr, column_types):
     """
-    Zip together multiple columns.
+    Unzip multiple columns.
 
     Args:
         columns (WeldObject / Numpy.ndarray): lust of columns
@@ -1069,7 +1069,8 @@ def groupby_sum(columns, column_tys, grouping_columns, grouping_column_tys):
 def groupby_std(columns, column_tys, grouping_columns, grouping_column_tys):
     """
     Groups the given columns by the corresponding grouping column
-    value, and aggregate by summing values.
+    value, and computes the standard deviation of the aggregate values
+    in each group.
 
     Args:
         columns (List<WeldObject>): List of columns as WeldObjects
@@ -1110,8 +1111,6 @@ def groupby_std(columns, column_tys, grouping_columns, grouping_column_tys):
         columns_var = columns_var_list[0]
         tys_str = column_tys[0]
         result_str = "merge(b, {e.$0, {e.$1, 1L}})"
-        # TODO : The above change needs to apply for all result strings
-        # These currently break at the moment
     elif len(columns_var_list) == 1 and len(grouping_columns) > 1:
         columns_var = columns_var_list[0]
         tys_str = column_tys[0]
@@ -1151,7 +1150,6 @@ def groupby_std(columns, column_tys, grouping_columns, grouping_column_tys):
         result_str = "merge(b, {%s, 1L})" % ", ".join(result_str_list)
         # TODO Need to implement exponent operator
         # The mean dict's e.$1.$0 assumes this is a scalar vector and not a struct vector
-        # Also pandas normalizes by n - 1
     weld_template = """
     let sum_dict = result(
       for(
