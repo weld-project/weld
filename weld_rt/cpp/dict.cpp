@@ -6,6 +6,9 @@
 #define LOCK_GRANULARITY 16
 #define MAX_LOCAL_PROBES 5
 
+const int LOCK_GRANULARITY = 16;
+const int MAX_LOCAL_PROBES = 5;
+
 struct simple_dict {
   void *data;
   volatile int64_t size;
@@ -29,6 +32,7 @@ struct weld_dict {
   int32_t n_workers; // save this here so we don't have to repeatedly call runtime for it
 };
 
+// XXX Done
 inline int32_t slot_size(weld_dict *wd) {
   return sizeof(uint8_t) /* space for `filled` field */ + wd->key_size + wd->val_size +
     sizeof(int32_t) /* space for key hash */ + sizeof(uint8_t) /* space for slot lock */;
@@ -63,6 +67,7 @@ inline uint8_t *lock_at(weld_dict *wd, void *slot) {
     + sizeof(int32_t));
 }
 
+// What does this do?
 inline bool slot_in_local(weld_dict *wd, void *slot) {
   simple_dict *local = (simple_dict *)weld_rt_get_merger_at_index(wd->dicts, sizeof(simple_dict),
     weld_rt_thread_id());
