@@ -134,8 +134,8 @@ fn fold_constants_in_function(func: &mut SirFunction, global_params: &fnv::FnvHa
                 AssignLiteral(ref lit) => {
                     let output_sym = statement.output.clone().unwrap();
                     if *assignment_counts.get(&output_sym).unwrap() == 1 {
-                        values.insert(output_sym, *lit);
-                        Some(*lit)
+                        values.insert(output_sym, (*lit).clone());
+                        Some((*lit).clone())
                     } else {
                         None
                     }
@@ -145,24 +145,24 @@ fn fold_constants_in_function(func: &mut SirFunction, global_params: &fnv::FnvHa
                     // contains_key instead of get to avoid double mutable borrow
                     if values.contains_key(sym) {
                         let output_sym = statement.output.clone().unwrap();
-                        let value = *values.get(sym).unwrap();
+                        let value = (*values.get(sym).unwrap()).clone();
                         if *assignment_counts.get(&output_sym).unwrap() == 1 {
-                            values.insert(output_sym, value);
+                            values.insert(output_sym, value.clone());
                         }
                         Some(value)
                     } else {
                         None
                     }
                 }
-                BinOp { ref op, ref left, ref right } if values.contains_key(left) && values.contains_key(right) => {
-                    let left_val = *values.get(left).unwrap();
-                    let right_val = *values.get(right).unwrap();
+                BinOp { ref op, ref left, ref right } if (&values).contains_key(left) && (&values).contains_key(right) => {
+                    let left_val = (*values.get(left).unwrap()).clone();
+                    let right_val = (*values.get(right).unwrap()).clone();
                     // If this throws an error, it just means that we don't support evaluating the
                     // expression right now.
                     if let Ok(result) = evaluate_binop(*op, left_val, right_val) {
                         let output_sym = statement.output.clone().unwrap();
                         if *assignment_counts.get(&output_sym).unwrap() == 1 {
-                            values.insert(output_sym, result);
+                            values.insert(output_sym, result.clone());
                         }
                         Some(result)
                     } else {

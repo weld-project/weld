@@ -18,20 +18,21 @@ pub fn new_expr(kind: ExprKind<Type>, ty: Type) -> WeldResult<Expr<Type>> {
 }
 
 pub fn literal_expr(kind: LiteralKind) -> WeldResult<Expr<Type>> {
-    new_expr(Literal(kind),
-             Scalar(match kind {
-                        BoolLiteral(_) => ScalarKind::Bool,
-                        I8Literal(_) => ScalarKind::I8,
-                        I16Literal(_) => ScalarKind::I16,
-                        I32Literal(_) => ScalarKind::I32,
-                        I64Literal(_) => ScalarKind::I64,
-                        U8Literal(_) => ScalarKind::U8,
-                        U16Literal(_) => ScalarKind::U16,
-                        U32Literal(_) => ScalarKind::U32,
-                        U64Literal(_) => ScalarKind::U64,
-                        F32Literal(_) => ScalarKind::F32,
-                        F64Literal(_) => ScalarKind::F64,
-             }))
+    new_expr(Literal(kind.clone()),
+             match kind {
+                 BoolLiteral(_) => Scalar(ScalarKind::Bool),
+                 I8Literal(_) => Scalar(ScalarKind::I8),
+                 I16Literal(_) => Scalar(ScalarKind::I16),
+                 I32Literal(_) => Scalar(ScalarKind::I32),
+                 I64Literal(_) => Scalar(ScalarKind::I64),
+                 U8Literal(_) => Scalar(ScalarKind::U8),
+                 U16Literal(_) => Scalar(ScalarKind::U16),
+                 U32Literal(_) => Scalar(ScalarKind::U32),
+                 U64Literal(_) => Scalar(ScalarKind::U64),
+                 F32Literal(_) => Scalar(ScalarKind::F32),
+                 F64Literal(_) => Scalar(ScalarKind::F64),
+                 StringLiteral(_) => Vector(Box::new(Scalar(ScalarKind::I8))),
+             })
 }
 
 pub fn ident_expr(symbol: Symbol, ty: Type) -> WeldResult<Expr<Type>> {

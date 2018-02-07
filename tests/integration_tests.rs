@@ -1,4 +1,6 @@
 use std::env;
+use std::str;
+use std::slice;
 use std::thread;
 
 extern crate weld;
@@ -159,6 +161,21 @@ fn basic_program() {
     let data = unsafe { weld_value_data(ret_value) as *const i32 };
     let result = unsafe { *data };
     assert_eq!(result, 42);
+
+    unsafe { free_value_and_module(ret_value) };
+}
+
+fn basic_string() {
+    let code = "|| \"test str\"";
+    let conf = default_conf();
+
+    let ref input_data = 0;
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<u8> };
+    let result = unsafe { (*data).clone() };
+    assert_eq!(result.len, 8);
+    unsafe { assert_eq!(str::from_utf8(slice::from_raw_parts(result.data, result.len as usize)).unwrap(), "test str"); }
 
     unsafe { free_value_and_module(ret_value) };
 }
@@ -2571,6 +2588,7 @@ fn update_counter(mut counter: [i64; 3], shapes: [i64; 3]) -> [i64; 3] {
 /// to mimic the behaviour of numpy. This has also been tested against numpy, and appears to work
 /// fine.
 fn nditer_basic_op_test() {
+    #[allow(dead_code)]
     struct Args {
         x: WeldVec<f64>,
         shapes: WeldVec<i64>,
@@ -2681,6 +2699,7 @@ fn main() {
     let args: Vec<String> = env::args().collect();
     let tests: Vec<(&str, fn())> =
         vec![("basic_program", basic_program),
+             ("basic_string", basic_string),
              ("float_literals", float_literals),
              ("negation", negation),
              ("negation_double", negation_double),

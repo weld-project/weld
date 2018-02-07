@@ -194,6 +194,8 @@ impl PartialExpr {
             Literal(F32Literal(v)) => Literal(F32Literal(v)),
             Literal(F64Literal(v)) => Literal(F64Literal(v)),
 
+            Literal(StringLiteral(ref v)) => Literal(StringLiteral(v.clone())),
+
             Ident(ref name) => Ident(name.clone()),
 
             CUDF {

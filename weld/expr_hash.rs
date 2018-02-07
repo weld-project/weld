@@ -58,6 +58,7 @@ impl ExprHash {
                     U64Literal(v) => v.hash(&mut self.hasher),
                     F32Literal(v) => v.hash(&mut self.hasher),
                     F64Literal(v) => v.hash(&mut self.hasher),
+                    StringLiteral(ref v) => v.hash(&mut self.hasher)
                 }
             }
             Ident(ref sym) => {
