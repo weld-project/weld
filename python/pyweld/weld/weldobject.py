@@ -5,9 +5,9 @@
 #
 
 import ctypes
-
 import os
 import time
+import re
 
 import bindings as cweld
 from types import *
@@ -138,9 +138,12 @@ class WeldObject(object):
             for key in sorted(cur_obj.dependencies.keys()):
                 queue.append(cur_obj.dependencies[key])
             visited.add(cur_obj_id)
-        let_statements.sort()  # To ensure that let statements are in the right
-                               # order in the final generated program
-
+        # each let statement is of the form:
+        #   let obj10xx = ....;
+        # we must sort the object by their numerical values of obj, otherwise
+        # in a case with: obj100, and obj99, obj100 < obj99 according to string
+        # sorting rules
+        let_statements.sort(key=lambda x: int(re.search(r'\d+', x).group()))
         return "\n".join(let_statements)
 
     def to_weld_func(self):

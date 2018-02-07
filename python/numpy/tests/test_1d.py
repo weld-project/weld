@@ -6,20 +6,14 @@ import scipy.special as ss
 
 '''
 TODO: New tests:
-    - reduce ufuncs: at least the supported ones.
-    - error based tests: nan; underflow/overflow; unsupported types [true] * [...] etc;
-    - long computational graphs - that segfault or take too long; will require implicit evaluation
-      when the nested ops get too many.
     - edge/failing cases: out = ndarray for op involving weldarrays.
-    - update elements of an array in a loop etc. --> setitem test.
-    - setitem + views tests.
 '''
 
 UNARY_OPS = [np.exp, np.log, np.sqrt]
-# TODO: Add wa.erf - doesn't use the ufunc functionality of numpy so not doing it for
-# now.
 BINARY_OPS = [np.add, np.subtract, np.multiply, np.divide]
 REDUCE_UFUNCS = [np.add.reduce, np.multiply.reduce]
+# TODO: add other similar functions 
+UTIL_FUNCTIONS = [np.max, np.min]
 
 # FIXME: weld mergers dont support non-commutative ops --> need to find a workaround for this.
 # REDUCE_UFUNCS = [np.add.reduce, np.subtract.reduce, np.multiply.reduce, np.divide.reduce]
@@ -398,7 +392,8 @@ def test_views_overlap():
     other being updated too.
     '''
     NUM_ELS = 10
-    n, w = random_arrays(NUM_ELS, 'float32')
+    dtype = 'float64'
+    n, w = random_arrays(NUM_ELS, dtype)
 
     w2 = w[2:5]
     n2 = n[2:5]
@@ -430,7 +425,7 @@ def test_views_overlap():
 
     # binary part:
     # now update the child with binary op
-    n3, w3 = random_arrays(3, 'float32')
+    n3, w3 = random_arrays(3, dtype)
     # n3, w3 = given_arrays([1.0, 1.0, 1.0], 'float32')
 
     n2 = np.add(n2, n3, out=n2)
@@ -1054,4 +1049,68 @@ def test_too_many_ops():
     w = w.evaluate()
     assert np.allclose(w, n)
 
-# test_views_strides()
+def test_non_matching_types():
+    for t in TYPES:
+        n, w = random_arrays(10, t)
+        if ('int' in t):
+            n += 10
+            w += 10
+        else:
+            n += 10.0
+            w += 10.0
+
+    np.allclose(n, w)
+
+def test_let_sorting():
+    '''
+    FIXME: test doesn't quite test what is needed.
+    Want to generate a situation like this, from TestArmedTestBeds.py in rl
+    algorithms repo:
+        |_inp0: vec[f64], _inp2007: vec[f64], _inp2009: vec[f64]| let obj10001 = (_inp2009);
+        let obj10002 = (_inp0);
+        let obj10003 = (result(for(zip(obj10002,obj10001), appender,|b,i,e| merge(b,e.$0 - e.$1))));
+        let obj10004 = (result(for(obj10003, appender,|b,i,e| merge(b,-0.197762439964 *e))));
+        let obj10005 = (result(for(zip(obj9996,obj10004), appender,|b,i,e| merge(b,e.$0 + e.$1))));
+        let obj9900 = (_inp0);
+        let obj9992 = (_inp2007);
+        let obj9993 = (_inp0);
+        let obj9994 = (result(for(zip(obj9993,obj9992), appender,|b,i,e| merge(b,e.$0 - e.$1))));
+        let obj9995 = (result(for(obj9994, appender,|b,i,e| merge(b,0.0 *e))));
+        let obj9996 = (result(for(zip(obj9900,obj9995), appender,|b,i,e| merge(b,e.$0 + e.$1))));
+        result(for(obj10005, appender,|b,i,e| merge(b,exp(e)))): Undefined symbol obj9996
+    '''
+    weld_arrays = []
+    for i in range(1020):
+        # n, w = aiven_arrays([1.0, 1.0, 1.0], 'float32')
+        n, w = random_arrays(5, 'float32')
+        weld_arrays.append(w)
+        if i == 0:
+            weld_arrays[0] = np.sqrt(weld_arrays[0])
+        if i == 1:
+            weld_arrays[0] = weld_arrays[0] + weld_arrays[1]
+
+    weld_arrays[1010] = np.sqrt(weld_arrays[1010])
+    weld_arrays[0] = np.sqrt(weld_arrays[0])
+    for i in range(1020):
+        if i == 0:
+            weld_arrays[0] = np.sqrt(weld_arrays[0])
+        if i == 1:
+            weld_arrays[0] = weld_arrays[0] + weld_arrays[1]
+
+
+    w2 = weld_arrays[0] + weld_arrays[1010]
+    print(w2.weldobj.weld_code)
+    w2 = w2.evaluate()
+
+def test_util_functions():
+    '''
+    looks stuff like np.max etc. work fine without needing to evaluate -->
+    evaluate is being called implicitly in np.amax's implementation.
+    '''
+    for f in UTIL_FUNCTIONS:
+        n, w = random_arrays(5, 'float64')
+        n = np.log(n)
+        w = np.log(w) 
+        nmax = f(n)
+        wmax = f(w)
+        assert nmax == wmax 

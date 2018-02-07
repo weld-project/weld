@@ -33,22 +33,70 @@ class weldarray(np.ndarray):
         obj._verbose = verbose
         # Views. For a base_array, this would always be None.
         obj._weldarray_view = None
-        if hasattr(input_array, '_real_shape'):
+
+        # if hasattr(input_array, '_num_registered_ops'):
+            # obj._num_registered_ops = input_array._num_registered_ops
+        # else:
+            # obj._num_registered_ops = 0
+
+        # if hasattr(input_array, '_real_shape'):
+            # # This is slightly hacky --> in the path to array creation from
+            # # _gen_weldview (for e.g., see test:
+            # # test_broadcasting_nbody_bug()), we seem to be getting weldarray's
+            # # without _real shape being set (because np.transform returns
+            # # weldarray BUT does not update stuff like _real_shape or
+            # # weldview's etc.)
+            # obj._real_shape = input_array._real_shape
+        # else:
+            # obj._real_shape = obj.shape
+
+        return obj
+
+    def __array_finalize__(self, obj):
+        '''
+        array finalize will be called whenever a subclass of ndarray (e.g., weldarray) is created.
+        This can happen in many situations where it does not go through __new__, e.g.:
+            - np.float32(arr)
+            - arr.T
+        Thus, we want to generate the generic variables needed for the weldarray here.
+
+        @self: weldarray, current weldarray object being created.
+        @obj:  weldarray or ndarray, depending on whether the object is being created based on a
+        ndarray or a weldarray. If obj is a weldarray, then __new__ was not called for self, so we
+        should update the appropriate fields.
+
+        TODO: need to consider edge cases with views etc.
+        '''
+        if isinstance(obj, weldarray):
+            # self was not generated through a call to __new__ so we should update self's
+            # properties
+            self.name = obj.name
+            # TODO: Or maybe just set them equal to each other?
+            self._gen_weldobj(obj)
+            self._verbose = obj._verbose
+            self._weldarray_view = obj._weldarray_view
+            self._weld_type = obj._weld_type
+            # in case of ndarray.T it doesn't seem like self.shape or obj.shape
+            # is correct at this stage
+            self._real_shape = self.shape
+        
+        # since an array can be created without explicitly going through
+        # __new__, we need to do these intializations here.
+        if hasattr(obj, '_num_registered_ops'):
+            self._num_registered_ops = obj._num_registered_ops
+        else:
+            self._num_registered_ops = 0
+
+        if hasattr(obj, '_real_shape'):
             # This is slightly hacky --> in the path to array creation from
             # _gen_weldview (for e.g., see test:
             # test_broadcasting_nbody_bug()), we seem to be getting weldarray's
             # without _real shape being set (because np.transform returns
             # weldarray BUT does not update stuff like _real_shape or
             # weldview's etc.)
-            obj._real_shape = input_array._real_shape
+            self._real_shape = obj._real_shape
         else:
-            obj._real_shape = obj.shape
-        if hasattr(input_array, '_num_registered_ops'):
-            obj._num_registered_ops = input_array._num_registered_ops
-        else:
-            obj._num_registered_ops = 0
-
-        return obj
+            self._real_shape = self.shape
 
     def transpose(self, *args, **kwargs):
         '''
@@ -97,34 +145,6 @@ class weldarray(np.ndarray):
         reshaped_arr = np.reshape(*new_args, **kwargs)
         return weldarray(reshaped_arr)
 
-    def __array_finalize__(self, obj):
-        '''
-        array finalize will be called whenever a subclass of ndarray (e.g., weldarray) is created.
-        This can happen in many situations where it does not go through __new__, e.g.:
-            - np.float32(arr)
-            - arr.T
-        Thus, we want to generate the generic variables needed for the weldarray here.
-
-        @self: weldarray, current weldarray object being created.
-        @obj:  weldarray or ndarray, depending on whether the object is being created based on a
-        ndarray or a weldarray. If obj is a weldarray, then __new__ was not called for self, so we
-        should update the appropriate fields.
-
-        TODO: need to consider edge cases with views etc.
-        '''
-        if isinstance(obj, weldarray):
-            # self was not generated through a call to __new__ so we should update self's
-            # properties
-            self.name = obj.name
-            # TODO: Or maybe just set them equal to each other?
-            self._gen_weldobj(obj)
-            self._verbose = obj._verbose
-            self._weldarray_view = obj._weldarray_view
-            self._weld_type = obj._weld_type
-            # in case of ndarray.T it doesn't seem like self.shape or obj.shape
-            # is correct at this stage
-            self._real_shape = self.shape
-
     def __repr__(self):
         '''
         Evaluate, and then let ndarray deal with it.
@@ -138,7 +158,7 @@ class weldarray(np.ndarray):
         '''
         arr = self._eval()
         return arr.__str__()
-
+    
     def _gen_weldview(self, new_arr, idx=None):
         '''
         TODO: can generalize this to the 1d cases too or not?
@@ -337,7 +357,8 @@ class weldarray(np.ndarray):
                         # also a single float can be assigned to multiple values
                         latest_arr[latest_arr_i] = val
 
-            elif isinstance(idx, np.ndarray) or isinstance(idx, list):
+            elif isinstance(idx, np.ndarray) or isinstance(idx, list) \
+            or isinstance(idx, tuple):
                 # each element of the idx must be the index into our array
                 for val_i, arr_i in enumerate(idx):
                     if hasattr(val, '__len__'):
@@ -349,6 +370,7 @@ class weldarray(np.ndarray):
             elif isinstance(idx, int):
                 latest_arr[idx] = val
             else:
+                print(idx)
                 assert False, 'idx type not supported'
         else:
             # in general, this seems to work, but it is just horribly slow and
@@ -470,14 +492,19 @@ class weldarray(np.ndarray):
                 if self._verbose: print('WARNING: scalar input is boolean. Will be offloaded to numpy')
                 return False
             elif isinstance(scalars[0], float):
-                pass
+                if not (arrays[0].dtype == np.float64 or 
+                        arrays[0].dtype == np.float32):
+                    return False
             elif isinstance(scalars[0], int):
-                pass
+                if not (arrays[0].dtype == np.int64 or 
+                        arrays[0].dtype == np.int32):
+                    return False
             # assuming its np.float32 etc.
             elif not str(scalars[0].dtype) in SUPPORTED_DTYPES:
                 if self._verbose: print('WARNING: scalar dtype not in supported dtypes. Will be offloaded to numpy')
                 return False
             else:
+                print("ELSE")
                 scalar_weld_type = SUPPORTED_DTYPES[str(scalars[0].dtype)]
                 array_weld_type = arrays[0]._weld_type
                 if scalar_weld_type != array_weld_type:
@@ -657,6 +684,7 @@ class weldarray(np.ndarray):
         - View: If self is a view, then evaluates the parent array, and returns the aprropriate index from
         the result. Here, the behaviour is slightly different - it returns a weldarray
         '''
+        print("_eval")
         # all registered ops will be cleared after this
         self._num_registered_ops = 0
         # This check has to happen before the caching - as the weldobj/code for views is never updated.
@@ -705,7 +733,7 @@ class weldarray(np.ndarray):
         # was leading to a huge memory leak as a's original array still had a
         # reference to the old array, so python's garbage collector did not
         # collect it for free-ing.
-        del(self.weldobj.context[self.name])
+        # del(self.weldobj.context[self.name])
 
         # Now that the evaluation is done - create new weldobject for self,
         # initalized from the returned arr. We want to be able to support users
