@@ -34,9 +34,9 @@ export LD_LIBRARY_PATH=`pwd`/target/release
 python python/grizzly/tests/grizzly_test.py
 python python/grizzly/tests/numpy_weld_test.py
 
-# run tests for nditer - need to be in numpy directory so we can import
-# weldnumpy
+# run tests for nditer - first need to install weldnumpy
 cd python/numpy
+python setup.py install
 python ../../examples/python/nditer/nditer_test.py
 cd ../..
 
