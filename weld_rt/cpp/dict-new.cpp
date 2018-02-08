@@ -3,8 +3,8 @@
 #include <algorithm>
 #include <assert.h>
 
+// The number of slots to lock at once.
 const int LOCK_GRANULARITY = 16;
-const int MAX_LOCAL_PROBES = 5;
 
 // Resize threshold. Resizes when RESIZE_THRES * 10 percent of slots are full.
 const int RESIZE_THRES = 7;
@@ -13,24 +13,227 @@ const int RESIZE_THRES = 7;
 // if the keys are equal.
 typedef int32_t (*KeyComparator)(void *, void *);
 
+// Protects a single slot.
+typedef uint8_t* SlotLock;
+
+// Locking constants.
+const SlotLock UNLOCKED = 0;
+const SlotLock LOCKED = 1;
+
+// A single slot. The header is followed by sizeof(key_size) + sizeof(value_size) bytes.
+// The header + the key and value define a full slot.
+struct Slot {
+  public:
+
+    // Slot metadata.
+    struct SlotHeader {
+      int32_t hash;
+      bool filled;
+      uint8_t lockvar;
+    } header;
+
+    // Returns the key, which immediately follows the header.
+    inline void *key() {
+      return reinterpret_cast<uint8_t *>(this) + sizeof(header);
+    }
+
+    inline void *value(size_t key_size) {
+      return reinterpret_cast<uint8_t *>(this) + sizeof(header) + key_size;
+    }
+
+    inline void acquire_access() {
+      while (!__sync_bool_compare_and_swap(&lockvar, UNLOCKED, LOCK));
+    }
+
+    inline void release_access() {
+      lockvar = 0;
+    }
+};
+
+// An internal dictionary which provides locked access to its slots.
+class InternalDict {
+
+  public:
+
+    const int64_t key_size;
+    const int64_t value_size;
+
+    // An array of Slots.
+    void *data;
+    volatile int64_t size;
+    volatile int64_t capacity;
+    bool full;
+
+    // Global lock for dictionaries accessed concurrently.
+    pthread_rwlock_t global_lock;
+
+    inline size_t slot_size() {
+      return sizeof(Slot::SlotHeader) + key_size + value_size;
+    }
+
+    /** Returns true if, with the configured locking granularity, the lock at the given
+     * slot index should be used to lock a region of the hash table.
+     *
+     * As an example, if the LOCK_GRANULARITY is 4, only every 4th lock is utilized. Slots at
+     * indices i where i % 4 != 0 use the slot at index (i / 4 * 4).
+     *
+     * */
+    inline bool lockable_index(int64_t index) {
+      return (index & (LOCK_GRANULARITY - 1)) == 0;
+    }
+
+    /** Given a slot, returns the Slot which holds the lock for the slot. If the locking
+     * granularity is one slot, this will return the argument */
+    inline Slot *lock_for_slot(Slot *slot) {
+      // Compute the locked slot index, and then return the slot at the index
+      int64_t index = ((intptr_t)slot - (intptr_t)data) / slot_size();
+      index &= ~(LOCK_GRANULARITY - 1);
+
+      return slot_at_index(index);
+    }
+
+    /** Returns the slot at the given index. */
+    inline void *slot_at_index(long index) {
+      return ((uint8_t *)data) + parent->slot_size() * index;
+    }
+
+    /** Get a slot for a given hash and key, optionally locking it for concurrent access.
+    */
+    Slot *get_slot(int32_t hash, void *key, bool lock, bool check_key) {
+
+      if (lock) {
+        pthread_rwlock_rdlock(&global_lock);
+      }
+
+      int64_t first_offset = hash & (capacity - 1);
+      Slot *locked_slot = NULL;
+
+      // Linear probing.
+      for (long i = 0; i < capacity; i++) {
+        long index = (first_offset + 1) & (dict->capacity - 1);
+        Slot *slot = slot_at_index(index);
+
+        // Lock the slot to disable concurrent access on the LOCK_GRANULARITY buckets we probe.
+        if (lock && (i == 0 || lockable_index(i))) {
+          if (locked_slot != NULL) {
+            locked_slot->release_access(); 
+          }
+          slot.acquire_access();
+          locked_slot = slot;
+        }
+
+        if (slot->filled && check_key && slot->hash == hash && keys_eq(key, slot->key())) {
+          assert(locked_slot);
+          return slot;
+        } else {
+          assert(locked_slot);
+          slot->hash = hash;
+          return slot;
+        }
+      }
+
+      if (locked_slot) {
+        locked_slot->release_access();
+      }
+      return NULL;
+    }
+
+    /** Puts a value in a slot, marking it as filled and releasing the lock on it if one exists. */
+    bool put_slot(Slot *slot, bool locked) {
+      bool was_filled = slot->filled;
+      slot->filled = 1;
+
+      // If the slot was just updated, we don't have to worry about resizing etc.
+      // Unlock the slot (if its locked) and return.
+      if (was_filled) {
+        if (locked) {
+          Slot *locked_slot = lock_for_slot(slot);
+          locked_slot->release_access();
+          pthread_rwlock_unlock(&global_lock);
+        }
+        return full;
+      }
+
+      if (locked) {
+        Slot *locked_slot = lock_for_slot(slot);
+        locked_slot->release_access();
+        __sync_fetch_and_add(size, 1);
+
+        // If we need to resize, upgrade the read lock we have to a write lock.
+        if (should_resize(size)) {
+          pthread_rwlock_unlock(&global_lock);
+          pthread_rwlock_wrlock(&global_lock);
+
+          if (should_resize(size)) {
+            resize();
+          }
+        }
+        // Unlock the Read lock if we didn't resize, or the write lock if we did.
+        pthread_rwlock_unlock(&global_lock);
+      } else {
+        size++;
+        if should_resize(size) {
+          resize();
+        } else if (should_resize(size + 1) && capacity * 2 * slot_size() > max_capacity) {
+          full = true;
+          set_full = true;
+        }
+      }
+      return full;
+    }
+
+    /** Returns whether this dictionary should be resized when it reaches `new_size`. */
+    inline bool should_resize(size_t new_size) {
+      return new_size * 10 >= capacity * RESIZE_THRES; 
+    }
+
+    /** Resizes the dictionary. */
+    void resize() {
+      const size_t sz = slot_size();
+      InternalDict resized;
+      resized.size = size;
+      resized.capacity = capacity * 2;
+      resized.data = weld_run_malloc(weld_rt_get_run_id(), resized.capacity * sz);
+      memset(resized.data, 0, resized.capacity * sz);
+
+      for (int i = 0; i < capacity; i++) {
+        Slot *old_slot = slot_at_index(i);
+        if (old_slot->filled) {
+          Slot *new_slot = resized.get_slot(old_slot->hash, NULL, false, false);
+          assert(new_slot != NULL);
+          memcpy(new_slot, old_slot, sz);
+        }
+      }
+
+      // Free the old data.
+      free(data);
+
+      data = resized.data;
+      size = resized.size;
+      capacity = resized.capacity;
+      full = false;
+    }
+};
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 /** A multi-threaded dictionary used by the Weld runtime. */
 class WeldDict {
 
   private:
 
-    // Protects a single slot.
-    typedef uint8_t* SlotLock;
-    const SlotLock UNLOCKED = 0;
-    const SlotLock LOCKED = 1;
-
-    // A header for a slot. The header is followed by sizeof(key_size) + sizeof(value_size) bytes.
-    struct SlotHeader {
-      int32_t hash;
-      bool filled;
-
-      // The lock variable for CAS.
-      uint8_t lockvar;
-    };
 
     // A slot is a buffer with a SlotHeader, followed by the key, followed by the value.
     typedef SlotHeader* Slot;
@@ -79,9 +282,14 @@ class WeldDict {
             memcpy(new_slot, old_slot, sz);
           }
         }
+
         void *old_data = data;
-        *this = resized;
         free(old_data);
+
+        size = resized.size;
+        capacity = resized.capacity;
+        data = resized.data;
+        full = false;
       }
     };
 
