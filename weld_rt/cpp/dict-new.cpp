@@ -50,13 +50,16 @@ struct Slot {
     }
 };
 
-// An internal dictionary which provides locked access to its slots.
+// An internal dictionary which provides (optional) locked access to its slots.
 class InternalDict {
 
   public:
 
     const int64_t key_size;
     const int64_t value_size;
+    const int64_t max_capacity;
+
+  private:
 
     // An array of Slots.
     void *data;
@@ -95,6 +98,56 @@ class InternalDict {
     /** Returns the slot at the given index. */
     inline void *slot_at_index(long index) {
       return ((uint8_t *)data) + parent->slot_size() * index;
+    }
+
+  public:
+
+        // N dictionaries for the N workers, + 1 for the global dictionary.
+        dicts_ = weld_rt_new_merger(sizeof(InternalDict), workers_ + 1);
+        // Initialize the thread-local dictionaries.
+        for (int i = 0; i < workers_ + 1; i++) {
+          InternalDict *dict = dict_at_index(i);
+          size_t data_size = capacity * slot_size();
+
+          dict->size = 0;
+          dict->capacity = capacity;
+          dict->data = weld_run_malloc(weld_rt_get_run_id(), data_size);
+          memset(dict->data, 0, data_size);
+          dict->full = max_local_bytes_ == 0;
+        }
+
+    InternalDict(int64_t key_size, int64_t value_size, int64_t capacity, int64_t max_capacity):
+      key_size(key_size),
+      value_size(value_size),
+      capacity(capacity),
+      max_capacity(max_capacity) {
+
+        // Power of 2 check.
+        assert(capacity > 0 && (capacity & (capacity - 1)) == 0);
+        size_t data_size = capacity * slot_size();
+
+        data = weld_run_malloc(weld_rt_get_run_id(), data_size);
+        memset(data, 0, data_size);
+        full = max_capacity == 0;
+
+        pthread_rwlock_init(&global_lock, NULL);
+      }
+
+    ~InternalDict() {
+      pthread_rwlock_destroy(&wd->global_lock);
+      free(data);
+    }
+
+    int64_t size() {
+      return size;
+    }
+
+    int64_t capacity() {
+      return capacity;
+    }
+
+    bool full() {
+      return full;
     }
 
     /** Get a slot for a given hash and key, optionally locking it for concurrent access.
