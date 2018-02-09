@@ -46,7 +46,8 @@ define %{NAME} @{NAME}.bld.result(%{NAME}.bld %bld) {{
 start:
   br label %entry
 entry:
-  %nextSlotRaw = call i8* @weld_rt_dict_finalize_next_local_slot(i8* %bld)
+  call void @weld_rt_finalize_begin(i8* bld)
+  %nextSlotRaw = call i8* @weld_rt_dict_finalize_next(i8* %bld)
   %nextSlotLong = ptrtoint i8* %nextSlotRaw to i64
   %isNull = icmp eq i64 %nextSlotLong, 0
   br i1 %isNull, label %done, label %body
@@ -54,7 +55,7 @@ body:
   %nextSlot = bitcast i8* %nextSlotRaw to %{NAME}.slot
   %key = call {KEY} @{NAME}.slot.key(%{NAME}.slot %nextSlot)
   %localValue = call {VALUE} @{NAME}.slot.value(%{NAME}.slot %nextSlot)
-  %globalSlotRaw = call i8* @weld_rt_dict_finalize_global_slot_for_local(i8* %bld, i8* %nextSlotRaw)
+  %globalSlotRaw = call i8* @weld_rt_dict_finalize_get_global_slot(i8* %bld, i8* %nextSlotRaw)
   %globalSlot = bitcast i8* %globalSlotRaw to %{NAME}.slot
   %filled = call i1 @{NAME}.slot.filled(%{NAME}.slot %globalSlot)
   br i1 %filled, label %onFilled, label %onEmpty
