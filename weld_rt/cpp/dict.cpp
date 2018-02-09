@@ -404,4 +404,3 @@ extern "C" void weld_rt_dict_free(void *d) {
   }
   weld_run_free(weld_rt_get_run_id(), wd);
 }
-}
