@@ -22,7 +22,7 @@ struct Slot {
     struct SlotHeader {
       int32_t hash;
       bool filled;
-      uint8_t lockvar;
+      uint8_t lockvar; // locks the slot with a CAS.
     } header;
 
     // Returns the key, which immediately follows the header.
@@ -51,10 +51,15 @@ class InternalDict {
 
   public:
 
-    int64_t key_size;
-    int64_t value_size;
-    int64_t full_watermark;
-    KeyComparator keys_eq;
+    const int64_t key_size;
+    const int64_t value_size;
+
+    // Measured in bytes, designating the size of the buffer. If the full_watermark is reached,
+    // the dictionary is marked full.
+    const int64_t full_watermark;
+
+    // Compares the key.
+    const KeyComparator keys_eq;
 
   private:
 
@@ -90,19 +95,26 @@ class InternalDict {
 
   public:
 
-    void init_internal(int64_t a_key_size,
+    // Default constructor.
+    InternalDict() :
+      key_size(0),
+      value_size(0),
+      full_watermark(0),
+      keys_eq(0),
+      _size(0),
+      _capacity(0) {}
+
+    InternalDict(int64_t a_key_size,
         int64_t a_value_size,
         KeyComparator a_keys_eq,
         int64_t a_capacity,
-        int64_t a_full_watermark) {
-
-      key_size = a_key_size;
-      value_size = a_value_size;
-      keys_eq = a_keys_eq;
-      full_watermark = a_full_watermark;
-
-      _capacity = a_capacity;
-      _size = 0;
+        int64_t a_full_watermark):
+      key_size(a_key_size),
+      value_size(a_value_size),
+      full_watermark(a_full_watermark),
+      keys_eq(a_keys_eq),
+      _size(0),
+      _capacity(a_capacity) {
 
       // Power of 2 check.
       assert(_capacity > 0 && (_capacity & (_capacity - 1)) == 0);
@@ -115,7 +127,7 @@ class InternalDict {
       pthread_rwlock_init(&_global_lock, NULL);
     }
 
-    void free_internal() {
+    ~InternalDict() {
       pthread_rwlock_destroy(&_global_lock);
       weld_run_free(weld_rt_get_run_id(), _data);
     }
@@ -322,7 +334,7 @@ class WeldDict {
       return dict_at_index(_workers);
     }
 
-    void init_welddict(int32_t key_size, int32_t value_size,
+    WeldDict(int32_t key_size, int32_t value_size,
         KeyComparator keys_eq,
         int64_t capacity,
         int64_t full_watermark) {
@@ -332,21 +344,52 @@ class WeldDict {
       _dicts = weld_rt_new_merger(sizeof(InternalDict), _workers + 1);
       for (int i = 0; i < _workers + 1; i++) {
         InternalDict *dict = dict_at_index(i);
-        dict->init_internal(key_size, value_size,  keys_eq, capacity, full_watermark);
+
+        // Weird syntax, but calls the constructor in this memory region.
+        new(dict)InternalDict(key_size, value_size, keys_eq, capacity, full_watermark);
       }
 
       finalized = (full_watermark == 0);
       memset(&finalize_iterator, 0, sizeof(finalize_iterator));
     }
 
-    void free_welddict() {
+#if 0
+    // Used to deserialize a dictionary.
+    WeldDict(SerializedWeldDictHeader *buffer, KeyComparator keys_eq) {
+      _workers = weld_rt_get_nworkers();
+
+      // Multiple workers are currently unsupported.
+      assert(_workers == 1);
+
+      _dicts = weld_rt_new_merger(sizeof(InternalDict), _workers + 1);
+      for (int i = 0; i < _workers; i++) {
+        InternalDict *dict = dict_at_index(i);
+        // Weird syntax, but calls the constructor in this memory region.
+        new(dict)InternalDict(buffer->key_size, buffer->value_size, keys_eq, 16, 0);
+      }
+
+      InternalDict *dict = global();
+      new(dict)InternalDict(((uint8_t *)buffer) + sizeof(SerializedWeldDictHeader),
+        buffer->key_size,
+        buffer->value_size,
+        keys_eq,
+        16,
+        0);
+
+      // For now, just allow reads on deserialized dictionaries.
+      finalized = true;
+    }
+#endif
+
+    ~WeldDict() {
       for (int i = 0; i < _workers + 1; i++) {
         InternalDict *dict = dict_at_index(i);
-        dict->free_internal();
+        dict->~InternalDict();
       }
       weld_rt_free_merger(_dicts);
     }
 
+    /** Begin the finalization procedure, which marks this dictionary as finished with all writes. */
     void finalize_begin() {
       assert(!finalized);
 
@@ -354,6 +397,9 @@ class WeldDict {
       memset(&finalize_iterator, 0, sizeof(finalize_iterator));
     }
 
+    /** Returns the next slot to finalize. `finalize_begin` must be called before this method is invoked.
+     * finalized_next will return NULL when all slots have been finalized.
+     */
     Slot *finalize_next() {
       assert(finalized);
 
@@ -375,12 +421,18 @@ class WeldDict {
       return NULL;
     }
 
-    void finalize_commit() {
-      assert(finalized);
-    }
+    // Serialization routines.
 
-    // Various serialization routines.
-
+    /** Returns an array of { key, value } structs, potentially padded, given this dictionary. The dictionary
+     * must be finalized. 
+     *
+     * @param value_offset the offset of the value after the key. This accounts for padding in the returned
+     * struct.
+     * @param struct_size the total struct size. This handles padding after the value.
+     *
+     * @return a buffer of {key, value} pairs.
+     *
+     * */
     void *new_kv_vector(int32_t value_offset, int32_t struct_size) {
       assert(finalized);
       InternalDict *dict = global();
@@ -406,21 +458,21 @@ class WeldDict {
       return (void *)buf;
     }
 
-    // Serializes the dictionary.
+    /** Serializes the dictionary. */
     uint8_t *serialize() {
       assert(finalized);
 
       InternalDict *dict = global();
 
-      // Header for hte serialized bytestream.
+      // Header for the serialized bytestream.
       SerializedWeldDictHeader header;
-      header.workers = _workers;
       header.key_size = dict->key_size;
       header.value_size = dict->value_size;
       header.size = dict->size();
       header.capacity = dict->capacity();
 
-      uint8_t *buf = (uint8_t *)weld_run_malloc(weld_rt_get_run_id(), sizeof(header) + dict->slot_size() * dict->capacity());
+      uint8_t *buf = (uint8_t *)weld_run_malloc(weld_rt_get_run_id(),
+          sizeof(header) + dict->slot_size() * dict->capacity());
       uint8_t *offset_buf = buf;
 
       memcpy(offset_buf, &header, sizeof(header));
@@ -429,6 +481,7 @@ class WeldDict {
 
       return buf;
     }
+
 
 };
 
@@ -447,13 +500,14 @@ extern "C" void *weld_rt_dict_new(int32_t key_size,
     int64_t capacity) {
 
   WeldDict *wd = (WeldDict *)weld_run_malloc(weld_rt_get_run_id(), sizeof(WeldDict));
-  wd->init_welddict(key_size, val_size, keys_eq, capacity, max_local_bytes);
+  new(wd)WeldDict(key_size, val_size, keys_eq, capacity, max_local_bytes);
+
   return (void *)wd;
 }
 
 extern "C" void weld_rt_dict_free(void *d) {
   WeldDict *wd = (WeldDict *)d;
-  wd->free_welddict();
+  wd->~WeldDict();
   weld_run_free(weld_rt_get_run_id(), wd);
 }
 
@@ -511,7 +565,6 @@ extern "C" void weld_rt_dict_put(void *d, void *s) {
 //                    Finalization
 //
 ///////////////////////////////////////////////////////
-
 
 // Begin the finalization procedure.
 extern "C" void weld_rt_dict_finalize_begin(void *d) {
