@@ -9,9 +9,22 @@ const int LOCK_GRANULARITY = 16;
 // Resize threshold. Resizes when RESIZE_THRES * 10 percent of slots are full.
 const int RESIZE_THRES = 7;
 
+// Size of the global buffer, in # of slots.
+const int GLOBAL_BATCH_SIZE = 128; 
+
 // A callback which checks whether two keys are equal. Returns a non-zero value
 // if the keys are equal.
+//
+// arg1: key, arg2: other_key
 typedef int32_t (*KeyComparator)(void *, void *);
+
+/**
+ * @param metadata
+ * @param filled
+ * @param value to update.
+ * @pram value to merge.
+ */
+typedef int32_t (*MergeFn)(void *, int32_t, void *, void *);
 
 // A single slot. The header is followed by sizeof(key_size) +
 // sizeof(value_size) bytes. The header + the key and value define a full slot.
@@ -32,6 +45,23 @@ public:
   // Returns the value, which follows the header, and then `key_size` bytes.
   inline void *value(size_t key_size) {
     return reinterpret_cast<uint8_t *>(this) + sizeof(header) + key_size;
+  }
+
+  // Updates the slot using a merge function.
+  void update(MergeFn merge,
+      int32_t a_hash,
+      void *a_key, int64_t key_size,
+      void *a_val, int64_t val_size) {
+
+    if (!header.filled) {
+      memcpy(key(), a_key, key_size);
+      header.hash = a_hash;
+    }
+
+    if (merge) {
+      // TODO NULL should be some metadata?
+      merge(NULL, (int32_t)header.filled, value(key_size), a_val);
+    }
   }
 
   // Lock a slot.
@@ -218,7 +248,7 @@ public:
         pthread_rwlock_wrlock(&_global_lock);
 
         if (should_resize(_size)) {
-          resize();
+          resize(_capacity * 2);
         }
       }
       // Unlock the Read lock if we didn't resize, or the write lock if we did.
@@ -226,7 +256,7 @@ public:
     } else {
       _size++;
       if (should_resize(_size)) {
-        resize();
+        resize(_capacity * 2);
       } else if (should_resize(_size + 1) &&
                  _capacity * 2 * slot_size() > full_watermark) {
         _full = true;
@@ -242,11 +272,11 @@ public:
   }
 
   /** Resizes the dictionary. */
-  void resize() {
+  void resize(int64_t new_capacity) {
     const size_t sz = slot_size();
     InternalDict resized;
     resized._size = _size;
-    resized._capacity = _capacity * 2;
+    resized._capacity = new_capacity;
     resized._data =
         weld_run_malloc(weld_rt_get_run_id(), resized._capacity * sz);
     memset(resized._data, 0, resized._capacity * sz);
@@ -271,6 +301,51 @@ public:
   }
 };
 
+class GlobalBuffer {
+
+  public:
+
+    void *data;
+    // The size, in slots.
+    int64_t size;
+    // Size of a single slot, in bytes.
+    const int64_t slot_size;
+
+
+  public:
+
+    GlobalBuffer(int64_t a_slot_size): slot_size(a_slot_size) {
+        data = weld_run_malloc(weld_rt_get_run_id(), GLOBAL_BATCH_SIZE * slot_size);
+        memset(data, 0, GLOBAL_BATCH_SIZE * slot_size);
+        size = 0;
+    }
+
+    ~GlobalBuffer() {
+      weld_run_free(weld_rt_get_run_id(), data);
+    }
+
+    // Returns true if this buffer contains the slot, by checking whether the
+    // slot address lies in the buffer's data.
+    bool contains_slot(Slot *s) {
+      intptr_t start = (intptr_t)data;
+      intptr_t end = start + size * slot_size;
+      intptr_t slot = (intptr_t)s;
+      return slot >= start && slot < end;
+    }
+
+    /** Returns the slot at the given index. */
+    inline Slot *slot_at_index(long index) {
+      assert(index < GLOBAL_BATCH_SIZE);
+      return (Slot *)(((uint8_t *)data) + slot_size * index);
+    }
+
+    /** Returns the slot at the given index. */
+    inline Slot *next_slot() {
+      assert(size < GLOBAL_BATCH_SIZE);
+      return (Slot *)(((uint8_t *)data) + slot_size * size);
+    }
+};
+
 struct SerializedWeldDictHeader {
   int32_t workers;
   int64_t key_size;
@@ -288,17 +363,23 @@ private:
   // and dictionary N+1 is the global dictionary.
   void *_dicts;
 
+  // Buffers for writes into the global dictionary.
+  void *_global_buffers;
+
   int32_t _workers;
 
-  struct WeldDictFinalizeIterator {
-    int32_t current_finalize_dict_index;
-    int32_t current_finalize_slot_index;
-  } finalize_iterator;
+  // Merge function.
+  MergeFn _merge_fn;
 
 public:
   bool finalized;
 
 public:
+
+  MergeFn merge_fn() {
+    return _merge_fn;
+  }
+
   /** Get the dictionary at the given index.
    *
    * @i the index.
@@ -309,28 +390,46 @@ public:
                                                        sizeof(InternalDict), i);
   }
 
+  /** Get the thread-local write buffer at the given index.
+   *
+   * @i the index.
+   * @return the buffer the index.
+   */
+  inline GlobalBuffer *buffer_at_index(int32_t i) {
+    return (GlobalBuffer *)weld_rt_get_merger_at_index(_global_buffers,
+                                                       sizeof(GlobalBuffer), i);
+  }
+
+  /** Get the write buffer for the calling thread. */
+  inline GlobalBuffer *local_buffer() { return buffer_at_index(weld_rt_thread_id()); }
+
+  /** Get the write buffer dictionary. */
+  inline GlobalBuffer *global_buffer() { return buffer_at_index(_workers); }
+
   /** Get the dictionary for the calling thread. */
-  inline InternalDict *local() { return dict_at_index(weld_rt_thread_id()); }
+  inline InternalDict *local_dict() { return dict_at_index(weld_rt_thread_id()); }
 
   /** Get the global dictionary. */
-  inline InternalDict *global() { return dict_at_index(_workers); }
+  inline InternalDict *global_dict() { return dict_at_index(_workers); }
 
-  WeldDict(int32_t key_size, int32_t value_size, KeyComparator keys_eq,
+  WeldDict(int32_t key_size, int32_t value_size, KeyComparator keys_eq, MergeFn merge_fn,
            int64_t capacity, int64_t full_watermark) {
 
     _workers = weld_rt_get_nworkers();
-
+    _merge_fn = merge_fn;
     _dicts = weld_rt_new_merger(sizeof(InternalDict), _workers + 1);
+    _global_buffers = weld_rt_new_merger(sizeof(GlobalBuffer), _workers + 1);
+
     for (int i = 0; i < _workers + 1; i++) {
       InternalDict *dict = dict_at_index(i);
-
-      // Weird syntax, but calls the constructor in this memory region.
       new (dict)
           InternalDict(key_size, value_size, keys_eq, capacity, full_watermark);
+
+      GlobalBuffer *glbuf = buffer_at_index(i);
+      new (glbuf) GlobalBuffer(dict->slot_size());
     }
 
     finalized = (full_watermark == 0);
-    memset(&finalize_iterator, 0, sizeof(finalize_iterator));
   }
 
 #if 0
@@ -348,7 +447,7 @@ public:
         new(dict)InternalDict(buffer->key_size, buffer->value_size, keys_eq, 16, 0);
       }
 
-      InternalDict *dict = global();
+      InternalDict *dict = global_dict();
       new(dict)InternalDict(((uint8_t *)buffer) + sizeof(SerializedWeldDictHeader),
         buffer->key_size,
         buffer->value_size,
@@ -364,45 +463,65 @@ public:
   ~WeldDict() {
     for (int i = 0; i < _workers + 1; i++) {
       InternalDict *dict = dict_at_index(i);
+      GlobalBuffer *glbuf = buffer_at_index(i);
       dict->~InternalDict();
+      glbuf->~GlobalBuffer();
     }
     weld_rt_free_merger(_dicts);
+    weld_rt_free_merger(_global_buffers);
   }
 
-  /** Begin the finalization procedure, which marks this dictionary as finished
-   * with all writes. */
-  void finalize_begin() {
+  // Commits writes in the global buffer back into the main global dictionary.
+  // XXX Check with james if it's okay to not grab the lock in the beginning.
+  void drain_global_buffer(GlobalBuffer *glbuf) {
+    InternalDict *dict = global_dict();
+
+    for (int i = 0; i < glbuf->size; i++) {
+      Slot *buf_slot = glbuf->slot_at_index(i);
+      Slot *global_slot = dict->get_slot(buf_slot->header.hash, buf_slot->key(), true, true);
+      global_slot->update(_merge_fn,
+          buf_slot->header.hash,
+          global_slot->key(), dict->key_size,
+          global_slot->value(dict->key_size), dict->value_size);
+      dict->put_slot(global_slot, true);
+    }
+    // The buffer is drained.
+    glbuf->size = 0;
+  }
+
+  void finalize() {
     assert(!finalized);
-
     finalized = true;
-    memset(&finalize_iterator, 0, sizeof(finalize_iterator));
-  }
 
-  /** Returns the next slot to finalize. `finalize_begin` must be called before
-   * this method is invoked. finalized_next will return NULL when all slots have
-   * been finalized.
-   */
-  Slot *finalize_next() {
-    assert(finalized);
-
-    while (finalize_iterator.current_finalize_dict_index != _workers) {
-      InternalDict *dict =
-          dict_at_index(finalize_iterator.current_finalize_dict_index);
-      Slot *slot =
-          dict->slot_at_index(finalize_iterator.current_finalize_slot_index);
-
-      finalize_iterator.current_finalize_slot_index++;
-      // Finished this dictionary - move on to the next one.
-      if (finalize_iterator.current_finalize_slot_index >= dict->capacity()) {
-        finalize_iterator.current_finalize_dict_index++;
-        finalize_iterator.current_finalize_slot_index = 0;
-      }
-
-      if (slot->header.filled) {
-        return slot;
+    int64_t max_capacity = 0;
+    for (int i = 0; i < _workers; i++) {
+      InternalDict *dict = dict_at_index(i);
+      if (dict->capacity() > max_capacity) {
+        max_capacity = dict->capacity();
       }
     }
-    return NULL;
+
+    // Prevents spurious resizes during the finalization phase.
+    InternalDict *dict = global_dict();
+    dict->resize(max_capacity);
+
+    for (int i = 0; i < _workers; i++) {
+
+      drain_global_buffer(buffer_at_index(i));
+
+      InternalDict *ldict = dict_at_index(i);
+      for (int j = 0; j < ldict->capacity(); j++) {
+        Slot *slot = ldict->slot_at_index(j);
+        if (slot->header.filled) {
+          Slot *global_slot = dict->get_slot(slot->header.hash, slot->key(), false, true);
+          global_slot->update(_merge_fn,
+              global_slot->header.hash,
+              global_slot->key(), dict->key_size,
+              slot->value(dict->key_size), dict->value_size);
+          dict->put_slot(global_slot, false);
+        }
+      }
+    }
   }
 
   // Serialization routines.
@@ -420,7 +539,7 @@ public:
    * */
   void *new_kv_vector(int32_t value_offset, int32_t struct_size) {
     assert(finalized);
-    InternalDict *dict = global();
+    InternalDict *dict = global_dict();
 
     int32_t key_padding_bytes = value_offset - dict->key_size;
 
@@ -449,7 +568,7 @@ public:
   uint8_t *serialize() {
     assert(finalized);
 
-    InternalDict *dict = global();
+    InternalDict *dict = global_dict();
 
     // Header for the serialized bytestream.
     SerializedWeldDictHeader header;
@@ -479,13 +598,13 @@ public:
 //
 ///////////////////////////////////////////////////////
 
-extern "C" void *weld_rt_dict_new(int32_t key_size, KeyComparator keys_eq,
+extern "C" void *weld_rt_dict_new(int32_t key_size, KeyComparator keys_eq, MergeFn merge_fn,
                                   int32_t val_size, int64_t max_local_bytes,
                                   int64_t capacity) {
 
   WeldDict *wd =
       (WeldDict *)weld_run_malloc(weld_rt_get_run_id(), sizeof(WeldDict));
-  new (wd) WeldDict(key_size, val_size, keys_eq, capacity, max_local_bytes);
+  new (wd) WeldDict(key_size, val_size, keys_eq, merge_fn, capacity, max_local_bytes);
 
   return (void *)wd;
 }
@@ -498,14 +617,14 @@ extern "C" void weld_rt_dict_free(void *d) {
 
 ///////////////////////////////////////////////////////
 //
-//                Basic Get and Put
+//             Get and Put, and Merge
 //
 ///////////////////////////////////////////////////////
 
 extern "C" void *weld_rt_dict_lookup(void *d, int32_t hash, void *key) {
   WeldDict *wd = (WeldDict *)d;
   if (!wd->finalized) {
-    InternalDict *dict = wd->local();
+    InternalDict *dict = wd->local_dict();
     Slot *slot = dict->get_slot(hash, key, false, true);
 
     // Use the slot in the local dictionary if (a) the dictionary is not full or
@@ -516,33 +635,63 @@ extern "C" void *weld_rt_dict_lookup(void *d, int32_t hash, void *key) {
     }
   }
 
-  InternalDict *dict = wd->global();
+  // Global dictionary.
+  if (!wd->finalized) {
+    GlobalBuffer *glbuf = wd->local_buffer();
+    Slot *slot = glbuf->next_slot();
+    return slot;
+  }
 
-  // If the dictionary is not finalized, lock it. Otherwise we are guaranteeing
-  // that we will only do a read.
-  bool lock = !wd->finalized;
-  Slot *s = dict->get_slot(hash, key, lock, true);
-  assert(s);
-
+  // This is just a read - no locking required.
+  InternalDict *dict = wd->global_dict();
+  Slot *s = dict->get_slot(hash, key, false, true);
   return s;
 }
 
 extern "C" void weld_rt_dict_put(void *d, void *s) {
   WeldDict *wd = (WeldDict *)d;
   Slot *slot = (Slot *)s;
-  InternalDict *dict = wd->local();
+  InternalDict *dict = wd->local_dict();
 
   if (dict->contains_slot(slot)) {
     dict->put_slot(slot, false);
     return;
   }
 
-  dict = wd->global();
+  dict = wd->global_dict();
   assert(dict->contains_slot(slot));
 
   // TODO if we are doing a put, this should always be true?
   bool lock = !wd->finalized;
   dict->put_slot(slot, lock);
+}
+
+extern "C" void weld_rt_dict_merge(void *d, int32_t hash, void *key, void *value) {
+  WeldDict *wd = (WeldDict *)d;
+  Slot *slot = (Slot *)weld_rt_dict_lookup(d, hash, key);
+  GlobalBuffer *glbuf = wd->local_buffer();
+
+  InternalDict *dict = wd->local_dict();
+
+  if (glbuf->contains_slot(slot)) {
+    // The put occured in the write buffer.
+    slot->update(NULL, hash, key, dict->key_size, value, dict->value_size);
+    glbuf->size++;
+    if (glbuf->size == GLOBAL_BATCH_SIZE) {
+      wd->drain_global_buffer(glbuf);
+    }
+  } else {
+    // The put occurred in a dictionary (either global or local).
+    slot->update(wd->merge_fn(), hash, key, dict->key_size, value, dict->value_size);
+    if (dict->contains_slot(slot)) {
+      dict->put_slot(slot, false);
+      return;
+    }
+
+    dict = wd->global_dict();
+    assert(dict->contains_slot(slot));
+    dict->put_slot(slot, true);
+  }
 }
 
 ///////////////////////////////////////////////////////
@@ -552,24 +701,9 @@ extern "C" void weld_rt_dict_put(void *d, void *s) {
 ///////////////////////////////////////////////////////
 
 // Begin the finalization procedure.
-extern "C" void weld_rt_dict_finalize_begin(void *d) {
+extern "C" void weld_rt_dict_finalize(void *d) {
   WeldDict *wd = (WeldDict *)d;
-  wd->finalize_begin();
-}
-
-// Return the next slot to finalize.
-extern "C" void *weld_rt_dict_finalize_next(void *d) {
-  WeldDict *wd = (WeldDict *)d;
-  return wd->finalize_next();
-}
-
-// Given a local slot, return the corresponding slot in the global dictionary
-// that the value in the local slot should be merged into.
-extern "C" void *weld_rt_finalize_get_global_slot(void *d, void *s) {
-  WeldDict *wd = (WeldDict *)d;
-  Slot *slot = (Slot *)s;
-  InternalDict *dict = wd->global();
-  return dict->get_slot(slot->header.hash, slot->key(), false, true);
+  wd->finalize();
 }
 
 ///////////////////////////////////////////////////////
@@ -596,6 +730,6 @@ extern "C" int64_t weld_rt_dict_size(void *d) {
   WeldDict *wd = (WeldDict *)d;
   assert(wd->finalized);
 
-  InternalDict *dict = wd->global();
+  InternalDict *dict = wd->global_dict();
   return dict->size();
 }
