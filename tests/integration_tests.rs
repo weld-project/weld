@@ -1,4 +1,6 @@
 use std::env;
+use std::str;
+use std::slice;
 use std::thread;
 
 extern crate weld;
@@ -159,6 +161,21 @@ fn basic_program() {
     let data = unsafe { weld_value_data(ret_value) as *const i32 };
     let result = unsafe { *data };
     assert_eq!(result, 42);
+
+    unsafe { free_value_and_module(ret_value) };
+}
+
+fn basic_string() {
+    let code = "|| \"test str\"";
+    let conf = default_conf();
+
+    let ref input_data = 0;
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<u8> };
+    let result = unsafe { (*data).clone() };
+    assert_eq!(result.len, 8);
+    unsafe { assert_eq!(str::from_utf8(slice::from_raw_parts(result.data, result.len as usize)).unwrap(), "test str"); }
 
     unsafe { free_value_and_module(ret_value) };
 }
@@ -1620,7 +1637,7 @@ fn complex_groupmerger_with_struct_key() {
     unsafe { free_value_and_module(ret_value) };
 }
 
-fn simple_parallel_for_dictmerger_loop() {
+fn simple_parallel_for_dictmerger_loop_helper(use_local: bool) {
     #[derive(Clone)]
     #[allow(dead_code)]
     struct Pair {
@@ -1633,8 +1650,9 @@ fn simple_parallel_for_dictmerger_loop() {
         y: WeldVec<i32>,
     }
 
-    let code = "|x:vec[i32], y:vec[i32]| tovec(result(@(grain_size: 100)for(zip(x,y), dictmerger[i32,i32,+],
-                |b,i,e| merge(b, e))))";
+    let code = format!("|x:vec[i32], y:vec[i32]| tovec(result(@(grain_size: 100)for(zip(x,y),
+                dictmerger[i32,i32,+]({}L), |b,i,e| merge(b, e))))",
+                if use_local { 100000000 } else { 0 });
     let conf = many_threads_conf();
 
     const DICT_SIZE: usize = 8192;
@@ -1656,7 +1674,7 @@ fn simple_parallel_for_dictmerger_loop() {
         },
     };
 
-    let ret_value = compile_and_run(code, conf, input_data);
+    let ret_value = compile_and_run(&code, conf, input_data);
     let data = unsafe { weld_value_data(ret_value) as *const WeldVec<Pair> };
     let result = unsafe { (*data).clone() };
 
@@ -1677,6 +1695,14 @@ fn simple_parallel_for_dictmerger_loop() {
     }
     assert_eq!(result.len, output_keys.len() as i64);
     unsafe { free_value_and_module(ret_value) };
+}
+
+fn simple_parallel_for_dictmerger_loop_local() {
+    simple_parallel_for_dictmerger_loop_helper(true);
+}
+
+fn simple_parallel_for_dictmerger_loop_global() {
+    simple_parallel_for_dictmerger_loop_helper(false);
 }
 
 fn simple_dict_lookup() {
@@ -2533,6 +2559,7 @@ fn main() {
     let args: Vec<String> = env::args().collect();
     let tests: Vec<(&str, fn())> =
         vec![("basic_program", basic_program),
+             ("basic_string", basic_string),
              ("float_literals", float_literals),
              ("negation", negation),
              ("negation_double", negation_double),
@@ -2599,7 +2626,8 @@ fn main() {
              ("dictmerger_with_structs", dictmerger_with_structs),
              ("simple_groupmerger", simple_groupmerger),
              ("complex_groupmerger_with_struct_key", complex_groupmerger_with_struct_key),
-             ("simple_parallel_for_dictmerger_loop", simple_parallel_for_dictmerger_loop),
+             ("simple_parallel_for_dictmerger_loop_local", simple_parallel_for_dictmerger_loop_local),
+             ("simple_parallel_for_dictmerger_loop_global", simple_parallel_for_dictmerger_loop_global),
              ("simple_dict_lookup", simple_dict_lookup),
              ("simple_dict_exists", simple_dict_exists),
              ("simple_length", simple_length),

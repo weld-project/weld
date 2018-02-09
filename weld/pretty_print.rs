@@ -329,7 +329,7 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>,
 
         GetField { ref expr, index } => {
             format!("{}.${}",
-                    print_expr_impl(expr, typed, indent, should_indent),
+                    print_expr_impl(expr, false, indent, should_indent),
                     index)
         }
 
@@ -518,6 +518,7 @@ pub fn print_vector_literal(lit: &LiteralKind) -> String {
             }
             format!("<{}, {}, ..>", &res, &res)
         }
+        StringLiteral(ref v) => format!("<{}, {}, ..>", v, v),
     }
 }
 
@@ -550,6 +551,7 @@ pub fn print_literal(lit: &LiteralKind) -> String {
             }
             res
         }
+        StringLiteral(ref v) => format!("\"{}\"", v),
     }
 }
 

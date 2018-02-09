@@ -110,19 +110,15 @@ extern "C" {
   void *weld_rt_get_merger_at_index(void *m, int64_t size, int32_t i);
   void weld_rt_free_merger(void *m);
 
-  void *weld_rt_dict_new(int32_t key_size, int32_t (*keys_eq)(void *, void *), int32_t val_size,
-    int64_t max_local_bytes, int64_t capacity);
   void *weld_rt_dict_lookup(void *d, int32_t hash, void *key);
-  void weld_rt_dict_put(void *d, void *slot);
-  void weld_rt_dict_finalize_begin(void *d);
-  void *weld_rt_dict_finalize_next(void *d);
-  void *weld_rt_dict_finalize_get_global_slot(void *d, void *local_slot);
-  void *weld_rt_dict_new_kv_vector(void *d, int32_t value_offset_in_struct, int32_t struct_size);
-  int64_t weld_rt_dict_size(void *d);
+  void weld_rt_dict_merge(void *d, int32_t hash, void *key, void *value);
+  void weld_rt_dict_finalize(void *d);
+  void *weld_rt_dict_to_array(void *d, int32_t value_offset_in_struct, int32_t struct_size);
+  int64_t weld_rt_dict_get_size(void *d);
   void weld_rt_dict_free(void *d);
 
-  void *weld_rt_gb_new(int32_t key_size, int32_t (*keys_eq)(void *, void *), int32_t val_size,
-    int64_t max_local_bytes, int64_t capacity);
+  void *weld_rt_gb_new(int32_t key_size, int32_t (*keys_eq)(void *, void *),
+    int32_t val_size, int64_t max_local_bytes, int64_t capacity);
   void weld_rt_gb_merge(void *b, void *key, int32_t hash, void *value);
   void *weld_rt_gb_result(void *b);
   void weld_rt_gb_free(void *gb);

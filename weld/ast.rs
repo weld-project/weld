@@ -35,7 +35,7 @@ impl fmt::Display for Symbol {
         if self.id == 0 {
             write!(f, "{}", self.name)
         } else {
-            write!(f, "{}#{}", self.name, self.id)
+            write!(f, "{}__{}", self.name, self.id)
         }
     }
 }
@@ -408,7 +408,7 @@ impl<T: TypeBounds> ExprKind<T> {
     }
 }
 
-#[derive(Clone, Copy, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Clone, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
 pub enum LiteralKind {
     BoolLiteral(bool),
     I8Literal(i8),
@@ -423,6 +423,7 @@ pub enum LiteralKind {
     F32Literal(u32),
     // stored as raw bits.
     F64Literal(u64),
+    StringLiteral(String),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
