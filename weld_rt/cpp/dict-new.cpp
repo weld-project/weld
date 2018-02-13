@@ -207,13 +207,17 @@ public:
       }
 
       if (!slot->header.filled) {
-        assert(locked_slot);
+        if (mode == ACQUIRE) {
+          assert(locked_slot);
+        }
         return slot;
       }
 
       // Slot is filled - check it.
       if (check_key && slot->header.hash == hash && keys_eq(key, slot->key())) {
-        assert(locked_slot);
+        if (mode == ACQUIRE) {
+          assert(locked_slot);
+        }
         return slot;
       }
     }
