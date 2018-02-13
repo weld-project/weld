@@ -20,7 +20,7 @@ public:
   // Slot metadata.
   struct SlotHeader {
     int32_t hash;
-    bool filled;
+    uint8_t filled;
     uint8_t lockvar; // locks the slot with a CAS.
   } header;
 

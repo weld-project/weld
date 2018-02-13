@@ -11,7 +11,7 @@
 
 ; hash, isFilled, lockVar, key, value 
 ; (packed so that C code can easily store it in a byte array without considering padding)
-%{NAME}.entry = type <{{ i32, i1, i8, {KEY}, {VALUE} }}>
+%{NAME}.entry = type <{{ i32, i8, i8, {KEY}, {VALUE} }}>
 %{NAME}.slot = type %{NAME}.entry*                ; handle to an entry in the API
 %{NAME} = type i8*  ; entries, size, capacity
 
@@ -44,7 +44,7 @@ define i64 @{NAME}.size(%{NAME} %dict) {{
 ; Check whether a slot is filled.
 define i1 @{NAME}.slot.filled(%{NAME}.slot %slot) {{
   %filledPtr = getelementptr %{NAME}.entry, %{NAME}.slot %slot, i64 0, i32 1
-  %filled = load i1, i1* %filledPtr
+  %filled = load i8, i8* %filledPtr
   ret i1 %filled
 }}
 
