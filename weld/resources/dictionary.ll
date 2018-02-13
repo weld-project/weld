@@ -44,7 +44,8 @@ define i64 @{NAME}.size(%{NAME} %dict) {{
 ; Check whether a slot is filled.
 define i1 @{NAME}.slot.filled(%{NAME}.slot %slot) {{
   %filledPtr = getelementptr %{NAME}.entry, %{NAME}.slot %slot, i64 0, i32 1
-  %filled = load i8, i8* %filledPtr
+  %filled_i8 = load i8, i8* %filledPtr
+  %filled = trunc i8 %filled_i8 to i1
   ret i1 %filled
 }}
 
