@@ -362,14 +362,6 @@ class GlobalBuffer {
     }
 };
 
-struct SerializedWeldDictHeader {
-  int32_t workers;
-  int64_t key_size;
-  int64_t value_size;
-  int64_t size;
-  int64_t capacity;
-};
-
 /** A multi-threaded dictionary used by the Weld runtime. */
 class WeldDict {
 
