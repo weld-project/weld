@@ -64,8 +64,8 @@ define {VALUE} @{NAME}.slot.value(%{NAME}.slot %slot) {{
 }}
 
 ; Look up the given key, returning a slot for it. The slot functions may be
-; used to tell whether the entry is filled, get its value, etc, and the put()
-; function may be used to put a new value into the slot.
+; used to tell whether the entry is filled, get its value, etc. This function
+; gives *read only* access to the slot.
 define %{NAME}.slot @{NAME}.lookup(%{NAME} %dict, {KEY} %key) {{
   %keyPtr = alloca {KEY}
   store {KEY} %key, {KEY}* %keyPtr

@@ -13,6 +13,13 @@ const int RESIZE_THRES = 7;
 // Size of the global buffer, in # of slots.
 const int GLOBAL_BATCH_SIZE = 128; 
 
+// Specifies what kind of locking to use. Basically a boolean, but its here for additional
+// type safety enforced by the compiler.
+typedef enum {
+  NO_LOCKING = 0,
+  ACQUIRE = 1,
+} LockMode;
+
 // A single slot. The header is followed by sizeof(key_size) +
 // sizeof(value_size) bytes. The header + the key and value define a full slot.
 struct Slot {
@@ -107,7 +114,6 @@ private:
     // Compute the locked slot index, and then return the slot at the index
     int64_t index = ((intptr_t)slot - (intptr_t)_data) / slot_size();
     index &= ~(LOCK_GRANULARITY - 1);
-
     return slot_at_index(index);
   }
 
@@ -180,7 +186,7 @@ public:
    * Prerequisites: If this is a concurrently accessed dictionary, call lock() first.
    *
    */
-  Slot *get_slot(int32_t hash, void *key, bool lock, bool check_key) {
+  Slot *get_slot(int32_t hash, void *key, LockMode mode, bool check_key) {
 
     int64_t first_offset = hash & (_capacity - 1);
     Slot *locked_slot = NULL;
@@ -192,7 +198,7 @@ public:
 
       // Lock the slot to disable concurrent access on the LOCK_GRANULARITY
       // buckets we probe.
-      if (lock && (i == 0 || lockable_index(i))) {
+      if (mode == ACQUIRE && (i == 0 || lockable_index(i))) {
         if (locked_slot != NULL) {
           locked_slot->release_access();
         }
@@ -200,13 +206,14 @@ public:
         locked_slot = slot;
       }
 
-      if (slot->header.filled && check_key && slot->header.hash == hash &&
-          keys_eq(key, slot->key())) {
+      if (!slot->header.filled) {
         assert(locked_slot);
         return slot;
-      } else {
+      }
+
+      // Slot is filled - check it.
+      if (check_key && slot->header.hash == hash && keys_eq(key, slot->key())) {
         assert(locked_slot);
-        slot->header.hash = hash;
         return slot;
       }
     }
@@ -219,37 +226,40 @@ public:
 
   /** Puts a value in a slot, marking it as filled. The caller should have retrieved slot
    * using get_slot, and locked the dictionary using read_lock. */
-  bool put_slot(Slot *slot, bool locked) {
+  bool put_slot(Slot *slot, LockMode mode) {
     bool was_filled = slot->header.filled;
-    slot->header.filled = 1;
 
     // If the slot was just updated, we don't have to worry about resizing etc.
     // Unlock the slot (if its locked) and return.
     if (was_filled) {
-      if (locked) {
+      if (mode == ACQUIRE) {
         Slot *locked_slot = lock_for_slot(slot);
         locked_slot->release_access();
-        pthread_rwlock_unlock(&_global_lock);
       }
       return _full;
     }
 
-    if (locked) {
+    // This slot is now filled.
+    slot->header.filled = 1;
+
+    if (mode == ACQUIRE) {
       Slot *locked_slot = lock_for_slot(slot);
       locked_slot->release_access();
       __sync_fetch_and_add(&_size, 1);
 
       // If we need to resize, upgrade the read lock to a write lock.
       if (should_resize(_size)) {
-        pthread_rwlock_unlock(&_global_lock);
+
+        unlock();
         pthread_rwlock_wrlock(&_global_lock);
 
+        // In case someone resized before we got the lock.
         if (should_resize(_size)) {
           resize(_capacity * 2);
         }
 
         // Downgrade back to a read lock.
-        pthread_rwlock_unlock(&_global_lock);
+        unlock();
         read_lock();
       }
     } else {
@@ -258,6 +268,7 @@ public:
         resize(_capacity * 2);
       } else if (should_resize(_size + 1) &&
                  _capacity * 2 * slot_size() > full_watermark) {
+        // The local dictionary is full.
         _full = true;
       }
     }
@@ -286,7 +297,7 @@ public:
         // Locking the slot here is not required, since the caller should acquire the write lock
         // on the full dictionary.
         Slot *new_slot =
-            resized.get_slot(old_slot->header.hash, NULL, false, false);
+            resized.get_slot(old_slot->header.hash, NULL, NO_LOCKING, false);
         assert(new_slot != NULL);
         memcpy(new_slot, old_slot, sz);
       }
@@ -340,7 +351,7 @@ class GlobalBuffer {
       return (Slot *)(((uint8_t *)data) + slot_size * index);
     }
 
-    /** Returns the slot at the given index. */
+    /** Returns the next free slot. */
     inline Slot *next_slot() {
       assert(size < GLOBAL_BATCH_SIZE);
       return (Slot *)(((uint8_t *)data) + slot_size * size);
@@ -454,28 +465,9 @@ public:
 
 
   Slot *lookup(int32_t hash, void *key) {
-    if (!finalized) {
-      InternalDict *dict = local_dict();
-      Slot *slot = dict->get_slot(hash, key, false, true);
-
-      // Use the slot in the local dictionary if (a) the dictionary is not full or
-      // (b) the slot is already occupied and just needs to be updated with a new
-      // value for the key.
-      if (!dict->full() || (slot != NULL && slot->header.filled)) {
-        return slot;
-      }
-    }
-
-    // Global dictionary.
-    if (!finalized) {
-      GlobalBuffer *glbuf = local_buffer();
-      Slot *slot = glbuf->next_slot();
-      return slot;
-    }
-
-    // This is just a read - no locking required.
+    assert(finalized);
     InternalDict *dict = global_dict();
-    Slot *s = dict->get_slot(hash, key, false, true);
+    Slot *s = dict->get_slot(hash, key, NO_LOCKING, true);
     return s;
   }
 
@@ -499,14 +491,15 @@ public:
           dict->key_size,
           value,
           dict->value_size);
+
       if (dict->contains_slot(slot)) {
-        dict->put_slot(slot, false);
+        dict->put_slot(slot, NO_LOCKING);
         return;
       }
 
       dict = global_dict();
       assert(dict->contains_slot(slot));
-      dict->put_slot(slot, true);
+      dict->put_slot(slot, ACQUIRE);
     }
   }
 
@@ -534,13 +527,13 @@ public:
       for (int j = 0; j < ldict->capacity(); j++) {
         Slot *slot = ldict->slot_at_index(j);
         if (slot->header.filled) {
-          Slot *global_slot = dict->get_slot(slot->header.hash, slot->key(), false, true);
+          Slot *global_slot = dict->get_slot(slot->header.hash, slot->key(), NO_LOCKING, true);
           global_slot->update(_finalize_merge_fn,
               _metadata,
               global_slot->header.hash,
               global_slot->key(), dict->key_size,
               slot->value(dict->key_size), dict->value_size);
-          dict->put_slot(global_slot, false);
+          dict->put_slot(global_slot, NO_LOCKING);
         }
       }
     }
@@ -590,7 +583,7 @@ private:
 
     for (int i = 0; i < glbuf->size; i++) {
       Slot *buf_slot = glbuf->slot_at_index(i);
-      Slot *global_slot = dict->get_slot(buf_slot->header.hash, buf_slot->key(), true, true);
+      Slot *global_slot = dict->get_slot(buf_slot->header.hash, buf_slot->key(), ACQUIRE, true);
 
       global_slot->update(_merge_fn,
           _metadata,
@@ -598,7 +591,7 @@ private:
           global_slot->key(), dict->key_size,
           global_slot->value(dict->key_size), dict->value_size);
 
-      dict->put_slot(global_slot, true);
+      dict->put_slot(global_slot, ACQUIRE);
     }
 
     dict->unlock();
