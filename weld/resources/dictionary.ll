@@ -37,7 +37,7 @@ define void @{NAME}.free(%{NAME} %dict) {{
 
 ; Get the size of a dictionary.
 define i64 @{NAME}.size(%{NAME} %dict) {{
-  %size = call i64 @weld_rt_dict_get_size(i8* %dict)
+  %size = call i64 @weld_rt_dict_size(i8* %dict)
   ret i64 %size
 }}
 
@@ -82,7 +82,7 @@ define {KV_VEC} @{NAME}.tovec(%{NAME} %dict) {{
   %valOffset = ptrtoint {VALUE}* %valOffsetPtr to i32
   %structSizePtr = getelementptr {KV_STRUCT}, {KV_STRUCT}* null, i32 1
   %structSize = ptrtoint {KV_STRUCT}* %structSizePtr to i32
-  %arrRaw = call i8* @weld_rt_dict_new_kv_vector(i8* %dict, i32 %valOffset, i32 %structSize)
+  %arrRaw = call i8* @weld_rt_dict_to_array(i8* %dict, i32 %valOffset, i32 %structSize)
   %arr = bitcast i8* %arrRaw to {KV_STRUCT}*
   %size = call i64 @weld_rt_dict_size(i8* %dict)
   %1 = insertvalue {KV_VEC} undef, {KV_STRUCT}* %arr, 0
