@@ -461,7 +461,25 @@ public:
 
 
   Slot *lookup(int32_t hash, void *key) {
-    assert(finalized);
+    if (!finalized) {
+      InternalDict *dict = local_dict();
+      Slot *slot = dict->get_slot(hash, key, NO_LOCKING, true);
+
+      // Use the slot in the local dictionary if (a) the dictionary is not full or
+      // (b) the slot is already occupied and just needs to be updated with a new
+      // value for the key.
+      if (!dict->full() || (slot != NULL && slot->header.filled)) {
+        return slot;
+      }
+    }
+
+    // Global dictionary.
+    if (!finalized) {
+      GlobalBuffer *glbuf = local_buffer();
+      Slot *slot = glbuf->next_slot();
+      return slot;
+    }
+
     InternalDict *dict = global_dict();
     Slot *s = dict->get_slot(hash, key, NO_LOCKING, true);
     return s;
