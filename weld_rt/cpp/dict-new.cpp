@@ -109,7 +109,7 @@ private:
     return (index & (LOCK_GRANULARITY - 1)) == 0;
   }
 
-public: // TODO should be private
+private:
 
   /** Given a slot, returns the Slot which holds the lock for the slot. If the
    * locking granularity is one slot, this will return the argument */
