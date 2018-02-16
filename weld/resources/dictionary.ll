@@ -9,9 +9,9 @@
 ; - KV_VEC: name of vector of KV_STRUCTs (should be generated outside)
 ; - KV_VEC_PREFIX: prefix for helper functions of KV_VEC
 
-; hash, isFilled, lockVar, key, value 
+; hash, isFilled, lockVar, padding, key, value 
 ; (packed so that C code can easily store it in a byte array without considering padding)
-%{NAME}.entry = type <{{ i32, i8, i8, {KEY}, {VALUE} }}>
+%{NAME}.entry = type <{{ i32, i8, i8, i16, {KEY}, {VALUE} }}>
 %{NAME}.slot = type %{NAME}.entry*                ; handle to an entry in the API
 %{NAME} = type i8*  ; entries, size, capacity
 
@@ -51,14 +51,14 @@ define i1 @{NAME}.slot.filled(%{NAME}.slot %slot) {{
 
 ; Get the key for a slot (only valid if filled).
 define {KEY} @{NAME}.slot.key(%{NAME}.slot %slot) {{
-  %keyPtr = getelementptr %{NAME}.entry, %{NAME}.slot %slot, i64 0, i32 3
+  %keyPtr = getelementptr %{NAME}.entry, %{NAME}.slot %slot, i64 0, i32 4
   %key = load {KEY}, {KEY}* %keyPtr
   ret {KEY} %key
 }}
 
 ; Get the value for a slot (only valid if filled).
 define {VALUE} @{NAME}.slot.value(%{NAME}.slot %slot) {{
-  %valuePtr = getelementptr %{NAME}.entry, %{NAME}.slot %slot, i64 0, i32 4
+  %valuePtr = getelementptr %{NAME}.entry, %{NAME}.slot %slot, i64 0, i32 5
   %value = load {VALUE}, {VALUE}* %valuePtr
   ret {VALUE} %value
 }}

@@ -1,6 +1,7 @@
 #ifndef _WELD_DICT_H_
 #define _WELD_DICT_H_
 
+#include <stdint.h>
 
 // A callback which checks whether two keys are equal. Returns a non-zero value
 // if the keys are equal.

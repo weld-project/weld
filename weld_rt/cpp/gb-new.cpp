@@ -31,21 +31,6 @@ class GrowableWeldVec {
     void *at(int32_t val_size, int64_t i) {
       return (void *)((uint8_t *)wv.data + i * val_size);
     }
-
-    void merge(void *value, int32_t val_size, bool filled) {
-      if (filled && capacity == wv.size) {
-          resize(val_size, capacity * 2);
-      }
-      
-      if (!filled) {
-        capacity = INITIAL_CAPACITY;
-        wv.data = weld_run_malloc(weld_rt_get_run_id(), capacity * val_size);
-        wv.size = 0;
-      }
-
-      memcpy(at(val_size, wv.size), value, val_size);
-      wv.size++;
-    }
 };
 
 // The merge function for the dictionary holding the groupbuilder vectors.
@@ -120,7 +105,7 @@ extern "C" void *weld_rt_gb_result(void *b) {
   return b;
 }
 
-// TODO need to free the metadatwv...
+// TODO need to free the metadata...
 extern "C" void weld_rt_gb_free(void *gb) {
   weld_rt_dict_free(gb);
 }
