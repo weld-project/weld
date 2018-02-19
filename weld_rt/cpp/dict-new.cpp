@@ -1,3 +1,62 @@
+/**
+ *
+ * The generic, bytes to bytes dictionary implementation for the Weld runtime.
+ *
+ * Note: See dict.h for the Weld-facing dictionary API. This implements that API.
+ *
+ * This is the generic bytes to bytes dictionary implementation for the Weld runtime. The dictionary
+ * uses an adaptive algorithm that transitions from thread-local dictionaries to global dictionaries
+ * based on the size of the thread-local dictionaries.
+ *
+ * Dictionaries follow the Weld builder pattern, i.e., "reads only after all writes are complete."
+ *
+ * The basic algorithm is as follows, assuming multi-threaded concurrent writes:
+ *
+ *
+ * Writes
+ * ___________________________________________________________________________________
+ *
+ * Writes occur on an un-contended thread-local dictionary unless the
+ * thread-local dictionary is `full_watermark` bytes in size. If this is the
+ * case, the writes go to a global shared dictionary.
+ *
+ * If a write occurs to a global dictionary, the update goes to a thread-local
+ * buffer called GlobalBuffer to reduce the overhead of locking the dictionary.
+ * Once the GlobalBuffer has GLOBAL_BATCH_SIZE items, the global dictionary is
+ * locked via a pthread RW-lock. A read lock is held for inserts into a slot,
+ * and a write lock is held if the dictionary must be resized.  The slots in
+ * the global buffer are merged into the main dictionary. Individual slots are
+ * protected at LOCK_GRANULARITY via a spin lock.
+ *
+ * 
+ * Layout
+ * ___________________________________________________________________________________
+ *
+ * The dictionary is laid out as a sequential buffer of Slots. A single slot has the following layout:
+ *
+ * ----------------------------------------------------------------------------------------------
+ *                                                |                     |                       |
+ *              SlotHeader bytes                  |  sizeof(key) bytes  |  sizeof(value) bytes  |
+ *  (contains filled flag, hash, some metadata)   |                     |                       | .... (repeats)
+ *                                                |                     |                       |
+ * ------------------------------------------------ ---------------------------------------------
+ *
+ *
+ * Finalization
+ * ___________________________________________________________________________________
+ *
+ * When writes are complete, the `finalized` flag is set to true, and slots in the
+ * local dictionary are merged into the global dictionary.
+ *
+ *
+ * Conversion to Array of Keys/Values
+ * ___________________________________________________________________________________
+ *
+ * The dictionary supports conversion to a value of key/value structs. Users specify a total size for the
+ * KV-struct, and the padding after the key. This allows accounting for padding in C structs, since
+ * keys and values are stored in a packed layout in the dictionary. 
+ *
+ */
 #include "runtime.h"
 #include "dict.h"
 
@@ -13,8 +72,8 @@ const int RESIZE_THRES = 7;
 // Size of the global buffer, in # of slots.
 const int GLOBAL_BATCH_SIZE = 128;
 
-// Specifies what kind of locking to use. Basically a boolean, but its here for additional
-// type safety enforced by the compiler.
+// Specifies what kind of locking to use. Basically a boolean, but its here for
+// additional type safety enforced by the compiler.
 typedef enum {
   NO_LOCKING = 0,
   ACQUIRE = 1,
@@ -42,7 +101,17 @@ public:
     return reinterpret_cast<uint8_t *>(this) + sizeof(header) + key_size;
   }
 
-  // Updates the slot using a merge function.
+  /** Update the slot with a merge function.
+   *
+   * @param merge the merge function to use.
+   * @param metadata data passed to the merge function.
+   * @param a_hash the hash
+   * @param a_key the key
+   * @param a_key the key size
+   * @param a_key the value
+   * @param a_key the the value size
+   *
+   */
   void update(MergeFn merge,
       void *metadata,
       int32_t a_hash,
@@ -72,7 +141,7 @@ public:
   inline void release_access() { header.lockvar = 0; }
 };
 
-// An internal dictionary which provides (optional) locked access to its slots.
+// An internal dictionary which provides (optionally) locked access to its slots.
 class InternalDict {
 
 public:
@@ -186,6 +255,14 @@ public:
   /** Get a slot for a given hash and key, optionally locking it for concurrent
    * access on a slot.
    *
+   * @param hash the hash of the key
+   * @param key the key data. Should be key_size bytes long.
+   * @param mode the locking mode -- ACQUIRE for locked access, NO_LOCKING for no locking.
+   * @param check_key a flag that, if true, causes this function to return the
+   * first unfilled slot for the hash without comparing the keys at the lot.
+   *
+   * @return the slot.
+   *
    * Prerequisites: If this is a concurrently accessed dictionary, call lock() first.
    *
    */
@@ -232,7 +309,16 @@ public:
   }
 
   /** Puts a value in a slot, marking it as filled. The caller should have retrieved slot
-   * using get_slot, and locked the dictionary using read_lock. */
+   * using get_slot, and locked the dictionary using read_lock. 
+   *
+   * @param slot a slot acquired via get_slot.
+   * @param mode the locking mode. This should match the locking mode used to
+   * get this slot using get_slot.
+   *
+   * Prerequisites: Get a slot using get_slot, lock the dictionary with
+   * read_lock() if ACQUIRE is true.
+   *
+   * */
   bool put_slot(Slot *slot, LockMode mode) {
     bool was_filled = slot->header.filled;
 
@@ -302,8 +388,8 @@ public:
     for (int i = 0; i < _capacity; i++) {
       Slot *old_slot = slot_at_index(i);
       if (old_slot->header.filled) {
-        // Locking the slot here is not required, since the caller should acquire the write lock
-        // on the full dictionary.
+        // Locking the slot here is not required, since the caller should
+        // acquire the write lock on the full dictionary.
         Slot *new_slot =
             resized.get_slot(old_slot->header.hash, NULL, NO_LOCKING, false);
         assert(new_slot != NULL);
@@ -615,6 +701,7 @@ public:
 
 private:
 
+  // Flush the global buffer into the global dictionary. Assumes concurrent access to the global dictionary.
   void drain_global_buffer(GlobalBuffer *glbuf) {
     InternalDict *dict = global_dict();
 
