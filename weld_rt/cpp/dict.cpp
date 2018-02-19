@@ -1,3 +1,6 @@
+// See dict-new.cpp for a re-implementation of this dictionary.
+#if 0
+
 #include "runtime.h"
 #include "assert.h"
 #include "stdio.h"
@@ -399,3 +402,5 @@ extern "C" void weld_rt_dict_free(void *d) {
   }
   weld_run_free(weld_rt_get_run_id(), wd);
 }
+
+#endif

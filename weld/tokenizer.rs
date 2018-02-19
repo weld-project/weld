@@ -6,7 +6,6 @@
 //! matched greedily in an order that ensures the "largest" one wins first; for example, the
 //! string '1e-5' is parsed as a f64 literal, not as ('1e', '-', '5').
 
-use std::ascii::AsciiExt;
 use std::fmt;
 use std::str::FromStr;
 use std::vec::Vec;

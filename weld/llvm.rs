@@ -1,4 +1,3 @@
-use std::ascii::AsciiExt;
 use std::collections::HashSet;
 use std::collections::BTreeMap;
 

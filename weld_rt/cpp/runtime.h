@@ -7,6 +7,11 @@
 #include <pthread.h>
 #include <vector>
 
+// Weld dictionary interface.
+#include "dict.h"
+// Weld groupbuilder interface.
+#include "groupbuilder.h"
+
 // work item
 struct work_t {
   // parameters for the task function
@@ -109,23 +114,6 @@ extern "C" {
   void *weld_rt_new_merger(int64_t size, int32_t nworkers);
   void *weld_rt_get_merger_at_index(void *m, int64_t size, int32_t i);
   void weld_rt_free_merger(void *m);
-
-  void *weld_rt_dict_new(int32_t key_size, int32_t (*keys_eq)(void *, void *),
-    void (*merge_new_val)(void *, int32_t, void *, void *),
-    void (*merge_vals_finalize)(void *, int32_t, void *, void *), void *metadata, int32_t val_size,
-    int32_t to_array_true_val_size, int64_t max_local_bytes, int64_t capacity);
-  void *weld_rt_dict_lookup(void *d, int32_t hash, void *key);
-  void weld_rt_dict_merge(void *d, int32_t hash, void *key, void *value);
-  void weld_rt_dict_finalize(void *d);
-  void *weld_rt_dict_to_array(void *d, int32_t value_offset_in_struct, int32_t struct_size);
-  int64_t weld_rt_dict_get_size(void *d);
-  void weld_rt_dict_free(void *d);
-
-  void *weld_rt_gb_new(int32_t key_size, int32_t (*keys_eq)(void *, void *),
-    int32_t val_size, int64_t max_local_bytes, int64_t capacity);
-  void weld_rt_gb_merge(void *b, void *key, int32_t hash, void *value);
-  void *weld_rt_gb_result(void *b);
-  void weld_rt_gb_free(void *gb);
 
   // weld_run functions can be called both from a runtime thread and before/after a Weld computation is
   // executed
