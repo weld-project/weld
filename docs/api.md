@@ -21,6 +21,7 @@ into a format which Weld understands. The table below describes how each type in
   Type | C Representation | Explanation
   ------------- | ------------- | -------------
   `i8` | `int8_t` |
+  `i16` | `int16_t` |
   `i32` | `int32_t` |
   `i64` | `int64_t` |
   `f32` | `float` |

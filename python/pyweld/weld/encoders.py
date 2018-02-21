@@ -13,7 +13,9 @@ import ctypes
 
 
 def dtype_to_weld_type(dtype):
-    if dtype == 'int32':
+    if dtype == 'int16':
+        return WeldInt16()
+    elif dtype == 'int32':
         return WeldInt()
     elif dtype == 'int64':
         return WeldLong()
@@ -52,7 +54,11 @@ class NumpyArrayDecoder(WeldObjectDecoder):
 
     def decode(self, obj, restype):
         # This stuff is same as grizzly.
-        if restype == WeldInt():
+        if restype == WeldInt16():
+            data = cweld.WeldValue(obj).data()
+            result = ctypes.cast(data, ctypes.POINTER(c_int16)).contents.value
+            return np.int16(result)
+        elif restype == WeldInt():
             data = cweld.WeldValue(obj).data()
             result = ctypes.cast(data, ctypes.POINTER(c_int)).contents.value
             return np.int32(result)
@@ -81,6 +87,8 @@ class NumpyArrayDecoder(WeldObjectDecoder):
             ArrayType = ctypes.c_float*size
         elif restype == WeldVec(WeldLong()) or restype == WeldVec(WeldDouble()):
             ArrayType = ctypes.c_double*size
+        elif restype == WeldVec(WeldInt16()):
+            ArrayType = ctypes.c_int16*size
         
         array_pointer = ctypes.cast(data, ctypes.POINTER(ArrayType))
         result = np.frombuffer(array_pointer.contents, dtype=dtype,count=size)

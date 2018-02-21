@@ -756,6 +756,7 @@ impl<'t> Parser<'t> {
         try!(self.parse_annotations(&mut annotations));
 
         match *self.next() {
+            TI16Literal(v) => Ok(expr_box(Literal(I16Literal(v)), Annotations::new())),
             TI8Literal(v) => Ok(expr_box(Literal(I8Literal(v)), Annotations::new())),
             TI32Literal(v) => Ok(expr_box(Literal(I32Literal(v)), Annotations::new())),
             TI64Literal(v) => Ok(expr_box(Literal(I64Literal(v)), Annotations::new())),

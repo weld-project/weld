@@ -95,6 +95,28 @@ class WeldBit(WeldType):
         return c_bool
 
 
+class WeldInt16(WeldType):
+    """Summary
+    """
+
+    def __str__(self):
+        """Summary
+
+        Returns:
+            TYPE: Description
+        """
+        return 'i16'
+
+    @property
+    def ctype_class(self):
+        """Summary
+
+        Returns:
+            TYPE: Description
+        """
+        return c_int16
+
+
 class WeldInt(WeldType):
     """Summary
     """
