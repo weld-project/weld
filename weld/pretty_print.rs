@@ -135,6 +135,7 @@ fn print_iter_kind<T: PrintableType>(iter: &Iter<T>) -> &str {
         IterKind::ScalarIter => "",
         IterKind::SimdIter => "simd",
         IterKind::FringeIter => "fringe",
+        IterKind::RangeIter => "range",
     }
 }
 

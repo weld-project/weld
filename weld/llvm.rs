@@ -821,19 +821,46 @@ impl LlvmGenerator {
 
         let num_iters_str = ctx.var_ids.next();
         let mut fringe_start_str = None;
-        if par_for.data[0].kind == IterKind::SimdIter || par_for.data[0].kind == IterKind::ScalarIter {
-            if par_for.data[0].start.is_none() {
-                // set num_iters_str to len(first_data)
-                ctx.code.add(format!("{} = call i64 {}.size({} {})",
-                num_iters_str,
-                data_prefix,
-                data_ty_str,
-                data_str));
-            } else {
-                // TODO(shoumik): Don't support non-unit stride right now.
-                if par_for.data[0].kind == IterKind::SimdIter {
-                    return weld_err!("vector iterator does not support non-unit stride");
+        match par_for.data[0].kind {
+            IterKind::SimdIter | IterKind::ScalarIter => {
+                if par_for.data[0].start.is_none() {
+                    // set num_iters_str to len(first_data)
+                    ctx.code.add(format!("{} = call i64 {}.size({} {})",
+                    num_iters_str,
+                    data_prefix,
+                    data_ty_str,
+                    data_str));
+                } else {
+                    // TODO(shoumik): Don't support non-unit stride right now.
+                    if par_for.data[0].kind == IterKind::SimdIter {
+                        return weld_err!("vector iterator does not support non-unit stride");
+                    }
+                    // set num_iters_str to (end - start) / stride
+                    let start_str = llvm_symbol(&par_for.data[0].start.clone().unwrap());
+                    let end_str = llvm_symbol(&par_for.data[0].end.clone().unwrap());
+                    let stride_str = llvm_symbol(&par_for.data[0].stride.clone().unwrap());
+                    let diff_tmp = ctx.var_ids.next();
+                    ctx.code.add(format!("{} = sub i64 {}, {}", diff_tmp, end_str, start_str));
+                    ctx.code.add(format!("{} = udiv i64 {}, {}", num_iters_str, diff_tmp, stride_str));
                 }
+            },
+            IterKind::FringeIter => {
+                if par_for.data[0].start.is_some() {
+                    return weld_err!("fringe iterator does not support non-unit stride");
+                }
+                let arr_len = ctx.var_ids.next();
+                let tmp = ctx.var_ids.next();
+                let vector_len = format!("{}", llvm_simd_size(func.symbol_type(&first_data)?)?);
+
+                ctx.code.add(format!("{} = call i64 {}.size({} {})", arr_len, data_prefix, data_ty_str, data_str));
+
+                // num_iters = arr_len % llvm_simd_size // number of iterations
+                // tmp2 = arr_len - num_iters // start index
+                ctx.code.add(format!("{} = urem i64 {}, {}", num_iters_str, arr_len, vector_len));
+                ctx.code.add(format!("{} = sub nuw nsw i64 {}, {}", tmp, arr_len, num_iters_str));
+                fringe_start_str = Some(tmp);
+            },
+            IterKind::RangeIter => {
                 // set num_iters_str to (end - start) / stride
                 let start_str = llvm_symbol(&par_for.data[0].start.clone().unwrap());
                 let end_str = llvm_symbol(&par_for.data[0].end.clone().unwrap());
@@ -842,23 +869,6 @@ impl LlvmGenerator {
                 ctx.code.add(format!("{} = sub i64 {}, {}", diff_tmp, end_str, start_str));
                 ctx.code.add(format!("{} = udiv i64 {}, {}", num_iters_str, diff_tmp, stride_str));
             }
-        } else {
-            // FringeIter
-            // TODO(shoumik): Don't support non-unit stride right now.
-            if par_for.data[0].start.is_some() {
-                return weld_err!("fringe iterator does not support non-unit stride");
-            }
-            let arr_len = ctx.var_ids.next();
-            let tmp = ctx.var_ids.next();
-            let vector_len = format!("{}", llvm_simd_size(func.symbol_type(&first_data)?)?);
-
-            ctx.code.add(format!("{} = call i64 {}.size({} {})", arr_len, data_prefix, data_ty_str, data_str));
-
-            // num_iters = arr_len % llvm_simd_size // number of iterations
-            // tmp2 = arr_len - num_iters // start index
-            ctx.code.add(format!("{} = urem i64 {}, {}", num_iters_str, arr_len, vector_len));
-            ctx.code.add(format!("{} = sub nuw nsw i64 {}, {}", tmp, arr_len, num_iters_str));
-            fringe_start_str = Some(tmp);
         }
         Ok((String::from(num_iters_str), fringe_start_str))
     }
@@ -874,26 +884,34 @@ impl LlvmGenerator {
                                  par_for: &ParallelForData,
                                  func: &SirFunction,
                                  ctx: &mut FunctionContext) -> WeldResult<()> {
-        if !(par_for.data.len() == 1 && par_for.data[0].start.is_none()) {
+        // We require a bounds check if (a) we have more than one iterator, or (b) if the iterator
+        // has a user-defined iteration pattern (start, end, stride).
+        if par_for.data.len() > 1 || par_for.data[0].start.is_some() {
             for iter in par_for.data.iter() {
                 let (data_ll_ty, data_ll_sym) = self.llvm_type_and_name(func, &iter.data)?;
                 let data_prefix = llvm_prefix(&data_ll_ty);
 
-                let data_size_ll_tmp = ctx.var_ids.next();
+                let mut data_size_ll_tmp = ctx.var_ids.next();
                 ctx.code.add(format!("{} = call i64 {}.size({} {})",
                     data_size_ll_tmp, data_prefix, data_ll_ty, data_ll_sym));
 
                 // Obtain the start and stride values.
-                let (start_str, stride_str) = if iter.start.is_none() {
+                let (start_str, end_str, stride_str) = if iter.start.is_none() {
                     // We already checked to make sure the FringeIter doesn't have a start, etc.
                     let start_str = match iter.kind {
                         IterKind::FringeIter => fringe_start_str.as_ref().unwrap().to_string(),
                         _ => String::from("0")
                     };
                     let stride_str = String::from("1");
-                    (start_str, stride_str)
+                    (start_str, None, stride_str)
                 } else {
-                    (llvm_symbol(iter.start.as_ref().unwrap()), llvm_symbol(iter.stride.as_ref().unwrap()))
+                    (
+                        llvm_symbol(iter.start.as_ref().unwrap()),
+                        if iter.kind == IterKind::RangeIter {
+                            Some(llvm_symbol(iter.end.as_ref().unwrap()))
+                        } else { None },
+                        llvm_symbol(iter.stride.as_ref().unwrap())
+                    )
                 };
 
                 let t0 = ctx.var_ids.next();
@@ -901,6 +919,11 @@ impl LlvmGenerator {
                 let t2 = ctx.var_ids.next();
                 let cond = ctx.var_ids.next();
                 let next_bounds_check_label = ctx.var_ids.next();
+
+                // For range iterators, use the specified end instead of the data size.
+                if let Some(end_str) = end_str {
+                    data_size_ll_tmp = end_str;
+                }
 
                 // TODO just compare against end here...this computation is redundant.
                 // t0 = sub i64 num_iters, 1
@@ -1097,6 +1120,7 @@ impl LlvmGenerator {
                 }
             };
 
+            let mut inner_elem_tmp = ctx.var_ids.next();
             match iter.kind {
                 IterKind::ScalarIter | IterKind::FringeIter => {
                     ctx.code.add(format!("{} = call {}* {}.at({} {}, i64 {})",
@@ -1116,8 +1140,18 @@ impl LlvmGenerator {
                     data_str,
                     arr_idx));
                 }
+                IterKind::RangeIter => {
+                    // Range Iterators always return the type `i64`. Just pass the array
+                    // index we would have computed.
+                    ctx.code.add(format!("{} = add i64 0, {}", inner_elem_tmp, arr_idx));
+                }
             };
-            let inner_elem_tmp = self.gen_load_var(&inner_elem_tmp_ptr, &inner_elem_ty_str, ctx)?;
+
+            // For everything other than RangeIter, we need to load some data.
+            if iter.kind != IterKind::RangeIter {
+                inner_elem_tmp  = self.gen_load_var(&inner_elem_tmp_ptr, &inner_elem_ty_str, ctx)?;
+            }
+
             if par_for.data.len() == 1 {
                 prev_ref.clear();
                 prev_ref.push_str(&inner_elem_tmp);

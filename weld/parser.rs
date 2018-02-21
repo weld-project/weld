@@ -500,48 +500,67 @@ impl<'t> Parser<'t> {
     /// a vector expression (i.e., without an explicit iter(..).
     fn parse_iter(&mut self) -> WeldResult<Iter<PartialType>> {
         let iter: Token = self.peek().clone();
-        if *self.peek() == TScalarIter || *self.peek() == TSimdIter || *self.peek() == TFringeIter {
-            try!(self.consume(iter.clone()));
-            try!(self.consume(TOpenParen));
-            let data = try!(self.expr());
-            let mut start = None;
-            let mut end = None;
-            let mut stride = None;
-            if *self.peek() == TComma {
+        match iter {
+            TScalarIter | TSimdIter | TFringeIter => {
+                try!(self.consume(iter.clone()));
+                try!(self.consume(TOpenParen));
+                let data = try!(self.expr());
+                let mut start = None;
+                let mut end = None;
+                let mut stride = None;
+                if *self.peek() == TComma {
+                    try!(self.consume(TComma));
+                    start = Some(try!(self.expr()));
+                    try!(self.consume(TComma));
+                    end = Some(try!(self.expr()));
+                    try!(self.consume(TComma));
+                    stride = Some(try!(self.expr()));
+                }
+                let iter = Iter {
+                    data: data,
+                    start: start,
+                    end: end,
+                    stride: stride,
+                    kind: match iter {
+                        TSimdIter => SimdIter,
+                        TFringeIter => FringeIter,
+                        _ => ScalarIter,
+                    },
+                };
+                try!(self.consume(TCloseParen));
+                Ok(iter)
+            },
+            TRangeIter => {
+                try!(self.consume(iter.clone()));
+                try!(self.consume(TOpenParen));
+                let start = try!(self.expr());
                 try!(self.consume(TComma));
-                start = Some(try!(self.expr()));
+                let end = try!(self.expr());
                 try!(self.consume(TComma));
-                end = Some(try!(self.expr()));
-                try!(self.consume(TComma));
-                stride = Some(try!(self.expr()));
+                let stride = try!(self.expr());
+                let mut dummy_data = expr_box(MakeVector { elems: vec![] }, Annotations::new());
+                dummy_data.as_mut().ty = Vector(Box::new(Scalar(ScalarKind::I64)));
+                let iter = Iter {
+                    data: dummy_data,
+                    start: Some(start),
+                    end: Some(end),
+                    stride: Some(stride),
+                    kind: RangeIter,
+                };
+                try!(self.consume(TCloseParen));
+                Ok(iter)
+            },
+            _ => {
+                let data = try!(self.expr());
+                let iter = Iter {
+                    data: data,
+                    start: None,
+                    end: None,
+                    stride: None,
+                    kind: ScalarIter,
+                };
+                Ok(iter)
             }
-            let iter = Iter {
-                data: data,
-                start: start,
-                end: end,
-                stride: stride,
-                kind: match iter {
-                    TSimdIter => SimdIter,
-                    TFringeIter => FringeIter,
-                    _ => ScalarIter,
-                },
-            };
-            try!(self.consume(TCloseParen));
-            Ok(iter)
-        } else {
-            let data = try!(self.expr());
-            let iter = Iter {
-                data: data,
-                start: None,
-                end: None,
-                stride: None,
-                kind: match iter {
-                    TSimdIter => SimdIter,
-                    TFringeIter => FringeIter,
-                    _ => ScalarIter,
-                },
-            };
-            Ok(iter)
         }
     }
 

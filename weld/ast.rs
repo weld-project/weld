@@ -237,7 +237,8 @@ pub struct Expr<T: TypeBounds> {
 pub enum IterKind {
     ScalarIter, // A standard scalar iterator.
     SimdIter, // A vector iterator.
-    FringeIter, // A fringe iterator, handling the fringe of a vector iter.
+    FringeIter,
+    RangeIter,
 }
 
 impl fmt::Display for IterKind {
@@ -247,6 +248,7 @@ impl fmt::Display for IterKind {
             ScalarIter => "scalar",
             SimdIter => "vectorized",
             FringeIter => "fringe",
+            RangeIter => "range",
         };
         f.write_str(text)
     }
