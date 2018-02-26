@@ -1007,6 +1007,62 @@ fn complex_parallel_for_appender_loop() {
     unsafe { free_value_and_module(ret_value) };
 }
 
+fn range_iter_1() {
+    let end = 1000;
+    let code = format!("|a: i64| result(for(rangeiter(1L, {}L + 1L, 1L), merger[i64,+], |b,i,e| merge(b, a+e)))", end);
+
+    #[allow(dead_code)]
+    struct Args {
+        a: i64,
+    };
+    let conf = default_conf();
+    let ref input_data = Args { a: 0 };
+
+    let ret_value = compile_and_run(&code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const i64 };
+    let result = unsafe { (*data).clone() };
+    let output = end * (end + 1) / 2;
+    assert_eq!(result, output);
+    unsafe { free_value_and_module(ret_value) };
+}
+
+fn range_iter_zipped_helper(parallel: bool) {
+    let grain_size = if parallel { 100 } else  { 4096 };
+    let conf = if parallel { many_threads_conf() } else { default_conf() };
+
+    let end = 1000;
+    let code = format!("|v: vec[i64]| result(
+        @(grain_size: {grain_size})for(zip(v, rangeiter(1L, {end}L + 1L, 1L)), merger[i64,+], |b,i,e| merge(b, e.$0 + e.$1)
+    ))", grain_size=grain_size, end=end);
+
+    #[allow(dead_code)]
+    struct Args {
+        v: WeldVec<i64>,
+    };
+    let input_vec = vec![1 as i64; end as usize];
+    let ref input_data = Args {
+        v: WeldVec {
+            data: input_vec.as_ptr() as *const i64,
+            len: input_vec.len() as i64,
+        },
+    };
+
+    let ret_value = compile_and_run(&code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const i64 };
+    let result = unsafe { (*data).clone() };
+    let output = end * (end + 1) / 2 + end;
+    assert_eq!(result, output);
+    unsafe { free_value_and_module(ret_value) };
+}
+
+fn range_iter_2() {
+    range_iter_zipped_helper(false)
+}
+
+fn range_iter_parallel() {
+    range_iter_zipped_helper(true)
+}
+
 fn simple_for_vectorizable_loop() {
     #[allow(dead_code)]
     struct Args {
@@ -2606,6 +2662,9 @@ fn main() {
              ("simple_parallel_for_appender_loop", simple_parallel_for_appender_loop),
              ("simple_parallel_for_multi_appender_loop", simple_parallel_for_multi_appender_loop),
              ("complex_parallel_for_appender_loop", complex_parallel_for_appender_loop),
+             ("range_iter_1", range_iter_1),
+             ("range_iter_2", range_iter_2),
+             ("range_iter_parallel", range_iter_parallel),
              ("simple_for_vectorizable_loop", simple_for_vectorizable_loop),
              ("fringed_for_vectorizable_loop", fringed_for_vectorizable_loop),
              ("fringed_for_vectorizable_loop_with_par", fringed_for_vectorizable_loop_with_par),
