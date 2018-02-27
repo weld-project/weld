@@ -579,7 +579,8 @@ impl fmt::Display for ParallelForIter {
         let iterkind = match self.kind {
             IterKind::ScalarIter => "iter",
             IterKind::SimdIter => "simditer",
-            IterKind::FringeIter => "fringeiter"
+            IterKind::FringeIter => "fringeiter",
+            IterKind::RangeIter => "rangeiter",
         };
 
         if self.start.is_some() {

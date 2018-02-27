@@ -448,11 +448,17 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             // Push iters and builder type into func
             let mut elem_types = vec![];
             for iter in iters.iter_mut() {
-                let elem_type = match iter.data.ty {
+                let mut elem_type = match iter.data.ty {
                     Vector(ref elem) => *elem.clone(),
                     Unknown => Unknown,
                     _ => return weld_err!("non-vector type in For"),
                 };
+
+                // RangeIters always have this element type.
+                if iter.kind == IterKind::RangeIter {
+                    elem_type = Scalar(I64);
+                }
+
                 elem_types.push(elem_type);
                 if iter.start.is_some() {
                     for i in [&mut iter.start, &mut iter.end, &mut iter.stride].iter_mut() {
