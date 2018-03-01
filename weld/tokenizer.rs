@@ -160,6 +160,7 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
     lazy_static! {
         // Regular expression for splitting up tokens.
         static ref TOKEN_RE: Regex = Regex::new(concat!(
+            "(?m)#.*$|",
             r#"[0-9]+\.[0-9]+([eE]-?[0-9]+)?[fF]?|[0-9]+[eE]-?[0-9]+[fF]?|"[^"]*"|"#,
             r#"[A-Za-z0-9$_]+|==|!=|>=|<=|&&|\|\||[-+/*%,=()[\]{}|@&\.:;?&\|^<>]|\S+"#
         )).unwrap();
@@ -172,6 +173,7 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
              i8|i16|i32|i64|u8|u16|u32|u64|f32|f64|bool|vec|appender|merger|vecmerger|\
              dictmerger|groupmerger|tovec|min|max|pow)$").unwrap();
 
+        static ref COMMENT_RE: Regex = Regex::new("#.*$").unwrap();
         static ref STRLIT_RE: Regex = Regex::new(r#""[^"]*""#).unwrap();
         static ref IDENT_RE: Regex = Regex::new(r"^[A-Za-z$_][A-Za-z0-9$_]*$").unwrap();
 
@@ -200,7 +202,9 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
 
     for cap in TOKEN_RE.captures_iter(input) {
         let text = cap.at(0).unwrap();
-        if KEYWORD_RE.is_match(text) {
+        if COMMENT_RE.is_match(text) {
+            // Do nothing - skips the token.
+        } else if KEYWORD_RE.is_match(text) {
             tokens.push(match text {
                             "if" => TIf,
                             "iterate" => TIterate,
@@ -261,7 +265,6 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
                             "pow" => TPow,
                             _ => return weld_err!("Invalid input token: {}", text),
                         });
-
         } else if STRLIT_RE.is_match(text) {
             let string = text.trim_matches('"').to_string();
             if !(string.is_ascii()) {

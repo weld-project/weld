@@ -88,6 +88,19 @@ In reality, we can enforce this by making builders "linear types", and requiring
 Linear types are a concept in programming languages that we'll talk about below.
 Our implementation does not statically enforce linearity, but it only works if `update` functions really do only return builders derived from their arguments, and if `result` is only called on each builder once.
 
+## Comments
+
+Weld supports Python-style one line comments with the `#` character. For example:
+
+```
+# A function that adds two vectors.
+|v1 :vec[i32], v2: vec[i32]|
+  map(zip(v1,v2),
+    |e| # A struct of type {i32,i32}
+      e.$0 + e.$1
+  )
+```
+
 ### Example
 
 Here are a few simple examples using builder expressions:
