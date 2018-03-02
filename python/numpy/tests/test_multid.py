@@ -197,7 +197,7 @@ def test_views_non_contig_newarray_binary():
 
 def test_views_non_contig_inplace_binary1():
     '''
-    FIXME: This fails sometimes...
+    FIXME: Heisenbug
     TODO: separate out case with updated other into new test.
 
     binary involves a few cases that we need to test:
@@ -614,3 +614,4 @@ def test_tictactoe_reshape():
         if i == -1:
             print('woot')
         assert isinstance(i, np.float64)
+

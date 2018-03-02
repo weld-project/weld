@@ -4,8 +4,8 @@ from weld.types import *
 from distutils.version import StrictVersion
 assert StrictVersion(np.__version__) >= StrictVersion('1.13')
 
-ALL_PASSES = ["loop-fusion", "infer-size", "short-circuit-booleans", "predicate", "vectorize",
-        "fix-iterate"]
+ALL_PASSES = ["loop-fusion", "infer-size", "short-circuit-booleans",
+        "predicate", "vectorize", "fix-iterate"]
 CUR_PASSES = ALL_PASSES
 offload_setitem = True
 
@@ -13,7 +13,8 @@ class weldarray_view():
     '''
     This can be either a parent or a child.
     '''
-    def __init__(self, base_array, parent, start, end, idx, shape=None, strides=None):
+    def __init__(self, base_array, parent, start, end, idx, shape=None,
+            strides=None):
         '''
         TODO: Need to add more stuff / generalize to nd case.
         TODO: Can also just use w.base instead of storing base_array here.
