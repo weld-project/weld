@@ -120,17 +120,17 @@ pub fn predicate_merge_expr(e: &mut Expr<Type>) {
                                         match *bk {
                                             BuilderKind::Merger(_, _)
                                                 | BuilderKind::VecMerger(_, _) => {
-                                                /* Change if(cond, merge(b, e), b) => 
+                                                /* Change if(cond, merge(b, e), b) =>
                                                 merge(b, select(cond, e, identity). */
                                                 let expr = exprs::merge_expr(*builder.clone(),
                                                                              exprs::select_expr(
                                                                                  *cond.clone(),
                                                                                  *value.clone(), x)?)?;
                                                 return Ok((Some(expr), true));
-                                                
+
                                             },
                                             BuilderKind::DictMerger(_, _, _) => {
-                                                /* For dictmerger, need to match identity element 
+                                                /* For dictmerger, need to match identity element
                                                 back to the key. */
                                                 let sel_expr = make_select_for_kv(*cond.clone(),
                                                                                   *value.clone(),
@@ -191,12 +191,36 @@ pub fn predicate_simple_expr(e: &mut Expr<Type>) {
 
 /// Returns `true` if this is a set of iterators we can vectorize, `false` otherwise.
 ///
-/// We can vectorize an iterator if all of its iterators consume the entire collection.
+/// We can vectorize an iterator if all of its iterators consume the entire collection,
+/// if each vector element is a scalar, and each scalar has the same bit width.
 fn vectorizable_iters(iters: &Vec<Iter<Type>>) -> bool {
+    fn scalar_element_bits(iter: &Iter<Type>) -> Option<u32> {
+        match iter.data.ty {
+            Vector(ref elem) => {
+                match *elem.as_ref() {
+                    Scalar(ref kind) => Some(kind.bits()),
+                    _ => None
+                }
+            }
+            _ => None,
+        }
+    }
+
+    if iters.len() == 0 {
+        return false;
+    }
+
+    let bits = if let Some(bits) = scalar_element_bits(&iters[0]) {
+        bits
+    } else {
+        return false;
+    };
+
     iters.iter().all(|ref iter| {
-        iter.start.is_none() && iter.end.is_none() && iter.stride.is_none() && match iter.data.ty {
-            Vector(ref elem) if elem.is_scalar() => true,
-            _ => false,
+        if let Some(iter_bits) = scalar_element_bits(iter) {
+            iter_bits == bits && iter.is_simple()
+        } else {
+            false
         }
     })
 }
@@ -418,10 +442,10 @@ fn make_select_for_kv(cond:  Expr<Type>,
                       ident: Expr<Type>) -> WeldResult<Option<Expr<Type>>> {
     let mut sym_gen = SymbolGenerator::from_expression(&kv);
     let name = sym_gen.new_symbol("k");
-    
+
     let kv_struct = exprs::ident_expr(name.clone(), kv.ty.clone())?;
     let kv_ident = exprs::makestruct_expr(vec![exprs::getfield_expr(kv_struct.clone(), 0)?, ident])?; // use the original key and the identity as the value
-    
+
     let sel = exprs::select_expr(cond, kv_struct, kv_ident)?;
     let le = exprs::let_expr(name, kv, sel)?; /* avoid copying key */
     return Ok(Some(le))
