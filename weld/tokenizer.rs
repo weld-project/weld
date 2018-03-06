@@ -66,6 +66,8 @@ pub enum Token {
     TSimd,
     TSelect,
     TBroadcast,
+    TSerialize,
+    TDeserialize,
     TLog,
     TErf,
     TSqrt,
@@ -168,7 +170,7 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
         // Regular expressions for various types of tokens.
         static ref KEYWORD_RE: Regex = Regex::new(
             "^(if|for|zip|len|lookup|keyexists|slice|sort|exp|sin|cos|tan|asin|acos|atan|sinh|cosh|tanh|\
-             log|erf|sqrt|simd|select|broadcast|\
+             log|erf|sqrt|simd|select|broadcast|serialize|deserialize|\
              iterate|cudf|simditer|fringeiter|rangeiter|iter|merge|result|let|true|false|macro|\
              i8|i16|i32|i64|u8|u16|u32|u64|f32|f64|bool|vec|appender|merger|vecmerger|\
              dictmerger|groupmerger|tovec|min|max|pow)$").unwrap();
@@ -258,6 +260,8 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
                             "simd" => TSimd,
                             "select" => TSelect,
                             "broadcast" => TBroadcast,
+                            "serialize" => TSerialize,
+                            "deserialize" => TDeserialize,
                             "true" => TBoolLiteral(true),
                             "false" => TBoolLiteral(false),
                             "min" => TMin,
@@ -419,6 +423,8 @@ impl fmt::Display for Token {
                     TSimd => "simd",
                     TSelect => "select",
                     TBroadcast => "broadcast",
+                    TSerialize => "serialize",
+                    TDeserialize => "deserialize",
                     TOpenParen => "(",
                     TCloseParen => ")",
                     TOpenBracket => "[",

@@ -213,6 +213,18 @@ impl PartialExpr {
                 }
             }
 
+            Deserialize {
+                ref value,
+                ref value_ty,
+            } => {
+                let value = typed_box(value)?;
+                let value_ty: Box<Type> = Box::new(try!(value_ty.to_type()));
+                Deserialize {
+                    value: value,
+                    value_ty: value_ty,
+                }
+            }
+
             BinOp {
                 kind,
                 ref left,
@@ -428,6 +440,7 @@ impl PartialExpr {
             }
             Negate(ref expr) => Negate(try!(typed_box(expr))),
             Broadcast(ref expr) => Broadcast(try!(typed_box(expr))),
+            Serialize(ref expr) => Serialize(try!(typed_box(expr))),
         };
 
         Ok(TypedExpr {

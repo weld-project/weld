@@ -861,6 +861,27 @@ impl<'t> Parser<'t> {
                 Ok(expr_box(Broadcast(expr), Annotations::new()))
             }
 
+            TSerialize => {
+                try!(self.consume(TOpenParen));
+                let expr = try!(self.expr());
+                try!(self.consume(TCloseParen));
+                Ok(expr_box(Serialize(expr), Annotations::new()))
+            }
+
+            TDeserialize => {
+                try!(self.consume(TOpenBracket));
+                let value_ty = try!(self.type_());
+                try!(self.consume(TCloseBracket));
+                try!(self.consume(TOpenParen));
+                let value = try!(self.expr());
+                try!(self.consume(TCloseParen));
+                Ok(expr_box(Deserialize {
+                                value_ty: Box::new(value_ty),
+                                value: value,
+                            },
+                            annotations))
+            }
+
             TCUDF => {
                 let mut args = vec![];
                 try!(self.consume(TOpenBracket));

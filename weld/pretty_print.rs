@@ -268,6 +268,20 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>,
                              .map(|e| print_expr_impl(e, typed, indent, should_indent))))
         }
 
+        Serialize(ref e) => {
+            format!("serialize({})",
+                    print_expr_impl(e, typed, indent, should_indent))
+        }
+
+        Deserialize {
+            ref value,
+            ref value_ty,
+        } => {
+            format!("deserialize[{}]({})",
+                    value_ty.print(),
+                    print_expr_impl(value, typed ,indent, should_indent))
+        }
+
         Cast {
             kind,
             ref child_expr,
