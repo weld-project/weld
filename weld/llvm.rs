@@ -108,6 +108,25 @@ pub fn apply_opt_passes(expr: &mut TypedExpr,
     Ok(())
 }
 
+/// Returns `true` if the target contains a pointer, or false otherwise.
+trait HasPointer {
+    fn has_pointer(&self) -> bool;
+}
+
+impl HasPointer for Type {
+    fn has_pointer(&self) -> bool {
+        match *self {
+            Scalar(_) => false,
+            Simd(_) => false,
+            Vector(ref ty) => true,
+            Dict(_, _) => true,
+            Builder(_, _) => true,
+            Struct(ref tys) => tys.iter().any(|ref t| t.has_pointer()),
+            Function(_, _) => true,
+        }
+    }
+}
+
 /// Generate a compiled LLVM module from a program whose body is a function.
 pub fn compile_program(program: &Program, conf: &ParsedConf, stats: &mut CompilationStats)
         -> WeldResult<CompiledModule> {
@@ -175,6 +194,16 @@ pub fn compile_program(program: &Program, conf: &ParsedConf, stats: &mut Compila
     trace!("LLVM program:\n{}\n", &llvm_code);
     stats.weld_times.push(("LLVM Codegen".to_string(), start.to(end)));
 
+    let ref timestamp = format!("{}", time::now().to_timespec().sec);
+
+    // Dump files if needed. Do this here in case the actual LLVM code gen fails.
+    if conf.dump_code.enabled {
+        info!("Writing code to directory '{}' with timestamp {}", &conf.dump_code.dir.display(), timestamp);
+        write_code(&print_typed_expr(&expr), "weld", timestamp, &conf.dump_code.dir);
+        write_code(&format!("{}", &sir_prog), "sir", timestamp, &conf.dump_code.dir);
+        write_code(&llvm_code, "ll", timestamp, &conf.dump_code.dir);
+    }
+
     debug!("Started compiling LLVM");
     let compiled = try!(easy_ll::compile_module(
         &llvm_code,
@@ -201,16 +230,9 @@ pub fn compile_program(program: &Program, conf: &ParsedConf, stats: &mut Compila
     debug!("Done runtime_init call");
     stats.weld_times.push(("Runtime Init".to_string(), start.to(end)));
 
-    // Dump files if needed.
+    // Dump remaining files if needed.
     if conf.dump_code.enabled {
-        let ref timestamp = format!("{}", time::now().to_timespec().sec);
-        info!("Writing code to directory '{}' with timestamp {}", &conf.dump_code.dir.display(), timestamp);
-        write_code(&print_typed_expr(&expr), "weld", timestamp, &conf.dump_code.dir);
-        write_code(&format!("{}", &sir_prog), "sir", timestamp, &conf.dump_code.dir);
-        write_code(&llvm_code, "ll", timestamp, &conf.dump_code.dir);
-
         let llvm_op_code = llvm_op_code.unwrap();
-
         // Write the optimized LLVM code and assembly.
         write_code(&llvm_op_code.optimized_llvm, "ll", format!("{}-opt", timestamp).as_ref(), &conf.dump_code.dir);
         write_code(&llvm_op_code.assembly, "S", format!("{}-opt", timestamp).as_ref(), &conf.dump_code.dir);
@@ -276,6 +298,7 @@ pub struct LlvmGenerator {
     /// LLVM type name of the form %v0, %v1, etc for each vec generated.
     vec_names: fnv::FnvHashMap<Type, String>,
     vec_ids: IdGenerator,
+    growable_vec_names: fnv::FnvHashSet<Type>,
 
     // LLVM type names for each merger type.
     merger_names: fnv::FnvHashMap<Type, String>,
@@ -293,6 +316,8 @@ pub struct LlvmGenerator {
 
     /// Pointer name for each declared string constant.
     string_names: fnv::FnvHashMap<String, String>,
+
+    serialize_fns: fnv::FnvHashMap<Type, String>, 
     
     /// A CodeBuilder and ID generator for prelude functions such as type and struct definitions.
     prelude_code: CodeBuilder,
@@ -323,10 +348,12 @@ impl LlvmGenerator {
             struct_ids: IdGenerator::new("%s"),
             vec_names: fnv::FnvHashMap::default(),
             vec_ids: IdGenerator::new("%v"),
+            growable_vec_names: fnv::FnvHashSet::default(),
             merger_names: fnv::FnvHashMap::default(),
             merger_ids: IdGenerator::new("%m"),
             dict_names: fnv::FnvHashMap::default(),
             dict_ids: IdGenerator::new("%d"),
+            serialize_fns: fnv::FnvHashMap::default(),
             cudf_names: HashSet::new(),
             bld_names: fnv::FnvHashMap::default(),
             string_names: fnv::FnvHashMap::default(),
@@ -2291,6 +2318,165 @@ impl LlvmGenerator {
         Ok(())
     }
 
+    /// Generates a serialization function for each type.
+    fn gen_serialize_helper(&mut self,
+                            buffer_ll_reg: &str,
+                            buffer_ll_ty: &str,
+                            buffer_ll_prefix: &str,
+                            expr_ll_reg: &str,
+                            expr_ll_ty: &str,
+                            expr_ll_prefix: &str,
+                            expr_ty: &Type,
+                            func: &SirFunction,
+                            ctx: &mut FunctionContext) -> WeldResult<String> {
+
+        // If we already generated a serialization call, just call into it.
+        if let Some(ref serialize_fn) = self.serialize_fns.get(expr_ty) {
+            let result = ctx.var_ids.next();
+            ctx.code.add(format!("{} = call {}.growable @{}({}.growable {}, {} {})",
+                                 result, buffer_ll_prefix, serialize_fn, buffer_ll_ty, buffer_ll_reg,
+                                 expr_ll_ty, expr_ll_reg));
+            return Ok(result);
+        }
+
+        let serialize_fn = format!("{}.serialize", expr_ll_prefix);
+
+        match *expr_ty {
+            Scalar(ref kind) => {
+                let mut serialize_code = CodeBuilder::new();
+                serialize_code.add(format!("define {}.growable {}({}.growable %buf, {} %data) {{",
+                buffer_ll_ty,
+                serialize_fn,
+                buffer_ll_ty,
+                expr_ll_ty));
+
+                // Serialized as the binary scalar value.
+                let tmp = ctx.var_ids.next();
+                let tmp2 = ctx.var_ids.next();
+                let tmp3 = ctx.var_ids.next();
+                let ref tmp4 = ctx.var_ids.next();
+                // Size of the scalar in bytes.
+                let size = format!("{}", kind.bits() / 8);
+                serialize_code.add(format!("{} = call {}.growable @{}.growable.resize_to_fit({}.growable %buf, i64 {})",
+                tmp,
+                buffer_ll_ty,
+                buffer_ll_prefix,
+                buffer_ll_ty,
+                size));
+                serialize_code.add(format!("{} = call i8* @{}.growable.last({}.growable {})",
+                tmp2,
+                buffer_ll_prefix,
+                buffer_ll_ty,
+                tmp));
+                serialize_code.add(format!("{} = bitcast i8* {} as {}*", tmp3, tmp2, expr_ll_ty));
+                self.gen_store_var("%data", &tmp3, &expr_ll_ty, ctx);
+                serialize_code.add(format!("{} = call {} @{}.growable.extend({}.growable {}, i64 {})",
+                tmp4,
+                buffer_ll_ty,
+                buffer_ll_prefix,
+                buffer_ll_ty,
+                tmp3,
+                size));
+                serialize_code.add(format!("ret {}.growable {}", buffer_ll_ty, tmp4));
+
+
+                serialize_code.add("}");
+                self.prelude_code.add_code(&serialize_code);
+                self.prelude_code.add("\n");
+
+            }
+            Vector(ref elem_ty) if elem_ty.has_pointer() => {
+                // Serialized as an i64 length, followed by each `length` serialized elements.
+                let ref elem_ll_ty = self.llvm_type(elem_ty)?;
+                self.prelude_code.add(format!(include_str!("resources/vector/serialize_with_pointers.ll"),
+                BUFNAME=buffer_ll_ty.replace("%", ""),
+                NAME=expr_ll_ty.replace("%", ""),
+                ELEM=elem_ll_ty,
+                ELEM_PREFIX=llvm_prefix(elem_ll_ty)));
+
+            }
+            Vector(ref elem_ty) => {
+                // Serialized as an i64 length, followed by each `length` serialized elements.
+                // The elements are not pointer-based types, so it is safe to perform a memcpy.
+                let ref elem_ll_ty = self.llvm_type(elem_ty)?;
+                self.prelude_code.add(format!(include_str!("resources/vector/serialize_without_pointers.ll"),
+                BUFNAME=buffer_ll_ty.replace("%", ""),
+                NAME=expr_ll_ty.replace("%", ""),
+                ELEM=elem_ll_ty));
+            }
+            Dict(ref key, ref value) => {
+                // TODO
+
+            }
+            Struct(ref tys) => {
+                // Serialized as each struct element serialized in order.
+            }
+            Simd(_) | Builder(_, _) | Function(_, _) => {
+                // Non-serializable types.
+                return weld_err!("codegen cannot serialize type {:?}", expr_ty);
+            }
+        }
+
+        self.serialize_fns.insert(expr_ty.clone(), serialize_fn.clone());
+
+        // Call the function on the input.    
+        let result = ctx.var_ids.next();
+        ctx.code.add(format!("{} = call {}.growable @{}({}.growable {}, {} {})",
+                                 result, buffer_ll_ty, serialize_fn, buffer_ll_ty, buffer_ll_reg,
+                                 expr_ll_ty, expr_ll_reg));
+        return Ok(result);
+    }
+
+
+    /// Generates serialization code for `expr`, which converts it into a flat vec[i8].
+    fn gen_serialize(&mut self,
+                     expr: &Symbol,
+                     output: &Symbol,
+                     func: &SirFunction,
+                     ctx: &mut FunctionContext) -> WeldResult<()> {
+
+        let (expr_ll_ty, expr_ll_sym) = self.llvm_type_and_name(func, expr)?;
+        let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
+
+        let output_ty = func.symbol_type(output)?;
+        if *output_ty != Vector(Box::new(Scalar(ScalarKind::I8))) {
+            return weld_err!("codegen error: output of serialize is not vec[i8]");
+        }
+
+        // Generate a growable vec[i8] if it doesn't exist.
+        if !self.growable_vec_names.contains(&output_ty) {
+            self.growable_vec_names.insert(output_ty.clone());
+            let elem_ll_ty = self.llvm_type(&Scalar(ScalarKind::I8))?;
+            self.prelude_code.add(format!(
+                    include_str!("resources/vector/growable_vector.ll"),
+                    ELEM=elem_ll_ty,
+                    NAME=&output_ll_ty.replace("%", "")));
+            self.prelude_code.add("\n");
+        }
+
+        let expr_ty = func.symbol_type(expr)?;
+        let expr_tmp = self.gen_load_var(&expr_ll_sym, &expr_ll_ty, ctx)?;
+
+        let input = ctx.var_ids.next();
+        let output_ll_prefix = output_ll_ty.replace("%", "");
+
+        ctx.code.add(format!("{} = call {}.growable @{}.growable.new(i64 16)", input, output_ll_ty, output_ll_prefix));
+
+        let tmp = self.gen_serialize_helper(&input,
+                                  &output_ll_ty,
+                                  &output_ll_prefix,
+                                  &expr_tmp,
+                                  &expr_ll_ty,
+                                  &expr_ll_ty.replace("%", ""),
+                                  expr_ty,
+                                  func,
+                                  ctx)?;
+        let output_tmp = ctx.var_ids.next();
+        ctx.code.add(format!("{} = call {} @{}.growable.tovec({}.growable {})", output_tmp,
+        output_ll_ty, output_ll_prefix, output_ll_ty, tmp));
+        self.gen_store_var(&output_tmp, &output_ll_sym, &output_ll_ty, ctx);
+        Ok(())
+    }
 
     /// Generate code to perform a unary operation on `child` and store the result in `output` (which should
     /// be a location on the stack).
@@ -2521,6 +2707,14 @@ impl LlvmGenerator {
                     prev_name = next;
                 }
                 self.gen_store_var(&prev_name, &output_ll_sym, &output_ll_ty, ctx);
+            }
+
+            Serialize(ref child) => {
+                self.gen_serialize(child, output, func, ctx)?;
+            }
+
+            Deserialize(ref child) => {
+                unimplemented!("Deserialization not implemented yet!")
             }
 
             UnaryOp { op, ref child, } => {
