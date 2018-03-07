@@ -4,7 +4,7 @@
 ; - BUFNAME: name of vec[i8] type that this vector serializes into.
 ; - NAME: name of generated vector type, without % or @ prefix
 ; - ELEM: LLVM type of the element (e.g. i32 or %MyStruct)
-; - ELEM_PREFIX: prefix for helper functions on ELEM (e.g. @i32 or @MyStruct)
+; - ELEM_SERIALIZE: prefix for helper functions on ELEM (e.g. @i32 or @MyStruct)
 
 
 define %{BUFNAME}.growable @{NAME}.serialize(%{BUFNAME}.growable %buf, %{NAME} %vec) {{
@@ -19,16 +19,16 @@ define %{BUFNAME}.growable @{NAME}.serialize(%{BUFNAME}.growable %buf, %{NAME} %
   br label %entry
 
 entry:
-  %cond = icmp ule 0, %size
+  %cond = icmp ult i64 0, %size
   br i1 %cond, label %body, label %done
 body:
   %i = phi i64 [ 0, %entry ], [ %i2, %body ]
   %buf4 = phi %{BUFNAME}.growable [ %buf3, %entry ], [ %buf5, %body ]
   %elemPtr = call {ELEM}* @{NAME}.at(%{NAME} %vec, i64 %i)
   %elem = load {ELEM}, {ELEM}* %elemPtr
-  %buf5 = call %{BUFNAME}.growable {ELEM_PREFIX}.serialize(%{BUFNAME}.growable %buf4, {ELEM} %elem)
-  %i2 = add i64 %i2, 1
-  %cond2 = icmp ule %i2, %size
+  %buf5 = call %{BUFNAME}.growable {ELEM_SERIALIZE}(%{BUFNAME}.growable %buf4, {ELEM} %elem)
+  %i2 = add i64 %i, 1
+  %cond2 = icmp ult i64 %i2, %size
   br i1 %cond2, label %body, label %done
 done:
   %buf6 = phi %{BUFNAME}.growable [ %buf3, %entry ], [ %buf5, %body ]

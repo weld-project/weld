@@ -2320,23 +2320,17 @@ impl LlvmGenerator {
 
     /// Generates a serialization function for each type.
     fn gen_serialize_helper(&mut self,
-                            buffer_ll_reg: &str,
                             buffer_ll_ty: &str,
                             buffer_ll_prefix: &str,
-                            expr_ll_reg: &str,
                             expr_ll_ty: &str,
                             expr_ll_prefix: &str,
                             expr_ty: &Type,
                             func: &SirFunction,
                             ctx: &mut FunctionContext) -> WeldResult<String> {
 
-        // If we already generated a serialization call, just call into it.
+        // If we already generated a serialization call, return it.
         if let Some(ref serialize_fn) = self.serialize_fns.get(expr_ty) {
-            let result = ctx.var_ids.next();
-            ctx.code.add(format!("{} = call {}.growable @{}({}.growable {}, {} {})",
-                                 result, buffer_ll_prefix, serialize_fn, buffer_ll_ty, buffer_ll_reg,
-                                 expr_ll_ty, expr_ll_reg));
-            return Ok(result);
+            return Ok(String::from(serialize_fn.as_ref()))
         }
 
         let serialize_fn = format!("{}.serialize", expr_ll_prefix);
@@ -2379,7 +2373,6 @@ impl LlvmGenerator {
                 size));
                 serialize_code.add(format!("ret {}.growable {}", buffer_ll_ty, tmp4));
 
-
                 serialize_code.add("}");
                 self.prelude_code.add_code(&serialize_code);
                 self.prelude_code.add("\n");
@@ -2388,12 +2381,19 @@ impl LlvmGenerator {
             Vector(ref elem_ty) if elem_ty.has_pointer() => {
                 // Serialized as an i64 length, followed by each `length` serialized elements.
                 let ref elem_ll_ty = self.llvm_type(elem_ty)?;
+                let elem_serialize = self.gen_serialize_helper(buffer_ll_ty,
+                                                               buffer_ll_prefix, 
+                                                               elem_ll_ty,
+                                                               &llvm_prefix(elem_ll_ty),
+                                                               elem_ty,
+                                                               func,
+                                                               ctx)?;
+
                 self.prelude_code.add(format!(include_str!("resources/vector/serialize_with_pointers.ll"),
                 BUFNAME=buffer_ll_ty.replace("%", ""),
                 NAME=expr_ll_ty.replace("%", ""),
                 ELEM=elem_ll_ty,
-                ELEM_PREFIX=llvm_prefix(elem_ll_ty)));
-
+                ELEM_SERIALIZE=elem_serialize));
             }
             Vector(ref elem_ty) => {
                 // Serialized as an i64 length, followed by each `length` serialized elements.
@@ -2418,13 +2418,7 @@ impl LlvmGenerator {
         }
 
         self.serialize_fns.insert(expr_ty.clone(), serialize_fn.clone());
-
-        // Call the function on the input.    
-        let result = ctx.var_ids.next();
-        ctx.code.add(format!("{} = call {}.growable @{}({}.growable {}, {} {})",
-                                 result, buffer_ll_ty, serialize_fn, buffer_ll_ty, buffer_ll_reg,
-                                 expr_ll_ty, expr_ll_reg));
-        return Ok(result);
+        Ok(serialize_fn)
     }
 
 
@@ -2455,25 +2449,36 @@ impl LlvmGenerator {
         }
 
         let expr_ty = func.symbol_type(expr)?;
-        let expr_tmp = self.gen_load_var(&expr_ll_sym, &expr_ll_ty, ctx)?;
-
-        let input = ctx.var_ids.next();
         let output_ll_prefix = output_ll_ty.replace("%", "");
 
-        ctx.code.add(format!("{} = call {}.growable @{}.growable.new(i64 1024)", input, output_ll_ty, output_ll_prefix));
+        let serialize_fn = self.gen_serialize_helper(&output_ll_ty,
+                                                     &output_ll_prefix,
+                                                     &expr_ll_ty,
+                                                     &expr_ll_ty.replace("%", ""),
+                                                     expr_ty,
+                                                     func,
+                                                     ctx)?;
 
-        let tmp = self.gen_serialize_helper(&input,
-                                  &output_ll_ty,
-                                  &output_ll_prefix,
-                                  &expr_tmp,
-                                  &expr_ll_ty,
-                                  &expr_ll_ty.replace("%", ""),
-                                  expr_ty,
-                                  func,
-                                  ctx)?;
+        let expr_tmp = self.gen_load_var(&expr_ll_sym, &expr_ll_ty, ctx)?;
+
+        let buf_tmp = ctx.var_ids.next();
+        ctx.code.add(format!("{} = call {}.growable @{}.growable.new(i64 1024)",
+        buf_tmp, output_ll_ty, output_ll_prefix));
+
+        let result = ctx.var_ids.next();
+        ctx.code.add(format!("{} = call {}.growable @{}({}.growable {}, {} {})",
+        result,
+        output_ll_ty,
+        serialize_fn,
+        output_ll_ty,
+        buf_tmp,
+        expr_ll_ty,
+        expr_tmp));
+
         let output_tmp = ctx.var_ids.next();
-        ctx.code.add(format!("{} = call {} @{}.growable.tovec({}.growable {})", output_tmp,
-        output_ll_ty, output_ll_prefix, output_ll_ty, tmp));
+        ctx.code.add(format!("{} = call {} @{}.growable.tovec({}.growable {})",
+        output_tmp, output_ll_ty, output_ll_prefix, output_ll_ty, result));
+
         self.gen_store_var(&output_tmp, &output_ll_sym, &output_ll_ty, ctx);
         Ok(())
     }
