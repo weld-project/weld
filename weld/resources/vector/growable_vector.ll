@@ -49,7 +49,7 @@ define %{NAME}.growable @{NAME}.growable.extend(%{NAME}.growable %gvec, i64 %sz)
 }}
 
 ; Resize the vector to fit `num_elements` elements. Does nothing if the vector already has enough capacity.
-define %{NAME}.growable @{NAME}.growable.resize_to_fit(%{NAME}.growable %gvec, i64 %num_elements) alwaysinline {{
+define %{NAME}.growable @{NAME}.growable.resize_to_fit(%{NAME}.growable %gvec, i64 %num_elements) {{
   %vec = extractvalue %{NAME}.growable %gvec, 0
   %size = extractvalue %{NAME}.growable %gvec, 1
   %capacity = extractvalue %{NAME} %vec, 1
@@ -61,7 +61,12 @@ entry:
   br i1 %cond, label %resize, label %done
 
 resize:
-  %newCapacity = mul i64 %capacity, 2
+  %newSize = add i64 %num_elements, %capacity
+  %doubled = mul i64 %capacity, 2
+  %cond2 = icmp uge i64 %doubled, %newSize
+  ; New capacity is either capacity + elements we want to add
+  ; or double the capacity: whichever is bigger.
+  %newCapacity = select i1 %cond2, i64 %doubled, i64 %newSize
   %elemSizePtr = getelementptr {ELEM}, {ELEM}* null, i32 1
   %elemSize = ptrtoint {ELEM}* %elemSizePtr to i64
   %bytes = extractvalue %{NAME} %vec, 0
@@ -73,10 +78,11 @@ resize:
 
   %1 = insertvalue %{NAME} undef, {ELEM}* %newBuf, 0
   %2 = insertvalue %{NAME} %1, i64 %newCapacity, 1
-  %3 = insertvalue %{NAME}.growable %gvec, %{NAME} %2, 0
+  %3 = insertvalue %{NAME}.growable undef, %{NAME} %2, 0
+  %4 = insertvalue %{NAME}.growable %3, i64 %size, 1
   br label %done
 
 done:
-  %ret = phi %{NAME}.growable [ %gvec, %entry ], [ %3, %resize]
+  %ret = phi %{NAME}.growable [ %gvec, %entry ], [ %4, %resize]
   ret %{NAME}.growable %ret
 }}

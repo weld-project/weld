@@ -2460,7 +2460,7 @@ impl LlvmGenerator {
         let input = ctx.var_ids.next();
         let output_ll_prefix = output_ll_ty.replace("%", "");
 
-        ctx.code.add(format!("{} = call {}.growable @{}.growable.new(i64 16)", input, output_ll_ty, output_ll_prefix));
+        ctx.code.add(format!("{} = call {}.growable @{}.growable.new(i64 1024)", input, output_ll_ty, output_ll_prefix));
 
         let tmp = self.gen_serialize_helper(&input,
                                   &output_ll_ty,

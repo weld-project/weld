@@ -19,7 +19,7 @@ define %{BUFNAME}.growable @{NAME}.serialize(%{BUFNAME}.growable %buf, %{NAME} %
 
   ; Store the vector length.
   %lenPtr = bitcast i8* %ptr to i64*
-  store i64 %dataSize, i64* %lenPtr
+  store i64 %vecSize, i64* %lenPtr
 
   ; Increment the pointer and store the vector data.
   %dataStorePtr = getelementptr i8, i8* %ptr, i64 8
