@@ -16,11 +16,17 @@ struct weld_vec {
     int64_t length;
 };
 
-struct args {
-    struct weld_vec<weld_vec<int32_t> > vector;
+struct triple {
+  int a;
+  int b;
+  int c;
 };
 
-const char *program = "|x:vec[vec[i32]]| serialize(x)";
+struct args {
+    struct weld_vec<weld_vec<triple> > vector;
+};
+
+const char *program = "|x:vec[vec[{i32,i32,i32}]]| serialize(x)";
 
 // Parses a single serialized vec<i32>
 char *parse_buffer(char *data) {
@@ -28,10 +34,12 @@ char *parse_buffer(char *data) {
 
   data += sizeof(int64_t);
   for (int i = 0; i < length; i++) {
-    int32_t value = *((int32_t *)data);
-    assert(value == i);
-    printf("%d ", value);
-    data += sizeof(int32_t);
+    triple value = *((triple *)data);
+    assert(value.a == i);
+    assert(value.b == i);
+    assert(value.b == i);
+    printf("(%d %d %d) ", value.a, value.b, value.c);
+    data += sizeof(triple);
   }
   printf("\n");
   return data;
@@ -51,15 +59,17 @@ int main() {
         exit(1);
     }
 
-    weld_vec<weld_vec<int32_t> > v;
-    const uint64_t length = 24;
+    weld_vec<weld_vec<triple> > v;
+    const uint64_t length = 8;
 
-    weld_vec<int32_t> *data = (weld_vec<int32_t> *)malloc(sizeof(weld_vec<int32_t>) * length);
+    weld_vec<triple> *data = (weld_vec<triple> *)malloc(sizeof(weld_vec<triple>) * length);
     for (int i = 0; i < length; i++) {
       data[i].length = length;
-      data[i].data = (int32_t *)malloc(sizeof(int32_t) * length);
+      data[i].data = (triple *)malloc(sizeof(triple) * length);
       for (int j = 0; j < length; j++) {
-        data[i].data[j] = j;
+        data[i].data[j].a = j;
+        data[i].data[j].b = j;
+        data[i].data[j].c = j;
       }
     }
 

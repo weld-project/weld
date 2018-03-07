@@ -118,7 +118,7 @@ impl HasPointer for Type {
         match *self {
             Scalar(_) => false,
             Simd(_) => false,
-            Vector(ref ty) => true,
+            Vector(_) => true,
             Dict(_, _) => true,
             Builder(_, _) => true,
             Struct(ref tys) => tys.iter().any(|ref t| t.has_pointer()),
@@ -317,8 +317,8 @@ pub struct LlvmGenerator {
     /// Pointer name for each declared string constant.
     string_names: fnv::FnvHashMap<String, String>,
 
-    serialize_fns: fnv::FnvHashMap<Type, String>, 
-    
+    serialize_fns: fnv::FnvHashMap<Type, String>,
+
     /// A CodeBuilder and ID generator for prelude functions such as type and struct definitions.
     prelude_code: CodeBuilder,
     prelude_var_ids: IdGenerator,
@@ -1986,7 +1986,7 @@ impl LlvmGenerator {
     fn escape_str(&self, string: &str) -> String {
         string.replace("\\", "\\\\").replace("\"", "\\\"")
     }
-    
+
     /// Retrieve the stored pointer for a String constant or create one if it doesn't exist.
     fn get_string_ptr(&mut self, string: &str) -> WeldResult<String> {
         if self.string_names.get(string) == None {
@@ -2000,7 +2000,7 @@ impl LlvmGenerator {
         if !(string.is_ascii()) {
             return weld_err!("Weld strings must be valid ASCII");
         }
-        
+
         let global = self.prelude_var_ids.next().replace("%", "@");
         let text = self.escape_str(string);
         let len = text.len();
@@ -2336,9 +2336,13 @@ impl LlvmGenerator {
         let serialize_fn = format!("{}.serialize", expr_ll_prefix);
 
         match *expr_ty {
-            Scalar(ref kind) => {
+            Scalar(_) | Struct(_) if !expr_ty.has_pointer() => {
+                // These are primitive pointer-less values that we can store directly into the
+                // buffer.
+                //
+
                 let mut serialize_code = CodeBuilder::new();
-                serialize_code.add(format!("define {}.growable {}({}.growable %buf, {} %data) {{",
+                serialize_code.add(format!("define {}.growable {}({}.growable %buf, {} %data) alwaysinline {{",
                 buffer_ll_ty,
                 serialize_fn,
                 buffer_ll_ty,
@@ -2349,8 +2353,12 @@ impl LlvmGenerator {
                 let tmp2 = ctx.var_ids.next();
                 let tmp3 = ctx.var_ids.next();
                 let ref tmp4 = ctx.var_ids.next();
-                // Size of the scalar in bytes.
-                let size = format!("{}", kind.bits() / 8);
+                let size_ptr = ctx.var_ids.next();
+                let size = ctx.var_ids.next();
+
+                // Get size of the type.
+                serialize_code.add(format!("{} = getelementptr {}, {}* null, i32 1", size_ptr, expr_ll_ty, expr_ll_ty));
+                serialize_code.add(format!("{} = ptrtoint {}* {} to i64", size, expr_ll_ty, size_ptr));
                 serialize_code.add(format!("{} = call {}.growable @{}.growable.resize_to_fit({}.growable %buf, i64 {})",
                 tmp,
                 buffer_ll_ty,
@@ -2382,7 +2390,7 @@ impl LlvmGenerator {
                 // Serialized as an i64 length, followed by each `length` serialized elements.
                 let ref elem_ll_ty = self.llvm_type(elem_ty)?;
                 let elem_serialize = self.gen_serialize_helper(buffer_ll_ty,
-                                                               buffer_ll_prefix, 
+                                                               buffer_ll_prefix,
                                                                elem_ll_ty,
                                                                &llvm_prefix(elem_ll_ty),
                                                                elem_ty,
@@ -2406,15 +2414,27 @@ impl LlvmGenerator {
             }
             Dict(ref key, ref value) => {
                 // TODO
-
             }
             Struct(ref tys) => {
                 // Serialized as each struct element serialized in order.
+                // First, generate a serialization function for each struct member.
+                for elem_ty in tys.iter() {
+                    let ref elem_ll_ty = self.llvm_type(elem_ty)?;
+                    let elem_serialize = self.gen_serialize_helper(buffer_ll_ty,
+                                                                   buffer_ll_prefix,
+                                                                   elem_ll_ty,
+                                                                   &llvm_prefix(elem_ll_ty),
+                                                                   elem_ty,
+                                                                   func,
+                                                                   ctx)?;
+                }
             }
             Simd(_) | Builder(_, _) | Function(_, _) => {
                 // Non-serializable types.
-                return weld_err!("codegen cannot serialize type {:?}", expr_ty);
+                return weld_err!("Cannot serialize type {:?}", expr_ty);
             }
+            // Covered by the first case since scalars never have pointers.
+            Scalar(_) => unreachable!(),
         }
 
         self.serialize_fns.insert(expr_ty.clone(), serialize_fn.clone());
