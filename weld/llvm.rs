@@ -2082,7 +2082,7 @@ impl LlvmGenerator {
         let kv_vec = Box::new(Vector(elem.clone()));
         let kv_vec_ty = self.llvm_type(&kv_vec)?;
 
-        let dict_def = format!(include_str!("resources/dictionary.ll"),
+        let dict_def = format!(include_str!("resources/dictionary/dictionary.ll"),
             NAME=&name.replace("%", ""),
             KEY=&key_ty,
             KEY_PREFIX=&key_prefix,
@@ -2129,7 +2129,7 @@ impl LlvmGenerator {
                 let key_prefix = llvm_prefix(&key_ty);
                 let value_ty = self.llvm_type(vt)?;
 
-                let dictmerger_def = format!(include_str!("resources/dictmerger.ll"),
+                let dictmerger_def = format!(include_str!("resources/dictionary/dictmerger.ll"),
                     NAME=&bld_ty_str.replace("%", ""),
                     KEY=&key_ty,
                     KEY_PREFIX=&key_prefix,
@@ -2164,7 +2164,7 @@ impl LlvmGenerator {
                 let bld = Dict(kt.clone(), vec);
                 let bld_ty = self.llvm_type(&bld)?;
 
-                let groupmerger_def = format!(include_str!("resources/groupbuilder.ll"),
+                let groupmerger_def = format!(include_str!("resources/dictionary/groupbuilder.ll"),
                     NAME=&bld_ty.replace("%", ""),
                     KEY=&key_ty,
                     KEY_PREFIX=&key_prefix,
@@ -2411,6 +2411,16 @@ impl LlvmGenerator {
                 BUFNAME=buffer_ll_ty.replace("%", ""),
                 NAME=expr_ll_ty.replace("%", ""),
                 ELEM=elem_ll_ty));
+            }
+            Dict(ref key, ref value) if !key.has_pointer() && !value.has_pointer() => {
+                // Dictionaries are serialized as <8-byte length (in # of Key/value pairs)>
+                // followed by packed {key, value} pairs. This case handles dictionaries where
+                // the key and value do not have pointers. The following case handles pointers by
+                // calling serialize on the key and value.
+                self.prelude_code.add(format!(include_str!("resources/dictionary/serialize_dictionary.ll"),
+                    NAME=expr_ll_ty.replace("%", ""),
+                    BUFNAME=buffer_ll_ty.replace("%", ""),
+                    HAS_POINTER=0));
             }
             Dict(ref key, ref value) => {
                 // TODO

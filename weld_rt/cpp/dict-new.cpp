@@ -706,6 +706,61 @@ public:
     return (void *)buf;
   }
 
+  /** Serializes a dictionary, flattening pointers if necessary. */
+  void serialize(void *buffer, int32_t has_pointer) {
+    // The growable vector type used for serialization.
+    struct growable_vec {
+      struct {
+        uint8_t *data;
+        int64_t capacity;
+      } vector;
+      int64_t size;
+    };
+
+    assert(finalized);
+    InternalDict *dict = global_dict();
+
+    growable_vec *gvec = (growable_vec *)buffer;
+
+    // In the no pointer case, we can just pre-allocate space for the dictionary and then copy
+    // key/value pairs.
+    if (!has_pointer) {
+      const int64_t bytes = sizeof(int64_t) + (dict->key_size + dict->value_size) * dict->size();
+      if (gvec->vector.capacity - gvec->size < bytes) {
+        int64_t new_capacity;
+        if (gvec->vector.capacity + bytes > gvec->vector.capacity * 2) {
+          new_capacity =gvec->vector.capacity + bytes;
+        } else {
+          new_capacity = gvec->vector.capacity * 2;
+        }
+        gvec->vector.data = (uint8_t *)weld_run_realloc(weld_rt_get_run_id(), gvec->vector.data, new_capacity);
+        gvec->vector.capacity = new_capacity;
+      }
+
+      uint8_t *offset = gvec->vector.data + gvec->size;
+
+      int64_t *as_i64_ptr = (int64_t *)offset;
+      *as_i64_ptr = dict->size();
+      offset += 8;
+
+      // Copy each key/value pair into the buffer.
+      for (long i = 0; i < dict->capacity(); i++) {
+        Slot *slot = dict->slot_at_index(i);
+        if (slot->header.filled) {
+          memcpy(offset, slot->key(), dict->key_size);
+          offset += dict->key_size;
+          memcpy(offset, slot->value(dict->key_size), dict->value_size);
+          offset += dict->value_size;
+        }
+      }
+
+      assert(offset - gvec->vector.data == bytes);
+      gvec->size += bytes;
+    } else {
+      assert(false);
+    }
+  }
+
 private:
 
   // Flush the global buffer into the global dictionary. Assumes concurrent access to the global dictionary.
@@ -798,3 +853,10 @@ extern "C" int64_t weld_rt_dict_size(void *d) {
   InternalDict *dict = wd->global_dict();
   return dict->size();
 }
+
+extern "C" void weld_rt_dict_serialize(void *d, void *buf, int32_t has_pointer) {
+  WeldDict *wd = (WeldDict *)d;
+  wd->serialize(buf, has_pointer);
+}
+
+

@@ -80,4 +80,14 @@ extern "C" void *weld_rt_dict_to_array(void *d, int32_t value_offset, int32_t st
  */
 extern "C" int64_t weld_rt_dict_size(void *d);
 
+/** Writes serialized bytes representing the dictionary `d` into `buf`.
+ *
+ *
+ * PRE-REQUISITES:
+ * `d`, the dictionary, must be finalized.
+ * `buf` must be a Weld growable vec[i8].
+ *
+ */
+extern "C" void weld_rt_dict_serialize(void *d, void *buf, int32_t has_pointer);
+
 #endif
