@@ -88,6 +88,10 @@ extern "C" int64_t weld_rt_dict_size(void *d);
  * `buf` must be a Weld growable vec[i8].
  *
  */
-extern "C" void weld_rt_dict_serialize(void *d, void *buf, int32_t has_pointer);
+extern "C" void weld_rt_dict_serialize(void *d,
+    void *buf,
+    int32_t has_pointer,
+    void* key_ser,
+    void* val_ser);
 
 #endif

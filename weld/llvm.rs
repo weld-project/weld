@@ -2370,14 +2370,14 @@ impl LlvmGenerator {
                 buffer_ll_prefix,
                 buffer_ll_ty,
                 tmp));
-                serialize_code.add(format!("{} = bitcast i8* {} as {}*", tmp3, tmp2, expr_ll_ty));
-                self.gen_store_var("%data", &tmp3, &expr_ll_ty, ctx);
-                serialize_code.add(format!("{} = call {} @{}.growable.extend({}.growable {}, i64 {})",
+                serialize_code.add(format!("{} = bitcast i8* {} to {}*", tmp3, tmp2, expr_ll_ty));
+                serialize_code.add(format!("store {} %data, {}* {}", &expr_ll_ty, &expr_ll_ty, &tmp3));
+                serialize_code.add(format!("{} = call {}.growable @{}.growable.extend({}.growable {}, i64 {})",
                 tmp4,
                 buffer_ll_ty,
                 buffer_ll_prefix,
                 buffer_ll_ty,
-                tmp3,
+                tmp,
                 size));
                 serialize_code.add(format!("ret {}.growable {}", buffer_ll_ty, tmp4));
 
@@ -2420,15 +2420,56 @@ impl LlvmGenerator {
                 self.prelude_code.add(format!(include_str!("resources/dictionary/serialize_dictionary.ll"),
                     NAME=expr_ll_ty.replace("%", ""),
                     BUFNAME=buffer_ll_ty.replace("%", ""),
-                    HAS_POINTER=0));
+                    HAS_POINTER=0,
+                    KEY_SERIALIZE_ON_PTR="null", 
+                    VAL_SERIALIZE_ON_PTR="null"
+                    ));
             }
             Dict(ref key, ref value) => {
-                // TODO
+                // Dictionaries are serialized as <8-byte length (in # of Key/value pairs)>
+                // followed by packed {key, value} pairs. This case handles dictionaries where
+                // the key and value do not have pointers. The following case handles pointers by
+                // calling serialize on the key and value.
+
+                let ref key_ll_ty = self.llvm_type(key)?;
+                let _ = self.gen_serialize_helper(buffer_ll_ty,
+                                                  buffer_ll_prefix,
+                                                  key_ll_ty,
+                                                  &llvm_prefix(key_ll_ty),
+                                                  key,
+                                                  func,
+                                                  ctx)?;
+
+                let ref value_ll_ty = self.llvm_type(value)?;
+                let _ = self.gen_serialize_helper(buffer_ll_ty,
+                                                  buffer_ll_prefix,
+                                                  value_ll_ty,
+                                                  &llvm_prefix(value_ll_ty),
+                                                  value,
+                                                  func,
+                                                  ctx)?;
+
+                self.prelude_code.add(format!(include_str!("resources/dictionary/serialize_dictionary.ll"),
+                    NAME=expr_ll_ty.replace("%", ""),
+                    BUFNAME=buffer_ll_ty.replace("%", ""),
+                    HAS_POINTER=0,
+                    KEY_SERIALIZE_ON_PTR=format!("{}.serialize_on_pointers", llvm_prefix(key_ll_ty)), 
+                    VAL_SERIALIZE_ON_PTR=format!("{}.serialize_on_pointers", llvm_prefix(value_ll_ty))
+                    ));
             }
             Struct(ref tys) => {
-                // Serialized as each struct element serialized in order.
-                // First, generate a serialization function for each struct member.
-                for elem_ty in tys.iter() {
+                // Serialized as each struct element serialized in order. This version handles
+                // struct members with pointers, and generates a serialization function for each
+                // struct member.
+                let mut serialize_code = CodeBuilder::new();
+                serialize_code.add(format!("define {}.growable {}({}.growable %buf, {} %data) alwaysinline {{",
+                buffer_ll_ty,
+                serialize_fn,
+                buffer_ll_ty,
+                expr_ll_ty));
+
+                let mut prev_gvec = "%buf".to_string();
+                for (i, elem_ty) in tys.iter().enumerate() {
                     let ref elem_ll_ty = self.llvm_type(elem_ty)?;
                     let elem_serialize = self.gen_serialize_helper(buffer_ll_ty,
                                                                    buffer_ll_prefix,
@@ -2437,7 +2478,25 @@ impl LlvmGenerator {
                                                                    elem_ty,
                                                                    func,
                                                                    ctx)?;
+
+                    let tmp = ctx.var_ids.next();
+                    let next_gvec = ctx.var_ids.next();
+                    serialize_code.add(format!("{} = extractvalue {} %data, {}", tmp, &expr_ll_ty, i));
+                    serialize_code.add(format!("{} = call {}.growable {}({}.growable {}, {} {})",
+                    next_gvec,
+                    buffer_ll_ty, 
+                    elem_serialize,
+                    buffer_ll_ty,
+                    prev_gvec,
+                    elem_ll_ty,
+                    tmp));
+                    prev_gvec = next_gvec;
                 }
+                serialize_code.add(format!("ret {}.growable {}", buffer_ll_ty, prev_gvec));
+                serialize_code.add("}");
+
+                self.prelude_code.add_code(&serialize_code);
+                self.prelude_code.add("\n");
             }
             Simd(_) | Builder(_, _) | Function(_, _) => {
                 // Non-serializable types.
@@ -2446,6 +2505,13 @@ impl LlvmGenerator {
             // Covered by the first case since scalars never have pointers.
             Scalar(_) => unreachable!(),
         }
+
+        // Generate the serialize function on pointers.
+        self.prelude_code.add(format!(include_str!("resources/serialize_on_pointers.ll"),
+        TYPE=expr_ll_ty,
+        TYPE_PREFIX=&llvm_prefix(expr_ll_ty),
+        BUFNAME=buffer_ll_ty.replace("%", ""),
+        SERIALIZE=serialize_fn));
 
         self.serialize_fns.insert(expr_ty.clone(), serialize_fn.clone());
         Ok(serialize_fn)
@@ -2484,7 +2550,7 @@ impl LlvmGenerator {
         let serialize_fn = self.gen_serialize_helper(&output_ll_ty,
                                                      &output_ll_prefix,
                                                      &expr_ll_ty,
-                                                     &expr_ll_ty.replace("%", ""),
+                                                     &llvm_prefix(&expr_ll_ty),
                                                      expr_ty,
                                                      func,
                                                      ctx)?;
@@ -2496,7 +2562,7 @@ impl LlvmGenerator {
         buf_tmp, output_ll_ty, output_ll_prefix));
 
         let result = ctx.var_ids.next();
-        ctx.code.add(format!("{} = call {}.growable @{}({}.growable {}, {} {})",
+        ctx.code.add(format!("{} = call {}.growable {}({}.growable {}, {} {})",
         result,
         output_ll_ty,
         serialize_fn,

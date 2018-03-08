@@ -72,6 +72,44 @@ const int RESIZE_THRES = 7;
 // Size of the global buffer, in # of slots.
 const int GLOBAL_BATCH_SIZE = 128;
 
+// The growable vector type used for serialization.
+struct GrowableVec {
+
+public:
+  struct {
+    uint8_t *data;
+    int64_t capacity;
+  } vector;
+
+  int64_t size;
+
+public:
+
+  // Size the vector to fit `bytes` data in the vector. Does nothing if the vector already
+  // has the capacity to hold `bytes`.
+  void resize_to_fit(int64_t bytes) {
+    if (vector.capacity - size < bytes) {
+      int64_t new_capacity;
+      if (vector.capacity + bytes > vector.capacity * 2) {
+        new_capacity = vector.capacity + bytes;
+      } else {
+        new_capacity = vector.capacity * 2;
+      }
+      vector.data = (uint8_t *)weld_run_realloc(weld_rt_get_run_id(), vector.data, new_capacity);
+      vector.capacity = new_capacity;
+    }
+  }
+
+};
+
+/**Type alias for serialization function over pointers
+ *
+ * @param the growable vector where the serialized data is written
+ * @param the value being serialized.
+ *
+ */
+typedef void (*SerializeFn)(GrowableVec *, void *);
+
 // Specifies what kind of locking to use. Basically a boolean, but its here for
 // additional type safety enforced by the compiler.
 typedef enum {
@@ -707,61 +745,65 @@ public:
   }
 
   /** Serializes a dictionary, flattening pointers if necessary. */
-  void serialize(void *buffer, int32_t has_pointer) {
-    // The growable vector type used for serialization.
-    struct growable_vec {
-      struct {
-        uint8_t *data;
-        int64_t capacity;
-      } vector;
-      int64_t size;
-    };
-
+  void serialize(void *buffer, int32_t has_pointer, SerializeFn serialize_key_fn, SerializeFn serialize_value_fn) {
     assert(finalized);
-    InternalDict *dict = global_dict();
-
-    growable_vec *gvec = (growable_vec *)buffer;
-
-    // In the no pointer case, we can just pre-allocate space for the dictionary and then copy
-    // key/value pairs.
     if (!has_pointer) {
-      const int64_t bytes = sizeof(int64_t) + (dict->key_size + dict->value_size) * dict->size();
-      if (gvec->vector.capacity - gvec->size < bytes) {
-        int64_t new_capacity;
-        if (gvec->vector.capacity + bytes > gvec->vector.capacity * 2) {
-          new_capacity =gvec->vector.capacity + bytes;
-        } else {
-          new_capacity = gvec->vector.capacity * 2;
-        }
-        gvec->vector.data = (uint8_t *)weld_run_realloc(weld_rt_get_run_id(), gvec->vector.data, new_capacity);
-        gvec->vector.capacity = new_capacity;
-      }
-
-      uint8_t *offset = gvec->vector.data + gvec->size;
-
-      int64_t *as_i64_ptr = (int64_t *)offset;
-      *as_i64_ptr = dict->size();
-      offset += 8;
-
-      // Copy each key/value pair into the buffer.
-      for (long i = 0; i < dict->capacity(); i++) {
-        Slot *slot = dict->slot_at_index(i);
-        if (slot->header.filled) {
-          memcpy(offset, slot->key(), dict->key_size);
-          offset += dict->key_size;
-          memcpy(offset, slot->value(dict->key_size), dict->value_size);
-          offset += dict->value_size;
-        }
-      }
-
-      assert(offset - gvec->vector.data == bytes);
-      gvec->size += bytes;
+      serialize_no_pointers(buffer);
     } else {
-      assert(false);
+      serialize_with_pointers(buffer, serialize_key_fn, serialize_value_fn);
     }
   }
 
 private:
+
+  /** Serializes a dictionary, where the keys and values have no pointers. */
+  void serialize_with_pointers(void *buffer, SerializeFn serialize_key_fn, SerializeFn serialize_value_fn) {
+    assert(finalized);
+    InternalDict *dict = global_dict();
+
+    GrowableVec *gvec = (GrowableVec *)buffer;
+    gvec->resize_to_fit(sizeof(int64_t));
+
+    // Copy each key/value pair into the buffer.
+    for (long i = 0; i < dict->capacity(); i++) {
+      Slot *slot = dict->slot_at_index(i);
+      if (slot->header.filled) {
+        serialize_key_fn(gvec, slot->key());
+        serialize_value_fn(gvec, slot->value(dict->key_size));
+      }
+    }
+  }
+
+  /** Serializes a dictionary, where the keys and values have no pointers. */
+  void serialize_no_pointers(void *buffer) {
+    assert(finalized);
+    InternalDict *dict = global_dict();
+
+    GrowableVec *gvec = (GrowableVec *)buffer;
+
+    const int64_t bytes = sizeof(int64_t) + (dict->key_size + dict->value_size) * dict->size();
+    gvec->resize_to_fit(bytes);
+
+    uint8_t *offset = gvec->vector.data + gvec->size;
+
+    int64_t *as_i64_ptr = (int64_t *)offset;
+    *as_i64_ptr = dict->size();
+    offset += 8;
+
+    // Copy each key/value pair into the buffer.
+    for (long i = 0; i < dict->capacity(); i++) {
+      Slot *slot = dict->slot_at_index(i);
+      if (slot->header.filled) {
+        memcpy(offset, slot->key(), dict->key_size);
+        offset += dict->key_size;
+        memcpy(offset, slot->value(dict->key_size), dict->value_size);
+        offset += dict->value_size;
+      }
+    }
+
+    assert(offset - gvec->vector.data == bytes);
+    gvec->size += bytes;
+  }
 
   // Flush the global buffer into the global dictionary. Assumes concurrent access to the global dictionary.
   void drain_global_buffer(GlobalBuffer *glbuf) {
@@ -854,9 +896,9 @@ extern "C" int64_t weld_rt_dict_size(void *d) {
   return dict->size();
 }
 
-extern "C" void weld_rt_dict_serialize(void *d, void *buf, int32_t has_pointer) {
+extern "C" void weld_rt_dict_serialize(void *d, void *buf, int32_t has_pointer, void *key_ser, void *val_ser) {
   WeldDict *wd = (WeldDict *)d;
-  wd->serialize(buf, has_pointer);
+  wd->serialize(buf, has_pointer, (SerializeFn)key_ser, (SerializeFn)val_ser);
 }
 
 

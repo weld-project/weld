@@ -45,6 +45,8 @@ int main() {
     weld_error_t e = weld_error_new();
     weld_conf_t conf = weld_conf_new();
 
+    weld_conf_set(conf, "weld.compile.dumpCode", "true");
+
     weld_module_t m = weld_module_compile(program, conf, e);
     weld_conf_free(conf);
 
