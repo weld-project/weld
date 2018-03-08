@@ -88,7 +88,11 @@ extern "C" {
     #[no_mangle]
     pub fn weld_rt_dict_size(d: *mut c_void) -> int64_t;
     #[no_mangle]
-    pub fn weld_rt_dict_serialize(d: *mut c_void, buf: *mut c_void, has_pointer: int32_t, key_ser: *mut c_void, val_ser: &mut c_void);
+    pub fn weld_rt_dict_serialize(d: *mut c_void,
+                                  buf: *mut c_void,
+                                  has_pointer: int32_t,
+                                  key_ser: extern "C" fn(*mut c_void, *mut c_void),
+                                  val_ser: extern "C" fn(*mut c_void, *mut c_void));
     #[no_mangle]
     pub fn weld_rt_dict_free(d: *mut c_void);
     #[no_mangle]

@@ -12,7 +12,7 @@ define %{BUFNAME}.growable @{NAME}.serialize(%{BUFNAME}.growable %buf, %{NAME} %
   %bufPtr = alloca %{BUFNAME}.growable
   store %{BUFNAME}.growable %buf, %{BUFNAME}.growable* %bufPtr
   %bufPtrRaw = bitcast %{BUFNAME}.growable* %bufPtr to i8*
-  call void @weld_rt_dict_serialize(i8* %dict, i8* %bufPtrRaw, i32 {HAS_POINTER}, i8* {KEY_SERIALIZE_ON_PTR}, i8* {VAL_SERIALIZE_ON_PTR})
+  call void @weld_rt_dict_serialize(i8* %dict, i8* %bufPtrRaw, i32 {HAS_POINTER}, void (i8*, i8*)* {KEY_SERIALIZE_ON_PTR}, void (i8*, i8*)* {VAL_SERIALIZE_ON_PTR})
   %newBuf = load %{BUFNAME}.growable, %{BUFNAME}.growable* %bufPtr
   ret %{BUFNAME}.growable %newBuf
 }}
