@@ -1554,21 +1554,22 @@ impl LlvmGenerator {
                   right_tmp: &str,
                   output_tmp: &str,
                   ty: &Type,
-                  ctx: &mut FunctionContext) -> WeldResult<()> {
+                  var_ids: &mut IdGenerator,
+                  code: &mut CodeBuilder) -> WeldResult<()> {
         use super::ast::BinOpKind::*;
         match *ty {
             Scalar(s) | Simd(s) => {
                 if s.is_integer() {
-                    let sel_tmp = ctx.var_ids.next();
+                    let sel_tmp = var_ids.next();
                     match *op {
                         Max => {
-                            ctx.code.add(format!("{} = {} {} {}, {}",
+                            code.add(format!("{} = {} {} {}, {}",
                                                  &sel_tmp,
                                                  llvm_binop(GreaterThan, ty)?,
                                              &ll_ty, &left_tmp, &right_tmp));
                         }
                         Min => {
-                            ctx.code.add(format!("{} = {} {} {}, {}",
+                            code.add(format!("{} = {} {} {}, {}",
                                                  &sel_tmp,
                                                  llvm_binop(LessThan, ty)?,
                                                  &ll_ty, &left_tmp, &right_tmp));
@@ -1576,14 +1577,20 @@ impl LlvmGenerator {
                         _ => return weld_err!("Illegal operation using Min/Max generator"),
                     }
 
-                    ctx.code.add(format!("{} = select i1 {}, {} {}, {} {}",
-                                         &output_tmp, sel_tmp,
+                    let sel_type = if ty.is_scalar() 
+                                    { "i1".to_string() } 
+                                    else { format!("<{} x i1>", llvm_simd_size(ty)?) };
+                    code.add(format!("{} = select {} {}, {} {}, {} {}",
+                                         &output_tmp, &sel_type, sel_tmp,
                                          self.llvm_type(ty)?, left_tmp,
                                          self.llvm_type(ty)?, right_tmp));
                 } else if s.is_float() { /* has one-line intrinsic */
-                    ctx.code.add(format!("{} = call {} {}({} {}, {} {})",
+                    let intrinsic = if ty.is_scalar() 
+                                    { llvm_binary_intrinsic(*op, &s)? } 
+                                    else { llvm_simd_binary_intrinsic(*op, &s, llvm_simd_size(ty)?)? };
+                    code.add(format!("{} = call {} {}({} {}, {} {})",
                                          &output_tmp, &ll_ty,
-                                         llvm_binary_intrinsic(*op, &s)?,
+                                         intrinsic,
                                          self.llvm_type(ty)?, &left_tmp,
                                          self.llvm_type(ty)?, &right_tmp));
                 }
@@ -2207,13 +2214,21 @@ impl LlvmGenerator {
                                  var_ids: &mut IdGenerator,
                                  code: &mut CodeBuilder)
                                  -> WeldResult<String> {
+        use super::ast::BinOpKind::*;
         let llvm_ty = self.llvm_type(arg_ty)?.to_string();
         let mut res = var_ids.next();
 
         match *arg_ty {
             Scalar(_) | Simd(_) => {
-                code.add(format!("{} = {} {} {}, {}",
-                    &res, try!(llvm_binop(*bin_op, arg_ty)), &llvm_ty, arg1, arg2));
+                match *bin_op {
+                    Max | Min => {
+                        assert!(self.gen_minmax(&llvm_ty, bin_op, arg1, arg2, &res, arg_ty, var_ids, code).is_ok());
+                    }
+                    _ => {
+                        code.add(format!("{} = {} {} {}, {}",
+                            &res, try!(llvm_binop(*bin_op, arg_ty)), &llvm_ty, arg1, arg2));
+                    }
+                }
             }
 
             Struct(ref fields) => {
@@ -2406,7 +2421,7 @@ impl LlvmGenerator {
                                                 &left_tmp.as_str(),
                                                 &right_tmp.as_str(),
                                                 &output_tmp.as_str(),
-                                                ty, ctx)?;
+                                                ty, &mut ctx.var_ids, &mut ctx.code)?;
                             }
                             // Pow only supported for floating point.
                             Pow if ty.is_scalar() && s.is_float() => {
@@ -3544,6 +3559,34 @@ fn binop_identity(op_kind: BinOpKind, ty: &Type) -> WeldResult<String> {
         (Multiply, &Scalar(s)) if s.is_integer() => Ok("1".to_string()),
         (Multiply, &Scalar(s)) if s.is_float() => Ok("1.0".to_string()),
 
+        (Min, &Scalar(s)) => match s {
+            I8  => Ok(::std::i8::MAX.to_string()),
+            I16 => Ok(::std::i16::MAX.to_string()),
+            I32 => Ok(::std::i32::MAX.to_string()),
+            I64 => Ok(::std::i64::MAX.to_string()),
+            U8  => Ok(::std::u8::MAX.to_string()),
+            U16 => Ok(::std::u16::MAX.to_string()),
+            U32 => Ok(::std::u32::MAX.to_string()),
+            U64 => Ok(::std::u64::MAX.to_string()),
+            F32 => Ok("0x7FF0000000000000".to_string()), // inf 
+            F64 => Ok("0x7FF0000000000000".to_string()), // inf
+            _ => weld_err!("Unsupported identity for binary op: {} on {}", op_kind, print_type(ty)),
+        },
+
+        (Max, &Scalar(s)) => match s {
+            I8  => Ok(::std::i8::MIN.to_string()),
+            I16 => Ok(::std::i16::MIN.to_string()),
+            I32 => Ok(::std::i32::MIN.to_string()),
+            I64 => Ok(::std::i64::MIN.to_string()),
+            U8  => Ok(::std::u8::MIN.to_string()),
+            U16 => Ok(::std::u16::MIN.to_string()),
+            U32 => Ok(::std::u32::MIN.to_string()),
+            U64 => Ok(::std::u64::MIN.to_string()),
+            F32 => Ok("0xFFF0000000000000".to_string()), // -inf
+            F64 => Ok("0xFFF0000000000000".to_string()), // -inf
+            _ => weld_err!("Unsupported identity for binary op: {} on {}", op_kind, print_type(ty)),
+        },
+
         _ => weld_err!("Unsupported identity for binary op: {} on {}", op_kind, print_type(ty)),
     }
 }
@@ -3622,6 +3665,23 @@ fn llvm_binary_intrinsic(op_kind: BinOpKind, ty: &ScalarKind) -> WeldResult<&'st
         (BinOpKind::Pow, &F64) => Ok("@llvm.pow.f64"),
 
         _ => weld_err!("Unsupported binary op: {} on {}", op_kind, ty),
+    }
+}
+
+/// Return LLVM intrinsic for simd float max/min
+fn llvm_simd_binary_intrinsic(op_kind: BinOpKind, ty: &ScalarKind, width: u32) -> WeldResult<&'static str> {
+    match (op_kind, ty, width) {
+        (BinOpKind::Min, &F32, 4) => Ok("@llvm.minnum.v4f32"),
+        (BinOpKind::Min, &F32, 8) => Ok("@llvm.minnum.v8f32"),
+        (BinOpKind::Min, &F64, 2) => Ok("@llvm.minnum.v2f64"),
+        (BinOpKind::Min, &F64, 4) => Ok("@llvm.minnum.v4f64"),
+
+        (BinOpKind::Max, &F32, 4) => Ok("@llvm.maxnum.v4f32"),
+        (BinOpKind::Max, &F32, 8) => Ok("@llvm.maxnum.v8f32"),
+        (BinOpKind::Max, &F64, 2) => Ok("@llvm.maxnum.v2f64"),
+        (BinOpKind::Max, &F64, 4) => Ok("@llvm.maxnum.v4f64"),
+
+        _ => weld_err!("Unsupported binnary op: {} on <{} x {}>", op_kind, width, ty),
     }
 }
 

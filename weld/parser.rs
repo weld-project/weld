@@ -1059,7 +1059,7 @@ impl<'t> Parser<'t> {
                 self.consume(TOpenBracket)?;
                 elem_type = self.type_()?;
                 self.consume(TComma)?;
-                // Basic merger supports Plus and Times right now.
+                // Basic merger right now supports Plus, Times, Min and Max only.
                 match *self.peek() {
                     TPlus => {
                         self.consume(TPlus)?;
@@ -1068,6 +1068,14 @@ impl<'t> Parser<'t> {
                     TTimes => {
                         self.consume(TTimes)?;
                         bin_op = Multiply;
+                    }
+                    TMin => {
+                        self.consume(TMin)?;
+                        bin_op = Min;
+                    }
+                    TMax => {
+                        self.consume(TMax)?;
+                        bin_op = Max;
                     }
                     ref t => {
                         return weld_err!("expected commutative binary op in merger but got '{}'",
@@ -1097,7 +1105,7 @@ impl<'t> Parser<'t> {
                 try!(self.consume(TComma));
                 value_type = try!(self.type_());
                 try!(self.consume(TComma));
-                // DictMerger right now supports Plus and Times only.
+                // DictMerger right now supports Plus, Times, Min and Max only.
                 match *self.peek() {
                     TPlus => {
                         self.consume(TPlus)?;
@@ -1106,6 +1114,14 @@ impl<'t> Parser<'t> {
                     TTimes => {
                         self.consume(TTimes)?;
                         bin_op = Multiply;
+                    }
+                    TMin => {
+                        self.consume(TMin)?;
+                        bin_op = Min;
+                    }
+                    TMax => {
+                        self.consume(TMax)?;
+                        bin_op = Max;
                     }
                     _ => {
                         return weld_err!("expected commutative binary op in dictmerger");
@@ -1155,7 +1171,7 @@ impl<'t> Parser<'t> {
                 try!(self.consume(TOpenBracket));
                 elem_type = try!(self.type_());
                 try!(self.consume(TComma));
-                // VecMerger right now supports Plus and Times only.
+                // VecMerger right now supports Plus, Times, Min and Max only.
                 match *self.peek() {
                     TPlus => {
                         self.consume(TPlus)?;
@@ -1164,6 +1180,14 @@ impl<'t> Parser<'t> {
                     TTimes => {
                         self.consume(TTimes)?;
                         bin_op = Multiply;
+                    }
+                    TMin => {
+                        self.consume(TMin)?;
+                        bin_op = Min;
+                    }
+                    TMax => {
+                        self.consume(TMax)?;
+                        bin_op = Max;
                     }
                     _ => {
                         return weld_err!("Expected commutative binary op in vecmerger");

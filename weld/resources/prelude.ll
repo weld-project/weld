@@ -41,10 +41,19 @@ declare double    @llvm.cos.f64(double %Val)
 
 declare i64 @llvm.ctlz.i64(i64, i1)
 
-declare float @llvm.maxnum.f32(float, float)
-declare double @llvm.maxnum.f64(double, double)
 declare float @llvm.minnum.f32(float, float)
+declare <4 x float> @llvm.minnum.v4f32(<4 x float>, <4 x float>)
+declare <8 x float> @llvm.minnum.v8f32(<8 x float>, <8 x float>)
 declare double @llvm.minnum.f64(double, double)
+declare <2 x double> @llvm.minnum.v2f64(<2 x double>, <2 x double>)
+declare <4 x double> @llvm.minnum.v4f64(<4 x double>, <4 x double>)
+
+declare float @llvm.maxnum.f32(float, float)
+declare <4 x float> @llvm.maxnum.v4f32(<4 x float>, <4 x float>)
+declare <8 x float> @llvm.maxnum.v8f32(<8 x float>, <8 x float>)
+declare double @llvm.maxnum.f64(double, double)
+declare <2 x double> @llvm.maxnum.v2f64(<2 x double>, <2 x double>)
+declare <4 x double> @llvm.maxnum.v4f64(<4 x double>, <4 x double>)
 
 ; std library functions
 declare i8* @malloc(i64)

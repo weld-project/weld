@@ -2288,6 +2288,96 @@ fn many_mergers_test() {
     unsafe { free_value_and_module(ret_value) };
 }
 
+fn maxmin_mergers_test() {
+    #[derive(Clone)]
+    #[allow(dead_code)]
+    // Larger types have to be first, or else the struct won't be read back correctly
+    struct Output {
+        i64min: i64,
+        i64max: i64,
+        f64min: f64,
+        f64max: f64,
+        f32min: f32,
+        f32max: f32,
+        i32min: i32,
+        i32max: i32,
+        i8min: i8,
+        i8max: i8,
+    }
+
+    #[derive(Clone)]
+    #[allow(dead_code)]
+    struct Args {
+        i8in: WeldVec<i8>,
+        i32in: WeldVec<i32>,
+        i64in: WeldVec<i64>,
+        f32in: WeldVec<f32>,
+        f64in: WeldVec<f64>,
+    }
+
+    let code = "
+    |i8in: vec[i8], i32in: vec[i32], i64in: vec[i64], f32in: vec[f32], f64in: vec[f64]|
+    let i8min = result(for(i8in, merger[i8, min], |b, i, n| merge(b, n)));
+    let i8max = result(for(i8in, merger[i8, max], |b, i, n| merge(b, n)));
+    let i32min = result(for(i32in, merger[i32, min], |b, i, n| merge(b, n)));
+    let i32max = result(for(i32in, merger[i32, max], |b, i, n| merge(b, n)));
+    let i64min = result(for(i64in, merger[i64, min], |b, i, n| merge(b, n)));
+    let i64max = result(for(i64in, merger[i64, max], |b, i, n| merge(b, n)));
+    let f32min = result(for(f32in, merger[f32, min], |b, i, n| merge(b, n)));
+    let f32max = result(for(f32in, merger[f32, max], |b, i, n| merge(b, n)));
+    let f64min = result(for(f64in, merger[f64, min], |b, i, n| merge(b, n)));
+    let f64max = result(for(f64in, merger[f64, max], |b, i, n| merge(b, n)));
+    {i64min, i64max, f64min, f64max, f32min, f32max, i32min, i32max, i8min, i8max}";
+
+    let conf = default_conf();
+
+    let i8in: Vec<i8> = vec![-2, -1, 0, 1, 2];
+    let i32in: Vec<i32> = vec![-2, -1, 0, 1, 2];
+    let i64in: Vec<i64> = vec![-2, -1, 0, 1, 2];
+    let f32in: Vec<f32> = vec![-2.0, -1.0, 0.0, 1.0, 2.0];
+    let f64in: Vec<f64> = vec![-2.0, -1.0, 0.0, 1.0, 2.0];
+
+    let ref input_data = Args {
+        i8in: WeldVec {
+            data: i8in.as_ptr() as *const i8,
+            len: i8in.len() as i64,
+        },
+        i32in: WeldVec {
+            data: i32in.as_ptr() as *const i32,
+            len: i32in.len() as i64,
+        },
+        i64in: WeldVec {
+            data: i64in.as_ptr() as *const i64,
+            len: i64in.len() as i64,
+        },
+        f32in: WeldVec {
+            data: f32in.as_ptr() as *const f32,
+            len: f32in.len() as i64,
+        },
+        f64in: WeldVec {
+            data: f64in.as_ptr() as *const f64,
+            len: f64in.len() as i64,
+        },
+    };
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const Output };
+    let result = unsafe { (*data).clone() };
+
+    assert_eq!(result.i8min, -2 as i8);
+    assert_eq!(result.i32min, -2 as i32);
+    assert_eq!(result.i64min, -2 as i64);
+    assert_eq!(result.f32min, -2.0 as f32);
+    assert_eq!(result.f64min, -2.0 as f64);
+    assert_eq!(result.i8max, 2 as i8);
+    assert_eq!(result.i32max, 2 as i32);
+    assert_eq!(result.i64max, 2 as i64);
+    assert_eq!(result.f32max, 2.0 as f32);
+    assert_eq!(result.f64max, 2.0 as f64);
+
+    unsafe { free_value_and_module(ret_value) };
+}
+
 /// A wrapper struct to allow passing pointers across threads (they aren't Send/Sync by default).
 /// The default #[derive(Copy,Clone)] does not work here unless T has Copy/Clone, so we also
 /// implement those traits manually.
@@ -2699,6 +2789,7 @@ fn main() {
              ("iterate_with_parallel_body", iterate_with_parallel_body),
              ("serial_parlib_test", serial_parlib_test),
              ("many_mergers_test", many_mergers_test),
+             ("maxmin_mergers_test", maxmin_mergers_test),
              ("multithreaded_module_run", multithreaded_module_run),
              ("iters_outofbounds_error_test", iters_outofbounds_error_test),
              ("outofmemory_error_test", outofmemory_error_test),
