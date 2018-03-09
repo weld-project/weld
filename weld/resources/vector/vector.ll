@@ -150,6 +150,11 @@ define void @{NAME}.bld.newPiece(%{NAME}.bld %bldPtr, %work_t* %cur.work) {{
   ret void
 }}
 
+define void @{NAME}.bld.setOffsetIfFixed(%{NAME}.bld %bldPtr, i64 %offset) {{
+  call void @weld_rt_set_vb_offset_if_fixed(i8* %bldPtr, i64 %offset)
+  ret void
+}}
+
 ; Append a value into a builder, growing its space if needed.
 define %{NAME}.bld @{NAME}.bld.merge(%{NAME}.bld %bldPtr, {ELEM} %value, i32 %myId) {{
 entry:

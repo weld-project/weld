@@ -109,6 +109,7 @@ declare void    @weld_rt_set_result(i8*)
 declare i8*     @weld_rt_new_vb(i64, i64, i32)
 declare void    @weld_rt_new_vb_piece(i8*, %work_t*, i32)
 declare %vb.vp* @weld_rt_cur_vb_piece(i8*, i32)
+declare void    @weld_rt_set_vb_offset_if_fixed(i8*, i64)
 declare %vb.out @weld_rt_result_vb(i8*)
 
 declare i8*     @weld_rt_new_merger(i64, i32)
