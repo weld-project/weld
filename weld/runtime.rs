@@ -42,6 +42,8 @@ extern "C" {
     #[no_mangle]
     pub fn weld_rt_cur_vb_piece(v: *mut c_void, my_id: int32_t) -> *mut vec_piece;
     #[no_mangle]
+    pub fn weld_rt_set_vb_offset_if_fixed(v: *mut c_void, offset: int64_t);
+    #[no_mangle]
     pub fn weld_rt_result_vb(v: *mut c_void) -> vec_output;
     #[no_mangle]
     pub fn weld_rt_new_merger(size: int64_t, nworkers: int32_t) -> *mut c_void;

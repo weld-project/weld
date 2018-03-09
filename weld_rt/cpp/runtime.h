@@ -20,8 +20,8 @@ struct work_t {
   // it is [0, 0) if the task is not a loop body
   int64_t lower;
   int64_t upper;
-  // set in the user program -- the current iteration index this task is on,
-  // 0 if not a loop body task
+  // updated in the user program -- the current iteration index for the outermost loop this task
+  // covers, 0 if not a loop body task. Not updated in each iteration of innermost loops.
   int64_t cur_idx;
   // true if task was directly stolen from another queue or is a continuation.
   // If true, we need to set the nest_* fields so that we can create a new piece for
@@ -109,6 +109,7 @@ extern "C" {
   void *weld_rt_new_vb(int64_t elem_size, int64_t starting_cap, int32_t fixed_size);
   void weld_rt_new_vb_piece(void *v, work_t *w, int32_t is_init_piece);
   vec_piece *weld_rt_cur_vb_piece(void *v, int32_t my_id);
+  void weld_rt_set_vb_offset_if_fixed(void *v, int64_t offset);
   vec_output weld_rt_result_vb(void *v);
 
   void *weld_rt_new_merger(int64_t size, int32_t nworkers);

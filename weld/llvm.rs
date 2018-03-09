@@ -858,6 +858,25 @@ impl LlvmGenerator {
                 // tmp2 = arr_len - num_iters // start index
                 ctx.code.add(format!("{} = urem i64 {}, {}", num_iters_str, arr_len, vector_len));
                 ctx.code.add(format!("{} = sub nuw nsw i64 {}, {}", tmp, arr_len, num_iters_str));
+
+                // TODO somewhat hacky way to ensure the fringe for fixed-size appender loop writes at the
+                // appropriate offset (without this the offset is set to w->cur_idx at the start of the
+                // main loop body's continuation)
+                let bld_ty = func.symbol_type(&par_for.builder)?;
+                if let Builder(ref bk, _) = *bld_ty {
+                    match *bk {
+                        Appender(_) => {
+                            let bld_ty_str = self.llvm_type(bld_ty)?;
+                            let bld_prefix = llvm_prefix(&bld_ty_str);
+                            ctx.code.add(format!("call void {}.setOffsetIfFixed({} {}, i64 {})",
+                                                 bld_prefix,
+                                                 bld_ty_str,
+                                                 llvm_symbol(&par_for.builder),
+                                                 tmp));
+                        }
+                        _ => {}
+                    }
+                }
                 fringe_start_str = Some(tmp);
             },
             IterKind::RangeIter => {

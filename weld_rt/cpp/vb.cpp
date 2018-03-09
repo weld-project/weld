@@ -85,6 +85,15 @@ extern "C" void weld_rt_new_vb_piece(void *v, work_t *w, int32_t is_init_piece) 
   }
 }
 
+extern "C" void weld_rt_set_vb_offset_if_fixed(void *v, int64_t offset) {
+  vec_builder *vb = (vec_builder *)v;
+  if (vb->fixed_size) {
+    vec_piece *cur_piece = (vec_piece *)weld_rt_get_merger_at_index(vb->thread_curs, sizeof(vec_piece),
+      weld_rt_thread_id());
+    cur_piece->size = offset;
+  }
+}
+
 extern "C" vec_output weld_rt_result_vb(void *v) {
   vec_builder *vb = (vec_builder *)v;
   vec_output vo;
