@@ -2396,8 +2396,11 @@ fn multithreaded_module_run() {
     let conf = UnsafePtr(default_conf());
 
     // Set up input data
-    let len: usize = 10 * 1000 * 1000;
-    let input_vec = vec![1; len];
+    let len: usize = 10 * 1000 * 1000 + 1;
+    let mut input_vec = vec![];
+    for i in 0..len {
+        input_vec.push(i as i32);
+    }
     let input_data = WeldVec {
         data: input_vec.as_ptr(),
         len: input_vec.len() as i64,
@@ -2425,8 +2428,11 @@ fn multithreaded_module_run() {
 
                     // Check the result
                     let ret_data = weld_value_data(ret_value) as *const WeldVec<i32>;
-                    let result = (*ret_data).len;
-                    assert_eq!(result, len as i64);
+                    let result = (*ret_data).clone();
+                    assert_eq!(result.len, len as i64);
+                    for i in 0..len {
+                        assert_eq!(i as i32, *result.data.offset(i as isize));
+                    }
                     weld_value_free(ret_value);
                 }
             }))
