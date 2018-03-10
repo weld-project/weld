@@ -15,6 +15,7 @@ pub enum WeldRuntimeErrno {
     OutOfMemory = 7,
     RunNotFound,
     Unknown,
+    DeserializationError,
     ErrnoMax,
 }
 

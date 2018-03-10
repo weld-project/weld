@@ -318,6 +318,7 @@ pub struct LlvmGenerator {
     string_names: fnv::FnvHashMap<String, String>,
 
     serialize_fns: fnv::FnvHashMap<Type, String>,
+    deserialize_fns: fnv::FnvHashMap<Type, String>,
 
     /// A CodeBuilder and ID generator for prelude functions such as type and struct definitions.
     prelude_code: CodeBuilder,
@@ -354,6 +355,7 @@ impl LlvmGenerator {
             dict_names: fnv::FnvHashMap::default(),
             dict_ids: IdGenerator::new("%d"),
             serialize_fns: fnv::FnvHashMap::default(),
+            deserialize_fns: fnv::FnvHashMap::default(),
             cudf_names: HashSet::new(),
             bld_names: fnv::FnvHashMap::default(),
             string_names: fnv::FnvHashMap::default(),
@@ -2339,8 +2341,6 @@ impl LlvmGenerator {
             Scalar(_) | Struct(_) if !expr_ty.has_pointer() => {
                 // These are primitive pointer-less values that we can store directly into the
                 // buffer.
-                //
-
                 let mut serialize_code = CodeBuilder::new();
                 serialize_code.add(format!("define {}.growable {}({}.growable %buf, {} %data) alwaysinline {{",
                 buffer_ll_ty,
@@ -2348,39 +2348,27 @@ impl LlvmGenerator {
                 buffer_ll_ty,
                 expr_ll_ty));
 
-                // Serialized as the binary scalar value.
-                let tmp = ctx.var_ids.next();
-                let tmp2 = ctx.var_ids.next();
-                let tmp3 = ctx.var_ids.next();
-                let ref tmp4 = ctx.var_ids.next();
-                let size_ptr = ctx.var_ids.next();
-                let size = ctx.var_ids.next();
-
                 // Get size of the type.
-                serialize_code.add(format!("{} = getelementptr {}, {}* null, i32 1", size_ptr, expr_ll_ty, expr_ll_ty));
-                serialize_code.add(format!("{} = ptrtoint {}* {} to i64", size, expr_ll_ty, size_ptr));
-                serialize_code.add(format!("{} = call {}.growable @{}.growable.resize_to_fit({}.growable %buf, i64 {})",
-                tmp,
-                buffer_ll_ty,
-                buffer_ll_prefix,
-                buffer_ll_ty,
-                size));
-                serialize_code.add(format!("{} = call i8* @{}.growable.last({}.growable {})",
-                tmp2,
-                buffer_ll_prefix,
-                buffer_ll_ty,
-                tmp));
-                serialize_code.add(format!("{} = bitcast i8* {} to {}*", tmp3, tmp2, expr_ll_ty));
-                serialize_code.add(format!("store {} %data, {}* {}", &expr_ll_ty, &expr_ll_ty, &tmp3));
-                serialize_code.add(format!("{} = call {}.growable @{}.growable.extend({}.growable {}, i64 {})",
-                tmp4,
-                buffer_ll_ty,
-                buffer_ll_prefix,
-                buffer_ll_ty,
-                tmp,
-                size));
-                serialize_code.add(format!("ret {}.growable {}", buffer_ll_ty, tmp4));
+                serialize_code.add(format!("%sizePtr = getelementptr {}, {}* null, i32 1", expr_ll_ty, expr_ll_ty));
+                serialize_code.add(format!("%size = ptrtoint {}* %sizePtr to i64", expr_ll_ty));
 
+                // Resize the buffer to fit and get the pointer to write at.
+                serialize_code.add(format!("%tmp = call {}.growable @{}.growable.resize_to_fit({}.growable %buf, i64 %size)",
+                buffer_ll_ty,
+                buffer_ll_prefix,
+                buffer_ll_ty));
+                serialize_code.add(format!("%tmp2 = call i8* @{}.growable.last({}.growable %tmp)",
+                buffer_ll_prefix,
+                buffer_ll_ty));
+
+                // Store the final value and return the new buffer.
+                serialize_code.add(format!("%tmp3 = bitcast i8* %tmp2 to {}*", expr_ll_ty));
+                serialize_code.add(format!("store {} %data, {}* %tmp3", &expr_ll_ty, &expr_ll_ty));
+                serialize_code.add(format!("%tmp4 = call {}.growable @{}.growable.extend({}.growable %tmp, i64 %size)",
+                buffer_ll_ty,
+                buffer_ll_prefix,
+                buffer_ll_ty));
+                serialize_code.add(format!("ret {}.growable %tmp4", buffer_ll_ty));
                 serialize_code.add("}");
                 self.prelude_code.add_code(&serialize_code);
                 self.prelude_code.add("\n");
@@ -2430,7 +2418,6 @@ impl LlvmGenerator {
                 // followed by packed {key, value} pairs. This case handles dictionaries where
                 // the key and value do not have pointers. The following case handles pointers by
                 // calling serialize on the key and value.
-
                 let ref key_ll_ty = self.llvm_type(key)?;
                 let _ = self.gen_serialize_helper(buffer_ll_ty,
                                                   buffer_ll_prefix,
@@ -2517,6 +2504,198 @@ impl LlvmGenerator {
         Ok(serialize_fn)
     }
 
+    /// Generates a serialization function for each type.
+    fn gen_deserialize_helper(&mut self,
+                            output_ll_ty: &str,
+                            output_ll_prefix: &str,
+                            buffer_ll_ty: &str,
+                            buffer_ll_prefix: &str,
+                            output_ty: &Type,
+                            func: &SirFunction,
+                            ctx: &mut FunctionContext) -> WeldResult<String> {
+
+        // If we already generated a serialization call, return it.
+        if let Some(ref deserialize_fn) = self.deserialize_fns.get(output_ty) {
+            return Ok(String::from(deserialize_fn.as_ref()))
+        }
+        let deserialize_fn = format!("{}.deserialize", output_ll_prefix);
+
+        match *output_ty {
+            Scalar(_) | Struct(_) if !output_ty.has_pointer() => {
+                let mut deserialize_code = CodeBuilder::new();
+                deserialize_code.add(format!("define i64 {}({} %buf, i64 %offset, {}* %resPtr) alwaysinline {{",
+                deserialize_fn,
+                buffer_ll_ty,
+                output_ll_ty));
+
+                // Get size of the type.
+                deserialize_code.add(format!("%sizePtr = getelementptr {}, {}* null, i32 1", output_ll_ty, output_ll_ty));
+                deserialize_code.add(format!("%size = ptrtoint {}* %sizePtr to i64", output_ll_ty));
+
+                // Get the pointer to the value from the serialized buffer, load it, and copy it to
+                // the result pointer.
+                deserialize_code.add(format!("%dataPtrRaw = call i8* {}.at({} %buf, i64 %offset)", buffer_ll_prefix, buffer_ll_ty));
+                deserialize_code.add(format!("%dataPtr = bitcast i8* %dataPtrRaw to {}*", output_ll_ty));
+                deserialize_code.add(format!("%dataTmp = load {}, {}* %dataPtr", output_ll_ty, output_ll_ty));
+                deserialize_code.add(format!("store {} %dataTmp, {}* %resPtr", output_ll_ty, output_ll_ty));
+
+                // Increment the offset and return the new offset.
+                deserialize_code.add(format!("%result = add i64 %offset, %size"));
+                deserialize_code.add("ret i64 %result");
+                deserialize_code.add("}");
+                self.prelude_code.add_code(&deserialize_code);
+                self.prelude_code.add("\n");
+
+            }
+            Vector(ref elem_ty) if elem_ty.has_pointer() => {
+                let ref elem_ll_ty = self.llvm_type(elem_ty)?;
+                let _ = self.gen_deserialize_helper(elem_ll_ty,
+                                                    &llvm_prefix(elem_ll_ty),
+                                                    buffer_ll_ty,
+                                                    buffer_ll_prefix,
+                                                    elem_ty,
+                                                    func,
+                                                    ctx)?;
+                self.prelude_code.add(format!(include_str!("resources/vector/deserialize_with_pointers.ll"),
+                BUFNAME=buffer_ll_ty,
+                BUF_PREFIX=&llvm_prefix(buffer_ll_ty),
+                NAME=output_ll_ty.replace("%", ""),
+                ELEM=elem_ll_ty,
+                ELEM_PREFIX=&llvm_prefix(elem_ll_ty)
+                ));
+            }
+            Vector(ref elem_ty) => {
+                let elem_ll_ty = self.llvm_type(elem_ty)?;
+
+                self.prelude_code.add(format!(include_str!("resources/vector/deserialize_without_pointers.ll"),
+                BUFNAME=buffer_ll_ty,
+                BUF_PREFIX=&llvm_prefix(buffer_ll_ty),
+                NAME=output_ll_ty.replace("%", ""),
+                ELEM=elem_ll_ty));
+            }
+            Dict(ref key, ref value) if !key.has_pointer() && !value.has_pointer() => {
+
+            }
+            Dict(ref key, ref value) => {
+
+            }
+            Struct(ref tys) => {
+                // This is a struct with pointers, so we need to go through each element and decode
+                // it.
+                let mut deserialize_code = CodeBuilder::new();
+                let mut var_ids = IdGenerator::new("%t.t");
+                deserialize_code.add(format!("define i64 {}({} %buf, i64 %offset, {}* %resPtr) alwaysinline {{",
+                deserialize_fn,
+                buffer_ll_ty,
+                output_ll_ty));
+
+                deserialize_code.add(format!("%dataPtrRaw = call i8* {}.at({} %buf, i64 %offset)", buffer_ll_prefix, buffer_ll_ty));
+                deserialize_code.add(format!("%dataPtr = bitcast i8* %dataPtrRaw to {}*", output_ll_ty));
+
+                let mut offset = "%offset".to_string();
+                for (i, elem_ty) in tys.iter().enumerate() {
+                    let ref elem_ll_ty = self.llvm_type(elem_ty)?;
+                    let _ = self.gen_deserialize_helper(elem_ll_ty,
+                                                        &llvm_prefix(elem_ll_ty),
+                                                        buffer_ll_ty,
+                                                        buffer_ll_prefix,
+                                                        elem_ty,
+                                                        func,
+                                                        ctx)?;
+
+                    // Get the pointer to the correct field in the struct.
+                    let res_ptr_tmp = var_ids.next();
+                    deserialize_code.add(format!("{} = getelementptr inbounds {}, {}* %resPtr, i32 0, i32 {}",
+                                                 res_ptr_tmp, elem_ll_ty, elem_ll_ty, i));
+
+                    // Deserialize directly into the pointer.
+                    let next_offset = var_ids.next();
+                    deserialize_code.add(format!("{} = call i64 {}.deserialize({} %buf, i64 {}, {}* {})", 
+                                                 next_offset,
+                                                 &llvm_prefix(elem_ll_ty),
+                                                 buffer_ll_ty,
+                                                 offset,
+                                                 elem_ll_ty,
+                                                 res_ptr_tmp));
+                    offset = next_offset;
+
+                }
+                deserialize_code.add(format!("ret i64 {}", offset));
+                deserialize_code.add("}");
+                self.prelude_code.add_code(&deserialize_code);
+                self.prelude_code.add("\n");
+
+            }
+            Simd(_) | Builder(_, _) | Function(_, _) => {
+                // Non-deserializable types.
+                return weld_err!("Cannot deserialize to type {:?}", output_ty);
+            }
+            // Covered by the first case since scalars never have pointers.
+            Scalar(_) => unreachable!(),
+        }
+
+        self.deserialize_fns.insert(output_ty.clone(), deserialize_fn.clone());
+        Ok(deserialize_fn)
+    }
+
+    /// Generates deserialization code for `expr`, which is a vec[i8] that is converted to `ty`.
+    fn gen_deserialize(&mut self,
+                     expr: &Symbol,
+                     output: &Symbol,
+                     func: &SirFunction,
+                     ctx: &mut FunctionContext) -> WeldResult<()> {
+
+        let (expr_ll_ty, expr_ll_sym) = self.llvm_type_and_name(func, expr)?;
+        let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
+
+        let expr_ty = func.symbol_type(expr)?;
+        if *expr_ty != Vector(Box::new(Scalar(ScalarKind::I8))) {
+            return weld_err!("codegen error: input of deserialize is not vec[i8]");
+        }
+
+        let output_ty = func.symbol_type(output)?;
+
+        let expr_ll_prefix = llvm_prefix(&expr_ll_ty);
+        let output_ll_prefix = llvm_prefix(&output_ll_ty);
+
+        let _ = self.gen_deserialize_helper(&output_ll_ty,
+                                            &output_ll_prefix,
+                                            &expr_ll_ty,
+                                            &expr_ll_prefix,
+                                            output_ty,
+                                            func,
+                                            ctx)?;
+
+        let expr_tmp = self.gen_load_var(&expr_ll_sym, &expr_ll_ty, ctx)?;
+        let bytes_tmp = ctx.var_ids.next();
+        ctx.code.add(format!("{} = call i64 {}.deserialize({} {}, i64 0, {}* {})", 
+                                     bytes_tmp,
+                                     output_ll_prefix,
+                                     expr_ll_ty,
+                                     expr_tmp,
+                                     output_ll_ty,
+                                     output_ll_sym));
+
+        // Check if all the bytes were consumed, and abort if not.
+        let array_size = ctx.var_ids.next();
+        let cond = ctx.var_ids.next();
+        let continue_label = ctx.var_ids.next();
+        let abort_label = ctx.var_ids.next();
+        let run_id = ctx.var_ids.next();
+        let errno = WeldRuntimeErrno::DeserializationError;
+
+        ctx.code.add(format!("{} = call i64 {}.size({} {})", array_size, expr_ll_prefix, expr_ll_ty, expr_tmp));
+        ctx.code.add(format!("{} = icmp neq i64 {}, {}", cond, bytes_tmp, array_size)); 
+        ctx.code.add(format!("br i1 {}, label {}, label {}", cond, abort_label, continue_label));
+        ctx.code.add(format!("{}:", abort_label.replace("%", "")));
+        ctx.code.add(format!("{} = call i64 @weld_rt_get_run_id()", run_id));
+        ctx.code.add(format!("call void @weld_run_set_errno(i64 {}, i64 {})", run_id, errno as i64));
+        ctx.code.add(format!("call void @weld_rt_abort_thread()"));
+        ctx.code.add(format!("; Unreachable!"));
+        ctx.code.add(format!("br label {}", continue_label));
+        ctx.code.add(format!("{}:", continue_label.replace("%", "")));
+        Ok(())
+    }
 
     /// Generates serialization code for `expr`, which converts it into a flat vec[i8].
     fn gen_serialize(&mut self,
@@ -2815,7 +2994,7 @@ impl LlvmGenerator {
             }
 
             Deserialize(ref child) => {
-                unimplemented!("Deserialization not implemented yet!")
+                self.gen_deserialize(child, output, func, ctx)?;
             }
 
             UnaryOp { op, ref child, } => {
