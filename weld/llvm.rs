@@ -2439,7 +2439,7 @@ impl LlvmGenerator {
                 self.prelude_code.add(format!(include_str!("resources/dictionary/serialize_dictionary.ll"),
                     NAME=expr_ll_ty.replace("%", ""),
                     BUFNAME=buffer_ll_ty.replace("%", ""),
-                    HAS_POINTER=0,
+                    HAS_POINTER=1,
                     KEY_SERIALIZE_ON_PTR=format!("{}.serialize_on_pointers", llvm_prefix(key_ll_ty)), 
                     VAL_SERIALIZE_ON_PTR=format!("{}.serialize_on_pointers", llvm_prefix(value_ll_ty))
                     ));
@@ -2573,11 +2573,37 @@ impl LlvmGenerator {
                 NAME=output_ll_ty.replace("%", ""),
                 ELEM=elem_ll_ty));
             }
-            Dict(ref key, ref value) if !key.has_pointer() && !value.has_pointer() => {
-
-            }
             Dict(ref key, ref value) => {
+                // For dictionaries, the deserialization path for keys and values with and without
+                // pointers is the same.
+                let ref key_ll_ty = self.llvm_type(key)?;
+                let ref key_ll_prefix = llvm_prefix(key_ll_ty);
+                let _ = self.gen_deserialize_helper(key_ll_ty,
+                                                    key_ll_prefix,
+                                                    buffer_ll_ty,
+                                                    buffer_ll_prefix,
+                                                    key,
+                                                    func,
+                                                    ctx)?;
+                let ref val_ll_ty = self.llvm_type(value)?;
+                let ref val_ll_prefix = llvm_prefix(val_ll_ty);
+                let _ = self.gen_deserialize_helper(val_ll_ty,
+                                                    val_ll_prefix,
+                                                    buffer_ll_ty,
+                                                    buffer_ll_prefix,
+                                                    value,
+                                                    func,
+                                                    ctx)?;
 
+                self.prelude_code.add(format!(
+                        include_str!("resources/dictionary/deserialize_dictionary.ll"),
+                        NAME=output_ll_ty.replace("%", ""),
+                        KEY=key_ll_ty,
+                        KEY_PREFIX=key_ll_prefix,
+                        VALUE=val_ll_ty,
+                        VALUE_PREFIX=val_ll_prefix,
+                        BUFNAME=buffer_ll_ty,
+                        BUF_PREFIX=buffer_ll_prefix));
             }
             Struct(ref tys) => {
                 // This is a struct with pointers, so we need to go through each element and decode

@@ -29,6 +29,19 @@ define %{NAME} @{NAME}.new(i64 %capacity, i64 %maxLocalBytes, void (i8*, i32, i8
   ret %{NAME} %dict
 }}
 
+; Initialize a new finalized dictionary with the given capacity.
+; The capacity must be a power of 2.
+define %{NAME} @{NAME}.newFinalized(i64 %capacity) {{
+  %keySizePtr = getelementptr {KEY}, {KEY}* null, i32 1
+  %keySize = ptrtoint {KEY}* %keySizePtr to i32
+  %valSizePtr = getelementptr {VALUE}, {VALUE}* null, i32 1
+  %valSize = ptrtoint {VALUE}* %valSizePtr to i32
+  %dict = call i8* @weld_rt_dict_new(i32 %keySize, i32 (i8*, i8*)* {KEY_PREFIX}.eq_on_pointers,
+    void (i8*, i32, i8*, i8*)* null, void (i8*, i32, i8*, i8*)* null,
+    i8* null, i32 %valSize, i32 %valSize, i64 0, i64 %capacity)
+  ret %{NAME} %dict
+}}
+
 ; Free dictionary
 define void @{NAME}.free(%{NAME} %dict) {{
   call void @weld_rt_dict_free(i8* %dict)
@@ -49,16 +62,40 @@ define i1 @{NAME}.slot.filled(%{NAME}.slot %slot) {{
   ret i1 %filled
 }}
 
+; Get a pointer to the hash in the slot.
+define i32* @{NAME}.slot.hashPtr(%{NAME}.slot %slot) alwaysinline {{
+  %hashPtr = getelementptr %{NAME}.entry, %{NAME}.slot %slot, i64 0, i32 0
+  ret i32* %hashPtr
+}}
+
+; Get a pointer to the filled flag in the slot
+define i8* @{NAME}.slot.filledPtr(%{NAME}.slot %slot) alwaysinline {{
+  %filledPtr = getelementptr %{NAME}.entry, %{NAME}.slot %slot, i64 0, i32 1
+  ret i8* %filledPtr
+}}
+
+; Get a pointer to the key in the slot.
+define {KEY}* @{NAME}.slot.keyPtr(%{NAME}.slot %slot) alwaysinline {{
+  %keyPtr = getelementptr %{NAME}.entry, %{NAME}.slot %slot, i64 0, i32 4
+  ret {KEY}* %keyPtr
+}}
+
+; Get a pointer to the value in the slot.
+define {VALUE}* @{NAME}.slot.valuePtr(%{NAME}.slot %slot) alwaysinline {{
+  %valuePtr = getelementptr %{NAME}.entry, %{NAME}.slot %slot, i64 0, i32 5
+  ret {VALUE}* %valuePtr
+}}
+
 ; Get the key for a slot (only valid if filled).
 define {KEY} @{NAME}.slot.key(%{NAME}.slot %slot) {{
-  %keyPtr = getelementptr %{NAME}.entry, %{NAME}.slot %slot, i64 0, i32 4
+  %keyPtr = call {KEY}* @{NAME}.slot.keyPtr(%{NAME}.slot %slot)
   %key = load {KEY}, {KEY}* %keyPtr
   ret {KEY} %key
 }}
 
 ; Get the value for a slot (only valid if filled).
 define {VALUE} @{NAME}.slot.value(%{NAME}.slot %slot) {{
-  %valuePtr = getelementptr %{NAME}.entry, %{NAME}.slot %slot, i64 0, i32 5
+  %valuePtr = call {VALUE}* @{NAME}.slot.valuePtr(%{NAME}.slot %slot)
   %value = load {VALUE}, {VALUE}* %valuePtr
   ret {VALUE} %value
 }}

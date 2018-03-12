@@ -553,7 +553,8 @@ public:
       int32_t value_size,
       int32_t packed_value_size,
       int64_t full_watermark,
-      int64_t capacity) {
+      int64_t capacity,
+      bool init_finalized) {
 
     _workers = weld_rt_get_nworkers();
     _merge_fn = merge_fn;
@@ -562,7 +563,7 @@ public:
     _packed_value_size = packed_value_size;
     _dicts = weld_rt_new_merger(sizeof(InternalDict), _workers + 1);
     _global_buffers = weld_rt_new_merger(sizeof(GlobalBuffer), _workers);
-    finalized = false;
+    finalized = init_finalized;
 
     // All writes go directly to the global dictionary with no locking if we
     // run on one thread.
@@ -764,6 +765,10 @@ private:
     GrowableVec *gvec = (GrowableVec *)buffer;
     gvec->resize_to_fit(sizeof(int64_t));
 
+    int64_t *as_i64_ptr = (int64_t *)(gvec->vector.data + gvec->size);
+    *as_i64_ptr = dict->size();
+    gvec->size += sizeof(int64_t);
+
     // Copy each key/value pair into the buffer.
     for (long i = 0; i < dict->capacity(); i++) {
       Slot *slot = dict->slot_at_index(i);
@@ -854,7 +859,35 @@ extern "C" void *weld_rt_dict_new(int32_t key_size,
       val_size,
       packed_value_size,
       max_local_bytes,
-      capacity);
+      capacity,
+      false);
+
+  return (void *)wd;
+}
+
+extern "C" void *weld_rt_dict_new_finalized(int32_t key_size,
+    KeyComparator keys_eq,
+    MergeFn merge_fn,
+    MergeFn finalize_merge_fn,
+    void *metadata,
+    int32_t val_size,
+    int32_t packed_value_size,
+    int64_t max_local_bytes,
+    int64_t capacity) {
+
+  WeldDict *wd =
+      (WeldDict *)weld_run_malloc(weld_rt_get_run_id(), sizeof(WeldDict));
+
+  new (wd) WeldDict(key_size,
+      keys_eq,
+      merge_fn,
+      finalize_merge_fn,
+      metadata,
+      val_size,
+      packed_value_size,
+      max_local_bytes,
+      capacity,
+      true);
 
   return (void *)wd;
 }
