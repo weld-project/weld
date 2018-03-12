@@ -12,7 +12,7 @@ define i64 @{NAME}.deserialize({BUFNAME} %buf, i64 %offset, %{NAME}* %resPtr) {{
   %elSize = zext i32 %elSizeTmp to i64
   %sizePtrRaw = call i8* {BUF_PREFIX}.at({BUFNAME} %buf, i64 %offset)
   %sizePtr = bitcast i8* %sizePtrRaw to i64*
-  %size = i64, load i64* %sizePtr
+  %size = load i64, i64* %sizePtr
   %newVec = call %{NAME} @{NAME}.new(i64 %size)
   %dataOffset = add i64 %offset, 8
   br label %entry

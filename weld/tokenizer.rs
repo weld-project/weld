@@ -43,6 +43,7 @@ pub enum Token {
     TF64,
     TBool,
     TVec,
+    TDict,
     TZip,
     TScalarIter,
     TSimdIter,
@@ -172,7 +173,7 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
             "^(if|for|zip|len|lookup|keyexists|slice|sort|exp|sin|cos|tan|asin|acos|atan|sinh|cosh|tanh|\
              log|erf|sqrt|simd|select|broadcast|serialize|deserialize|\
              iterate|cudf|simditer|fringeiter|rangeiter|iter|merge|result|let|true|false|macro|\
-             i8|i16|i32|i64|u8|u16|u32|u64|f32|f64|bool|vec|appender|merger|vecmerger|\
+             i8|i16|i32|i64|u8|u16|u32|u64|f32|f64|bool|vec|dict|appender|merger|vecmerger|\
              dictmerger|groupmerger|tovec|min|max|pow)$").unwrap();
 
         static ref COMMENT_RE: Regex = Regex::new("#.*$").unwrap();
@@ -227,6 +228,7 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
                             "f64" => TF64,
                             "bool" => TBool,
                             "vec" => TVec,
+                            "dict" => TDict,
                             "appender" => TAppender,
                             "merger" => TMerger,
                             "dictmerger" => TDictMerger,
@@ -390,6 +392,7 @@ impl fmt::Display for Token {
                     TF64 => "f64",
                     TBool => "bool",
                     TVec => "vec",
+                    TDict => "dict",
                     TAppender => "appender",
                     TMerger => "merger",
                     TDictMerger => "dictmerger",

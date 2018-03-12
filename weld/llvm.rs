@@ -2610,7 +2610,7 @@ impl LlvmGenerator {
                 // it.
                 let mut deserialize_code = CodeBuilder::new();
                 let mut var_ids = IdGenerator::new("%t.t");
-                deserialize_code.add(format!("define i64 {}({} %buf, i64 %offset, {}* %resPtr) alwaysinline {{",
+                deserialize_code.add(format!("define i64 {}({} %buf, i64 %offset, {}* %resPtr) {{",
                 deserialize_fn,
                 buffer_ll_ty,
                 output_ll_ty));
@@ -2632,7 +2632,7 @@ impl LlvmGenerator {
                     // Get the pointer to the correct field in the struct.
                     let res_ptr_tmp = var_ids.next();
                     deserialize_code.add(format!("{} = getelementptr inbounds {}, {}* %resPtr, i32 0, i32 {}",
-                                                 res_ptr_tmp, elem_ll_ty, elem_ll_ty, i));
+                                                 res_ptr_tmp, output_ll_ty, output_ll_ty, i));
 
                     // Deserialize directly into the pointer.
                     let next_offset = var_ids.next();
@@ -2710,8 +2710,9 @@ impl LlvmGenerator {
         let run_id = ctx.var_ids.next();
         let errno = WeldRuntimeErrno::DeserializationError;
 
+        ctx.code.add("; Check to ensure that the full vector was consume during deserialization.");
         ctx.code.add(format!("{} = call i64 {}.size({} {})", array_size, expr_ll_prefix, expr_ll_ty, expr_tmp));
-        ctx.code.add(format!("{} = icmp neq i64 {}, {}", cond, bytes_tmp, array_size)); 
+        ctx.code.add(format!("{} = icmp ne i64 {}, {}", cond, bytes_tmp, array_size)); 
         ctx.code.add(format!("br i1 {}, label {}, label {}", cond, abort_label, continue_label));
         ctx.code.add(format!("{}:", abort_label.replace("%", "")));
         ctx.code.add(format!("{} = call i64 @weld_rt_get_run_id()", run_id));
