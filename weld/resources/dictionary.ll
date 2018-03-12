@@ -49,16 +49,28 @@ define i1 @{NAME}.slot.filled(%{NAME}.slot %slot) {{
   ret i1 %filled
 }}
 
+; Get a pointer to the key in the slot.
+define {KEY}* @{NAME}.slot.keyPtr(%{NAME}.slot %slot) alwaysinline {{
+  %keyPtr = getelementptr %{NAME}.entry, %{NAME}.slot %slot, i64 0, i32 4
+  ret {KEY}* %keyPtr
+}}
+
+; Get a pointer to the value in the slot.
+define {VALUE}* @{NAME}.slot.valuePtr(%{NAME}.slot %slot) alwaysinline {{
+  %valuePtr = getelementptr %{NAME}.entry, %{NAME}.slot %slot, i64 0, i32 5
+  ret {VALUE}* %valuePtr
+}}
+
 ; Get the key for a slot (only valid if filled).
 define {KEY} @{NAME}.slot.key(%{NAME}.slot %slot) {{
-  %keyPtr = getelementptr %{NAME}.entry, %{NAME}.slot %slot, i64 0, i32 4
+  %keyPtr = call {KEY}* @{NAME}.slot.keyPtr(%{NAME}.slot %slot)
   %key = load {KEY}, {KEY}* %keyPtr
   ret {KEY} %key
 }}
 
 ; Get the value for a slot (only valid if filled).
 define {VALUE} @{NAME}.slot.value(%{NAME}.slot %slot) {{
-  %valuePtr = getelementptr %{NAME}.entry, %{NAME}.slot %slot, i64 0, i32 5
+  %valuePtr = call {VALUE}* @{NAME}.slot.valuePtr(%{NAME}.slot %slot)
   %value = load {VALUE}, {VALUE}* %valuePtr
   ret {VALUE} %value
 }}
