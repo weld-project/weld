@@ -524,6 +524,14 @@ public:
     _packed_value_size = packed_value_size;
     _dicts = weld_rt_new_merger(sizeof(InternalDict), _workers + 1);
     _global_buffers = weld_rt_new_merger(sizeof(GlobalBuffer), _workers);
+    finalized = false;
+
+    // All writes go directly to the global dictionary with no locking if we
+    // run on one thread.
+    if (_workers == 1) {
+      finalized = true;
+      full_watermark = 0;
+    }
 
     for (int i = 0; i < _workers + 1; i++) {
       InternalDict *dict = dict_at_index(i);
@@ -535,8 +543,6 @@ public:
         new (glbuf) GlobalBuffer(dict->slot_size());
       }
     }
-
-    finalized = false;
   }
 
   void free_weld_dict() {
@@ -581,7 +587,6 @@ public:
       return slot;
     }
 
-
     // If the dictionary is finalized, provide a slot without locking.
     InternalDict *dict = global_dict();
     Slot *s = dict->get_slot(hash, key, NO_LOCKING, true);
@@ -591,6 +596,7 @@ public:
 
   void merge(int32_t hash, void *key, void *value) {
     Slot *slot = lookup(hash, key);
+
     GlobalBuffer *glbuf = local_buffer();
     InternalDict *dict = local_dict();
 
@@ -618,7 +624,8 @@ public:
 
       dict = global_dict();
       assert(dict->contains_slot(slot));
-      dict->put_slot(slot, ACQUIRE);
+      // If finalized, we don't need to lock/unlock anything.
+      dict->put_slot(slot, finalized ? NO_LOCKING : ACQUIRE);
     }
   }
 
