@@ -29,13 +29,13 @@ body:
   %i = phi i64 [ 0, %entry ], [ %i2, %body ]
   %keyOffset = phi i64 [ %dataOffset, %entry ], [ %nextOffset, %body ]
   %valOffset = call i64 {KEY_PREFIX}.deserialize({BUFNAME} %buf, i64 %keyOffset, {KEY}* %keyPtr)
-  %nextOffset = call i64 {VALUE_PREFIX}.deserialize({BUFNAME} %buf, i64 %valOffset, {VALUE}* %slotValPtr)
+  %nextOffset = call i64 {VALUE_PREFIX}.deserialize({BUFNAME} %buf, i64 %valOffset, {VALUE}* %valPtr)
   %key = load {KEY}, {KEY}* %keyPtr
   %rawHash = call i32 {KEY_PREFIX}.hash({KEY} %key)
   %finalizedHash = call i32 @hash_finalize(i32 %rawHash)
-  %keyPtrRaw = bitcast {KEY}* %keyPtr to %keyPtrRaw
-  %valPtrRaw = bitcast {VALUE}* %valPtr to %valPtrRaw
-  call void i8* @weld_rt_dict_merge(i8* %newDict, i32 %finalizedHash, i8* %keyPtrRaw, i8 *valPtrRaw)
+  %keyPtrRaw = bitcast {KEY}* %keyPtr to i8*
+  %valPtrRaw = bitcast {VALUE}* %valPtr to i8*
+  call void @weld_rt_dict_merge(i8* %newDict, i32 %finalizedHash, i8* %keyPtrRaw, i8* %valPtrRaw)
   %i2 = add i64 %i, 1
   %cond2 = icmp ult i64 %i2, %size
   br i1 %cond2, label %body, label %done

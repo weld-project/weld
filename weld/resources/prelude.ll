@@ -228,7 +228,7 @@ define i32 @double.hash(double %arg) {
 }
 
 ; Return the next power of 2 of an i64.
-define i64 @i64.power2(i64) {
+define i64 @i64.nextPower2(i64) {
   %2 = add nsw i64 %0, -1
   %3 = ashr i64 %2, 1
   %4 = or i64 %3, %2
