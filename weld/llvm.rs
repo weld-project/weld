@@ -2558,7 +2558,7 @@ impl LlvmGenerator {
                                                     ctx)?;
                 self.prelude_code.add(format!(include_str!("resources/vector/deserialize_with_pointers.ll"),
                 BUFNAME=buffer_ll_ty,
-                BUF_PREFIX=&llvm_prefix(buffer_ll_ty),
+                BUF_PREFIX=buffer_ll_prefix,
                 NAME=output_ll_ty.replace("%", ""),
                 ELEM=elem_ll_ty,
                 ELEM_PREFIX=&llvm_prefix(elem_ll_ty)
@@ -2569,7 +2569,7 @@ impl LlvmGenerator {
 
                 self.prelude_code.add(format!(include_str!("resources/vector/deserialize_without_pointers.ll"),
                 BUFNAME=buffer_ll_ty,
-                BUF_PREFIX=&llvm_prefix(buffer_ll_ty),
+                BUF_PREFIX=buffer_ll_prefix,
                 NAME=output_ll_ty.replace("%", ""),
                 ELEM=elem_ll_ty));
             }
