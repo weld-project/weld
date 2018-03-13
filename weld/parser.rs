@@ -861,6 +861,27 @@ impl<'t> Parser<'t> {
                 Ok(expr_box(Broadcast(expr), Annotations::new()))
             }
 
+            TSerialize => {
+                try!(self.consume(TOpenParen));
+                let expr = try!(self.expr());
+                try!(self.consume(TCloseParen));
+                Ok(expr_box(Serialize(expr), Annotations::new()))
+            }
+
+            TDeserialize => {
+                try!(self.consume(TOpenBracket));
+                let value_ty = try!(self.type_());
+                try!(self.consume(TCloseBracket));
+                try!(self.consume(TOpenParen));
+                let value = try!(self.expr());
+                try!(self.consume(TCloseParen));
+                Ok(expr_box(Deserialize {
+                                value_ty: Box::new(value_ty),
+                                value: value,
+                            },
+                            annotations))
+            }
+
             TCUDF => {
                 let mut args = vec![];
                 try!(self.consume(TOpenBracket));
@@ -1148,6 +1169,7 @@ impl<'t> Parser<'t> {
                 Ok(expr)
             }
 
+
             TGroupMerger => {
                 let key_type: PartialType;
                 let value_type: PartialType;
@@ -1353,6 +1375,18 @@ impl<'t> Parser<'t> {
                 self.consume(TCloseBracket)?;
 
                 Ok(Builder(Merger(Box::new(elem_type), bin_op), annotations))
+            }
+
+
+            TDict => {
+                let key_type: PartialType;
+                let value_type: PartialType;
+                try!(self.consume(TOpenBracket));
+                key_type = try!(self.type_());
+                try!(self.consume(TComma));
+                value_type = try!(self.type_());
+                try!(self.consume(TCloseBracket));
+                Ok(Dict(Box::new(key_type), Box::new(value_type)))
             }
 
             TDictMerger => {

@@ -79,6 +79,8 @@ The core language consists of the following expressions:
   * `for(vec, builder, update)` applies a function `update` to every element of a vector, possibly merging values into a builder for each one, and returns a final builder with all the merges incorporated. `vec` must be of type `vec[T]` for some `T`, `builder` can be any builder type `B`, and `update` must be a function of type `(B, I, T) => B` that possibly merges values into the `B` passed in. `I` is the index of the element being processed.
   * `zip(vec[T1], vec2[T2], ..)` returns a `vec[{T1, T2, ..}]`. This expression is special because it can only be used in the `for` loop.
   * `iter(data, start, end, stride)` returns a vector with certain elements skipped. `data` is a `vec[T]` with for some type `T`. `start`, `end`, and `stride` represent the start index, end index, and stride of the iteration respectively. This expression is special because it can only be used in the `for` loop.
+  * `serialize(data)` serializes `data` into a `vec[i8]`. The data in this vector can be written to disk, sent over the network, etc.
+  * `deserialize[T](data)` deserializes `data` (a `vec[i8]`) into a value of type `T`.
 
 The builder expressions are the only "interesting" ones, where parallelism comes in.
 The basic idea is that a builder is a "write-only" data structure, and the `result` operation turns it into a read-only value.

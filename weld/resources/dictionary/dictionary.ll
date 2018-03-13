@@ -29,6 +29,19 @@ define %{NAME} @{NAME}.new(i64 %capacity, i64 %maxLocalBytes, void (i8*, i32, i8
   ret %{NAME} %dict
 }}
 
+; Initialize a new finalized dictionary with the given capacity.
+; The capacity must be a power of 2.
+define %{NAME} @{NAME}.newFinalized(i64 %capacity) {{
+  %keySizePtr = getelementptr {KEY}, {KEY}* null, i32 1
+  %keySize = ptrtoint {KEY}* %keySizePtr to i32
+  %valSizePtr = getelementptr {VALUE}, {VALUE}* null, i32 1
+  %valSize = ptrtoint {VALUE}* %valSizePtr to i32
+  %dict = call i8* @weld_rt_dict_new_finalized(i32 %keySize, i32 (i8*, i8*)* {KEY_PREFIX}.eq_on_pointers,
+    void (i8*, i32, i8*, i8*)* null, void (i8*, i32, i8*, i8*)* null,
+    i8* null, i32 %valSize, i32 %valSize, i64 0, i64 %capacity)
+  ret %{NAME} %dict
+}}
+
 ; Free dictionary
 define void @{NAME}.free(%{NAME} %dict) {{
   call void @weld_rt_dict_free(i8* %dict)
@@ -47,6 +60,18 @@ define i1 @{NAME}.slot.filled(%{NAME}.slot %slot) {{
   %filled_i8 = load i8, i8* %filledPtr
   %filled = trunc i8 %filled_i8 to i1
   ret i1 %filled
+}}
+
+; Get a pointer to the hash in the slot.
+define i32* @{NAME}.slot.hashPtr(%{NAME}.slot %slot) alwaysinline {{
+  %hashPtr = getelementptr %{NAME}.entry, %{NAME}.slot %slot, i64 0, i32 0
+  ret i32* %hashPtr
+}}
+
+; Get a pointer to the filled flag in the slot
+define i8* @{NAME}.slot.filledPtr(%{NAME}.slot %slot) alwaysinline {{
+  %filledPtr = getelementptr %{NAME}.entry, %{NAME}.slot %slot, i64 0, i32 1
+  ret i8* %filledPtr
 }}
 
 ; Get a pointer to the key in the slot.

@@ -93,6 +93,7 @@ define void @{NAME}.zero(%{NAME} %v) {{
   ret void
 }}
 
+; Returns the element size in bytes.
 define i32 @{NAME}.elSize() {{
   %elemSizePtr = getelementptr {ELEM}, {ELEM}* null, i32 1
   %elemSize = ptrtoint {ELEM}* %elemSizePtr to i32

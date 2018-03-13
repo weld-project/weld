@@ -215,7 +215,10 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             }
         }
 
-        CUDF { ref return_ty, .. } => push_complete_type(&mut expr.ty, *return_ty.clone(), "CUDF"),
+        CUDF { ref return_ty, .. } => push_type(&mut expr.ty, return_ty, "CUDF"),
+
+        Serialize(_) => push_complete_type(&mut expr.ty, Vector(Box::new(Scalar(I8))), "Serialize"),
+        Deserialize{ ref value_ty, .. } => push_type(&mut expr.ty, value_ty, "Deserialize"),
 
         Let { ref mut body, .. } => sync_types(&mut expr.ty, &mut body.ty, "Let body"),
 

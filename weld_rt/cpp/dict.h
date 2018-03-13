@@ -47,6 +47,20 @@ extern "C" void *weld_rt_dict_new(int32_t key_size,
     int64_t max_local_bytes,
     int64_t capacity);
 
+/* Same as `weld_rt_dict_new` above, but always initialize the dictionary as
+ * finalized (this allows multi-threaded writes, but still allocates space for
+ * multi-threading in case the dictionary is converted into a builder).
+ */
+extern "C" void *weld_rt_dict_new_finalized(int32_t key_size,
+    KeyComparator keys_eq,
+    MergeFn merge_fn,
+    MergeFn finalize_merge_fn,
+    void *metadata,
+    int32_t val_size,
+    int32_t packed_value_size,
+    int64_t max_local_bytes,
+    int64_t capacity);
+
 /** Frees a dictionary created using `weld_rt_dict_new`. */
 extern "C" void weld_rt_dict_free(void *d);
 
@@ -79,5 +93,19 @@ extern "C" void *weld_rt_dict_to_array(void *d, int32_t value_offset, int32_t st
  * PRE-REQUISITES: The dictionary must be finalized.
  */
 extern "C" int64_t weld_rt_dict_size(void *d);
+
+/** Writes serialized bytes representing the dictionary `d` into `buf`.
+ *
+ *
+ * PRE-REQUISITES:
+ * `d`, the dictionary, must be finalized.
+ * `buf` must be a Weld growable vec[i8].
+ *
+ */
+extern "C" void weld_rt_dict_serialize(void *d,
+    void *buf,
+    int32_t has_pointer,
+    void* key_ser,
+    void* val_ser);
 
 #endif
