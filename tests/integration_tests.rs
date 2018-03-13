@@ -92,17 +92,6 @@ impl<K, V> Pair<K, V> {
     }
 }
 
-/*
-impl<K,V> PartialEq for Pair<K,V> where
-K: PartialEq,
-V: PartialEq {
-    fn eq(&self, other: &Pair<K, V>) -> bool {
-        self.ele1 == other.ele1 && self.ele2 == other.ele2
-    }
-}
-*/
-
-
 /// Returns a default configuration which uses a single thread.
 fn default_conf() -> *mut WeldConf {
     let conf = weld_conf_new();
