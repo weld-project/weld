@@ -7,7 +7,7 @@
 #include <assert.h>
 
 // Include the Weld API.
-#include "../../../c/weld.h"
+#include "../../../../c/weld.h"
 
 
 template <class T>
