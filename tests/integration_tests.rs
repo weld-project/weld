@@ -67,6 +67,15 @@ struct Pair<K, V> {
     ele2: V,
 }
 
+impl Pair {
+    fn new(a: K, b: V) -> Pair {
+        Pair {
+            ele1: a,
+            ele2: b,
+        }
+    }
+}
+
 /// Returns a default configuration which uses a single thread.
 fn default_conf() -> *mut WeldConf {
     let conf = weld_conf_new();
@@ -2285,6 +2294,59 @@ fn many_mergers_test() {
     assert_eq!(result.d, size as f64);
     assert_eq!(result.e, size as i64);
     assert_eq!(result.f, size as f64);
+    unsafe { free_value_and_module(ret_value) };
+}
+
+
+fn serialize_test() {
+    #[derive(Clone)]
+    #[allow(dead_code)]
+    struct Output {
+        a: i32,
+        b: Pair<i32,i32>,
+        c: WeldVec<i32>,
+        d: WeldVec<WeldVec<i32>>,
+        e: Pair<i32, WeldVec<i32>>,
+        f: WeldVec<Pair<i32,i32>>,
+        g: WeldVec<Pair<i32,WeldVec<i32>>>,
+    }
+
+    let code = "
+    |v: vec[i32]|
+    # Scalar
+    let a = deserialize[i32](serialize(lookup(v, 0L)));
+    # Struct of Scalar
+    let b = deserialize[{i32,i32}](serialize({lookup(v, 0L), lookup(v, 1L)}));
+    # Vector without pointers
+    let c = deserialize[vec[i32]](serialize(v));
+    # Vector with pointers
+    let d = deserialize[vec[vec[i32]]](serialize([v, v, v]));
+    # Struct with pointers
+    let e = deserialize[{i32,vec[i32]}](serialize({lookup(v, 0L), v}));
+
+    # Dictionary without pointers
+    let dict1 = result(for(v, dictmerger[i32,i32,+], |b,i,e| merge(b, {e,e})));
+    let f = tovec(deserialize[dict[i32,i32]](serialize(dict1)));
+
+    # Dictionary with pointers
+    let dict2 = result(for(v, groupmerger[i32,i32], |b,i,e| merge(b, {e,e})));
+    let g = tovec(deserialize[dict[i32,vec[i32]]](serialize(dict2)));
+    {a,b,c,d,e,f,g}";
+
+    let conf = default_conf();
+
+    let input_vec: Vec<i32> = range(0, 100).collect();
+    let ref input_data = WeldVec {
+        data: &input_vec as *const i32,
+        len: input_vec.len() as i64,
+    };
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const Output };
+    let result = unsafe { (*data).clone() };
+
+    // TODO verify the result.
+
     unsafe { free_value_and_module(ret_value) };
 }
 
