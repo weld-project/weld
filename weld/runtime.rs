@@ -76,6 +76,7 @@ extern "C" {
         merge_vals_finalize: extern "C" fn(int32_t, *mut c_void, *mut c_void),
         metadata: *mut c_void, val_size: int32_t, to_array_true_val_size: int32_t,
         max_local_bytes: int64_t, capacity: int64_t) -> *mut c_void;
+    #[no_mangle]
     pub fn weld_rt_dict_new_finalized(key_size: int32_t,
         keys_eq: extern "C" fn(*mut c_void, *mut c_void) -> int32_t,
         merge_new_val: extern "C" fn(int32_t, *mut c_void, *mut c_void),

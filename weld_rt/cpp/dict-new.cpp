@@ -567,7 +567,7 @@ public:
 
     // All writes go directly to the global dictionary with no locking if we
     // run on one thread.
-    if (_workers == 1) {
+    if (_workers == 1 || init_finalized) {
       finalized = true;
       full_watermark = 0;
     }

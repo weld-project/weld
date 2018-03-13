@@ -41,5 +41,6 @@ body:
   br i1 %cond2, label %body, label %done
 done:
   %finalOffset = phi i64 [ %dataOffset, %entry ], [ %nextOffset, %body ]
+  store %{NAME} %newDict, %{NAME}* %resPtr
   ret i64 %finalOffset
 }}

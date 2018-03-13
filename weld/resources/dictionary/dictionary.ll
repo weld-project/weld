@@ -36,7 +36,7 @@ define %{NAME} @{NAME}.newFinalized(i64 %capacity) {{
   %keySize = ptrtoint {KEY}* %keySizePtr to i32
   %valSizePtr = getelementptr {VALUE}, {VALUE}* null, i32 1
   %valSize = ptrtoint {VALUE}* %valSizePtr to i32
-  %dict = call i8* @weld_rt_dict_new(i32 %keySize, i32 (i8*, i8*)* {KEY_PREFIX}.eq_on_pointers,
+  %dict = call i8* @weld_rt_dict_new_finalized(i32 %keySize, i32 (i8*, i8*)* {KEY_PREFIX}.eq_on_pointers,
     void (i8*, i32, i8*, i8*)* null, void (i8*, i32, i8*, i8*)* null,
     i8* null, i32 %valSize, i32 %valSize, i64 0, i64 %capacity)
   ret %{NAME} %dict
