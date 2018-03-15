@@ -3812,10 +3812,7 @@ impl LlvmGenerator {
                                         max_local_bytes));
                 self.gen_store_var(&bld_tmp, &llvm_symbol(output), &bld_ty_str, ctx);
             }
-            VecMerger(ref elem, ref op) => {
-                if *op != BinOpKind::Add {
-                    return weld_err!("VecMerger only supports +");
-                }
+            VecMerger(ref elem, _) => {
                 match *arg {
                     Some(ref s) => {
                         let arg_ty = self.llvm_type(&Vector(elem.clone()))?;
