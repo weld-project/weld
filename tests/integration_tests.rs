@@ -2,6 +2,7 @@ use std::env;
 use std::str;
 use std::slice;
 use std::thread;
+use std::cmp;
 
 extern crate weld;
 extern crate libc;
@@ -1455,23 +1456,39 @@ fn simple_for_vecmerger_loop() {
     unsafe { free_value_and_module(ret_value) };
 }
 
-fn simple_for_vecmerger_loop_2() {
-    let code = "|x:vec[i32]| result(for(x, vecmerger[i32,+](x), |b,i,e| merge(b, {i,e*7})))";
+fn simple_for_vecmerger_binops() {
+    let code = "|x:vec[i64]| {
+        result(for(x, vecmerger[i64,+](x), |b,i,e| merge(b, {i,e*7L}))),
+        result(for(x, vecmerger[i64,*](x), |b,i,e| merge(b, {i, i}))),
+        result(for(x, vecmerger[i64,min](x), |b,i,e| merge(b, {i, i}))),
+        result(for(x, vecmerger[i64,max](x), |b,i,e| merge(b, {i, i})))
+        }";
     let conf = default_conf();
 
-    let input_vec = [1, 1, 1, 1, 1];
+    #[derive(Clone)]
+    #[allow(dead_code)]
+    struct Output {
+        sum: WeldVec<i64>,
+        prod: WeldVec<i64>,
+        min: WeldVec<i64>,
+        max: WeldVec<i64>,
+    }
+
+    let input_vec: Vec<i64> = vec![3, 3, 3, 3, 3];
     let ref input_data = WeldVec {
-        data: &input_vec as *const i32,
+        data: input_vec.as_ptr() as *const i64,
         len: input_vec.len() as i64,
     };
 
     let ret_value = compile_and_run(code, conf, input_data);
-    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<i32> };
+    let data = unsafe { weld_value_data(ret_value) as *const Output };
     let result = unsafe { (*data).clone() };
-    assert_eq!(result.len, input_vec.len() as i64);
-    for i in 0..(result.len as isize) {
-        assert_eq!(unsafe { *result.data.offset(i) },
+    for i in 0..(input_vec.len() as isize) {
+        assert_eq!(unsafe { *result.sum.data.offset(i) },
                    input_vec[i as usize] + input_vec[i as usize] * 7);
+        assert_eq!(unsafe { *result.prod.data.offset(i) }, input_vec[i as usize] * (i as i64));
+        assert_eq!(unsafe { *result.min.data.offset(i) }, cmp::min(input_vec[i as usize], (i as i64)));
+        assert_eq!(unsafe { *result.max.data.offset(i) }, cmp::max(input_vec[i as usize], (i as i64)));
     }
     unsafe { free_value_and_module(ret_value) };
 }
@@ -2924,7 +2941,7 @@ fn main() {
               parallel_for_merger_loop_initial_value_product),
              ("simple_for_merger_loop_product", simple_for_merger_loop_product),
              ("simple_for_vecmerger_loop", simple_for_vecmerger_loop),
-             ("simple_for_vecmerger_loop_2", simple_for_vecmerger_loop_2),
+             ("simple_for_vecmerger_binops", simple_for_vecmerger_binops),
              ("parallel_for_vecmerger_loop", parallel_for_vecmerger_loop),
              ("simple_for_dictmerger_loop", simple_for_dictmerger_loop),
              ("dictmerger_with_structs", dictmerger_with_structs),
