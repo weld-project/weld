@@ -1,9 +1,3 @@
-"""Summary
-
-Attributes:
-    numpy_to_weld_type_mapping (TYPE): Description
-"""
-
 from weld.weldobject import *
 import numpy as np
 import os
@@ -11,15 +5,29 @@ import sys
 
 import pkg_resources
 
-numpy_to_weld_type_mapping = {
-    'str': WeldVec(WeldChar()),
-    'int16': WeldInt16(),
-    'int32': WeldInt(),
-    'int64': WeldLong(),
-    'float32': WeldFloat(),
-    'float64': WeldDouble(),
-    'bool': WeldBit()
+_numpy_to_weld_type_mapping = {
+    'S': WeldVec(WeldChar()),
+    'b': WeldChar(),
+    'h': WeldInt16(),
+    'i': WeldInt(),
+    'l': WeldLong(),
+    'f': WeldFloat(),
+    'd': WeldDouble(),
+    '?': WeldBit()
 }
+
+def numpy_to_weld_type(numpy_dtype):
+    """ Convert from np.dtype or str to WeldType
+
+    :param numpy_dtype: np.dtype or str
+    :return: WeldType
+    """
+    assert isinstance(numpy_dtype, (np.dtype, str))
+
+    if isinstance(numpy_dtype, str):
+        numpy_dtype = np.dtype(numpy_dtype)
+
+    return _numpy_to_weld_type_mapping[numpy_dtype.char]
 
 
 def to_shared_lib(name):
