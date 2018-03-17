@@ -811,11 +811,7 @@ fn get_iter_sym(opt : &Option<Box<Expr<Type>>>,
             tracker: &mut StatementTracker,
             multithreaded: bool,
             body_func: FunctionId) -> WeldResult<Option<Symbol>> {
-    if opt.is_some() {
-        let opt_expr = match *opt {
-            Some(ref e) => e,
-            _ => weld_err!("Can't reach this")?,
-        };
+    if let &Some(ref opt_expr) = opt {
         let opt_res = gen_expr(&opt_expr, prog, *cur_func, *cur_block, tracker, multithreaded)?;
         /* TODO pari: Originally, in gen_expr cur_func, and cur_block were also being set - but this
         does not seem to have any effect. Could potentially remove this if it wasn't needed? All
