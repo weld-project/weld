@@ -136,6 +136,7 @@ fn print_iter_kind<T: PrintableType>(iter: &Iter<T>) -> &str {
         IterKind::SimdIter => "simd",
         IterKind::FringeIter => "fringe",
         IterKind::NdIter => "nditer",
+        IterKind::RangeIter => "range",
     }
 }
 
@@ -287,6 +288,20 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>,
                          ")",
                          args.iter()
                              .map(|e| print_expr_impl(e, typed, indent, should_indent))))
+        }
+
+        Serialize(ref e) => {
+            format!("serialize({})",
+                    print_expr_impl(e, typed, indent, should_indent))
+        }
+
+        Deserialize {
+            ref value,
+            ref value_ty,
+        } => {
+            format!("deserialize[{}]({})",
+                    value_ty.print(),
+                    print_expr_impl(value, typed ,indent, should_indent))
         }
 
         Cast {

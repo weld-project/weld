@@ -2,6 +2,7 @@ use std::env;
 use std::str;
 use std::slice;
 use std::thread;
+use std::cmp;
 
 extern crate weld;
 extern crate libc;
@@ -42,7 +43,7 @@ fn approx_equal_f32(a: f32, b: f32, cmp_decimals: u32) -> bool {
 }
 
 /// An in memory representation of a Weld vector.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 #[allow(dead_code)]
 #[repr(C)]
 struct WeldVec<T> {
@@ -59,12 +60,37 @@ impl<T> WeldVec<T> {
     }
 }
 
-#[derive(Clone)]
+impl<T> PartialEq for WeldVec<T> where T: PartialEq + Clone {
+    fn eq(&self, other: &WeldVec<T>) -> bool {
+        if self.len != other.len {
+            return false;
+        }
+        for i in 0..self.len {
+            let v1 = unsafe { (*self.data.offset(i as isize)).clone() };
+            let v2 = unsafe { (*other.data.offset(i as isize)).clone() };
+            if v1 != v2 {
+                return false;
+            }
+        }
+        true
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
 #[allow(dead_code)]
 #[repr(C)]
 struct Pair<K, V> {
     ele1: K,
     ele2: V,
+}
+
+impl<K, V> Pair<K, V> {
+    fn new(a: K, b: V) -> Pair<K,V> {
+        Pair {
+            ele1: a,
+            ele2: b,
+        }
+    }
 }
 
 /// Returns a default configuration which uses a single thread.
@@ -1007,6 +1033,62 @@ fn complex_parallel_for_appender_loop() {
     unsafe { free_value_and_module(ret_value) };
 }
 
+fn range_iter_1() {
+    let end = 1000;
+    let code = format!("|a: i64| result(for(rangeiter(1L, {}L + 1L, 1L), merger[i64,+], |b,i,e| merge(b, a+e)))", end);
+
+    #[allow(dead_code)]
+    struct Args {
+        a: i64,
+    };
+    let conf = default_conf();
+    let ref input_data = Args { a: 0 };
+
+    let ret_value = compile_and_run(&code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const i64 };
+    let result = unsafe { (*data).clone() };
+    let output = end * (end + 1) / 2;
+    assert_eq!(result, output);
+    unsafe { free_value_and_module(ret_value) };
+}
+
+fn range_iter_zipped_helper(parallel: bool) {
+    let grain_size = if parallel { 100 } else  { 4096 };
+    let conf = if parallel { many_threads_conf() } else { default_conf() };
+
+    let end = 1000;
+    let code = format!("|v: vec[i64]| result(
+        @(grain_size: {grain_size})for(zip(v, rangeiter(1L, {end}L + 1L, 1L)), merger[i64,+], |b,i,e| merge(b, e.$0 + e.$1)
+    ))", grain_size=grain_size, end=end);
+
+    #[allow(dead_code)]
+    struct Args {
+        v: WeldVec<i64>,
+    };
+    let input_vec = vec![1 as i64; end as usize];
+    let ref input_data = Args {
+        v: WeldVec {
+            data: input_vec.as_ptr() as *const i64,
+            len: input_vec.len() as i64,
+        },
+    };
+
+    let ret_value = compile_and_run(&code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const i64 };
+    let result = unsafe { (*data).clone() };
+    let output = end * (end + 1) / 2 + end;
+    assert_eq!(result, output);
+    unsafe { free_value_and_module(ret_value) };
+}
+
+fn range_iter_2() {
+    range_iter_zipped_helper(false)
+}
+
+fn range_iter_parallel() {
+    range_iter_zipped_helper(true)
+}
+
 fn simple_for_vectorizable_loop() {
     #[allow(dead_code)]
     struct Args {
@@ -1374,23 +1456,39 @@ fn simple_for_vecmerger_loop() {
     unsafe { free_value_and_module(ret_value) };
 }
 
-fn simple_for_vecmerger_loop_2() {
-    let code = "|x:vec[i32]| result(for(x, vecmerger[i32,+](x), |b,i,e| merge(b, {i,e*7})))";
+fn simple_for_vecmerger_binops() {
+    let code = "|x:vec[i64]| {
+        result(for(x, vecmerger[i64,+](x), |b,i,e| merge(b, {i,e*7L}))),
+        result(for(x, vecmerger[i64,*](x), |b,i,e| merge(b, {i, i}))),
+        result(for(x, vecmerger[i64,min](x), |b,i,e| merge(b, {i, i}))),
+        result(for(x, vecmerger[i64,max](x), |b,i,e| merge(b, {i, i})))
+        }";
     let conf = default_conf();
 
-    let input_vec = [1, 1, 1, 1, 1];
+    #[derive(Clone)]
+    #[allow(dead_code)]
+    struct Output {
+        sum: WeldVec<i64>,
+        prod: WeldVec<i64>,
+        min: WeldVec<i64>,
+        max: WeldVec<i64>,
+    }
+
+    let input_vec: Vec<i64> = vec![3, 3, 3, 3, 3];
     let ref input_data = WeldVec {
-        data: &input_vec as *const i32,
+        data: input_vec.as_ptr() as *const i64,
         len: input_vec.len() as i64,
     };
 
     let ret_value = compile_and_run(code, conf, input_data);
-    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<i32> };
+    let data = unsafe { weld_value_data(ret_value) as *const Output };
     let result = unsafe { (*data).clone() };
-    assert_eq!(result.len, input_vec.len() as i64);
-    for i in 0..(result.len as isize) {
-        assert_eq!(unsafe { *result.data.offset(i) },
+    for i in 0..(input_vec.len() as isize) {
+        assert_eq!(unsafe { *result.sum.data.offset(i) },
                    input_vec[i as usize] + input_vec[i as usize] * 7);
+        assert_eq!(unsafe { *result.prod.data.offset(i) }, input_vec[i as usize] * (i as i64));
+        assert_eq!(unsafe { *result.min.data.offset(i) }, cmp::min(input_vec[i as usize], (i as i64)));
+        assert_eq!(unsafe { *result.max.data.offset(i) }, cmp::max(input_vec[i as usize], (i as i64)));
     }
     unsafe { free_value_and_module(ret_value) };
 }
@@ -2232,6 +2330,220 @@ fn many_mergers_test() {
     unsafe { free_value_and_module(ret_value) };
 }
 
+#[derive(Clone, Debug)]
+#[allow(dead_code)]
+#[repr(C)]
+struct SerializeOutput {
+    a: i32,
+    b: Pair<i32,i32>,
+    c: WeldVec<i32>,
+    d: WeldVec<WeldVec<i32>>,
+    e: Pair<i32, WeldVec<i32>>,
+    f: WeldVec<Pair<i32,i32>>,
+    g: WeldVec<Pair<i32,WeldVec<i32>>>,
+}
+
+impl PartialEq for SerializeOutput {
+    fn eq(&self, other: &SerializeOutput) -> bool {
+        let mut passed = true;
+        passed &= self.a == other.a;
+        passed &= self.b == other.b;
+        passed &= self.c == other.c;
+        passed &= self.d == other.d;
+        passed &= self.e == other.e;
+
+        fn f_into_native(v: &WeldVec<Pair<i32,i32>>) -> Vec<(i32, i32)> {
+            let mut res: Vec<(i32, i32)> = (0..v.len)
+                .into_iter()
+                .map(|x| {
+                    unsafe { ((*v.data.offset(x as isize)).ele1, (*v.data.offset(x as isize)).ele2) }
+                })
+            .collect();
+            res.sort_by_key(|a| a.0);
+            res
+        }
+
+        passed &= f_into_native(&self.f) == f_into_native(&other.f);
+
+        // Converts field g into a native rust Vec.
+        fn g_into_native(v: &WeldVec<Pair<i32,WeldVec<i32>>>) -> Vec<(i32, Vec<i32>)>{
+            let mut res: Vec<(i32, Vec<i32>)> = (0..v.len)
+                .into_iter()
+                .map(|x| {
+                    let key = unsafe { (*v.data.offset(x as isize)).ele1 };
+                    let val = unsafe { ((*v.data.offset(x as isize)).ele2).clone() };
+                    let vec: Vec<i32> = (0..val.len)
+                        .into_iter()
+                        .map(|y| unsafe { *val.data.offset(y as isize) })
+                        .collect();
+                    (key, vec)
+                })
+            .collect();
+
+            // For dictionary outputs, we need to ignore the order.
+            res.sort_by_key(|a| a.0);
+            res
+        }
+
+        passed &= g_into_native(&self.g) == g_into_native(&other.g);
+
+        passed
+    }
+}
+
+fn serialize_test() {
+    let code = " |v: vec[i32]|
+    let dict1 = result(for(v, dictmerger[i32,i32,+], |b,i,e| merge(b, {e,e})));
+    let dict2 = result(for(v, groupmerger[i32,i32], |b,i,e| merge(b, {e,e})));
+
+    let a = deserialize[i32](serialize(lookup(v, 0L)));
+    let b = deserialize[{i32,i32}](serialize({lookup(v, 0L), lookup(v, 1L)}));
+    let c = deserialize[vec[i32]](serialize(v));
+    let d = deserialize[vec[vec[i32]]](serialize([v, v, v]));
+    let e = deserialize[{i32,vec[i32]}](serialize({lookup(v, 0L), v}));
+    let f = tovec(deserialize[dict[i32,i32]](serialize(dict1)));
+    let g = tovec(deserialize[dict[i32,vec[i32]]](serialize(dict2)));
+    {a,b,c,d,e,f,g}";
+
+    let conf = default_conf();
+
+    let input_vec: Vec<i32> = (10..20).collect();
+    let ref input_data = WeldVec {
+        data: input_vec.as_ptr(),
+        len: input_vec.len() as i64,
+    };
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const SerializeOutput };
+    let result = unsafe { (*data).clone() };
+
+    let vv = vec![input_data.clone(), input_data.clone(), input_data.clone()];
+    let dict1_vec: Vec<_> = input_vec.iter().map(|e| Pair::new(*e, *e)).collect();
+    let dict2_inners: Vec<_> = input_vec.iter().map(|e| (*e, vec![*e])).collect();
+    let dict2_vec: Vec<_>  = dict2_inners.iter()
+        .map(|e| {
+            let e1 = e.0;
+            let e2 = WeldVec {
+                data: e.1.as_ptr(),
+                len: e.1.len() as i64,
+            };
+            Pair::new(e1, e2)
+        })
+    .collect();
+
+    let expected = SerializeOutput {
+        a: input_vec[0],
+        b: Pair::new(input_vec[0], input_vec[1]),
+        c: input_data.clone(),
+        d: WeldVec {
+            data: vv.as_ptr(),
+            len: vv.len() as i64,
+        },
+        e: Pair::new(input_vec[0], input_data.clone()),
+        f: WeldVec {
+            data: dict1_vec.as_ptr(),
+            len: dict1_vec.len() as i64,
+        },
+        g: WeldVec {
+            data: dict2_vec.as_ptr(),
+            len: dict2_vec.len() as i64,
+        }
+    };
+
+    assert_eq!(result, expected);
+    unsafe { free_value_and_module(ret_value) };
+}
+
+fn maxmin_mergers_test() {
+    #[derive(Clone)]
+    #[allow(dead_code)]
+    // Larger types have to be first, or else the struct won't be read back correctly
+    struct Output {
+        i64min: i64,
+        i64max: i64,
+        f64min: f64,
+        f64max: f64,
+        f32min: f32,
+        f32max: f32,
+        i32min: i32,
+        i32max: i32,
+        i8min: i8,
+        i8max: i8,
+    }
+
+    #[derive(Clone)]
+    #[allow(dead_code)]
+    struct Args {
+        i8in: WeldVec<i8>,
+        i32in: WeldVec<i32>,
+        i64in: WeldVec<i64>,
+        f32in: WeldVec<f32>,
+        f64in: WeldVec<f64>,
+    }
+
+    let code = "
+    |i8in: vec[i8], i32in: vec[i32], i64in: vec[i64], f32in: vec[f32], f64in: vec[f64]|
+    let i8min = result(for(i8in, merger[i8, min], |b, i, n| merge(b, n)));
+    let i8max = result(for(i8in, merger[i8, max], |b, i, n| merge(b, n)));
+    let i32min = result(for(i32in, merger[i32, min], |b, i, n| merge(b, n)));
+    let i32max = result(for(i32in, merger[i32, max], |b, i, n| merge(b, n)));
+    let i64min = result(for(i64in, merger[i64, min], |b, i, n| merge(b, n)));
+    let i64max = result(for(i64in, merger[i64, max], |b, i, n| merge(b, n)));
+    let f32min = result(for(f32in, merger[f32, min], |b, i, n| merge(b, n)));
+    let f32max = result(for(f32in, merger[f32, max], |b, i, n| merge(b, n)));
+    let f64min = result(for(f64in, merger[f64, min], |b, i, n| merge(b, n)));
+    let f64max = result(for(f64in, merger[f64, max], |b, i, n| merge(b, n)));
+    {i64min, i64max, f64min, f64max, f32min, f32max, i32min, i32max, i8min, i8max}";
+
+    let conf = default_conf();
+
+    let i8in: Vec<i8> = vec![-2, -1, 0, 1, 2];
+    let i32in: Vec<i32> = vec![-2, -1, 0, 1, 2];
+    let i64in: Vec<i64> = vec![-2, -1, 0, 1, 2];
+    let f32in: Vec<f32> = vec![-2.0, -1.0, 0.0, 1.0, 2.0];
+    let f64in: Vec<f64> = vec![-2.0, -1.0, 0.0, 1.0, 2.0];
+
+    let ref input_data = Args {
+        i8in: WeldVec {
+            data: i8in.as_ptr() as *const i8,
+            len: i8in.len() as i64,
+        },
+        i32in: WeldVec {
+            data: i32in.as_ptr() as *const i32,
+            len: i32in.len() as i64,
+        },
+        i64in: WeldVec {
+            data: i64in.as_ptr() as *const i64,
+            len: i64in.len() as i64,
+        },
+        f32in: WeldVec {
+            data: f32in.as_ptr() as *const f32,
+            len: f32in.len() as i64,
+        },
+        f64in: WeldVec {
+            data: f64in.as_ptr() as *const f64,
+            len: f64in.len() as i64,
+        },
+    };
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const Output };
+    let result = unsafe { (*data).clone() };
+
+    assert_eq!(result.i8min, -2 as i8);
+    assert_eq!(result.i32min, -2 as i32);
+    assert_eq!(result.i64min, -2 as i64);
+    assert_eq!(result.f32min, -2.0 as f32);
+    assert_eq!(result.f64min, -2.0 as f64);
+    assert_eq!(result.i8max, 2 as i8);
+    assert_eq!(result.i32max, 2 as i32);
+    assert_eq!(result.i64max, 2 as i64);
+    assert_eq!(result.f32max, 2.0 as f32);
+    assert_eq!(result.f64max, 2.0 as f64);
+
+    unsafe { free_value_and_module(ret_value) };
+}
+
 /// A wrapper struct to allow passing pointers across threads (they aren't Send/Sync by default).
 /// The default #[derive(Copy,Clone)] does not work here unless T has Copy/Clone, so we also
 /// implement those traits manually.
@@ -2250,8 +2562,11 @@ fn multithreaded_module_run() {
     let conf = UnsafePtr(default_conf());
 
     // Set up input data
-    let len: usize = 10 * 1000 * 1000;
-    let input_vec = vec![1; len];
+    let len: usize = 10 * 1000 * 1000 + 1;
+    let mut input_vec = vec![];
+    for i in 0..len {
+        input_vec.push(i as i32);
+    }
     let input_data = WeldVec {
         data: input_vec.as_ptr(),
         len: input_vec.len() as i64,
@@ -2279,8 +2594,11 @@ fn multithreaded_module_run() {
 
                     // Check the result
                     let ret_data = weld_value_data(ret_value) as *const WeldVec<i32>;
-                    let result = (*ret_data).len;
-                    assert_eq!(result, len as i64);
+                    let result = (*ret_data).clone();
+                    assert_eq!(result.len, len as i64);
+                    for i in 0..len {
+                        assert_eq!(i as i32, *result.data.offset(i as isize));
+                    }
                     weld_value_free(ret_value);
                 }
             }))
@@ -2746,6 +3064,9 @@ fn main() {
              ("simple_parallel_for_appender_loop", simple_parallel_for_appender_loop),
              ("simple_parallel_for_multi_appender_loop", simple_parallel_for_multi_appender_loop),
              ("complex_parallel_for_appender_loop", complex_parallel_for_appender_loop),
+             ("range_iter_1", range_iter_1),
+             ("range_iter_2", range_iter_2),
+             ("range_iter_parallel", range_iter_parallel),
              ("simple_for_vectorizable_loop", simple_for_vectorizable_loop),
              ("fringed_for_vectorizable_loop", fringed_for_vectorizable_loop),
              ("fringed_for_vectorizable_loop_with_par", fringed_for_vectorizable_loop_with_par),
@@ -2760,7 +3081,7 @@ fn main() {
               parallel_for_merger_loop_initial_value_product),
              ("simple_for_merger_loop_product", simple_for_merger_loop_product),
              ("simple_for_vecmerger_loop", simple_for_vecmerger_loop),
-             ("simple_for_vecmerger_loop_2", simple_for_vecmerger_loop_2),
+             ("simple_for_vecmerger_binops", simple_for_vecmerger_binops),
              ("parallel_for_vecmerger_loop", parallel_for_vecmerger_loop),
              ("simple_for_dictmerger_loop", simple_for_dictmerger_loop),
              ("dictmerger_with_structs", dictmerger_with_structs),
@@ -2780,6 +3101,7 @@ fn main() {
              ("iterate_with_parallel_body", iterate_with_parallel_body),
              ("serial_parlib_test", serial_parlib_test),
              ("many_mergers_test", many_mergers_test),
+             ("maxmin_mergers_test", maxmin_mergers_test),
              ("multithreaded_module_run", multithreaded_module_run),
              ("iters_outofbounds_error_test", iters_outofbounds_error_test),
              ("outofmemory_error_test", outofmemory_error_test),
@@ -2791,7 +3113,8 @@ fn main() {
              ("nditer_zip", nditer_zip),
              ("nested_appender_loop", nested_appender_loop),
              ("simple_sort", simple_sort),
-             ("complex_sort", complex_sort)];
+             ("complex_sort", complex_sort),
+             ("serialize_test", serialize_test)];
 
     println!("");
     println!("running tests");

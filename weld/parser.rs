@@ -500,59 +500,88 @@ impl<'t> Parser<'t> {
     /// a vector expression (i.e., without an explicit iter(..).
     fn parse_iter(&mut self) -> WeldResult<Iter<PartialType>> {
         let iter: Token = self.peek().clone();
-        if *self.peek() == TScalarIter || *self.peek() == TSimdIter || *self.peek() == TFringeIter || *self.peek() == TNdIter {
-            try!(self.consume(iter.clone()));
-            try!(self.consume(TOpenParen));
-            let data = try!(self.expr());
-            let (mut start, mut end, mut stride, mut shape, mut strides) = (None, None, None, None, None);
-            if *self.peek() == TComma {
-                try!(self.consume(TComma));
-                start = Some(try!(self.expr()));
-                try!(self.consume(TComma));
-                end = Some(try!(self.expr()));
-                try!(self.consume(TComma));
-                stride = Some(try!(self.expr()));
-            }
-            if iter == TNdIter && *self.peek() == TComma {
-                try!(self.consume(TComma));
-                shape = Some(try!(self.expr()));
-                try!(self.consume(TComma));
-                strides = Some(try!(self.expr()));
-            }
+        match iter {
+            TScalarIter | TSimdIter | TFringeIter | TNdIter => {
+                try!(self.consume(iter.clone()));
+                try!(self.consume(TOpenParen));
+                let data = try!(self.expr());
+                let (mut start, mut end, mut stride, mut shape, mut strides) 
+                    = (None, None, None, None, None);
 
-            let iter = Iter {
-                data: data,
-                start: start,
-                end: end,
-                stride: stride,
-                kind: match iter {
-                    TSimdIter => SimdIter,
-                    TFringeIter => FringeIter,
-                    TNdIter => NdIter,
-                    _ => ScalarIter,
-                },
-                shape: shape,
-                strides: strides,
-            };
-            try!(self.consume(TCloseParen));
-            Ok(iter)
-        } else {
-            let data = try!(self.expr());
-            let iter = Iter {
-                data: data,
-                start: None,
-                end: None,
-                stride: None,
-                kind: match iter {
-                    TSimdIter => SimdIter,
-                    TFringeIter => FringeIter,
-                    TNdIter => NdIter,
-                    _ => ScalarIter,
-                },
-                shape: None,
-                strides: None,
-            };
-            Ok(iter)
+                if *self.peek() == TComma {
+                    try!(self.consume(TComma));
+                    start = Some(try!(self.expr()));
+                    try!(self.consume(TComma));
+                    end = Some(try!(self.expr()));
+                    try!(self.consume(TComma));
+                    stride = Some(try!(self.expr()));
+                }
+
+                if iter == TNdIter && *self.peek() == TComma {
+                    try!(self.consume(TComma));
+                    shape = Some(try!(self.expr()));
+                    try!(self.consume(TComma));
+                    strides = Some(try!(self.expr()));
+                }
+
+                let iter = Iter {
+                    data: data,
+                    start: start,
+                    end: end,
+                    stride: stride,
+                    kind: match iter {
+                        TSimdIter => SimdIter,
+                        TFringeIter => FringeIter,
+                        TNdIter => NdIter,
+                        _ => ScalarIter,
+                    },
+                    shape: shape,
+                    strides: strides,
+                };
+                try!(self.consume(TCloseParen));
+                Ok(iter)
+            },
+            TRangeIter => {
+                try!(self.consume(iter.clone()));
+                try!(self.consume(TOpenParen));
+                let start = try!(self.expr());
+                try!(self.consume(TComma));
+                let end = try!(self.expr());
+                try!(self.consume(TComma));
+                let stride = try!(self.expr());
+                let mut dummy_data = expr_box(MakeVector { elems: vec![] }, Annotations::new());
+                dummy_data.as_mut().ty = Vector(Box::new(Scalar(ScalarKind::I64)));
+                let iter = Iter {
+                    data: dummy_data,
+                    start: Some(start),
+                    end: Some(end),
+                    stride: Some(stride),
+                    kind: RangeIter,
+                    shape: None,
+                    strides: None,
+                };
+                try!(self.consume(TCloseParen));
+                Ok(iter)
+            },
+            _ => {
+                let data = try!(self.expr());
+                let iter = Iter {
+                    data: data,
+                    start: None,
+                    end: None,
+                    stride: None,
+                    kind: match iter {
+                        TSimdIter => SimdIter,
+                        TFringeIter => FringeIter,
+                        TNdIter => NdIter,
+                        TRangeIter => RangeIter,
+                        _ => ScalarIter,
+                    },
+                    shape: None,
+                    strides: None,
+                };
+                Ok(iter)
+            }
         }
     }
 
@@ -853,6 +882,27 @@ impl<'t> Parser<'t> {
                 Ok(expr_box(Broadcast(expr), Annotations::new()))
             }
 
+            TSerialize => {
+                try!(self.consume(TOpenParen));
+                let expr = try!(self.expr());
+                try!(self.consume(TCloseParen));
+                Ok(expr_box(Serialize(expr), Annotations::new()))
+            }
+
+            TDeserialize => {
+                try!(self.consume(TOpenBracket));
+                let value_ty = try!(self.type_());
+                try!(self.consume(TCloseBracket));
+                try!(self.consume(TOpenParen));
+                let value = try!(self.expr());
+                try!(self.consume(TCloseParen));
+                Ok(expr_box(Deserialize {
+                                value_ty: Box::new(value_ty),
+                                value: value,
+                            },
+                            annotations))
+            }
+
             TCUDF => {
                 let mut args = vec![];
                 try!(self.consume(TOpenBracket));
@@ -1050,7 +1100,7 @@ impl<'t> Parser<'t> {
                 self.consume(TOpenBracket)?;
                 elem_type = self.type_()?;
                 self.consume(TComma)?;
-                // Basic merger supports Plus and Times right now.
+                // Basic merger right now supports Plus, Times, Min and Max only.
                 match *self.peek() {
                     TPlus => {
                         self.consume(TPlus)?;
@@ -1059,6 +1109,14 @@ impl<'t> Parser<'t> {
                     TTimes => {
                         self.consume(TTimes)?;
                         bin_op = Multiply;
+                    }
+                    TMin => {
+                        self.consume(TMin)?;
+                        bin_op = Min;
+                    }
+                    TMax => {
+                        self.consume(TMax)?;
+                        bin_op = Max;
                     }
                     ref t => {
                         return weld_err!("expected commutative binary op in merger but got '{}'",
@@ -1088,7 +1146,7 @@ impl<'t> Parser<'t> {
                 try!(self.consume(TComma));
                 value_type = try!(self.type_());
                 try!(self.consume(TComma));
-                // DictMerger right now supports Plus and Times only.
+                // DictMerger right now supports Plus, Times, Min and Max only.
                 match *self.peek() {
                     TPlus => {
                         self.consume(TPlus)?;
@@ -1097,6 +1155,14 @@ impl<'t> Parser<'t> {
                     TTimes => {
                         self.consume(TTimes)?;
                         bin_op = Multiply;
+                    }
+                    TMin => {
+                        self.consume(TMin)?;
+                        bin_op = Min;
+                    }
+                    TMax => {
+                        self.consume(TMax)?;
+                        bin_op = Max;
                     }
                     _ => {
                         return weld_err!("expected commutative binary op in dictmerger");
@@ -1123,6 +1189,7 @@ impl<'t> Parser<'t> {
                 Ok(expr)
             }
 
+
             TGroupMerger => {
                 let key_type: PartialType;
                 let value_type: PartialType;
@@ -1146,7 +1213,7 @@ impl<'t> Parser<'t> {
                 try!(self.consume(TOpenBracket));
                 elem_type = try!(self.type_());
                 try!(self.consume(TComma));
-                // VecMerger right now supports Plus and Times only.
+                // VecMerger right now supports Plus, Times, Min and Max only.
                 match *self.peek() {
                     TPlus => {
                         self.consume(TPlus)?;
@@ -1155,6 +1222,14 @@ impl<'t> Parser<'t> {
                     TTimes => {
                         self.consume(TTimes)?;
                         bin_op = Multiply;
+                    }
+                    TMin => {
+                        self.consume(TMin)?;
+                        bin_op = Min;
+                    }
+                    TMax => {
+                        self.consume(TMax)?;
+                        bin_op = Max;
                     }
                     _ => {
                         return weld_err!("Expected commutative binary op in vecmerger");
@@ -1320,6 +1395,18 @@ impl<'t> Parser<'t> {
                 self.consume(TCloseBracket)?;
 
                 Ok(Builder(Merger(Box::new(elem_type), bin_op), annotations))
+            }
+
+
+            TDict => {
+                let key_type: PartialType;
+                let value_type: PartialType;
+                try!(self.consume(TOpenBracket));
+                key_type = try!(self.type_());
+                try!(self.consume(TComma));
+                value_type = try!(self.type_());
+                try!(self.consume(TCloseBracket));
+                Ok(Dict(Box::new(key_type), Box::new(value_type)))
             }
 
             TDictMerger => {

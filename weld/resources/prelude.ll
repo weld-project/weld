@@ -41,10 +41,19 @@ declare double    @llvm.cos.f64(double %Val)
 
 declare i64 @llvm.ctlz.i64(i64, i1)
 
-declare float @llvm.maxnum.f32(float, float)
-declare double @llvm.maxnum.f64(double, double)
 declare float @llvm.minnum.f32(float, float)
+declare <4 x float> @llvm.minnum.v4f32(<4 x float>, <4 x float>)
+declare <8 x float> @llvm.minnum.v8f32(<8 x float>, <8 x float>)
 declare double @llvm.minnum.f64(double, double)
+declare <2 x double> @llvm.minnum.v2f64(<2 x double>, <2 x double>)
+declare <4 x double> @llvm.minnum.v4f64(<4 x double>, <4 x double>)
+
+declare float @llvm.maxnum.f32(float, float)
+declare <4 x float> @llvm.maxnum.v4f32(<4 x float>, <4 x float>)
+declare <8 x float> @llvm.maxnum.v8f32(<8 x float>, <8 x float>)
+declare double @llvm.maxnum.f64(double, double)
+declare <2 x double> @llvm.maxnum.v2f64(<2 x double>, <2 x double>)
+declare <4 x double> @llvm.maxnum.v4f64(<4 x double>, <4 x double>)
 
 ; std library functions
 declare i8* @malloc(i64)
@@ -100,6 +109,7 @@ declare void    @weld_rt_set_result(i8*)
 declare i8*     @weld_rt_new_vb(i64, i64, i32)
 declare void    @weld_rt_new_vb_piece(i8*, %work_t*, i32)
 declare %vb.vp* @weld_rt_cur_vb_piece(i8*, i32)
+declare void    @weld_rt_set_vb_offset_if_fixed(i8*, i64)
 declare %vb.out @weld_rt_result_vb(i8*)
 
 declare i8*     @weld_rt_new_merger(i64, i32)
@@ -108,11 +118,14 @@ declare void    @weld_rt_free_merger(i8*)
 
 declare i8*     @weld_rt_dict_new(i32, i32 (i8*, i8*)*, void (i8*, i32, i8*, i8*)*,
                                   void (i8*, i32, i8*, i8*)*, i8*, i32, i32, i64, i64)
+declare i8*     @weld_rt_dict_new_finalized(i32, i32 (i8*, i8*)*, void (i8*, i32, i8*, i8*)*,
+                                  void (i8*, i32, i8*, i8*)*, i8*, i32, i32, i64, i64)
 declare i8*     @weld_rt_dict_lookup(i8*, i32, i8*)
 declare void    @weld_rt_dict_merge(i8*, i32, i8*, i8*)
 declare void    @weld_rt_dict_finalize(i8*)
 declare i8*     @weld_rt_dict_to_array(i8*, i32, i32)
-declare i64     @weld_rt_dict_get_size(i8*)
+declare i64     @weld_rt_dict_size(i8*)
+declare void    @weld_rt_dict_serialize(i8*, i8*, i32, void (i8*, i8*)*, void (i8*, i8*)*) 
 declare void    @weld_rt_dict_free(i8*)
 
 declare i8*     @weld_rt_gb_new(i32, i32 (i8*, i8*)*, i32, i64, i64)
@@ -212,4 +225,23 @@ define i32 @double.hash(double %arg) {
   %1 = bitcast double %arg to i64
   %2 = call i32 @i64.hash(i64 %1)
   ret i32 %2
+}
+
+; Return the next power of 2 of an i64.
+define i64 @i64.nextPower2(i64) {
+  %2 = add nsw i64 %0, -1
+  %3 = ashr i64 %2, 1
+  %4 = or i64 %3, %2
+  %5 = ashr i64 %4, 2
+  %6 = or i64 %5, %4
+  %7 = ashr i64 %6, 4
+  %8 = or i64 %7, %6
+  %9 = ashr i64 %8, 8
+  %10 = or i64 %9, %8
+  %11 = ashr i64 %10, 16
+  %12 = or i64 %11, %10
+  %13 = ashr i64 %12, 32
+  %14 = or i64 %13, %12
+  %15 = add nsw i64 %14, 1
+  ret i64 %15
 }

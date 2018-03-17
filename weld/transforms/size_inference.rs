@@ -73,6 +73,10 @@ pub fn infer_size(expr: &mut Expr<Type>) {
                              */
                             let data_expr = ident_expr(data_sym.clone(), iters[0].data.ty.clone()).unwrap();
                             (length_expr(data_expr.clone()).unwrap(), Some(data_expr))
+                        //} else if iters[0].kind == IterKind::RangeIter || iters[1].kind == IterKind::RangeIter {
+                        } else if iters.iter().any(|ref iter| iter.kind == IterKind::RangeIter) {
+                            // FIXME: pari - temporary fix?
+                            return None;
                         } else {
                              /* For all other iter types - ScalarIter, NdIter etc. which also specify
                              start-end-strides variables. In this case, we use:
