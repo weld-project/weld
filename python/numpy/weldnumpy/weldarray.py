@@ -959,8 +959,8 @@ class weldarray(np.ndarray):
         @result: output array. If it has been specified by the caller, then
         don't allocate new array. This MUST be input1, or input2.
 
-        TODO: Explain Scenario 1 (non-inplace op) and 4 cases + Scenario 2 (inplace op) and its
-        cases and how we deal with them.
+        TODO: Explain Scenario 1 (non-inplace op) and 4 cases + Scenario 2
+        (inplace op) and its cases and how we deal with them.
         '''
         def _update_input(inp):
             '''
