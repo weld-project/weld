@@ -264,8 +264,9 @@ class DataFrameWeldExpr:
                 grizzly_impl.pivot_sort(
                     self.expr,
                     by,
-                    self.column_types[2].elemType,
-                    self.column_types[1].elemType.elemType
+                    self.column_types[0].elemType, # The index type
+                    self.column_types[2].elemType, # The column name types (usually string)
+                    self.column_types[1].elemType.elemType # The column value type
                 ),
                 self.column_names,
                 self.weld_type,
@@ -377,6 +378,43 @@ def merge(df1, df2):
             weld_type
         )
     return df1.merge(df2)
+
+def group_eval(objs, passes=None):
+    LazyOpResults = []
+    for ob in objs:
+        if isinstance(ob, SeriesWeld):
+            if ob.index_type is not None:
+                weld_type = WeldStruct([WeldVec(ob.index_type), WeldVec(ob.weld_type)])
+                LazyOpResults.append(LazyOpResult(ob.expr, weld_type, 0))
+        else:
+            LazyOpResults.append(LazyOpResult(ob.expr, ob.weld_type, 0))
+    
+    results = group(LazyOpResults).evaluate((True, -1), passes=passes)
+    pd_results = []
+    for i, result in enumerate(results):
+        ob = objs[i]
+        if isinstance(ob, SeriesWeld):
+            if ob.index_type is not None:
+                index, column = result
+                series = pd.Series(column, index)
+                series.index.rename(ob.index_name, True)
+                pd_results.append(series)
+            else:
+                pd_results.append(series)
+        if isinstance(ob, DataFrameWeldExpr):
+            if ob.is_pivot:
+                index, pivot, columns = result
+                df_dict = {}
+                for i, column_name in enumerate(columns):
+                    df_dict[column_name] = pivot[i]
+                pd_results.append(pd.DataFrame(df_dict, index=index))
+            else:
+                columns = result
+                df_dict = {}
+                for i, column_name in enumerate(ob.column_names):
+                    df_dict[column_name] = columns[i]
+                pd_results.append(pd.DataFrame(df_dict))
+    return pd_results
 
 def group(exprs):
     weld_type = [to_weld_type(expr.weld_type, expr.dim) for expr in exprs]
