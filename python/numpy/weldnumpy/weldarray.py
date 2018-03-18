@@ -93,7 +93,10 @@ class weldarray(np.ndarray):
         # first arg to a list
         args_list = list(args)
         new_arr = self._eval()
-        args_list[0] = new_arr.view(np.ndarray)
+        if (len(args_list) >= 1):
+            args_list[0] = new_arr.view(np.ndarray)
+        else:
+            args_list.append(new_arr.view(np.ndarray))
         args = tuple(args_list)
         # let numpy handle transposing.
         transposed = np.transpose(*args, **kwargs)

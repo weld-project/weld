@@ -819,10 +819,17 @@ def test_views_strides():
 
     w += 100.00
     n += 100.00
+    
+    w = w.evaluate()
     assert np.allclose(w, n)
     assert np.allclose(w2, n2)
+
     w2 = np.sqrt(w2, out=w2)
     n2 = np.sqrt(n2, out=n2)
+
+    w = w.evaluate()
+    w2 = w2.evaluate()
+
     assert np.allclose(w, n)
     assert np.allclose(w2, n2)
 
@@ -1114,3 +1121,5 @@ def test_util_functions():
         nmax = f(n)
         wmax = f(w)
         assert nmax == wmax 
+
+# test_views_strides()
