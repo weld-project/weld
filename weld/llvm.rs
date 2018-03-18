@@ -13,6 +13,7 @@ use common::WeldRuntimeErrno;
 use std::io::Write;
 use std::path::PathBuf;
 use std::fs::OpenOptions;
+use std::ascii::AsciiExt;
 
 use super::ast::*;
 use super::ast::Type::*;
