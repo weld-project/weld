@@ -592,15 +592,15 @@ class weldarray(np.ndarray):
             return self._binary_op(input_args[0], input_args[1],
                     wn.BINARY_OPS[ufunc.__name__], result=output)
 
-        elif ufunc.__name__ == 'square' or ufunc.__name__ == 'power':
-            if ufunc.__name__ == 'square':
-                # power arg is implied
-                power = 2
-            else:
-                power = input_args[1]
+        # elif ufunc.__name__ == 'square' or ufunc.__name__ == 'power':
+            # if ufunc.__name__ == 'square':
+                # # power arg is implied
+                # power = 2
+            # else:
+                # power = input_args[1]
 
-            if self._verbose: print('supported op: ', ufunc.__name__)
-            return self._power_op(power, result=output)
+            # if self._verbose: print('supported op: ', ufunc.__name__)
+            # return self._power_op(power, result=output)
 
         # FIXME: Not doing this because numpy returns Boolean array -- and if we do that, then we can't
         # multiply it with f64 arrays in weld because of type mismatch.
