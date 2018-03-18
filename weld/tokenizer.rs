@@ -22,6 +22,7 @@ pub enum Token {
     TF64Literal(f64),
     TI8Literal(i8),
     TBoolLiteral(bool),
+    TStringLiteral(String),
     TIdent(String),
     TIf,
     TIterate,
@@ -42,10 +43,12 @@ pub enum Token {
     TF64,
     TBool,
     TVec,
+    TDict,
     TZip,
     TScalarIter,
     TSimdIter,
     TFringeIter,
+    TRangeIter,
     TLen,
     TLookup,
     TKeyExists,
@@ -64,6 +67,8 @@ pub enum Token {
     TSimd,
     TSelect,
     TBroadcast,
+    TSerialize,
+    TDeserialize,
     TLog,
     TErf,
     TSqrt,
@@ -158,18 +163,21 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
     lazy_static! {
         // Regular expression for splitting up tokens.
         static ref TOKEN_RE: Regex = Regex::new(concat!(
-            r"[0-9]+\.[0-9]+([eE]-?[0-9]+)?[fF]?|[0-9]+[eE]-?[0-9]+[fF]?|",
-            r"[A-Za-z0-9$_]+|==|!=|>=|<=|&&|\|\||[-+/*%,=()[\]{}|@&\.:;?&\|^<>]|\S+"
+            "(?m)#.*$|",
+            r#"[0-9]+\.[0-9]+([eE]-?[0-9]+)?[fF]?|[0-9]+[eE]-?[0-9]+[fF]?|"[^"]*"|"#,
+            r#"[A-Za-z0-9$_]+|==|!=|>=|<=|&&|\|\||[-+/*%,=()[\]{}|@&\.:;?&\|^<>]|\S+"#
         )).unwrap();
 
         // Regular expressions for various types of tokens.
         static ref KEYWORD_RE: Regex = Regex::new(
             "^(if|for|zip|len|lookup|keyexists|slice|sort|exp|sin|cos|tan|asin|acos|atan|sinh|cosh|tanh|\
-            log|erf|sqrt|simd|select|broadcast|\
-             iterate|cudf|simditer|fringeiter|iter|merge|result|let|true|false|macro|\
-             i8|i16|i32|i64|u8|u16|u32|u64|f32|f64|bool|vec|appender|merger|vecmerger|\
+             log|erf|sqrt|simd|select|broadcast|serialize|deserialize|\
+             iterate|cudf|simditer|fringeiter|rangeiter|iter|merge|result|let|true|false|macro|\
+             i8|i16|i32|i64|u8|u16|u32|u64|f32|f64|bool|vec|dict|appender|merger|vecmerger|\
              dictmerger|groupmerger|tovec|min|max|pow)$").unwrap();
 
+        static ref COMMENT_RE: Regex = Regex::new("#.*$").unwrap();
+        static ref STRLIT_RE: Regex = Regex::new(r#""[^"]*""#).unwrap();
         static ref IDENT_RE: Regex = Regex::new(r"^[A-Za-z$_][A-Za-z0-9$_]*$").unwrap();
 
         static ref I8_BASE_10_RE: Regex = Regex::new(r"^[0-9]+[cC]$").unwrap();
@@ -197,7 +205,9 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
 
     for cap in TOKEN_RE.captures_iter(input) {
         let text = cap.at(0).unwrap();
-        if KEYWORD_RE.is_match(text) {
+        if COMMENT_RE.is_match(text) {
+            // Do nothing - skips the token.
+        } else if KEYWORD_RE.is_match(text) {
             tokens.push(match text {
                             "if" => TIf,
                             "iterate" => TIterate,
@@ -218,6 +228,7 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
                             "f64" => TF64,
                             "bool" => TBool,
                             "vec" => TVec,
+                            "dict" => TDict,
                             "appender" => TAppender,
                             "merger" => TMerger,
                             "dictmerger" => TDictMerger,
@@ -228,6 +239,7 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
                             "iter" => TScalarIter,
                             "simditer" => TSimdIter,
                             "fringeiter" => TFringeIter,
+                            "rangeiter" => TRangeIter,
                             "len" => TLen,
                             "lookup" => TLookup,
                             "keyexists" => TKeyExists,
@@ -250,6 +262,8 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
                             "simd" => TSimd,
                             "select" => TSelect,
                             "broadcast" => TBroadcast,
+                            "serialize" => TSerialize,
+                            "deserialize" => TDeserialize,
                             "true" => TBoolLiteral(true),
                             "false" => TBoolLiteral(false),
                             "min" => TMin,
@@ -257,7 +271,12 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
                             "pow" => TPow,
                             _ => return weld_err!("Invalid input token: {}", text),
                         });
-
+        } else if STRLIT_RE.is_match(text) {
+            let string = text.trim_matches('"').to_string();
+            if !(string.is_ascii()) {
+                return weld_err!("Weld strings must be valid ASCII");
+            }
+            tokens.push(TStringLiteral(string)); // Trim off quotes before tokenizing
         } else if IDENT_RE.is_match(text) {
             tokens.push(TIdent(text.to_string()));
         } else if I8_BASE_10_RE.is_match(text) {
@@ -338,6 +357,7 @@ impl fmt::Display for Token {
             TF64Literal(ref value) => write!(f, "{}", value),  // TODO: force .0?
             TI8Literal(ref value) => write!(f, "{}C", value),
             TBoolLiteral(ref value) => write!(f, "{}B", value),
+            TStringLiteral(ref value) => write!(f, "\"{}\"", value),
             TIdent(ref value) => write!(f, "{}", value),
 
             // Cases that return fixed strings
@@ -350,6 +370,7 @@ impl fmt::Display for Token {
                     TF64Literal(_) => "",
                     TI8Literal(_) => "",
                     TBoolLiteral(_) => "",
+                    TStringLiteral(_) => "",
                     TIdent(_) => "",
                     // Other cases that return fixed strings
                     TIf => "if",
@@ -371,6 +392,7 @@ impl fmt::Display for Token {
                     TF64 => "f64",
                     TBool => "bool",
                     TVec => "vec",
+                    TDict => "dict",
                     TAppender => "appender",
                     TMerger => "merger",
                     TDictMerger => "dictmerger",
@@ -381,6 +403,7 @@ impl fmt::Display for Token {
                     TScalarIter => "iter",
                     TSimdIter => "simditer",
                     TFringeIter => "fringeiter",
+                    TRangeIter => "rangeiter",
                     TLen => "len",
                     TLookup => "lookup",
                     TKeyExists => "keyexists",
@@ -403,6 +426,8 @@ impl fmt::Display for Token {
                     TSimd => "simd",
                     TSelect => "select",
                     TBroadcast => "broadcast",
+                    TSerialize => "serialize",
+                    TDeserialize => "deserialize",
                     TOpenParen => "(",
                     TCloseParen => ")",
                     TOpenBracket => "[",
@@ -478,6 +503,13 @@ fn parse_i64_literal(input: &str, base: u32) -> WeldResult<Token> {
 fn basic_tokenize() {
     use self::Token::*;
 
+    assert_eq!(tokenize("\"test string\"").unwrap(),
+               vec![TStringLiteral("test string".to_string()),
+                    TEndOfInput]);
+    assert_eq!(tokenize("\"test\" string").unwrap(),
+               vec![TStringLiteral("test".to_string()),
+                    TIdent("string".into()),
+                    TEndOfInput]);
     assert_eq!(tokenize("a for 23 + z0").unwrap(),
                vec![TIdent("a".into()),
                     TFor,

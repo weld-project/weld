@@ -93,6 +93,7 @@ define void @{NAME}.zero(%{NAME} %v) {{
   ret void
 }}
 
+; Returns the element size in bytes.
 define i32 @{NAME}.elSize() {{
   %elemSizePtr = getelementptr {ELEM}, {ELEM}* null, i32 1
   %elemSize = ptrtoint {ELEM}* %elemSizePtr to i32
@@ -147,6 +148,11 @@ define void @{NAME}.bld.newPieceInit(%{NAME}.bld %bldPtr, %work_t* %cur.work) {{
 
 define void @{NAME}.bld.newPiece(%{NAME}.bld %bldPtr, %work_t* %cur.work) {{
   call void @weld_rt_new_vb_piece(i8* %bldPtr, %work_t* %cur.work, i32 0)
+  ret void
+}}
+
+define void @{NAME}.bld.setOffsetIfFixed(%{NAME}.bld %bldPtr, i64 %offset) {{
+  call void @weld_rt_set_vb_offset_if_fixed(i8* %bldPtr, i64 %offset)
   ret void
 }}
 

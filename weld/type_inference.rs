@@ -131,6 +131,9 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
 
         Literal(BoolLiteral(_)) => push_complete_type(&mut expr.ty, Scalar(Bool), "BoolLiteral"),
 
+        Literal(StringLiteral(_)) => push_complete_type(&mut expr.ty, Vector(Box::new(Scalar(I8))),
+                                                        "StringLiteral"),
+        
         BinOp {
             kind: op,
             ref mut left,
@@ -212,7 +215,10 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             }
         }
 
-        CUDF { ref return_ty, .. } => push_complete_type(&mut expr.ty, *return_ty.clone(), "CUDF"),
+        CUDF { ref return_ty, .. } => push_type(&mut expr.ty, return_ty, "CUDF"),
+
+        Serialize(_) => push_complete_type(&mut expr.ty, Vector(Box::new(Scalar(I8))), "Serialize"),
+        Deserialize{ ref value_ty, .. } => push_type(&mut expr.ty, value_ty, "Deserialize"),
 
         Let { ref mut body, .. } => sync_types(&mut expr.ty, &mut body.ty, "Let body"),
 
@@ -445,11 +451,17 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             // Push iters and builder type into func
             let mut elem_types = vec![];
             for iter in iters.iter_mut() {
-                let elem_type = match iter.data.ty {
+                let mut elem_type = match iter.data.ty {
                     Vector(ref elem) => *elem.clone(),
                     Unknown => Unknown,
                     _ => return weld_err!("non-vector type in For"),
                 };
+
+                // RangeIters always have this element type.
+                if iter.kind == IterKind::RangeIter {
+                    elem_type = Scalar(I64);
+                }
+
                 elem_types.push(elem_type);
                 if iter.start.is_some() {
                     for i in [&mut iter.start, &mut iter.end, &mut iter.stride].iter_mut() {

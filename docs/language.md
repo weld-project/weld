@@ -33,14 +33,14 @@ The builder types are:
 * `appender[T]`: Builds a `vec[T]` from elements of type `T`.
 * `merger[T,bin_op]`: Combines `T` values using a binary operation. Its parameters are:
    * `T`: The type of value this merger creates. Can be a scalar or a struct of scalars.
-   * `bin_op`: A commutative binary operation (currently supports `+` and `*`). The operation is applied to structs elementwise.
+   * `bin_op`: A commutative binary operation (currently supports `+`, `*`, `min` and `max`). The operation is applied to structs elementwise.
 * `dictmerger[K,V,bin_op]`: Combines `{K, V}` pairs by key into a dictionary. The parameters are:
    * `K`: Key type. Can be any value.
    * `V`: Value type. Can be a scalar or a struct of scalars.
-   * `bin_op`: A commutative binary operation (currently supports `+` and `*`) for the value. The operation is applied to structs elementwise.
+   * `bin_op`: A commutative binary operation (currently supports `+`, `*`, `min` and `max`) for the value. The operation is applied to structs elementwise.
 * `vecmerger[T,bin_op]`: Combines `{long, T}` pairs by key into a vector using `bin_op`. The builder is initialized with an initial vector to work with.
    * `T`: The vector element type of value this `vecmerger` creates. Can be a scalar or a struct of scalars.
-   * `bin_op`: A commutative binary operation (currently supports `+` and `*`). The operation is applied to structs elementwise.
+   * `bin_op`: A commutative binary operation (currently supports `+`, `*`, `min` and `max`). The operation is applied to structs elementwise.
 
 * Any struct whose fields are builders can also be used as a builder. This is used to build multiple results at the same time.
 
@@ -79,6 +79,8 @@ The core language consists of the following expressions:
   * `for(vec, builder, update)` applies a function `update` to every element of a vector, possibly merging values into a builder for each one, and returns a final builder with all the merges incorporated. `vec` must be of type `vec[T]` for some `T`, `builder` can be any builder type `B`, and `update` must be a function of type `(B, I, T) => B` that possibly merges values into the `B` passed in. `I` is the index of the element being processed.
   * `zip(vec[T1], vec2[T2], ..)` returns a `vec[{T1, T2, ..}]`. This expression is special because it can only be used in the `for` loop.
   * `iter(data, start, end, stride)` returns a vector with certain elements skipped. `data` is a `vec[T]` with for some type `T`. `start`, `end`, and `stride` represent the start index, end index, and stride of the iteration respectively. This expression is special because it can only be used in the `for` loop.
+  * `serialize(data)` serializes `data` into a `vec[i8]`. The data in this vector can be written to disk, sent over the network, etc.
+  * `deserialize[T](data)` deserializes `data` (a `vec[i8]`) into a value of type `T`.
 
 The builder expressions are the only "interesting" ones, where parallelism comes in.
 The basic idea is that a builder is a "write-only" data structure, and the `result` operation turns it into a read-only value.
@@ -87,6 +89,19 @@ Note that this requires that one does not call `result` on a builder inside a lo
 In reality, we can enforce this by making builders "linear types", and requiring that the `update` function in `for` return a builder derived from its argument.
 Linear types are a concept in programming languages that we'll talk about below.
 Our implementation does not statically enforce linearity, but it only works if `update` functions really do only return builders derived from their arguments, and if `result` is only called on each builder once.
+
+## Comments
+
+Weld supports Python-style one line comments with the `#` character. For example:
+
+```
+# A function that adds two vectors.
+|v1 :vec[i32], v2: vec[i32]|
+  map(zip(v1,v2),
+    |e| # A struct of type {i32,i32}
+      e.$0 + e.$1
+  )
+```
 
 ### Example
 

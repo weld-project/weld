@@ -72,6 +72,8 @@ pub enum StatementKind {
         child: Symbol,
         keyfunc: SirFunction,
     },
+    Serialize(Symbol),
+    Deserialize(Symbol),
     ToVec(Symbol),
     UnaryOp {
         op: UnaryOpKind,
@@ -106,6 +108,12 @@ impl StatementKind {
                 vars.push(child);
             }
             Broadcast(ref child) => {
+                vars.push(child);
+            }
+            Serialize(ref child) => {
+                vars.push(child);
+            }
+            Deserialize(ref child) => {
                 vars.push(child);
             }
             Lookup {
@@ -457,6 +465,8 @@ impl fmt::Display for StatementKind {
                 ref right
             } => write!(f, "{} {} {}", op, left, right),
             Broadcast(ref child) => write!(f, "broadcast({})", child),
+            Serialize(ref child) => write!(f, "serialize({})", child),
+            Deserialize(ref child) => write!(f, "deserialize({})", child),
             Cast(ref child, ref ty) => write!(f, "cast({}, {})", child, print_type(ty)),
             CUDF {
                 ref symbol_name,
@@ -579,7 +589,8 @@ impl fmt::Display for ParallelForIter {
         let iterkind = match self.kind {
             IterKind::ScalarIter => "iter",
             IterKind::SimdIter => "simditer",
-            IterKind::FringeIter => "fringeiter"
+            IterKind::FringeIter => "fringeiter",
+            IterKind::RangeIter => "rangeiter",
         };
 
         if self.start.is_some() {
@@ -787,8 +798,8 @@ fn gen_expr(expr: &TypedExpr,
     match expr.kind {
         ExprKind::Ident(ref sym) => Ok((cur_func, cur_block, sym.clone())),
 
-        ExprKind::Literal(lit) => {
-            let kind = AssignLiteral(lit);
+        ExprKind::Literal(ref lit) => {
+            let kind = AssignLiteral(lit.clone());
             let res_sym = tracker.symbol_for_statement(prog, cur_func, cur_block, &expr.ty, kind);
             Ok((cur_func, cur_block, res_sym))
         }
@@ -846,6 +857,20 @@ fn gen_expr(expr: &TypedExpr,
         ExprKind::Broadcast(ref child_expr) => {
             let (cur_func, cur_block, child_sym) = gen_expr(child_expr, prog, cur_func, cur_block, tracker, multithreaded)?;
             let kind = Broadcast(child_sym);
+            let res_sym = tracker.symbol_for_statement(prog, cur_func, cur_block, &expr.ty, kind);
+            Ok((cur_func, cur_block, res_sym))
+        }
+
+        ExprKind::Serialize(ref child_expr) => {
+            let (cur_func, cur_block, child_sym) = gen_expr(child_expr, prog, cur_func, cur_block, tracker, multithreaded)?;
+            let kind = Serialize(child_sym);
+            let res_sym = tracker.symbol_for_statement(prog, cur_func, cur_block, &expr.ty, kind);
+            Ok((cur_func, cur_block, res_sym))
+        }
+
+        ExprKind::Deserialize {ref value, .. } => {
+            let (cur_func, cur_block, child_sym) = gen_expr(value, prog, cur_func, cur_block, tracker, multithreaded)?;
+            let kind = Deserialize(child_sym);
             let res_sym = tracker.symbol_for_statement(prog, cur_func, cur_block, &expr.ty, kind);
             Ok((cur_func, cur_block, res_sym))
         }

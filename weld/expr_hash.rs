@@ -58,6 +58,7 @@ impl ExprHash {
                     U64Literal(v) => v.hash(&mut self.hasher),
                     F32Literal(v) => v.hash(&mut self.hasher),
                     F64Literal(v) => v.hash(&mut self.hasher),
+                    StringLiteral(ref v) => v.hash(&mut self.hasher)
                 }
             }
             Ident(ref sym) => {
@@ -119,6 +120,9 @@ impl ExprHash {
                 sym_name.hash(&mut self.hasher);
                 return_ty.hash(&mut self.hasher);
             }
+            Deserialize  { ref value_ty, .. } => {
+                value_ty.hash(&mut self.hasher);
+            }
             For { ref iters, .. } => {
                 for iter in iters.iter() {
                     iter.kind.hash(&mut self.hasher);
@@ -126,7 +130,7 @@ impl ExprHash {
             }
             // Other expressions (listed explicitly so we don't forget to add new ones). If the
             // expression doesn't have a non-Expr field, it goes here.
-            Negate(_) | Broadcast(_) | ToVec{ .. } | MakeStruct { .. } | MakeVector { .. } |
+            Negate(_) | Broadcast(_) | Serialize(_) | ToVec{ .. } | MakeStruct { .. } | MakeVector { .. } |
                 Zip { .. } | Length { .. } | Lookup { .. } | KeyExists { .. } |
                 Slice { .. } | Sort { .. } | If { .. } | Iterate { .. } | Select { .. } | Apply { .. } |
                 NewBuilder(_) | Merge { .. } | Res { .. } => {}

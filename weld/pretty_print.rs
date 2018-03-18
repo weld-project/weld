@@ -135,6 +135,7 @@ fn print_iter_kind<T: PrintableType>(iter: &Iter<T>) -> &str {
         IterKind::ScalarIter => "",
         IterKind::SimdIter => "simd",
         IterKind::FringeIter => "fringe",
+        IterKind::RangeIter => "range",
     }
 }
 
@@ -267,6 +268,20 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>,
                              .map(|e| print_expr_impl(e, typed, indent, should_indent))))
         }
 
+        Serialize(ref e) => {
+            format!("serialize({})",
+                    print_expr_impl(e, typed, indent, should_indent))
+        }
+
+        Deserialize {
+            ref value,
+            ref value_ty,
+        } => {
+            format!("deserialize[{}]({})",
+                    value_ty.print(),
+                    print_expr_impl(value, typed ,indent, should_indent))
+        }
+
         Cast {
             kind,
             ref child_expr,
@@ -329,7 +344,7 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>,
 
         GetField { ref expr, index } => {
             format!("{}.${}",
-                    print_expr_impl(expr, typed, indent, should_indent),
+                    print_expr_impl(expr, false, indent, should_indent),
                     index)
         }
 
@@ -518,6 +533,7 @@ pub fn print_vector_literal(lit: &LiteralKind) -> String {
             }
             format!("<{}, {}, ..>", &res, &res)
         }
+        StringLiteral(ref v) => format!("<{}, {}, ..>", v, v),
     }
 }
 
@@ -550,6 +566,7 @@ pub fn print_literal(lit: &LiteralKind) -> String {
             }
             res
         }
+        StringLiteral(ref v) => format!("\"{}\"", v),
     }
 }
 

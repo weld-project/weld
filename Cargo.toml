@@ -1,12 +1,12 @@
 [package]
 name = "weld"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Weld Developers <weld-group@lists.stanford.edu>"]
 build = "build.rs"
 description = "Weld is a language and runtime for improving the performance of data-intensive applications. It optimizes across libraries and functions by expressing the core computations in libraries using a common intermediate representation, and optimizing across each framework."
 readme = "README.md"
 license = "BSD-3-Clause"
-homepage = "http://weld.stanford.edu"
+homepage = "https://www.weld.rs"
 repository = "https://github.com/weld-project/weld"
 
 [dependencies]

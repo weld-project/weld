@@ -1,3 +1,6 @@
+// See gb-new.cpp for a re-implementation of this dictionary.
+#if 0
+
 #include "runtime.h"
 #include <algorithm>
 
@@ -78,3 +81,5 @@ extern "C" void *weld_rt_gb_result(void *b) {
 }
 
 extern "C" void weld_rt_gb_free(void *gb) {}
+
+#endif

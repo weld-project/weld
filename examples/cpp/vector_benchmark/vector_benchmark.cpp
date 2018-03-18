@@ -17,8 +17,8 @@ struct args {
     int32_t a;
 };
 
-const char *program = "|x:vec[i32], a:i32| result(for(x, merger[i32,+],\
-                       |b,i,e| merge(b, e)))";
+const char *program = "|x:vec[i32], a:i32| result(for(zip(x, rangeiter(1L, 101L, 1L)), merger[i32,+],\
+                       |b,i,e| merge(b, i32(i64(e.$0) + e.$1))))";
 
 int main() {
     // Compile Weld module.
@@ -34,13 +34,10 @@ int main() {
     }
 
     weld_vector v;
-    const uint64_t length = 4093*10000 + 33;
-    int32_t *data = (int32_t *)malloc(sizeof(int32_t) * (length + 100));
-    for (int i = 0; i < length + 100; i++) {
+    const uint64_t length = 100;
+    int32_t *data = (int32_t *)malloc(sizeof(int32_t) * length);
+    for (int i = 0; i < length; i++) {
         data[i] = 1;
-        if (i >= length) {
-            data[i] = 0;
-        }
     }
 
     v.data = data;
