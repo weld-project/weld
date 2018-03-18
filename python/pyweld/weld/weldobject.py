@@ -171,7 +171,6 @@ class WeldObject(object):
         start = time.time()
         encoded = []
         argtypes = []
-        weld_num_threads = int(os.environ.get("WELD_NUM_THREADS", "1"))
         for name in names:
             if name in self.argtypes:
                 argtypes.append(self.argtypes[name].ctype_class)
@@ -179,7 +178,7 @@ class WeldObject(object):
             else:
                 argtypes.append(self.encoder.py_to_weld_type(
                     self.context[name]).ctype_class)
-                encoded.append(self.encoder.encode(self.context[name], weld_num_threads))
+                encoded.append(self.encoder.encode(self.context[name]))
         end = time.time()
         if verbose:
             print "Python->Weld:", end - start
