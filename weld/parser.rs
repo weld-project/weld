@@ -501,13 +501,13 @@ impl<'t> Parser<'t> {
     fn parse_iter(&mut self) -> WeldResult<Iter<PartialType>> {
         let iter: Token = self.peek().clone();
         match iter {
-            TScalarIter | TSimdIter | TFringeIter => {
+            TScalarIter | TSimdIter | TFringeIter | TNdIter => {
                 try!(self.consume(iter.clone()));
                 try!(self.consume(TOpenParen));
                 let data = try!(self.expr());
-                let mut start = None;
-                let mut end = None;
-                let mut stride = None;
+                let (mut start, mut end, mut stride, mut shape, mut strides) 
+                    = (None, None, None, None, None);
+
                 if *self.peek() == TComma {
                     try!(self.consume(TComma));
                     start = Some(try!(self.expr()));
@@ -516,6 +516,14 @@ impl<'t> Parser<'t> {
                     try!(self.consume(TComma));
                     stride = Some(try!(self.expr()));
                 }
+
+                if iter == TNdIter && *self.peek() == TComma {
+                    try!(self.consume(TComma));
+                    shape = Some(try!(self.expr()));
+                    try!(self.consume(TComma));
+                    strides = Some(try!(self.expr()));
+                }
+
                 let iter = Iter {
                     data: data,
                     start: start,
@@ -524,8 +532,11 @@ impl<'t> Parser<'t> {
                     kind: match iter {
                         TSimdIter => SimdIter,
                         TFringeIter => FringeIter,
+                        TNdIter => NdIter,
                         _ => ScalarIter,
                     },
+                    shape: shape,
+                    strides: strides,
                 };
                 try!(self.consume(TCloseParen));
                 Ok(iter)
@@ -546,6 +557,8 @@ impl<'t> Parser<'t> {
                     end: Some(end),
                     stride: Some(stride),
                     kind: RangeIter,
+                    shape: None,
+                    strides: None,
                 };
                 try!(self.consume(TCloseParen));
                 Ok(iter)
@@ -557,7 +570,15 @@ impl<'t> Parser<'t> {
                     start: None,
                     end: None,
                     stride: None,
-                    kind: ScalarIter,
+                    kind: match iter {
+                        TSimdIter => SimdIter,
+                        TFringeIter => FringeIter,
+                        TNdIter => NdIter,
+                        TRangeIter => RangeIter,
+                        _ => ScalarIter,
+                    },
+                    shape: None,
+                    strides: None,
                 };
                 Ok(iter)
             }
@@ -1017,7 +1038,6 @@ impl<'t> Parser<'t> {
                             },
                             Annotations::new()))
             }
-
             TExp => self.unary_leaf_expr(TExp),
             TLog => self.unary_leaf_expr(TLog),
             TErf => self.unary_leaf_expr(TErf),

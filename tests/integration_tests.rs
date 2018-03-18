@@ -2873,6 +2873,146 @@ fn nested_for_loops() {
     unsafe { free_value_and_module(ret_value) };
 }
 
+/// Helper function for nditer - in order to simulate the behaviour of numpy's non-contiguous
+/// multi-dimensional arrays using counter, strides.
+/// returns idx = dot(counter, strides)
+fn get_idx(counter: [i64;3], strides: [i64;3]) -> i64 {
+    let mut sum:i64 = 0;
+    for i in 0..3 {
+        sum += counter[i]*strides[i];
+    }
+    return sum;
+}
+/// increments counter as in numpy / and nditer implementation. For e.g.,
+/// let shapes :[i64; 3] = [2, 3, 4];
+/// Now counter would start from (0,0,0).
+/// Each index would go upto shapes, and then reset to 0. 
+/// eg. (0,0,0), (0,0,1), (0,0,2), (0,0,3), (0,1,0) etc.
+fn update_counter(mut counter: [i64; 3], shapes: [i64; 3]) -> [i64; 3] {
+    let v = vec![2, 1, 0];
+    for i in v {
+        counter[i] += 1;
+        if counter[i] == shapes[i] {
+            counter[i] = 0;
+        } else {
+            return counter;
+        }
+    }
+    return counter;
+}
+
+/// Tests that nditer correctly iterates over each element of a non-contiguous array and applies
+/// the op to it. Note: In order to simulate non-contiguous arrays, we use counter/shapes/strides
+/// to mimic the behaviour of numpy. This has also been tested against numpy, and appears to work
+/// fine.
+fn nditer_basic_op_test() {
+    #[allow(dead_code)]
+    struct Args {
+        x: WeldVec<f64>,
+        shapes: WeldVec<i64>,
+        strides: WeldVec<i64>,
+    }
+    let code = "|x:vec[f64], shapes:vec[i64], strides:vec[i64]| result(for(nditer(x,0L,24L,1L,shapes,strides), appender, |b,i,e|
+                merge(b,log(e))))";
+
+    let conf = default_conf();
+    let mut x :[f64; 100] = [0.0; 100];
+    for i in 0..100 {
+        x[i] = i as f64;
+    }
+    /* Number of elements to go forward in each index to get to next element. 
+     * These are arbitrarily chosen here for testing purposes so get_idx can simulate the behaviour
+     * nditer should be doing (idx = dot(counter, strides).
+     */
+    let strides :[i64; 3] = [5, 2, 3];
+    // nditer with this shape will contain: 2*3*4 = 24 elements.
+    let shapes :[i64; 3] = [2, 3, 4];
+    let mut counter :[i64; 3] = [0, 0, 0];
+
+    let ref input_data = Args {
+        x: WeldVec {
+            data: &x as *const f64,
+            len: x.len() as i64,
+        },
+        shapes: WeldVec {
+            data: &shapes as *const i64,
+            len: shapes.len() as i64,
+        },
+        strides: WeldVec {
+            data: &strides as *const i64,
+            len: strides.len() as i64,
+        },
+    };
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<f64> };
+    let result = unsafe { (*data).clone() };
+    for i in 0..(result.len as isize) {
+        /* next idx for the original array, x, based on how numpy would behave with the given
+         * shapes/strides */
+        let idx = get_idx(counter, strides);
+        assert_eq!(unsafe { *result.data.offset(i) }, x[idx as usize].ln());
+        /* update counter according to the numpy above */
+        counter = update_counter(counter, shapes);
+    }
+    unsafe { free_value_and_module(ret_value) };
+}
+
+fn nditer_zip() {
+    #[allow(dead_code)]
+    struct Args {
+        x: WeldVec<i64>,
+        y: WeldVec<i64>,
+        shapes: WeldVec<i64>,
+        strides: WeldVec<i64>,
+    }
+    let code = "|x:vec[i64], y:vec[i64], shapes:vec[i64], strides:vec[i64]| result(for(zip(nditer(x,0L,24L,1L, shapes, strides), nditer(y,0L,24L,1L,shapes,strides)),  \
+    appender, |b,i,e| merge(b,e.$0+e.$1)))";
+
+    let conf = default_conf();
+    let mut x :[i64; 100] = [5; 100];
+    let mut y :[i64; 100] = [0; 100];
+    for i in 0..100 {
+        x[i] = i as i64 + 5;
+    }
+    for i in 0..100 {
+        y[i] = i as i64;
+    }
+
+    let strides :[i64; 3] = [5, 2, 2];
+    let shapes :[i64; 3] = [2, 3, 4];
+    let mut counter :[i64; 3] = [0, 0, 0];
+
+    let ref input_data = Args {
+        x: WeldVec {
+            data: &x as *const i64,
+            len: x.len() as i64,
+        },
+        y: WeldVec {
+            data: &y as *const i64,
+            len: y.len() as i64,
+        },
+        shapes: WeldVec {
+            data: &shapes as *const i64,
+            len: shapes.len() as i64,
+        },
+        strides: WeldVec {
+            data: &strides as *const i64,
+            len: strides.len() as i64,
+        },
+    };
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<i64> };
+    let result = unsafe { (*data).clone() };
+
+    for i in 0..(result.len as isize) {
+        let idx = get_idx(counter, strides);
+        assert_eq!(unsafe { *result.data.offset(i) }, x[idx as usize] + y[idx as usize]);
+        counter = update_counter(counter, shapes);
+    }
+    unsafe { free_value_and_module(ret_value) };
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     let tests: Vec<(&str, fn())> =
@@ -2969,6 +3109,8 @@ fn main() {
              ("simple_int_mod", simple_int_mod),
              ("predicate_if_iff_annotated", predicate_if_iff_annotated),
              ("nested_for_loops", nested_for_loops),
+             ("nditer_basic_op_test", nditer_basic_op_test),
+             ("nditer_zip", nditer_zip),
              ("nested_appender_loop", nested_appender_loop),
              ("simple_sort", simple_sort),
              ("complex_sort", complex_sort),

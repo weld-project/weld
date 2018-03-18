@@ -45,6 +45,8 @@ pub fn inline_zips(expr: &mut Expr<Type>) {
                                      end: None,
                                      stride: None,
                                      kind: first_iter.kind.clone(),
+                                     shape: None,
+                                     strides: None,
                                  }
                              })
                         .collect::<Vec<_>>();
