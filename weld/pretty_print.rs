@@ -135,6 +135,7 @@ fn print_iter_kind<T: PrintableType>(iter: &Iter<T>) -> &str {
         IterKind::ScalarIter => "",
         IterKind::SimdIter => "simd",
         IterKind::FringeIter => "fringe",
+        IterKind::NdIter => "nditer",
         IterKind::RangeIter => "range",
     }
 }
@@ -152,7 +153,28 @@ fn print_iters<T: PrintableType>(iters: &Vec<Iter<T>>,
         indent_str = "".to_string();
     }
     for iter in iters {
-        if let Some(_) = iter.start {
+        if iter.kind == IterKind::NdIter {
+            /* Need to check this first because NdIter also has iter.start */
+            iter_strs.push(format!("{}iter({},{},{},{})",
+                                   print_iter_kind(iter),
+                                   print_expr_impl(iter.data.as_ref(),
+                                                   typed,
+                                                   indent,
+                                                   should_indent),
+                                   print_expr_impl(iter.start.as_ref().unwrap(),
+                                                   typed,
+                                                   indent,
+                                                   should_indent),
+                                   print_expr_impl(iter.shape.as_ref().unwrap(),
+                                                   typed,
+                                                   indent,
+                                                   should_indent),
+                                   print_expr_impl(iter.strides.as_ref().unwrap(),
+                                                   typed,
+                                                   indent,
+                                                   should_indent),
+                                    ));
+        } else if let Some(_) = iter.start {
             iter_strs.push(format!("{}iter({},{},{},{})",
                                    print_iter_kind(iter),
                                    print_expr_impl(iter.data.as_ref(),

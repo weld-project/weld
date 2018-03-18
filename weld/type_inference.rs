@@ -469,6 +469,17 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
                             Some(ref mut e) => {
                                 changed |= try!(push_complete_type(&mut e.ty, Scalar(I64), "iter"))
                             }
+                            None => unreachable!()
+                        };
+                    }
+                }
+                /* For Nd-Iter */
+                if iter.shape.is_some() {
+                    for i in [&mut iter.shape, &mut iter.strides].iter_mut() {
+                        match **i {
+                            Some(ref mut e) => {
+                                changed |= try!(push_complete_type(&mut e.ty, Vector(Box::new(Scalar(I64))), "iter"))
+                            }
                             None => return weld_err!("Impossible"),
                         };
                     }

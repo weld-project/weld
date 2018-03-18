@@ -18,10 +18,10 @@ csv = "0.15.0"
 log = "0.3.8"
 env_logger = "0.4.3"
 chrono = "0.4.0"
-time = "*"
+time = "0.1.38"
 llvm-sys = "38.0.1"
 fnv = "1.0.5"
-clap = "*"
+clap = "2.31.1"
 
 
 [lib]

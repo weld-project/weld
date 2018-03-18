@@ -371,12 +371,23 @@ impl PartialExpr {
                         Some(ref s) => Some(try!(typed_box(s))),
                         None => None,
                     };
+                    let shape = match iter.shape {
+                        Some(ref s) => Some(try!(typed_box(s))),
+                        None => None,
+                    };
+                    let strides = match iter.strides {
+                        Some(ref s) => Some(try!(typed_box(s))),
+                        None => None,
+                    };
+
                     let typed_iter = Iter {
                         data: try!(typed_box(&iter.data)),
                         start: start,
                         end: end,
                         stride: stride,
                         kind: iter.kind.clone(),
+                        shape: shape,
+                        strides: strides,
                     };
                     typed_iters.push(typed_iter);
                 }

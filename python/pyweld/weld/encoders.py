@@ -32,7 +32,6 @@ class NumpyArrayEncoder(WeldObjectEncoder):
         Checks whether this NumPy array is supported by Weld.
         """
         assert isinstance(obj, np.ndarray)
-        assert obj.ndim == 1
 
     def encode(self, obj):
         self._check(obj)
@@ -40,7 +39,8 @@ class NumpyArrayEncoder(WeldObjectEncoder):
         c_class = WeldVec(elem_type).ctype_class
         elem_class = elem_type.ctype_class
         ptr = obj.ctypes.data_as(POINTER(elem_class))
-        size = ctypes.c_int64(len(obj))
+        # obj.size gives the correct value for multi-dimensional arrays.
+        size = ctypes.c_int64(obj.size)
         return c_class(ptr=ptr, size=size)
 
     def py_to_weld_type(self, obj):
@@ -85,7 +85,6 @@ class NumpyArrayDecoder(WeldObjectDecoder):
         array_pointer = ctypes.cast(data, ctypes.POINTER(ArrayType))
         result = np.frombuffer(array_pointer.contents, dtype=dtype,count=size)
         return result
-
 
 class ScalarDecoder(WeldObjectDecoder):
 

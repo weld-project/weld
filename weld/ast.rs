@@ -237,7 +237,8 @@ pub struct Expr<T: TypeBounds> {
 pub enum IterKind {
     ScalarIter, // A standard scalar iterator.
     SimdIter, // A vector iterator.
-    FringeIter,
+    FringeIter, // A fringe iterator, handling the fringe of a vector iter.
+    NdIter,     // multi-dimensional nd-iter
     RangeIter,
 }
 
@@ -248,6 +249,7 @@ impl fmt::Display for IterKind {
             ScalarIter => "scalar",
             SimdIter => "vectorized",
             FringeIter => "fringe",
+            NdIter => "nditer",
             RangeIter => "range",
         };
         f.write_str(text)
@@ -263,8 +265,10 @@ pub struct Iter<T: TypeBounds> {
     pub end: Option<Box<Expr<T>>>,
     pub stride: Option<Box<Expr<T>>>,
     pub kind: IterKind,
+    // NdIter specific fields
+    pub strides: Option<Box<Expr<T>>>,
+    pub shape: Option<Box<Expr<T>>>,
 }
-
 
 impl<T: TypeBounds> Iter<T> {
     /// Returns true if this is a simple iterator with no start/stride/end specified
