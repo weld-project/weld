@@ -59,7 +59,7 @@ class BinaryDistribution(Distribution):
         return True
 
 setup(name='pyweld',
-      version='0.0.3',
+      version='0.0.4',
       packages=['weld'],
       cmdclass={"build_ext": build_ext, "develop": Develop},
       distclass=BinaryDistribution,
