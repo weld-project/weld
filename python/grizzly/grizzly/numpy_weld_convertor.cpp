@@ -35,6 +35,19 @@ weld::vec<long> numpy_to_weld_long_arr(PyObject* in) {
  * Converts numpy array to Weld vector.
  */
 extern "C"
+weld::vec<float> numpy_to_weld_float_arr(PyObject* in) {
+    PyArrayObject* inp = (PyArrayObject*) in;
+    int64_t dimension = (int64_t) PyArray_DIMS(inp)[0];
+    weld::vec<float> t;
+    t.size = dimension;
+    t.ptr = (float*) PyArray_DATA(inp);
+    return t;
+}
+
+/**
+ * Converts numpy array to Weld vector.
+ */
+extern "C"
 weld::vec<double> numpy_to_weld_double_arr(PyObject* in) {
     PyArrayObject* inp = (PyArrayObject*) in;
     int64_t dimension = (int64_t) PyArray_DIMS(inp)[0];
@@ -111,6 +124,37 @@ weld::vec<weld::vec<long> > numpy_to_weld_long_arr_arr(PyObject* in) {
         for (int i = 0; i < t.size; i++) {
             t.ptr[i].size = dimension2;
             t.ptr[i].ptr = (long *)(inp->data + i * PyArray_STRIDES(inp)[0]);
+        }
+    }
+
+    return t;
+}
+
+/**
+ * Converts numpy array to Weld vector, with ndim = 2.
+ */
+extern "C"
+weld::vec<weld::vec<float> > numpy_to_weld_float_arr_arr(PyObject* in) {
+    PyArrayObject* inp = (PyArrayObject*) in;
+    int64_t dimension1 = (int64_t) PyArray_DIMS(inp)[0];
+    int64_t dimension2 = (int64_t) PyArray_DIMS(inp)[1];
+    weld::vec<weld::vec<float> > t = weld::make_vec<weld::vec<float> >(dimension1);
+    if ((dimension1 * 8) == PyArray_STRIDES(inp)[1]) {
+        // Matrix is transposed.
+        float *new_buffer = (float *) malloc(sizeof(long) * dimension1 * dimension2);
+        float *old_buffer = (float *) inp->data;
+        for (int i = 0; i < t.size; i++) {
+            t.ptr[i].size = dimension2;
+            for (int j = 0; j < dimension2; j++) {
+                *(new_buffer + j) = old_buffer[(j * dimension1) + i];
+            }
+            t.ptr[i].ptr = new_buffer;
+            new_buffer += dimension2;
+        }
+    } else {
+        for (int i = 0; i < t.size; i++) {
+            t.ptr[i].size = dimension2;
+            t.ptr[i].ptr = (float *)(inp->data + i * PyArray_STRIDES(inp)[0]);
         }
     }
 
@@ -199,6 +243,18 @@ PyObject* weld_to_numpy_long_arr(weld::vec<long> inp) {
  * Converts Weld vector to numpy float array.
  */
 extern "C"
+PyObject* weld_to_numpy_float_arr(weld::vec<float> inp) {
+    Py_Initialize();
+    npy_intp size = {inp.size};
+    _import_array();
+    PyObject* out = PyArray_SimpleNewFromData(1, &size, NPY_FLOAT, (char*)inp.ptr);
+    return out;
+}
+
+/**
+ * Converts Weld vector to numpy double array.
+ */
+extern "C"
 PyObject* weld_to_numpy_double_arr(weld::vec<double> inp) {
     Py_Initialize();
     npy_intp size = {inp.size};
@@ -268,6 +324,30 @@ PyObject* weld_to_numpy_long_arr_arr(weld::vec< weld::vec<long> > inp) {
 }
 
 /**
+ * Converts Weld vector-of-float-vectors to two-dimensional numpy array.
+ */
+extern "C"
+PyObject* weld_to_numpy_float_arr_arr(weld::vec< weld::vec<float> > inp) {
+    Py_Initialize();
+
+    int num_rows = inp.size;
+    int num_cols = inp.ptr[0].size;
+
+    npy_intp size[2] = {num_rows, num_cols};
+    float *ptr_array = (float *) malloc(sizeof(float) * num_rows * num_cols);
+
+    for (int i = 0; i < num_rows; i++) {
+        for (int j = 0; j < num_cols; j++) {
+            ptr_array[i * num_cols + j] = *((float *) inp.ptr[i].ptr + j);
+        }
+    }
+
+    _import_array();
+    PyObject* out = PyArray_SimpleNewFromData(2, size, NPY_FLOAT, (char*)ptr_array);
+    return out;
+}
+
+/**
  * Converts Weld vector-of-double-vectors to two-dimensional numpy array.
  */
 extern "C"
@@ -287,7 +367,7 @@ PyObject* weld_to_numpy_double_arr_arr(weld::vec< weld::vec<double> > inp) {
     }
 
     _import_array();
-    PyObject* out = PyArray_SimpleNewFromData(2, size, NPY_FLOAT64, (char*)ptr_array);
+    PyObject* out = PyArray_SimpleNewFromData(2, size, NPY_DOUBLE, (char*)ptr_array);
     return out;
 }
 
