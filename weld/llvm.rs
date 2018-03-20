@@ -2256,11 +2256,21 @@ impl LlvmGenerator {
                 let elem_ty = self.llvm_type(elem)?;
                 let elem_prefix = llvm_prefix(&elem_ty);
                 let name = self.vec_names.get(elem).unwrap();
-                    self.prelude_code.add(format!(
-                            include_str!("resources/vector/vector_hash.ll"),
-                            ELEM_PREFIX=&elem_prefix,
-                            ELEM=&elem_ty,
-                            NAME=&name.replace("%", "")));
+                match *elem.as_ref() {
+                    Scalar(ScalarKind::U8) | Scalar(ScalarKind::I8) => {
+                        self.prelude_code.add(format!(
+                                include_str!("resources/vector/veci8_hash.ll"),
+                                ELEM=&elem_ty,
+                                NAME=&name.replace("%", "")));
+                    }
+                    _ => {
+                        self.prelude_code.add(format!(
+                                include_str!("resources/vector/vector_hash.ll"),
+                                ELEM_PREFIX=&elem_prefix,
+                                ELEM=&elem_ty,
+                                NAME=&name.replace("%", "")));
+                    }
+                }
             }
             _ => {
                 return weld_err!("Unsupported function `hash` for type {:?}", ty);

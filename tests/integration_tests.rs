@@ -1836,6 +1836,33 @@ fn simple_dict_lookup() {
     unsafe { free_value_and_module(ret_value) };
 }
 
+fn string_dict_lookup() {
+    #[allow(dead_code)]
+    struct Args {
+        x: WeldVec<i32>,
+        y: WeldVec<i32>,
+    }
+
+    let code = "|x:vec[i32]| let v = [\"abcdefghi\", \"abcdefghi\", \"abcdefghi\"];
+                let d = result(for(zip(v,x), dictmerger[vec[i8],i32,+], |b,i,e| merge(b, e)));
+                lookup(d, \"abcdefghi\")";
+    let conf = default_conf();
+
+    let input_vec = [1, 1, 1];
+    let ref input_data = WeldVec {
+        data: &input_vec as *const i32,
+        len: input_vec.len() as i64,
+    };
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const i32 };
+    let result = unsafe { (*data).clone() };
+
+    let output = 3;
+    assert_eq!(output, result);
+    unsafe { free_value_and_module(ret_value) };
+}
+
 fn simple_dict_exists() {
     #[allow(dead_code)]
     struct Args {
@@ -3090,6 +3117,7 @@ fn main() {
              ("simple_parallel_for_dictmerger_loop_local", simple_parallel_for_dictmerger_loop_local),
              ("simple_parallel_for_dictmerger_loop_global", simple_parallel_for_dictmerger_loop_global),
              ("simple_dict_lookup", simple_dict_lookup),
+             ("string_dict_lookup", string_dict_lookup),
              ("simple_dict_exists", simple_dict_exists),
              ("simple_length", simple_length),
              ("filter_length", filter_length),
