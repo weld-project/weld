@@ -23,7 +23,7 @@ Weld contains "value" types that hold data, as well as "builder" types that are 
 
 The value types are:
 
-* Scalars: `bool`, `i8`, `i32`, `i64`, `f32`, `f64`.
+* Scalars: `bool`, `i8`, `i16`, `i32`, `i64`, `f32`, `f64`.
 * Vectors: `vec[T]` for some type `T`. These are variable-length.
 * Dictionaries: `dict[K, V]` for types K, V.
 * Structs: `{T1, T2, ...}` for field types T1, T2, etc.
@@ -57,6 +57,7 @@ The core language consists of the following expressions:
   Type | Syntax
   ------------- | -------------
   `i8` | `1c`, `1C`
+  `i16` | `1si` (short int)
   `i32` | `1`
   `i64` | `1l`, `1L`
   `f32` | `1.0f`, `1.0F`
