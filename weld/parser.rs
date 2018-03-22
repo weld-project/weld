@@ -8,6 +8,7 @@ use std::cmp::min;
 
 use super::ast::Symbol;
 use super::ast::Iter;
+use super::ast::BinOpKind;
 use super::ast::BinOpKind::*;
 use super::ast::UnaryOpKind;
 use super::ast::UnaryOpKind::*;
@@ -1097,33 +1098,10 @@ impl<'t> Parser<'t> {
 
             TMerger => {
                 let elem_type: PartialType;
-                let bin_op: _;
                 self.consume(TOpenBracket)?;
                 elem_type = self.type_()?;
                 self.consume(TComma)?;
-                // Basic merger right now supports Plus, Times, Min and Max only.
-                match *self.peek() {
-                    TPlus => {
-                        self.consume(TPlus)?;
-                        bin_op = Add;
-                    }
-                    TTimes => {
-                        self.consume(TTimes)?;
-                        bin_op = Multiply;
-                    }
-                    TMin => {
-                        self.consume(TMin)?;
-                        bin_op = Min;
-                    }
-                    TMax => {
-                        self.consume(TMax)?;
-                        bin_op = Max;
-                    }
-                    ref t => {
-                        return weld_err!("expected commutative binary op in merger but got '{}'",
-                                         t);
-                    }
-                };
+                let bin_op = self.commutative_binop_()?;
                 self.consume(TCloseBracket)?;
 
                 let mut value = None;
@@ -1141,34 +1119,12 @@ impl<'t> Parser<'t> {
             TDictMerger => {
                 let key_type: PartialType;
                 let value_type: PartialType;
-                let bin_op: _;
                 try!(self.consume(TOpenBracket));
                 key_type = try!(self.type_());
                 try!(self.consume(TComma));
                 value_type = try!(self.type_());
                 try!(self.consume(TComma));
-                // DictMerger right now supports Plus, Times, Min and Max only.
-                match *self.peek() {
-                    TPlus => {
-                        self.consume(TPlus)?;
-                        bin_op = Add;
-                    }
-                    TTimes => {
-                        self.consume(TTimes)?;
-                        bin_op = Multiply;
-                    }
-                    TMin => {
-                        self.consume(TMin)?;
-                        bin_op = Min;
-                    }
-                    TMax => {
-                        self.consume(TMax)?;
-                        bin_op = Max;
-                    }
-                    _ => {
-                        return weld_err!("expected commutative binary op in dictmerger");
-                    }
-                }
+                let bin_op = self.commutative_binop_()?;
                 try!(self.consume(TCloseBracket));
 
                 let arg = if *self.peek() == TOpenParen {
@@ -1210,36 +1166,14 @@ impl<'t> Parser<'t> {
 
             TVecMerger => {
                 let elem_type: PartialType;
-                let bin_op: _;
-                try!(self.consume(TOpenBracket));
-                elem_type = try!(self.type_());
-                try!(self.consume(TComma));
-                // VecMerger right now supports Plus, Times, Min and Max only.
-                match *self.peek() {
-                    TPlus => {
-                        self.consume(TPlus)?;
-                        bin_op = Add;
-                    }
-                    TTimes => {
-                        self.consume(TTimes)?;
-                        bin_op = Multiply;
-                    }
-                    TMin => {
-                        self.consume(TMin)?;
-                        bin_op = Min;
-                    }
-                    TMax => {
-                        self.consume(TMax)?;
-                        bin_op = Max;
-                    }
-                    _ => {
-                        return weld_err!("Expected commutative binary op in vecmerger");
-                    }
-                }
-                try!(self.consume(TCloseBracket));
-                try!(self.consume(TOpenParen));
-                let expr = try!(self.expr());
-                try!(self.consume(TCloseParen));
+                self.consume(TOpenBracket)?;
+                elem_type = self.type_()?;
+                self.consume(TComma)?;
+                let bin_op = self.commutative_binop_()?;
+                self.consume(TCloseBracket)?;
+                self.consume(TOpenParen)?;
+                let expr = self.expr()?;
+                self.consume(TCloseParen)?;
 
                 let mut expr = expr_box(NewBuilder(Some(expr)), Annotations::new());
                 expr.ty = Builder(VecMerger(Box::new(elem_type.clone()),
@@ -1327,6 +1261,31 @@ impl<'t> Parser<'t> {
         }
     }
 
+    /// Parses a commutative binary operator, used by builders.
+    fn commutative_binop_(&mut self) -> WeldResult<BinOpKind> {
+        match *self.peek() {
+            TPlus => {
+                self.consume(TPlus)?;
+                Ok(Add)
+            }
+            TTimes => {
+                self.consume(TTimes)?;
+                Ok(Multiply)
+            }
+            TMax => {
+                self.consume(TMax)?;
+                Ok(Max)
+            }
+            TMin => {
+                self.consume(TMin)?;
+                Ok(Min)
+            }
+            ref t => {
+                weld_err!("expected commutative binary op in but got '{}'", t)
+            }
+        }
+    }
+
     /// Parse a PartialType starting at the current input position.
     fn type_(&mut self) -> WeldResult<PartialType> {
         let mut annotations = Annotations::new();
@@ -1374,28 +1333,13 @@ impl<'t> Parser<'t> {
 
             TMerger => {
                 let elem_type: PartialType;
-                let bin_op: _;
                 self.consume(TOpenBracket)?;
                 elem_type = self.type_()?;
                 self.consume(TComma)?;
-                // Basic merger supports Plus and Times right now.
-                match *self.peek() {
-                    TPlus => {
-                        self.consume(TPlus)?;
-                        bin_op = Add;
-                    }
-                    TTimes => {
-                        self.consume(TTimes)?;
-                        bin_op = Multiply;
-                    }
-                    ref t => {
-                        return weld_err!("expected commutative binary op in merger but got '{}'",
-                                         t);
-                    }
-                };
+                let binop = self.commutative_binop_()?;
                 self.consume(TCloseBracket)?;
 
-                Ok(Builder(Merger(Box::new(elem_type), bin_op), annotations))
+                Ok(Builder(Merger(Box::new(elem_type), binop), annotations))
             }
 
 
@@ -1413,61 +1357,33 @@ impl<'t> Parser<'t> {
             TDictMerger => {
                 let key_type: PartialType;
                 let value_type: PartialType;
-                let bin_op: _;
-                try!(self.consume(TOpenBracket));
-                key_type = try!(self.type_());
-                try!(self.consume(TComma));
-                value_type = try!(self.type_());
-                try!(self.consume(TComma));
-                // DictMerger right now supports Plus and Times only.
-                match *self.peek() {
-                    TPlus => {
-                        self.consume(TPlus)?;
-                        bin_op = Add;
-                    }
-                    TTimes => {
-                        self.consume(TTimes)?;
-                        bin_op = Multiply;
-                    }
-                    _ => {
-                        return weld_err!("expected commutative binary op in dictmerger");
-                    }
-                }
-                try!(self.consume(TCloseBracket));
+                self.consume(TOpenBracket)?;
+                key_type = self.type_()?;
+                self.consume(TComma)?;
+                value_type = self.type_()?;
+                self.consume(TComma)?;
+                let binop = self.commutative_binop_()?;
+                self.consume(TCloseBracket)?;
                 Ok(Builder(DictMerger(Box::new(key_type.clone()),
                                       Box::new(value_type.clone()),
                                       Box::new(Struct(vec![key_type.clone(),
                                                            value_type.clone()])),
-                                      bin_op),
+                                      binop),
                            annotations))
             }
 
             TVecMerger => {
                 let elem_type: PartialType;
-                let bin_op: _;
-                try!(self.consume(TOpenBracket));
-                elem_type = try!(self.type_());
-                try!(self.consume(TComma));
-                // VecMerger right now supports Plus and Times only.
-                match *self.peek() {
-                    TPlus => {
-                        self.consume(TPlus)?;
-                        bin_op = Add;
-                    }
-                    TTimes => {
-                        self.consume(TTimes)?;
-                        bin_op = Multiply;
-                    }
-                    _ => {
-                        return weld_err!("Expected commutative binary op in vecmerger");
-                    }
-                }
-                try!(self.consume(TCloseBracket));
+                self.consume(TOpenBracket)?;
+                elem_type = self.type_()?;
+                self.consume(TComma)?;
+                let binop = self.commutative_binop_()?;
+                self.consume(TCloseBracket)?;
 
                 Ok(Builder(VecMerger(Box::new(elem_type.clone()),
                                      Box::new(Struct(vec![Scalar(ScalarKind::I64),
                                                           elem_type.clone()])),
-                                     bin_op),
+                                     binop),
                            annotations))
             }
 
