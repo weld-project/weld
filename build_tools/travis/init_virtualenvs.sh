@@ -2,7 +2,7 @@
 
 PYTHON_VERSIONS=$@
 
-pip install -U virtualenv
+pip install --user virtualenv
 mkdir -p .virtualenv
 export VENV_HOME=`pwd`/.virtualenv
 
