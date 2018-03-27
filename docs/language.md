@@ -1,6 +1,6 @@
 # Weld Language Overview
 
-## Contents
+# Contents
 
 - [Weld Language Overview](#weld-language-overview)
   * [Contents](#contents)
@@ -24,7 +24,7 @@
     + [Examples](#examples)
   * [Annotations](#annotations)
 
-## Overview
+# Overview
 
 Weld is a statically typed, referentially transparent language with built-in parallel constructs.
 It has a number of operators similar to functional languages, but it is not truly functional, in that functions aren't first-class values and recursion is not allowed.
@@ -42,11 +42,11 @@ All of the sugar operators are translated to `for`s and builders through simple 
 
 This doc describes the types, operators, and basic features of the Weld language.
 
-## Data Types
+# Data Types
 
 Weld contains "value" types that hold data, as well as "builder" types that are used to construct results in parallel from values that are "merged" into them.
 
-### Value Types
+## Value Types
 
 * Scalars: `bool`, `i8`, `u8`, `i16`, `u16`, `i32`, `u32`, `i64`, `u64`, `f32`, `f64`. Scalars prefixed with `i` are signed, and ones prefixed with `u` are unsigned.
 * SIMD values `simd[S]` for some *scalar type* `S`. The length of a SIMD value is currently platform dependent and chosen automatically.
@@ -56,7 +56,7 @@ Weld contains "value" types that hold data, as well as "builder" types that are 
 
 Except from the SIMD type `simd[S]` (where `S` must be a scalar type), `T` in the types above can be any other type.
 
-### Builder Types
+## Builder Types
 
 * `appender[T]`: Builds a `vec[T]` from elements of type `T`.
 * `merger[T,binop]`: Combines `T` values using a binary operation. Its parameters are:
@@ -74,7 +74,7 @@ Except from the SIMD type `simd[S]` (where `S` must be a scalar type), `T` in th
    * `binop`: [A commutative binary operation](#commutative-binary-operations-for-builders)
 * Any struct whose fields are builders can also be used as a builder. This is used to build multiple results at the same time.
 
-#### Commutative Binary Operations for Builders
+### Commutative Binary Operations for Builders
 
 For the builder types above, the supported commutative `binop` values are `+`,
 `*`, `min`, and `max`. This operator is applied element-wise on
@@ -91,13 +91,13 @@ Note that among the builders that take binary operators and merge-types, two
 builder types are identical only if they're parameterized with the same
 operators _and_ values.
 
-## Core Operations
+# Core Operations
 
 The core language consists of the following expressions. `E1` ... `En` refer to
 a subexpression, which can be any of the operators below. `T`, `U`, and `V`
 refer to types.
 
-### Basic Expressions
+## Basic Expressions
 
 * Literals, e.g. `5.0`, `{6,7}`, and `[1,2,3]`.
 
@@ -134,7 +134,7 @@ refer to types.
 * `T(data)` implements a cast between scalar types if `T` is a scalar and `data` is also a scalar type.
 * `broadcast(data)` takes a scalar value `data` and broadcasts the value into a SIMD type.
 
-### Expressions on Collections (Vectors, Dictionaries, Structs)
+## Expressions on Collections (Vectors, Dictionaries, Structs)
 
 * `lookup(dict, key)` and `lookup(vec, index)` return an element from a dictionary and vector respectively. `index` must be of type `i64`. It is an error to call `lookup` on a dictionary
   with a key that does not exist: see `keyexists`.
@@ -145,12 +145,12 @@ refer to types.
 * `struct.$0`, `struct.$1`, etc. are used to access fields of a struct.
 * `tovec(dict)` gets the entries of a dictionary as a vector of `{K, V}` pairs.
 
-### Builder Expressions
+## Builder Expressions
   * `merge(builder, value)` returns a new builder that incorporates `value` into the previous builder. This returns a new updated builder.
   * `result(builder)` computes the result of the builder given the values merged so far.
   * `for(vec, builder, update)` applies a function `update` to every element of a vector, possibly merging values into a builder for each one, and returns a final builder with all the merges incorporated. `vec` must be of type `vec[T]` for some `T` (see caveats in the section about [iterators](#iterators-in-for-loops), `builder` can be any builder type `B` (see [builder types](#builder-types), and `update` must be a function of type `(B, I, T) => B` that possibly merges values into the `B` passed in. `I` is the `i64` index of the element being processed.
 
-#### Iterators in For Loops
+### Iterators in For Loops
 
 For loops support iteration over multiple vectors at once, ranges of vectors, vectors that are treated as N-dimensional tensors, and over ranges of indices without a vector). These features are
 enabled via _iterators_, which are special expressions that can only be used in the first argument of a `for` loop. They are described below:
@@ -163,7 +163,7 @@ of the data.
 * `rangeiter(start, end, stride)` iterates over a range of integers based on the `start`, `end`, and `stride` expressions. The `rangeiter` emits elements of type `i64`. In the for loop function, the second argument of the function when using a `rangeiter` is the
 iteration number, while the third argument is the value produced by the iterator, so most programs will want to access the third argument.
 
-#### About Builders
+### About Builders
 
 A builder is a "write-only" data structure, and the `result` operation turns it
 into a read-only value.  Because builders are "write-only", it is okay to merge
@@ -176,7 +176,7 @@ about below. Our implementation does not statically enforce linearity, but it
 only works if `update` functions really do only return builders derived from
 their arguments, and if `result` is only called on each builder once.
 
-#### Examples of Builders
+### Examples of Builders
 
 Here are a few simple examples using builder expressions:
 
@@ -226,7 +226,7 @@ let bs = for(
 {result(bs.$0), result(bs.$1)} # returns {[1, 2, 3], [2, 4, 6]}
 ```
 
-#### Aside: Linearity of Builder Types
+### Aside: Linearity of Builder Types
 
 We want to place a few constraints on builders to make them easier to implement and make their semantics clear.
 First, for builders to have clear semantics in Weld, we need to make sure that `result` is not called on a builder while parallel work is still happening on it.
@@ -245,7 +245,7 @@ The one place where the situation is trickier is with structs of builders.
 Here, we require that each field of the resulting struct is derived from the corresponding field of the struct passed as an argument, but different fields may pass through different expressions through the function.
 It is less clear whether existing type systems capture this, but it should not be difficult to define one for it.
 
-## Comments
+# Comments
 
 Weld supports Python-style one line comments with the `#` character. For example:
 
@@ -259,7 +259,7 @@ Weld supports Python-style one line comments with the `#` character. For example
 ```
 
 
-## Type Inference
+# Type Inference
 
 Weld supports some basic type inference, so users do not need to specify a full type for each expression in the program (but may optionally choose to do so).
 In particular, Weld only requires types for the top-level function arguments, and can generally infer types for most other expressions. For example:
@@ -274,7 +274,7 @@ In particular, Weld only requires types for the top-level function arguments, an
       )
 ```
 
-## Sugar Operations
+# Sugar Operations
 
 To make programs easier to write, the Weld implementation also supports some "sugar" operations that translate into `for`s and builders.
 These are currently represented as *macros*, which are substitution rules whose definitions are not handled by the optimizer.
@@ -303,7 +303,7 @@ macro filter(data, func) = (
 );
 ```
 
-## User Defined Functions
+# User Defined Functions
 
 Weld supports invoking C-style UDFs from a Weld program. The `cudf[name,ty](arg1, arg2,...argN)` node enables this; `name` is a C symbol name which refers to a function in the same address space (e.g., a function in a dynamically loaded library), `ty` is the Weld return type of the UDF, and `arg1, arg2,...,argN` is a list of zero or more argument expressions.
 
@@ -341,7 +341,7 @@ extern "C" void fast_matmul(float_vec_t *a, float_vec_t *b, float_vec_t *result)
   my_fast_matrix_multiply(a->data, b->data, result->data, a->length);
 }
 ```
-## Annotations
+# Annotations
 
 In addition, it's possible to specify annotations on both builder types and expressions: these could for example specify an implementation strategy for a builder. To specify an annotation on a `dictmerger`, one can use syntax like
 
