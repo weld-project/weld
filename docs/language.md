@@ -2,8 +2,6 @@
 
 # Contents
 
-- [Weld Language Overview](#weld-language-overview)
-- [Contents](#contents)
 - [Overview](#overview)
 - [Data Types](#data-types)
   * [Value Types](#value-types)
@@ -131,7 +129,7 @@ refer to types.
 * `cudf[name,ty](args)` to call arbitrary C-style functions (see a discussion of UDFs [below](#user-defined-functions)).
 * `serialize(data)` serializes `data` into a `vec[i8]`. The data in this vector can be written to disk, sent over the network, etc.
 * `deserialize[T](data)` deserializes `data` (a `vec[i8]`) into a value of type `T`.
-* `T(data)` implements a cast between scalar types if `T` is a scalar and `data` is also a scalar type.
+* Casting: `T(data)` implements a cast between scalar types if `T` is a scalar and `data` is also a scalar type.
 * `broadcast(data)` takes a scalar value `data` and broadcasts the value into a SIMD type.
 
 ## Expressions on Collections (Vectors, Dictionaries, Structs)
@@ -157,9 +155,8 @@ enabled via _iterators_, which are special expressions that can only be used in 
 
 * `zip(vec[T1], vec2[T2], ..)` iterates over a `vec[{T1, T2, ..}]`. The vectors may be over other iterators (described below). Each iterator *must consume the same number of elements.*
 * `iter(data, start, end, stride)` iterates over a vector with certain elements skipped. `data` is a `vec[T]` with for some type `T`. `start`, `end`, and `stride` represent the start index, end index, and stride of the iteration respectively.
-* `simditer(data)` iterates until the last multiple of  `sizeof(simd[T])`. For exampe, in a vector with 13 elements, if a single SIMD type holds 4 elements, the `simditer` will consume elements 0-11.
+* `simditer(data)` iterates until the last multiple of  `sizeof(simd[T])`. For example, in a vector with 13 elements, if a single SIMD type holds 4 elements, the `simditer` will consume elements 0-11.
 * `fringeiter(data)` iterates over the portion of the vector that the `simditer` does not. From the above example, this iterator would consume only the last element.
-of the data.
 * `rangeiter(start, end, stride)` iterates over a range of integers based on the `start`, `end`, and `stride` expressions. The `rangeiter` emits elements of type `i64`. In the for loop function, the second argument of the function when using a `rangeiter` is the
 iteration number, while the third argument is the value produced by the iterator, so most programs will want to access the third argument.
 
@@ -230,7 +227,7 @@ let bs = for(
 
 We want to place a few constraints on builders to make them easier to implement and make their semantics clear.
 First, for builders to have clear semantics in Weld, we need to make sure that `result` is not called on a builder while parallel work is still happening on it.
-Otherwise, the language may have to be nondeterministic, which is not something we want for this version.
+Otherwise, the language may have to be non-deterministic, which is not something we want for this version.
 Second, for simplicity of implementation, we will also make sure that each builder is used in a *linear* sequence of operations (`merge`s and `for`s followed by at most one `result`), which will let us update the underlying memory in place instead of having to "fork" it if one derives two builders from it.
 Likewise, we will enforce that the `update` function in a `for` always returns a builder derived from the one passed in as a parameter, and not, say, some kind of new builder it initialized inside.
 This will help coordinate parallel execution and memory management for `for`s.
