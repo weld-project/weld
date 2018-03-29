@@ -153,6 +153,8 @@ class weldarray(np.ndarray):
         __getitem__, e.g., for views created by broadcasting, or transposes.
         FIXME: Want to do this so that we can modify self's weldarray view
         directly?
+        FIXME: If self is a weldarray as well, then fails.
+
         @returns: new_arr with the weldview being generated.
         '''
         new_arr = weldarray(new_arr, verbose=self._verbose)
@@ -162,7 +164,7 @@ class weldarray(np.ndarray):
             base_array = self
             par_start = 0
         else:
-            # assert False, 'nested views, need to fix this still'
+            assert False, 'nested views, need to fix this still'
             base_array = self._weldarray_view.base_array
             par_start = self._weldarray_view.start
 
@@ -213,8 +215,6 @@ class weldarray(np.ndarray):
         '''
         # Need to cast it as ndarray view before calling ndarray's __getitem__
         # implementation.
-        print("getitem")
-        print(type(idx))
         if isinstance(idx, slice):
             # TODO: The way we treat views now, views don't need their own
             # weldobj - just the weldview object. Could be a minor
@@ -564,6 +564,7 @@ class weldarray(np.ndarray):
             if isinstance(arg_, weldarray):
                 # Evaluate all the lazily stored computations first.
                 input_args[i] = arg_._eval()
+
                 # not doing this leads to a subtle bug: If we are updating a
                 # non-contiguous array in place, then we were offloading it to
                 # NumPy. If ops were previously stored on this array (or its
@@ -584,7 +585,15 @@ class weldarray(np.ndarray):
         # if possible, return weldarray.
         if str(result.dtype) in SUPPORTED_DTYPES and isinstance(result,
                 np.ndarray):
-            return weldarray(result, verbose=self._verbose)
+            result = weldarray(result, verbose=self._verbose)
+            # Edge case: the output could have been a weldarray view -- so
+            # after doing an inplace update done by NumPy, we need to restore
+            # the _weldarray_view as well. Also implicit assumption:
+            # weldarray_view should not be changed by any ops.
+            if outputs and isinstance(outputs[0], weldarray) and outputs[0]._weldarray_view:
+                result._weldarray_view = outputs[0]._weldarray_view
+            return result
+
         else:
             return result
 

@@ -63,9 +63,11 @@ def get_noncontig_idx(shape):
         - different sizes, strides etc.
     '''
     # idx = []
-
-    # for i in range(5):
-    while True:
+    
+    # 1000 tries to find a non-contig idx. 5 was actually failing to find a
+    # non-contig case sometimes...once the correct idx is found, will break out
+    # of loop, so should be much shorter than 1000.
+    for i in range(1000):
         idx = []
         for s in shape:
             # 5 tries to get non-contiguous array
@@ -79,10 +81,8 @@ def get_noncontig_idx(shape):
         a, _ = random_arrays(shape, 'float32')
         b = a[idx]
         if is_view_child(b,a) and not b.flags.contiguous:
-            print(idx)
             break
     
-    print(idx)
     return idx
 
 def test_views_non_contig_basic():
@@ -133,22 +133,16 @@ def test_views_non_contig_no_op():
         assert np.allclose(n, w)
         assert np.array_equal(n2, w2)
         print("************array equal done************")
-        # assert np.allclose(n2, w2)
+        assert np.allclose(n2, w2)
         assert np.allclose(n2, w2.evaluate())
 
 def test_views_non_contig_inplace_unary():
-    ND_SHAPES = [(5,5)]
 
     for shape in ND_SHAPES:
         n, w = random_arrays(shape, 'float64')
         idx = get_noncontig_idx(shape)
-
-        # FIXME: Temporary fixed index. Remove after fixing.
-        idx = slice(0,5,2), slice(0,5,2)
-
         n2 = n[idx]
-        w2 = w[idx]
-        
+        w2 = w[idx] 
         assert is_view_child(n2, n), 'should be child'
  
         # test: update parents first
@@ -279,6 +273,56 @@ def test_views_non_contig_inplace_binary1():
         # # TODO: write test.
         # pass
 
+def test_views_non_contig_nested_child():
+    '''
+    non-contig view getting another view made off it. Second view seems to fail
+    getting a _weldarray view.
+    '''
+    for shape in ND_SHAPES:
+        n, w = random_arrays(shape, 'float32')
+        idx = get_noncontig_idx(shape)
+
+        nv1 = n[idx]
+        wv1 = w[idx]
+
+        assert wv1._weldarray_view is not None
+        
+        # FIXME: make this more general somehow + this should actually be
+        # asserting in weldnumpy?
+        idx2 = slice(0,-1,2)
+        nv2 = nv1[idx2]
+        print("nv2 shape: ", nv2.shape)
+        wv2 = wv1[idx2]
+
+        assert wv2._weldarray_view is not None
+
+def test_weldarray_vanishing_view():
+    '''
+    mysteriously vanishing weldarray view...
+    '''
+    for shape in ND_SHAPES:
+        n, w = random_arrays(shape, 'float32')
+        idx = get_noncontig_idx(shape)
+
+        nv = n[idx]
+        wv = w[idx]
+        assert wv._weldarray_view is not None
+
+        # update other from before.
+        # important: we need to make sure the case with the second array having some operations
+        # stored in it is dealt with.
+        wv = np.sqrt(wv, out=wv)
+        nv = np.sqrt(nv, out=nv)
+        
+        print(type(wv))
+        print(addr(wv) - addr(w))
+        print(wv.flags.contiguous)
+        assert wv._weldarray_view is not None
+
+        wv = wv.evaluate()
+
+        assert wv._weldarray_view is not None
+
 def test_views_non_contig_inplace_other_updates():
     '''
     FIXME: This fails because non-contig in place updates.
@@ -302,7 +346,8 @@ def test_views_non_contig_inplace_other_updates():
         # stored in it is dealt with.
         wv2 = np.sqrt(wv2, out=wv2)
         nv2 = np.sqrt(nv2, out=nv2)
-        # wv2 = wv2.evaluate()
+        wv2 = wv2.evaluate()
+
         assert wv2._weldarray_view is not None
 
         op = np.subtract
@@ -319,6 +364,7 @@ def test_views_non_contig_inplace_other_updates():
         # when we evaluate a weldarray_view, the view properties (parent array etc) must be preserved in the
         # returned array.
         wv1 = wv1.evaluate()
+        wv2 = wv2.evaluate()
         assert wv2._weldarray_view is not None
 
         assert np.array_equal(nv2, wv2)
@@ -405,6 +451,7 @@ def test_transpose_simple():
     # import test
     assert w2._weldarray_view is not None, 'should not be None!'
 
+# FIXME: Annoying failure in the weld/rust code.
 # def test_transpose_ops():
     # '''
     # FAILS WITH A unwrap on None value error.
