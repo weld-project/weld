@@ -12,20 +12,25 @@
 ## Setup
 
 ### pip
-TODO: Need to setup pip install 
+pip install weldnumpy
 
-### Installing from source
-TODO: will need to install weld + grizzly first and set up environment
-variables etc. before installing weldnumpy?
+<!--### Installing from source-->
+<!--Here, you will need to install [Weld](https://github.com/weld-project/weld)-->
+<!--first, and then you can install weldnumpy -->
 
-After installation, you should be able to verify it by running the tests from
-the root directory with:
+<!--```bash-->
+<!--$ git clone -->
+<!--'''-->
 
-```bash
-$ pytest 
-```
+<!--TODO: Should testing involve cloning this repo etc??-->
+<!--After installation, you should be able to verify it by running the tests from-->
+<!--the NumPy directory. -->
 
-## Overview
+<!--```bash-->
+<!--$ git clone -->
+<!--```-->
+
+# Overview
 
 WeldNumpy is a library that provides a subclass of NumPy's ndarray module,
 called weldarray, which 
@@ -289,6 +294,9 @@ rather than aliasing all of them, we suggest you use WeldNumpy by just using
 weldarray: import weldarray from weldnumpy - as shown in many of the examples
 above.
 
+Another surprising cause of performance issues might occur in some use cases of
+in place updates on views - these have been described in detail below.
+
 #### Making the most of the Weld model
 
 We have designed this such that you can use it without really understanding
@@ -315,16 +323,95 @@ can avoid them, and so on.
 
 ##### Inplace Ops and Views
 
-Weld does not explicitly support Inplace Ops yet - thus we have a slightly more
-complicated way to deal with these than expected - which could lead to some
-surprising speed issues (but the functionality should still be correct). Since
-the most common use case is around contiguous arrays - and here, we could
-actually give the illusion as if in place ops are supported in Weld - we first
-discuss that scenario:
+Whenever we do an inplace operation on an array, then we need to ensure that if
+the array was a view (or had any views) - then all the other arrays sharing its
+memory also get updated. Currently, Weld does not explicitly support Inplace
+Ops yet - thus we have a slightly more complicated way to deal with these than
+expected - which could lead to some surprising speed issues (but the
+functionality should still be correct). 
 
-* Contiguous Arrays:
+<!--Since the most common use case is around contiguous arrays - and here, we could-->
+<!--actually give the illusion as if in place ops are supported in Weld - we first-->
+<!--discuss that scenario:-->
 
-* Non-Contiguous Arrays:
+* Non-Contiguous Arrays: If there is an in place update on a non-contiguous
+array, then we simply force the evaluation of all operations stored so far on
+the relevant memory (these would be stored in the parent array) - and then
+offload the inplace update to NumPy. As we have mentioned before, evaluating
+stored ops is not ideal for Weld's performance, thus if possible, you may want
+to avoid such a situation, but everything should still work as expected, and
+you can still hope to get performance gains if a few operations were combined
+before applying the inplace update. 
+
+* Contiguous Arrays: Since this is the most common scenario, and it might often
+be that the inplace update is applied to the whole array, then we did not want
+to force an evaluation of all the stored operations as in the non-contiguous
+case. Instead, we combine the inplace update with the operations that were
+already to be done on the given array. In common scenarios, this would do well,
+but it can lead to some edge cases where the performance is clearly worse.
+
+First, let us consider typical scenarios where this will perform well:
+
+```python
+from weldnumpy import weldarray
+import numpy as np
+a = weldarray(np.random.rand(100000))
+
+for i in range(10):
+    a += 10.0
+print(a)
+
+# For the above code, NumPy will not need to make any copies of the array, 
+# while Weld will need to make a single copy. But Weld will be able to save
+# big on fusing the loops together - thus instead of looping over a 10 times,
+# Weld will only need to do it once. So for most 'big' arrays, this will be a
+# big win. 
+    
+# Also, if we had something like:
+c = weldarray(np.random.rand(100000))
+b = a + 20      
+b += c
+
+# Then, NumPy will require a copy when performing b = a+20, while no copy will
+# be required for b += c. Meanwhile, weld, will also only need one copy because
+# it will be able to combine the two operations on b together. Considering that
+# we expect weldnumpy programs to be much longer, it felt like a single-copy
+# cost for the inplace op was not a big deal.
+'''
+
+One natural drawback that you can see from the above example is if we had to
+immediately evaluate an array after an inplace op:
+
+```python
+from weldnumpy import weldarray
+import numpy as np
+
+a = weldarray(np.random.rand(10))
+a += 10.0
+print(a)
+
+# In NumPy, the above program will involve no copying, but our current design
+# for inplace updates to contiguous arrays will create a new copy of a - thus
+# this is a clear performance issue.
+'''
+
+Another drawback is if we get a contiguous array which is a view into a small
+part of the array 'a' - then updating such an array would unfortunately cause
+all of 'a' to be copied over. This is a side effect of the current implementation,
+but we should be able to eventually remove this drawback. For instance:
+
+```python
+from weldnumpy import weldarray
+import numpy as np
+
+a = weldarray(np.random.rand(10000000))
+b = a[0:10]
+b += 10.0
+print(b)
+
+# This will perform horribly, because our current implementation will force the
+# copying of all of a when updating 'b' in place.
+'''
 
 ## Developer Documentation
 
