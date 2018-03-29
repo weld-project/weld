@@ -12,25 +12,21 @@
 ## Setup
 
 ### pip
-pip install weldnumpy
+```bash
+$ pip install weldnumpy
+```
+TODO: Add testing details
 
-<!--### Installing from source-->
-<!--Here, you will need to install [Weld](https://github.com/weld-project/weld)-->
-<!--first, and then you can install weldnumpy -->
+### Installing from source
 
-<!--```bash-->
-<!--$ git clone -->
-<!--'''-->
+Clone this repo, and then to install weldnumpy and run tests, do: 
+```bash
+$ cd weld/python/numpy
+$ python setup.py install
+$ pytest -q
+```
 
-<!--TODO: Should testing involve cloning this repo etc??-->
-<!--After installation, you should be able to verify it by running the tests from-->
-<!--the NumPy directory. -->
-
-<!--```bash-->
-<!--$ git clone -->
-<!--```-->
-
-# Overview
+## Overview
 
 WeldNumpy is a library that provides a subclass of NumPy's ndarray module,
 called weldarray, which 
@@ -51,12 +47,17 @@ supported by Weld.
 NumPy features that WeldNumpy currently supports are:
 * Supported operations include:
     * Unary Operations: np.exp, np.log, np.sqrt, np.sin, np.cos, np.tan,
-    np.arccos, np.arcsin, np.arctan, np.sinh, np.cosh, np.tanh, scipy.special.erf
+    np.arccos, np.arcsin, np.arctan, np.sinh, np.cosh, np.tanh,
+    scipy.special.erf (Note: scipy functions on NumPy arrays can also be
+    supported in the same fashion - but we have not implemented most of
+    these)
     * Binary Operations: np.add, np.subtract, np.multiply, np.divide
 * Supported types are: np.float64, np.float32, np.int64, np.int32
 * In general, the operations work over multi-dimensional arrays, including
-non-contiguous arrays. But for inplace updates, there are more subtleties
-involved, as described later.
+non-contiguous arrays. But for inplace updates, there are a few more subtleties
+involved if you want to maximize performance, as described
+[below](inplace-ops-and-views)
+
 * Supports reductions over 1d arrays
 * Supports [broadcasting](https://docs.scipy.org/doc/numpy/user/basics.broadcasting.html)
 * All unsupported operations/methods on the weldarray are offloaded to NumPy -
@@ -72,11 +73,12 @@ In general, it may be more flexible to not always utilize weldarray - for
 instance with relatively small sized NumPy arrays, the overhead of compiling
 the Weld programs will be more expensive than the total NumPy execution times.
 
-The biggest speed benefit from using WeldNumPy v/s NumPy is just that the Weld
-code can be automatically parallelized. But even with single threaded code,
- there are various tricks that Weld uses in order to get the most out of
- the performance. Let us now look at a few basic usage examples that also
- highlight some of these benefits provided by WeldNumpy.
+One of the biggest speed benefit from using WeldNumPy v/s NumPy is just that
+the Weld code can be automatically parallelized. But even with single threaded
+code, there are various tricks that Weld uses in order to get the most out of
+the performance. Let us now look at a few basic usage examples that also
+highlight some of these benefits besides automatic parallelization as provided
+by WeldNumpy.
 
 #### Materialization 
 
@@ -167,25 +169,26 @@ same as the equivalent operations on NumPy arrays. The only extra operation on
 a weldarray is: weldarray.evaluate() which forces the evaluation of all the
 operations registered on the weldarray.
 
-#### Differences with NumPy
+### Differences with NumPy
 
-##### Compilation Costs 
+#### Compilation Costs 
 In general, there is a slight overhead for compiling the Weld IR to LLVM before
 it can be executed. If the array sizes are large enough, then these compilation
 costs add little overhead as compared to computations. But this also means that
 if you are using NumPy with small arrays, then there would be little to no use
 of WeldNumpy.
 
-##### Lazy Evaluation
+#### Lazy Evaluation
 
 Weld is a lazily evaluated IR - i.e., when a program line is encountered, it is
 not neccessarily executed. Instead, these operations are just stored as
 metadata in the weldarray, so that they could be executed at a later time with
 the intention that certain optimizations (like the ones described above) will
-suddenly become possible. NumPy doesn't do this, so the challenge is to present
-the same interface as NumPy without explicitly using lazy evaluation.
+suddenly become possible. NumPy doesn't do this, so a challenge is to present
+the same interface as NumPy without explicitly using lazy evaluation. This
+leads us to the different ways to evaluate a weldarray:
 
-###### Implicit Evaluation
+##### Implicit Evaluation
 
 In general, if you print an array / or access it in some other way without
 explicitly evaluating it, you will still see the correct results because
@@ -203,12 +206,12 @@ print(w[0])
 ```
 
 Another use case for implicit evaluation is when we offload operations to
-NumPy. Since NumPy expects to operate on the memory of the ndarray like object
-- we need to ensure that this memory represents the latest values of the array
-object. In order to do this, we always implicitly evaluate the array when
-offloading computations to NumPy. 
+NumPy. Since NumPy expects to operate on the memory of the ndarray like object,
+we need to ensure that this memory represents the latest values of the
+array object. In order to do this, we always implicitly evaluate the array
+when offloading computations to NumPy. 
 
-###### Evaluate
+##### Evaluate
 
 This is one of the two public functions on weld arrays that is different from
 the NumPy operations. It will just evaluate all the operations registered with the
@@ -266,11 +269,11 @@ for most NumPy functions, but there are a few that just do this. In general,
 the simplest thing might be to remember to evaluate the arrays before sending
 it into an unknown NumPy function.
 
-###### Group Evaluate
+##### Group Evaluate
 
 TODO: Finalize syntax
 
-##### Things that don't quite work
+#### Things that don't quite work
 
 In general, most common functions on a ndarray are routed by NumPy through the
 weldarray subclass - thus things like [universal
@@ -377,7 +380,7 @@ b += c
 # it will be able to combine the two operations on b together. Considering that
 # we expect weldnumpy programs to be much longer, it felt like a single-copy
 # cost for the inplace op was not a big deal.
-'''
+```
 
 One natural drawback that you can see from the above example is if we had to
 immediately evaluate an array after an inplace op:
@@ -393,7 +396,7 @@ print(a)
 # In NumPy, the above program will involve no copying, but our current design
 # for inplace updates to contiguous arrays will create a new copy of a - thus
 # this is a clear performance issue.
-'''
+```
 
 Another drawback is if we get a contiguous array which is a view into a small
 part of the array 'a' - then updating such an array would unfortunately cause
@@ -411,24 +414,49 @@ print(b)
 
 # This will perform horribly, because our current implementation will force the
 # copying of all of a when updating 'b' in place.
-'''
+```
 
 ## Developer Documentation
 
-Scenarios which cause Implicit Evaluation:
+### Scenarios which cause Implicit Evaluation:
+
+As described above, these are cases 
 
 * printing the array
 * unsupported operations which need to be offloaded to NumPy
-* If the number of registered ops on the weldarray exceeds a threshold, like
-50 ops, as beyond that, the Weld optimization passes start taking significant
-time since they are quadratic. Also, if the number of ops gets around 1000,
- then the program can actually segfault because of some implementation
- details of the Weld optimization passes.
-* operations between ndarrays and weldarrays: this does not neccessarily
+* If the number of registered ops on the weldarray exceeds a threshold, as
+beyond a point, the Weld optimization passes start taking significant time
+since they are quadratic. Also, if the number of ops gets over
+MAX_REGISTERED_OPS (defined in weldnumpy.py, and currently set to 100) we
+implicitly evaluate it. The reasoning is that if the depth of the tree of weld
+operators becomes too large, then the optimization algorithms (which are
+quadratic by their nature) start to take a non-trivial amount of time,
+and in certain cases can also cause crashes.
+* b operations between ndarrays and weldarrays: this does not neccessarily
 require implicit evaluation of the weldarray, but there were some edge cases in
 the non-contiguous arrays case which make us conservatively choose to
 implicitly evaluate weldarrays in these cases.
 
+### Views
+
+Whenever a view is created, the new array, 'w', gets a w._weldarray_view
+(weldarray_view) object. You can find the definition in weldnumpy.py. The basic
+idea is that it stores information about how to get the view from the parent /
+and information such idx/start/end/strides/shape. This is important because in
+place updates to views would require updating both the parent and all it's
+views.
+
+TODO: Write more detailed views notes
+
+### Common useful functions in the weldnumpy code: 
+
 ## Future Work
 
+* Add gpu support for Weld - which should result in all the operations
+described above having the possibility of executing on GPU's.
+* 
+
 ## Similar Projects
+
+* [Bohrium](http://bohrium.readthedocs.io/)
+* [Dask](https://dask.pydata.org/en/latest/)

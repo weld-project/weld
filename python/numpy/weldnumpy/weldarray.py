@@ -39,18 +39,17 @@ class weldarray(np.ndarray):
 
     def __array_finalize__(self, obj):
         '''
-        array finalize will be called whenever a subclass of ndarray (e.g., weldarray) is created.
-        This can happen in many situations where it does not go through __new__, e.g.:
+        array finalize will be called whenever a subclass of ndarray (e.g.,
+        weldarray) is created.  This can happen in many situations where it
+        does not go through __new__, e.g.:
             - np.float32(arr)
-            - arr.T
-        Thus, we want to generate the generic variables needed for the weldarray here.
+            - arr.T Thus, we want to generate the generic variables needed for
+              the weldarray here.
 
-        @self: weldarray, current weldarray object being created.
-        @obj:  weldarray or ndarray, depending on whether the object is being created based on a
-        ndarray or a weldarray. If obj is a weldarray, then __new__ was not called for self, so we
-        should update the appropriate fields.
-
-        TODO: need to consider edge cases with views etc.
+        @self: weldarray, current weldarray object being created.  @obj:
+        weldarray or ndarray, depending on whether the object is being created
+        based on a ndarray or a weldarray. If obj is a weldarray, then __new__
+        was not called for self, so we should update the appropriate fields.
         '''
         if isinstance(obj, weldarray):
             # self was not generated through a call to __new__ so we should update self's
@@ -497,7 +496,7 @@ class weldarray(np.ndarray):
         outputs = kwargs.pop('out', None)
         supported = self._process_ufunc_inputs(input_args, outputs, kwargs)
         output = None
-        if self._num_registered_ops > 100:
+        if self._num_registered_ops > MAX_REGISTERED_OPS:
             # force evaluation internally.
             self._eval()
 

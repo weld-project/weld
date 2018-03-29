@@ -8,6 +8,7 @@ ALL_PASSES = ["loop-fusion", "infer-size", "short-circuit-booleans",
         "predicate", "vectorize", "fix-iterate"]
 CUR_PASSES = ALL_PASSES
 offload_setitem = True
+MAX_REGISTERED_OPS = 100
 
 class weldarray_view():
     '''
