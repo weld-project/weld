@@ -184,6 +184,8 @@ class weldarray(np.ndarray):
 
     def __getitem__(self, idx):
         '''
+        TODO: Need to rewrite this with non-contig stuff + slices being
+        similar.
         Deal with the following scenarios:
             - idx is a scalar
             - idx is an array (fancy indicing)
@@ -193,11 +195,10 @@ class weldarray(np.ndarray):
                     1. _eval self to get the latest values in the array.
                     2. Call np.ndarray's __getitem__ method on self.
                     3. Convert to weldarray and return.
-
             - idx is a slice (e.g., 3:5)
                 - In this scenario, if the memory is being shared with the
                   parent then we do not evaluate the ops stored so far in the
-                  base array (the original array which the view is a subset
+                  base array (the original array which the view is a subarray
                   of). Instead future in place ops on the view are just added
                   to the base array.
                 - Steps:
@@ -212,6 +213,8 @@ class weldarray(np.ndarray):
         '''
         # Need to cast it as ndarray view before calling ndarray's __getitem__
         # implementation.
+        print("getitem")
+        print(type(idx))
         if isinstance(idx, slice):
             # TODO: The way we treat views now, views don't need their own
             # weldobj - just the weldview object. Could be a minor
@@ -242,7 +245,8 @@ class weldarray(np.ndarray):
 
         elif isinstance(idx, tuple):
             # FIXME: This seems like it WOULD FAIL w/o an evaluate?
-            ret = self.view(np.ndarray).__getitem__(idx)
+            # ret = self.view(np.ndarray).__getitem__(idx)
+            ret = self._eval().__getitem__(idx)
             if isinstance(ret, np.ndarray):
                 return self._gen_weldview(ret, idx)
             else:
@@ -543,25 +547,37 @@ class weldarray(np.ndarray):
         '''
         relegate responsibility of executing ufunc to numpy.
         '''
-        if self._verbose: print('WARNING: ufunc being offloaded to numpy', ufunc)
+        if self._verbose: print('WARNING: ufunc being offloaded to numpy',
+                ufunc)
+
+        out_args = []
+        if outputs:
+            for j, output in enumerate(outputs):
+                if isinstance(output, weldarray):
+                    out_args.append(output.view(np.ndarray))
+                else:
+                    out_args.append(output)
+
         # Relegating the work to numpy. If input arg is weldarray, evaluate it,
         # and convert to ndarray before passing to super()
         for i, arg_ in enumerate(input_args):
             if isinstance(arg_, weldarray):
                 # Evaluate all the lazily stored computations first.
                 input_args[i] = arg_._eval()
+                # not doing this leads to a subtle bug: If we are updating a
+                # non-contiguous array in place, then we were offloading it to
+                # NumPy. If ops were previously stored on this array (or its
+                # parent), then the evaluation above would have changed its
+                # location -- thus the output array and the input would not be
+                # pointing to the same array anympore!
+                for j, out_j in enumerate(out_args):
+                    if (addr(out_j) - addr(arg_) == 0):
+                        out_args[j] = input_args[i]
 
-        if outputs:
-            out_args = []
-            for j, output in enumerate(outputs):
-                if isinstance(output, weldarray):
-                    out_args.append(output.view(np.ndarray))
-                else:
-                    out_args.append(output)
-            kwargs['out'] = tuple(out_args)
-        else:
-            outputs = (None,) * ufunc.nout
+        if len(out_args) == 0:
+            out_args = [None]*ufunc.nout
 
+        kwargs['out'] = tuple(out_args)
         result = super(weldarray, self).__array_ufunc__(ufunc, method,
                 *input_args, **kwargs)
 
@@ -918,6 +934,7 @@ class weldarray(np.ndarray):
         if result is None:
             result = self._get_result()
         else:
+            # only supports in place ops for weld arrays
             if not isinstance(result, weldarray):
                 return None
             # TODO: make general _get_result() function for in place ops.
@@ -928,7 +945,6 @@ class weldarray(np.ndarray):
                 v.base_array._update_range(v.start, v.end, update_str)
                 return result
 
-        # back to updating result array
         # Since it is a unary op - result is derived from self, so this is not
         # required. But if we change the way result is derived - i.e., use
         # something like np.empty(shape) - then we will need this.

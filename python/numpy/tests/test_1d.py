@@ -12,7 +12,7 @@ TODO: New tests:
 UNARY_OPS = [np.exp, np.log, np.sqrt]
 BINARY_OPS = [np.add, np.subtract, np.multiply, np.divide]
 REDUCE_UFUNCS = [np.add.reduce, np.multiply.reduce]
-# TODO: add other similar functions 
+# TODO: add other similar functions
 UTIL_FUNCTIONS = [np.max, np.min]
 
 # FIXME: weld mergers dont support non-commutative ops --> need to find a workaround for this.
@@ -814,12 +814,13 @@ def test_views_strides():
     FIXME: not supported yet.
     '''
     n, w = random_arrays(NUM_ELS, 'float32')
+    print("creating the view")
     w2 = w[2:8:2]
     n2 = n[2:8:2]
 
     w += 100.00
     n += 100.00
-    
+
     w = w.evaluate()
     assert np.allclose(w, n)
     assert np.allclose(w2, n2)
@@ -1117,7 +1118,7 @@ def test_util_functions():
     for f in UTIL_FUNCTIONS:
         n, w = random_arrays(5, 'float64')
         n = np.log(n)
-        w = np.log(w) 
+        w = np.log(w)
         nmax = f(n)
         wmax = f(w)
-        assert nmax == wmax 
+        assert nmax == wmax

@@ -18,11 +18,11 @@ class BinaryDistribution(Distribution):
         return True
 
 setup(name='weldnumpy',
-      version='0.0.1',
+      version='0.0.2',
       packages=['weldnumpy'],
       cmdclass={"install": Install},
       distclass=BinaryDistribution,
       url='https://github.com/parimarjan/weld/tree/master/python/numpy',
       author='Weld Developers',
       author_email='weld-group@lists.stanford.edu',
-      install_requires=['pyweld', 'pygrizzly', 'numpy>=1.13', 'scipy', 'pytest'])
+      install_requires=['pyweld', 'numpy>=1.13', 'scipy', 'pytest'])

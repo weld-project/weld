@@ -64,7 +64,8 @@ def get_noncontig_idx(shape):
     '''
     # idx = []
 
-    for i in range(5):
+    # for i in range(5):
+    while True:
         idx = []
         for s in shape:
             # 5 tries to get non-contiguous array
@@ -77,9 +78,11 @@ def get_noncontig_idx(shape):
         idx = tuple(idx)
         a, _ = random_arrays(shape, 'float32')
         b = a[idx]
-        if not b.flags.contiguous:
+        if is_view_child(b,a) and not b.flags.contiguous:
+            print(idx)
             break
-
+    
+    print(idx)
     return idx
 
 def test_views_non_contig_basic():
@@ -134,19 +137,31 @@ def test_views_non_contig_no_op():
         assert np.allclose(n2, w2.evaluate())
 
 def test_views_non_contig_inplace_unary():
-    ND_SHAPES = [(3,3)]
+    ND_SHAPES = [(5,5)]
+
     for shape in ND_SHAPES:
         n, w = random_arrays(shape, 'float64')
         idx = get_noncontig_idx(shape)
 
-        # n2 = n[idx]
-        # w2 = w[idx]
+        # FIXME: Temporary fixed index. Remove after fixing.
+        idx = slice(0,5,2), slice(0,5,2)
+
         n2 = n[idx]
         w2 = w[idx]
+        
+        assert is_view_child(n2, n), 'should be child'
+ 
+        # test: update parents first
+        n = np.log(n, out=n)
+        w = np.log(w, out=w)
+
+        assert np.allclose(n2, w2)
+        assert np.allclose(n, w)
 
         # unary op test.
         n2 = np.sqrt(n2, out=n2)
         w2 = np.sqrt(w2, out=w2)
+
         assert n2.shape == w2.shape
         assert n2.strides == w2.strides
 
@@ -159,7 +174,7 @@ def test_views_non_contig_inplace_unary():
         w2 = w2.evaluate()
         assert np.array_equal(n2, w2)
         assert np.allclose(n2, w2.evaluate())
-        assert np.allclose(n, w)
+        assert np.allclose(n, w.evaluate())
 
 def test_views_non_contig_newarray_binary():
     '''
@@ -616,9 +631,3 @@ def test_tictactoe_reshape():
         if i == -1:
             print('woot')
         assert isinstance(i, np.float64)
-
-# test_transpose_simple()
-# print("transpose simple done....")
-test_transpose_inplace()
-# test_transpose_ops()
-
