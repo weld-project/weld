@@ -146,42 +146,35 @@ class weldarray(np.ndarray):
 
     def _gen_weldview(self, new_arr, idx=None):
         '''
-        TODO: can generalize this to the 1d cases too or not?
-        @new_arr: new view of self.
+        @new_arr: ndarray, which is a new view of self.
         @idx: the idx used to create the view. Not really needed - because
         there are cases when this function is being used from outside
         __getitem__, e.g., for views created by broadcasting, or transposes.
-        FIXME: Want to do this so that we can modify self's weldarray view
-        directly?
-        FIXME: If self is a weldarray as well, then fails.
 
-        @returns: new_arr with the weldview being generated.
+        @returns: new_arr with the weldview being generated. If new arr was not
+        a child of self, then new_arr is returned as a weldarray.
         '''
         new_arr = weldarray(new_arr, verbose=self._verbose)
         # FIXME: Do stuff with views being grandchildren here.
         # now let's create the weldarray view with the starts/stops/steps
-        if self._weldarray_view is None:
-            base_array = self
-            par_start = 0
-        else:
-            assert False, 'nested views, need to fix this still'
-            base_array = self._weldarray_view.base_array
-            par_start = self._weldarray_view.start
+        if is_view_child(new_arr.view(np.ndarray), self.view(np.ndarray)):
+            if self._weldarray_view is None:
+                base_array = self
+            else:
+                base_array = self._weldarray_view.base_array
 
-        # FIXME: cleaner way to calculate start?
-        start = (addr(new_arr) - addr(base_array)) / self.itemsize
-        start += par_start
-        # TODO: temporarily needed.
-        end = 1
-        shape = new_arr.shape
-        strides = new_arr.strides
-        for s in shape:
-            end = end*s
-        end += start
-
-        # new_arr is a view, so initialize its weldview.
-        new_arr._weldarray_view = weldarray_view(base_array, self, start, end,
-                idx, shape=shape, strides=strides)
+            # FIXME: cleaner way to calculate start? This seems to work well
+            # though.
+            start = (addr(new_arr) - addr(base_array)) / self.itemsize
+            end = 1
+            shape = new_arr.shape
+            strides = new_arr.strides
+            for s in shape:
+                end = end*s
+            end += start
+            # new_arr is a view, so initialize its weldview.
+            new_arr._weldarray_view = weldarray_view(base_array, self, start, end,
+                    idx, shape=shape, strides=strides)
         return new_arr
 
     def __getitem__(self, idx):
@@ -220,32 +213,9 @@ class weldarray(np.ndarray):
             # weldobj - just the weldview object. Could be a minor
             # optimization.
             ret = self.view(np.ndarray).__getitem__(idx)
-            ret = weldarray(ret, verbose=self._verbose)
-            # check if ret really is a view of arr. If not, then don't need to
-            # make changes to ret's weldarray_view etc.
-            if is_view_child(ret.view(np.ndarray), self.view(np.ndarray)):
-                if self._weldarray_view is None:
-                    base_array = self
-                    par_start = 0
-                else:
-                    base_array = self._weldarray_view.base_array
-                    par_start = self._weldarray_view.start
-
-                # start / end is relative to the base_array because all future
-                # in place updates to the view would be made on the relevant
-                # indices on the base array.
-                start = par_start + idx.start
-                end = par_start + idx.stop
-                # ret is a view, initialize its weldview.
-                strides = ret.strides
-                ret._weldarray_view = weldarray_view(base_array, self, start,
-                        end, idx, strides=strides)
-
-            return ret
+            return self._gen_weldview(ret, idx)
 
         elif isinstance(idx, tuple):
-            # FIXME: This seems like it WOULD FAIL w/o an evaluate?
-            # ret = self.view(np.ndarray).__getitem__(idx)
             ret = self._eval().__getitem__(idx)
             if isinstance(ret, np.ndarray):
                 return self._gen_weldview(ret, idx)

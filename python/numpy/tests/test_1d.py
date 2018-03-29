@@ -290,8 +290,14 @@ def test_views_grandparents_update_mix():
     w2 = w[2:9]
     n2 = n[2:9]
 
+    print(w2._weldarray_view.start)
+    print(w2._weldarray_view.end)
+
     w3 = w2[2:4]
     n3 = n2[2:4]
+
+    print(w3._weldarray_view.start)
+    print(w3._weldarray_view.end)
 
     assert np.allclose(w3.evaluate(), n3)
 
@@ -1122,3 +1128,5 @@ def test_util_functions():
         nmax = f(n)
         wmax = f(w)
         assert nmax == wmax
+
+test_views_grandparents_update_mix()

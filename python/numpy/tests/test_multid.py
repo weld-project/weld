@@ -143,7 +143,9 @@ def test_views_non_contig_inplace_unary():
         idx = get_noncontig_idx(shape)
         n2 = n[idx]
         w2 = w[idx] 
+
         assert is_view_child(n2, n), 'should be child'
+        assert is_view_child(w2.view(np.ndarray), w.view(np.ndarray)), 'should be child'
  
         # test: update parents first
         n = np.log(n, out=n)
@@ -291,7 +293,6 @@ def test_views_non_contig_nested_child():
         # asserting in weldnumpy?
         idx2 = slice(0,-1,2)
         nv2 = nv1[idx2]
-        print("nv2 shape: ", nv2.shape)
         wv2 = wv1[idx2]
 
         assert wv2._weldarray_view is not None
@@ -312,11 +313,7 @@ def test_weldarray_vanishing_view():
         # important: we need to make sure the case with the second array having some operations
         # stored in it is dealt with.
         wv = np.sqrt(wv, out=wv)
-        nv = np.sqrt(nv, out=nv)
-        
-        print(type(wv))
-        print(addr(wv) - addr(w))
-        print(wv.flags.contiguous)
+        nv = np.sqrt(nv, out=nv) 
         assert wv._weldarray_view is not None
 
         wv = wv.evaluate()
@@ -462,8 +459,7 @@ def test_transpose_simple():
     # n, w = random_arrays((10,5), 'float64')
     # # slightly awkward because otherwise numpy's transpose will be called...ideally, weldnumpy is
     # # being used as import weldnumpy as np, and then this stuff would work fine.
-    # n2 = transpose(n)
-    # # w2 = transpose(w)
+    # n2 = np.transpose(n)
     # w2 = np.transpose(w)
 
     # assert n2.shape == w2.shape
@@ -474,11 +470,22 @@ def test_transpose_simple():
     # w3 = w3.evaluate()
 
     # assert n3.shape == w3.shape
-    # print('n3 assert done')
+    # assert w3.flags.contiguous
+
+    # np.allclose(n3, w3)
+    # np.allclose(n2, w2)
+    # np.allclose(n, w)
+
+    # print("first bunch of allcloses done")
 
     # n4 = n3 - n2
     # w4 = w3 - w2
+    # # THIS WORKS: 
+    # # w4 = w2 - w3
+    
+    # print(w4.weldobj.weld_code)
     # w4 = w4.evaluate()
+    # print("w4 evaluate done")
 
     # np.allclose(n3, w3)
     # np.allclose(n2, w2)
@@ -678,3 +685,5 @@ def test_tictactoe_reshape():
         if i == -1:
             print('woot')
         assert isinstance(i, np.float64)
+
+test_views_non_contig_inplace_unary()
