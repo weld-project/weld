@@ -3040,6 +3040,73 @@ fn nditer_zip() {
     unsafe { free_value_and_module(ret_value) };
 }
 
+fn appender_and_dictmerger_loop() {
+    #[derive(Clone)]
+    #[allow(dead_code)]
+    struct Pair {
+        ele1: i32,
+        ele2: i32,
+    }
+
+    #[derive(Clone)]
+    #[allow(dead_code)]
+    struct Output {
+        append_out: WeldVec<i32>,
+        dict_out: WeldVec<Pair>
+    }
+
+    #[allow(dead_code)]
+    struct Args {
+        x: WeldVec<i32>,
+        y: WeldVec<i32>,
+    }
+
+    let code = "|x:vec[i32], y:vec[i32]| let rs = for(zip(x,y),{appender[i32],dictmerger[i32,i32,+]},
+                |bs,i,e| {merge(bs.$0, e.$0+e.$1), merge(bs.$1, e)}); {result(rs.$0), tovec(result(rs.$1))}";
+    let conf = default_conf();
+    let keys = [1, 2, 2, 1, 3];
+    let vals = [2, 3, 4, 2, 1];
+    let ref input_data = Args {
+        x: WeldVec {
+            data: &keys as *const i32,
+            len: keys.len() as i64,
+        },
+        y: WeldVec {
+            data: &vals as *const i32,
+            len: vals.len() as i64,
+        },
+    };
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const Output };
+    let result = unsafe { (*data).clone() };
+
+    let output_appender = [3, 5, 6, 3, 4];
+    let output_dict_keys = [1, 2, 3];
+    let output_dict_vals = [4, 7, 1];
+
+    assert_eq!(result.append_out.len, output_appender.len() as i64);
+    for i in 0..(output_appender.len() as isize) {
+        assert_eq!(unsafe { *result.append_out.data.offset(i) }, output_appender[i as usize]);
+    }
+
+    assert_eq!(result.dict_out.len, output_dict_keys.len() as i64);
+    for i in 0..(output_dict_keys.len() as isize) {
+        let mut success = false;
+        let key = unsafe { (*result.dict_out.data.offset(i)).ele1 };
+        let value = unsafe { (*result.dict_out.data.offset(i)).ele2 };
+        for j in 0..(output_dict_keys.len()) {
+            if output_dict_keys[j] == key {
+                if output_dict_vals[j] == value {
+                    success = true;
+                }
+            }
+        }
+        assert_eq!(success, true);
+    }
+    unsafe { free_value_and_module(ret_value) };
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     let tests: Vec<(&str, fn())> =
@@ -3142,7 +3209,8 @@ fn main() {
              ("nested_appender_loop", nested_appender_loop),
              ("simple_sort", simple_sort),
              ("complex_sort", complex_sort),
-             ("serialize_test", serialize_test)];
+             ("serialize_test", serialize_test),
+             ("appender_and_dictmerger_loop", appender_and_dictmerger_loop)];
 
     println!("");
     println!("running tests");
