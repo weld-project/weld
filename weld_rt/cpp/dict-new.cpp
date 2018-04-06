@@ -697,7 +697,7 @@ public:
       for (int j = 0; j < ldict->capacity(); j++) {
         Slot *slot = ldict->slot_at_index(j);
         if (slot->header.filled) {
-          Slot *global_slot = dict->get_slot(slot->header.hash, slot->key(), NO_LOCKING, false);
+          Slot *global_slot = dict->get_slot(slot->header.hash, slot->key(), NO_LOCKING, true);
           global_slot->update(_finalize_merge_fn,
               _metadata,
               slot->header.hash,
