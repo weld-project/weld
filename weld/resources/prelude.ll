@@ -76,8 +76,8 @@ declare float @tanhf(float)
 declare double @tanh(double)
 
 ; Power
-; declare float @llvm.pow.f32(float, float)
-; declare double @llvm.pow.f64(double, double)
+declare float @llvm.pow.f32(float, float)
+declare double @llvm.pow.f64(double, double)
 
 declare i32 @puts(i8* nocapture) nounwind
 
