@@ -62,7 +62,8 @@ involved if you want to maximize performance, as described
 * Supports [broadcasting](https://docs.scipy.org/doc/numpy/user/basics.broadcasting.html)
 * All unsupported operations/methods on the weldarray are offloaded to NumPy -
 so NumPy programs should still function correctly. After the NumPy methods
-are executed, a weldarray is returned.
+are executed, a weldarray is returned. In general, the costs of offloading are
+minimal, and for most large arrays, it should not be noticeable.
 
 One of the goals of this library is to require minimal changes to your original
 NumPy source code in order to harness the optimizations provided by Weld. Thus,
@@ -177,6 +178,13 @@ it can be executed. If the array sizes are large enough, then these compilation
 costs add little overhead as compared to computations. But this also means that
 if you are using NumPy with small arrays, then there would be little to no use
 of WeldNumpy.
+
+#### Each operand must have the same type
+
+If two operands would have different types (e.g., f32, and f64), then this is
+not supported in Weld, so it would be offloaded to NumPy. It should perform
+correctly, but as described later, it is best for performance to avoid
+offloading operations if possible.
 
 #### Lazy Evaluation
 

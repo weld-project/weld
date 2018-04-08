@@ -65,6 +65,8 @@ def get_supported_binary_ops():
     binary_ops[np.subtract.__name__] = '-'
     binary_ops[np.multiply.__name__] = '*'
     binary_ops[np.divide.__name__] = '/'
+    binary_ops[np.power.__name__] = 'pow'
+    binary_ops[np.square.__name__] = 'pow'
 
     return binary_ops
 

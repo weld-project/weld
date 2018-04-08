@@ -9,7 +9,7 @@ TODO: New tests:
     - edge/failing cases: out = ndarray for op involving weldarrays.
 '''
 
-UNARY_OPS = [np.exp, np.log, np.sqrt]
+UNARY_OPS = [np.exp, np.log, np.sqrt, np.square]
 BINARY_OPS = [np.add, np.subtract, np.multiply, np.divide]
 REDUCE_UFUNCS = [np.add.reduce, np.multiply.reduce]
 # TODO: add other similar functions
@@ -68,7 +68,7 @@ def test_unary_elemwise():
             np_result = op(np_test)
             w2_eval = w2.evaluate()
 
-            assert np.allclose(w2, np_result)
+            assert np.allclose(w2_eval, np_result)
             assert np.array_equal(w2_eval, np_result)
 
 def test_binary_elemwise():
@@ -1129,4 +1129,4 @@ def test_util_functions():
         wmax = f(w)
         assert nmax == wmax
 
-test_views_grandparents_update_mix()
+test_unary_elemwise()
