@@ -341,10 +341,6 @@ Ops yet - thus we have a slightly more complicated way to deal with these than
 expected - which could lead to some surprising speed issues (but the
 functionality should still be correct). 
 
-<!--Since the most common use case is around contiguous arrays - and here, we could-->
-<!--actually give the illusion as if in place ops are supported in Weld - we first-->
-<!--discuss that scenario:-->
-
 * Non-Contiguous Arrays: If there is an in place update on a non-contiguous
 array, then we simply force the evaluation of all operations stored so far on
 the relevant memory (these would be stored in the parent array) - and then
