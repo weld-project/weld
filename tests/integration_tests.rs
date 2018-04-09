@@ -3257,7 +3257,7 @@ fn main() {
              ("simple_sort", simple_sort),
              ("complex_sort", complex_sort),
              ("string_sort", string_sort),
-             ("serialize_test", serialize_test)];
+             ("serialize_test", serialize_test),
              ("appender_and_dictmerger_loop", appender_and_dictmerger_loop)];
 
     println!("");
