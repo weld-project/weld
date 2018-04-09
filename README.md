@@ -20,7 +20,7 @@ You can join the discussion on Weld on our [Google Group](https://groups.google.
 
 ## Building
 
-To build Weld, you need [Rust 1.20 or higher](http://rust-lang.org) and [LLVM](http://llvm.org) 3.8 or newer.
+To build Weld, you need [Rust 1.24 or higher](http://rust-lang.org) and [LLVM](http://llvm.org) 3.8 or newer.
 
 To install Rust, follow the steps [here](https://rustup.rs). You can verify that Rust was installed correctly on your system by typing `rustc` into your shell.
 

@@ -13,6 +13,7 @@ import pkg_resources
 
 numpy_to_weld_type_mapping = {
     'str': WeldVec(WeldChar()),
+    'int16': WeldInt16(),
     'int32': WeldInt(),
     'int64': WeldLong(),
     'float32': WeldFloat(),
@@ -64,7 +65,9 @@ class NumPyEncoder(WeldObjectEncoder):
         """
         if isinstance(obj, np.ndarray):
             dtype = str(obj.dtype)
-            if dtype == 'int32':
+            if dtype == 'int16':
+                base = WeldInt16()
+            elif dtype == 'int32':
                 base = WeldInt()
             elif dtype == 'int64':
                 base = WeldLong()
@@ -94,16 +97,24 @@ class NumPyEncoder(WeldObjectEncoder):
             Weld formatted object
         """
         if isinstance(obj, np.ndarray):
-            if obj.ndim == 1 and obj.dtype == 'int32':
+            if obj.ndim == 1 and obj.dtype == 'int16':
+                numpy_to_weld = self.utils.numpy_to_weld_int16_arr
+            elif obj.ndim == 1 and obj.dtype == 'int32':
                 numpy_to_weld = self.utils.numpy_to_weld_int_arr
             elif obj.ndim == 1 and obj.dtype == 'int64':
                 numpy_to_weld = self.utils.numpy_to_weld_long_arr
+            elif obj.ndim == 1 and obj.dtype == 'float32':
+                numpy_to_weld = self.utils.numpy_to_weld_float_arr
             elif obj.ndim == 1 and obj.dtype == 'float64':
                 numpy_to_weld = self.utils.numpy_to_weld_double_arr
+            elif obj.ndim == 2 and obj.dtype == 'int16':
+                numpy_to_weld = self.utils.numpy_to_weld_int16_arr_arr
             elif obj.ndim == 2 and obj.dtype == 'int32':
                 numpy_to_weld = self.utils.numpy_to_weld_int_arr_arr
             elif obj.ndim == 2 and obj.dtype == 'int64':
                 numpy_to_weld = self.utils.numpy_to_weld_long_arr_arr
+            elif obj.ndim == 2 and obj.dtype == 'float32':
+                numpy_to_weld = self.utils.numpy_to_weld_float_arr_arr
             elif obj.ndim == 2 and obj.dtype == 'float64':
                 numpy_to_weld = self.utils.numpy_to_weld_double_arr_arr
             elif obj.ndim == 1 and obj.dtype == 'bool':
@@ -153,7 +164,11 @@ class NumPyDecoder(WeldObjectDecoder):
             data = cweld.WeldValue(obj).data()
         result = ctypes.cast(data, ctypes.POINTER(restype.ctype_class)).contents
 
-        if restype == WeldInt():
+        if restype == WeldInt16():
+            data = cweld.WeldValue(obj).data()
+            result = ctypes.cast(data, ctypes.POINTER(c_int16)).contents.value
+            return result
+        elif restype == WeldInt():
             data = cweld.WeldValue(obj).data()
             result = ctypes.cast(data, ctypes.POINTER(c_int)).contents.value
             return result
@@ -164,7 +179,7 @@ class NumPyDecoder(WeldObjectDecoder):
         elif restype == WeldFloat():
             data = cweld.WeldValue(obj).data()
             result = ctypes.cast(data, ctypes.POINTER(c_float)).contents.value
-            return float(result)
+            return np.float32(result)
         elif restype == WeldDouble():
             data = cweld.WeldValue(obj).data()
             result = ctypes.cast(data, ctypes.POINTER(c_double)).contents.value
@@ -174,20 +189,28 @@ class NumPyDecoder(WeldObjectDecoder):
         # ctypes._structure
         if restype == WeldVec(WeldBit()):
             weld_to_numpy = self.utils.weld_to_numpy_bool_arr
+        elif restype == WeldVec(WeldInt16()):
+            weld_to_numpy = self.utils.weld_to_numpy_int16_arr
+        elif restype == WeldVec(WeldInt()):
+            weld_to_numpy = self.utils.weld_to_numpy_int_arr
         elif restype == WeldVec(WeldLong()):
             weld_to_numpy = self.utils.weld_to_numpy_long_arr
+        elif restype == WeldVec(WeldFloat()):
+            weld_to_numpy = self.utils.weld_to_numpy_float_arr
         elif restype == WeldVec(WeldDouble()):
             weld_to_numpy = self.utils.weld_to_numpy_double_arr
         elif restype == WeldVec(WeldVec(WeldChar())):
             weld_to_numpy = self.utils.weld_to_numpy_char_arr_arr
+        elif restype == WeldVec(WeldVec(WeldInt16())):
+            weld_to_numpy = self.utils.weld_to_numpy_int16_arr_arr
         elif restype == WeldVec(WeldVec(WeldInt())):
             weld_to_numpy = self.utils.weld_to_numpy_int_arr_arr
         elif restype == WeldVec(WeldVec(WeldLong())):
             weld_to_numpy = self.utils.weld_to_numpy_long_arr_arr
+        elif restype == WeldVec(WeldVec(WeldFloat())):
+            weld_to_numpy = self.utils.weld_to_numpy_float_arr_arr
         elif restype == WeldVec(WeldVec(WeldDouble())):
             weld_to_numpy = self.utils.weld_to_numpy_double_arr_arr
-        elif restype == WeldVec(WeldInt()):
-            weld_to_numpy = self.utils.weld_to_numpy_int_arr
         elif isinstance(restype, WeldStruct):
             ret_vecs = []
             # Iterate through all fields in the struct, and recursively call

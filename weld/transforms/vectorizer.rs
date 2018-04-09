@@ -251,14 +251,35 @@ fn vectorize_expr(e: &mut Expr<Type>, broadcast_idens: &HashSet<Symbol>) -> Weld
     Ok(cont)
 }
 
-fn vectorizable_newbuilder(expr: &TypedExpr) -> bool {
-    if let NewBuilder(_) = expr.kind {
-        return true;
+/// Checks if the expression is a vectorizable newbuilder.
+/// Returns Some(true) if it is an appender, merger or a struct of builders with at least one appender or merger.
+/// Returns Some(false) if it is a builder, struct of builders, but no appender or mergers.
+/// Returns None if it is not a builder.
+fn vectorizable_builder(expr: &TypedExpr) -> Option<bool> {
+    use ast::BuilderKind::*;
+    match expr.kind {
+        Ident(_) | NewBuilder(_) => {
+            if let Builder(ref bk, _) = expr.ty {
+                match *bk {
+                    Appender(_) | Merger(_, _) => return Some(true),
+                    _ => return Some(false)
+                }
+            } else {
+                return None;
+            }
+        }
+        MakeStruct { ref elems } => {
+            let mut vectorizable = false;
+            for elem in elems.iter() {
+                match vectorizable_builder(elem) {
+                    Some(val) => vectorizable |= val,
+                    None => return None
+                }
+            }
+            return Some(vectorizable);
+        }
+        _ => return None
     }
-    if let MakeStruct { ref elems } = expr.kind {
-        return elems.iter().all(|ref e| vectorizable_newbuilder(e));
-    }
-    false
 }
 
 /// Checks basic vectorizability for a loop - this is a strong check which ensure that the only
@@ -268,8 +289,8 @@ fn vectorizable(for_loop: &Expr<Type>) -> Option<HashSet<Symbol>> {
     if let For { ref iters, builder: ref init_builder, ref func } = for_loop.kind {
         // Check if the iterators are consumed.
         if vectorizable_iters(&iters) {
-            // Check if the builder is newly initialized.
-            if vectorizable_newbuilder(init_builder) {
+            // Check if at least one of the builders can be vectorized.
+            if let Some(true) = vectorizable_builder(init_builder) {
                 // Check the loop function.
                 if let Lambda { ref params, ref body } = func.kind {
                     let mut passed = true;
@@ -512,9 +533,10 @@ fn zipped_input() {
     assert!(has_vectorized_merge(&e));
 }
 
-#[test]
-fn zips_in_body() {
-    let mut e = typed_expr("|v:vec[i32]| result(for(v, dictmerger[{i32,i32},i32,+], |b,i,e| merge(b,{{e,e},e})))");
-    vectorize(&mut e);
-    assert!(has_vectorized_merge(&e));
-}
+// Pointless test as dictmerger cannot be vectorized anyway.
+// #[test]
+// fn zips_in_body() {
+//     let mut e = typed_expr("|v:vec[i32]| result(for(v, dictmerger[{i32,i32},i32,+], |b,i,e| merge(b,{{e,e},e})))");
+//     vectorize(&mut e);
+//     assert!(has_vectorized_merge(&e));
+// }

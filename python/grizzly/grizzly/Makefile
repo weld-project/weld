@@ -24,8 +24,8 @@ ifeq (${OS}, Darwin)
   PYTHON_INCLUDES=${PYTHON_HEADER_INCLUDE} ${NUMPY_HEADER_INCLUDE}
 else ifeq (${OS}, Linux)
   # Linux
-  CLANG ?= /usr/bin/clang-${LLVM_VERSION}
-  CLANGPP ?= /usr/bin/clang++-${LLVM_VERSION}
+  CLANG ?= clang-${LLVM_VERSION}
+  CLANGPP ?= clang++-${LLVM_VERSION}
   FLAGS=-mavx2 -fuse-ld=gold -flto
   DFLAGS=-shared -fPIC
   DYLIB_SUFFIX=.so
