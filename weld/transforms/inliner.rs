@@ -98,7 +98,7 @@ pub fn inline_apply<T: TypeBounds>(expr: &mut Expr<T>) {
 }
 
 /// Inlines Let calls if the symbol defined by the Let statement is used
-/// less than one time.
+/// never or only one time.
 pub fn inline_let(expr: &mut Expr<Type>) {
     if let Ok(_) = uniquify(expr) {
         expr.transform(&mut |ref mut expr| {
@@ -181,27 +181,8 @@ fn getfield_on_symbol(expr: &TypedExpr, sym: &Symbol) -> Option<u32> {
     None
 }
 
-pub fn inline_let_getfield(expr: &mut TypedExpr) {
-    expr.transform_up(&mut |ref mut expr| {
-        match expr.kind {
-            Let { ref name, ref value, ref body } => {
-                if let GetField { expr: ref struct_expr, .. } = value.kind {
-                    if let Ident(_) = struct_expr.kind {
-                        let mut new_body = body.as_ref().clone();
-                        let ref new_expr = value.as_ref().clone();
-                        new_body.substitute(name, new_expr);
-                        return Some(new_body);
-                    }
-                }
-                return None;
-            },
-            _ => None,
-        }
-    });
-}
-
 /// Changes struct definitions assigned to a name and only used in `GetField` operations
-/// to definitions over the struct elements themselves.
+/// to `Let` definitions over the struct elements themselves.
 ///
 /// For example:
 ///

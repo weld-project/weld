@@ -114,8 +114,7 @@ lazy_static! {
                                 Transformation::new(inliner::inline_cast)],
                  "inline-literals"));
         m.insert("unroll-structs",
-                 Pass::new(vec![Transformation::new(inliner::unroll_structs),
-                                Transformation::new(inliner::inline_let_getfield)],
+                 Pass::new(vec![Transformation::new(inliner::unroll_structs)],
                  "unroll-structs"));
         m.insert("short-circuit-booleans",
                  Pass::new(vec![Transformation::new(short_circuit::short_circuit_booleans)],
