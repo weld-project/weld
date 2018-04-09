@@ -185,7 +185,6 @@ void *numpy_to_weld_double_arr_arr_helper(void* args_) {
  * Converts numpy array to Weld vector, with ndim = 2.
  */
 extern "C"
-<<<<<<< HEAD
 weld::vec<weld::vec<double> > numpy_to_weld_double_arr_arr(PyObject* in, int num_threads) {
   PyArrayObject* inp = (PyArrayObject*) in;
   int64_t dimension1 = (int64_t) PyArray_DIMS(inp)[0];
