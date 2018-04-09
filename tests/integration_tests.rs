@@ -3,9 +3,11 @@ use std::str;
 use std::slice;
 use std::thread;
 use std::cmp;
+use std::collections::hash_map::Entry;
 
 extern crate weld;
 extern crate libc;
+extern crate fnv;
 
 use weld::common::WeldRuntimeErrno;
 
@@ -1735,6 +1737,9 @@ fn complex_groupmerger_with_struct_key() {
     unsafe { free_value_and_module(ret_value) };
 }
 
+/// Tests a the dictionary by merging multiple keys key multiple times into a dictionary.
+/// `use_local` specifies whether to use the local-global adaptive dictionary or the purely global
+/// dictionary.
 fn simple_parallel_for_dictmerger_loop_helper(use_local: bool) {
     #[derive(Clone)]
     #[allow(dead_code)]
@@ -1754,11 +1759,13 @@ fn simple_parallel_for_dictmerger_loop_helper(use_local: bool) {
     let conf = many_threads_conf();
 
     const DICT_SIZE: usize = 8192;
+    const UNIQUE_KEYS: usize = 256;
     let mut keys = [0; DICT_SIZE];
     let mut vals = [0; DICT_SIZE];
 
+    // Repeated keys will have their values summed.
     for i in 0..DICT_SIZE {
-        keys[i] = i as i32;
+        keys[i] = (i % UNIQUE_KEYS) as i32;
         vals[i] = i as i32;
     }
     let ref input_data = Args {
@@ -1776,22 +1783,29 @@ fn simple_parallel_for_dictmerger_loop_helper(use_local: bool) {
     let data = unsafe { weld_value_data(ret_value) as *const WeldVec<Pair> };
     let result = unsafe { (*data).clone() };
 
-    let output_keys = keys;
-    let output_values = vals;
-    for i in 0..(output_keys.len() as isize) {
-        let mut success = false;
-        let key = unsafe { (*result.data.offset(i)).ele1 };
-        let value = unsafe { (*result.data.offset(i)).ele2 };
-        for j in 0..(output_keys.len()) {
-            if output_keys[j] == key {
-                if output_values[j] == value {
-                    success = true;
-                }
+    assert_eq!(UNIQUE_KEYS as i64, result.len);
+
+    // Build the expected output by summing the values.
+    let mut expected = fnv::FnvHashMap::default();
+    for i in 0..DICT_SIZE {
+        let key = (i % UNIQUE_KEYS) as i32;
+        match expected.entry(key) {
+            Entry::Occupied(mut ent) => {
+                *ent.get_mut() += i as i32;
+            }
+            Entry::Vacant(mut ent) => {
+                ent.insert(i as i32);
             }
         }
-        assert_eq!(success, true);
     }
-    assert_eq!(result.len, output_keys.len() as i64);
+
+    for i in 0..(result.len as isize) {
+        let key = unsafe { (*result.data.offset(i)).ele1 };
+        let value = unsafe { (*result.data.offset(i)).ele2 };
+        let expected_value = expected.get(&key).unwrap();
+        assert_eq!(*expected_value, value);
+    }
+    assert_eq!(result.len, expected.len() as i64);
     unsafe { free_value_and_module(ret_value) };
 }
 
