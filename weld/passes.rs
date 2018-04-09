@@ -109,6 +109,13 @@ lazy_static! {
         m.insert("infer-size",
                  Pass::new(vec![Transformation::new(size_inference::infer_size)],
                  "infer-size"));
+        m.insert("inline-literals",
+                 Pass::new(vec![Transformation::new(inliner::inline_negate),
+                                Transformation::new(inliner::inline_cast)],
+                 "inline-literals"));
+        m.insert("unroll-structs",
+                 Pass::new(vec![Transformation::new(inliner::unroll_structs)],
+                 "unroll-structs"));
         m.insert("short-circuit-booleans",
                  Pass::new(vec![Transformation::new(short_circuit::short_circuit_booleans)],
                  "short-circuit-booleans"));

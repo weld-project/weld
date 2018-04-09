@@ -98,7 +98,7 @@ pub fn inline_apply<T: TypeBounds>(expr: &mut Expr<T>) {
 }
 
 /// Inlines Let calls if the symbol defined by the Let statement is used
-/// less than one time.
+/// never or only one time.
 pub fn inline_let(expr: &mut Expr<Type>) {
     if let Ok(_) = uniquify(expr) {
         expr.transform(&mut |ref mut expr| {
@@ -123,6 +123,135 @@ pub fn inline_let(expr: &mut Expr<Type>) {
         });
     }
 }
+
+/// Changes negations of literal values to be literal negated values.
+pub fn inline_negate(expr: &mut TypedExpr) {
+    use ast::LiteralKind::*;
+    use exprs::literal_expr;
+    expr.transform(&mut |ref mut expr| {
+        if let Negate(ref child_expr) = expr.kind {
+            if let Literal(ref literal_kind) = child_expr.kind {
+                let res = match  *literal_kind {
+                    I8Literal(a) => Some(literal_expr(I8Literal(-a)).unwrap()),
+                    I16Literal(a) => Some(literal_expr(I16Literal(-a)).unwrap()),
+                    I32Literal(a) => Some(literal_expr(I32Literal(-a)).unwrap()),
+                    I64Literal(a) => Some(literal_expr(I64Literal(-a)).unwrap()),
+                    F32Literal(a) => Some(literal_expr(F32Literal((-f32::from_bits(a)).to_bits())).unwrap()),
+                    F64Literal(a) => Some(literal_expr(F64Literal((-f64::from_bits(a)).to_bits())).unwrap()),
+                    _ => None,
+                };
+                return res;
+            }
+        }
+        None
+    });
+}
+
+/// Changes casts of literal values to be literal values of the casted type.
+pub fn inline_cast(expr: &mut TypedExpr) {
+    use ast::ScalarKind::*;
+    use ast::LiteralKind::*;
+    use exprs::literal_expr;
+    expr.transform(&mut |ref mut expr| {
+        if let Cast { kind: ref scalar_kind, ref child_expr } = expr.kind {
+            if let Literal(ref literal_kind) = child_expr.kind {
+                return match (scalar_kind, literal_kind) {
+                    (&F64, &I32Literal(a)) => Some(literal_expr(F64Literal((a as f64).to_bits())).unwrap()),
+                    (&I64, &I32Literal(a)) => Some(literal_expr(I64Literal((a as i64))).unwrap()),
+                    (&F64, &I64Literal(a)) => Some(literal_expr(F64Literal((a as f64).to_bits())).unwrap()),
+                    (&I64, &I64Literal(a)) => Some(literal_expr(I64Literal((a as i64))).unwrap()),
+                    _ => None,
+                }
+            }
+        }
+        None
+    });
+}
+
+/// Checks if `expr` is a `GetField` on an identifier with name `sym`. If so,
+/// returns the field index being accessed.
+fn getfield_on_symbol(expr: &TypedExpr, sym: &Symbol) -> Option<u32> {
+    if let GetField { ref expr, ref index } = expr.kind {
+        if let Ident(ref ident_name) = expr.kind {
+            if sym == ident_name {
+                return Some(*index);
+            }
+        }
+    }
+    None
+}
+
+/// Changes struct definitions assigned to a name and only used in `GetField` operations
+/// to `Let` definitions over the struct elements themselves.
+///
+/// For example:
+///
+/// let a = {1, 2, 3, 4};
+/// a.$0 + a.$1 + a.$2
+///
+/// Becomes
+///
+/// let us = 1;
+/// let us#1 = 2;
+/// let us#1 = 3;
+/// let us#1 = 4;
+/// us + us#1 + us#2
+///
+pub fn unroll_structs(expr: &mut TypedExpr) {
+    use exprs::*;
+    use util::SymbolGenerator;
+
+    uniquify(expr).unwrap();
+    let mut sym_gen = SymbolGenerator::from_expression(expr);
+    expr.transform_up(&mut |ref mut expr| {
+        match expr.kind {
+            Let { ref name, ref value, ref body } => {
+                if let MakeStruct { ref elems } = value.kind {
+
+                    // First, ensure that the name is not used anywhere but a `GetField`.
+                    let mut total_count: i32 = 0;
+                    let mut getstruct_count: i32 = 0;
+                    body.traverse(&mut |ref e| {
+                        if getfield_on_symbol(e, name).is_some() {
+                                    getstruct_count += 1;
+                        }
+                        if let Ident(ref ident_name) = e.kind {
+                            if ident_name == name {
+                                total_count += 1;
+                            }
+                        }
+                    });
+
+                    // We used the struct somewhere else, so we can't safely get rid of it.
+                    if total_count != getstruct_count {
+                        return None;
+                    }
+
+                    let mut new_body = body.as_ref().clone();
+                    let symbols: Vec<_> = elems.iter().map(|_| sym_gen.new_symbol("us")).collect();
+                    // Replace the new_body with the symbol we assigned the struct element to.
+                    new_body.transform(&mut |ref mut expr2| {
+                        if let Some(index) = getfield_on_symbol(expr2, name) {
+                            let sym = symbols.get(index as usize).unwrap().clone();
+                            return Some(ident_expr(sym, expr2.ty.clone()).unwrap())
+                        }
+                        None
+                    });
+
+                    // Unroll the struct elements by assigning each one to a name.
+                    let mut prev = new_body;
+                    for (i, sym) in symbols.into_iter().enumerate().rev() {
+                        prev = let_expr(sym, elems[i].clone(), prev).unwrap();
+                    }
+                    return Some(prev);
+                }
+            },
+            _ => ()
+        }
+        None
+    });
+}
+
 
 /// Count the occurances of a `Symbol` in an expression.
 fn symbol_usage_count(sym: &Symbol, expr: &Expr<Type>) -> u32 {
