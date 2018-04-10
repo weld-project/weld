@@ -311,6 +311,9 @@ pub struct LlvmGenerator {
     vec_ids: IdGenerator,
     growable_vec_names: fnv::FnvHashSet<Type>,
 
+    // Key function id generator
+    keyfunc_ids: IdGenerator,
+    
     // LLVM type names for each merger type.
     merger_names: fnv::FnvHashMap<Type, String>,
     merger_ids: IdGenerator,
@@ -361,6 +364,7 @@ impl LlvmGenerator {
             vec_names: fnv::FnvHashMap::default(),
             vec_ids: IdGenerator::new("%v"),
             growable_vec_names: fnv::FnvHashSet::default(),
+            keyfunc_ids: IdGenerator::new("%sortkeyfunc"),
             merger_names: fnv::FnvHashMap::default(),
             merger_ids: IdGenerator::new("%m"),
             dict_names: fnv::FnvHashMap::default(),
@@ -3429,7 +3433,7 @@ impl LlvmGenerator {
             Sort { ref child, ref keyfunc } => {
                 // keyfunc is an actual SirFunction
                 let out_ty = func.symbol_type(output)?;
-                let function_id = ctx.var_ids.next();
+                let function_id = self.keyfunc_ids.next();
                 let func_str = &function_id.replace("%", "");
                 match *out_ty {
                     Vector(ref elem_ty) => {
@@ -3473,9 +3477,8 @@ impl LlvmGenerator {
                                 // Add key function and sort prelude code
                                 let name = self.vec_names.get(elem_ty).unwrap();
                                 self.prelude_code.add(format!(
-                                    "define {} @{}.{}({}) alwaysinline {{",
+                                    "define {} @{}({}) alwaysinline {{",
                                     key_ll_ty,
-                                    &name.replace("%", ""),
                                     func_str,
                                     str_args));
                                 self.prelude_code.add(keyfunc_ctx.alloca_code.result());
@@ -3510,9 +3513,8 @@ impl LlvmGenerator {
                                 // Add key function and sort prelude code
                                 let name = self.vec_names.get(elem_ty).unwrap();
                                 self.prelude_code.add(format!(
-                                    "define {} @{}.{}({}) {{",
+                                    "define {} @{}({}) {{",
                                     key_ll_ty,
-                                    &name.replace("%", ""),
                                     func_str,
                                     str_args));
                                 self.prelude_code.add(keyfunc_ctx.alloca_code.result());
