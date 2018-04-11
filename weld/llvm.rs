@@ -3497,7 +3497,7 @@ impl LlvmGenerator {
                                                 keyfunc_ctx.code.add(format!("br label %b.b{}", block));
                                             } else if let Terminator::ProgramReturn(_) = b.terminator {
                                             } else {
-                                                return weld_err!("Can't have intermediate return in sort key function");
+                                                return weld_err!("Can't have terminator other than Branch or JumpBlock in sort key function");
                                             }
                                         }
                                     }
