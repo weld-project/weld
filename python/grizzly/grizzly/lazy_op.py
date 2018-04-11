@@ -18,7 +18,7 @@ def to_weld_type(weld_type, dim):
     return weld_type
 
 
-class LazyOpResult:
+class LazyOpResult(object):
     """Wrapper class around as yet un-evaluated Weld computation results
 
     Attributes:
