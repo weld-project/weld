@@ -48,7 +48,7 @@ class BinaryDistribution(Distribution):
         return True
 
 setup(name='pygrizzly',
-      version='0.0.1',
+      version='0.0.4',
       packages=['grizzly'],
       package_data = {'grizzly': ['numpy_weld_convertor.cpp', 'common.h', 'Makefile']},
       cmdclass={"install": Install, "develop": Develop},

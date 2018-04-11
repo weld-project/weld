@@ -2733,6 +2733,80 @@ fn predicate_if_iff_annotated() {
     let ret_value = compile_and_run(code, conf, input_data);
     check_result_and_free(ret_value, expected);
 }
+fn string_sort() {
+    #[derive(Clone)]
+    #[allow(dead_code)]
+    struct Args {
+        x: WeldVec<WeldVec<u8>>
+    }
+    let bs = vec!['T' as u8, 'R' as u8, 'U' as u8, 'E' as u8];
+    let cs = vec!['P' as u8, 'A' as u8, 'R' as u8];
+    let ds = vec!['F' as u8, 'A' as u8, 'L' as u8, 'S' as u8, 'E' as u8];
+    let sorted = vec![ds.clone(), cs.clone(), bs.clone()];
+    let bs_vec = WeldVec {
+        data: bs.as_ptr() as *const u8,
+        len: bs.len() as i64,
+    };
+    let cs_vec = WeldVec {
+        data: cs.as_ptr() as *const u8,
+        len: cs.len() as i64,
+    };
+    let ds_vec = WeldVec {
+        data: ds.as_ptr() as *const u8,
+        len: ds.len() as i64,
+    };
+    let strs = vec![bs_vec, cs_vec, ds_vec];
+
+    let ref input_data = Args {
+        x: WeldVec {
+            data: strs.as_ptr() as *const WeldVec<u8>,
+            len: strs.len() as i64,
+        }
+    };
+
+    let code = "|e0: vec[vec[u8]]| sort(e0, |i:vec[u8]| i)";
+
+    let conf = default_conf();
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<WeldVec<u8>> };
+    let result = unsafe { (*data).clone() };
+
+    for i in 0..(result.len as isize) {
+        let ivec = unsafe { (*result.data.offset(i)).clone() };
+        for j in 0..(ivec.len as isize) {
+            let val = unsafe { (*ivec.data.offset(j)) };
+                assert_eq!(val, sorted[i as usize][j as usize])
+        }
+    }
+
+    unsafe { free_value_and_module(ret_value) };
+}
+
+fn if_sort() {
+    #[derive(Clone)]
+    #[allow(dead_code)]
+
+    let ys = vec![2, 3, 1, 4, 5];
+    let ref input_data = WeldVec {
+        data: ys.as_ptr() as *const i32,
+        len: ys.len() as i64,
+    };
+
+    let code = "|ys:vec[i32]| sort(ys, |x:i32| if(x != 5, x + 1, 0))";
+    let conf = default_conf();
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<i32> };
+    let result = unsafe { (*data).clone() };
+
+    let expected = [5, 1, 2, 3, 4];
+    assert_eq!(result.len, expected.len() as i64);
+
+    for i in 0..(expected.len() as isize) {
+        assert_eq!(unsafe { *result.data.offset(i) }, expected[i as usize])
+    }
+
+    unsafe { free_value_and_module(ret_value) };
+}
 
 fn simple_sort() {
     #[derive(Clone)]
@@ -3221,8 +3295,10 @@ fn main() {
              ("nditer_basic_op_test", nditer_basic_op_test),
              ("nditer_zip", nditer_zip),
              ("nested_appender_loop", nested_appender_loop),
+             ("if_sort", if_sort),
              ("simple_sort", simple_sort),
              ("complex_sort", complex_sort),
+             ("string_sort", string_sort),
              ("serialize_test", serialize_test),
              ("appender_and_dictmerger_loop", appender_and_dictmerger_loop)];
 

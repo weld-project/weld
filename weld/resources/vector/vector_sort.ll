@@ -21,6 +21,6 @@ define i32 @{NAME}.{FUNC}.helper(i8* %p1, i8* %p2) {{
   %kv2 = bitcast i8* %p2 to {ELEM}*
   %ev1 = call {KEY} @{FUNC}({ELEM}* %kv1)
   %ev2 = call {KEY} @{FUNC}({ELEM}* %kv2)
-  %res = call i32 @{KEY}.cmp({KEY} %ev1, {KEY} %ev2)
+  %res = call i32 @{RAWKEY}.cmp({KEY} %ev1, {KEY} %ev2)
   ret i32 %res
 }}

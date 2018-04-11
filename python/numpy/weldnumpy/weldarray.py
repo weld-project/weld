@@ -15,7 +15,7 @@ class weldarray(np.ndarray):
     use __array_finalize (besides __array_finalize__ also adds a function call to the creation of a
     new array, which adds to the overhead compared to numpy for initializing arrays)
     '''
-    def __new__(cls, input_array, verbose=False, *args, **kwargs):
+    def __new__(cls, input_array, verbose=True, *args, **kwargs):
         '''
         @input_array: original ndarray from which the new array is derived.
         '''

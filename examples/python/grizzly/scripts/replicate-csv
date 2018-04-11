@@ -4,6 +4,32 @@ import argparse
 import csv
 import random
 
+def transformCSV_birth_analysis(inputFile, outputFile, replicationFactor):
+    years = [str(i) for i in range(0, 1000 * replicationFactor)]
+    gender = [str(i) for i in range(0, 4)]
+    with open(inputFile, 'r') as f1, open(outputFile, 'w') as f2:
+        lineId = 0
+        numCols = 0
+        count = 0
+        for line in csv.reader(f1, delimiter=','):
+            if lineId == 0:
+                numCols = len(line)
+            if len(line) != numCols:
+                continue
+            line_ele_list = [str(line_ele) for line_ele in line]
+
+            for factor in range(0, replicationFactor):
+                count += 1
+                new_year = years[count % len(years)]
+                # This is a hack. We need to get to the bottom of pandas ordering on sorts
+                # which is causing grizzly to include "Leslyn" when pandas does not
+                # for birth analysis (sort on groupmerger).
+                num_diff = str(int(line_ele_list[2]) + count)
+                new_gender = gender[count % len(gender)]
+                new_line_list = [new_year, line_ele_list[0], line_ele_list[1], num_diff]
+                f2.write(','.join(new_line_list))
+                f2.write('\n')
+        lineId += 1
 
 def transformCSV(inputFile, outputFile, replicationFactor):
     with open(inputFile, 'r') as f1, open(outputFile, 'w') as f2:
@@ -35,6 +61,9 @@ if __name__ == '__main__':
 
     cmdLineArgs = parser.parse_args()
     optDict = vars(cmdLineArgs)
-
-    transformCSV(optDict["inputFile"], optDict["outputFile"],
-                 optDict["replicationFactor"])
+    if optDict["inputFile"].split("/")[-1].startswith("yob"):
+        transformCSV_birth_analysis(optDict["inputFile"], optDict["outputFile"],
+                                    optDict["replicationFactor"])
+    else:
+        transformCSV(optDict["inputFile"], optDict["outputFile"],
+                     optDict["replicationFactor"])

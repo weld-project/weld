@@ -35,7 +35,7 @@ else
 endif
 
 convertor:
-	${CLANGPP} ${DFLAGS} -w -march=native $(PYTHON_LDFLAGS) numpy_weld_convertor.cpp -o numpy_weld_convertor${DYLIB_SUFFIX}  ${PYTHON_INCLUDES}
+	${CLANG} ${DFLAGS} -w -march=native $(PYTHON_LDFLAGS) numpy_weld_convertor.cpp -o numpy_weld_convertor${DYLIB_SUFFIX}  ${PYTHON_INCLUDES}
 
 clean:
 	rm -rf run numpy_weld_convertor${DYLIB_SUFFIX} *.pyc
