@@ -821,14 +821,6 @@ fn push_type(dest: &mut PartialType, src: &PartialType, context: &str) -> WeldRe
                             for ty in tys {
                                 match *ty {
                                     Scalar(_) => {}
-                                    Vector(ref sty) => {
-                                        match **sty {
-                                            Scalar(_) => {}
-                                            _ => {
-                                                return weld_err!("Commutative merge builders can only contain scalar vectors in structs");
-                                            }
-                                        }
-                                    }
                                     _ => {
                                         return weld_err!("Commutatitive merge builders only \
                                                           support structs with scalars");
