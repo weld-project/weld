@@ -11,11 +11,19 @@
 
 ## Setup
 
+To install weldnumpy, and run the tests, do the following:
+
 ### pip
+
 ```bash
 $ pip install weldnumpy
+$ pytest --pyargs weldnumpy
 ```
-TODO: Add testing details
+
+Note: this should also install the depedencies as described in
+requirements.txt. In particular, make sure that the dependency on numpy>=1.13
+was successfully installed, as weldnumpy does not support older versions of
+NumPy.
 
 ### Installing from source
 
@@ -145,23 +153,23 @@ only import weldarray and convert only the large arrays whose operations you
 want to optimize, as in the first example above. More detailed examples with
 comments are provided in [examples](examples).
 
-#### Redundant Computations
+<!--#### Redundant Computations-->
 
-```python
+<!--```python-->
 
-a = np.random.rand(10000)
-# Here, NumPy would evaluate a**2 twice. But WeldNumpy will only need to
-# evaluate it once - and then for the second a**2, the value would have been
-# stored. 
-b = a**2 + a**2 
+<!--a = np.random.rand(10000)-->
+<!--# Here, NumPy would evaluate a**2 twice. But WeldNumpy will only need to-->
+<!--# evaluate it once - and then for the second a**2, the value would have been-->
+<!--# stored. -->
+<!--b = a**2 + a**2 -->
 
-# forces evaluation
-b = b.evaluate()
-```
+<!--# forces evaluation-->
+<!--b = b.evaluate()-->
+<!--```-->
 
-Notice that in the example above, it seems like a very easy error to spot. But
-in general, such redundant computations can get arbitrarily complicated, and it
-is nice to be able to automatically eliminate these.
+<!--Notice that in the example above, it seems like a very easy error to spot. But-->
+<!--in general, such redundant computations can get arbitrarily complicated, and it-->
+<!--is nice to be able to automatically eliminate these.-->
 
 ## Documentation
 
@@ -171,6 +179,14 @@ a weldarray is: weldarray.evaluate() which forces the evaluation of all the
 operations registered on the weldarray.
 
 ### Differences with NumPy
+
+#### Speed and Array Sizes
+
+In general, Weld is only really useful for arrays with large sizes. For arrays
+with small sizes, you will often find the compilation overhead associated with
+Weld will be significant as compared to the total runtime. In this README, we
+often give examples with few elements for illustrative purposes, but to see the
+difference in performance, you should test it on large array sizes.
 
 #### Compilation Costs 
 In general, there is a slight overhead for compiling the Weld IR to LLVM before
@@ -279,7 +295,38 @@ it into an unknown NumPy function.
 
 ##### Group Evaluate
 
-TODO: Finalize syntax
+Avoiding materialization can be beneficial, as we saw above, but it has a
+significant drawback - if you were going to reuse intermediate arrays in
+operations on multiple arrays in the future, then when evaluating these arrays
+- you may need to recompute everything from the start. An example might make
+this clearer:
+
+```python
+
+from weldnumpy import weldarray
+import numpy as np
+w = weldarray(np.random.rand(100))
+w2 = w + 100.00
+
+# Both the following arrays use w2
+w3 = w2 * 5.0
+w4 = w2 + 10.0
+# will require computing w2 = w + 100.00. But it won't store this value
+# anywhere.
+print(w3)
+
+# this will again compute w2.
+print(w4)
+```
+
+A practical example with such a scenario can be found in the blackscholes
+workload, in [examples](examples). One way to manually avoid this is to
+materialize w2 before evaluating w3, or w4 - but naturally, this can get
+complicated fast. In the blackscholes example, we show the usage of the
+experimental group evaluate feature -- which would allow you to evaluate
+multiple arrays together (e.g., w3, and w4 in the example above) - and thus let
+weld reuse the intermediate results, like w2. Note: group evaluate currently
+depends on pygrizzly - thus you will have to pip install that first.
 
 #### Things that don't quite work
 
@@ -450,9 +497,7 @@ and information such idx/start/end/strides/shape. This is important because in
 place updates to views would require updating both the parent and all it's
 views.
 
-TODO: Write more detailed views notes
-
-### Common useful functions in the weldnumpy code: 
+TODO: Write more detailed views notes.
 
 ## Future Work
 
