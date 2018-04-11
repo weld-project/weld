@@ -5,8 +5,8 @@
 ; - ELEM: LLVM type of the element (e.g. i32 or %MyStruct)
 ; - FUNC: the key function (must return scalar)
 ; - KEY: type returned by FUNC (must be scalar)
-define %{NAME} @{NAME}.{FUNC}.sort(%{NAME} %res) {{
-;  %res = call %{NAME} @{NAME}.clone(%{NAME} %vec)
+define %{NAME} @{NAME}.{FUNC}.sort(%{NAME} %vec) {{
+  %res = call %{NAME} @{NAME}.clone(%{NAME} %vec)
   %elements = extractvalue %{NAME} %res, 0
   %size = extractvalue %{NAME} %res, 1
   %elementsRaw = bitcast {ELEM}* %elements to i8*
