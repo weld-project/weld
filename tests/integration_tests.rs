@@ -2767,6 +2767,33 @@ fn string_sort() {
 
     unsafe { free_value_and_module(ret_value) };
 }
+
+fn if_sort() {
+    #[derive(Clone)]
+    #[allow(dead_code)]
+
+    let ys = vec![2, 3, 1, 4, 5];
+    let ref input_data = WeldVec {
+        data: ys.as_ptr() as *const i32,
+        len: ys.len() as i64,
+    };
+
+    let code = "|ys:vec[i32]| sort(ys, |x:i32| if(x != 5, x + 1, 0))";
+    let conf = default_conf();
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<i32> };
+    let result = unsafe { (*data).clone() };
+
+    let expected = [5, 1, 2, 3, 4];
+    assert_eq!(result.len, expected.len() as i64);
+
+    for i in 0..(expected.len() as isize) {
+        assert_eq!(unsafe { *result.data.offset(i) }, expected[i as usize])
+    }
+
+    unsafe { free_value_and_module(ret_value) };
+}
+
 fn simple_sort() {
     #[derive(Clone)]
     #[allow(dead_code)]
@@ -3254,6 +3281,7 @@ fn main() {
              ("nditer_basic_op_test", nditer_basic_op_test),
              ("nditer_zip", nditer_zip),
              ("nested_appender_loop", nested_appender_loop),
+             ("if_sort", if_sort),
              ("simple_sort", simple_sort),
              ("complex_sort", complex_sort),
              ("string_sort", string_sort),

@@ -391,7 +391,6 @@ extern "C" int64_t weld_rt_dict_get_size(void *d) {
 
 extern "C" void weld_rt_dict_free(void *d) {
   weld_dict *wd = (weld_dict *)d;
-
   for (int32_t i = 0; i < wd->n_workers + 1; i++) {
     simple_dict *d = get_dict_at_index(wd, i);
     weld_run_free(weld_rt_get_run_id(), d->data);
