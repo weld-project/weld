@@ -1489,8 +1489,8 @@ fn simple_for_vecmerger_binops() {
         assert_eq!(unsafe { *result.sum.data.offset(i) },
                    input_vec[i as usize] + input_vec[i as usize] * 7);
         assert_eq!(unsafe { *result.prod.data.offset(i) }, input_vec[i as usize] * (i as i64));
-        assert_eq!(unsafe { *result.min.data.offset(i) }, cmp::min(input_vec[i as usize], (i as i64)));
-        assert_eq!(unsafe { *result.max.data.offset(i) }, cmp::max(input_vec[i as usize], (i as i64)));
+        assert_eq!(unsafe { *result.min.data.offset(i) }, cmp::min(input_vec[i as usize], i as i64));
+        assert_eq!(unsafe { *result.max.data.offset(i) }, cmp::max(input_vec[i as usize], i as i64));
     }
     unsafe { free_value_and_module(ret_value) };
 }
