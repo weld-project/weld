@@ -112,7 +112,7 @@ impl<'t> Parser<'t> {
             self.position
         };
 
-        for i in (self.position - context_length)..min((self.position + context_length), self.tokens.len()-1) {
+        for i in (self.position - context_length)..min(self.position + context_length, self.tokens.len()-1) {
             let token_str = format!("{}", &self.tokens[i]);
             if i == self.position { 
                 string.push_str(format_color(Color::BoldRed, token_str.as_str()).as_str());

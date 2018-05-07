@@ -9,7 +9,6 @@
 use std::fmt;
 use std::str::FromStr;
 use std::vec::Vec;
-use std::ascii::AsciiExt;
 
 use regex::Regex;
 

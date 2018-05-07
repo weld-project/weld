@@ -157,9 +157,9 @@ pub fn inline_cast(expr: &mut TypedExpr) {
             if let Literal(ref literal_kind) = child_expr.kind {
                 return match (scalar_kind, literal_kind) {
                     (&F64, &I32Literal(a)) => Some(literal_expr(F64Literal((a as f64).to_bits())).unwrap()),
-                    (&I64, &I32Literal(a)) => Some(literal_expr(I64Literal((a as i64))).unwrap()),
+                    (&I64, &I32Literal(a)) => Some(literal_expr(I64Literal(a as i64)).unwrap()),
                     (&F64, &I64Literal(a)) => Some(literal_expr(F64Literal((a as f64).to_bits())).unwrap()),
-                    (&I64, &I64Literal(a)) => Some(literal_expr(I64Literal((a as i64))).unwrap()),
+                    (&I64, &I64Literal(a)) => Some(literal_expr(I64Literal(a as i64)).unwrap()),
                     _ => None,
                 }
             }

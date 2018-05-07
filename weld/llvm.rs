@@ -13,7 +13,6 @@ use common::WeldRuntimeErrno;
 use std::io::Write;
 use std::path::PathBuf;
 use std::fs::OpenOptions;
-use std::ascii::AsciiExt;
 
 use super::ast::*;
 use super::ast::Type::*;
@@ -3481,7 +3480,7 @@ impl LlvmGenerator {
                                         for s in b.statements.iter() {
                                             self.gen_statement(s, keyfunc, keyfunc_ctx)?
                                         }
-                                        if (i != end_block_index) {
+                                        if i != end_block_index {
                                             if let Terminator::Branch { ref cond, on_true, on_false} = b.terminator {
                                                 keyfunc_ctx.code.add(format!("; {}", b.terminator));
                                                 if self.trace_run {

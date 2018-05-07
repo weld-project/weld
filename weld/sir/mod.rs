@@ -250,8 +250,18 @@ impl StatementTracker {
                             sym_ty: &Type,
                             kind: StatementKind) -> Symbol {
 
+        use sir::StatementKind::CUDF;
+
         let site = ProgramSite(func, block);
         let map = self.generated.entry(site).or_insert(fnv::FnvHashMap::default());
+
+        // CUDFs are the only functions that can have side-effects so we always need to give them
+        // a new name.
+        if let CUDF { .. } = kind {
+            let res_sym = prog.add_local(sym_ty, func);
+            prog.funcs[func].blocks[block].add_statement(Statement::new(Some(res_sym.clone()), kind));
+            return res_sym;
+        }
 
         // Return the symbol to use.
         match map.entry(kind.clone()) {
@@ -595,7 +605,7 @@ impl fmt::Display for ParallelForIter {
             IterKind::NdIter => "nditer",
             IterKind::RangeIter => "rangeiter",
         };
-        
+
         if self.shape.is_some() {
             /* NdIter. Note: end or stride aren't important here, so skpping those.
              * */
@@ -795,7 +805,7 @@ pub fn ast_to_sir(expr: &TypedExpr, multithreaded: bool) -> WeldResult<SirProgra
         // second call is necessary in the case where there are loops in the call graph, since
         // some parameter dependencies may not have been propagated through back edges
         sir_param_correction(&mut prog)?;
-        Ok((prog))
+        Ok(prog)
     } else {
         weld_err!("Expression passed to ast_to_sir was not a Lambda")
     }
@@ -1293,15 +1303,15 @@ fn gen_expr(expr: &TypedExpr,
                     prog.funcs[body_func]
                         .params
                         .insert(data_res.2.clone(), iter.data.ty.clone());
-                    let start_sym = try!(get_iter_sym(&iter.start, prog, &mut cur_func, &mut cur_block, 
+                    let start_sym = try!(get_iter_sym(&iter.start, prog, &mut cur_func, &mut cur_block,
                                                       tracker, multithreaded, body_func));
-                    let end_sym = try!(get_iter_sym(&iter.end, prog, &mut cur_func, &mut cur_block, 
+                    let end_sym = try!(get_iter_sym(&iter.end, prog, &mut cur_func, &mut cur_block,
                                                     tracker, multithreaded, body_func));
-                    let stride_sym = try!(get_iter_sym(&iter.stride, prog, &mut cur_func, &mut cur_block, 
+                    let stride_sym = try!(get_iter_sym(&iter.stride, prog, &mut cur_func, &mut cur_block,
                                                        tracker, multithreaded, body_func));
-                    let shape_sym = try!(get_iter_sym(&iter.shape, prog, &mut cur_func, &mut cur_block, 
+                    let shape_sym = try!(get_iter_sym(&iter.shape, prog, &mut cur_func, &mut cur_block,
                                                        tracker, multithreaded, body_func));
-                    let strides_sym = try!(get_iter_sym(&iter.strides, prog, &mut cur_func, &mut cur_block, 
+                    let strides_sym = try!(get_iter_sym(&iter.strides, prog, &mut cur_func, &mut cur_block,
                                                         tracker, multithreaded, body_func));
                     pf_iters.push(ParallelForIter {
                                       data: data_res.2,
