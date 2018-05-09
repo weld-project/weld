@@ -9,10 +9,10 @@ TODO: New tests:
     - edge/failing cases: out = ndarray for op involving weldarrays.
 '''
 
-UNARY_OPS = [np.exp, np.log, np.sqrt]
+UNARY_OPS = [np.exp, np.log, np.sqrt, np.square]
 BINARY_OPS = [np.add, np.subtract, np.multiply, np.divide]
 REDUCE_UFUNCS = [np.add.reduce, np.multiply.reduce]
-# TODO: add other similar functions 
+# TODO: add other similar functions
 UTIL_FUNCTIONS = [np.max, np.min]
 
 # FIXME: weld mergers dont support non-commutative ops --> need to find a workaround for this.
@@ -68,7 +68,7 @@ def test_unary_elemwise():
             np_result = op(np_test)
             w2_eval = w2.evaluate()
 
-            assert np.allclose(w2, np_result)
+            assert np.allclose(w2_eval, np_result)
             assert np.array_equal(w2_eval, np_result)
 
 def test_binary_elemwise():
@@ -290,8 +290,14 @@ def test_views_grandparents_update_mix():
     w2 = w[2:9]
     n2 = n[2:9]
 
+    print(w2._weldarray_view.start)
+    print(w2._weldarray_view.end)
+
     w3 = w2[2:4]
     n3 = n2[2:4]
+
+    print(w3._weldarray_view.start)
+    print(w3._weldarray_view.end)
 
     assert np.allclose(w3.evaluate(), n3)
 
@@ -814,12 +820,13 @@ def test_views_strides():
     FIXME: not supported yet.
     '''
     n, w = random_arrays(NUM_ELS, 'float32')
+    print("creating the view")
     w2 = w[2:8:2]
     n2 = n[2:8:2]
 
     w += 100.00
     n += 100.00
-    
+
     w = w.evaluate()
     assert np.allclose(w, n)
     assert np.allclose(w2, n2)
@@ -1117,7 +1124,9 @@ def test_util_functions():
     for f in UTIL_FUNCTIONS:
         n, w = random_arrays(5, 'float64')
         n = np.log(n)
-        w = np.log(w) 
+        w = np.log(w)
         nmax = f(n)
         wmax = f(w)
-        assert nmax == wmax 
+        assert nmax == wmax
+
+test_unary_elemwise()
