@@ -16,6 +16,8 @@ notes
 *.so
 *.dll
 python/build/
+python/numpy/build/
+python/numpy/setup.cfg
 python/dist
 python/grizzly.egg-info/
 examples/python/grizzly/data

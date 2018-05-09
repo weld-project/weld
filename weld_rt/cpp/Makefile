@@ -4,7 +4,7 @@ LLVM_VERSION = $(shell llvm-config --version | cut -d . -f 1,2)
 CFLAGS = -O3 -std=c++11 -Wall -fno-use-cxa-atexit -fPIC
 ifeq (${OS}, Darwin)
   # OS X
-  CLANG ?= clang++-${LLVM_VERSION}
+  CLANG ?= clang-${LLVM_VERSION}
 	LIB = libweldrt.a
 else ifeq (${OS}, Linux)
   # Linux
