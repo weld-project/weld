@@ -1,3 +1,6 @@
+//! Tests that use dictionaries. This includes the DictMerger and GroupBuilder
+//! builder types, as well as operations on read-only dictionaries (e.g., lookups).
+
 extern crate weld;
 extern crate fnv;
 

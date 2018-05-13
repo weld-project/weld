@@ -1,3 +1,4 @@
+//! Tests related to Weld's SIMD vectorizer transformation.
 
 extern crate weld;
 use weld::weld_value_data;

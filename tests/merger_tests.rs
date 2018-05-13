@@ -1,3 +1,5 @@
+//! Tests for the Merger builder type.
+
 extern crate weld;
 
 use weld::weld_value_data;

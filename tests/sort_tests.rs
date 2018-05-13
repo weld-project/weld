@@ -1,3 +1,4 @@
+//! Tests that make use of the Sort operator.
 
 extern crate weld;
 use weld::weld_value_data;

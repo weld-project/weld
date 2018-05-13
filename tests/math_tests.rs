@@ -1,3 +1,5 @@
+//! Tests for the math functions Weld natively supports.
+
 extern crate weld;
 
 use weld::*;

@@ -1,3 +1,5 @@
+//! Tests related to creating, running, and freeing Weld modules using the Weld API.
+
 extern crate weld;
 extern crate libc;
 

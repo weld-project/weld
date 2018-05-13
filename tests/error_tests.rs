@@ -1,3 +1,5 @@
+//! Tests for runtime errors that Weld can throw.
+
 extern crate weld;
 extern crate libc;
 

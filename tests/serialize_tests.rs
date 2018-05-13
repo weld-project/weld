@@ -1,3 +1,4 @@
+//! Tests for serializing and deserializing Weld objects.
 
 extern crate weld;
 use weld::weld_value_data;

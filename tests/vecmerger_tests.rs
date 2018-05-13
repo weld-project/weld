@@ -1,3 +1,4 @@
+//! Tests for the VecMerger builder type.
 
 extern crate weld;
 use weld::weld_value_data;
