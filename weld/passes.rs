@@ -17,19 +17,10 @@ use std::collections::HashMap;
 pub type PassFn = fn(&mut Expr<Type>);
 
 /// A single IR to IR transformation.
+#[derive(Clone)]
 pub struct Transformation {
     pub func: PassFn,
     pub experimental: bool,
-}
-
-/// Manually implement Clone for Transformation because it cannot be #derived due to the fn type inside it.
-impl Clone for Transformation {
-    fn clone(&self) -> Transformation {
-        Transformation {
-            func: self.func,
-            experimental: self.experimental,
-        }
-    }
 }
 
 impl Transformation {
