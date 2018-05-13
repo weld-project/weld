@@ -1,30 +1,14 @@
-extern crate weld;
-extern crate libc;
-extern crate fnv;
+//! Various tests for the different expressions in Weld.
 
-use std::env;
+extern crate weld;
+use weld::weld_value_data;
+
 use std::str;
 use std::slice;
-use std::thread;
-use std::cmp;
-use std::collections::hash_map::Entry;
-
-use weld::common::WeldRuntimeErrno;
-
-use weld::WeldConf;
-use weld::WeldValue;
-use weld::WeldError;
-use weld::{weld_value_new, weld_value_data, weld_value_module, weld_value_free};
-use weld::{weld_module_compile, weld_module_run, weld_module_free};
-use weld::{weld_error_new, weld_error_code, weld_error_message, weld_error_free};
-use weld::{weld_conf_new, weld_conf_set, weld_conf_free};
 
 use std::f64::consts::PI;
-use std::ffi::{CStr, CString};
-use libc::{c_char, c_void};
 
 mod common;
-
 use common::*;
 
 #[test]
@@ -71,7 +55,7 @@ fn float_literals() {
         let data = unsafe { weld_value_data(ret_value) as *const f64 };
         let result = unsafe { *data };
         assert_eq!(result, v);
-        unsafe { weld_value_free(ret_value) };
+        unsafe { free_value_and_module(ret_value) };
 
         // Try parsing the value as a float
         let code = format!("|| {:e}f", v);
@@ -81,7 +65,7 @@ fn float_literals() {
         let data = unsafe { weld_value_data(ret_value) as *const f32 };
         let result = unsafe { *data };
         assert_eq!(result, v as f32);
-        unsafe { weld_value_free(ret_value) };
+        unsafe { free_value_and_module(ret_value) };
     }
 }
 
@@ -501,7 +485,7 @@ fn iterate_non_parallel() {
 
     assert_eq!(result, 0);
 
-    unsafe { weld_value_free(ret_value) };
+    unsafe { free_value_and_module(ret_value) };
 }
 
 #[test]
@@ -521,7 +505,7 @@ fn iterate_with_parallel_body() {
         assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
     }
 
-    unsafe { weld_value_free(ret_value) };
+    unsafe { free_value_and_module(ret_value) };
 }
 
 #[test]

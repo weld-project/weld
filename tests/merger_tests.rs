@@ -1,31 +1,25 @@
 extern crate weld;
-extern crate libc;
-extern crate fnv;
 
-use std::env;
-use std::str;
-use std::slice;
-use std::thread;
-use std::cmp;
-use std::collections::hash_map::Entry;
-
-use weld::common::WeldRuntimeErrno;
-
-use weld::WeldConf;
-use weld::WeldValue;
-use weld::WeldError;
-use weld::{weld_value_new, weld_value_data, weld_value_module, weld_value_free};
-use weld::{weld_module_compile, weld_module_run, weld_module_free};
-use weld::{weld_error_new, weld_error_code, weld_error_message, weld_error_free};
-use weld::{weld_conf_new, weld_conf_set, weld_conf_free};
-
-use std::f64::consts::PI;
-use std::ffi::{CStr, CString};
-use libc::{c_char, c_void};
+use weld::weld_value_data;
 
 mod common;
-
 use common::*;
+
+
+#[test]
+fn empty_merger_loop() {
+    let code = "||result(for([]:vec[i32], merger[i32, +], |b, i, n| merge(b, n)))";
+    let conf = default_conf();
+
+    let ref input_data: i32 = 0;
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const i32 };
+    let result = unsafe { *data };
+    assert_eq!(result, 0);
+
+    unsafe { free_value_and_module(ret_value) };
+}
 
 
 #[test]
