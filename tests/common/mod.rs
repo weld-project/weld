@@ -7,6 +7,8 @@ extern crate libc;
 use weld::*;
 use weld::common::WeldRuntimeErrno;
 
+use std::convert::AsRef;
+
 use std::ffi::{CStr, CString};
 use self::libc::{c_char, c_void};
 
@@ -31,7 +33,6 @@ pub fn approx_equal_f32(a: f32, b: f32, cmp_decimals: u32) -> bool {
     diff <= thresh
 }
 
-/// An in memory representation of a Weld vector.
 #[derive(Clone, Debug)]
 #[repr(C)]
 pub struct WeldVec<T> {
@@ -45,6 +46,13 @@ impl<T> WeldVec<T> {
             data: ptr,
             len: len
         }
+    }
+}
+
+impl<'a, T, U> From<&'a U> for WeldVec<T> 
+    where U: AsRef<[T]> {
+    fn from(s: &'a U) -> WeldVec<T> {
+        WeldVec::new(s.as_ref().as_ptr(), s.as_ref().len() as i64)
     }
 }
 
@@ -82,18 +90,47 @@ impl<K, V> Pair<K, V> {
 
 /// Returns a default configuration which uses a single thread.
 pub fn default_conf() -> *mut WeldConf {
-    let conf = weld_conf_new();
-    let key = CString::new("weld.threads").unwrap().into_raw() as *const c_char;
-    let value = CString::new("1").unwrap().into_raw() as *const c_char;
-    unsafe { weld_conf_set(conf, key, value) };
-    conf
+    conf(1)
 }
 
 /// Returns a configuration which uses several threads.
 pub fn many_threads_conf() -> *mut WeldConf {
+    conf(4)
+}
+
+/// Runs `code` with the given `conf` and input data pointer `ptr`, expecting
+/// a succeessful result to be returned. Panics if an error is thrown by the runtime.
+pub fn compile_and_run<T>(code: &str, conf: *mut WeldConf, ptr: &T) -> *mut WeldValue {
+    match unsafe { _compile_and_run(code, conf, ptr) } {
+        Ok(val) => val,
+        Err(err) => {
+            panic!(format!("Compile failed: {:?}",
+                           unsafe { CStr::from_ptr(weld_error_message(err)) }))
+        }
+    }
+}
+
+/// Runs `code` with the given `conf` and input data pointer `ptr`, expecting
+/// a runtime error to be thrown. Panics if no error is thrown.
+pub fn compile_and_run_error<T>(code: &str, conf: *mut WeldConf, ptr: &T) -> *mut WeldError {
+    match unsafe { _compile_and_run(code, conf, ptr) } {
+        Ok(_) => panic!("Expected an error but got a value"),
+        Err(e) => e,
+    }
+}
+
+/// Frees a value and its corresponding module.
+pub unsafe fn free_value_and_module(value: *mut WeldValue) {
+    let module = weld_value_module(value);
+    weld_value_free(value);
+    weld_module_free(module);
+}
+
+fn conf(threads: i32) -> *mut WeldConf {
+    let threads = format!("{}", threads);
     let conf = weld_conf_new();
     let key = CString::new("weld.threads").unwrap().into_raw() as *const c_char;
-    let value = CString::new("4").unwrap().into_raw() as *const c_char;
+    let value = CString::new(threads).unwrap().into_raw() as *const c_char;
     unsafe { weld_conf_set(conf, key, value) };
     conf
 }
@@ -137,29 +174,3 @@ unsafe fn _compile_and_run<T>(code: &str,
     return Ok(ret_value);
 }
 
-pub unsafe fn free_value_and_module(value: *mut WeldValue) {
-    let module = weld_value_module(value);
-    weld_value_free(value);
-    weld_module_free(module);
-}
-
-/// Runs `code` with the given `conf` and input data pointer `ptr`, expecting
-/// a runtime error to be thrown. Panics if no error is thrown.
-pub fn compile_and_run_error<T>(code: &str, conf: *mut WeldConf, ptr: &T) -> *mut WeldError {
-    match unsafe { _compile_and_run(code, conf, ptr) } {
-        Ok(_) => panic!("Expected an error but got a value"),
-        Err(e) => e,
-    }
-}
-
-/// Runs `code` with the given `conf` and input data pointer `ptr`, expecting
-/// a succeessful result to be returned. Panics if an error is thrown by the runtime.
-pub fn compile_and_run<T>(code: &str, conf: *mut WeldConf, ptr: &T) -> *mut WeldValue {
-    match unsafe { _compile_and_run(code, conf, ptr) } {
-        Ok(val) => val,
-        Err(err) => {
-            panic!(format!("Compile failed: {:?}",
-                           unsafe { CStr::from_ptr(weld_error_message(err)) }))
-        }
-    }
-}

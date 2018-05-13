@@ -146,10 +146,7 @@ fn map_exp() {
     let conf = default_conf();
 
     let input_vec = [0.0f32, 1.0f32, 2.0f32, 3.0f32];
-    let ref input_data = WeldVec {
-        data: &input_vec as *const f32,
-        len: input_vec.len() as i64,
-    };
+    let ref input_data = WeldVec::from(&input_vec);
 
     let ret_value = compile_and_run(code, conf, input_data);
     let data = unsafe { weld_value_data(ret_value) as *const WeldVec<f32> };

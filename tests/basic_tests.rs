@@ -350,10 +350,7 @@ fn simple_length() {
     let conf = default_conf();
 
     let input_vec = [2, 3, 4, 2, 1];
-    let ref input_data = WeldVec {
-        data: &input_vec as *const i32,
-        len: input_vec.len() as i64,
-    };
+    let ref input_data = WeldVec::from(&input_vec);
 
     let ret_value = compile_and_run(code, conf, input_data);
     let data = unsafe { weld_value_data(ret_value) as *const i32 };
@@ -370,10 +367,7 @@ fn filter_length() {
     let conf = default_conf();
 
     let input_vec = [2, 3, 4, 2, 1];
-    let ref input_data = WeldVec {
-        data: &input_vec as *const i32,
-        len: input_vec.len() as i64,
-    };
+    let ref input_data = WeldVec::from(&input_vec);
 
     let ret_value = compile_and_run(code, conf, input_data);
     let data = unsafe { weld_value_data(ret_value) as *const i32 };
@@ -390,10 +384,7 @@ fn flat_map_length() {
     let conf = default_conf();
 
     let input_vec = [2, 3, 4, 2, 1];
-    let ref input_data = WeldVec {
-        data: &input_vec as *const i32,
-        len: input_vec.len() as i64,
-    };
+    let ref input_data = WeldVec::from(&input_vec);
 
     let ret_value = compile_and_run(code, conf, input_data);
     let data = unsafe { weld_value_data(ret_value) as *const i32 };
@@ -418,10 +409,7 @@ fn if_for_loop() {
     }
 
     let ref input_data = Args {
-        x: WeldVec {
-            data: &input_vec as *const i32,
-            len: input_vec.len() as i64,
-        },
+        x: WeldVec::from(&input_vec),
         a: 1,
     };
 
@@ -450,14 +438,8 @@ fn map_zip_loop() {
     let x = [1, 2, 3, 4];
     let y = [5, 6, 7, 8];
     let ref input_data = Args {
-        x: WeldVec {
-            data: &x as *const i32,
-            len: x.len() as i64,
-        },
-        y: WeldVec {
-            data: &y as *const i32,
-            len: y.len() as i64,
-        },
+        x: WeldVec::from(&x),
+        y: WeldVec::from(&y),
     };
 
     let ret_value = compile_and_run(code, conf, input_data);
@@ -515,12 +497,8 @@ fn serial_parlib_test() {
 
     let size: i32 = 10000;
     let input_vec: Vec<i32> = vec![1; size as usize];
-
-    let ref input_data = WeldVec {
-        data: input_vec.as_ptr() as *const i32,
-        len: size as i64,
-    };
-
+    let ref input_data = WeldVec::from(&input_vec);
+       
     let ret_value = compile_and_run(code, conf, input_data);
     let data = unsafe { weld_value_data(ret_value) as *const i32 };
     let result = unsafe { (*data).clone() };

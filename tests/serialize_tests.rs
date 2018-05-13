@@ -28,6 +28,7 @@ impl PartialEq for SerializeOutput {
         passed &= self.d == other.d;
         passed &= self.e == other.e;
 
+        // Convert field f into a native Rust Vec.
         fn f_into_native(v: &WeldVec<Pair<i32,i32>>) -> Vec<(i32, i32)> {
             let mut res: Vec<(i32, i32)> = (0..v.len)
                 .into_iter()
@@ -41,7 +42,7 @@ impl PartialEq for SerializeOutput {
 
         passed &= f_into_native(&self.f) == f_into_native(&other.f);
 
-        // Converts field g into a native rust Vec.
+        // Converts field g into a native Rust Vec.
         fn g_into_native(v: &WeldVec<Pair<i32,WeldVec<i32>>>) -> Vec<(i32, Vec<i32>)>{
             let mut res: Vec<(i32, Vec<i32>)> = (0..v.len)
                 .into_iter()
@@ -85,10 +86,7 @@ fn serialize_test() {
     let conf = default_conf();
 
     let input_vec: Vec<i32> = (10..20).collect();
-    let ref input_data = WeldVec {
-        data: input_vec.as_ptr(),
-        len: input_vec.len() as i64,
-    };
+    let ref input_data = WeldVec::from(&input_vec);
 
     let ret_value = compile_and_run(code, conf, input_data);
     let data = unsafe { weld_value_data(ret_value) as *const SerializeOutput };
@@ -100,10 +98,7 @@ fn serialize_test() {
     let dict2_vec: Vec<_>  = dict2_inners.iter()
         .map(|e| {
             let e1 = e.0;
-            let e2 = WeldVec {
-                data: e.1.as_ptr(),
-                len: e.1.len() as i64,
-            };
+            let e2 = WeldVec::from(&e.1);
             Pair::new(e1, e2)
         })
     .collect();
@@ -112,19 +107,10 @@ fn serialize_test() {
         a: input_vec[0],
         b: Pair::new(input_vec[0], input_vec[1]),
         c: input_data.clone(),
-        d: WeldVec {
-            data: vv.as_ptr(),
-            len: vv.len() as i64,
-        },
+        d: WeldVec::from(&vv),
         e: Pair::new(input_vec[0], input_data.clone()),
-        f: WeldVec {
-            data: dict1_vec.as_ptr(),
-            len: dict1_vec.len() as i64,
-        },
-        g: WeldVec {
-            data: dict2_vec.as_ptr(),
-            len: dict2_vec.len() as i64,
-        }
+        f: WeldVec::from(&dict1_vec),
+        g: WeldVec::from(&dict2_vec),
     };
 
     assert_eq!(result, expected);

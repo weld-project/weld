@@ -36,10 +36,7 @@ fn multithreaded_module_run() {
     for i in 0..len {
         input_vec.push(i as i32);
     }
-    let input_data = WeldVec {
-        data: input_vec.as_ptr(),
-        len: input_vec.len() as i64,
-    };
+    let input_data = WeldVec::from(&input_vec);
 
     unsafe {
 

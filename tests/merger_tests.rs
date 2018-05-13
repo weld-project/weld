@@ -35,10 +35,7 @@ fn simple_for_merger_loop() {
 
     let input_vec = vec![1, 2, 3, 4, 5];
     let ref input_data = Args {
-        x: WeldVec {
-            data: input_vec.as_ptr(),
-            len: input_vec.len() as i64,
-        },
+        x: WeldVec::from(&input_vec),
         a: 1,
     };
 
@@ -66,14 +63,8 @@ fn simple_zipped_for_merger_loop() {
     let y_data = vec![5; size as usize];
 
     let ref input_data = Args {
-        x: WeldVec {
-            data: x_data.as_ptr(),
-            len: x_data.len() as i64,
-        },
-        y: WeldVec {
-            data: y_data.as_ptr(),
-            len: y_data.len() as i64,
-        },
+        x: WeldVec::from(&x_data),
+        y: WeldVec::from(&y_data),
     };
 
     let ret_value = compile_and_run(code, conf, input_data);
@@ -97,10 +88,7 @@ fn simple_for_merger_loop_product() {
 
     let input_vec = [1, 2, 3, 4, 5];
     let ref input_data = Args {
-        x: WeldVec {
-            data: &input_vec as *const i32,
-            len: input_vec.len() as i64,
-        },
+        x: WeldVec::from(&input_vec),
         a: 1,
     };
 
@@ -123,12 +111,9 @@ fn parallel_for_merger_loop() {
     let code = "|x:vec[i32], a:i32| result(@(grain_size: 100)for(x, merger[i32,+], |b,i,e| merge(b, e+a)))";
     let conf = many_threads_conf();
 
-    let input_vec = [1; 4096];
+    let input_vec = vec![1; 4096];
     let ref input_data = Args {
-        x: WeldVec {
-            data: &input_vec as *const i32,
-            len: input_vec.len() as i64,
-        },
+        x: WeldVec::from(&input_vec),
         a: 1,
     };
 
@@ -146,11 +131,8 @@ fn parallel_for_multi_merger_loop() {
                 { merge(b.$0, e), merge(b.$1, e) }); result(r.$0) + result(r.$1)";
     let conf = many_threads_conf();
 
-    let input_vec = [1; 4096];
-    let ref input_data = WeldVec {
-        data: &input_vec as *const i32,
-        len: input_vec.len() as i64
-    };
+    let input_vec = vec![1; 4096];
+    let ref input_data = WeldVec::from(&input_vec);
 
     let ret_value = compile_and_run(code, conf, input_data);
     let data = unsafe { weld_value_data(ret_value) as *const i32 };
@@ -171,12 +153,9 @@ fn simple_for_merger_loop_initial_value() {
     let code = "|x:vec[i32], a:i32| result(for(x, merger[i32,+](1000), |b,i,e| merge(b, e+a)))";
     let conf = default_conf();
 
-    let input_vec = [1; 4096];
+    let input_vec = vec![1; 4096];
     let ref input_data = Args {
-        x: WeldVec {
-            data: &input_vec as *const i32,
-            len: input_vec.len() as i64,
-        },
+        x: WeldVec::from(&input_vec),
         a: 1,
     };
 
@@ -199,12 +178,9 @@ fn parallel_for_merger_loop_initial_value() {
     let code = "|x:vec[i32], a:i32| result(@(grain_size: 100)for(x, merger[i32,+](1000), |b,i,e| merge(b, e+a)))";
     let conf = many_threads_conf();
 
-    let input_vec = [1; 4096];
+    let input_vec = vec![1; 4096];
     let ref input_data = Args {
-        x: WeldVec {
-            data: &input_vec as *const i32,
-            len: input_vec.len() as i64,
-        },
+        x: WeldVec::from(&input_vec),
         a: 1,
     };
 
@@ -226,12 +202,9 @@ fn parallel_for_merger_loop_initial_value_product() {
     let code = "|x:vec[i32]| result(@(grain_size: 100)for(x, merger[i32,*](1000), |b,i,e| merge(b, e)))";
     let conf = many_threads_conf();
 
-    let input_vec = [1; 4096];
+    let input_vec = vec![1; 4096];
     let ref input_data = Args {
-        x: WeldVec {
-            data: &input_vec as *const i32,
-            len: input_vec.len() as i64,
-        },
+        x: WeldVec::from(&input_vec),
     };
 
     let ret_value = compile_and_run(code, conf, input_data);
@@ -279,18 +252,9 @@ fn many_mergers_test() {
     let z = vec![1.0; size as usize];
 
     let ref input_data = Args {
-        x: WeldVec {
-            data: x.as_ptr() as *const f64,
-            len: x.len() as i64,
-        },
-        y: WeldVec {
-            data: y.as_ptr() as *const f64,
-            len: y.len() as i64,
-        },
-        z: WeldVec {
-            data: z.as_ptr() as *const f64,
-            len: z.len() as i64,
-        },
+        x: WeldVec::from(&x),
+        y: WeldVec::from(&y),
+        z: WeldVec::from(&z),
     };
 
     let ret_value = compile_and_run(code, conf, input_data);
@@ -357,26 +321,11 @@ fn maxmin_mergers_test() {
     let f64in: Vec<f64> = vec![-2.0, -1.0, 0.0, 1.0, 2.0];
 
     let ref input_data = Args {
-        i8in: WeldVec {
-            data: i8in.as_ptr() as *const i8,
-            len: i8in.len() as i64,
-        },
-        i32in: WeldVec {
-            data: i32in.as_ptr() as *const i32,
-            len: i32in.len() as i64,
-        },
-        i64in: WeldVec {
-            data: i64in.as_ptr() as *const i64,
-            len: i64in.len() as i64,
-        },
-        f32in: WeldVec {
-            data: f32in.as_ptr() as *const f32,
-            len: f32in.len() as i64,
-        },
-        f64in: WeldVec {
-            data: f64in.as_ptr() as *const f64,
-            len: f64in.len() as i64,
-        },
+        i8in: WeldVec::from(&i8in),
+        i32in: WeldVec::from(&i32in),
+        i64in: WeldVec::from(&i64in),
+        f32in: WeldVec::from(&f32in),
+        f64in: WeldVec::from(&f64in),
     };
 
     let ret_value = compile_and_run(code, conf, input_data);

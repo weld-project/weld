@@ -16,11 +16,8 @@ fn iters_outofbounds_error_test() {
     let code = "|x:vec[i32]| result(for(iter(x,0L,20000L,1L), appender, |b,i,e| merge(b,e+1)))";
     let conf = many_threads_conf();
 
-    let input_vec = [4; 1000 as usize];
-    let ref input_data = WeldVec {
-        data: &input_vec as *const i32,
-        len: input_vec.len() as i64,
-    };
+    let input_vec = vec![4; 1000 as usize];
+    let ref input_data = WeldVec::from(&input_vec);
 
     let err_value = compile_and_run_error(code, conf, input_data);
     assert_eq!(unsafe { weld_error_code(err_value) },
@@ -39,10 +36,7 @@ fn outofmemory_error_test() {
     unsafe { weld_conf_set(conf, key, value) };
 
     let x = vec![4; 50000 / 4 as usize];
-    let ref input_data = WeldVec {
-        data: x.as_ptr() as *const i32,
-        len: x.len() as i64,
-    };
+    let ref input_data = WeldVec::from(&x);
 
     let err_value = compile_and_run_error(code, conf, input_data);
     assert_eq!(unsafe { weld_error_code(err_value) },

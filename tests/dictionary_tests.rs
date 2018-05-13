@@ -29,14 +29,8 @@ fn simple_for_dictmerger_loop() {
     let keys = [1, 2, 2, 1, 3];
     let vals = [2, 3, 4, 2, 1];
     let ref input_data = Args {
-        x: WeldVec {
-            data: &keys as *const i32,
-            len: keys.len() as i64,
-        },
-        y: WeldVec {
-            data: &vals as *const i32,
-            len: vals.len() as i64,
-        },
+        x: WeldVec::from(&keys),
+        y: WeldVec::from(&vals),
     };
 
     let ret_value = compile_and_run(code, conf, input_data);
@@ -91,14 +85,8 @@ fn dictmerger_with_structs() {
     let keys = [1, 2, 2, 1, 3];
     let vals = [2, 3, 4, 2, 1];
     let ref input_data = Args {
-        x: WeldVec {
-            data: &keys as *const i32,
-            len: keys.len() as i64,
-        },
-        y: WeldVec {
-            data: &vals as *const i32,
-            len: vals.len() as i64,
-        },
+        x: WeldVec::from(&keys),
+        y: WeldVec::from(&vals),
     };
 
     let ret_value = compile_and_run(code, conf, input_data);
@@ -139,14 +127,8 @@ fn simple_groupmerger() {
     let keys = [1, 2, 2, 3, 3, 1];
     let vals = [2, 3, 4, 1, 0, 2];
     let ref input_data = Args {
-        x: WeldVec {
-            data: &keys as *const i32,
-            len: keys.len() as i64,
-        },
-        y: WeldVec {
-            data: &vals as *const i32,
-            len: vals.len() as i64,
-        },
+        x: WeldVec::from(&keys),
+        y: WeldVec::from(&vals),
     };
 
     let ret_value = compile_and_run(code, conf, input_data);
@@ -190,18 +172,9 @@ fn complex_groupmerger_with_struct_key() {
     let keys2 = [1, 1, 2, 2, 3, 3, 4, 4];
     let vals = [2, 3, 4, 2, 1, 0, 3, 2];
     let ref input_data = Args {
-        x: WeldVec {
-            data: &keys1 as *const i32,
-            len: keys1.len() as i64,
-        },
-        y: WeldVec {
-            data: &keys2 as *const i32,
-            len: keys2.len() as i64,
-        },
-        z: WeldVec {
-            data: &vals as *const i32,
-            len: vals.len() as i64,
-        },
+        x: WeldVec::from(&keys1),
+        y: WeldVec::from(&keys2),
+        z: WeldVec::from(&vals),
     };
 
     let ret_value = compile_and_run(code, conf, input_data);
@@ -254,23 +227,18 @@ fn simple_parallel_for_dictmerger_loop_helper(use_local: bool) {
 
     const DICT_SIZE: usize = 8192;
     const UNIQUE_KEYS: usize = 256;
-    let mut keys = [0; DICT_SIZE];
-    let mut vals = [0; DICT_SIZE];
+    let mut keys = vec![0; DICT_SIZE];
+    let mut vals = vec![0; DICT_SIZE];
 
     // Repeated keys will have their values summed.
     for i in 0..DICT_SIZE {
         keys[i] = (i % UNIQUE_KEYS) as i32;
         vals[i] = i as i32;
     }
+
     let ref input_data = Args {
-        x: WeldVec {
-            data: &keys as *const i32,
-            len: DICT_SIZE as i64,
-        },
-        y: WeldVec {
-            data: &vals as *const i32,
-            len: DICT_SIZE as i64,
-        },
+        x: WeldVec::from(&keys),
+        y: WeldVec::from(&vals),
     };
 
     let ret_value = compile_and_run(&code, conf, input_data);
@@ -327,15 +295,10 @@ fn simple_dict_lookup() {
 
     let keys = [1, 2, 2, 1, 3];
     let vals = [2, 3, 4, 2, 1];
+
     let ref input_data = Args {
-        x: WeldVec {
-            data: &keys as *const i32,
-            len: keys.len() as i64,
-        },
-        y: WeldVec {
-            data: &vals as *const i32,
-            len: vals.len() as i64,
-        },
+        x: WeldVec::from(&keys),
+        y: WeldVec::from(&vals),
     };
 
     let ret_value = compile_and_run(code, conf, input_data);
@@ -349,11 +312,6 @@ fn simple_dict_lookup() {
 
 #[test]
 fn string_dict_lookup() {
-    #[allow(dead_code)]
-    struct Args {
-        x: WeldVec<i32>,
-        y: WeldVec<i32>,
-    }
 
     let code = "|x:vec[i32]| let v = [\"abcdefghi\", \"abcdefghi\", \"abcdefghi\"];
                 let d = result(for(zip(v,x), dictmerger[vec[i8],i32,+], |b,i,e| merge(b, e)));
@@ -361,10 +319,7 @@ fn string_dict_lookup() {
     let conf = default_conf();
 
     let input_vec = [1, 1, 1];
-    let ref input_data = WeldVec {
-        data: &input_vec as *const i32,
-        len: input_vec.len() as i64,
-    };
+    let ref input_data = WeldVec::from(&input_vec);
 
     let ret_value = compile_and_run(code, conf, input_data);
     let data = unsafe { weld_value_data(ret_value) as *const i32 };
@@ -393,14 +348,8 @@ fn simple_dict_exists() {
     let conf = default_conf();
 
     let ref input_data = Args {
-        x: WeldVec {
-            data: &keys as *const i32,
-            len: keys.len() as i64,
-        },
-        y: WeldVec {
-            data: &vals as *const i32,
-            len: vals.len() as i64,
-        },
+        x: WeldVec::from(&keys),
+        y: WeldVec::from(&vals),
     };
 
     let ret_value = compile_and_run(code_true, conf, input_data.clone());

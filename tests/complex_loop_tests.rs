@@ -12,10 +12,7 @@ fn nested_if_statement_loop() {
     let conf = default_conf();
 
     let input_vec: Vec<i64> = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
-    let ref input_data = WeldVec {
-        data: input_vec.as_ptr() as *const i64,
-        len: input_vec.len() as i64,
-    };
+    let ref input_data = WeldVec::from(&input_vec);
 
     let ret_value = compile_and_run(code, conf, input_data);
     let data = unsafe { weld_value_data(ret_value) as *const i32 };
@@ -34,10 +31,7 @@ fn nested_if_statement_with_builders_loop() {
     let conf = default_conf();
 
     let input_vec: Vec<i64> = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
-    let ref input_data = WeldVec {
-        data: input_vec.as_ptr() as *const i64,
-        len: input_vec.len() as i64,
-    };
+    let ref input_data = WeldVec::from(&input_vec);
 
     let ret_value = compile_and_run(code, conf, input_data);
     let data = unsafe { weld_value_data(ret_value) as *const i32 };
@@ -102,10 +96,7 @@ fn nested_for_loops() {
 
     // Input data.
     let ys = vec![1i64, 3i64, 4i64];
-    let ref input_data = WeldVec {
-        data: ys.as_ptr() as *const i64,
-        len: ys.len() as i64,
-    };
+    let ref input_data = WeldVec::from(&ys);
 
     let ret_value = compile_and_run(code, conf, input_data);
     let data = unsafe { weld_value_data(ret_value) as *const WeldVec<Row> };
@@ -153,14 +144,8 @@ fn appender_and_dictmerger_loop() {
     let keys = [1, 2, 2, 1, 3];
     let vals = [2, 3, 4, 2, 1];
     let ref input_data = Args {
-        x: WeldVec {
-            data: &keys as *const i32,
-            len: keys.len() as i64,
-        },
-        y: WeldVec {
-            data: &vals as *const i32,
-            len: vals.len() as i64,
-        },
+        x: WeldVec::from(&keys),
+        y: WeldVec::from(&vals),
     };
 
     let ret_value = compile_and_run(code, conf, input_data);

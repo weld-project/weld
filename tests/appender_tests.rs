@@ -19,10 +19,7 @@ fn simple_for_appender_loop() {
 
     let input_vec = [1, 2];
     let ref input_data = Args {
-        x: WeldVec {
-            data: &input_vec as *const i32,
-            len: input_vec.len() as i64,
-        },
+        x: WeldVec::from(&input_vec),
         a: 1,
     };
 
@@ -44,10 +41,7 @@ fn large_unaryop_for_appender_loop() {
     let conf = default_conf();
 
     let input_vec: Vec<f32> = vec![4.0; 1000000];
-    let ref input_data: WeldVec<f32> = WeldVec {
-        data: input_vec.as_ptr(),
-        len: input_vec.len() as i64,
-    };
+    let ref input_data = WeldVec::from(&input_vec);
 
     let ret_value = compile_and_run(code, conf, input_data);
     let data = unsafe { weld_value_data(ret_value) as *const WeldVec<f32> };
@@ -66,10 +60,7 @@ fn simple_parallel_for_appender_loop() {
 
     let size = 10000;
     let input_vec: Vec<i32> = vec![0; size as usize];
-    let ref input_data = WeldVec {
-        data: input_vec.as_ptr() as *const i32,
-        len: size,
-    };
+    let ref input_data = WeldVec::from(&input_vec);
 
     let ret_value = compile_and_run(code, conf, input_data);
     let data = unsafe { weld_value_data(ret_value) as *const WeldVec<i64> };
@@ -91,10 +82,7 @@ fn simple_parallel_for_multi_appender_loop() {
 
     let size = 10000;
     let input_vec: Vec<i32> = vec![0; size as usize];
-    let ref input_data = WeldVec {
-        data: input_vec.as_ptr() as *const i32,
-        len: size,
-    };
+    let ref input_data = WeldVec::from(&input_vec);
 
     let ret_value = compile_and_run(code, conf, input_data);
     let data = unsafe { weld_value_data(ret_value) as *const WeldVec<i64> };
@@ -116,10 +104,7 @@ fn complex_parallel_for_appender_loop() {
 
     let size = 3000;
     let input_vec: Vec<i32> = vec![0; size as usize];
-    let ref input_data = WeldVec {
-        data: input_vec.as_ptr() as *const i32,
-        len: size,
-    };
+    let ref input_data = WeldVec::from(&input_vec);
 
     let ret_value = compile_and_run(code, conf, input_data);
     let data = unsafe { weld_value_data(ret_value) as *const WeldVec<i64> };

@@ -19,13 +19,8 @@ fn simple_for_vectorizable_loop() {
 
     let size = 1000;
     let input_vec = vec![1 as i32; size as usize];
-    let ref input_data = Args {
-        x: WeldVec {
-            data: input_vec.as_ptr() as *const i32,
-            len: input_vec.len() as i64,
-        },
-    };
-
+    let ref input_data = WeldVec::from(&input_vec);
+    
     let ret_value = compile_and_run(code, conf, input_data);
     let data = unsafe { weld_value_data(ret_value) as *const i32 };
     let result = unsafe { (*data).clone() };
@@ -56,10 +51,7 @@ fn fringed_for_vectorizable_loop() {
     let size = 1002;
     let input_vec = vec![1 as i32; size as usize];
     let ref input_data = Args {
-        x: WeldVec {
-            data: input_vec.as_ptr() as *const i32,
-            len: input_vec.len() as i64,
-        },
+        x: WeldVec::from(&input_vec),
     };
 
     let ret_value = compile_and_run(code, conf, input_data);
@@ -93,10 +85,7 @@ fn fringed_for_vectorizable_loop_with_par() {
     let size = 10 * 1000 * 1000 + 123;
     let input_vec = vec![1 as i32; size as usize];
     let ref input_data = Args {
-        x: WeldVec {
-            data: input_vec.as_ptr() as *const i32,
-            len: input_vec.len() as i64,
-        },
+        x: WeldVec::from(&input_vec),
     };
 
     let ret_value = compile_and_run(code, conf, input_data);
@@ -131,10 +120,7 @@ fn for_predicated_vectorizable_loop() {
     let size = 1000;
     let input_vec = vec![1 as i32; size as usize];
     let ref input_data = Args {
-        x: WeldVec {
-            data: input_vec.as_ptr() as *const i32,
-            len: input_vec.len() as i64,
-        },
+        x: WeldVec::from(&input_vec),
     };
 
     let ret_value = compile_and_run(code, conf, input_data);
@@ -161,10 +147,7 @@ fn predicate_if_iff_annotated() {
 
     let input_vec = vec![-1, 2, 3, 4, 5];
     let ref input_data = Args {
-        v: WeldVec {
-            data: input_vec.as_ptr(),
-            len: input_vec.len() as i64,
-        }
+        v: WeldVec::from(&input_vec),
     };
 
     let expected = 14;

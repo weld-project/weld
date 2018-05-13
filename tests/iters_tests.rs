@@ -40,10 +40,7 @@ fn range_iter_zipped_helper(parallel: bool) {
     };
     let input_vec = vec![1 as i64; end as usize];
     let ref input_data = Args {
-        v: WeldVec {
-            data: input_vec.as_ptr() as *const i64,
-            len: input_vec.len() as i64,
-        },
+        v: WeldVec::from(&input_vec),
     };
 
     let ret_value = compile_and_run(&code, conf, input_data);
@@ -79,14 +76,8 @@ fn iters_for_loop() {
     let x = [1, 2, 3, 4];
     let y = [5, 6];
     let ref input_data = Args {
-        x: WeldVec {
-            data: &x as *const i32,
-            len: x.len() as i64,
-        },
-        y: WeldVec {
-            data: &y as *const i32,
-            len: y.len() as i64,
-        },
+        x: WeldVec::from(&x),
+        y: WeldVec::from(&y),
     };
 
     let ret_value = compile_and_run(code, conf, input_data);
@@ -145,7 +136,7 @@ fn nditer_basic_op_test() {
                 merge(b,log(e))))";
 
     let conf = default_conf();
-    let mut x :[f64; 100] = [0.0; 100];
+    let mut x = vec![0.0; 100];
     for i in 0..100 {
         x[i] = i as f64;
     }
@@ -153,25 +144,17 @@ fn nditer_basic_op_test() {
      * These are arbitrarily chosen here for testing purposes so get_idx can simulate the behaviour
      * nditer should be doing (idx = dot(counter, strides).
      */
-    let strides :[i64; 3] = [5, 2, 3];
+    let strides = [5, 2, 3];
     // nditer with this shape will contain: 2*3*4 = 24 elements.
-    let shapes :[i64; 3] = [2, 3, 4];
-    let mut counter :[i64; 3] = [0, 0, 0];
+    let shapes = [2, 3, 4];
+    let mut counter = [0, 0, 0];
 
     let ref input_data = Args {
-        x: WeldVec {
-            data: &x as *const f64,
-            len: x.len() as i64,
-        },
-        shapes: WeldVec {
-            data: &shapes as *const i64,
-            len: shapes.len() as i64,
-        },
-        strides: WeldVec {
-            data: &strides as *const i64,
-            len: strides.len() as i64,
-        },
+        x: WeldVec::from(&x),
+        shapes: WeldVec::from(&shapes),
+        strides: WeldVec::from(&strides),
     };
+
     let ret_value = compile_and_run(code, conf, input_data);
     let data = unsafe { weld_value_data(ret_value) as *const WeldVec<f64> };
     let result = unsafe { (*data).clone() };
@@ -199,8 +182,8 @@ fn nditer_zip() {
     appender, |b,i,e| merge(b,e.$0+e.$1)))";
 
     let conf = default_conf();
-    let mut x :[i64; 100] = [5; 100];
-    let mut y :[i64; 100] = [0; 100];
+    let mut x = vec![5; 100];
+    let mut y = vec![0; 100];
     for i in 0..100 {
         x[i] = i as i64 + 5;
     }
@@ -208,27 +191,15 @@ fn nditer_zip() {
         y[i] = i as i64;
     }
 
-    let strides :[i64; 3] = [5, 2, 2];
-    let shapes :[i64; 3] = [2, 3, 4];
-    let mut counter :[i64; 3] = [0, 0, 0];
+    let strides = [5, 2, 2];
+    let shapes = [2, 3, 4];
+    let mut counter = [0, 0, 0];
 
     let ref input_data = Args {
-        x: WeldVec {
-            data: &x as *const i64,
-            len: x.len() as i64,
-        },
-        y: WeldVec {
-            data: &y as *const i64,
-            len: y.len() as i64,
-        },
-        shapes: WeldVec {
-            data: &shapes as *const i64,
-            len: shapes.len() as i64,
-        },
-        strides: WeldVec {
-            data: &strides as *const i64,
-            len: strides.len() as i64,
-        },
+        x: WeldVec::from(&x),
+        y: WeldVec::from(&y),
+        shapes: WeldVec::from(&shapes),
+        strides: WeldVec::from(&strides),
     };
 
     let ret_value = compile_and_run(code, conf, input_data);

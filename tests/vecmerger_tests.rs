@@ -12,10 +12,7 @@ fn simple_for_vecmerger_loop() {
     let conf = default_conf();
 
     let input_vec = [1, 1, 1, 1, 1];
-    let ref input_data = WeldVec {
-        data: &input_vec as *const i32,
-        len: input_vec.len() as i64,
-    };
+    let ref input_data = WeldVec::from(&input_vec);
 
     let ret_value = compile_and_run(code, conf, input_data);
     let data = unsafe { weld_value_data(ret_value) as *const WeldVec<i32> };
@@ -47,10 +44,7 @@ fn simple_for_vecmerger_binops() {
     }
 
     let input_vec: Vec<i64> = vec![3, 3, 3, 3, 3];
-    let ref input_data = WeldVec {
-        data: input_vec.as_ptr() as *const i64,
-        len: input_vec.len() as i64,
-    };
+    let ref input_data = WeldVec::from(&input_vec);
 
     let ret_value = compile_and_run(code, conf, input_data);
     let data = unsafe { weld_value_data(ret_value) as *const Output };
@@ -70,11 +64,8 @@ fn parallel_for_vecmerger_loop() {
     let code = "|x:vec[i32]| result(@(grain_size: 100)for(x, vecmerger[i32,+](x), |b,i,e| merge(b, {i,e*7})))";
     let conf = many_threads_conf();
 
-    let input_vec = [1; 4096];
-    let ref input_data = WeldVec {
-        data: &input_vec as *const i32,
-        len: input_vec.len() as i64,
-    };
+    let input_vec = vec![1; 4096];
+    let ref input_data = WeldVec::from(&input_vec);
 
     let ret_value = compile_and_run(code, conf, input_data);
     let data = unsafe { weld_value_data(ret_value) as *const WeldVec<i32> };
