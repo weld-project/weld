@@ -12,27 +12,6 @@ use std::convert::AsRef;
 use std::ffi::{CStr, CString};
 use self::libc::{c_char, c_void};
 
-/// Compares a and b, and returns true if their difference is less than 0.000...1 (cmp_decimals)
-pub fn approx_equal(a: f64, b: f64, cmp_decimals: u32) -> bool {
-    if a == b {
-        return true;
-    }
-    let thresh = 0.1 / ((10i32.pow(cmp_decimals)) as f64);
-    let diff = (a - b).abs();
-    diff <= thresh
-}
-
-
-/// Compares a and b, and returns true if their difference is less than 0.000...1 (cmp_decimals)
-pub fn approx_equal_f32(a: f32, b: f32, cmp_decimals: u32) -> bool {
-    if a == b {
-        return true;
-    }
-    let thresh = 0.1 / ((10i32.pow(cmp_decimals)) as f32);
-    let diff = (a - b).abs();
-    diff <= thresh
-}
-
 #[derive(Clone, Debug)]
 #[repr(C)]
 pub struct WeldVec<T> {
@@ -41,6 +20,9 @@ pub struct WeldVec<T> {
 }
 
 impl<T> WeldVec<T> {
+    /// Return a new WeldVec from a pointer and a length.
+    ///
+    /// Consider using `WeldVec::from` instead, which automatically derives the length.
     pub fn new(ptr: *const T, len: i64) -> WeldVec<T> {
         WeldVec {
             data: ptr,

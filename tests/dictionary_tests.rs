@@ -8,33 +8,26 @@ use weld::weld_value_data;
 mod common;
 use common::*;
 
+#[repr(C)]
+struct I32KeyValArgs {
+    x: WeldVec<i32>,
+    y: WeldVec<i32>,
+}
+
 #[test]
 fn simple_for_dictmerger_loop() {
-    #[derive(Clone)]
-    #[allow(dead_code)]
-    struct Pair {
-        ele1: i32,
-        ele2: i32,
-    }
-
-    #[allow(dead_code)]
-    struct Args {
-        x: WeldVec<i32>,
-        y: WeldVec<i32>,
-    }
-
     let code = "|x:vec[i32], y:vec[i32]| tovec(result(for(zip(x,y), dictmerger[i32,i32,+],
                 |b,i,e| merge(b, e))))";
     let conf = default_conf();
     let keys = [1, 2, 2, 1, 3];
     let vals = [2, 3, 4, 2, 1];
-    let ref input_data = Args {
+    let ref input_data = I32KeyValArgs {
         x: WeldVec::from(&keys),
         y: WeldVec::from(&vals),
     };
 
     let ret_value = compile_and_run(code, conf, input_data);
-    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<Pair> };
+    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<Pair<_, _>> };
     let result = unsafe { (*data).clone() };
 
     let output_keys = [1, 2, 3];
@@ -70,12 +63,6 @@ fn dictmerger_with_structs() {
         v2: f32
     }
 
-    #[allow(dead_code)]
-    struct Args {
-        x: WeldVec<i32>,
-        y: WeldVec<i32>,
-    }
-
     let code = "|x:vec[i32], y:vec[i32]|
                     tovec(result(for(
                         zip(x,y),
@@ -84,7 +71,7 @@ fn dictmerger_with_structs() {
     let conf = default_conf();
     let keys = [1, 2, 2, 1, 3];
     let vals = [2, 3, 4, 2, 1];
-    let ref input_data = Args {
+    let ref input_data = I32KeyValArgs {
         x: WeldVec::from(&keys),
         y: WeldVec::from(&vals),
     };
@@ -114,19 +101,13 @@ fn dictmerger_with_structs() {
 
 #[test]
 fn simple_groupmerger() {
-    #[allow(dead_code)]
-    struct Args {
-        x: WeldVec<i32>,
-        y: WeldVec<i32>,
-    }
-
     let code = "|x:vec[i32], y:vec[i32]| tovec(result(for(zip(x,y), groupmerger[i32,i32],
                 |b,i,e| merge(b, e))))";
 
     let conf = default_conf();
     let keys = [1, 2, 2, 3, 3, 1];
     let vals = [2, 3, 4, 1, 0, 2];
-    let ref input_data = Args {
+    let ref input_data = I32KeyValArgs {
         x: WeldVec::from(&keys),
         y: WeldVec::from(&vals),
     };
@@ -171,6 +152,7 @@ fn complex_groupmerger_with_struct_key() {
     let keys1 = [1, 1, 2, 2, 3, 3, 3, 3];
     let keys2 = [1, 1, 2, 2, 3, 3, 4, 4];
     let vals = [2, 3, 4, 2, 1, 0, 3, 2];
+
     let ref input_data = Args {
         x: WeldVec::from(&keys1),
         y: WeldVec::from(&keys2),
@@ -208,18 +190,6 @@ fn complex_groupmerger_with_struct_key() {
 /// `use_local` specifies whether to use the local-global adaptive dictionary or the purely global
 /// dictionary.
 fn simple_parallel_for_dictmerger_loop_helper(use_local: bool) {
-    #[derive(Clone)]
-    #[allow(dead_code)]
-    struct Pair {
-        ele1: i32,
-        ele2: i32,
-    }
-    #[allow(dead_code)]
-    struct Args {
-        x: WeldVec<i32>,
-        y: WeldVec<i32>,
-    }
-
     let code = format!("|x:vec[i32], y:vec[i32]| tovec(result(@(grain_size: 100)for(zip(x,y),
                 dictmerger[i32,i32,+]({}L), |b,i,e| merge(b, e))))",
                 if use_local { 100000000 } else { 0 });
@@ -236,13 +206,13 @@ fn simple_parallel_for_dictmerger_loop_helper(use_local: bool) {
         vals[i] = i as i32;
     }
 
-    let ref input_data = Args {
+    let ref input_data = I32KeyValArgs {
         x: WeldVec::from(&keys),
         y: WeldVec::from(&vals),
     };
 
     let ret_value = compile_and_run(&code, conf, input_data);
-    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<Pair> };
+    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<Pair<_, _>> };
     let result = unsafe { (*data).clone() };
 
     assert_eq!(UNIQUE_KEYS as i64, result.len);
@@ -283,12 +253,6 @@ fn simple_parallel_for_dictmerger_loop_global() {
 
 #[test]
 fn simple_dict_lookup() {
-    #[allow(dead_code)]
-    struct Args {
-        x: WeldVec<i32>,
-        y: WeldVec<i32>,
-    }
-
     let code = "|x:vec[i32], y:vec[i32]| let a = result(for(zip(x,y), dictmerger[i32,i32,+],
                 |b,i,e| merge(b, e))); lookup(a, 1)";
     let conf = default_conf();
@@ -296,7 +260,7 @@ fn simple_dict_lookup() {
     let keys = [1, 2, 2, 1, 3];
     let vals = [2, 3, 4, 2, 1];
 
-    let ref input_data = Args {
+    let ref input_data = I32KeyValArgs {
         x: WeldVec::from(&keys),
         y: WeldVec::from(&vals),
     };
@@ -332,12 +296,6 @@ fn string_dict_lookup() {
 
 #[test]
 fn simple_dict_exists() {
-    #[allow(dead_code)]
-    struct Args {
-        x: WeldVec<i32>,
-        y: WeldVec<i32>,
-    }
-
     let keys = [1, 2, 2, 1, 3];
     let vals = [2, 3, 4, 2, 1];
 
@@ -347,7 +305,7 @@ fn simple_dict_exists() {
                       dictmerger[i32,i32,+], |b,i,e| merge(b, e))); keyexists(a, 4)";
     let conf = default_conf();
 
-    let ref input_data = Args {
+    let ref input_data = I32KeyValArgs {
         x: WeldVec::from(&keys),
         y: WeldVec::from(&vals),
     };

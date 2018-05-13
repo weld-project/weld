@@ -6,6 +6,33 @@ use weld::common::WeldRuntimeErrno;
 mod common;
 use common::*;
 
+trait Close<Rhs: ?Sized = Self> {
+    /// Returns true if self is close to other. The closeness is dictated by granularity.
+    fn close(self, other: Rhs, granularity: u32) -> bool;
+}
+
+impl Close for f32 {
+    fn close(self, other: f32, granularity: u32) -> bool {
+        if self == other {
+            return true;
+        }
+        let thresh = 0.1 / ((10i32.pow(granularity)) as Self);
+        let diff = (self - other).abs();
+        diff <= thresh
+    }
+}
+
+impl Close for f64 {
+    fn close(self, other: f64, granularity: u32) -> bool {
+        if self == other {
+            return true;
+        }
+        let thresh = 0.1 / ((10i32.pow(granularity)) as Self);
+        let diff = (self - other).abs();
+        diff <= thresh
+    }
+}
+
 #[test]
 fn simple_log() {
     let code = "|x:f64| log(x)";
@@ -15,7 +42,7 @@ fn simple_log() {
     let data = unsafe { weld_value_data(ret_value) as *const f64 };
     let result = unsafe { (*data).clone() };
     let output = 1.0f64;
-    assert!(approx_equal(output, result, 5));
+    assert!(output.close(result, 5));
     unsafe { free_value_and_module(ret_value) };
 }
 
@@ -39,7 +66,7 @@ fn simple_exp() {
     let data = unsafe { weld_value_data(ret_value) as *const f64 };
     let result = unsafe { (*data).clone() };
     let output = 2.718281828459045;
-    assert!(approx_equal(output, result, 5));
+    assert!(output.close(result, 5));
     unsafe { free_value_and_module(ret_value) };
 }
 
@@ -63,7 +90,7 @@ fn simple_erf() {
     let data = unsafe { weld_value_data(ret_value) as *const f64 };
     let result = unsafe { (*data).clone() };
     let output = 0.84270079294971478;
-    assert!(approx_equal(output, result, 5));
+    assert!(output.close(result, 5));
     unsafe { free_value_and_module(ret_value) };
 }
 
@@ -77,7 +104,7 @@ fn simple_sqrt() {
 
     let result = unsafe { (*data).clone() };
     let output = 2.0f64;
-    assert!(approx_equal(output, result, 5));
+    assert!(output.close(result, 5));
     unsafe { free_value_and_module(ret_value) };
 }
 
@@ -91,7 +118,7 @@ fn simple_pow() {
     let data = unsafe { weld_value_data(ret_value) as *const f64 };
 
     let result = unsafe { (*data).clone() };
-    assert!(approx_equal(16.0, result, 5));
+    assert!((16.0).close(result, 5));
     unsafe { free_value_and_module(ret_value) };
 }
 
@@ -103,7 +130,7 @@ fn simple_trig() {
         let ret_value = compile_and_run(&code, conf, &input);
         let data = unsafe { weld_value_data(ret_value) as *const f32 };
         let result = unsafe { (*data).clone() };
-        assert!(approx_equal_f32(expect, result, 5));
+        assert!(expect.close(result, 5));
         unsafe { free_value_and_module(ret_value) };
     }
 
@@ -113,7 +140,7 @@ fn simple_trig() {
         let ret_value = compile_and_run(&code, conf, &input);
         let data = unsafe { weld_value_data(ret_value) as *const f64 };
         let result = unsafe { (*data).clone() };
-        assert!(approx_equal(expect, result, 5));
+        assert!(expect.close(result, 5));
         unsafe { free_value_and_module(ret_value) };
     }
 
@@ -180,6 +207,20 @@ fn simple_float_mod() {
     let ret_value = compile_and_run(code, conf, input_data);
     let data = unsafe { weld_value_data(ret_value) as *const f64 };
     let result = unsafe { *data };
-    assert!(approx_equal(result, 0.02, 5));
+    assert!(result.close(0.02, 5));
+    unsafe { free_value_and_module(ret_value) };
+}
+
+#[test]
+fn simple_float_min() {
+    let code = "|| min(3.1, 4.2)";
+    let conf = default_conf();
+
+    let ref input_data: f64 = 0.0;
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = unsafe { weld_value_data(ret_value) as *const f64 };
+    let result = unsafe { *data };
+    assert!(result.close(3.1, 5));
     unsafe { free_value_and_module(ret_value) };
 }

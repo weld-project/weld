@@ -274,21 +274,6 @@ fn if_statement() {
 }
 
 #[test]
-fn float_min() {
-    let code = "|| min(3.1, 4.2)";
-    let conf = default_conf();
-
-    let ref input_data: f64 = 0.0;
-
-    let ret_value = compile_and_run(code, conf, input_data);
-    let data = unsafe { weld_value_data(ret_value) as *const f64 };
-    let result = unsafe { *data };
-    assert!(approx_equal(result, 3.1, 5));
-
-    unsafe { free_value_and_module(ret_value) };
-}
-
-#[test]
 fn maxmin() {
     let code = "|| max(3, min(2, 4))";
     let conf = default_conf();
