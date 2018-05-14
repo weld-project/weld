@@ -12,7 +12,8 @@ pub struct CodeBuilder {
 impl CodeBuilder {
     /// Adds a single line of code to this code builder, formatting it based on previous code.
     pub fn add_line<S>(&mut self, line: S)
-        where S: AsRef<str>
+    where
+        S: AsRef<str>,
     {
         let line = line.as_ref().trim();
         let indent_change = (line.matches("{").count() as i32) - (line.matches("}").count() as i32);
@@ -38,7 +39,8 @@ impl CodeBuilder {
 
     /// Adds one or more lines (split by "\n") to this code builder.
     pub fn add<S>(&mut self, code: S)
-        where S: AsRef<str>
+    where
+        S: AsRef<str>,
     {
         for l in code.as_ref().lines() {
             self.add_line(l);
@@ -71,7 +73,8 @@ impl CodeBuilder {
 
     /// Returns a formatted string using the CodeBuilder.
     pub fn format<S>(indent_size: i32, code: S) -> String
-        where S: AsRef<str>
+    where
+        S: AsRef<str>,
     {
         let mut c = CodeBuilder::with_indent_size(indent_size);
         c.add(code);

@@ -19,19 +19,22 @@ pub enum AnnotationKind {
 
 impl fmt::Display for AnnotationKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}",
-               match *self {
-                   AnnotationKind::BuilderImplementation => "impl",
-                   AnnotationKind::TileSize => "tile_size",
-                   AnnotationKind::GrainSize => "grain_size",
-                   AnnotationKind::Size => "size",
-                   AnnotationKind::LoopSize => "loopsize",
-                   AnnotationKind::BranchSelectivity => "branch_selectivity",
-                   AnnotationKind::NumKeys => "num_keys",
-                   AnnotationKind::Predicate => "predicate",
-                   AnnotationKind::Vectorize => "vectorize",
-                   AnnotationKind::AlwaysUseRuntime => "always_use_runtime",
-               })
+        write!(
+            f,
+            "{}",
+            match *self {
+                AnnotationKind::BuilderImplementation => "impl",
+                AnnotationKind::TileSize => "tile_size",
+                AnnotationKind::GrainSize => "grain_size",
+                AnnotationKind::Size => "size",
+                AnnotationKind::LoopSize => "loopsize",
+                AnnotationKind::BranchSelectivity => "branch_selectivity",
+                AnnotationKind::NumKeys => "num_keys",
+                AnnotationKind::Predicate => "predicate",
+                AnnotationKind::Vectorize => "vectorize",
+                AnnotationKind::AlwaysUseRuntime => "always_use_runtime",
+            }
+        )
     }
 }
 
@@ -70,20 +73,23 @@ enum AnnotationValue {
 
 impl fmt::Display for AnnotationValue {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-       write!(f, "{}",
-              match *self {
-                   AnnotationValue::VBuilderImplementation(ref kind) => format!("{}", kind),
-                   AnnotationValue::VTileSize(ref v) => format!("{}", v),
-                   AnnotationValue::VGrainSize(ref v) => format!("{}", v),
-                   AnnotationValue::VSize(ref v) => format!("{}", v),
-                   AnnotationValue::VLoopSize(ref v) => format!("{}", v),
-                   AnnotationValue::VBranchSelectivity(ref v) => format!("{}", v),
-                   AnnotationValue::VNumKeys(ref v) => format!("{}", v),
-                   // These are flags, so their existence indicates that the value is `true`.
-                   AnnotationValue::VPredicate => "true".to_string(),
-                   AnnotationValue::VVectorize => "true".to_string(),
-                   AnnotationValue::VAlwaysUseRuntime => "true".to_string(),
-               })
+        write!(
+            f,
+            "{}",
+            match *self {
+                AnnotationValue::VBuilderImplementation(ref kind) => format!("{}", kind),
+                AnnotationValue::VTileSize(ref v) => format!("{}", v),
+                AnnotationValue::VGrainSize(ref v) => format!("{}", v),
+                AnnotationValue::VSize(ref v) => format!("{}", v),
+                AnnotationValue::VLoopSize(ref v) => format!("{}", v),
+                AnnotationValue::VBranchSelectivity(ref v) => format!("{}", v),
+                AnnotationValue::VNumKeys(ref v) => format!("{}", v),
+                // These are flags, so their existence indicates that the value is `true`.
+                AnnotationValue::VPredicate => "true".to_string(),
+                AnnotationValue::VVectorize => "true".to_string(),
+                AnnotationValue::VAlwaysUseRuntime => "true".to_string(),
+            }
+        )
     }
 }
 
@@ -94,9 +100,7 @@ pub struct Annotations {
 
 impl Annotations {
     pub fn new() -> Annotations {
-        return Annotations {
-            values: BTreeMap::new(),
-        };
+        return Annotations { values: BTreeMap::new() };
     }
 
     pub fn builder_implementation(&self) -> Option<BuilderImplementationKind> {

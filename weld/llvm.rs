@@ -1,24 +1,25 @@
-use std::collections::HashSet;
 use std::collections::BTreeMap;
+use std::collections::HashSet;
 
 use easy_ll;
 
-extern crate time;
 extern crate fnv;
+extern crate time;
 
 use time::PreciseTime;
 
 use common::WeldRuntimeErrno;
 
+use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::PathBuf;
-use std::fs::OpenOptions;
 
-use super::ast::*;
-use super::ast::Type::*;
+use super::annotations::*;
+use super::ast::BuilderKind::*;
 use super::ast::LiteralKind::*;
 use super::ast::ScalarKind::*;
-use super::ast::BuilderKind::*;
+use super::ast::Type::*;
+use super::ast::*;
 use super::code_builder::CodeBuilder;
 use super::error::*;
 use super::macro_processor;
@@ -27,16 +28,15 @@ use super::pretty_print::*;
 use super::program::Program;
 use super::runtime::*;
 use super::sir;
-use super::sir::*;
 use super::sir::Statement;
 use super::sir::StatementKind::*;
 use super::sir::Terminator::*;
 use super::sir::optimizations;
+use super::sir::*;
 use super::transforms::uniquify;
 use super::type_inference;
 use super::util::IdGenerator;
 use super::util::WELD_INLINE_LIB;
-use super::annotations::*;
 
 use super::conf::ParsedConf;
 
@@ -104,10 +104,7 @@ impl CompiledModule {
     }
 }
 
-pub fn apply_opt_passes(expr: &mut TypedExpr,
-                        opt_passes: &Vec<Pass>,
-                        stats: &mut CompilationStats,
-                        use_experimental: bool) -> WeldResult<()> {
+pub fn apply_opt_passes(expr: &mut TypedExpr, opt_passes: &Vec<Pass>, stats: &mut CompilationStats, use_experimental: bool) -> WeldResult<()> {
     for pass in opt_passes {
         let start = PreciseTime::now();
         pass.transform(expr, use_experimental)?;
@@ -138,8 +135,7 @@ impl HasPointer for Type {
 }
 
 /// Generate a compiled LLVM module from a program whose body is a function.
-pub fn compile_program(program: &Program, conf: &ParsedConf, stats: &mut CompilationStats)
-        -> WeldResult<CompiledModule> {
+pub fn compile_program(program: &Program, conf: &ParsedConf, stats: &mut CompilationStats) -> WeldResult<CompiledModule> {
     let mut expr = macro_processor::process_program(program)?;
     debug!("After macro substitution:\n{}\n", print_typed_expr(&expr));
 
@@ -219,7 +215,8 @@ pub fn compile_program(program: &Program, conf: &ParsedConf, stats: &mut Compila
         &llvm_code,
         conf.llvm_optimization_level,
         conf.dump_code.enabled,
-        Some(WELD_INLINE_LIB)));
+        Some(WELD_INLINE_LIB)
+    ));
     debug!("Done compiling LLVM");
 
     let module = compiled.module;
@@ -262,9 +259,7 @@ pub fn compile_program(program: &Program, conf: &ParsedConf, stats: &mut Compila
 /// Writes code to a file specified by `PathBuf`. Writes a log message if it failed.
 fn write_code(code: &str, ext: &str, timestamp: &str, dir_path: &PathBuf) {
     let mut options = OpenOptions::new();
-    options.write(true)
-        .create_new(true)
-        .create(true);
+    options.write(true).create_new(true).create(true);
     let ref mut path = dir_path.clone();
     path.push(format!("code-{}", timestamp));
     path.set_extension(ext);
@@ -312,7 +307,7 @@ pub struct LlvmGenerator {
 
     // Key function id generator
     keyfunc_ids: IdGenerator,
-    
+
     // LLVM type names for each merger type.
     merger_names: fnv::FnvHashMap<Type, String>,
     merger_ids: IdGenerator,
@@ -379,7 +374,7 @@ impl LlvmGenerator {
             visited: HashSet::new(),
             type_helpers: fnv::FnvHashMap::default(),
             multithreaded: false,
-            trace_run: false
+            trace_run: false,
         };
         generator.prelude_code.add(PRELUDE_CODE);
         generator.prelude_code.add("\n");
@@ -395,7 +390,7 @@ impl LlvmGenerator {
     //
     // Helpers for Function Code Generation
     //
-    *********************************************************************************************/
+     *********************************************************************************************/
 
     /// Given a set of parameters and a suffix, returns a string used to represent LLVM function
     /// arguments. Each argument has the given suffix. Argument names are sorted by their symbol
@@ -410,8 +405,7 @@ impl LlvmGenerator {
         Ok(arg_types)
     }
 
-    fn gen_store_args(&mut self, params_sorted: &BTreeMap<Symbol, Type>, input_suffix: &str, stored_suffix: &str,
-        ctx: &mut FunctionContext) -> WeldResult<()> {
+    fn gen_store_args(&mut self, params_sorted: &BTreeMap<Symbol, Type>, input_suffix: &str, stored_suffix: &str, ctx: &mut FunctionContext) -> WeldResult<()> {
         for (_, (arg, ty)) in params_sorted.iter().enumerate() {
             let ll_ty = self.llvm_type(ty)?;
             let ll_sym = format!("{}{}", llvm_symbol(arg), stored_suffix);
@@ -421,12 +415,18 @@ impl LlvmGenerator {
         Ok(())
     }
 
-    fn gen_load_args(&mut self, params_sorted: &BTreeMap<Symbol, Type>, loaded_suffix: &str, stored_suffix: &str,
-        ctx: &mut FunctionContext) -> WeldResult<()> {
+    fn gen_load_args(&mut self, params_sorted: &BTreeMap<Symbol, Type>, loaded_suffix: &str, stored_suffix: &str, ctx: &mut FunctionContext) -> WeldResult<()> {
         for (_, (arg, ty)) in params_sorted.iter().enumerate() {
             let ll_ty = self.llvm_type(ty)?;
-            ctx.code.add(format!("{}{} = load {}, {}* {}{}", llvm_symbol(arg), loaded_suffix, ll_ty, ll_ty, llvm_symbol(arg),
-                stored_suffix));
+            ctx.code.add(format!(
+                "{}{} = load {}, {}* {}{}",
+                llvm_symbol(arg),
+                loaded_suffix,
+                ll_ty,
+                ll_ty,
+                llvm_symbol(arg),
+                stored_suffix
+            ));
         }
         Ok(())
     }
@@ -439,43 +439,39 @@ impl LlvmGenerator {
         let storage_ptr = ctx.var_ids.next();
         let work_data_ptr = ctx.var_ids.next();
         let work_data = ctx.var_ids.next();
-        ctx.code.add(format!("{} = getelementptr inbounds %work_t, %work_t* %cur.work, i32 0, i32 0", work_data_ptr));
+        ctx.code
+            .add(format!("{} = getelementptr inbounds %work_t, %work_t* %cur.work, i32 0, i32 0", work_data_ptr));
         ctx.code.add(format!("{} = load i8*, i8** {}", work_data, work_data_ptr));
         ctx.code.add(format!("{} = bitcast i8* {} to {}*", storage_ptr, work_data, arg_struct_ll_ty));
         for (i, (arg, ty)) in params_sorted.iter().enumerate() {
             let ptr_tmp = ctx.var_ids.next();
             let arg_ll_ty = self.llvm_type(ty)?;
-            ctx.code.add(format!("{} = getelementptr inbounds {}, {}* {}, i32 0, i32 {}",
-                ptr_tmp, arg_struct_ll_ty, arg_struct_ll_ty, storage_ptr, i));
+            ctx.code.add(format!(
+                "{} = getelementptr inbounds {}, {}* {}, i32 0, i32 {}",
+                ptr_tmp, arg_struct_ll_ty, arg_struct_ll_ty, storage_ptr, i
+            ));
             ctx.code.add(format!("{}{} = load {}, {}* {}", llvm_symbol(arg), suffix, arg_ll_ty, arg_ll_ty, ptr_tmp));
         }
         Ok(())
     }
 
-    fn gen_create_new_vb_pieces_helper(&mut self, sym: &str, ty: &Type, inner_ctx: &mut FunctionContext,
-        outer_ctx: &mut FunctionContext) -> WeldResult<(bool)> {
+    fn gen_create_new_vb_pieces_helper(&mut self, sym: &str, ty: &Type, inner_ctx: &mut FunctionContext, outer_ctx: &mut FunctionContext) -> WeldResult<(bool)> {
         let mut has_builder = false;
         match *ty {
-            Builder(ref bk, _) => {
-                match *bk {
-                    Appender(_) => {
-                        let bld_ty_str = self.llvm_type(ty)?;
-                        let bld_prefix = llvm_prefix(&bld_ty_str);
-                        inner_ctx.code.add(format!("call void {}.newPiece({} {}, %work_t* %cur.work)",
-                                                bld_prefix,
-                                                bld_ty_str,
-                                                sym));
-                        has_builder = true;
-                    }
-                    _ => {}
+            Builder(ref bk, _) => match *bk {
+                Appender(_) => {
+                    let bld_ty_str = self.llvm_type(ty)?;
+                    let bld_prefix = llvm_prefix(&bld_ty_str);
+                    inner_ctx.code.add(format!("call void {}.newPiece({} {}, %work_t* %cur.work)", bld_prefix, bld_ty_str, sym));
+                    has_builder = true;
                 }
-            }
+                _ => {}
+            },
             Struct(ref fields) => {
                 for (i, f) in fields.iter().enumerate() {
                     let struct_ty = self.llvm_type(ty)?;
                     let bld_sym = outer_ctx.var_ids.next();
-                    inner_ctx.code.add(format!("{} = extractvalue {} {}, {}", bld_sym, struct_ty,
-                        sym, i));
+                    inner_ctx.code.add(format!("{} = extractvalue {} {}, {}", bld_sym, struct_ty, sym, i));
                     has_builder |= self.gen_create_new_vb_pieces_helper(&bld_sym, f, inner_ctx, outer_ctx)?;
                 }
             }
@@ -489,15 +485,15 @@ impl LlvmGenerator {
         let full_task_ptr = ctx.var_ids.next();
         let full_task_int = ctx.var_ids.next();
         let full_task_bit = ctx.var_ids.next();
-        ctx.code.add(format!("{} = getelementptr inbounds %work_t, %work_t* %cur.work, i32 0, i32 4", full_task_ptr));
+        ctx.code
+            .add(format!("{} = getelementptr inbounds %work_t, %work_t* %cur.work, i32 0, i32 4", full_task_ptr));
         ctx.code.add(format!("{} = load i32, i32* {}", full_task_int, full_task_ptr));
         ctx.code.add(format!("{} = trunc i32 {} to i1", full_task_bit, full_task_int));
         ctx.code.add(format!("br i1 {}, label %new_pieces, label %fn_call", full_task_bit));
         ctx.code.add("new_pieces:");
         for (arg, ty) in params_sorted.iter() {
             let inner_ctx = &mut FunctionContext::new(false);
-            let has_builder = self.gen_create_new_vb_pieces_helper(
-                format!("{}{}", llvm_symbol(arg), suffix).as_str(), ty, inner_ctx, ctx)?;
+            let has_builder = self.gen_create_new_vb_pieces_helper(format!("{}{}", llvm_symbol(arg), suffix).as_str(), ty, inner_ctx, ctx)?;
             if has_builder {
                 ctx.code.add(&inner_ctx.code.result());
             }
@@ -506,46 +502,37 @@ impl LlvmGenerator {
         Ok(())
     }
 
-    fn gen_create_stack_mergers_helper(&mut self, sym: &str, ty: &Type, inner_ctx: &mut FunctionContext,
-        outer_ctx: &mut FunctionContext) -> WeldResult<(bool)> {
+    fn gen_create_stack_mergers_helper(&mut self, sym: &str, ty: &Type, inner_ctx: &mut FunctionContext, outer_ctx: &mut FunctionContext) -> WeldResult<(bool)> {
         let mut has_builder = false;
         match *ty {
-            Builder(ref bk, _) => {
-                match *bk {
-                    Merger(ref val_ty, ref op) => {
-                        let bld_ll_ty = self.llvm_type(ty)?;
-                        let bld_prefix = llvm_prefix(&bld_ll_ty);
-                        let bld_ll_stack_sym = format!("{}.stack", sym);
-                        let bld_ll_stack_ty = format!("{}.piece", bld_ll_ty);
-                        let val_ll_scalar_ty = self.llvm_type(val_ty)?;
-                        let iden_elem = binop_identity(*op, val_ty.as_ref())?;
-                        outer_ctx.add_alloca(&bld_ll_stack_sym, &bld_ll_stack_ty)?;
-                        inner_ctx.code.add(format!(
-                            "call void {}.insertStackPiece({}* {}, {}.piecePtr {})",
-                            bld_prefix,
-                            bld_ll_ty,
-                            sym,
-                            bld_ll_ty,
-                            bld_ll_stack_sym));
-                        inner_ctx.code.add(format!(
-                            "call void {}.clearStackPiece({}* {}, {} {})",
-                            bld_prefix,
-                            bld_ll_ty,
-                            sym,
-                            val_ll_scalar_ty,
-                            iden_elem
-                            ));
-                        has_builder = true;
-                    }
-                    _ => {}
+            Builder(ref bk, _) => match *bk {
+                Merger(ref val_ty, ref op) => {
+                    let bld_ll_ty = self.llvm_type(ty)?;
+                    let bld_prefix = llvm_prefix(&bld_ll_ty);
+                    let bld_ll_stack_sym = format!("{}.stack", sym);
+                    let bld_ll_stack_ty = format!("{}.piece", bld_ll_ty);
+                    let val_ll_scalar_ty = self.llvm_type(val_ty)?;
+                    let iden_elem = binop_identity(*op, val_ty.as_ref())?;
+                    outer_ctx.add_alloca(&bld_ll_stack_sym, &bld_ll_stack_ty)?;
+                    inner_ctx.code.add(format!(
+                        "call void {}.insertStackPiece({}* {}, {}.piecePtr {})",
+                        bld_prefix, bld_ll_ty, sym, bld_ll_ty, bld_ll_stack_sym
+                    ));
+                    inner_ctx.code.add(format!(
+                        "call void {}.clearStackPiece({}* {}, {} {})",
+                        bld_prefix, bld_ll_ty, sym, val_ll_scalar_ty, iden_elem
+                    ));
+                    has_builder = true;
                 }
-            }
+                _ => {}
+            },
             Struct(ref fields) => {
                 for (i, f) in fields.iter().enumerate() {
                     let struct_ty = self.llvm_type(ty)?;
                     let bld_sym = outer_ctx.var_ids.next();
-                    inner_ctx.code.add(format!("{} = getelementptr {}, {}* {}, i32 0, i32 {}", bld_sym, struct_ty,
-                        struct_ty, sym, i));
+                    inner_ctx
+                        .code
+                        .add(format!("{} = getelementptr {}, {}* {}, i32 0, i32 {}", bld_sym, struct_ty, struct_ty, sym, i));
                     has_builder |= self.gen_create_stack_mergers_helper(&bld_sym, f, inner_ctx, outer_ctx)?;
                 }
             }
@@ -570,28 +557,23 @@ impl LlvmGenerator {
     fn gen_create_new_merger_regs(&mut self, params_sorted: &BTreeMap<Symbol, Type>, ctx: &mut FunctionContext) -> WeldResult<()> {
         for (arg, ty) in params_sorted.iter() {
             match *ty {
-                Builder(ref bk, _) => {
-                    match *bk {
-                        Merger(ref val_ty, ref op) => {
-                            let bld_ll_ty = self.llvm_type(ty)?;
-                            let bld_ll_sym = llvm_symbol(arg);
-                            let bld_ll_reg_sym = format!("{}.reg", bld_ll_sym);
-                            let bld_ll_reg_ty = format!("{}.piece", bld_ll_ty);
-                            ctx.add_alloca(&bld_ll_reg_sym, &bld_ll_reg_ty)?;
-                            let val_ll_ty = self.llvm_type(val_ty)?;
-                            let iden_elem = binop_identity(*op, val_ty.as_ref())?;
-                            let bld_prefix = llvm_prefix(&bld_ll_ty);
-                            ctx.code.add(format!(
-                                "call void {}.clearPiece({}* {}, {} {})",
-                                bld_prefix,
-                                bld_ll_reg_ty,
-                                bld_ll_reg_sym,
-                                val_ll_ty,
-                                iden_elem));
-                        }
-                        _ => {}
+                Builder(ref bk, _) => match *bk {
+                    Merger(ref val_ty, ref op) => {
+                        let bld_ll_ty = self.llvm_type(ty)?;
+                        let bld_ll_sym = llvm_symbol(arg);
+                        let bld_ll_reg_sym = format!("{}.reg", bld_ll_sym);
+                        let bld_ll_reg_ty = format!("{}.piece", bld_ll_ty);
+                        ctx.add_alloca(&bld_ll_reg_sym, &bld_ll_reg_ty)?;
+                        let val_ll_ty = self.llvm_type(val_ty)?;
+                        let iden_elem = binop_identity(*op, val_ty.as_ref())?;
+                        let bld_prefix = llvm_prefix(&bld_ll_ty);
+                        ctx.code.add(format!(
+                            "call void {}.clearPiece({}* {}, {} {})",
+                            bld_prefix, bld_ll_reg_ty, bld_ll_reg_sym, val_ll_ty, iden_elem
+                        ));
                     }
-                }
+                    _ => {}
+                },
                 _ => {}
             }
         }
@@ -602,74 +584,50 @@ impl LlvmGenerator {
     fn gen_create_global_mergers(&mut self, params_sorted: &BTreeMap<Symbol, Type>, suffix: &str, ctx: &mut FunctionContext) -> WeldResult<()> {
         for (arg, ty) in params_sorted.iter() {
             match *ty {
-                Builder(ref bk, _) => {
-                    match *bk {
-                        Merger(ref val_ty, ref op) => {
-                            let bld_ll_ty = self.llvm_type(ty)?;
-                            let bld_ll_sym = llvm_symbol(arg);
-                            let val_ll_scalar_ty = self.llvm_type(val_ty)?;
-                            let val_ll_simd_ty = self.llvm_type(&val_ty.simd_type()?)?;
-                            let iden_elem = binop_identity(*op, val_ty.as_ref())?;
-                            let bld_prefix = llvm_prefix(&bld_ll_ty);
-                            let bld_ptr_raw = ctx.var_ids.next();
-                            let bld_ptr_scalar = ctx.var_ids.next();
-                            let bld_ptr_simd = ctx.var_ids.next();
-                            let stack_ptr_scalar = ctx.var_ids.next();
-                            let stack_ptr_simd = ctx.var_ids.next();
-                            ctx.code.add(format!(
-                                "call void {}.initGlobalIfNeeded({}* {}{}, {} {})",
-                                bld_prefix,
-                                bld_ll_ty,
-                                bld_ll_sym,
-                                suffix,
-                                val_ll_scalar_ty,
-                                iden_elem));
-                            ctx.code.add(format!(
-                                "{} = call {}.piecePtr {}.getPtrIndexed({}* {}{}, i32 %cur.tid)",
-                                bld_ptr_raw,
-                                bld_ll_ty,
-                                bld_prefix,
-                                bld_ll_ty,
-                                bld_ll_sym,
-                                suffix));
-                            ctx.code.add(format!(
-                                "{} = call {}* {}.vectorMergePtrForPiece({}.piecePtr {})",
-                                bld_ptr_simd,
-                                val_ll_simd_ty,
-                                bld_prefix,
-                                bld_ll_ty,
-                                bld_ptr_raw));
-                            ctx.code.add(format!(
-                                "{} = call {}* {}.scalarMergePtrForPiece({}.piecePtr {})",
-                                bld_ptr_scalar,
-                                val_ll_scalar_ty,
-                                bld_prefix,
-                                bld_ll_ty,
-                                bld_ptr_raw));
-                            ctx.code.add(format!(
-                                "{} = call {}* {}.vectorMergePtrForStackPiece({}* {}{})",
-                                stack_ptr_simd,
-                                val_ll_simd_ty,
-                                bld_prefix,
-                                bld_ll_ty,
-                                bld_ll_sym,
-                                suffix));
-                            ctx.code.add(format!(
-                                "{} = call {}* {}.scalarMergePtrForStackPiece({}* {}{})",
-                                stack_ptr_scalar,
-                                val_ll_scalar_ty,
-                                bld_prefix,
-                                bld_ll_ty,
-                                bld_ll_sym,
-                                suffix));
-                            let stack_simd = self.gen_load_var(&stack_ptr_simd, &val_ll_simd_ty, ctx)?;
-                            let stack_scalar = self.gen_load_var(&stack_ptr_scalar, &val_ll_scalar_ty, ctx)?;
-                            self.gen_merge_op(&bld_ptr_simd, &stack_simd, &val_ll_simd_ty, op, &val_ty.simd_type()?, ctx)?;
-                            self.gen_merge_op(&bld_ptr_scalar, &stack_scalar, &val_ll_scalar_ty, op, val_ty, ctx)?;
-                        }
-                        _ => {}
+                Builder(ref bk, _) => match *bk {
+                    Merger(ref val_ty, ref op) => {
+                        let bld_ll_ty = self.llvm_type(ty)?;
+                        let bld_ll_sym = llvm_symbol(arg);
+                        let val_ll_scalar_ty = self.llvm_type(val_ty)?;
+                        let val_ll_simd_ty = self.llvm_type(&val_ty.simd_type()?)?;
+                        let iden_elem = binop_identity(*op, val_ty.as_ref())?;
+                        let bld_prefix = llvm_prefix(&bld_ll_ty);
+                        let bld_ptr_raw = ctx.var_ids.next();
+                        let bld_ptr_scalar = ctx.var_ids.next();
+                        let bld_ptr_simd = ctx.var_ids.next();
+                        let stack_ptr_scalar = ctx.var_ids.next();
+                        let stack_ptr_simd = ctx.var_ids.next();
+                        ctx.code.add(format!(
+                            "call void {}.initGlobalIfNeeded({}* {}{}, {} {})",
+                            bld_prefix, bld_ll_ty, bld_ll_sym, suffix, val_ll_scalar_ty, iden_elem
+                        ));
+                        ctx.code.add(format!(
+                            "{} = call {}.piecePtr {}.getPtrIndexed({}* {}{}, i32 %cur.tid)",
+                            bld_ptr_raw, bld_ll_ty, bld_prefix, bld_ll_ty, bld_ll_sym, suffix
+                        ));
+                        ctx.code.add(format!(
+                            "{} = call {}* {}.vectorMergePtrForPiece({}.piecePtr {})",
+                            bld_ptr_simd, val_ll_simd_ty, bld_prefix, bld_ll_ty, bld_ptr_raw
+                        ));
+                        ctx.code.add(format!(
+                            "{} = call {}* {}.scalarMergePtrForPiece({}.piecePtr {})",
+                            bld_ptr_scalar, val_ll_scalar_ty, bld_prefix, bld_ll_ty, bld_ptr_raw
+                        ));
+                        ctx.code.add(format!(
+                            "{} = call {}* {}.vectorMergePtrForStackPiece({}* {}{})",
+                            stack_ptr_simd, val_ll_simd_ty, bld_prefix, bld_ll_ty, bld_ll_sym, suffix
+                        ));
+                        ctx.code.add(format!(
+                            "{} = call {}* {}.scalarMergePtrForStackPiece({}* {}{})",
+                            stack_ptr_scalar, val_ll_scalar_ty, bld_prefix, bld_ll_ty, bld_ll_sym, suffix
+                        ));
+                        let stack_simd = self.gen_load_var(&stack_ptr_simd, &val_ll_simd_ty, ctx)?;
+                        let stack_scalar = self.gen_load_var(&stack_ptr_scalar, &val_ll_scalar_ty, ctx)?;
+                        self.gen_merge_op(&bld_ptr_simd, &stack_simd, &val_ll_simd_ty, op, &val_ty.simd_type()?, ctx)?;
+                        self.gen_merge_op(&bld_ptr_scalar, &stack_scalar, &val_ll_scalar_ty, op, val_ty, ctx)?;
                     }
-                }
+                    _ => {}
+                },
                 _ => {}
             }
         }
@@ -680,75 +638,53 @@ impl LlvmGenerator {
     fn gen_store_stack_mergers(&mut self, params_sorted: &BTreeMap<Symbol, Type>, ctx: &mut FunctionContext) -> WeldResult<()> {
         for (arg, ty) in params_sorted.iter() {
             match *ty {
-                Builder(ref bk, _) => {
-                    match *bk {
-                        Merger(ref val_ty, ref op) => {
-                            let next_label = ctx.var_ids.next();
-                            let cur_label = ctx.var_ids.next();
-                            let bld_ll_ty = self.llvm_type(ty)?;
-                            let bld_ll_sym = llvm_symbol(arg);
-                            let val_ll_scalar_ty = self.llvm_type(val_ty)?;
-                            let val_ll_simd_ty = self.llvm_type(&val_ty.simd_type()?)?;
-                            let bld_prefix = llvm_prefix(&bld_ll_ty);
-                            let bld_ptr_raw = ctx.var_ids.next();
-                            let bld_ptr_scalar = ctx.var_ids.next();
-                            let bld_ptr_simd = ctx.var_ids.next();
-                            let stack_ptr_scalar = ctx.var_ids.next();
-                            let stack_ptr_simd = ctx.var_ids.next();
-                            let is_global = ctx.var_ids.next();
-                            ctx.code.add(format!(
-                                "{} = call i1 {}.isGlobal({}* {})",
-                                is_global,
-                                bld_prefix,
-                                bld_ll_ty,
-                                bld_ll_sym));
-                            ctx.code.add(format!("br i1 {}, label {}, label {}", is_global, cur_label, next_label));
-                            ctx.code.add(format!("{}:", cur_label.replace("%", "")));
-                            ctx.code.add(format!(
-                                "{} = call {}.piecePtr {}.getPtrIndexed({}* {}, i32 %cur.tid)",
-                                bld_ptr_raw,
-                                bld_ll_ty,
-                                bld_prefix,
-                                bld_ll_ty,
-                                bld_ll_sym));
-                            ctx.code.add(format!(
-                                "{} = call {}* {}.vectorMergePtrForPiece({}.piecePtr {})",
-                                bld_ptr_simd,
-                                val_ll_simd_ty,
-                                bld_prefix,
-                                bld_ll_ty,
-                                bld_ptr_raw));
-                            ctx.code.add(format!(
-                                "{} = call {}* {}.scalarMergePtrForPiece({}.piecePtr {})",
-                                bld_ptr_scalar,
-                                val_ll_scalar_ty,
-                                bld_prefix,
-                                bld_ll_ty,
-                                bld_ptr_raw));
-                            ctx.code.add(format!(
-                                "{} = call {}* {}.vectorMergePtrForStackPiece({}* {})",
-                                stack_ptr_simd,
-                                val_ll_simd_ty,
-                                bld_prefix,
-                                bld_ll_ty,
-                                bld_ll_sym));
-                            ctx.code.add(format!(
-                                "{} = call {}* {}.scalarMergePtrForStackPiece({}* {})",
-                                stack_ptr_scalar,
-                                val_ll_scalar_ty,
-                                bld_prefix,
-                                bld_ll_ty,
-                                bld_ll_sym));
-                            let stack_simd = self.gen_load_var(&stack_ptr_simd, &val_ll_simd_ty, ctx)?;
-                            let stack_scalar = self.gen_load_var(&stack_ptr_scalar, &val_ll_scalar_ty, ctx)?;
-                            self.gen_merge_op(&bld_ptr_simd, &stack_simd, &val_ll_simd_ty, op, &val_ty.simd_type()?, ctx)?;
-                            self.gen_merge_op(&bld_ptr_scalar, &stack_scalar, &val_ll_scalar_ty, op, val_ty, ctx)?;
-                            ctx.code.add(format!("br label {}", next_label));
-                            ctx.code.add(format!("{}:", next_label.replace("%", "")));
-                        }
-                        _ => {}
+                Builder(ref bk, _) => match *bk {
+                    Merger(ref val_ty, ref op) => {
+                        let next_label = ctx.var_ids.next();
+                        let cur_label = ctx.var_ids.next();
+                        let bld_ll_ty = self.llvm_type(ty)?;
+                        let bld_ll_sym = llvm_symbol(arg);
+                        let val_ll_scalar_ty = self.llvm_type(val_ty)?;
+                        let val_ll_simd_ty = self.llvm_type(&val_ty.simd_type()?)?;
+                        let bld_prefix = llvm_prefix(&bld_ll_ty);
+                        let bld_ptr_raw = ctx.var_ids.next();
+                        let bld_ptr_scalar = ctx.var_ids.next();
+                        let bld_ptr_simd = ctx.var_ids.next();
+                        let stack_ptr_scalar = ctx.var_ids.next();
+                        let stack_ptr_simd = ctx.var_ids.next();
+                        let is_global = ctx.var_ids.next();
+                        ctx.code.add(format!("{} = call i1 {}.isGlobal({}* {})", is_global, bld_prefix, bld_ll_ty, bld_ll_sym));
+                        ctx.code.add(format!("br i1 {}, label {}, label {}", is_global, cur_label, next_label));
+                        ctx.code.add(format!("{}:", cur_label.replace("%", "")));
+                        ctx.code.add(format!(
+                            "{} = call {}.piecePtr {}.getPtrIndexed({}* {}, i32 %cur.tid)",
+                            bld_ptr_raw, bld_ll_ty, bld_prefix, bld_ll_ty, bld_ll_sym
+                        ));
+                        ctx.code.add(format!(
+                            "{} = call {}* {}.vectorMergePtrForPiece({}.piecePtr {})",
+                            bld_ptr_simd, val_ll_simd_ty, bld_prefix, bld_ll_ty, bld_ptr_raw
+                        ));
+                        ctx.code.add(format!(
+                            "{} = call {}* {}.scalarMergePtrForPiece({}.piecePtr {})",
+                            bld_ptr_scalar, val_ll_scalar_ty, bld_prefix, bld_ll_ty, bld_ptr_raw
+                        ));
+                        ctx.code.add(format!(
+                            "{} = call {}* {}.vectorMergePtrForStackPiece({}* {})",
+                            stack_ptr_simd, val_ll_simd_ty, bld_prefix, bld_ll_ty, bld_ll_sym
+                        ));
+                        ctx.code.add(format!(
+                            "{} = call {}* {}.scalarMergePtrForStackPiece({}* {})",
+                            stack_ptr_scalar, val_ll_scalar_ty, bld_prefix, bld_ll_ty, bld_ll_sym
+                        ));
+                        let stack_simd = self.gen_load_var(&stack_ptr_simd, &val_ll_simd_ty, ctx)?;
+                        let stack_scalar = self.gen_load_var(&stack_ptr_scalar, &val_ll_scalar_ty, ctx)?;
+                        self.gen_merge_op(&bld_ptr_simd, &stack_simd, &val_ll_simd_ty, op, &val_ty.simd_type()?, ctx)?;
+                        self.gen_merge_op(&bld_ptr_scalar, &stack_scalar, &val_ll_scalar_ty, op, val_ty, ctx)?;
+                        ctx.code.add(format!("br label {}", next_label));
+                        ctx.code.add(format!("{}:", next_label.replace("%", "")));
                     }
-                }
+                    _ => {}
+                },
                 _ => {}
             }
         }
@@ -759,55 +695,41 @@ impl LlvmGenerator {
     fn gen_store_merger_regs(&mut self, params_sorted: &BTreeMap<Symbol, Type>, ctx: &mut FunctionContext) -> WeldResult<()> {
         for (arg, ty) in params_sorted.iter() {
             match *ty {
-                Builder(ref bk, _) => {
-                    match *bk {
-                        Merger(ref val_ty, ref op) => {
-                            let bld_ll_ty = self.llvm_type(ty)?;
-                            let bld_ll_sym = llvm_symbol(arg);
-                            let bld_ll_reg_sym = format!("{}.reg", llvm_symbol(arg));
-                            let val_ll_scalar_ty = self.llvm_type(val_ty)?;
-                            let val_ll_simd_ty = self.llvm_type(&val_ty.simd_type()?)?;
-                            let bld_prefix = llvm_prefix(&bld_ll_ty);
-                            let bld_ptr_scalar = ctx.var_ids.next();
-                            let bld_ptr_simd = ctx.var_ids.next();
-                            let reg_ptr_scalar = ctx.var_ids.next();
-                            let reg_ptr_simd = ctx.var_ids.next();
-                            ctx.code.add(format!(
-                                "{} = call {}* {}.vectorMergePtrForStackPiece({}* {})",
-                                bld_ptr_simd,
-                                val_ll_simd_ty,
-                                bld_prefix,
-                                bld_ll_ty,
-                                bld_ll_sym));
-                            ctx.code.add(format!(
-                                "{} = call {}* {}.scalarMergePtrForStackPiece({}* {})",
-                                bld_ptr_scalar,
-                                val_ll_scalar_ty,
-                                bld_prefix,
-                                bld_ll_ty,
-                                bld_ll_sym));
-                            ctx.code.add(format!(
-                                "{} = call {}* {}.vectorMergePtrForPiece({}.piecePtr {})",
-                                reg_ptr_simd,
-                                val_ll_simd_ty,
-                                bld_prefix,
-                                bld_ll_ty,
-                                bld_ll_reg_sym));
-                            ctx.code.add(format!(
-                                "{} = call {}* {}.scalarMergePtrForPiece({}.piecePtr {})",
-                                reg_ptr_scalar,
-                                val_ll_scalar_ty,
-                                bld_prefix,
-                                bld_ll_ty,
-                                bld_ll_reg_sym));
-                            let reg_simd = self.gen_load_var(&reg_ptr_simd, &val_ll_simd_ty, ctx)?;
-                            let reg_scalar = self.gen_load_var(&reg_ptr_scalar, &val_ll_scalar_ty, ctx)?;
-                            self.gen_merge_op(&bld_ptr_simd, &reg_simd, &val_ll_simd_ty, op, &val_ty.simd_type()?, ctx)?;
-                            self.gen_merge_op(&bld_ptr_scalar, &reg_scalar, &val_ll_scalar_ty, op, val_ty, ctx)?;
-                        }
-                        _ => {}
+                Builder(ref bk, _) => match *bk {
+                    Merger(ref val_ty, ref op) => {
+                        let bld_ll_ty = self.llvm_type(ty)?;
+                        let bld_ll_sym = llvm_symbol(arg);
+                        let bld_ll_reg_sym = format!("{}.reg", llvm_symbol(arg));
+                        let val_ll_scalar_ty = self.llvm_type(val_ty)?;
+                        let val_ll_simd_ty = self.llvm_type(&val_ty.simd_type()?)?;
+                        let bld_prefix = llvm_prefix(&bld_ll_ty);
+                        let bld_ptr_scalar = ctx.var_ids.next();
+                        let bld_ptr_simd = ctx.var_ids.next();
+                        let reg_ptr_scalar = ctx.var_ids.next();
+                        let reg_ptr_simd = ctx.var_ids.next();
+                        ctx.code.add(format!(
+                            "{} = call {}* {}.vectorMergePtrForStackPiece({}* {})",
+                            bld_ptr_simd, val_ll_simd_ty, bld_prefix, bld_ll_ty, bld_ll_sym
+                        ));
+                        ctx.code.add(format!(
+                            "{} = call {}* {}.scalarMergePtrForStackPiece({}* {})",
+                            bld_ptr_scalar, val_ll_scalar_ty, bld_prefix, bld_ll_ty, bld_ll_sym
+                        ));
+                        ctx.code.add(format!(
+                            "{} = call {}* {}.vectorMergePtrForPiece({}.piecePtr {})",
+                            reg_ptr_simd, val_ll_simd_ty, bld_prefix, bld_ll_ty, bld_ll_reg_sym
+                        ));
+                        ctx.code.add(format!(
+                            "{} = call {}* {}.scalarMergePtrForPiece({}.piecePtr {})",
+                            reg_ptr_scalar, val_ll_scalar_ty, bld_prefix, bld_ll_ty, bld_ll_reg_sym
+                        ));
+                        let reg_simd = self.gen_load_var(&reg_ptr_simd, &val_ll_simd_ty, ctx)?;
+                        let reg_scalar = self.gen_load_var(&reg_ptr_scalar, &val_ll_scalar_ty, ctx)?;
+                        self.gen_merge_op(&bld_ptr_simd, &reg_simd, &val_ll_simd_ty, op, &val_ty.simd_type()?, ctx)?;
+                        self.gen_merge_op(&bld_ptr_scalar, &reg_scalar, &val_ll_scalar_ty, op, val_ty, ctx)?;
                     }
-                }
+                    _ => {}
+                },
                 _ => {}
             }
         }
@@ -819,18 +741,19 @@ impl LlvmGenerator {
     /// name of the i8* pointer pointing to the created struct.
     fn gen_create_arg_struct(&mut self, params_sorted: &BTreeMap<Symbol, Type>, suffix: &str, ctx: &mut FunctionContext) -> WeldResult<String> {
         let mut prev_ref = String::from("undef");
-        let ll_ty = self.llvm_type(&Struct(params_sorted.values().map(|e| e.clone()).collect()))?
-            .to_string();
+        let ll_ty = self.llvm_type(&Struct(params_sorted.values().map(|e| e.clone()).collect()))?.to_string();
         for (i, (arg, ty)) in params_sorted.iter().enumerate() {
             let next_ref = ctx.var_ids.next();
-            ctx.code.add(format!("{} = insertvalue {} {}, {} {}{}, {}",
-                                 next_ref,
-                                 ll_ty,
-                                 prev_ref,
-                                 self.llvm_type(&ty)?,
-                                 llvm_symbol(arg),
-                                 suffix,
-                                 i));
+            ctx.code.add(format!(
+                "{} = insertvalue {} {}, {} {}{}, {}",
+                next_ref,
+                ll_ty,
+                prev_ref,
+                self.llvm_type(&ty)?,
+                llvm_symbol(arg),
+                suffix,
+                i
+            ));
             prev_ref.clear();
             prev_ref.push_str(&next_ref);
         }
@@ -852,10 +775,7 @@ impl LlvmGenerator {
     /// `FringeIter`, the LLVM register name representing the starting index of the fringe iterator.
     ///
     /// Precedes gen_loop_bounds_check
-    fn gen_num_iters_and_fringe_start(&mut self,
-                                      par_for: &ParallelForData,
-                                      func: &SirFunction,
-                                      ctx: &mut FunctionContext) -> WeldResult<(String, Option<String>)> {
+    fn gen_num_iters_and_fringe_start(&mut self, par_for: &ParallelForData, func: &SirFunction, ctx: &mut FunctionContext) -> WeldResult<(String, Option<String>)> {
         // Use the first data to compute the indexing.
         let first_data = &par_for.data[0].data;
         let first_iter = &par_for.data[0];
@@ -869,11 +789,7 @@ impl LlvmGenerator {
             IterKind::SimdIter | IterKind::ScalarIter => {
                 if par_for.data[0].start.is_none() {
                     // set num_iters_str to len(first_data)
-                    ctx.code.add(format!("{} = call i64 {}.size({} {})",
-                    num_iters_str,
-                    data_prefix,
-                    data_ty_str,
-                    data_str));
+                    ctx.code.add(format!("{} = call i64 {}.size({} {})", num_iters_str, data_prefix, data_ty_str, data_str));
                 } else {
                     // TODO(shoumik): Don't support non-unit stride right now.
                     if par_for.data[0].kind == IterKind::SimdIter {
@@ -887,7 +803,7 @@ impl LlvmGenerator {
                     ctx.code.add(format!("{} = sub i64 {}, {}", diff_tmp, end_str, start_str));
                     ctx.code.add(format!("{} = udiv i64 {}, {}", num_iters_str, diff_tmp, stride_str));
                 }
-            },
+            }
             IterKind::FringeIter => {
                 if par_for.data[0].start.is_some() {
                     return weld_err!("fringe iterator does not support non-unit stride");
@@ -912,17 +828,19 @@ impl LlvmGenerator {
                         Appender(_) => {
                             let bld_ty_str = self.llvm_type(bld_ty)?;
                             let bld_prefix = llvm_prefix(&bld_ty_str);
-                            ctx.code.add(format!("call void {}.setOffsetIfFixed({} {}, i64 {})",
-                                                 bld_prefix,
-                                                 bld_ty_str,
-                                                 llvm_symbol(&par_for.builder),
-                                                 tmp));
+                            ctx.code.add(format!(
+                                "call void {}.setOffsetIfFixed({} {}, i64 {})",
+                                bld_prefix,
+                                bld_ty_str,
+                                llvm_symbol(&par_for.builder),
+                                tmp
+                            ));
                         }
                         _ => {}
                     }
                 }
                 fringe_start_str = Some(tmp);
-            },
+            }
             IterKind::RangeIter => {
                 // set num_iters_str to (end - start) / stride
                 let start_str = llvm_symbol(&par_for.data[0].start.clone().unwrap());
@@ -934,22 +852,20 @@ impl LlvmGenerator {
             }
             IterKind::NdIter => {
                 /* llvm code for:
-                 * end = shape[0]*shape[1]...*shape[n-1] 
+                 * end = shape[0]*shape[1]...*shape[n-1]
                  * num_iters_str = end - start */
                 let shape_el_ty = self.llvm_type(&Scalar(I64))?;
-                let shape_llvm_info = self.get_array_llvm_info(func, ctx, first_iter.shape.as_ref().unwrap(), 
-                                                                shape_el_ty, false)?; 
+                let shape_llvm_info = self.get_array_llvm_info(func, ctx, first_iter.shape.as_ref().unwrap(), shape_el_ty, false)?;
                 let prod_ptr = ctx.var_ids.next();
                 ctx.code.add(format!("{} = alloca i64", prod_ptr));
-                ctx.code.add(format!("store i64 1, i64* {}", prod_ptr)); 
+                ctx.code.add(format!("store i64 1, i64* {}", prod_ptr));
                 let loop_name = "gen_num_iters_loop";
-                let (cur_i_ptr, cur_i) = self.add_llvm_for_loop_start(ctx, &loop_name, "0", 
-                                                   &shape_llvm_info.len_str, "slt")?;
+                let (cur_i_ptr, cur_i) = self.add_llvm_for_loop_start(ctx, &loop_name, "0", &shape_llvm_info.len_str, "slt")?;
                 let shape_i = self.get_array_idx(ctx, shape_llvm_info, false, &cur_i)?;
                 let prod = ctx.var_ids.next();
                 ctx.code.add(format!("{} = load i64, i64* {}", prod, prod_ptr));
                 let tmp_result = ctx.var_ids.next();
-                ctx.code.add(format!("{} = mul i64 {}, {}", tmp_result, prod, shape_i)); 
+                ctx.code.add(format!("{} = mul i64 {}, {}", tmp_result, prod, shape_i));
                 /* store back in prod_ptr */
                 ctx.code.add(format!("store i64 {}, i64* {}", tmp_result, prod_ptr));
                 /* Loop body done, so now update cur_i, and jump back to loop.start. */
@@ -966,12 +882,14 @@ impl LlvmGenerator {
     /// does not cause an out of bounds error with the given start and stride.
     /// Follows gen_num_iters_and_fringe_start
     /// Precedes gen_invoke_loop_body
-    fn gen_loop_bounds_check(&mut self,
-                                 fringe_start_str: Option<String>,
-                                 num_iters_str: &str,
-                                 par_for: &ParallelForData,
-                                 func: &SirFunction,
-                                 ctx: &mut FunctionContext) -> WeldResult<()> {
+    fn gen_loop_bounds_check(
+        &mut self,
+        fringe_start_str: Option<String>,
+        num_iters_str: &str,
+        par_for: &ParallelForData,
+        func: &SirFunction,
+        ctx: &mut FunctionContext,
+    ) -> WeldResult<()> {
         // We require a bounds check if (a) we have more than one iterator, or (b) if the iterator
         // has a user-defined iteration pattern (start, end, stride).
         if par_for.data.len() > 1 || par_for.data[0].start.is_some() {
@@ -998,8 +916,7 @@ impl LlvmGenerator {
                     ctx.code.add(format!("{} = alloca i64", offset_ptr));
                     ctx.code.add(format!("store i64 0, i64* {}", offset_ptr));
                     let loop_name = format!("boundscheck_loop{}", i);
-                    let (cur_i_ptr, cur_i) = self.add_llvm_for_loop_start(ctx, &loop_name, "0",
-                                               &strides_llvm_info.len_str, "slt")?;
+                    let (cur_i_ptr, cur_i) = self.add_llvm_for_loop_start(ctx, &loop_name, "0", &strides_llvm_info.len_str, "slt")?;
                     let shape_i = self.get_array_idx(ctx, shape_llvm_info, false, &cur_i)?;
                     let strides_i = self.get_array_idx(ctx, strides_llvm_info, false, &cur_i)?;
                     let (tmp_prod, max_i, cur_offset) = (ctx.var_ids.next(), ctx.var_ids.next(), ctx.var_ids.next());
@@ -1013,30 +930,30 @@ impl LlvmGenerator {
                     self.add_llvm_for_loop_end(ctx, &loop_name, &cur_i_ptr, &cur_i, "add");
                     /* start + offset should be the correct limit now */
                     let start_str = llvm_symbol(iter.start.as_ref().unwrap());
-                    let (max_iter_str, final_offset) = (ctx.var_ids.next(), ctx.var_ids.next()); 
+                    let (max_iter_str, final_offset) = (ctx.var_ids.next(), ctx.var_ids.next());
                     ctx.code.add(format!("{} = load i64, i64* {}", final_offset, offset_ptr));
                     ctx.code.add(format!("{} = add i64 {}, {}", max_iter_str, start_str, final_offset));
-                    /* if max_iter_str > data_len, then bad, else all is good */ 
+                    /* if max_iter_str > data_len, then bad, else all is good */
+
                     let (next_bounds_check_label, cond) = (ctx.var_ids.next(), ctx.var_ids.next());
                     /* Since start = 0, max_iter_str can be at most len(data)-1 */
                     ctx.code.add(format!("{} = icmp slt i64 {}, {}", cond, max_iter_str, data_llvm_info.len_str));
                     ctx.code.add(format!("br i1 {}, label {}, label %fn.boundcheckfailed", cond, next_bounds_check_label));
                     ctx.code.add(format!("{}:", next_bounds_check_label.replace("%", "")));
                 } else {
-
                     let (data_ll_ty, data_ll_sym) = self.llvm_type_and_name(func, &iter.data)?;
                     let data_prefix = llvm_prefix(&data_ll_ty);
 
                     let mut data_size_ll_tmp = ctx.var_ids.next();
-                    ctx.code.add(format!("{} = call i64 {}.size({} {})",
-                        data_size_ll_tmp, data_prefix, data_ll_ty, data_ll_sym));
+                    ctx.code
+                        .add(format!("{} = call i64 {}.size({} {})", data_size_ll_tmp, data_prefix, data_ll_ty, data_ll_sym));
 
                     // Obtain the start and stride values.
                     let (start_str, end_str, stride_str) = if iter.start.is_none() {
                         // We already checked to make sure the FringeIter doesn't have a start, etc.
                         let start_str = match iter.kind {
                             IterKind::FringeIter => fringe_start_str.as_ref().unwrap().to_string(),
-                            _ => String::from("0")
+                            _ => String::from("0"),
                         };
                         let stride_str = String::from("1");
                         (start_str, None, stride_str)
@@ -1045,8 +962,10 @@ impl LlvmGenerator {
                             llvm_symbol(iter.start.as_ref().unwrap()),
                             if iter.kind == IterKind::RangeIter {
                                 Some(llvm_symbol(iter.end.as_ref().unwrap()))
-                            } else { None },
-                            llvm_symbol(iter.stride.as_ref().unwrap())
+                            } else {
+                                None
+                            },
+                            llvm_symbol(iter.stride.as_ref().unwrap()),
                         )
                     };
 
@@ -1073,8 +992,7 @@ impl LlvmGenerator {
                     ctx.code.add(format!("{} = mul i64 {}, {}", t1, stride_str, t0));
                     ctx.code.add(format!("{} = add i64 {}, {}", t2, t1, start_str));
                     ctx.code.add(format!("{} = icmp slt i64 {}, {}", cond, t2, data_size_ll_tmp));
-                    ctx.code.add(format!("br i1 {}, label {}, label %fn.boundcheckfailed", cond,
-                                           next_bounds_check_label));
+                    ctx.code.add(format!("br i1 {}, label {}, label %fn.boundcheckfailed", cond, next_bounds_check_label));
                     ctx.code.add(format!("{}:", next_bounds_check_label.replace("%", "")));
                 }
             }
@@ -1100,12 +1018,7 @@ impl LlvmGenerator {
     /// iterations to be executed.
     ///
     /// Follows gen_loop_bounds_check
-    fn gen_invoke_loop_body(&mut self,
-                          num_iters_str: &str,
-                          par_for: &ParallelForData,
-                          sir: &SirProgram,
-                          func: &SirFunction,
-                          mut ctx: &mut FunctionContext) -> WeldResult<()> {
+    fn gen_invoke_loop_body(&mut self, num_iters_str: &str, par_for: &ParallelForData, sir: &SirProgram, func: &SirFunction, mut ctx: &mut FunctionContext) -> WeldResult<()> {
         let bound_cmp = ctx.var_ids.next();
         let grain_size = match par_for.grain_size {
             Some(size) => size,
@@ -1149,38 +1062,26 @@ impl LlvmGenerator {
         let body_struct = self.gen_create_arg_struct(&func.params, ".ab", ctx)?;
         let cont_struct = self.gen_create_arg_struct(&sir.funcs[par_for.cont].params, ".ac", ctx)?;
         ctx.code.add(format!(
-                "call void @weld_rt_start_loop(%work_t* %cur.work, i8* {}, i8* {}, \
-                                void (%work_t*)* @f{}_par, void (%work_t*)* @f{}_par, i64 0, \
-                                i64 {}, i32 {})",
-                                body_struct,
-                                cont_struct,
-                                func.id,
-                                par_for.cont,
-                                num_iters_str,
-                                grain_size
-                                ));
+            "call void @weld_rt_start_loop(%work_t* %cur.work, i8* {}, i8* {}, \
+             void (%work_t*)* @f{}_par, void (%work_t*)* @f{}_par, i64 0, \
+             i64 {}, i32 {})",
+            body_struct, cont_struct, func.id, par_for.cont, num_iters_str, grain_size
+        ));
         Ok(())
-    } 
+    }
 
     /// Helper function used at various places. Takes in a symbol of an array (as is passed to
     /// Weld), and based on the func and ctx, loads the value at index 'idx' of array and returns a
     /// string representing the value.
     /// @llvm_info: generated from get_llvm_info(...) call at some point.
     /// @vectorized: call to get the element is slightly different for simd ops.
-    fn get_array_idx(&mut self, 
-                     ctx: &mut FunctionContext,
-                     llvm_info: VecLLVMInfo,
-                     vectorized: bool,
-                     idx: &String) -> WeldResult<String> {
+    fn get_array_idx(&mut self, ctx: &mut FunctionContext, llvm_info: VecLLVMInfo, vectorized: bool, idx: &String) -> WeldResult<String> {
         let arr_elem_tmp_ptr = ctx.var_ids.next();
-        let at = if vectorized {
-            "vat"
-        } else {
-            "at"
-        };
-        ctx.code.add(format!("{} = call {}* {}.{}({} {}, i64 {})",
-                    arr_elem_tmp_ptr, &llvm_info.el_ty_str, llvm_info.prefix,
-                    at, &llvm_info.ty_str, llvm_info.arr_str, idx)); 
+        let at = if vectorized { "vat" } else { "at" };
+        ctx.code.add(format!(
+            "{} = call {}* {}.{}({} {}, i64 {})",
+            arr_elem_tmp_ptr, &llvm_info.el_ty_str, llvm_info.prefix, at, &llvm_info.ty_str, llvm_info.arr_str, idx
+        ));
         // Loading the cur element from the data array.
         Ok(self.gen_load_var(&arr_elem_tmp_ptr, &llvm_info.el_ty_str, ctx)?)
     }
@@ -1192,15 +1093,10 @@ impl LlvmGenerator {
     /// func (eg. wrapper) - this seems to change the type of the array (eg. in_func it is v0*,
     /// while !in_func: it is v0) -- and we have different methods to access the correct type in
     /// both scenarios.
-    fn get_array_llvm_info(&mut self,
-                           func: &SirFunction,
-                           ctx: &mut FunctionContext,
-                           arr: &Symbol,
-                           el_ty_str: String,
-                           in_func: bool) -> WeldResult<VecLLVMInfo> {
+    fn get_array_llvm_info(&mut self, func: &SirFunction, ctx: &mut FunctionContext, arr: &Symbol, el_ty_str: String, in_func: bool) -> WeldResult<VecLLVMInfo> {
         let (arr_ty_str, arr_str) = if in_func {
             let arr_ty_str = self.llvm_type(func.params.get(arr).unwrap())?;
-            let arr_str = self.gen_load_var(llvm_symbol(arr).as_str(), &arr_ty_str, ctx)?; 
+            let arr_str = self.gen_load_var(llvm_symbol(arr).as_str(), &arr_ty_str, ctx)?;
             (arr_ty_str, arr_str)
         } else {
             self.llvm_type_and_name(func, &arr)?
@@ -1208,24 +1104,19 @@ impl LlvmGenerator {
         let arr_prefix = llvm_prefix(&arr_ty_str);
         let len = ctx.var_ids.next();
         ctx.code.add(format!("{} = extractvalue {} {}, 1 ", len, arr_ty_str, arr_str));
-        let v = VecLLVMInfo { 
-                    ty_str: arr_ty_str,
-                    arr_str: arr_str,
-                    prefix: arr_prefix,
-                    len_str: len,
-                    el_ty_str: el_ty_str,
-                };
+        let v = VecLLVMInfo {
+            ty_str: arr_ty_str,
+            arr_str: arr_str,
+            prefix: arr_prefix,
+            len_str: len,
+            el_ty_str: el_ty_str,
+        };
         Ok(v)
     }
 
     /// Adds generic for loop code for an llvm loop to ctx.
     /// Returns the name of the pointer to, and the variable name of loop variable 'i'.
-    fn add_llvm_for_loop_start(&mut self, 
-                        ctx: &mut FunctionContext,
-                        loop_name: &str,
-                        loop_start: &str,
-                        end_cmp: &str,
-                        cmp_type: &str) -> WeldResult<(String, String)> {
+    fn add_llvm_for_loop_start(&mut self, ctx: &mut FunctionContext, loop_name: &str, loop_start: &str, end_cmp: &str, cmp_type: &str) -> WeldResult<(String, String)> {
         let cur_i_ptr = ctx.var_ids.next();
         ctx.code.add(format!("{} = alloca i64", cur_i_ptr));
         ctx.code.add(format!("store i64 {}, i64* {}", loop_start, cur_i_ptr));
@@ -1236,19 +1127,14 @@ impl LlvmGenerator {
         ctx.code.add(format!("{} = load i64, i64* {}", cur_i, cur_i_ptr));
         let cmp_str = ctx.var_ids.next();
         ctx.code.add(format!("{} = icmp {} i64 {}, {}", cmp_str, cmp_type, cur_i, end_cmp));
-        ctx.code.add(format!("br i1 {}, label %{name}.body, label %{name}.end", cmp_str, name=loop_name));
-        ctx.code.add(format!("{}.body:", loop_name)); 
+        ctx.code.add(format!("br i1 {}, label %{name}.body, label %{name}.end", cmp_str, name = loop_name));
+        ctx.code.add(format!("{}.body:", loop_name));
         Ok((cur_i_ptr, cur_i))
     }
 
-    /// Adds generic end conditions for the loop - called after add_llvm_for_loop_start, and 
+    /// Adds generic end conditions for the loop - called after add_llvm_for_loop_start, and
     /// the loop body has been added.
-    fn add_llvm_for_loop_end(&mut self, 
-                        ctx: &mut FunctionContext,
-                        loop_name: &str,
-                        cur_i_ptr: &str,
-                        cur_i: &str,
-                        incr_op: &str) {
+    fn add_llvm_for_loop_end(&mut self, ctx: &mut FunctionContext, loop_name: &str, cur_i_ptr: &str, cur_i: &str, incr_op: &str) {
         /* cur_i = incr_op cur_i, 1 and jump back to loop start */
         let tmp_cur_i = ctx.var_ids.next();
         ctx.code.add(format!("{} = {} i64 {}, {}", tmp_cur_i, incr_op, cur_i, 1));
@@ -1256,35 +1142,30 @@ impl LlvmGenerator {
         ctx.code.add(format!("br label %{}.start", loop_name));
         /* loop.end needs to be added */
         ctx.code.add(format!("{}.end:", loop_name));
-    } 
+    }
 
     /// Calculates the next element when performing a non-contiguous iteration. Essentially does
     /// idx = start + dot(counter, strides)
     /// @i: For zipped iters, nditer_next_element may be called for each individual iter.
     /// Since this involves declaring a new loop to do the dot product, we need 'i', to get unique
     /// names for each of the zipped values.
-    fn nditer_next_element(&mut self,
-                           func: &SirFunction,
-                           ctx: &mut FunctionContext,
-                           iter: &ParallelForIter,
-                           i: String) -> WeldResult<String> {
+    fn nditer_next_element(&mut self, func: &SirFunction, ctx: &mut FunctionContext, iter: &ParallelForIter, i: String) -> WeldResult<String> {
         let strides_el_ty = self.llvm_type(&Scalar(I64))?;
-        let strides_llvm_info = self.get_array_llvm_info(func, ctx, iter.strides.as_ref().unwrap(), 
-                                                         strides_el_ty, true)?;
-        /* sum += counter[i]*strides[i] loop to find arr_idx of next element. */    
+        let strides_llvm_info = self.get_array_llvm_info(func, ctx, iter.strides.as_ref().unwrap(), strides_el_ty, true)?;
+        /* sum += counter[i]*strides[i] loop to find arr_idx of next element. */
+
         let sum_ptr = ctx.var_ids.next();
         ctx.code.add(format!("{} = alloca i64", sum_ptr));
         ctx.code.add(format!("store i64 0, i64* {}", sum_ptr));
         let loop_name = format!("next_element_loop{}", i);
-        let (cur_i_ptr, cur_i) = self.add_llvm_for_loop_start(ctx, &loop_name, "0",
-                                   &strides_llvm_info.len_str, "slt")?;
+        let (cur_i_ptr, cur_i) = self.add_llvm_for_loop_start(ctx, &loop_name, "0", &strides_llvm_info.len_str, "slt")?;
         /* sum += counter[i]*strides[i] */
         let tmp_sum = ctx.var_ids.next();
         ctx.code.add(format!("{} = load i64, i64* {}", tmp_sum, sum_ptr));
         let strides_i = self.get_array_idx(ctx, strides_llvm_info, false, &cur_i)?;
         let counter_i_ptr = ctx.var_ids.next();
-        ctx.code.add(format!("{id} = getelementptr i64, i64* %counter.idx, i64 {idx}", 
-                             id=counter_i_ptr, idx=cur_i));
+        ctx.code
+            .add(format!("{id} = getelementptr i64, i64* %counter.idx, i64 {idx}", id = counter_i_ptr, idx = cur_i));
         let counter_i = ctx.var_ids.next();
         ctx.code.add(format!("{} = load i64, i64* {}", counter_i, counter_i_ptr));
         let tmp_prod = ctx.var_ids.next();
@@ -1293,24 +1174,23 @@ impl LlvmGenerator {
         ctx.code.add(format!("{} = add i64 {}, {}", tmp_sum2, tmp_sum, tmp_prod));
         /* Load the correct value back into sum. Could be more efficient to use the tmp variables,
          * but this stuff should be optimized by llvm anyway (?) */
-        ctx.code.add(format!("store i64 {}, i64* {}", tmp_sum2, sum_ptr)); 
+        ctx.code.add(format!("store i64 {}, i64* {}", tmp_sum2, sum_ptr));
         /* Update cur_i_ptr and go back to start */
-        self.add_llvm_for_loop_end(ctx, &loop_name, &cur_i_ptr, &cur_i, "add"); 
+        self.add_llvm_for_loop_end(ctx, &loop_name, &cur_i_ptr, &cur_i, "add");
         /* sum must be the correct offset right now. */
         let offset = ctx.var_ids.next();
         ctx.code.add(format!("{} = load i64, i64* {}", offset, sum_ptr));
         /* next_idx = start + offset */
-        let start_str = self.gen_load_var(llvm_symbol(&iter.start.clone().unwrap()).as_str(), "i64", ctx)?; 
+        let start_str = self.gen_load_var(llvm_symbol(&iter.start.clone().unwrap()).as_str(), "i64", ctx)?;
         let final_idx = ctx.var_ids.next();
         ctx.code.add(format!("{} = add i64 {}, {}", final_idx, start_str, offset));
         /* final idx into original array that the iteration is on right now. */
         Ok(final_idx)
     }
-    
+
     /// Helper function to check if any of the iters are of kind NdIter, and returns it if found.
-    fn check_any_nditer(&mut self,
-                        par_for: &ParallelForData) -> Option<ParallelForIter> {
-        let mut nditer :Option<ParallelForIter> = None;
+    fn check_any_nditer(&mut self, par_for: &ParallelForData) -> Option<ParallelForIter> {
+        let mut nditer: Option<ParallelForIter> = None;
         for cur_iter in par_for.data.iter() {
             if cur_iter.kind == IterKind::NdIter {
                 nditer = Some(cur_iter.clone());
@@ -1322,10 +1202,7 @@ impl LlvmGenerator {
 
     /// Generates the first half of the loop iteration code, which computes the index to iterate to
     /// and loads data before passing it to the loop body code.
-    fn gen_loop_iteration_start(&mut self,
-                     par_for: &ParallelForData,
-                     func: &SirFunction,
-                     ctx: &mut FunctionContext) -> WeldResult<()> {
+    fn gen_loop_iteration_start(&mut self, par_for: &ParallelForData, func: &SirFunction, ctx: &mut FunctionContext) -> WeldResult<()> {
         let bld_ty_str = self.llvm_type(func.params.get(&par_for.builder).unwrap())?;
         let bld_param_str = llvm_symbol(&par_for.builder);
         let bld_arg_str = llvm_symbol(&par_for.builder_arg);
@@ -1344,25 +1221,27 @@ impl LlvmGenerator {
             let shape_llvm_info = self.get_array_llvm_info(func, ctx, first_iter.shape.as_ref().unwrap(), shape_el_ty, true)?;
             /* dynamically generates an array of len(shape) ints on the stack. There does not seem to
              * be any reason to use malloc here. */
-            ctx.code.add(format!("%counter.idx = alloca i64, i64 {}", shape_llvm_info.len_str)); 
+            ctx.code.add(format!("%counter.idx = alloca i64, i64 {}", shape_llvm_info.len_str));
             /* Zero it out, maybe use memset instead? */
             let loop_name = "zero_out_counter";
-            let (cur_i_ptr, cur_i) = self.add_llvm_for_loop_start(ctx, &loop_name, "0",
-                                               &shape_llvm_info.len_str, "slt")?;  
+            let (cur_i_ptr, cur_i) = self.add_llvm_for_loop_start(ctx, &loop_name, "0", &shape_llvm_info.len_str, "slt")?;
             let tmp_id = ctx.var_ids.next();
             /* counter.idx[cur_i] */
-            ctx.code.add(format!("{} = getelementptr i64, i64* %counter.idx, \
-                                i64 {}", tmp_id, cur_i));
+            ctx.code.add(format!(
+                "{} = getelementptr i64, i64* %counter.idx, \
+                 i64 {}",
+                tmp_id, cur_i
+            ));
             ctx.code.add(format!("store i64 0, i64* {}", tmp_id));
             self.add_llvm_for_loop_end(ctx, &loop_name, &cur_i_ptr, &cur_i, "add");
         }
         // Declare loop body as counter etc. have already been initialized.
         ctx.code.add("br label %loop.start");
-        ctx.code.add("loop.start:"); 
-        /* Loop termination condition. 
+        ctx.code.add("loop.start:");
+        /* Loop termination condition.
          * Keeping it the same in nditer, and ensuring "num_iterations" value is set correctly in
          * gen_num_iters_and_fringe_start.*/
-        let idx_tmp = self.gen_load_var("%cur.idx", "i64", ctx)?;  
+        let idx_tmp = self.gen_load_var("%cur.idx", "i64", ctx)?;
         let elem_ty = func.locals.get(&par_for.data_arg).unwrap();
         let idx_cmp = ctx.var_ids.next();
         if par_for.data[0].kind == IterKind::SimdIter {
@@ -1386,7 +1265,7 @@ impl LlvmGenerator {
                     Struct(ref v) => self.llvm_type(&v[i])?,
                     _ => weld_err!("Internal error: invalid element type {}", print_type(elem_ty))?,
                 }
-            }; 
+            };
             let data_llvm_info = self.get_array_llvm_info(func, ctx, &iter.data, inner_elem_ty_str.clone(), true)?;
             /* idx into the original array at iteration %cur.i */
             let arr_idx = if iter.kind == IterKind::NdIter {
@@ -1411,8 +1290,10 @@ impl LlvmGenerator {
                     let arr_len = ctx.var_ids.next();
                     let offset = ctx.var_ids.next();
                     let final_idx = ctx.var_ids.next();
-                    ctx.code.add(format!("{} = call i64 {}.size({} {})", arr_len, data_llvm_info.prefix,
-                                 data_llvm_info.ty_str,data_llvm_info.arr_str));
+                    ctx.code.add(format!(
+                        "{} = call i64 {}.size({} {})",
+                        arr_len, data_llvm_info.prefix, data_llvm_info.ty_str, data_llvm_info.arr_str
+                    ));
                     ctx.code.add(format!("{} = udiv i64 {}, {}", tmp, arr_len, vector_len));
                     // tmp2 is also where the iteration for the FringeIter starts (the
                     // offset).
@@ -1426,20 +1307,16 @@ impl LlvmGenerator {
             };
 
             let inner_elem_tmp = match iter.kind {
-               IterKind::SimdIter => {
-                    self.get_array_idx(ctx, data_llvm_info, true, &arr_idx)?
-               }
-               IterKind::RangeIter => {
+                IterKind::SimdIter => self.get_array_idx(ctx, data_llvm_info, true, &arr_idx)?,
+                IterKind::RangeIter => {
                     // Range Iterators always return the type `i64`. Just pass the array
                     // index we would have computed.
                     let mut inner_elem_tmp = ctx.var_ids.next();
                     ctx.code.add(format!("{} = add i64 0, {}", inner_elem_tmp, arr_idx));
                     inner_elem_tmp
-               }
-               /* General case for ScalarIter, NdIter and FringeIter */
-               _ => {
-                    self.get_array_idx(ctx, data_llvm_info, false, &arr_idx)?
-               }
+                }
+                /* General case for ScalarIter, NdIter and FringeIter */
+                _ => self.get_array_idx(ctx, data_llvm_info, false, &arr_idx)?,
             };
 
             if par_for.data.len() == 1 {
@@ -1447,37 +1324,27 @@ impl LlvmGenerator {
                 prev_ref.push_str(&inner_elem_tmp);
             } else {
                 let elem_tmp = ctx.var_ids.next();
-                ctx.code.add(format!("{} = insertvalue {} {}, {} {}, {}",
-                                     elem_tmp,
-                                     elem_ty_str,
-                                     prev_ref,
-                                     inner_elem_ty_str,
-                                     inner_elem_tmp,
-                                     i));
+                ctx.code.add(format!(
+                    "{} = insertvalue {} {}, {} {}, {}",
+                    elem_tmp, elem_ty_str, prev_ref, inner_elem_ty_str, inner_elem_tmp, i
+                ));
                 prev_ref.clear();
                 prev_ref.push_str(&elem_tmp);
-            } 
+            }
         }
         let elem_str = llvm_symbol(&par_for.data_arg);
         /* stores prev_ref in place pointed to by elem_str */
-        ctx.code.add(format!("store {} {}, {}* {}", &elem_ty_str, prev_ref, &elem_ty_str, elem_str)); 
+        ctx.code.add(format!("store {} {}, {}* {}", &elem_ty_str, prev_ref, &elem_ty_str, elem_str));
         /* updating the value of the current index, "i". */
         ctx.code.add(format!("store i64 {}, i64* {}", idx_tmp, llvm_symbol(&par_for.idx_arg)));
         Ok(())
     }
     /// Generates the second half of the loop iteration code, which updates the current index and
     /// jumps to the beginning of the loop if more iterations are left.
-    fn gen_loop_iteration_end(&mut self,
-                              par_for: &ParallelForData,
-                              func: &SirFunction,
-                              ctx: &mut FunctionContext) -> WeldResult<()> {
+    fn gen_loop_iteration_end(&mut self, par_for: &ParallelForData, func: &SirFunction, ctx: &mut FunctionContext) -> WeldResult<()> {
         // TODO - should take the minimum vector size of all elements here?
         let vectorized = par_for.data[0].kind == IterKind::SimdIter;
-        let fetch_width = if vectorized {
-            llvm_simd_size(func.locals.get(&par_for.data_arg).unwrap())?
-        } else {
-            1
-        };
+        let fetch_width = if vectorized { llvm_simd_size(func.locals.get(&par_for.data_arg).unwrap())? } else { 1 };
 
         ctx.code.add("br label %loop.terminator");
         ctx.code.add("loop.terminator:");
@@ -1495,7 +1362,8 @@ impl LlvmGenerator {
             // Add the counter incrementing loop here and break to label %loop.start when done.
             let shape_el_ty = self.llvm_type(&Scalar(I64))?;
             let shape_llvm_info = self.get_array_llvm_info(func, ctx, iter.shape.as_ref().unwrap(), shape_el_ty, true)?;
-            ctx.code.add(format!("{i} = alloca i64
+            ctx.code.add(format!(
+                "{i} = alloca i64
                                  {tmp0} = sub i64 {counter_len}, 1
                                  store i64 {tmp0}, i64* {i}     
                                  br label %counter_loop.start
@@ -1508,14 +1376,22 @@ impl LlvmGenerator {
                                  {tmp2} = getelementptr i64, i64* {counter}, i64 {tmp1} 
                                  {tmp3} = load i64, i64* {tmp2}
                                  {tmp4} = add i64 {tmp3}, 1
-                                 store i64 {tmp4}, i64* {tmp2}"
-                                 , i="%counter.i", counter_len=shape_llvm_info.len_str, 
-                                 counter="%counter.idx", tmp0=ctx.var_ids.next(), tmp00=ctx.var_ids.next(),
-                                 tmp01=ctx.var_ids.next(), tmp1="%cur_i", tmp2=ctx.var_ids.next(),
-                                 tmp3=ctx.var_ids.next(), tmp4=ctx.var_ids.next()));
+                                 store i64 {tmp4}, i64* {tmp2}",
+                i = "%counter.i",
+                counter_len = shape_llvm_info.len_str,
+                counter = "%counter.idx",
+                tmp0 = ctx.var_ids.next(),
+                tmp00 = ctx.var_ids.next(),
+                tmp01 = ctx.var_ids.next(),
+                tmp1 = "%cur_i",
+                tmp2 = ctx.var_ids.next(),
+                tmp3 = ctx.var_ids.next(),
+                tmp4 = ctx.var_ids.next()
+            ));
             /* Need to break off the long sequence of llvm IR because no easy way to get ith element of shape. */
             let shape_elem_str = self.get_array_idx(ctx, shape_llvm_info, false, &"%cur_i".to_string())?;
-            ctx.code.add(format!("{tmp5} = load i64, i64* {i}
+            ctx.code.add(format!(
+                "{tmp5} = load i64, i64* {i}
                                  {tmp6} = getelementptr i64, i64* {counter}, i64 {tmp5} 
                                  {tmp7} = load i64, i64* {tmp6}
                                  {tmp8} = icmp eq i64 {shape_elem}, {tmp7}
@@ -1525,14 +1401,18 @@ impl LlvmGenerator {
                                  store i64 0, i64* {tmp6}
                                  {tmp9} = sub i64 {tmp5}, 1
                                  store i64 {tmp9}, i64* {i}
-                                 br label %counter_loop.start", 
-                                 shape_elem = shape_elem_str,
-                                 counter="%counter.idx", i = "%counter.i",
-                                 tmp5 = ctx.var_ids.next(), tmp6 = ctx.var_ids.next(), tmp7 =
-                                 ctx.var_ids.next(), tmp8 = ctx.var_ids.next(), tmp9 =
-                                 ctx.var_ids.next()));
+                                 br label %counter_loop.start",
+                shape_elem = shape_elem_str,
+                counter = "%counter.idx",
+                i = "%counter.i",
+                tmp5 = ctx.var_ids.next(),
+                tmp6 = ctx.var_ids.next(),
+                tmp7 = ctx.var_ids.next(),
+                tmp8 = ctx.var_ids.next(),
+                tmp9 = ctx.var_ids.next()
+            ));
             ctx.code.add("loop.end:");
-        } else { 
+        } else {
             ctx.code.add("br label %loop.start");
             ctx.code.add("loop.end:");
         }
@@ -1565,14 +1445,11 @@ impl LlvmGenerator {
     //
     // Function Code Generation
     //
-    *********************************************************************************************/
+     *********************************************************************************************/
 
     /// Generates a wrapper function for a for loop, which performs a bounds check on the loop data
     /// and then invokes the loop body.
-    fn gen_loop_wrapper_function(&mut self,
-                                 par_for: &ParallelForData,
-                                 sir: &SirProgram,
-                                 func: &SirFunction) -> WeldResult<()> {
+    fn gen_loop_wrapper_function(&mut self, par_for: &ParallelForData, sir: &SirProgram, func: &SirFunction) -> WeldResult<()> {
         let ref mut ctx = FunctionContext::new(false);
         let combined_params = get_combined_params(sir, &par_for);
         let serial_arg_types = self.get_arg_str(&combined_params, "")?;
@@ -1600,62 +1477,59 @@ impl LlvmGenerator {
     /// function which executes a loop body after unpacking the lower and upper bound from the work
     /// item.
     fn gen_parallel_runtime_callback_function(&mut self, func: &SirFunction) -> WeldResult<()> {
-            let mut ctx = &mut FunctionContext::new(false);
-            self.gen_unload_arg_struct(&func.params, ".load", &mut ctx)?;
-            self.gen_store_args(&func.params, ".load", "", &mut ctx)?;
-            self.gen_create_stack_mergers(&func.params, &mut ctx)?;
-            let lower_bound_ptr = ctx.var_ids.next();
-            let lower_bound = ctx.var_ids.next();
-            let upper_bound_ptr = ctx.var_ids.next();
-            let upper_bound = ctx.var_ids.next();
-            ctx.code.add(format!("%cur.tid = call i32 @weld_rt_thread_id()"));
-            ctx.code.add(format!("{} = getelementptr %work_t, %work_t* %cur.work, i32 0, i32 1", lower_bound_ptr));
-            ctx.code.add(format!("{} = load i64, i64* {}", lower_bound, lower_bound_ptr));
-            ctx.code.add(format!("{} = getelementptr %work_t, %work_t* %cur.work, i32 0, i32 2", upper_bound_ptr));
-            ctx.code.add(format!("{} = load i64, i64* {}", upper_bound, upper_bound_ptr));
-            self.gen_load_args(&func.params, ".arg", "", &mut ctx)?;
-            let body_arg_types = try!(self.get_arg_str(&func.params, ".arg"));
-            self.gen_create_new_vb_pieces(&func.params, ".arg", &mut ctx)?;
-            ctx.code.add("fn_call:");
-            ctx.code.add(format!("call void @f{}({}, i64 {}, i64 {}, i32 %cur.tid)",
-                                            func.id,
-                                            body_arg_types,
-                                            lower_bound,
-                                            upper_bound));
-            self.gen_store_stack_mergers(&func.params, &mut ctx)?;
-            ctx.code.add("ret void");
-            ctx.code.add("}\n\n");
-            self.body_code.add(format!("define void @f{}_par(%work_t* %cur.work) {{", func.id));
-            self.body_code.add("entry:");
-            self.body_code.add(&ctx.alloca_code.result());
-            self.body_code.add(&ctx.code.result());
-            Ok(())
+        let mut ctx = &mut FunctionContext::new(false);
+        self.gen_unload_arg_struct(&func.params, ".load", &mut ctx)?;
+        self.gen_store_args(&func.params, ".load", "", &mut ctx)?;
+        self.gen_create_stack_mergers(&func.params, &mut ctx)?;
+        let lower_bound_ptr = ctx.var_ids.next();
+        let lower_bound = ctx.var_ids.next();
+        let upper_bound_ptr = ctx.var_ids.next();
+        let upper_bound = ctx.var_ids.next();
+        ctx.code.add(format!("%cur.tid = call i32 @weld_rt_thread_id()"));
+        ctx.code.add(format!("{} = getelementptr %work_t, %work_t* %cur.work, i32 0, i32 1", lower_bound_ptr));
+        ctx.code.add(format!("{} = load i64, i64* {}", lower_bound, lower_bound_ptr));
+        ctx.code.add(format!("{} = getelementptr %work_t, %work_t* %cur.work, i32 0, i32 2", upper_bound_ptr));
+        ctx.code.add(format!("{} = load i64, i64* {}", upper_bound, upper_bound_ptr));
+        self.gen_load_args(&func.params, ".arg", "", &mut ctx)?;
+        let body_arg_types = try!(self.get_arg_str(&func.params, ".arg"));
+        self.gen_create_new_vb_pieces(&func.params, ".arg", &mut ctx)?;
+        ctx.code.add("fn_call:");
+        ctx.code.add(format!(
+            "call void @f{}({}, i64 {}, i64 {}, i32 %cur.tid)",
+            func.id, body_arg_types, lower_bound, upper_bound
+        ));
+        self.gen_store_stack_mergers(&func.params, &mut ctx)?;
+        ctx.code.add("ret void");
+        ctx.code.add("}\n\n");
+        self.body_code.add(format!("define void @f{}_par(%work_t* %cur.work) {{", func.id));
+        self.body_code.add("entry:");
+        self.body_code.add(&ctx.alloca_code.result());
+        self.body_code.add(&ctx.code.result());
+        Ok(())
     }
 
     /// Generates the continuation function of the given parallel loop.
-    fn gen_loop_continuation_function(&mut self,
-                                      par_for: &ParallelForData,
-                                      sir: &SirProgram) -> WeldResult<()> {
-            let mut ctx = &mut FunctionContext::new(false);
+    fn gen_loop_continuation_function(&mut self, par_for: &ParallelForData, sir: &SirProgram) -> WeldResult<()> {
+        let mut ctx = &mut FunctionContext::new(false);
 
-            ctx.code.add(format!("%cur.tid = call i32 @weld_rt_thread_id()"));
-            self.gen_unload_arg_struct(&sir.funcs[par_for.cont].params, ".load", &mut ctx)?;
-            self.gen_store_args(&sir.funcs[par_for.cont].params, ".load", "", &mut ctx)?;
-            self.gen_create_stack_mergers(&sir.funcs[par_for.cont].params, &mut ctx)?;
-            self.gen_load_args(&sir.funcs[par_for.cont].params, ".arg", "", &mut ctx)?;
-            self.gen_create_new_vb_pieces(&sir.funcs[par_for.cont].params, ".arg", &mut ctx)?;
+        ctx.code.add(format!("%cur.tid = call i32 @weld_rt_thread_id()"));
+        self.gen_unload_arg_struct(&sir.funcs[par_for.cont].params, ".load", &mut ctx)?;
+        self.gen_store_args(&sir.funcs[par_for.cont].params, ".load", "", &mut ctx)?;
+        self.gen_create_stack_mergers(&sir.funcs[par_for.cont].params, &mut ctx)?;
+        self.gen_load_args(&sir.funcs[par_for.cont].params, ".arg", "", &mut ctx)?;
+        self.gen_create_new_vb_pieces(&sir.funcs[par_for.cont].params, ".arg", &mut ctx)?;
 
-            ctx.code.add("fn_call:");
-            let cont_arg_types = self.get_arg_str(&sir.funcs[par_for.cont].params, ".arg")?;
-            ctx.code.add(format!("call void @f{}({}, i32 %cur.tid)", par_for.cont, cont_arg_types));
-            self.gen_store_stack_mergers(&sir.funcs[par_for.cont].params, &mut ctx)?;
-            ctx.code.add("ret void");
-            ctx.code.add("}\n\n");
-            self.body_code.add(format!("define void @f{}_par(%work_t* %cur.work) {{", par_for.cont));
-            self.body_code.add("entry:");
-            self.body_code.add(&ctx.alloca_code.result());
-            self.body_code.add(&ctx.code.result());
-            Ok(())
+        ctx.code.add("fn_call:");
+        let cont_arg_types = self.get_arg_str(&sir.funcs[par_for.cont].params, ".arg")?;
+        ctx.code.add(format!("call void @f{}({}, i32 %cur.tid)", par_for.cont, cont_arg_types));
+        self.gen_store_stack_mergers(&sir.funcs[par_for.cont].params, &mut ctx)?;
+        ctx.code.add("ret void");
+        ctx.code.add("}\n\n");
+        self.body_code.add(format!("define void @f{}_par(%work_t* %cur.work) {{", par_for.cont));
+        self.body_code.add("entry:");
+        self.body_code.add(&ctx.alloca_code.result());
+        self.body_code.add(&ctx.code.result());
+        Ok(())
     }
 
     /// Generates all the functions required to run a single parallel for loop. This includes the
@@ -1822,7 +1696,7 @@ impl LlvmGenerator {
     //
     // Utilities
     //
-    *********************************************************************************************/
+     *********************************************************************************************/
 
     /// Returns the LLVM type (as a string), and LLVM symbol name (as a string). This function is
     /// only valid for Symbols defined in a SirFunction.
@@ -1871,9 +1745,7 @@ impl LlvmGenerator {
                 self.bld_names.get(bk).unwrap().to_string()
             }
 
-            _ => {
-                return weld_err!("Unsupported type {}", print_type(ty))?
-            }
+            _ => return weld_err!("Unsupported type {}", print_type(ty))?,
         })
     }
 
@@ -1881,17 +1753,19 @@ impl LlvmGenerator {
     //
     // Routines for Code Generation of Statements and Blocks.
     //
-    *********************************************************************************************/
+     *********************************************************************************************/
 
-
-    fn gen_minmax(&mut self, ll_ty: &str,
-                  op: &BinOpKind,
-                  left_tmp: &str,
-                  right_tmp: &str,
-                  output_tmp: &str,
-                  ty: &Type,
-                  var_ids: &mut IdGenerator,
-                  code: &mut CodeBuilder) -> WeldResult<()> {
+    fn gen_minmax(
+        &mut self,
+        ll_ty: &str,
+        op: &BinOpKind,
+        left_tmp: &str,
+        right_tmp: &str,
+        output_tmp: &str,
+        ty: &Type,
+        var_ids: &mut IdGenerator,
+        code: &mut CodeBuilder,
+    ) -> WeldResult<()> {
         use super::ast::BinOpKind::*;
         match *ty {
             Scalar(s) | Simd(s) => {
@@ -1899,36 +1773,42 @@ impl LlvmGenerator {
                     let sel_tmp = var_ids.next();
                     match *op {
                         Max => {
-                            code.add(format!("{} = {} {} {}, {}",
-                                                 &sel_tmp,
-                                                 llvm_binop(GreaterThan, ty)?,
-                                             &ll_ty, &left_tmp, &right_tmp));
+                            code.add(format!("{} = {} {} {}, {}", &sel_tmp, llvm_binop(GreaterThan, ty)?, &ll_ty, &left_tmp, &right_tmp));
                         }
                         Min => {
-                            code.add(format!("{} = {} {} {}, {}",
-                                                 &sel_tmp,
-                                                 llvm_binop(LessThan, ty)?,
-                                                 &ll_ty, &left_tmp, &right_tmp));
+                            code.add(format!("{} = {} {} {}, {}", &sel_tmp, llvm_binop(LessThan, ty)?, &ll_ty, &left_tmp, &right_tmp));
                         }
                         _ => return weld_err!("Illegal operation using Min/Max generator"),
                     }
 
-                    let sel_type = if ty.is_scalar() 
-                                    { "i1".to_string() } 
-                                    else { format!("<{} x i1>", llvm_simd_size(ty)?) };
-                    code.add(format!("{} = select {} {}, {} {}, {} {}",
-                                         &output_tmp, &sel_type, sel_tmp,
-                                         self.llvm_type(ty)?, left_tmp,
-                                         self.llvm_type(ty)?, right_tmp));
-                } else if s.is_float() { /* has one-line intrinsic */
-                    let intrinsic = if ty.is_scalar() 
-                                    { llvm_binary_intrinsic(*op, &s)? } 
-                                    else { llvm_simd_binary_intrinsic(*op, &s, llvm_simd_size(ty)?)? };
-                    code.add(format!("{} = call {} {}({} {}, {} {})",
-                                         &output_tmp, &ll_ty,
-                                         intrinsic,
-                                         self.llvm_type(ty)?, &left_tmp,
-                                         self.llvm_type(ty)?, &right_tmp));
+                    let sel_type = if ty.is_scalar() { "i1".to_string() } else { format!("<{} x i1>", llvm_simd_size(ty)?) };
+                    code.add(format!(
+                        "{} = select {} {}, {} {}, {} {}",
+                        &output_tmp,
+                        &sel_type,
+                        sel_tmp,
+                        self.llvm_type(ty)?,
+                        left_tmp,
+                        self.llvm_type(ty)?,
+                        right_tmp
+                    ));
+                } else if s.is_float() {
+                    /* has one-line intrinsic */
+                    let intrinsic = if ty.is_scalar() {
+                        llvm_binary_intrinsic(*op, &s)?
+                    } else {
+                        llvm_simd_binary_intrinsic(*op, &s, llvm_simd_size(ty)?)?
+                    };
+                    code.add(format!(
+                        "{} = call {} {}({} {}, {} {})",
+                        &output_tmp,
+                        &ll_ty,
+                        intrinsic,
+                        self.llvm_type(ty)?,
+                        &left_tmp,
+                        self.llvm_type(ty)?,
+                        &right_tmp
+                    ));
                 }
             }
             _ => weld_err!("Illegal type {} in Min/Max", print_type(ty))?,
@@ -1961,8 +1841,8 @@ impl LlvmGenerator {
                 // Then, create the comparison function for the full struct, which just compares
                 // each field.
                 let name = self.struct_names.get(fields).unwrap();
-                self.prelude_code.add_line(format!(
-                        "define i32 {}.cmp({} %a, {} %b) {{", name.replace("%", "@"), name, name));
+                self.prelude_code
+                    .add_line(format!("define i32 {}.cmp({} %a, {} %b) {{", name.replace("%", "@"), name, name));
                 let mut label_ids = IdGenerator::new("%l");
                 for i in 0..field_types.len() {
                     if let Simd(_) = fields[i] {
@@ -1978,13 +1858,10 @@ impl LlvmGenerator {
                     let field_prefix_str = format!("@{}", field_ty_str.replace("%", ""));
                     self.prelude_code.add_line(format!("{} = extractvalue {} %a , {}", a_field, name, i));
                     self.prelude_code.add_line(format!("{} = extractvalue {} %b, {}", b_field, name, i));
-                    self.prelude_code.add_line(format!("{} = call i32 {}.cmp({} {}, {} {})",
-                    cmp,
-                    field_prefix_str,
-                    field_ty_str,
-                    a_field,
-                    field_ty_str,
-                    b_field));
+                    self.prelude_code.add_line(format!(
+                        "{} = call i32 {}.cmp({} {}, {} {})",
+                        cmp, field_prefix_str, field_ty_str, a_field, field_ty_str, b_field
+                    ));
                     self.prelude_code.add_line(format!("{} = icmp ne i32 {}, 0", ne, cmp));
                     self.prelude_code.add_line(format!("br i1 {}, label {}, label {}", ne, ret_label, post_label));
                     self.prelude_code.add_line(format!("{}:", ret_label.replace("%", "")));
@@ -1998,18 +1875,15 @@ impl LlvmGenerator {
             Scalar(ref scalar_ty) | Simd(ref scalar_ty) => {
                 let ll_ty = self.llvm_type(ty)?;
                 let ll_prefix = ll_ty.replace("%", "");
-                let ll_cmp = if scalar_ty.is_float() {
-                    "fcmp"
-                } else {
-                    "icmp"
-                };
+                let ll_cmp = if scalar_ty.is_float() { "fcmp" } else { "icmp" };
 
                 let ll_eq = llvm_eq(*scalar_ty);
                 let ll_lt = llvm_lt(*scalar_ty);
 
                 // Booleans are special cased.
                 if *scalar_ty != ScalarKind::Bool {
-                    self.prelude_code.add_line(format!("
+                    self.prelude_code.add_line(format!(
+                        "
                     define i32 @{ll_prefix}.cmp({ll_ty} %a, {ll_ty} %b) alwaysinline {{
                       %1 = {ll_cmp} {ll_eq} {ll_ty} %a, %b
                       br i1 %1, label %eq, label %ne
@@ -2020,9 +1894,15 @@ impl LlvmGenerator {
                       %3 = select i1 %2, i32 -1, i32 1
                       ret i32 %3
                   }}",
-                    ll_prefix=ll_prefix, ll_ty=ll_ty, ll_cmp=ll_cmp, ll_eq=ll_eq, ll_lt=ll_lt));
+                        ll_prefix = ll_prefix,
+                        ll_ty = ll_ty,
+                        ll_cmp = ll_cmp,
+                        ll_eq = ll_eq,
+                        ll_lt = ll_lt
+                    ));
                 } else {
-                    self.prelude_code.add(format!("
+                    self.prelude_code.add(format!(
+                        "
                     define i32 @i1.cmp(i1 %a, i1 %b) {{
                       %1 = icmp eq i1 %a, %b
                       br i1 %1, label %eq, label %ne
@@ -2031,24 +1911,31 @@ impl LlvmGenerator {
                     ne:
                       %2 = select i1 %b, i32 -1, i32 1
                       ret i32 %2
-                    }}"));
+                    }}"
+                    ));
                 }
             }
             Dict(_, _) => {
                 // Create a dummy comparison function for structs with the builder as a field.
                 let dict_name = self.dict_names.get(ty).unwrap();
-                self.prelude_code.add(format!("
+                self.prelude_code.add(format!(
+                    "
                 define i32 @{NAME}.cmp(%{NAME} %dict1, %{NAME} %dict2) {{
                   ret i32 -1
-                }}", NAME=dict_name.replace("%", "")));
+                }}",
+                    NAME = dict_name.replace("%", "")
+                ));
             }
             Builder(ref bk, _) => {
                 // Create a dummy comparison function for structs with the builder as a field.
                 let bld_name = self.bld_names.get(bk).unwrap();
-                self.prelude_code.add(format!("
+                self.prelude_code.add(format!(
+                    "
                 define i32 @{NAME}.cmp(%{NAME} %bld1, %{NAME} %bld2) {{
                   ret i32 -1
-                }}", NAME=bld_name.replace("%", "")));
+                }}",
+                    NAME = bld_name.replace("%", "")
+                ));
             }
             Vector(ref elem) => {
                 self.gen_cmp(elem)?;
@@ -2059,15 +1946,15 @@ impl LlvmGenerator {
                 let elem_prefix = llvm_prefix(&elem_ty);
                 let name = self.vec_names.get(elem).unwrap();
                 if let Scalar(ScalarKind::U8) = *elem.as_ref() {
-                    self.prelude_code.add(format!(
-                            include_str!("resources/vector/vector_comparison_memcmp.ll"),
-                            NAME=&name.replace("%", "")));
+                    self.prelude_code
+                        .add(format!(include_str!("resources/vector/vector_comparison_memcmp.ll"), NAME = &name.replace("%", "")));
                 } else {
                     self.prelude_code.add(format!(
-                            include_str!("resources/vector/vector_comparison.ll"),
-                            ELEM_PREFIX=&elem_prefix,
-                            ELEM=&elem_ty,
-                            NAME=&name.replace("%", "")));
+                        include_str!("resources/vector/vector_comparison.ll"),
+                        ELEM_PREFIX = &elem_prefix,
+                        ELEM = &elem_ty,
+                        NAME = &name.replace("%", "")
+                    ));
                 }
                 // Set this flag to true as well, since these templates also generate `eq`.
                 let helper_state = self.type_helpers.get_mut(ty).unwrap();
@@ -2102,8 +1989,7 @@ impl LlvmGenerator {
                     field_types.push(self.llvm_type(f)?.to_string());
                 }
                 let name = self.struct_names.get(fields).unwrap();
-                self.prelude_code.add_line(format!(
-                        "define i1 {}.eq({} %a, {} %b) {{", name.replace("%", "@"), name, name));
+                self.prelude_code.add_line(format!("define i1 {}.eq({} %a, {} %b) {{", name.replace("%", "@"), name, name));
                 let mut label_ids = IdGenerator::new("%l");
                 for i in 0..field_types.len() {
                     let a_field = self.prelude_var_ids.next();
@@ -2113,13 +1999,10 @@ impl LlvmGenerator {
                     let field_prefix_str = format!("@{}", field_ty_str.replace("%", ""));
                     self.prelude_code.add_line(format!("{} = extractvalue {} %a , {}", a_field, name, i));
                     self.prelude_code.add_line(format!("{} = extractvalue {} %b, {}", b_field, name, i));
-                    self.prelude_code.add_line(format!("{} = call i1 {}.eq({} {}, {} {})",
-                        this_eq,
-                        field_prefix_str,
-                        field_ty_str,
-                        a_field,
-                        field_ty_str,
-                        b_field));
+                    self.prelude_code.add_line(format!(
+                        "{} = call i1 {}.eq({} {}, {} {})",
+                        this_eq, field_prefix_str, field_ty_str, a_field, field_ty_str, b_field
+                    ));
                     let on_ne = label_ids.next();
                     let on_eq = label_ids.next();
                     self.prelude_code.add_line(format!("br i1 {}, label {}, label {}", this_eq, on_eq, on_ne));
@@ -2134,36 +2017,43 @@ impl LlvmGenerator {
             Scalar(ref scalar_ty) | Simd(ref scalar_ty) => {
                 let ll_ty = self.llvm_type(ty)?;
                 let ll_prefix = ll_ty.replace("%", "");
-                let ll_cmp = if scalar_ty.is_float() {
-                    "fcmp"
-                } else {
-                    "icmp"
-                };
+                let ll_cmp = if scalar_ty.is_float() { "fcmp" } else { "icmp" };
 
                 let ll_eq = llvm_eq(*scalar_ty);
 
-                self.prelude_code.add_line(format!("
+                self.prelude_code.add_line(format!(
+                    "
                     define i1 @{ll_prefix}.eq({ll_ty} %a, {ll_ty} %b) alwaysinline {{
                       %1 = {ll_cmp} {ll_eq} {ll_ty} %a, %b
                       ret i1 %1
                     }}",
-                    ll_prefix=ll_prefix, ll_ty=ll_ty, ll_cmp=ll_cmp, ll_eq=ll_eq));
+                    ll_prefix = ll_prefix,
+                    ll_ty = ll_ty,
+                    ll_cmp = ll_cmp,
+                    ll_eq = ll_eq
+                ));
             }
             Dict(_, _) => {
                 // Create a dummy comparison function for structs with the builder as a field.
                 let dict_name = self.dict_names.get(ty).unwrap();
-                self.prelude_code.add(format!("
+                self.prelude_code.add(format!(
+                    "
                 define i1 @{NAME}.eq(%{NAME} %dict1, %{NAME} %dict2) {{
                   ret i1 0
-                }}", NAME=dict_name.replace("%", "")));
+                }}",
+                    NAME = dict_name.replace("%", "")
+                ));
             }
             Builder(ref bk, _) => {
                 // Create a dummy comparison function for structs with the builder as a field.
                 let bld_name = self.bld_names.get(bk).unwrap();
-                self.prelude_code.add(format!("
+                self.prelude_code.add(format!(
+                    "
                 define i1 @{NAME}.cmp(%{NAME} %bld1, %{NAME} %bld2) {{
                   ret i1 0
-                }}", NAME=bld_name.replace("%", "")));
+                }}",
+                    NAME = bld_name.replace("%", "")
+                ));
             }
             Vector(_) => {
                 // The comparison function template generates equality functions.
@@ -2175,9 +2065,7 @@ impl LlvmGenerator {
         };
         let ll_ty = self.llvm_type(ty)?;
         let ll_prefix = llvm_prefix(&ll_ty);
-        let eq_on_pointers = format!(include_str!("resources/eq_on_pointers.ll"),
-            TYPE=&ll_ty,
-            TYPE_PREFIX=&ll_prefix);
+        let eq_on_pointers = format!(include_str!("resources/eq_on_pointers.ll"), TYPE = &ll_ty, TYPE_PREFIX = &ll_prefix);
         self.prelude_code.add(&eq_on_pointers);
         self.prelude_code.add("\n");
         Ok(())
@@ -2209,8 +2097,7 @@ impl LlvmGenerator {
                 let name = self.struct_names.get(fields).unwrap();
 
                 // Generate hash function for the struct.
-                self.prelude_code
-                    .add_line(format!("define i32 {}.hash({} %value) {{", name.replace("%", "@"), name));
+                self.prelude_code.add_line(format!("define i32 {}.hash({} %value) {{", name.replace("%", "@"), name));
                 let mut res = "0".to_string();
                 for i in 0..field_types.len() {
                     // TODO(shoumik): hack to prevent incorrect code gen for vectors.
@@ -2223,13 +2110,9 @@ impl LlvmGenerator {
                     let field_ty_str = &field_types[i];
                     let field_prefix_str = format!("@{}", field_ty_str.replace("%", ""));
                     self.prelude_code.add_line(format!("{} = extractvalue {} %value, {}", field, name, i));
-                    self.prelude_code.add_line(format!("{} = call i32 {}.hash({} {})",
-                    hash,
-                    field_prefix_str,
-                    field_ty_str,
-                    field));
                     self.prelude_code
-                        .add_line(format!("{} = call i32 @hash_combine(i32 {}, i32 {})", new_res, res, hash));
+                        .add_line(format!("{} = call i32 {}.hash({} {})", hash, field_prefix_str, field_ty_str, field));
+                    self.prelude_code.add_line(format!("{} = call i32 @hash_combine(i32 {}, i32 {})", new_res, res, hash));
                     res = new_res;
                 }
                 self.prelude_code.add_line(format!("ret i32 {}", res));
@@ -2242,18 +2125,24 @@ impl LlvmGenerator {
             Dict(_, _) => {
                 // Create a dummy comparison function for structs with the builder as a field.
                 let dict_name = self.dict_names.get(ty).unwrap();
-                self.prelude_code.add(format!("
+                self.prelude_code.add(format!(
+                    "
                 define i32 @{NAME}.hash(%{NAME} %dict1) {{
                   ret i32 0
-                }}", NAME=dict_name.replace("%", "")));
+                }}",
+                    NAME = dict_name.replace("%", "")
+                ));
             }
             Builder(ref bk, _) => {
                 // Create a dummy comparison function for structs with the builder as a field.
                 let bld_name = self.bld_names.get(bk).unwrap();
-                self.prelude_code.add(format!("
+                self.prelude_code.add(format!(
+                    "
                 define i32 @{NAME}.hash(%{NAME} %bld1) {{
                   ret i32 0
-                }}", NAME=bld_name.replace("%", "")));
+                }}",
+                    NAME = bld_name.replace("%", "")
+                ));
             }
             Vector(ref elem) => {
                 self.gen_hash(elem)?;
@@ -2262,17 +2151,16 @@ impl LlvmGenerator {
                 let name = self.vec_names.get(elem).unwrap();
                 match *elem.as_ref() {
                     Scalar(ScalarKind::U8) | Scalar(ScalarKind::I8) => {
-                        self.prelude_code.add(format!(
-                                include_str!("resources/vector/veci8_hash.ll"),
-                                ELEM=&elem_ty,
-                                NAME=&name.replace("%", "")));
+                        self.prelude_code
+                            .add(format!(include_str!("resources/vector/veci8_hash.ll"), ELEM = &elem_ty, NAME = &name.replace("%", "")));
                     }
                     _ => {
                         self.prelude_code.add(format!(
-                                include_str!("resources/vector/vector_hash.ll"),
-                                ELEM_PREFIX=&elem_prefix,
-                                ELEM=&elem_ty,
-                                NAME=&name.replace("%", "")));
+                            include_str!("resources/vector/vector_hash.ll"),
+                            ELEM_PREFIX = &elem_prefix,
+                            ELEM = &elem_ty,
+                            NAME = &name.replace("%", "")
+                        ));
                     }
                 }
             }
@@ -2304,9 +2192,7 @@ impl LlvmGenerator {
         let global = self.prelude_var_ids.next().replace("%", "@");
         let text = self.escape_str(string);
         let len = text.len();
-        self.prelude_code.add(format!(
-            "{} = private unnamed_addr constant [{} x i8] c\"{}\"",
-            global, len, text));
+        self.prelude_code.add(format!("{} = private unnamed_addr constant [{} x i8] c\"{}\"", global, len, text));
         self.string_names.insert(string.to_string(), global);
         Ok(())
     }
@@ -2331,17 +2217,11 @@ impl LlvmGenerator {
         let global = self.get_string_ptr(string).unwrap();
         let len = self.escape_str(string).len();
         let local = ctx.var_ids.next();
-        ctx.code.add(format!(
-            "{} = getelementptr [{} x i8], [{} x i8]* {}, i32 0, i32 0",
-            local, len, len, global));
+        ctx.code.add(format!("{} = getelementptr [{} x i8], [{} x i8]* {}, i32 0, i32 0", local, len, len, global));
         let tmp_vec = ctx.var_ids.next();
-        ctx.code.add(format!(
-            "{} = insertvalue {} undef, i8* {}, 0",
-            tmp_vec, vec_ty, local));
+        ctx.code.add(format!("{} = insertvalue {} undef, i8* {}, 0", tmp_vec, vec_ty, local));
         let tmp_vec2 = ctx.var_ids.next();
-        ctx.code.add(format!(
-            "{} = insertvalue {} {}, i64 {}, 1",
-            tmp_vec2, vec_ty, tmp_vec, len));
+        ctx.code.add(format!("{} = insertvalue {} {}, i64 {}, 1", tmp_vec2, vec_ty, tmp_vec, len));
         Ok(tmp_vec2)
     }
 
@@ -2351,19 +2231,18 @@ impl LlvmGenerator {
         let name = self.vec_ids.next();
         self.vec_names.insert(elem.clone(), name.clone());
 
-        self.prelude_code.add(format!(
-            include_str!("resources/vector/vector.ll"),
-            ELEM=&elem_ty,
-            NAME=&name.replace("%", "")));
+        self.prelude_code
+            .add(format!(include_str!("resources/vector/vector.ll"), ELEM = &elem_ty, NAME = &name.replace("%", "")));
         self.prelude_code.add("\n");
 
         // If the vector contains scalars only, add in SIMD extensions.
         if elem.is_scalar() {
             self.prelude_code.add(format!(
                 include_str!("resources/vector/vvector.ll"),
-                ELEM=elem_ty,
-                NAME=&name.replace("%", ""),
-                VECSIZE=&format!("{}", llvm_simd_size(elem)?)));
+                ELEM = elem_ty,
+                NAME = &name.replace("%", ""),
+                VECSIZE = &format!("{}", llvm_simd_size(elem)?)
+            ));
             self.prelude_code.add("\n");
         }
         Ok(())
@@ -2382,13 +2261,15 @@ impl LlvmGenerator {
         let kv_vec = Box::new(Vector(elem.clone()));
         let kv_vec_ty = self.llvm_type(&kv_vec)?;
 
-        let dict_def = format!(include_str!("resources/dictionary/dictionary.ll"),
-            NAME=&name.replace("%", ""),
-            KEY=&key_ty,
-            KEY_PREFIX=&key_prefix,
-            VALUE=&value_ty,
-            KV_STRUCT=&kv_struct_ty,
-            KV_VEC=&kv_vec_ty);
+        let dict_def = format!(
+            include_str!("resources/dictionary/dictionary.ll"),
+            NAME = &name.replace("%", ""),
+            KEY = &key_ty,
+            KEY_PREFIX = &key_prefix,
+            VALUE = &value_ty,
+            KV_STRUCT = &kv_struct_ty,
+            KV_VEC = &kv_vec_ty
+        );
 
         self.prelude_code.add(&dict_def);
         self.prelude_code.add("\n");
@@ -2409,10 +2290,12 @@ impl LlvmGenerator {
                     let name = self.merger_ids.next();
                     self.merger_names.insert(*t.clone(), name.clone());
 
-                    let merger_def = format!(include_str!("resources/merger/merger.ll"),
-                        ELEM=&elem_ty,
-                        VECSIZE=&format!("{}", llvm_simd_size(t)?),
-                        NAME=&name.replace("%", ""));
+                    let merger_def = format!(
+                        include_str!("resources/merger/merger.ll"),
+                        ELEM = &elem_ty,
+                        VECSIZE = &format!("{}", llvm_simd_size(t)?),
+                        NAME = &name.replace("%", "")
+                    );
 
                     self.prelude_code.add(&merger_def);
                     self.prelude_code.add("\n");
@@ -2429,12 +2312,14 @@ impl LlvmGenerator {
                 let key_prefix = llvm_prefix(&key_ty);
                 let value_ty = self.llvm_type(vt)?;
 
-                let dictmerger_def = format!(include_str!("resources/dictionary/dictmerger.ll"),
-                    NAME=&bld_ty_str.replace("%", ""),
-                    KEY=&key_ty,
-                    KEY_PREFIX=&key_prefix,
-                    VALUE=&value_ty,
-                    KV_STRUCT=&kv_struct_ty.replace("%", ""));
+                let dictmerger_def = format!(
+                    include_str!("resources/dictionary/dictmerger.ll"),
+                    NAME = &bld_ty_str.replace("%", ""),
+                    KEY = &key_ty,
+                    KEY_PREFIX = &key_prefix,
+                    VALUE = &value_ty,
+                    KV_STRUCT = &kv_struct_ty.replace("%", "")
+                );
 
                 self.prelude_code.add(&dictmerger_def);
                 self.prelude_code.add("\n");
@@ -2444,9 +2329,12 @@ impl LlvmGenerator {
                 let mut merge_op_code = CodeBuilder::new();
                 merge_op_code.add(format!(
                     "define {} @{}.bld.merge_op({} %a, {} %b) alwaysinline {{",
-                    value_ty, bld_ty_str.replace("%", ""), value_ty, value_ty));
-                let res = self.gen_merge_op_on_registers(
-                    "%a", "%b", op, vt, &mut var_ids, &mut merge_op_code)?;
+                    value_ty,
+                    bld_ty_str.replace("%", ""),
+                    value_ty,
+                    value_ty
+                ));
+                let res = self.gen_merge_op_on_registers("%a", "%b", op, vt, &mut var_ids, &mut merge_op_code)?;
                 merge_op_code.add(format!("ret {} {}", value_ty, res));
                 merge_op_code.add("}");
                 self.prelude_code.add_code(&merge_op_code);
@@ -2464,12 +2352,14 @@ impl LlvmGenerator {
                 let bld = Dict(kt.clone(), vec);
                 let bld_ty = self.llvm_type(&bld)?;
 
-                let groupmerger_def = format!(include_str!("resources/dictionary/groupbuilder.ll"),
-                    NAME=&bld_ty.replace("%", ""),
-                    KEY=&key_ty,
-                    KEY_PREFIX=&key_prefix,
-                    VALUE=&value_ty,
-                    KV_STRUCT=&kv_struct_ty.replace("%", ""));
+                let groupmerger_def = format!(
+                    include_str!("resources/dictionary/groupbuilder.ll"),
+                    NAME = &bld_ty.replace("%", ""),
+                    KEY = &key_ty,
+                    KEY_PREFIX = &key_prefix,
+                    VALUE = &value_ty,
+                    KV_STRUCT = &kv_struct_ty.replace("%", "")
+                );
 
                 self.prelude_code.add(&groupmerger_def);
                 self.prelude_code.add("\n");
@@ -2504,13 +2394,7 @@ impl LlvmGenerator {
 
     /// Generates code for a SIMD literal with the given `kind` and `ty`. The result is stored in
     /// `output`.
-    fn gen_simd_literal(&mut self,
-                               output: &str,
-                               kind: &LiteralKind,
-                               vec_ty: &Type,
-                               ctx: &mut FunctionContext)
-                               -> WeldResult<()> {
-
+    fn gen_simd_literal(&mut self, output: &str, kind: &LiteralKind, vec_ty: &Type, ctx: &mut FunctionContext) -> WeldResult<()> {
         let size = llvm_simd_size(vec_ty)?;
         let vec_ty_str = self.llvm_type(vec_ty)?;
         let size_str = format!("{}", size);
@@ -2533,8 +2417,12 @@ impl LlvmGenerator {
             }
         }.to_string();
 
-        let insert_str = format!("insertelement <{size} x {elem}> $NAME, {elem} {value}, i32 $INDEX",
-                                 size=size_str, elem=elem_ty_str, value=value_str);
+        let insert_str = format!(
+            "insertelement <{size} x {elem}> $NAME, {elem} {value}, i32 $INDEX",
+            size = size_str,
+            elem = elem_ty_str,
+            value = value_str
+        );
 
         let mut prev_name = "undef".to_string();
         for i in 0..size {
@@ -2552,30 +2440,20 @@ impl LlvmGenerator {
     /// Generate code to perform a binary operation on two registers, returning the name of a new register
     /// that will hold the value. For structs, this will perform the same merge operation on each element
     /// of the struct, regardless of its type. Takes an IdGenerator for variable names.
-    fn gen_merge_op_on_registers(&mut self,
-                                 arg1: &str,
-                                 arg2: &str,
-                                 bin_op: &BinOpKind,
-                                 arg_ty: &Type,
-                                 var_ids: &mut IdGenerator,
-                                 code: &mut CodeBuilder)
-                                 -> WeldResult<String> {
+    fn gen_merge_op_on_registers(&mut self, arg1: &str, arg2: &str, bin_op: &BinOpKind, arg_ty: &Type, var_ids: &mut IdGenerator, code: &mut CodeBuilder) -> WeldResult<String> {
         use super::ast::BinOpKind::*;
         let llvm_ty = self.llvm_type(arg_ty)?.to_string();
         let mut res = var_ids.next();
 
         match *arg_ty {
-            Scalar(_) | Simd(_) => {
-                match *bin_op {
-                    Max | Min => {
-                        assert!(self.gen_minmax(&llvm_ty, bin_op, arg1, arg2, &res, arg_ty, var_ids, code).is_ok());
-                    }
-                    _ => {
-                        code.add(format!("{} = {} {} {}, {}",
-                            &res, try!(llvm_binop(*bin_op, arg_ty)), &llvm_ty, arg1, arg2));
-                    }
+            Scalar(_) | Simd(_) => match *bin_op {
+                Max | Min => {
+                    assert!(self.gen_minmax(&llvm_ty, bin_op, arg1, arg2, &res, arg_ty, var_ids, code).is_ok());
                 }
-            }
+                _ => {
+                    code.add(format!("{} = {} {} {}, {}", &res, try!(llvm_binop(*bin_op, arg_ty)), &llvm_ty, arg1, arg2));
+                }
+            },
 
             Struct(ref fields) => {
                 res = "undef".to_string();
@@ -2586,15 +2464,13 @@ impl LlvmGenerator {
                     let elem_ty_str = try!(self.llvm_type(ty)).to_string();
                     code.add(format!("{} = extractvalue {} {}, {}", &arg1_elem, &llvm_ty, &arg1, i));
                     code.add(format!("{} = extractvalue {} {}, {}", &arg2_elem, &llvm_ty, &arg2, i));
-                    let elem_res = self.gen_merge_op_on_registers(
-                        &arg1_elem, &arg2_elem, &bin_op, &ty, var_ids, code)?;
-                    code.add(format!("{} = insertvalue {} {}, {} {}, {}",
-                        &new_res, &llvm_ty, &res, &elem_ty_str, &elem_res, i));
+                    let elem_res = self.gen_merge_op_on_registers(&arg1_elem, &arg2_elem, &bin_op, &ty, var_ids, code)?;
+                    code.add(format!("{} = insertvalue {} {}, {} {}, {}", &new_res, &llvm_ty, &res, &elem_ty_str, &elem_res, i));
                     res = new_res;
                 }
             }
 
-            _ => return weld_err!("gen_merge_op_on_registers called on invalid type {}", print_type(arg_ty))
+            _ => return weld_err!("gen_merge_op_on_registers called on invalid type {}", print_type(arg_ty)),
         }
 
         Ok(res)
@@ -2604,33 +2480,27 @@ impl LlvmGenerator {
     /// into it using a binary operation. `result_ptr` is the pointer into which the original value
     /// is read and the updated value will be stored. `merge_value` is the value to merge in, which
     /// should be a value in a register.
-    fn gen_merge_op(&mut self,
-                    builder_ptr: &str,
-                    merge_value: &str,
-                    merge_ty_str: &str,
-                    bin_op: &BinOpKind,
-                    merge_ty: &Type,
-                    ctx: &mut FunctionContext) -> WeldResult<()> {
+    fn gen_merge_op(&mut self, builder_ptr: &str, merge_value: &str, merge_ty_str: &str, bin_op: &BinOpKind, merge_ty: &Type, ctx: &mut FunctionContext) -> WeldResult<()> {
         let builder_value = self.gen_load_var(&builder_ptr, &merge_ty_str, ctx)?;
-        let result_reg = self.gen_merge_op_on_registers(
-            &builder_value, &merge_value, &bin_op, &merge_ty, &mut ctx.var_ids, &mut ctx.code)?;
+        let result_reg = self.gen_merge_op_on_registers(&builder_value, &merge_value, &bin_op, &merge_ty, &mut ctx.var_ids, &mut ctx.code)?;
         self.gen_store_var(&result_reg, &builder_ptr, &merge_ty_str, ctx);
         Ok(())
     }
 
     /// Generates a serialization function for each type.
-    fn gen_serialize_helper(&mut self,
-                            buffer_ll_ty: &str,
-                            buffer_ll_prefix: &str,
-                            expr_ll_ty: &str,
-                            expr_ll_prefix: &str,
-                            expr_ty: &Type,
-                            func: &SirFunction,
-                            ctx: &mut FunctionContext) -> WeldResult<String> {
-
+    fn gen_serialize_helper(
+        &mut self,
+        buffer_ll_ty: &str,
+        buffer_ll_prefix: &str,
+        expr_ll_ty: &str,
+        expr_ll_prefix: &str,
+        expr_ty: &Type,
+        func: &SirFunction,
+        ctx: &mut FunctionContext,
+    ) -> WeldResult<String> {
         // If we already generated a serialization call, return it.
         if let Some(ref serialize_fn) = self.serialize_fns.get(expr_ty) {
-            return Ok(String::from(serialize_fn.as_ref()))
+            return Ok(String::from(serialize_fn.as_ref()));
         }
 
         let serialize_fn = format!("{}.serialize", expr_ll_prefix);
@@ -2640,76 +2510,71 @@ impl LlvmGenerator {
                 // These are primitive pointer-less values that we can store directly into the
                 // buffer.
                 let mut serialize_code = CodeBuilder::new();
-                serialize_code.add(format!("define {}.growable {}({}.growable %buf, {} %data) alwaysinline {{",
-                buffer_ll_ty,
-                serialize_fn,
-                buffer_ll_ty,
-                expr_ll_ty));
+                serialize_code.add(format!(
+                    "define {}.growable {}({}.growable %buf, {} %data) alwaysinline {{",
+                    buffer_ll_ty, serialize_fn, buffer_ll_ty, expr_ll_ty
+                ));
 
                 // Get size of the type.
                 serialize_code.add(format!("%sizePtr = getelementptr {}, {}* null, i32 1", expr_ll_ty, expr_ll_ty));
                 serialize_code.add(format!("%size = ptrtoint {}* %sizePtr to i64", expr_ll_ty));
 
                 // Resize the buffer to fit and get the pointer to write at.
-                serialize_code.add(format!("%tmp = call {}.growable @{}.growable.resize_to_fit({}.growable %buf, i64 %size)",
-                buffer_ll_ty,
-                buffer_ll_prefix,
-                buffer_ll_ty));
-                serialize_code.add(format!("%tmp2 = call i8* @{}.growable.last({}.growable %tmp)",
-                buffer_ll_prefix,
-                buffer_ll_ty));
+                serialize_code.add(format!(
+                    "%tmp = call {}.growable @{}.growable.resize_to_fit({}.growable %buf, i64 %size)",
+                    buffer_ll_ty, buffer_ll_prefix, buffer_ll_ty
+                ));
+                serialize_code.add(format!("%tmp2 = call i8* @{}.growable.last({}.growable %tmp)", buffer_ll_prefix, buffer_ll_ty));
 
                 // Store the final value and return the new buffer.
                 serialize_code.add(format!("%tmp3 = bitcast i8* %tmp2 to {}*", expr_ll_ty));
                 serialize_code.add(format!("store {} %data, {}* %tmp3", &expr_ll_ty, &expr_ll_ty));
-                serialize_code.add(format!("%tmp4 = call {}.growable @{}.growable.extend({}.growable %tmp, i64 %size)",
-                buffer_ll_ty,
-                buffer_ll_prefix,
-                buffer_ll_ty));
+                serialize_code.add(format!(
+                    "%tmp4 = call {}.growable @{}.growable.extend({}.growable %tmp, i64 %size)",
+                    buffer_ll_ty, buffer_ll_prefix, buffer_ll_ty
+                ));
                 serialize_code.add(format!("ret {}.growable %tmp4", buffer_ll_ty));
                 serialize_code.add("}");
                 self.prelude_code.add_code(&serialize_code);
                 self.prelude_code.add("\n");
-
             }
             Vector(ref elem_ty) if elem_ty.has_pointer() => {
                 // Serialized as an i64 length, followed by each `length` serialized elements.
                 let ref elem_ll_ty = self.llvm_type(elem_ty)?;
-                let elem_serialize = self.gen_serialize_helper(buffer_ll_ty,
-                                                               buffer_ll_prefix,
-                                                               elem_ll_ty,
-                                                               &llvm_prefix(elem_ll_ty),
-                                                               elem_ty,
-                                                               func,
-                                                               ctx)?;
+                let elem_serialize = self.gen_serialize_helper(buffer_ll_ty, buffer_ll_prefix, elem_ll_ty, &llvm_prefix(elem_ll_ty), elem_ty, func, ctx)?;
 
-                self.prelude_code.add(format!(include_str!("resources/vector/serialize_with_pointers.ll"),
-                BUFNAME=buffer_ll_ty.replace("%", ""),
-                NAME=expr_ll_ty.replace("%", ""),
-                ELEM=elem_ll_ty,
-                ELEM_SERIALIZE=elem_serialize));
+                self.prelude_code.add(format!(
+                    include_str!("resources/vector/serialize_with_pointers.ll"),
+                    BUFNAME = buffer_ll_ty.replace("%", ""),
+                    NAME = expr_ll_ty.replace("%", ""),
+                    ELEM = elem_ll_ty,
+                    ELEM_SERIALIZE = elem_serialize
+                ));
             }
             Vector(ref elem_ty) => {
                 // Serialized as an i64 length, followed by each `length` serialized elements.
                 // The elements are not pointer-based types, so it is safe to perform a memcpy.
                 let ref elem_ll_ty = self.llvm_type(elem_ty)?;
-                self.prelude_code.add(format!(include_str!("resources/vector/serialize_without_pointers.ll"),
-                BUFNAME=buffer_ll_ty.replace("%", ""),
-                NAME=expr_ll_ty.replace("%", ""),
-                ELEM=elem_ll_ty));
+                self.prelude_code.add(format!(
+                    include_str!("resources/vector/serialize_without_pointers.ll"),
+                    BUFNAME = buffer_ll_ty.replace("%", ""),
+                    NAME = expr_ll_ty.replace("%", ""),
+                    ELEM = elem_ll_ty
+                ));
             }
             Dict(ref key, ref value) if !key.has_pointer() && !value.has_pointer() => {
                 // Dictionaries are serialized as <8-byte length (in # of Key/value pairs)>
                 // followed by packed {key, value} pairs. This case handles dictionaries where
                 // the key and value do not have pointers. The following case handles pointers by
                 // calling serialize on the key and value.
-                self.prelude_code.add(format!(include_str!("resources/dictionary/serialize_dictionary.ll"),
-                    NAME=expr_ll_ty.replace("%", ""),
-                    BUFNAME=buffer_ll_ty.replace("%", ""),
-                    HAS_POINTER=0,
-                    KEY_SERIALIZE_ON_PTR="null", 
-                    VAL_SERIALIZE_ON_PTR="null"
-                    ));
+                self.prelude_code.add(format!(
+                    include_str!("resources/dictionary/serialize_dictionary.ll"),
+                    NAME = expr_ll_ty.replace("%", ""),
+                    BUFNAME = buffer_ll_ty.replace("%", ""),
+                    HAS_POINTER = 0,
+                    KEY_SERIALIZE_ON_PTR = "null",
+                    VAL_SERIALIZE_ON_PTR = "null"
+                ));
             }
             Dict(ref key, ref value) => {
                 // Dictionaries are serialized as <8-byte length (in # of Key/value pairs)>
@@ -2717,64 +2582,42 @@ impl LlvmGenerator {
                 // the key and value do not have pointers. The following case handles pointers by
                 // calling serialize on the key and value.
                 let ref key_ll_ty = self.llvm_type(key)?;
-                let _ = self.gen_serialize_helper(buffer_ll_ty,
-                                                  buffer_ll_prefix,
-                                                  key_ll_ty,
-                                                  &llvm_prefix(key_ll_ty),
-                                                  key,
-                                                  func,
-                                                  ctx)?;
+                let _ = self.gen_serialize_helper(buffer_ll_ty, buffer_ll_prefix, key_ll_ty, &llvm_prefix(key_ll_ty), key, func, ctx)?;
 
                 let ref value_ll_ty = self.llvm_type(value)?;
-                let _ = self.gen_serialize_helper(buffer_ll_ty,
-                                                  buffer_ll_prefix,
-                                                  value_ll_ty,
-                                                  &llvm_prefix(value_ll_ty),
-                                                  value,
-                                                  func,
-                                                  ctx)?;
+                let _ = self.gen_serialize_helper(buffer_ll_ty, buffer_ll_prefix, value_ll_ty, &llvm_prefix(value_ll_ty), value, func, ctx)?;
 
-                self.prelude_code.add(format!(include_str!("resources/dictionary/serialize_dictionary.ll"),
-                    NAME=expr_ll_ty.replace("%", ""),
-                    BUFNAME=buffer_ll_ty.replace("%", ""),
-                    HAS_POINTER=1,
-                    KEY_SERIALIZE_ON_PTR=format!("{}.serialize_on_pointers", llvm_prefix(key_ll_ty)), 
-                    VAL_SERIALIZE_ON_PTR=format!("{}.serialize_on_pointers", llvm_prefix(value_ll_ty))
-                    ));
+                self.prelude_code.add(format!(
+                    include_str!("resources/dictionary/serialize_dictionary.ll"),
+                    NAME = expr_ll_ty.replace("%", ""),
+                    BUFNAME = buffer_ll_ty.replace("%", ""),
+                    HAS_POINTER = 1,
+                    KEY_SERIALIZE_ON_PTR = format!("{}.serialize_on_pointers", llvm_prefix(key_ll_ty)),
+                    VAL_SERIALIZE_ON_PTR = format!("{}.serialize_on_pointers", llvm_prefix(value_ll_ty))
+                ));
             }
             Struct(ref tys) => {
                 // Serialized as each struct element serialized in order. This version handles
                 // struct members with pointers, and generates a serialization function for each
                 // struct member.
                 let mut serialize_code = CodeBuilder::new();
-                serialize_code.add(format!("define {}.growable {}({}.growable %buf, {} %data) alwaysinline {{",
-                buffer_ll_ty,
-                serialize_fn,
-                buffer_ll_ty,
-                expr_ll_ty));
+                serialize_code.add(format!(
+                    "define {}.growable {}({}.growable %buf, {} %data) alwaysinline {{",
+                    buffer_ll_ty, serialize_fn, buffer_ll_ty, expr_ll_ty
+                ));
 
                 let mut prev_gvec = "%buf".to_string();
                 for (i, elem_ty) in tys.iter().enumerate() {
                     let ref elem_ll_ty = self.llvm_type(elem_ty)?;
-                    let elem_serialize = self.gen_serialize_helper(buffer_ll_ty,
-                                                                   buffer_ll_prefix,
-                                                                   elem_ll_ty,
-                                                                   &llvm_prefix(elem_ll_ty),
-                                                                   elem_ty,
-                                                                   func,
-                                                                   ctx)?;
+                    let elem_serialize = self.gen_serialize_helper(buffer_ll_ty, buffer_ll_prefix, elem_ll_ty, &llvm_prefix(elem_ll_ty), elem_ty, func, ctx)?;
 
                     let tmp = ctx.var_ids.next();
                     let next_gvec = ctx.var_ids.next();
                     serialize_code.add(format!("{} = extractvalue {} %data, {}", tmp, &expr_ll_ty, i));
-                    serialize_code.add(format!("{} = call {}.growable {}({}.growable {}, {} {})",
-                    next_gvec,
-                    buffer_ll_ty, 
-                    elem_serialize,
-                    buffer_ll_ty,
-                    prev_gvec,
-                    elem_ll_ty,
-                    tmp));
+                    serialize_code.add(format!(
+                        "{} = call {}.growable {}({}.growable {}, {} {})",
+                        next_gvec, buffer_ll_ty, elem_serialize, buffer_ll_ty, prev_gvec, elem_ll_ty, tmp
+                    ));
                     prev_gvec = next_gvec;
                 }
                 serialize_code.add(format!("ret {}.growable {}", buffer_ll_ty, prev_gvec));
@@ -2792,39 +2635,42 @@ impl LlvmGenerator {
         }
 
         // Generate the serialize function on pointers.
-        self.prelude_code.add(format!(include_str!("resources/serialize_on_pointers.ll"),
-        TYPE=expr_ll_ty,
-        TYPE_PREFIX=&llvm_prefix(expr_ll_ty),
-        BUFNAME=buffer_ll_ty.replace("%", ""),
-        SERIALIZE=serialize_fn));
+        self.prelude_code.add(format!(
+            include_str!("resources/serialize_on_pointers.ll"),
+            TYPE = expr_ll_ty,
+            TYPE_PREFIX = &llvm_prefix(expr_ll_ty),
+            BUFNAME = buffer_ll_ty.replace("%", ""),
+            SERIALIZE = serialize_fn
+        ));
 
         self.serialize_fns.insert(expr_ty.clone(), serialize_fn.clone());
         Ok(serialize_fn)
     }
 
     /// Generates a serialization function for each type.
-    fn gen_deserialize_helper(&mut self,
-                            output_ll_ty: &str,
-                            output_ll_prefix: &str,
-                            buffer_ll_ty: &str,
-                            buffer_ll_prefix: &str,
-                            output_ty: &Type,
-                            func: &SirFunction,
-                            ctx: &mut FunctionContext) -> WeldResult<String> {
-
+    fn gen_deserialize_helper(
+        &mut self,
+        output_ll_ty: &str,
+        output_ll_prefix: &str,
+        buffer_ll_ty: &str,
+        buffer_ll_prefix: &str,
+        output_ty: &Type,
+        func: &SirFunction,
+        ctx: &mut FunctionContext,
+    ) -> WeldResult<String> {
         // If we already generated a serialization call, return it.
         if let Some(ref deserialize_fn) = self.deserialize_fns.get(output_ty) {
-            return Ok(String::from(deserialize_fn.as_ref()))
+            return Ok(String::from(deserialize_fn.as_ref()));
         }
         let deserialize_fn = format!("{}.deserialize", output_ll_prefix);
 
         match *output_ty {
             Scalar(_) | Struct(_) if !output_ty.has_pointer() => {
                 let mut deserialize_code = CodeBuilder::new();
-                deserialize_code.add(format!("define i64 {}({} %buf, i64 %offset, {}* %resPtr) alwaysinline {{",
-                deserialize_fn,
-                buffer_ll_ty,
-                output_ll_ty));
+                deserialize_code.add(format!(
+                    "define i64 {}({} %buf, i64 %offset, {}* %resPtr) alwaysinline {{",
+                    deserialize_fn, buffer_ll_ty, output_ll_ty
+                ));
 
                 // Get size of the type.
                 deserialize_code.add(format!("%sizePtr = getelementptr {}, {}* null, i32 1", output_ll_ty, output_ll_ty));
@@ -2843,75 +2689,57 @@ impl LlvmGenerator {
                 deserialize_code.add("}");
                 self.prelude_code.add_code(&deserialize_code);
                 self.prelude_code.add("\n");
-
             }
             Vector(ref elem_ty) if elem_ty.has_pointer() => {
                 let ref elem_ll_ty = self.llvm_type(elem_ty)?;
-                let _ = self.gen_deserialize_helper(elem_ll_ty,
-                                                    &llvm_prefix(elem_ll_ty),
-                                                    buffer_ll_ty,
-                                                    buffer_ll_prefix,
-                                                    elem_ty,
-                                                    func,
-                                                    ctx)?;
-                self.prelude_code.add(format!(include_str!("resources/vector/deserialize_with_pointers.ll"),
-                BUFNAME=buffer_ll_ty,
-                BUF_PREFIX=buffer_ll_prefix,
-                NAME=output_ll_ty.replace("%", ""),
-                ELEM=elem_ll_ty,
-                ELEM_PREFIX=&llvm_prefix(elem_ll_ty)
+                let _ = self.gen_deserialize_helper(elem_ll_ty, &llvm_prefix(elem_ll_ty), buffer_ll_ty, buffer_ll_prefix, elem_ty, func, ctx)?;
+                self.prelude_code.add(format!(
+                    include_str!("resources/vector/deserialize_with_pointers.ll"),
+                    BUFNAME = buffer_ll_ty,
+                    BUF_PREFIX = buffer_ll_prefix,
+                    NAME = output_ll_ty.replace("%", ""),
+                    ELEM = elem_ll_ty,
+                    ELEM_PREFIX = &llvm_prefix(elem_ll_ty)
                 ));
             }
             Vector(ref elem_ty) => {
                 let elem_ll_ty = self.llvm_type(elem_ty)?;
 
-                self.prelude_code.add(format!(include_str!("resources/vector/deserialize_without_pointers.ll"),
-                BUFNAME=buffer_ll_ty,
-                BUF_PREFIX=buffer_ll_prefix,
-                NAME=output_ll_ty.replace("%", ""),
-                ELEM=elem_ll_ty));
+                self.prelude_code.add(format!(
+                    include_str!("resources/vector/deserialize_without_pointers.ll"),
+                    BUFNAME = buffer_ll_ty,
+                    BUF_PREFIX = buffer_ll_prefix,
+                    NAME = output_ll_ty.replace("%", ""),
+                    ELEM = elem_ll_ty
+                ));
             }
             Dict(ref key, ref value) => {
                 // For dictionaries, the deserialization path for keys and values with and without
                 // pointers is the same.
                 let ref key_ll_ty = self.llvm_type(key)?;
                 let ref key_ll_prefix = llvm_prefix(key_ll_ty);
-                let _ = self.gen_deserialize_helper(key_ll_ty,
-                                                    key_ll_prefix,
-                                                    buffer_ll_ty,
-                                                    buffer_ll_prefix,
-                                                    key,
-                                                    func,
-                                                    ctx)?;
+                let _ = self.gen_deserialize_helper(key_ll_ty, key_ll_prefix, buffer_ll_ty, buffer_ll_prefix, key, func, ctx)?;
                 let ref val_ll_ty = self.llvm_type(value)?;
                 let ref val_ll_prefix = llvm_prefix(val_ll_ty);
-                let _ = self.gen_deserialize_helper(val_ll_ty,
-                                                    val_ll_prefix,
-                                                    buffer_ll_ty,
-                                                    buffer_ll_prefix,
-                                                    value,
-                                                    func,
-                                                    ctx)?;
+                let _ = self.gen_deserialize_helper(val_ll_ty, val_ll_prefix, buffer_ll_ty, buffer_ll_prefix, value, func, ctx)?;
 
                 self.prelude_code.add(format!(
-                        include_str!("resources/dictionary/deserialize_dictionary.ll"),
-                        NAME=output_ll_ty.replace("%", ""),
-                        KEY=key_ll_ty,
-                        KEY_PREFIX=key_ll_prefix,
-                        VALUE=val_ll_ty,
-                        VALUE_PREFIX=val_ll_prefix,
-                        BUFNAME=buffer_ll_ty,
-                        BUF_PREFIX=buffer_ll_prefix));
+                    include_str!("resources/dictionary/deserialize_dictionary.ll"),
+                    NAME = output_ll_ty.replace("%", ""),
+                    KEY = key_ll_ty,
+                    KEY_PREFIX = key_ll_prefix,
+                    VALUE = val_ll_ty,
+                    VALUE_PREFIX = val_ll_prefix,
+                    BUFNAME = buffer_ll_ty,
+                    BUF_PREFIX = buffer_ll_prefix
+                ));
             }
             Struct(ref tys) => {
                 // This is a struct with pointers, so we need to go through each element and decode
                 // it.
                 let mut deserialize_code = CodeBuilder::new();
                 let mut var_ids = IdGenerator::new("%t.t");
-                deserialize_code.add(format!("define i64 {}({} %buf, i64 %offset, {}* %resPtr) {{",
-                deserialize_fn,
-                buffer_ll_ty,
-                output_ll_ty));
+                deserialize_code.add(format!("define i64 {}({} %buf, i64 %offset, {}* %resPtr) {{", deserialize_fn, buffer_ll_ty, output_ll_ty));
 
                 deserialize_code.add(format!("%dataPtrRaw = call i8* {}.at({} %buf, i64 %offset)", buffer_ll_prefix, buffer_ll_ty));
                 deserialize_code.add(format!("%dataPtr = bitcast i8* %dataPtrRaw to {}*", output_ll_ty));
@@ -2919,36 +2747,32 @@ impl LlvmGenerator {
                 let mut offset = "%offset".to_string();
                 for (i, elem_ty) in tys.iter().enumerate() {
                     let ref elem_ll_ty = self.llvm_type(elem_ty)?;
-                    let _ = self.gen_deserialize_helper(elem_ll_ty,
-                                                        &llvm_prefix(elem_ll_ty),
-                                                        buffer_ll_ty,
-                                                        buffer_ll_prefix,
-                                                        elem_ty,
-                                                        func,
-                                                        ctx)?;
+                    let _ = self.gen_deserialize_helper(elem_ll_ty, &llvm_prefix(elem_ll_ty), buffer_ll_ty, buffer_ll_prefix, elem_ty, func, ctx)?;
 
                     // Get the pointer to the correct field in the struct.
                     let res_ptr_tmp = var_ids.next();
-                    deserialize_code.add(format!("{} = getelementptr inbounds {}, {}* %resPtr, i32 0, i32 {}",
-                                                 res_ptr_tmp, output_ll_ty, output_ll_ty, i));
+                    deserialize_code.add(format!(
+                        "{} = getelementptr inbounds {}, {}* %resPtr, i32 0, i32 {}",
+                        res_ptr_tmp, output_ll_ty, output_ll_ty, i
+                    ));
 
                     // Deserialize directly into the pointer.
                     let next_offset = var_ids.next();
-                    deserialize_code.add(format!("{} = call i64 {}.deserialize({} %buf, i64 {}, {}* {})", 
-                                                 next_offset,
-                                                 &llvm_prefix(elem_ll_ty),
-                                                 buffer_ll_ty,
-                                                 offset,
-                                                 elem_ll_ty,
-                                                 res_ptr_tmp));
+                    deserialize_code.add(format!(
+                        "{} = call i64 {}.deserialize({} %buf, i64 {}, {}* {})",
+                        next_offset,
+                        &llvm_prefix(elem_ll_ty),
+                        buffer_ll_ty,
+                        offset,
+                        elem_ll_ty,
+                        res_ptr_tmp
+                    ));
                     offset = next_offset;
-
                 }
                 deserialize_code.add(format!("ret i64 {}", offset));
                 deserialize_code.add("}");
                 self.prelude_code.add_code(&deserialize_code);
                 self.prelude_code.add("\n");
-
             }
             Simd(_) | Builder(_, _) | Function(_, _) => {
                 // Non-deserializable types.
@@ -2963,12 +2787,7 @@ impl LlvmGenerator {
     }
 
     /// Generates deserialization code for `expr`, which is a vec[i8] that is converted to `ty`.
-    fn gen_deserialize(&mut self,
-                     expr: &Symbol,
-                     output: &Symbol,
-                     func: &SirFunction,
-                     ctx: &mut FunctionContext) -> WeldResult<()> {
-
+    fn gen_deserialize(&mut self, expr: &Symbol, output: &Symbol, func: &SirFunction, ctx: &mut FunctionContext) -> WeldResult<()> {
         let (expr_ll_ty, expr_ll_sym) = self.llvm_type_and_name(func, expr)?;
         let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
 
@@ -2982,23 +2801,14 @@ impl LlvmGenerator {
         let expr_ll_prefix = llvm_prefix(&expr_ll_ty);
         let output_ll_prefix = llvm_prefix(&output_ll_ty);
 
-        let _ = self.gen_deserialize_helper(&output_ll_ty,
-                                            &output_ll_prefix,
-                                            &expr_ll_ty,
-                                            &expr_ll_prefix,
-                                            output_ty,
-                                            func,
-                                            ctx)?;
+        let _ = self.gen_deserialize_helper(&output_ll_ty, &output_ll_prefix, &expr_ll_ty, &expr_ll_prefix, output_ty, func, ctx)?;
 
         let expr_tmp = self.gen_load_var(&expr_ll_sym, &expr_ll_ty, ctx)?;
         let bytes_tmp = ctx.var_ids.next();
-        ctx.code.add(format!("{} = call i64 {}.deserialize({} {}, i64 0, {}* {})", 
-                                     bytes_tmp,
-                                     output_ll_prefix,
-                                     expr_ll_ty,
-                                     expr_tmp,
-                                     output_ll_ty,
-                                     output_ll_sym));
+        ctx.code.add(format!(
+            "{} = call i64 {}.deserialize({} {}, i64 0, {}* {})",
+            bytes_tmp, output_ll_prefix, expr_ll_ty, expr_tmp, output_ll_ty, output_ll_sym
+        ));
 
         // Check if all the bytes were consumed, and abort if not.
         let array_size = ctx.var_ids.next();
@@ -3010,7 +2820,7 @@ impl LlvmGenerator {
 
         ctx.code.add("; Check to ensure that the full vector was consume during deserialization.");
         ctx.code.add(format!("{} = call i64 {}.size({} {})", array_size, expr_ll_prefix, expr_ll_ty, expr_tmp));
-        ctx.code.add(format!("{} = icmp ne i64 {}, {}", cond, bytes_tmp, array_size)); 
+        ctx.code.add(format!("{} = icmp ne i64 {}, {}", cond, bytes_tmp, array_size));
         ctx.code.add(format!("br i1 {}, label {}, label {}", cond, abort_label, continue_label));
         ctx.code.add(format!("{}:", abort_label.replace("%", "")));
         ctx.code.add(format!("{} = call i64 @weld_rt_get_run_id()", run_id));
@@ -3023,12 +2833,7 @@ impl LlvmGenerator {
     }
 
     /// Generates serialization code for `expr`, which converts it into a flat vec[i8].
-    fn gen_serialize(&mut self,
-                     expr: &Symbol,
-                     output: &Symbol,
-                     func: &SirFunction,
-                     ctx: &mut FunctionContext) -> WeldResult<()> {
-
+    fn gen_serialize(&mut self, expr: &Symbol, output: &Symbol, func: &SirFunction, ctx: &mut FunctionContext) -> WeldResult<()> {
         let (expr_ll_ty, expr_ll_sym) = self.llvm_type_and_name(func, expr)?;
         let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
 
@@ -3042,42 +2847,35 @@ impl LlvmGenerator {
             self.growable_vec_names.insert(output_ty.clone());
             let elem_ll_ty = self.llvm_type(&Scalar(ScalarKind::I8))?;
             self.prelude_code.add(format!(
-                    include_str!("resources/vector/growable_vector.ll"),
-                    ELEM=elem_ll_ty,
-                    NAME=&output_ll_ty.replace("%", "")));
+                include_str!("resources/vector/growable_vector.ll"),
+                ELEM = elem_ll_ty,
+                NAME = &output_ll_ty.replace("%", "")
+            ));
             self.prelude_code.add("\n");
         }
 
         let expr_ty = func.symbol_type(expr)?;
         let output_ll_prefix = output_ll_ty.replace("%", "");
 
-        let serialize_fn = self.gen_serialize_helper(&output_ll_ty,
-                                                     &output_ll_prefix,
-                                                     &expr_ll_ty,
-                                                     &llvm_prefix(&expr_ll_ty),
-                                                     expr_ty,
-                                                     func,
-                                                     ctx)?;
+        let serialize_fn = self.gen_serialize_helper(&output_ll_ty, &output_ll_prefix, &expr_ll_ty, &llvm_prefix(&expr_ll_ty), expr_ty, func, ctx)?;
 
         let expr_tmp = self.gen_load_var(&expr_ll_sym, &expr_ll_ty, ctx)?;
 
         let buf_tmp = ctx.var_ids.next();
-        ctx.code.add(format!("{} = call {}.growable @{}.growable.new(i64 1024)",
-        buf_tmp, output_ll_ty, output_ll_prefix));
+        ctx.code
+            .add(format!("{} = call {}.growable @{}.growable.new(i64 1024)", buf_tmp, output_ll_ty, output_ll_prefix));
 
         let result = ctx.var_ids.next();
-        ctx.code.add(format!("{} = call {}.growable {}({}.growable {}, {} {})",
-        result,
-        output_ll_ty,
-        serialize_fn,
-        output_ll_ty,
-        buf_tmp,
-        expr_ll_ty,
-        expr_tmp));
+        ctx.code.add(format!(
+            "{} = call {}.growable {}({}.growable {}, {} {})",
+            result, output_ll_ty, serialize_fn, output_ll_ty, buf_tmp, expr_ll_ty, expr_tmp
+        ));
 
         let output_tmp = ctx.var_ids.next();
-        ctx.code.add(format!("{} = call {} @{}.growable.tovec({}.growable {})",
-        output_tmp, output_ll_ty, output_ll_prefix, output_ll_ty, result));
+        ctx.code.add(format!(
+            "{} = call {} @{}.growable.tovec({}.growable {})",
+            output_tmp, output_ll_ty, output_ll_prefix, output_ll_ty, result
+        ));
 
         self.gen_store_var(&output_tmp, &output_ll_sym, &output_ll_ty, ctx);
         Ok(())
@@ -3085,13 +2883,7 @@ impl LlvmGenerator {
 
     /// Generate code to perform a unary operation on `child` and store the result in `output` (which should
     /// be a location on the stack).
-    fn gen_unary_op(&mut self,
-                    ctx: &mut FunctionContext,
-                    func: &SirFunction,
-                    output: &Symbol,
-                    child: &Symbol,
-                    op_kind: UnaryOpKind)
-                    -> WeldResult<()> {
+    fn gen_unary_op(&mut self, ctx: &mut FunctionContext, func: &SirFunction, output: &Symbol, child: &Symbol, op_kind: UnaryOpKind) -> WeldResult<()> {
         let (child_ll_ty, child_ll_sym) = self.llvm_type_and_name(func, child)?;
         let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
         let child_ty = func.symbol_type(child)?;
@@ -3103,10 +2895,9 @@ impl LlvmGenerator {
             let op_name = llvm_scalar_unaryop(op_kind, ty)?;
             ctx.code.add(format!("{} = call {} {}({} {})", res_tmp, child_ll_ty, op_name, child_ll_ty, child_tmp));
             self.gen_store_var(&res_tmp, &output_ll_sym, &output_ll_ty, ctx);
-        }
-        else if let Simd(ref ty) = *child_ty {
+        } else if let Simd(ref ty) = *child_ty {
             let width = llvm_simd_size(child_ty)?;
-           // If an intrinsic exists for this SIMD op, use it.
+            // If an intrinsic exists for this SIMD op, use it.
             if let Ok(op_name) = llvm_simd_unaryop(op_kind, ty, width) {
                 let res_tmp = ctx.var_ids.next();
                 ctx.code.add(format!("{} = call {} {}({} {})", res_tmp, child_ll_ty, op_name, child_ll_ty, child_tmp));
@@ -3121,8 +2912,8 @@ impl LlvmGenerator {
                     let val_tmp = ctx.var_ids.next();
                     ctx.code.add(format!("{} = call {} {}({} {})", val_tmp, scalar_ll_ty, op_name, scalar_ll_ty, elem_tmp));
                     let next = ctx.var_ids.next();
-                    ctx.code.add(format!("{} = insertelement {} {}, {} {}, i32 {}",
-                                         next, child_ll_ty, prev_tmp, scalar_ll_ty, val_tmp, i));
+                    ctx.code
+                        .add(format!("{} = insertelement {} {}, {} {}, i32 {}", next, child_ll_ty, prev_tmp, scalar_ll_ty, val_tmp, i));
                     prev_tmp = next;
                 }
                 self.gen_store_var(&prev_tmp, &output_ll_sym, &output_ll_ty, ctx);
@@ -3159,8 +2950,10 @@ impl LlvmGenerator {
                     let (elem_ll_ty, elem_ll_sym) = self.llvm_type_and_name(func, elem)?;
                     let elem_value = self.gen_load_var(&elem_ll_sym, &elem_ll_ty, ctx)?;
                     let ptr_tmp = ctx.var_ids.next();
-                    ctx.code.add(format!("{} = getelementptr inbounds {}, {}* {}, i32 0, i32 {}",
-                        ptr_tmp, output_ll_ty, output_ll_ty, output_ll_sym, index));
+                    ctx.code.add(format!(
+                        "{} = getelementptr inbounds {}, {}* {}, i32 0, i32 {}",
+                        ptr_tmp, output_ll_ty, output_ll_ty, output_ll_sym, index
+                    ));
                     self.gen_store_var(&elem_value, &ptr_tmp, &elem_ll_ty, ctx);
                 }
             }
@@ -3206,7 +2999,8 @@ impl LlvmGenerator {
                     let elem_ll_sym = llvm_symbol(&elem);
                     let elem_loaded = self.gen_load_var(&elem_ll_sym, &elem_ll_ty, ctx)?;
                     let ptr = ctx.var_ids.next();
-                    ctx.code.add(format!("{} = call {}* {}.at({} {}, i64 {})", ptr, elem_ll_ty, output_ll_prefix, output_ll_ty, vec, i));
+                    ctx.code
+                        .add(format!("{} = call {}* {}.at({} {}, i64 {})", ptr, elem_ll_ty, output_ll_prefix, output_ll_ty, vec, i));
                     self.gen_store_var(&elem_loaded, &ptr, &elem_ll_ty, ctx);
                 }
                 self.gen_store_var(&vec, &output_ll_sym, &output_ll_ty, ctx);
@@ -3227,19 +3021,29 @@ impl LlvmGenerator {
                         match op {
                             // Special-case max and min, which don't have int intrinsics
                             Max | Min => {
-                                self.gen_minmax(&ll_ty.as_str(), &op,
-                                                &left_tmp.as_str(),
-                                                &right_tmp.as_str(),
-                                                &output_tmp.as_str(),
-                                                ty, &mut ctx.var_ids, &mut ctx.code)?;
+                                self.gen_minmax(
+                                    &ll_ty.as_str(),
+                                    &op,
+                                    &left_tmp.as_str(),
+                                    &right_tmp.as_str(),
+                                    &output_tmp.as_str(),
+                                    ty,
+                                    &mut ctx.var_ids,
+                                    &mut ctx.code,
+                                )?;
                             }
                             // Pow only supported for floating point.
                             Pow if ty.is_scalar() && s.is_float() => {
-                                    ctx.code.add(format!("{} = call {} {}({} {}, {} {})",
-                                    &output_tmp, &ll_ty,
+                                ctx.code.add(format!(
+                                    "{} = call {} {}({} {}, {} {})",
+                                    &output_tmp,
+                                    &ll_ty,
                                     llvm_binary_intrinsic(op, &s)?,
-                                    self.llvm_type(ty)?, &left_tmp,
-                                    self.llvm_type(ty)?, &right_tmp));
+                                    self.llvm_type(ty)?,
+                                    &left_tmp,
+                                    self.llvm_type(ty)?,
+                                    &right_tmp
+                                ));
                             }
                             Pow if ty.is_simd() && s.is_float() => {
                                 // Unroll and apply the scalar op, and then pack back into vector
@@ -3251,27 +3055,24 @@ impl LlvmGenerator {
                                     let left_elem_tmp = self.gen_simd_extract(ty, &left_tmp, i, ctx)?;
                                     let right_elem_tmp = self.gen_simd_extract(ty, &right_tmp, i, ctx)?;
                                     let val_tmp = ctx.var_ids.next();
-                                     ctx.code.add(format!("{} = call {} {}({} {}, {} {})",
-                                                                &val_tmp,
-                                                                &scalar_ll_ty,
-                                                                llvm_binary_intrinsic(op, &s)?,
-                                                                scalar_ll_ty,
-                                                                &left_elem_tmp,
-                                                                scalar_ll_ty,
-                                                                &right_elem_tmp));
-                                    let next = if i == width - 1 {
-                                        output_tmp.clone()
-                                    } else {
-                                        ctx.var_ids.next()
-                                    };
-                                    ctx.code.add(format!("{} = insertelement {} {}, {} {}, i32 {}",
-                                                         next, simd_ll_ty, prev_tmp, scalar_ll_ty, val_tmp, i));
+                                    ctx.code.add(format!(
+                                        "{} = call {} {}({} {}, {} {})",
+                                        &val_tmp,
+                                        &scalar_ll_ty,
+                                        llvm_binary_intrinsic(op, &s)?,
+                                        scalar_ll_ty,
+                                        &left_elem_tmp,
+                                        scalar_ll_ty,
+                                        &right_elem_tmp
+                                    ));
+                                    let next = if i == width - 1 { output_tmp.clone() } else { ctx.var_ids.next() };
+                                    ctx.code
+                                        .add(format!("{} = insertelement {} {}, {} {}, i32 {}", next, simd_ll_ty, prev_tmp, scalar_ll_ty, val_tmp, i));
                                     prev_tmp = next;
                                 }
                             }
                             _ => {
-                                ctx.code.add(format!("{} = {} {} {}, {}",
-                                                     &output_tmp, llvm_binop(op, ty)?, &ll_ty, &left_tmp, &right_tmp));
+                                ctx.code.add(format!("{} = {} {} {}, {}", &output_tmp, llvm_binop(op, ty)?, &ll_ty, &left_tmp, &right_tmp));
                             }
                         }
                         self.gen_store_var(&output_tmp, &output_ll_sym, &output_ll_ty, ctx);
@@ -3284,13 +3085,8 @@ impl LlvmGenerator {
                         let vec_prefix = llvm_prefix(&ll_ty);
                         // Make sure a comparison function exists for this type.
                         self.gen_cmp(ty)?;
-                        ctx.code.add(format!("{} = call i32 {}.cmp({} {}, {} {})",
-                                             tmp,
-                                             vec_prefix,
-                                             ll_ty,
-                                             left_tmp,
-                                             ll_ty,
-                                             right_tmp));
+                        ctx.code
+                            .add(format!("{} = call i32 {}.cmp({} {}, {} {})", tmp, vec_prefix, ll_ty, left_tmp, ll_ty, right_tmp));
                         ctx.code.add(format!("{} = icmp {} i32 {}, {}", output_tmp, op_name, tmp, value));
                         self.gen_store_var(&output_tmp, &output_ll_sym, &output_ll_ty, ctx);
                     }
@@ -3307,8 +3103,8 @@ impl LlvmGenerator {
                 let mut prev_name = "undef".to_string();
                 for i in 0..llvm_simd_size(child_ty)? {
                     let next = ctx.var_ids.next();
-                    ctx.code.add(format!("{} = insertelement {} {}, {} {}, i32 {}",
-                                            next, output_ll_ty, prev_name, child_ll_ty, value, i));
+                    ctx.code
+                        .add(format!("{} = insertelement {} {}, {} {}, i32 {}", next, output_ll_ty, prev_name, child_ll_ty, value, i));
                     prev_name = next;
                 }
                 self.gen_store_var(&prev_name, &output_ll_sym, &output_ll_ty, ctx);
@@ -3322,9 +3118,7 @@ impl LlvmGenerator {
                 self.gen_deserialize(child, output, func, ctx)?;
             }
 
-            UnaryOp { op, ref child, } => {
-                self.gen_unary_op(ctx, func, output, child, op)?
-            }
+            UnaryOp { op, ref child } => self.gen_unary_op(ctx, func, output, child, op)?,
 
             Negate(ref child) => {
                 let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
@@ -3349,8 +3143,7 @@ impl LlvmGenerator {
                     let op_name = llvm_castop(child_ty, output_ty)?;
                     let child_tmp = self.gen_load_var(&child_ll_sym, &child_ll_ty, ctx)?;
                     let cast_tmp = ctx.var_ids.next();
-                    ctx.code.add(format!("{} = {} {} {} to {}",
-                                            cast_tmp, op_name, child_ll_ty, child_tmp, output_ll_ty));
+                    ctx.code.add(format!("{} = {} {} {} to {}", cast_tmp, op_name, child_ll_ty, child_tmp, output_ll_ty));
                     self.gen_store_var(&cast_tmp, &output_ll_sym, &output_ll_ty, ctx);
                 } else {
                     let child_tmp = self.gen_load_var(&child_ll_sym, &child_ll_ty, ctx)?;
@@ -3369,8 +3162,10 @@ impl LlvmGenerator {
                         let child_tmp = self.gen_load_var(&child_ll_sym, &child_ll_ty, ctx)?;
                         let index_tmp = self.gen_load_var(&index_ll_sym, &index_ll_ty, ctx)?;
                         let res_ptr = ctx.var_ids.next();
-                        ctx.code.add(format!("{} = call {}* {}.at({} {}, i64 {})",
-                            res_ptr, output_ll_ty, child_prefix, child_ll_ty,child_tmp, index_tmp));
+                        ctx.code.add(format!(
+                            "{} = call {}* {}.at({} {}, i64 {})",
+                            res_ptr, output_ll_ty, child_prefix, child_ll_ty, child_tmp, index_tmp
+                        ));
                         let res_tmp = self.gen_load_var(&res_ptr, &output_ll_ty, ctx)?;
                         self.gen_store_var(&res_tmp, &output_ll_sym, &output_ll_ty, ctx);
                     }
@@ -3380,10 +3175,12 @@ impl LlvmGenerator {
                         let index_tmp = self.gen_load_var(&index_ll_sym, &index_ll_ty, ctx)?;
                         let slot = ctx.var_ids.next();
                         let res_tmp = ctx.var_ids.next();
-                        ctx.code.add(format!("{} = call {}.slot {}.lookup({} {}, {} {})",
-                                                slot, child_ll_ty, child_prefix, child_ll_ty, child_tmp, index_ll_ty, index_tmp));
-                        ctx.code.add(format!("{} = call {} {}.slot.value({}.slot {})",
-                                                res_tmp, output_ll_ty, child_prefix, child_ll_ty, slot));
+                        ctx.code.add(format!(
+                            "{} = call {}.slot {}.lookup({} {}, {} {})",
+                            slot, child_ll_ty, child_prefix, child_ll_ty, child_tmp, index_ll_ty, index_tmp
+                        ));
+                        ctx.code
+                            .add(format!("{} = call {} {}.slot.value({}.slot {})", res_tmp, output_ll_ty, child_prefix, child_ll_ty, slot));
                         self.gen_store_var(&res_tmp, &output_ll_sym, &output_ll_ty, ctx);
                     }
                     _ => weld_err!("Illegal type {} in Lookup", print_type(child_ty))?,
@@ -3401,10 +3198,11 @@ impl LlvmGenerator {
 
                 let slot = ctx.var_ids.next();
                 let res_tmp = ctx.var_ids.next();
-                ctx.code.add(format!("{} = call {}.slot {}.lookup({} {}, {} {})",
-                    slot, child_ll_ty, child_prefix, child_ll_ty, child_tmp, key_ll_ty, key_tmp));
-                ctx.code.add(format!("{} = call i1 {}.slot.filled({}.slot {})",
-                    res_tmp, child_prefix, child_ll_ty, slot));
+                ctx.code.add(format!(
+                    "{} = call {}.slot {}.lookup({} {}, {} {})",
+                    slot, child_ll_ty, child_prefix, child_ll_ty, child_tmp, key_ll_ty, key_tmp
+                ));
+                ctx.code.add(format!("{} = call i1 {}.slot.filled({}.slot {})", res_tmp, child_prefix, child_ll_ty, slot));
                 self.gen_store_var(&res_tmp, &output_ll_sym, &output_ll_ty, ctx);
             }
 
@@ -3418,14 +3216,10 @@ impl LlvmGenerator {
                 let index_tmp = self.gen_load_var(&index_ll_sym, &index_ll_ty, ctx)?;
                 let size_tmp = self.gen_load_var(&size_ll_sym, &size_ll_ty, ctx)?;
                 let res_ptr = ctx.var_ids.next();
-                ctx.code.add(format!("{} = call {} {}.slice({} {}, i64 {}, i64{})",
-                                                res_ptr,
-                                                output_ll_ty,
-                                                vec_prefix,
-                                                child_ll_ty,
-                                                child_tmp,
-                                                index_tmp,
-                                                size_tmp));
+                ctx.code.add(format!(
+                    "{} = call {} {}.slice({} {}, i64 {}, i64{})",
+                    res_ptr, output_ll_ty, vec_prefix, child_ll_ty, child_tmp, index_tmp, size_tmp
+                ));
                 self.gen_store_var(&res_ptr, &output_ll_sym, &output_ll_ty, ctx);
             }
 
@@ -3445,8 +3239,7 @@ impl LlvmGenerator {
                                 let (param_ll_ty, param_ll_sym) = self.llvm_type_and_name(keyfunc, param_syms[0])?;
                                 str_args.push_str(&format!("{}* {}", param_ll_ty, param_ll_sym));
                             } else {
-                                return weld_err!("Type mismatch: vector:{ } and sort key parameter:{ }",
-                                                 print_type(&**elem_ty), print_type(&*param_ty));
+                                return weld_err!("Type mismatch: vector:{ } and sort key parameter:{ }", print_type(&**elem_ty), print_type(&*param_ty));
                             }
                         }
 
@@ -3456,7 +3249,7 @@ impl LlvmGenerator {
                         let last_block = keyfunc.blocks.last().unwrap();
                         if let Terminator::ProgramReturn(ref key_sym) = last_block.terminator {
                             let key_ty = keyfunc.symbol_type(key_sym)?;
-                            match *key_ty{
+                            match *key_ty {
                                 Scalar(_) | Vector(_) => {
                                     self.gen_cmp(key_ty)?;
                                     let (key_ll_tyc, key_ll_symc) = self.llvm_type_and_name(keyfunc, key_sym)?;
@@ -3481,7 +3274,7 @@ impl LlvmGenerator {
                                             self.gen_statement(s, keyfunc, keyfunc_ctx)?
                                         }
                                         if i != end_block_index {
-                                            if let Terminator::Branch { ref cond, on_true, on_false} = b.terminator {
+                                            if let Terminator::Branch { ref cond, on_true, on_false } = b.terminator {
                                                 keyfunc_ctx.code.add(format!("; {}", b.terminator));
                                                 if self.trace_run {
                                                     self.gen_puts(&format!("  {}", b.terminator), ctx);
@@ -3502,30 +3295,27 @@ impl LlvmGenerator {
                                     }
                                     // Add key function and sort prelude code
                                     let name = self.vec_names.get(elem_ty).unwrap();
-                                    self.prelude_code.add(format!(
-                                        "define {} @{}({}) alwaysinline {{",
-                                        key_ll_ty,
-                                        func_str,
-                                        str_args));
+                                    self.prelude_code.add(format!("define {} @{}({}) alwaysinline {{", key_ll_ty, func_str, str_args));
                                     self.prelude_code.add(keyfunc_ctx.alloca_code.result());
                                     self.prelude_code.add(keyfunc_ctx.code.result());
-                                    self.prelude_code.add(format!("{}.ret = load {}, {}* {}",
-                                                                  key_ll_sym, key_ll_ty, key_ll_ty, key_ll_sym));
+                                    self.prelude_code.add(format!("{}.ret = load {}, {}* {}", key_ll_sym, key_ll_ty, key_ll_ty, key_ll_sym));
                                     self.prelude_code.add(format!("ret {} {}.ret\n}}", key_ll_ty, key_ll_sym));
                                     self.prelude_code.add(format!(
                                         include_str!("resources/vector/vector_sort.ll"),
-                                        ELEM=&elem_ll_ty,
-                                        KEY=&key_ll_ty,
-                                        RAWKEY=&key_ll_ty.replace("%", ""),
-                                        FUNC=&func_str,
-                                        NAME=&name.replace("%", "")));
+                                        ELEM = &elem_ll_ty,
+                                        KEY = &key_ll_ty,
+                                        RAWKEY = &key_ll_ty.replace("%", ""),
+                                        FUNC = &func_str,
+                                        NAME = &name.replace("%", "")
+                                    ));
                                 }
-                                _=> { return weld_err!("Sort key function must have scalar or vector return type");}
+                                _ => {
+                                    return weld_err!("Sort key function must have scalar or vector return type");
+                                }
                             }
                         } else {
                             return weld_err!("Sort key Function must have return type");
                         }
-
                     }
                     _ => {
                         return weld_err!("Unsupported function `sort` for type {:?}", out_ty);
@@ -3537,17 +3327,18 @@ impl LlvmGenerator {
                 let vec_prefix = llvm_prefix(&child_ll_ty);
                 let child_tmp = self.gen_load_var(&child_ll_sym, &child_ll_ty, ctx)?;
                 let res_ptr = ctx.var_ids.next();
-                ctx.code.add(format!("{} = call {} {}.{}.sort({} {})",
-                                     res_ptr,
-                                     output_ll_ty,
-                                     vec_prefix,
-                                     func_str,
-                                     child_ll_ty,
-                                     child_tmp));
+                ctx.code.add(format!(
+                    "{} = call {} {}.{}.sort({} {})",
+                    res_ptr, output_ll_ty, vec_prefix, func_str, child_ll_ty, child_tmp
+                ));
                 self.gen_store_var(&res_ptr, &output_ll_sym, &output_ll_ty, ctx);
             }
 
-            Select { ref cond, ref on_true, ref on_false } => {
+            Select {
+                ref cond,
+                ref on_true,
+                ref on_false,
+            } => {
                 let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
                 let (cond_ll_ty, cond_ll_sym) = self.llvm_type_and_name(func, cond)?;
                 let (on_true_ll_ty, on_true_ll_sym) = self.llvm_type_and_name(func, on_true)?;
@@ -3556,8 +3347,10 @@ impl LlvmGenerator {
                 let on_true_tmp = self.gen_load_var(&on_true_ll_sym, &on_true_ll_ty, ctx)?;
                 let on_false_tmp = self.gen_load_var(&on_false_ll_sym, &on_false_ll_ty, ctx)?;
                 let tmp = ctx.var_ids.next();
-                ctx.code.add(format!("{} = select {} {}, {} {}, {} {}",
-                    tmp, cond_ll_ty, cond_tmp, on_true_ll_ty, on_true_tmp, on_false_ll_ty, on_false_tmp));
+                ctx.code.add(format!(
+                    "{} = select {} {}, {} {}, {} {}",
+                    tmp, cond_ll_ty, cond_tmp, on_true_ll_ty, on_true_tmp, on_false_ll_ty, on_false_tmp
+                ));
                 self.gen_store_var(&tmp, &output_ll_sym, &output_ll_ty, ctx);
             }
 
@@ -3567,8 +3360,8 @@ impl LlvmGenerator {
                 let dict_prefix = llvm_prefix(&child_ll_ty);
                 let child_tmp = self.gen_load_var(&child_ll_sym, &child_ll_ty, ctx)?;
                 let res_tmp = ctx.var_ids.next();
-                ctx.code.add(format!("{} = call {} {}.tovec({} {})",
-                    res_tmp, output_ll_ty, dict_prefix, child_ll_ty, child_tmp));
+                ctx.code
+                    .add(format!("{} = call {} {}.tovec({} {})", res_tmp, output_ll_ty, dict_prefix, child_ll_ty, child_tmp));
                 self.gen_store_var(&res_tmp, &output_ll_sym, &output_ll_ty, ctx);
             }
 
@@ -3593,8 +3386,10 @@ impl LlvmGenerator {
                 let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
                 let (value_ll_ty, value_ll_sym) = self.llvm_type_and_name(func, value)?;
                 let ptr_tmp = ctx.var_ids.next();
-                ctx.code.add(format!("{} = getelementptr inbounds {}, {}* {}, i32 0, i32 {}",
-                    ptr_tmp, value_ll_ty, value_ll_ty, value_ll_sym, index));
+                ctx.code.add(format!(
+                    "{} = getelementptr inbounds {}, {}* {}, i32 0, i32 {}",
+                    ptr_tmp, value_ll_ty, value_ll_ty, value_ll_sym, index
+                ));
                 let res_tmp = self.gen_load_var(&ptr_tmp, &output_ll_ty, ctx)?;
                 self.gen_store_var(&res_tmp, &output_ll_sym, &output_ll_ty, ctx);
             }
@@ -3624,7 +3419,7 @@ impl LlvmGenerator {
                     let val_ty = func.symbol_type(value)?;
                     self.gen_merge(bld_kind, builder, val_ty, value, func, ctx)?;
                 } else {
-                    return weld_err!("Non builder type {} found in Merge", print_type(bld_ty))
+                    return weld_err!("Non builder type {} found in Merge", print_type(bld_ty));
                 }
             }
 
@@ -3633,7 +3428,7 @@ impl LlvmGenerator {
                 if let Builder(ref bld_kind, _) = *bld_ty {
                     self.gen_result(bld_kind, builder, output, func, ctx)?;
                 } else {
-                    return weld_err!("Non builder type {} found in Result", print_type(bld_ty))
+                    return weld_err!("Non builder type {} found in Result", print_type(bld_ty));
                 }
             }
 
@@ -3641,7 +3436,7 @@ impl LlvmGenerator {
                 if let Builder(ref bld_kind, ref annotations) = *ty {
                     self.gen_new_builder(bld_kind, annotations, arg, output, func, ctx)?;
                 } else {
-                    return weld_err!("Non builder type {} found in NewBuilder", print_type(ty))
+                    return weld_err!("Non builder type {} found in NewBuilder", print_type(ty));
                 }
             }
         }
@@ -3650,15 +3445,7 @@ impl LlvmGenerator {
     }
 
     /// Generate code for a Merge instruction, appending it to the given FunctionContext.
-    fn gen_merge(&mut self,
-                 builder_kind: &BuilderKind,
-                 builder: &Symbol,
-                 value_ty: &Type,
-                 value: &Symbol,
-                 func: &SirFunction,
-                 ctx: &mut FunctionContext)
-                 -> WeldResult<()> {
-
+    fn gen_merge(&mut self, builder_kind: &BuilderKind, builder: &Symbol, value_ty: &Type, value: &Symbol, func: &SirFunction, ctx: &mut FunctionContext) -> WeldResult<()> {
         let (bld_ll_ty, bld_ll_sym) = self.llvm_type_and_name(func, builder)?;
         let val_ll_ty = self.llvm_type(value_ty)?;
         let val_ll_sym = llvm_symbol(value);
@@ -3675,19 +3462,13 @@ impl LlvmGenerator {
                     if !ctx.is_innermost {
                         ctx.code.add(format!(
                             "{} = call {}* {}.vectorMergePtrForStackPiece({}* {})",
-                            merge_ptr,
-                            val_ll_ty,
-                            bld_prefix,
-                            bld_ll_ty,
-                            bld_ll_sym));
+                            merge_ptr, val_ll_ty, bld_prefix, bld_ll_ty, bld_ll_sym
+                        ));
                     } else {
                         ctx.code.add(format!(
                             "{} = call {}* {}.vectorMergePtrForPiece({}.piecePtr {}.reg)",
-                            merge_ptr,
-                            val_ll_ty,
-                            bld_prefix,
-                            bld_ll_ty,
-                            bld_ll_sym));
+                            merge_ptr, val_ll_ty, bld_prefix, bld_ll_ty, bld_ll_sym
+                        ));
                     }
                     self.gen_merge_op(&merge_ptr, &elem_tmp, &val_ll_ty, op, value_ty, ctx)?;
                 }
@@ -3695,13 +3476,10 @@ impl LlvmGenerator {
                 Appender(ref elem) if elem.is_scalar() => {
                     let bld_tmp = self.gen_load_var(&bld_ll_sym, &bld_ll_ty, ctx)?;
                     let val_tmp = self.gen_load_var(&val_ll_sym, &val_ll_ty, ctx)?;
-                    ctx.code.add(format!("call {} {}.vmerge({} {}, {} {}, i32 %cur.tid)",
-                    bld_ll_ty,
-                    bld_prefix,
-                    bld_ll_ty,
-                    bld_tmp,
-                    val_ll_ty,
-                    val_tmp));
+                    ctx.code.add(format!(
+                        "call {} {}.vmerge({} {}, {} {}, i32 %cur.tid)",
+                        bld_ll_ty, bld_prefix, bld_ll_ty, bld_tmp, val_ll_ty, val_tmp
+                    ));
                 }
 
                 _ => {
@@ -3720,7 +3498,7 @@ impl LlvmGenerator {
                     }
                 }
             }
-            return Ok(())
+            return Ok(());
         }
 
         // For non-vectorized elements, just switch on the builder type. TODO: Use annotations here too.
@@ -3728,26 +3506,17 @@ impl LlvmGenerator {
             Appender(_) => {
                 let bld_tmp = self.gen_load_var(&bld_ll_sym, &bld_ll_ty, ctx)?;
                 let val_tmp = self.gen_load_var(&val_ll_sym, &val_ll_ty, ctx)?;
-                ctx.code.add(format!("call {} {}.merge({} {}, {} {}, i32 %cur.tid)",
-                                        bld_ll_ty,
-                                        bld_prefix,
-                                        bld_ll_ty,
-                                        bld_tmp,
-                                        val_ll_ty,
-                                        val_tmp));
+                ctx.code.add(format!(
+                    "call {} {}.merge({} {}, {} {}, i32 %cur.tid)",
+                    bld_ll_ty, bld_prefix, bld_ll_ty, bld_tmp, val_ll_ty, val_tmp
+                ));
             }
 
             DictMerger(_, _, _) | GroupMerger(_, _) => {
                 let bld_tmp = self.gen_load_var(&bld_ll_sym, &bld_ll_ty, ctx)?;
                 let val_tmp = self.gen_load_var(&val_ll_sym, &val_ll_ty, ctx)?;
-                ctx.code.add(format!(
-                    "call {} {}.merge({} {}, {} {})",
-                    bld_ll_ty,
-                    bld_prefix,
-                    bld_ll_ty,
-                    bld_tmp,
-                    val_ll_ty,
-                    val_tmp));
+                ctx.code
+                    .add(format!("call {} {}.merge({} {}, {} {})", bld_ll_ty, bld_prefix, bld_ll_ty, bld_tmp, val_ll_ty, val_tmp));
             }
 
             Merger(ref t, ref op) => {
@@ -3756,19 +3525,13 @@ impl LlvmGenerator {
                 if !ctx.is_innermost {
                     ctx.code.add(format!(
                         "{} = call {}* {}.scalarMergePtrForStackPiece({}* {})",
-                        merge_ptr,
-                        val_ll_ty,
-                        bld_prefix,
-                        bld_ll_ty,
-                        bld_ll_sym));
+                        merge_ptr, val_ll_ty, bld_prefix, bld_ll_ty, bld_ll_sym
+                    ));
                 } else {
                     ctx.code.add(format!(
                         "{} = call {}* {}.scalarMergePtrForPiece({}.piecePtr {}.reg)",
-                        merge_ptr,
-                        val_ll_ty,
-                        bld_prefix,
-                        bld_ll_ty,
-                        bld_ll_sym));
+                        merge_ptr, val_ll_ty, bld_prefix, bld_ll_ty, bld_ll_sym
+                    ));
                 }
                 self.gen_merge_op(&merge_ptr, &val_tmp, &val_ll_ty, op, t, ctx)?;
             }
@@ -3783,16 +3546,11 @@ impl LlvmGenerator {
                 ctx.code.add(format!("{} = extractvalue {} {}, 1", elem_var, &val_ll_ty, val_tmp));
                 let bld_ptr_raw = ctx.var_ids.next();
                 let bld_ptr = ctx.var_ids.next();
-                ctx.code.add(format!("{} = call i8* {}.merge_ptr({} {}, i64 {}, i32 %cur.tid)",
-                                        bld_ptr_raw,
-                                        bld_prefix,
-                                        bld_ll_ty,
-                                        bld_tmp,
-                                        index_var));
-                ctx.code.add(format!("{} = bitcast i8* {} to {}*",
-                                        bld_ptr,
-                                        bld_ptr_raw,
-                                        elem_ll_ty));
+                ctx.code.add(format!(
+                    "{} = call i8* {}.merge_ptr({} {}, i64 {}, i32 %cur.tid)",
+                    bld_ptr_raw, bld_prefix, bld_ll_ty, bld_tmp, index_var
+                ));
+                ctx.code.add(format!("{} = bitcast i8* {} to {}*", bld_ptr, bld_ptr_raw, elem_ll_ty));
                 self.gen_merge_op(&bld_ptr, &elem_var, &elem_ll_ty, op, t, ctx)?;
             }
         }
@@ -3800,14 +3558,7 @@ impl LlvmGenerator {
     }
 
     /// Generate code to compute the result of a `builder` and store it in `output`, appending it to a FunctionContext.
-    fn gen_result(&mut self,
-                  builder_kind: &BuilderKind,
-                  builder: &Symbol,
-                  output: &Symbol,
-                  func: &SirFunction,
-                  ctx: &mut FunctionContext)
-                  -> WeldResult<()> {
-
+    fn gen_result(&mut self, builder_kind: &BuilderKind, builder: &Symbol, output: &Symbol, func: &SirFunction, ctx: &mut FunctionContext) -> WeldResult<()> {
         let (bld_ll_ty, bld_ll_sym) = self.llvm_type_and_name(func, builder)?;
         let (res_ll_ty, res_ll_sym) = self.llvm_type_and_name(func, output)?;
         let bld_ty = func.symbol_type(builder)?;
@@ -3818,12 +3569,7 @@ impl LlvmGenerator {
                 let bld_prefix = llvm_prefix(&bld_ll_ty);
                 let bld_tmp = self.gen_load_var(&bld_ll_sym, &bld_ll_ty, ctx)?;
                 let res_tmp = ctx.var_ids.next();
-                ctx.code.add(format!("{} = call {} {}.result({} {})",
-                                     res_tmp,
-                                     res_ll_ty,
-                                     bld_prefix,
-                                     bld_ll_ty,
-                                     bld_tmp));
+                ctx.code.add(format!("{} = call {} {}.result({} {})", res_tmp, res_ll_ty, bld_prefix, bld_ll_ty, bld_tmp));
                 self.gen_store_var(&res_tmp, &res_ll_sym, &res_ll_ty, ctx);
             }
 
@@ -3881,82 +3627,82 @@ impl LlvmGenerator {
                 let done_label_v = ctx.var_ids.next().replace("%", "");
                 let vector_width = format!("{}", llvm_simd_size(t)?);
 
-                ctx.code.add(format!(include_str!("resources/merger/merger_result_start.ll"),
-                                        is_global = is_global,
-                                        scalar_ptr = scalar_ptr,
-                                        vector_ptr = vector_ptr,
-                                        nworkers = nworkers,
-                                        bld_sym = bld_ll_sym,
-                                        i = i,
-                                        bld_ptr = bld_ptr,
-                                        val_scalar_ptr = val_scalar_ptr,
-                                        val_vector_ptr = val_vector_ptr,
-                                        val_scalar = val_scalar,
-                                        val_vector = val_vector,
-                                        i2 = i2,
-                                        elem_ty_str = elem_ty_str,
-                                        elem_vec_ty_str = elem_vec_ty_str,
-                                        bld_ty_str = bld_ll_ty,
-                                        bld_prefix = bld_prefix,
-                                        entry = entry_label,
-                                        body = body_label,
-                                        done = done_label));
+                ctx.code.add(format!(
+                    include_str!("resources/merger/merger_result_start.ll"),
+                    is_global = is_global,
+                    scalar_ptr = scalar_ptr,
+                    vector_ptr = vector_ptr,
+                    nworkers = nworkers,
+                    bld_sym = bld_ll_sym,
+                    i = i,
+                    bld_ptr = bld_ptr,
+                    val_scalar_ptr = val_scalar_ptr,
+                    val_vector_ptr = val_vector_ptr,
+                    val_scalar = val_scalar,
+                    val_vector = val_vector,
+                    i2 = i2,
+                    elem_ty_str = elem_ty_str,
+                    elem_vec_ty_str = elem_vec_ty_str,
+                    bld_ty_str = bld_ll_ty,
+                    bld_prefix = bld_prefix,
+                    entry = entry_label,
+                    body = body_label,
+                    done = done_label
+                ));
 
                 // Add the scalar and vector values to the aggregate result.
                 self.gen_merge_op(&scalar_ptr, &val_scalar, &elem_ty_str, op, t, ctx)?;
                 self.gen_merge_op(&vector_ptr, &val_vector, &elem_vec_ty_str, op, vec_type, ctx)?;
 
-                ctx.code.add(format!(include_str!("resources/merger/merger_result_end_vectorized_1.ll"),
-                        nworkers = nworkers,
-                        i=i,
-                        i2=i2,
-                        cond2=cond2,
-                        i_v=i_v,
-                        i2_v=i2_v,
-                        cond_v=cond_v,
-                        res_ty_str=res_ty_str,
-                        vector_ptr=vector_ptr,
-                        scalar_ptr=scalar_ptr,
-                        final_val_vec=final_val_vec,
-                        scalar_val_2=scalar_val_2,
-                        vector_width=vector_width,
-                        elem_vec_ty_str=elem_vec_ty_str,
-                        val_v=val_v,
-                        body=body_label,
-                        done=done_label,
-                        entry_v=entry_label_v,
-                        body_v=body_label_v,
-                        done_v=done_label_v,
-                        output=res_ll_sym));
+                ctx.code.add(format!(
+                    include_str!("resources/merger/merger_result_end_vectorized_1.ll"),
+                    nworkers = nworkers,
+                    i = i,
+                    i2 = i2,
+                    cond2 = cond2,
+                    i_v = i_v,
+                    i2_v = i2_v,
+                    cond_v = cond_v,
+                    res_ty_str = res_ty_str,
+                    vector_ptr = vector_ptr,
+                    scalar_ptr = scalar_ptr,
+                    final_val_vec = final_val_vec,
+                    scalar_val_2 = scalar_val_2,
+                    vector_width = vector_width,
+                    elem_vec_ty_str = elem_vec_ty_str,
+                    val_v = val_v,
+                    body = body_label,
+                    done = done_label,
+                    entry_v = entry_label_v,
+                    body_v = body_label_v,
+                    done_v = done_label_v,
+                    output = res_ll_sym
+                ));
 
                 self.gen_merge_op(&res_ll_sym, &val_v, &res_ty_str, op, t, ctx)?;
 
-                ctx.code.add(format!(include_str!("resources/merger/merger_result_end_vectorized_2.ll"),
-                        i_v=i_v,
-                        i2_v=i2_v,
-                        cond2_v=cond2_v,
-                        as_ptr=as_ptr,
-                        bld_ty_str=bld_ty_str,
-                        bld_sym=bld_ll_sym,
-                        bld_prefix=bld_prefix,
-                        body_v=body_label_v,
-                        vector_width=vector_width,
-                        done_v=done_label_v));
+                ctx.code.add(format!(
+                    include_str!("resources/merger/merger_result_end_vectorized_2.ll"),
+                    i_v = i_v,
+                    i2_v = i2_v,
+                    cond2_v = cond2_v,
+                    as_ptr = as_ptr,
+                    bld_ty_str = bld_ty_str,
+                    bld_sym = bld_ll_sym,
+                    bld_prefix = bld_prefix,
+                    body_v = body_label_v,
+                    vector_width = vector_width,
+                    done_v = done_label_v
+                ));
             }
 
             DictMerger(_, _, _) | GroupMerger(_, _) => {
                 let bld_ty_str = self.llvm_type(&bld_ty)?;
                 let bld_prefix = llvm_prefix(&bld_ty_str);
                 let res_ty_str = self.llvm_type(&res_ty)?;
-                let bld_tmp =
-                    self.gen_load_var(llvm_symbol(builder).as_str(), &bld_ty_str, ctx)?;
+                let bld_tmp = self.gen_load_var(llvm_symbol(builder).as_str(), &bld_ty_str, ctx)?;
                 let res_tmp = ctx.var_ids.next();
-                ctx.code.add(format!("{} = call {} {}.result({} {})",
-                                        res_tmp,
-                                        res_ty_str,
-                                        bld_prefix,
-                                        bld_ty_str,
-                                        bld_tmp));
+                ctx.code.add(format!("{} = call {} {}.result({} {})", res_tmp, res_ty_str, bld_prefix, bld_ty_str, bld_tmp));
 
                 self.gen_store_var(&res_tmp, &llvm_symbol(output), &res_ty_str, ctx);
             }
@@ -3971,8 +3717,7 @@ impl LlvmGenerator {
                 // The element type
                 let elem_ty_str = self.llvm_type(t)?;
                 // The builder we operate on.
-                let bld_ptr =
-                    self.gen_load_var(llvm_symbol(builder).as_str(), &bld_ty_str, ctx)?;
+                let bld_ptr = self.gen_load_var(llvm_symbol(builder).as_str(), &bld_ty_str, ctx)?;
 
                 // Generate names for all temporaries.
                 let nworkers = ctx.var_ids.next();
@@ -4004,58 +3749,62 @@ impl LlvmGenerator {
                 let done_label = ctx.var_ids.next().replace("%", "");
                 let raw_ptr = ctx.var_ids.next();
 
-                ctx.code.add(format!(include_str!("resources/vecmerger/vecmerger_result_start.ll"),
-                                    nworkers = nworkers,
-                                    t0 = t0,
-                                    buildPtr = bld_ptr,
-                                    resType = res_ty_str,
-                                    resPrefix = res_prefix,
-                                    elemType = elem_ty_str,
-                                    typedPtr = typed_ptr,
-                                    firstVec = first_vec,
-                                    size = size,
-                                    retValue = ret_value,
-                                    cond = cond,
-                                    i = i,
-                                    i2 = i2,
-                                    vecPtr = vec_ptr,
-                                    curVec = cur_vec,
-                                    copyCond = copy_cond,
-                                    j = j,
-                                    j2 = j2,
-                                    elemPtr = elem_ptr,
-                                    mergeValue = merge_value,
-                                    mergePtr = merge_ptr,
-                                    entry = entry,
-                                    bodyLabel = body_label,
-                                    copyEntryLabel = copy_entry_label,
-                                    copyBodyLabel = copy_body_label,
-                                    copyDoneLabel = copy_done_label,
-                                    doneLabel = done_label,
-                                    bldType = bld_ty_str,
-                                    bldPrefix = bld_prefix));
+                ctx.code.add(format!(
+                    include_str!("resources/vecmerger/vecmerger_result_start.ll"),
+                    nworkers = nworkers,
+                    t0 = t0,
+                    buildPtr = bld_ptr,
+                    resType = res_ty_str,
+                    resPrefix = res_prefix,
+                    elemType = elem_ty_str,
+                    typedPtr = typed_ptr,
+                    firstVec = first_vec,
+                    size = size,
+                    retValue = ret_value,
+                    cond = cond,
+                    i = i,
+                    i2 = i2,
+                    vecPtr = vec_ptr,
+                    curVec = cur_vec,
+                    copyCond = copy_cond,
+                    j = j,
+                    j2 = j2,
+                    elemPtr = elem_ptr,
+                    mergeValue = merge_value,
+                    mergePtr = merge_ptr,
+                    entry = entry,
+                    bodyLabel = body_label,
+                    copyEntryLabel = copy_entry_label,
+                    copyBodyLabel = copy_body_label,
+                    copyDoneLabel = copy_done_label,
+                    doneLabel = done_label,
+                    bldType = bld_ty_str,
+                    bldPrefix = bld_prefix
+                ));
 
                 self.gen_merge_op(&merge_ptr, &merge_value, &elem_ty_str, op, t, ctx)?;
 
-                ctx.code.add(format!(include_str!("resources/vecmerger/vecmerger_result_end.ll"),
-                                    j2 = j2,
-                                    j = j,
-                                    copyCond2 = copy_cond2,
-                                    size = size,
-                                    i2 = i2,
-                                    i = i,
-                                    cond2 = cond2,
-                                    nworkers = nworkers,
-                                    resType = res_ty_str,
-                                    retValue = ret_value,
-                                    copyBodyLabel = copy_body_label,
-                                    copyDoneLabel = copy_done_label,
-                                    doneLabel = done_label,
-                                    bodyLabel = body_label,
-                                    rawPtr = raw_ptr,
-                                    buildPtr = bld_ptr,
-                                    bldType = bld_ty_str,
-                                    output = llvm_symbol(output)));
+                ctx.code.add(format!(
+                    include_str!("resources/vecmerger/vecmerger_result_end.ll"),
+                    j2 = j2,
+                    j = j,
+                    copyCond2 = copy_cond2,
+                    size = size,
+                    i2 = i2,
+                    i = i,
+                    cond2 = cond2,
+                    nworkers = nworkers,
+                    resType = res_ty_str,
+                    retValue = ret_value,
+                    copyBodyLabel = copy_body_label,
+                    copyDoneLabel = copy_done_label,
+                    doneLabel = done_label,
+                    bodyLabel = body_label,
+                    rawPtr = raw_ptr,
+                    buildPtr = bld_ptr,
+                    bldType = bld_ty_str,
+                    output = llvm_symbol(output)
+                ));
             }
         }
 
@@ -4064,14 +3813,15 @@ impl LlvmGenerator {
 
     /// Generate code for a NewBuilder statement, creating a builder of the given type with a given `arg` and
     /// storing the result in an `output` symbol. Appends the code to a given FunctionContext.
-    fn gen_new_builder(&mut self,
-                       builder_kind: &BuilderKind,
-                       annotations: &Annotations,
-                       arg: &Option<Symbol>,
-                       output: &Symbol,
-                       func: &SirFunction,
-                       ctx: &mut FunctionContext)
-                       -> WeldResult<()> {
+    fn gen_new_builder(
+        &mut self,
+        builder_kind: &BuilderKind,
+        annotations: &Annotations,
+        arg: &Option<Symbol>,
+        output: &Symbol,
+        func: &SirFunction,
+        ctx: &mut FunctionContext,
+    ) -> WeldResult<()> {
         let bld_ty = func.symbol_type(output)?;
         let bld_ty_str = self.llvm_type(bld_ty)?;
         let bld_prefix = llvm_prefix(&bld_ty_str);
@@ -4094,12 +3844,8 @@ impl LlvmGenerator {
 
                 ctx.code.add(format!(
                     "{} = call {} {}.new(i64 {}, %work_t* \
-                                    %cur.work, i32 {})",
-                    bld_tmp,
-                    bld_ty_str,
-                    bld_prefix,
-                    size_tmp,
-                    fixed_size
+                     %cur.work, i32 {})",
+                    bld_tmp, bld_ty_str, bld_prefix, size_tmp, fixed_size
                 ));
                 self.gen_store_var(&bld_tmp, &llvm_symbol(output), &bld_ty_str, ctx);
             }
@@ -4118,8 +3864,10 @@ impl LlvmGenerator {
                 let bld_tmp_stack = format!("{}.stack", bld_tmp);
                 let bld_stack_ty_str = format!("{}.piece", bld_ty_str);
                 ctx.add_alloca(&bld_tmp_stack, &bld_stack_ty_str)?;
-                ctx.code.add(format!("{} = call {} {}.new({} {}, {} {}, {}* {})", bld_tmp, bld_ty_str,
-                    bld_prefix, elem_type, iden_elem, elem_type, init_elem, bld_stack_ty_str, bld_tmp_stack));
+                ctx.code.add(format!(
+                    "{} = call {} {}.new({} {}, {} {}, {}* {})",
+                    bld_tmp, bld_ty_str, bld_prefix, elem_type, iden_elem, elem_type, init_elem, bld_stack_ty_str, bld_tmp_stack
+                ));
                 self.gen_store_var(&bld_tmp, &llvm_symbol(output), &bld_ty_str, ctx);
             }
             DictMerger(_, _, _) | GroupMerger(_, _) => {
@@ -4130,48 +3878,37 @@ impl LlvmGenerator {
                 } else {
                     format!("{}", 100000000)
                 };
-                ctx.code.add(format!("{} = call {} {}.new(i64 {}, i64 {})",
-                                        bld_tmp,
-                                        bld_ty_str,
-                                        bld_prefix,
-                                        builder_size,
-                                        max_local_bytes));
+                ctx.code.add(format!(
+                    "{} = call {} {}.new(i64 {}, i64 {})",
+                    bld_tmp, bld_ty_str, bld_prefix, builder_size, max_local_bytes
+                ));
                 self.gen_store_var(&bld_tmp, &llvm_symbol(output), &bld_ty_str, ctx);
             }
-            VecMerger(ref elem, _) => {
-                match *arg {
-                    Some(ref s) => {
-                        let arg_ty = self.llvm_type(&Vector(elem.clone()))?;
-                        let arg_ty_str = arg_ty.to_string();
-                        let arg_str = self.gen_load_var(llvm_symbol(s).as_str(), &arg_ty_str, ctx)?;
-                        let bld_tmp = ctx.var_ids.next();
-                        ctx.code.add(format!("{} = call {} {}.new({} \
-                                                {})",
-                                                bld_tmp,
-                                                bld_ty_str,
-                                                bld_prefix,
-                                                arg_ty_str,
-                                                arg_str));
-                        self.gen_store_var(&bld_tmp, &llvm_symbol(output), &bld_ty_str, ctx);
-                    }
-                    None => {
-                        weld_err!("Internal error: NewBuilder(VecMerger) \
-                                    expected argument in LLVM codegen")?
-                    }
+            VecMerger(ref elem, _) => match *arg {
+                Some(ref s) => {
+                    let arg_ty = self.llvm_type(&Vector(elem.clone()))?;
+                    let arg_ty_str = arg_ty.to_string();
+                    let arg_str = self.gen_load_var(llvm_symbol(s).as_str(), &arg_ty_str, ctx)?;
+                    let bld_tmp = ctx.var_ids.next();
+                    ctx.code.add(format!(
+                        "{} = call {} {}.new({} \
+                         {})",
+                        bld_tmp, bld_ty_str, bld_prefix, arg_ty_str, arg_str
+                    ));
+                    self.gen_store_var(&bld_tmp, &llvm_symbol(output), &bld_ty_str, ctx);
                 }
-            }
+                None => weld_err!(
+                    "Internal error: NewBuilder(VecMerger) \
+                     expected argument in LLVM codegen"
+                )?,
+            },
         }
 
         Ok(())
     }
 
     /// Generate code for a basic block's terminator, appending it to the given FunctionContext.
-    fn gen_terminator(&mut self,
-                      terminator: &Terminator,
-                      sir: &SirProgram,
-                      func: &SirFunction,
-                      ctx: &mut FunctionContext)
-                      -> WeldResult<()> {
+    fn gen_terminator(&mut self, terminator: &Terminator, sir: &SirProgram, func: &SirFunction, ctx: &mut FunctionContext) -> WeldResult<()> {
         ctx.code.add(format!("; {}", terminator));
         if self.trace_run {
             self.gen_puts(&format!("  {}", terminator), ctx);
@@ -4233,10 +3970,7 @@ impl LlvmGenerator {
                 ctx.code.add(format!("{} = ptrtoint {}* {} to i64", &elem_size, &ty_str, &elem_size_ptr));
 
                 ctx.code.add(format!("{} = call i64 @weld_rt_get_run_id()", run_id));
-                ctx.code.add(format!("{} = call i8* @weld_run_malloc(i64 {}, i64 {})",
-                                        &elem_storage,
-                                        &run_id,
-                                        &elem_size));
+                ctx.code.add(format!("{} = call i8* @weld_run_malloc(i64 {}, i64 {})", &elem_storage, &run_id, &elem_size));
                 ctx.code.add(format!("{} = bitcast i8* {} to {}*", &elem_storage_typed, &elem_storage, &ty_str));
                 self.gen_store_var(&res_tmp, &elem_storage_typed, &ty_str, ctx);
                 ctx.code.add(format!("call void @weld_rt_set_result(i8* {})", elem_storage));
@@ -4260,13 +3994,7 @@ impl LlvmGenerator {
     /// Generate code to extract the index'th element of a SIMD value, returning a register name for it.
     /// This is slightly tricky because the SIMD value may be a struct, in which case we need to recurse into each of
     /// its elements. `simd_reg` must be the name of an LLVM register containing the SIMD value.
-    fn gen_simd_extract(&mut self,
-                        simd_type: &Type,
-                        simd_reg: &str,
-                        index: u32,
-                        ctx: &mut FunctionContext)
-                        -> WeldResult<String> {
-
+    fn gen_simd_extract(&mut self, simd_type: &Type, simd_reg: &str, index: u32, ctx: &mut FunctionContext) -> WeldResult<String> {
         let simd_ll_ty = self.llvm_type(simd_type)?;
         let item_type = simd_type.scalar_type()?;
         let item_ll_ty = self.llvm_type(&item_type)?;
@@ -4293,14 +4021,21 @@ impl LlvmGenerator {
 
                     // Insert this into our result struct
                     let new_struct = ctx.var_ids.next();
-                    ctx.code.add(format!("{} = insertvalue {} {}, {} {}, {}",
-                        new_struct, item_ll_ty, current_struct, self.llvm_type(&item_type)?, item_reg, i));
+                    ctx.code.add(format!(
+                        "{} = insertvalue {} {}, {} {}, {}",
+                        new_struct,
+                        item_ll_ty,
+                        current_struct,
+                        self.llvm_type(&item_type)?,
+                        item_reg,
+                        i
+                    ));
                     current_struct = new_struct;
                 }
                 Ok(current_struct)
             }
 
-            _ => weld_err!("Invalid type for gen_simd_extract: {:?}", simd_type)
+            _ => weld_err!("Invalid type for gen_simd_extract: {:?}", simd_type),
         }
     }
 
@@ -4310,13 +4045,10 @@ impl LlvmGenerator {
         let global = self.prelude_var_ids.next().replace("%", "@");
         let text = text.replace("\\", "\\\\").replace("\"", "\\\"");
         let len = text.len() + 1;
-        self.prelude_code.add(format!(
-            "{} = private unnamed_addr constant [{} x i8] c\"{}\\00\"",
-            global, len, text));
+        self.prelude_code
+            .add(format!("{} = private unnamed_addr constant [{} x i8] c\"{}\\00\"", global, len, text));
         let local = ctx.var_ids.next();
-        ctx.code.add(format!(
-            "{} = getelementptr [{} x i8], [{} x i8]* {}, i32 0, i32 0",
-            local, len, len, global));
+        ctx.code.add(format!("{} = getelementptr [{} x i8], [{} x i8]* {}, i32 0, i32 0", local, len, len, global));
         ctx.code.add(format!("call i32 @puts(i8* {})", local));
     }
 }
@@ -4357,7 +4089,6 @@ fn llvm_eq(k: ScalarKind) -> &'static str {
     }
 }
 
-
 /// Returns the LLVM less than function for the `ScalarKind` `k`.
 fn llvm_lt(k: ScalarKind) -> &'static str {
     match k {
@@ -4373,7 +4104,7 @@ fn llvm_literal(k: LiteralKind) -> WeldResult<String> {
         BoolLiteral(l) => format!("{}", if l { 1 } else { 0 }),
         I8Literal(l) => format!("{}", l),
         I16Literal(l) => format!("{}", l),
-        I32Literal(l) =>  format!("{}", l),
+        I32Literal(l) => format!("{}", l),
         I64Literal(l) => format!("{}", l),
         U8Literal(l) => format!("{}", l),
         U16Literal(l) => format!("{}", l),
@@ -4390,7 +4121,11 @@ fn llvm_literal(k: LiteralKind) -> WeldResult<String> {
 
 /// Return the LLVM version of a Weld symbol (encoding any special characters for LLVM).
 fn llvm_symbol(symbol: &Symbol) -> String {
-    if symbol.id == 0 { format!("%{}", symbol.name) } else { format!("%{}.{}", symbol.name, symbol.id) }
+    if symbol.id == 0 {
+        format!("%{}", symbol.name)
+    } else {
+        format!("%{}.{}", symbol.name, symbol.id)
+    }
 }
 
 fn binop_identity(op_kind: BinOpKind, ty: &Type) -> WeldResult<String> {
@@ -4403,25 +4138,25 @@ fn binop_identity(op_kind: BinOpKind, ty: &Type) -> WeldResult<String> {
         (Multiply, &Scalar(s)) if s.is_float() => Ok("1.0".to_string()),
 
         (Min, &Scalar(s)) => match s {
-            I8  => Ok(::std::i8::MAX.to_string()),
+            I8 => Ok(::std::i8::MAX.to_string()),
             I16 => Ok(::std::i16::MAX.to_string()),
             I32 => Ok(::std::i32::MAX.to_string()),
             I64 => Ok(::std::i64::MAX.to_string()),
-            U8  => Ok(::std::u8::MAX.to_string()),
+            U8 => Ok(::std::u8::MAX.to_string()),
             U16 => Ok(::std::u16::MAX.to_string()),
             U32 => Ok(::std::u32::MAX.to_string()),
             U64 => Ok(::std::u64::MAX.to_string()),
-            F32 => Ok("0x7FF0000000000000".to_string()), // inf 
+            F32 => Ok("0x7FF0000000000000".to_string()), // inf
             F64 => Ok("0x7FF0000000000000".to_string()), // inf
             _ => weld_err!("Unsupported identity for binary op: {} on {}", op_kind, print_type(ty)),
         },
 
         (Max, &Scalar(s)) => match s {
-            I8  => Ok(::std::i8::MIN.to_string()),
+            I8 => Ok(::std::i8::MIN.to_string()),
             I16 => Ok(::std::i16::MIN.to_string()),
             I32 => Ok(::std::i32::MIN.to_string()),
             I64 => Ok(::std::i64::MIN.to_string()),
-            U8  => Ok(::std::u8::MIN.to_string()),
+            U8 => Ok(::std::u8::MIN.to_string()),
             U16 => Ok(::std::u16::MIN.to_string()),
             U32 => Ok(::std::u32::MIN.to_string()),
             U64 => Ok(::std::u64::MIN.to_string()),
@@ -4438,60 +4173,58 @@ fn binop_identity(op_kind: BinOpKind, ty: &Type) -> WeldResult<String> {
 fn llvm_binop(op_kind: BinOpKind, ty: &Type) -> WeldResult<&'static str> {
     use super::ast::BinOpKind::*;
     match ty {
-        &Scalar(s) | &Simd(s) => {
-            match op_kind {
-                Add if s.is_integer() => Ok("add"),
-                Add if s.is_float() => Ok("fadd"),
+        &Scalar(s) | &Simd(s) => match op_kind {
+            Add if s.is_integer() => Ok("add"),
+            Add if s.is_float() => Ok("fadd"),
 
-                Subtract if s.is_integer() => Ok("sub"),
-                Subtract if s.is_float() => Ok("fsub"),
+            Subtract if s.is_integer() => Ok("sub"),
+            Subtract if s.is_float() => Ok("fsub"),
 
-                Multiply if s.is_integer() => Ok("mul"),
-                Multiply if s.is_float() => Ok("fmul"),
+            Multiply if s.is_integer() => Ok("mul"),
+            Multiply if s.is_float() => Ok("fmul"),
 
-                Divide if s.is_signed_integer() => Ok("sdiv"),
-                Divide if s.is_unsigned_integer() => Ok("udiv"),
-                Divide if s.is_float() => Ok("fdiv"),
+            Divide if s.is_signed_integer() => Ok("sdiv"),
+            Divide if s.is_unsigned_integer() => Ok("udiv"),
+            Divide if s.is_float() => Ok("fdiv"),
 
-                Modulo if s.is_signed_integer() => Ok("srem"),
-                Modulo if s.is_unsigned_integer() => Ok("urem"),
-                Modulo if s.is_float() => Ok("frem"),
+            Modulo if s.is_signed_integer() => Ok("srem"),
+            Modulo if s.is_unsigned_integer() => Ok("urem"),
+            Modulo if s.is_float() => Ok("frem"),
 
-                Equal if s.is_integer() || s.is_bool() => Ok("icmp eq"),
-                Equal if s.is_float() => Ok("fcmp oeq"),
+            Equal if s.is_integer() || s.is_bool() => Ok("icmp eq"),
+            Equal if s.is_float() => Ok("fcmp oeq"),
 
-                NotEqual if s.is_integer() || s.is_bool() => Ok("icmp ne"),
-                NotEqual if s.is_float() => Ok("fcmp one"),
+            NotEqual if s.is_integer() || s.is_bool() => Ok("icmp ne"),
+            NotEqual if s.is_float() => Ok("fcmp one"),
 
-                LessThan if s.is_signed_integer() => Ok("icmp slt"),
-                LessThan if s.is_unsigned_integer() => Ok("icmp ult"),
-                LessThan if s.is_float() => Ok("fcmp olt"),
+            LessThan if s.is_signed_integer() => Ok("icmp slt"),
+            LessThan if s.is_unsigned_integer() => Ok("icmp ult"),
+            LessThan if s.is_float() => Ok("fcmp olt"),
 
-                LessThanOrEqual if s.is_signed_integer() => Ok("icmp sle"),
-                LessThanOrEqual if s.is_unsigned_integer() => Ok("icmp ule"),
-                LessThanOrEqual if s.is_float() => Ok("fcmp ole"),
+            LessThanOrEqual if s.is_signed_integer() => Ok("icmp sle"),
+            LessThanOrEqual if s.is_unsigned_integer() => Ok("icmp ule"),
+            LessThanOrEqual if s.is_float() => Ok("fcmp ole"),
 
-                GreaterThan if s.is_signed_integer() => Ok("icmp sgt"),
-                GreaterThan if s.is_unsigned_integer() => Ok("icmp ugt"),
-                GreaterThan if s.is_float() => Ok("fcmp ogt"),
+            GreaterThan if s.is_signed_integer() => Ok("icmp sgt"),
+            GreaterThan if s.is_unsigned_integer() => Ok("icmp ugt"),
+            GreaterThan if s.is_float() => Ok("fcmp ogt"),
 
-                GreaterThanOrEqual if s.is_signed_integer() => Ok("icmp sge"),
-                GreaterThanOrEqual if s.is_unsigned_integer() => Ok("icmp uge"),
-                GreaterThanOrEqual if s.is_float() => Ok("fcmp oge"),
+            GreaterThanOrEqual if s.is_signed_integer() => Ok("icmp sge"),
+            GreaterThanOrEqual if s.is_unsigned_integer() => Ok("icmp uge"),
+            GreaterThanOrEqual if s.is_float() => Ok("fcmp oge"),
 
-                LogicalAnd if s.is_bool() => Ok("and"),
-                BitwiseAnd if s.is_integer() || s.is_bool() => Ok("and"),
+            LogicalAnd if s.is_bool() => Ok("and"),
+            BitwiseAnd if s.is_integer() || s.is_bool() => Ok("and"),
 
-                LogicalOr if s.is_bool() => Ok("or"),
-                BitwiseOr if s.is_integer() || s.is_bool() => Ok("or"),
+            LogicalOr if s.is_bool() => Ok("or"),
+            BitwiseOr if s.is_integer() || s.is_bool() => Ok("or"),
 
-                Xor if s.is_integer() || s.is_bool() => Ok("xor"),
+            Xor if s.is_integer() || s.is_bool() => Ok("xor"),
 
-                _ => return weld_err!("Unsupported binary op: {} on {}", op_kind, print_type(ty))
-            }
-        }
+            _ => return weld_err!("Unsupported binary op: {} on {}", op_kind, print_type(ty)),
+        },
 
-        _ => return weld_err!("Unsupported binary op: {} on {}", op_kind, print_type(ty))
+        _ => return weld_err!("Unsupported binary op: {} on {}", op_kind, print_type(ty)),
     }
 }
 
@@ -4563,8 +4296,6 @@ fn llvm_scalar_unaryop(op_kind: UnaryOpKind, ty: &ScalarKind) -> WeldResult<&'st
         (UnaryOpKind::Tanh, &F32) => Ok("@tanhf"),
         (UnaryOpKind::Tanh, &F64) => Ok("@tanh"),
 
-
-
         (UnaryOpKind::Erf, &F32) => Ok("@erff"),
         (UnaryOpKind::Erf, &F64) => Ok("@erf"),
 
@@ -4611,42 +4342,39 @@ fn llvm_binop_vector(op_kind: BinOpKind, ty: &Type) -> WeldResult<(&'static str,
 /// Return the name of hte LLVM instruction for a cast operation between specific types.
 fn llvm_castop(ty1: &Type, ty2: &Type) -> WeldResult<&'static str> {
     match (ty1, ty2) {
-        (&Scalar(s1), &Scalar(s2)) => {
-            match (s1, s2) {
-                (F32, F64) => Ok("fpext"),
-                (F64, F32) => Ok("fptrunc"),
+        (&Scalar(s1), &Scalar(s2)) => match (s1, s2) {
+            (F32, F64) => Ok("fpext"),
+            (F64, F32) => Ok("fptrunc"),
 
-                (F32, _) if s2.is_signed_integer() => Ok("fptosi"),
-                (F64, _) if s2.is_signed_integer() => Ok("fptosi"),
+            (F32, _) if s2.is_signed_integer() => Ok("fptosi"),
+            (F64, _) if s2.is_signed_integer() => Ok("fptosi"),
 
-                (F32, _) => Ok("fptoui"),
-                (F64, _) => Ok("fptoui"),
+            (F32, _) => Ok("fptoui"),
+            (F64, _) => Ok("fptoui"),
 
-                (_, F32) if s1.is_signed_integer() => Ok("sitofp"),
-                (_, F64) if s1.is_signed_integer() => Ok("sitofp"),
+            (_, F32) if s1.is_signed_integer() => Ok("sitofp"),
+            (_, F64) if s1.is_signed_integer() => Ok("sitofp"),
 
-                (_, F32) => Ok("uitofp"),
-                (_, F64) => Ok("uitofp"),
+            (_, F32) => Ok("uitofp"),
+            (_, F64) => Ok("uitofp"),
 
-                (Bool, _) => Ok("zext"),
+            (Bool, _) => Ok("zext"),
 
-                (U8, _) if s2.bits() > 8 => Ok("zext"),
-                (U16, _) if s2.bits() > 16 => Ok("zext"),
-                (U32, _) if s2.bits() > 32 => Ok("zext"),
-                (U64, _) if s2.bits() > 64 => Ok("zext"),
+            (U8, _) if s2.bits() > 8 => Ok("zext"),
+            (U16, _) if s2.bits() > 16 => Ok("zext"),
+            (U32, _) if s2.bits() > 32 => Ok("zext"),
+            (U64, _) if s2.bits() > 64 => Ok("zext"),
 
-                (_, _) if s2.bits() > s1.bits() => Ok("sext"),
+            (_, _) if s2.bits() > s1.bits() => Ok("sext"),
 
-                (_, _) if s2.bits() < s1.bits() => Ok("trunc"),
+            (_, _) if s2.bits() < s1.bits() => Ok("trunc"),
 
-                (_, _) if s2.bits() == s1.bits() => Ok("bitcast"),
+            (_, _) if s2.bits() == s1.bits() => Ok("bitcast"),
 
-                 _ => weld_err!("Can't cast {} to {}", print_type(ty1), print_type(ty2))
-            }
-        }
+            _ => weld_err!("Can't cast {} to {}", print_type(ty1), print_type(ty2)),
+        },
 
-        _ => weld_err!("Can't cast {} to {}", print_type(ty1), print_type(ty2))
-
+        _ => weld_err!("Can't cast {} to {}", print_type(ty1), print_type(ty2)),
     }
 }
 
@@ -4658,7 +4386,7 @@ struct FunctionContext {
     code: CodeBuilder,
     defined_symbols: HashSet<String>,
     var_ids: IdGenerator,
-    is_innermost: bool
+    is_innermost: bool,
 }
 
 impl FunctionContext {
@@ -4668,7 +4396,7 @@ impl FunctionContext {
             code: CodeBuilder::new(),
             var_ids: IdGenerator::new("%t.t"),
             defined_symbols: HashSet::new(),
-            is_innermost: _is_innermost
+            is_innermost: _is_innermost,
         }
     }
 
@@ -4710,17 +4438,16 @@ fn simple_predicate() {
     let code = "|v1:vec[i32],v2:vec[bool]| result(for(zip(v1, v2), merger[i32,+], |b,i,e| merge(b, @(predicate:true) if(e.$1, e.$0, 0))))";
     let typed_e = predicate_only(code);
     assert!(typed_e.is_ok());
-    let expected = "|v1:vec[i32],v2:vec[bool]|result(for(zip(v1:vec[i32],v2:vec[bool]),merger[i32,+],|b:merger[i32,+],i:i64,e:{i32,bool}|merge(b:merger[i32,+],select(e.$1,e.$0,0))))";
-    assert_eq!(print_typed_expr_without_indent(&typed_e.unwrap()).as_str(),
-               expected);
+    let expected =
+        "|v1:vec[i32],v2:vec[bool]|result(for(zip(v1:vec[i32],v2:vec[bool]),merger[i32,+],|b:merger[i32,+],i:i64,e:{i32,bool}|merge(b:merger[i32,+],select(e.$1,e.$0,0))))";
+    assert_eq!(print_typed_expr_without_indent(&typed_e.unwrap()).as_str(), expected);
 
     /* Ensure that the simple_predicate transform doesn't change the program if on_true or on_false contains a builder expression. */
     let code = "|v1:vec[i32],v2:vec[bool]| result(for(v2, appender, |b,i,e| merge(b, @(predicate:true) if(e, result(for(v1, merger[i32,+], |b2,i2,e2| merge(b2,e2))), 0))))";
     let typed_e = predicate_only(code);
     assert!(typed_e.is_ok());
     let expected = "|v1:vec[i32],v2:vec[bool]|result(for(v2:vec[bool],appender[i32],|b:appender[i32],i:i64,e:bool|merge(b:appender[i32],@(predicate:true)if(e:bool,result(for(v1:vec[i32],merger[i32,+],|b2:merger[i32,+],i2:i64,e2:i32|merge(b2:merger[i32,+],e2:i32))),0))))";
-    assert_eq!(print_typed_expr_without_indent(&typed_e.unwrap()).as_str(),
-               expected);
+    assert_eq!(print_typed_expr_without_indent(&typed_e.unwrap()).as_str(), expected);
 }
 
 #[test]
@@ -4732,26 +4459,22 @@ fn predicate_iff_annotated() {
     let typed_e = predicate_only(code);
     assert!(typed_e.is_ok());
     let expected = "|v:vec[i32]|result(for(v:vec[i32],merger[i32,+],|b:merger[i32,+],i:i64,e:i32|merge(b:merger[i32,+],select((e:i32>0),e:i32,0))))";
-    assert_eq!(print_typed_expr_without_indent(&typed_e.unwrap()).as_str(),
-               expected);
+    assert_eq!(print_typed_expr_without_indent(&typed_e.unwrap()).as_str(), expected);
 
     /* annotation false */
     let code = "|v:vec[i32]| result(for(v, merger[i32,+], |b,i,e| @(predicate:false)if(e>0, merge(b,e), b)))";
     let typed_e = predicate_only(code);
     assert!(typed_e.is_ok());
     let expected = "|v:vec[i32]|result(for(v:vec[i32],merger[i32,+],|b:merger[i32,+],i:i64,e:i32|if((e:i32>0),merge(b:merger[i32,+],e:i32),b:merger[i32,+])))";
-    assert_eq!(print_typed_expr_without_indent(&typed_e.unwrap()).as_str(),
-               expected);
+    assert_eq!(print_typed_expr_without_indent(&typed_e.unwrap()).as_str(), expected);
 
     /* annotation missing */
     let code = "|v:vec[i32]| result(for(v, merger[i32,+], |b,i,e| if(e>0, merge(b,e), b)))";
     let typed_e = predicate_only(code);
     assert!(typed_e.is_ok());
     let expected = "|v:vec[i32]|result(for(v:vec[i32],merger[i32,+],|b:merger[i32,+],i:i64,e:i32|if((e:i32>0),merge(b:merger[i32,+],e:i32),b:merger[i32,+])))";
-    assert_eq!(print_typed_expr_without_indent(&typed_e.unwrap()).as_str(),
-               expected);
+    assert_eq!(print_typed_expr_without_indent(&typed_e.unwrap()).as_str(), expected);
 }
-
 
 #[test]
 fn predicate_dictmerger() {
@@ -4761,8 +4484,7 @@ fn predicate_dictmerger() {
     let typed_e = predicate_only(code);
     assert!(typed_e.is_ok());
     let expected = "|v:vec[i32]|result(for(v:vec[i32],dictmerger[{i32,i32},i32,+],|b:dictmerger[{i32,i32},i32,+],i:i64,e:i32|(let k:{{i32,i32},i32}=({{e:i32,e:i32},(e:i32*2)});select((e:i32>0),k:{{i32,i32},i32},{k.$0,0}))))";
-    assert_eq!(expected,
-               print_typed_expr_without_indent(&typed_e.unwrap()).as_str());
+    assert_eq!(expected, print_typed_expr_without_indent(&typed_e.unwrap()).as_str());
 }
 
 #[test]

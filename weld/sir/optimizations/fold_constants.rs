@@ -1,13 +1,13 @@
 //! Folds constants in SIR programs.
-//! 
+//!
 //! This transform walks each SIR function and attempts to evaluate expressions at runtime,
 //! deleting definitions and variables which evaluate to simple constants.
-//! 
+//!
 //! The transform in conservative in two ways:
-//! 
+//!
 //! 1. It will not remove symbols required by terminators, in case a code generator relies on the
 //! existence of these symbols.
-//! 
+//!
 //! 2. It will not remove symbols which are used as parameters to a function (though this can
 //!    probably be changed to support a simple inteprocedural constant simplification).
 
@@ -22,62 +22,54 @@ extern crate fnv;
 // TODO(shoumik): Maybe we should just implement this as a method or as traits (e.g., Add, Sub,
 // etc.) on LiteralKind? Not every literal implements every binop, however...
 fn evaluate_binop(kind: BinOpKind, left: LiteralKind, right: LiteralKind) -> WeldResult<LiteralKind> {
-    use ast::LiteralKind::*;
     use ast::BinOpKind::*;
+    use ast::LiteralKind::*;
     let result = match kind {
         // Just support the basics for now.
-        Add => {
-            match (left, right) {
-                (I8Literal(l), I8Literal(r)) => I8Literal(l + r),
-                (I16Literal(l), I16Literal(r)) => I16Literal(l + r),
-                (I32Literal(l), I32Literal(r)) => I32Literal(l + r),
-                (I64Literal(l), I64Literal(r)) => I64Literal(l + r),
-                (F32Literal(l), F32Literal(r)) => F32Literal((f32::from_bits(l) + f32::from_bits(r)).to_bits()),
-                (F64Literal(l), F64Literal(r)) => F64Literal((f64::from_bits(l) + f64::from_bits(r)).to_bits()),
-                _ => {
-                    return weld_err!("Mismatched types in evaluate_binop");
-                }
+        Add => match (left, right) {
+            (I8Literal(l), I8Literal(r)) => I8Literal(l + r),
+            (I16Literal(l), I16Literal(r)) => I16Literal(l + r),
+            (I32Literal(l), I32Literal(r)) => I32Literal(l + r),
+            (I64Literal(l), I64Literal(r)) => I64Literal(l + r),
+            (F32Literal(l), F32Literal(r)) => F32Literal((f32::from_bits(l) + f32::from_bits(r)).to_bits()),
+            (F64Literal(l), F64Literal(r)) => F64Literal((f64::from_bits(l) + f64::from_bits(r)).to_bits()),
+            _ => {
+                return weld_err!("Mismatched types in evaluate_binop");
             }
-        }
-        Subtract => {
-            match (left, right) {
-                (I8Literal(l), I8Literal(r)) => I8Literal(l - r),
-                (I16Literal(l), I16Literal(r)) => I16Literal(l - r),
-                (I32Literal(l), I32Literal(r)) => I32Literal(l - r),
-                (I64Literal(l), I64Literal(r)) => I64Literal(l - r),
-                (F32Literal(l), F32Literal(r)) => F32Literal((f32::from_bits(l) - f32::from_bits(r)).to_bits()),
-                (F64Literal(l), F64Literal(r)) => F64Literal((f64::from_bits(l) - f64::from_bits(r)).to_bits()),
-                _ => {
-                    return weld_err!("Mismatched types in evaluate_binop");
-                }
+        },
+        Subtract => match (left, right) {
+            (I8Literal(l), I8Literal(r)) => I8Literal(l - r),
+            (I16Literal(l), I16Literal(r)) => I16Literal(l - r),
+            (I32Literal(l), I32Literal(r)) => I32Literal(l - r),
+            (I64Literal(l), I64Literal(r)) => I64Literal(l - r),
+            (F32Literal(l), F32Literal(r)) => F32Literal((f32::from_bits(l) - f32::from_bits(r)).to_bits()),
+            (F64Literal(l), F64Literal(r)) => F64Literal((f64::from_bits(l) - f64::from_bits(r)).to_bits()),
+            _ => {
+                return weld_err!("Mismatched types in evaluate_binop");
             }
-        }
-        Multiply => {
-            match (left, right) {
-                (I8Literal(l), I8Literal(r)) => I8Literal(l * r),
-                (I16Literal(l), I16Literal(r)) => I16Literal(l * r),
-                (I32Literal(l), I32Literal(r)) => I32Literal(l * r),
-                (I64Literal(l), I64Literal(r)) => I64Literal(l * r),
-                (F32Literal(l), F32Literal(r)) => F32Literal((f32::from_bits(l) * f32::from_bits(r)).to_bits()),
-                (F64Literal(l), F64Literal(r)) => F64Literal((f64::from_bits(l) * f64::from_bits(r)).to_bits()),
-                _ => {
-                    return weld_err!("Mismatched types in evaluate_binop");
-                }
+        },
+        Multiply => match (left, right) {
+            (I8Literal(l), I8Literal(r)) => I8Literal(l * r),
+            (I16Literal(l), I16Literal(r)) => I16Literal(l * r),
+            (I32Literal(l), I32Literal(r)) => I32Literal(l * r),
+            (I64Literal(l), I64Literal(r)) => I64Literal(l * r),
+            (F32Literal(l), F32Literal(r)) => F32Literal((f32::from_bits(l) * f32::from_bits(r)).to_bits()),
+            (F64Literal(l), F64Literal(r)) => F64Literal((f64::from_bits(l) * f64::from_bits(r)).to_bits()),
+            _ => {
+                return weld_err!("Mismatched types in evaluate_binop");
             }
-        }
-        Divide => {
-            match (left, right) {
-                (I8Literal(l), I8Literal(r)) => I8Literal(l / r),
-                (I16Literal(l), I16Literal(r)) => I16Literal(l / r),
-                (I32Literal(l), I32Literal(r)) => I32Literal(l / r),
-                (I64Literal(l), I64Literal(r)) => I64Literal(l / r),
-                (F32Literal(l), F32Literal(r)) => F32Literal((f32::from_bits(l) / f32::from_bits(r)).to_bits()),
-                (F64Literal(l), F64Literal(r)) => F64Literal((f64::from_bits(l) / f64::from_bits(r)).to_bits()),
-                _ => {
-                    return weld_err!("Mismatched types in evaluate_binop");
-                }
+        },
+        Divide => match (left, right) {
+            (I8Literal(l), I8Literal(r)) => I8Literal(l / r),
+            (I16Literal(l), I16Literal(r)) => I16Literal(l / r),
+            (I32Literal(l), I32Literal(r)) => I32Literal(l / r),
+            (I64Literal(l), I64Literal(r)) => I64Literal(l / r),
+            (F32Literal(l), F32Literal(r)) => F32Literal((f32::from_bits(l) / f32::from_bits(r)).to_bits()),
+            (F64Literal(l), F64Literal(r)) => F64Literal((f64::from_bits(l) / f64::from_bits(r)).to_bits()),
+            _ => {
+                return weld_err!("Mismatched types in evaluate_binop");
             }
-        }
+        },
         _ => {
             return weld_err!("Unsupported binary operation in evaluate_binop");
         }
@@ -86,7 +78,6 @@ fn evaluate_binop(kind: BinOpKind, left: LiteralKind, right: LiteralKind) -> Wel
 }
 
 pub fn fold_constants(prog: &mut SirProgram) -> WeldResult<()> {
-
     let ref mut parameters = fnv::FnvHashSet::default();
 
     // Collect all the Symbols passed between functions. We will keep the
@@ -139,7 +130,7 @@ fn fold_constants_in_function(func: &mut SirFunction, global_params: &fnv::FnvHa
                     } else {
                         None
                     }
-                },
+                }
                 // Aliases
                 Assign(ref sym) => {
                     // contains_key instead of get to avoid double mutable borrow
@@ -170,7 +161,7 @@ fn fold_constants_in_function(func: &mut SirFunction, global_params: &fnv::FnvHa
                     }
                 }
                 // Unsupported for now
-                _ => None
+                _ => None,
             };
 
             if replacement_lit.is_some() {

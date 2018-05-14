@@ -7,14 +7,14 @@
 use std::collections::HashMap;
 use std::vec::Vec;
 
-use super::ast::*;
+use super::annotations::*;
 use super::ast::ExprKind::*;
-use super::program::*;
+use super::ast::*;
+use super::error::*;
 use super::parser::*;
 use super::partial_types::*;
-use super::error::*;
+use super::program::*;
 use super::util::SymbolGenerator;
-use super::annotations::*;
 
 #[cfg(test)]
 use super::pretty_print::*;
@@ -58,15 +58,9 @@ pub fn process_expression(expr: &PartialExpr, macros: &Vec<Macro>) -> WeldResult
     weld_err!("Marco expansion recursed past {} levels", MAX_MACRO_DEPTH)
 }
 
-fn apply_macros(expr: &mut PartialExpr,
-                macros: &HashMap<Symbol, &Macro>,
-                sym_gen: &mut SymbolGenerator)
-                -> WeldResult<bool> {
+fn apply_macros(expr: &mut PartialExpr, macros: &HashMap<Symbol, &Macro>, sym_gen: &mut SymbolGenerator) -> WeldResult<bool> {
     let mut new_expr = None;
-    if let Apply {
-               ref func,
-               ref params,
-           } = expr.kind {
+    if let Apply { ref func, ref params } = expr.kind {
         if let Ident(ref name) = func.kind {
             if let Some(mac) = macros.get(name) {
                 let mut new_body = mac.body.clone();
@@ -94,10 +88,11 @@ fn apply_macros(expr: &mut PartialExpr,
 
 fn update_defined_ids(expr: &mut PartialExpr, sym_gen: &mut SymbolGenerator) {
     if let Let {
-               name: ref mut sym,
-               ref value,
-               ref mut body,
-           } = expr.kind {
+        name: ref mut sym,
+        ref value,
+        ref mut body,
+    } = expr.kind
+    {
         if sym.id == 0 {
             let new_sym = sym_gen.new_symbol(&sym.name);
             let new_ident = PartialExpr {
@@ -109,10 +104,7 @@ fn update_defined_ids(expr: &mut PartialExpr, sym_gen: &mut SymbolGenerator) {
             sym.id = new_sym.id;
         }
     }
-    if let Lambda {
-               ref mut params,
-               ref mut body,
-           } = expr.kind {
+    if let Lambda { ref mut params, ref mut body } = expr.kind {
         for ref mut param in params {
             let sym = &mut param.name;
             if sym.id == 0 {
@@ -170,8 +162,7 @@ fn macros_introducing_symbols() {
     let macros = parse_macros("macro twice(a) = (let x = a; x+x);").unwrap();
     let expr = parse_expr("twice(x)").unwrap();
     let result = process_expression(&expr, &macros).unwrap();
-    assert_eq!(print_expr_without_indent(&result).as_str(),
-               "(let x__1=(x);(x__1+x__1))");
+    assert_eq!(print_expr_without_indent(&result).as_str(), "(let x__1=(x);(x__1+x__1))");
 
     // On the other hand, if x is not used in the parameter, keep its ID as is.
     let macros = parse_macros("macro adder(a) = |x| x+a;").unwrap();
@@ -183,22 +174,19 @@ fn macros_introducing_symbols() {
     let macros = parse_macros("macro twice(a) = (let x = a; x+x);").unwrap();
     let expr = parse_expr("twice(b)").unwrap();
     let result = process_expression(&expr, &macros).unwrap();
-    assert_eq!(print_expr_without_indent(&result).as_str(),
-               "(let x=(b);(x+x))");
+    assert_eq!(print_expr_without_indent(&result).as_str(), "(let x=(b);(x+x))");
 
     // If a symbol is used multiple times during macro substitution, replace it with distinct IDs.
     let macros = parse_macros("macro adder(a) = |x| x+a;").unwrap();
     let expr = parse_expr("adder(x+adder(x)(1))").unwrap();
     let result = process_expression(&expr, &macros).unwrap();
-    assert_eq!(print_expr_without_indent(&result).as_str(),
-               "|x__1|(x__1+(x+(|x__2|(x__2+x))(1)))");
+    assert_eq!(print_expr_without_indent(&result).as_str(), "|x__1|(x__1+(x+(|x__2|(x__2+x))(1)))");
 
     // Similar case with multiple macros.
     let macros = parse_macros("macro adder(a)=|x|x+a; macro twice(a)=(let x=a; x+x);").unwrap();
     let expr = parse_expr("adder(twice(x))").unwrap();
     let result = process_expression(&expr, &macros).unwrap();
-    assert_eq!(print_expr_without_indent(&result).as_str(),
-               "|x__1|(x__1+(let x__2=(x);(x__2+x__2)))");
+    assert_eq!(print_expr_without_indent(&result).as_str(), "|x__1|(x__1+(let x__2=(x);(x__2+x__2)))");
 }
 
 #[test]
@@ -206,6 +194,8 @@ fn standard_macros() {
     // Check that the standard macros file is loaded
     let program = parse_program("map([1,2,3], |a|a+1)").unwrap();
     let result = process_program(&program).unwrap();
-    assert_eq!(print_expr_without_indent(&result).as_str(),
-               "result(for([1,2,3],appender[?],|b,i,x|merge(b,(|a|(a+1))(x))))");
+    assert_eq!(
+        print_expr_without_indent(&result).as_str(),
+        "result(for([1,2,3],appender[?],|b,i,x|merge(b,(|a|(a+1))(x))))"
+    );
 }

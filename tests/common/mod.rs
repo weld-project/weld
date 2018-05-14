@@ -24,10 +24,7 @@ impl<T> WeldVec<T> {
     ///
     /// Consider using `WeldVec::from` instead, which automatically derives the length.
     pub fn new(ptr: *const T, len: i64) -> WeldVec<T> {
-        WeldVec {
-            data: ptr,
-            len: len,
-        }
+        WeldVec { data: ptr, len: len }
     }
 }
 
@@ -87,9 +84,7 @@ pub fn many_threads_conf() -> *mut WeldConf {
 pub fn compile_and_run<T>(code: &str, conf: *mut WeldConf, ptr: &T) -> *mut WeldValue {
     match unsafe { _compile_and_run(code, conf, ptr) } {
         Ok(val) => val,
-        Err(err) => panic!(format!("Compile failed: {:?}", unsafe {
-            CStr::from_ptr(weld_error_message(err))
-        })),
+        Err(err) => panic!(format!("Compile failed: {:?}", unsafe { CStr::from_ptr(weld_error_message(err)) })),
     }
 }
 
@@ -122,11 +117,7 @@ fn conf(threads: i32) -> *mut WeldConf {
 /// successful, returns the resulting value. If the run fails (via a runtime error), returns an
 /// error. Both the value and error must be freed by the caller. The  `conf` passed to this
 /// function is freed.
-unsafe fn _compile_and_run<T>(
-    code: &str,
-    conf: *mut WeldConf,
-    ptr: &T,
-) -> Result<*mut WeldValue, *mut WeldError> {
+unsafe fn _compile_and_run<T>(code: &str, conf: *mut WeldConf, ptr: &T) -> Result<*mut WeldValue, *mut WeldError> {
     let code = CString::new(code).unwrap();
     let input_value = weld_value_new(ptr as *const _ as *const c_void);
     let err = weld_error_new();

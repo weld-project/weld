@@ -19,10 +19,7 @@ fn map_comparison() {
     let result = unsafe { (*data).clone() };
     assert_eq!(result.len as usize, input_vec.len());
     for i in 0..(result.len as isize) {
-        assert_eq!(
-            unsafe { *result.data.offset(i) },
-            input_vec[i as usize] == 100
-        )
+        assert_eq!(unsafe { *result.data.offset(i) }, input_vec[i as usize] == 100)
     }
 
     unsafe { free_value_and_module(ret_value) };

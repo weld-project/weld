@@ -1,24 +1,24 @@
 //! Implements size inference for `For` loops.
 
-use ast::*;
+use ast::BuilderKind::*;
 use ast::ExprKind::*;
 use ast::Type::*;
-use ast::BuilderKind::*;
+use ast::*;
 use exprs::*;
 use util::SymbolGenerator;
 
 struct NewAppender<'a> {
-    elem_type: &'a Type
+    elem_type: &'a Type,
 }
 
 impl<'a> NewAppender<'a> {
     fn extract(expr: &'a TypedExpr) -> Option<NewAppender<'a>> {
         if let NewBuilder(_) = expr.kind {
             if let Builder(Appender(ref elem_type), _) = expr.ty {
-                return Some(NewAppender{elem_type})
+                return Some(NewAppender { elem_type });
             }
         }
-        return None
+        return None;
     }
 }
 
@@ -49,7 +49,12 @@ fn func_has_simple_merge(expr: &TypedExpr) -> bool {
 pub fn infer_size(expr: &mut Expr<Type>) {
     expr.transform_up(&mut |ref mut expr| {
         let mut sym_gen = SymbolGenerator::from_expression(&expr);
-        if let For { ref mut iters, ref mut builder, ref mut func } = expr.kind {
+        if let For {
+            ref mut iters,
+            ref mut builder,
+            ref mut func,
+        } = expr.kind
+        {
             /* Without this condition, the transform_up calls seems to end up in an infinite recursive loop */
             if let NewBuilder(None) = builder.kind {
                 if iters.len() > 0 && func_has_simple_merge(func) {
@@ -78,14 +83,13 @@ pub fn infer_size(expr: &mut Expr<Type>) {
                             // FIXME: pari - temporary fix?
                             return None;
                         } else {
-                             /* For all other iter types - ScalarIter, NdIter etc. which also specify
+                            /* For all other iter types - ScalarIter, NdIter etc. which also specify
                              start-end-strides variables. In this case, we use:
                                 length = (end - start) / strides;
                              In this case, we don't need data_expr, because we don't use any
                              potentially complicated expressions to calculate length - thus we don't
                              need to take it out in a let statement */
-                            let mut e = binop_expr(BinOpKind::Subtract, *iters[0].end.as_ref().unwrap().clone(),
-                                                   *iters[0].start.as_ref().unwrap().clone());
+                            let mut e = binop_expr(BinOpKind::Subtract, *iters[0].end.as_ref().unwrap().clone(), *iters[0].start.as_ref().unwrap().clone());
                             let length = binop_expr(BinOpKind::Divide, e.unwrap(), *iters[0].stride.as_ref().unwrap().clone());
                             (length.unwrap(), None)
                         };
@@ -104,8 +108,7 @@ pub fn infer_size(expr: &mut Expr<Type>) {
                                  * a new expression -- which transform_up will replace expr with */
                                 let orig_data = iters[0].data.clone();
                                 iters[0].data = Box::new(data_expr.clone().unwrap());
-                                let mut new_loop = for_expr(iters.clone(), newbuilder,
-                                                      func.as_ref().clone(), false).unwrap();
+                                let mut new_loop = for_expr(iters.clone(), newbuilder, func.as_ref().clone(), false).unwrap();
                                 new_loop = let_expr(data_sym.clone(), *orig_data, new_loop).unwrap();
                                 /* returning from the lambda function we passed to transform_up */
                                 return Some(new_loop);
@@ -131,10 +134,11 @@ fn simple_merge(sym: &Symbol, expr: &Expr<Type>) -> bool {
             }
             return false;
         }
-        If { ref cond, ref on_true, ref on_false } => {
-            !cond.contains_symbol(sym) && simple_merge(sym, on_true) &&
-                simple_merge(sym, on_false)
-        }
+        If {
+            ref cond,
+            ref on_true,
+            ref on_false,
+        } => !cond.contains_symbol(sym) && simple_merge(sym, on_true) && simple_merge(sym, on_false),
         _ => false,
     }
 }

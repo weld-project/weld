@@ -32,12 +32,7 @@ impl PartialEq for SerializeOutput {
         fn f_into_native(v: &WeldVec<Pair<i32, i32>>) -> Vec<(i32, i32)> {
             let mut res: Vec<(i32, i32)> = (0..v.len)
                 .into_iter()
-                .map(|x| unsafe {
-                    (
-                        (*v.data.offset(x as isize)).ele1,
-                        (*v.data.offset(x as isize)).ele2,
-                    )
-                })
+                .map(|x| unsafe { ((*v.data.offset(x as isize)).ele1, (*v.data.offset(x as isize)).ele2) })
                 .collect();
             res.sort_by_key(|a| a.0);
             res
@@ -52,10 +47,7 @@ impl PartialEq for SerializeOutput {
                 .map(|x| {
                     let key = unsafe { (*v.data.offset(x as isize)).ele1 };
                     let val = unsafe { ((*v.data.offset(x as isize)).ele2).clone() };
-                    let vec: Vec<i32> = (0..val.len)
-                        .into_iter()
-                        .map(|y| unsafe { *val.data.offset(y as isize) })
-                        .collect();
+                    let vec: Vec<i32> = (0..val.len).into_iter().map(|y| unsafe { *val.data.offset(y as isize) }).collect();
                     (key, vec)
                 })
                 .collect();

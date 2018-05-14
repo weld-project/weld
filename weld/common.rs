@@ -30,12 +30,12 @@ impl fmt::Display for WeldRuntimeErrno {
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd)]
 #[repr(u64)]
 pub enum WeldLogLevel {
-    Off = 0,    // Log level values must match weld.h.
+    Off = 0, // Log level values must match weld.h.
     Error = 1,
     Warn = 2,
     Info = 3,
     Debug = 4,
-    Trace = 5
+    Trace = 5,
 }
 
 impl fmt::Display for WeldLogLevel {

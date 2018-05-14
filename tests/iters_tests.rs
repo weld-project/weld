@@ -10,10 +10,7 @@ use common::*;
 #[test]
 fn range_iter_1() {
     let end = 1000;
-    let code = format!(
-        "|a: i64| result(for(rangeiter(1L, {}L + 1L, 1L), merger[i64,+], |b,i,e| merge(b, a+e)))",
-        end
-    );
+    let code = format!("|a: i64| result(for(rangeiter(1L, {}L + 1L, 1L), merger[i64,+], |b,i,e| merge(b, a+e)))", end);
 
     #[allow(dead_code)]
     struct Args {
@@ -32,25 +29,23 @@ fn range_iter_1() {
 
 fn range_iter_zipped_helper(parallel: bool) {
     let grain_size = if parallel { 100 } else { 4096 };
-    let conf = if parallel {
-        many_threads_conf()
-    } else {
-        default_conf()
-    };
+    let conf = if parallel { many_threads_conf() } else { default_conf() };
 
     let end = 1000;
-    let code = format!("|v: vec[i64]| result(
+    let code = format!(
+        "|v: vec[i64]| result(
         @(grain_size: {grain_size})for(zip(v, rangeiter(1L, {end}L + 1L, 1L)), merger[i64,+], |b,i,e| merge(b, e.$0 + e.$1)
-    ))", grain_size=grain_size, end=end);
+    ))",
+        grain_size = grain_size,
+        end = end
+    );
 
     #[allow(dead_code)]
     struct Args {
         v: WeldVec<i64>,
     };
     let input_vec = vec![1 as i64; end as usize];
-    let ref input_data = Args {
-        v: WeldVec::from(&input_vec),
-    };
+    let ref input_data = Args { v: WeldVec::from(&input_vec) };
 
     let ret_value = compile_and_run(&code, conf, input_data);
     let data = unsafe { weld_value_data(ret_value) as *const i64 };
@@ -188,7 +183,7 @@ fn nditer_zip() {
         strides: WeldVec<i64>,
     }
     let code = "|x:vec[i64], y:vec[i64], shapes:vec[i64], strides:vec[i64]| result(for(zip(nditer(x,0L,24L,1L, shapes, strides), nditer(y,0L,24L,1L,shapes,strides)),  \
-    appender, |b,i,e| merge(b,e.$0+e.$1)))";
+                appender, |b,i,e| merge(b,e.$0+e.$1)))";
 
     let conf = default_conf();
     let mut x = vec![5; 100];
@@ -217,10 +212,7 @@ fn nditer_zip() {
 
     for i in 0..(result.len as isize) {
         let idx = get_idx(counter, strides);
-        assert_eq!(
-            unsafe { *result.data.offset(i) },
-            x[idx as usize] + y[idx as usize]
-        );
+        assert_eq!(unsafe { *result.data.offset(i) }, x[idx as usize] + y[idx as usize]);
         counter = update_counter(counter, shapes);
     }
     unsafe { free_value_and_module(ret_value) };

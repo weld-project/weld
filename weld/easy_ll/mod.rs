@@ -1,27 +1,27 @@
 //! A very simple wrapper for LLVM that can JIT functions written as IR strings.
 
-extern crate llvm_sys as llvm;
 extern crate libc;
+extern crate llvm_sys as llvm;
 extern crate time;
 
 use std::error::Error;
 use std::ffi::{CStr, CString, NulError};
 use std::fmt;
-use std::result::Result;
 use std::mem;
 use std::ops::Drop;
 use std::os::raw::c_char;
+use std::result::Result;
 use std::sync::{Once, ONCE_INIT};
 
 use std::ptr;
 
+use self::llvm::execution_engine::{LLVMExecutionEngineRef, LLVMGetExecutionEngineTargetMachine, LLVMMCJITCompilerOptions};
+use self::llvm::prelude::{LLVMContextRef, LLVMMemoryBufferRef, LLVMModuleRef};
 use self::llvm::support::LLVMLoadLibraryPermanently;
-use self::llvm::prelude::{LLVMContextRef, LLVMModuleRef, LLVMMemoryBufferRef};
-use self::llvm::execution_engine::{LLVMExecutionEngineRef, LLVMMCJITCompilerOptions, LLVMGetExecutionEngineTargetMachine};
 
-use self::llvm::target_machine::{LLVMCodeGenFileType, LLVMTargetMachineEmitToMemoryBuffer};
-use self::llvm::core::{LLVMGetBufferStart, LLVMPrintModuleToString};
 use self::llvm::analysis::LLVMVerifierFailureAction;
+use self::llvm::core::{LLVMGetBufferStart, LLVMPrintModuleToString};
+use self::llvm::target_machine::{LLVMCodeGenFileType, LLVMTargetMachineEmitToMemoryBuffer};
 use self::llvm::transforms::pass_manager_builder as pmb;
 
 use time::{Duration, PreciseTime};
@@ -77,9 +77,7 @@ pub struct LlvmTimingInfo {
 
 impl LlvmTimingInfo {
     pub fn new() -> LlvmTimingInfo {
-        LlvmTimingInfo {
-            times: Vec::new(),
-        }
+        LlvmTimingInfo { times: Vec::new() }
     }
 }
 
@@ -106,9 +104,9 @@ pub struct CodeDump {
 #[derive(Debug)]
 /// The return type of `compile_module`.
 pub struct Compiled {
-   pub module: CompiledModule,
-   pub code: Option<CodeDump>,
-   pub timing: LlvmTimingInfo,
+    pub module: CompiledModule,
+    pub code: Option<CodeDump>,
+    pub timing: LlvmTimingInfo,
 }
 
 impl CompiledModule {
@@ -143,13 +141,7 @@ pub fn load_library(libname: &str) -> Result<(), LlvmError> {
 /// Compile a string of LLVM IR (in human readable format) into a `CompiledModule` that can then
 /// be executed. The LLVM IR should contain an entry point function called `run` that takes `i64`
 /// and returns `i64`, which will be called by `CompiledModule::run`.
-pub fn compile_module(
-        code: &str,
-        optimization_level: u32,
-        dump_code: bool,
-        bc_file: Option<&[u8]>)
-        -> Result<Compiled, LlvmError> {
-
+pub fn compile_module(code: &str, optimization_level: u32, dump_code: bool, bc_file: Option<&[u8]>) -> Result<Compiled, LlvmError> {
     let mut timing = LlvmTimingInfo::new();
 
     unsafe {
@@ -224,7 +216,10 @@ pub fn compile_module(
         let code = if dump_code {
             let ir = output_llvm_ir(module)?;
             let assembly = output_target_machine_assembly(engine, module)?;
-            Some(CodeDump { optimized_llvm: ir, assembly: assembly })
+            Some(CodeDump {
+                optimized_llvm: ir,
+                assembly: assembly,
+            })
         } else {
             None
         };
@@ -232,7 +227,7 @@ pub fn compile_module(
         let result = Compiled {
             module: result,
             code: code,
-            timing: timing
+            timing: timing,
         };
         Ok(result)
     }
@@ -258,18 +253,14 @@ fn initialize() {
     }
 }
 
-unsafe fn parse_module_helper(context: LLVMContextRef,
-                              buffer: LLVMMemoryBufferRef)
-                              -> Result<LLVMModuleRef, LlvmError> {
+unsafe fn parse_module_helper(context: LLVMContextRef, buffer: LLVMMemoryBufferRef) -> Result<LLVMModuleRef, LlvmError> {
     // Parse IR into a module
     let mut module = 0 as LLVMModuleRef;
     let mut error_str = 0 as *mut c_char;
 
-    let result_code =
-        llvm::ir_reader::LLVMParseIRInContext(context, buffer, &mut module, &mut error_str);
+    let result_code = llvm::ir_reader::LLVMParseIRInContext(context, buffer, &mut module, &mut error_str);
     if result_code != 0 {
-        let msg = format!("Compile error: {}",
-                          CStr::from_ptr(error_str).to_str().unwrap());
+        let msg = format!("Compile error: {}", CStr::from_ptr(error_str).to_str().unwrap());
         return Err(LlvmError(msg));
     }
 
@@ -277,16 +268,11 @@ unsafe fn parse_module_helper(context: LLVMContextRef,
 }
 
 /// Parse a buffer of IR bytecode into an `LLVMModuleRef` for the given context.
-unsafe fn parse_module_bytes(context: LLVMContextRef,
-                             code: &[u8])
-                             -> Result<LLVMModuleRef, LlvmError> {
+unsafe fn parse_module_bytes(context: LLVMContextRef, code: &[u8]) -> Result<LLVMModuleRef, LlvmError> {
     // Create an LLVM memory buffer around the code
     let code_len = code.len();
     let name = CString::new("module")?;
-    let buffer = llvm::core::LLVMCreateMemoryBufferWithMemoryRange(code.as_ptr() as *const i8,
-                                                                   code_len,
-                                                                   name.as_ptr(),
-                                                                   0);
+    let buffer = llvm::core::LLVMCreateMemoryBufferWithMemoryRange(code.as_ptr() as *const i8, code_len, name.as_ptr(), 0);
 
     if buffer.is_null() {
         return Err(LlvmError::new("LLVMCreateMemoryBufferWithMemoryRange failed"));
@@ -296,17 +282,12 @@ unsafe fn parse_module_bytes(context: LLVMContextRef,
 }
 
 /// Parse a string of IR code into an `LLVMModuleRef` for the given context.
-unsafe fn parse_module_str(context: LLVMContextRef,
-                           code: &str)
-                           -> Result<LLVMModuleRef, LlvmError> {
+unsafe fn parse_module_str(context: LLVMContextRef, code: &str) -> Result<LLVMModuleRef, LlvmError> {
     // Create an LLVM memory buffer around the code
     let code_len = code.len();
     let name = CString::new("module")?;
     let code = CString::new(code)?;
-    let buffer = llvm::core::LLVMCreateMemoryBufferWithMemoryRange(code.as_ptr(),
-                                                                   code_len,
-                                                                   name.as_ptr(),
-                                                                   0);
+    let buffer = llvm::core::LLVMCreateMemoryBufferWithMemoryRange(code.as_ptr(), code_len, name.as_ptr(), 0);
     if buffer.is_null() {
         return Err(LlvmError::new("LLVMCreateMemoryBufferWithMemoryRange failed"));
     }
@@ -316,19 +297,13 @@ unsafe fn parse_module_str(context: LLVMContextRef,
 
 /// Parse a file of IR code into an `LLVMModuleRef` for the given context.
 #[allow(dead_code)]
-unsafe fn parse_module_file(context: LLVMContextRef,
-                            file: &str)
-                            -> Result<LLVMModuleRef, LlvmError> {
+unsafe fn parse_module_file(context: LLVMContextRef, file: &str) -> Result<LLVMModuleRef, LlvmError> {
     let mut buffer = 0 as LLVMMemoryBufferRef;
     let mut error_str = 0 as *mut c_char;
     let file_name = CString::new(file).unwrap();
-    let result_code = llvm::core::LLVMCreateMemoryBufferWithContentsOfFile(file_name.as_ptr(),
-                                                                           &mut buffer,
-                                                                           &mut error_str);
+    let result_code = llvm::core::LLVMCreateMemoryBufferWithContentsOfFile(file_name.as_ptr(), &mut buffer, &mut error_str);
     if result_code != 0 {
-        let msg = format!("Error reading module file {}: {}",
-                          file,
-                          CStr::from_ptr(error_str).to_str().unwrap());
+        let msg = format!("Error reading module file {}: {}", file, CStr::from_ptr(error_str).to_str().unwrap());
         return Err(LlvmError(msg));
     }
     if buffer.is_null() {
@@ -340,13 +315,9 @@ unsafe fn parse_module_file(context: LLVMContextRef,
 /// Verify a module using LLVM's verifier (for basic block structure, etc).
 unsafe fn verify_module(module: LLVMModuleRef) -> Result<(), LlvmError> {
     let mut error_str = 0 as *mut c_char;
-    let result_code =
-        llvm::analysis::LLVMVerifyModule(module,
-                                         LLVMVerifierFailureAction::LLVMReturnStatusAction,
-                                         &mut error_str);
+    let result_code = llvm::analysis::LLVMVerifyModule(module, LLVMVerifierFailureAction::LLVMReturnStatusAction, &mut error_str);
     if result_code != 0 {
-        let msg = format!("Module verification failed: {}",
-                          CStr::from_ptr(error_str).to_str().unwrap());
+        let msg = format!("Module verification failed: {}", CStr::from_ptr(error_str).to_str().unwrap());
         return Err(LlvmError(msg));
     }
     Ok(())
@@ -368,8 +339,7 @@ unsafe fn check_run_function(module: LLVMModuleRef) -> Result<(), LlvmError> {
 }
 
 /// Optimize an LLVM module using a given LLVM optimization level.
-unsafe fn optimize_module(module: LLVMModuleRef, optimization_level: u32)
-        -> Result<(), LlvmError> {
+unsafe fn optimize_module(module: LLVMModuleRef, optimization_level: u32) -> Result<(), LlvmError> {
     let manager = llvm::core::LLVMCreatePassManager();
     if manager.is_null() {
         return Err(LlvmError::new("LLVMCreatePassManager returned null"));
@@ -388,19 +358,16 @@ unsafe fn optimize_module(module: LLVMModuleRef, optimization_level: u32)
 }
 
 /// Create an MCJIT execution engine for a given module.
-unsafe fn create_exec_engine(module: LLVMModuleRef, optimization_level: u32)
-        -> Result<LLVMExecutionEngineRef, LlvmError> {
+unsafe fn create_exec_engine(module: LLVMModuleRef, optimization_level: u32) -> Result<LLVMExecutionEngineRef, LlvmError> {
     let mut engine = 0 as LLVMExecutionEngineRef;
     let mut error_str = 0 as *mut c_char;
     let mut options: LLVMMCJITCompilerOptions = mem::uninitialized();
     let options_size = mem::size_of::<LLVMMCJITCompilerOptions>();
     llvm::execution_engine::LLVMInitializeMCJITCompilerOptions(&mut options, options_size);
     options.OptLevel = optimization_level;
-    let result_code = llvm::execution_engine::LLVMCreateMCJITCompilerForModule(
-        &mut engine, module, &mut options, options_size, &mut error_str);
+    let result_code = llvm::execution_engine::LLVMCreateMCJITCompilerForModule(&mut engine, module, &mut options, options_size, &mut error_str);
     if result_code != 0 {
-        let msg = format!("Creating execution engine failed: {}",
-                          CStr::from_ptr(error_str).to_str().unwrap());
+        let msg = format!("Creating execution engine failed: {}", CStr::from_ptr(error_str).to_str().unwrap());
         return Err(LlvmError(msg));
     }
     Ok(engine)
@@ -417,16 +384,14 @@ unsafe fn find_function(engine: LLVMExecutionEngineRef, name: &str) -> Result<I6
     Ok(function)
 }
 
-
 /// Outputs the target machine assembly based on the given engine and module.
-unsafe fn output_target_machine_assembly(engine: LLVMExecutionEngineRef, module: LLVMModuleRef)
-    -> Result<String, LlvmError> {
+unsafe fn output_target_machine_assembly(engine: LLVMExecutionEngineRef, module: LLVMModuleRef) -> Result<String, LlvmError> {
     // We create a pointer to a MemoryBuffer, and pass its address to be modified by
     // EmitToMemoryBuffer.
-    let mut output_buf : self::llvm::prelude::LLVMMemoryBufferRef = ptr::null_mut();
+    let mut output_buf: self::llvm::prelude::LLVMMemoryBufferRef = ptr::null_mut();
     let mut err = ptr::null_mut();
     let cur_target = LLVMGetExecutionEngineTargetMachine(engine);
-    let file_type :LLVMCodeGenFileType = LLVMCodeGenFileType::LLVMAssemblyFile;
+    let file_type: LLVMCodeGenFileType = LLVMCodeGenFileType::LLVMAssemblyFile;
     let res = LLVMTargetMachineEmitToMemoryBuffer(cur_target, module, file_type, &mut err, &mut output_buf);
     if res == 1 {
         let x = CStr::from_ptr(err as *mut c_char).to_string_lossy().into_owned();

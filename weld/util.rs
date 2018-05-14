@@ -1,13 +1,12 @@
-
-extern crate libc;
 extern crate fnv;
+extern crate libc;
 
 use std::cmp::max;
 
 use std::env;
 
-use super::ast::*;
 use super::ast::ExprKind::*;
+use super::ast::*;
 
 pub const WELD_INLINE_LIB: &'static [u8] = include_bytes!("../weld_rt/cpp/inline.bc");
 const WELD_HOME: &'static str = "WELD_HOME";
@@ -22,7 +21,9 @@ pub struct SymbolGenerator {
 impl SymbolGenerator {
     /// Initialize a SymbolGenerator with no existing symbols.
     pub fn new() -> SymbolGenerator {
-        SymbolGenerator { id_map: fnv::FnvHashMap::default() }
+        SymbolGenerator {
+            id_map: fnv::FnvHashMap::default(),
+        }
     }
 
     /// Initialize a SymbolGenerator from all the symbols defined in an expression.
@@ -35,15 +36,15 @@ impl SymbolGenerator {
         };
 
         expr.traverse(&mut |e| match e.kind {
-                               Let { ref name, .. } => update_id(&mut id_map, name),
-                               Ident(ref sym) => update_id(&mut id_map, sym),
-                               Lambda { ref params, .. } => {
-                                   for ref p in params {
-                                       update_id(&mut id_map, &p.name);
-                                   }
-                               }
-                               _ => {}
-                           });
+            Let { ref name, .. } => update_id(&mut id_map, name),
+            Ident(ref sym) => update_id(&mut id_map, sym),
+            Lambda { ref params, .. } => {
+                for ref p in params {
+                    update_id(&mut id_map, &p.name);
+                }
+            }
+            _ => {}
+        });
 
         SymbolGenerator { id_map: id_map }
     }
@@ -51,10 +52,7 @@ impl SymbolGenerator {
     pub fn new_symbol(&mut self, name: &str) -> Symbol {
         let id = self.id_map.entry(name.to_owned()).or_insert(-1);
         *id += 1;
-        Symbol {
-            name: name.to_owned(),
-            id: *id,
-        }
+        Symbol { name: name.to_owned(), id: *id }
     }
 
     /// Return the next ID that will be given to a symbol with the given string name.
@@ -96,11 +94,7 @@ impl IdGenerator {
 pub fn get_weld_home() -> Result<String, ()> {
     match env::var(WELD_HOME) {
         Ok(path) => {
-            let path = if path.chars().last().unwrap() != '/' {
-                path + &"/"
-            } else {
-                path
-            };
+            let path = if path.chars().last().unwrap() != '/' { path + &"/" } else { path };
             Ok(path)
         }
         Err(_) => Err(()),

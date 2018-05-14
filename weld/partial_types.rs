@@ -2,9 +2,9 @@
 
 use std::vec::Vec;
 
+use super::annotations::*;
 use super::ast::*;
 use super::error::*;
-use super::annotations::*;
 
 /// A partial data type, where some parameters may not be known.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -42,48 +42,34 @@ pub type PartialParameter = Parameter<PartialType>;
 /// Create a box containing an untyped expression of the given kind.
 pub fn expr_box(kind: ExprKind<PartialType>, annot: Annotations) -> Box<PartialExpr> {
     Box::new(PartialExpr {
-                 ty: PartialType::Unknown,
-                 kind: kind,
-                 annotations: annot,
-             })
+        ty: PartialType::Unknown,
+        kind: kind,
+        annotations: annot,
+    })
 }
 
 impl PartialType {
     /// Convert a PartialType to a Type if neither it nor any of its parameters are unknown.
     pub fn to_type(&self) -> WeldResult<Type> {
-        use self::PartialType::*;
         use self::PartialBuilderKind::*;
+        use self::PartialType::*;
         match *self {
             Unknown => weld_err!("Incomplete partial type"),
             Scalar(kind) => Ok(Type::Scalar(kind)),
             Simd(kind) => Ok(Type::Simd(kind)),
             Vector(ref elem) => Ok(Type::Vector(Box::new(try!(elem.to_type())))),
-            Dict(ref kt, ref vt) => {
-                Ok(Type::Dict(Box::new(try!(kt.to_type())), Box::new(try!(vt.to_type()))))
-            }
-            Builder(Appender(ref elem), ref annotations) => {
-                Ok(Type::Builder(BuilderKind::Appender(Box::new(try!(elem.to_type()))),
-                                 annotations.clone()))
-            }
-            Builder(DictMerger(ref kt, ref vt, _, op), ref annotations) => {
-                Ok(Type::Builder(BuilderKind::DictMerger(Box::new(try!(kt.to_type())),
-                                                         Box::new(try!(vt.to_type())),
-                                                         op),
-                                 annotations.clone()))
-            }
-            Builder(GroupMerger(ref kt, ref vt, _), ref annotations) => {
-                Ok(Type::Builder(BuilderKind::GroupMerger(Box::new(try!(kt.to_type())),
-                                                          Box::new(try!(vt.to_type()))),
-                                 annotations.clone()))
-            }
-            Builder(VecMerger(ref elem, _, op), ref annotations) => {
-                Ok(Type::Builder(BuilderKind::VecMerger(Box::new(try!(elem.to_type())), op),
-                                 annotations.clone()))
-            }
-            Builder(Merger(ref elem, op), ref annotations) => {
-                Ok(Type::Builder(BuilderKind::Merger(Box::new(try!(elem.to_type())), op),
-                                 annotations.clone()))
-            }
+            Dict(ref kt, ref vt) => Ok(Type::Dict(Box::new(try!(kt.to_type())), Box::new(try!(vt.to_type())))),
+            Builder(Appender(ref elem), ref annotations) => Ok(Type::Builder(BuilderKind::Appender(Box::new(try!(elem.to_type()))), annotations.clone())),
+            Builder(DictMerger(ref kt, ref vt, _, op), ref annotations) => Ok(Type::Builder(
+                BuilderKind::DictMerger(Box::new(try!(kt.to_type())), Box::new(try!(vt.to_type())), op),
+                annotations.clone(),
+            )),
+            Builder(GroupMerger(ref kt, ref vt, _), ref annotations) => Ok(Type::Builder(
+                BuilderKind::GroupMerger(Box::new(try!(kt.to_type())), Box::new(try!(vt.to_type()))),
+                annotations.clone(),
+            )),
+            Builder(VecMerger(ref elem, _, op), ref annotations) => Ok(Type::Builder(BuilderKind::VecMerger(Box::new(try!(elem.to_type())), op), annotations.clone())),
+            Builder(Merger(ref elem, op), ref annotations) => Ok(Type::Builder(BuilderKind::Merger(Box::new(try!(elem.to_type())), op), annotations.clone())),
             Struct(ref elems) => {
                 let mut new_elems = Vec::with_capacity(elems.len());
                 for e in elems {
@@ -104,8 +90,8 @@ impl PartialType {
 
     /// Is a PartialType complete (i.e. does it have no unkowns)?
     pub fn is_complete(&self) -> bool {
-        use self::PartialType::*;
         use self::PartialBuilderKind::*;
+        use self::PartialType::*;
         match *self {
             Unknown => false,
             Scalar(_) => true,
@@ -118,9 +104,7 @@ impl PartialType {
             Builder(VecMerger(ref elem, _, _), _) => elem.is_complete(),
             Builder(Merger(ref elem, _), _) => elem.is_complete(),
             Struct(ref elems) => elems.iter().all(|e| e.is_complete()),
-            Function(ref params, ref res) => {
-                params.iter().all(|p| p.is_complete()) && res.is_complete()
-            }
+            Function(ref params, ref res) => params.iter().all(|p| p.is_complete()) && res.is_complete(),
         }
     }
 }
@@ -149,8 +133,8 @@ impl PartialBuilderKind {
     }
 
     pub fn result_type(&self) -> PartialType {
-        use self::PartialType::*;
         use self::PartialBuilderKind::*;
+        use self::PartialType::*;
         match *self {
             Appender(ref elem) => Vector((*elem).clone()),
             DictMerger(ref kt, ref vt, _, _) => Dict((*kt).clone(), (*vt).clone()),
@@ -164,10 +148,7 @@ impl PartialBuilderKind {
 impl PartialParameter {
     pub fn to_typed(&self) -> WeldResult<TypedParameter> {
         let t = try!(self.ty.to_type());
-        Ok(TypedParameter {
-               name: self.name.clone(),
-               ty: t,
-           })
+        Ok(TypedParameter { name: self.name.clone(), ty: t })
     }
 }
 
@@ -213,65 +194,39 @@ impl PartialExpr {
                 }
             }
 
-            Deserialize {
-                ref value,
-                ref value_ty,
-            } => {
+            Deserialize { ref value, ref value_ty } => {
                 let value = typed_box(value)?;
                 let value_ty: Box<Type> = Box::new(try!(value_ty.to_type()));
-                Deserialize {
-                    value: value,
-                    value_ty: value_ty,
-                }
+                Deserialize { value: value, value_ty: value_ty }
             }
 
-            BinOp {
-                kind,
-                ref left,
-                ref right,
-            } => {
-                BinOp {
-                    kind: kind,
-                    left: try!(typed_box(left)),
-                    right: try!(typed_box(right)),
-                }
-            }
+            BinOp { kind, ref left, ref right } => BinOp {
+                kind: kind,
+                left: try!(typed_box(left)),
+                right: try!(typed_box(right)),
+            },
 
-            UnaryOp { kind, ref value } => {
-                UnaryOp {
-                    kind: kind,
-                    value: try!(typed_box(value)),
-                }
-            }
+            UnaryOp { kind, ref value } => UnaryOp {
+                kind: kind,
+                value: try!(typed_box(value)),
+            },
 
-            Cast {
-                kind,
-                ref child_expr,
-            } => {
-                Cast {
-                    kind: kind,
-                    child_expr: try!(typed_box(child_expr)),
-                }
-            }
+            Cast { kind, ref child_expr } => Cast {
+                kind: kind,
+                child_expr: try!(typed_box(child_expr)),
+            },
 
-            ToVec { ref child_expr } => ToVec { child_expr: try!(typed_box(child_expr)) },
+            ToVec { ref child_expr } => ToVec {
+                child_expr: try!(typed_box(child_expr)),
+            },
 
-            Let {
-                ref name,
-                ref value,
-                ref body,
-            } => {
-                Let {
-                    name: name.clone(),
-                    value: try!(typed_box(value)),
-                    body: try!(typed_box(body)),
-                }
-            }
+            Let { ref name, ref value, ref body } => Let {
+                name: name.clone(),
+                value: try!(typed_box(value)),
+                body: try!(typed_box(body)),
+            },
 
-            Lambda {
-                ref params,
-                ref body,
-            } => {
+            Lambda { ref params, ref body } => {
                 let params: WeldResult<Vec<_>> = params.iter().map(|p| p.to_typed()).collect();
                 Lambda {
                     params: try!(params),
@@ -294,69 +249,42 @@ impl PartialExpr {
                 MakeStruct { elems: try!(elems) }
             }
 
-            GetField { ref expr, index } => {
-                GetField {
-                    expr: try!(typed_box(expr)),
-                    index: index,
-                }
-            }
+            GetField { ref expr, index } => GetField {
+                expr: try!(typed_box(expr)),
+                index: index,
+            },
 
             Length { ref data } => Length { data: try!(typed_box(data)) },
-            Lookup {
-                ref data,
-                ref index,
-            } => {
-                Lookup {
-                    data: try!(typed_box(data)),
-                    index: try!(typed_box(index)),
-                }
-            }
-            KeyExists { ref data, ref key } => {
-                KeyExists {
-                    data: try!(typed_box(data)),
-                    key: try!(typed_box(key)),
-                }
-            }
+            Lookup { ref data, ref index } => Lookup {
+                data: try!(typed_box(data)),
+                index: try!(typed_box(index)),
+            },
+            KeyExists { ref data, ref key } => KeyExists {
+                data: try!(typed_box(data)),
+                key: try!(typed_box(key)),
+            },
 
-            Slice {
-                ref data,
-                ref index,
-                ref size,
-            } => {
-                Slice {
-                    data: try!(typed_box(data)),
-                    index: try!(typed_box(index)),
-                    size: try!(typed_box(size)),
-                }
-            }
+            Slice { ref data, ref index, ref size } => Slice {
+                data: try!(typed_box(data)),
+                index: try!(typed_box(index)),
+                size: try!(typed_box(size)),
+            },
 
-            Sort {
-                ref data,
-                ref keyfunc,
-            } => {
-                Sort {
-                    data: try!(typed_box(data)),
-                    keyfunc: try!(typed_box(keyfunc)),
-                }
-            }
+            Sort { ref data, ref keyfunc } => Sort {
+                data: try!(typed_box(data)),
+                keyfunc: try!(typed_box(keyfunc)),
+            },
 
-            Merge {
-                ref builder,
-                ref value,
-            } => {
-                Merge {
-                    builder: try!(typed_box(builder)),
-                    value: try!(typed_box(value)),
-                }
-            }
+            Merge { ref builder, ref value } => Merge {
+                builder: try!(typed_box(builder)),
+                value: try!(typed_box(value)),
+            },
 
-            Res { ref builder } => Res { builder: try!(typed_box(builder)) },
+            Res { ref builder } => Res {
+                builder: try!(typed_box(builder)),
+            },
 
-            For {
-                ref iters,
-                ref builder,
-                ref func,
-            } => {
+            For { ref iters, ref builder, ref func } => {
                 let mut typed_iters = vec![];
                 for iter in iters {
                     let start = match iter.start {
@@ -402,40 +330,28 @@ impl PartialExpr {
                 ref cond,
                 ref on_true,
                 ref on_false,
-            } => {
-                If {
-                    cond: try!(typed_box(cond)),
-                    on_true: try!(typed_box(on_true)),
-                    on_false: try!(typed_box(on_false)),
-                }
-            }
+            } => If {
+                cond: try!(typed_box(cond)),
+                on_true: try!(typed_box(on_true)),
+                on_false: try!(typed_box(on_false)),
+            },
 
-            Iterate {
-                ref initial,
-                ref update_func,
-            } => {
-                Iterate {
-                    initial: try!(typed_box(initial)),
-                    update_func: try!(typed_box(update_func)),
-                }
-            }
+            Iterate { ref initial, ref update_func } => Iterate {
+                initial: try!(typed_box(initial)),
+                update_func: try!(typed_box(update_func)),
+            },
 
             Select {
                 ref cond,
                 ref on_true,
                 ref on_false,
-            } => {
-                Select {
-                    cond: try!(typed_box(cond)),
-                    on_true: try!(typed_box(on_true)),
-                    on_false: try!(typed_box(on_false)),
-                }
-            }
+            } => Select {
+                cond: try!(typed_box(cond)),
+                on_true: try!(typed_box(on_true)),
+                on_false: try!(typed_box(on_false)),
+            },
 
-            Apply {
-                ref func,
-                ref params,
-            } => {
+            Apply { ref func, ref params } => {
                 let params: WeldResult<Vec<_>> = params.iter().map(|p| p.to_typed()).collect();
                 Apply {
                     func: try!(typed_box(func)),
@@ -455,9 +371,9 @@ impl PartialExpr {
         };
 
         Ok(TypedExpr {
-               ty: try!(self.ty.to_type()),
-               kind: new_kind,
-               annotations: self.annotations.clone(),
-           })
+            ty: try!(self.ty.to_type()),
+            kind: new_kind,
+            annotations: self.annotations.clone(),
+        })
     }
 }

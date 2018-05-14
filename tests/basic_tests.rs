@@ -38,10 +38,7 @@ fn basic_string() {
     let result = unsafe { (*data).clone() };
     assert_eq!(result.len, 8);
     unsafe {
-        assert_eq!(
-            str::from_utf8(slice::from_raw_parts(result.data, result.len as usize)).unwrap(),
-            "test str"
-        );
+        assert_eq!(str::from_utf8(slice::from_raw_parts(result.data, result.len as usize)).unwrap(), "test str");
     }
 
     unsafe { free_value_and_module(ret_value) };
@@ -461,8 +458,7 @@ fn iterate_non_parallel() {
 
 #[test]
 fn iterate_with_parallel_body() {
-    let code =
-        "|x:i32| let a=2; iterate({[1,2,3], 1}, |p| {{map(p.$0, |y|y*a), p.$1+1}, p.$1<x}).$0";
+    let code = "|x:i32| let a=2; iterate({[1,2,3], 1}, |p| {{map(p.$0, |y|y*a), p.$1+1}, p.$1<x}).$0";
     let conf = default_conf();
 
     let input: i32 = 3;

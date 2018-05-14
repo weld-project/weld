@@ -51,9 +51,7 @@ fn fringed_for_vectorizable_loop() {
 
     let size = 1002;
     let input_vec = vec![1 as i32; size as usize];
-    let ref input_data = Args {
-        x: WeldVec::from(&input_vec),
-    };
+    let ref input_data = Args { x: WeldVec::from(&input_vec) };
 
     let ret_value = compile_and_run(code, conf, input_data);
     let data = unsafe { weld_value_data(ret_value) as *const i32 };
@@ -85,9 +83,7 @@ fn fringed_for_vectorizable_loop_with_par() {
     // Large size to invoke parallel runtime + some fringing.
     let size = 10 * 1000 * 1000 + 123;
     let input_vec = vec![1 as i32; size as usize];
-    let ref input_data = Args {
-        x: WeldVec::from(&input_vec),
-    };
+    let ref input_data = Args { x: WeldVec::from(&input_vec) };
 
     let ret_value = compile_and_run(code, conf, input_data);
     let data = unsafe { weld_value_data(ret_value) as *const i32 };
@@ -120,9 +116,7 @@ fn for_predicated_vectorizable_loop() {
 
     let size = 1000;
     let input_vec = vec![1 as i32; size as usize];
-    let ref input_data = Args {
-        x: WeldVec::from(&input_vec),
-    };
+    let ref input_data = Args { x: WeldVec::from(&input_vec) };
 
     let ret_value = compile_and_run(code, conf, input_data);
     let data = unsafe { weld_value_data(ret_value) as *const i32 };
@@ -147,9 +141,7 @@ fn predicate_if_iff_annotated() {
     }
 
     let input_vec = vec![-1, 2, 3, 4, 5];
-    let ref input_data = Args {
-        v: WeldVec::from(&input_vec),
-    };
+    let ref input_data = Args { v: WeldVec::from(&input_vec) };
 
     let expected = 14;
 

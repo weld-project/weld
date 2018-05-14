@@ -4,19 +4,10 @@ use std::process::Command;
 fn main() {
     let project_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
 
-    let status = Command::new("make")
-        .arg("clean")
-        .arg("-C")
-        .arg(format!("{}/weld_rt/cpp/", project_dir))
-        .status()
-        .unwrap();
+    let status = Command::new("make").arg("clean").arg("-C").arg(format!("{}/weld_rt/cpp/", project_dir)).status().unwrap();
     assert!(status.success());
 
-    let status = Command::new("make")
-        .arg("-C")
-        .arg(format!("{}/weld_rt/cpp/", project_dir))
-        .status()
-        .unwrap();
+    let status = Command::new("make").arg("-C").arg(format!("{}/weld_rt/cpp/", project_dir)).status().unwrap();
     assert!(status.success());
 
     // Link C++ standard library and some Mac-specific libraries

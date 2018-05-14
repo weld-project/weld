@@ -8,21 +8,21 @@ extern crate lazy_static;
 #[macro_use]
 extern crate log;
 
-extern crate regex;
-extern crate libc;
-extern crate env_logger;
 extern crate chrono;
+extern crate env_logger;
+extern crate libc;
+extern crate regex;
 extern crate time;
 
-use self::time::{PreciseTime, Duration};
+use self::time::{Duration, PreciseTime};
 
+use libc::{c_char, c_void};
 use std::collections::HashMap;
 use std::error::Error;
-use libc::{c_char, c_void};
 use std::ffi::{CStr, CString};
 
-use common::WeldRuntimeErrno;
 use common::WeldLogLevel;
+use common::WeldRuntimeErrno;
 
 /// Utility macro to create an Err result with a WeldError from a format string.
 #[macro_export]
@@ -32,18 +32,20 @@ macro_rules! weld_err {
     })
 }
 
-
 pub mod annotations;
 pub mod ast;
 pub mod code_builder;
 pub mod colors;
 pub mod common;
+pub mod conf;
 pub mod error;
+pub mod expr_hash;
+pub mod exprs;
 pub mod llvm;
 pub mod macro_processor;
-pub mod passes;
 pub mod parser;
 pub mod partial_types;
+pub mod passes;
 pub mod pretty_print;
 pub mod program;
 pub mod runtime;
@@ -51,10 +53,7 @@ pub mod sir;
 pub mod tokenizer;
 pub mod transforms;
 pub mod type_inference;
-pub mod conf;
 pub mod util;
-pub mod exprs;
-pub mod expr_hash;
 
 pub mod easy_ll;
 
@@ -196,9 +195,7 @@ pub unsafe extern "C" fn weld_conf_get(ptr: *const WeldConf, key: *const c_char)
 
 #[no_mangle]
 /// Set the value of `key` to `value`.
-pub unsafe extern "C" fn weld_conf_set(ptr: *mut WeldConf,
-                                       key: *const c_char,
-                                       value: *const c_char) {
+pub unsafe extern "C" fn weld_conf_set(ptr: *mut WeldConf, key: *const c_char, value: *const c_char) {
     assert!(!ptr.is_null());
     let conf = &mut *ptr;
 
@@ -217,10 +214,10 @@ pub unsafe extern "C" fn weld_conf_set(ptr: *mut WeldConf,
 /// to must be managed by the caller.
 pub extern "C" fn weld_value_new(data: *const c_void) -> *mut WeldValue {
     Box::into_raw(Box::new(WeldValue {
-                               data: data,
-                               module: None,
-                               run_id: None,
-                           }))
+        data: data,
+        module: None,
+        run_id: None,
+    }))
 }
 
 #[no_mangle]
@@ -288,10 +285,7 @@ pub unsafe extern "C" fn weld_value_memory_usage(obj: *mut WeldValue) -> libc::i
 
 #[no_mangle]
 /// Given some Weld code and a configuration, returns a runnable Weld module.
-pub unsafe extern "C" fn weld_module_compile(code: *const c_char,
-                                             conf: *const WeldConf,
-                                             err_ptr: *mut WeldError)
-                                             -> *mut WeldModule {
+pub unsafe extern "C" fn weld_module_compile(code: *const c_char, conf: *const WeldConf, err_ptr: *mut WeldError) -> *mut WeldModule {
     info!("Started weld_module_compile");
     assert!(!code.is_null());
     assert!(!err_ptr.is_null());
@@ -343,11 +337,7 @@ pub unsafe extern "C" fn weld_module_compile(code: *const c_char,
 /// Runs a module.
 ///
 /// The module may write a value into the provided error pointer.
-pub unsafe extern "C" fn weld_module_run(module: *mut WeldModule,
-                                         conf: *const WeldConf,
-                                         arg: *const WeldValue,
-                                         err_ptr: *mut WeldError)
-                                         -> *mut WeldValue {
+pub unsafe extern "C" fn weld_module_run(module: *mut WeldModule, conf: *const WeldConf, arg: *const WeldValue, err_ptr: *mut WeldError) -> *mut WeldValue {
     assert!(!module.is_null());
     assert!(!conf.is_null());
     assert!(!arg.is_null());
@@ -373,20 +363,20 @@ pub unsafe extern "C" fn weld_module_run(module: *mut WeldModule,
     }
 
     let input = Box::new(llvm::WeldInputArgs {
-                             input: arg.data as i64,
-                             nworkers: conf.threads,
-                             mem_limit: conf.memory_limit,
-                         });
+        input: arg.data as i64,
+        nworkers: conf.threads,
+        mem_limit: conf.memory_limit,
+    });
     let ptr = Box::into_raw(input) as i64;
     // result_raw is allocated with ordinary malloc, hence the free below
     let result_raw = module_callable.run(ptr) as *const llvm::WeldOutputArgs;
     let result = (*result_raw).clone();
 
     let ret = Box::into_raw(Box::new(WeldValue {
-                                         data: result.output as *const c_void,
-                                         module: Some(module),
-                                         run_id: Some(result.run_id),
-                                     }));
+        data: result.output as *const c_void,
+        module: Some(module),
+        run_id: Some(result.run_id),
+    }));
 
     if result.errno != WeldRuntimeErrno::Success {
         weld_value_free(ret);
@@ -473,7 +463,7 @@ pub extern "C" fn weld_set_log_level(level: WeldLogLevel) {
         WeldLogLevel::Info => log::LogLevelFilter::Info,
         WeldLogLevel::Debug => log::LogLevelFilter::Debug,
         WeldLogLevel::Trace => log::LogLevelFilter::Trace,
-        _ => log::LogLevelFilter::Off
+        _ => log::LogLevelFilter::Off,
     };
 
     let format = |rec: &log::LogRecord| {

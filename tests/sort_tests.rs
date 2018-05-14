@@ -22,9 +22,7 @@ fn string_sort() {
     let ds_vec = WeldVec::from(&ds);
     let strs = vec![bs_vec, cs_vec, ds_vec];
 
-    let ref input_data = Args {
-        x: WeldVec::from(&strs),
-    };
+    let ref input_data = Args { x: WeldVec::from(&strs) };
 
     let code = "|e0: vec[vec[u8]]| sort(e0, |i:vec[u8]| i)";
 
@@ -150,14 +148,8 @@ fn complex_sort() {
     assert_eq!(result.len, expected.len() as i64);
 
     for i in 0..(expected.len() as isize) {
-        assert_eq!(
-            unsafe { (*result.data.offset(i)).ele1 },
-            expected[i as usize][0]
-        );
-        assert_eq!(
-            unsafe { (*result.data.offset(i)).ele2 },
-            expected[i as usize][1]
-        );
+        assert_eq!(unsafe { (*result.data.offset(i)).ele1 }, expected[i as usize][0]);
+        assert_eq!(unsafe { (*result.data.offset(i)).ele2 }, expected[i as usize][1]);
     }
 
     unsafe { free_value_and_module(ret_value) };

@@ -51,22 +51,10 @@ fn simple_for_vecmerger_binops() {
     let data = unsafe { weld_value_data(ret_value) as *const Output };
     let result = unsafe { (*data).clone() };
     for i in 0..(input_vec.len() as isize) {
-        assert_eq!(
-            unsafe { *result.sum.data.offset(i) },
-            input_vec[i as usize] + input_vec[i as usize] * 7
-        );
-        assert_eq!(
-            unsafe { *result.prod.data.offset(i) },
-            input_vec[i as usize] * (i as i64)
-        );
-        assert_eq!(
-            unsafe { *result.min.data.offset(i) },
-            cmp::min(input_vec[i as usize], i as i64)
-        );
-        assert_eq!(
-            unsafe { *result.max.data.offset(i) },
-            cmp::max(input_vec[i as usize], i as i64)
-        );
+        assert_eq!(unsafe { *result.sum.data.offset(i) }, input_vec[i as usize] + input_vec[i as usize] * 7);
+        assert_eq!(unsafe { *result.prod.data.offset(i) }, input_vec[i as usize] * (i as i64));
+        assert_eq!(unsafe { *result.min.data.offset(i) }, cmp::min(input_vec[i as usize], i as i64));
+        assert_eq!(unsafe { *result.max.data.offset(i) }, cmp::max(input_vec[i as usize], i as i64));
     }
     unsafe { free_value_and_module(ret_value) };
 }
@@ -85,10 +73,7 @@ fn parallel_for_vecmerger_loop() {
 
     assert_eq!(result.len, input_vec.len() as i64);
     for i in 0..(result.len as isize) {
-        assert_eq!(
-            unsafe { *result.data.offset(i) },
-            input_vec[i as usize] + input_vec[i as usize] * 7
-        );
+        assert_eq!(unsafe { *result.data.offset(i) }, input_vec[i as usize] + input_vec[i as usize] * 7);
     }
 
     unsafe { free_value_and_module(ret_value) };

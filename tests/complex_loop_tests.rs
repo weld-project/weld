@@ -60,10 +60,7 @@ fn nested_appender_loop() {
     let wv4 = WeldVec::new(r4.as_ptr() as *const i32, r4.len() as i64);
 
     let input_data = [wv0, wv1, wv2, wv3, wv4];
-    let ref arg = WeldVec::new(
-        input_data.as_ptr() as *const WeldVec<WeldVec<i32>>,
-        input_data.len() as i64,
-    );
+    let ref arg = WeldVec::new(input_data.as_ptr() as *const WeldVec<WeldVec<i32>>, input_data.len() as i64);
 
     let expect = [r0, r1, r2, r3, r4];
 
@@ -82,10 +79,7 @@ fn nested_appender_loop() {
         let inner_length = unsafe { (*inner).len };
         assert_eq!(inner_length, size);
         for j in 0..(inner_length as isize) {
-            assert_eq!(
-                unsafe { *((*inner).data.offset(i)) },
-                expect[i as usize][j as usize]
-            );
+            assert_eq!(unsafe { *((*inner).data.offset(i)) }, expect[i as usize][j as usize]);
         }
     }
 }
@@ -166,10 +160,7 @@ fn appender_and_dictmerger_loop() {
 
     assert_eq!(result.append_out.len, output_appender.len() as i64);
     for i in 0..(output_appender.len() as isize) {
-        assert_eq!(
-            unsafe { *result.append_out.data.offset(i) },
-            output_appender[i as usize]
-        );
+        assert_eq!(unsafe { *result.append_out.data.offset(i) }, output_appender[i as usize]);
     }
 
     assert_eq!(result.dict_out.len, output_dict_keys.len() as i64);

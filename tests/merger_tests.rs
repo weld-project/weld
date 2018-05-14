@@ -127,8 +127,7 @@ fn parallel_for_merger_loop() {
 
 #[test]
 fn parallel_for_multi_merger_loop() {
-    let code =
-        "|x:vec[i32]| let r = @(grain_size: 100)for(x, {merger[i32,+], merger[i32,+]}, |b,i,e|
+    let code = "|x:vec[i32]| let r = @(grain_size: 100)for(x, {merger[i32,+], merger[i32,+]}, |b,i,e|
                 { merge(b.$0, e), merge(b.$1, e) }); result(r.$0) + result(r.$1)";
     let conf = many_threads_conf();
 
@@ -200,14 +199,11 @@ fn parallel_for_merger_loop_initial_value_product() {
         x: WeldVec<i32>,
     }
 
-    let code =
-        "|x:vec[i32]| result(@(grain_size: 100)for(x, merger[i32,*](1000), |b,i,e| merge(b, e)))";
+    let code = "|x:vec[i32]| result(@(grain_size: 100)for(x, merger[i32,*](1000), |b,i,e| merge(b, e)))";
     let conf = many_threads_conf();
 
     let input_vec = vec![1; 4096];
-    let ref input_data = Args {
-        x: WeldVec::from(&input_vec),
-    };
+    let ref input_data = Args { x: WeldVec::from(&input_vec) };
 
     let ret_value = compile_and_run(code, conf, input_data);
     let data = unsafe { weld_value_data(ret_value) as *const i32 };

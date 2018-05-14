@@ -92,9 +92,7 @@ fn dictmerger_with_structs() {
         // Check whether we find the entry anywhere in the expected outputs
         let mut success = false;
         for j in 0..(output_keys.len()) {
-            if entry.k1 == output_keys[j] && entry.k2 == output_keys[j]
-                && entry.v1 == output_vals[j] && entry.v2 == output_vals[j] as f32
-            {
+            if entry.k1 == output_keys[j] && entry.k2 == output_keys[j] && entry.v1 == output_vals[j] && entry.v2 == output_vals[j] as f32 {
                 success = true;
             }
         }
@@ -126,10 +124,7 @@ fn simple_groupmerger() {
         .map(|x| {
             let key = unsafe { (*result.data.offset(x as isize)).ele1 };
             let val = unsafe { ((*result.data.offset(x as isize)).ele2).clone() };
-            let vec: Vec<i32> = (0..val.len)
-                .into_iter()
-                .map(|y| unsafe { *val.data.offset(y as isize) })
-                .collect();
+            let vec: Vec<i32> = (0..val.len).into_iter().map(|y| unsafe { *val.data.offset(y as isize) }).collect();
             (key, vec)
         })
         .collect();
@@ -164,25 +159,16 @@ fn complex_groupmerger_with_struct_key() {
     };
 
     let ret_value = compile_and_run(code, conf, input_data);
-    let data =
-        unsafe { weld_value_data(ret_value) as *const WeldVec<Pair<Pair<i32, i32>, WeldVec<i32>>> };
+    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<Pair<Pair<i32, i32>, WeldVec<i32>>> };
     let result = unsafe { (*data).clone() };
-    let output = vec![
-        ((1, 1), vec![2, 3]),
-        ((2, 2), vec![4, 2]),
-        ((3, 3), vec![1, 0]),
-        ((3, 4), vec![3, 2]),
-    ];
+    let output = vec![((1, 1), vec![2, 3]), ((2, 2), vec![4, 2]), ((3, 3), vec![1, 0]), ((3, 4), vec![3, 2])];
 
     let mut res: Vec<((i32, i32), Vec<i32>)> = (0..result.len)
         .into_iter()
         .map(|x| {
             let key = unsafe { ((*result.data.offset(x as isize)).ele1).clone() };
             let val = unsafe { ((*result.data.offset(x as isize)).ele2).clone() };
-            let vec: Vec<i32> = (0..val.len)
-                .into_iter()
-                .map(|y| unsafe { *val.data.offset(y as isize) })
-                .collect();
+            let vec: Vec<i32> = (0..val.len).into_iter().map(|y| unsafe { *val.data.offset(y as isize) }).collect();
             ((key.ele1, key.ele2), vec)
         })
         .collect();

@@ -1,4 +1,4 @@
-use libc::{c_void, int64_t, int32_t, size_t};
+use libc::{c_void, size_t, int32_t, int64_t};
 
 #[allow(non_camel_case_types)]
 type work_t = c_void;
@@ -12,7 +12,7 @@ pub struct vec_output {
     size: i64,
 }
 
-#[link(name="weldrt", kind="static")]
+#[link(name = "weldrt", kind = "static")]
 extern "C" {
     #[no_mangle]
     pub fn weld_runtime_init();
@@ -25,14 +25,16 @@ extern "C" {
     #[no_mangle]
     pub fn weld_rt_get_run_id() -> int64_t;
     #[no_mangle]
-    pub fn weld_rt_start_loop(w: *mut work_t,
-                              body_data: *mut c_void,
-                              cont_data: *mut c_void,
-                              body: extern "C" fn(*mut work_t),
-                              cont: extern "C" fn(*mut work_t),
-                              lower: int64_t,
-                              upper: int64_t,
-                              grain_size: int32_t);
+    pub fn weld_rt_start_loop(
+        w: *mut work_t,
+        body_data: *mut c_void,
+        cont_data: *mut c_void,
+        body: extern "C" fn(*mut work_t),
+        cont: extern "C" fn(*mut work_t),
+        lower: int64_t,
+        upper: int64_t,
+        grain_size: int32_t,
+    );
     #[no_mangle]
     pub fn weld_rt_set_result(res: *mut c_void);
     #[no_mangle]
@@ -70,19 +72,29 @@ extern "C" {
     #[no_mangle]
     pub fn weld_run_set_errno(run_id: int64_t, err: int64_t);
     #[no_mangle]
-    pub fn weld_rt_dict_new(key_size: int32_t,
+    pub fn weld_rt_dict_new(
+        key_size: int32_t,
         keys_eq: extern "C" fn(*mut c_void, *mut c_void) -> int32_t,
         merge_new_val: extern "C" fn(int32_t, *mut c_void, *mut c_void),
         merge_vals_finalize: extern "C" fn(int32_t, *mut c_void, *mut c_void),
-        metadata: *mut c_void, val_size: int32_t, to_array_true_val_size: int32_t,
-        max_local_bytes: int64_t, capacity: int64_t) -> *mut c_void;
+        metadata: *mut c_void,
+        val_size: int32_t,
+        to_array_true_val_size: int32_t,
+        max_local_bytes: int64_t,
+        capacity: int64_t,
+    ) -> *mut c_void;
     #[no_mangle]
-    pub fn weld_rt_dict_new_finalized(key_size: int32_t,
+    pub fn weld_rt_dict_new_finalized(
+        key_size: int32_t,
         keys_eq: extern "C" fn(*mut c_void, *mut c_void) -> int32_t,
         merge_new_val: extern "C" fn(int32_t, *mut c_void, *mut c_void),
         merge_vals_finalize: extern "C" fn(int32_t, *mut c_void, *mut c_void),
-        metadata: *mut c_void, val_size: int32_t, to_array_true_val_size: int32_t,
-        max_local_bytes: int64_t, capacity: int64_t) -> *mut c_void;
+        metadata: *mut c_void,
+        val_size: int32_t,
+        to_array_true_val_size: int32_t,
+        max_local_bytes: int64_t,
+        capacity: int64_t,
+    ) -> *mut c_void;
     #[no_mangle]
     pub fn weld_rt_dict_lookup(d: *mut c_void, hash: int32_t, key: *mut c_void) -> *mut c_void;
     #[no_mangle]
@@ -90,22 +102,27 @@ extern "C" {
     #[no_mangle]
     pub fn weld_rt_dict_finalize(d: *mut c_void);
     #[no_mangle]
-    pub fn weld_rt_dict_to_array(d: *mut c_void, value_offset_in_struct: int32_t,
-        struct_size: int32_t) -> *mut c_void;
+    pub fn weld_rt_dict_to_array(d: *mut c_void, value_offset_in_struct: int32_t, struct_size: int32_t) -> *mut c_void;
     #[no_mangle]
     pub fn weld_rt_dict_size(d: *mut c_void) -> int64_t;
     #[no_mangle]
-    pub fn weld_rt_dict_serialize(d: *mut c_void,
-                                  buf: *mut c_void,
-                                  has_pointer: int32_t,
-                                  key_ser: extern "C" fn(*mut c_void, *mut c_void),
-                                  val_ser: extern "C" fn(*mut c_void, *mut c_void));
+    pub fn weld_rt_dict_serialize(
+        d: *mut c_void,
+        buf: *mut c_void,
+        has_pointer: int32_t,
+        key_ser: extern "C" fn(*mut c_void, *mut c_void),
+        val_ser: extern "C" fn(*mut c_void, *mut c_void),
+    );
     #[no_mangle]
     pub fn weld_rt_dict_free(d: *mut c_void);
     #[no_mangle]
-    pub fn weld_rt_gb_new(key_size: int32_t,
-        keys_eq: extern "C" fn(*mut c_void, *mut c_void) -> int32_t, val_size: int32_t,
-        max_local_bytes: int64_t, capacity: int64_t) -> *mut c_void;
+    pub fn weld_rt_gb_new(
+        key_size: int32_t,
+        keys_eq: extern "C" fn(*mut c_void, *mut c_void) -> int32_t,
+        val_size: int32_t,
+        max_local_bytes: int64_t,
+        capacity: int64_t,
+    ) -> *mut c_void;
     #[no_mangle]
     pub fn weld_rt_gb_merge(b: *mut c_void, key: *mut c_void, hash: int32_t, value: *mut c_void);
     #[no_mangle]

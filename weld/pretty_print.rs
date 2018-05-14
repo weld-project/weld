@@ -1,11 +1,11 @@
 use std::iter;
 use std::iter::Iterator;
 
-use super::ast::*;
 use super::ast::BuilderKind::*;
-use super::ast::Type::*;
 use super::ast::ExprKind::*;
 use super::ast::LiteralKind::*;
+use super::ast::Type::*;
+use super::ast::*;
 use super::partial_types::*;
 
 // TODO: These methods could take a mutable string as an argument, or even a fmt::Format.
@@ -30,25 +30,11 @@ impl PrintableType for Type {
                 res.push_str(")");
                 res
             }
-            Builder(Appender(ref t), ref annotations) => {
-                format!("{}appender[{}]", annotations, t.print())
-            }
-            Builder(DictMerger(ref kt, ref vt, op), ref annotations) => {
-                format!("{}dictmerger[{},{},{}]",
-                        annotations,
-                        kt.print(),
-                        vt.print(),
-                        op)
-            }
-            Builder(GroupMerger(ref kt, ref vt), ref annotations) => {
-                format!("{}groupmerger[{},{}]", annotations, kt.print(), vt.print())
-            }
-            Builder(VecMerger(ref elem, op), ref annotations) => {
-                format!("{}vecmerger[{},{}]", annotations, elem.print(), op)
-            }
-            Builder(Merger(ref t, op), ref annotations) => {
-                format!("{}merger[{},{}]", annotations, t.print(), op)
-            }
+            Builder(Appender(ref t), ref annotations) => format!("{}appender[{}]", annotations, t.print()),
+            Builder(DictMerger(ref kt, ref vt, op), ref annotations) => format!("{}dictmerger[{},{},{}]", annotations, kt.print(), vt.print(), op),
+            Builder(GroupMerger(ref kt, ref vt), ref annotations) => format!("{}groupmerger[{},{}]", annotations, kt.print(), vt.print()),
+            Builder(VecMerger(ref elem, op), ref annotations) => format!("{}vecmerger[{},{}]", annotations, elem.print(), op),
+            Builder(Merger(ref t, op), ref annotations) => format!("{}merger[{},{}]", annotations, t.print(), op),
         }
     }
 }
@@ -56,8 +42,8 @@ impl PrintableType for Type {
 /// Print implementation for PartialTypes
 impl PrintableType for PartialType {
     fn print(&self) -> String {
-        use partial_types::PartialType::*;
         use partial_types::PartialBuilderKind::*;
+        use partial_types::PartialType::*;
         match *self {
             Unknown => "?".to_string(),
             Scalar(ref kind) => format!("{}", kind),
@@ -70,25 +56,11 @@ impl PrintableType for PartialType {
                 res.push_str(&ret.print());
                 res
             }
-            Builder(Appender(ref elem), ref annotations) => {
-                format!("{}appender[{}]", annotations, elem.print())
-            }
-            Builder(DictMerger(ref kt, ref vt, _, op), ref annotations) => {
-                format!("{}dictmerger[{},{},{}]",
-                        annotations,
-                        kt.print(),
-                        vt.print(),
-                        op)
-            }
-            Builder(VecMerger(ref elem, _, op), ref annotations) => {
-                format!("{}vecmerger[{},{}]", annotations, elem.print(), op)
-            }
-            Builder(Merger(ref t, op), ref annotations) => {
-                format!("{}merger[{},{}]", annotations, t.print(), op)
-            }
-            Builder(GroupMerger(ref kt, ref vt, _), ref annotations) => {
-                format!("{}groupmerger[{},{}]", annotations, kt.print(), vt.print())
-            }
+            Builder(Appender(ref elem), ref annotations) => format!("{}appender[{}]", annotations, elem.print()),
+            Builder(DictMerger(ref kt, ref vt, _, op), ref annotations) => format!("{}dictmerger[{},{},{}]", annotations, kt.print(), vt.print(), op),
+            Builder(VecMerger(ref elem, _, op), ref annotations) => format!("{}vecmerger[{},{}]", annotations, elem.print(), op),
+            Builder(Merger(ref t, op), ref annotations) => format!("{}merger[{},{}]", annotations, t.print(), op),
+            Builder(GroupMerger(ref kt, ref vt, _), ref annotations) => format!("{}groupmerger[{},{}]", annotations, kt.print(), vt.print()),
         }
     }
 }
@@ -108,9 +80,9 @@ pub fn print_expr_without_indent<T: PrintableType>(expr: &Expr<T>) -> String {
     print_expr_impl(expr, false, 2, false)
         .chars()
         .map(|x| match x {
-                 '\n' => "".to_string(),
-                 _ => x.to_string(),
-             })
+            '\n' => "".to_string(),
+            _ => x.to_string(),
+        })
         .collect()
 }
 
@@ -124,9 +96,9 @@ pub fn print_typed_expr_without_indent<T: PrintableType>(expr: &Expr<T>) -> Stri
     print_expr_impl(expr, true, 2, false)
         .chars()
         .map(|x| match x {
-                 '\n' => "".to_string(),
-                 _ => x.to_string(),
-             })
+            '\n' => "".to_string(),
+            _ => x.to_string(),
+        })
         .collect()
 }
 
@@ -140,11 +112,7 @@ fn print_iter_kind<T: PrintableType>(iter: &Iter<T>) -> &str {
     }
 }
 
-fn print_iters<T: PrintableType>(iters: &Vec<Iter<T>>,
-                                 typed: bool,
-                                 indent: i32,
-                                 should_indent: bool)
-                                 -> String {
+fn print_iters<T: PrintableType>(iters: &Vec<Iter<T>>, typed: bool, indent: i32, should_indent: bool) -> String {
     let mut iter_strs = vec![];
     let mut less_indent_str: String = iter::repeat(" ").take((indent - 2) as usize).collect();
     let mut indent_str: String = iter::repeat(" ").take(indent as usize).collect();
@@ -155,73 +123,43 @@ fn print_iters<T: PrintableType>(iters: &Vec<Iter<T>>,
     for iter in iters {
         if iter.kind == IterKind::NdIter {
             /* Need to check this first because NdIter also has iter.start */
-            iter_strs.push(format!("{}iter({},{},{},{})",
-                                   print_iter_kind(iter),
-                                   print_expr_impl(iter.data.as_ref(),
-                                                   typed,
-                                                   indent,
-                                                   should_indent),
-                                   print_expr_impl(iter.start.as_ref().unwrap(),
-                                                   typed,
-                                                   indent,
-                                                   should_indent),
-                                   print_expr_impl(iter.shape.as_ref().unwrap(),
-                                                   typed,
-                                                   indent,
-                                                   should_indent),
-                                   print_expr_impl(iter.strides.as_ref().unwrap(),
-                                                   typed,
-                                                   indent,
-                                                   should_indent),
-                                    ));
+            iter_strs.push(format!(
+                "{}iter({},{},{},{})",
+                print_iter_kind(iter),
+                print_expr_impl(iter.data.as_ref(), typed, indent, should_indent),
+                print_expr_impl(iter.start.as_ref().unwrap(), typed, indent, should_indent),
+                print_expr_impl(iter.shape.as_ref().unwrap(), typed, indent, should_indent),
+                print_expr_impl(iter.strides.as_ref().unwrap(), typed, indent, should_indent),
+            ));
         } else if let Some(_) = iter.start {
-            iter_strs.push(format!("{}iter({},{},{},{})",
-                                   print_iter_kind(iter),
-                                   print_expr_impl(iter.data.as_ref(),
-                                                   typed,
-                                                   indent,
-                                                   should_indent),
-                                   print_expr_impl(iter.start.as_ref().unwrap(),
-                                                   typed,
-                                                   indent,
-                                                   should_indent),
-                                   print_expr_impl(iter.end.as_ref().unwrap(),
-                                                   typed,
-                                                   indent,
-                                                   should_indent),
-                                   print_expr_impl(iter.stride.as_ref().unwrap(),
-                                                   typed,
-                                                   indent,
-                                                   should_indent),
-                                    ));
+            iter_strs.push(format!(
+                "{}iter({},{},{},{})",
+                print_iter_kind(iter),
+                print_expr_impl(iter.data.as_ref(), typed, indent, should_indent),
+                print_expr_impl(iter.start.as_ref().unwrap(), typed, indent, should_indent),
+                print_expr_impl(iter.end.as_ref().unwrap(), typed, indent, should_indent),
+                print_expr_impl(iter.stride.as_ref().unwrap(), typed, indent, should_indent),
+            ));
         } else if iter.kind != IterKind::ScalarIter {
-            iter_strs.push(format!("{}iter({})",
-                                   print_iter_kind(iter),
-                                   print_expr_impl(iter.data.as_ref(),
-                                                   typed,
-                                                   indent,
-                                                   should_indent)));
+            iter_strs.push(format!(
+                "{}iter({})",
+                print_iter_kind(iter),
+                print_expr_impl(iter.data.as_ref(), typed, indent, should_indent)
+            ));
         } else {
             iter_strs.push(print_expr_impl(iter.data.as_ref(), typed, indent + 2, should_indent));
         }
     }
 
     if iters.len() > 1 {
-        format!("zip(\n{}{}\n{})",
-                indent_str,
-                iter_strs.join(&format!(",\n{}", indent_str)),
-                less_indent_str)
+        format!("zip(\n{}{}\n{})", indent_str, iter_strs.join(&format!(",\n{}", indent_str)), less_indent_str)
     } else {
         iter_strs[0].clone()
     }
 }
 
 /// Main work to print an expression.
-fn print_expr_impl<T: PrintableType>(expr: &Expr<T>,
-                                     typed: bool,
-                                     indent: i32,
-                                     should_indent: bool)
-                                     -> String {
+fn print_expr_impl<T: PrintableType>(expr: &Expr<T>, typed: bool, indent: i32, should_indent: bool) -> String {
     let mut less_indent_str: String = iter::repeat(" ").take((indent - 2) as usize).collect();
     let mut indent_str: String = iter::repeat(" ").take(indent as usize).collect();
     if !should_indent {
@@ -239,286 +177,186 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>,
             }
         }
 
-        BinOp {
-            kind,
-            ref left,
-            ref right,
-        } => {
+        BinOp { kind, ref left, ref right } => {
             /* special-case max and min */
             use super::ast::BinOpKind::*;
             match kind {
-                Max | Min | Pow => {
-                    format!("{}({},{})",
-                            kind,
-                            print_expr_impl(left, typed, indent, should_indent),
-                            print_expr_impl(right, typed, indent, should_indent))
-                }
-                _ => {
-                    format!("({}{}{})",
-                            print_expr_impl(left, typed, indent, should_indent),
-                            kind,
-                            print_expr_impl(right, typed, indent, should_indent))
-                }
+                Max | Min | Pow => format!(
+                    "{}({},{})",
+                    kind,
+                    print_expr_impl(left, typed, indent, should_indent),
+                    print_expr_impl(right, typed, indent, should_indent)
+                ),
+                _ => format!(
+                    "({}{}{})",
+                    print_expr_impl(left, typed, indent, should_indent),
+                    kind,
+                    print_expr_impl(right, typed, indent, should_indent)
+                ),
             }
         }
 
-        UnaryOp { kind, ref value } => {
-            format!("({}({}))",
-                    kind,
-                    print_expr_impl(value, typed, indent, should_indent))
-        }
+        UnaryOp { kind, ref value } => format!("({}({}))", kind, print_expr_impl(value, typed, indent, should_indent)),
 
         Negate(ref e) => format!("(-{})", print_expr_impl(e, typed, indent, should_indent)),
 
-        Broadcast(ref e) => {
-            format!("broadcast({})",
-                    print_expr_impl(e, typed, indent, should_indent))
-        }
+        Broadcast(ref e) => format!("broadcast({})", print_expr_impl(e, typed, indent, should_indent)),
 
         CUDF {
             ref sym_name,
             ref args,
             ref return_ty,
-        } => {
-            format!("cudf[{},{}]{}",
-                    sym_name,
-                    return_ty.print(),
-                    join("(",
-                         ",",
-                         ")",
-                         args.iter()
-                             .map(|e| print_expr_impl(e, typed, indent, should_indent))))
-        }
+        } => format!(
+            "cudf[{},{}]{}",
+            sym_name,
+            return_ty.print(),
+            join("(", ",", ")", args.iter().map(|e| print_expr_impl(e, typed, indent, should_indent)))
+        ),
 
-        Serialize(ref e) => {
-            format!("serialize({})",
-                    print_expr_impl(e, typed, indent, should_indent))
-        }
+        Serialize(ref e) => format!("serialize({})", print_expr_impl(e, typed, indent, should_indent)),
 
-        Deserialize {
-            ref value,
-            ref value_ty,
-        } => {
-            format!("deserialize[{}]({})",
-                    value_ty.print(),
-                    print_expr_impl(value, typed ,indent, should_indent))
-        }
+        Deserialize { ref value, ref value_ty } => format!("deserialize[{}]({})", value_ty.print(), print_expr_impl(value, typed, indent, should_indent)),
 
-        Cast {
-            kind,
-            ref child_expr,
-        } => {
-            format!("({}({}))",
-                    kind,
-                    print_expr_impl(child_expr, typed, indent, should_indent))
-        }
+        Cast { kind, ref child_expr } => format!("({}({}))", kind, print_expr_impl(child_expr, typed, indent, should_indent)),
 
-        ToVec { ref child_expr } => {
-            format!("toVec({})",
-                    print_expr_impl(child_expr, typed, indent, should_indent))
-        }
+        ToVec { ref child_expr } => format!("toVec({})", print_expr_impl(child_expr, typed, indent, should_indent)),
 
-        Let {
-            ref name,
-            ref value,
-            ref body,
-        } => {
+        Let { ref name, ref value, ref body } => {
             if typed {
-                format!("(let {}:{}=({});{})",
-                        name,
-                        value.ty.print(),
-                        print_expr_impl(value, typed, indent, should_indent),
-                        print_expr_impl(body, typed, indent, should_indent))
+                format!(
+                    "(let {}:{}=({});{})",
+                    name,
+                    value.ty.print(),
+                    print_expr_impl(value, typed, indent, should_indent),
+                    print_expr_impl(body, typed, indent, should_indent)
+                )
             } else {
-                format!("(let {}=({});{})",
-                        name,
-                        print_expr_impl(value, typed, indent, should_indent),
-                        print_expr_impl(body, typed, indent, should_indent))
+                format!(
+                    "(let {}=({});{})",
+                    name,
+                    print_expr_impl(value, typed, indent, should_indent),
+                    print_expr_impl(body, typed, indent, should_indent)
+                )
             }
         }
 
-        MakeStruct { ref elems } => {
-            join("{",
-                 ",",
-                 "}",
-                 elems
-                     .iter()
-                     .map(|e| print_expr_impl(e, typed, indent, should_indent)))
-        }
+        MakeStruct { ref elems } => join("{", ",", "}", elems.iter().map(|e| print_expr_impl(e, typed, indent, should_indent))),
 
-        MakeVector { ref elems } => {
-            join("[",
-                 ",",
-                 "]",
-                 elems
-                     .iter()
-                     .map(|e| print_expr_impl(e, typed, indent, should_indent)))
-        }
+        MakeVector { ref elems } => join("[", ",", "]", elems.iter().map(|e| print_expr_impl(e, typed, indent, should_indent))),
 
-        Zip { ref vectors } => {
-            join(&format!("zip(\n{}", indent_str),
-                 &format!(",\n{}", indent_str),
-                 ")",
-                 vectors
-                     .iter()
-                     .map(|e| print_expr_impl(e, typed, indent + 2, should_indent)))
-        }
+        Zip { ref vectors } => join(
+            &format!("zip(\n{}", indent_str),
+            &format!(",\n{}", indent_str),
+            ")",
+            vectors.iter().map(|e| print_expr_impl(e, typed, indent + 2, should_indent)),
+        ),
 
-        GetField { ref expr, index } => {
-            format!("{}.${}",
-                    print_expr_impl(expr, false, indent, should_indent),
-                    index)
-        }
+        GetField { ref expr, index } => format!("{}.${}", print_expr_impl(expr, false, indent, should_indent), index),
 
-        Length { ref data } => {
-            format!("len({})",
-                    print_expr_impl(data, typed, indent, should_indent))
-        }
+        Length { ref data } => format!("len({})", print_expr_impl(data, typed, indent, should_indent)),
 
-        Lookup {
-            ref data,
-            ref index,
-        } => {
-            format!("lookup({},{})",
-                    print_expr_impl(data, typed, indent, should_indent),
-                    print_expr_impl(index, typed, indent, should_indent))
-        }
+        Lookup { ref data, ref index } => format!(
+            "lookup({},{})",
+            print_expr_impl(data, typed, indent, should_indent),
+            print_expr_impl(index, typed, indent, should_indent)
+        ),
 
-        KeyExists { ref data, ref key } => {
-            format!("keyexists({},{})",
-                    print_expr_impl(data, typed, indent, should_indent),
-                    print_expr_impl(key, typed, indent, should_indent))
-        }
+        KeyExists { ref data, ref key } => format!(
+            "keyexists({},{})",
+            print_expr_impl(data, typed, indent, should_indent),
+            print_expr_impl(key, typed, indent, should_indent)
+        ),
 
-        Slice {
-            ref data,
-            ref index,
-            ref size,
-        } => {
-            format!("slice({},{},{})",
-                    print_expr_impl(data, typed, indent, should_indent),
-                    print_expr_impl(index, typed, indent, should_indent),
-                    print_expr_impl(size, typed, indent, should_indent))
-        }
+        Slice { ref data, ref index, ref size } => format!(
+            "slice({},{},{})",
+            print_expr_impl(data, typed, indent, should_indent),
+            print_expr_impl(index, typed, indent, should_indent),
+            print_expr_impl(size, typed, indent, should_indent)
+        ),
 
-        Sort {
-            ref data,
-            ref keyfunc,
-        } => {
-            format!("sort({}, {})",
-                    print_expr_impl(data, typed, indent, should_indent),
-                    print_expr_impl(keyfunc, typed, indent, should_indent))
-        }
+        Sort { ref data, ref keyfunc } => format!(
+            "sort({}, {})",
+            print_expr_impl(data, typed, indent, should_indent),
+            print_expr_impl(keyfunc, typed, indent, should_indent)
+        ),
 
-        Lambda {
-            ref params,
-            ref body,
-        } => {
-            let mut res = join("|",
-                               ",",
-                               "|",
-                               params.iter().map(|e| print_parameter(e, typed)));
-            res.push_str(&format!("\n{}{}",
-                                  indent_str,
-                                  print_expr_impl(body, typed, indent + 2, should_indent)));
+        Lambda { ref params, ref body } => {
+            let mut res = join("|", ",", "|", params.iter().map(|e| print_parameter(e, typed)));
+            res.push_str(&format!("\n{}{}", indent_str, print_expr_impl(body, typed, indent + 2, should_indent)));
             res
         }
 
-        NewBuilder(ref arg) => {
-            match *arg {
-                Some(ref e) => {
-                    format!("{}({})",
-                            expr.ty.print(),
-                            print_expr_impl(e, typed, indent, should_indent))
-                }
-                None => expr.ty.print(),
-            }
-        }
+        NewBuilder(ref arg) => match *arg {
+            Some(ref e) => format!("{}({})", expr.ty.print(), print_expr_impl(e, typed, indent, should_indent)),
+            None => expr.ty.print(),
+        },
 
-        Res { ref builder } => {
-            format!("result(\n{}{}\n{})",
-                    indent_str,
-                    print_expr_impl(builder, typed, indent + 2, should_indent),
-                    less_indent_str)
-        }
+        Res { ref builder } => format!(
+            "result(\n{}{}\n{})",
+            indent_str,
+            print_expr_impl(builder, typed, indent + 2, should_indent),
+            less_indent_str
+        ),
 
-        Merge {
-            ref builder,
-            ref value,
-        } => {
-            format!("merge({},{})",
-                    print_expr_impl(builder, typed, indent, should_indent),
-                    print_expr_impl(value, typed, indent, should_indent))
-        }
+        Merge { ref builder, ref value } => format!(
+            "merge({},{})",
+            print_expr_impl(builder, typed, indent, should_indent),
+            print_expr_impl(value, typed, indent, should_indent)
+        ),
 
-        For {
-            ref iters,
-            ref builder,
-            ref func,
-        } => {
-            format!("for(\n{}{},\n{}{},\n{}{}\n{})",
-                    indent_str,
-                    print_iters(iters, typed, indent + 2, should_indent),
-                    indent_str,
-                    print_expr_impl(builder, typed, indent + 2, should_indent),
-                    indent_str,
-                    print_expr_impl(func, typed, indent + 2, should_indent),
-                    less_indent_str)
-        }
+        For { ref iters, ref builder, ref func } => format!(
+            "for(\n{}{},\n{}{},\n{}{}\n{})",
+            indent_str,
+            print_iters(iters, typed, indent + 2, should_indent),
+            indent_str,
+            print_expr_impl(builder, typed, indent + 2, should_indent),
+            indent_str,
+            print_expr_impl(func, typed, indent + 2, should_indent),
+            less_indent_str
+        ),
 
         If {
             ref cond,
             ref on_true,
             ref on_false,
-        } => {
-            format!("if(\n{}{},\n{}{},\n{}{}\n{})",
-                    indent_str,
-                    print_expr_impl(cond, typed, indent + 2, should_indent),
-                    indent_str,
-                    print_expr_impl(on_true, typed, indent + 2, should_indent),
-                    indent_str,
-                    print_expr_impl(on_false, typed, indent + 2, should_indent),
-                    less_indent_str)
-        }
+        } => format!(
+            "if(\n{}{},\n{}{},\n{}{}\n{})",
+            indent_str,
+            print_expr_impl(cond, typed, indent + 2, should_indent),
+            indent_str,
+            print_expr_impl(on_true, typed, indent + 2, should_indent),
+            indent_str,
+            print_expr_impl(on_false, typed, indent + 2, should_indent),
+            less_indent_str
+        ),
 
-        Iterate {
-            ref initial,
-            ref update_func,
-        } => {
-            format!("iterate(\n{}{},\n{}{}\n{})",
-                    indent_str,
-                    print_expr_impl(initial, typed, indent + 2, should_indent),
-                    indent_str,
-                    print_expr_impl(update_func, typed, indent + 2, should_indent),
-                    less_indent_str)
-        }
+        Iterate { ref initial, ref update_func } => format!(
+            "iterate(\n{}{},\n{}{}\n{})",
+            indent_str,
+            print_expr_impl(initial, typed, indent + 2, should_indent),
+            indent_str,
+            print_expr_impl(update_func, typed, indent + 2, should_indent),
+            less_indent_str
+        ),
 
         Select {
             ref cond,
             ref on_true,
             ref on_false,
-        } => {
-            format!("select(\n{}{},\n{}{},\n{}{}\n{})",
-                    indent_str,
-                    print_expr_impl(cond, typed, indent + 2, should_indent),
-                    indent_str,
-                    print_expr_impl(on_true, typed, indent + 2, should_indent),
-                    indent_str,
-                    print_expr_impl(on_false, typed, indent + 2, should_indent),
-                    less_indent_str)
-        }
+        } => format!(
+            "select(\n{}{},\n{}{},\n{}{}\n{})",
+            indent_str,
+            print_expr_impl(cond, typed, indent + 2, should_indent),
+            indent_str,
+            print_expr_impl(on_true, typed, indent + 2, should_indent),
+            indent_str,
+            print_expr_impl(on_false, typed, indent + 2, should_indent),
+            less_indent_str
+        ),
 
-        Apply {
-            ref func,
-            ref params,
-        } => {
+        Apply { ref func, ref params } => {
             let mut res = format!("({})", print_expr_impl(func, typed, indent, should_indent));
-            res.push_str(&join("(",
-                               ",",
-                               ")",
-                               params
-                                   .iter()
-                                   .map(|e| print_expr_impl(e, typed, indent, should_indent))));
+            res.push_str(&join("(", ",", ")", params.iter().map(|e| print_expr_impl(e, typed, indent, should_indent))));
             res
         }
     };

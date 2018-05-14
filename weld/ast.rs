@@ -1,11 +1,11 @@
 //! Abstract syntax tree for Weld.
 
-use std::vec;
 use std::fmt;
 use std::hash::Hash;
+use std::vec;
 
-use super::error::*;
 use super::annotations::*;
+use super::error::*;
 
 /// A symbol (identifier name); for now these are strings, but we may add some kind of scope ID.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -16,17 +16,11 @@ pub struct Symbol {
 
 impl Symbol {
     pub fn new(name: &str, id: i32) -> Symbol {
-        Symbol {
-            name: name.into(),
-            id: id,
-        }
+        Symbol { name: name.into(), id: id }
     }
 
     pub fn name(name: &str) -> Symbol {
-        Symbol {
-            name: name.into(),
-            id: 0,
-        }
+        Symbol { name: name.into(), id: 0 }
     }
 }
 
@@ -64,7 +58,7 @@ impl Type {
             Simd(_) => true,
             Builder(_, _) => true,
             Struct(ref fields) => fields.iter().all(|f| f.is_simd()),
-            _ => false
+            _ => false,
         }
     }
 
@@ -72,7 +66,7 @@ impl Type {
         use self::Type::*;
         match *self {
             Scalar(_) => true,
-            _ => false
+            _ => false,
         }
     }
 
@@ -92,7 +86,7 @@ impl Type {
                 Ok(Struct(new_fields))
             }
 
-            _ => weld_err!("simd_type called on non-SIMD {:?}", self)
+            _ => weld_err!("simd_type called on non-SIMD {:?}", self),
         }
     }
 
@@ -112,7 +106,7 @@ impl Type {
                 Ok(Struct(new_fields))
             }
 
-            _ => weld_err!("scalar_type called on non-SIMD {:?}", self)
+            _ => weld_err!("scalar_type called on non-SIMD {:?}", self),
         }
     }
 }
@@ -138,7 +132,7 @@ impl ScalarKind {
         use ast::ScalarKind::*;
         match *self {
             F32 | F64 => true,
-            _ => false
+            _ => false,
         }
     }
 
@@ -147,7 +141,7 @@ impl ScalarKind {
         use ast::ScalarKind::*;
         match *self {
             Bool => true,
-            _ => false
+            _ => false,
         }
     }
 
@@ -156,7 +150,7 @@ impl ScalarKind {
         use ast::ScalarKind::*;
         match *self {
             I8 | I16 | I32 | I64 => true,
-            _ => false
+            _ => false,
         }
     }
 
@@ -165,7 +159,7 @@ impl ScalarKind {
         use ast::ScalarKind::*;
         match *self {
             U8 | U16 | U32 | U64 => true,
-            _ => false
+            _ => false,
         }
     }
 
@@ -182,7 +176,7 @@ impl ScalarKind {
             I8 | U8 => 8,
             I16 | U16 => 16,
             I32 | U32 | F32 => 32,
-            I64 | U64 | F64 => 64
+            I64 | U64 | F64 => 64,
         }
     }
 }
@@ -236,7 +230,7 @@ pub struct Expr<T: TypeBounds> {
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum IterKind {
     ScalarIter, // A standard scalar iterator.
-    SimdIter, // A vector iterator.
+    SimdIter,   // A vector iterator.
     FringeIter, // A fringe iterator, handling the fringe of a vector iter.
     NdIter,     // multi-dimensional nd-iter
     RangeIter,
@@ -274,8 +268,7 @@ impl<T: TypeBounds> Iter<T> {
     /// Returns true if this is a simple iterator with no start/stride/end specified
     /// (i.e., it iterates over all the input data) and kind `ScalarIter`.
     pub fn is_simple(&self) -> bool {
-        return self.start.is_none() && self.end.is_none() && self.stride.is_none() &&
-            self.kind == IterKind::ScalarIter;
+        return self.start.is_none() && self.end.is_none() && self.stride.is_none() && self.kind == IterKind::ScalarIter;
     }
 }
 
@@ -300,12 +293,25 @@ pub enum ExprKind<T: TypeBounds> {
         kind: ScalarKind,
         child_expr: Box<Expr<T>>,
     },
-    ToVec { child_expr: Box<Expr<T>> },
-    MakeStruct { elems: Vec<Expr<T>> },
-    MakeVector { elems: Vec<Expr<T>> },
-    Zip { vectors: Vec<Expr<T>> },
-    GetField { expr: Box<Expr<T>>, index: u32 },
-    Length { data: Box<Expr<T>> },
+    ToVec {
+        child_expr: Box<Expr<T>>,
+    },
+    MakeStruct {
+        elems: Vec<Expr<T>>,
+    },
+    MakeVector {
+        elems: Vec<Expr<T>>,
+    },
+    Zip {
+        vectors: Vec<Expr<T>>,
+    },
+    GetField {
+        expr: Box<Expr<T>>,
+        index: u32,
+    },
+    Length {
+        data: Box<Expr<T>>,
+    },
     Lookup {
         data: Box<Expr<T>>,
         index: Box<Expr<T>>,
@@ -371,7 +377,9 @@ pub enum ExprKind<T: TypeBounds> {
         builder: Box<Expr<T>>,
         value: Box<Expr<T>>,
     },
-    Res { builder: Box<Expr<T>> },
+    Res {
+        builder: Box<Expr<T>>,
+    },
 }
 
 impl<T: TypeBounds> ExprKind<T> {
@@ -383,7 +391,7 @@ impl<T: TypeBounds> ExprKind<T> {
             Ident(_) => "Ident",
             Negate(_) => "Negate",
             Broadcast(_) => "Broadcast",
-            BinOp{ .. } => "BinOp",
+            BinOp { .. } => "BinOp",
             UnaryOp { .. } => "UnaryOp",
             Cast { .. } => "Cast",
             ToVec { .. } => "ToVec",
@@ -400,7 +408,7 @@ impl<T: TypeBounds> ExprKind<T> {
             If { .. } => "If",
             Iterate { .. } => "Iterate",
             Select { .. } => "Select",
-            Lambda  { .. } => "Lambda",
+            Lambda { .. } => "Lambda",
             Apply { .. } => "Apply",
             CUDF { .. } => "CUDF",
             Serialize(_) => "Serialize",
@@ -483,9 +491,7 @@ impl BinOpKind {
     pub fn is_comparison(&self) -> bool {
         use ast::BinOpKind::*;
         match *self {
-            Equal | NotEqual | LessThan | GreaterThan | LessThanOrEqual | GreaterThanOrEqual => {
-                true
-            }
+            Equal | NotEqual | LessThan | GreaterThan | LessThanOrEqual | GreaterThanOrEqual => true,
             _ => false,
         }
     }
@@ -537,7 +543,7 @@ pub type TypedExpr = Expr<Type>;
 
 /// A typed iterator.
 pub type TypedIter = Iter<Type>;
- 
+
 /// A typed parameter.
 pub type TypedParameter = Parameter<Type>;
 
@@ -546,49 +552,24 @@ impl<T: TypeBounds> Expr<T> {
     pub fn children(&self) -> vec::IntoIter<&Expr<T>> {
         use self::ExprKind::*;
         match self.kind {
-            BinOp {
-                ref left,
-                ref right,
-                ..
-            } => vec![left.as_ref(), right.as_ref()],
-            UnaryOp {ref value, ..} => vec![value.as_ref()],
+            BinOp { ref left, ref right, .. } => vec![left.as_ref(), right.as_ref()],
+            UnaryOp { ref value, .. } => vec![value.as_ref()],
             Cast { ref child_expr, .. } => vec![child_expr.as_ref()],
             ToVec { ref child_expr } => vec![child_expr.as_ref()],
-            Let {
-                ref value,
-                ref body,
-                ..
-            } => vec![value.as_ref(), body.as_ref()],
+            Let { ref value, ref body, .. } => vec![value.as_ref(), body.as_ref()],
             Lambda { ref body, .. } => vec![body.as_ref()],
             MakeStruct { ref elems } => elems.iter().collect(),
             MakeVector { ref elems } => elems.iter().collect(),
             Zip { ref vectors } => vectors.iter().collect(),
             GetField { ref expr, .. } => vec![expr.as_ref()],
             Length { ref data } => vec![data.as_ref()],
-            Lookup {
-                ref data,
-                ref index,
-            } => vec![data.as_ref(), index.as_ref()],
+            Lookup { ref data, ref index } => vec![data.as_ref(), index.as_ref()],
             KeyExists { ref data, ref key } => vec![data.as_ref(), key.as_ref()],
-            Slice {
-                ref data,
-                ref index,
-                ref size,
-            } => vec![data.as_ref(), index.as_ref(), size.as_ref()],
-            Sort {
-                ref data,
-                ref keyfunc,
-            } => vec![data.as_ref(), keyfunc.as_ref()],
-            Merge {
-                ref builder,
-                ref value,
-            } => vec![builder.as_ref(), value.as_ref()],
+            Slice { ref data, ref index, ref size } => vec![data.as_ref(), index.as_ref(), size.as_ref()],
+            Sort { ref data, ref keyfunc } => vec![data.as_ref(), keyfunc.as_ref()],
+            Merge { ref builder, ref value } => vec![builder.as_ref(), value.as_ref()],
             Res { ref builder } => vec![builder.as_ref()],
-            For {
-                ref iters,
-                ref builder,
-                ref func,
-            } => {
+            For { ref iters, ref builder, ref func } => {
                 let mut res: Vec<&Expr<T>> = vec![];
                 for iter in iters {
                     res.push(iter.data.as_ref());
@@ -611,19 +592,13 @@ impl<T: TypeBounds> Expr<T> {
                 ref on_true,
                 ref on_false,
             } => vec![cond.as_ref(), on_true.as_ref(), on_false.as_ref()],
-            Iterate {
-                ref initial,
-                ref update_func,
-            } => vec![initial.as_ref(), update_func.as_ref()],
+            Iterate { ref initial, ref update_func } => vec![initial.as_ref(), update_func.as_ref()],
             Select {
                 ref cond,
                 ref on_true,
                 ref on_false,
             } => vec![cond.as_ref(), on_true.as_ref(), on_false.as_ref()],
-            Apply {
-                ref func,
-                ref params,
-            } => {
+            Apply { ref func, ref params } => {
                 let mut res = vec![func.as_ref()];
                 res.extend(params.iter());
                 res
@@ -649,46 +624,26 @@ impl<T: TypeBounds> Expr<T> {
     pub fn children_mut(&mut self) -> vec::IntoIter<&mut Expr<T>> {
         use self::ExprKind::*;
         match self.kind {
-            BinOp {
-                ref mut left,
-                ref mut right,
-                ..
-            } => vec![left.as_mut(), right.as_mut()],
+            BinOp { ref mut left, ref mut right, .. } => vec![left.as_mut(), right.as_mut()],
             UnaryOp { ref mut value, .. } => vec![value.as_mut()],
             Cast { ref mut child_expr, .. } => vec![child_expr.as_mut()],
             ToVec { ref mut child_expr } => vec![child_expr.as_mut()],
-            Let {
-                ref mut value,
-                ref mut body,
-                ..
-            } => vec![value.as_mut(), body.as_mut()],
+            Let { ref mut value, ref mut body, .. } => vec![value.as_mut(), body.as_mut()],
             Lambda { ref mut body, .. } => vec![body.as_mut()],
             MakeStruct { ref mut elems } => elems.iter_mut().collect(),
             MakeVector { ref mut elems } => elems.iter_mut().collect(),
             Zip { ref mut vectors } => vectors.iter_mut().collect(),
             GetField { ref mut expr, .. } => vec![expr.as_mut()],
             Length { ref mut data } => vec![data.as_mut()],
-            Lookup {
-                ref mut data,
-                ref mut index,
-            } => vec![data.as_mut(), index.as_mut()],
-            KeyExists {
-                ref mut data,
-                ref mut key,
-            } => vec![data.as_mut(), key.as_mut()],
+            Lookup { ref mut data, ref mut index } => vec![data.as_mut(), index.as_mut()],
+            KeyExists { ref mut data, ref mut key } => vec![data.as_mut(), key.as_mut()],
             Slice {
                 ref mut data,
                 ref mut index,
                 ref mut size,
             } => vec![data.as_mut(), index.as_mut(), size.as_mut()],
-            Sort {
-                ref mut data,
-                ref mut keyfunc,
-            } => vec![data.as_mut(), keyfunc.as_mut()],
-            Merge {
-                ref mut builder,
-                ref mut value,
-            } => vec![builder.as_mut(), value.as_mut()],
+            Sort { ref mut data, ref mut keyfunc } => vec![data.as_mut(), keyfunc.as_mut()],
+            Merge { ref mut builder, ref mut value } => vec![builder.as_mut(), value.as_mut()],
             Res { ref mut builder } => vec![builder.as_mut()],
             For {
                 ref mut iters,
@@ -727,10 +682,7 @@ impl<T: TypeBounds> Expr<T> {
                 ref mut on_false,
             } => vec![cond.as_mut(), on_true.as_mut(), on_false.as_mut()],
 
-            Apply {
-                ref mut func,
-                ref mut params,
-            } => {
+            Apply { ref mut func, ref mut params } => {
                 let mut res = vec![func.as_mut()];
                 res.extend(params.iter_mut());
                 res
@@ -762,11 +714,12 @@ impl<T: TypeBounds> Expr<T> {
         let mut sym_map: HashMap<&Symbol, &Symbol> = HashMap::new();
         let mut reverse_sym_map: HashMap<&Symbol, &Symbol> = HashMap::new();
 
-        fn _compare_ignoring_symbols<'b, 'a, U: TypeBounds>(e1: &'a Expr<U>,
-                                                            e2: &'b Expr<U>,
-                                                            sym_map: &mut HashMap<&'a Symbol, &'b Symbol>,
-                                                            reverse_sym_map: &mut HashMap<&'b Symbol, &'a Symbol>)
-                                                            -> WeldResult<bool> {
+        fn _compare_ignoring_symbols<'b, 'a, U: TypeBounds>(
+            e1: &'a Expr<U>,
+            e2: &'b Expr<U>,
+            sym_map: &mut HashMap<&'a Symbol, &'b Symbol>,
+            reverse_sym_map: &mut HashMap<&'b Symbol, &'a Symbol>,
+        ) -> WeldResult<bool> {
             // First, check the type.
             if e1.ty != e2.ty {
                 return Ok(false);
@@ -774,13 +727,9 @@ impl<T: TypeBounds> Expr<T> {
             // Check the kind of each expression. same_kind is true if each *non-expression* field
             // is equal and the kind of the expression matches. Also records corresponding symbol names.
             let same_kind = match (&e1.kind, &e2.kind) {
-                (&BinOp { kind: ref kind1, .. }, &BinOp { kind: ref kind2, .. }) if kind1 ==
-                                                                                    kind2 => {
-                    Ok(true)
-                }
+                (&BinOp { kind: ref kind1, .. }, &BinOp { kind: ref kind2, .. }) if kind1 == kind2 => Ok(true),
                 (&UnaryOp { .. }, &UnaryOp { .. }) => Ok(true),
-                (&Cast { kind: ref kind1, .. }, &Cast { kind: ref kind2, .. }) if kind1 ==
-                                                                                  kind2 => Ok(true),
+                (&Cast { kind: ref kind1, .. }, &Cast { kind: ref kind2, .. }) if kind1 == kind2 => Ok(true),
                 (&ToVec { .. }, &ToVec { .. }) => Ok(true),
                 (&Let { name: ref sym1, .. }, &Let { name: ref sym2, .. }) => {
                     sym_map.insert(sym1, sym2);
@@ -789,8 +738,7 @@ impl<T: TypeBounds> Expr<T> {
                 }
                 (&Lambda { params: ref params1, .. }, &Lambda { params: ref params2, .. }) => {
                     // Just compare types, and assume the symbol names "match up".
-                    if params1.len() == params2.len() &&
-                       params1.iter().zip(params2).all(|t| t.0.ty == t.1.ty) {
+                    if params1.len() == params2.len() && params1.iter().zip(params2).all(|t| t.0.ty == t.1.ty) {
                         for (p1, p2) in params1.iter().zip(params2) {
                             sym_map.insert(&p1.name, &p2.name);
                             reverse_sym_map.insert(&p2.name, &p1.name);
@@ -806,9 +754,7 @@ impl<T: TypeBounds> Expr<T> {
                 (&MakeStruct { .. }, &MakeStruct { .. }) => Ok(true),
                 (&MakeVector { .. }, &MakeVector { .. }) => Ok(true),
                 (&Zip { .. }, &Zip { .. }) => Ok(true),
-                (&GetField { index: idx1, .. }, &GetField { index: idx2, .. }) if idx1 == idx2 => {
-                    Ok(true)
-                }
+                (&GetField { index: idx1, .. }, &GetField { index: idx2, .. }) if idx1 == idx2 => Ok(true),
                 (&Length { .. }, &Length { .. }) => Ok(true),
                 (&Lookup { .. }, &Lookup { .. }) => Ok(true),
                 (&KeyExists { .. }, &KeyExists { .. }) => Ok(true),
@@ -816,24 +762,26 @@ impl<T: TypeBounds> Expr<T> {
                 (&Sort { .. }, &Sort { .. }) => Ok(true),
                 (&Merge { .. }, &Merge { .. }) => Ok(true),
                 (&Res { .. }, &Res { .. }) => Ok(true),
-                (&For { iters: ref liters, .. }, &For { iters: ref riters, .. })  => {
+                (&For { iters: ref liters, .. }, &For { iters: ref riters, .. }) => {
                     // If the iter kinds match for each iterator, the non-expression fields match.
                     Ok(liters.iter().zip(riters.iter()).all(|(ref l, ref r)| l.kind == r.kind))
-                },
+                }
                 (&If { .. }, &If { .. }) => Ok(true),
                 (&Iterate { .. }, &Iterate { .. }) => Ok(true),
                 (&Select { .. }, &Select { .. }) => Ok(true),
                 (&Apply { .. }, &Apply { .. }) => Ok(true),
-                (&CUDF {
-                     sym_name: ref sym_name1,
-                     return_ty: ref return_ty1,
-                     ..
-                 },
-                 &CUDF {
-                     sym_name: ref sym_name2,
-                     return_ty: ref return_ty2,
-                     ..
-                 }) => {
+                (
+                    &CUDF {
+                        sym_name: ref sym_name1,
+                        return_ty: ref return_ty1,
+                        ..
+                    },
+                    &CUDF {
+                        sym_name: ref sym_name2,
+                        return_ty: ref return_ty2,
+                        ..
+                    },
+                ) => {
                     let mut matches = sym_name1 == sym_name2;
                     matches = matches && return_ty1 == return_ty2;
                     Ok(matches)
@@ -903,10 +851,7 @@ impl<T: TypeBounds> Expr<T> {
                 }
             }
 
-            Lambda {
-                ref params,
-                ref mut body,
-            } => {
+            Lambda { ref params, ref mut body } => {
                 if params.iter().all(|p| p.name != *symbol) {
                     body.substitute(symbol, replacement);
                 }
@@ -922,7 +867,8 @@ impl<T: TypeBounds> Expr<T> {
 
     /// Run a closure on this expression and every child, in pre-order.
     pub fn traverse<F>(&self, func: &mut F)
-        where F: FnMut(&Expr<T>) -> ()
+    where
+        F: FnMut(&Expr<T>) -> (),
     {
         func(self);
         for c in self.children() {
@@ -945,7 +891,8 @@ impl<T: TypeBounds> Expr<T> {
 
     /// Recursively transforms an expression in place by running a function on it and optionally replacing it with another expression.
     pub fn transform_and_continue<F>(&mut self, func: &mut F)
-        where F: FnMut(&mut Expr<T>) -> (Option<Expr<T>>, bool)
+    where
+        F: FnMut(&mut Expr<T>) -> (Option<Expr<T>>, bool),
     {
         match func(self) {
             (Some(e), true) => {
@@ -967,31 +914,32 @@ impl<T: TypeBounds> Expr<T> {
     /// Recursively transforms an expression in place by running a function on it and optionally replacing it with another expression.
     /// Supports returning an error, which is treated as returning (None, false)
     pub fn transform_and_continue_res<F>(&mut self, func: &mut F)
-        where F: FnMut(&mut Expr<T>) -> WeldResult<(Option<Expr<T>>, bool)>
-        {
-            if let Ok(result) = func(self) {
-                match result {
-                    (Some(e), true) => {
-                        *self = e;
-                        return self.transform_and_continue_res(func);
-                    }
-                    (Some(e), false) => {
-                        *self = e;
-                    }
-                    (None, true) => {
-                        for c in self.children_mut() {
-                            c.transform_and_continue_res(func);
-                        }
-                    }
-                    (None, false) => {}
+    where
+        F: FnMut(&mut Expr<T>) -> WeldResult<(Option<Expr<T>>, bool)>,
+    {
+        if let Ok(result) = func(self) {
+            match result {
+                (Some(e), true) => {
+                    *self = e;
+                    return self.transform_and_continue_res(func);
                 }
+                (Some(e), false) => {
+                    *self = e;
+                }
+                (None, true) => {
+                    for c in self.children_mut() {
+                        c.transform_and_continue_res(func);
+                    }
+                }
+                (None, false) => {}
             }
         }
-
+    }
 
     /// Recursively transforms an expression in place by running a function on it and optionally replacing it with another expression.
     pub fn transform<F>(&mut self, func: &mut F)
-        where F: FnMut(&mut Expr<T>) -> Option<Expr<T>>
+    where
+        F: FnMut(&mut Expr<T>) -> Option<Expr<T>>,
     {
         if let Some(e) = func(self) {
             *self = e;
@@ -1005,7 +953,8 @@ impl<T: TypeBounds> Expr<T> {
     /// Recursively transforms an expression in place by running a function first on its children, then on the root
     /// expression itself; this can be more efficient than `transform` for some cases
     pub fn transform_up<F>(&mut self, func: &mut F)
-        where F: FnMut(&mut Expr<T>) -> Option<Expr<T>>
+    where
+        F: FnMut(&mut Expr<T>) -> Option<Expr<T>>,
     {
         for c in self.children_mut() {
             c.transform(func);
