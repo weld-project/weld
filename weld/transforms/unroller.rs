@@ -34,7 +34,12 @@ impl<'a> UnrollPattern<'a> {
         if let Res { ref builder } = expr.kind {
             if let Some(loopsize) = builder.annotations.loopsize() {
                 if loopsize <= UNROLL_LIMIT {
-                    if let For { ref iters, ref builder, ref func } = builder.kind {
+                    if let For {
+                        ref iters,
+                        ref builder,
+                        ref func,
+                    } = builder.kind
+                    {
                         if let Builder(ref bk, _) = builder.ty {
                             if let Lambda { ref params, ref body } = func.kind {
                                 if let Merge { builder: ref builder2, ref value } = body.kind {
@@ -90,7 +95,10 @@ pub fn unroll_static_loop(expr: &mut TypedExpr) {
 
             let combined_expr = combine_unrolled_values(pat.builder_kind.clone(), vals);
             if combined_expr.is_err() {
-                trace!("Unroller error: {}", combined_expr.unwrap_err().description());
+                trace!(
+                    "Unroller error: {}",
+                    combined_expr.unwrap_err().description()
+                );
                 return None;
             }
 
@@ -119,7 +127,12 @@ fn is_same_ident(expr: &TypedExpr, other: &TypedExpr) -> bool {
 
 /// Takes a `MergeSingle` and returns a list of expressions which replace the element
 /// in the merge with a Lookup.
-fn unroll_values(parameters: &Vec<TypedParameter>, value: &TypedExpr, vectors: &Vec<TypedExpr>, loopsize: i64) -> WeldResult<Vec<TypedExpr>> {
+fn unroll_values(
+    parameters: &Vec<TypedParameter>,
+    value: &TypedExpr,
+    vectors: &Vec<TypedExpr>,
+    loopsize: i64,
+) -> WeldResult<Vec<TypedExpr>> {
     if parameters.len() != 3 {
         return weld_err!("Expected three parameters to Merge function");
     }
@@ -140,13 +153,27 @@ fn unroll_values(parameters: &Vec<TypedParameter>, value: &TypedExpr, vectors: &
                 Ident(ref name) if name == elem_symbol && vectors.len() == 1 => {
                     // There is a single iterator, which means the type of the element is the type
                     // of the iterator's data. Replace it with a lookup into the vector.
-                    Some(lookup_expr(vectors[0].clone(), literal_expr(LiteralKind::I64Literal(i as i64)).unwrap()).unwrap())
+                    Some(
+                        lookup_expr(
+                            vectors[0].clone(),
+                            literal_expr(LiteralKind::I64Literal(i as i64)).unwrap(),
+                        ).unwrap(),
+                    )
                 }
-                GetField { ref expr, ref index } if is_same_ident(expr, elem_ident) && vectors.len() > 1 => {
+                GetField {
+                    ref expr,
+                    ref index,
+                } if is_same_ident(expr, elem_ident) && vectors.len() > 1 =>
+                {
                     // There are multiple iterators zipped into a struct, and this expression is
                     // pulling one of the elements out of that struct. Replace it with a lookup into the vector.
                     let data_expr = vectors[*index as usize].clone();
-                    Some(lookup_expr(data_expr, literal_expr(LiteralKind::I64Literal(i as i64)).unwrap()).unwrap())
+                    Some(
+                        lookup_expr(
+                            data_expr,
+                            literal_expr(LiteralKind::I64Literal(i as i64)).unwrap(),
+                        ).unwrap(),
+                    )
                 }
                 _ => None,
             }
@@ -188,7 +215,10 @@ fn combine_unrolled_values(bk: BuilderKind, values: Vec<TypedExpr>) -> WeldResul
             return makevector_expr(values);
         }
         ref bk => {
-            return weld_err!("Unroller transform does not support loops with builder of kind {:?}", bk);
+            return weld_err!(
+                "Unroller transform does not support loops with builder of kind {:?}",
+                bk
+            );
         }
     }
 }

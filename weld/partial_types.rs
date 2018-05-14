@@ -25,7 +25,12 @@ impl TypeBounds for PartialType {}
 pub enum PartialBuilderKind {
     Appender(Box<PartialType>),
     // Key type, value type, merge type (struct of <key,value> pairs)
-    DictMerger(Box<PartialType>, Box<PartialType>, Box<PartialType>, BinOpKind),
+    DictMerger(
+        Box<PartialType>,
+        Box<PartialType>,
+        Box<PartialType>,
+        BinOpKind,
+    ),
     // Key type, value type, merge type (struct of <key,value> pairs)
     GroupMerger(Box<PartialType>, Box<PartialType>, Box<PartialType>),
     // elem type, merge type (struct of <index, value> pairs
@@ -241,7 +246,9 @@ impl PartialExpr {
 
             Zip { ref vectors } => {
                 let vectors: WeldResult<Vec<_>> = vectors.iter().map(|e| e.to_typed()).collect();
-                Zip { vectors: try!(vectors) }
+                Zip {
+                    vectors: try!(vectors),
+                }
             }
 
             MakeStruct { ref elems } => {
@@ -366,6 +373,7 @@ impl PartialExpr {
                 NewBuilder(typed_arg)
             }
             Negate(ref expr) => Negate(try!(typed_box(expr))),
+            Not(ref expr) => Not(try!(typed_box(expr))),
             Broadcast(ref expr) => Broadcast(try!(typed_box(expr))),
             Serialize(ref expr) => Serialize(try!(typed_box(expr))),
         };

@@ -104,7 +104,10 @@ pub fn fuse_loops_2(expr: &mut Expr<Type>) {
             if let Lambda { ref params, ref body } = func.kind {
                 // Check whether at least one iterator is over a map pattern, i.e., Res(For(new Appender)) with
                 // a simple merge operation.
-                if !iters.iter().any(|ref iter| MapIter::extract(iter).is_some()) {
+                if !iters
+                    .iter()
+                    .any(|ref iter| MapIter::extract(iter).is_some())
+                {
                     return None;
                 }
 
@@ -131,7 +134,8 @@ pub fn fuse_loops_2(expr: &mut Expr<Type>) {
                         // This was indeed a map pattern; we'll update it to apply the map function directly on the
                         // element values we pull from those iterators in the upper-level loop.
                         let mut value = map.merge_value.clone();
-                        let index_ident = ident_expr(params[1].name.clone(), params[1].ty.clone()).unwrap();
+                        let index_ident =
+                            ident_expr(params[1].name.clone(), params[1].ty.clone()).unwrap();
                         value.substitute(&map.merge_params[1].name, &index_ident);
 
                         // For each iterator in the original MapIter, figure out a local variable that will hold
@@ -167,7 +171,8 @@ pub fn fuse_loops_2(expr: &mut Expr<Type>) {
                         if map_elem_exprs.len() > 1 {
                             let struct_symbol = gen.new_symbol("tmp");
                             let make_struct = makestruct_expr(map_elem_exprs).unwrap();
-                            let struct_ident = ident_expr(struct_symbol.clone(), make_struct.ty.clone()).unwrap();
+                            let struct_ident =
+                                ident_expr(struct_symbol.clone(), make_struct.ty.clone()).unwrap();
                             let_statements.push((struct_symbol, make_struct));
                             value.substitute(&map.merge_params[2].name, &struct_ident);
                         } else {
@@ -222,7 +227,8 @@ pub fn fuse_loops_2(expr: &mut Expr<Type>) {
                 }
 
                 // Add let statements in front of the body that set the new_elem_symbols to new_elem_exprs.
-                let new_param_ident = ident_expr(new_param_name.clone(), new_param_type.clone()).unwrap();
+                let new_param_ident =
+                    ident_expr(new_param_name.clone(), new_param_type.clone()).unwrap();
                 if new_elem_types.len() > 1 {
                     for i in (0..new_elem_types.len()).rev() {
                         new_body = let_expr(new_elem_symbols[i].clone(), getfield_expr(new_param_ident.clone(), i as u32).unwrap(), new_body).unwrap()
@@ -232,7 +238,8 @@ pub fn fuse_loops_2(expr: &mut Expr<Type>) {
                 }
 
                 let new_func = lambda_expr(new_params, new_body).unwrap();
-                let mut result = for_expr(new_iters.clone(), builder.as_ref().clone(), new_func, false).unwrap();
+                let mut result =
+                    for_expr(new_iters.clone(), builder.as_ref().clone(), new_func, false).unwrap();
                 result.annotations = expr.annotations.clone();
                 return Some(result);
             }
@@ -299,8 +306,9 @@ fn only_used_in_zip(name: &Symbol, expr: &TypedExpr) -> bool {
                         }
                         _ => (),
                     }
+                    _ => (),
                 }
-            }
+            },
             Length { ref data } => {
                 if let Ident(ref name1) = data.kind {
                     if name1 == name {
@@ -359,10 +367,17 @@ pub fn merge_makestruct_loops(expr: &mut TypedExpr) {
     expr.transform(&mut |ref mut expr| {
         if let MakeStruct { ref elems } = expr.kind {
             // Each member of the `GetStruct` must be a ResForAppender pattern.
-            if elems.len() > 2 || !elems.iter().all(|ref e| ResForAppender::extract(e).is_some()) {
+            if elems.len() > 2
+                || !elems
+                    .iter()
+                    .all(|ref e| ResForAppender::extract(e).is_some())
+            {
                 return None;
             }
-            let rfas: Vec<_> = elems.iter().map(|ref e| ResForAppender::extract(e).unwrap()).collect();
+            let rfas: Vec<_> = elems
+                .iter()
+                .map(|ref e| ResForAppender::extract(e).unwrap())
+                .collect();
 
             // Make sure all the iterators are simple, and each map just has a single merge.
             if !rfas.iter()
@@ -421,7 +436,9 @@ pub fn merge_makestruct_loops(expr: &mut TypedExpr) {
             // Construct the new builder type for the loop/etc.
 
             // For each RFA, get the first parameter of the builder function and copy its type.
-            let types: Vec<_> = rfas.iter().map(|ref rfa| MergeSingle::extract(rfa.func).unwrap().params[0].ty.clone()).collect();
+            let types: Vec<_> = rfas.iter()
+                .map(|ref rfa| MergeSingle::extract(rfa.func).unwrap().params[0].ty.clone())
+                .collect();
             let final_builder_ty = Struct(types);
 
             let mut bodies = vec![];
@@ -441,7 +458,11 @@ pub fn merge_makestruct_loops(expr: &mut TypedExpr) {
 
                     // This will be a no-op for the first iterator.
                     new_body.transform(&mut |ref mut e| {
-                        if let GetField { ref mut expr, ref mut index } = e.kind {
+                        if let GetField {
+                            ref mut expr,
+                            ref mut index,
+                        } = e.kind
+                        {
                             if let Ident(ref name) = expr.kind {
                                 if *name == elem_name.name && expr.ty == elem_name.ty {
                                     // Get the vector identifier this index refers to.
@@ -460,11 +481,15 @@ pub fn merge_makestruct_loops(expr: &mut TypedExpr) {
                 // Skip the first one since that's the builder, and since this is matching a
                 // MergeSingle pattern, we shouldn't have any builders in here.
                 for (j, ref param) in ma.params.iter().enumerate() {
-                    let ref replacement = ident_expr(first_ma.params[j].name.clone(), param.ty.clone()).unwrap();
+                    let ref replacement =
+                        ident_expr(first_ma.params[j].name.clone(), param.ty.clone()).unwrap();
                     new_body.substitute(&param.name, replacement);
                 }
                 // Add the new merge expression to the list of bodies.
-                let builder_expr = getfield_expr(ident_expr(first_ma.params[0].name.clone(), final_builder_ty.clone()).unwrap(), i as u32).unwrap();
+                let builder_expr = getfield_expr(
+                    ident_expr(first_ma.params[0].name.clone(), final_builder_ty.clone()).unwrap(),
+                    i as u32,
+                ).unwrap();
                 bodies.push(merge_expr(builder_expr, new_body).unwrap());
             }
 
@@ -517,7 +542,10 @@ fn iters_match_ignoring_symbols(iter1: &TypedIter, iter2: &TypedIter) -> WeldRes
 }
 
 /// Are two Option<Box<Expr>> equal ignoring symbols defined inside each one?
-fn options_match_ignoring_symbols(opt1: &Option<Box<TypedExpr>>, opt2: &Option<Box<TypedExpr>>) -> WeldResult<bool> {
+fn options_match_ignoring_symbols(
+    opt1: &Option<Box<TypedExpr>>,
+    opt2: &Option<Box<TypedExpr>>,
+) -> WeldResult<bool> {
     match (opt1, opt2) {
         (&None, &None) => Ok(true),
         (&Some(ref e1), &Some(ref e2)) => e1.compare_ignoring_symbols(e2.as_ref()),

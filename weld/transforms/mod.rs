@@ -1,5 +1,6 @@
 //! Common transformations on expressions.
 
+pub mod algebraic;
 pub mod annotator;
 pub mod inliner;
 pub mod loop_fusion;

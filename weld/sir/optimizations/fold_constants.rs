@@ -101,14 +101,19 @@ pub fn fold_constants(prog: &mut SirProgram) -> WeldResult<()> {
     Ok(())
 }
 
-fn fold_constants_in_function(func: &mut SirFunction, global_params: &fnv::FnvHashSet<Symbol>) -> WeldResult<()> {
+fn fold_constants_in_function(
+    func: &mut SirFunction,
+    global_params: &fnv::FnvHashSet<Symbol>,
+) -> WeldResult<()> {
     use sir::StatementKind::*;
 
     let mut assignment_counts: fnv::FnvHashMap<Symbol, i32> = fnv::FnvHashMap::default();
     for block in func.blocks.iter_mut() {
         for statement in block.statements.iter_mut() {
             if statement.output.is_some() {
-                let assignment_count = assignment_counts.entry(statement.output.clone().unwrap()).or_insert(0);
+                let assignment_count = assignment_counts
+                    .entry(statement.output.clone().unwrap())
+                    .or_insert(0);
                 *assignment_count += 1;
             }
         }
@@ -145,7 +150,12 @@ fn fold_constants_in_function(func: &mut SirFunction, global_params: &fnv::FnvHa
                         None
                     }
                 }
-                BinOp { ref op, ref left, ref right } if (&values).contains_key(left) && (&values).contains_key(right) => {
+                BinOp {
+                    ref op,
+                    ref left,
+                    ref right,
+                } if (&values).contains_key(left) && (&values).contains_key(right) =>
+                {
                     let left_val = (*values.get(left).unwrap()).clone();
                     let right_val = (*values.get(right).unwrap()).clone();
                     // If this throws an error, it just means that we don't support evaluating the

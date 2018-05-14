@@ -45,7 +45,7 @@ pub fn binop_expr(kind: BinOpKind, left: Expr<Type>, right: Expr<Type>) -> WeldR
     if left.ty != right.ty {
         weld_err!("Internal error: Mismatched types in binop_expr")
     } else {
-        let ty = left.ty.clone();
+        let ty = left.ty.clone(); // FIXME comparisons don't have the same output type as their arguments!
         new_expr(
             BinOp {
                 kind: kind,
@@ -90,6 +90,15 @@ pub fn negate_expr(expr: Expr<Type>) -> WeldResult<Expr<Type>> {
         return weld_err!("Internal error: Mismatched types in negate_expr");
     };
     new_expr(Negate(Box::new(expr)), ty)
+}
+
+pub fn not_expr(expr: Expr<Type>) -> WeldResult<Expr<Type>> {
+    let ty = if let Scalar(ref k) = expr.ty {
+        Scalar(k.clone())
+    } else {
+        return weld_err!("Internal error: Mismatched types in not_expr");
+    };
+    new_expr(Not(Box::new(expr)), ty)
 }
 
 pub fn broadcast_expr(expr: Expr<Type>) -> WeldResult<Expr<Type>> {
@@ -146,7 +155,12 @@ pub fn getfield_expr(expr: Expr<Type>, index: u32) -> WeldResult<Expr<Type>> {
 
 pub fn length_expr(expr: Expr<Type>) -> WeldResult<Expr<Type>> {
     if let Vector(_) = expr.ty {
-        new_expr(Length { data: Box::new(expr) }, Scalar(ScalarKind::I64))
+        new_expr(
+            Length {
+                data: Box::new(expr),
+            },
+            Scalar(ScalarKind::I64),
+        )
     } else {
         weld_err!("Internal error: Mismatched types in length_expr")
     }
@@ -262,7 +276,11 @@ pub fn let_expr(name: Symbol, value: Expr<Type>, body: Expr<Type>) -> WeldResult
     )
 }
 
-pub fn if_expr(cond: Expr<Type>, on_true: Expr<Type>, on_false: Expr<Type>) -> WeldResult<Expr<Type>> {
+pub fn if_expr(
+    cond: Expr<Type>,
+    on_true: Expr<Type>,
+    on_false: Expr<Type>,
+) -> WeldResult<Expr<Type>> {
     let err = weld_err!("Internal error: Mismatched types in if_expr");
     if cond.ty != Scalar(ScalarKind::Bool) {
         return err;
@@ -283,7 +301,11 @@ pub fn if_expr(cond: Expr<Type>, on_true: Expr<Type>, on_false: Expr<Type>) -> W
     )
 }
 
-pub fn select_expr(cond: Expr<Type>, on_true: Expr<Type>, on_false: Expr<Type>) -> WeldResult<Expr<Type>> {
+pub fn select_expr(
+    cond: Expr<Type>,
+    on_true: Expr<Type>,
+    on_false: Expr<Type>,
+) -> WeldResult<Expr<Type>> {
     let err = weld_err!("Internal error: Mismatched types in select_expr");
     if cond.ty != Scalar(ScalarKind::Bool) && cond.ty != Simd(ScalarKind::Bool) {
         return err;
@@ -418,7 +440,9 @@ pub fn for_expr(iters: Vec<Iter<Type>>, builder: Expr<Type>, func: Expr<Type>, v
 
         // Check builder.
         if param_0_ty != &builder_ty {
-            return weld_err!("Internal error: Mismatched types in for_expr - function builder type",);
+            return weld_err!(
+                "Internal error: Mismatched types in for_expr - function builder type",
+            );
         }
 
         // Check the index.
@@ -427,7 +451,9 @@ pub fn for_expr(iters: Vec<Iter<Type>>, builder: Expr<Type>, func: Expr<Type>, v
         }
 
         if iters.len() != vec_elem_tys.len() {
-            return weld_err!("Internal error: Mismatched types in for_expr - iters and vec_tys length",);
+            return weld_err!(
+                "Internal error: Mismatched types in for_expr - iters and vec_tys length",
+            );
         }
 
         // Check the element type.
@@ -455,7 +481,9 @@ pub fn for_expr(iters: Vec<Iter<Type>>, builder: Expr<Type>, func: Expr<Type>, v
                     if let Scalar(ref sk) = ty {
                         vec_elem_tys_simd.push(Simd(sk.clone()))
                     } else {
-                        return weld_err!("Internal error: Mismatched types in for_expr - bad vector",);
+                        return weld_err!(
+                            "Internal error: Mismatched types in for_expr - bad vector",
+                        );
                     }
                 }
                 Struct(vec_elem_tys_simd)
@@ -464,7 +492,9 @@ pub fn for_expr(iters: Vec<Iter<Type>>, builder: Expr<Type>, func: Expr<Type>, v
             };
 
             if *param_2_ty != composite_ty {
-                return weld_err!("Internal error: Mismatched types in for_expr - function zipped elem type",);
+                return weld_err!(
+                    "Internal error: Mismatched types in for_expr - function zipped elem type",
+                );
             }
         }
 
@@ -571,7 +601,12 @@ pub fn result_expr(builder: Expr<Type>) -> WeldResult<Expr<Type>> {
     } else {
         return err;
     };
-    new_expr(Res { builder: Box::new(builder) }, ty)
+    new_expr(
+        Res {
+            builder: Box::new(builder),
+        },
+        ty,
+    )
 }
 
 #[cfg(test)]

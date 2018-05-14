@@ -1,6 +1,7 @@
 use super::ast::*;
 use super::error::*;
 
+use super::transforms::algebraic;
 use super::transforms::annotator;
 use super::transforms::inliner;
 use super::transforms::loop_fusion;
@@ -120,6 +121,16 @@ lazy_static! {
         );
         m.insert("vectorize", Pass::new(vec![Transformation::new(vectorizer::vectorize)], "vectorize"));
         m.insert("fix-iterate", Pass::new(vec![Transformation::new(annotator::force_iterate_parallel_fors)], "fix-iterate"));
+        m.insert(
+            "algebraicopts",
+            Pass::new(
+                vec![
+                    Transformation::new(algebraic::shift_work_to_constants),
+                    Transformation::new(algebraic::eliminate_redundant_negation),
+                ],
+                "algebraicopts",
+            ),
+        );
         m
     };
 }

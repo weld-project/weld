@@ -190,7 +190,8 @@ pub fn predicate_simple_expr(e: &mut Expr<Type>) {
 
             if let Scalar(_) = on_true.ty {
                 if let Scalar(_) = on_false.ty {
-                    let expr = exprs::select_expr(*cond.clone(), *on_true.clone(), *on_false.clone())?;
+                    let expr =
+                        exprs::select_expr(*cond.clone(), *on_true.clone(), *on_false.clone())?;
                     return Ok((Some(expr), true));
                 }
             }
@@ -305,7 +306,11 @@ fn vectorizable(for_loop: &Expr<Type>) -> Option<HashSet<Symbol>> {
             // Check if at least one of the builders can be vectorized.
             if let Some(true) = vectorizable_builder(init_builder) {
                 // Check the loop function.
-                if let Lambda { ref params, ref body } = func.kind {
+                if let Lambda {
+                    ref params,
+                    ref body,
+                } = func.kind
+                {
                     let mut passed = true;
 
                     // Identifiers defined within the loop.
@@ -494,7 +499,8 @@ fn predicated_merger() {
 #[test]
 fn unpredicated_merger() {
     // This one shouldn't be vectorized since we didn't predicate it.
-    let mut e = typed_expr("|v:vec[i32]| result(for(v, merger[i32,+], |b,i,e| if(e>0, merge(b,e), b)))");
+    let mut e =
+        typed_expr("|v:vec[i32]| result(for(v, merger[i32,+], |b,i,e| if(e>0, merge(b,e), b)))");
     vectorize(&mut e);
     assert!(!has_vectorized_merge(&e));
 }
@@ -526,14 +532,16 @@ fn non_vectorizable_type() {
 #[test]
 fn non_vectorizable_expr() {
     // This code should NOT be vectorized because we can't vectorize lookup().
-    let mut e = typed_expr("|v:vec[i32]| result(for(v, appender[i32], |b,i,e| merge(b,lookup(v,i))))");
+    let mut e =
+        typed_expr("|v:vec[i32]| result(for(v, appender[i32], |b,i,e| merge(b,lookup(v,i))))");
     vectorize(&mut e);
     assert!(!has_vectorized_merge(&e));
 }
 
 #[test]
 fn zipped_input() {
-    let mut e = typed_expr("|v:vec[i32]| result(for(zip(v,v), appender[i32], |b,i,e| merge(b,e.$0+e.$1)))");
+    let mut e =
+        typed_expr("|v:vec[i32]| result(for(zip(v,v), appender[i32], |b,i,e| merge(b,e.$0+e.$1)))");
     vectorize(&mut e);
     assert!(has_vectorized_merge(&e));
 }

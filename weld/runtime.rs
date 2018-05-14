@@ -38,7 +38,11 @@ extern "C" {
     #[no_mangle]
     pub fn weld_rt_set_result(res: *mut c_void);
     #[no_mangle]
-    pub fn weld_rt_new_vb(elem_size: int64_t, starting_cap: int64_t, fixed_size: int32_t) -> *mut c_void;
+    pub fn weld_rt_new_vb(
+        elem_size: int64_t,
+        starting_cap: int64_t,
+        fixed_size: int32_t,
+    ) -> *mut c_void;
     #[no_mangle]
     pub fn weld_rt_new_vb_piece(v: *mut c_void, w: *mut work_t);
     #[no_mangle]
@@ -54,7 +58,11 @@ extern "C" {
     #[no_mangle]
     pub fn weld_rt_free_merger(m: *mut c_void);
     #[no_mangle]
-    pub fn weld_run_begin(run: extern "C" fn(*mut work_t), mem_limit: int64_t, n_workers: int32_t) -> int64_t;
+    pub fn weld_run_begin(
+        run: extern "C" fn(*mut work_t),
+        mem_limit: int64_t,
+        n_workers: int32_t,
+    ) -> int64_t;
     #[no_mangle]
     pub fn weld_run_get_result(run_id: int64_t) -> *mut c_void;
     #[no_mangle]

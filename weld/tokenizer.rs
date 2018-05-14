@@ -100,6 +100,7 @@ pub enum Token {
     TColon,
     TSemicolon,
     TQuestion,
+    TBang,
     TEqualEqual,
     TNotEqual,
     TLessThanOrEqual,
@@ -122,9 +123,11 @@ impl Token {
     pub fn requires_space(&self) -> bool {
         use super::tokenizer::Token::*;
         match *self {
-            TOpenParen | TCloseParen | TOpenBracket | TCloseBracket | TOpenBrace | TCloseBrace | TComma | TPlus | TMinus | TTimes | TDivide | TModulo | TEqual | TBar | TAtMark
-            | TDot | TColon | TSemicolon | TQuestion | TEqualEqual | TNotEqual | TLessThanOrEqual | TGreaterThanOrEqual | TLessThan | TGreaterThan | TLogicalAnd | TLogicalOr
-            | TBitwiseAnd | TXor | TMax | TMin | TPow | TEndOfInput => false,
+            TOpenParen | TCloseParen | TOpenBracket | TCloseBracket | TOpenBrace | TCloseBrace
+            | TComma | TPlus | TMinus | TTimes | TDivide | TModulo | TEqual | TBar | TAtMark
+            | TDot | TColon | TSemicolon | TQuestion | TBang | TEqualEqual | TNotEqual
+            | TLessThanOrEqual | TGreaterThanOrEqual | TLessThan | TGreaterThan | TLogicalAnd
+            | TLogicalOr | TBitwiseAnd | TXor | TMax | TMin | TPow | TEndOfInput => false,
             _ => true,
         }
     }
@@ -137,7 +140,7 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
         static ref TOKEN_RE: Regex = Regex::new(concat!(
             "(?m)#.*$|",
             r#"[0-9]+\.[0-9]+([eE]-?[0-9]+)?[fF]?|[0-9]+[eE]-?[0-9]+[fF]?|"[^"]*"|"#,
-            r#"[A-Za-z0-9$_]+|==|!=|>=|<=|&&|\|\||[-+/*%,=()[\]{}|@&\.:;?&\|^<>]|\S+"#
+            r#"[A-Za-z0-9$_]+|==|!=|>=|<=|&&|\|\||[-+/*%,=()[\]{}|@&\.:;?!&\|^<>]|\S+"#
         )).unwrap();
 
         // Regular expressions for various types of tokens.
@@ -311,6 +314,7 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
                 ":" => TColon,
                 ";" => TSemicolon,
                 "?" => TQuestion,
+                "!" => TBang,
                 "==" => TEqualEqual,
                 "!=" => TNotEqual,
                 "<" => TLessThan,
@@ -435,6 +439,7 @@ impl fmt::Display for Token {
                         TDot => ".",
                         TColon => ":",
                         TSemicolon => ";",
+                        TBang => "!",
                         TQuestion => "?",
                         TEqualEqual => "==",
                         TNotEqual => "!=",
@@ -512,6 +517,17 @@ fn basic_tokenize() {
         vec![TEqual, TEqualEqual, TBar, TLogicalOr, TBitwiseAnd, TLogicalAnd, TEndOfInput]
     );
     assert_eq!(
+        tokenize("|t| !t").unwrap(),
+        vec![
+            TBar,
+            TIdent("t".into()),
+            TBar,
+            TBang,
+            TIdent("t".into()),
+            TEndOfInput,
+        ]
+    );
+    assert_eq!(
         tokenize("|a:i8| a").unwrap(),
         vec![TBar, TIdent("a".into()), TColon, TI8, TBar, TIdent("a".into()), TEndOfInput]
     );
@@ -561,7 +577,10 @@ fn basic_tokenize() {
     );
     assert!(tokenize("0a").is_err());
 
-    assert_eq!(tokenize("42si").unwrap(), vec![TI16Literal(42i16), TEndOfInput]);
+    assert_eq!(
+        tokenize("42si").unwrap(),
+        vec![TI16Literal(42i16), TEndOfInput]
+    );
     assert_eq!(tokenize("0b10").unwrap(), vec![TI32Literal(2), TEndOfInput]);
     assert_eq!(tokenize("0x10").unwrap(), vec![TI32Literal(16), TEndOfInput]);
 

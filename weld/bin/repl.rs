@@ -234,7 +234,10 @@ fn main() {
         .get_matches();
 
     // Parse the log level.
-    let log_level_str = matches.value_of("loglevel").unwrap_or("debug").to_lowercase();
+    let log_level_str = matches
+        .value_of("loglevel")
+        .unwrap_or("debug")
+        .to_lowercase();
     let (log_level, log_str) = match log_level_str.as_str() {
         "none" => (WeldLogLevel::Off, "none"),
         "error" => (WeldLogLevel::Error, "\x1b[0;31merror\x1b[0m"),

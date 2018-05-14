@@ -168,6 +168,10 @@ impl ScalarKind {
         return self.is_signed_integer() || self.is_unsigned_integer();
     }
 
+    pub fn is_numeric(&self) -> bool {
+        return self.is_integer() || self.is_float();
+    }
+
     /// Return the length of this scalar type in bits
     pub fn bits(&self) -> u32 {
         use ast::ScalarKind::*;
@@ -178,6 +182,13 @@ impl ScalarKind {
             I32 | U32 | F32 => 32,
             I64 | U64 | F64 => 64,
         }
+    }
+
+    pub fn is_upcast(&self, target: &ScalarKind) -> bool {
+        target.bits() >= self.bits()
+    }
+    pub fn is_strict_upcast(&self, target: &ScalarKind) -> bool {
+        target.bits() > self.bits()
     }
 }
 
@@ -278,6 +289,7 @@ pub enum ExprKind<T: TypeBounds> {
     Literal(LiteralKind),
     Ident(Symbol),
     Negate(Box<Expr<T>>),
+    Not(Box<Expr<T>>),
     // Broadcasts a scalar into a vector, e.g., 1 -> <1, 1, 1, 1>
     Broadcast(Box<Expr<T>>),
     BinOp {
@@ -390,6 +402,7 @@ impl<T: TypeBounds> ExprKind<T> {
             Literal(_) => "Literal",
             Ident(_) => "Ident",
             Negate(_) => "Negate",
+            Not(_) => "Not",
             Broadcast(_) => "Broadcast",
             BinOp { .. } => "BinOp",
             UnaryOp { .. } => "UnaryOp",
@@ -614,6 +627,7 @@ impl<T: TypeBounds> Expr<T> {
             Deserialize { ref value, .. } => vec![value.as_ref()],
             CUDF { ref args, .. } => args.iter().collect(),
             Negate(ref t) => vec![t.as_ref()],
+            Not(ref t) => vec![t.as_ref()],
             Broadcast(ref t) => vec![t.as_ref()],
             // Explicitly list types instead of doing _ => ... to remember to add new types.
             Literal(_) | Ident(_) => vec![],
@@ -626,7 +640,9 @@ impl<T: TypeBounds> Expr<T> {
         match self.kind {
             BinOp { ref mut left, ref mut right, .. } => vec![left.as_mut(), right.as_mut()],
             UnaryOp { ref mut value, .. } => vec![value.as_mut()],
-            Cast { ref mut child_expr, .. } => vec![child_expr.as_mut()],
+            Cast {
+                ref mut child_expr, ..
+            } => vec![child_expr.as_mut()],
             ToVec { ref mut child_expr } => vec![child_expr.as_mut()],
             Let { ref mut value, ref mut body, .. } => vec![value.as_mut(), body.as_mut()],
             Lambda { ref mut body, .. } => vec![body.as_mut()],
@@ -698,6 +714,7 @@ impl<T: TypeBounds> Expr<T> {
             Deserialize { ref mut value, .. } => vec![value.as_mut()],
             CUDF { ref mut args, .. } => args.iter_mut().collect(),
             Negate(ref mut t) => vec![t.as_mut()],
+            Not(ref mut t) => vec![t.as_mut()],
             Broadcast(ref mut t) => vec![t.as_mut()],
             // Explicitly list types instead of doing _ => ... to remember to add new types.
             Literal(_) | Ident(_) => vec![],
@@ -736,7 +753,16 @@ impl<T: TypeBounds> Expr<T> {
                     reverse_sym_map.insert(sym2, sym1);
                     Ok(true)
                 }
-                (&Lambda { params: ref params1, .. }, &Lambda { params: ref params2, .. }) => {
+                (
+                    &Lambda {
+                        params: ref params1,
+                        ..
+                    },
+                    &Lambda {
+                        params: ref params2,
+                        ..
+                    },
+                ) => {
                     // Just compare types, and assume the symbol names "match up".
                     if params1.len() == params2.len() && params1.iter().zip(params2).all(|t| t.0.ty == t.1.ty) {
                         for (p1, p2) in params1.iter().zip(params2) {
@@ -787,7 +813,16 @@ impl<T: TypeBounds> Expr<T> {
                     Ok(matches)
                 }
                 (&Serialize(_), &Serialize(_)) => Ok(true),
-                (&Deserialize { ref value_ty, .. }, &Deserialize { value_ty: ref value_ty2, .. }) if value_ty == value_ty2 => Ok(true),
+                (
+                    &Deserialize { ref value_ty, .. },
+                    &Deserialize {
+                        value_ty: ref value_ty2,
+                        ..
+                    },
+                ) if value_ty == value_ty2 =>
+                {
+                    Ok(true)
+                }
                 (&Literal(ref l), &Literal(ref r)) if l == r => Ok(true),
                 (&Ident(ref l), &Ident(ref r)) => {
                     if let Some(lv) = sym_map.get(l) {
@@ -950,6 +985,19 @@ impl<T: TypeBounds> Expr<T> {
         }
     }
 
+    pub fn transform_kind<F>(&mut self, func: &mut F)
+    where
+        F: FnMut(&mut Expr<T>) -> Option<ExprKind<T>>,
+    {
+        if let Some(k) = func(self) {
+            self.kind = k;
+            return self.transform_kind(func);
+        }
+        for c in self.children_mut() {
+            c.transform_kind(func);
+        }
+    }
+
     /// Recursively transforms an expression in place by running a function first on its children, then on the root
     /// expression itself; this can be more efficient than `transform` for some cases
     pub fn transform_up<F>(&mut self, func: &mut F)
@@ -975,5 +1023,33 @@ impl<T: TypeBounds> Expr<T> {
             }
         }
         return false;
+    }
+}
+
+pub trait Takeable {
+    fn take(&mut self) -> Self;
+}
+
+impl<T: TypeBounds> Takeable for Expr<T> {
+    fn take(&mut self) -> Expr<T> {
+        let mut new = Expr {
+            ty: self.ty.clone(),
+            kind: ExprKind::Ident(Symbol::name("taken")),
+            annotations: Annotations::new(),
+        };
+        mem::swap(self, &mut new);
+        new
+    }
+}
+
+impl<T: TypeBounds> Takeable for Box<Expr<T>> {
+    fn take(&mut self) -> Box<Expr<T>> {
+        let mut new = Expr {
+            ty: self.ty.clone(),
+            kind: ExprKind::Ident(Symbol::name("taken")),
+            annotations: Annotations::new(),
+        };
+        mem::swap(self.as_mut(), &mut new);
+        Box::new(new)
     }
 }

@@ -147,7 +147,12 @@ fn print_iters<T: PrintableType>(iters: &Vec<Iter<T>>, typed: bool, indent: i32,
                 print_expr_impl(iter.data.as_ref(), typed, indent, should_indent)
             ));
         } else {
-            iter_strs.push(print_expr_impl(iter.data.as_ref(), typed, indent + 2, should_indent));
+            iter_strs.push(print_expr_impl(
+                iter.data.as_ref(),
+                typed,
+                indent + 2,
+                should_indent,
+            ));
         }
     }
 
@@ -199,7 +204,7 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>, typed: bool, indent: i32, s
         UnaryOp { kind, ref value } => format!("({}({}))", kind, print_expr_impl(value, typed, indent, should_indent)),
 
         Negate(ref e) => format!("(-{})", print_expr_impl(e, typed, indent, should_indent)),
-
+        Not(ref e) => format!("(!{})", print_expr_impl(e, typed, indent, should_indent)),
         Broadcast(ref e) => format!("broadcast({})", print_expr_impl(e, typed, indent, should_indent)),
 
         CUDF {

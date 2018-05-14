@@ -198,6 +198,13 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
 
         Negate(ref c) => push_type(&mut expr.ty, &c.ty, "Negate"),
 
+        Not(ref mut c) => {
+            let mut changed = false;
+            changed |= try!(push_type(&mut c.ty, &Scalar(Bool), "Not"));
+            changed |= try!(push_type(&mut expr.ty, &Scalar(Bool), "Not"));
+            Ok(changed)
+        }
+
         Broadcast(ref c) => match c.ty {
             Scalar(ref kind) => push_type(&mut expr.ty, &Simd(kind.clone()), "Broadcast"),
             _ => weld_err!("Broadcast only works with Scalar(_)"),
@@ -483,7 +490,9 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
                     }
                 } else {
                     if iters.iter().any(|i| i.kind == IterKind::SimdIter) {
-                        return weld_err!("For without vector arguments requires a Scalar or Fringe iterator");
+                        return weld_err!(
+                            "For without vector arguments requires a Scalar or Fringe iterator"
+                        );
                     }
                 }
             }
@@ -750,7 +759,7 @@ fn push_type(dest: &mut PartialType, src: &PartialType, context: &str) -> WeldRe
                                     }
                                 }
                             }
-                        }
+                        },
                         Scalar(_) => {}
                         _ => {
                             return weld_err!(
@@ -810,7 +819,7 @@ fn push_type(dest: &mut PartialType, src: &PartialType, context: &str) -> WeldRe
                                     }
                                 }
                             }
-                        }
+                        },
                         Scalar(_) => {}
                         _ => {
                             return weld_err!(
@@ -850,7 +859,7 @@ fn push_type(dest: &mut PartialType, src: &PartialType, context: &str) -> WeldRe
                                     }
                                 }
                             }
-                        }
+                        },
                         Scalar(_) => {}
                         _ => {
                             return weld_err!(

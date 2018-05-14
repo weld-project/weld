@@ -36,9 +36,17 @@ use super::pretty_print::*;
 macro_rules! check_parse_error {
     ($parser:expr, $res:expr) => {{
         if $res.is_ok() && !$parser.is_done() {
-            return weld_err!("Unexpected token {} at {}", $parser.peek(), $parser.error_context());
+            return weld_err!(
+                "Unexpected token {} at {}",
+                $parser.peek(),
+                $parser.error_context()
+            );
         } else if $res.is_err() {
-            return weld_err!("{} (at {})", $res.unwrap_err().description(), $parser.error_context());
+            return weld_err!(
+                "{} (at {})",
+                $res.unwrap_err().description(),
+                $parser.error_context()
+            );
         } else {
             $res
         }
@@ -752,8 +760,14 @@ impl<'t> Parser<'t> {
             TI8Literal(v) => Ok(expr_box(Literal(I8Literal(v)), Annotations::new())),
             TI32Literal(v) => Ok(expr_box(Literal(I32Literal(v)), Annotations::new())),
             TI64Literal(v) => Ok(expr_box(Literal(I64Literal(v)), Annotations::new())),
-            TF32Literal(v) => Ok(expr_box(Literal(F32Literal(v.to_bits())), Annotations::new())),
-            TF64Literal(v) => Ok(expr_box(Literal(F64Literal(v.to_bits())), Annotations::new())),
+            TF32Literal(v) => Ok(expr_box(
+                Literal(F32Literal(v.to_bits())),
+                Annotations::new(),
+            )),
+            TF64Literal(v) => Ok(expr_box(
+                Literal(F64Literal(v.to_bits())),
+                Annotations::new(),
+            )),
             TBoolLiteral(v) => Ok(expr_box(Literal(BoolLiteral(v)), Annotations::new())),
             TStringLiteral(ref v) => Ok(expr_box(Literal(StringLiteral(v.clone())), Annotations::new())),
 
@@ -773,7 +787,12 @@ impl<'t> Parser<'t> {
                 try!(self.consume(TOpenParen));
                 let child_expr = try!(self.expr());
                 try!(self.consume(TCloseParen));
-                Ok(expr_box(ToVec { child_expr: child_expr }, Annotations::new()))
+                Ok(expr_box(
+                    ToVec {
+                        child_expr: child_expr,
+                    },
+                    Annotations::new(),
+                ))
             }
 
             TIdent(ref name) => Ok(expr_box(Ident(Symbol { name: name.clone(), id: 0 }), Annotations::new())),
@@ -1171,6 +1190,7 @@ impl<'t> Parser<'t> {
             }
 
             TMinus => Ok(expr_box(Negate(try!(self.leaf_expr())), Annotations::new())),
+            TBang => Ok(expr_box(Not(try!(self.leaf_expr())), Annotations::new())),
 
             TMin => {
                 try!(self.consume(TOpenParen));

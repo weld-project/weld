@@ -1,5 +1,7 @@
 //! Generates headers for a Weld program.
 
+extern crate clap;
+extern crate libc;
 #[macro_use]
 extern crate weld;
 extern crate clap;
@@ -106,7 +108,8 @@ impl CppHeaderGenerator {
         };
 
         if result.is_ok() {
-            self.generated_types.insert(ty.clone(), result.as_ref().unwrap().clone());
+            self.generated_types
+                .insert(ty.clone(), result.as_ref().unwrap().clone());
         }
         self.code.add("\n");
 
@@ -128,7 +131,8 @@ impl CppHeaderGenerator {
         self.code.add("\n");
         self.code.add("// Aliases for argument and return types.");
         self.code.add(format!("typedef {} input_type;", param_type));
-        self.code.add(format!("typedef {} return_type;", return_type));
+        self.code
+            .add(format!("typedef {} return_type;", return_type));
         self.code.add("\n");
         self.code.add("#endif /* _WELD_CPP_HEADER_ */");
         self.code.result().to_string()

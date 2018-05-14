@@ -35,6 +35,7 @@ lazy_static! {
     pub static ref DEFAULT_OPTIMIZATION_PASSES: Vec<Pass> = {
         let m = [
             "loop-fusion",
+            "algebraicopts",
             "unroll-static-loop",
             "infer-size",
             "short-circuit-booleans",
@@ -106,6 +107,7 @@ pub fn parse(conf: &WeldConf) -> WeldResult<ParsedConf> {
 
     let value = get_value(conf, TRACE_RUN_KEY);
     let trace_run = value.map(|s| parse_bool_flag(&s, "Invalid flag for trace.run")).unwrap_or(Ok(DEFAULT_TRACE_RUN))?;
+
 
     Ok(ParsedConf {
         memory_limit: memory_limit,
