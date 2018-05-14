@@ -39,9 +39,3 @@ bench = false
 name = "hdrgen"
 path = "weld/bin/hdrgen.rs"
 bench = false
-
-[[test]]
-name = "integration_tests"
-path = "tests/integration_tests.rs"
-harness = false
-bench = false
