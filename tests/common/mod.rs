@@ -1,16 +1,16 @@
 //! Utilities and helper functions for integration tests.
 #![allow(dead_code)]
 
-extern crate weld;
 extern crate libc;
+extern crate weld;
 
-use weld::*;
 use weld::common::WeldRuntimeErrno;
+use weld::*;
 
 use std::convert::AsRef;
 
-use std::ffi::{CStr, CString};
 use self::libc::{c_char, c_void};
+use std::ffi::{CStr, CString};
 
 #[derive(Clone, Debug)]
 #[repr(C)]
@@ -26,19 +26,24 @@ impl<T> WeldVec<T> {
     pub fn new(ptr: *const T, len: i64) -> WeldVec<T> {
         WeldVec {
             data: ptr,
-            len: len
+            len: len,
         }
     }
 }
 
-impl<'a, T, U> From<&'a U> for WeldVec<T> 
-    where U: AsRef<[T]> {
+impl<'a, T, U> From<&'a U> for WeldVec<T>
+where
+    U: AsRef<[T]>,
+{
     fn from(s: &'a U) -> WeldVec<T> {
         WeldVec::new(s.as_ref().as_ptr(), s.as_ref().len() as i64)
     }
 }
 
-impl<T> PartialEq for WeldVec<T> where T: PartialEq + Clone {
+impl<T> PartialEq for WeldVec<T>
+where
+    T: PartialEq + Clone,
+{
     fn eq(&self, other: &WeldVec<T>) -> bool {
         if self.len != other.len {
             return false;
@@ -62,11 +67,8 @@ pub struct Pair<K, V> {
 }
 
 impl<K, V> Pair<K, V> {
-    pub fn new(a: K, b: V) -> Pair<K,V> {
-        Pair {
-            ele1: a,
-            ele2: b,
-        }
+    pub fn new(a: K, b: V) -> Pair<K, V> {
+        Pair { ele1: a, ele2: b }
     }
 }
 
@@ -85,10 +87,9 @@ pub fn many_threads_conf() -> *mut WeldConf {
 pub fn compile_and_run<T>(code: &str, conf: *mut WeldConf, ptr: &T) -> *mut WeldValue {
     match unsafe { _compile_and_run(code, conf, ptr) } {
         Ok(val) => val,
-        Err(err) => {
-            panic!(format!("Compile failed: {:?}",
-                           unsafe { CStr::from_ptr(weld_error_message(err)) }))
-        }
+        Err(err) => panic!(format!("Compile failed: {:?}", unsafe {
+            CStr::from_ptr(weld_error_message(err))
+        })),
     }
 }
 
@@ -121,11 +122,11 @@ fn conf(threads: i32) -> *mut WeldConf {
 /// successful, returns the resulting value. If the run fails (via a runtime error), returns an
 /// error. Both the value and error must be freed by the caller. The  `conf` passed to this
 /// function is freed.
-unsafe fn _compile_and_run<T>(code: &str,
-                              conf: *mut WeldConf,
-                              ptr: &T)
-                              -> Result<*mut WeldValue, *mut WeldError> {
-
+unsafe fn _compile_and_run<T>(
+    code: &str,
+    conf: *mut WeldConf,
+    ptr: &T,
+) -> Result<*mut WeldValue, *mut WeldError> {
     let code = CString::new(code).unwrap();
     let input_value = weld_value_new(ptr as *const _ as *const c_void);
     let err = weld_error_new();
@@ -155,4 +156,3 @@ unsafe fn _compile_and_run<T>(code: &str,
 
     return Ok(ret_value);
 }
-

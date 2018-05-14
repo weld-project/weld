@@ -3,8 +3,8 @@
 extern crate weld;
 use weld::weld_value_data;
 
-use std::str;
 use std::slice;
+use std::str;
 
 use std::f64::consts::PI;
 
@@ -37,11 +37,15 @@ fn basic_string() {
     let data = unsafe { weld_value_data(ret_value) as *const WeldVec<u8> };
     let result = unsafe { (*data).clone() };
     assert_eq!(result.len, 8);
-    unsafe { assert_eq!(str::from_utf8(slice::from_raw_parts(result.data, result.len as usize)).unwrap(), "test str"); }
+    unsafe {
+        assert_eq!(
+            str::from_utf8(slice::from_raw_parts(result.data, result.len as usize)).unwrap(),
+            "test str"
+        );
+    }
 
     unsafe { free_value_and_module(ret_value) };
 }
-
 
 #[test]
 fn float_literals() {
@@ -457,7 +461,8 @@ fn iterate_non_parallel() {
 
 #[test]
 fn iterate_with_parallel_body() {
-    let code = "|x:i32| let a=2; iterate({[1,2,3], 1}, |p| {{map(p.$0, |y|y*a), p.$1+1}, p.$1<x}).$0";
+    let code =
+        "|x:i32| let a=2; iterate({[1,2,3], 1}, |p| {{map(p.$0, |y|y*a), p.$1+1}, p.$1<x}).$0";
     let conf = default_conf();
 
     let input: i32 = 3;
@@ -483,7 +488,7 @@ fn serial_parlib_test() {
     let size: i32 = 10000;
     let input_vec: Vec<i32> = vec![1; size as usize];
     let ref input_data = WeldVec::from(&input_vec);
-       
+
     let ret_value = compile_and_run(code, conf, input_data);
     let data = unsafe { weld_value_data(ret_value) as *const i32 };
     let result = unsafe { (*data).clone() };
@@ -491,5 +496,3 @@ fn serial_parlib_test() {
     assert_eq!(result, size as i32);
     unsafe { free_value_and_module(ret_value) };
 }
-
-

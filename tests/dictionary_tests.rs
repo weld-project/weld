@@ -1,8 +1,8 @@
 //! Tests that use dictionaries. This includes the DictMerger and GroupBuilder
 //! builder types, as well as operations on read-only dictionaries (e.g., lookups).
 
-extern crate weld;
 extern crate fnv;
+extern crate weld;
 
 use std::collections::hash_map::Entry;
 
@@ -63,7 +63,7 @@ fn dictmerger_with_structs() {
         k1: i32,
         k2: i32,
         v1: i32,
-        v2: f32
+        v2: f32,
     }
 
     let code = "|x:vec[i32], y:vec[i32]|
@@ -92,8 +92,9 @@ fn dictmerger_with_structs() {
         // Check whether we find the entry anywhere in the expected outputs
         let mut success = false;
         for j in 0..(output_keys.len()) {
-            if entry.k1 == output_keys[j] && entry.k2 == output_keys[j] &&
-                    entry.v1 == output_vals[j] && entry.v2 == output_vals[j] as f32 {
+            if entry.k1 == output_keys[j] && entry.k2 == output_keys[j]
+                && entry.v1 == output_vals[j] && entry.v2 == output_vals[j] as f32
+            {
                 success = true;
             }
         }
@@ -166,10 +167,12 @@ fn complex_groupmerger_with_struct_key() {
     let data =
         unsafe { weld_value_data(ret_value) as *const WeldVec<Pair<Pair<i32, i32>, WeldVec<i32>>> };
     let result = unsafe { (*data).clone() };
-    let output = vec![((1, 1), vec![2, 3]),
-                      ((2, 2), vec![4, 2]),
-                      ((3, 3), vec![1, 0]),
-                      ((3, 4), vec![3, 2])];
+    let output = vec![
+        ((1, 1), vec![2, 3]),
+        ((2, 2), vec![4, 2]),
+        ((3, 3), vec![1, 0]),
+        ((3, 4), vec![3, 2]),
+    ];
 
     let mut res: Vec<((i32, i32), Vec<i32>)> = (0..result.len)
         .into_iter()
@@ -193,9 +196,11 @@ fn complex_groupmerger_with_struct_key() {
 /// `use_local` specifies whether to use the local-global adaptive dictionary or the purely global
 /// dictionary.
 fn simple_parallel_for_dictmerger_loop_helper(use_local: bool) {
-    let code = format!("|x:vec[i32], y:vec[i32]| tovec(result(@(grain_size: 100)for(zip(x,y),
+    let code = format!(
+        "|x:vec[i32], y:vec[i32]| tovec(result(@(grain_size: 100)for(zip(x,y),
                 dictmerger[i32,i32,+]({}L), |b,i,e| merge(b, e))))",
-                if use_local { 100000000 } else { 0 });
+        if use_local { 100000000 } else { 0 }
+    );
     let conf = many_threads_conf();
 
     const DICT_SIZE: usize = 8192;
@@ -279,7 +284,6 @@ fn simple_dict_lookup() {
 
 #[test]
 fn string_dict_lookup() {
-
     let code = "|x:vec[i32]| let v = [\"abcdefghi\", \"abcdefghi\", \"abcdefghi\"];
                 let d = result(for(zip(v,x), dictmerger[vec[i8],i32,+], |b,i,e| merge(b, e)));
                 lookup(d, \"abcdefghi\")";
@@ -330,4 +334,3 @@ fn simple_dict_exists() {
     assert_eq!(output, result);
     unsafe { free_value_and_module(ret_value) };
 }
-

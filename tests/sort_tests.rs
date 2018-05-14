@@ -11,7 +11,7 @@ fn string_sort() {
     #[derive(Clone)]
     #[allow(dead_code)]
     struct Args {
-        x: WeldVec<WeldVec<u8>>
+        x: WeldVec<WeldVec<u8>>,
     }
     let bs = vec!['T' as u8, 'R' as u8, 'U' as u8, 'E' as u8];
     let cs = vec!['P' as u8, 'A' as u8, 'R' as u8];
@@ -37,7 +37,7 @@ fn string_sort() {
         let ivec = unsafe { (*result.data.offset(i)).clone() };
         for j in 0..(ivec.len as isize) {
             let val = unsafe { (*ivec.data.offset(j)) };
-                assert_eq!(val, sorted[i as usize][j as usize])
+            assert_eq!(val, sorted[i as usize][j as usize])
         }
     }
 
@@ -150,8 +150,14 @@ fn complex_sort() {
     assert_eq!(result.len, expected.len() as i64);
 
     for i in 0..(expected.len() as isize) {
-        assert_eq!(unsafe { (*result.data.offset(i)).ele1 }, expected[i as usize][0]);
-        assert_eq!(unsafe { (*result.data.offset(i)).ele2 }, expected[i as usize][1]);
+        assert_eq!(
+            unsafe { (*result.data.offset(i)).ele1 },
+            expected[i as usize][0]
+        );
+        assert_eq!(
+            unsafe { (*result.data.offset(i)).ele2 },
+            expected[i as usize][1]
+        );
     }
 
     unsafe { free_value_and_module(ret_value) };

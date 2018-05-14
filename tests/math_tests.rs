@@ -2,8 +2,8 @@
 
 extern crate weld;
 
-use weld::*;
 use weld::common::WeldRuntimeErrno;
+use weld::*;
 
 mod common;
 use common::*;
@@ -54,8 +54,10 @@ fn log_error() {
     let conf = default_conf();
     let input = 1;
     let err_value = compile_and_run_error(code, conf, &input);
-    assert_eq!(unsafe { weld_error_code(err_value) },
-               WeldRuntimeErrno::CompileError);
+    assert_eq!(
+        unsafe { weld_error_code(err_value) },
+        WeldRuntimeErrno::CompileError
+    );
     unsafe { weld_error_free(err_value) };
 }
 
@@ -78,8 +80,10 @@ fn exp_error() {
     let conf = default_conf();
     let input = 1;
     let err_value = compile_and_run_error(code, conf, &input);
-    assert_eq!(unsafe { weld_error_code(err_value) },
-               WeldRuntimeErrno::CompileError);
+    assert_eq!(
+        unsafe { weld_error_code(err_value) },
+        WeldRuntimeErrno::CompileError
+    );
     unsafe { weld_error_free(err_value) };
 }
 

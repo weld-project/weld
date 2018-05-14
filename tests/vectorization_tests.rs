@@ -1,8 +1,8 @@
 //! Tests related to Weld's SIMD vectorizer transformation.
 
 extern crate weld;
-use weld::weld_value_data;
 use weld::WeldValue;
+use weld::weld_value_data;
 
 mod common;
 use common::*;
@@ -21,7 +21,7 @@ fn simple_for_vectorizable_loop() {
     let size = 1000;
     let input_vec = vec![1 as i32; size as usize];
     let ref input_data = WeldVec::from(&input_vec);
-    
+
     let ret_value = compile_and_run(code, conf, input_data);
     let data = unsafe { weld_value_data(ret_value) as *const i32 };
     let result = unsafe { (*data).clone() };
@@ -37,7 +37,7 @@ fn fringed_for_vectorizable_loop() {
         x: WeldVec<i32>,
     }
 
-	let code = "|x:vec[i32]|
+    let code = "|x:vec[i32]|
 	let b1 = for(
 		simditer(x),
 		merger[i32,+],
@@ -70,7 +70,7 @@ fn fringed_for_vectorizable_loop_with_par() {
         x: WeldVec<i32>,
     }
 
-	let code = "|x:vec[i32]|
+    let code = "|x:vec[i32]|
 	let b1 = for(
 		simditer(x),
 		merger[i32,+],
@@ -143,7 +143,7 @@ fn check_result_and_free(ret_value: *mut WeldValue, expected: i32) {
 fn predicate_if_iff_annotated() {
     #[allow(dead_code)]
     struct Args {
-        v: WeldVec<i32>
+        v: WeldVec<i32>,
     }
 
     let input_vec = vec![-1, 2, 3, 4, 5];
@@ -171,5 +171,3 @@ fn predicate_if_iff_annotated() {
     let ret_value = compile_and_run(code, conf, input_data);
     check_result_and_free(ret_value, expected);
 }
-
-

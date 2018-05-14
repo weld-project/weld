@@ -1,10 +1,10 @@
 //! Tests for runtime errors that Weld can throw.
 
-extern crate weld;
 extern crate libc;
+extern crate weld;
 
-use weld::*;
 use weld::common::WeldRuntimeErrno;
+use weld::*;
 
 use std::ffi::CString;
 
@@ -22,8 +22,10 @@ fn iters_outofbounds_error_test() {
     let ref input_data = WeldVec::from(&input_vec);
 
     let err_value = compile_and_run_error(code, conf, input_data);
-    assert_eq!(unsafe { weld_error_code(err_value) },
-               WeldRuntimeErrno::BadIteratorLength);
+    assert_eq!(
+        unsafe { weld_error_code(err_value) },
+        WeldRuntimeErrno::BadIteratorLength
+    );
     unsafe { weld_error_free(err_value) };
 }
 
@@ -41,7 +43,9 @@ fn outofmemory_error_test() {
     let ref input_data = WeldVec::from(&x);
 
     let err_value = compile_and_run_error(code, conf, input_data);
-    assert_eq!(unsafe { weld_error_code(err_value) },
-               WeldRuntimeErrno::OutOfMemory);
+    assert_eq!(
+        unsafe { weld_error_code(err_value) },
+        WeldRuntimeErrno::OutOfMemory
+    );
     unsafe { weld_error_free(err_value) };
 }

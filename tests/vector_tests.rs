@@ -6,7 +6,6 @@ use weld::weld_value_data;
 mod common;
 use common::*;
 
-
 #[test]
 fn map_comparison() {
     let code = "|e0: vec[i32]| map(e0, |a: i32| a == i32(100))";
@@ -20,8 +19,10 @@ fn map_comparison() {
     let result = unsafe { (*data).clone() };
     assert_eq!(result.len as usize, input_vec.len());
     for i in 0..(result.len as isize) {
-        assert_eq!(unsafe { *result.data.offset(i) },
-                   input_vec[i as usize] == 100)
+        assert_eq!(
+            unsafe { *result.data.offset(i) },
+            input_vec[i as usize] == 100
+        )
     }
 
     unsafe { free_value_and_module(ret_value) };
@@ -285,7 +286,7 @@ fn simple_vector_slice() {
 
     let input_vec = [1, 2];
     let ref input_data = WeldVec::from(&input_vec);
-    
+
     let ret_value = compile_and_run(code, conf, input_data);
     let data = unsafe { weld_value_data(ret_value) as *const WeldVec<i32> };
     let result = unsafe { (*data).clone() };

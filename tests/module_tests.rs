@@ -1,13 +1,13 @@
 //! Tests related to creating, running, and freeing Weld modules using the Weld API.
 
-extern crate weld;
 extern crate libc;
+extern crate weld;
 
-use weld::*;
 use weld::common::WeldRuntimeErrno;
+use weld::*;
 
-use std::thread;
 use std::ffi::CString;
+use std::thread;
 
 use libc::{c_char, c_void};
 
@@ -41,12 +41,15 @@ fn multithreaded_module_run() {
     let input_data = WeldVec::from(&input_vec);
 
     unsafe {
-
         // Compile the module
         let code = CString::new(code).unwrap();
         let input_value = UnsafePtr(weld_value_new(&input_data as *const _ as *const c_void));
         let err = weld_error_new();
-        let module = UnsafePtr(weld_module_compile(code.into_raw() as *const c_char, conf.0, err));
+        let module = UnsafePtr(weld_module_compile(
+            code.into_raw() as *const c_char,
+            conf.0,
+            err,
+        ));
         assert_eq!(weld_error_code(err), WeldRuntimeErrno::Success);
 
         // Run several threads, each of which executes the module several times

@@ -7,7 +7,6 @@ use weld::weld_value_data;
 mod common;
 use common::*;
 
-
 #[test]
 fn empty_merger_loop() {
     let code = "||result(for([]:vec[i32], merger[i32, +], |b, i, n| merge(b, n)))";
@@ -22,7 +21,6 @@ fn empty_merger_loop() {
 
     unsafe { free_value_and_module(ret_value) };
 }
-
 
 #[test]
 fn simple_for_merger_loop() {
@@ -129,7 +127,8 @@ fn parallel_for_merger_loop() {
 
 #[test]
 fn parallel_for_multi_merger_loop() {
-    let code = "|x:vec[i32]| let r = @(grain_size: 100)for(x, {merger[i32,+], merger[i32,+]}, |b,i,e|
+    let code =
+        "|x:vec[i32]| let r = @(grain_size: 100)for(x, {merger[i32,+], merger[i32,+]}, |b,i,e|
                 { merge(b.$0, e), merge(b.$1, e) }); result(r.$0) + result(r.$1)";
     let conf = many_threads_conf();
 
@@ -201,7 +200,8 @@ fn parallel_for_merger_loop_initial_value_product() {
         x: WeldVec<i32>,
     }
 
-    let code = "|x:vec[i32]| result(@(grain_size: 100)for(x, merger[i32,*](1000), |b,i,e| merge(b, e)))";
+    let code =
+        "|x:vec[i32]| result(@(grain_size: 100)for(x, merger[i32,*](1000), |b,i,e| merge(b, e)))";
     let conf = many_threads_conf();
 
     let input_vec = vec![1; 4096];

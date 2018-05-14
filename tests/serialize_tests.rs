@@ -6,18 +6,17 @@ use weld::weld_value_data;
 mod common;
 use common::*;
 
-
 #[derive(Clone, Debug)]
 #[allow(dead_code)]
 #[repr(C)]
 struct SerializeOutput {
     a: i32,
-    b: Pair<i32,i32>,
+    b: Pair<i32, i32>,
     c: WeldVec<i32>,
     d: WeldVec<WeldVec<i32>>,
     e: Pair<i32, WeldVec<i32>>,
-    f: WeldVec<Pair<i32,i32>>,
-    g: WeldVec<Pair<i32,WeldVec<i32>>>,
+    f: WeldVec<Pair<i32, i32>>,
+    g: WeldVec<Pair<i32, WeldVec<i32>>>,
 }
 
 impl PartialEq for SerializeOutput {
@@ -30,13 +29,16 @@ impl PartialEq for SerializeOutput {
         passed &= self.e == other.e;
 
         // Convert field f into a native Rust Vec.
-        fn f_into_native(v: &WeldVec<Pair<i32,i32>>) -> Vec<(i32, i32)> {
+        fn f_into_native(v: &WeldVec<Pair<i32, i32>>) -> Vec<(i32, i32)> {
             let mut res: Vec<(i32, i32)> = (0..v.len)
                 .into_iter()
-                .map(|x| {
-                    unsafe { ((*v.data.offset(x as isize)).ele1, (*v.data.offset(x as isize)).ele2) }
+                .map(|x| unsafe {
+                    (
+                        (*v.data.offset(x as isize)).ele1,
+                        (*v.data.offset(x as isize)).ele2,
+                    )
                 })
-            .collect();
+                .collect();
             res.sort_by_key(|a| a.0);
             res
         }
@@ -44,7 +46,7 @@ impl PartialEq for SerializeOutput {
         passed &= f_into_native(&self.f) == f_into_native(&other.f);
 
         // Converts field g into a native Rust Vec.
-        fn g_into_native(v: &WeldVec<Pair<i32,WeldVec<i32>>>) -> Vec<(i32, Vec<i32>)>{
+        fn g_into_native(v: &WeldVec<Pair<i32, WeldVec<i32>>>) -> Vec<(i32, Vec<i32>)> {
             let mut res: Vec<(i32, Vec<i32>)> = (0..v.len)
                 .into_iter()
                 .map(|x| {
@@ -56,7 +58,7 @@ impl PartialEq for SerializeOutput {
                         .collect();
                     (key, vec)
                 })
-            .collect();
+                .collect();
 
             // For dictionary outputs, we need to ignore the order.
             res.sort_by_key(|a| a.0);
@@ -96,13 +98,14 @@ fn serialize_test() {
     let vv = vec![input_data.clone(), input_data.clone(), input_data.clone()];
     let dict1_vec: Vec<_> = input_vec.iter().map(|e| Pair::new(*e, *e)).collect();
     let dict2_inners: Vec<_> = input_vec.iter().map(|e| (*e, vec![*e])).collect();
-    let dict2_vec: Vec<_>  = dict2_inners.iter()
+    let dict2_vec: Vec<_> = dict2_inners
+        .iter()
         .map(|e| {
             let e1 = e.0;
             let e2 = WeldVec::from(&e.1);
             Pair::new(e1, e2)
         })
-    .collect();
+        .collect();
 
     let expected = SerializeOutput {
         a: input_vec[0],

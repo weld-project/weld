@@ -10,7 +10,10 @@ use common::*;
 #[test]
 fn range_iter_1() {
     let end = 1000;
-    let code = format!("|a: i64| result(for(rangeiter(1L, {}L + 1L, 1L), merger[i64,+], |b,i,e| merge(b, a+e)))", end);
+    let code = format!(
+        "|a: i64| result(for(rangeiter(1L, {}L + 1L, 1L), merger[i64,+], |b,i,e| merge(b, a+e)))",
+        end
+    );
 
     #[allow(dead_code)]
     struct Args {
@@ -28,8 +31,12 @@ fn range_iter_1() {
 }
 
 fn range_iter_zipped_helper(parallel: bool) {
-    let grain_size = if parallel { 100 } else  { 4096 };
-    let conf = if parallel { many_threads_conf() } else { default_conf() };
+    let grain_size = if parallel { 100 } else { 4096 };
+    let conf = if parallel {
+        many_threads_conf()
+    } else {
+        default_conf()
+    };
 
     let end = 1000;
     let code = format!("|v: vec[i64]| result(
@@ -97,17 +104,17 @@ fn iters_for_loop() {
 /// Helper function for nditer - in order to simulate the behaviour of numpy's non-contiguous
 /// multi-dimensional arrays using counter, strides.
 /// returns idx = dot(counter, strides)
-fn get_idx(counter: [i64;3], strides: [i64;3]) -> i64 {
-    let mut sum:i64 = 0;
+fn get_idx(counter: [i64; 3], strides: [i64; 3]) -> i64 {
+    let mut sum: i64 = 0;
     for i in 0..3 {
-        sum += counter[i]*strides[i];
+        sum += counter[i] * strides[i];
     }
     return sum;
 }
 /// increments counter as in numpy / and nditer implementation. For e.g.,
 /// let shapes :[i64; 3] = [2, 3, 4];
 /// Now counter would start from (0,0,0).
-/// Each index would go upto shapes, and then reset to 0. 
+/// Each index would go upto shapes, and then reset to 0.
 /// eg. (0,0,0), (0,0,1), (0,0,2), (0,0,3), (0,1,0) etc.
 fn update_counter(mut counter: [i64; 3], shapes: [i64; 3]) -> [i64; 3] {
     let v = vec![2, 1, 0];
@@ -142,7 +149,7 @@ fn nditer_basic_op_test() {
     for i in 0..100 {
         x[i] = i as f64;
     }
-    /* Number of elements to go forward in each index to get to next element. 
+    /* Number of elements to go forward in each index to get to next element.
      * These are arbitrarily chosen here for testing purposes so get_idx can simulate the behaviour
      * nditer should be doing (idx = dot(counter, strides).
      */
@@ -210,7 +217,10 @@ fn nditer_zip() {
 
     for i in 0..(result.len as isize) {
         let idx = get_idx(counter, strides);
-        assert_eq!(unsafe { *result.data.offset(i) }, x[idx as usize] + y[idx as usize]);
+        assert_eq!(
+            unsafe { *result.data.offset(i) },
+            x[idx as usize] + y[idx as usize]
+        );
         counter = update_counter(counter, shapes);
     }
     unsafe { free_value_and_module(ret_value) };
