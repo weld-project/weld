@@ -306,7 +306,6 @@ fn only_used_in_zip(name: &Symbol, expr: &TypedExpr) -> bool {
                         }
                         _ => (),
                     }
-                    _ => (),
                 }
             },
             Length { ref data } => {

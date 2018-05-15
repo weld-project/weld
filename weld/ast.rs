@@ -1,6 +1,7 @@
 //! Abstract syntax tree for Weld.
 
 use std::fmt;
+use std::mem;
 use std::hash::Hash;
 use std::vec;
 
