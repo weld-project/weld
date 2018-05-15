@@ -227,13 +227,13 @@ fn simple_float_min() {
 
 #[test]
 fn simple_not() {
-    let code = "|x:bool| !!x";
+    let code = "|x:bool| !!!x";
     let conf = default_conf();
     let ref input_data: bool = true;
     let ret_value = compile_and_run(code, conf, input_data);
     let data = unsafe { weld_value_data(ret_value) as *const bool };
     let result = unsafe { *data };
-    assert_eq!(result, true);
+    assert_eq!(result, false);
     unsafe { free_value_and_module(ret_value) };
 }
 
