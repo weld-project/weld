@@ -14,12 +14,12 @@
 /** A Weld log level. */
 typedef uint64_t weld_log_level_t;
 
-weld_log_level_t WELD_LOG_LEVEL_OFF = 0;
-weld_log_level_t WELD_LOG_LEVEL_ERROR = 1;
-weld_log_level_t WELD_LOG_LEVEL_WARN = 2;
-weld_log_level_t WELD_LOG_LEVEL_INFO = 3;
-weld_log_level_t WELD_LOG_LEVEL_DEBUG = 4;
-weld_log_level_t WELD_LOG_LEVEL_TRACE = 5;
+static const weld_log_level_t WELD_LOG_LEVEL_OFF = 0;
+static const weld_log_level_t WELD_LOG_LEVEL_ERROR = 1;
+static const weld_log_level_t WELD_LOG_LEVEL_WARN = 2;
+static const weld_log_level_t WELD_LOG_LEVEL_INFO = 3;
+static const weld_log_level_t WELD_LOG_LEVEL_DEBUG = 4;
+static const weld_log_level_t WELD_LOG_LEVEL_TRACE = 5;
 
 // Types
 
