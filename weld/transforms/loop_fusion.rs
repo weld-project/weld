@@ -97,15 +97,9 @@ pub fn fuse_loops_horizontal(expr: &mut Expr<Type>) {
                     // nested for into a single merge into a struct.
 
                     // Zip the expressions to create an appender whose merge (value) type is a struct.
-                    let merge_type = Struct(
-                        lambdas
-                            .iter()
-                            .map(|ref e| e.1.ty.clone())
-                            .collect::<Vec<_>>(),
-                    );
+                    let merge_type = Struct(lambdas.iter().map(|ref e| e.1.ty.clone()).collect::<Vec<_>>());
                     // TODO(Deepak): Fix this to something meaningful.
-                    let builder_type =
-                        Builder(Appender(Box::new(merge_type.clone())), Annotations::new());
+                    let builder_type = Builder(Appender(Box::new(merge_type.clone())), Annotations::new());
                     // The element type remains unchanged.
                     let func_elem_type = lambdas[0].0[2].ty.clone();
 
@@ -250,12 +244,7 @@ pub fn fuse_loops_vertical(expr: &mut Expr<Type>) {
                             if let NewBuilder(_) = bldr2.kind {
                                 if let Builder(ref kind, _) = bldr2.ty {
                                     if let Appender(_) = *kind {
-                                        let mut e = exprs::for_expr(
-                                            iters2.clone(),
-                                            *bldr1.clone(),
-                                            replace_builder(lambda, nested, &mut sym_gen)?,
-                                            false,
-                                        )?;
+                                        let mut e = exprs::for_expr(iters2.clone(), *bldr1.clone(), replace_builder(lambda, nested, &mut sym_gen)?, false)?;
                                         e.annotations = expr.annotations.clone();
                                         return Ok((Some(e), true));
                                     }
@@ -319,16 +308,8 @@ fn replace_builder(lambda: &Expr<Type>, nested: &Expr<Type>, sym_gen: &mut Symbo
         }
     }
 
-    if let Lambda {
-        params: ref args,
-        ref body,
-    } = lambda.kind
-    {
-        if let Lambda {
-            params: ref nested_args,
-            ..
-        } = nested.kind
-        {
+    if let Lambda { params: ref args, ref body } = lambda.kind {
+        if let Lambda { params: ref nested_args, .. } = nested.kind {
             let mut new_body = *body.clone();
             let ref old_bldr = args[0];
             let ref old_index = args[1];
@@ -340,13 +321,8 @@ fn replace_builder(lambda: &Expr<Type>, nested: &Expr<Type>, sym_gen: &mut Symbo
 
             // Fix expressions to use the new builder.
             new_body.transform_and_continue_res(&mut |ref mut e| match e.kind {
-                Merge {
-                    ref builder,
-                    ref value,
-                } if same_iden(&(*builder).kind, &old_bldr.name) =>
-                {
-                    let params: Vec<Expr<Type>> =
-                        vec![new_bldr.clone(), new_index.clone(), *value.clone()];
+                Merge { ref builder, ref value } if same_iden(&(*builder).kind, &old_bldr.name) => {
+                    let params: Vec<Expr<Type>> = vec![new_bldr.clone(), new_index.clone(), *value.clone()];
                     let mut expr = exprs::apply_expr(nested.clone(), params)?;
                     inline_apply(&mut expr);
                     Ok((Some(expr), true))

@@ -30,10 +30,7 @@ fn newbuilder_with_size(builder: &TypedExpr, length: TypedExpr) -> Option<TypedE
     }
     if let MakeStruct { ref elems } = builder.kind {
         if elems.iter().all(|ref e| NewAppender::extract(e).is_some()) {
-            let newbuilders = elems
-                .iter()
-                .map(|ref e| newbuilder_with_size(e, length.clone()).unwrap())
-                .collect();
+            let newbuilders = elems.iter().map(|ref e| newbuilder_with_size(e, length.clone()).unwrap()).collect();
             return Some(makestruct_expr(newbuilders).unwrap());
         }
     }
@@ -41,11 +38,7 @@ fn newbuilder_with_size(builder: &TypedExpr, length: TypedExpr) -> Option<TypedE
 }
 
 fn func_has_simple_merge(expr: &TypedExpr) -> bool {
-    if let Lambda {
-        ref params,
-        ref body,
-    } = expr.kind
-    {
+    if let Lambda { ref params, ref body } = expr.kind {
         simple_merge(&params[0].name, body)
     } else {
         false
@@ -71,10 +64,7 @@ pub fn infer_size(expr: &mut Expr<Type>) {
                          * SymbolGenerator seems to borrow expression immutably,
                          * so we can't borrow it mutably before.*/
                         let data_sym = sym_gen.new_symbol("data1");
-                        let (length, data_expr) = if iters
-                            .iter()
-                            .all(|ref iter| iter.start.is_none())
-                        {
+                        let (length, data_expr) = if iters.iter().all(|ref iter| iter.start.is_none()) {
                             /* In this scenario, to determine the length of the appender, we use:
                              *      length = len(iters[0].data);
                              * Here, an issue is if iters[0].data is a more complicated expression,
@@ -88,14 +78,10 @@ pub fn infer_size(expr: &mut Expr<Type>) {
                              * length -- thus we extract the let statements only at the end after
                              * new loop has been defined.
                              */
-                            let data_expr =
-                                ident_expr(data_sym.clone(), iters[0].data.ty.clone()).unwrap();
+                            let data_expr = ident_expr(data_sym.clone(), iters[0].data.ty.clone()).unwrap();
                             (length_expr(data_expr.clone()).unwrap(), Some(data_expr))
                         //} else if iters[0].kind == IterKind::RangeIter || iters[1].kind == IterKind::RangeIter {
-                        } else if iters
-                            .iter()
-                            .any(|ref iter| iter.kind == IterKind::RangeIter)
-                        {
+                        } else if iters.iter().any(|ref iter| iter.kind == IterKind::RangeIter) {
                             // FIXME: pari - temporary fix?
                             return None;
                         } else {
@@ -142,10 +128,7 @@ pub fn infer_size(expr: &mut Expr<Type>) {
 /// that the loop containing `expr`'s size can be inferred.
 fn simple_merge(sym: &Symbol, expr: &Expr<Type>) -> bool {
     match expr.kind {
-        Merge {
-            ref builder,
-            ref value,
-        } => {
+        Merge { ref builder, ref value } => {
             if let Ident(ref s) = builder.kind {
                 if s == sym {
                     return !value.contains_symbol(sym);

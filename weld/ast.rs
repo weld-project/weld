@@ -1,8 +1,8 @@
 //! Abstract syntax tree for Weld.
 
 use std::fmt;
-use std::mem;
 use std::hash::Hash;
+use std::mem;
 use std::vec;
 
 use super::annotations::*;
@@ -641,9 +641,7 @@ impl<T: TypeBounds> Expr<T> {
         match self.kind {
             BinOp { ref mut left, ref mut right, .. } => vec![left.as_mut(), right.as_mut()],
             UnaryOp { ref mut value, .. } => vec![value.as_mut()],
-            Cast {
-                ref mut child_expr, ..
-            } => vec![child_expr.as_mut()],
+            Cast { ref mut child_expr, .. } => vec![child_expr.as_mut()],
             ToVec { ref mut child_expr } => vec![child_expr.as_mut()],
             Let { ref mut value, ref mut body, .. } => vec![value.as_mut(), body.as_mut()],
             Lambda { ref mut body, .. } => vec![body.as_mut()],
@@ -754,16 +752,7 @@ impl<T: TypeBounds> Expr<T> {
                     reverse_sym_map.insert(sym2, sym1);
                     Ok(true)
                 }
-                (
-                    &Lambda {
-                        params: ref params1,
-                        ..
-                    },
-                    &Lambda {
-                        params: ref params2,
-                        ..
-                    },
-                ) => {
+                (&Lambda { params: ref params1, .. }, &Lambda { params: ref params2, .. }) => {
                     // Just compare types, and assume the symbol names "match up".
                     if params1.len() == params2.len() && params1.iter().zip(params2).all(|t| t.0.ty == t.1.ty) {
                         for (p1, p2) in params1.iter().zip(params2) {
@@ -814,16 +803,7 @@ impl<T: TypeBounds> Expr<T> {
                     Ok(matches)
                 }
                 (&Serialize(_), &Serialize(_)) => Ok(true),
-                (
-                    &Deserialize { ref value_ty, .. },
-                    &Deserialize {
-                        value_ty: ref value_ty2,
-                        ..
-                    },
-                ) if value_ty == value_ty2 =>
-                {
-                    Ok(true)
-                }
+                (&Deserialize { ref value_ty, .. }, &Deserialize { value_ty: ref value_ty2, .. }) if value_ty == value_ty2 => Ok(true),
                 (&Literal(ref l), &Literal(ref r)) if l == r => Ok(true),
                 (&Ident(ref l), &Ident(ref r)) => {
                     if let Some(lv) = sym_map.get(l) {

@@ -147,12 +147,7 @@ fn print_iters<T: PrintableType>(iters: &Vec<Iter<T>>, typed: bool, indent: i32,
                 print_expr_impl(iter.data.as_ref(), typed, indent, should_indent)
             ));
         } else {
-            iter_strs.push(print_expr_impl(
-                iter.data.as_ref(),
-                typed,
-                indent + 2,
-                should_indent,
-            ));
+            iter_strs.push(print_expr_impl(iter.data.as_ref(), typed, indent + 2, should_indent));
         }
     }
 

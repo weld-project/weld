@@ -121,8 +121,7 @@ impl Drop for CompiledModule {
     /// Disposes of the LLVM execution engine and compiled function.
     fn drop(&mut self) {
         unsafe {
-            self.engine
-                .map(|e| llvm::execution_engine::LLVMDisposeExecutionEngine(e));
+            self.engine.map(|e| llvm::execution_engine::LLVMDisposeExecutionEngine(e));
             llvm::core::LLVMContextDispose(self.context);
         }
     }
@@ -136,9 +135,7 @@ pub fn load_library(libname: &str) -> Result<(), LlvmError> {
     if unsafe { LLVMLoadLibraryPermanently(c_string_raw) } == 0 {
         Ok(())
     } else {
-        Err(LlvmError::new(
-            format!("Couldn't load library {}", libname).as_ref(),
-        ))
+        Err(LlvmError::new(format!("Couldn't load library {}", libname).as_ref()))
     }
 }
 
@@ -185,36 +182,28 @@ pub fn compile_module(code: &str, optimization_level: u32, dump_code: bool, bc_f
             debug!("Done linking bytecode file");
         }
         let end = PreciseTime::now();
-        timing
-            .times
-            .push(("Bytecode Linking".to_string(), start.to(end)));
+        timing.times.push(("Bytecode Linking".to_string(), start.to(end)));
 
         // Validate the module
         let start = PreciseTime::now();
         verify_module(module)?;
         check_run_function(module)?;
         let end = PreciseTime::now();
-        timing
-            .times
-            .push(("Module Verification".to_string(), start.to(end)));
+        timing.times.push(("Module Verification".to_string(), start.to(end)));
         debug!("Done validating module");
 
         // Optimize the module.
         let start = PreciseTime::now();
         optimize_module(module, optimization_level)?;
         let end = PreciseTime::now();
-        timing
-            .times
-            .push(("Module Optimization".to_string(), start.to(end)));
+        timing.times.push(("Module Optimization".to_string(), start.to(end)));
         debug!("Done optimizing module");
 
         // Create an execution engine for the module and find its run function
         let start = PreciseTime::now();
         let engine = create_exec_engine(module, optimization_level)?;
         let end = PreciseTime::now();
-        timing
-            .times
-            .push(("Create Exec Engine".to_string(), start.to(end)));
+        timing.times.push(("Create Exec Engine".to_string(), start.to(end)));
         debug!("Done creating execution engine");
 
         // Find the run function
@@ -222,9 +211,7 @@ pub fn compile_module(code: &str, optimization_level: u32, dump_code: bool, bc_f
         result.engine = Some(engine);
         result.run_function = Some(find_function(engine, "run")?);
         let end = PreciseTime::now();
-        timing
-            .times
-            .push(("Find Run Func Address".to_string(), start.to(end)));
+        timing.times.push(("Find Run Func Address".to_string(), start.to(end)));
         debug!("Done generating/finding run function");
 
         let code = if dump_code {
@@ -289,9 +276,7 @@ unsafe fn parse_module_bytes(context: LLVMContextRef, code: &[u8]) -> Result<LLV
     let buffer = llvm::core::LLVMCreateMemoryBufferWithMemoryRange(code.as_ptr() as *const i8, code_len, name.as_ptr(), 0);
 
     if buffer.is_null() {
-        return Err(LlvmError::new(
-            "LLVMCreateMemoryBufferWithMemoryRange failed",
-        ));
+        return Err(LlvmError::new("LLVMCreateMemoryBufferWithMemoryRange failed"));
     }
 
     parse_module_helper(context, buffer)
@@ -305,9 +290,7 @@ unsafe fn parse_module_str(context: LLVMContextRef, code: &str) -> Result<LLVMMo
     let code = CString::new(code)?;
     let buffer = llvm::core::LLVMCreateMemoryBufferWithMemoryRange(code.as_ptr(), code_len, name.as_ptr(), 0);
     if buffer.is_null() {
-        return Err(LlvmError::new(
-            "LLVMCreateMemoryBufferWithMemoryRange failed",
-        ));
+        return Err(LlvmError::new("LLVMCreateMemoryBufferWithMemoryRange failed"));
     }
 
     parse_module_helper(context, buffer)
@@ -325,9 +308,7 @@ unsafe fn parse_module_file(context: LLVMContextRef, file: &str) -> Result<LLVMM
         return Err(LlvmError(msg));
     }
     if buffer.is_null() {
-        return Err(LlvmError::new(
-            "LLVMCreateMemoryBufferWithContentsOfFile failed",
-        ));
+        return Err(LlvmError::new("LLVMCreateMemoryBufferWithContentsOfFile failed"));
     }
     parse_module_helper(context, buffer)
 }
@@ -353,10 +334,7 @@ unsafe fn check_run_function(module: LLVMModuleRef) -> Result<(), LlvmError> {
     let c_str = llvm::core::LLVMPrintTypeToString(llvm::core::LLVMTypeOf(func));
     let func_type = CStr::from_ptr(c_str).to_str().unwrap();
     if func_type != "i64 (i64)*" {
-        return Err(LlvmError(format!(
-            "Run function has wrong type: {}",
-            func_type
-        )));
+        return Err(LlvmError(format!("Run function has wrong type: {}", func_type)));
     }
     Ok(())
 }
@@ -417,12 +395,8 @@ unsafe fn output_target_machine_assembly(engine: LLVMExecutionEngineRef, module:
     let file_type: LLVMCodeGenFileType = LLVMCodeGenFileType::LLVMAssemblyFile;
     let res = LLVMTargetMachineEmitToMemoryBuffer(cur_target, module, file_type, &mut err, &mut output_buf);
     if res == 1 {
-        let x = CStr::from_ptr(err as *mut c_char)
-            .to_string_lossy()
-            .into_owned();
-        return Err(LlvmError::new(
-            format!("Getting LLVM IR failed with error {}", &x).as_ref(),
-        ));
+        let x = CStr::from_ptr(err as *mut c_char).to_string_lossy().into_owned();
+        return Err(LlvmError::new(format!("Getting LLVM IR failed with error {}", &x).as_ref()));
     }
     let start = LLVMGetBufferStart(output_buf);
     let c_str: &CStr = CStr::from_ptr(start as *mut c_char);

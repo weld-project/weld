@@ -66,10 +66,7 @@ impl SymbolStack {
 
 /// The main helper function for uniquify, which uses `SymbolStack` to track scope and assign
 /// unique names to each symbol. The prerequisite is that each symbol has `id = 0`.
-fn uniquify_helper<T: TypeBounds>(
-    expr: &mut Expr<T>,
-    symbol_stack: &mut SymbolStack,
-) -> WeldResult<()> {
+fn uniquify_helper<T: TypeBounds>(expr: &mut Expr<T>, symbol_stack: &mut SymbolStack) -> WeldResult<()> {
     match expr.kind {
         // First, handle expressions which define *new* symbols - Let and Lambda
         Lambda { ref mut params, ref mut body } => {

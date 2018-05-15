@@ -156,10 +156,7 @@ fn macros_introducing_symbols() {
     let macros = parse_macros("macro adder(a) = |x| x+a;").unwrap();
     let expr = parse_expr("adder(x)").unwrap();
     let result = process_expression(&expr, &macros).unwrap();
-    assert_eq!(
-        print_expr_without_indent(&result).as_str(),
-        "|x__1|(x__1+x)"
-    );
+    assert_eq!(print_expr_without_indent(&result).as_str(), "|x__1|(x__1+x)");
 
     // Same case as above except we define a symbol in a Let instead of Lambda.
     let macros = parse_macros("macro twice(a) = (let x = a; x+x);").unwrap();

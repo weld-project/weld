@@ -83,11 +83,7 @@ impl ExprHash {
             GetField { ref index, .. } => {
                 index.hash(&mut self.hasher);
             }
-            Let {
-                ref name,
-                ref value,
-                ref body,
-            } => {
+            Let { ref name, ref value, ref body } => {
                 // Do the value before pushing onto the symbol staack.
                 self.from_expr(value, symbol_positions, max_id)?;
                 {
@@ -101,10 +97,7 @@ impl ExprHash {
                 let _ = entry.pop();
                 finished_subexpressions = true;
             }
-            Lambda {
-                ref params,
-                ref body,
-            } => {
+            Lambda { ref params, ref body } => {
                 // Push the stack for each param.
                 for param in params.iter() {
                     let entry = symbol_positions.entry(&param.name).or_insert(Vec::new());
@@ -119,11 +112,7 @@ impl ExprHash {
                 }
                 finished_subexpressions = true;
             }
-            CUDF {
-                ref sym_name,
-                ref return_ty,
-                ..
-            } => {
+            CUDF { ref sym_name, ref return_ty, .. } => {
                 sym_name.hash(&mut self.hasher);
                 return_ty.hash(&mut self.hasher);
             }

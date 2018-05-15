@@ -490,9 +490,7 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
                     }
                 } else {
                     if iters.iter().any(|i| i.kind == IterKind::SimdIter) {
-                        return weld_err!(
-                            "For without vector arguments requires a Scalar or Fringe iterator"
-                        );
+                        return weld_err!("For without vector arguments requires a Scalar or Fringe iterator");
                     }
                 }
             }
@@ -759,7 +757,7 @@ fn push_type(dest: &mut PartialType, src: &PartialType, context: &str) -> WeldRe
                                     }
                                 }
                             }
-                        },
+                        }
                         Scalar(_) => {}
                         _ => {
                             return weld_err!(
@@ -819,7 +817,7 @@ fn push_type(dest: &mut PartialType, src: &PartialType, context: &str) -> WeldRe
                                     }
                                 }
                             }
-                        },
+                        }
                         Scalar(_) => {}
                         _ => {
                             return weld_err!(
@@ -859,7 +857,7 @@ fn push_type(dest: &mut PartialType, src: &PartialType, context: &str) -> WeldRe
                                     }
                                 }
                             }
-                        },
+                        }
                         Scalar(_) => {}
                         _ => {
                             return weld_err!(

@@ -130,12 +130,8 @@ pub fn inline_negate(expr: &mut TypedExpr) {
                     I16Literal(a) => Some(literal_expr(I16Literal(-a)).unwrap()),
                     I32Literal(a) => Some(literal_expr(I32Literal(-a)).unwrap()),
                     I64Literal(a) => Some(literal_expr(I64Literal(-a)).unwrap()),
-                    F32Literal(a) => {
-                        Some(literal_expr(F32Literal((-f32::from_bits(a)).to_bits())).unwrap())
-                    }
-                    F64Literal(a) => {
-                        Some(literal_expr(F64Literal((-f64::from_bits(a)).to_bits())).unwrap())
-                    }
+                    F32Literal(a) => Some(literal_expr(F32Literal((-f32::from_bits(a)).to_bits())).unwrap()),
+                    F64Literal(a) => Some(literal_expr(F64Literal((-f64::from_bits(a)).to_bits())).unwrap()),
                     _ => None,
                 };
                 return res;
@@ -158,13 +154,9 @@ pub fn inline_cast(expr: &mut TypedExpr) {
         {
             if let Literal(ref literal_kind) = child_expr.kind {
                 return match (scalar_kind, literal_kind) {
-                    (&F64, &I32Literal(a)) => {
-                        Some(literal_expr(F64Literal((a as f64).to_bits())).unwrap())
-                    }
+                    (&F64, &I32Literal(a)) => Some(literal_expr(F64Literal((a as f64).to_bits())).unwrap()),
                     (&I64, &I32Literal(a)) => Some(literal_expr(I64Literal(a as i64)).unwrap()),
-                    (&F64, &I64Literal(a)) => {
-                        Some(literal_expr(F64Literal((a as f64).to_bits())).unwrap())
-                    }
+                    (&F64, &I64Literal(a)) => Some(literal_expr(F64Literal((a as f64).to_bits())).unwrap()),
                     (&I64, &I64Literal(a)) => Some(literal_expr(I64Literal(a as i64)).unwrap()),
                     _ => None,
                 };
@@ -177,11 +169,7 @@ pub fn inline_cast(expr: &mut TypedExpr) {
 /// Checks if `expr` is a `GetField` on an identifier with name `sym`. If so,
 /// returns the field index being accessed.
 fn getfield_on_symbol(expr: &TypedExpr, sym: &Symbol) -> Option<u32> {
-    if let GetField {
-        ref expr,
-        ref index,
-    } = expr.kind
-    {
+    if let GetField { ref expr, ref index } = expr.kind {
         if let Ident(ref ident_name) = expr.kind {
             if sym == ident_name {
                 return Some(*index);
@@ -215,11 +203,7 @@ pub fn unroll_structs(expr: &mut TypedExpr) {
     let mut sym_gen = SymbolGenerator::from_expression(expr);
     expr.transform_up(&mut |ref mut expr| {
         match expr.kind {
-            Let {
-                ref name,
-                ref value,
-                ref body,
-            } => {
+            Let { ref name, ref value, ref body } => {
                 if let MakeStruct { ref elems } = value.kind {
                     // First, ensure that the name is not used anywhere but a `GetField`.
                     let mut total_count: i32 = 0;
