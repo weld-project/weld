@@ -52,7 +52,6 @@ mod exprs;
 mod expr_hash;
 mod easy_ll;
 mod stats;
-mod runtime;
 
 // Public interfaces.
 // TODO these probably shouldn't all be public...
@@ -60,6 +59,7 @@ pub mod ast;
 pub mod util;
 pub mod common;
 pub mod ffi;
+pub mod runtime;
 pub mod code_builder;
 
 // Tests.
@@ -333,4 +333,3 @@ pub extern "C" fn weld_set_log_level(level: WeldLogLevel) {
     builder.filter(None, filter);
     builder.init().unwrap_or(());
 }
-
