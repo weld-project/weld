@@ -31,12 +31,8 @@ macro_rules! weld_err {
     })
 }
 
-/// Internal macro for creating a compile error.
-macro_rules! compile_err {
-    ( $($arg:tt)* ) => ({
-        ::std::result::Result::Err($crate::error::WeldCompileError::new(format!($($arg)*)))
-    })
-}
+#[macro_use]
+mod error;
 
 mod annotations;
 mod colors;
@@ -56,7 +52,7 @@ mod exprs;
 mod expr_hash;
 mod easy_ll;
 mod stats;
-mod error;
+mod runtime;
 
 // Public interfaces.
 // TODO these probably shouldn't all be public...
@@ -65,7 +61,6 @@ pub mod util;
 pub mod common;
 pub mod ffi;
 pub mod code_builder;
-pub mod runtime;
 
 // Tests.
 #[cfg(test)]

@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use libc::{c_void, int64_t, int32_t, size_t};
 
 #[allow(non_camel_case_types)]

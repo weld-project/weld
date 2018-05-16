@@ -4,6 +4,15 @@ use std::fmt;
 
 use easy_ll::LlvmError;
 
+/// Internal macro for creating a compile error.
+macro_rules! compile_err {
+    ( $($arg:tt)* ) => ({
+        ::std::result::Result::Err($crate::error::WeldCompileError::new(format!($($arg)*)))
+    })
+}
+
+
+
 /// A compilation error produced by Weld.
 #[derive(Debug, Clone)]
 pub struct WeldCompileError(String);
