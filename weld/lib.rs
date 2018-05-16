@@ -55,6 +55,8 @@ pub mod conf;
 pub mod util;
 pub mod exprs;
 pub mod expr_hash;
+pub mod api;
+pub mod ffi;
 
 pub mod easy_ll;
 
@@ -299,7 +301,7 @@ pub unsafe extern "C" fn weld_module_compile(code: *const c_char,
 
     let mut stats = CompilationStats::new();
 
-    let conf = conf::parse(&*conf);
+    let conf = conf::parse2(&*conf);
     if let Err(e) = conf {
         err.errno = WeldRuntimeErrno::ConfigurationError;
         err.message = CString::new(e.description().to_string()).unwrap();
@@ -358,7 +360,7 @@ pub unsafe extern "C" fn weld_module_run(module: *mut WeldModule,
     let arg = &*arg;
     let err = &mut *err_ptr;
 
-    let conf = conf::parse(&*conf);
+    let conf = conf::parse2(&*conf);
     if let Err(e) = conf {
         err.errno = WeldRuntimeErrno::ConfigurationError;
         err.message = CString::new(e.description().to_string()).unwrap();

@@ -1,7 +1,6 @@
 //! Configurations and defaults for the Weld runtime.
 
-use std::ffi::CString;
-
+use api;
 use super::WeldConf;
 use super::error::WeldResult;
 use super::passes::OPTIMIZATION_PASSES;
@@ -58,8 +57,10 @@ pub struct ParsedConf {
     pub dump_code: DumpCodeConf,
 }
 
+pub fn parse2(conf: &WeldConf) -> WeldResult<ParsedConf> { weld_err!("poop") }
+
 /// Parse a configuration from a WeldConf key-value dictionary.
-pub fn parse(conf: &WeldConf) -> WeldResult<ParsedConf> {
+pub fn parse(conf: &api::WeldConf) -> WeldResult<ParsedConf> {
     let value = get_value(conf, MEMORY_LIMIT_KEY);
     let memory_limit = value.map(|s| parse_memory_limit(&s))
                             .unwrap_or(Ok(DEFAULT_MEMORY_LIMIT))?;
@@ -121,10 +122,10 @@ pub fn parse(conf: &WeldConf) -> WeldResult<ParsedConf> {
     })
 }
 
-fn get_value(conf: &WeldConf, key: &str) -> Option<String> {
-    let c_key = CString::new(key).unwrap();
-    let c_value = conf.dict.get(&c_key);
-    c_value.map(|cstr| String::from(cstr.to_string_lossy()))
+fn get_value(conf: &api::WeldConf, key: &str) -> Option<String> {
+    conf.get(key)
+        .cloned()
+        .map(|v| v.into_string().unwrap())
 }
 
 /// Parses a string into a path and checks if the path is a directory in the filesystem.
