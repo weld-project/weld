@@ -1,3 +1,72 @@
+//!
+//! Weld is a runtime for improving the performance of data-intensive applications. It optimizes
+//! across libraries and functions by expressing the core computations in libraries using a small
+//! common intermediate representation, similar to CUDA and OpenCL.
+//!
+//! Modern analytics applications combine multiple functions from different libraries and
+//! frameworks to build complex workflows. Even though individual functions can achieve high
+//! performance in isolation, the performance of the combined workflow is often an order of
+//! magnitude below hardware limits due to extensive data movement across the functions. Weld’s
+//! take on solving this problem is to lazily build up a computation for the entire workflow,
+//! optimizing and evaluating it only when a result is needed.
+//!
+//! # Using Weld
+//!
+//! Fundamentally, Weld is a small programming language that supports _parallel loops_ and
+//! _builders_, which are declarative objects that specify how to buid results. The parallel loops
+//! can be used in conjunction with the builders to build a result in parallel.
+//!
+//! This crate contains the Weld compiler and runtime, though users only interact with the
+//! compiler. Users use Weld by constructing a Weld program (currently as a string), compiling
+//! the string into a runnable _module_, and then running the module with in-memory data.
+//!
+//! Weld JITs code into the current process using LLVM. As a result, Weld users must have a version
+//! of LLVM installed on their machine (currently, Weld uses LLVM 3.8).
+//!
+//! ## Modules
+//!
+//! The `WeldModule` is the main entry point into Weld. Users can compile Weld programs using
+//! `WeldModule::compile`, and then run compiled programs using `WeldModule::run`.
+//!
+//! The module functions can be configured in several ways. This configuration is controlled using
+//! the `WeldConf` struct, which is effectively a dictionary of `String` key/value pairs that
+//! control how a Weld program is compiled and run.
+//!
+//! ## Values
+//!
+//! Since Weld JITs code and implements a custom runtime, data passed in and out of it must be in a
+//! specific, C-compatible packed format. The [Weld Github](http://github.com/weld-project/weld)
+//! contains a plethora of information on how data should be formatted when passed into Weld, but
+//! in short, it is **not** safe to simply pass Rust objects into Weld.
+//!
+//! `WeldModule` accepts and returns a wrapper struct called `WeldValue`, which wraps an opaque
+//! `*const void` that Weld reads depending on the argument and return types of the Weld program.
+//! Weld's main `run` function is thus `unsafe`: users need to guarantee that the data passed into
+//! Weld is properly formatted!
+//!
+//! ### Passing Rust Values into Weld
+//!
+//! Currently, users need to manually munge Rust values into a format that Weld understands, as
+//! specified [here](https://github.com/weld-project/weld/blob/master/docs/api.md). Eventually, we
+//! may add a module in this crate that contains wrappers for some useful types. The current Rust
+//! types can be passed safely into Weld already:
+//!
+//! * Primitive types such as `i8`, `i16`, and `f32`. These have a 1-1 correspondance with Weld.
+//! * Rust structs with `repr(C)`.
+//!
+//! Notably, `Vec<T>` _cannot_ be passed without adhering to the custom Weld format. Currently,
+//! that format is defined as:
+//!
+//! ```
+//! [repr(C)]
+//! struct WeldVec<T> {
+//!     ptr: *const T,
+//!     len: i64,
+//! }
+//! ```
+//!
+//! There is thus a straightforward conversion from `Vec<T>` to a `WeldVec<T>`.
+
 #![cfg_attr(not(test), allow(dead_code))]
 
 #[macro_use]
@@ -84,21 +153,21 @@ pub type Data = *const libc::c_void;
 /// A wrapper for a mutable C pointer.
 pub type DataMut = *mut libc::c_void;
 
-/// A run ID that uniquely identifies a call to `WeldModule::run`.
+/// An identifier that uniquely identifies a call to `WeldModule::run`.
 pub type RunId = i64;
 
-/// An error produced by Weld.
+/// An error when compiling or running a Weld program.
 #[derive(Debug,Clone)]
 pub struct WeldError {
     message: CString,
     code: WeldRuntimeErrno,
 }
 
-/// A result produced by Weld, with an errortype `WeldError`.
+/// A `Result` that uses `WeldError`.
 pub type WeldResult<T> = Result<T, WeldError>;
 
 impl WeldError {
-    /// Return a new error.
+    /// Creates a new error with a particular message and error code.
     pub fn new<T: Into<Vec<u8>>>(message: T, code: WeldRuntimeErrno) -> WeldError {
         WeldError {
             message: CString::new(message).unwrap(),
@@ -106,7 +175,7 @@ impl WeldError {
         }
     }
 
-    /// Return a new error with an unknown code.
+    /// Creates a new error with a particular message and an `Unknown` error code.
     pub fn new_unknown<T: Into<Vec<u8>>>(message: T) -> WeldError {
         WeldError {
             message: CString::new(message).unwrap(),
@@ -114,17 +183,19 @@ impl WeldError {
         }
     }
 
-    /// Returns a new error indicating success.
+    /// Creates a new error with a particular message indicating success.
+    ///
+    /// The error returned by this function has a message "Success" and the error code `Success`.
     pub fn new_success() -> WeldError {
         WeldError::new(CString::new("Success").unwrap(), WeldRuntimeErrno::Success)
     }
 
-    /// Returns the error code.
+    /// Returns the error code of this `WeldError`.
     pub fn code(&self) -> WeldRuntimeErrno {
         self.code
     }
 
-    /// Returns the error message.
+    /// Returns the error message of this `WeldError`.
     pub fn message(&self) -> &CStr {
         self.message.as_ref()
     }
@@ -146,9 +217,7 @@ impl From<error::WeldCompileError> for WeldError {
     }
 }
 
-/// Wraps a value produced or consumed by a Weld program. Values that are passed into Weld can be
-/// initialized using `WeldValue::new_from_data`. Weld also returns an output wrapped a
-/// `WeldValue`.
+/// A wrapper for data passed into and out of Weld.
 #[derive(Debug,Clone)]
 pub struct WeldValue {
     data: Data,
@@ -156,7 +225,12 @@ pub struct WeldValue {
 }
 
 impl WeldValue {
-    /// Wrap a value represented as a C pointer as a `WeldValue`.
+
+    /// Creates a new `WeldValue` with a particular data pointer.
+    ///
+    /// This function is used to wrap data that will be passed into Weld. Data passed into Weld
+    /// should be in a standard format that Weld understands: this is usually some kind of packed C
+    /// structure with a particular field layout.
     pub fn new_from_data(data: Data) -> WeldValue {
         WeldValue {
             data: data,
@@ -164,19 +238,24 @@ impl WeldValue {
         }
     }
 
-    /// Returns the data pointer of this value.
+    /// Returns the data pointer of this `WeldValue`.
     pub fn data(&self) -> Data {
         self.data
     }
 
-    /// Returns the run ID of this value, if it has one. A `WeldValue` will only have a run ID if
-    /// it was returned by a Weld program.
+    /// Returns the run ID of this value if it has one.
+    ///
+    /// A `WeldValue` will only have a run ID if it was _returned_ by a Weld program. That is, a
+    /// `WeldValue` that is created using `WeldValue::new_from_data` will always have a `run_id` of
+    /// `None`.
     pub fn run_id(&self) -> Option<RunId> {
         self.run_id
     }
 
-    /// Returns the memory usage of this value. This equivalently returns the amount of memory
-    /// allocated by a Weld run. If the value was not returned by Weld, returns `None`.
+    /// Returns the memory usage of this value.
+    ///
+    /// This equivalently returns the amount of memory allocated by a Weld run. If the value was
+    /// not returned by Weld, returns `None`.
     pub fn memory_usage(&self) -> Option<i64> {
         self.run_id.map(|v| unsafe { runtime::weld_run_memory_usage(v) } )
     }
@@ -191,19 +270,28 @@ impl Drop for WeldValue {
     }
 }
 
-/// Describes a Weld configuration, which is a dictionary of key-value pairs.
+/// A struct used to configure compilation and the Weld runtime.
 #[derive(Debug,Clone)]
 pub struct WeldConf {
     dict: fnv::FnvHashMap<String, CString>,
 }
 
 impl WeldConf {
-    /// Returns a new, empty configuration.
+    /// Creates a new empty `WeldConf`.
+    ///
+    /// Weld configurations are unstructured key/value pairs. The configuration is used to modify
+    /// how a Weld program is compiled (e.g., setting multi-thread support, configuring
+    /// optimization passes, etc.) and how a Weld program is run (e.g., a memory limit, the number
+    /// of threads to allocate the run, etc.).
     pub fn new() -> WeldConf {
         WeldConf { dict: fnv::FnvHashMap::default() }
     }
 
-    /// Add a configuration option to `self.`
+    /// Adds a configuration to this `WeldConf`.
+    ///
+    /// This method does not perform any checks to ensure that the key/value pairs are valid. If
+    /// a `WeldConf` contains an invalid configuration option, the `WeldModule` methods that
+    /// compile and run modules will fail with an error.
     pub fn set<K: Into<String>, V: Into<Vec<u8>>>(&mut self, key: K, value: V) {
         self.dict.insert(key.into(), CString::new(value).unwrap());
     }
@@ -214,14 +302,19 @@ impl WeldConf {
     }
 }
 
-/// A compiled Weld module.
+/// A compiled runnable Weld module.
 pub struct WeldModule {
     llvm_module: llvm::CompiledModule,
 }
 
 impl WeldModule {
-    /// Compiles Weld code represented as a string into a `WeldModule`, with the given
-    /// configuration.
+    /// Creates a compiled `WeldModule` with a Weld program and configuration.
+    ///
+    /// A compiled module encapsulates JIT'd code in the current process. This function takes a
+    /// string reprsentation of Weld code, parses it, and compiles it into machine code. The passed
+    /// `WeldConf` can be used to configure how the code is compiled (see `conf.rs` for a list of
+    /// compilation options). Each configuration option has a default value, so setting
+    /// configuration options is optional.
     pub fn compile<S: AsRef<str>>(code: S, conf: &WeldConf) -> WeldResult<WeldModule> {
         let mut stats = CompilationStats::new();
         let ref parsed_conf = conf::parse(conf)?;
@@ -238,8 +331,23 @@ impl WeldModule {
         Ok(WeldModule { llvm_module: module })
     }
 
-    /// Run `self` with a given runtime configuraotion and argument, returning a `WeldValue`
-    /// wrapping the return value (or an error if something went wrong).
+    /// Run this `WeldModule` with a configuration and argument.
+    ///
+    /// This is the entry point for running a Weld program. The `WeldConf` specifies how runtime
+    /// options for running the program (e.g., number of threads): see `conf.rs` for a list of
+    /// runtime options. Each configuration option has a default value, so setting configuration
+    /// options is optional.
+    ///
+    /// # Weld Arguments
+    ///
+    /// This function takes a `WeldValue` initialized using `WeldValue::new_from_data` or another Weld
+    /// program. The value must encapsulate a valid pointer in a "Weld-compatible" format as
+    /// specified by the [specification](https://github.com/weld-project/weld/blob/master/docs/api.md).
+    /// This method is, as a result, `unsafe` because passing invalid data into a Weld program will
+    /// cause undefined behavior.
+    ///
+    /// Note that most Rust values cannot be passed into Weld directly. That is, it is *not* safe
+    /// to simply pass a pointer to a `Vec<T>` into Weld directly.
     pub unsafe fn run(&mut self, conf: &WeldConf, arg: &WeldValue) -> WeldResult<WeldValue> {
         let callable = self.llvm_module.llvm_mut();
         let ref parsed_conf = conf::parse(conf)?;
@@ -275,12 +383,12 @@ impl WeldModule {
         }
     }
 
-    /// Returns the parameter types of the module.
+    /// Returns the Weld arguments types of this `WeldModule`.
     pub fn param_types(&self) -> Vec<ast::Type> {
         self.llvm_module.param_types().clone()
     }
 
-    /// Returns teh return type of the module.
+    /// Returns the Weld return type of this `WeldModule`.
     pub fn return_type(&self) -> ast::Type {
         self.llvm_module.return_type().clone()
     }

@@ -35,7 +35,6 @@ use super::sir::optimizations;
 use super::transforms::uniquify;
 use super::type_inference;
 use super::util::IdGenerator;
-use super::util::WELD_INLINE_LIB;
 use super::annotations::*;
 
 use super::conf::ParsedConf;
@@ -56,6 +55,7 @@ pub struct VecLLVMInfo {
 }
 
 static PRELUDE_CODE: &'static str = include_str!("resources/prelude.ll");
+const WELD_INLINE_LIB: &'static [u8] = include_bytes!("../weld_rt/cpp/inline.bc");
 
 /// The default grain size for the parallel runtime.
 static DEFAULT_INNER_GRAIN_SIZE: i32 = 16384;
