@@ -10,7 +10,8 @@ import scipy.special as ss
 import grizzly.grizzly as gr
 from grizzly.lazy_op import LazyOpResult
 
-invsqrt2 = 1.0 #0.707
+# invsqrt2 = 1.0 #0.707
+invsqrt2 = 0.707
 
 def get_data(num_els):
     np.random.seed(2592)
@@ -49,10 +50,9 @@ def blackscholes(price, strike, t, rate, vol, intermediate_eval, use_group):
     # these are numpy arrays, so use scipy's erf function. scipy's ufuncs also
     # get routed through the common ufunc routing mechanism, so these work just
     # fine on weld arrays.
-    # d1 = c05 + c05 * ss.erf(d1 * invsqrt2)
-    # d2 = c05 + c05 * ss.erf(d2 * invsqrt2)
+    d1 = c05 + c05 * ss.erf(d1 * invsqrt2)
+    d2 = c05 + c05 * ss.erf(d2 * invsqrt2)
 
-    # e_rt = np.exp((rate) * t)
     e_rt = np.exp((0.0-rate) * t)
 
     # An alternative to using the group operator is to manually evaluate all
@@ -158,9 +158,10 @@ if __name__ == '__main__':
         print(np.linalg.norm(call - call2.view(np.ndarray)))
 
         # mistakes = 0
-        # for i in range(1000):
+        # for i in range(len(call)):
             # if (call[i] - call2[i] > 5):
                 # mistakes += 1
+                # print(i)
             # if (call[i] != call2[i]):
                 # print("call: ", call[i])
                 # print("call2: ", call2[i])
