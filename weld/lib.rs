@@ -58,7 +58,7 @@
 //! that format is defined as:
 //!
 //! ```
-//! [repr(C)]
+//! #[repr(C)]
 //! struct WeldVec<T> {
 //!     ptr: *const T,
 //!     len: i64,
