@@ -6,7 +6,7 @@ use libc::{c_char, c_void, int64_t};
 use std::ptr;
 use std::ffi::CStr;
 
-use super::api::*;
+use super::*;
 use super::common::WeldRuntimeErrno;
 
 trait ToRustStr {
@@ -20,7 +20,6 @@ trait ToRustStr {
 impl ToRustStr for *const c_char {
     fn to_str(&self) -> &str {
         let c_str = unsafe { CStr::from_ptr(*self) };
-        // TODO make this nicer?
         c_str.to_str().unwrap()
     }
 }
@@ -34,7 +33,9 @@ pub extern "C" fn weld_conf_new() -> *mut WeldConf {
 #[no_mangle]
 /// Free a Weld configuration.
 pub unsafe extern "C" fn weld_conf_free(ptr: *mut WeldConf) {
-    Box::from_raw(ptr);
+    if ptr != ptr::null_mut() {
+        Box::from_raw(ptr);
+    }
 }
 
 #[no_mangle]
@@ -88,8 +89,9 @@ pub unsafe extern "C" fn weld_value_data(value: *const WeldValue) -> *const c_vo
 /// Weld values which are not owned by the runtime only free the structure used
 /// to wrap the data; the actual data itself is owned by the caller.
 pub unsafe extern "C" fn weld_value_free(value: *mut WeldValue) {
-    let value = &mut *value;
-    Box::from_raw(value);
+    if value != ptr::null_mut() {
+        Box::from_raw(value);
+    }
 }
 
 #[no_mangle]
@@ -123,9 +125,9 @@ pub unsafe extern "C" fn weld_module_compile(code: *const c_char,
 }
 
 #[no_mangle]
-/// Runs a module.
-///
-/// The module may write a value into the provided error pointer.
+/// Runs a Weld module with a given configuration and argument list, and returns the result wrapped
+/// as a `WeldValue`. If the run raised a runtime error, the error is written into `err` and
+/// null-pointer is returned. Otherwise, `err` indicates success.
 pub unsafe extern "C" fn weld_module_run(module: *mut WeldModule,
                                          conf: *const WeldConf,
                                          arg: *const WeldValue,
@@ -142,6 +144,7 @@ pub unsafe extern "C" fn weld_module_run(module: *mut WeldModule,
             Box::into_raw(Box::new(result))
         }
         Err(runtime_err) => {
+            eprintln!("{:?}", runtime_err);
             *err = runtime_err;
             ptr::null_mut()
         }
@@ -154,7 +157,9 @@ pub unsafe extern "C" fn weld_module_run(module: *mut WeldModule,
 /// Freeing a module does not free the memory it may have allocated. Values returned by the module
 /// must be freed explicitly using `weld_value_free`.
 pub unsafe extern "C" fn weld_module_free(ptr: *mut WeldModule) {
-    Box::from_raw(ptr);
+    if ptr != ptr::null_mut() {
+        Box::from_raw(ptr);
+    }
 }
 
 #[no_mangle]
@@ -180,5 +185,7 @@ pub unsafe extern "C" fn weld_error_message(err: *const WeldError) -> *const c_c
 #[no_mangle]
 /// Frees a Weld error object.
 pub unsafe extern "C" fn weld_error_free(err: *mut WeldError) {
-    Box::from_raw(err);
+    if err != ptr::null_mut() {
+        Box::from_raw(err);
+    }
 }

@@ -104,9 +104,8 @@ pub fn compile_and_run_error<T>(code: &str, conf: *mut WeldConf, ptr: &T) -> *mu
 
 /// Frees a value and its corresponding module.
 pub unsafe fn free_value_and_module(value: *mut WeldValue) {
-    let module = weld_value_module(value);
     weld_value_free(value);
-    weld_module_free(module);
+    // XXX TODO!! DELETE THE MODULE!!
 }
 
 fn conf(threads: i32) -> *mut WeldConf {
