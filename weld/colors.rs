@@ -1,4 +1,5 @@
 //! Basic format strings for colored output.
+#![allow(dead_code)]
 
 const RESET: &str = "\x1b[0m";
 

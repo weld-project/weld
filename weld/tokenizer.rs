@@ -276,12 +276,12 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
                             "min" => TMin,
                             "max" => TMax,
                             "pow" => TPow,
-                            _ => return weld_err!("Invalid input token: {}", text),
+                            _ => return compile_err!("Invalid input token: {}", text),
                         });
         } else if STRLIT_RE.is_match(text) {
             let string = text.trim_matches('"').to_string();
             if !(string.is_ascii()) {
-                return weld_err!("Weld strings must be valid ASCII");
+                return compile_err!("Weld strings must be valid ASCII");
             }
             tokens.push(TStringLiteral(string)); // Trim off quotes before tokenizing
         } else if IDENT_RE.is_match(text) {
@@ -313,12 +313,12 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
         } else if F32_RE.is_match(text) {
             match f32::from_str(&text[..text.len() - 1]) {
                 Ok(value) => tokens.push(Token::TF32Literal(value)),
-                Err(_) => return weld_err!("Invalid f32 literal: {}", text),
+                Err(_) => return compile_err!("Invalid f32 literal: {}", text),
             }
         } else if F64_RE.is_match(text) {
             match f64::from_str(text) {
                 Ok(value) => tokens.push(Token::TF64Literal(value)),
-                Err(_) => return weld_err!("Invalid f64 literal: {}", text),
+                Err(_) => return compile_err!("Invalid f64 literal: {}", text),
             }
         } else {
             tokens.push(match text {
@@ -351,7 +351,7 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
                             "||" => TLogicalOr,
                             "&" => TBitwiseAnd,
                             "^" => TXor,
-                            _ => return weld_err!("Invalid input token: {}", text),
+                            _ => return compile_err!("Invalid input token: {}", text),
                         });
         }
     }
@@ -491,7 +491,7 @@ fn parse_i8_literal(input: &str, base: u32) -> WeldResult<Token> {
     };
     match i8::from_str_radix(slice, base) {
         Ok(value) => Ok(Token::TI8Literal(value)),
-        Err(_) => weld_err!("Invalid i8 literal: {}", input),
+        Err(_) => compile_err!("Invalid i8 literal: {}", input),
     }
 }
 
@@ -503,7 +503,7 @@ fn parse_i16_literal(input: &str, base: u32) -> WeldResult<Token> {
     };
     match i16::from_str_radix(slice, base) {
         Ok(value) => Ok(Token::TI16Literal(value)),
-        Err(_) => weld_err!("Invalid i16 literal: {}", input), 
+        Err(_) => compile_err!("Invalid i16 literal: {}", input), 
     }
 }
 
@@ -511,7 +511,7 @@ fn parse_i32_literal(input: &str, base: u32) -> WeldResult<Token> {
     let slice = if base == 10 { input } else { &input[2..] };
     match i32::from_str_radix(slice, base) {
         Ok(value) => Ok(Token::TI32Literal(value)),
-        Err(_) => weld_err!("Invalid i32 literal: {}", input),
+        Err(_) => compile_err!("Invalid i32 literal: {}", input),
     }
 }
 
@@ -523,7 +523,7 @@ fn parse_i64_literal(input: &str, base: u32) -> WeldResult<Token> {
     };
     match i64::from_str_radix(slice, base) {
         Ok(value) => Ok(Token::TI64Literal(value)),
-        Err(_) => weld_err!("Invalid i32 literal: {}", input),
+        Err(_) => compile_err!("Invalid i32 literal: {}", input),
     }
 }
 

@@ -54,7 +54,7 @@ impl PartialType {
         use self::PartialType::*;
         use self::PartialBuilderKind::*;
         match *self {
-            Unknown => weld_err!("Incomplete partial type"),
+            Unknown => compile_err!("Incomplete partial type"),
             Scalar(kind) => Ok(Type::Scalar(kind)),
             Simd(kind) => Ok(Type::Simd(kind)),
             Vector(ref elem) => Ok(Type::Vector(Box::new(try!(elem.to_type())))),

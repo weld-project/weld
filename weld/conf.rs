@@ -130,7 +130,7 @@ fn parse_dir(s: &str) -> WeldResult<PathBuf> {
     let path = Path::new(s);
     match path.metadata() {
         Ok(_) if path.is_dir() => Ok(path.to_path_buf()),
-        _ => weld_err!("WeldConf: {} is not a directory", s)
+        _ => compile_err!("WeldConf: {} is not a directory", s)
     }
 }
 
@@ -138,7 +138,7 @@ fn parse_dir(s: &str) -> WeldResult<PathBuf> {
 fn parse_threads(s: &str) -> WeldResult<i32> {
     match s.parse::<i32>() {
         Ok(v) if v > 0 => Ok(v),
-        _ => weld_err!("Invalid number of threads: {}", s),
+        _ => compile_err!("Invalid number of threads: {}", s),
     }
 }
 
@@ -146,7 +146,7 @@ fn parse_threads(s: &str) -> WeldResult<i32> {
 fn parse_bool_flag(s: &str, err: &str) -> WeldResult<bool> {
     match s.parse::<bool>() {
         Ok(v) => Ok(v),
-        _ => weld_err!("{}: {}", err, s),
+        _ => compile_err!("{}: {}", err, s),
     }
 }
 
@@ -154,7 +154,7 @@ fn parse_bool_flag(s: &str, err: &str) -> WeldResult<bool> {
 fn parse_memory_limit(s: &str) -> WeldResult<i64> {
     match s.parse::<i64>() {
         Ok(v) if v > 0 => Ok(v),
-        _ => weld_err!("Invalid memory limit: {}", s),
+        _ => compile_err!("Invalid memory limit: {}", s),
     }
 }
 
@@ -168,7 +168,7 @@ fn parse_passes(s: &str) -> WeldResult<Vec<Pass>> {
     for piece in s.split(",") {
         match OPTIMIZATION_PASSES.get(piece) {
             Some(pass) => result.push(pass.clone()),
-            None => return weld_err!("Unknown optimization pass: {}", piece)
+            None => return compile_err!("Unknown optimization pass: {}", piece)
         }
     }
     Ok(result)
@@ -178,7 +178,7 @@ fn parse_passes(s: &str) -> WeldResult<Vec<Pass>> {
 fn parse_llvm_optimization_level(s: &str) -> WeldResult<u32> {
     match s.parse::<u32>() {
         Ok(v) if v <= 3 => Ok(v),
-        _ => weld_err!("Invalid LLVM optimization level: {}", s),
+        _ => compile_err!("Invalid LLVM optimization level: {}", s),
     }
 }
 

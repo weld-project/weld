@@ -118,7 +118,7 @@ fn is_same_ident(expr: &TypedExpr, other: &TypedExpr) -> bool {
 /// in the merge with a Lookup.
 fn unroll_values(parameters: &Vec<TypedParameter>, value: &TypedExpr, vectors: &Vec<TypedExpr>, loopsize: i64) -> WeldResult<Vec<TypedExpr>> {
     if parameters.len() != 3 {
-        return weld_err!("Expected three parameters to Merge function");
+        return compile_err!("Expected three parameters to Merge function");
     }
 
     let ref index_symbol = parameters[1].name;
@@ -160,12 +160,12 @@ fn unroll_values(parameters: &Vec<TypedParameter>, value: &TypedExpr, vectors: &
 /// merger[i32,+], this function will produce the expression Literal(1) + Literal(2) + Literal(3).
 fn combine_unrolled_values(bk: BuilderKind, values: Vec<TypedExpr>) -> WeldResult<TypedExpr> {
     if values.len() == 0 {
-        return weld_err!("Need at least one value to combine in unroller");
+        return compile_err!("Need at least one value to combine in unroller");
     }
     match bk {
         Merger(ref ty, ref binop) => {
             if values.iter().any(|ref expr| expr.ty != *ty.as_ref()) {
-                return weld_err!("Mismatched types in Merger and unrolled values.");
+                return compile_err!("Mismatched types in Merger and unrolled values.");
             }
             // Use the specified binary op to produce the final expression.
             let mut prev = None;
@@ -180,12 +180,12 @@ fn combine_unrolled_values(bk: BuilderKind, values: Vec<TypedExpr>) -> WeldResul
         }
         Appender(ref ty) => {
             if values.iter().any(|ref expr| expr.ty != *ty.as_ref()) {
-                return weld_err!("Mismatched types in Appender and unrolled values.");
+                return compile_err!("Mismatched types in Appender and unrolled values.");
             }
             return makevector_expr(values);
         }
         ref bk => {
-            return weld_err!("Unroller transform does not support loops with builder of kind {:?}", bk);
+            return compile_err!("Unroller transform does not support loops with builder of kind {:?}", bk);
         }
     }
 }

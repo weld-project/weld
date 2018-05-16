@@ -33,7 +33,7 @@ pub fn infer_types(expr: &mut PartialExpr) -> WeldResult<()> {
         let res = try!(infer_up(expr, &mut env));
         if res == false {
             if !has_all_types(expr) {
-                return weld_err!("Could not infer some types");
+                return compile_err!("Could not infer some types");
             }
             return Ok(());
         }
@@ -168,7 +168,7 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
                 Scalar(F32) => push_complete_type(&mut expr.ty, Scalar(F32), "UnaryOp"),
                 Scalar(F64) => push_complete_type(&mut expr.ty, Scalar(F64), "UnaryOp"),
                 Unknown => push_type(&mut expr.ty, &value.ty, "UnaryOp"),
-                _ => return weld_err!("Internal error: {} called on non-scalar or non-float", op),
+                _ => return compile_err!("Internal error: {} called on non-scalar or non-float", op),
             }
         }
 
@@ -188,18 +188,18 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
                         }
                     }
                 } else {
-                    return weld_err!("Internal error: vector field in toVec return type is not a \
+                    return compile_err!("Internal error: vector field in toVec return type is not a \
                                       struct");
                 }
             } else {
-                return weld_err!("Internal error: type of toVec was not Vector(..)");
+                return compile_err!("Internal error: type of toVec was not Vector(..)");
             }
             Ok(changed)
         }
 
         Ident(ref symbol) => {
             match env.get(symbol) {
-                None => weld_err!("Undefined identifier: {}", symbol.name),
+                None => compile_err!("Undefined identifier: {}", symbol.name),
                 Some(t) => push_type(&mut expr.ty, t, "Ident"),
             }
         }
@@ -211,7 +211,7 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
                 Scalar(ref kind) => {
                     push_type(&mut expr.ty, &Simd(kind.clone()), "Broadcast")
                 }
-                _ => weld_err!("Broadcast only works with Scalar(_)")
+                _ => compile_err!("Broadcast only works with Scalar(_)")
             }
         }
 
@@ -249,13 +249,13 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
                         if let Vector(ref elem_type) = vec_expr.ty {
                             changed |= try!(push_type(vec_ty, elem_type, "Zip"));
                         } else if vec_expr.ty != Unknown {
-                            return weld_err!("Internal error: Zip argument not a Vector");
+                            return compile_err!("Internal error: Zip argument not a Vector");
                         }
                         types.push(vec_ty.clone());
                     }
                 }
             } else {
-                return weld_err!("Internal error: type of Zip was not Vector(Struct(..))");
+                return compile_err!("Internal error: type of Zip was not Vector(Struct(..))");
             }
 
             let base_type = Vector(Box::new(Struct(types)));
@@ -275,7 +275,7 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
                     changed |= try!(sync_types(elem_ty, &mut elem_expr.ty, "MakeStruct"));
                 }
             } else {
-                return weld_err!("Internal error: type of MakeStruct was not Struct");
+                return compile_err!("Internal error: type of MakeStruct was not Struct");
             }
 
             Ok(changed)
@@ -288,13 +288,13 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             if let Struct(ref mut elem_types) = param.ty {
                 let index = index as usize;
                 if index >= elem_types.len() {
-                    return weld_err!("Invalid index for GetField");
+                    return compile_err!("Invalid index for GetField");
                 }
                 sync_types(&mut elem_types[index], &mut expr.ty, "GetField")
             } else if param.ty == Unknown {
                 Ok(false)
             } else {
-                weld_err!("Internal error: GetField called on {:?}", param.ty)
+                compile_err!("Internal error: GetField called on {:?}", param.ty)
             }
         }
 
@@ -302,7 +302,7 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             match data.ty {
                 Vector(_) => (),
                 Unknown => (),
-                _ => return weld_err!("Internal error: Length called on non-vector"),
+                _ => return compile_err!("Internal error: Length called on non-vector"),
             }
             push_complete_type(&mut expr.ty, Scalar(I64), "Length")
         }
@@ -319,7 +319,7 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
                 changed |= try!(push_type(&mut expr.ty, &data.ty, "Slice"));
                 Ok(changed)
             } else {
-                weld_err!("Internal error: Slice called on {:?}, must be called on vector",
+                compile_err!("Internal error: Slice called on {:?}, must be called on vector",
                           data.ty)
             }
         }
@@ -334,13 +334,13 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
                     if params.len() == 1 {
                         changed |= try!(push_type(&mut params[0], &elem_type, "Sort key return"));
                     } else {
-                        return weld_err!("Internal error: Sort key has too many parameters");
+                        return compile_err!("Internal error: Sort key has too many parameters");
                     }
                 }
                 changed |= try!(push_type(&mut expr.ty, &data.ty, "Sort"));
                 Ok(changed)
             } else {
-                weld_err!("Internal error: Sort called on {:?}, must be called on vector",
+                compile_err!("Internal error: Sort called on {:?}, must be called on vector",
                           data.ty)
             }
         }
@@ -362,7 +362,7 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             } else if data.ty == Unknown {
                 Ok(false)
             } else {
-                weld_err!("Internal error: Lookup called on {:?}", data.ty)
+                compile_err!("Internal error: Lookup called on {:?}", data.ty)
             }
         }
 
@@ -378,7 +378,7 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
             } else if data.ty == Unknown {
                 Ok(false)
             } else {
-                weld_err!("Internal error: KeyExists called on {:?}", data.ty)
+                compile_err!("Internal error: KeyExists called on {:?}", data.ty)
             }
         }
 
@@ -397,7 +397,7 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
                     changed |= try!(sync_types(param_ty, &mut param_expr.ty, "Lambda parameter"));
                 }
             } else {
-                return weld_err!("Internal error: type of Lambda was not Function");
+                return compile_err!("Internal error: type of Lambda was not Function");
             }
 
             Ok(changed)
@@ -423,7 +423,7 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
                     }
                 }
                 Unknown => (),
-                _ => return weld_err!("Internal error: Merge called on non-builder"),
+                _ => return compile_err!("Internal error: Merge called on non-builder"),
             }
             changed |= try!(sync_types(&mut expr.ty, &mut builder.ty, "Merge"));
             Ok(changed)
@@ -437,7 +437,7 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
                     changed |= try!(push_type(&mut expr.ty, &rty, "Result"));
                 }
                 Unknown => (),
-                _ => return weld_err!("Internal error: Result called on non-builder"),
+                _ => return compile_err!("Internal error: Result called on non-builder"),
             }
             Ok(changed)
         }
@@ -454,7 +454,7 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
                 let mut elem_type = match iter.data.ty {
                     Vector(ref elem) => *elem.clone(),
                     Unknown => Unknown,
-                    _ => return weld_err!("non-vector type in For"),
+                    _ => return compile_err!("non-vector type in For"),
                 };
 
                 // RangeIters always have this element type.
@@ -480,7 +480,7 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
                             Some(ref mut e) => {
                                 changed |= try!(push_complete_type(&mut e.ty, Vector(Box::new(Scalar(I64))), "iter"))
                             }
-                            None => return weld_err!("Impossible"),
+                            None => return compile_err!("Impossible"),
                         };
                     }
                 }
@@ -518,11 +518,11 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
 
                 if vector_param {
                     if !iters.iter().all(|i| i.kind == IterKind::SimdIter) {
-                        return weld_err!("For with vector arguments requires a Simd iterator");
+                        return compile_err!("For with vector arguments requires a Simd iterator");
                     }
                 } else {
                     if iters.iter().any(|i| i.kind == IterKind::SimdIter) {
-                        return weld_err!("For without vector arguments requires a Scalar or Fringe iterator");
+                        return compile_err!("For without vector arguments requires a Scalar or Fringe iterator");
                     }
                 }
             }
@@ -538,7 +538,7 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
                     changed |= try!(push_type(&mut builder.ty, &params[0], "For"));
                     changed |= try!(push_type(&mut builder.ty, result.as_ref(), "For"));
                 }
-                _ => return weld_err!("For"),
+                _ => return compile_err!("For"),
             };
 
             // Push builder's type to our expression
@@ -549,7 +549,7 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
         NewBuilder(ref mut e) => {
             let mut changed = match expr.ty {
                 Unknown | Builder(_, _) => false,
-                _ => return weld_err!("Wrong type ascribed to NewBuilder"),
+                _ => return compile_err!("Wrong type ascribed to NewBuilder"),
             };
             // For builders with arguments (Just VecMerger for now).
             if let Builder(ref bty, _) = expr.ty {
@@ -557,7 +557,7 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
                     VecMerger(ref elem, _, _) => {
                         match *e {
                             None => {
-                                return weld_err!("Expected argument for NewBuilder of type \
+                                return compile_err!("Expected argument for NewBuilder of type \
                                                   VecMerger");
                             }
                             Some(ref mut arg) => {
@@ -616,7 +616,7 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
                 Function(ref mut params, _) if params.len() == 1 => {
                     changed |= sync_types(&mut params[0], &mut initial.ty, "Iterate")?;
                 }
-                _ => return weld_err!("Second argument of Iterate must be a 1-argument function"),
+                _ => return compile_err!("Second argument of Iterate must be a 1-argument function"),
             };
             Ok(changed)
         }
@@ -656,7 +656,7 @@ fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> 
                     }
                 }
 
-                _ => return weld_err!("Internal error: Apply was not called on a function"),
+                _ => return compile_err!("Internal error: Apply was not called on a function"),
             }
 
             Ok(changed)
@@ -675,7 +675,7 @@ fn push_complete_type(dest: &mut PartialType, src: PartialType, context: &str) -
             } else if *dest == src {
                 Ok(false)
             } else {
-                weld_err!("Mismatched types in {}", context)
+                compile_err!("Mismatched types in {}", context)
             }
         }
 
@@ -686,12 +686,12 @@ fn push_complete_type(dest: &mut PartialType, src: PartialType, context: &str) -
             } else if let Vector(ref mut dest_elem) = *dest {
                 push_complete_type(dest_elem, elem.as_ref().clone(), context)
             } else {
-                weld_err!("Mismatched types in {}", context)
+                compile_err!("Mismatched types in {}", context)
             }
         }
 
         _ => {
-            weld_err!("Internal error: push_complete_type not implemented for {:?}",
+            compile_err!("Internal error: push_complete_type not implemented for {:?}",
                       src)
         }
     }
@@ -712,21 +712,21 @@ fn push_type(dest: &mut PartialType, src: &PartialType, context: &str) -> WeldRe
         Scalar(ref d) => {
             match *src {
                 Scalar(ref s) if d == s => Ok(false),
-                _ => weld_err!("Mismatched types in Scalar, {}", context),
+                _ => compile_err!("Mismatched types in Scalar, {}", context),
             }
         }
 
         Simd(ref d) => {
             match *src {
                 Simd(ref s) if d == s => Ok(false),
-                _ => weld_err!("Mismatched types in Simd, {}", context),
+                _ => compile_err!("Mismatched types in Simd, {}", context),
             }
         }
 
         Vector(ref mut dest_elem) => {
             match *src {
                 Vector(ref src_elem) => push_type(dest_elem, src_elem, context),
-                _ => weld_err!("Mismatched types in Vector, {}", context),
+                _ => compile_err!("Mismatched types in Vector, {}", context),
             }
         }
 
@@ -739,7 +739,7 @@ fn push_type(dest: &mut PartialType, src: &PartialType, context: &str) -> WeldRe
                         try!(push_type(dest_value_ty.as_mut(), src_value_ty.as_ref(), context));
                     Ok(changed)
                 }
-                _ => weld_err!("Mismatched types in Dict, {}", context),
+                _ => compile_err!("Mismatched types in Dict, {}", context),
             }
         }
 
@@ -748,14 +748,14 @@ fn push_type(dest: &mut PartialType, src: &PartialType, context: &str) -> WeldRe
                 Struct(ref src_elems) => {
                     let mut changed = false;
                     if dest_elems.len() != src_elems.len() {
-                        return weld_err!("Mismatched types in Struct, {}", context);
+                        return compile_err!("Mismatched types in Struct, {}", context);
                     }
                     for (dest_elem, src_elem) in dest_elems.iter_mut().zip(src_elems) {
                         changed |= try!(push_type(dest_elem, src_elem, context));
                     }
                     Ok(changed)
                 }
-                _ => weld_err!("Mismatched types in Struct, {}", context),
+                _ => compile_err!("Mismatched types in Struct, {}", context),
             }
         }
 
@@ -764,7 +764,7 @@ fn push_type(dest: &mut PartialType, src: &PartialType, context: &str) -> WeldRe
                 Function(ref src_params, ref src_res) => {
                     let mut changed = false;
                     if dest_params.len() != src_params.len() {
-                        return weld_err!("Mismatched types in Function, {}", context);
+                        return compile_err!("Mismatched types in Function, {}", context);
                     }
                     for (dest_param, src_param) in dest_params.iter_mut().zip(src_params) {
                         changed |= try!(push_type(dest_param, src_param, context));
@@ -772,7 +772,7 @@ fn push_type(dest: &mut PartialType, src: &PartialType, context: &str) -> WeldRe
                     changed |= try!(push_type(dest_res, src_res, context));
                     Ok(changed)
                 }
-                _ => weld_err!("Mismatched types in Function, {}", context),
+                _ => compile_err!("Mismatched types in Function, {}", context),
             }
         }
 
@@ -789,7 +789,7 @@ fn push_type(dest: &mut PartialType, src: &PartialType, context: &str) -> WeldRe
                     }
                     Ok(changed)
                 }
-                _ => weld_err!("Mismatched types in Appender, {}", context),
+                _ => compile_err!("Mismatched types in Appender, {}", context),
             }
         }
 
@@ -822,7 +822,7 @@ fn push_type(dest: &mut PartialType, src: &PartialType, context: &str) -> WeldRe
                                 match *ty {
                                     Scalar(_) => {}
                                     _ => {
-                                        return weld_err!("Commutatitive merge builders only \
+                                        return compile_err!("Commutatitive merge builders only \
                                                           support structs with scalars");
                                     }
                                 }
@@ -830,13 +830,13 @@ fn push_type(dest: &mut PartialType, src: &PartialType, context: &str) -> WeldRe
                         }
                         Scalar(_) => {}
                         _ => {
-                            return weld_err!("Commutatitive merge builders only support scalars \
+                            return compile_err!("Commutatitive merge builders only support scalars \
                                               or structs of scalars");
                         }
                     }
                     Ok(changed)
                 }
-                _ => weld_err!("Mismatched types in DictMerger, {}", context),
+                _ => compile_err!("Mismatched types in DictMerger, {}", context),
             }
         }
 
@@ -857,7 +857,7 @@ fn push_type(dest: &mut PartialType, src: &PartialType, context: &str) -> WeldRe
                     }
                     Ok(changed)
                 }
-                _ => weld_err!("Mismatched types in GroupMerger, {}", context),
+                _ => compile_err!("Mismatched types in GroupMerger, {}", context),
             }
         }
 
@@ -885,7 +885,7 @@ fn push_type(dest: &mut PartialType, src: &PartialType, context: &str) -> WeldRe
                                 match *ty {
                                     Scalar(_) => {}
                                     _ => {
-                                        return weld_err!("Commutative merge builders only \
+                                        return compile_err!("Commutative merge builders only \
                                                           support structs with scalars");
                                     }
                                 }
@@ -893,7 +893,7 @@ fn push_type(dest: &mut PartialType, src: &PartialType, context: &str) -> WeldRe
                         }
                         Scalar(_) => {}
                         _ => {
-                            return weld_err!("Commutative merge builders only support scalars \
+                            return compile_err!("Commutative merge builders only support scalars \
                                               or structs of scalars");
                         }
                     }
@@ -901,7 +901,7 @@ fn push_type(dest: &mut PartialType, src: &PartialType, context: &str) -> WeldRe
 
 
                 }
-                _ => weld_err!("Mismatched types in VecMerger, {}", context),
+                _ => compile_err!("Mismatched types in VecMerger, {}", context),
             }
         }
 
@@ -923,7 +923,7 @@ fn push_type(dest: &mut PartialType, src: &PartialType, context: &str) -> WeldRe
                                 match *ty {
                                     Scalar(_) => {}
                                     _ => {
-                                        return weld_err!("Commutatitive merge builders only \
+                                        return compile_err!("Commutatitive merge builders only \
                                                           support structs with scalars");
                                     }
                                 }
@@ -931,13 +931,13 @@ fn push_type(dest: &mut PartialType, src: &PartialType, context: &str) -> WeldRe
                         }
                         Scalar(_) => {}
                         _ => {
-                            return weld_err!("Commutatitive merge builders only support scalars \
+                            return compile_err!("Commutatitive merge builders only support scalars \
                                               or structs of scalars");
                         }
                     }
                     Ok(changed)
                 }
-                _ => weld_err!("Mismatched types in {}", context),
+                _ => compile_err!("Mismatched types in {}", context),
             }
         }
     }

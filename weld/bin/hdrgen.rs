@@ -22,7 +22,6 @@ use std::io::prelude::*;
 use weld::code_builder::CodeBuilder;
 use weld::util::IdGenerator;
 use weld::ast::*;
-use weld::error::*;
 
 static PRELUDE_CODE: &'static str = include_str!("resources/cpp_prelude.h");
 

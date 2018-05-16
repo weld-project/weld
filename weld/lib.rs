@@ -23,11 +23,18 @@ use std::error::Error;
 use std::default::Default;
 use std::ffi::{CString, CStr};
 
-/// Utility macro to create an Err result with a WeldError from a format string.
+/// A macro for creating a `WeldError` with a message and an unknown error code.
 #[macro_export]
 macro_rules! weld_err {
     ( $($arg:tt)* ) => ({
-        ::std::result::Result::Err($crate::error::WeldError::new(format!($($arg)*)))
+        ::std::result::Result::Err($crate::WeldError::new_unknown(format!($($arg)*)))
+    })
+}
+
+/// Internal macro for creating a compile error.
+macro_rules! compile_err {
+    ( $($arg:tt)* ) => ({
+        ::std::result::Result::Err($crate::error::WeldCompileError::new(format!($($arg)*)))
     })
 }
 
@@ -49,11 +56,11 @@ mod exprs;
 mod expr_hash;
 mod easy_ll;
 mod stats;
+mod error;
 
 // Public interfaces.
 // TODO these probably shouldn't all be public...
 pub mod ast;
-pub mod error;
 pub mod util;
 pub mod common;
 pub mod ffi;
@@ -92,15 +99,23 @@ pub struct WeldError {
     code: WeldRuntimeErrno,
 }
 
-/// A wrapper representing the API-exposed `WeldError`.
-type WeldResult<T> = Result<T, WeldError>;
+/// A result produced by Weld, with an errortype `WeldError`.
+pub type WeldResult<T> = Result<T, WeldError>;
 
 impl WeldError {
     /// Return a new error.
-    pub fn new(message: CString, code: WeldRuntimeErrno) -> WeldError {
+    pub fn new<T: Into<Vec<u8>>>(message: T, code: WeldRuntimeErrno) -> WeldError {
         WeldError {
-            message: message,
+            message: CString::new(message).unwrap(),
             code: code,
+        }
+    }
+
+    /// Return a new error with an unknown code.
+    pub fn new_unknown<T: Into<Vec<u8>>>(message: T) -> WeldError {
+        WeldError {
+            message: CString::new(message).unwrap(),
+            code: WeldRuntimeErrno::Unknown,
         }
     }
 
@@ -129,8 +144,9 @@ impl Default for WeldError {
     }
 }
 
-impl From<error::WeldError> for WeldError {
-    fn from(err: error::WeldError) -> WeldError {
+// Conversion from a compilation error to an external WeldError.
+impl From<error::WeldCompileError> for WeldError {
+    fn from(err: error::WeldCompileError) -> WeldError {
         WeldError::new(CString::new(err.description()).unwrap(), WeldRuntimeErrno::CompileError)
     }
 }

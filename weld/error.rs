@@ -3,48 +3,26 @@ use std::error;
 use std::fmt;
 
 use easy_ll::LlvmError;
-use common::WeldRuntimeErrno;
 
-/// Error type returned by Weld.
-#[derive(Debug,Clone)]
-pub struct WeldError {
-    description: String,
-    code: WeldRuntimeErrno,
-}
+/// A compilation error produced by Weld.
+#[derive(Debug, Clone)]
+pub struct WeldCompileError(String);
 
-impl WeldError {
-    pub fn new(description: String) -> WeldError {
-        WeldError {
-            description: description,
-            code: WeldRuntimeErrno::CompileError,
-        }
-    }
-
-    pub fn new_with_errno(description: String, code: WeldRuntimeErrno) -> WeldError {
-        WeldError {
-            description: description,
-            code: code,
-        }
-    }
-
-    pub fn success() -> WeldError {
-        WeldError::new_with_errno("Success".to_string(), WeldRuntimeErrno::Success)
-    }
-
-    pub fn code(&self) -> WeldRuntimeErrno {
-        self.code
+impl WeldCompileError {
+    pub fn new<T: Into<String>>(description: T) -> WeldCompileError {
+        WeldCompileError(description.into())
     }
 }
 
-impl fmt::Display for WeldError {
+impl fmt::Display for WeldCompileError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.description)
+        write!(f, "{}", self.0)
     }
 }
 
-impl error::Error for WeldError {
+impl error::Error for WeldCompileError {
     fn description(&self) -> &str {
-        &self.description
+        &self.0
     }
 
     fn cause(&self) -> Option<&error::Error> {
@@ -52,11 +30,11 @@ impl error::Error for WeldError {
     }
 }
 
-impl From<LlvmError> for WeldError {
-    fn from(err: LlvmError) -> WeldError {
-        WeldError::new(err.to_string())
+impl From<LlvmError> for WeldCompileError {
+    fn from(err: LlvmError) -> WeldCompileError {
+        WeldCompileError::new(err.to_string())
     }
 }
 
 /// Result type returned by Weld.
-pub type WeldResult<T> = Result<T, WeldError>;
+pub type WeldResult<T> = Result<T, WeldCompileError>;

@@ -314,7 +314,7 @@ fn replace_builder(lambda: &Expr<Type>,
             return exprs::lambda_expr(new_params, new_body);
         }
     }
-    return weld_err!("Inconsistency in replace_builder");
+    return compile_err!("Inconsistency in replace_builder");
 }
 
 /// Given a root type, forces each expression to return that type. TODO For now, only supporting

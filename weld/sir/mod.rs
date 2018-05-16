@@ -396,7 +396,7 @@ impl SirFunction {
     pub fn symbol_type(&self, sym: &Symbol) -> WeldResult<&Type> {
         self.locals.get(sym).map(|s| Ok(s)).unwrap_or_else(|| {
             self.params.get(sym).map(|s| Ok(s)).unwrap_or_else(|| {
-                weld_err!("Can't find symbol {}#{}", sym.name, sym.id)
+                compile_err!("Can't find symbol {}#{}", sym.name, sym.id)
             })
         })
     }
@@ -784,7 +784,7 @@ fn sir_param_correction(prog: &mut SirProgram) -> WeldResult<()> {
     let ref func = prog.funcs[0];
     for name in closure {
         if func.params.get(&name) == None {
-            weld_err!("Unbound symbol {}#{}", name.name, name.id)?;
+            compile_err!("Unbound symbol {}#{}", name.name, name.id)?;
         }
     }
     Ok(())
@@ -807,7 +807,7 @@ pub fn ast_to_sir(expr: &TypedExpr, multithreaded: bool) -> WeldResult<SirProgra
         sir_param_correction(&mut prog)?;
         Ok(prog)
     } else {
-        weld_err!("Expression passed to ast_to_sir was not a Lambda")
+        compile_err!("Expression passed to ast_to_sir was not a Lambda")
     }
 }
 
@@ -1006,7 +1006,7 @@ fn gen_expr(expr: &TypedExpr,
                 let res_sym = tracker.symbol_for_statement(prog, cur_func, cur_block, &expr.ty, kind);
                 Ok((cur_func, cur_block, res_sym))
             } else {
-                weld_err!("Sort key function expected lambda type, instead {:?} provided", keyfunc.ty)
+                compile_err!("Sort key function expected lambda type, instead {:?} provided", keyfunc.ty)
             }
         }
         ExprKind::Select {
@@ -1092,14 +1092,14 @@ fn gen_expr(expr: &TypedExpr,
                     argument_sym = &params[0].name;
                     func_body = body;
                     if params[0].ty != initial.ty {
-                        return weld_err!("Wrong argument type for body of Iterate");
+                        return compile_err!("Wrong argument type for body of Iterate");
                     }
                     if func_body.ty != Struct(vec![initial.ty.clone(), Scalar(ScalarKind::Bool)]) {
-                        return weld_err!("Wrong return type for body of Iterate");
+                        return compile_err!("Wrong return type for body of Iterate");
                     }
                     prog.add_local_named(&params[0].ty, argument_sym, cur_func);
                 }
-                _ => return weld_err!("Argument of Iterate was not a Lambda")
+                _ => return compile_err!("Argument of Iterate was not a Lambda")
             }
 
             prog.funcs[cur_func].blocks[cur_block].add_statement(Statement::new(Some(argument_sym.clone()), Assign(initial_sym)));
@@ -1261,7 +1261,7 @@ fn gen_expr(expr: &TypedExpr,
             let field_ty = match expr.ty {
                 super::ast::Type::Struct(ref v) => &v[index as usize],
                 _ => {
-                    weld_err!("Internal error: tried to get field of type {}",
+                    compile_err!("Internal error: tried to get field of type {}",
                               print_type(&expr.ty))?
                 }
             };
@@ -1347,11 +1347,11 @@ fn gen_expr(expr: &TypedExpr,
                                 });
                 Ok((cont_func, cont_block, builder_sym))
             } else {
-                weld_err!("Argument to For was not a Lambda: {}", print_expr(func))
+                compile_err!("Argument to For was not a Lambda: {}", print_expr(func))
             }
         }
 
-        _ => weld_err!("Unsupported expression: {}", print_expr(expr)),
+        _ => compile_err!("Unsupported expression: {}", print_expr(expr)),
     }
 }
 
