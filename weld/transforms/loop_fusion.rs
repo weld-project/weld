@@ -14,10 +14,6 @@ use super::inliner::inline_apply;
 
 use util::SymbolGenerator;
 
-/// Fuses loops where one for loop takes another as it's input, which prevents intermediate results
-/// from being materialized.
-pub struct VerticalLoopFusion;
-
 /// Fuses for loops over the same vector in a zip into a single for loop which produces a vector of
 /// structs directly.
 ///

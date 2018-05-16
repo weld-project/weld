@@ -1,7 +1,6 @@
 //! Tests which exercise various aspects of the `For` loop.
 
 extern crate weld;
-use weld::weld_value_data;
 
 mod common;
 use common::*;
@@ -11,17 +10,16 @@ fn nested_if_statement_loop() {
     let code = "|p: vec[i64]|
     result(for(p,merger[i64, +], |bs, i, ns| if(ns >= 3L, if(ns < 7L, merge(bs, ns), bs), bs)))";
 
-    let conf = default_conf();
+    let ref conf = default_conf();
 
     let input_vec: Vec<i64> = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
     let ref input_data = WeldVec::from(&input_vec);
 
     let ret_value = compile_and_run(code, conf, input_data);
-    let data = unsafe { weld_value_data(ret_value) as *const i32 };
+    let data = ret_value.data() as *const i32;
     let result = unsafe { (*data).clone() };
     let output = 18;
     assert_eq!(result, output);
-    unsafe { free_value_and_module(ret_value) };
 }
 
 #[test]
@@ -30,17 +28,16 @@ fn nested_if_statement_with_builders_loop() {
         let filter = result(for(p,appender[i64], |bs, i, ns|if(ns >= 3L, if(ns < 7L, merge(bs, ns), bs), bs)));
         result(for(filter, merger[i64, +], |bs2, i2, ns2| merge(bs2, ns2)))";
 
-    let conf = default_conf();
+    let ref conf = default_conf();
 
     let input_vec: Vec<i64> = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
     let ref input_data = WeldVec::from(&input_vec);
 
     let ret_value = compile_and_run(code, conf, input_data);
-    let data = unsafe { weld_value_data(ret_value) as *const i32 };
+    let data = ret_value.data() as *const i32;
     let result = unsafe { (*data).clone() };
     let output = 18;
     assert_eq!(result, output);
-    unsafe { free_value_and_module(ret_value) };
 }
 
 #[test]
@@ -69,10 +66,10 @@ fn nested_appender_loop() {
 
     // Computes the identity.
     let code = "|e0: vec[vec[i32]]| map(e0, |x:vec[i32]| map(x, |y:i32| y))";
-    let conf = default_conf();
+    let ref conf = default_conf();
 
     let ret_value = compile_and_run(code, conf, arg);
-    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<WeldVec<i32>> };
+    let data = ret_value.data() as *const WeldVec<WeldVec<i32>>;
     let result = unsafe { (*data).clone() };
 
     // Make sure we get the same thing back.
@@ -100,14 +97,14 @@ fn nested_for_loops() {
     }
 
     let code = "|ys:vec[i64]|result(for(ys, appender[{i64, i32}], |b0, i0, y0| for(ys, b0, |b1, i1, y1| if (y1 > y0, merge(b0, {y0, i32(y1)}), b0))))";
-    let conf = default_conf();
+    let ref conf = default_conf();
 
     // Input data.
     let ys = vec![1i64, 3i64, 4i64];
     let ref input_data = WeldVec::from(&ys);
 
     let ret_value = compile_and_run(code, conf, input_data);
-    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<Row> };
+    let data = ret_value.data() as *const WeldVec<Row>;
     let result = unsafe { (*data).clone() };
 
     assert_eq!(result.len, 3i64);
@@ -120,8 +117,6 @@ fn nested_for_loops() {
     let row = unsafe { (*result.data.offset(2)).clone() };
     assert_eq!(row.x, 3i64);
     assert_eq!(row.y, 4);
-
-    unsafe { free_value_and_module(ret_value) };
 }
 
 #[test]
@@ -148,7 +143,7 @@ fn appender_and_dictmerger_loop() {
 
     let code = "|x:vec[i32], y:vec[i32]| let rs = for(zip(x,y),{appender[i32],dictmerger[i32,i32,+]},
                 |bs,i,e| {merge(bs.$0, e.$0+e.$1), merge(bs.$1, e)}); {result(rs.$0), tovec(result(rs.$1))}";
-    let conf = default_conf();
+    let ref conf = default_conf();
     let keys = [1, 2, 2, 1, 3];
     let vals = [2, 3, 4, 2, 1];
     let ref input_data = Args {
@@ -157,7 +152,7 @@ fn appender_and_dictmerger_loop() {
     };
 
     let ret_value = compile_and_run(code, conf, input_data);
-    let data = unsafe { weld_value_data(ret_value) as *const Output };
+    let data = ret_value.data() as *const Output;
     let result = unsafe { (*data).clone() };
 
     let output_appender = [3, 5, 6, 3, 4];
@@ -186,5 +181,4 @@ fn appender_and_dictmerger_loop() {
         }
         assert_eq!(success, true);
     }
-    unsafe { free_value_and_module(ret_value) };
 }

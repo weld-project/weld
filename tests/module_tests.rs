@@ -1,4 +1,6 @@
 //! Tests related to creating, running, and freeing Weld modules using the Weld API.
+//!
+//! This module uses the C API to simplify multi-threaded testing.
 
 extern crate libc;
 extern crate weld;
@@ -30,7 +32,9 @@ impl<T> Copy for UnsafePtr<T> {}
 #[test]
 fn multithreaded_module_run() {
     let code = "|v:vec[i32]| result(for(v, appender[i32], |b,i,e| merge(b,e)))";
-    let conf = UnsafePtr(default_conf());
+
+    let conf_raw = weld_conf_new();
+    let conf = UnsafePtr(conf_raw);
 
     // Set up input data
     let len: usize = 10 * 1000 * 1000 + 1;
@@ -82,5 +86,6 @@ fn multithreaded_module_run() {
         }
 
         weld_module_free(module.0);
+        weld_conf_free(conf_raw);
     }
 }

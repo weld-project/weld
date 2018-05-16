@@ -1,7 +1,6 @@
 //! Tests that make use of the Sort operator.
 
 extern crate weld;
-use weld::weld_value_data;
 
 mod common;
 use common::*;
@@ -28,9 +27,9 @@ fn string_sort() {
 
     let code = "|e0: vec[vec[u8]]| sort(e0, |i:vec[u8]| i)";
 
-    let conf = default_conf();
+    let ref conf = default_conf();
     let ret_value = compile_and_run(code, conf, input_data);
-    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<WeldVec<u8>> };
+    let data = ret_value.data() as *const WeldVec<WeldVec<u8>>;
     let result = unsafe { (*data).clone() };
 
     for i in 0..(result.len as isize) {
@@ -41,7 +40,7 @@ fn string_sort() {
         }
     }
 
-    unsafe { free_value_and_module(ret_value) };
+
 }
 
 #[test]
@@ -50,9 +49,9 @@ fn if_sort() {
     let ref input_data = WeldVec::from(&ys);
 
     let code = "|ys:vec[i32]| sort(ys, |x:i32| if(x != 5, x + 1, 0))";
-    let conf = default_conf();
+    let ref conf = default_conf();
     let ret_value = compile_and_run(code, conf, input_data);
-    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<i32> };
+    let data = ret_value.data() as *const WeldVec<i32>;
     let result = unsafe { (*data).clone() };
 
     let expected = [5, 1, 2, 3, 4];
@@ -62,7 +61,7 @@ fn if_sort() {
         assert_eq!(unsafe { *result.data.offset(i) }, expected[i as usize])
     }
 
-    unsafe { free_value_and_module(ret_value) };
+
 }
 
 #[test]
@@ -71,9 +70,9 @@ fn simple_sort() {
     let ref input_data = WeldVec::from(&ys);
 
     let code = "|ys:vec[i32]| sort(ys, |x:i32| x + 1)";
-    let conf = default_conf();
+    let ref conf = default_conf();
     let ret_value = compile_and_run(code, conf, input_data);
-    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<i32> };
+    let data = ret_value.data() as *const WeldVec<i32>;
     let result = unsafe { (*data).clone() };
 
     let expected = [1, 2, 3, 4, 5];
@@ -83,15 +82,15 @@ fn simple_sort() {
         assert_eq!(unsafe { *result.data.offset(i) }, expected[i as usize])
     }
 
-    unsafe { free_value_and_module(ret_value) };
+
 
     let ys = vec![2.0, 3.0, 1.0, 5.001, 5.0001];
     let ref input_data = WeldVec::from(&ys);
 
     let code = "|ys:vec[f64]| sort(sort(ys, |x:f64| x), |x:f64| x)";
-    let conf = default_conf();
+    let ref conf = default_conf();
     let ret_value = compile_and_run(code, conf, input_data);
-    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<f64> };
+    let data = ret_value.data() as *const WeldVec<f64>;
     let result = unsafe { (*data).clone() };
 
     let expected = [1.0, 2.0, 3.0, 5.0001, 5.001];
@@ -101,9 +100,9 @@ fn simple_sort() {
     }
 
     let code = "|ys:vec[f64]| sort(ys, |x:f64| 1.0 / exp(-1.0*x))";
-    let conf = default_conf();
+    let ref conf = default_conf();
     let ret_value = compile_and_run(code, conf, input_data);
-    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<f64> };
+    let data = ret_value.data() as *const WeldVec<f64>;
     let result = unsafe { (*data).clone() };
 
     assert_eq!(result.len, expected.len() as i64);
@@ -111,7 +110,7 @@ fn simple_sort() {
         assert_eq!(unsafe { *result.data.offset(i) }, expected[i as usize])
     }
 
-    unsafe { free_value_and_module(ret_value) };
+
 }
 
 #[test]
@@ -141,9 +140,9 @@ fn complex_sort() {
                     ),
                     |x:{i32, i32}| x.$0
                 )";
-    let conf = default_conf();
+    let ref conf = default_conf();
     let ret_value = compile_and_run(code, conf, input_data);
-    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<Pair<i32, i32>> };
+    let data = ret_value.data() as *const WeldVec<Pair<i32,i32>>;
     let result = unsafe { (*data).clone() };
 
     let expected = [[1, 5], [2, 4], [3, 3], [4, 2], [5, 1]];
@@ -160,5 +159,5 @@ fn complex_sort() {
         );
     }
 
-    unsafe { free_value_and_module(ret_value) };
+
 }
