@@ -3,13 +3,6 @@
 //! across libraries and functions by expressing the core computations in libraries using a small
 //! common intermediate representation, similar to CUDA and OpenCL.
 //!
-//! Modern analytics applications combine multiple functions from different libraries and
-//! frameworks to build complex workflows. Even though individual functions can achieve high
-//! performance in isolation, the performance of the combined workflow is often an order of
-//! magnitude below hardware limits due to extensive data movement across the functions. Weld’s
-//! take on solving this problem is to lazily build up a computation for the entire workflow,
-//! optimizing and evaluating it only when a result is needed.
-//!
 //! # Using Weld
 //!
 //! Fundamentally, Weld is a small programming language that supports _parallel loops_ and
@@ -22,6 +15,46 @@
 //!
 //! Weld JITs code into the current process using LLVM. As a result, Weld users must have a version
 //! of LLVM installed on their machine (currently, Weld uses LLVM 3.8).
+//!
+//! ## Example
+//!
+//! The following program shows a minimal Weld program that adds two numbers:
+//!
+//! ```rust,no_run
+//! # extern crate weld;
+//! #
+//! # use weld::*;
+//! #
+//! #[repr(C)]
+//! struct MyArgs {
+//!     a: i32,
+//!     b: i32,
+//! }
+//!
+//! let code = "|a: i32, b: i32| a + b";
+//! let ref conf = WeldConf::new();
+//! let mut module = WeldModule::compile(code, conf).unwrap();
+//!
+//! // Weld accept packed C structs as an argument.
+//! let ref args = MyArgs { a: 1, b: 50 };
+//! let ref input = WeldValue::new_from_data(args as *const _ as Data);
+//!
+//! // Running a Weld module and reading a value out of it is unsafe!
+//! unsafe {
+//!     // Run the module, which returns a wrapper `WeldValue`.
+//!     let result = module.run(conf, input).unwrap();
+//!     // The data is just a pointer: cast it to the expected type
+//!     let data = result.data() as *const i32;
+//!
+//!     let result = (*data).clone();
+//!     assert_eq!(args.a + args.b, result);
+//! }
+//! ```
+//! 
+//! Users write a Weld program as a string, compile it into a module, and then pass packed
+//! arguments into it to run the JITed code. The result is a pointer that represents the output of
+//! the Weld program: we can cast that to the appropriate pointer type and read it by
+//! dereferencing.
 //!
 //! ## Modules
 //!
@@ -53,7 +86,7 @@
 //!
 //! * Primitive types such as `i8`, `i16`, and `f32`. These have a 1-1 correspondance with Weld.
 //! * Rust structs with `repr(C)`.
-//!
+//! 
 //! Notably, `Vec<T>` _cannot_ be passed without adhering to the custom Weld format. Currently,
 //! that format is defined as:
 //!
