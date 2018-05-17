@@ -35,7 +35,7 @@ fn evaluate_binop(kind: BinOpKind, left: LiteralKind, right: LiteralKind) -> Wel
                 (F32Literal(l), F32Literal(r)) => F32Literal((f32::from_bits(l) + f32::from_bits(r)).to_bits()),
                 (F64Literal(l), F64Literal(r)) => F64Literal((f64::from_bits(l) + f64::from_bits(r)).to_bits()),
                 _ => {
-                    return weld_err!("Mismatched types in evaluate_binop");
+                    return compile_err!("Mismatched types in evaluate_binop");
                 }
             }
         }
@@ -48,7 +48,7 @@ fn evaluate_binop(kind: BinOpKind, left: LiteralKind, right: LiteralKind) -> Wel
                 (F32Literal(l), F32Literal(r)) => F32Literal((f32::from_bits(l) - f32::from_bits(r)).to_bits()),
                 (F64Literal(l), F64Literal(r)) => F64Literal((f64::from_bits(l) - f64::from_bits(r)).to_bits()),
                 _ => {
-                    return weld_err!("Mismatched types in evaluate_binop");
+                    return compile_err!("Mismatched types in evaluate_binop");
                 }
             }
         }
@@ -61,7 +61,7 @@ fn evaluate_binop(kind: BinOpKind, left: LiteralKind, right: LiteralKind) -> Wel
                 (F32Literal(l), F32Literal(r)) => F32Literal((f32::from_bits(l) * f32::from_bits(r)).to_bits()),
                 (F64Literal(l), F64Literal(r)) => F64Literal((f64::from_bits(l) * f64::from_bits(r)).to_bits()),
                 _ => {
-                    return weld_err!("Mismatched types in evaluate_binop");
+                    return compile_err!("Mismatched types in evaluate_binop");
                 }
             }
         }
@@ -74,12 +74,12 @@ fn evaluate_binop(kind: BinOpKind, left: LiteralKind, right: LiteralKind) -> Wel
                 (F32Literal(l), F32Literal(r)) => F32Literal((f32::from_bits(l) / f32::from_bits(r)).to_bits()),
                 (F64Literal(l), F64Literal(r)) => F64Literal((f64::from_bits(l) / f64::from_bits(r)).to_bits()),
                 _ => {
-                    return weld_err!("Mismatched types in evaluate_binop");
+                    return compile_err!("Mismatched types in evaluate_binop");
                 }
             }
         }
         _ => {
-            return weld_err!("Unsupported binary operation in evaluate_binop");
+            return compile_err!("Unsupported binary operation in evaluate_binop");
         }
     };
     Ok(result)

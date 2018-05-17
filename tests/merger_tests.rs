@@ -2,24 +2,20 @@
 
 extern crate weld;
 
-use weld::weld_value_data;
-
 mod common;
 use common::*;
 
 #[test]
 fn empty_merger_loop() {
     let code = "||result(for([]:vec[i32], merger[i32, +], |b, i, n| merge(b, n)))";
-    let conf = default_conf();
+    let ref conf = default_conf();
 
     let ref input_data: i32 = 0;
 
     let ret_value = compile_and_run(code, conf, input_data);
-    let data = unsafe { weld_value_data(ret_value) as *const i32 };
+    let data = ret_value.data() as *const i32;
     let result = unsafe { *data };
     assert_eq!(result, 0);
-
-    unsafe { free_value_and_module(ret_value) };
 }
 
 #[test]
@@ -31,7 +27,7 @@ fn simple_for_merger_loop() {
     }
 
     let code = "|x:vec[i32], a:i32| result(for(x, merger[i32,+], |b,i,e| merge(b, e+a)))";
-    let conf = default_conf();
+    let ref conf = default_conf();
 
     let input_vec = vec![1, 2, 3, 4, 5];
     let ref input_data = Args {
@@ -40,11 +36,10 @@ fn simple_for_merger_loop() {
     };
 
     let ret_value = compile_and_run(code, conf, input_data);
-    let data = unsafe { weld_value_data(ret_value) as *const i32 };
+    let data = ret_value.data() as *const i32;
     let result = unsafe { (*data).clone() };
     let output = 20;
     assert_eq!(result, output);
-    unsafe { free_value_and_module(ret_value) };
 }
 
 #[test]
@@ -56,7 +51,7 @@ fn simple_zipped_for_merger_loop() {
     }
 
     let code = "|x:vec[i32], y:vec[i32]| result(for(zip(x,y), merger[i32,+], |b,i,e| merge(b, e.$0+e.$1)))";
-    let conf = default_conf();
+    let ref conf = default_conf();
 
     let size = 2000;
     let x_data = vec![1; size as usize];
@@ -68,11 +63,10 @@ fn simple_zipped_for_merger_loop() {
     };
 
     let ret_value = compile_and_run(code, conf, input_data);
-    let data = unsafe { weld_value_data(ret_value) as *const i32 };
+    let data = ret_value.data() as *const i32;
     let result = unsafe { (*data).clone() };
     let output = size * (x_data[0] + y_data[0]);
     assert_eq!(result, output);
-    unsafe { free_value_and_module(ret_value) };
 }
 
 #[test]
@@ -84,7 +78,7 @@ fn simple_for_merger_loop_product() {
     }
 
     let code = "|x:vec[i32], a:i32| result(for(x, merger[i32,*], |b,i,e| merge(b, e+a)))";
-    let conf = default_conf();
+    let ref conf = default_conf();
 
     let input_vec = [1, 2, 3, 4, 5];
     let ref input_data = Args {
@@ -93,11 +87,10 @@ fn simple_for_merger_loop_product() {
     };
 
     let ret_value = compile_and_run(code, conf, input_data);
-    let data = unsafe { weld_value_data(ret_value) as *const i32 };
+    let data = ret_value.data() as *const i32;
     let result = unsafe { (*data).clone() };
     let output = 720;
     assert_eq!(result, output);
-    unsafe { free_value_and_module(ret_value) };
 }
 
 #[test]
@@ -109,7 +102,7 @@ fn parallel_for_merger_loop() {
     }
 
     let code = "|x:vec[i32], a:i32| result(@(grain_size: 100)for(x, merger[i32,+], |b,i,e| merge(b, e+a)))";
-    let conf = many_threads_conf();
+    let ref conf = many_threads_conf();
 
     let input_vec = vec![1; 4096];
     let ref input_data = Args {
@@ -118,11 +111,10 @@ fn parallel_for_merger_loop() {
     };
 
     let ret_value = compile_and_run(code, conf, input_data);
-    let data = unsafe { weld_value_data(ret_value) as *const i32 };
+    let data = ret_value.data() as *const i32;
     let result = unsafe { (*data).clone() };
     let output = (input_vec[0] + input_data.a) * (input_vec.len() as i32);
     assert_eq!(result, output);
-    unsafe { free_value_and_module(ret_value) };
 }
 
 #[test]
@@ -130,17 +122,16 @@ fn parallel_for_multi_merger_loop() {
     let code =
         "|x:vec[i32]| let r = @(grain_size: 100)for(x, {merger[i32,+], merger[i32,+]}, |b,i,e|
                 { merge(b.$0, e), merge(b.$1, e) }); result(r.$0) + result(r.$1)";
-    let conf = many_threads_conf();
+    let ref conf = many_threads_conf();
 
     let input_vec = vec![1; 4096];
     let ref input_data = WeldVec::from(&input_vec);
 
     let ret_value = compile_and_run(code, conf, input_data);
-    let data = unsafe { weld_value_data(ret_value) as *const i32 };
+    let data = ret_value.data() as *const i32;
     let result = unsafe { (*data).clone() };
     let output = input_vec[0] * 2 * (input_vec.len() as i32);
     assert_eq!(result, output);
-    unsafe { free_value_and_module(ret_value) };
 }
 
 #[test]
@@ -152,7 +143,7 @@ fn simple_for_merger_loop_initial_value() {
     }
 
     let code = "|x:vec[i32], a:i32| result(for(x, merger[i32,+](1000), |b,i,e| merge(b, e+a)))";
-    let conf = default_conf();
+    let ref conf = default_conf();
 
     let input_vec = vec![1; 4096];
     let ref input_data = Args {
@@ -161,11 +152,10 @@ fn simple_for_merger_loop_initial_value() {
     };
 
     let ret_value = compile_and_run(code, conf, input_data);
-    let data = unsafe { weld_value_data(ret_value) as *const i32 };
+    let data = ret_value.data() as *const i32;
     let result = unsafe { (*data).clone() };
     let output = 1000 + (input_vec[0] + input_data.a) * (input_vec.len() as i32);
     assert_eq!(result, output);
-    unsafe { free_value_and_module(ret_value) };
 }
 
 #[test]
@@ -177,7 +167,7 @@ fn parallel_for_merger_loop_initial_value() {
     }
 
     let code = "|x:vec[i32], a:i32| result(@(grain_size: 100)for(x, merger[i32,+](1000), |b,i,e| merge(b, e+a)))";
-    let conf = many_threads_conf();
+    let ref conf = many_threads_conf();
 
     let input_vec = vec![1; 4096];
     let ref input_data = Args {
@@ -186,11 +176,10 @@ fn parallel_for_merger_loop_initial_value() {
     };
 
     let ret_value = compile_and_run(code, conf, input_data);
-    let data = unsafe { weld_value_data(ret_value) as *const i32 };
+    let data = ret_value.data() as *const i32;
     let result = unsafe { (*data).clone() };
     let output = 1000 + (input_vec[0] + input_data.a) * (input_vec.len() as i32);
     assert_eq!(result, output);
-    unsafe { free_value_and_module(ret_value) };
 }
 
 #[test]
@@ -202,7 +191,7 @@ fn parallel_for_merger_loop_initial_value_product() {
 
     let code =
         "|x:vec[i32]| result(@(grain_size: 100)for(x, merger[i32,*](1000), |b,i,e| merge(b, e)))";
-    let conf = many_threads_conf();
+    let ref conf = many_threads_conf();
 
     let input_vec = vec![1; 4096];
     let ref input_data = Args {
@@ -210,11 +199,10 @@ fn parallel_for_merger_loop_initial_value_product() {
     };
 
     let ret_value = compile_and_run(code, conf, input_data);
-    let data = unsafe { weld_value_data(ret_value) as *const i32 };
+    let data = ret_value.data() as *const i32;
     let result = unsafe { (*data).clone() };
     let output = 1000;
     assert_eq!(result, output);
-    unsafe { free_value_and_module(ret_value) };
 }
 
 #[test]
@@ -246,7 +234,7 @@ fn many_mergers_test() {
                    {merge(bs1.$0, 1L), merge(bs1.$1, f64(ns1.$0)), merge(bs1.$2, 1L), merge(bs1.$3, f64(ns1.$1)), merge(bs1.$4, 1L), merge(bs1.$5, f64(ns1.$2))});
  {result(merged.$0), result(merged.$1), result(merged.$2), result(merged.$3), result(merged.$4), result(merged.$5)}";
 
-    let conf = default_conf();
+    let ref conf = default_conf();
 
     let size: i32 = 1000;
     let x = vec![1.0; size as usize];
@@ -260,7 +248,7 @@ fn many_mergers_test() {
     };
 
     let ret_value = compile_and_run(code, conf, input_data);
-    let data = unsafe { weld_value_data(ret_value) as *const Output };
+    let data = ret_value.data() as *const Output;
     let result = unsafe { (*data).clone() };
 
     assert_eq!(result.a, size as i64);
@@ -269,7 +257,6 @@ fn many_mergers_test() {
     assert_eq!(result.d, size as f64);
     assert_eq!(result.e, size as i64);
     assert_eq!(result.f, size as f64);
-    unsafe { free_value_and_module(ret_value) };
 }
 
 #[test]
@@ -314,7 +301,7 @@ fn maxmin_mergers_test() {
     let f64max = result(for(f64in, merger[f64, max], |b, i, n| merge(b, n)));
     {i64min, i64max, f64min, f64max, f32min, f32max, i32min, i32max, i8min, i8max}";
 
-    let conf = default_conf();
+    let ref conf = default_conf();
 
     let i8in: Vec<i8> = vec![-2, -1, 0, 1, 2];
     let i32in: Vec<i32> = vec![-2, -1, 0, 1, 2];
@@ -331,7 +318,7 @@ fn maxmin_mergers_test() {
     };
 
     let ret_value = compile_and_run(code, conf, input_data);
-    let data = unsafe { weld_value_data(ret_value) as *const Output };
+    let data = ret_value.data() as *const Output;
     let result = unsafe { (*data).clone() };
 
     assert_eq!(result.i8min, -2 as i8);
@@ -344,6 +331,4 @@ fn maxmin_mergers_test() {
     assert_eq!(result.i64max, 2 as i64);
     assert_eq!(result.f32max, 2.0 as f32);
     assert_eq!(result.f64max, 2.0 as f64);
-
-    unsafe { free_value_and_module(ret_value) };
 }

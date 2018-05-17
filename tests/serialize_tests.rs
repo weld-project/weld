@@ -1,7 +1,6 @@
 //! Tests for serializing and deserializing Weld objects.
 
 extern crate weld;
-use weld::weld_value_data;
 
 mod common;
 use common::*;
@@ -86,13 +85,13 @@ fn serialize_test() {
     let g = tovec(deserialize[dict[i32,vec[i32]]](serialize(dict2)));
     {a,b,c,d,e,f,g}";
 
-    let conf = default_conf();
+    let ref conf = default_conf();
 
     let input_vec: Vec<i32> = (10..20).collect();
     let ref input_data = WeldVec::from(&input_vec);
 
     let ret_value = compile_and_run(code, conf, input_data);
-    let data = unsafe { weld_value_data(ret_value) as *const SerializeOutput };
+    let data = ret_value.data() as *const SerializeOutput;
     let result = unsafe { (*data).clone() };
 
     let vv = vec![input_data.clone(), input_data.clone(), input_data.clone()];
@@ -118,5 +117,4 @@ fn serialize_test() {
     };
 
     assert_eq!(result, expected);
-    unsafe { free_value_and_module(ret_value) };
 }

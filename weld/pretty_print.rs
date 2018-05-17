@@ -526,39 +526,6 @@ fn print_expr_impl<T: PrintableType>(expr: &Expr<T>,
     format!("{}{}", expr.annotations, expr_str)
 }
 
-/// Print a vector literal value.
-pub fn print_vector_literal(lit: &LiteralKind) -> String {
-    match *lit {
-        BoolLiteral(v) => format!("<{}, {}, ..>", v, v),
-        I8Literal(v) => format!("<{}, {}, ..>", v, v),
-        I16Literal(v) => format!("<{}, {}, ..>", v, v),
-        I32Literal(v) => format!("<{}, {}, ..>", v, v),
-        I64Literal(v) => format!("<{}L, {}L, ..>", v, v),
-        U8Literal(v) => format!("<{}, {}, ..>", v, v),
-        U16Literal(v) => format!("<{}, {}, ..>", v, v),
-        U32Literal(v) => format!("<{}, {}, ..>", v, v),
-        U64Literal(v) => format!("<{}, {}, ..>", v, v),
-        F32Literal(v) => {
-            let mut res = format!("{}", f32::from_bits(v));
-            // Hack to disambiguate from integers.
-            if !res.contains(".") {
-                res.push_str(".0");
-            }
-            res.push_str("F");
-            format!("<{}, {}, ..>", &res, &res)
-        }
-        F64Literal(v) => {
-            let mut res = format!("{}", f64::from_bits(v));
-            // Hack to disambiguate from integers.
-            if !res.contains(".") {
-                res.push_str(".0");
-            }
-            format!("<{}, {}, ..>", &res, &res)
-        }
-        StringLiteral(ref v) => format!("<{}, {}, ..>", v, v),
-    }
-}
-
 /// Print a literal value.
 pub fn print_literal(lit: &LiteralKind) -> String {
     match *lit {

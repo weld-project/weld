@@ -39,10 +39,10 @@ impl SymbolStack {
                 let id = ent.get()
                     .last()
                     .map(|v| *v)
-                    .ok_or(WeldError::new(format!("Symbol {} is out of scope", &sym)))?;
+                    .ok_or(WeldCompileError::new(format!("Symbol {} is out of scope", &sym)))?;
                 Ok(Symbol::new(name, id))
             }
-            _ => weld_err!("Undefined symbol {}", sym),
+            _ => compile_err!("Undefined symbol {}", sym),
         }
     }
 
@@ -67,7 +67,7 @@ impl SymbolStack {
                 ent.get_mut().pop();
                 Ok(())
             },
-            _ => weld_err!("Attempting to pop undefined symbol {}", sym)
+            _ => compile_err!("Attempting to pop undefined symbol {}", sym)
         }
     }
 }

@@ -35,7 +35,6 @@ use super::sir::optimizations;
 use super::transforms::uniquify;
 use super::type_inference;
 use super::util::IdGenerator;
-use super::util::WELD_INLINE_LIB;
 use super::annotations::*;
 
 use super::conf::ParsedConf;
@@ -56,6 +55,7 @@ pub struct VecLLVMInfo {
 }
 
 static PRELUDE_CODE: &'static str = include_str!("resources/prelude.ll");
+const WELD_INLINE_LIB: &'static [u8] = include_bytes!("../weld_rt/cpp/inline.bc");
 
 /// The default grain size for the parallel runtime.
 static DEFAULT_INNER_GRAIN_SIZE: i32 = 16384;
@@ -877,7 +877,7 @@ impl LlvmGenerator {
                 } else {
                     // TODO(shoumik): Don't support non-unit stride right now.
                     if par_for.data[0].kind == IterKind::SimdIter {
-                        return weld_err!("vector iterator does not support non-unit stride");
+                        return compile_err!("vector iterator does not support non-unit stride");
                     }
                     // set num_iters_str to (end - start) / stride
                     let start_str = llvm_symbol(&par_for.data[0].start.clone().unwrap());
@@ -890,7 +890,7 @@ impl LlvmGenerator {
             },
             IterKind::FringeIter => {
                 if par_for.data[0].start.is_some() {
-                    return weld_err!("fringe iterator does not support non-unit stride");
+                    return compile_err!("fringe iterator does not support non-unit stride");
                 }
                 let arr_len = ctx.var_ids.next();
                 let tmp = ctx.var_ids.next();
@@ -1384,7 +1384,7 @@ impl LlvmGenerator {
             } else {
                 match *elem_ty {
                     Struct(ref v) => self.llvm_type(&v[i])?,
-                    _ => weld_err!("Internal error: invalid element type {}", print_type(elem_ty))?,
+                    _ => compile_err!("Internal error: invalid element type {}", print_type(elem_ty))?,
                 }
             }; 
             let data_llvm_info = self.get_array_llvm_info(func, ctx, &iter.data, inner_elem_ty_str.clone(), true)?;
@@ -1395,7 +1395,7 @@ impl LlvmGenerator {
                 // TODO(shoumik) implement. This needs to be a gather instead of a
                 // sequential load.
                 if iter.kind == IterKind::SimdIter {
-                    return weld_err!("Unimplemented: vectorized iterators do not support non-unit stride.");
+                    return compile_err!("Unimplemented: vectorized iterators do not support non-unit stride.");
                 }
                 let offset = ctx.var_ids.next();
                 let stride_str = self.gen_load_var(llvm_symbol(&iter.stride.clone().unwrap()).as_str(), "i64", ctx)?;
@@ -1872,7 +1872,7 @@ impl LlvmGenerator {
             }
 
             _ => {
-                return weld_err!("Unsupported type {}", print_type(ty))?
+                return compile_err!("Unsupported type {}", print_type(ty))?
             }
         })
     }
@@ -1910,7 +1910,7 @@ impl LlvmGenerator {
                                                  llvm_binop(LessThan, ty)?,
                                                  &ll_ty, &left_tmp, &right_tmp));
                         }
-                        _ => return weld_err!("Illegal operation using Min/Max generator"),
+                        _ => return compile_err!("Illegal operation using Min/Max generator"),
                     }
 
                     let sel_type = if ty.is_scalar() 
@@ -1931,7 +1931,7 @@ impl LlvmGenerator {
                                          self.llvm_type(ty)?, &right_tmp));
                 }
             }
-            _ => weld_err!("Illegal type {} in Min/Max", print_type(ty))?,
+            _ => compile_err!("Illegal type {} in Min/Max", print_type(ty))?,
         }
 
         Ok(())
@@ -2074,7 +2074,7 @@ impl LlvmGenerator {
                 helper_state.eq_func = true;
             }
             _ => {
-                return weld_err!("Unsupported function `cmp` for type {:?}", ty);
+                return compile_err!("Unsupported function `cmp` for type {:?}", ty);
             }
         };
         Ok(())
@@ -2170,7 +2170,7 @@ impl LlvmGenerator {
                 self.gen_cmp(ty)?;
             }
             _ => {
-                return weld_err!("Unsupported function `eq` for type {:?}", ty);
+                return compile_err!("Unsupported function `eq` for type {:?}", ty);
             }
         };
         let ll_ty = self.llvm_type(ty)?;
@@ -2277,7 +2277,7 @@ impl LlvmGenerator {
                 }
             }
             _ => {
-                return weld_err!("Unsupported function `hash` for type {:?}", ty);
+                return compile_err!("Unsupported function `hash` for type {:?}", ty);
             }
         };
         Ok(())
@@ -2298,7 +2298,7 @@ impl LlvmGenerator {
     /// Generates a global pointer for a String constant.
     fn gen_string_definition(&mut self, string: &str) -> WeldResult<()> {
         if !(string.is_ascii()) {
-            return weld_err!("Weld strings must be valid ASCII");
+            return compile_err!("Weld strings must be valid ASCII");
         }
 
         let global = self.prelude_var_ids.next().replace("%", "@");
@@ -2529,7 +2529,7 @@ impl LlvmGenerator {
             F32Literal(_) => "float",
             F64Literal(_) => "double",
             StringLiteral(_) => {
-                return weld_err!("Cannot create SIMD StringLiteral");
+                return compile_err!("Cannot create SIMD StringLiteral");
             }
         }.to_string();
 
@@ -2594,7 +2594,7 @@ impl LlvmGenerator {
                 }
             }
 
-            _ => return weld_err!("gen_merge_op_on_registers called on invalid type {}", print_type(arg_ty))
+            _ => return compile_err!("gen_merge_op_on_registers called on invalid type {}", print_type(arg_ty))
         }
 
         Ok(res)
@@ -2785,7 +2785,7 @@ impl LlvmGenerator {
             }
             Simd(_) | Builder(_, _) | Function(_, _) => {
                 // Non-serializable types.
-                return weld_err!("Cannot serialize type {:?}", expr_ty);
+                return compile_err!("Cannot serialize type {:?}", expr_ty);
             }
             // Covered by the first case since scalars never have pointers.
             Scalar(_) => unreachable!(),
@@ -2952,7 +2952,7 @@ impl LlvmGenerator {
             }
             Simd(_) | Builder(_, _) | Function(_, _) => {
                 // Non-deserializable types.
-                return weld_err!("Cannot deserialize to type {:?}", output_ty);
+                return compile_err!("Cannot deserialize to type {:?}", output_ty);
             }
             // Covered by the first case since scalars never have pointers.
             Scalar(_) => unreachable!(),
@@ -2974,7 +2974,7 @@ impl LlvmGenerator {
 
         let expr_ty = func.symbol_type(expr)?;
         if *expr_ty != Vector(Box::new(Scalar(ScalarKind::I8))) {
-            return weld_err!("codegen error: input of deserialize is not vec[i8]");
+            return compile_err!("codegen error: input of deserialize is not vec[i8]");
         }
 
         let output_ty = func.symbol_type(output)?;
@@ -3034,7 +3034,7 @@ impl LlvmGenerator {
 
         let output_ty = func.symbol_type(output)?;
         if *output_ty != Vector(Box::new(Scalar(ScalarKind::I8))) {
-            return weld_err!("codegen error: output of serialize is not vec[i8]");
+            return compile_err!("codegen error: output of serialize is not vec[i8]");
         }
 
         // Generate a growable vec[i8] if it doesn't exist.
@@ -3128,7 +3128,7 @@ impl LlvmGenerator {
                 self.gen_store_var(&prev_tmp, &output_ll_sym, &output_ll_ty, ctx);
             }
         } else {
-            weld_err!("Illegal type {} in {}", print_type(child_ty), op_kind)?;
+            compile_err!("Illegal type {} in {}", print_type(child_ty), op_kind)?;
         }
         Ok(())
     }
@@ -3295,7 +3295,7 @@ impl LlvmGenerator {
                         self.gen_store_var(&output_tmp, &output_ll_sym, &output_ll_ty, ctx);
                     }
 
-                    _ => weld_err!("Illegal type {} in BinOp", print_type(ty))?,
+                    _ => compile_err!("Illegal type {} in BinOp", print_type(ty))?,
                 }
             }
 
@@ -3386,7 +3386,7 @@ impl LlvmGenerator {
                                                 res_tmp, output_ll_ty, child_prefix, child_ll_ty, slot));
                         self.gen_store_var(&res_tmp, &output_ll_sym, &output_ll_ty, ctx);
                     }
-                    _ => weld_err!("Illegal type {} in Lookup", print_type(child_ty))?,
+                    _ => compile_err!("Illegal type {} in Lookup", print_type(child_ty))?,
                 }
             }
 
@@ -3445,7 +3445,7 @@ impl LlvmGenerator {
                                 let (param_ll_ty, param_ll_sym) = self.llvm_type_and_name(keyfunc, param_syms[0])?;
                                 str_args.push_str(&format!("{}* {}", param_ll_ty, param_ll_sym));
                             } else {
-                                return weld_err!("Type mismatch: vector:{ } and sort key parameter:{ }",
+                                return compile_err!("Type mismatch: vector:{ } and sort key parameter:{ }",
                                                  print_type(&**elem_ty), print_type(&*param_ty));
                             }
                         }
@@ -3496,7 +3496,7 @@ impl LlvmGenerator {
                                                 keyfunc_ctx.code.add(format!("br label %b.b{}", block));
                                             } else if let Terminator::ProgramReturn(_) = b.terminator {
                                             } else {
-                                                return weld_err!("Can't have terminator other than Branch or JumpBlock in sort key function");
+                                                return compile_err!("Can't have terminator other than Branch or JumpBlock in sort key function");
                                             }
                                         }
                                     }
@@ -3520,15 +3520,15 @@ impl LlvmGenerator {
                                         FUNC=&func_str,
                                         NAME=&name.replace("%", "")));
                                 }
-                                _=> { return weld_err!("Sort key function must have scalar or vector return type");}
+                                _=> { return compile_err!("Sort key function must have scalar or vector return type");}
                             }
                         } else {
-                            return weld_err!("Sort key Function must have return type");
+                            return compile_err!("Sort key Function must have return type");
                         }
 
                     }
                     _ => {
-                        return weld_err!("Unsupported function `sort` for type {:?}", out_ty);
+                        return compile_err!("Unsupported function `sort` for type {:?}", out_ty);
                     }
                 }
 
@@ -3624,7 +3624,7 @@ impl LlvmGenerator {
                     let val_ty = func.symbol_type(value)?;
                     self.gen_merge(bld_kind, builder, val_ty, value, func, ctx)?;
                 } else {
-                    return weld_err!("Non builder type {} found in Merge", print_type(bld_ty))
+                    return compile_err!("Non builder type {} found in Merge", print_type(bld_ty))
                 }
             }
 
@@ -3633,7 +3633,7 @@ impl LlvmGenerator {
                 if let Builder(ref bld_kind, _) = *bld_ty {
                     self.gen_result(bld_kind, builder, output, func, ctx)?;
                 } else {
-                    return weld_err!("Non builder type {} found in Result", print_type(bld_ty))
+                    return compile_err!("Non builder type {} found in Result", print_type(bld_ty))
                 }
             }
 
@@ -3641,7 +3641,7 @@ impl LlvmGenerator {
                 if let Builder(ref bld_kind, ref annotations) = *ty {
                     self.gen_new_builder(bld_kind, annotations, arg, output, func, ctx)?;
                 } else {
-                    return weld_err!("Non builder type {} found in NewBuilder", print_type(ty))
+                    return compile_err!("Non builder type {} found in NewBuilder", print_type(ty))
                 }
             }
         }
@@ -3835,7 +3835,7 @@ impl LlvmGenerator {
                 let ref vec_type = if let Scalar(ref k) = **t {
                     Simd(k.clone())
                 } else {
-                    return weld_err!("Invalid non-scalar type in merger");
+                    return compile_err!("Invalid non-scalar type in merger");
                 };
 
                 let elem_vec_ty_str = self.llvm_type(vec_type)?;
@@ -4155,7 +4155,7 @@ impl LlvmGenerator {
                         self.gen_store_var(&bld_tmp, &llvm_symbol(output), &bld_ty_str, ctx);
                     }
                     None => {
-                        weld_err!("Internal error: NewBuilder(VecMerger) \
+                        compile_err!("Internal error: NewBuilder(VecMerger) \
                                     expected argument in LLVM codegen")?
                     }
                 }
@@ -4300,7 +4300,7 @@ impl LlvmGenerator {
                 Ok(current_struct)
             }
 
-            _ => weld_err!("Invalid type for gen_simd_extract: {:?}", simd_type)
+            _ => compile_err!("Invalid type for gen_simd_extract: {:?}", simd_type)
         }
     }
 
@@ -4382,7 +4382,7 @@ fn llvm_literal(k: LiteralKind) -> WeldResult<String> {
         F32Literal(l) => format!("{:.30e}", f32::from_bits(l)),
         F64Literal(l) => format!("{:.30e}", f64::from_bits(l)),
         StringLiteral(_) => {
-            return weld_err!("String literal must be declared as global constant in LLVM");
+            return compile_err!("String literal must be declared as global constant in LLVM");
         }
     }.to_string();
     Ok(res)
@@ -4413,7 +4413,7 @@ fn binop_identity(op_kind: BinOpKind, ty: &Type) -> WeldResult<String> {
             U64 => Ok(::std::u64::MAX.to_string()),
             F32 => Ok("0x7FF0000000000000".to_string()), // inf 
             F64 => Ok("0x7FF0000000000000".to_string()), // inf
-            _ => weld_err!("Unsupported identity for binary op: {} on {}", op_kind, print_type(ty)),
+            _ => compile_err!("Unsupported identity for binary op: {} on {}", op_kind, print_type(ty)),
         },
 
         (Max, &Scalar(s)) => match s {
@@ -4427,10 +4427,10 @@ fn binop_identity(op_kind: BinOpKind, ty: &Type) -> WeldResult<String> {
             U64 => Ok(::std::u64::MIN.to_string()),
             F32 => Ok("0xFFF0000000000000".to_string()), // -inf
             F64 => Ok("0xFFF0000000000000".to_string()), // -inf
-            _ => weld_err!("Unsupported identity for binary op: {} on {}", op_kind, print_type(ty)),
+            _ => compile_err!("Unsupported identity for binary op: {} on {}", op_kind, print_type(ty)),
         },
 
-        _ => weld_err!("Unsupported identity for binary op: {} on {}", op_kind, print_type(ty)),
+        _ => compile_err!("Unsupported identity for binary op: {} on {}", op_kind, print_type(ty)),
     }
 }
 
@@ -4487,11 +4487,11 @@ fn llvm_binop(op_kind: BinOpKind, ty: &Type) -> WeldResult<&'static str> {
 
                 Xor if s.is_integer() || s.is_bool() => Ok("xor"),
 
-                _ => return weld_err!("Unsupported binary op: {} on {}", op_kind, print_type(ty))
+                _ => return compile_err!("Unsupported binary op: {} on {}", op_kind, print_type(ty))
             }
         }
 
-        _ => return weld_err!("Unsupported binary op: {} on {}", op_kind, print_type(ty))
+        _ => return compile_err!("Unsupported binary op: {} on {}", op_kind, print_type(ty))
     }
 }
 
@@ -4507,7 +4507,7 @@ fn llvm_binary_intrinsic(op_kind: BinOpKind, ty: &ScalarKind) -> WeldResult<&'st
         (BinOpKind::Pow, &F32) => Ok("@llvm.pow.f32"),
         (BinOpKind::Pow, &F64) => Ok("@llvm.pow.f64"),
 
-        _ => weld_err!("Unsupported binary op: {} on {}", op_kind, ty),
+        _ => compile_err!("Unsupported binary op: {} on {}", op_kind, ty),
     }
 }
 
@@ -4524,7 +4524,7 @@ fn llvm_simd_binary_intrinsic(op_kind: BinOpKind, ty: &ScalarKind, width: u32) -
         (BinOpKind::Max, &F64, 2) => Ok("@llvm.maxnum.v2f64"),
         (BinOpKind::Max, &F64, 4) => Ok("@llvm.maxnum.v4f64"),
 
-        _ => weld_err!("Unsupported binnary op: {} on <{} x {}>", op_kind, width, ty),
+        _ => compile_err!("Unsupported binnary op: {} on <{} x {}>", op_kind, width, ty),
     }
 }
 
@@ -4568,7 +4568,7 @@ fn llvm_scalar_unaryop(op_kind: UnaryOpKind, ty: &ScalarKind) -> WeldResult<&'st
         (UnaryOpKind::Erf, &F32) => Ok("@erff"),
         (UnaryOpKind::Erf, &F64) => Ok("@erf"),
 
-        _ => weld_err!("Unsupported unary op: {} on {}", op_kind, ty),
+        _ => compile_err!("Unsupported unary op: {} on {}", op_kind, ty),
     }
 }
 
@@ -4590,7 +4590,7 @@ fn llvm_simd_unaryop(op_kind: UnaryOpKind, ty: &ScalarKind, width: u32) -> WeldR
         (UnaryOpKind::Exp, &F64, 2) => Ok("@llvm.exp.v2f64"),
         (UnaryOpKind::Exp, &F64, 4) => Ok("@llvm.exp.v4f64"),
 
-        _ => weld_err!("Unsupported unary op: {} on <{} x {}>", op_kind, width, ty),
+        _ => compile_err!("Unsupported unary op: {} on <{} x {}>", op_kind, width, ty),
     }
 }
 
@@ -4604,7 +4604,7 @@ fn llvm_binop_vector(op_kind: BinOpKind, ty: &Type) -> WeldResult<(&'static str,
         BinOpKind::GreaterThan => Ok(("eq", 1)),
         BinOpKind::GreaterThanOrEqual => Ok(("ne", -1)),
 
-        _ => weld_err!("Unsupported binary op: {} on {}", op_kind, print_type(ty)),
+        _ => compile_err!("Unsupported binary op: {} on {}", op_kind, print_type(ty)),
     }
 }
 
@@ -4641,11 +4641,11 @@ fn llvm_castop(ty1: &Type, ty2: &Type) -> WeldResult<&'static str> {
 
                 (_, _) if s2.bits() == s1.bits() => Ok("bitcast"),
 
-                 _ => weld_err!("Can't cast {} to {}", print_type(ty1), print_type(ty2))
+                 _ => compile_err!("Can't cast {} to {}", print_type(ty1), print_type(ty2))
             }
         }
 
-        _ => weld_err!("Can't cast {} to {}", print_type(ty1), print_type(ty2))
+        _ => compile_err!("Can't cast {} to {}", print_type(ty1), print_type(ty2))
 
     }
 }
@@ -4674,7 +4674,7 @@ impl FunctionContext {
 
     fn add_alloca(&mut self, symbol: &str, ty: &str) -> WeldResult<()> {
         if !self.defined_symbols.insert(symbol.to_string()) {
-            weld_err!("Symbol already defined in function: {}", symbol)
+            compile_err!("Symbol already defined in function: {}", symbol)
         } else {
             self.alloca_code.add(format!("{} = alloca {}", symbol, ty));
             Ok(())

@@ -71,7 +71,7 @@ impl ExprHash {
                         ent.get().hash(&mut self.hasher);
                     },
                     _ => {
-                        return weld_err!("Undefined symbol {}", sym);
+                        return compile_err!("Undefined symbol {}", sym);
                     }
                 }
             }

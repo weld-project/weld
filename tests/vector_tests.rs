@@ -1,7 +1,6 @@
 //! Tests related to the Vector type.
 
 extern crate weld;
-use weld::weld_value_data;
 
 mod common;
 use common::*;
@@ -9,13 +8,13 @@ use common::*;
 #[test]
 fn map_comparison() {
     let code = "|e0: vec[i32]| map(e0, |a: i32| a == i32(100))";
-    let conf = default_conf();
+    let ref conf = default_conf();
 
     let input_vec = [100, 200, 0, 100];
     let ref input_data = WeldVec::from(&input_vec);
 
     let ret_value = compile_and_run(code, conf, input_data);
-    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<bool> };
+    let data = ret_value.data() as *const WeldVec<bool>;
     let result = unsafe { (*data).clone() };
     assert_eq!(result.len as usize, input_vec.len());
     for i in 0..(result.len as isize) {
@@ -24,8 +23,6 @@ fn map_comparison() {
             input_vec[i as usize] == 100
         )
     }
-
-    unsafe { free_value_and_module(ret_value) };
 }
 
 #[test]
@@ -35,7 +32,7 @@ fn eq_between_vectors() {
         x: WeldVec<i32>,
         y: WeldVec<i32>,
     }
-    let conf = default_conf();
+    let ref conf = default_conf();
 
     let code = "|e0: vec[i32], e1: vec[i32]| e0 == e1";
     let input_vec1 = [1, 2, 3, 4, 5];
@@ -46,10 +43,9 @@ fn eq_between_vectors() {
     };
 
     let ret_value = compile_and_run(code, conf, input_data);
-    let data = unsafe { weld_value_data(ret_value) as *const bool };
+    let data = ret_value.data() as *const bool;
     let result = unsafe { *data };
     assert_eq!(result, true);
-    unsafe { free_value_and_module(ret_value) };
 }
 
 #[test]
@@ -59,7 +55,7 @@ fn eq_between_diff_length_vectors() {
         x: WeldVec<i32>,
         y: WeldVec<i32>,
     }
-    let conf = default_conf();
+    let ref conf = default_conf();
 
     let code = "|e0: vec[i32], e1: vec[i32]| e0 == e1";
     let input_vec1 = [1, 2, 3, 4, 5];
@@ -70,10 +66,9 @@ fn eq_between_diff_length_vectors() {
     };
 
     let ret_value = compile_and_run(code, conf, input_data);
-    let data = unsafe { weld_value_data(ret_value) as *const bool };
+    let data = ret_value.data() as *const bool;
     let result = unsafe { *data };
     assert_eq!(result, false);
-    unsafe { free_value_and_module(ret_value) };
 }
 
 #[test]
@@ -83,7 +78,7 @@ fn ne_between_vectors() {
         x: WeldVec<i32>,
         y: WeldVec<i32>,
     }
-    let conf = default_conf();
+    let ref conf = default_conf();
 
     let code = "|e0: vec[i32], e1: vec[i32]| e0 != e1";
     let input_vec1 = [1, 2, 3, 4, 5];
@@ -94,10 +89,9 @@ fn ne_between_vectors() {
     };
 
     let ret_value = compile_and_run(code, conf, input_data);
-    let data = unsafe { weld_value_data(ret_value) as *const bool };
+    let data = ret_value.data() as *const bool;
     let result = unsafe { *data };
     assert_eq!(result, true);
-    unsafe { free_value_and_module(ret_value) };
 }
 
 #[test]
@@ -107,7 +101,7 @@ fn lt_between_vectors() {
         x: WeldVec<i32>,
         y: WeldVec<i32>,
     }
-    let conf = default_conf();
+    let ref conf = default_conf();
 
     let code = "|e0: vec[i32], e1: vec[i32]| e0 < e1";
     let input_vec1 = [1, 2, 3, 4, 5];
@@ -118,10 +112,9 @@ fn lt_between_vectors() {
     };
 
     let ret_value = compile_and_run(code, conf, input_data);
-    let data = unsafe { weld_value_data(ret_value) as *const bool };
+    let data = ret_value.data() as *const bool;
     let result = unsafe { *data };
     assert_eq!(result, true);
-    unsafe { free_value_and_module(ret_value) };
 }
 
 #[test]
@@ -131,7 +124,7 @@ fn le_between_vectors() {
         x: WeldVec<i32>,
         y: WeldVec<i32>,
     }
-    let conf = default_conf();
+    let ref conf = default_conf();
 
     let code = "|e0: vec[i32], e1: vec[i32]| e0 <= e1";
     let input_vec1 = [-1, 0, 3, 4, 5];
@@ -142,10 +135,9 @@ fn le_between_vectors() {
     };
 
     let ret_value = compile_and_run(code, conf, input_data);
-    let data = unsafe { weld_value_data(ret_value) as *const bool };
+    let data = ret_value.data() as *const bool;
     let result = unsafe { *data };
     assert_eq!(result, false);
-    unsafe { free_value_and_module(ret_value) };
 }
 
 #[test]
@@ -155,7 +147,7 @@ fn le_between_unsigned_vectors() {
         x: WeldVec<i32>,
         y: WeldVec<i32>,
     }
-    let conf = default_conf();
+    let ref conf = default_conf();
 
     // Note that we pass our integers in as unsigneds in Weld
     let code = "|e0: vec[u32], e1: vec[u32]| e0 <= e1";
@@ -167,10 +159,9 @@ fn le_between_unsigned_vectors() {
     };
 
     let ret_value = compile_and_run(code, conf, input_data);
-    let data = unsafe { weld_value_data(ret_value) as *const bool };
+    let data = ret_value.data() as *const bool;
     let result = unsafe { *data };
     assert_eq!(result, true);
-    unsafe { free_value_and_module(ret_value) };
 }
 
 #[test]
@@ -180,7 +171,7 @@ fn eq_between_u8_vectors() {
         x: WeldVec<u8>,
         y: WeldVec<u8>,
     }
-    let conf = default_conf();
+    let ref conf = default_conf();
 
     let code = "|e0: vec[u8], e1: vec[u8]| e0 == e1";
     let input_vec1 = [1u8, 2u8, 3u8, 4u8, 5u8];
@@ -191,10 +182,9 @@ fn eq_between_u8_vectors() {
     };
 
     let ret_value = compile_and_run(code, conf, input_data);
-    let data = unsafe { weld_value_data(ret_value) as *const bool };
+    let data = ret_value.data() as *const bool;
     let result = unsafe { *data };
     assert_eq!(result, true);
-    unsafe { free_value_and_module(ret_value) };
 }
 
 #[test]
@@ -204,7 +194,7 @@ fn eq_between_different_length_u8_vectors() {
         x: WeldVec<u8>,
         y: WeldVec<u8>,
     }
-    let conf = default_conf();
+    let ref conf = default_conf();
 
     let code = "|e0: vec[u8], e1: vec[u8]| e0 == e1";
     let input_vec1 = [1u8, 2u8, 3u8, 4u8, 5u8];
@@ -215,10 +205,9 @@ fn eq_between_different_length_u8_vectors() {
     };
 
     let ret_value = compile_and_run(code, conf, input_data);
-    let data = unsafe { weld_value_data(ret_value) as *const bool };
+    let data = ret_value.data() as *const bool;
     let result = unsafe { *data };
     assert_eq!(result, false);
-    unsafe { free_value_and_module(ret_value) };
 }
 
 #[test]
@@ -228,7 +217,7 @@ fn le_between_u8_vectors() {
         x: WeldVec<u8>,
         y: WeldVec<u8>,
     }
-    let conf = default_conf();
+    let ref conf = default_conf();
 
     let code = "|e0: vec[u8], e1: vec[u8]| e0 <= e1";
     let input_vec1 = [1u8, 2u8, 3u8, 4u8, 5u8];
@@ -239,38 +228,35 @@ fn le_between_u8_vectors() {
     };
 
     let ret_value = compile_and_run(code, conf, input_data);
-    let data = unsafe { weld_value_data(ret_value) as *const bool };
+    let data = ret_value.data() as *const bool;
     let result = unsafe { *data };
     assert_eq!(result, true);
-    unsafe { free_value_and_module(ret_value) };
 }
 
 #[test]
 fn simple_vector_lookup() {
     let code = "|x:vec[i32]| lookup(x, 3L)";
-    let conf = default_conf();
+    let ref conf = default_conf();
 
     let input_vec = [1, 2, 3, 4, 5];
     let ref input_data = WeldVec::from(&input_vec);
 
     let ret_value = compile_and_run(code, conf, input_data);
-    let data = unsafe { weld_value_data(ret_value) as *const i32 };
+    let data = ret_value.data() as *const i32;
     let result = unsafe { *data };
     assert_eq!(result, input_vec[3]);
-
-    unsafe { free_value_and_module(ret_value) };
 }
 
 #[test]
 fn simple_vector_slice() {
     let code = "|x:vec[i32]| slice(x, 1L, 3L)";
-    let conf = default_conf();
+    let ref conf = default_conf();
 
     let input_vec = [1, 2, 3, 4, 5];
     let ref input_data = WeldVec::from(&input_vec);
 
     let ret_value = compile_and_run(code, conf, input_data);
-    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<i32> };
+    let data = ret_value.data() as *const WeldVec<i32>;
     let result = unsafe { (*data).clone() };
     let output = [2, 3, 4];
 
@@ -279,16 +265,14 @@ fn simple_vector_slice() {
         assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
     }
 
-    unsafe { free_value_and_module(ret_value) };
-
     // Test slicing out of bounds case
-    let conf = default_conf();
+    let ref conf = default_conf();
 
     let input_vec = [1, 2];
     let ref input_data = WeldVec::from(&input_vec);
 
     let ret_value = compile_and_run(code, conf, input_data);
-    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<i32> };
+    let data = ret_value.data() as *const WeldVec<i32>;
     let result = unsafe { (*data).clone() };
     let output = [2];
 
@@ -296,6 +280,4 @@ fn simple_vector_slice() {
     for i in 0..(result.len as isize) {
         assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
     }
-
-    unsafe { free_value_and_module(ret_value) };
 }

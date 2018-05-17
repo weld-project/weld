@@ -14,10 +14,6 @@ use super::inliner::inline_apply;
 
 use util::SymbolGenerator;
 
-/// Fuses loops where one for loop takes another as it's input, which prevents intermediate results
-/// from being materialized.
-pub struct VerticalLoopFusion;
-
 /// Fuses for loops over the same vector in a zip into a single for loop which produces a vector of
 /// structs directly.
 ///
@@ -314,7 +310,7 @@ fn replace_builder(lambda: &Expr<Type>,
             return exprs::lambda_expr(new_params, new_body);
         }
     }
-    return weld_err!("Inconsistency in replace_builder");
+    return compile_err!("Inconsistency in replace_builder");
 }
 
 /// Given a root type, forces each expression to return that type. TODO For now, only supporting

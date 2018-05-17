@@ -92,7 +92,7 @@ impl Type {
                 Ok(Struct(new_fields))
             }
 
-            _ => weld_err!("simd_type called on non-SIMD {:?}", self)
+            _ => compile_err!("simd_type called on non-SIMD {:?}", self)
         }
     }
 
@@ -112,7 +112,7 @@ impl Type {
                 Ok(Struct(new_fields))
             }
 
-            _ => weld_err!("scalar_type called on non-SIMD {:?}", self)
+            _ => compile_err!("scalar_type called on non-SIMD {:?}", self)
         }
     }
 }

@@ -40,7 +40,7 @@ pub fn process_expression(expr: &PartialExpr, macros: &Vec<Macro>) -> WeldResult
     let mut macro_map: HashMap<Symbol, &Macro> = HashMap::new();
     for m in macros {
         if macro_map.contains_key(&m.name) {
-            return weld_err!("Duplicate macro: {}", m.name);
+            return compile_err!("Duplicate macro: {}", m.name);
         } else {
             macro_map.insert(m.name.clone(), &m);
         }
@@ -55,7 +55,7 @@ pub fn process_expression(expr: &PartialExpr, macros: &Vec<Macro>) -> WeldResult
         }
     }
 
-    weld_err!("Marco expansion recursed past {} levels", MAX_MACRO_DEPTH)
+    compile_err!("Marco expansion recursed past {} levels", MAX_MACRO_DEPTH)
 }
 
 fn apply_macros(expr: &mut PartialExpr,
@@ -71,7 +71,7 @@ fn apply_macros(expr: &mut PartialExpr,
             if let Some(mac) = macros.get(name) {
                 let mut new_body = mac.body.clone();
                 if params.len() != mac.parameters.len() {
-                    return weld_err!("Wrong number of parameters for macro {}", mac.name);
+                    return compile_err!("Wrong number of parameters for macro {}", mac.name);
                 }
                 update_defined_ids(&mut new_body, sym_gen);
                 for (name, value) in mac.parameters.iter().zip(params) {

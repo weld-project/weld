@@ -3,7 +3,6 @@
 extern crate weld;
 
 use weld::common::WeldRuntimeErrno;
-use weld::*;
 
 mod common;
 use common::*;
@@ -38,116 +37,105 @@ impl Close for f64 {
 #[test]
 fn simple_log() {
     let code = "|x:f64| log(x)";
-    let conf = default_conf();
+    let ref conf = default_conf();
     let input = 2.718281828459045;
     let ret_value = compile_and_run(code, conf, &input);
-    let data = unsafe { weld_value_data(ret_value) as *const f64 };
+    let data = ret_value.data() as *const f64;
     let result = unsafe { (*data).clone() };
     let output = 1.0f64;
     assert!(output.close(result, 5));
-    unsafe { free_value_and_module(ret_value) };
+
 }
 
 #[test]
 fn log_error() {
     let code = "|x:i64| log(x)";
-    let conf = default_conf();
+    let ref conf = default_conf();
     let input = 1;
     let err_value = compile_and_run_error(code, conf, &input);
-    assert_eq!(
-        unsafe { weld_error_code(err_value) },
-        WeldRuntimeErrno::CompileError
-    );
-    unsafe { weld_error_free(err_value) };
+    assert_eq!(err_value.code(), WeldRuntimeErrno::CompileError);
 }
 
 #[test]
 fn simple_exp() {
     let code = "|x:f64| exp(x)";
-    let conf = default_conf();
+    let ref conf = default_conf();
     let input = 1.0f64;
     let ret_value = compile_and_run(code, conf, &input);
-    let data = unsafe { weld_value_data(ret_value) as *const f64 };
+    let data = ret_value.data() as *const f64;
     let result = unsafe { (*data).clone() };
     let output = 2.718281828459045;
     assert!(output.close(result, 5));
-    unsafe { free_value_and_module(ret_value) };
+
 }
 
 #[test]
 fn exp_error() {
     let code = "|x:i64| exp(x)";
-    let conf = default_conf();
+    let ref conf = default_conf();
     let input = 1;
     let err_value = compile_and_run_error(code, conf, &input);
-    assert_eq!(
-        unsafe { weld_error_code(err_value) },
-        WeldRuntimeErrno::CompileError
-    );
-    unsafe { weld_error_free(err_value) };
+    assert_eq!(err_value.code(), WeldRuntimeErrno::CompileError);
 }
 
 #[test]
 fn simple_erf() {
     let code = "|x:f64| erf(x)";
-    let conf = default_conf();
+    let ref conf = default_conf();
     let input = 1.00;
     let ret_value = compile_and_run(code, conf, &input);
-    let data = unsafe { weld_value_data(ret_value) as *const f64 };
+    let data = ret_value.data() as *const f64;
     let result = unsafe { (*data).clone() };
     let output = 0.84270079294971478;
     assert!(output.close(result, 5));
-    unsafe { free_value_and_module(ret_value) };
 }
 
 #[test]
 fn simple_sqrt() {
     let code = "|x:f64| sqrt(x)";
-    let conf = default_conf();
+    let ref conf = default_conf();
     let input = 4.0;
     let ret_value = compile_and_run(code, conf, &input);
-    let data = unsafe { weld_value_data(ret_value) as *const f64 };
+    let data = ret_value.data() as *const f64;
 
     let result = unsafe { (*data).clone() };
     let output = 2.0f64;
     assert!(output.close(result, 5));
-    unsafe { free_value_and_module(ret_value) };
 }
 
 #[test]
 fn simple_pow() {
     use std::f64;
     let code = "|x:f64| pow(x, 2.0)";
-    let conf = default_conf();
+    let ref conf = default_conf();
     let input = 4.0;
     let ret_value = compile_and_run(code, conf, &input);
-    let data = unsafe { weld_value_data(ret_value) as *const f64 };
+    let data = ret_value.data() as *const f64;
 
     let result = unsafe { (*data).clone() };
     assert!((16.0).close(result, 5));
-    unsafe { free_value_and_module(ret_value) };
 }
 
 #[test]
 fn simple_trig() {
     fn check_trig_f32(op: &str, input: f32, expect: f32) {
         let code = format!("|x:f32| {}(x)", op);
-        let conf = default_conf();
+        let ref conf = default_conf();
         let ret_value = compile_and_run(&code, conf, &input);
-        let data = unsafe { weld_value_data(ret_value) as *const f32 };
+        let data = ret_value.data() as *const f32;
         let result = unsafe { (*data).clone() };
         assert!(expect.close(result, 5));
-        unsafe { free_value_and_module(ret_value) };
+
     }
 
     fn check_trig_f64(op: &str, input: f64, expect: f64) {
         let code = format!("|x:f64| {}(x)", op);
-        let conf = default_conf();
+        let ref conf = default_conf();
         let ret_value = compile_and_run(&code, conf, &input);
-        let data = unsafe { weld_value_data(ret_value) as *const f64 };
+        let data = ret_value.data() as *const f64;
         let result = unsafe { (*data).clone() };
         assert!(expect.close(result, 5));
-        unsafe { free_value_and_module(ret_value) };
+
     }
 
     let inp: f32 = 1.0;
@@ -176,57 +164,52 @@ fn simple_trig() {
 #[test]
 fn map_exp() {
     let code = "|x:vec[f32]| map(x, |a| exp(a))";
-    let conf = default_conf();
+    let ref conf = default_conf();
 
     let input_vec = [0.0f32, 1.0f32, 2.0f32, 3.0f32];
     let ref input_data = WeldVec::from(&input_vec);
 
     let ret_value = compile_and_run(code, conf, input_data);
-    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<f32> };
+    let data = ret_value.data() as *const WeldVec<f32>;
     let result = unsafe { (*data).clone() };
 
     let output = [1.0, 2.7182817, 7.389056, 20.085537];
     for i in 0..(result.len as isize) {
         assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
     }
-
-    unsafe { free_value_and_module(ret_value) };
 }
 
 #[test]
 fn simple_int_mod() {
     let code = "|x:i64| x % 3L";
-    let conf = default_conf();
+    let ref conf = default_conf();
     let ref input_data: i64 = -10;
     let ret_value = compile_and_run(code, conf, input_data);
-    let data = unsafe { weld_value_data(ret_value) as *const i64 };
+    let data = ret_value.data() as *const i64;
     let result = unsafe { *data };
     assert_eq!(result, -1);
-    unsafe { free_value_and_module(ret_value) };
 }
 
 #[test]
 fn simple_float_mod() {
     let code = "|x:f64| x % 0.04";
-    let conf = default_conf();
+    let ref conf = default_conf();
     let ref input_data: f64 = 0.5;
     let ret_value = compile_and_run(code, conf, input_data);
-    let data = unsafe { weld_value_data(ret_value) as *const f64 };
+    let data = ret_value.data() as *const f64;
     let result = unsafe { *data };
     assert!(result.close(0.02, 5));
-    unsafe { free_value_and_module(ret_value) };
 }
 
 #[test]
 fn simple_float_min() {
     let code = "|| min(3.1, 4.2)";
-    let conf = default_conf();
+    let ref conf = default_conf();
 
     let ref input_data: f64 = 0.0;
 
     let ret_value = compile_and_run(code, conf, input_data);
-    let data = unsafe { weld_value_data(ret_value) as *const f64 };
+    let data = ret_value.data() as *const f64;
     let result = unsafe { *data };
     assert!(result.close(3.1, 5));
-    unsafe { free_value_and_module(ret_value) };
 }

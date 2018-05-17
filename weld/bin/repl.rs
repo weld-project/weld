@@ -17,9 +17,7 @@ use std::fs::File;
 use std::error::Error;
 use std::io::prelude::*;
 use std::fmt;
-use std::ffi::{CStr, CString};
 use std::collections::HashMap;
-use libc::c_char;
 
 use weld::*;
 use weld::common::*;
@@ -56,34 +54,16 @@ lazy_static! {
 ///
 /// The argument is a key/value pair. The command sets the key/value pair for the REPL's
 /// configuration.
-fn process_setconf(conf: *mut WeldConf, key: &str, value: &str) {
-    let key = CString::new(key).unwrap();
-    let value = CString::new(value).unwrap();
-    unsafe {
-        weld_conf_set(conf, key.as_ptr(), value.as_ptr());
-    }
+fn process_setconf(conf: &mut WeldConf, key: &str, value: &str) {
+    conf.set(key, value);
 }
 
 /// Process the `GetConf` command.
 ///
 /// The argument is a key in the configuration. The command returns the value of the key or `None`
 /// if no value is set.
-fn process_getconf(conf: *mut WeldConf, key: &str) -> Option<String> {
-    let key = CString::new(key).unwrap();
-    unsafe {
-        let val = weld_conf_get(conf, key.as_ptr());
-        if val.is_null() {
-            None
-        } else {
-            let val = CStr::from_ptr(val);
-            let val = val.to_str();
-            if let Ok(s) = val {
-                Some(s.to_string())
-            } else {
-                None
-            }
-        }
-    }
+fn process_getconf(conf: &mut WeldConf, key: &str) -> Option<String> {
+    conf.get(key).cloned().map(|e| e.into_string().unwrap())
 }
 
 /// Processes the LoadFile command.
@@ -149,7 +129,7 @@ fn read_input(rl: &mut Editor<()>, prompt: &str, history: bool) -> Option<String
 
 /// Handles a single string command. Returns a string if the command
 /// contains code or `None` if the command is fully processed.
-fn handle_string<'a>(command: &'a str, conf: *mut WeldConf) -> Option<String> {
+fn handle_string<'a>(command: &'a str, conf: &mut WeldConf) -> Option<String> {
     let mut tokens = command.splitn(2, " ");
     let repl_command = tokens.next().unwrap();
     let arg = tokens.next().unwrap_or("");
@@ -191,27 +171,15 @@ fn handle_string<'a>(command: &'a str, conf: *mut WeldConf) -> Option<String> {
     }
 }
 
-fn process_code(code: &str, conf: *mut WeldConf) {
-    unsafe {
-        let code = CString::new(code).unwrap();
-        let err = weld_error_new();
-        let module = weld_module_compile(code.into_raw() as *const c_char, conf, err);
-        if weld_error_code(err) != WeldRuntimeErrno::Success {
-            println!("REPL: Compile error: {}",
-                     CStr::from_ptr(weld_error_message(err)).to_str().unwrap());
-        } else {
-            println!("REPL: Program compiled successfully to LLVM");
-            weld_module_free(module);
-        }
-        weld_error_free(err);
+fn process_code(code: &str, conf: &mut WeldConf) {
+    match WeldModule::compile(code, conf) {
+        Ok(_) => println!("REPL: Program compiled successfully to LLVM"),
+        Err(err) => println!("REPL: Compile error: {}", err.message().to_str().unwrap()),
     }
 }
 
 fn main() {
-
-    // This is the conf we use for compilation.
-    let conf = weld_conf_new();
-
+    let ref mut conf = WeldConf::new();
     let matches = App::new("Weld REPL")
         .version("0.1.0")
         .author("Weld authors <weld-group@cs.stanford.edu")
@@ -300,13 +268,8 @@ fn main() {
         if code.is_none() {
             continue;
         }
-
         // Process the code.
         process_code(&code.unwrap(), conf);
-    }
-
-    unsafe {
-        weld_conf_free(conf);
     }
 
     rl.save_history(&history_file_path).unwrap();

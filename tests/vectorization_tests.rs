@@ -2,7 +2,6 @@
 
 extern crate weld;
 use weld::WeldValue;
-use weld::weld_value_data;
 
 mod common;
 use common::*;
@@ -16,18 +15,18 @@ fn simple_for_vectorizable_loop() {
 
     let code = "|x:vec[i32]| result(for(simditer(x), merger[i32,+], |b,i,e:simd[i32]| let a = broadcast(1); let a2 = a +
                     broadcast(1); merge(b, e+a2)))";
-    let conf = default_conf();
+    let ref conf = default_conf();
 
     let size = 1000;
     let input_vec = vec![1 as i32; size as usize];
     let ref input_data = WeldVec::from(&input_vec);
 
     let ret_value = compile_and_run(code, conf, input_data);
-    let data = unsafe { weld_value_data(ret_value) as *const i32 };
+    let data = ret_value.data() as *const i32;
     let result = unsafe { (*data).clone() };
     let output = size * 3;
     assert_eq!(result, output);
-    unsafe { free_value_and_module(ret_value) };
+
 }
 
 #[test]
@@ -47,7 +46,7 @@ fn fringed_for_vectorizable_loop() {
 		|b,i,e| let a = 1; let a2 = a + 1; merge(b, e+a2)
 	))";
 
-    let conf = default_conf();
+    let ref conf = default_conf();
 
     let size = 1002;
     let input_vec = vec![1 as i32; size as usize];
@@ -56,11 +55,11 @@ fn fringed_for_vectorizable_loop() {
     };
 
     let ret_value = compile_and_run(code, conf, input_data);
-    let data = unsafe { weld_value_data(ret_value) as *const i32 };
+    let data = ret_value.data() as *const i32;
     let result = unsafe { (*data).clone() };
     let output = size * 3;
     assert_eq!(result, output);
-    unsafe { free_value_and_module(ret_value) };
+
 }
 
 #[test]
@@ -80,7 +79,7 @@ fn fringed_for_vectorizable_loop_with_par() {
 		|b,i,e| let a = 1; let a2 = a + 1; merge(b, e+a2)
 	))";
 
-    let conf = many_threads_conf();
+    let ref conf = many_threads_conf();
 
     // Large size to invoke parallel runtime + some fringing.
     let size = 10 * 1000 * 1000 + 123;
@@ -90,11 +89,11 @@ fn fringed_for_vectorizable_loop_with_par() {
     };
 
     let ret_value = compile_and_run(code, conf, input_data);
-    let data = unsafe { weld_value_data(ret_value) as *const i32 };
+    let data = ret_value.data() as *const i32;
     let result = unsafe { (*data).clone() };
     let output = size * 3;
     assert_eq!(result, output);
-    unsafe { free_value_and_module(ret_value) };
+
 }
 
 #[test]
@@ -116,7 +115,7 @@ fn for_predicated_vectorizable_loop() {
 			  ))
 	))
 	";
-    let conf = default_conf();
+    let ref conf = default_conf();
 
     let size = 1000;
     let input_vec = vec![1 as i32; size as usize];
@@ -125,18 +124,18 @@ fn for_predicated_vectorizable_loop() {
     };
 
     let ret_value = compile_and_run(code, conf, input_data);
-    let data = unsafe { weld_value_data(ret_value) as *const i32 };
+    let data = ret_value.data() as *const i32;
     let result = unsafe { (*data).clone() };
     let output = size;
     assert_eq!(result, output);
-    unsafe { free_value_and_module(ret_value) };
+
 }
 
-fn check_result_and_free(ret_value: *mut WeldValue, expected: i32) {
-    let data = unsafe { weld_value_data(ret_value) as *const i32 };
+fn check_result_and_free(ret_value: WeldValue, expected: i32) {
+    let data = ret_value.data() as *const i32;
     let result = unsafe { (*data).clone() };
     assert_eq!(result, expected);
-    unsafe { free_value_and_module(ret_value) };
+
 }
 
 #[test]
@@ -155,19 +154,19 @@ fn predicate_if_iff_annotated() {
 
     /* annotation true */
     let code = "|v:vec[i32]| result(for(v, merger[i32,+], |b,i,e| @(predicate:true)if(e>0, merge(b,e), b)))";
-    let conf = default_conf();
+    let ref conf = default_conf();
     let ret_value = compile_and_run(code, conf, input_data);
     check_result_and_free(ret_value, expected);
 
     /* annotation false */
     let code = "|v:vec[i32]| result(for(v, merger[i32,+], |b,i,e| @(predicate:false)if(e>0, merge(b,e), b)))";
-    let conf = default_conf();
+    let ref conf = default_conf();
     let ret_value = compile_and_run(code, conf, input_data);
     check_result_and_free(ret_value, expected);
 
     /* annotation missing */
     let code = "|v:vec[i32]| result(for(v, merger[i32,+], |b,i,e| if(e>0, merge(b,e), b)))";
-    let conf = default_conf();
+    let ref conf = default_conf();
     let ret_value = compile_and_run(code, conf, input_data);
     check_result_and_free(ret_value, expected);
 }

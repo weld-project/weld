@@ -2,8 +2,6 @@
 
 extern crate weld;
 
-use weld::weld_value_data;
-
 mod common;
 use common::*;
 
@@ -19,20 +17,19 @@ fn range_iter_1() {
     struct Args {
         a: i64,
     };
-    let conf = default_conf();
+    let ref conf = default_conf();
     let ref input_data = Args { a: 0 };
 
     let ret_value = compile_and_run(&code, conf, input_data);
-    let data = unsafe { weld_value_data(ret_value) as *const i64 };
+    let data = ret_value.data() as *const i64;
     let result = unsafe { (*data).clone() };
     let output = end * (end + 1) / 2;
     assert_eq!(result, output);
-    unsafe { free_value_and_module(ret_value) };
 }
 
 fn range_iter_zipped_helper(parallel: bool) {
     let grain_size = if parallel { 100 } else { 4096 };
-    let conf = if parallel {
+    let ref conf = if parallel {
         many_threads_conf()
     } else {
         default_conf()
@@ -53,11 +50,10 @@ fn range_iter_zipped_helper(parallel: bool) {
     };
 
     let ret_value = compile_and_run(&code, conf, input_data);
-    let data = unsafe { weld_value_data(ret_value) as *const i64 };
+    let data = ret_value.data() as *const i64;
     let result = unsafe { (*data).clone() };
     let output = end * (end + 1) / 2 + end;
     assert_eq!(result, output);
-    unsafe { free_value_and_module(ret_value) };
 }
 
 #[test]
@@ -80,7 +76,7 @@ fn iters_for_loop() {
 
     let code = "|x:vec[i32], y:vec[i32]| result(for(zip(iter(x,0L,4L,2L), y), appender, |b,i,e|
                 merge(b,e.$0+e.$1)))";
-    let conf = default_conf();
+    let ref conf = default_conf();
 
     let x = [1, 2, 3, 4];
     let y = [5, 6];
@@ -90,15 +86,13 @@ fn iters_for_loop() {
     };
 
     let ret_value = compile_and_run(code, conf, input_data);
-    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<i32> };
+    let data = ret_value.data() as *const WeldVec<i32>;
     let result = unsafe { (*data).clone() };
 
     let output = [6, 9];
     for i in 0..(result.len as isize) {
         assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
     }
-
-    unsafe { free_value_and_module(ret_value) };
 }
 
 /// Helper function for nditer - in order to simulate the behaviour of numpy's non-contiguous
@@ -144,7 +138,7 @@ fn nditer_basic_op_test() {
     let code = "|x:vec[f64], shapes:vec[i64], strides:vec[i64]| result(for(nditer(x,0L,24L,1L,shapes,strides), appender, |b,i,e|
                 merge(b,log(e))))";
 
-    let conf = default_conf();
+    let ref conf = default_conf();
     let mut x = vec![0.0; 100];
     for i in 0..100 {
         x[i] = i as f64;
@@ -165,7 +159,7 @@ fn nditer_basic_op_test() {
     };
 
     let ret_value = compile_and_run(code, conf, input_data);
-    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<f64> };
+    let data = ret_value.data() as *const WeldVec<f64>;
     let result = unsafe { (*data).clone() };
     for i in 0..(result.len as isize) {
         /* next idx for the original array, x, based on how numpy would behave with the given
@@ -175,7 +169,6 @@ fn nditer_basic_op_test() {
         /* update counter according to the numpy above */
         counter = update_counter(counter, shapes);
     }
-    unsafe { free_value_and_module(ret_value) };
 }
 
 #[test]
@@ -190,7 +183,7 @@ fn nditer_zip() {
     let code = "|x:vec[i64], y:vec[i64], shapes:vec[i64], strides:vec[i64]| result(for(zip(nditer(x,0L,24L,1L, shapes, strides), nditer(y,0L,24L,1L,shapes,strides)),  \
     appender, |b,i,e| merge(b,e.$0+e.$1)))";
 
-    let conf = default_conf();
+    let ref conf = default_conf();
     let mut x = vec![5; 100];
     let mut y = vec![0; 100];
     for i in 0..100 {
@@ -212,7 +205,7 @@ fn nditer_zip() {
     };
 
     let ret_value = compile_and_run(code, conf, input_data);
-    let data = unsafe { weld_value_data(ret_value) as *const WeldVec<i64> };
+    let data = ret_value.data() as *const WeldVec<i64>;
     let result = unsafe { (*data).clone() };
 
     for i in 0..(result.len as isize) {
@@ -223,5 +216,4 @@ fn nditer_zip() {
         );
         counter = update_counter(counter, shapes);
     }
-    unsafe { free_value_and_module(ret_value) };
 }

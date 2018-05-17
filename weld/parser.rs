@@ -36,9 +36,9 @@ use super::pretty_print::*;
 macro_rules! check_parse_error {
     ($parser:expr, $res:expr) => ({
         if $res.is_ok() && !$parser.is_done() {
-            return weld_err!("Unexpected token {} at {}", $parser.peek(), $parser.error_context());
+            return compile_err!("Unexpected token {} at {}", $parser.peek(), $parser.error_context());
         } else if $res.is_err() {
-            return weld_err!("{} (at {})", $res.unwrap_err().description(), $parser.error_context());
+            return compile_err!("{} (at {})", $res.unwrap_err().description(), $parser.error_context());
         } else {
             $res
         }
@@ -144,7 +144,7 @@ impl<'t> Parser<'t> {
     /// Consume the next token and check that it equals `expected`. If not, return an Err.
     fn consume(&mut self, expected: Token) -> WeldResult<()> {
         if *self.next() != expected {
-            weld_err!("Expected '{}'", expected)
+            compile_err!("Expected '{}'", expected)
         } else {
             Ok(())
         }
@@ -185,7 +185,7 @@ impl<'t> Parser<'t> {
             if *self.peek() == TComma {
                 self.next();
             } else if *self.peek() != TCloseParen {
-                return weld_err!("Expected ',' or ')'");
+                return compile_err!("Expected ',' or ')'");
             }
         }
         try!(self.consume(TCloseParen));
@@ -248,12 +248,12 @@ impl<'t> Parser<'t> {
                 if *self.peek() == TComma {
                     self.next();
                 } else if *self.peek() != TBar {
-                    return weld_err!("Expected ',' or '|'");
+                    return compile_err!("Expected ',' or '|'");
                 }
             }
             try!(self.consume(TBar));
         } else if *token != TLogicalOr {
-            return weld_err!("Expected '|' or '||'");
+            return compile_err!("Expected '|' or '||'");
         }
         let body = try!(self.expr());
         Ok(expr_box(Lambda {
@@ -467,12 +467,12 @@ impl<'t> Parser<'t> {
                                                     },
                                                     Annotations::new())
                                 }
-                                _ => return weld_err!("Expected field index but got '{}'", value),
+                                _ => return compile_err!("Expected field index but got '{}'", value),
                             }
                         }
                     }
 
-                    ref other => return weld_err!("Expected field index but got '{}'", other),
+                    ref other => return compile_err!("Expected field index but got '{}'", other),
                 }
             } else {
                 // TOpenParen
@@ -483,7 +483,7 @@ impl<'t> Parser<'t> {
                     if *self.peek() == TComma {
                         self.next();
                     } else if *self.peek() != TCloseParen {
-                        return weld_err!("Expected ',' or ')'");
+                        return compile_err!("Expected ',' or ')'");
                     }
                 }
                 try!(self.consume(TCloseParen));
@@ -589,11 +589,11 @@ impl<'t> Parser<'t> {
     /// Parses a cast operation, the type being cast to is passed in as an argument.
     fn parse_cast(&mut self, kind: ScalarKind) -> WeldResult<Box<PartialExpr>> {
         if *self.next() != TOpenParen {
-            return weld_err!("Expected '('");
+            return compile_err!("Expected '('");
         }
         let expr = try!(self.expr());
         if *self.next() != TCloseParen {
-            return weld_err!("Expected ')'");
+            return compile_err!("Expected ')'");
         }
         let cast_expr = expr_box(Cast {
                                      kind: kind,
@@ -620,10 +620,10 @@ impl<'t> Parser<'t> {
                                         match inner_value.as_ref() {
                                             "global" => BuilderImplementationKind::Global,
                                             "local" => BuilderImplementationKind::Local,
-                                            _ => return weld_err!("Invalid implementation type"),
+                                            _ => return compile_err!("Invalid implementation type"),
                                         }
                                     }
-                                    _ => return weld_err!("Invalid implementation type"),
+                                    _ => return compile_err!("Invalid implementation type"),
                                 };
                                 annotations.set_builder_implementation(implementation);
                             }
@@ -633,7 +633,7 @@ impl<'t> Parser<'t> {
                                 if let TBoolLiteral(l) = *self.next() {
                                     annotations.set_predicate(l);
                                 } else {
-                                    return weld_err!("Invalid predicate type (must be a bool)");
+                                    return compile_err!("Invalid predicate type (must be a bool)");
                                 }
                             }
                             "vectorize" => {
@@ -642,7 +642,7 @@ impl<'t> Parser<'t> {
                                 if let TBoolLiteral(l) = *self.next() {
                                     annotations.set_vectorize(l);
                                 } else {
-                                    return weld_err!("Invalid vectorize type (must be a bool)");
+                                    return compile_err!("Invalid vectorize type (must be a bool)");
                                 }
                             }
                             "tile_size" => {
@@ -651,7 +651,7 @@ impl<'t> Parser<'t> {
                                 if let TI32Literal(l) = *self.next() {
                                     annotations.set_tile_size(l);
                                 } else {
-                                    return weld_err!("Invalid tile size (must be a i32)");
+                                    return compile_err!("Invalid tile size (must be a i32)");
                                 }
                             }
                             "grain_size" => {
@@ -660,7 +660,7 @@ impl<'t> Parser<'t> {
                                 if let TI32Literal(l) = *self.next() {
                                     annotations.set_grain_size(l);
                                 } else {
-                                    return weld_err!("Invalid tile size (must be a i32)");
+                                    return compile_err!("Invalid tile size (must be a i32)");
                                 }
                             }
                             "size" => {
@@ -669,7 +669,7 @@ impl<'t> Parser<'t> {
                                 if let TI64Literal(l) = *self.next() {
                                     annotations.set_size(l);
                                 } else {
-                                    return weld_err!("Invalid vector size (must be a i64)");
+                                    return compile_err!("Invalid vector size (must be a i64)");
                                 }
                             }
                             "loopsize" => {
@@ -678,7 +678,7 @@ impl<'t> Parser<'t> {
                                 if let TI64Literal(l) = *self.next() {
                                     annotations.set_loopsize(l);
                                 } else {
-                                    return weld_err!("Invalid vector size (must be a i64)");
+                                    return compile_err!("Invalid vector size (must be a i64)");
                                 }
                             }
                             "selectivity" => {
@@ -687,7 +687,7 @@ impl<'t> Parser<'t> {
                                 if let TF32Literal(l) = *self.next() {
                                     annotations.set_branch_selectivity((l * 100000.0) as i32);
                                 } else {
-                                    return weld_err!("Invalid selectivity (must be a f32)");
+                                    return compile_err!("Invalid selectivity (must be a f32)");
                                 }
                             }
                             "num_keys" => {
@@ -696,19 +696,19 @@ impl<'t> Parser<'t> {
                                 if let TI64Literal(l) = *self.next() {
                                     annotations.set_num_keys(l);
                                 } else {
-                                    return weld_err!("Invalid number of keys (must be a i64)");
+                                    return compile_err!("Invalid number of keys (must be a i64)");
                                 }
                             }
-                            _ => return weld_err!("Invalid annotation type"),
+                            _ => return compile_err!("Invalid annotation type"),
                         }
                     }
-                    _ => return weld_err!("Invalid annotation type -- expected an identifier"),
+                    _ => return compile_err!("Invalid annotation type -- expected an identifier"),
                 }
 
                 if *self.peek() == TComma {
                     self.next();
                 } else if *self.peek() != TCloseParen {
-                    return weld_err!("Expected ',' or ')'");
+                    return compile_err!("Expected ',' or ')'");
                 }
             }
             try!(self.consume(TCloseParen));
@@ -733,7 +733,7 @@ impl<'t> Parser<'t> {
             TCosh => Cosh,
             TTanh => Tanh,
             _ => {
-                return weld_err!("Invalid token for UnaryOp");
+                return compile_err!("Invalid token for UnaryOp");
             }
         };
         Ok(kind)
@@ -797,7 +797,7 @@ impl<'t> Parser<'t> {
             TOpenParen => {
                 let expr = try!(self.expr());
                 if *self.next() != TCloseParen {
-                    return weld_err!("Expected ')' after {:?}", expr);
+                    return compile_err!("Expected ')' after {:?}", expr);
                 }
                 Ok(expr)
             }
@@ -810,7 +810,7 @@ impl<'t> Parser<'t> {
                     if *self.peek() == TComma {
                         self.next();
                     } else if *self.peek() != TCloseBracket {
-                        return weld_err!("Expected ',' or ']'");
+                        return compile_err!("Expected ',' or ']'");
                     }
                 }
                 try!(self.consume(TCloseBracket));
@@ -825,7 +825,7 @@ impl<'t> Parser<'t> {
                     if *self.peek() == TComma {
                         self.next();
                     } else if *self.peek() != TCloseBrace {
-                        return weld_err!("Expected ',' or '}}'");
+                        return compile_err!("Expected ',' or '}}'");
                     }
                 }
                 try!(self.consume(TCloseBrace));
@@ -938,12 +938,12 @@ impl<'t> Parser<'t> {
                     if *self.peek() == TComma {
                         self.next();
                     } else if *self.peek() != TCloseParen {
-                        return weld_err!("Expected ',' or ')'");
+                        return compile_err!("Expected ',' or ')'");
                     }
                 }
                 try!(self.consume(TCloseParen));
                 if vectors.len() < 2 {
-                    return weld_err!("Expected two or more arguments in Zip");
+                    return compile_err!("Expected two or more arguments in Zip");
                 }
                 Ok(expr_box(Zip { vectors: vectors }, Annotations::new()))
             }
@@ -1233,7 +1233,7 @@ impl<'t> Parser<'t> {
                 Ok(res)
             }
             
-            ref other => weld_err!("Expected expression but got '{}'", other),
+            ref other => compile_err!("Expected expression but got '{}'", other),
         }
     }
 
@@ -1246,7 +1246,7 @@ impl<'t> Parser<'t> {
                        id: 0,
                    })
             }
-            ref other => weld_err!("Expected identifier but got '{}'", other),
+            ref other => compile_err!("Expected identifier but got '{}'", other),
         }
     }
 
@@ -1281,7 +1281,7 @@ impl<'t> Parser<'t> {
                 Ok(Min)
             }
             ref t => {
-                weld_err!("expected commutative binary op in but got '{}'", t)
+                compile_err!("expected commutative binary op in but got '{}'", t)
             }
         }
     }
@@ -1318,7 +1318,7 @@ impl<'t> Parser<'t> {
                 if let Scalar(ref kind) = elem_type {
                     Ok(Simd(kind.clone()))
                 } else {
-                    weld_err!("Expected Scalar type in simd")
+                    compile_err!("Expected Scalar type in simd")
                 }
             }
 
@@ -1395,7 +1395,7 @@ impl<'t> Parser<'t> {
                     if *self.peek() == TComma {
                         self.next();
                     } else if *self.peek() != TCloseBrace {
-                        return weld_err!("Expected ',' or '}}'");
+                        return compile_err!("Expected ',' or '}}'");
                     }
                 }
                 try!(self.consume(TCloseBrace));
@@ -1404,7 +1404,7 @@ impl<'t> Parser<'t> {
 
             TQuestion => Ok(Unknown),
 
-            ref other => weld_err!("Expected type but got '{}'", other),
+            ref other => compile_err!("Expected type but got '{}'", other),
         }
     }
 }

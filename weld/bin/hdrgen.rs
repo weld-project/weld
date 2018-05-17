@@ -9,9 +9,9 @@ use weld::*;
 use weld::common::*;
 
 use clap::{Arg, App};
+use libc::c_char;
 
 use std::ffi::{CStr, CString};
-use libc::c_char;
 use std::collections::HashMap;
 
 use std::path::Path;
@@ -21,9 +21,7 @@ use std::io::prelude::*;
 
 use weld::code_builder::CodeBuilder;
 use weld::util::IdGenerator;
-
 use weld::ast::*;
-use weld::error::*;
 
 static PRELUDE_CODE: &'static str = include_str!("resources/cpp_prelude.h");
 
