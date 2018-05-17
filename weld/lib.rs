@@ -118,9 +118,6 @@ extern crate time;
 use libc::c_void;
 use self::time::PreciseTime;
 
-// For the FFI functions here -- TODO delete/move these!
-use libc::c_char;
-
 use std::error::Error;
 use std::default::Default;
 use std::ffi::{CString, CStr};
@@ -247,6 +244,13 @@ impl Default for WeldError {
 impl From<error::WeldCompileError> for WeldError {
     fn from(err: error::WeldCompileError) -> WeldError {
         WeldError::new(CString::new(err.description()).unwrap(), WeldRuntimeErrno::CompileError)
+    }
+}
+
+// Conversion from a compilation error to an external WeldError.
+impl From<easy_ll::LlvmError> for WeldError {
+    fn from(err: easy_ll::LlvmError) -> WeldError {
+        WeldError::new(err.to_string(), WeldRuntimeErrno::CompileError)
     }
 }
 
@@ -427,27 +431,21 @@ impl WeldModule {
     }
 }
 
-// TODO move these to FFI, make Rust wrappers for them!
-
-#[no_mangle]
-/// Loads a dynamically linked library and makes it available to the LLVM compiler and JIT.
-/// This function is safe to call multiple times on the same library file.
-pub unsafe extern "C" fn weld_load_library(filename: *const c_char, err: *mut WeldError) {
-    assert!(!err.is_null());
-    let err = &mut *err;
-    let filename = CStr::from_ptr(filename);
-    let filename = filename.to_str().unwrap();
-    if let Err(e) = easy_ll::load_library(filename) {
-        err.code = WeldRuntimeErrno::LoadLibraryError;
-        err.message = CString::new(e.description()).unwrap();
-    }
+/// Load a dynamic library that a Weld program can access.
+///
+/// The dynamic library is a C dynamic library identified by its filename.
+pub fn load_linked_library<S: AsRef<str>>(filename: S) -> WeldResult<()> {
+    easy_ll::load_library(filename.as_ref()).map_err(|e| WeldError::from(e))
 }
 
 #[no_mangle]
 /// Enables logging to stderr in Weld with the given log level.
 /// This function is ignored if it has already been called once, or if some other code in the
 /// process has initialized logging using Rust's `log` crate.
-pub extern "C" fn weld_set_log_level(level: WeldLogLevel) {
+pub fn set_log_level(level: WeldLogLevel) {
+    use self::colors::*;
+    use self::colors::Color::*;
+
     let filter = match level {
         WeldLogLevel::Error => log::LogLevelFilter::Error,
         WeldLogLevel::Warn => log::LogLevelFilter::Warn,
@@ -459,11 +457,11 @@ pub extern "C" fn weld_set_log_level(level: WeldLogLevel) {
 
     let format = |rec: &log::LogRecord| {
         let prefix = match rec.level() {
-            log::LogLevel::Error => "\x1b[0;31merror\x1b[0m",
-            log::LogLevel::Warn => "\x1b[0;33mwarn\x1b[0m",
-            log::LogLevel::Info => "\x1b[0;33minfo\x1b[0m",
-            log::LogLevel::Debug => "\x1b[0;32mdebug\x1b[0m",
-            log::LogLevel::Trace => "\x1b[0;32mtrace\x1b[0m",
+            log::LogLevel::Error => format_color(Red, "error"),
+            log::LogLevel::Warn => format_color(Yellow, "warn"),
+            log::LogLevel::Info => format_color(Yellow, "info"),
+            log::LogLevel::Debug => format_color(Green, "debug"),
+            log::LogLevel::Trace => format_color(Green, "trace"),
         };
         let date = chrono::Local::now().format("%T%.3f");
         format!("[{}] {}: {}", prefix, date, rec.args())

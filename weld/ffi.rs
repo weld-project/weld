@@ -215,3 +215,28 @@ pub unsafe extern "C" fn weld_error_free(err: *mut WeldError) {
         Box::from_raw(err);
     }
 }
+
+
+#[no_mangle]
+/// Load a dynamic library that a Weld program can access.
+///
+/// The dynamic library is a C dynamic library identified by its filename.
+/// This function is a wrapper for `load_linked_library`.
+pub unsafe extern "C" fn weld_load_library(filename: *const c_char, err: *mut WeldError) {
+    let err = &mut *err;
+    let filename = filename.to_str();
+    if let Err(e) = load_linked_library(filename) {
+        *err = e;
+    } else {
+        *err = WeldError::new_success();
+    }
+}
+
+#[no_mangle]
+/// Enables logging to stderr in Weld with the given log level.
+///
+/// This function is ignored if it has already been called once, or if some other code in the
+/// process has initialized logging using Rust's `log` crate.
+pub extern "C" fn weld_set_log_level(level: WeldLogLevel) {
+    set_log_level(level)
+}
