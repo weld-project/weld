@@ -117,6 +117,8 @@ class NumPyEncoder(WeldObjectEncoder):
                 numpy_to_weld = self.utils.numpy_to_weld_float_arr_arr
             elif obj.ndim == 2 and obj.dtype == 'float64':
                 numpy_to_weld = self.utils.numpy_to_weld_double_arr_arr
+            elif obj.ndim == 2 and obj.dtype == 'bool':
+                numpy_to_weld = self.utils.numpy_to_weld_bool_arr_arr
             elif obj.ndim == 1 and obj.dtype == 'bool':
                 numpy_to_weld = self.utils.numpy_to_weld_bool_arr
             else:
@@ -184,6 +186,10 @@ class NumPyDecoder(WeldObjectDecoder):
             data = cweld.WeldValue(obj).data()
             result = ctypes.cast(data, ctypes.POINTER(c_double)).contents.value
             return float(result)
+        elif restype == WeldBit():
+            data = cweld.WeldValue(obj).data()
+            result = ctypes.cast(data, ctypes.POINTER(c_bool)).contents.value
+            return bool(result)
 
         # Obj is a WeldVec(WeldInt()).ctype_class, which is a subclass of
         # ctypes._structure
@@ -211,6 +217,8 @@ class NumPyDecoder(WeldObjectDecoder):
             weld_to_numpy = self.utils.weld_to_numpy_float_arr_arr
         elif restype == WeldVec(WeldVec(WeldDouble())):
             weld_to_numpy = self.utils.weld_to_numpy_double_arr_arr
+        elif restype == WeldVec(WeldVec(WeldBit())):
+            weld_to_numpy = self.utils.weld_to_numpy_bool_arr_arr
         elif isinstance(restype, WeldStruct):
             ret_vecs = []
             # Iterate through all fields in the struct, and recursively call

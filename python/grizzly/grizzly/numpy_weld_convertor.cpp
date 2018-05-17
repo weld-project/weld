@@ -352,6 +352,37 @@ weld::vec<weld::vec<uint8_t> > numpy_to_weld_char_arr_arr(PyObject* in) {
 }
 
 /**
+ * Converts numpy array of bool to Weld vector, with ndim = 2.
+ */
+extern "C"
+weld::vec<weld::vec<bool> > numpy_to_weld_bool_arr_arr(PyObject* in) {
+    PyArrayObject* inp = (PyArrayObject*) in;
+    int64_t dimension1 = (int64_t) PyArray_DIMS(inp)[0];
+    int64_t dimension2 = (int64_t) PyArray_DIMS(inp)[1];
+    weld::vec<weld::vec<bool> > t = weld::make_vec<weld::vec<bool> >(dimension1);
+    if ((dimension1 * 8) == PyArray_STRIDES(inp)[1]) {
+        // Matrix is transposed.
+        bool *new_buffer = (bool *) malloc(sizeof(bool) * dimension1 * dimension2);
+        bool *old_buffer = (bool *) inp->data;
+        for (int i = 0; i < t.size; i++) {
+            t.ptr[i].size = dimension2;
+            for (int j = 0; j < dimension2; j++) {
+                *(new_buffer + j) = old_buffer[(j * dimension1) + i];
+            }
+            t.ptr[i].ptr = new_buffer;
+            new_buffer += dimension2;
+        }
+    } else {
+        for (int i = 0; i < t.size; i++) {
+            t.ptr[i].size = dimension2;
+            t.ptr[i].ptr = (bool *)(inp->data + i * PyArray_STRIDES(inp)[0]);
+        }
+    }
+
+    return t;
+}
+
+/**
  * Converts Weld vector to numpy array.
  */
 extern "C"
@@ -542,6 +573,30 @@ PyObject* weld_to_numpy_double_arr_arr(weld::vec< weld::vec<double> > inp) {
   PyObject* out = PyArray_SimpleNewFromData(2, size, NPY_DOUBLE, (char*)ptr_array);
   return out;
 
+}
+
+/**
+ * Converts Weld vector-of-bool-vectors to two-dimensional numpy array.
+ */
+extern "C"
+PyObject* weld_to_numpy_bool_arr_arr(weld::vec< weld::vec<bool> > inp) {
+    Py_Initialize();
+
+    int num_rows = inp.size;
+    int num_cols = inp.ptr[0].size;
+
+    npy_intp size[2] = {num_rows, num_cols};
+    bool *ptr_array = (bool *) malloc(sizeof(bool) * num_rows * num_cols);
+
+    for (int i = 0; i < num_rows; i++) {
+        for (int j = 0; j < num_cols; j++) {
+            ptr_array[i * num_cols + j] = *((bool *) inp.ptr[i].ptr + j);
+        }
+    }
+
+    _import_array();
+    PyObject* out = PyArray_SimpleNewFromData(2, size, NPY_BOOL, (char*)ptr_array);
+    return out;
 }
 
 /**
