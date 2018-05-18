@@ -151,6 +151,7 @@ mod exprs;
 mod expr_hash;
 mod easy_ll;
 mod stats;
+mod new_types;
 
 // Public interfaces.
 // TODO these probably shouldn't all be public...
