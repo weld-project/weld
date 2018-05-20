@@ -19,7 +19,7 @@ class weldarray(np.ndarray):
     the creation of a new array, which adds to the overhead compared to NumPy
     for initializing arrays)
     '''
-    def __new__(cls, input_array, verbose=False, new_weldobj = True, *args, **kwargs):
+    def __new__(cls, input_array, verbose=True, new_weldobj = True, *args, **kwargs):
         '''
         @input_array: original ndarray from which the new array is derived.
         '''

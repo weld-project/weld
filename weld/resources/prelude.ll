@@ -222,6 +222,19 @@ define i32 @double.hash(double %arg) {
 
 ; ERF implementation for <4 x double> based on https://www.johndcook.com/blog/cpp_erf/
 define <4 x double> @erf256_pd(<4 x double> %iinp) {
+  ; sign for each value in iinp
+  ;%zeros = <double -0.000000e+00, double -0.000000e+00, double -0.000000e+00, double -0.000000e+00>
+  %j0 = fcmp oge <4 x double> <double -0.000000e+00, double -0.000000e+00, double -0.000000e+00,double -0.000000e+00>, %iinp
+  %j1 = icmp eq <4 x i1> <i1 0, i1 0, i1 0, i1 0>, %j0
+
+  ; now j0 - j1 should give us the sign of each value in iinp, if only these were not bits.
+  %j2 = sext <4 x i1> %j0 to <4 x i32>
+  %j3 = sext <4 x i1> %j1 to <4 x i32>
+  %j4 = sub <4 x i32> %j2, %j3
+  %j5 = sext <4 x i32> %j4 to <4 x i64>
+  ;%sign = bitcast <4 x i64> %j5 to <4 x double>
+  %sign = sitofp <4 x i64> %j5 to <4 x double>
+
   %i4 = call <4 x double> @llvm.fabs.v4f64(<4 x double> %iinp)
   %i5 = fmul <4 x double> %i4, <double 3.275911e-01, double 3.275911e-01, double 3.275911e-01, double 3.275911e-01>
   %i6 = fadd <4 x double> %i5, <double 1.000000e+00, double 1.000000e+00, double 1.000000e+00, double 1.000000e+00>
@@ -240,5 +253,7 @@ define <4 x double> @erf256_pd(<4 x double> %iinp) {
   %i19 = call <4 x double> @llvm.exp.v4f64(<4 x double> %i18)
   %i20 = fmul <4 x double> %i19, %i16
   %i21 = fsub <4 x double> <double 1.000000e+00, double 1.000000e+00, double 1.000000e+00, double 1.000000e+00>, %i20
-  ret <4 x double> %i21
+
+  %i22 = fmul <4 x double> %i21, %sign
+  ret <4 x double> %i22
 }
