@@ -107,9 +107,6 @@ impl CompiledModule {
 pub fn apply_opt_passes(expr: &mut TypedExpr, opt_passes: &Vec<Pass>, stats: &mut CompilationStats) -> WeldResult<()> {
     for pass in opt_passes {
         let start = PreciseTime::now();
-        //if "vectorize" == pass.pass_name() {
-            //continue;
-        //}
         pass.transform(expr)?;
         let end = PreciseTime::now();
         stats.pass_times.push((pass.pass_name(), start.to(end)));

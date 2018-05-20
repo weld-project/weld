@@ -35,8 +35,8 @@ declare <4 x double> @llvm.fabs.v4f64(<4 x double>)
 declare float @llvm.sqrt.f32(float)
 declare double @llvm.sqrt.f64(double)
 
-declare double @llvm.powi.f64(double, i32)
-declare float @llvm.powi.f32(float, i32)
+;declare double @llvm.powi.f64(double, i32)
+;declare float @llvm.powi.f32(float, i32)
 
 declare float     @llvm.sin.f32(float  %Val)
 declare double    @llvm.sin.f64(double %Val)

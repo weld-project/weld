@@ -156,7 +156,11 @@ class weldarray(np.ndarray):
         new_arr = weldarray(new_arr, verbose=self._verbose)
         # FIXME: Do stuff with views being grandchildren here.
         # now let's create the weldarray view with the starts/stops/steps
-        if is_view_child(new_arr.view(np.ndarray), self.view(np.ndarray)):
+        # Note: it is important to compare with self._eval(), instead of self,
+        # because when generating views, we implicitly always evaluate stored
+        # ops on self. Thus, new_arr should be compared with the evaluated
+        # array.
+        if is_view_child(new_arr.view(np.ndarray), self._eval()):
             if self._weldarray_view is None:
                 base_array = self
             else:
@@ -205,6 +209,9 @@ class weldarray(np.ndarray):
             - idx is a tuple: Used for multi-dimensional arrays.
                 - TODO: explain stuff + similarities/differences with slices.
         '''
+        print("in getitem")
+        print("idx is: ", idx)
+        print("idx type is: ", type(idx))
         # Need to cast it as ndarray view before calling ndarray's __getitem__
         # implementation.
         if isinstance(idx, slice):
@@ -217,6 +224,7 @@ class weldarray(np.ndarray):
         elif isinstance(idx, tuple):
             ret = self._eval().__getitem__(idx)
             if isinstance(ret, np.ndarray):
+                print("going to call gen weld view")
                 return self._gen_weldview(ret, idx)
             else:
                 # could have been just a float, so return it without converting
