@@ -116,6 +116,15 @@ pub fn makevector_expr(exprs: Vec<Expr<Type>>) -> WeldResult<Expr<Type>> {
     }
 }
 
+/// Version of makevector_expr that is compatible with empty vectors.
+pub fn makevector_expr_typed(exprs: Vec<Expr<Type>>, ty: Type) -> WeldResult<Expr<Type>> {
+    if exprs.iter().all(|e| e.ty == ty) {
+        new_expr(MakeVector { elems: exprs }, Vector(Box::new(ty.clone())))
+    } else {
+        compile_err!("Internal error: Mismatched types in makevector_expr")
+    }
+}
+
 pub fn getfield_expr(expr: Expr<Type>, index: u32) -> WeldResult<Expr<Type>> {
     let ty = if let Struct(ref tys) = expr.ty {
         tys[index as usize].clone()
@@ -552,6 +561,11 @@ fn binop_test() {
 
     assert_eq!(print_expr_without_indent(&expr), "(1+1)");
     assert_eq!(expr.ty, Scalar(ScalarKind::I32));
+}
+
+#[test]
+fn makevector_empty_test() {
+    let vector = makevector_expr_typed(vec![], Scalar(ScalarKind::I32)).unwrap();
 }
 
 #[test]
