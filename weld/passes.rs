@@ -43,13 +43,15 @@ impl Transformation {
 pub struct Pass {
     transforms: Vec<Transformation>,
     pass_name: String,
+    apply_once: bool,
 }
 
 impl Pass {
-    pub fn new(transforms: Vec<Transformation>, pass_name: &'static str) -> Pass {
+    pub fn new(transforms: Vec<Transformation>, pass_name: &'static str, apply_once: bool) -> Pass {
         Pass {
             transforms: transforms,
             pass_name: String::from(pass_name),
+            apply_once: apply_once
         }
     }
 
@@ -67,6 +69,10 @@ impl Pass {
             let after = ExprHash::from(expr)?.value();
             continue_pass = !(before == after);
             before = after;
+
+            if self.apply_once {
+                continue_pass = false;
+            }
         }
         Ok(())
     }
@@ -80,11 +86,11 @@ lazy_static! {
     pub static ref OPTIMIZATION_PASSES: HashMap<&'static str, Pass> = {
         let mut m = HashMap::new();
         m.insert("inline-apply",
-                 Pass::new(vec![Transformation::new(inliner::inline_apply)], "inline-apply"));
+                 Pass::new(vec![Transformation::new(inliner::inline_apply)], "inline-apply", false));
         m.insert("inline-let",
-                 Pass::new(vec![Transformation::new(inliner::inline_let)], "inline-let"));
+                 Pass::new(vec![Transformation::new(inliner::inline_let)], "inline-let", false));
         m.insert("inline-zip",
-                 Pass::new(vec![Transformation::new(inliner::inline_zips)], "inline-zip"));
+                 Pass::new(vec![Transformation::new(inliner::inline_zips)], "inline-zip", false));
         m.insert("loop-fusion",
                  Pass::new(vec![Transformation::new(loop_fusion::fuse_loops_vertical),
                                 Transformation::new(loop_fusion_2::fuse_loops_2),
@@ -93,33 +99,33 @@ lazy_static! {
                                 Transformation::new(inliner::inline_let),
                                 Transformation::new_experimental(loop_fusion_2::aggressive_inline_let),
                                 Transformation::new_experimental(loop_fusion_2::merge_makestruct_loops)],
-                 "loop-fusion"));
+                 "loop-fusion", false));
         m.insert("unroll-static-loop",
                  Pass::new(vec![Transformation::new(unroller::unroll_static_loop)],
-                 "unroll-static-loop"));
+                 "unroll-static-loop", false));
         m.insert("infer-size",
                  Pass::new(vec![Transformation::new(size_inference::infer_size)],
-                 "infer-size"));
+                 "infer-size", false));
         m.insert("inline-literals",
                  Pass::new(vec![Transformation::new(inliner::inline_negate),
                                 Transformation::new(inliner::inline_cast)],
-                 "inline-literals"));
+                 "inline-literals", false));
         m.insert("unroll-structs",
                  Pass::new(vec![Transformation::new(inliner::unroll_structs)],
-                 "unroll-structs"));
+                 "unroll-structs", false));
         m.insert("short-circuit-booleans",
                  Pass::new(vec![Transformation::new(short_circuit::short_circuit_booleans)],
-                 "short-circuit-booleans"));
+                 "short-circuit-booleans", false));
         m.insert("predicate",
                  Pass::new(vec![Transformation::new(vectorizer::predicate_merge_expr),
                                 Transformation::new(vectorizer::predicate_simple_expr)],
-                 "predicate"));
+                 "predicate", false));
         m.insert("vectorize",
                  Pass::new(vec![Transformation::new(vectorizer::vectorize)],
-                 "vectorize"));
+                 "vectorize", false));
         m.insert("fix-iterate",
                  Pass::new(vec![Transformation::new(annotator::force_iterate_parallel_fors)],
-                 "fix-iterate"));
+                 "fix-iterate", false));
         m
     };
 }
