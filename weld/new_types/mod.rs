@@ -11,6 +11,8 @@ use self::BuilderKind::*;
 use std::fmt;
 use std::vec;
 
+pub mod inference;
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Type {
     /// A scalar.
