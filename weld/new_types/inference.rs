@@ -3,7 +3,6 @@
 extern crate fnv;
 
 use new_types::*;
-use ast::Symbol;
 
 use fnv::FnvHashMap;
 
@@ -13,17 +12,17 @@ type Binding = (Symbol, Option<Type>);
 pub trait InferTypes {
     /// Checks and infers types in place.
     ///
-    /// Returns an error if types are inconsistent.
+    /// Returns an error if types are inconsistent or all types could not be inferred. That is, if
+    /// the resulting value has any partial types, this method will return an error.
     fn infer_types(&mut self) -> WeldResult<()>;
 }
 
-/*
 impl InferTypes for Expr {
+    /// Checks and infers types in place.
     fn infer_types(&mut self) -> WeldResult<()> {
         self.infer_types_internal()
     }
 }
-*/
 
 /// A trait for updating a type based on types around it.
 ///
@@ -43,9 +42,41 @@ trait PushType {
     fn sync(&mut self, other: &mut Self) -> WeldResult<bool> {
         Ok(self.push(other)? || other.push(self)?)
     }
+
+    /// Sets this `Type` to be `other`.
+    ///
+    /// This function returns an error if `other` is incompatible with this `Type`.
+    fn set(&mut self, other: Self) -> WeldResult<bool>;
 }
 
 impl PushType for Type {
+
+    fn set(&mut self, other: Type) -> WeldResult<bool> {
+        match other {
+            Scalar(_) | Simd(_) if *self == Unknown => {
+                *self = other;
+                Ok(true)
+            }
+            Scalar(_) | Simd(_) if *self == other => {
+                Ok(false)
+            }
+            Vector(ref elem) if *self == Unknown => {
+                *self = Vector(elem.clone());
+                Ok(true)
+            }
+            Vector(ref elem) => {
+                if let Vector(ref mut dest) = *self {
+                    dest.set(elem.as_ref().clone())
+                } else {
+                    compile_err!("blah")
+                }
+            }
+            _ => {
+                compile_err!("blah")
+            }
+        }
+    }
+
     /// Push the type of `other` into this `Type` and return if this `Type` changed.
     fn push(&mut self, other: &Self) -> WeldResult<bool> {
         // If the other type is Unknown, we cannot infer anything. If this type is Unknown,
@@ -115,6 +146,7 @@ impl PushType for Type {
                             compile_err!("Mismatched types")
                         }
                 }?;
+
                 // Check the annotations.
                 if *annotations != *other_annotations {
                     if !annotations.is_empty() {
@@ -124,17 +156,19 @@ impl PushType for Type {
                 }
                 Ok(changed)
             }
-             _ => compile_err!("Mismatched type")
+            (ref this, ref other) => {
+                // TODO: pretty print the types here.
+                compile_err!("Mismatched types: could not push type {:?} to {:?}", other, this)
+            }
         }
     }
 }
 
-/*
 /// A module-internal implementation of type inference.
 ///
 /// This trait contains additional helper methods that are not exposed outside this module.
 trait InferTypesInternal {
-    fn infer_types_internal(&mut self) -> WeldResult<()>
+    fn infer_types_internal(&mut self) -> WeldResult<()>;
     fn infer_locally(&mut self, env: &TypeMap) -> WeldResult<bool>;
     fn infer_up(&mut self, &mut TypeMap) -> WeldResult<bool>;
 }
@@ -144,8 +178,8 @@ impl InferTypesInternal for Expr {
     /// Internal implementation of type inference.
     fn infer_types_internal(&mut self) -> WeldResult<()> {
         loop {
-            let mut env = TypeMap::default();
-            if !self.infer_up(&mut env)? {
+            let ref mut env = TypeMap::default();
+            if !self.infer_up(env)? {
                 if self.ty.partial_type() {
                     return compile_err!("Could not infer some types")
                 } else {
@@ -163,15 +197,15 @@ impl InferTypesInternal for Expr {
         // Remember whether we inferred any new type.
         let mut changed = false;
         // Remember the old bindings so they can be restored.
-        let mut old_bindings = Vec::new();
+        let mut old_bindings: Vec<Binding> = Vec::new();
         // Let and Lambda are the only expressions that change bindings.
-        match expr.kind {
+        match self.kind {
             Let { ref mut name, ref mut value, ref mut body } => {
                 // First perform type inference on the value. Then, take the old binding to `name`
                 // and perform type inference on the body. Finally, restore the original
                 // environment.
                 changed |= value.infer_up(env)?;
-                old_bindings.push(name.clone(), env.insert(name.clone(), value.ty.clone()));
+                old_bindings.push((name.clone(), env.insert(name.clone(), value.ty.clone())));
                 changed |= body.infer_up(env)?;
             }
             Lambda { ref mut params, ref mut body } =>  {
@@ -197,7 +231,6 @@ impl InferTypesInternal for Expr {
     }
 
     fn infer_locally(&mut self, env: &TypeMap) -> WeldResult<bool> {
-
+        Ok(true)
     }
 }
-*/
