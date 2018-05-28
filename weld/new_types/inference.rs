@@ -5,7 +5,6 @@ extern crate fnv;
 use new_types::*;
 use new_types::LiteralKind::*;
 use new_types::BuilderKind::*;
-use new_types::ScalarKind::*;
 
 use fnv::FnvHashMap;
 
@@ -540,7 +539,75 @@ impl InferTypesInternal for Expr {
                 }
             }
 
-            _ => unimplemented!()
+            If { ref mut cond, ref mut on_true, ref mut on_false } => {
+                let mut changed = false;
+                changed |= cond.ty.push_complete(Scalar(Bool))?;
+                changed |= self.ty.sync(&mut on_true.ty)?;
+                changed |= self.ty.sync(&mut on_false.ty)?;
+                Ok(changed)
+            }
+
+            Iterate { ref mut initial, ref mut update_func } => {
+                let mut changed = self.ty.sync(&mut initial.ty)?;
+                match update_func.ty {
+                    // TODO(shoumik): Do we want to check whether the return type of the function is
+                    // the same as the function's return type?
+                    Function(ref mut params, _) if params.len() == 1 => {
+                        changed |= params.get_mut(0).unwrap().sync(&mut initial.ty)?;
+                        Ok(changed)
+                    }
+                    _ => compile_err!("TODO")
+                }
+            }
+
+            Select { ref mut cond, ref mut on_true, ref mut on_false } => {
+                let mut changed = false;
+                let cond_type = if cond.ty.is_simd() {
+                    Simd(Bool)
+                } else {
+                    Scalar(Bool)
+                };
+                changed |= cond.ty.push_complete(cond_type)?;
+                changed |= self.ty.sync(&mut on_true.ty)?;
+                changed |= self.ty.sync(&mut on_false.ty)?;
+                Ok(changed)
+            }
+
+            Apply { ref mut func, ref mut params } => {
+                let func_type = Function(vec![Unknown; params.len()], Box::new(Unknown));
+                let mut changed = func.ty.push(&func_type)?;
+
+                let ref mut fty = func.ty;
+                if let Function(ref mut param_types, ref mut res_type) = *fty {
+                    changed |= self.ty.sync(res_type)?;
+                    for (param_ty, param_expr) in param_types.iter_mut().zip(params.iter_mut()) {
+                        changed |= param_ty.sync(&mut param_expr.ty)?;
+                    }
+                    Ok(changed)
+                } else {
+                    compile_err!("TODO")
+                }
+            }
+
+            /*
+            NewBuilder(ref mut e) => {
+                Ok(false)
+            }
+
+            Merge { ref mut builder, ref mut value } => {
+                Ok(false)
+            }
+
+            Res { ref mut builder } => {
+                Ok(false)
+            }
+
+            For { ref mut iters, ref mut builder, ref mut func } => {
+                Ok(false)
+            }
+            */
+
+            _ => unimplemented!(),
         }
     }
 }
