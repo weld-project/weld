@@ -167,6 +167,23 @@ impl PushType for Type {
     }
 }
 
+/// Force `expr`, which has kind `Lambda`, to have parameters that match `tys`.
+fn sync_function(expr: &mut Expr, tys: Vec<&Type>) -> WeldResult<bool> {
+    if let Function(ref mut params, _) = expr.ty {
+        if params.len() != tys.len() {
+            compile_err!("TODO")
+        } else {
+            let mut changed = false;
+            for (param, ty) in params.iter_mut().zip(tys) {
+                changed |= param.push(ty)?;
+            }
+            Ok(changed)
+        }
+    } else {
+        compile_err!("TODO")
+    }
+}
+
 /// A module-internal implementation of type inference.
 ///
 /// This trait contains additional helper methods that are not exposed outside this module.
@@ -429,54 +446,37 @@ impl InferTypesInternal for Expr {
             }
         }
 
-        /*
         Length { ref mut data } => {
-            match data.ty {
-                Vector(_) => (),
-                Unknown => (),
-                _ => return compile_err!("Internal error: Length called on non-vector"),
+            if let Vector(_) = data.ty {
+                self.ty.push_complete(Scalar(I64))
+            } else {
+                compile_err!("TODO")
             }
-            push_complete_type(&mut expr.ty, Scalar(I64), "Length")
         }
 
-        Slice {
-            ref mut data,
-            ref mut index,
-            ref mut size,
-        } => {
+        Slice { ref mut data, ref mut index, ref mut size } => {
             if let Vector(_) = data.ty {
                 let mut changed = false;
-                changed |= try!(push_complete_type(&mut index.ty, Scalar(I64), "Slice"));
-                changed |= try!(push_complete_type(&mut size.ty, Scalar(I64), "Slice"));
-                changed |= try!(push_type(&mut expr.ty, &data.ty, "Slice"));
+                changed |= index.ty.push_complete(Scalar(I64))?;
+                changed |= size.ty.push_complete(Scalar(I64))?;
+                changed |= self.ty.push(&data.ty)?;
                 Ok(changed)
             } else {
-                compile_err!("Internal error: Slice called on {:?}, must be called on vector",
-                          data.ty)
+                compile_err!("TODO")
             }
         }
 
-        Sort {
-            ref mut data,
-            ref mut keyfunc,
-        } => {
+        Sort { ref mut data, ref mut keyfunc } => {
             if let Vector(ref elem_type) = data.ty {
-                let mut changed = false;
-                if let Function(ref mut params, _) = keyfunc.ty {
-                    if params.len() == 1 {
-                        changed |= try!(push_type(&mut params[0], &elem_type, "Sort key return"));
-                    } else {
-                        return compile_err!("Internal error: Sort key has too many parameters");
-                    }
-                }
-                changed |= try!(push_type(&mut expr.ty, &data.ty, "Sort"));
+                let mut changed = sync_function(keyfunc, vec![&elem_type])?;
+                changed |= self.ty.push(&data.ty)?;
                 Ok(changed)
             } else {
-                compile_err!("Internal error: Sort called on {:?}, must be called on vector",
-                          data.ty)
+                compile_err!("TODO")
             }
         }
 
+        /*
         Lookup {
             ref mut data,
             ref mut index,
