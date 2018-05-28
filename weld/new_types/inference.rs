@@ -112,7 +112,10 @@ impl PushType for Type {
                 }
                 Ok(changed)
             }
-            (&mut Function(ref mut params, ref mut body), &Function(ref other_params, ref other_body)) if params.len() == other_params.len() => {
+            (&mut Function(ref mut params, ref mut body),
+             &Function(ref other_params, ref other_body))
+                if params.len() == other_params.len() => {
+
                 let mut changed = false;
                 for (this, other) in params.iter_mut().zip(other_params) {
                     changed |= this.push(other)?;
@@ -127,8 +130,6 @@ impl PushType for Type {
                         Ok(elem.push(other_elem)?)
                     }
                     (&mut DictMerger(ref mut key, ref mut value, ref mut op), &DictMerger(ref other_key, ref other_value, ref other_op)) if *op == *other_op => {
-                        // TODO other type checking for DictMergers? We could in theory do this in
-                        // a separate pass.
                         Ok(key.push(other_key)? | value.push(other_value)?)
                     }
                     (&mut GroupMerger(ref mut key, ref mut value), &GroupMerger(ref other_key, ref other_value)) => {
@@ -249,6 +250,7 @@ impl InferTypesInternal for Expr {
         Ok(changed)
     }
 
+    /// Infer the types of an expression based on direct subexpressions.
     fn infer_locally(&mut self, env: &TypeMap) -> WeldResult<bool> {
         match self.kind {
             Literal(I8Literal(_)) =>
@@ -293,9 +295,9 @@ impl InferTypesInternal for Expr {
                 // For comparisons, force the type to be Bool.
                 if op.is_comparison() {
                     if let Simd(_) = left.ty {
-                        changed |= self.ty.push(&Simd(Bool))?;
+                        changed |= self.ty.push_complete(Simd(Bool))?;
                     } else {
-                        changed |= self.ty.push(&Scalar(Bool))?;
+                        changed |= self.ty.push_complete(Scalar(Bool))?;
                     }
                 } else {
                     changed |= self.ty.push(elem_type)?;
