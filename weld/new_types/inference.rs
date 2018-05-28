@@ -210,8 +210,9 @@ impl InferTypesInternal for Expr {
 
     /// Infer types for an expression upward.
     ///
-    /// Returns whether the type of this expression or any subexpressions changed, or an error if
-    /// one occurred.
+    /// This method iterates over each expression in the AST in post-order, operating on the trees
+    /// leaves and propogating types up. The method returns whether the type of this expression or
+    /// any subexpressions changed, or an error if one occurred.
     fn infer_up(&mut self, env: &mut TypeMap) -> WeldResult<bool> {
         // Remember whether we inferred any new type.
         let mut changed = false;
@@ -251,19 +252,30 @@ impl InferTypesInternal for Expr {
 
     fn infer_locally(&mut self, env: &TypeMap) -> WeldResult<bool> {
         match self.kind {
-            // Literal values - force the type to match the literal.
-            Literal(I8Literal(_)) => self.ty.push_complete(Scalar(I8)),
-            Literal(I16Literal(_)) => self.ty.push_complete(Scalar(I16)),
-            Literal(I32Literal(_)) => self.ty.push_complete(Scalar(I32)),
-            Literal(I64Literal(_)) => self.ty.push_complete(Scalar(I64)),
-            Literal(U8Literal(_)) => self.ty.push_complete(Scalar(U8)),
-            Literal(U16Literal(_)) => self.ty.push_complete(Scalar(U16)),
-            Literal(U32Literal(_)) => self.ty.push_complete(Scalar(U32)),
-            Literal(U64Literal(_)) => self.ty.push_complete(Scalar(U64)),
-            Literal(F32Literal(_)) => self.ty.push_complete(Scalar(F32)),
-            Literal(F64Literal(_)) => self.ty.push_complete(Scalar(F64)),
-            Literal(BoolLiteral(_)) => self.ty.push_complete(Scalar(Bool)),
-            Literal(StringLiteral(_)) => self.ty.push_complete(Vector(Box::new(Scalar(I8)))),
+            Literal(I8Literal(_)) =>
+                self.ty.push_complete(Scalar(I8)),
+            Literal(I16Literal(_)) =>
+                self.ty.push_complete(Scalar(I16)),
+            Literal(I32Literal(_)) =>
+                self.ty.push_complete(Scalar(I32)),
+            Literal(I64Literal(_)) =>
+                self.ty.push_complete(Scalar(I64)),
+            Literal(U8Literal(_)) =>
+                self.ty.push_complete(Scalar(U8)),
+            Literal(U16Literal(_)) =>
+                self.ty.push_complete(Scalar(U16)),
+            Literal(U32Literal(_)) =>
+                self.ty.push_complete(Scalar(U32)),
+            Literal(U64Literal(_)) =>
+                self.ty.push_complete(Scalar(U64)),
+            Literal(F32Literal(_)) =>
+                self.ty.push_complete(Scalar(F32)),
+            Literal(F64Literal(_)) =>
+                self.ty.push_complete(Scalar(F64)),
+            Literal(BoolLiteral(_)) =>
+                self.ty.push_complete(Scalar(Bool)),
+            Literal(StringLiteral(_)) =>
+                self.ty.push_complete(Vector(Box::new(Scalar(I8)))),
 
             BinOp { kind: op, ref mut left, ref mut right } => {
                 // First, sync the left and right types into the elem_type.
@@ -297,6 +309,7 @@ impl InferTypesInternal for Expr {
                     Scalar(ref kind) if kind.is_float() => {
                         self.ty.push(&value.ty)
                     }
+                    Unknown => Ok(false),
                     _ => {
                         compile_err!("TODO")
                     }
@@ -323,6 +336,8 @@ impl InferTypesInternal for Expr {
                             set_types = true;
                         }
                     }
+                } else if child_expr.ty == Unknown {
+                    return Ok(false)
                 }
 
                 if !set_types {
@@ -417,124 +432,113 @@ impl InferTypesInternal for Expr {
                 }
             }
 
-        MakeStruct { ref mut elems } => {
-            let mut changed = false;
-            let ref base_type = Struct(vec![Unknown; elems.len()]);
-            changed |= self.ty.push(base_type)?;
+            MakeStruct { ref mut elems } => {
+                let mut changed = false;
+                let ref base_type = Struct(vec![Unknown; elems.len()]);
+                changed |= self.ty.push(base_type)?;
 
-            if let Struct(ref mut elem_types) = self.ty {
-                // Sync the type of each element and the expression struct type.
-                for (elem_ty, elem_expr) in elem_types.iter_mut().zip(elems.iter_mut()) {
-                    changed |= elem_ty.sync(&mut elem_expr.ty)?;
-                }
-                Ok(changed)
-            } else {
-                compile_err!("TODO")
-            }
-        }
-
-        GetField { expr: ref mut param, index } => {
-            if let Struct(ref mut elem_types) = param.ty {
-                let index = index as usize;
-                if index >= elem_types.len() {
-                    compile_err!("IndexError")
+                if let Struct(ref mut elem_types) = self.ty {
+                    // Sync the type of each element and the expression struct type.
+                    for (elem_ty, elem_expr) in elem_types.iter_mut().zip(elems.iter_mut()) {
+                        changed |= elem_ty.sync(&mut elem_expr.ty)?;
+                    }
+                    Ok(changed)
                 } else {
-                    self.ty.sync(&mut elem_types[index])
+                    compile_err!("TODO")
                 }
-            } else {
-                compile_err!("TODO")
             }
-        }
 
-        Length { ref mut data } => {
-            if let Vector(_) = data.ty {
-                self.ty.push_complete(Scalar(I64))
-            } else {
-                compile_err!("TODO")
-            }
-        }
-
-        Slice { ref mut data, ref mut index, ref mut size } => {
-            if let Vector(_) = data.ty {
-                let mut changed = false;
-                changed |= index.ty.push_complete(Scalar(I64))?;
-                changed |= size.ty.push_complete(Scalar(I64))?;
-                changed |= self.ty.push(&data.ty)?;
-                Ok(changed)
-            } else {
-                compile_err!("TODO")
-            }
-        }
-
-        Sort { ref mut data, ref mut keyfunc } => {
-            if let Vector(ref elem_type) = data.ty {
-                let mut changed = sync_function(keyfunc, vec![&elem_type])?;
-                changed |= self.ty.push(&data.ty)?;
-                Ok(changed)
-            } else {
-                compile_err!("TODO")
-            }
-        }
-
-        /*
-        Lookup {
-            ref mut data,
-            ref mut index,
-        } => {
-            if let Vector(ref elem_type) = data.ty {
-                let mut changed = false;
-                changed |= try!(push_complete_type(&mut index.ty, Scalar(I64), "Lookup"));
-                changed |= try!(push_type(&mut expr.ty, &elem_type, "Lookup"));
-                Ok(changed)
-            } else if let Dict(ref key_type, ref value_type) = data.ty {
-                let mut changed = false;
-                changed |= try!(push_type(&mut index.ty, &key_type, "Lookup"));
-                changed |= try!(push_type(&mut expr.ty, &value_type, "Lookup"));
-                Ok(changed)
-            } else if data.ty == Unknown {
-                Ok(false)
-            } else {
-                compile_err!("Internal error: Lookup called on {:?}", data.ty)
-            }
-        }
-
-        KeyExists {
-            ref mut data,
-            ref mut key,
-        } => {
-            if let Dict(ref key_type, _) = data.ty {
-                let mut changed = false;
-                changed |= try!(push_type(&mut key.ty, &key_type, "KeyExists"));
-                changed |= try!(push_complete_type(&mut expr.ty, Scalar(Bool), "KeyExists"));
-                Ok(changed)
-            } else if data.ty == Unknown {
-                Ok(false)
-            } else {
-                compile_err!("Internal error: KeyExists called on {:?}", data.ty)
-            }
-        }
-
-        Lambda {
-            ref mut params,
-            ref mut body,
-        } => {
-            let mut changed = false;
-
-            let base_type = Function(vec![Unknown; params.len()], Box::new(Unknown));
-            changed |= try!(push_type(&mut expr.ty, &base_type, "Lambda"));
-
-            if let Function(ref mut param_types, ref mut res_type) = expr.ty {
-                changed |= try!(sync_types(&mut body.ty, res_type, "Lambda return"));
-                for (param_ty, param_expr) in param_types.iter_mut().zip(params.iter_mut()) {
-                    changed |= try!(sync_types(param_ty, &mut param_expr.ty, "Lambda parameter"));
+            GetField { expr: ref mut param, index } => {
+                if let Struct(ref mut elem_types) = param.ty {
+                    let index = index as usize;
+                    if index >= elem_types.len() {
+                        compile_err!("IndexError")
+                    } else {
+                        self.ty.sync(&mut elem_types[index])
+                    }
+                } else {
+                    compile_err!("TODO")
                 }
-            } else {
-                return compile_err!("Internal error: type of Lambda was not Function");
             }
 
-            Ok(changed)
-        }
-        */
+            Length { ref mut data } => {
+                if let Vector(_) = data.ty {
+                    self.ty.push_complete(Scalar(I64))
+                } else {
+                    compile_err!("TODO")
+                }
+            }
+
+            Slice { ref mut data, ref mut index, ref mut size } => {
+                if let Vector(_) = data.ty {
+                    let mut changed = false;
+                    changed |= index.ty.push_complete(Scalar(I64))?;
+                    changed |= size.ty.push_complete(Scalar(I64))?;
+                    changed |= self.ty.push(&data.ty)?;
+                    Ok(changed)
+                } else {
+                    compile_err!("TODO")
+                }
+            }
+
+            Sort { ref mut data, ref mut keyfunc } => {
+                if let Vector(ref elem_type) = data.ty {
+                    let mut changed = sync_function(keyfunc, vec![&elem_type])?;
+                    changed |= self.ty.push(&data.ty)?;
+                    Ok(changed)
+                } else {
+                    compile_err!("TODO")
+                }
+            }
+
+            Lookup { ref mut data, ref mut index } => {
+                let mut changed = false;
+                match data.ty {
+                    Vector(ref elem_type) => {
+                        changed |= index.ty.push_complete(Scalar(I64))?;
+                        changed |= self.ty.push(elem_type)?;
+                        Ok(changed)
+                    }
+                    Dict(ref key_type, ref value_type) => {
+                        let mut changed = false;
+                        changed |= index.ty.push(key_type)?;
+                        changed |= self.ty.push(value_type)?;
+                        Ok(changed)
+                    }
+                    Unknown => Ok(false),
+                    _ => compile_err!("TODO"),
+                }
+            }
+
+            KeyExists { ref mut data, ref mut key } => {
+                if let Dict(ref key_type, _) = data.ty {
+                    let mut changed = false;
+                    changed |= key.ty.push(&key_type)?;
+                    changed |= self.ty.push_complete(Scalar(Bool))?;
+                    Ok(changed)
+                } else if data.ty == Unknown {
+                    Ok(false)
+                } else {
+                    compile_err!("TODO")
+                }
+            }
+
+            Lambda { ref mut params, ref mut body } => {
+                let mut changed = false;
+                let base_type = Function(vec![Unknown; params.len()], Box::new(Unknown));
+
+                changed |= self.ty.push(&base_type)?;
+
+                if let Function(ref mut param_types, ref mut res_type) = self.ty {
+                    changed |= body.ty.sync(res_type)?;
+                    for (param_ty, param_expr) in param_types.iter_mut().zip(params.iter_mut()) {
+                        changed |= param_ty.sync(&mut param_expr.ty)?;
+                    }
+                    Ok(changed)
+                } else {
+                    return compile_err!("TODO")
+                }
+            }
 
             _ => unimplemented!()
         }
