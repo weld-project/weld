@@ -4,7 +4,6 @@ extern crate fnv;
 
 use new_types::*;
 use new_types::LiteralKind::*;
-use new_types::BuilderKind::*;
 
 use fnv::FnvHashMap;
 
@@ -591,25 +590,75 @@ impl InferTypesInternal for Expr {
                 }
             }
 
-            /*
-            NewBuilder(ref mut e) => {
-                Ok(false)
+            NewBuilder(ref mut argument) => {
+                // NewBuilder is a special case where the expression can currently only be created
+                // via a type. If it doesn't have a type, throw a type inference error.
+                if let Builder(ref kind, _) = self.ty {
+                    // Handle the builders that may take arguments.
+                    match *kind {
+                        VecMerger(ref elem, _) => {
+                            if let Some(ref mut argument) = argument {
+                                argument.ty.push(&Vector(elem.clone()))
+                            } else {
+                                // Expected argument.
+                                compile_err!("TODO")
+                            }
+                        }
+                        Merger(ref elem, _) => {
+                            if let Some(ref mut argument) = argument {
+                                argument.ty.push(elem)
+                            } else {
+                                // Expected argument.
+                                compile_err!("TODO")
+                            }
+                        }
+                        Appender(_) => {
+                            if let Some(ref mut argument) = argument {
+                                argument.ty.push_complete(Scalar(I64))
+                            } else {
+                                Ok(false)
+                            }
+                        }
+                        _ => Ok(false)
+                    }
+                } else {
+                    compile_err!("TODO")
+                }
             }
 
             Merge { ref mut builder, ref mut value } => {
-                Ok(false)
+                let mut changed = false;
+                if let Builder(ref mut builder_kind, _) = builder.ty {
+                    let mut merge_type = builder_kind.merge_type();
+                    // If we are merging a SIMD value, sync with the SIMD merge type.
+                    // NOTE: This currently only works under the assumption that each
+                    // value in a SIMD program is SIMD-valued.
+                    if let Simd(_) = value.ty {
+                        merge_type = merge_type.simd_type()?;
+                    }
+                    changed |= value.ty.sync(&mut merge_type)?;
+                } else if builder.ty == Unknown {
+                    return Ok(false)
+                } else {
+                    return compile_err!("TODO")
+                }
+                changed |= self.ty.sync(&mut builder.ty)?;
+                Ok(changed)
             }
 
             Res { ref mut builder } => {
-                Ok(false)
+                if let Builder(ref mut kind, _) = builder.ty {
+                    self.ty.push(&kind.result_type())
+                } else if builder.ty == Unknown {
+                    Ok(false) 
+                } else {
+                    compile_err!("TODO")
+                }
             }
 
             For { ref mut iters, ref mut builder, ref mut func } => {
                 Ok(false)
             }
-            */
-
-            _ => unimplemented!(),
         }
     }
 }
