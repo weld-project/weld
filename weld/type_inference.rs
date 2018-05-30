@@ -11,6 +11,8 @@ use ast::ScalarKind::*;
 
 use error::*;
 
+use pretty_print::print_type;
+
 use fnv::FnvHashMap;
 
 type TypeMap = FnvHashMap<Symbol, Type>;
@@ -75,11 +77,11 @@ impl PushType for Type {
                 if let Vector(ref mut dest) = *self {
                     dest.push_complete(elem.as_ref().clone())
                 } else {
-                    compile_err!("TODO")
+                    compile_err!("Type mismatch: expected {} but got {}", print_type(&other), print_type(self))
                 }
             }
             _ => {
-                compile_err!("TODO")
+                compile_err!("Type mismatch: expected {} but got {}", print_type(&other), print_type(self))
             }
         }
     }
@@ -167,7 +169,7 @@ impl PushType for Type {
                     (&mut Appender(_), _) | (&mut DictMerger(_,_,_), _) |
                         (&mut GroupMerger(_,_), _) | (&mut VecMerger(_,_), _) |
                         (&mut Merger(_,_), _) => {
-                            compile_err!("TODO")
+                            compile_err!("Type mismatch: expected builder type {}", print_type(other))
                         }
                 }?;
 
@@ -181,8 +183,8 @@ impl PushType for Type {
                 Ok(changed)
             }
             (ref this, ref other) => {
-                // TODO: pretty print the types here.
-                compile_err!("Mismatched types: could not push type {:?} to {:?}", other, this)
+                compile_err!("Type mismatch: expected {} but got {}",
+                             print_type(other), print_type(this))
             }
         }
     }
@@ -190,18 +192,17 @@ impl PushType for Type {
 
 /// Force `expr`, which has kind `Lambda`, to have parameters that match `tys`.
 fn sync_function(expr: &mut Expr, tys: Vec<&Type>) -> WeldResult<bool> {
-    if let Function(ref mut params, _) = expr.ty {
-        if params.len() != tys.len() {
-            compile_err!("TODO")
-        } else {
+    match expr.ty {
+        Function(ref mut params, _) if params.len() == tys.len() => {
             let mut changed = false;
             for (param, ty) in params.iter_mut().zip(tys) {
                 changed |= param.push(ty)?;
             }
             Ok(changed)
         }
-    } else {
-        compile_err!("TODO")
+        _ => {
+            compile_err!("Expected function with {} arguments, but got {}", tys.len(), print_type(&expr.ty))
+        }
     }
 }
 
@@ -235,8 +236,6 @@ impl InferTypesInternal for Expr {
     /// leaves and propogating types up. The method returns whether the type of this expression or
     /// any subexpressions changed, or an error if one occurred.
     fn infer_up(&mut self, env: &mut TypeMap) -> WeldResult<bool> {
-        use super::pretty_print::print_typed_expr_without_indent;
-        println!("infer_up called on {}", print_typed_expr_without_indent(self));
         // Remember whether we inferred any new type.
         let mut changed = false;
         // Remember the old bindings so they can be restored.
@@ -256,7 +255,6 @@ impl InferTypesInternal for Expr {
                 for p in params {
                     let previous = env.insert(p.name.clone(), p.ty.clone());
                     old_bindings.push((p.name.clone(), previous));
-                    debug!("Environment update for Lambda: {:?}", env);
                 }
                 changed |= body.infer_up(env)?;
             }
@@ -343,14 +341,14 @@ impl InferTypesInternal for Expr {
                 Ok(changed)
             }
 
-            UnaryOp { ref value, .. } => {
+            UnaryOp { ref value, ref kind } => {
                 match value.ty {
                     Scalar(ref kind) if kind.is_float() => {
                         self.ty.push(&value.ty)
                     }
                     Unknown => Ok(false),
                     _ => {
-                        compile_err!("TODO")
+                        compile_err!("Expected floating-point type for unary op '{}'", kind)
                     }
                 }
             }
@@ -380,7 +378,7 @@ impl InferTypesInternal for Expr {
                 }
 
                 if !set_types {
-                    compile_err!("TODO")
+                    compile_err!("Expected dictionary argument for tovec(...), got {}", print_type(&child_expr.ty))
                 } else {
                     Ok(changed)
                 }
@@ -388,10 +386,9 @@ impl InferTypesInternal for Expr {
 
             Ident(ref symbol) => {
                 if let Some(ref ty) = env.get(symbol) {
-                    debug!("Identifier {:?} got type {:?}", symbol, ty);
                     self.ty.push(ty)
                 } else {
-                    compile_err!("TODO")
+                    compile_err!("Symbol {} is not defined", symbol)
                 }
             }
 
@@ -402,8 +399,10 @@ impl InferTypesInternal for Expr {
             Broadcast(ref c) => {
                 if let Scalar(ref kind) = c.ty {
                     self.ty.push(&Simd(kind.clone()))
+                } else if c.ty == Unknown {
+                    Ok(false)
                 } else {
-                    compile_err!("TODO")
+                    compile_err!("Expected scalar argument for broadcast, got {}", print_type(&c.ty))
                 }
             }
 
@@ -464,7 +463,11 @@ impl InferTypesInternal for Expr {
                 }
 
                 if !set_types || types.len() != vectors.len() {
-                    compile_err!("TODO")
+                    compile_err!("Expected vector types in zip, got types {}",
+                                 types.iter()
+                                    .map(|t| print_type(t))
+                                    .collect::<Vec<_>>()
+                                    .join(","))
                 } else {
                     let ref base_type = Vector(Box::new(Struct(types)));
                     changed |= self.ty.push(base_type)?;
@@ -484,7 +487,7 @@ impl InferTypesInternal for Expr {
                     }
                     Ok(changed)
                 } else {
-                    compile_err!("TODO")
+                    compile_err!("Type mismatch in struct literal")
                 }
             }
 
@@ -492,22 +495,24 @@ impl InferTypesInternal for Expr {
                 if let Struct(ref mut elem_types) = param.ty {
                     let index = index as usize;
                     if index >= elem_types.len() {
-                        compile_err!("IndexError")
+                        compile_err!("struct index error")
                     } else {
                         self.ty.sync(&mut elem_types[index])
                     }
                 } else if param.ty == Unknown {
                     Ok(false)
                 } else {
-                    compile_err!("TODO")
+                    compile_err!("Expected struct type for struct field access, got {}", print_type(&param.ty))
                 }
             }
 
             Length { ref mut data } => {
                 if let Vector(_) = data.ty {
                     self.ty.push_complete(Scalar(I64))
+                } else if data.ty == Unknown {
+                    Ok(false)
                 } else {
-                    compile_err!("TODO")
+                    compile_err!("Expected vector type in len, got {}", print_type(&data.ty))
                 }
             }
 
@@ -518,8 +523,10 @@ impl InferTypesInternal for Expr {
                     changed |= size.ty.push_complete(Scalar(I64))?;
                     changed |= self.ty.push(&data.ty)?;
                     Ok(changed)
+                } else if data.ty == Unknown {
+                    Ok(false)
                 } else {
-                    compile_err!("TODO")
+                    compile_err!("Expected vector type in slice, got {}", print_type(&data.ty))
                 }
             }
 
@@ -528,8 +535,10 @@ impl InferTypesInternal for Expr {
                     let mut changed = sync_function(keyfunc, vec![&elem_type])?;
                     changed |= self.ty.push(&data.ty)?;
                     Ok(changed)
+                } else if data.ty == Unknown {
+                    Ok(false)
                 } else {
-                    compile_err!("TODO")
+                    compile_err!("Expected vector type in sort, got {}", print_type(&data.ty))
                 }
             }
 
@@ -548,7 +557,9 @@ impl InferTypesInternal for Expr {
                         Ok(changed)
                     }
                     Unknown => Ok(false),
-                    _ => compile_err!("TODO"),
+                    _ => {
+                        compile_err!("Expected vector or dict type in lookup, got {}", print_type(&data.ty))
+                    }
                 }
             }
 
@@ -561,7 +572,7 @@ impl InferTypesInternal for Expr {
                 } else if data.ty == Unknown {
                     Ok(false)
                 } else {
-                    compile_err!("TODO")
+                    compile_err!("Expected dict type in lookup, got {}", print_type(&data.ty))
                 }
             }
 
@@ -578,7 +589,7 @@ impl InferTypesInternal for Expr {
                     }
                     Ok(changed)
                 } else {
-                    return compile_err!("TODO")
+                    compile_err!("Expected function type for lambda, got {}", print_type(&self.ty))
                 }
             }
 
@@ -593,13 +604,11 @@ impl InferTypesInternal for Expr {
             Iterate { ref mut initial, ref mut update_func } => {
                 let mut changed = self.ty.sync(&mut initial.ty)?;
                 match update_func.ty {
-                    // TODO(shoumik): Do we want to check whether the return type of the function is
-                    // the same as the function's return type?
                     Function(ref mut params, _) if params.len() == 1 => {
                         changed |= params.get_mut(0).unwrap().sync(&mut initial.ty)?;
                         Ok(changed)
                     }
-                    _ => compile_err!("TODO")
+                    _ => compile_err!("Expected function with single type in iterate, got {}", print_type(&update_func.ty))
                 }
             }
 
@@ -628,7 +637,7 @@ impl InferTypesInternal for Expr {
                     }
                     Ok(changed)
                 } else {
-                    compile_err!("TODO")
+                    compile_err!("Expected function type in apply, got {}", print_type(fty))
                 }
             }
 
@@ -642,8 +651,7 @@ impl InferTypesInternal for Expr {
                             if let Some(ref mut argument) = argument {
                                 argument.ty.push(&Vector(elem.clone()))
                             } else {
-                                // Expected argument.
-                                compile_err!("TODO")
+                                compile_err!("Expected single vector argument in vecmerger")
                             }
                         }
                         Merger(ref elem, _) => {
@@ -665,7 +673,7 @@ impl InferTypesInternal for Expr {
                 } else if self.ty == Unknown {
                     Ok(false)
                 } else {
-                    compile_err!("TODO")
+                    compile_err!("non-builder type when creating new builder")
                 }
             }
 
@@ -688,7 +696,7 @@ impl InferTypesInternal for Expr {
                 } else if builder.ty == Unknown {
                     return Ok(false)
                 } else {
-                    return compile_err!("TODO")
+                    return compile_err!("Expected builder type in merge, got {}", print_type(&builder.ty))
                 };
 
                 changed |= value.ty.sync(&mut merge_type)?;
@@ -748,7 +756,7 @@ impl InferTypesInternal for Expr {
                 } else if builder.ty == Unknown {
                     Ok(false)
                 } else {
-                    compile_err!("TODO")
+                    compile_err!("Expected builder type in result, got {}", print_type(&builder.ty))
                 }
             }
 
@@ -783,7 +791,7 @@ impl InferTypesInternal for Expr {
                         match iter.data.ty {
                             Vector(ref elem) => Ok(elem.as_ref().clone()),
                             Unknown => Ok(Unknown),
-                            _ => compile_err!("TODO")
+                            _ => compile_err!("Expected vector type in for loop iter, got {}", print_type(&iter.data.ty))
                         }
                     }
                 }).collect::<WeldResult<_>>()?;
@@ -803,16 +811,16 @@ impl InferTypesInternal for Expr {
                         // functinon is SIMD.
                         if params[2].ty.is_simd() {
                             if !iters.iter().all(|i| i.kind == IterKind::SimdIter) {
-                                return compile_err!("TODO");
+                                return compile_err!("for loop requires that either all or none of the iters are simditer")
                             }
                             elem_types = elem_types.simd_type()?;
                         } else if iters.iter().any(|i| i.kind == IterKind::SimdIter) {
-                            return compile_err!("TODO");
+                            return compile_err!("for loop requires that either all or none of the iters are simditer")
                         }
                     }
                     _ => {
                         // Invalid builder function.
-                        return compile_err!("TODO")
+                        return compile_err!("Expected builder function of type |builder, i64, elements|")
                     }
                 }
 
