@@ -6,12 +6,11 @@ use super::ast::BuilderKind::*;
 use super::ast::Type::*;
 use super::ast::ExprKind::*;
 use super::ast::LiteralKind::*;
-use super::partial_types::*;
 
 // TODO: These methods could take a mutable string as an argument, or even a fmt::Format.
 
 /// A trait for printing types.
-pub trait PrintableType: TypeBounds {
+pub trait PrintableType {
     fn print(&self) -> String;
 }
 
@@ -49,62 +48,23 @@ impl PrintableType for Type {
             Builder(Merger(ref t, op), ref annotations) => {
                 format!("{}merger[{},{}]", annotations, t.print(), op)
             }
-        }
-    }
-}
-
-/// Print implementation for PartialTypes
-impl PrintableType for PartialType {
-    fn print(&self) -> String {
-        use partial_types::PartialType::*;
-        use partial_types::PartialBuilderKind::*;
-        match *self {
-            Unknown => "?".to_string(),
-            Scalar(ref kind) => format!("{}", kind),
-            Simd(ref kind) => format!("simd[{}]", kind),
-            Vector(ref elem) => format!("vec[{}]", elem.print()),
-            Dict(ref kt, ref vt) => format!("dict[{},{}]", kt.print(), vt.print()),
-            Struct(ref elems) => join("{", ",", "}", elems.iter().map(|e| e.print())),
-            Function(ref params, ref ret) => {
-                let mut res = join("(", ",", ")=>", params.iter().map(|e| e.print()));
-                res.push_str(&ret.print());
-                res
-            }
-            Builder(Appender(ref elem), ref annotations) => {
-                format!("{}appender[{}]", annotations, elem.print())
-            }
-            Builder(DictMerger(ref kt, ref vt, _, op), ref annotations) => {
-                format!("{}dictmerger[{},{},{}]",
-                        annotations,
-                        kt.print(),
-                        vt.print(),
-                        op)
-            }
-            Builder(VecMerger(ref elem, _, op), ref annotations) => {
-                format!("{}vecmerger[{},{}]", annotations, elem.print(), op)
-            }
-            Builder(Merger(ref t, op), ref annotations) => {
-                format!("{}merger[{},{}]", annotations, t.print(), op)
-            }
-            Builder(GroupMerger(ref kt, ref vt, _), ref annotations) => {
-                format!("{}groupmerger[{},{}]", annotations, kt.print(), vt.print())
-            }
+            Unknown => String::from("?")
         }
     }
 }
 
 /// Print a type.
-pub fn print_type<T: PrintableType>(ty: &T) -> String {
+pub fn print_type(ty: &Type) -> String {
     ty.print()
 }
 
 /// Print an expression concisely (without any type annotations).
-pub fn print_expr<T: PrintableType>(expr: &Expr<T>) -> String {
+pub fn print_expr(expr: &Expr) -> String {
     print_expr_impl(expr, false, 2, true)
 }
 
 /// Print an expression concisely (without any type annotations), without indentation.
-pub fn print_expr_without_indent<T: PrintableType>(expr: &Expr<T>) -> String {
+pub fn print_expr_without_indent(expr: &Expr) -> String {
     print_expr_impl(expr, false, 2, false)
         .chars()
         .map(|x| match x {
@@ -115,12 +75,12 @@ pub fn print_expr_without_indent<T: PrintableType>(expr: &Expr<T>) -> String {
 }
 
 /// Print an expression with type annotations on all symbols.
-pub fn print_typed_expr<T: PrintableType>(expr: &Expr<T>) -> String {
+pub fn print_typed_expr(expr: &Expr) -> String {
     print_expr_impl(expr, true, 2, true)
 }
 
 /// Print an expression with type annotations on all symbols, without indentation.
-pub fn print_typed_expr_without_indent<T: PrintableType>(expr: &Expr<T>) -> String {
+pub fn print_typed_expr_without_indent(expr: &Expr) -> String {
     print_expr_impl(expr, true, 2, false)
         .chars()
         .map(|x| match x {
@@ -130,7 +90,7 @@ pub fn print_typed_expr_without_indent<T: PrintableType>(expr: &Expr<T>) -> Stri
         .collect()
 }
 
-fn print_iter_kind<T: PrintableType>(iter: &Iter<T>) -> &str {
+fn print_iter_kind(iter: &Iter) -> &str {
     match iter.kind {
         IterKind::ScalarIter => "",
         IterKind::SimdIter => "simd",
@@ -140,7 +100,7 @@ fn print_iter_kind<T: PrintableType>(iter: &Iter<T>) -> &str {
     }
 }
 
-fn print_iters<T: PrintableType>(iters: &Vec<Iter<T>>,
+fn print_iters(iters: &Vec<Iter>,
                                  typed: bool,
                                  indent: i32,
                                  should_indent: bool)
@@ -217,7 +177,7 @@ fn print_iters<T: PrintableType>(iters: &Vec<Iter<T>>,
 }
 
 /// Main work to print an expression.
-fn print_expr_impl<T: PrintableType>(expr: &Expr<T>,
+fn print_expr_impl(expr: &Expr,
                                      typed: bool,
                                      indent: i32,
                                      should_indent: bool)
@@ -560,7 +520,7 @@ pub fn print_literal(lit: &LiteralKind) -> String {
 }
 
 /// Print a parameter, optionally showing its type.
-fn print_parameter<T: PrintableType>(param: &Parameter<T>, typed: bool) -> String {
+fn print_parameter(param: &Parameter, typed: bool) -> String {
     if typed {
         format!("{}:{}", param.name, param.ty.print())
     } else {

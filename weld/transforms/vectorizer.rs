@@ -19,7 +19,7 @@ use parser::*;
 use type_inference::*;
 
 /// Vectorize an expression.
-pub fn vectorize(expr: &mut Expr<Type>) {
+pub fn vectorize(expr: &mut Expr) {
     let mut vectorized = false;
     // Used to create the identifiers which refer to the data items. These identifiers are
     // used to pull out the iter into a let statement. This lets us repeat the iter via an
@@ -93,7 +93,7 @@ pub fn vectorize(expr: &mut Expr<Type>) {
 }
 
 /// Predicate an `If` expression by checking for if(cond, merge(b, e), b) and transforms it to merge(b, select(cond, e,identity)).
-pub fn predicate_merge_expr(e: &mut Expr<Type>) {
+pub fn predicate_merge_expr(e: &mut Expr) {
     e.transform_and_continue_res(&mut |ref mut e| {
         if !(should_be_predicated(e)) {
             return Ok((None, true));
@@ -160,7 +160,7 @@ pub fn predicate_merge_expr(e: &mut Expr<Type>) {
 }
 
 /// Predicate an `If` expression by checking for if(cond, scalar1, scalar2) and transforms it to select(cond, scalar1, scalar2).
-pub fn predicate_simple_expr(e: &mut Expr<Type>) {
+pub fn predicate_simple_expr(e: &mut Expr) {
     e.transform_and_continue_res(&mut |ref mut e| {
         if !(should_be_predicated(e)) {
             return Ok((None, true));
@@ -194,7 +194,7 @@ pub fn predicate_simple_expr(e: &mut Expr<Type>) {
 /// Returns `true` if this is a set of iterators we can vectorize, `false` otherwise.
 ///
 /// We can vectorize an iterator if all of its iterators consume the entire collection.
-fn vectorizable_iters(iters: &Vec<Iter<Type>>) -> bool {
+fn vectorizable_iters(iters: &Vec<Iter>) -> bool {
     iters.iter().all(|ref iter| {
         iter.start.is_none() && iter.end.is_none() && iter.stride.is_none() && match iter.data.ty {
             Vector(ref elem) if elem.is_scalar() => true,
@@ -204,7 +204,7 @@ fn vectorizable_iters(iters: &Vec<Iter<Type>>) -> bool {
 }
 
 /// Vectorizes an expression in-place, also changing its type if needed.
-fn vectorize_expr(e: &mut Expr<Type>, broadcast_idens: &HashSet<Symbol>) -> WeldResult<bool> {
+fn vectorize_expr(e: &mut Expr, broadcast_idens: &HashSet<Symbol>) -> WeldResult<bool> {
     let mut new_expr = None;
     let mut cont = true;
 
@@ -255,7 +255,7 @@ fn vectorize_expr(e: &mut Expr<Type>, broadcast_idens: &HashSet<Symbol>) -> Weld
 /// Returns Some(true) if it is an appender, merger or a struct of builders with at least one appender or merger.
 /// Returns Some(false) if it is a builder, struct of builders, but no appender or mergers.
 /// Returns None if it is not a builder.
-fn vectorizable_builder(expr: &TypedExpr) -> Option<bool> {
+fn vectorizable_builder(expr: &Expr) -> Option<bool> {
     use ast::BuilderKind::*;
     match expr.kind {
         Ident(_) | NewBuilder(_) => {
@@ -285,7 +285,7 @@ fn vectorizable_builder(expr: &TypedExpr) -> Option<bool> {
 /// Checks basic vectorizability for a loop - this is a strong check which ensure that the only
 /// expressions which appear in a function body are vectorizable expressions (see
 /// `docs/internals/vectorization.md` for details)
-fn vectorizable(for_loop: &Expr<Type>) -> Option<HashSet<Symbol>> {
+fn vectorizable(for_loop: &Expr) -> Option<HashSet<Symbol>> {
     if let For { ref iters, builder: ref init_builder, ref func } = for_loop.kind {
         // Check if the iterators are consumed.
         if vectorizable_iters(&iters) {
@@ -391,11 +391,11 @@ fn vectorizable(for_loop: &Expr<Type>) -> Option<HashSet<Symbol>> {
     None
 }
 
-fn should_be_predicated(e: &mut Expr<Type>) -> bool {
+fn should_be_predicated(e: &mut Expr) -> bool {
     e.annotations.predicate()
 }
 
-fn get_id_element(ty: &Type, op: &BinOpKind) -> WeldResult<Option<Expr<Type>>> {
+fn get_id_element(ty: &Type, op: &BinOpKind) -> WeldResult<Option<Expr>> {
     let ref sk = match *ty {
         Scalar(sk) => sk,
         _ => {
@@ -436,9 +436,9 @@ fn get_id_element(ty: &Type, op: &BinOpKind) -> WeldResult<Option<Expr<Type>>> {
     Ok(Some(identity))
 }
 
-fn make_select_for_kv(cond:  Expr<Type>,
-                      kv:    Expr<Type>,
-                      ident: Expr<Type>) -> WeldResult<Option<Expr<Type>>> {
+fn make_select_for_kv(cond:  Expr,
+                      kv:    Expr,
+                      ident: Expr) -> WeldResult<Option<Expr>> {
     let mut sym_gen = SymbolGenerator::from_expression(&kv);
     let name = sym_gen.new_symbol("k");
     
@@ -454,16 +454,16 @@ fn make_select_for_kv(cond:  Expr<Type>,
 
 /// Parse and perform type inference on an expression.
 #[cfg(test)]
-fn typed_expr(code: &str) -> TypedExpr {
+fn typed_expr(code: &str) -> Expr {
     let mut e = parse_expr(code).unwrap();
-    assert!(infer_types(&mut e).is_ok());
-    e.to_typed().unwrap()
+    assert!(e.infer_types().is_ok());
+    e
 }
 
 /// Check whether a function has a vectorized Merge call. We'll use this to check whether function
 /// bodies got vectorized.
 #[cfg(test)]
-fn has_vectorized_merge(expr: &TypedExpr) -> bool {
+fn has_vectorized_merge(expr: &Expr) -> bool {
     let mut found = false;
     expr.traverse(&mut |ref e| if let Merge { ref value, .. } = e.kind {
                            found |= value.ty.is_simd();

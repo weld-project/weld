@@ -1,4 +1,4 @@
-//! Applies macros to an expression or program, yielding a final `PartialExpr`.
+//! Applies macros to an expression or program, yielding a final `Expr`.
 //!
 //! Caveats:
 //! - Macros that reuse a parameter twice have its expansion appear twice, instead of assigning
@@ -11,7 +11,6 @@ use super::ast::*;
 use super::ast::ExprKind::*;
 use super::program::*;
 use super::parser::*;
-use super::partial_types::*;
 use super::error::*;
 use super::util::SymbolGenerator;
 use super::annotations::*;
@@ -29,14 +28,14 @@ lazy_static! {
 }
 
 /// Apply macros to a program, including the standard macros built into Weld.
-pub fn process_program(program: &Program) -> WeldResult<PartialExpr> {
+pub fn process_program(program: &Program) -> WeldResult<Expr> {
     let mut all_macros = STANDARD_MACROS.clone();
     all_macros.extend(program.macros.iter().cloned());
     process_expression(&program.body, &all_macros)
 }
 
 /// Apply a specific list of macros to an expression (does not load the standard macros).
-pub fn process_expression(expr: &PartialExpr, macros: &Vec<Macro>) -> WeldResult<PartialExpr> {
+pub fn process_expression(expr: &Expr, macros: &Vec<Macro>) -> WeldResult<Expr> {
     let mut macro_map: HashMap<Symbol, &Macro> = HashMap::new();
     for m in macros {
         if macro_map.contains_key(&m.name) {
@@ -58,7 +57,7 @@ pub fn process_expression(expr: &PartialExpr, macros: &Vec<Macro>) -> WeldResult
     compile_err!("Marco expansion recursed past {} levels", MAX_MACRO_DEPTH)
 }
 
-fn apply_macros(expr: &mut PartialExpr,
+fn apply_macros(expr: &mut Expr,
                 macros: &HashMap<Symbol, &Macro>,
                 sym_gen: &mut SymbolGenerator)
                 -> WeldResult<bool> {
@@ -92,7 +91,7 @@ fn apply_macros(expr: &mut PartialExpr,
     Ok(changed)
 }
 
-fn update_defined_ids(expr: &mut PartialExpr, sym_gen: &mut SymbolGenerator) {
+fn update_defined_ids(expr: &mut Expr, sym_gen: &mut SymbolGenerator) {
     if let Let {
                name: ref mut sym,
                ref value,
@@ -100,7 +99,7 @@ fn update_defined_ids(expr: &mut PartialExpr, sym_gen: &mut SymbolGenerator) {
            } = expr.kind {
         if sym.id == 0 {
             let new_sym = sym_gen.new_symbol(&sym.name);
-            let new_ident = PartialExpr {
+            let new_ident = Expr {
                 kind: Ident(new_sym.clone()),
                 ty: value.ty.clone(),
                 annotations: Annotations::new(),
@@ -117,7 +116,7 @@ fn update_defined_ids(expr: &mut PartialExpr, sym_gen: &mut SymbolGenerator) {
             let sym = &mut param.name;
             if sym.id == 0 {
                 let new_sym = sym_gen.new_symbol(&sym.name);
-                let new_ident = PartialExpr {
+                let new_ident = Expr {
                     kind: Ident(new_sym.clone()),
                     ty: param.ty.clone(),
                     annotations: Annotations::new(),

@@ -33,7 +33,7 @@ use super::sir::StatementKind::*;
 use super::sir::Terminator::*;
 use super::sir::optimizations;
 use super::transforms::uniquify;
-use super::type_inference;
+use super::type_inference::InferTypes;
 use super::util::IdGenerator;
 use super::annotations::*;
 
@@ -104,7 +104,7 @@ impl CompiledModule {
     }
 }
 
-pub fn apply_opt_passes(expr: &mut TypedExpr,
+pub fn apply_opt_passes(expr: &mut Expr,
                         opt_passes: &Vec<Pass>,
                         stats: &mut CompilationStats,
                         use_experimental: bool) -> WeldResult<()> {
@@ -133,6 +133,7 @@ impl HasPointer for Type {
             Builder(_, _) => true,
             Struct(ref tys) => tys.iter().any(|ref t| t.has_pointer()),
             Function(_, _) => true,
+            Unknown => false,
         }
     }
 }
@@ -150,8 +151,7 @@ pub fn compile_program(program: &Program, conf: &ParsedConf, stats: &mut Compila
     let mut uniquify_dur = start.to(end);
 
     let start = PreciseTime::now();
-    type_inference::infer_types(&mut expr)?;
-    let mut expr = expr.to_typed()?;
+    expr.infer_types()?;
     let end = PreciseTime::now();
     debug!("After type inference:\n{}\n", print_typed_expr(&expr));
     stats.weld_times.push(("Type Inference".to_string(), start.to(end)));
@@ -2636,6 +2636,9 @@ impl LlvmGenerator {
         let serialize_fn = format!("{}.serialize", expr_ll_prefix);
 
         match *expr_ty {
+            Unknown => {
+                return compile_err!("Unexpected Unknown type in code gen");
+            }
             Scalar(_) | Struct(_) if !expr_ty.has_pointer() => {
                 // These are primitive pointer-less values that we can store directly into the
                 // buffer.
@@ -2819,6 +2822,9 @@ impl LlvmGenerator {
         let deserialize_fn = format!("{}.deserialize", output_ll_prefix);
 
         match *output_ty {
+            Unknown => {
+                return compile_err!("Unexpected Unknown type in code gen");
+            }
             Scalar(_) | Struct(_) if !output_ty.has_pointer() => {
                 let mut deserialize_code = CodeBuilder::new();
                 deserialize_code.add(format!("define i64 {}({} %buf, i64 %offset, {}* %resPtr) alwaysinline {{",
@@ -4691,10 +4697,10 @@ fn get_combined_params(sir: &SirProgram, par_for: &ParallelForData) -> BTreeMap<
 }
 
 #[cfg(test)]
-fn predicate_only(code: &str) -> WeldResult<TypedExpr> {
+fn predicate_only(code: &str) -> WeldResult<Expr> {
     let mut e = parse_expr(code).unwrap();
-    assert!(type_inference::infer_types(&mut e).is_ok());
-    let mut typed_e = e.to_typed().unwrap();
+    assert!(e.infer_types().is_ok());
+    let mut typed_e = e;
 
     let optstr = ["predicate"];
     let optpass = optstr.iter().map(|x| (*OPTIMIZATION_PASSES.get(x).unwrap()).clone()).collect();
@@ -4778,10 +4784,10 @@ fn types() {
     assert_eq!(gen.llvm_type(&Scalar(F64)).unwrap(), "double");
     assert_eq!(gen.llvm_type(&Scalar(Bool)).unwrap(), "i1");
 
-    let struct1 = parse_type("{i32,bool,i32}").unwrap().to_type().unwrap();
+    let struct1 = parse_type("{i32,bool,i32}").unwrap();
     assert_eq!(gen.llvm_type(&struct1).unwrap(), "%s0");
     assert_eq!(gen.llvm_type(&struct1).unwrap(), "%s0"); // Name is reused for same struct
 
-    let struct2 = parse_type("{i32,bool}").unwrap().to_type().unwrap();
+    let struct2 = parse_type("{i32,bool}").unwrap();
     assert_eq!(gen.llvm_type(&struct2).unwrap(), "%s1");
 }

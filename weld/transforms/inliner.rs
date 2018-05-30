@@ -10,7 +10,7 @@ use super::uniquify::uniquify;
 
 /// Inlines GetField(MakeStruct(*)) expressions, which can occur during loop fusion when some
 /// of the loops are zipping together multiple column vectors.
-pub fn inline_get_field<T: TypeBounds>(expr: &mut Expr<T>) {
+pub fn inline_get_field(expr: &mut Expr) {
     expr.transform(&mut |ref mut expr| {
         if let GetField { ref expr, index } = expr.kind {
             if let MakeStruct { ref elems } = expr.kind {
@@ -26,7 +26,7 @@ pub fn inline_get_field<T: TypeBounds>(expr: &mut Expr<T>) {
 /// such as map and filter into Iters in For loops.
 ///
 /// TODO(shoumik): Perhaps Zip should just be a macro? Then macros need to be ordered.
-pub fn inline_zips(expr: &mut Expr<Type>) {
+pub fn inline_zips(expr: &mut Expr) {
     expr.transform(&mut |ref mut e| {
         if let For {
                    ref mut iters,
@@ -76,7 +76,7 @@ pub fn inline_zips(expr: &mut Expr<Type>) {
 ///   it to a temporary as would happen with function application.
 /// - Does not complete inlining if some of the functions take functions as arguments (in that
 ///   case, the expressions after inlining may lead to more inlining).
-pub fn inline_apply<T: TypeBounds>(expr: &mut Expr<T>) {
+pub fn inline_apply(expr: &mut Expr) {
     expr.transform(&mut |ref mut expr| {
         if let Apply {
                    ref func,
@@ -99,7 +99,7 @@ pub fn inline_apply<T: TypeBounds>(expr: &mut Expr<T>) {
 
 /// Inlines Let calls if the symbol defined by the Let statement is used
 /// never or only one time.
-pub fn inline_let(expr: &mut Expr<Type>) {
+pub fn inline_let(expr: &mut Expr) {
     if let Ok(_) = uniquify(expr) {
         expr.transform(&mut |ref mut expr| {
             if let Let {
@@ -125,7 +125,7 @@ pub fn inline_let(expr: &mut Expr<Type>) {
 }
 
 /// Changes negations of literal values to be literal negated values.
-pub fn inline_negate(expr: &mut TypedExpr) {
+pub fn inline_negate(expr: &mut Expr) {
     use ast::LiteralKind::*;
     use exprs::literal_expr;
     expr.transform(&mut |ref mut expr| {
@@ -148,7 +148,7 @@ pub fn inline_negate(expr: &mut TypedExpr) {
 }
 
 /// Changes casts of literal values to be literal values of the casted type.
-pub fn inline_cast(expr: &mut TypedExpr) {
+pub fn inline_cast(expr: &mut Expr) {
     use ast::ScalarKind::*;
     use ast::LiteralKind::*;
     use exprs::literal_expr;
@@ -170,7 +170,7 @@ pub fn inline_cast(expr: &mut TypedExpr) {
 
 /// Checks if `expr` is a `GetField` on an identifier with name `sym`. If so,
 /// returns the field index being accessed.
-fn getfield_on_symbol(expr: &TypedExpr, sym: &Symbol) -> Option<u32> {
+fn getfield_on_symbol(expr: &Expr, sym: &Symbol) -> Option<u32> {
     if let GetField { ref expr, ref index } = expr.kind {
         if let Ident(ref ident_name) = expr.kind {
             if sym == ident_name {
@@ -197,7 +197,7 @@ fn getfield_on_symbol(expr: &TypedExpr, sym: &Symbol) -> Option<u32> {
 /// let us#1 = 4;
 /// us + us#1 + us#2
 ///
-pub fn unroll_structs(expr: &mut TypedExpr) {
+pub fn unroll_structs(expr: &mut Expr) {
     use exprs::*;
     use util::SymbolGenerator;
 
@@ -254,7 +254,7 @@ pub fn unroll_structs(expr: &mut TypedExpr) {
 
 
 /// Count the occurances of a `Symbol` in an expression.
-fn symbol_usage_count(sym: &Symbol, expr: &Expr<Type>) -> u32 {
+fn symbol_usage_count(sym: &Symbol, expr: &Expr) -> u32 {
     let mut usage_count = 0;
     expr.traverse(&mut |ref e| {
         if let For { ref func, .. } = e.kind {

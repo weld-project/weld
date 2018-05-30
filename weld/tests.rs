@@ -1,5 +1,4 @@
 use super::ast::{Expr, Type, ExprKind, Symbol};
-use super::partial_types::PartialType::Unknown;
 use super::parser::parse_expr;
 use super::pretty_print::*;
 use super::type_inference::*;
@@ -13,10 +12,10 @@ use super::transforms::uniquify::uniquify;
 
 /// Returns a typed expression.
 #[cfg(test)]
-fn typed_expression(s: &str) -> Expr<Type> {
-    let mut e1 = parse_expr(s).unwrap();
-    infer_types(&mut e1).unwrap();
-    e1.to_typed().unwrap()
+fn typed_expression(s: &str) -> Expr {
+    let mut expr = parse_expr(s).unwrap();
+    expr.infer_types().unwrap();
+    expr
 }
 
 #[test]
@@ -156,7 +155,7 @@ fn parse_and_print_typed_expr_without_indentations() {
                                   name: "a".to_string(),
                                   id: 1,
                               }),
-        ty: Unknown,
+        ty: Type::Unknown,
         annotations: Annotations::new(),
     };
     assert_eq!(print_typed_expr_without_indent(&e).as_str(), "a__1:?");
@@ -167,37 +166,37 @@ fn parse_and_print_typed_expr_without_indentations() {
     let mut e = parse_expr("let a = 2; a").unwrap();
     assert_eq!(print_typed_expr_without_indent(&e).as_str(),
                "(let a:?=(2);a:?)");
-    infer_types(&mut e).unwrap();
+    e.infer_types().unwrap();
     assert_eq!(print_typed_expr_without_indent(&e).as_str(),
                "(let a:i32=(2);a:i32)");
 
     let mut e = parse_expr("let a = 2; let a = false; a").unwrap();
-    infer_types(&mut e).unwrap();
+    e.infer_types().unwrap();
     assert_eq!(print_typed_expr_without_indent(&e).as_str(),
                "(let a:i32=(2);(let a:bool=(false);a:bool))");
 
     // Types should propagate from function parameters to body
     let mut e = parse_expr("|a:i32, b:i32| a + b").unwrap();
-    infer_types(&mut e).unwrap();
+    e.infer_types().unwrap();
     assert_eq!(print_typed_expr_without_indent(&e).as_str(),
                "|a:i32,b:i32|(a:i32+b:i32)");
 
     let mut e = parse_expr("|a:f32, b:f32| a + b").unwrap();
-    infer_types(&mut e).unwrap();
+    e.infer_types().unwrap();
     assert_eq!(print_typed_expr_without_indent(&e).as_str(),
                "|a:f32,b:f32|(a:f32+b:f32)");
 
     let mut e = parse_expr("let a = [1, 2, 3]; 1").unwrap();
-    infer_types(&mut e).unwrap();
+    e.infer_types().unwrap();
     assert_eq!(print_typed_expr_without_indent(&e).as_str(),
                "(let a:vec[i32]=([1,2,3]);1)");
 
     // Mismatched types in MakeVector
     let mut e = parse_expr("[1, true]").unwrap();
-    assert!(infer_types(&mut e).is_err());
+    assert!(e.infer_types().is_err());
 
     let mut e = parse_expr("for([1],appender[?],|b,i,x|merge(b,x))").unwrap();
-    infer_types(&mut e).unwrap();
+    e.infer_types().unwrap();
     assert_eq!(print_typed_expr_without_indent(&e).as_str(),
                "for([1],appender[i32],|b:appender[i32],i:i64,x:i32|merge(b:appender[i32],x:i32))");
 }

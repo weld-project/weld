@@ -139,7 +139,6 @@ mod llvm;
 mod macro_processor;
 mod passes;
 mod parser;
-mod partial_types;
 mod pretty_print;
 mod program;
 mod sir;
@@ -151,7 +150,6 @@ mod exprs;
 mod expr_hash;
 mod easy_ll;
 mod stats;
-mod new_types;
 
 // Public interfaces.
 // TODO these probably shouldn't all be public...

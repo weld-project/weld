@@ -12,7 +12,7 @@ struct NewAppender<'a> {
 }
 
 impl<'a> NewAppender<'a> {
-    fn extract(expr: &'a TypedExpr) -> Option<NewAppender<'a>> {
+    fn extract(expr: &'a Expr) -> Option<NewAppender<'a>> {
         if let NewBuilder(_) = expr.kind {
             if let Builder(Appender(ref elem_type), _) = expr.ty {
                 return Some(NewAppender{elem_type})
@@ -22,7 +22,7 @@ impl<'a> NewAppender<'a> {
     }
 }
 
-fn newbuilder_with_size(builder: &TypedExpr, length: TypedExpr) -> Option<TypedExpr> {
+fn newbuilder_with_size(builder: &Expr, length: Expr) -> Option<Expr> {
     if let Some(na) = NewAppender::extract(builder) {
         let bk = Appender(Box::new(na.elem_type.clone()));
         //let inferred_size = length_expr(vector.clone()).unwrap();
@@ -37,7 +37,7 @@ fn newbuilder_with_size(builder: &TypedExpr, length: TypedExpr) -> Option<TypedE
     None
 }
 
-fn func_has_simple_merge(expr: &TypedExpr) -> bool {
+fn func_has_simple_merge(expr: &Expr) -> bool {
     if let Lambda { ref params, ref body } = expr.kind {
         simple_merge(&params[0].name, body)
     } else {
@@ -46,7 +46,7 @@ fn func_has_simple_merge(expr: &TypedExpr) -> bool {
 }
 
 /// Infers the size of an `Appender` in a `For` loop.
-pub fn infer_size(expr: &mut Expr<Type>) {
+pub fn infer_size(expr: &mut Expr) {
     expr.transform_up(&mut |ref mut expr| {
         let mut sym_gen = SymbolGenerator::from_expression(&expr);
         if let For { ref mut iters, ref mut builder, ref mut func } = expr.kind {
@@ -121,7 +121,7 @@ pub fn infer_size(expr: &mut Expr<Type>) {
 
 /// Checks that `expr` performs only one `Merge` per control path - this guarantees
 /// that the loop containing `expr`'s size can be inferred.
-fn simple_merge(sym: &Symbol, expr: &Expr<Type>) -> bool {
+fn simple_merge(sym: &Symbol, expr: &Expr) -> bool {
     match expr.kind {
         Merge { ref builder, ref value } => {
             if let Ident(ref s) = builder.kind {

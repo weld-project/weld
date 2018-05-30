@@ -3,7 +3,7 @@ use ast::*;
 use ast::ExprKind::*;
 use exprs::*;
 
-pub fn short_circuit_booleans(expr: &mut TypedExpr) {
+pub fn short_circuit_booleans(expr: &mut Expr) {
     // For If statements annotated as predicated, do not apply the transform on the condition,
     // since it removes the predication opportunity.
     let applied = match expr.kind {
@@ -45,10 +45,10 @@ use type_inference::*;
 
 /// Parse and perform type inference on an expression.
 #[cfg(test)]
-fn typed_expr(code: &str) -> TypedExpr {
+fn typed_expr(code: &str) -> Expr {
     let mut e = parse_expr(code).unwrap();
-    assert!(infer_types(&mut e).is_ok());
-    e.to_typed().unwrap()
+    assert!(e.infer_types().is_ok());
+    e
 }
 
 #[test]

@@ -6,21 +6,16 @@
 use std::vec::Vec;
 use std::cmp::min;
 
-use super::ast::Symbol;
-use super::ast::Iter;
-use super::ast::BinOpKind;
+use super::ast::*;
+use super::ast::Type::*;
 use super::ast::BinOpKind::*;
-use super::ast::UnaryOpKind;
 use super::ast::UnaryOpKind::*;
 use super::ast::ExprKind::*;
 use super::ast::LiteralKind::*;
-use super::ast::ScalarKind;
+use super::ast::BuilderKind::*;
 use super::ast::IterKind::*;
 use super::colors::*;
 use super::error::*;
-use super::partial_types::*;
-use super::partial_types::PartialBuilderKind::*;
-use super::partial_types::PartialType::*;
 use super::program::*;
 use super::tokenizer::*;
 use super::tokenizer::Token::*;
@@ -64,7 +59,7 @@ pub fn parse_macros(input: &str) -> WeldResult<Vec<Macro>> {
 }
 
 /// Parse the complete input string as an expression.
-pub fn parse_expr(input: &str) -> WeldResult<PartialExpr> {
+pub fn parse_expr(input: &str) -> WeldResult<Expr> {
     let tokens = try!(tokenize(input));
     let mut parser = Parser::new(&tokens);
     let res = parser.expr().map(|b| *b);
@@ -72,8 +67,8 @@ pub fn parse_expr(input: &str) -> WeldResult<PartialExpr> {
     check_parse_error!(parser, res)
 }
 
-/// Parse the complete input string as a PartialType.
-pub fn parse_type(input: &str) -> WeldResult<PartialType> {
+/// Parse the complete input string as a Type.
+pub fn parse_type(input: &str) -> WeldResult<Type> {
     let tokens = try!(tokenize(input));
     let mut parser = Parser::new(&tokens);
     let res = parser.type_();
@@ -200,7 +195,7 @@ impl<'t> Parser<'t> {
     }
 
     /// Parse an expression starting at the current position.
-    fn expr(&mut self) -> WeldResult<Box<PartialExpr>> {
+    fn expr(&mut self) -> WeldResult<Box<Expr>> {
         if *self.peek() == TLet {
             self.let_expr()
         } else if *self.peek() == TBar || *self.peek() == TLogicalOr {
@@ -211,7 +206,7 @@ impl<'t> Parser<'t> {
     }
 
     /// Parse 'let name = value; body' starting at the current position.
-    fn let_expr(&mut self) -> WeldResult<Box<PartialExpr>> {
+    fn let_expr(&mut self) -> WeldResult<Box<Expr>> {
         try!(self.consume(TLet));
         let name = try!(self.symbol());
         let ty = try!(self.optional_type());
@@ -236,15 +231,15 @@ impl<'t> Parser<'t> {
     }
 
     /// Parse '|params| body' starting at the current position.
-    fn lambda_expr(&mut self) -> WeldResult<Box<PartialExpr>> {
-        let mut params: Vec<PartialParameter> = Vec::new();
+    fn lambda_expr(&mut self) -> WeldResult<Box<Expr>> {
+        let mut params: Vec<Parameter> = Vec::new();
         // The next token could be either '||' if there are no params, or '|' if there are some.
         let token = self.next();
         if *token == TBar {
             while *self.peek() != TBar {
                 let name = try!(self.symbol());
                 let ty = try!(self.optional_type());
-                params.push(PartialParameter { name: name, ty: ty });
+                params.push(Parameter { name: name, ty: ty });
                 if *self.peek() == TComma {
                     self.next();
                 } else if *self.peek() != TBar {
@@ -264,12 +259,12 @@ impl<'t> Parser<'t> {
     }
 
     /// Parse an expression involving operators (||, &&, +, -, etc down the precedence chain)
-    fn operator_expr(&mut self) -> WeldResult<Box<PartialExpr>> {
+    fn operator_expr(&mut self) -> WeldResult<Box<Expr>> {
         self.logical_or_expr()
     }
 
     /// Parse a logical or expression with terms separated by || (for operator precedence).
-    fn logical_or_expr(&mut self) -> WeldResult<Box<PartialExpr>> {
+    fn logical_or_expr(&mut self) -> WeldResult<Box<Expr>> {
         let mut res = try!(self.logical_and_expr());
         while *self.peek() == TLogicalOr {
             self.consume(TLogicalOr)?;
@@ -285,7 +280,7 @@ impl<'t> Parser<'t> {
     }
 
     /// Parse a logical and expression with terms separated by && (for operator precedence).
-    fn logical_and_expr(&mut self) -> WeldResult<Box<PartialExpr>> {
+    fn logical_and_expr(&mut self) -> WeldResult<Box<Expr>> {
         let mut res = try!(self.bitwise_or_expr());
         while *self.peek() == TLogicalAnd {
             self.consume(TLogicalAnd)?;
@@ -301,7 +296,7 @@ impl<'t> Parser<'t> {
     }
 
     /// Parse a bitwise or expression with terms separated by | (for operator precedence).
-    fn bitwise_or_expr(&mut self) -> WeldResult<Box<PartialExpr>> {
+    fn bitwise_or_expr(&mut self) -> WeldResult<Box<Expr>> {
         let mut res = try!(self.xor_expr());
         while *self.peek() == TBar {
             self.consume(TBar)?;
@@ -317,7 +312,7 @@ impl<'t> Parser<'t> {
     }
 
     /// Parse a bitwise or expression with terms separated by ^ (for operator precedence).
-    fn xor_expr(&mut self) -> WeldResult<Box<PartialExpr>> {
+    fn xor_expr(&mut self) -> WeldResult<Box<Expr>> {
         let mut res = try!(self.bitwise_and_expr());
         while *self.peek() == TXor {
             self.consume(TXor)?;
@@ -333,7 +328,7 @@ impl<'t> Parser<'t> {
     }
 
     /// Parse a bitwise and expression with terms separated by & (for operator precedence).
-    fn bitwise_and_expr(&mut self) -> WeldResult<Box<PartialExpr>> {
+    fn bitwise_and_expr(&mut self) -> WeldResult<Box<Expr>> {
         let mut res = try!(self.equality_expr());
         while *self.peek() == TBitwiseAnd {
             self.consume(TBitwiseAnd)?;
@@ -349,7 +344,7 @@ impl<'t> Parser<'t> {
     }
 
     /// Parse an == or != expression (for operator precedence).
-    fn equality_expr(&mut self) -> WeldResult<Box<PartialExpr>> {
+    fn equality_expr(&mut self) -> WeldResult<Box<Expr>> {
         let mut res = try!(self.comparison_expr());
         // Unlike other expressions, we only allow one operator here; prevents stuff like a==b==c
         if *self.peek() == TEqualEqual || *self.peek() == TNotEqual {
@@ -375,7 +370,7 @@ impl<'t> Parser<'t> {
     }
 
     /// Parse a <, >, <= or >= expression (for operator precedence).
-    fn comparison_expr(&mut self) -> WeldResult<Box<PartialExpr>> {
+    fn comparison_expr(&mut self) -> WeldResult<Box<Expr>> {
         let mut res = try!(self.sum_expr());
         // Unlike other expressions, we only allow one operator here; prevents stuff like a>b>c
         if *self.peek() == TLessThan || *self.peek() == TLessThanOrEqual ||
@@ -398,7 +393,7 @@ impl<'t> Parser<'t> {
     }
 
     /// Parse a sum expression with terms separated by + and - (for operator precedence).
-    fn sum_expr(&mut self) -> WeldResult<Box<PartialExpr>> {
+    fn sum_expr(&mut self) -> WeldResult<Box<Expr>> {
         let mut res = try!(self.product_expr());
         while *self.peek() == TPlus || *self.peek() == TMinus {
             let token = self.next();
@@ -423,7 +418,7 @@ impl<'t> Parser<'t> {
     }
 
     /// Parse a product expression with terms separated by *, / and % (for precedence).
-    fn product_expr(&mut self) -> WeldResult<Box<PartialExpr>> {
+    fn product_expr(&mut self) -> WeldResult<Box<Expr>> {
         let mut res = try!(self.ascribe_expr());
         while *self.peek() == TTimes || *self.peek() == TDivide || *self.peek() == TModulo {
             let op = match *self.next() {
@@ -443,7 +438,7 @@ impl<'t> Parser<'t> {
     }
 
     /// Parse a type abscription expression such as 'e: T', or lower-level ones in precedence.
-    fn ascribe_expr(&mut self) -> WeldResult<Box<PartialExpr>> {
+    fn ascribe_expr(&mut self) -> WeldResult<Box<Expr>> {
         let mut expr = try!(self.apply_expr());
         if *self.peek() == TColon {
             expr.ty = try!(self.optional_type());
@@ -452,7 +447,7 @@ impl<'t> Parser<'t> {
     }
 
     /// Parse application chain expression such as a.0().3().
-    fn apply_expr(&mut self) -> WeldResult<Box<PartialExpr>> {
+    fn apply_expr(&mut self) -> WeldResult<Box<Expr>> {
         let mut expr = try!(self.leaf_expr());
         while *self.peek() == TDot || *self.peek() == TOpenParen {
             if *self.next() == TDot {
@@ -476,7 +471,7 @@ impl<'t> Parser<'t> {
                 }
             } else {
                 // TOpenParen
-                let mut params: Vec<PartialExpr> = Vec::new();
+                let mut params: Vec<Expr> = Vec::new();
                 while *self.peek() != TCloseParen {
                     let param = try!(self.expr());
                     params.push(*param);
@@ -499,7 +494,7 @@ impl<'t> Parser<'t> {
 
     /// Parses a for loop iterator expression starting at the current position. This could also be
     /// a vector expression (i.e., without an explicit iter(..).
-    fn parse_iter(&mut self) -> WeldResult<Iter<PartialType>> {
+    fn parse_iter(&mut self) -> WeldResult<Iter> {
         let iter: Token = self.peek().clone();
         match iter {
             TScalarIter | TSimdIter | TFringeIter | TNdIter => {
@@ -587,7 +582,7 @@ impl<'t> Parser<'t> {
     }
 
     /// Parses a cast operation, the type being cast to is passed in as an argument.
-    fn parse_cast(&mut self, kind: ScalarKind) -> WeldResult<Box<PartialExpr>> {
+    fn parse_cast(&mut self, kind: ScalarKind) -> WeldResult<Box<Expr>> {
         if *self.next() != TOpenParen {
             return compile_err!("Expected '('");
         }
@@ -740,7 +735,7 @@ impl<'t> Parser<'t> {
     }
 
     /// Helper function for leaf_expr as all functions with unary args follow same pattern.
-    fn unary_leaf_expr(&mut self, token: Token) -> WeldResult<Box<PartialExpr>> {
+    fn unary_leaf_expr(&mut self, token: Token) -> WeldResult<Box<Expr>> {
         try!(self.consume(TOpenParen));
         let value = try!(self.expr());
         try!(self.consume(TCloseParen));
@@ -752,7 +747,7 @@ impl<'t> Parser<'t> {
     }
 
     /// Parse a terminal expression at the bottom of the precedence chain.
-    fn leaf_expr(&mut self) -> WeldResult<Box<PartialExpr>> {
+    fn leaf_expr(&mut self) -> WeldResult<Box<Expr>> {
         let mut annotations = Annotations::new();
         try!(self.parse_annotations(&mut annotations));
 
@@ -803,7 +798,7 @@ impl<'t> Parser<'t> {
             }
 
             TOpenBracket => {
-                let mut exprs: Vec<PartialExpr> = Vec::new();
+                let mut exprs: Vec<Expr> = Vec::new();
                 while *self.peek() != TCloseBracket {
                     let expr = try!(self.expr());
                     exprs.push(*expr);
@@ -818,7 +813,7 @@ impl<'t> Parser<'t> {
             }
 
             TOpenBrace => {
-                let mut exprs: Vec<PartialExpr> = Vec::new();
+                let mut exprs: Vec<Expr> = Vec::new();
                 while *self.peek() != TCloseBrace {
                     let expr = try!(self.expr());
                     exprs.push(*expr);
@@ -1097,7 +1092,7 @@ impl<'t> Parser<'t> {
             }
 
             TMerger => {
-                let elem_type: PartialType;
+                let elem_type: Type;
                 self.consume(TOpenBracket)?;
                 elem_type = self.type_()?;
                 self.consume(TComma)?;
@@ -1117,8 +1112,8 @@ impl<'t> Parser<'t> {
             }
 
             TDictMerger => {
-                let key_type: PartialType;
-                let value_type: PartialType;
+                let key_type: Type;
+                let value_type: Type;
                 try!(self.consume(TOpenBracket));
                 key_type = try!(self.type_());
                 try!(self.consume(TComma));
@@ -1139,8 +1134,6 @@ impl<'t> Parser<'t> {
                 let mut expr = expr_box(NewBuilder(arg), Annotations::new());
                 expr.ty = Builder(DictMerger(Box::new(key_type.clone()),
                                              Box::new(value_type.clone()),
-                                             Box::new(Struct(vec![key_type.clone(),
-                                                                  value_type.clone()])),
                                              bin_op),
                                   annotations);
                 Ok(expr)
@@ -1148,8 +1141,8 @@ impl<'t> Parser<'t> {
 
 
             TGroupMerger => {
-                let key_type: PartialType;
-                let value_type: PartialType;
+                let key_type: Type;
+                let value_type: Type;
                 try!(self.consume(TOpenBracket));
                 key_type = try!(self.type_());
                 try!(self.consume(TComma));
@@ -1157,15 +1150,13 @@ impl<'t> Parser<'t> {
                 try!(self.consume(TCloseBracket));
                 let mut expr = expr_box(NewBuilder(None), Annotations::new());
                 expr.ty = Builder(GroupMerger(Box::new(key_type.clone()),
-                                              Box::new(value_type.clone()),
-                                              Box::new(Struct(vec![key_type.clone(),
-                                                                   value_type.clone()]))),
+                                              Box::new(value_type.clone())),
                                   annotations);
                 Ok(expr)
             }
 
             TVecMerger => {
-                let elem_type: PartialType;
+                let elem_type: Type;
                 self.consume(TOpenBracket)?;
                 elem_type = self.type_()?;
                 self.consume(TComma)?;
@@ -1177,8 +1168,6 @@ impl<'t> Parser<'t> {
 
                 let mut expr = expr_box(NewBuilder(Some(expr)), Annotations::new());
                 expr.ty = Builder(VecMerger(Box::new(elem_type.clone()),
-                                            Box::new(Struct(vec![Scalar(ScalarKind::I64),
-                                                                 elem_type.clone()])),
                                             bin_op),
                                   annotations);
                 Ok(expr)
@@ -1250,9 +1239,9 @@ impl<'t> Parser<'t> {
         }
     }
 
-    /// Optionally parse a type annotation such as ": i32" and return the result as a PartialType;
+    /// Optionally parse a type annotation such as ": i32" and return the result as a Type;
     /// gives Unknown if there is no type annotation at the current position.
-    fn optional_type(&mut self) -> WeldResult<PartialType> {
+    fn optional_type(&mut self) -> WeldResult<Type> {
         if *self.peek() == TColon {
             try!(self.consume(TColon));
             self.type_()
@@ -1286,8 +1275,8 @@ impl<'t> Parser<'t> {
         }
     }
 
-    /// Parse a PartialType starting at the current input position.
-    fn type_(&mut self) -> WeldResult<PartialType> {
+    /// Parse a Type starting at the current input position.
+    fn type_(&mut self) -> WeldResult<Type> {
         let mut annotations = Annotations::new();
         try!(self.parse_annotations(&mut annotations));
 
@@ -1332,7 +1321,7 @@ impl<'t> Parser<'t> {
             }
 
             TMerger => {
-                let elem_type: PartialType;
+                let elem_type: Type;
                 self.consume(TOpenBracket)?;
                 elem_type = self.type_()?;
                 self.consume(TComma)?;
@@ -1344,8 +1333,8 @@ impl<'t> Parser<'t> {
 
 
             TDict => {
-                let key_type: PartialType;
-                let value_type: PartialType;
+                let key_type: Type;
+                let value_type: Type;
                 try!(self.consume(TOpenBracket));
                 key_type = try!(self.type_());
                 try!(self.consume(TComma));
@@ -1355,8 +1344,8 @@ impl<'t> Parser<'t> {
             }
 
             TDictMerger => {
-                let key_type: PartialType;
-                let value_type: PartialType;
+                let key_type: Type;
+                let value_type: Type;
                 self.consume(TOpenBracket)?;
                 key_type = self.type_()?;
                 self.consume(TComma)?;
@@ -1366,14 +1355,12 @@ impl<'t> Parser<'t> {
                 self.consume(TCloseBracket)?;
                 Ok(Builder(DictMerger(Box::new(key_type.clone()),
                                       Box::new(value_type.clone()),
-                                      Box::new(Struct(vec![key_type.clone(),
-                                                           value_type.clone()])),
                                       binop),
                            annotations))
             }
 
             TVecMerger => {
-                let elem_type: PartialType;
+                let elem_type: Type;
                 self.consume(TOpenBracket)?;
                 elem_type = self.type_()?;
                 self.consume(TComma)?;
@@ -1381,14 +1368,12 @@ impl<'t> Parser<'t> {
                 self.consume(TCloseBracket)?;
 
                 Ok(Builder(VecMerger(Box::new(elem_type.clone()),
-                                     Box::new(Struct(vec![Scalar(ScalarKind::I64),
-                                                          elem_type.clone()])),
                                      binop),
                            annotations))
             }
 
             TOpenBrace => {
-                let mut types: Vec<PartialType> = Vec::new();
+                let mut types: Vec<Type> = Vec::new();
                 while *self.peek() != TCloseBrace {
                     let ty = try!(self.type_());
                     types.push(ty);

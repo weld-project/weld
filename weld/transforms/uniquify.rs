@@ -10,7 +10,7 @@ extern crate fnv;
 
 /// Modifies symbol names so each symbol is unique in the AST.  Returns an error if an undeclared
 /// symbol appears in the program.
-pub fn uniquify<T: TypeBounds>(expr: &mut Expr<T>) -> WeldResult<()> {
+pub fn uniquify(expr: &mut Expr) -> WeldResult<()> {
     uniquify_helper(expr, &mut SymbolStack::new())
 }
 
@@ -74,7 +74,7 @@ impl SymbolStack {
 
 /// The main helper function for uniquify, which uses `SymbolStack` to track scope and assign
 /// unique names to each symbol. The prerequisite is that each symbol has `id = 0`.
-fn uniquify_helper<T: TypeBounds>(expr: &mut Expr<T>, symbol_stack: &mut SymbolStack) -> WeldResult<()> {
+fn uniquify_helper(expr: &mut Expr, symbol_stack: &mut SymbolStack) -> WeldResult<()> {
     match expr.kind {
         // First, handle expressions which define *new* symbols - Let and Lambda
         Lambda {ref mut params, ref mut body} => {
