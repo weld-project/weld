@@ -5,8 +5,10 @@ use easy_ll;
 
 extern crate time;
 extern crate fnv;
+extern crate code_builder;
 
 use time::PreciseTime;
+use code_builder::CodeBuilder;
 
 use common::WeldRuntimeErrno;
 
@@ -19,7 +21,6 @@ use super::ast::Type::*;
 use super::ast::LiteralKind::*;
 use super::ast::ScalarKind::*;
 use super::ast::BuilderKind::*;
-use super::code_builder::CodeBuilder;
 use super::error::*;
 use super::macro_processor;
 use super::passes::*;

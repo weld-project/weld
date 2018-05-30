@@ -4,6 +4,9 @@
 extern crate weld;
 extern crate libc;
 extern crate clap;
+extern crate code_builder;
+
+use code_builder::CodeBuilder;
 
 use weld::*;
 use weld::common::*;
@@ -19,7 +22,6 @@ use std::fs::File;
 use std::error::Error;
 use std::io::prelude::*;
 
-use weld::code_builder::CodeBuilder;
 use weld::util::IdGenerator;
 use weld::ast::*;
 
