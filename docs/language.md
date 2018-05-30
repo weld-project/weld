@@ -309,7 +309,7 @@ C UDFs require a special format within C code. In particular, a valid C UDF must
  * Each argument passed to the C UDF is a pointer. For example, A UDF which takes one argument `arg1: T1` must have its first argument be `T1*`.
  * The last argument is a pointer to the return type. Weld allocates space for the return type struct; the UDF just needs to write data back to this pointer. However, buffers which the return type itself contains *are not managed by Weld*. For example, if UDF returns a vector, the `{T*, int64_t}` struct representing the vector is owned by Weld, but the `T*` buffer is not.
  
- Note that C UDFs must take as input types understood by the Weld runtime; see the [API documentation](https://github.com/weld-project/weld/master/docs/api.md) for how each type looks in memory.
+ Note that C UDFs must take as input types understood by the Weld runtime; see the [API documentation](https://github.com/weld-project/weld/blob/master/docs/api.md) for how each type looks in memory.
  
  ### Examples
   
