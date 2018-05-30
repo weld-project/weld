@@ -22,7 +22,7 @@ time = "0.1.38"
 llvm-sys = "38.0.1"
 fnv = "1.0.5"
 clap = "2.31.1"
-
+code_builder = "0.1.0"
 
 [lib]
 path = "weld/lib.rs"

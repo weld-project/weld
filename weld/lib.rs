@@ -114,6 +114,7 @@ extern crate env_logger;
 extern crate chrono;
 extern crate fnv;
 extern crate time;
+extern crate code_builder;
 
 use libc::c_void;
 use self::time::PreciseTime;
@@ -159,7 +160,6 @@ pub mod util;
 pub mod common;
 pub mod ffi;
 pub mod runtime;
-pub mod code_builder;
 
 // Tests.
 #[cfg(test)]
