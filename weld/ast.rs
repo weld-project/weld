@@ -28,7 +28,7 @@ pub enum Type {
     Struct(Vec<Type>),
     /// A function with a list of arguments and return type.
     Function(Vec<Type>, Box<Type>),
-    /// An unknown type, used only for type inference.
+    /// An unknown type, used only before type inference.
     Unknown,
 }
 
