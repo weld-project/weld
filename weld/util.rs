@@ -22,7 +22,7 @@ impl SymbolGenerator {
     }
 
     /// Initialize a SymbolGenerator from all the symbols defined in an expression.
-    pub fn from_expression<T: TypeBounds>(expr: &Expr<T>) -> SymbolGenerator {
+    pub fn from_expression(expr: &Expr) -> SymbolGenerator {
         let mut id_map: fnv::FnvHashMap<String, i32> = fnv::FnvHashMap::default();
 
         let update_id = |id_map: &mut fnv::FnvHashMap<String, i32>, symbol: &Symbol| {

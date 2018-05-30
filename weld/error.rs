@@ -11,8 +11,6 @@ macro_rules! compile_err {
     })
 }
 
-
-
 /// A compilation error produced by Weld.
 #[derive(Debug, Clone)]
 pub struct WeldCompileError(String);

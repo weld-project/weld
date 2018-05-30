@@ -10,7 +10,7 @@ use super::error::*;
 use super::annotations::*;
 use super::pretty_print::print_type;
 
-pub fn new_expr(kind: ExprKind<Type>, ty: Type) -> WeldResult<Expr<Type>> {
+pub fn new_expr(kind: ExprKind, ty: Type) -> WeldResult<Expr> {
     Ok(Expr {
            kind: kind,
            ty: ty,
@@ -18,7 +18,7 @@ pub fn new_expr(kind: ExprKind<Type>, ty: Type) -> WeldResult<Expr<Type>> {
        })
 }
 
-pub fn literal_expr(kind: LiteralKind) -> WeldResult<Expr<Type>> {
+pub fn literal_expr(kind: LiteralKind) -> WeldResult<Expr> {
     new_expr(Literal(kind.clone()),
              match kind {
                  BoolLiteral(_) => Scalar(ScalarKind::Bool),
@@ -36,11 +36,11 @@ pub fn literal_expr(kind: LiteralKind) -> WeldResult<Expr<Type>> {
              })
 }
 
-pub fn ident_expr(symbol: Symbol, ty: Type) -> WeldResult<Expr<Type>> {
+pub fn ident_expr(symbol: Symbol, ty: Type) -> WeldResult<Expr> {
     new_expr(Ident(symbol), ty)
 }
 
-pub fn binop_expr(kind: BinOpKind, left: Expr<Type>, right: Expr<Type>) -> WeldResult<Expr<Type>> {
+pub fn binop_expr(kind: BinOpKind, left: Expr, right: Expr) -> WeldResult<Expr> {
     if left.ty != right.ty {
         compile_err!("Internal error: Mismatched types in binop_expr")
     } else {
@@ -54,7 +54,7 @@ pub fn binop_expr(kind: BinOpKind, left: Expr<Type>, right: Expr<Type>) -> WeldR
     }
 }
 
-pub fn unaryop_expr(kind: UnaryOpKind, value: Expr<Type>) -> WeldResult<Expr<Type>> {
+pub fn unaryop_expr(kind: UnaryOpKind, value: Expr) -> WeldResult<Expr> {
     let ty = value.ty.clone();
     new_expr(UnaryOp {
                  kind: kind,
@@ -62,7 +62,7 @@ pub fn unaryop_expr(kind: UnaryOpKind, value: Expr<Type>) -> WeldResult<Expr<Typ
              }, ty)
 }
 
-pub fn cast_expr(kind: ScalarKind, expr: Expr<Type>) -> WeldResult<Expr<Type>> {
+pub fn cast_expr(kind: ScalarKind, expr: Expr) -> WeldResult<Expr> {
     let ty = if let Scalar(_) = expr.ty {
         Scalar(kind)
     } else {
@@ -75,7 +75,7 @@ pub fn cast_expr(kind: ScalarKind, expr: Expr<Type>) -> WeldResult<Expr<Type>> {
              ty)
 }
 
-pub fn negate_expr(expr: Expr<Type>) -> WeldResult<Expr<Type>> {
+pub fn negate_expr(expr: Expr) -> WeldResult<Expr> {
     let ty = if let Scalar(ref k) = expr.ty {
         Scalar(k.clone())
     } else {
@@ -84,7 +84,7 @@ pub fn negate_expr(expr: Expr<Type>) -> WeldResult<Expr<Type>> {
     new_expr(Negate(Box::new(expr)), ty)
 }
 
-pub fn broadcast_expr(expr: Expr<Type>) -> WeldResult<Expr<Type>> {
+pub fn broadcast_expr(expr: Expr) -> WeldResult<Expr> {
     let ty = if let Scalar(ref k) = expr.ty {
         Simd(k.clone())
     } else {
@@ -93,7 +93,7 @@ pub fn broadcast_expr(expr: Expr<Type>) -> WeldResult<Expr<Type>> {
     new_expr(Broadcast(Box::new(expr)), ty)
 }
 
-pub fn tovec_expr(expr: Expr<Type>) -> WeldResult<Expr<Type>> {
+pub fn tovec_expr(expr: Expr) -> WeldResult<Expr> {
     let ty = if let Dict(ref kt, ref vt) = expr.ty {
         Struct(vec![*kt.clone(), *vt.clone()])
     } else {
@@ -102,12 +102,12 @@ pub fn tovec_expr(expr: Expr<Type>) -> WeldResult<Expr<Type>> {
     new_expr(ToVec { child_expr: Box::new(expr.clone()) }, ty)
 }
 
-pub fn makestruct_expr(exprs: Vec<Expr<Type>>) -> WeldResult<Expr<Type>> {
+pub fn makestruct_expr(exprs: Vec<Expr>) -> WeldResult<Expr> {
     let ty = Struct(exprs.iter().map(|e| e.ty.clone()).collect());
     new_expr(MakeStruct { elems: exprs }, ty)
 }
 
-pub fn makevector_expr(exprs: Vec<Expr<Type>>) -> WeldResult<Expr<Type>> {
+pub fn makevector_expr(exprs: Vec<Expr>) -> WeldResult<Expr> {
     let ty = exprs[0].ty.clone();
     if exprs.iter().all(|e| e.ty == ty) {
         new_expr(MakeVector { elems: exprs }, Vector(Box::new(ty)))
@@ -117,7 +117,7 @@ pub fn makevector_expr(exprs: Vec<Expr<Type>>) -> WeldResult<Expr<Type>> {
 }
 
 /// Version of makevector_expr that is compatible with empty vectors.
-pub fn makevector_expr_typed(exprs: Vec<Expr<Type>>, ty: Type) -> WeldResult<Expr<Type>> {
+pub fn makevector_expr_typed(exprs: Vec<Expr>, ty: Type) -> WeldResult<Expr> {
     if exprs.iter().all(|e| e.ty == ty) {
         new_expr(MakeVector { elems: exprs }, Vector(Box::new(ty.clone())))
     } else {
@@ -125,7 +125,7 @@ pub fn makevector_expr_typed(exprs: Vec<Expr<Type>>, ty: Type) -> WeldResult<Exp
     }
 }
 
-pub fn getfield_expr(expr: Expr<Type>, index: u32) -> WeldResult<Expr<Type>> {
+pub fn getfield_expr(expr: Expr, index: u32) -> WeldResult<Expr> {
     let ty = if let Struct(ref tys) = expr.ty {
         tys[index as usize].clone()
     } else {
@@ -138,7 +138,7 @@ pub fn getfield_expr(expr: Expr<Type>, index: u32) -> WeldResult<Expr<Type>> {
              ty)
 }
 
-pub fn length_expr(expr: Expr<Type>) -> WeldResult<Expr<Type>> {
+pub fn length_expr(expr: Expr) -> WeldResult<Expr> {
     if let Vector(_) = expr.ty {
         new_expr(Length { data: Box::new(expr) }, Scalar(ScalarKind::I64))
     } else {
@@ -146,7 +146,7 @@ pub fn length_expr(expr: Expr<Type>) -> WeldResult<Expr<Type>> {
     }
 }
 
-pub fn lookup_expr(data: Expr<Type>, index: Expr<Type>) -> WeldResult<Expr<Type>> {
+pub fn lookup_expr(data: Expr, index: Expr) -> WeldResult<Expr> {
     let err = compile_err!("Internal error: Mismatched types in lookup_expr");
     let ty = if let Vector(ref ty) = data.ty {
         *ty.clone()
@@ -165,7 +165,7 @@ pub fn lookup_expr(data: Expr<Type>, index: Expr<Type>) -> WeldResult<Expr<Type>
     }
 }
 
-pub fn keyexists_expr(data: Expr<Type>, key: Expr<Type>) -> WeldResult<Expr<Type>> {
+pub fn keyexists_expr(data: Expr, key: Expr) -> WeldResult<Expr> {
     let err = compile_err!("Internal error: Mismatched types in keyexists_expr");
     let kt = if let Dict(ref kt, _) = data.ty {
         *kt.clone()
@@ -183,7 +183,7 @@ pub fn keyexists_expr(data: Expr<Type>, key: Expr<Type>) -> WeldResult<Expr<Type
              Scalar(ScalarKind::Bool))
 }
 
-pub fn slice_expr(data: Expr<Type>, index: Expr<Type>, size: Expr<Type>) -> WeldResult<Expr<Type>> {
+pub fn slice_expr(data: Expr, index: Expr, size: Expr) -> WeldResult<Expr> {
     let mut type_checked = 0;
 
     if let Vector(_) = data.ty {
@@ -211,7 +211,7 @@ pub fn slice_expr(data: Expr<Type>, index: Expr<Type>, size: Expr<Type>) -> Weld
              ty)
 }
 
-pub fn sort_expr(data: Expr<Type>, keyfunc: Expr<Type>) -> WeldResult<Expr<Type>> {
+pub fn sort_expr(data: Expr, keyfunc: Expr) -> WeldResult<Expr> {
     let mut type_checked = false;
 
     if let Vector(ref vec_ty) = data.ty {
@@ -237,7 +237,7 @@ pub fn sort_expr(data: Expr<Type>, keyfunc: Expr<Type>) -> WeldResult<Expr<Type>
              ty)
 }
 
-pub fn let_expr(name: Symbol, value: Expr<Type>, body: Expr<Type>) -> WeldResult<Expr<Type>> {
+pub fn let_expr(name: Symbol, value: Expr, body: Expr) -> WeldResult<Expr> {
     let ty = body.ty.clone();
     new_expr(Let {
                  name: name,
@@ -247,7 +247,7 @@ pub fn let_expr(name: Symbol, value: Expr<Type>, body: Expr<Type>) -> WeldResult
              ty)
 }
 
-pub fn if_expr(cond: Expr<Type>, on_true: Expr<Type>, on_false: Expr<Type>) -> WeldResult<Expr<Type>> {
+pub fn if_expr(cond: Expr, on_true: Expr, on_false: Expr) -> WeldResult<Expr> {
     let err = compile_err!("Internal error: Mismatched types in if_expr");
     if cond.ty != Scalar(ScalarKind::Bool) {
         return err;
@@ -266,7 +266,7 @@ pub fn if_expr(cond: Expr<Type>, on_true: Expr<Type>, on_false: Expr<Type>) -> W
              ty)
 }
 
-pub fn select_expr(cond: Expr<Type>, on_true: Expr<Type>, on_false: Expr<Type>) -> WeldResult<Expr<Type>> {
+pub fn select_expr(cond: Expr, on_true: Expr, on_false: Expr) -> WeldResult<Expr> {
     let err = compile_err!("Internal error: Mismatched types in select_expr");
     if cond.ty != Scalar(ScalarKind::Bool) && cond.ty != Simd(ScalarKind::Bool) {
         return err;
@@ -285,7 +285,7 @@ pub fn select_expr(cond: Expr<Type>, on_true: Expr<Type>, on_false: Expr<Type>) 
              ty)
 }
 
-pub fn lambda_expr(params: Vec<Parameter<Type>>, body: Expr<Type>) -> WeldResult<Expr<Type>> {
+pub fn lambda_expr(params: Vec<Parameter>, body: Expr) -> WeldResult<Expr> {
     let ty = Function(params.iter().map(|p| p.ty.clone()).collect(),
                       Box::new(body.ty.clone()));
     new_expr(Lambda {
@@ -295,7 +295,7 @@ pub fn lambda_expr(params: Vec<Parameter<Type>>, body: Expr<Type>) -> WeldResult
              ty)
 }
 
-pub fn apply_expr(func: Expr<Type>, params: Vec<Expr<Type>>) -> WeldResult<Expr<Type>> {
+pub fn apply_expr(func: Expr, params: Vec<Expr>) -> WeldResult<Expr> {
     let err = compile_err!("Internal error: Mismatched types in apply_expr");
     let mut passed = false;
     let mut ty = None;
@@ -317,7 +317,7 @@ pub fn apply_expr(func: Expr<Type>, params: Vec<Expr<Type>>) -> WeldResult<Expr<
              *ty.unwrap())
 }
 
-pub fn cudf_expr(sym_name: String, args: Vec<Expr<Type>>, return_ty: Type) -> WeldResult<Expr<Type>> {
+pub fn cudf_expr(sym_name: String, args: Vec<Expr>, return_ty: Type) -> WeldResult<Expr> {
     new_expr(CUDF {
                  sym_name: sym_name,
                  args: args,
@@ -326,7 +326,7 @@ pub fn cudf_expr(sym_name: String, args: Vec<Expr<Type>>, return_ty: Type) -> We
              return_ty)
 }
 
-pub fn newbuilder_expr(kind: BuilderKind, expr: Option<Expr<Type>>) -> WeldResult<Expr<Type>> {
+pub fn newbuilder_expr(kind: BuilderKind, expr: Option<Expr>) -> WeldResult<Expr> {
     let passed = match kind {
         Merger(ref ty, _) => {
             let mut passed = false;
@@ -372,7 +372,7 @@ pub fn newbuilder_expr(kind: BuilderKind, expr: Option<Expr<Type>>) -> WeldResul
 }
 
 // TODO - the vectorized flag is temporary!
-pub fn for_expr(iters: Vec<Iter<Type>>, builder: Expr<Type>, func: Expr<Type>, vectorized: bool) -> WeldResult<Expr<Type>> {
+pub fn for_expr(iters: Vec<Iter>, builder: Expr, func: Expr, vectorized: bool) -> WeldResult<Expr> {
 
     let vec_tys = iters.iter().map(|i| i.data.ty.clone()).collect::<Vec<_>>();
     let mut vec_elem_tys = vec![];
@@ -457,7 +457,7 @@ pub fn for_expr(iters: Vec<Iter<Type>>, builder: Expr<Type>, func: Expr<Type>, v
              builder_ty)
 }
 
-pub fn merge_expr(builder: Expr<Type>, value: Expr<Type>) -> WeldResult<Expr<Type>> {
+pub fn merge_expr(builder: Expr, value: Expr) -> WeldResult<Expr> {
     let err = compile_err!("Internal error: Mismatched types in merge_expr");
     if let Builder(ref bk, _) = builder.ty {
         match *bk {
@@ -525,7 +525,7 @@ pub fn merge_expr(builder: Expr<Type>, value: Expr<Type>) -> WeldResult<Expr<Typ
              ty)
 }
 
-pub fn result_expr(builder: Expr<Type>) -> WeldResult<Expr<Type>> {
+pub fn result_expr(builder: Expr) -> WeldResult<Expr> {
     let err = compile_err!("Internal error: Mismatched types in result_expr");
     let ty = if let Builder(ref bk, _) = builder.ty {
         match *bk {
@@ -565,7 +565,7 @@ fn binop_test() {
 
 #[test]
 fn makevector_empty_test() {
-    let vector = makevector_expr_typed(vec![], Scalar(ScalarKind::I32)).unwrap();
+    let _vector = makevector_expr_typed(vec![], Scalar(ScalarKind::I32)).unwrap();
 }
 
 #[test]

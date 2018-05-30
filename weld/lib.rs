@@ -35,7 +35,7 @@
 //! let ref conf = WeldConf::new();
 //! let mut module = WeldModule::compile(code, conf).unwrap();
 //!
-//! // Weld accept packed C structs as an argument.
+//! // Weld accepts a packed C struct as an argument.
 //! let ref args = MyArgs { a: 1, b: 50 };
 //! let ref input = WeldValue::new_from_data(args as *const _ as Data);
 //!
@@ -140,7 +140,6 @@ mod llvm;
 mod macro_processor;
 mod passes;
 mod parser;
-mod partial_types;
 mod pretty_print;
 mod program;
 mod sir;

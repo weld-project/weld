@@ -31,7 +31,7 @@ use util::SymbolGenerator;
 ///     - Like all Zip-based transforms, this function currently assumes that the output of each
 ///     expression in the Zip is the same length.
 ///
-pub fn fuse_loops_horizontal(expr: &mut Expr<Type>) {
+pub fn fuse_loops_horizontal(expr: &mut Expr) {
     expr.transform(&mut |ref mut expr| {
         let mut sym_gen = SymbolGenerator::from_expression(expr);
         if let For{iters: ref all_iters, builder: ref outer_bldr, func: ref outer_func} = expr.kind {
@@ -178,7 +178,7 @@ pub fn fuse_loops_horizontal(expr: &mut Expr<Type>) {
 
 /// Fuses loops where one for loop takes another as it's input, which prevents intermediate results
 /// from being materialized.
-pub fn fuse_loops_vertical(expr: &mut Expr<Type>) {
+pub fn fuse_loops_vertical(expr: &mut Expr) {
     expr.transform_and_continue_res(&mut |ref mut expr| {
         let mut sym_gen = SymbolGenerator::from_expression(expr);
         if let For { iters: ref all_iters, builder: ref bldr1, func: ref nested } = expr.kind {
@@ -206,7 +206,7 @@ pub fn fuse_loops_vertical(expr: &mut Expr<Type>) {
 }
 
 /// Given an iterator, returns whether the iterator consumes every element of its data vector.
-fn consumes_all(iter: &Iter<Type>) -> bool {
+fn consumes_all(iter: &Iter) -> bool {
     if let &Iter {
                start: None,
                end: None,
@@ -245,14 +245,14 @@ fn consumes_all(iter: &Iter<Type>) -> bool {
 /// Given a lambda which takes a builder and an argument, returns a new function which takes a new
 /// builder type and calls nested on the values it would've merged into its old builder. This
 /// allows us to "compose" merge functions and avoid creating intermediate results.
-fn replace_builder(lambda: &Expr<Type>,
-                   nested: &Expr<Type>,
+fn replace_builder(lambda: &Expr,
+                   nested: &Expr,
                    sym_gen: &mut SymbolGenerator)
-                   -> WeldResult<Expr<Type>> {
+                   -> WeldResult<Expr> {
 
     // Tests whether an identifier and symbol refer to the same value by
     // comparing the symbols.
-    fn same_iden(a: &ExprKind<Type>, b: &Symbol) -> bool {
+    fn same_iden(a: &ExprKind, b: &Symbol) -> bool {
         if let Ident(ref symbol) = *a {
             symbol == b
         } else {
@@ -274,7 +274,7 @@ fn replace_builder(lambda: &Expr<Type>,
             // Fix expressions to use the new builder.
             new_body.transform_and_continue_res(&mut |ref mut e| match e.kind {
                 Merge { ref builder, ref value } if same_iden(&(*builder).kind, &old_bldr.name) => {
-                    let params: Vec<Expr<Type>> = vec![new_bldr.clone(), new_index.clone(), *value.clone()];
+                    let params: Vec<Expr> = vec![new_bldr.clone(), new_index.clone(), *value.clone()];
                     let mut expr = exprs::apply_expr(nested.clone(), params)?;
                     inline_apply(&mut expr);
                     Ok((Some(expr), true))
@@ -315,7 +315,7 @@ fn replace_builder(lambda: &Expr<Type>,
 
 /// Given a root type, forces each expression to return that type. TODO For now, only supporting
 /// expressions which can be builders. We might want to factor this out to be somewhere else.
-fn match_types(root_ty: &Type, expr: &mut Expr<Type>) {
+fn match_types(root_ty: &Type, expr: &mut Expr) {
     expr.ty = root_ty.clone();
     match expr.kind {
         If { ref mut on_true, ref mut on_false, ..} => {

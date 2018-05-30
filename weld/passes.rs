@@ -14,7 +14,7 @@ use super::expr_hash::*;
 
 use std::collections::HashMap;
 
-pub type PassFn = fn(&mut Expr<Type>);
+pub type PassFn = fn(&mut Expr);
 
 /// A single IR to IR transformation.
 #[derive(Clone)]
@@ -53,7 +53,7 @@ impl Pass {
         }
     }
 
-    pub fn transform(&self, mut expr: &mut Expr<Type>, use_experimental: bool) -> WeldResult<()> {
+    pub fn transform(&self, mut expr: &mut Expr, use_experimental: bool) -> WeldResult<()> {
         let mut continue_pass = true;
         let mut before = ExprHash::from(expr)?.value();
         while continue_pass {

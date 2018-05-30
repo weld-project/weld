@@ -406,12 +406,12 @@ pub struct SirProgram {
     /// funcs[0] is the main function
     pub funcs: Vec<SirFunction>,
     pub ret_ty: Type,
-    pub top_params: Vec<TypedParameter>,
+    pub top_params: Vec<Parameter>,
     sym_gen: SymbolGenerator,
 }
 
 impl SirProgram {
-    pub fn new(ret_ty: &Type, top_params: &Vec<TypedParameter>) -> SirProgram {
+    pub fn new(ret_ty: &Type, top_params: &Vec<Parameter>) -> SirProgram {
         let mut prog = SirProgram {
             funcs: vec![],
             ret_ty: ret_ty.clone(),
@@ -791,7 +791,7 @@ fn sir_param_correction(prog: &mut SirProgram) -> WeldResult<()> {
 }
 
 /// Convert an AST to a SIR program. Symbols must be unique in expr.
-pub fn ast_to_sir(expr: &TypedExpr, multithreaded: bool) -> WeldResult<SirProgram> {
+pub fn ast_to_sir(expr: &Expr, multithreaded: bool) -> WeldResult<SirProgram> {
     if let ExprKind::Lambda { ref params, ref body } = expr.kind {
         let mut prog = SirProgram::new(&expr.ty, params);
         prog.sym_gen = SymbolGenerator::from_expression(expr);
@@ -814,7 +814,7 @@ pub fn ast_to_sir(expr: &TypedExpr, multithreaded: bool) -> WeldResult<SirProgra
 /// Helper method for gen_expr. Used to process the fields of ParallelForIter, like "start",
 /// "shape" etc. Returns None, or the Symbol associated with the field. It also resets values for
 /// cur_func, and cur_block.
-fn get_iter_sym(opt : &Option<Box<Expr<Type>>>,
+fn get_iter_sym(opt : &Option<Box<Expr>>,
             prog: &mut SirProgram,
             cur_func: &mut FunctionId,
             cur_block: &mut BasicBlockId,
@@ -841,7 +841,7 @@ fn get_iter_sym(opt : &Option<Box<Expr<Type>>>,
 /// Generate code to compute the expression `expr` starting at the current tail of `cur_block`,
 /// possibly creating new basic blocks and functions in the process. Return the function and
 /// basic block that the expression will be ready in, and its symbol therein.
-fn gen_expr(expr: &TypedExpr,
+fn gen_expr(expr: &Expr,
             prog: &mut SirProgram,
             cur_func: FunctionId,
             cur_block: BasicBlockId,
@@ -1356,7 +1356,7 @@ fn gen_expr(expr: &TypedExpr,
 }
 
 /// Return true if an expression contains parallel for operators
-fn contains_parallel_expressions(expr: &TypedExpr) -> bool {
+fn contains_parallel_expressions(expr: &Expr) -> bool {
     let mut found = false;
     expr.traverse(&mut |ref e| {
         if let ExprKind::For { .. } = e.kind {

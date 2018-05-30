@@ -13,12 +13,12 @@ use util::SymbolGenerator;
 extern crate fnv;
 
 struct MergeSingle<'a> {
-    params: &'a Vec<TypedParameter>,
-    value: &'a TypedExpr
+    params: &'a Vec<Parameter>,
+    value: &'a Expr
 }
 
 impl<'a> MergeSingle<'a> {
-    fn extract(expr: &'a TypedExpr) -> Option<MergeSingle<'a>> {
+    fn extract(expr: &'a Expr) -> Option<MergeSingle<'a>> {
         if let Lambda{ref params, ref body} = expr.kind {
             if let Merge{ref builder, ref value} = body.kind {
                 match builder.kind {
@@ -35,7 +35,7 @@ impl<'a> MergeSingle<'a> {
 struct NewAppender;
 
 impl NewAppender {
-    fn extract(expr: &TypedExpr) -> Option<NewAppender> {
+    fn extract(expr: &Expr) -> Option<NewAppender> {
         if let NewBuilder(_) = expr.kind {
             if let Builder(Appender(_), _) = expr.ty {
                 return Some(NewAppender)
@@ -46,12 +46,12 @@ impl NewAppender {
 }
 
 struct ResForAppender<'a> {
-    iters: &'a Vec<Iter<Type>>,
-    func: &'a TypedExpr
+    iters: &'a Vec<Iter>,
+    func: &'a Expr
 }
 
 impl<'a> ResForAppender<'a> {
-    fn extract(expr: &'a TypedExpr) -> Option<ResForAppender<'a>> {
+    fn extract(expr: &'a Expr) -> Option<ResForAppender<'a>> {
         if let Res{ref builder} = expr.kind {
             if let For{ref iters, ref builder, ref func} = builder.kind {
                 if NewAppender::extract(builder).is_some() {
@@ -64,13 +64,13 @@ impl<'a> ResForAppender<'a> {
 }
 
 struct MapIter<'a> {
-    iters: &'a Vec<Iter<Type>>,
-    merge_params: &'a Vec<TypedParameter>,
-    merge_value: &'a TypedExpr
+    iters: &'a Vec<Iter>,
+    merge_params: &'a Vec<Parameter>,
+    merge_value: &'a Expr
 }
 
 impl<'a> MapIter<'a> {
-    fn extract(iter: &'a TypedIter) -> Option<MapIter> {
+    fn extract(iter: &'a Iter) -> Option<MapIter> {
         if iter.is_simple() {
             if let Some(rfa) = ResForAppender::extract(&iter.data) {
                 if rfa.iters.iter().all(|ref i| i.is_simple()) {
@@ -94,7 +94,7 @@ impl<'a> MapIter<'a> {
 /// Caveats:
 ///   - Like all Zip-based transforms, this function currently assumes that the output of each
 ///     expression in the Zip is the same length.
-pub fn fuse_loops_2(expr: &mut Expr<Type>) {
+pub fn fuse_loops_2(expr: &mut Expr) {
     use exprs::*;
     if uniquify::uniquify(expr).is_err() {
         return;
@@ -112,9 +112,9 @@ pub fn fuse_loops_2(expr: &mut Expr<Type>) {
                 // Now that we know we have at least one nested map, create a new expression to replace the old
                 // one with. We start by figuring out our new list of iterators, then build a new lambda function
                 // that will call the old one but substitute some of the variables in it.
-                let mut new_iters: Vec<TypedIter> = Vec::new();
-                let mut new_elem_exprs: Vec<TypedExpr> = Vec::new();
-                let mut let_statements: Vec<(Symbol, TypedExpr)> = Vec::new();
+                let mut new_iters: Vec<Iter> = Vec::new();
+                let mut new_elem_exprs: Vec<Expr> = Vec::new();
+                let mut let_statements: Vec<(Symbol, Expr)> = Vec::new();
                 let mut new_body = body.as_ref().clone();
 
                 let elem_types: Vec<Type>;
@@ -139,7 +139,7 @@ pub fn fuse_loops_2(expr: &mut Expr<Type>) {
                         // the corresponding item.
                         let mut map_elem_types: Vec<Type> = Vec::new();
                         let mut map_elem_symbols: Vec<Symbol> = Vec::new();
-                        let mut map_elem_exprs: Vec<TypedExpr> = Vec::new();
+                        let mut map_elem_exprs: Vec<Expr> = Vec::new();
                         for ref map_iter in map.iters {
                             // Check whether this iterator is already in our new_iters list; if so, reuse the old one
                             let iter_num;
@@ -255,7 +255,7 @@ pub fn fuse_loops_2(expr: &mut Expr<Type>) {
 /// Replaces Let(name, value, Merge(builder, elem)) with Merge(builder, Let(name, value, elem)) to
 /// enable further pattern matching on map functions downstream. This is only allowed when the let
 /// statement is not defining some symbol that's used in the builder expression, so we check for that.
-pub fn move_merge_before_let(expr: &mut Expr<Type>) {
+pub fn move_merge_before_let(expr: &mut Expr) {
     use exprs::*;
     expr.transform_up(&mut |ref mut expr| {
         if let Let { ref name, value: ref let_value, ref body } = expr.kind {
@@ -273,7 +273,7 @@ pub fn move_merge_before_let(expr: &mut Expr<Type>) {
 }
 
 /// Checks whether a For loop is simple enough to be fused.
-fn is_fusable_expr(expr: &TypedExpr) -> bool {
+fn is_fusable_expr(expr: &Expr) -> bool {
     if let Some(rfa) = ResForAppender::extract(expr) {
         if rfa.iters.iter().all(|ref i| i.is_simple()) {
             if let Some(_) = MergeSingle::extract(&rfa.func) {
@@ -285,7 +285,7 @@ fn is_fusable_expr(expr: &TypedExpr) -> bool {
 }
 
 /// Checks if a name binding can be fused with the loop its contained in.
-fn only_used_in_zip(name: &Symbol, expr: &TypedExpr) -> bool {
+fn only_used_in_zip(name: &Symbol, expr: &Expr) -> bool {
     // Number of times the name appears in `expr`.
     let mut total_count = 0;
     // Number of times the name appears in a Zip in `expr`.
@@ -321,7 +321,7 @@ fn only_used_in_zip(name: &Symbol, expr: &TypedExpr) -> bool {
 /// Aggressively inlines let statements in cases which allow loop fusion to fire. This inliner is
 /// aggressive because it will replace identifiers which appear more than once after being defined.
 /// However, the inliner will only fire if eventually, the inlined loop will be fused.
-pub fn aggressive_inline_let(expr: &mut TypedExpr) {
+pub fn aggressive_inline_let(expr: &mut Expr) {
     let mut subbed_one = false;
     expr.transform_up(&mut |ref mut expr| {
         if subbed_one {
@@ -352,7 +352,7 @@ pub fn aggressive_inline_let(expr: &mut TypedExpr) {
 /// Prerequisites: Expression is uniquified.
 /// Caveats: This transformation will only fire if each vector in the iterator is bound to an
 /// identifier.
-pub fn merge_makestruct_loops(expr: &mut TypedExpr) {
+pub fn merge_makestruct_loops(expr: &mut Expr) {
     use exprs::*;
     super::uniquify::uniquify(expr).unwrap();
     expr.transform(&mut |ref mut expr| {
@@ -506,7 +506,7 @@ pub fn merge_makestruct_loops(expr: &mut TypedExpr) {
 }
 
 /// Are two iterators equivalent ignoring symbols defined inside each one?
-fn iters_match_ignoring_symbols(iter1: &TypedIter, iter2: &TypedIter) -> WeldResult<bool> {
+fn iters_match_ignoring_symbols(iter1: &Iter, iter2: &Iter) -> WeldResult<bool> {
     Ok(iter1.kind == iter2.kind &&
         iter1.data.compare_ignoring_symbols(iter2.data.as_ref())? &&
         options_match_ignoring_symbols(&iter1.start, &iter2.start)? &&
@@ -515,7 +515,7 @@ fn iters_match_ignoring_symbols(iter1: &TypedIter, iter2: &TypedIter) -> WeldRes
 }
 
 /// Are two Option<Box<Expr>> equal ignoring symbols defined inside each one?
-fn options_match_ignoring_symbols(opt1: &Option<Box<TypedExpr>>, opt2: &Option<Box<TypedExpr>>) -> WeldResult<bool> {
+fn options_match_ignoring_symbols(opt1: &Option<Box<Expr>>, opt2: &Option<Box<Expr>>) -> WeldResult<bool> {
     match (opt1, opt2) {
         (&None, &None) => Ok(true),
         (&Some(ref e1), &Some(ref e2)) => e1.compare_ignoring_symbols(e2.as_ref()),

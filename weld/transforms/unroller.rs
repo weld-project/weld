@@ -22,15 +22,15 @@ pub const UNROLL_LIMIT: i64 = 8;
 /// For loop's function body.
 struct UnrollPattern<'a> {
     loop_size: i64,
-    iters: &'a Vec<TypedIter>,
+    iters: &'a Vec<Iter>,
     builder_kind: &'a BuilderKind,
-    merge_params: &'a Vec<TypedParameter>,
-    merge_value: &'a TypedExpr,
+    merge_params: &'a Vec<Parameter>,
+    merge_value: &'a Expr,
 }
 
 impl<'a> UnrollPattern<'a> {
     /// Extracts a `UnrollPattern` from the expression, or returns `None`.
-    fn extract(expr: &'a TypedExpr) -> Option<UnrollPattern> {
+    fn extract(expr: &'a Expr) -> Option<UnrollPattern> {
         if let Res { ref builder } = expr.kind {
             if let Some(loopsize) = builder.annotations.loopsize() {
                 if loopsize <= UNROLL_LIMIT {
@@ -63,7 +63,7 @@ impl<'a> UnrollPattern<'a> {
     }
 }
 
-pub fn unroll_static_loop(expr: &mut TypedExpr) {
+pub fn unroll_static_loop(expr: &mut Expr) {
     use util::SymbolGenerator;
 
     if let Err(_) = uniquify(expr) {
@@ -105,7 +105,7 @@ pub fn unroll_static_loop(expr: &mut TypedExpr) {
     });
 }
 
-fn is_same_ident(expr: &TypedExpr, other: &TypedExpr) -> bool {
+fn is_same_ident(expr: &Expr, other: &Expr) -> bool {
     if let Ident(ref name) = other.kind {
         if let Ident(ref name2) = expr.kind {
             return name == name2 && expr.ty == other.ty;
@@ -116,7 +116,7 @@ fn is_same_ident(expr: &TypedExpr, other: &TypedExpr) -> bool {
 
 /// Takes a `MergeSingle` and returns a list of expressions which replace the element
 /// in the merge with a Lookup.
-fn unroll_values(parameters: &Vec<TypedParameter>, value: &TypedExpr, vectors: &Vec<TypedExpr>, loopsize: i64) -> WeldResult<Vec<TypedExpr>> {
+fn unroll_values(parameters: &Vec<Parameter>, value: &Expr, vectors: &Vec<Expr>, loopsize: i64) -> WeldResult<Vec<Expr>> {
     if parameters.len() != 3 {
         return compile_err!("Expected three parameters to Merge function");
     }
@@ -158,7 +158,7 @@ fn unroll_values(parameters: &Vec<TypedParameter>, value: &TypedExpr, vectors: &
 ///
 /// As an example, if `values` is [ Literal(1), Literal(2), Literal(3)] and the builder was a
 /// merger[i32,+], this function will produce the expression Literal(1) + Literal(2) + Literal(3).
-fn combine_unrolled_values(bk: BuilderKind, values: Vec<TypedExpr>) -> WeldResult<TypedExpr> {
+fn combine_unrolled_values(bk: BuilderKind, values: Vec<Expr>) -> WeldResult<Expr> {
     if values.len() == 0 {
         return compile_err!("Need at least one value to combine in unroller");
     }
@@ -197,10 +197,10 @@ use type_inference::*;
 
 /// Returns a typed expression.
 #[cfg(test)]
-fn typed_expression(s: &str) -> Expr<Type> {
+fn typed_expression(s: &str) -> Expr {
     let mut e1 = parse_expr(s).unwrap();
-    infer_types(&mut e1).unwrap();
-    e1.to_typed().unwrap()
+    e1.infer_types().unwrap();
+    e1
 }
 
 #[test]

@@ -1,1110 +1,848 @@
-use std::collections::HashMap;
+//! Type inference for Weld expressions.
 
-use super::ast::ExprKind::*;
-use super::ast::LiteralKind::*;
-use super::ast::ScalarKind::*;
-use super::ast::IterKind;
-use super::ast::Symbol;
-use super::partial_types::PartialExpr;
-use super::partial_types::PartialType;
-use super::partial_types::PartialType::*;
-use super::partial_types::PartialBuilderKind::*;
-use super::error::*;
+extern crate fnv;
 
-#[cfg(test)]
-use super::annotations::Annotations;
-#[cfg(test)]
-use super::ast::BinOpKind::*;
-#[cfg(test)]
-use super::parser::*;
-#[cfg(test)]
-use super::partial_types::expr_box;
-#[cfg(test)]
-use super::pretty_print::*;
+use ast::*;
+use ast::ExprKind::*;
+use ast::Type::*;
+use ast::LiteralKind::*;
+use ast::BuilderKind::*;
+use ast::ScalarKind::*;
 
-type TypeMap = HashMap<Symbol, PartialType>;
+use error::*;
 
-/// Infer the missing types of all expressions a tree, modifying it in place to set them.
-pub fn infer_types(expr: &mut PartialExpr) -> WeldResult<()> {
-    // Note: we should also make sure that the types already set in expr are consistent; this will
-    // be done by the first call to infer_up.
-    loop {
-        let mut env = TypeMap::new();
-        let res = try!(infer_up(expr, &mut env));
-        if res == false {
-            if !has_all_types(expr) {
-                return compile_err!("Could not infer some types");
+use pretty_print::print_type;
+
+use fnv::FnvHashMap;
+
+type TypeMap = FnvHashMap<Symbol, Type>;
+type Binding = (Symbol, Option<Type>);
+
+pub trait InferTypes {
+    /// Checks and infers types in place.
+    ///
+    /// Returns an error if types are inconsistent or all types could not be inferred. That is, if
+    /// the resulting value has any partial types, this method will return an error.
+    fn infer_types(&mut self) -> WeldResult<()>;
+}
+
+impl InferTypes for Expr {
+    /// Checks and infers types in place.
+    fn infer_types(&mut self) -> WeldResult<()> {
+        self.infer_types_internal()
+    }
+}
+
+/// A trait for updating a type based on types around it.
+///
+/// This trait is implemented by `Type`.
+trait PushType {
+    /// Push the type of `other` into this `Type` and return if this `Type` changed.
+    ///
+    /// Pushing the type forces this `Type` to be at least as specific as `other (i.e., the same
+    /// type with fewer Unknowns in any subtypes). The function returns an error if an incompatible
+    /// type was pushed, and otherwise returns a boolean indicating whether this `Type` changed.
+    fn push(&mut self, other: &Self) -> WeldResult<bool>;
+
+    /// Sync this `Type` with `other`, calling push in both directions.
+    ///
+    /// This function returns an error if an incompatible type was pushed in either direction, and
+    /// otherwise returns a boolean indicating whether either `Type` changed.
+    fn sync(&mut self, other: &mut Self) -> WeldResult<bool> {
+        Ok(self.push(other)? || other.push(self)?)
+    }
+
+    /// Sets this `Type` to be `other`.
+    ///
+    /// This function returns an error if `other` is incompatible with this `Type`.
+    fn push_complete(&mut self, other: Self) -> WeldResult<bool>;
+}
+
+impl PushType for Type {
+    /// Sets this `Type` to be `other`.
+    fn push_complete(&mut self, other: Type) -> WeldResult<bool> {
+        match other {
+            Scalar(_) | Simd(_) if *self == Unknown => {
+                *self = other;
+                Ok(true)
             }
-            return Ok(());
+            Scalar(_) | Simd(_) if *self == other => {
+                Ok(false)
+            }
+            Vector(ref elem) if *self == Unknown => {
+                *self = Vector(elem.clone());
+                Ok(true)
+            }
+            Vector(ref elem) => {
+                if let Vector(ref mut dest) = *self {
+                    dest.push_complete(elem.as_ref().clone())
+                } else {
+                    compile_err!("Type mismatch: expected {} but got {}", print_type(&other), print_type(self))
+                }
+            }
+            _ => {
+                compile_err!("Type mismatch: expected {} but got {}", print_type(&other), print_type(self))
+            }
+        }
+    }
+
+    /// Push the type of `other` into this `Type` and return if this `Type` changed.
+    fn push(&mut self, other: &Self) -> WeldResult<bool> {
+        // If the other type is Unknown, we cannot infer anything. If this type is Unknown,
+        // copy the other type to this one.
+        if *other == Unknown {
+            return Ok(false);
+        } else if *self == Unknown {
+            *self = other.clone();
+            return Ok(true);
+        }
+
+        // Match this `Type` with `other` to make sure the variant is the same. Then, recursively
+        // call `push` on any subtypes.
+        match (self, other) {
+            (&mut Scalar(a), &Scalar(b)) if a == b => {
+                Ok(false)
+            }
+            (&mut Simd(a), &Simd(b)) if a == b => {
+                Ok(false)
+            }
+            (&mut Vector(ref mut elem), &Vector(ref other_elem)) => {
+                elem.push(other_elem)
+            }
+            (&mut Dict(ref mut key, ref mut value), &Dict(ref other_key, ref other_value)) => {
+                Ok(key.push(other_key)? || value.push(other_value)?)
+            }
+            (&mut Struct(ref mut types), &Struct(ref other_types)) if types.len() == other_types.len() => {
+                let mut changed = false;
+                for (this, other) in types.iter_mut().zip(other_types) {
+                    changed |= this.push(other)?;
+                }
+                Ok(changed)
+            }
+            (&mut Function(ref mut params, ref mut body),
+             &Function(ref other_params, ref other_body))
+                if params.len() == other_params.len() => {
+
+                let mut changed = false;
+                for (this, other) in params.iter_mut().zip(other_params) {
+                    changed |= this.push(other)?;
+                }
+                changed |= body.push(other_body)?;
+                Ok(changed)
+            }
+            (&mut Builder(ref mut kind, ref mut annotations), &Builder(ref other_kind, ref other_annotations)) => {
+                // Perform type checking on the BuilderKind, followed by the annotations.
+                let mut changed = match (kind, other_kind) {
+                    (
+                        &mut Appender(ref mut elem),
+                        &Appender(ref other_elem)
+                    ) => {
+                        elem.push(other_elem)
+                    }
+                    (
+                        &mut DictMerger(ref mut key, ref mut value, ref mut op),
+                        &DictMerger(ref other_key, ref other_value, ref other_op)
+                    ) if *op == *other_op => {
+                        Ok(key.push(other_key)? | value.push(other_value)?)
+                    }
+                    (
+                        &mut GroupMerger(ref mut key, ref mut value),
+                        &GroupMerger(ref other_key, ref other_value)
+                    ) => {
+                        Ok(key.push(other_key)? | value.push(other_value)?)
+                    }
+                    (
+                        &mut VecMerger(ref mut elem, ref mut op),
+                        &VecMerger(ref other_elem, ref other_op)
+                    ) if *op == *other_op => {
+                        elem.push(other_elem)
+                    }
+                    (
+                        &mut Merger(ref mut elem, ref mut op),
+                        &Merger(ref other_elem, ref other_op)
+                    ) if *op == *other_op => {
+                        elem.push(other_elem)
+                    }
+                    // Mismatches in the binary operator of DictMerger, VecMerger, and GroupMerger,
+                    // or other type mismatches in the BuilderKind. We list them explicitly so the
+                    // compiler will throw an error if we add new types.
+                    (&mut Appender(_), _) | (&mut DictMerger(_,_,_), _) |
+                        (&mut GroupMerger(_,_), _) | (&mut VecMerger(_,_), _) |
+                        (&mut Merger(_,_), _) => {
+                            compile_err!("Type mismatch: expected builder type {}", print_type(other))
+                        }
+                }?;
+
+                // Check the annotations.
+                if *annotations != *other_annotations {
+                    if !annotations.is_empty() {
+                        *annotations = other_annotations.clone();
+                        changed = true;
+                    }
+                }
+                Ok(changed)
+            }
+            (ref this, ref other) => {
+                compile_err!("Type mismatch: expected {} but got {}",
+                             print_type(other), print_type(this))
+            }
         }
     }
 }
 
-/// Do expr or all of its descendants have types set?
-fn has_all_types(expr: &PartialExpr) -> bool {
-    if !expr.ty.is_complete() {
-        return false;
+/// Force `expr`, which has kind `Lambda`, to have parameters that match `tys`.
+fn sync_function(expr: &mut Expr, tys: Vec<&Type>) -> WeldResult<bool> {
+    match expr.ty {
+        Function(ref mut params, _) if params.len() == tys.len() => {
+            let mut changed = false;
+            for (param, ty) in params.iter_mut().zip(tys) {
+                changed |= param.push(ty)?;
+            }
+            Ok(changed)
+        }
+        _ => {
+            compile_err!("Expected function with {} arguments, but got {}", tys.len(), print_type(&expr.ty))
+        }
     }
-    expr.children().all(|c| has_all_types(c))
 }
 
-/// Infer the types of expressions upward from the leaves of a tree, using infer_locally.
-/// Return true if any new expression's type was inferred, or an error if types are inconsistent.
-fn infer_up(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> {
-    // Remember whether we inferred any new type
-    let mut changed = false;
+/// A module-internal implementation of type inference.
+///
+/// This trait contains additional helper methods that are not exposed outside this module.
+trait InferTypesInternal {
+    fn infer_types_internal(&mut self) -> WeldResult<()>;
+    fn infer_locally(&mut self, env: &TypeMap) -> WeldResult<bool>;
+    fn infer_up(&mut self, &mut TypeMap) -> WeldResult<bool>;
+}
 
-    // For Lets and Lambdas, add the identifiers they (re-)define to env
-    let mut old_bindings: Vec<(Symbol, Option<PartialType>)> = Vec::new();
-    let finished = match expr.kind {
-        Let {
-            ref mut name,
-            ref mut value,
-            ref mut body
-        } => {
-            // Infer the type of the value before updating the binding.
-            changed |= try!(infer_up(value, env));
-
-            // Update the binding, saving the old one.
-            let old_binding = env.insert(name.clone(), value.ty.clone());
-
-            // Then, infer the type of the body (with the new binding).
-            changed |= try!(infer_up(body, env));
-
-            // Undo the changes to the bindings.
-            match old_binding {
-                Some(old) => env.insert(name.clone(), old),
-                None => env.remove(name),
-            };
-            // Finished! Infer own type outside the match to avoid double mutable borrow.
-            true
-        }
-        Lambda { ref params, .. } => {
-            for p in params {
-                old_bindings.push((p.name.clone(), env.insert(p.name.clone(), p.ty.clone())));
+impl InferTypesInternal for Expr {
+    /// Internal implementation of type inference.
+    fn infer_types_internal(&mut self) -> WeldResult<()> {
+        loop {
+            let ref mut env = TypeMap::default();
+            if !self.infer_up(env)? {
+                if self.ty.partial_type() {
+                    return compile_err!("Could not infer some types")
+                } else {
+                    return Ok(())
+                }
             }
-            false
         }
-        _ => false,
-    };
-
-    // Done! Only for Lets for now.
-    if finished {
-        changed |= infer_locally(expr, env)?;
-        return Ok(changed);
     }
 
-    // Infer types of children first (with new environment)
-    for c in expr.children_mut() {
-        changed |= try!(infer_up(c, env));
-    }
-
-    // Undo the changes to env from Let and Lambda
-    for (symbol, opt) in old_bindings {
-        match opt {
-            Some(old) => env.insert(symbol, old),
-            None => env.remove(&symbol),
+    /// Infer types for an expression upward.
+    ///
+    /// This method iterates over each expression in the AST in post-order, operating on the trees
+    /// leaves and propogating types up. The method returns whether the type of this expression or
+    /// any subexpressions changed, or an error if one occurred.
+    fn infer_up(&mut self, env: &mut TypeMap) -> WeldResult<bool> {
+        // Remember whether we inferred any new type.
+        let mut changed = false;
+        // Remember the old bindings so they can be restored.
+        let mut old_bindings: Vec<Binding> = Vec::new();
+        // Let and Lambda are the only expressions that change bindings.
+        match self.kind {
+            Let { ref mut name, ref mut value, ref mut body } => {
+                // First perform type inference on the value. Then, take the old binding to `name`
+                // and perform type inference on the body. Finally, restore the original
+                // environment.
+                changed |= value.infer_up(env)?;
+                let previous = env.insert(name.clone(), value.ty.clone());
+                old_bindings.push((name.clone(), previous));
+                changed |= body.infer_up(env)?;
+            }
+            Lambda { ref mut params, ref mut body } =>  {
+                for p in params {
+                    let previous = env.insert(p.name.clone(), p.ty.clone());
+                    old_bindings.push((p.name.clone(), previous));
+                }
+                changed |= body.infer_up(env)?;
+            }
+            _ => ()
         };
+
+        // For Let and Lambda, we already inferred the types of each child. For all other
+        // expressions, we still need to do it after undoing the binding..
+        match self.kind {
+            Let { .. } | Lambda { .. } => (),
+            _ => {
+                // Infer/check the type of the subexpressions.
+                for child in self.children_mut() {
+                    changed |= child.infer_up(env)?;
+                }
+            }
+        };
+
+        // Undo symbol bindings.
+        for (symbol, opt) in old_bindings {
+            match opt {
+                Some(old) => env.insert(symbol, old),
+                None => env.remove(&symbol),
+            };
+        }
+
+        // Infer local type.
+        changed |= self.infer_locally(env)?;
+        Ok(changed)
     }
 
-    // Infer our type
-    changed |= try!(infer_locally(expr, env));
-    Ok(changed)
-}
+    /// Infer the types of an expression based on direct subexpressions.
+    fn infer_locally(&mut self, env: &TypeMap) -> WeldResult<bool> {
+        match self.kind {
+            Literal(I8Literal(_)) =>
+                self.ty.push_complete(Scalar(I8)),
+            Literal(I16Literal(_)) =>
+                self.ty.push_complete(Scalar(I16)),
+            Literal(I32Literal(_)) =>
+                self.ty.push_complete(Scalar(I32)),
+            Literal(I64Literal(_)) =>
+                self.ty.push_complete(Scalar(I64)),
+            Literal(U8Literal(_)) =>
+                self.ty.push_complete(Scalar(U8)),
+            Literal(U16Literal(_)) =>
+                self.ty.push_complete(Scalar(U16)),
+            Literal(U32Literal(_)) =>
+                self.ty.push_complete(Scalar(U32)),
+            Literal(U64Literal(_)) =>
+                self.ty.push_complete(Scalar(U64)),
+            Literal(F32Literal(_)) =>
+                self.ty.push_complete(Scalar(F32)),
+            Literal(F64Literal(_)) =>
+                self.ty.push_complete(Scalar(F64)),
+            Literal(BoolLiteral(_)) =>
+                self.ty.push_complete(Scalar(Bool)),
+            Literal(StringLiteral(_)) =>
+                self.ty.push_complete(Vector(Box::new(Scalar(I8)))),
 
-/// Infer the type of expr or its children locally based on what is known about some of them.
-/// Return true if any new expression's type was inferred, or an error if types are inconsistent.
-fn infer_locally(expr: &mut PartialExpr, env: &mut TypeMap) -> WeldResult<bool> {
-    match expr.kind {
-        Literal(I8Literal(_)) => push_complete_type(&mut expr.ty, Scalar(I8), "I8Literal"),
-        Literal(I16Literal(_)) => push_complete_type(&mut expr.ty, Scalar(I16), "I16Literal"),
-        Literal(I32Literal(_)) => push_complete_type(&mut expr.ty, Scalar(I32), "I32Literal"),
-        Literal(I64Literal(_)) => push_complete_type(&mut expr.ty, Scalar(I64), "I64Literal"),
+            BinOp { kind: op, ref mut left, ref mut right } => {
+                // First, sync the left and right types into the elem_type.
+                let ref mut elem_type = Unknown;
+                elem_type.push(&left.ty)?;
+                elem_type.push(&right.ty)?;
 
-        Literal(U8Literal(_)) => push_complete_type(&mut expr.ty, Scalar(U8), "U8Literal"),
-        Literal(U16Literal(_)) => push_complete_type(&mut expr.ty, Scalar(U16), "U16Literal"),
-        Literal(U32Literal(_)) => push_complete_type(&mut expr.ty, Scalar(U32), "U32Literal"),
-        Literal(U64Literal(_)) => push_complete_type(&mut expr.ty, Scalar(U64), "U64Literal"),
-
-        Literal(F32Literal(_)) => push_complete_type(&mut expr.ty, Scalar(F32), "F32Literal"),
-        Literal(F64Literal(_)) => push_complete_type(&mut expr.ty, Scalar(F64), "F64Literal"),
-
-        Literal(BoolLiteral(_)) => push_complete_type(&mut expr.ty, Scalar(Bool), "BoolLiteral"),
-
-        Literal(StringLiteral(_)) => push_complete_type(&mut expr.ty, Vector(Box::new(Scalar(I8))),
-                                                        "StringLiteral"),
-        
-        BinOp {
-            kind: op,
-            ref mut left,
-            ref mut right,
-        } => {
-            let mut elem_type = Unknown;
-            try!(push_type(&mut elem_type, &left.ty, "BinOp"));
-            try!(push_type(&mut elem_type, &right.ty, "BinOp"));
-            if !op.is_comparison() {
-                try!(push_type(&mut elem_type, &expr.ty, "BinOp"));
-            }
-            let mut changed = false;
-            changed |= try!(push_type(&mut left.ty, &elem_type, "BinOp"));
-            changed |= try!(push_type(&mut right.ty, &elem_type, "BinOp"));
-            if op.is_comparison() {
-                if let Simd(_) = left.ty {
-                    changed |= try!(push_type(&mut expr.ty, &Simd(Bool), "BinOp"));
-                } else {
-                    changed |= try!(push_type(&mut expr.ty, &Scalar(Bool), "BinOp"));
+                if !op.is_comparison() {
+                    elem_type.push(&self.ty)?;
                 }
-            } else {
-                changed |= try!(push_type(&mut expr.ty, &elem_type, "BinOp"));
-            }
-            Ok(changed)
-        }
 
-        UnaryOp {
-            kind: op,
-            ref mut value,
-        } => {
-            match value.ty {
-                Scalar(F32) => push_complete_type(&mut expr.ty, Scalar(F32), "UnaryOp"),
-                Scalar(F64) => push_complete_type(&mut expr.ty, Scalar(F64), "UnaryOp"),
-                Unknown => push_type(&mut expr.ty, &value.ty, "UnaryOp"),
-                _ => return compile_err!("Internal error: {} called on non-scalar or non-float", op),
-            }
-        }
+                // Now, attempt to push the elem_type back into left and right to "sync" them.
+                let mut changed = left.ty.push(elem_type)?;
+                changed |= right.ty.push(elem_type)?;
 
-        Cast { kind, .. } => Ok(try!(push_complete_type(&mut expr.ty, Scalar(kind), "Cast"))),
-
-        ToVec { ref mut child_expr } => {
-            let mut changed = false;
-            let base_type = Vector(Box::new(Struct(vec![Unknown, Unknown])));
-            changed |= push_type(&mut expr.ty, &base_type, "ToVec")?;
-            if let Vector(ref mut elem_type) = expr.ty {
-                if let Struct(ref mut field_types) = **elem_type {
-                    if let Dict(ref key_type, ref value_type) = child_expr.ty {
-                        for (field_ty, child_expr_field) in field_types
-                                .iter_mut()
-                                .zip(vec![key_type.clone(), value_type.clone()].iter_mut()) {
-                            changed |= try!(push_type(field_ty, child_expr_field, "ToVec"));
-                        }
+                // For comparisons, force the type to be Bool.
+                if op.is_comparison() {
+                    if let Simd(_) = left.ty {
+                        changed |= self.ty.push_complete(Simd(Bool))?;
+                    } else {
+                        changed |= self.ty.push_complete(Scalar(Bool))?;
                     }
                 } else {
-                    return compile_err!("Internal error: vector field in toVec return type is not a \
-                                      struct");
+                    changed |= self.ty.push(elem_type)?;
                 }
-            } else {
-                return compile_err!("Internal error: type of toVec was not Vector(..)");
+                Ok(changed)
             }
-            Ok(changed)
-        }
 
-        Ident(ref symbol) => {
-            match env.get(symbol) {
-                None => compile_err!("Undefined identifier: {}", symbol.name),
-                Some(t) => push_type(&mut expr.ty, t, "Ident"),
-            }
-        }
-
-        Negate(ref c) => push_type(&mut expr.ty, &c.ty, "Negate"),
-
-        Broadcast(ref c) => {
-            match c.ty {
-                Scalar(ref kind) => {
-                    push_type(&mut expr.ty, &Simd(kind.clone()), "Broadcast")
+            UnaryOp { ref value, ref kind } => {
+                match value.ty {
+                    Scalar(ref kind) if kind.is_float() => {
+                        self.ty.push(&value.ty)
+                    }
+                    Unknown => Ok(false),
+                    _ => {
+                        compile_err!("Expected floating-point type for unary op '{}'", kind)
+                    }
                 }
-                _ => compile_err!("Broadcast only works with Scalar(_)")
             }
-        }
 
-        CUDF { ref return_ty, .. } => push_type(&mut expr.ty, return_ty, "CUDF"),
-
-        Serialize(_) => push_complete_type(&mut expr.ty, Vector(Box::new(Scalar(I8))), "Serialize"),
-        Deserialize{ ref value_ty, .. } => push_type(&mut expr.ty, value_ty, "Deserialize"),
-
-        Let { ref mut body, .. } => sync_types(&mut expr.ty, &mut body.ty, "Let body"),
-
-        MakeVector { ref mut elems } => {
-            let mut changed = false;
-            let mut elem_type = Unknown;
-            for ref e in elems.iter() {
-                try!(push_type(&mut elem_type, &e.ty, "MakeVector"));
+            Cast { kind, .. } => {
+                self.ty.push_complete(Scalar(kind))
             }
-            for ref mut e in elems.iter_mut() {
-                changed |= try!(push_type(&mut e.ty, &elem_type, "MakeVector"));
-            }
-            let vec_type = Vector(Box::new(elem_type));
-            changed |= try!(push_type(&mut expr.ty, &vec_type, "MakeVector"));
-            Ok(changed)
-        }
 
-        Zip { ref mut vectors } => {
-            let mut changed = false;
+            ToVec { ref mut child_expr } => {
+                // The base type is vec[{?,?}] - infer the key and value type.
+                let ref base_type = Vector(Box::new(Struct(vec![Unknown, Unknown])));
+                let mut changed = self.ty.push(base_type)?;
 
-            let base_type = Vector(Box::new(Struct(vec![Unknown; vectors.len()])));
-            changed |= try!(push_type(&mut expr.ty, &base_type, "Zip"));
-
-            let mut types = vec![];
-            if let Vector(ref mut elem_type) = expr.ty {
-                if let Struct(ref mut vec_types) = **elem_type {
-                    for (vec_ty, vec_expr) in vec_types.iter_mut().zip(vectors.iter_mut()) {
-                        if let Vector(ref elem_type) = vec_expr.ty {
-                            changed |= try!(push_type(vec_ty, elem_type, "Zip"));
-                        } else if vec_expr.ty != Unknown {
-                            return compile_err!("Internal error: Zip argument not a Vector");
+                let mut set_types = false;
+                if let Dict(ref key, ref value) = child_expr.ty {
+                    if let Vector(ref mut elem) = self.ty {
+                        if let Struct(ref mut fields) = **elem {
+                            let pair_type = vec![key.clone(), value.clone()];
+                            for (ref mut field, ref child) in fields.iter_mut().zip(pair_type) {
+                                changed |= field.push(child)?;
+                            }
+                            set_types = true;
                         }
-                        types.push(vec_ty.clone());
                     }
+                } else if child_expr.ty == Unknown {
+                    return Ok(false)
                 }
-            } else {
-                return compile_err!("Internal error: type of Zip was not Vector(Struct(..))");
-            }
 
-            let base_type = Vector(Box::new(Struct(types)));
-            changed |= try!(push_type(&mut expr.ty, &base_type, "Zip"));
-
-            Ok(changed)
-        }
-
-        MakeStruct { ref mut elems } => {
-            let mut changed = false;
-
-            let base_type = Struct(vec![Unknown; elems.len()]);
-            changed |= try!(push_type(&mut expr.ty, &base_type, "MakeStruct"));
-
-            if let Struct(ref mut elem_types) = expr.ty {
-                for (elem_ty, elem_expr) in elem_types.iter_mut().zip(elems.iter_mut()) {
-                    changed |= try!(sync_types(elem_ty, &mut elem_expr.ty, "MakeStruct"));
+                if !set_types {
+                    compile_err!("Expected dictionary argument for tovec(...), got {}", print_type(&child_expr.ty))
+                } else {
+                    Ok(changed)
                 }
-            } else {
-                return compile_err!("Internal error: type of MakeStruct was not Struct");
             }
 
-            Ok(changed)
-        }
-
-        GetField {
-            expr: ref mut param,
-            index,
-        } => {
-            if let Struct(ref mut elem_types) = param.ty {
-                let index = index as usize;
-                if index >= elem_types.len() {
-                    return compile_err!("Invalid index for GetField");
+            Ident(ref symbol) => {
+                if let Some(ref ty) = env.get(symbol) {
+                    self.ty.push(ty)
+                } else {
+                    compile_err!("Symbol {} is not defined", symbol)
                 }
-                sync_types(&mut elem_types[index], &mut expr.ty, "GetField")
-            } else if param.ty == Unknown {
-                Ok(false)
-            } else {
-                compile_err!("Internal error: GetField called on {:?}", param.ty)
             }
-        }
 
-        Length { ref mut data } => {
-            match data.ty {
-                Vector(_) => (),
-                Unknown => (),
-                _ => return compile_err!("Internal error: Length called on non-vector"),
+            Negate(ref c) => {
+                self.ty.push(&c.ty)
             }
-            push_complete_type(&mut expr.ty, Scalar(I64), "Length")
-        }
 
-        Slice {
-            ref mut data,
-            ref mut index,
-            ref mut size,
-        } => {
-            if let Vector(_) = data.ty {
-                let mut changed = false;
-                changed |= try!(push_complete_type(&mut index.ty, Scalar(I64), "Slice"));
-                changed |= try!(push_complete_type(&mut size.ty, Scalar(I64), "Slice"));
-                changed |= try!(push_type(&mut expr.ty, &data.ty, "Slice"));
-                Ok(changed)
-            } else {
-                compile_err!("Internal error: Slice called on {:?}, must be called on vector",
-                          data.ty)
-            }
-        }
-
-        Sort {
-            ref mut data,
-            ref mut keyfunc,
-        } => {
-            if let Vector(ref elem_type) = data.ty {
-                let mut changed = false;
-                if let Function(ref mut params, _) = keyfunc.ty {
-                    if params.len() == 1 {
-                        changed |= try!(push_type(&mut params[0], &elem_type, "Sort key return"));
-                    } else {
-                        return compile_err!("Internal error: Sort key has too many parameters");
-                    }
+            Broadcast(ref c) => {
+                if let Scalar(ref kind) = c.ty {
+                    self.ty.push(&Simd(kind.clone()))
+                } else if c.ty == Unknown {
+                    Ok(false)
+                } else {
+                    compile_err!("Expected scalar argument for broadcast, got {}", print_type(&c.ty))
                 }
-                changed |= try!(push_type(&mut expr.ty, &data.ty, "Sort"));
-                Ok(changed)
-            } else {
-                compile_err!("Internal error: Sort called on {:?}, must be called on vector",
-                          data.ty)
             }
-        }
 
-        Lookup {
-            ref mut data,
-            ref mut index,
-        } => {
-            if let Vector(ref elem_type) = data.ty {
-                let mut changed = false;
-                changed |= try!(push_complete_type(&mut index.ty, Scalar(I64), "Lookup"));
-                changed |= try!(push_type(&mut expr.ty, &elem_type, "Lookup"));
-                Ok(changed)
-            } else if let Dict(ref key_type, ref value_type) = data.ty {
-                let mut changed = false;
-                changed |= try!(push_type(&mut index.ty, &key_type, "Lookup"));
-                changed |= try!(push_type(&mut expr.ty, &value_type, "Lookup"));
-                Ok(changed)
-            } else if data.ty == Unknown {
-                Ok(false)
-            } else {
-                compile_err!("Internal error: Lookup called on {:?}", data.ty)
+            CUDF { ref return_ty, .. } => {
+                self.ty.push(return_ty)
             }
-        }
 
-        KeyExists {
-            ref mut data,
-            ref mut key,
-        } => {
-            if let Dict(ref key_type, _) = data.ty {
-                let mut changed = false;
-                changed |= try!(push_type(&mut key.ty, &key_type, "KeyExists"));
-                changed |= try!(push_complete_type(&mut expr.ty, Scalar(Bool), "KeyExists"));
-                Ok(changed)
-            } else if data.ty == Unknown {
-                Ok(false)
-            } else {
-                compile_err!("Internal error: KeyExists called on {:?}", data.ty)
+            Serialize(_) => {
+                let serialized_type = Vector(Box::new(Scalar(I8)));
+                self.ty.push_complete(serialized_type)
             }
-        }
 
-        Lambda {
-            ref mut params,
-            ref mut body,
-        } => {
-            let mut changed = false;
+            Deserialize{ ref value_ty, .. } => {
+                self.ty.push(value_ty)
+            }
 
-            let base_type = Function(vec![Unknown; params.len()], Box::new(Unknown));
-            changed |= try!(push_type(&mut expr.ty, &base_type, "Lambda"));
+            Let { ref mut body, .. } => {
+                self.ty.sync(&mut body.ty)
+            }
 
-            if let Function(ref mut param_types, ref mut res_type) = expr.ty {
-                changed |= try!(sync_types(&mut body.ty, res_type, "Lambda return"));
-                for (param_ty, param_expr) in param_types.iter_mut().zip(params.iter_mut()) {
-                    changed |= try!(sync_types(param_ty, &mut param_expr.ty, "Lambda parameter"));
+            MakeVector { ref mut elems } => {
+                // Sync the types of each element.
+                let mut elem_type = Unknown;
+                for e in elems.iter() {
+                    elem_type.push(&e.ty)?;
                 }
-            } else {
-                return compile_err!("Internal error: type of Lambda was not Function");
+
+                let mut changed = false;
+                for e in elems.iter_mut() {
+                    changed |= e.ty.push(&elem_type)?;
+                }
+
+                // If no error eccord, push the element type to the expression.
+                let ref vec_type = Vector(Box::new(elem_type));
+                changed |= self.ty.push(vec_type)?;
+                Ok(changed)
             }
 
-            Ok(changed)
-        }
+            Zip { ref mut vectors } => {
+                let mut changed = false;
 
-        Merge {
-            ref mut builder,
-            ref mut value,
-        } => {
-            let mut changed = false;
-            match builder.ty {
-                Builder(ref mut b, _) => {
-                    if let Simd(kind) = value.ty {
-                        let mut simd_mty = Simd(kind);
-                        changed |= try!(sync_types(&mut simd_mty, &mut value.ty, "Merge"));
-                        let mty = b.merge_type_mut();
-                        if let Simd(kind) = simd_mty {
-                            *mty = Scalar(kind);
+                let ref base_type = Vector(Box::new(Struct(vec![Unknown; vectors.len()])));
+                changed |= self.ty.push(base_type)?;
+
+                // Push the vector type to each vector.
+                let mut types = vec![];
+                let mut set_types = false;
+                if let Vector(ref mut elem_type) = self.ty {
+                    if let Struct(ref mut vec_types) = **elem_type {
+                        for (vec_ty, vec_expr) in vec_types.iter_mut().zip(vectors.iter_mut()) {
+                            if let Vector(ref elem_type) = vec_expr.ty {
+                                changed |= vec_ty.push(elem_type)?;
+                            }
+                            types.push(vec_ty.clone());
                         }
-                    } else {
-                        let mty = b.merge_type_mut();
-                        changed |= try!(sync_types(mty, &mut value.ty, "Merge"));
+                        set_types = true;
                     }
                 }
-                Unknown => (),
-                _ => return compile_err!("Internal error: Merge called on non-builder"),
-            }
-            changed |= try!(sync_types(&mut expr.ty, &mut builder.ty, "Merge"));
-            Ok(changed)
-        }
 
-        Res { ref mut builder } => {
-            let mut changed = false;
-            match builder.ty {
-                Builder(ref mut b, _) => {
-                    let rty = b.result_type();
-                    changed |= try!(push_type(&mut expr.ty, &rty, "Result"));
+                if !set_types || types.len() != vectors.len() {
+                    compile_err!("Expected vector types in zip, got types {}",
+                                 types.iter()
+                                    .map(|t| print_type(t))
+                                    .collect::<Vec<_>>()
+                                    .join(","))
+                } else {
+                    let ref base_type = Vector(Box::new(Struct(types)));
+                    changed |= self.ty.push(base_type)?;
+                    Ok(changed)
                 }
-                Unknown => (),
-                _ => return compile_err!("Internal error: Result called on non-builder"),
             }
-            Ok(changed)
-        }
 
-        For {
-            ref mut iters,
-            ref mut builder,
-            ref mut func,
-        } => {
-            let mut changed = false;
-            // Push iters and builder type into func
-            let mut elem_types = vec![];
-            for iter in iters.iter_mut() {
-                let mut elem_type = match iter.data.ty {
-                    Vector(ref elem) => *elem.clone(),
-                    Unknown => Unknown,
-                    _ => return compile_err!("non-vector type in For"),
+            MakeStruct { ref mut elems } => {
+                let mut changed = false;
+                let ref base_type = Struct(vec![Unknown; elems.len()]);
+                changed |= self.ty.push(base_type)?;
+
+                if let Struct(ref mut elem_types) = self.ty {
+                    // Sync the type of each element and the expression struct type.
+                    for (elem_ty, elem_expr) in elem_types.iter_mut().zip(elems.iter_mut()) {
+                        changed |= elem_ty.sync(&mut elem_expr.ty)?;
+                    }
+                    Ok(changed)
+                } else {
+                    compile_err!("Type mismatch in struct literal")
+                }
+            }
+
+            GetField { expr: ref mut param, index } => {
+                if let Struct(ref mut elem_types) = param.ty {
+                    let index = index as usize;
+                    if index >= elem_types.len() {
+                        compile_err!("struct index error")
+                    } else {
+                        self.ty.sync(&mut elem_types[index])
+                    }
+                } else if param.ty == Unknown {
+                    Ok(false)
+                } else {
+                    compile_err!("Expected struct type for struct field access, got {}", print_type(&param.ty))
+                }
+            }
+
+            Length { ref mut data } => {
+                if let Vector(_) = data.ty {
+                    self.ty.push_complete(Scalar(I64))
+                } else if data.ty == Unknown {
+                    Ok(false)
+                } else {
+                    compile_err!("Expected vector type in len, got {}", print_type(&data.ty))
+                }
+            }
+
+            Slice { ref mut data, ref mut index, ref mut size } => {
+                if let Vector(_) = data.ty {
+                    let mut changed = false;
+                    changed |= index.ty.push_complete(Scalar(I64))?;
+                    changed |= size.ty.push_complete(Scalar(I64))?;
+                    changed |= self.ty.push(&data.ty)?;
+                    Ok(changed)
+                } else if data.ty == Unknown {
+                    Ok(false)
+                } else {
+                    compile_err!("Expected vector type in slice, got {}", print_type(&data.ty))
+                }
+            }
+
+            Sort { ref mut data, ref mut keyfunc } => {
+                if let Vector(ref elem_type) = data.ty {
+                    let mut changed = sync_function(keyfunc, vec![&elem_type])?;
+                    changed |= self.ty.push(&data.ty)?;
+                    Ok(changed)
+                } else if data.ty == Unknown {
+                    Ok(false)
+                } else {
+                    compile_err!("Expected vector type in sort, got {}", print_type(&data.ty))
+                }
+            }
+
+            Lookup { ref mut data, ref mut index } => {
+                let mut changed = false;
+                match data.ty {
+                    Vector(ref elem_type) => {
+                        changed |= index.ty.push_complete(Scalar(I64))?;
+                        changed |= self.ty.push(elem_type)?;
+                        Ok(changed)
+                    }
+                    Dict(ref key_type, ref value_type) => {
+                        let mut changed = false;
+                        changed |= index.ty.push(key_type)?;
+                        changed |= self.ty.push(value_type)?;
+                        Ok(changed)
+                    }
+                    Unknown => Ok(false),
+                    _ => {
+                        compile_err!("Expected vector or dict type in lookup, got {}", print_type(&data.ty))
+                    }
+                }
+            }
+
+            KeyExists { ref mut data, ref mut key } => {
+                if let Dict(ref key_type, _) = data.ty {
+                    let mut changed = false;
+                    changed |= key.ty.push(&key_type)?;
+                    changed |= self.ty.push_complete(Scalar(Bool))?;
+                    Ok(changed)
+                } else if data.ty == Unknown {
+                    Ok(false)
+                } else {
+                    compile_err!("Expected dict type in lookup, got {}", print_type(&data.ty))
+                }
+            }
+
+            Lambda { ref mut params, ref mut body } => {
+                let mut changed = false;
+                let base_type = Function(vec![Unknown; params.len()], Box::new(Unknown));
+
+                changed |= self.ty.push(&base_type)?;
+
+                if let Function(ref mut param_types, ref mut res_type) = self.ty {
+                    changed |= body.ty.sync(res_type)?;
+                    for (param_ty, param_expr) in param_types.iter_mut().zip(params.iter_mut()) {
+                        changed |= param_ty.sync(&mut param_expr.ty)?;
+                    }
+                    Ok(changed)
+                } else {
+                    compile_err!("Expected function type for lambda, got {}", print_type(&self.ty))
+                }
+            }
+
+            If { ref mut cond, ref mut on_true, ref mut on_false } => {
+                let mut changed = false;
+                changed |= cond.ty.push_complete(Scalar(Bool))?;
+                changed |= self.ty.sync(&mut on_true.ty)?;
+                changed |= self.ty.sync(&mut on_false.ty)?;
+                Ok(changed)
+            }
+
+            Iterate { ref mut initial, ref mut update_func } => {
+                let mut changed = self.ty.sync(&mut initial.ty)?;
+                match update_func.ty {
+                    Function(ref mut params, _) if params.len() == 1 => {
+                        changed |= params.get_mut(0).unwrap().sync(&mut initial.ty)?;
+                        Ok(changed)
+                    }
+                    _ => compile_err!("Expected function with single type in iterate, got {}", print_type(&update_func.ty))
+                }
+            }
+
+            Select { ref mut cond, ref mut on_true, ref mut on_false } => {
+                let mut changed = false;
+                let cond_type = if cond.ty.is_simd() {
+                    Simd(Bool)
+                } else {
+                    Scalar(Bool)
+                };
+                changed |= cond.ty.push_complete(cond_type)?;
+                changed |= self.ty.sync(&mut on_true.ty)?;
+                changed |= self.ty.sync(&mut on_false.ty)?;
+                Ok(changed)
+            }
+
+            Apply { ref mut func, ref mut params } => {
+                let func_type = Function(vec![Unknown; params.len()], Box::new(Unknown));
+                let mut changed = func.ty.push(&func_type)?;
+
+                let ref mut fty = func.ty;
+                if let Function(ref mut param_types, ref mut res_type) = *fty {
+                    changed |= self.ty.sync(res_type)?;
+                    for (param_ty, param_expr) in param_types.iter_mut().zip(params.iter_mut()) {
+                        changed |= param_ty.sync(&mut param_expr.ty)?;
+                    }
+                    Ok(changed)
+                } else {
+                    compile_err!("Expected function type in apply, got {}", print_type(fty))
+                }
+            }
+
+            NewBuilder(ref mut argument) => {
+                // NewBuilder is a special case where the expression can currently only be created
+                // via a type. If it doesn't have a type, throw a type inference error.
+                if let Builder(ref kind, _) = self.ty {
+                    // Handle the builders that may take arguments.
+                    match *kind {
+                        VecMerger(ref elem, _) => {
+                            if let Some(ref mut argument) = argument {
+                                argument.ty.push(&Vector(elem.clone()))
+                            } else {
+                                compile_err!("Expected single vector argument in vecmerger")
+                            }
+                        }
+                        Merger(ref elem, _) => {
+                            if let Some(ref mut argument) = argument {
+                                argument.ty.push(elem)
+                            } else {
+                                Ok(false)
+                            }
+                        }
+                        Appender(_) => {
+                            if let Some(ref mut argument) = argument {
+                                argument.ty.push(&Scalar(I64))
+                            } else {
+                                Ok(false)
+                            }
+                        }
+                        _ => Ok(false)
+                    }
+                } else if self.ty == Unknown {
+                    Ok(false)
+                } else {
+                    compile_err!("non-builder type when creating new builder")
+                }
+            }
+
+            Merge { ref mut builder, ref mut value } => {
+                use std::mem;
+                let mut changed = false;
+
+                // Get the merge type, which is the expected type of the value merged into the
+                // builder, and the builder kind, whose precise type we will infer and then set
+                // back into the builder.
+                let (mut merge_type, mut kind) = if let Builder(ref builder_kind, _) = builder.ty {
+                    let mut merge_type = builder_kind.merge_type();
+                    // If we are merging a SIMD value, sync with the SIMD merge type.
+                    // NOTE: This currently only works under the assumption that each
+                    // value in a SIMD program is SIMD-valued.
+                    if value.ty.is_simd() {
+                        merge_type = merge_type.simd_type()?;
+                    }
+                    (merge_type, builder_kind.clone())
+                } else if builder.ty == Unknown {
+                    return Ok(false)
+                } else {
+                    return compile_err!("Expected builder type in merge, got {}", print_type(&builder.ty))
                 };
 
-                // RangeIters always have this element type.
-                if iter.kind == IterKind::RangeIter {
-                    elem_type = Scalar(I64);
+                changed |= value.ty.sync(&mut merge_type)?;
+
+                // To sync the builder type, remove any SIMD type: SIMD shouldn't appear
+                // in the Builder kind.
+                if merge_type.is_simd() {
+                    merge_type = merge_type.scalar_type()?;
                 }
 
-                elem_types.push(elem_type);
-                if iter.start.is_some() {
-                    for i in [&mut iter.start, &mut iter.end, &mut iter.stride].iter_mut() {
-                        match **i {
-                            Some(ref mut e) => {
-                                changed |= try!(push_complete_type(&mut e.ty, Scalar(I64), "iter"))
-                            }
-                            None => unreachable!()
-                        };
+                // Set the builder kind type.
+                match kind {
+                    Appender(ref mut elem) => {
+                        **elem = merge_type;
                     }
-                }
-                /* For Nd-Iter */
-                if iter.shape.is_some() {
-                    for i in [&mut iter.shape, &mut iter.strides].iter_mut() {
-                        match **i {
-                            Some(ref mut e) => {
-                                changed |= try!(push_complete_type(&mut e.ty, Vector(Box::new(Scalar(I64))), "iter"))
-                            }
-                            None => return compile_err!("Impossible"),
-                        };
+                    Merger(ref mut elem, _) => {
+                        **elem = merge_type;
                     }
-                }
-            }
-
-            // The type could also be vectorized.
-            let mut elem_types = if elem_types.len() == 1 {
-                elem_types[0].clone()
-            } else {
-                Struct(elem_types)
-            };
-
-            // Check if the argument to the function is a vector.
-            if let Lambda{ref params, .. } = func.kind {
-                let mut vector_param = false;
-                if let Simd(ref kind) = params[2].ty {
-                    elem_types = Simd(kind.clone());
-                    vector_param = true;
-                } else if let Struct(ref field_tys) = params[2].ty {
-                    if field_tys.iter().all(|t| {
-                        match *t {
-                            Simd(_) => true,
-                            _ => false,
+                    DictMerger(ref mut key, ref mut value, _) => {
+                        if let Struct(mut tys) = merge_type {
+                            mem::swap(key.as_mut(), tys.get_mut(0).unwrap());
+                            mem::swap(value.as_mut(), tys.get_mut(1).unwrap());
+                        } else {
+                            unreachable!()
                         }
-                    }) {
-                        elem_types = Struct(field_tys.iter().map(|t| {
-                            match *t {
-                                Scalar(ref kind) => Simd(kind.clone()),
-                                ref a => a.clone()
-                            }
-                        }).collect());
-                        vector_param = true;
                     }
-                }
+                    GroupMerger(ref mut key, ref mut value) => {
+                        if let Struct(mut tys) = merge_type {
+                            mem::swap(key.as_mut(), tys.get_mut(0).unwrap());
+                            mem::swap(value.as_mut(), tys.get_mut(1).unwrap());
+                        } else {
+                            unreachable!()
+                        }
+                    }
+                    VecMerger(ref mut elem, _) => {
+                        if let Struct(mut tys) = merge_type {
+                            // tys[0] is the index.
+                            mem::swap(elem.as_mut(), tys.get_mut(1).unwrap());
+                        } else {
+                            unreachable!()
+                        }
+                    }
+                };
 
-                if vector_param {
-                    if !iters.iter().all(|i| i.kind == IterKind::SimdIter) {
-                        return compile_err!("For with vector arguments requires a Simd iterator");
-                    }
+                if let Builder(ref mut builder_kind, _) = builder.ty {
+                    *builder_kind = kind;
                 } else {
-                    if iters.iter().any(|i| i.kind == IterKind::SimdIter) {
-                        return compile_err!("For without vector arguments requires a Scalar or Fringe iterator");
-                    }
+                    unreachable!()
+                }
+                changed |= self.ty.sync(&mut builder.ty)?;
+                Ok(changed)
+            }
+
+            Res { ref mut builder } => {
+                if let Builder(ref mut kind, _) = builder.ty {
+                    self.ty.push(&kind.result_type())
+                } else if builder.ty == Unknown {
+                    Ok(false)
+                } else {
+                    compile_err!("Expected builder type in result, got {}", print_type(&builder.ty))
                 }
             }
 
-            let bldr_type = builder.ty.clone();
-            let func_type = Function(vec![bldr_type.clone(), Scalar(I64), elem_types],
-                                     Box::new(bldr_type));
-            changed |= try!(push_type(&mut func.ty, &func_type, "For"));
+            For { ref mut iters, ref mut builder, ref mut func } => {
+                let mut changed = false;
+                // First, for each Iter, if it has a start, end, stride, etc., make sure the types of
+                // those expressions is Scalar(I64).
+                for iter in iters.iter_mut() {
+                    // For ScalarIter, SimdIter, and RangeIter, start, end and stride must all be
+                    // None or Some.
+                    if iter.start.is_some() {
+                        changed |= iter.start.as_mut().unwrap().ty.push_complete(Scalar(I64))?;
+                        changed |= iter.end.as_mut().unwrap().ty.push_complete(Scalar(I64))?;
+                        changed |= iter.stride.as_mut().unwrap().ty.push_complete(Scalar(I64))?;
+                    }
 
-            // Push func's argument type and return type into builder
-            match func.ty {
-                Function(ref params, ref result) if params.len() == 3 => {
-                    changed |= try!(push_type(&mut builder.ty, &params[0], "For"));
-                    changed |= try!(push_type(&mut builder.ty, result.as_ref(), "For"));
+                    // For NDIter, the same rule applies for shape and stride.
+                    if iter.strides.is_some() {
+                        changed |= iter.strides.as_mut().unwrap().ty.push_complete(Vector(Box::new(Scalar(I64))))?;
+                        changed |= iter.shape.as_mut().unwrap().ty.push_complete(Vector(Box::new(Scalar(I64))))?;
+                    }
                 }
-                _ => return compile_err!("For"),
-            };
 
-            // Push builder's type to our expression
-            changed |= try!(push_type(&mut expr.ty, &builder.ty, "For"));
-            Ok(changed)
-        }
+                // Now get the vector data types.
+                let mut elem_types: Vec<_> = iters.iter().map(|iter| {
+                    // If the iterator is a RangeIter, special case it -- the data must be a "dummy"
+                    // empty vector with type vec[i64].
+                    if iter.kind == IterKind::RangeIter {
+                        Ok(Scalar(I64))
+                    } else {
+                        // Make sure the Iter's data is a Vector, and pull out its element kind.
+                        match iter.data.ty {
+                            Vector(ref elem) => Ok(elem.as_ref().clone()),
+                            Unknown => Ok(Unknown),
+                            _ => compile_err!("Expected vector type in for loop iter, got {}", print_type(&iter.data.ty))
+                        }
+                    }
+                }).collect::<WeldResult<_>>()?;
 
-        NewBuilder(ref mut e) => {
-            let mut changed = match expr.ty {
-                Unknown | Builder(_, _) => false,
-                _ => return compile_err!("Wrong type ascribed to NewBuilder"),
-            };
-            // For builders with arguments (Just VecMerger for now).
-            if let Builder(ref bty, _) = expr.ty {
-                match *bty {
-                    VecMerger(ref elem, _, _) => {
-                        match *e {
-                            None => {
-                                return compile_err!("Expected argument for NewBuilder of type \
-                                                  VecMerger");
+                // Convert the vector into a Type, which will either be a Struct or a single type.
+                let mut elem_types = if elem_types.len() == 1 {
+                    elem_types[0].clone()
+                } else {
+                    Struct(elem_types)
+                };
+
+                // Check the For loop's function, and change the element types to be SIMD types
+                // if necessary.
+                match func.kind {
+                    Lambda { ref params, .. } if params.len() == 3 => {
+                        // Convert the expected element types to SIMD if the parameter in the builder
+                        // functinon is SIMD.
+                        if params[2].ty.is_simd() {
+                            if !iters.iter().all(|i| i.kind == IterKind::SimdIter) {
+                                return compile_err!("for loop requires that either all or none of the iters are simditer")
                             }
-                            Some(ref mut arg) => {
-                                changed |= try!(push_type(&mut arg.ty,
-                                                          &Vector(elem.clone()),
-                                                          "NewBuilder(VecMerger)"));
-                            }
+                            elem_types = elem_types.simd_type()?;
+                        } else if iters.iter().any(|i| i.kind == IterKind::SimdIter) {
+                            return compile_err!("for loop requires that either all or none of the iters are simditer")
                         }
                     }
-                    Merger(ref elem, _) => {
-                        match *e {
-                            Some(ref mut arg) => {
-                                changed |= try!(push_type(&mut arg.ty,
-                                                          &elem.clone(),
-                                                          "NewBuilder(Merger)"));
-                            }
-                            None => {}
-                        }
-                    }
-                    Appender(_) => {
-                        match *e {
-                            Some(ref mut arg) => {
-                                changed |= try!(push_type(&mut arg.ty,
-                                                          &Scalar(I64),
-                                                          "NewBuilder(Appender)"));
-                            }
-                            None => {}
-                        }
-                    }
-                    _ => {}
-                }
-            }
-            Ok(changed)
-        }
-
-        If {
-            ref mut cond,
-            ref mut on_true,
-            ref mut on_false,
-        } => {
-            let mut changed = false;
-            changed |= try!(push_complete_type(&mut cond.ty, Scalar(Bool), "If"));
-            changed |= try!(sync_types(&mut expr.ty, &mut on_true.ty, "If"));
-            changed |= try!(sync_types(&mut expr.ty, &mut on_false.ty, "If"));
-            Ok(changed)
-        }
-
-        Iterate {
-            ref mut initial,
-            ref mut update_func,
-        } => {
-            let mut changed = false;
-            // Sync initial type with result type and function argument
-            changed |= sync_types(&mut expr.ty, &mut initial.ty, "Iterate")?;
-            match update_func.ty {
-                Function(ref mut params, _) if params.len() == 1 => {
-                    changed |= sync_types(&mut params[0], &mut initial.ty, "Iterate")?;
-                }
-                _ => return compile_err!("Second argument of Iterate must be a 1-argument function"),
-            };
-            Ok(changed)
-        }
-
-        Select {
-            ref mut cond,
-            ref mut on_true,
-            ref mut on_false,
-        } => {
-            let mut changed = false;
-            if let Simd(_) = on_true.ty {
-                changed |= try!(push_complete_type(&mut cond.ty, Simd(Bool), "Select"));
-            } else {
-                changed |= try!(push_complete_type(&mut cond.ty, Scalar(Bool), "Select"));
-            }
-            changed |= try!(sync_types(&mut expr.ty, &mut on_true.ty, "Select"));
-            changed |= try!(sync_types(&mut expr.ty, &mut on_false.ty, "Select"));
-            Ok(changed)
-        }
-
-        Apply {
-            ref mut func,
-            ref mut params,
-        } => {
-            let mut changed = false;
-
-            let func_type = Function(vec![Unknown; params.len()], Box::new(Unknown));
-            changed |= try!(push_type(&mut func.ty, &func_type, "Apply"));
-
-            let fty = &mut func.ty;
-            match *fty {
-                Function(ref mut param_types, ref mut res_type) => {
-                    changed |= try!(sync_types(&mut expr.ty, res_type, "Apply result"));
-                    for (param_ty, param_expr) in param_types.iter_mut().zip(params.iter_mut()) {
-                        changed |=
-                            try!(sync_types(param_ty, &mut param_expr.ty, "Apply parameter"));
+                    _ => {
+                        // Invalid builder function.
+                        return compile_err!("Expected builder function of type |builder, i64, elements|")
                     }
                 }
 
-                _ => return compile_err!("Internal error: Apply was not called on a function"),
-            }
+                // Impose the correct types on the function.
+                // Function should be (builder, i64, elems) -> builder.
+                let builder_type = builder.ty.clone();
+                let ref func_type = Function(vec![builder_type.clone(), Scalar(I64), elem_types], Box::new(builder_type));
+                changed |= func.ty.push(func_type)?;
 
-            Ok(changed)
-        }
-    }
-}
-
-/// Force the given type to be assigned to a PartialType, or report an error if it has the wrong
-/// type. Return a Result indicating whether the option has changed (i.e. a new type as added).
-fn push_complete_type(dest: &mut PartialType, src: PartialType, context: &str) -> WeldResult<bool> {
-    match src {
-        Scalar(_) | Simd(_) => {
-            if *dest == Unknown {
-                *dest = src;
-                Ok(true)
-            } else if *dest == src {
-                Ok(false)
-            } else {
-                compile_err!("Mismatched types in {}", context)
-            }
-        }
-
-        Vector(ref elem) => {
-            if *dest == Unknown {
-                *dest = src.clone();
-                Ok(true)
-            } else if let Vector(ref mut dest_elem) = *dest {
-                push_complete_type(dest_elem, elem.as_ref().clone(), context)
-            } else {
-                compile_err!("Mismatched types in {}", context)
-            }
-        }
-
-        _ => {
-            compile_err!("Internal error: push_complete_type not implemented for {:?}",
-                      src)
-        }
-    }
-}
-
-/// Force the type of `dest` to be at least as specific as `src`, or report an error if it has an
-/// incompatible type. Return a Result indicating whether the type of `dest` has changed.
-fn push_type(dest: &mut PartialType, src: &PartialType, context: &str) -> WeldResult<bool> {
-    if *src == Unknown {
-        return Ok(false);
-    }
-    match *dest {
-        Unknown => {
-            *dest = src.clone();
-            Ok(true)
-        }
-
-        Scalar(ref d) => {
-            match *src {
-                Scalar(ref s) if d == s => Ok(false),
-                _ => compile_err!("Mismatched types in Scalar, {}", context),
-            }
-        }
-
-        Simd(ref d) => {
-            match *src {
-                Simd(ref s) if d == s => Ok(false),
-                _ => compile_err!("Mismatched types in Simd, {}", context),
-            }
-        }
-
-        Vector(ref mut dest_elem) => {
-            match *src {
-                Vector(ref src_elem) => push_type(dest_elem, src_elem, context),
-                _ => compile_err!("Mismatched types in Vector, {}", context),
-            }
-        }
-
-        Dict(ref mut dest_key_ty, ref mut dest_value_ty) => {
-            match *src {
-                Dict(ref src_key_ty, ref src_value_ty) => {
-                    let mut changed = false;
-                    changed |= try!(push_type(dest_key_ty.as_mut(), src_key_ty.as_ref(), context));
-                    changed |=
-                        try!(push_type(dest_value_ty.as_mut(), src_value_ty.as_ref(), context));
-                    Ok(changed)
+                // This will never be false, since we pushed the Function type above.
+                // Make sure the Builder type and the function builder argument and return types match.
+                if let Function(ref params, ref result) = func.ty {
+                    changed |= builder.ty.push(&params[0])?;
+                    changed |= builder.ty.push(result.as_ref())?;
+                } else {
+                    unreachable!()
                 }
-                _ => compile_err!("Mismatched types in Dict, {}", context),
-            }
-        }
 
-        Struct(ref mut dest_elems) => {
-            match *src {
-                Struct(ref src_elems) => {
-                    let mut changed = false;
-                    if dest_elems.len() != src_elems.len() {
-                        return compile_err!("Mismatched types in Struct, {}", context);
-                    }
-                    for (dest_elem, src_elem) in dest_elems.iter_mut().zip(src_elems) {
-                        changed |= try!(push_type(dest_elem, src_elem, context));
-                    }
-                    Ok(changed)
-                }
-                _ => compile_err!("Mismatched types in Struct, {}", context),
-            }
-        }
-
-        Function(ref mut dest_params, ref mut dest_res) => {
-            match *src {
-                Function(ref src_params, ref src_res) => {
-                    let mut changed = false;
-                    if dest_params.len() != src_params.len() {
-                        return compile_err!("Mismatched types in Function, {}", context);
-                    }
-                    for (dest_param, src_param) in dest_params.iter_mut().zip(src_params) {
-                        changed |= try!(push_type(dest_param, src_param, context));
-                    }
-                    changed |= try!(push_type(dest_res, src_res, context));
-                    Ok(changed)
-                }
-                _ => compile_err!("Mismatched types in Function, {}", context),
-            }
-        }
-
-        Builder(Appender(ref mut dest_elem), ref mut dest_annotations) => {
-            match *src {
-                Builder(Appender(ref src_elem), ref src_annotations) => {
-                    let mut changed = false;
-                    changed |= try!(push_type(dest_elem.as_mut(), src_elem.as_ref(), context));
-                    if *dest_annotations != *src_annotations {
-                        if !src_annotations.is_empty() {
-                            *dest_annotations = src_annotations.clone();
-                            changed |= true;
-                        }
-                    }
-                    Ok(changed)
-                }
-                _ => compile_err!("Mismatched types in Appender, {}", context),
-            }
-        }
-
-        Builder(DictMerger(ref mut dest_key_ty,
-                           ref mut dest_value_ty,
-                           ref mut dest_merge_ty,
-                           _),
-                ref mut dest_annotations) => {
-            match *src {
-                Builder(DictMerger(ref src_key_ty, ref src_value_ty, ref src_merge_ty, _),
-                        ref src_annotations) => {
-                    let mut changed = false;
-                    changed |= try!(push_type(dest_key_ty.as_mut(), src_key_ty.as_ref(), context));
-                    changed |=
-                        try!(push_type(dest_value_ty.as_mut(), src_value_ty.as_ref(), context));
-                    changed |=
-                        try!(push_type(dest_merge_ty.as_mut(), src_merge_ty.as_ref(), context));
-                    if *dest_annotations != *src_annotations {
-                        if !src_annotations.is_empty() {
-                            *dest_annotations = src_annotations.clone();
-                            changed |= true;
-                        }
-                    }
-
-                    // For now, any commutative-merge builder only supports either a single scalar
-                    // or a struct of scalars.
-                    match **dest_value_ty {
-                        Struct(ref tys) => {
-                            for ty in tys {
-                                match *ty {
-                                    Scalar(_) => {}
-                                    _ => {
-                                        return compile_err!("Commutatitive merge builders only \
-                                                          support structs with scalars");
-                                    }
-                                }
-                            }
-                        }
-                        Scalar(_) => {}
-                        _ => {
-                            return compile_err!("Commutatitive merge builders only support scalars \
-                                              or structs of scalars");
-                        }
-                    }
-                    Ok(changed)
-                }
-                _ => compile_err!("Mismatched types in DictMerger, {}", context),
-            }
-        }
-
-        Builder(GroupMerger(ref mut dest_key_ty, ref mut dest_value_ty, ref mut dest_merge_ty),
-                ref mut dest_annotations) => {
-            match *src {
-                Builder(GroupMerger(ref src_key_ty, ref src_value_ty, ref src_merge_ty),
-                        ref src_annotations) => {
-                    let mut changed = false;
-                    changed |= push_type(dest_key_ty.as_mut(), src_key_ty.as_ref(), context)?;
-                    changed |= push_type(dest_value_ty.as_mut(), src_value_ty.as_ref(), context)?;
-                    changed |= push_type(dest_merge_ty.as_mut(), src_merge_ty.as_ref(), context)?;
-                    if *dest_annotations != *src_annotations {
-                        if !src_annotations.is_empty() {
-                            *dest_annotations = src_annotations.clone();
-                            changed |= true;
-                        }
-                    }
-                    Ok(changed)
-                }
-                _ => compile_err!("Mismatched types in GroupMerger, {}", context),
-            }
-        }
-
-        Builder(VecMerger(ref mut dest_elem_ty, ref mut dest_merge_ty, _),
-                ref mut dest_annotations) => {
-            match *src {
-                Builder(VecMerger(ref src_elem_ty, ref src_merge_ty, _), ref src_annotations) => {
-                    let mut changed = false;
-                    changed |=
-                        try!(push_type(dest_elem_ty.as_mut(), src_elem_ty.as_ref(), context));
-                    changed |=
-                        try!(push_type(dest_merge_ty.as_mut(), src_merge_ty.as_ref(), context));
-                    if *dest_annotations != *src_annotations {
-                        if !src_annotations.is_empty() {
-                            *dest_annotations = src_annotations.clone();
-                            changed |= true;
-                        }
-                    }
-
-                    // For now, any commutative-merge builder only supports either a single scalar
-                    // or a struct of scalars.
-                    match **dest_elem_ty {
-                        Struct(ref tys) => {
-                            for ty in tys {
-                                match *ty {
-                                    Scalar(_) => {}
-                                    _ => {
-                                        return compile_err!("Commutative merge builders only \
-                                                          support structs with scalars");
-                                    }
-                                }
-                            }
-                        }
-                        Scalar(_) => {}
-                        _ => {
-                            return compile_err!("Commutative merge builders only support scalars \
-                                              or structs of scalars");
-                        }
-                    }
-                    Ok(changed)
-
-
-                }
-                _ => compile_err!("Mismatched types in VecMerger, {}", context),
-            }
-        }
-
-        Builder(Merger(ref mut dest_elem, _), ref mut dest_annotations) => {
-            match *src {
-                Builder(Merger(ref src_elem, _), ref src_annotations) => {
-                    let mut changed = push_type(dest_elem.as_mut(), src_elem.as_ref(), context)?;
-                    if *dest_annotations != *src_annotations {
-                        if !src_annotations.is_empty() {
-                            *dest_annotations = src_annotations.clone();
-                            changed |= true;
-                        }
-                    }
-                    // For now, any commutative-merge builder only supports either a single scalar
-                    // or a struct of scalars. TODO(shoumik): Factor into function.
-                    match **dest_elem {
-                        Struct(ref tys) => {
-                            for ty in tys {
-                                match *ty {
-                                    Scalar(_) => {}
-                                    _ => {
-                                        return compile_err!("Commutatitive merge builders only \
-                                                          support structs with scalars");
-                                    }
-                                }
-                            }
-                        }
-                        Scalar(_) => {}
-                        _ => {
-                            return compile_err!("Commutatitive merge builders only support scalars \
-                                              or structs of scalars");
-                        }
-                    }
-                    Ok(changed)
-                }
-                _ => compile_err!("Mismatched types in {}", context),
+                // Push builder's type to our expression
+                changed |= self.ty.push(&builder.ty)?;
+                Ok(changed)
             }
         }
     }
-}
-
-/// Force two types to be equal, calling `push_type` in each direction. Return true if any type
-/// has changed in this process or an error if the types cannot be made to match.
-fn sync_types(t1: &mut PartialType, t2: &mut PartialType, error: &str) -> WeldResult<bool> {
-    Ok(try!(push_type(t1, t2, error)) | try!(push_type(t2, t1, error)))
-}
-
-#[test]
-fn infer_types_simple() {
-    let int_lit = expr_box(Literal(I32Literal(1)), Annotations::new());
-    let float_lit = expr_box(Literal(F32Literal(1f32.to_bits())), Annotations::new());
-    let bool_lit = expr_box(Literal(BoolLiteral(false)), Annotations::new());
-    let sum = expr_box(BinOp {
-                           kind: Add,
-                           left: int_lit.clone(),
-                           right: int_lit.clone(),
-                       }, Annotations::new());
-    let prod = expr_box(BinOp {
-                            kind: Multiply,
-                            left: sum.clone(),
-                            right: sum.clone(),
-                        }, Annotations::new());
-    let fsum = expr_box(BinOp {
-                            kind: Add,
-                            left: float_lit.clone(),
-                            right: float_lit.clone(),
-                        }, Annotations::new());
-    let fprod = expr_box(BinOp {
-                             kind: Add,
-                             left: float_lit.clone(),
-                             right: float_lit.clone(),
-                         }, Annotations::new());
-    let f64cast = expr_box(Cast {
-                               kind: F64,
-                               child_expr: fprod.clone(),
-                           }, Annotations::new());
-    let boolcast = expr_box(Cast {
-                                kind: Bool,
-                                child_expr: f64cast.clone(),
-                            }, Annotations::new());
-
-    let mut e = *int_lit.clone();
-    assert!(infer_types(&mut e).is_ok());
-    assert_eq!(e.ty, Scalar(I32));
-
-    let mut e = *float_lit.clone();
-    assert!(infer_types(&mut e).is_ok());
-    assert_eq!(e.ty, Scalar(F32));
-
-    let mut e = *bool_lit.clone();
-    assert!(infer_types(&mut e).is_ok());
-    assert_eq!(e.ty, Scalar(Bool));
-
-    let mut e = *sum.clone();
-    assert!(infer_types(&mut e).is_ok());
-    assert_eq!(e.ty, Scalar(I32));
-
-    let mut e = *prod.clone();
-    assert!(infer_types(&mut e).is_ok());
-    assert_eq!(e.ty, Scalar(I32));
-
-    let mut e = *fsum.clone();
-    assert!(infer_types(&mut e).is_ok());
-    assert_eq!(e.ty, Scalar(F32));
-
-    let mut e = *fprod.clone();
-    assert!(infer_types(&mut e).is_ok());
-    assert_eq!(e.ty, Scalar(F32));
-
-    let mut e = *f64cast.clone();
-    assert!(infer_types(&mut e).is_ok());
-    assert_eq!(e.ty, Scalar(F64));
-
-    let mut e = *boolcast.clone();
-    assert!(infer_types(&mut e).is_ok());
-    assert_eq!(e.ty, Scalar(Bool));
-
-}
-
-#[test]
-fn infer_types_let() {
-    let mut e = parse_expr("let a = 1; a + a").unwrap();
-    assert!(infer_types(&mut e).is_ok());
-    assert_eq!(e.ty, Scalar(I32));
-
-    let mut e = parse_expr("let a = 1.0f; a + a").unwrap();
-    assert!(infer_types(&mut e).is_ok());
-    assert_eq!(e.ty, Scalar(F32));
-
-    let mut e = parse_expr("a + a").unwrap();
-    assert!(infer_types(&mut e).is_err());
-
-    let mut e = parse_expr("let a:i32 = 1; a").unwrap();
-    assert!(infer_types(&mut e).is_ok());
-    assert_eq!(e.ty, Scalar(I32));
-
-    let mut e = parse_expr("let a:i64 = 1L; a").unwrap();
-    assert!(infer_types(&mut e).is_ok());
-    assert_eq!(e.ty, Scalar(I64));
-
-    let mut e = parse_expr("let a:f32 = 1.0f; a").unwrap();
-    assert!(infer_types(&mut e).is_ok());
-    assert_eq!(e.ty, Scalar(F32));
-
-    let mut e = parse_expr("let a:f64 = 1.0; a").unwrap();
-    assert!(infer_types(&mut e).is_ok());
-    assert_eq!(e.ty, Scalar(F64));
-
-    let mut e = parse_expr("let a = lookup([1,2,3], 0L); a").unwrap();
-    assert!(infer_types(&mut e).is_ok());
-    assert_eq!(e.ty, Scalar(I32));
-
-    let mut e = parse_expr("let a = lookup([1.0f,2.0f,3.0f], 0L); a").unwrap();
-    assert!(infer_types(&mut e).is_ok());
-    assert_eq!(e.ty, Scalar(F32));
-
-    let mut e = parse_expr("let a = lookup(lookup([[1],[2],[3]], 0L), 0L); a").unwrap();
-    assert!(infer_types(&mut e).is_ok());
-    assert_eq!(e.ty, Scalar(I32));
-
-    let code = "let a = result(for([1,2,3], dictmerger[i32,i32,+], \
-                |b,i,e| merge(b, {e,e}))); keyexists(a, 1)";
-
-    let mut e = parse_expr(code).unwrap();
-    assert!(infer_types(&mut e).is_ok());
-    assert_eq!(e.ty, Scalar(Bool));
-
-    let mut e = parse_expr("let a = slice([1.0f, 2.0f, 3.0f], 0L, 2L);a").unwrap();
-    assert!(infer_types(&mut e).is_ok());
-    assert_eq!(e.ty, Vector(Box::new(Scalar(F32))));
-
-    let mut e = parse_expr("let a = sort([1.0f, 2.0f, 3.0f], |x:f32| x);a").unwrap();
-    assert!(infer_types(&mut e).is_ok());
-    assert_eq!(e.ty, Vector(Box::new(Scalar(F32))));
-
-    let mut e = parse_expr("let a:bool = 1; a").unwrap();
-    assert!(infer_types(&mut e).is_err());
-
-    let mut e = parse_expr("let a = 1; a:bool").unwrap();
-    assert!(infer_types(&mut e).is_err());
-
-}
-
-#[test]
-fn infer_annotations() {
-    // Check if annotations are correctly inferred.
-    let code = "result(for([1,2,3], @(impl:local)dictmerger[i32,i32,+], \
-                |b,i,e| merge(b, {e,e})))";
-    let mut e = parse_expr(code).unwrap();
-    assert!(infer_types(&mut e).is_ok());
-    assert_eq!(print_typed_expr_without_indent(&e).as_str(),
-               "result(for([1,2,3],@(impl:local)dictmerger[i32,i32,+],\
-                |b:@(impl:local)dictmerger[i32,i32,+],i:i64,e:i32|\
-                merge(b:@(impl:local)dictmerger[i32,i32,+],{e:i32,e:i32})))");
-
-    // Perform same check as above, but with builder type explicitly specified (check
-    // if annotations are still propagated correctly).
-    let code = "result(for([1,2,3], @(impl:local)dictmerger[i32,i32,+], \
-                |b:dictmerger[i32,i32,+],i,e| merge(b, {e,e})))";
-    let mut e = parse_expr(code).unwrap();
-    assert!(infer_types(&mut e).is_ok());
-    assert_eq!(print_typed_expr_without_indent(&e).as_str(),
-               "result(for([1,2,3],@(impl:local)dictmerger[i32,i32,+],\
-                |b:@(impl:local)dictmerger[i32,i32,+],i:i64,e:i32|\
-                merge(b:@(impl:local)dictmerger[i32,i32,+],{e:i32,e:i32})))");
 }
