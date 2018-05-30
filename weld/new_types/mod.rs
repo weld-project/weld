@@ -1110,4 +1110,11 @@ impl Expr {
     }
 }
 
-
+/// Create a box containing an untyped expression of the given kind.
+pub fn expr_box(kind: ExprKind, annot: Annotations) -> Box<Expr> {
+    Box::new(Expr {
+                 ty: Type::Unknown,
+                 kind: kind,
+                 annotations: annot,
+             })
+}
