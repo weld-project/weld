@@ -565,7 +565,7 @@ fn binop_test() {
 
 #[test]
 fn makevector_empty_test() {
-    let vector = makevector_expr_typed(vec![], Scalar(ScalarKind::I32)).unwrap();
+    let _vector = makevector_expr_typed(vec![], Scalar(ScalarKind::I32)).unwrap();
 }
 
 #[test]
