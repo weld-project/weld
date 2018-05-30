@@ -657,7 +657,85 @@ impl InferTypesInternal for Expr {
             }
 
             For { ref mut iters, ref mut builder, ref mut func } => {
-                Ok(false)
+                let mut changed = false;
+                // First, for each Iter, if it has a start, end, stride, etc., make sure the types of
+                // those expressions is Scalar(I64).
+                for iter in iters.iter_mut() {
+                    // For ScalarIter, SimdIter, and RangeIter, start, end and stride must all be
+                    // None or Some.
+                    if iter.start.is_some() {
+                        changed |= iter.start.as_mut().unwrap().ty.push_complete(Scalar(I64))?;
+                        changed |= iter.end.as_mut().unwrap().ty.push_complete(Scalar(I64))?;
+                        changed |= iter.stride.as_mut().unwrap().ty.push_complete(Scalar(I64))?;
+                    }
+
+                    // For NDIter, the same rule applies for shape and stride.
+                    if iter.strides.is_some() {
+                        changed |= iter.strides.as_mut().unwrap().ty.push_complete(Vector(Box::new(Scalar(I64))))?;
+                        changed |= iter.shape.as_mut().unwrap().ty.push_complete(Vector(Box::new(Scalar(I64))))?;
+                    }
+                }
+
+                // Now get the vector data types.
+                let mut elem_types: Vec<_> = iters.iter().map(|iter| {
+                    // If the iterator is a RangeIter, special case it -- the data must be a "dummy"
+                    // empty vector with type vec[i64].
+                    if iter.kind == IterKind::RangeIter {
+                        Ok(Scalar(I64))
+                    } else {
+                        // Make sure the Iter's data is a Vector, and pull out its element kind.
+                        match iter.data.ty {
+                            Vector(ref elem) => Ok(elem.as_ref().clone()),
+                            Unknown => Ok(Unknown),
+                            _ => compile_err!("TODO")
+                        }
+                    }
+                }).collect::<WeldResult<_>>()?;
+
+                // Convert the vector into a Type, which will either be a Struct or a single type.
+                let mut elem_types = if elem_types.len() == 1 {
+                    elem_types[0].clone()
+                } else {
+                    Struct(elem_types)
+                };
+
+                // Check the For loop's function, and change the element types to be SIMD types
+                // if necessary.
+                match func.kind {
+                    Lambda { ref params, .. } if params.len() == 3 => {
+                        // Convert the expected element types to SIMD if the parameter in the builder
+                        // functinon is SIMD.
+                        if params[2].ty.is_simd() {
+                            if !iters.iter().all(|i| i.kind == IterKind::SimdIter) {
+                                return compile_err!("TODO");
+                            }
+                            elem_types = elem_types.simd_type()?;
+                        } else if iters.iter().any(|i| i.kind == IterKind::SimdIter) {
+                            return compile_err!("TODO");
+                        }
+                    }
+                    _ => {
+                        // Invalid builder function.
+                        return compile_err!("TODO")
+                    }
+                }
+
+                // Impose the correct types on the function.
+                // Function should be (builder, i64, elems) -> builder.
+                let builder_type = builder.ty.clone();
+                let ref func_type = Function(vec![builder_type.clone(), Scalar(I64), elem_types], Box::new(builder_type));
+                changed |= func.ty.push(func_type)?;
+
+                // This will never be false, since we pushed the Function type above.
+                // Make sure the Builder type and the function builder argument and return types match.
+                if let Function(ref params, ref result) = func.ty {
+                    changed |= builder.ty.push(&params[0])?;
+                    changed |= builder.ty.push(result.as_ref())?;
+                }
+
+                // Push builder's type to our expression
+                changed |= self.ty.push(&builder.ty)?;
+                Ok(changed)
             }
         }
     }
