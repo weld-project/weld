@@ -2,6 +2,8 @@
 extern crate libc;
 extern crate fnv;
 
+use std::iter;
+
 use std::cmp::max;
 
 use super::ast::*;
@@ -83,4 +85,17 @@ impl IdGenerator {
         self.next_id += 1;
         res
     }
+}
+
+pub fn join<T: iter::Iterator<Item = String>>(start: &str, sep: &str, end: &str, strings: T) -> String {
+    let mut res = String::new();
+    res.push_str(start);
+    for (i, s) in strings.enumerate() {
+        if i > 0 {
+            res.push_str(sep);
+        }
+        res.push_str(&s);
+    }
+    res.push_str(end);
+    res
 }

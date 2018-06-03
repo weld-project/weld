@@ -1,6 +1,6 @@
 use super::ast::{Expr, Type, ExprKind, Symbol};
 use super::parser::parse_expr;
-use super::pretty_print::*;
+use super::ast::pretty_print::*;
 use super::type_inference::*;
 use super::annotations::*;
 
