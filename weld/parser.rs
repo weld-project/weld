@@ -25,7 +25,7 @@ use super::annotations::*;
 use std::error::Error;
 
 #[cfg(test)]
-use super::pretty_print::*;
+use tests::{print_expr_without_indent, print_typed_expr_without_indent};
 
 /// Returns a formatted parse error if the parse failed, or returns the `res`.
 macro_rules! check_parse_error {
@@ -1481,11 +1481,11 @@ fn basic_parsing() {
     assert_eq!(print_expr_without_indent(&p.macros[0].body), "(x+x)");
     assert_eq!(print_expr_without_indent(&p.macros[1].body), "5");
 
-    let t = parse_type("{i32, vec[vec[?]], ?}").unwrap();
-    assert_eq!(print_type(&t), "{i32,vec[vec[?]],?}");
+    let ref t = parse_type("{i32, vec[vec[?]], ?}").unwrap().to_string();
+    assert_eq!(t, "{i32,vec[vec[?]],?}");
 
-    let t = parse_type("{}").unwrap();
-    assert_eq!(print_type(&t), "{}");
+    let ref t = parse_type("{}").unwrap().to_string();
+    assert_eq!(t, "{}");
 }
 
 #[test]

@@ -140,7 +140,6 @@ mod llvm;
 mod macro_processor;
 mod passes;
 mod parser;
-mod pretty_print;
 mod program;
 mod sir;
 mod tokenizer;

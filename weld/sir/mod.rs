@@ -9,7 +9,7 @@ use std::vec;
 use super::ast::*;
 use super::ast::Type::*;
 use super::error::*;
-use super::pretty_print::*;
+use super::ast::pretty_print::PrettyPrint;
 use super::util::SymbolGenerator;
 
 extern crate fnv;
@@ -471,7 +471,7 @@ impl fmt::Display for StatementKind {
         use self::StatementKind::*;
         match *self {
             Assign(ref value) => write!(f, "{}", value),
-            AssignLiteral(ref value) => write!(f, "{}", print_literal(value)),
+            AssignLiteral(ref value) => write!(f, "{}", value),
             BinOp {
                 ref op,
                 ref left,
@@ -480,7 +480,7 @@ impl fmt::Display for StatementKind {
             Broadcast(ref child) => write!(f, "broadcast({})", child),
             Serialize(ref child) => write!(f, "serialize({})", child),
             Deserialize(ref child) => write!(f, "deserialize({})", child),
-            Cast(ref child, ref ty) => write!(f, "cast({}, {})", child, print_type(ty)),
+            Cast(ref child, ref ty) => write!(f, "cast({}, {})", child, ty),
             CUDF {
                 ref symbol_name,
                 ref args,
@@ -523,7 +523,7 @@ impl fmt::Display for StatementKind {
                 } else {
                     "".to_string()
                 };
-                write!(f, "new {}({})", print_type(ty), arg_str)
+                write!(f, "new {}({})", ty, arg_str)
             }
             Lookup {
                 ref child,
@@ -649,12 +649,12 @@ impl fmt::Display for SirFunction {
         write!(f, "Params:\n")?;
         let params_sorted: BTreeMap<&Symbol, &Type> = self.params.iter().collect();
         for (name, ty) in params_sorted {
-            write!(f, "  {}: {}\n", name, print_type(ty))?;
+            write!(f, "  {}: {}\n", name, ty)?;
         }
         write!(f, "Locals:\n")?;
         let locals_sorted: BTreeMap<&Symbol, &Type> = self.locals.iter().collect();
         for (name, ty) in locals_sorted {
-            write!(f, "  {}: {}\n", name, print_type(ty))?;
+            write!(f, "  {}: {}\n", name, ty)?;
         }
         for block in &self.blocks {
             write!(f, "{}", block)?;
@@ -1262,7 +1262,7 @@ fn gen_expr(expr: &Expr,
                 super::ast::Type::Struct(ref v) => &v[index as usize],
                 _ => {
                     compile_err!("Internal error: tried to get field of type {}",
-                              print_type(&expr.ty))?
+                              &expr.ty)?
                 }
             };
 
@@ -1347,11 +1347,11 @@ fn gen_expr(expr: &Expr,
                                 });
                 Ok((cont_func, cont_block, builder_sym))
             } else {
-                compile_err!("Argument to For was not a Lambda: {}", print_expr(func))
+                compile_err!("Argument to For was not a Lambda: {}", func.pretty_print())
             }
         }
 
-        _ => compile_err!("Unsupported expression: {}", print_expr(expr)),
+        _ => compile_err!("Unsupported expression: {}", expr.pretty_print())
     }
 }
 

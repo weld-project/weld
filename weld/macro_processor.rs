@@ -16,7 +16,7 @@ use super::util::SymbolGenerator;
 use super::annotations::*;
 
 #[cfg(test)]
-use super::pretty_print::*;
+use tests::print_expr_without_indent;
 
 const MAX_MACRO_DEPTH: i32 = 30;
 
@@ -163,7 +163,7 @@ fn macros_introducing_symbols() {
     let macros = parse_macros("macro adder(a) = |x| x+a;").unwrap();
     let expr = parse_expr("adder(x)").unwrap();
     let result = process_expression(&expr, &macros).unwrap();
-    assert_eq!(print_expr_without_indent(&result).as_str(), "|x__1|(x__1+x)");
+    assert_eq!(print_expr_without_indent(&result).as_str(), "|x__1:?|(x__1+x)");
 
     // Same case as above except we define a symbol in a Let instead of Lambda.
     let macros = parse_macros("macro twice(a) = (let x = a; x+x);").unwrap();
@@ -176,7 +176,7 @@ fn macros_introducing_symbols() {
     let macros = parse_macros("macro adder(a) = |x| x+a;").unwrap();
     let expr = parse_expr("adder(b)").unwrap();
     let result = process_expression(&expr, &macros).unwrap();
-    assert_eq!(print_expr_without_indent(&result).as_str(), "|x|(x+b)");
+    assert_eq!(print_expr_without_indent(&result).as_str(), "|x:?|(x+b)");
 
     // Same case as above except we define a symbol in a Let instead of Lambda.
     let macros = parse_macros("macro twice(a) = (let x = a; x+x);").unwrap();
@@ -190,14 +190,14 @@ fn macros_introducing_symbols() {
     let expr = parse_expr("adder(x+adder(x)(1))").unwrap();
     let result = process_expression(&expr, &macros).unwrap();
     assert_eq!(print_expr_without_indent(&result).as_str(),
-               "|x__1|(x__1+(x+(|x__2|(x__2+x))(1)))");
+               "|x__1:?|(x__1+(x+(|x__2|(x__2+x))(1)))");
 
     // Similar case with multiple macros.
     let macros = parse_macros("macro adder(a)=|x|x+a; macro twice(a)=(let x=a; x+x);").unwrap();
     let expr = parse_expr("adder(twice(x))").unwrap();
     let result = process_expression(&expr, &macros).unwrap();
     assert_eq!(print_expr_without_indent(&result).as_str(),
-               "|x__1|(x__1+(let x__2=(x);(x__2+x__2)))");
+               "|x__1:?|(x__1+(let x__2=(x);(x__2+x__2)))");
 }
 
 #[test]

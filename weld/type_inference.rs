@@ -11,8 +11,6 @@ use ast::ScalarKind::*;
 
 use error::*;
 
-use pretty_print::print_type;
-
 use fnv::FnvHashMap;
 
 type TypeMap = FnvHashMap<Symbol, Type>;
@@ -77,11 +75,11 @@ impl PushType for Type {
                 if let Vector(ref mut dest) = *self {
                     dest.push_complete(elem.as_ref().clone())
                 } else {
-                    compile_err!("Type mismatch: expected {} but got {}", print_type(&other), print_type(self))
+                    compile_err!("Type mismatch: expected {} but got {}", &other, self)
                 }
             }
             _ => {
-                compile_err!("Type mismatch: expected {} but got {}", print_type(&other), print_type(self))
+                compile_err!("Type mismatch: expected {} but got {}", &other, self)
             }
         }
     }
@@ -169,7 +167,7 @@ impl PushType for Type {
                     (&mut Appender(_), _) | (&mut DictMerger(_,_,_), _) |
                         (&mut GroupMerger(_,_), _) | (&mut VecMerger(_,_), _) |
                         (&mut Merger(_,_), _) => {
-                            compile_err!("Type mismatch: expected builder type {}", print_type(other))
+                            compile_err!("Type mismatch: expected builder type {}", other)
                         }
                 }?;
 
@@ -184,7 +182,7 @@ impl PushType for Type {
             }
             (ref this, ref other) => {
                 compile_err!("Type mismatch: expected {} but got {}",
-                             print_type(other), print_type(this))
+                             other, this)
             }
         }
     }
@@ -201,7 +199,7 @@ fn sync_function(expr: &mut Expr, tys: Vec<&Type>) -> WeldResult<bool> {
             Ok(changed)
         }
         _ => {
-            compile_err!("Expected function with {} arguments, but got {}", tys.len(), print_type(&expr.ty))
+            compile_err!("Expected function with {} arguments, but got {}", tys.len(), &expr.ty)
         }
     }
 }
@@ -378,7 +376,7 @@ impl InferTypesInternal for Expr {
                 }
 
                 if !set_types {
-                    compile_err!("Expected dictionary argument for tovec(...), got {}", print_type(&child_expr.ty))
+                    compile_err!("Expected dictionary argument for tovec(...), got {}", &child_expr.ty)
                 } else {
                     Ok(changed)
                 }
@@ -402,7 +400,7 @@ impl InferTypesInternal for Expr {
                 } else if c.ty == Unknown {
                     Ok(false)
                 } else {
-                    compile_err!("Expected scalar argument for broadcast, got {}", print_type(&c.ty))
+                    compile_err!("Expected scalar argument for broadcast, got {}", &c.ty)
                 }
             }
 
@@ -465,7 +463,7 @@ impl InferTypesInternal for Expr {
                 if !set_types || types.len() != vectors.len() {
                     compile_err!("Expected vector types in zip, got types {}",
                                  types.iter()
-                                    .map(|t| print_type(t))
+                                    .map(|t| t.to_string())
                                     .collect::<Vec<_>>()
                                     .join(","))
                 } else {
@@ -502,7 +500,7 @@ impl InferTypesInternal for Expr {
                 } else if param.ty == Unknown {
                     Ok(false)
                 } else {
-                    compile_err!("Expected struct type for struct field access, got {}", print_type(&param.ty))
+                    compile_err!("Expected struct type for struct field access, got {}", &param.ty)
                 }
             }
 
@@ -512,7 +510,7 @@ impl InferTypesInternal for Expr {
                 } else if data.ty == Unknown {
                     Ok(false)
                 } else {
-                    compile_err!("Expected vector type in len, got {}", print_type(&data.ty))
+                    compile_err!("Expected vector type in len, got {}", &data.ty)
                 }
             }
 
@@ -526,7 +524,7 @@ impl InferTypesInternal for Expr {
                 } else if data.ty == Unknown {
                     Ok(false)
                 } else {
-                    compile_err!("Expected vector type in slice, got {}", print_type(&data.ty))
+                    compile_err!("Expected vector type in slice, got {}", &data.ty)
                 }
             }
 
@@ -538,7 +536,7 @@ impl InferTypesInternal for Expr {
                 } else if data.ty == Unknown {
                     Ok(false)
                 } else {
-                    compile_err!("Expected vector type in sort, got {}", print_type(&data.ty))
+                    compile_err!("Expected vector type in sort, got {}", &data.ty)
                 }
             }
 
@@ -558,7 +556,7 @@ impl InferTypesInternal for Expr {
                     }
                     Unknown => Ok(false),
                     _ => {
-                        compile_err!("Expected vector or dict type in lookup, got {}", print_type(&data.ty))
+                        compile_err!("Expected vector or dict type in lookup, got {}", &data.ty)
                     }
                 }
             }
@@ -572,7 +570,7 @@ impl InferTypesInternal for Expr {
                 } else if data.ty == Unknown {
                     Ok(false)
                 } else {
-                    compile_err!("Expected dict type in lookup, got {}", print_type(&data.ty))
+                    compile_err!("Expected dict type in lookup, got {}", &data.ty)
                 }
             }
 
@@ -589,7 +587,7 @@ impl InferTypesInternal for Expr {
                     }
                     Ok(changed)
                 } else {
-                    compile_err!("Expected function type for lambda, got {}", print_type(&self.ty))
+                    compile_err!("Expected function type for lambda, got {}", &self.ty)
                 }
             }
 
@@ -608,7 +606,7 @@ impl InferTypesInternal for Expr {
                         changed |= params.get_mut(0).unwrap().sync(&mut initial.ty)?;
                         Ok(changed)
                     }
-                    _ => compile_err!("Expected function with single type in iterate, got {}", print_type(&update_func.ty))
+                    _ => compile_err!("Expected function with single type in iterate, got {}", &update_func.ty)
                 }
             }
 
@@ -637,7 +635,7 @@ impl InferTypesInternal for Expr {
                     }
                     Ok(changed)
                 } else {
-                    compile_err!("Expected function type in apply, got {}", print_type(fty))
+                    compile_err!("Expected function type in apply, got {}", fty)
                 }
             }
 
@@ -696,7 +694,7 @@ impl InferTypesInternal for Expr {
                 } else if builder.ty == Unknown {
                     return Ok(false)
                 } else {
-                    return compile_err!("Expected builder type in merge, got {}", print_type(&builder.ty))
+                    return compile_err!("Expected builder type in merge, got {}", &builder.ty)
                 };
 
                 changed |= value.ty.sync(&mut merge_type)?;
@@ -756,7 +754,7 @@ impl InferTypesInternal for Expr {
                 } else if builder.ty == Unknown {
                     Ok(false)
                 } else {
-                    compile_err!("Expected builder type in result, got {}", print_type(&builder.ty))
+                    compile_err!("Expected builder type in result, got {}", &builder.ty)
                 }
             }
 
@@ -791,7 +789,7 @@ impl InferTypesInternal for Expr {
                         match iter.data.ty {
                             Vector(ref elem) => Ok(elem.as_ref().clone()),
                             Unknown => Ok(Unknown),
-                            _ => compile_err!("Expected vector type in for loop iter, got {}", print_type(&iter.data.ty))
+                            _ => compile_err!("Expected vector type in for loop iter, got {}", &iter.data.ty)
                         }
                     }
                 }).collect::<WeldResult<_>>()?;

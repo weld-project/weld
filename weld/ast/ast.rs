@@ -1,12 +1,11 @@
-//! Defines types in the Weld IR.
+//! Defines the Weld abstract syntax tree.
 
-use super::annotations::Annotations;
-use super::error::*;
+use annotations::Annotations;
+use error::*;
+use util;
 
-use self::Type::*;
 use self::ExprKind::*;
 use self::ScalarKind::*;
-use self::BuilderKind::*;
 use self::BinOpKind::*;
 
 use std::fmt;
@@ -35,6 +34,8 @@ pub enum Type {
 impl Type {
     /// Returns the child types of this `Type`.
     pub fn children(&self) -> vec::IntoIter<&Type> {
+        use self::Type::*;
+        use self::BuilderKind::*;
         match *self {
             Unknown | Scalar(_) | Simd(_) => vec![],
             Vector(ref elem) => {
@@ -78,6 +79,7 @@ impl Type {
     /// `Simd` type. We additionally consider each of the builders to be SIMD values, since they
     /// can operate over SIMD values as inputs.
     pub fn is_simd(&self) -> bool {
+        use self::Type::*;
         match *self {
             Simd(_) | Builder(_, _) => true,
             Struct(ref fields) => fields.iter().all(|f| f.is_simd()),
@@ -86,6 +88,7 @@ impl Type {
     }
 
     pub fn is_scalar(&self) -> bool {
+        use self::Type::Scalar;
         match *self {
             Scalar(_) => true,
             _ => false
@@ -96,6 +99,7 @@ impl Type {
     ///
     /// This method returns an error if this `Type` is not vectorizable.
     pub fn simd_type(&self) -> WeldResult<Type> {
+        use self::Type::*;
         match *self {
             Scalar(kind) => Ok(Simd(kind)),
             Builder(_, _) => Ok(self.clone()),
@@ -103,7 +107,7 @@ impl Type {
                 let result: WeldResult<_> = fields.iter().map(|f| f.simd_type()).collect();
                 Ok(Struct(result?))
             }
-            _ => compile_err!("simd_type called on non-SIMD {:?}", self)
+            _ => compile_err!("simd_type called on non-scalar type {}", self)
         }
     }
 
@@ -111,6 +115,7 @@ impl Type {
     ///
     /// This method returns an error if this `Type` is not scalarizable.
     pub fn scalar_type(&self) -> WeldResult<Type> {
+        use self::Type::*;
         match *self {
             Simd(kind) => Ok(Scalar(kind)),
             Builder(_, _) => Ok(self.clone()),
@@ -118,7 +123,7 @@ impl Type {
                 let result: WeldResult<_> = fields.iter().map(|f| f.scalar_type()).collect();
                 Ok(Struct(result?))
             }
-            _ => compile_err!("scalar_type called on non-SIMD {:?}", self)
+            _ => compile_err!("scalar_type called on non-SIMD type {}", self)
         }
     }
 
@@ -126,11 +131,12 @@ impl Type {
     ///
     /// Returns an error if this `Type` is not a builder type.
     pub fn merge_type(&self) -> WeldResult<Type> {
+        use self::Type::Builder;
         if let Builder(ref kind, _) = *self {
             Ok(kind.merge_type())
 
         } else {
-            compile_err!("merge_type called on non-builder type {:?}", self)
+            compile_err!("merge_type called on non-builder type {}", self)
         }
     }
 
@@ -138,10 +144,45 @@ impl Type {
     ///
     /// A type is partial if it or any of its subtypes is `Unknown`.
     pub fn partial_type(&self) -> bool {
+        use self::Type::Unknown;
         match *self {
             Unknown => true,
             _ => self.children().any(|t| t.partial_type()),
         }
+    }
+}
+
+impl fmt::Display for Type {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use self::Type::*;
+        let ref text = match *self {
+            Scalar(ref kind) => {
+                format!("{}", kind)
+            }
+            Simd(ref kind) => {
+                format!("simd[{}]", kind)
+            }
+            Vector(ref elem) => {
+                format!("vec[{}]", elem)
+            }
+            Dict(ref key, ref value) => {
+                format!("dict[{},{}]", key, value)
+            }
+            Struct(ref elems) => {
+                util::join("{", ",", "}", elems.iter().map(|e| e.to_string()))
+            }
+            Function(ref params, ref return_type) => {
+                let mut res = util::join("|", ",", "|(", params.iter().map(|e| e.to_string()));
+                res.push_str(&return_type.to_string());
+                res.push_str(")");
+                res
+            }
+            Builder(ref kind, ref annotations) => {
+                format!("{}{}", annotations, kind)
+            }
+            Unknown => String::from("?")
+        };
+        f.write_str(text)
     }
 }
 
@@ -263,6 +304,8 @@ pub enum BuilderKind {
 impl BuilderKind {
     /// Returns the type merged into this `BuilderKind`.
     pub fn merge_type(&self) -> Type {
+        use self::BuilderKind::*;
+        use self::Type::*;
         match *self {
             Appender(ref elem) => *elem.clone(),
             Merger(ref elem, _) => *elem.clone(),
@@ -274,6 +317,8 @@ impl BuilderKind {
 
     /// Returns the type produced by this `BuilderKind`.
     pub fn result_type(&self) -> Type {
+        use self::Type::*;
+        use self::BuilderKind::*;
         match *self {
             Appender(ref elem) => Vector(elem.clone()),
             Merger(ref elem, _) => *elem.clone(),
@@ -281,6 +326,30 @@ impl BuilderKind {
             GroupMerger(ref key, ref value) => Dict(key.clone(), Box::new(Vector(value.clone()))),
             VecMerger(ref elem, _) => Vector(elem.clone()),
         }
+    }
+}
+
+impl fmt::Display for BuilderKind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use self::BuilderKind::*;
+        let ref text = match *self {
+            Appender(ref t) => {
+                format!("appender[{}]", t)
+            }
+            DictMerger(ref key, ref value, op) => {
+                format!("dictmerger[{},{},{}]", key, value, op)
+            }
+            GroupMerger(ref key, ref value) => {
+                format!("groupmerger[{},{}]", key, value)
+            }
+            VecMerger(ref elem, op) => {
+                format!("vecmerger[{},{}]", elem, op)
+            }
+            Merger(ref elem, op) => {
+                format!("merger[{},{}]", elem, op)
+            }
+        };
+        f.write_str(text)
     }
 }
 
@@ -342,14 +411,15 @@ pub enum IterKind {
 impl fmt::Display for IterKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use self::IterKind::*;
-        let text = match *self {
-            ScalarIter => "scalar",
-            SimdIter => "vectorized",
+        let ref text = match *self {
+            ScalarIter => "",
+            SimdIter => "simd",
             FringeIter => "fringe",
             NdIter => "nditer",
             RangeIter => "range",
         };
-        f.write_str(text)
+        f.write_str(text)?;
+        f.write_str("iter")
     }
 }
 
@@ -529,6 +599,42 @@ pub enum LiteralKind {
     StringLiteral(String),
 }
 
+impl fmt::Display for LiteralKind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use self::LiteralKind::*;
+        let ref text = match *self {
+            BoolLiteral(v) => format!("{}", v),
+            I8Literal(v) => format!("{}c", v),
+            I16Literal(v) => format!("{}si", v),
+            I32Literal(v) => format!("{}", v),
+            I64Literal(v) => format!("{}L", v),
+            U8Literal(v) => format!("{}", v),
+            U16Literal(v) => format!("{}", v),
+            U32Literal(v) => format!("{}", v),
+            U64Literal(v) => format!("{}", v),
+            F32Literal(v) => {
+                let mut res = format!("{}", f32::from_bits(v));
+                // Hack to disambiguate from integers.
+                if !res.contains(".") {
+                    res.push_str(".0");
+                }
+                res.push_str("F");
+                res
+            }
+            F64Literal(v) => {
+                let mut res = format!("{}", f64::from_bits(v));
+                // Hack to disambiguate from integers.
+                if !res.contains(".") {
+                    res.push_str(".0");
+                }
+                res
+            }
+            StringLiteral(ref v) => format!("\"{}\"", v),
+        };
+        f.write_str(text)
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum BinOpKind {
     Add,
@@ -550,23 +656,6 @@ pub enum BinOpKind {
     Max,
     Min,
     Pow,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum UnaryOpKind {
-    Exp,
-    Log,
-    Sqrt,
-    Sin,
-    Cos,
-    Tan,
-    ASin,
-    ACos,
-    ATan,
-    Sinh,
-    Cosh,
-    Tanh,
-    Erf,
 }
 
 impl BinOpKind {
@@ -607,6 +696,23 @@ impl fmt::Display for BinOpKind {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum UnaryOpKind {
+    Exp,
+    Log,
+    Sqrt,
+    Sin,
+    Cos,
+    Tan,
+    ASin,
+    ACos,
+    ATan,
+    Sinh,
+    Cosh,
+    Tanh,
+    Erf,
+}
+
 impl fmt::Display for UnaryOpKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let text = format!("{:?}", self);
@@ -614,10 +720,18 @@ impl fmt::Display for UnaryOpKind {
     }
 }
 
+
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Parameter {
     pub name: Symbol,
     pub ty: Type,
+}
+
+impl fmt::Display for Parameter {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}:{}", self.name, self.ty)
+    }
 }
 
 impl Expr {

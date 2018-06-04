@@ -8,7 +8,6 @@ use super::ast::BuilderKind::*;
 use super::ast::LiteralKind::*;
 use super::error::*;
 use super::annotations::*;
-use super::pretty_print::print_type;
 
 pub fn new_expr(kind: ExprKind, ty: Type) -> WeldResult<Expr> {
     Ok(Expr {
@@ -421,7 +420,7 @@ pub fn for_expr(iters: Vec<Iter>, builder: Expr, func: Expr, vectorized: bool) -
             };
             if *param_2_ty != elem_ty {
                 return compile_err!("Internal error: Mismatched types in for_expr - function elem type {} != {}",
-                                 print_type(param_2_ty), print_type(&elem_ty));
+                                 param_2_ty, &elem_ty);
             }
         } else {
             let composite_ty = if vectorized {
@@ -542,7 +541,7 @@ pub fn result_expr(builder: Expr) -> WeldResult<Expr> {
 }
 
 #[cfg(test)]
-use super::pretty_print::*;
+use tests::print_expr_without_indent;
 
 #[test]
 fn literal_test() {

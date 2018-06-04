@@ -24,7 +24,7 @@ use super::ast::BuilderKind::*;
 use super::error::*;
 use super::macro_processor;
 use super::passes::*;
-use super::pretty_print::*;
+use super::ast::pretty_print::*;
 use super::program::Program;
 use super::runtime::*;
 use super::sir;
@@ -44,6 +44,9 @@ use super::CompilationStats;
 
 #[cfg(test)]
 use super::parser::*;
+
+#[cfg(test)]
+use tests::print_typed_expr_without_indent;
 
 /// useful to make the code related to accessing elements from the array less verbose.
 #[derive(Clone)]
@@ -114,7 +117,7 @@ pub fn apply_opt_passes(expr: &mut Expr,
         pass.transform(expr, use_experimental)?;
         let end = PreciseTime::now();
         stats.pass_times.push((pass.pass_name(), start.to(end)));
-        debug!("After {} pass:\n{}", pass.pass_name(), print_typed_expr(&expr));
+        debug!("After {} pass:\n{}", pass.pass_name(), expr.pretty_print());
     }
     Ok(())
 }
@@ -143,7 +146,7 @@ impl HasPointer for Type {
 pub fn compile_program(program: &Program, conf: &ParsedConf, stats: &mut CompilationStats)
         -> WeldResult<CompiledModule> {
     let mut expr = macro_processor::process_program(program)?;
-    debug!("After macro substitution:\n{}\n", print_typed_expr(&expr));
+    debug!("After macro substitution:\n{}\n", expr.pretty_print());
 
     let start = PreciseTime::now();
     uniquify::uniquify(&mut expr)?;
@@ -154,7 +157,7 @@ pub fn compile_program(program: &Program, conf: &ParsedConf, stats: &mut Compila
     let start = PreciseTime::now();
     expr.infer_types()?;
     let end = PreciseTime::now();
-    debug!("After type inference:\n{}\n", print_typed_expr(&expr));
+    debug!("After type inference:\n{}\n", expr.pretty_print());
     stats.weld_times.push(("Type Inference".to_string(), start.to(end)));
 
     apply_opt_passes(&mut expr, &conf.optimization_passes, stats, conf.enable_experimental_passes)?;
@@ -166,7 +169,7 @@ pub fn compile_program(program: &Program, conf: &ParsedConf, stats: &mut Compila
 
     stats.weld_times.push(("Uniquify outside Passes".to_string(), uniquify_dur));
 
-    debug!("Optimized Weld program:\n{}\n", print_expr(&expr));
+    debug!("Optimized Weld program:\n{}\n", expr.pretty_print());
 
     let start = PreciseTime::now();
     let mut sir_prog = sir::ast_to_sir(&expr, conf.support_multithread)?;
@@ -210,7 +213,7 @@ pub fn compile_program(program: &Program, conf: &ParsedConf, stats: &mut Compila
     // Dump files if needed. Do this here in case the actual LLVM code gen fails.
     if conf.dump_code.enabled {
         info!("Writing code to directory '{}' with timestamp {}", &conf.dump_code.dir.display(), timestamp);
-        write_code(&print_typed_expr(&expr), "weld", timestamp, &conf.dump_code.dir);
+        write_code(expr.pretty_print().as_ref(), "weld", timestamp, &conf.dump_code.dir);
         write_code(&format!("{}", &sir_prog), "sir", timestamp, &conf.dump_code.dir);
         write_code(&llvm_code, "ll", timestamp, &conf.dump_code.dir);
     }
@@ -1385,7 +1388,7 @@ impl LlvmGenerator {
             } else {
                 match *elem_ty {
                     Struct(ref v) => self.llvm_type(&v[i])?,
-                    _ => compile_err!("Internal error: invalid element type {}", print_type(elem_ty))?,
+                    _ => compile_err!("Internal error: invalid element type {}", elem_ty)?,
                 }
             }; 
             let data_llvm_info = self.get_array_llvm_info(func, ctx, &iter.data, inner_elem_ty_str.clone(), true)?;
@@ -1873,7 +1876,7 @@ impl LlvmGenerator {
             }
 
             _ => {
-                return compile_err!("Unsupported type {}", print_type(ty))?
+                return compile_err!("Unsupported type {}", ty)?
             }
         })
     }
@@ -1932,7 +1935,7 @@ impl LlvmGenerator {
                                          self.llvm_type(ty)?, &right_tmp));
                 }
             }
-            _ => compile_err!("Illegal type {} in Min/Max", print_type(ty))?,
+            _ => compile_err!("Illegal type {} in Min/Max", ty)?,
         }
 
         Ok(())
@@ -2595,7 +2598,7 @@ impl LlvmGenerator {
                 }
             }
 
-            _ => return compile_err!("gen_merge_op_on_registers called on invalid type {}", print_type(arg_ty))
+            _ => return compile_err!("gen_merge_op_on_registers called on invalid type {}", arg_ty)
         }
 
         Ok(res)
@@ -3135,7 +3138,7 @@ impl LlvmGenerator {
                 self.gen_store_var(&prev_tmp, &output_ll_sym, &output_ll_ty, ctx);
             }
         } else {
-            compile_err!("Illegal type {} in {}", print_type(child_ty), op_kind)?;
+            compile_err!("Illegal type {} in {}", child_ty, op_kind)?;
         }
         Ok(())
     }
@@ -3302,7 +3305,7 @@ impl LlvmGenerator {
                         self.gen_store_var(&output_tmp, &output_ll_sym, &output_ll_ty, ctx);
                     }
 
-                    _ => compile_err!("Illegal type {} in BinOp", print_type(ty))?,
+                    _ => compile_err!("Illegal type {} in BinOp", ty)?,
                 }
             }
 
@@ -3393,7 +3396,7 @@ impl LlvmGenerator {
                                                 res_tmp, output_ll_ty, child_prefix, child_ll_ty, slot));
                         self.gen_store_var(&res_tmp, &output_ll_sym, &output_ll_ty, ctx);
                     }
-                    _ => compile_err!("Illegal type {} in Lookup", print_type(child_ty))?,
+                    _ => compile_err!("Illegal type {} in Lookup", child_ty)?,
                 }
             }
 
@@ -3453,7 +3456,7 @@ impl LlvmGenerator {
                                 str_args.push_str(&format!("{}* {}", param_ll_ty, param_ll_sym));
                             } else {
                                 return compile_err!("Type mismatch: vector:{ } and sort key parameter:{ }",
-                                                 print_type(&**elem_ty), print_type(&*param_ty));
+                                                 &**elem_ty, &*param_ty);
                             }
                         }
 
@@ -3631,7 +3634,7 @@ impl LlvmGenerator {
                     let val_ty = func.symbol_type(value)?;
                     self.gen_merge(bld_kind, builder, val_ty, value, func, ctx)?;
                 } else {
-                    return compile_err!("Non builder type {} found in Merge", print_type(bld_ty))
+                    return compile_err!("Non builder type {} found in Merge", bld_ty)
                 }
             }
 
@@ -3640,7 +3643,7 @@ impl LlvmGenerator {
                 if let Builder(ref bld_kind, _) = *bld_ty {
                     self.gen_result(bld_kind, builder, output, func, ctx)?;
                 } else {
-                    return compile_err!("Non builder type {} found in Result", print_type(bld_ty))
+                    return compile_err!("Non builder type {} found in Result", bld_ty)
                 }
             }
 
@@ -3648,7 +3651,7 @@ impl LlvmGenerator {
                 if let Builder(ref bld_kind, ref annotations) = *ty {
                     self.gen_new_builder(bld_kind, annotations, arg, output, func, ctx)?;
                 } else {
-                    return compile_err!("Non builder type {} found in NewBuilder", print_type(ty))
+                    return compile_err!("Non builder type {} found in NewBuilder", ty)
                 }
             }
         }
@@ -4420,7 +4423,7 @@ fn binop_identity(op_kind: BinOpKind, ty: &Type) -> WeldResult<String> {
             U64 => Ok(::std::u64::MAX.to_string()),
             F32 => Ok("0x7FF0000000000000".to_string()), // inf 
             F64 => Ok("0x7FF0000000000000".to_string()), // inf
-            _ => compile_err!("Unsupported identity for binary op: {} on {}", op_kind, print_type(ty)),
+            _ => compile_err!("Unsupported identity for binary op: {} on {}", op_kind, ty),
         },
 
         (Max, &Scalar(s)) => match s {
@@ -4434,10 +4437,10 @@ fn binop_identity(op_kind: BinOpKind, ty: &Type) -> WeldResult<String> {
             U64 => Ok(::std::u64::MIN.to_string()),
             F32 => Ok("0xFFF0000000000000".to_string()), // -inf
             F64 => Ok("0xFFF0000000000000".to_string()), // -inf
-            _ => compile_err!("Unsupported identity for binary op: {} on {}", op_kind, print_type(ty)),
+            _ => compile_err!("Unsupported identity for binary op: {} on {}", op_kind, ty),
         },
 
-        _ => compile_err!("Unsupported identity for binary op: {} on {}", op_kind, print_type(ty)),
+        _ => compile_err!("Unsupported identity for binary op: {} on {}", op_kind, ty),
     }
 }
 
@@ -4494,11 +4497,11 @@ fn llvm_binop(op_kind: BinOpKind, ty: &Type) -> WeldResult<&'static str> {
 
                 Xor if s.is_integer() || s.is_bool() => Ok("xor"),
 
-                _ => return compile_err!("Unsupported binary op: {} on {}", op_kind, print_type(ty))
+                _ => return compile_err!("Unsupported binary op: {} on {}", op_kind, ty)
             }
         }
 
-        _ => return compile_err!("Unsupported binary op: {} on {}", op_kind, print_type(ty))
+        _ => return compile_err!("Unsupported binary op: {} on {}", op_kind, ty)
     }
 }
 
@@ -4611,7 +4614,7 @@ fn llvm_binop_vector(op_kind: BinOpKind, ty: &Type) -> WeldResult<(&'static str,
         BinOpKind::GreaterThan => Ok(("eq", 1)),
         BinOpKind::GreaterThanOrEqual => Ok(("ne", -1)),
 
-        _ => compile_err!("Unsupported binary op: {} on {}", op_kind, print_type(ty)),
+        _ => compile_err!("Unsupported binary op: {} on {}", op_kind, ty),
     }
 }
 
@@ -4648,11 +4651,11 @@ fn llvm_castop(ty1: &Type, ty2: &Type) -> WeldResult<&'static str> {
 
                 (_, _) if s2.bits() == s1.bits() => Ok("bitcast"),
 
-                 _ => compile_err!("Can't cast {} to {}", print_type(ty1), print_type(ty2))
+                 _ => compile_err!("Can't cast {} to {}", ty1, ty2)
             }
         }
 
-        _ => compile_err!("Can't cast {} to {}", print_type(ty1), print_type(ty2))
+        _ => compile_err!("Can't cast {} to {}", ty1, ty2)
 
     }
 }

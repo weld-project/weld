@@ -1,6 +1,5 @@
 use super::ast::{Expr, Type, ExprKind, Symbol};
 use super::parser::parse_expr;
-use super::pretty_print::*;
 use super::type_inference::*;
 use super::annotations::*;
 
@@ -16,6 +15,26 @@ fn typed_expression(s: &str) -> Expr {
     let mut expr = parse_expr(s).unwrap();
     expr.infer_types().unwrap();
     expr
+}
+
+/// Print an un-indented expression for string comparison.
+#[cfg(test)]
+pub fn print_expr_without_indent(e: &Expr) -> String {
+    use super::ast::pretty_print::*;
+    let ref config = PrettyPrintConfig::new()
+                            .show_types(false)
+                            .should_indent(false);
+    e.pretty_print_config(config)
+}
+
+/// Print an un-indented expression for string comparison.
+#[cfg(test)]
+pub fn print_typed_expr_without_indent(e: &Expr) -> String {
+    use super::ast::pretty_print::*;
+    let ref config = PrettyPrintConfig::new()
+                            .show_types(true)
+                            .should_indent(false);
+    e.pretty_print_config(config)
 }
 
 #[test]
@@ -80,7 +99,7 @@ fn parse_and_print_simple_expressions() {
     assert_eq!(print_expr_without_indent(&e).as_str(), "[1.0,2.0,3.0]");
 
     let e = parse_expr("|a, b| a + b").unwrap();
-    assert_eq!(print_expr_without_indent(&e).as_str(), "|a,b|(a+b)");
+    assert_eq!(print_expr_without_indent(&e).as_str(), "|a:?,b:?|(a+b)");
 
     let e = parse_expr("for(d, appender, |e| e+1)").unwrap();
     assert_eq!(print_expr_without_indent(&e).as_str(),
