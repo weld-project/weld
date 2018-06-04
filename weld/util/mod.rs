@@ -1,3 +1,8 @@
+//! Compiler utilities.
+//!
+//! This module contains a number of utilities used throughput the compiler, such as unique symbol
+//! and ID generators and a module for measuring compile-time performance of various aspects of the
+//! compiler.
 
 extern crate libc;
 extern crate fnv;
@@ -6,9 +11,10 @@ use std::iter;
 
 use std::cmp::max;
 
-use super::ast::*;
-use super::ast::ExprKind::*;
+use ast::*;
+use ast::ExprKind::*;
 
+pub mod stats;
 
 /// Utility struct that can track and generate unique IDs and symbols for use in an expression.
 /// Each SymbolGenerator tracks the maximum ID used for every symbol name, and can be used to

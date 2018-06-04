@@ -1,6 +1,6 @@
 use std::error::Error;
 
-use easy_ll::compile_module;
+use codegen::llvm::easy_ll::compile_module;
 
 #[test]
 fn basic_use() {

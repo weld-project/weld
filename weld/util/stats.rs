@@ -1,3 +1,4 @@
+//! Utility struct for measuring compilation time.
 
 extern crate time;
 

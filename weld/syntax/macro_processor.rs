@@ -9,8 +9,8 @@ use std::vec::Vec;
 
 use ast::*;
 use ast::ExprKind::*;
-use program::*;
 use super::parser::*;
+use super::program::*;
 use error::*;
 use util::SymbolGenerator;
 use annotation::*;

@@ -3,8 +3,8 @@
 
 use std::vec::Vec;
 
-use super::ast::Symbol;
-use super::ast::Expr;
+use ast::Symbol;
+use ast::Expr;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Program {

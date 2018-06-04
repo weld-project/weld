@@ -10,6 +10,9 @@ use std::collections::hash_map::Entry;
 
 extern crate fnv;
 
+#[cfg(test)]
+use tests::*;
+
 /// Modifies an expression to make symbol names unique.
 pub trait Uniquify {
     /// Modifies an expression to make symbol names unique.
@@ -133,3 +136,36 @@ fn uniquify_helper(expr: &mut Expr, symbol_stack: &mut SymbolStack) -> WeldResul
     }
     Ok(())
 }
+
+#[test]
+fn parse_and_print_uniquified_expressions() {
+    let mut e = parse_expr("let a = 2; a").unwrap();
+    let _ = e.uniquify();
+    assert_eq!(print_expr_without_indent(&e).as_str(), "(let a=(2);a)");
+
+    // Redefine a symbol.
+    let mut e = parse_expr("let a = 2; let a = 3; a").unwrap();
+    let _ = e.uniquify();
+    assert_eq!(print_expr_without_indent(&e).as_str(),
+               "(let a=(2);(let a__1=(3);a__1))");
+
+    // Make sure Let values aren't renamed.
+    let mut e = parse_expr("let a = 2; let a = a+1; a").unwrap();
+    let _ = e.uniquify();
+    assert_eq!(print_expr_without_indent(&e).as_str(),
+               "(let a=(2);(let a__1=((a+1));a__1))");
+
+    // Lambdas and proper scoping.
+    let mut e = parse_expr("let a = 2; (|a,b|a+b)(1,2) + a").unwrap();
+    let _ = e.uniquify();
+    assert_eq!(print_expr_without_indent(&e).as_str(),
+               "(let a=(2);((|a__1,b|(a__1+b))(1,2)+a))");
+
+    // Lambdas and Lets
+    let mut e = parse_expr("let b = for([1], appender[i32], |b,i,e| merge(b, e)); b").unwrap();
+    let _ = e.uniquify();
+    assert_eq!(print_expr_without_indent(&e).as_str(),
+               "(let b__1=(for([1],appender[i32],|b,i,e|merge(b,e)));b__1)");
+}
+
+

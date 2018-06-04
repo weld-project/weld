@@ -136,16 +136,13 @@ mod error;
 
 mod annotation;
 mod colors;
-mod llvm;
+mod codegen;
 mod optimizer;
 mod syntax;
-mod program;
 mod sir;
 mod type_inference;
 mod conf;
 mod exprs;
-mod easy_ll;
-mod stats;
 
 // Public interfaces.
 // TODO these probably shouldn't all be public...
@@ -160,7 +157,7 @@ mod tests;
 
 use runtime::WeldRuntimeErrno;
 use runtime::WeldLogLevel;
-use stats::CompilationStats;
+use util::stats::CompilationStats;
 
 // This is needed to free the output struct of a Weld run.
 extern "C" {
@@ -234,13 +231,6 @@ impl Default for WeldError {
 impl From<error::WeldCompileError> for WeldError {
     fn from(err: error::WeldCompileError) -> WeldError {
         WeldError::new(CString::new(err.description()).unwrap(), WeldRuntimeErrno::CompileError)
-    }
-}
-
-// Conversion from a compilation error to an external WeldError.
-impl From<easy_ll::LlvmError> for WeldError {
-    fn from(err: easy_ll::LlvmError) -> WeldError {
-        WeldError::new(err.to_string(), WeldRuntimeErrno::CompileError)
     }
 }
 
@@ -331,7 +321,7 @@ impl WeldConf {
 
 /// A compiled runnable Weld module.
 pub struct WeldModule {
-    llvm_module: llvm::CompiledModule,
+    llvm_module: codegen::llvm::CompiledModule,
 }
 
 impl WeldModule {
@@ -352,7 +342,7 @@ impl WeldModule {
         let end = PreciseTime::now();
         stats.weld_times.push(("Parsing".to_string(), start.to(end)));
 
-        let module = llvm::compile_program(&program, parsed_conf, &mut stats)?;
+        let module = codegen::llvm::compile_program(&program, parsed_conf, &mut stats)?;
         debug!("\n{}\n", stats.pretty_print());
 
         Ok(WeldModule { llvm_module: module })
@@ -380,7 +370,7 @@ impl WeldModule {
         let ref parsed_conf = conf::parse(conf)?;
 
         // This is the required input format of data passed into a compiled module.
-        let input = Box::new(llvm::WeldInputArgs {
+        let input = Box::new(codegen::llvm::WeldInputArgs {
                              input: arg.data as i64,
                              nworkers: parsed_conf.threads,
                              mem_limit: parsed_conf.memory_limit,
@@ -388,7 +378,7 @@ impl WeldModule {
         let ptr = Box::into_raw(input) as i64;
 
         // Runs the Weld program.
-        let raw = callable.run(ptr) as *const llvm::WeldOutputArgs;
+        let raw = callable.run(ptr) as *const codegen::llvm::WeldOutputArgs;
         let result = (*raw).clone();
 
         let value = WeldValue {
@@ -425,7 +415,8 @@ impl WeldModule {
 ///
 /// The dynamic library is a C dynamic library identified by its filename.
 pub fn load_linked_library<S: AsRef<str>>(filename: S) -> WeldResult<()> {
-    easy_ll::load_library(filename.as_ref()).map_err(|e| WeldError::from(e))
+    use error::WeldCompileError;
+    codegen::llvm::load_library(filename.as_ref()).map_err(|e| WeldError::from(WeldCompileError::from(e)))
 }
 
 #[no_mangle]

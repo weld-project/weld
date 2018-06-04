@@ -7,6 +7,9 @@ use ast::ExprKind::*;
 
 use annotation::*;
 
+#[cfg(test)]
+use tests::*;
+
 /// Inlines GetField(MakeStruct(*)) expressions, which can occur during loop fusion when some
 /// of the loops are zipping together multiple column vectors.
 pub fn inline_get_field(expr: &mut Expr) {
@@ -269,4 +272,31 @@ fn symbol_usage_count(sym: &Symbol, expr: &Expr) -> u32 {
     });
 
     usage_count
+}
+
+#[test]
+fn inline_lets() {
+    let mut e1 = typed_expression("let a = 1; a + 2");
+    inline_let(&mut e1);
+    let e2 = typed_expression("1 + 2");
+    assert!(e1.compare_ignoring_symbols(&e2).unwrap());
+
+    let mut e1 = typed_expression("let a = 1; a + a + 2");
+    // The transform should fail since the identifier is used more than once.
+    inline_let(&mut e1);
+    let e2 = typed_expression("let a = 1; a + a + 2");
+    assert!(e1.compare_ignoring_symbols(&e2).unwrap());
+
+    let mut e1 = typed_expression("let a = 1L; for([1L,2L,3L], appender, |b,i,e| merge(b, e + a \
+                                   + 2L))");
+    inline_let(&mut e1);
+    // The transform should fail since the identifier is used in a loop.
+    let e2 = typed_expression("let a = 1L; for([1L,2L,3L], appender, |b,i,e| merge(b, e + a + \
+                               2L))");
+    assert!(e1.compare_ignoring_symbols(&e2).unwrap());
+
+    let mut e1 = typed_expression("let a = 1; let b = 2; let c = 3; a + b + c");
+    inline_let(&mut e1);
+    let e2 = typed_expression("1 + 2 + 3");
+    assert!(e1.compare_ignoring_symbols(&e2).unwrap());
 }

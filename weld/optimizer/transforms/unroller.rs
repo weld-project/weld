@@ -191,17 +191,8 @@ fn combine_unrolled_values(bk: BuilderKind, values: Vec<Expr>) -> WeldResult<Exp
 }
 
 #[cfg(test)]
-use syntax::parser::*;
-#[cfg(test)]
-use type_inference::*;
+use tests::*;
 
-/// Returns a typed expression.
-#[cfg(test)]
-fn typed_expression(s: &str) -> Expr {
-    let mut e1 = parse_expr(s).unwrap();
-    e1.infer_types().unwrap();
-    e1
-}
 
 #[test]
 fn simple_merger_loop() {

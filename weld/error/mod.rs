@@ -1,8 +1,5 @@
-use std::convert::From;
 use std::error;
 use std::fmt;
-
-use easy_ll::LlvmError;
 
 /// Internal macro for creating a compile error.
 macro_rules! compile_err {
@@ -34,12 +31,6 @@ impl error::Error for WeldCompileError {
 
     fn cause(&self) -> Option<&error::Error> {
         None
-    }
-}
-
-impl From<LlvmError> for WeldCompileError {
-    fn from(err: LlvmError) -> WeldCompileError {
-        WeldCompileError::new(err.to_string())
     }
 }
 

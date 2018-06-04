@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::collections::BTreeMap;
 
-use easy_ll;
+use super::easy_ll;
 
 extern crate time;
 extern crate fnv;
@@ -17,33 +17,31 @@ use std::fs::OpenOptions;
 use ast::uniquify::Uniquify;
 use optimizer::*;
 use runtime::WeldRuntimeErrno;
+use syntax::program::*;
 
-use super::ast::*;
-use super::ast::Type::*;
-use super::ast::LiteralKind::*;
-use super::ast::ScalarKind::*;
-use super::ast::BuilderKind::*;
-use super::error::*;
-use super::syntax;
-use super::ast::pretty_print::*;
-use super::program::Program;
-use super::runtime;
-use super::sir;
-use super::sir::*;
-use super::sir::Statement;
-use super::sir::StatementKind::*;
-use super::sir::Terminator::*;
-use super::sir::optimizations;
-use super::type_inference::InferTypes;
-use super::util::IdGenerator;
-use super::annotation::*;
-
-use super::conf::ParsedConf;
-
-use super::CompilationStats;
+use ast::*;
+use ast::Type::*;
+use ast::LiteralKind::*;
+use ast::ScalarKind::*;
+use ast::BuilderKind::*;
+use error::*;
+use syntax;
+use ast::pretty_print::*;
+use runtime;
+use sir;
+use sir::*;
+use sir::Statement;
+use sir::StatementKind::*;
+use sir::Terminator::*;
+use sir::optimizations;
+use type_inference::InferTypes;
+use util::IdGenerator;
+use annotation::*;
+use conf::ParsedConf;
+use util::stats::CompilationStats;
 
 #[cfg(test)]
-use super::syntax::parser::*;
+use syntax::parser::*;
 
 #[cfg(test)]
 use tests::print_typed_expr_without_indent;
@@ -59,7 +57,7 @@ pub struct VecLLVMInfo {
 }
 
 static PRELUDE_CODE: &'static str = include_str!("resources/prelude.ll");
-const WELD_INLINE_LIB: &'static [u8] = include_bytes!("../weld_rt/cpp/inline.bc");
+const WELD_INLINE_LIB: &'static [u8] = include_bytes!("../../../weld_rt/cpp/inline.bc");
 
 /// The default grain size for the parallel runtime.
 static DEFAULT_INNER_GRAIN_SIZE: i32 = 16384;
@@ -1896,7 +1894,7 @@ impl LlvmGenerator {
                   ty: &Type,
                   var_ids: &mut IdGenerator,
                   code: &mut CodeBuilder) -> WeldResult<()> {
-        use super::ast::BinOpKind::*;
+        use ast::BinOpKind::*;
         match *ty {
             Scalar(s) | Simd(s) => {
                 if s.is_integer() {
@@ -2564,7 +2562,7 @@ impl LlvmGenerator {
                                  var_ids: &mut IdGenerator,
                                  code: &mut CodeBuilder)
                                  -> WeldResult<String> {
-        use super::ast::BinOpKind::*;
+        use ast::BinOpKind::*;
         let llvm_ty = self.llvm_type(arg_ty)?.to_string();
         let mut res = var_ids.next();
 
@@ -3223,7 +3221,7 @@ impl LlvmGenerator {
             }
 
             BinOp { op, ref left, ref right } => {
-                use super::ast::BinOpKind::*;
+                use ast::BinOpKind::*;
                 let (output_ll_ty, output_ll_sym) = self.llvm_type_and_name(func, output)?;
                 let ty = func.symbol_type(left)?;
                 // Assume the left and right operands have the same type.
@@ -4404,7 +4402,7 @@ fn llvm_symbol(symbol: &Symbol) -> String {
 }
 
 fn binop_identity(op_kind: BinOpKind, ty: &Type) -> WeldResult<String> {
-    use super::ast::BinOpKind::*;
+    use ast::BinOpKind::*;
     match (op_kind, ty) {
         (Add, &Scalar(s)) if s.is_integer() => Ok("0".to_string()),
         (Add, &Scalar(s)) if s.is_float() => Ok("0.0".to_string()),
@@ -4446,7 +4444,7 @@ fn binop_identity(op_kind: BinOpKind, ty: &Type) -> WeldResult<String> {
 
 /// Return the name of the LLVM instruction for a binary operation on a specific type.
 fn llvm_binop(op_kind: BinOpKind, ty: &Type) -> WeldResult<&'static str> {
-    use super::ast::BinOpKind::*;
+    use ast::BinOpKind::*;
     match ty {
         &Scalar(s) | &Simd(s) => {
             match op_kind {

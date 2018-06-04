@@ -13,6 +13,11 @@ use error::*;
 
 use fnv::FnvHashMap;
 
+#[cfg(test)]
+use tests::*;
+#[cfg(test)]
+use annotation::*;
+
 type TypeMap = FnvHashMap<Symbol, Type>;
 type Binding = (Symbol, Option<Type>);
 
@@ -843,4 +848,60 @@ impl InferTypesInternal for Expr {
             }
         }
     }
+}
+
+#[test]
+fn infer_types_test() {
+    let e = parse_expr("a").unwrap();
+    assert_eq!(print_typed_expr_without_indent(&e).as_str(), "a:?");
+
+    let e = Expr {
+        kind: ExprKind::Ident(Symbol {
+                                  name: "a".to_string(),
+                                  id: 1,
+                              }),
+        ty: Type::Unknown,
+        annotations: Annotations::new(),
+    };
+    assert_eq!(print_typed_expr_without_indent(&e).as_str(), "a__1:?");
+
+    let e = parse_expr("a:i32").unwrap();
+    assert_eq!(print_typed_expr_without_indent(&e).as_str(), "a:i32");
+
+    let mut e = parse_expr("let a = 2; a").unwrap();
+    assert_eq!(print_typed_expr_without_indent(&e).as_str(),
+               "(let a:?=(2);a:?)");
+    e.infer_types().unwrap();
+    assert_eq!(print_typed_expr_without_indent(&e).as_str(),
+               "(let a:i32=(2);a:i32)");
+
+    let mut e = parse_expr("let a = 2; let a = false; a").unwrap();
+    e.infer_types().unwrap();
+    assert_eq!(print_typed_expr_without_indent(&e).as_str(),
+               "(let a:i32=(2);(let a:bool=(false);a:bool))");
+
+    // Types should propagate from function parameters to body
+    let mut e = parse_expr("|a:i32, b:i32| a + b").unwrap();
+    e.infer_types().unwrap();
+    assert_eq!(print_typed_expr_without_indent(&e).as_str(),
+               "|a:i32,b:i32|(a:i32+b:i32)");
+
+    let mut e = parse_expr("|a:f32, b:f32| a + b").unwrap();
+    e.infer_types().unwrap();
+    assert_eq!(print_typed_expr_without_indent(&e).as_str(),
+               "|a:f32,b:f32|(a:f32+b:f32)");
+
+    let mut e = parse_expr("let a = [1, 2, 3]; 1").unwrap();
+    e.infer_types().unwrap();
+    assert_eq!(print_typed_expr_without_indent(&e).as_str(),
+               "(let a:vec[i32]=([1,2,3]);1)");
+
+    // Mismatched types in MakeVector
+    let mut e = parse_expr("[1, true]").unwrap();
+    assert!(e.infer_types().is_err());
+
+    let mut e = parse_expr("for([1],appender[?],|b,i,x|merge(b,x))").unwrap();
+    e.infer_types().unwrap();
+    assert_eq!(print_typed_expr_without_indent(&e).as_str(),
+               "for([1],appender[i32],|b:appender[i32],i:i64,x:i32|merge(b:appender[i32],x:i32))");
 }

@@ -17,8 +17,8 @@ use ast::BuilderKind::*;
 use ast::IterKind::*;
 use colors::*;
 use error::*;
-use program::*;
 
+use super::program::*;
 use super::tokenizer::*;
 use super::tokenizer::Token::*;
 
@@ -1518,4 +1518,100 @@ fn read_to_end_of_input() {
     assert!(parse_expr("vec[i32] 1").is_err());
     assert!(parse_program("macro a() = b; a() + b").is_ok());
     assert!(parse_program("macro a() = b; a() + b;").is_err());
+}
+
+#[test]
+fn parse_and_print_literal_expressions() {
+    let tests = vec![// i32 literal expressions
+                     ("23", "23"),
+                     ("0b111", "7"),
+                     ("0xff", "255"),
+                     // i64 literal expressions
+                     ("23L", "23L"),
+                     ("7L", "7L"),
+                     ("0xffL", "255L"),
+                     // f64 literal expressions
+                     ("23.0", "23.0"),
+                     ("23.5", "23.5"),
+                     ("23e5", "2300000.0"),
+                     ("23.5e5", "2350000.0"),
+                     // f32 literal expressions
+                     ("23.0f", "23.0F"),
+                     ("23.5f", "23.5F"),
+                     ("23e5f", "2300000.0F"),
+                     ("23.5e5f", "2350000.0F"),
+                     // bool literal expressions
+                     ("true", "true"),
+                     ("false", "false")];
+
+    for test in tests {
+        let e = parse_expr(test.0).unwrap();
+        assert_eq!(print_expr_without_indent(&e).as_str(), test.1);
+    }
+
+    // Test overflow of integer types
+    assert!(parse_expr("999999999999999").is_err()); // i32 literal too big
+    assert!(parse_expr("999999999999999L").is_ok());
+    assert!(parse_expr("999999999999999999999999999999L").is_err()); // i64 literal too big
+}
+
+#[test]
+fn parse_and_print_simple_expressions() {
+    let e = parse_expr("23 + 32").unwrap();
+    assert_eq!(print_expr_without_indent(&e).as_str(), "(23+32)");
+
+    let e = parse_expr("2 - 3 - 4").unwrap();
+    assert_eq!(print_expr_without_indent(&e).as_str(), "((2-3)-4)");
+
+    let e = parse_expr("2 - (3 - 4)").unwrap();
+    assert_eq!(print_expr_without_indent(&e).as_str(), "(2-(3-4))");
+
+    let e = parse_expr("a").unwrap();
+    assert_eq!(print_expr_without_indent(&e).as_str(), "a");
+
+    let e = parse_expr("let a = 2; a").unwrap();
+    assert_eq!(print_expr_without_indent(&e).as_str(), "(let a=(2);a)");
+
+    let e = parse_expr("let a = 2.0; a").unwrap();
+    assert_eq!(print_expr_without_indent(&e).as_str(), "(let a=(2.0);a)");
+
+    let e = parse_expr("[1, 2, 3]").unwrap();
+    assert_eq!(print_expr_without_indent(&e).as_str(), "[1,2,3]");
+
+    let e = parse_expr("[1.0, 2.0, 3.0]").unwrap();
+    assert_eq!(print_expr_without_indent(&e).as_str(), "[1.0,2.0,3.0]");
+
+    let e = parse_expr("|a, b| a + b").unwrap();
+    assert_eq!(print_expr_without_indent(&e).as_str(), "|a:?,b:?|(a+b)");
+
+    let e = parse_expr("for(d, appender, |e| e+1)").unwrap();
+    assert_eq!(print_expr_without_indent(&e).as_str(),
+               "for(d,appender[?],|e|(e+1))");
+}
+
+#[test]
+fn parse_and_print_for_expressions() {
+    let e = parse_expr("for(d, appender, |e| e+1)").unwrap();
+    assert_eq!(print_expr_without_indent(&e).as_str(),
+               "for(d,appender[?],|e|(e+1))");
+
+    let e = parse_expr("for(iter(d), appender, |e| e+1)").unwrap();
+    assert_eq!(print_expr_without_indent(&e).as_str(),
+               "for(d,appender[?],|e|(e+1))");
+
+    let e = parse_expr("for(iter(d,0L,4L,1L), appender, |e| e+1)").unwrap();
+    assert_eq!(print_expr_without_indent(&e).as_str(),
+               "for(iter(d,0L,4L,1L),appender[?],|e|(e+1))");
+
+    let e = parse_expr("for(zip(d), appender, |e| e+1)").unwrap();
+    assert_eq!(print_expr_without_indent(&e).as_str(),
+               "for(d,appender[?],|e|(e+1))");
+
+    let e = parse_expr("for(zip(d,e), appender, |e| e+1)").unwrap();
+    assert_eq!(print_expr_without_indent(&e).as_str(),
+               "for(zip(d,e),appender[?],|e|(e+1))");
+
+    let e = parse_expr("for(zip(a,b,iter(c,0L,4L,1L),iter(d)), appender, |e| e+1)").unwrap();
+    assert_eq!(print_expr_without_indent(&e).as_str(),
+               "for(zip(a,b,iter(c,0L,4L,1L),d),appender[?],|e|(e+1))");
 }

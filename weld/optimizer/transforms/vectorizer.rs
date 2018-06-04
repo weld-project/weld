@@ -14,9 +14,7 @@ use exprs;
 use util::SymbolGenerator;
 
 #[cfg(test)]
-use syntax::parser::*;
-#[cfg(test)]
-use type_inference::*;
+use tests::*;
 
 /// Vectorize an expression.
 pub fn vectorize(expr: &mut Expr) {
@@ -452,14 +450,6 @@ fn make_select_for_kv(cond:  Expr,
 
 
 
-/// Parse and perform type inference on an expression.
-#[cfg(test)]
-fn typed_expr(code: &str) -> Expr {
-    let mut e = parse_expr(code).unwrap();
-    assert!(e.infer_types().is_ok());
-    e
-}
-
 /// Check whether a function has a vectorized Merge call. We'll use this to check whether function
 /// bodies got vectorized.
 #[cfg(test)]
@@ -473,14 +463,14 @@ fn has_vectorized_merge(expr: &Expr) -> bool {
 
 #[test]
 fn simple_merger() {
-    let mut e = typed_expr("|v:vec[i32]| result(for(v, merger[i32,+], |b,i,e| merge(b,e+1)))");
+    let mut e = typed_expression("|v:vec[i32]| result(for(v, merger[i32,+], |b,i,e| merge(b,e+1)))");
     vectorize(&mut e);
     assert!(has_vectorized_merge(&e));
 }
 
 #[test]
 fn predicated_merger() {
-    let mut e = typed_expr("|v:vec[i32]| result(for(v, merger[i32,+], |b,i,e| @(predicate:true)if(e>0, merge(b,e), b)))");
+    let mut e = typed_expression("|v:vec[i32]| result(for(v, merger[i32,+], |b,i,e| @(predicate:true)if(e>0, merge(b,e), b)))");
     predicate_merge_expr(&mut e);
     vectorize(&mut e);
     assert!(has_vectorized_merge(&e));
@@ -489,14 +479,14 @@ fn predicated_merger() {
 #[test]
 fn unpredicated_merger() {
     // This one shouldn't be vectorized since we didn't predicate it.
-    let mut e = typed_expr("|v:vec[i32]| result(for(v, merger[i32,+], |b,i,e| if(e>0, merge(b,e), b)))");
+    let mut e = typed_expression("|v:vec[i32]| result(for(v, merger[i32,+], |b,i,e| if(e>0, merge(b,e), b)))");
     vectorize(&mut e);
     assert!(!has_vectorized_merge(&e));
 }
 
 #[test]
 fn simple_appender() {
-    let mut e = typed_expr("|v:vec[i32]| result(for(v, appender[i32], |b,i,e| merge(b,e+1)))");
+    let mut e = typed_expression("|v:vec[i32]| result(for(v, appender[i32], |b,i,e| merge(b,e+1)))");
     vectorize(&mut e);
     assert!(has_vectorized_merge(&e));
 }
@@ -504,7 +494,7 @@ fn simple_appender() {
 #[test]
 fn predicated_appender() {
     // This code should NOT be vectorized because we can't predicate merges into vecbuilder.
-    let mut e = typed_expr("|v:vec[i32]| result(for(v, appender[i32], |b,i,e| @(predicate:true)if(e>0, merge(b,e), b)))");
+    let mut e = typed_expression("|v:vec[i32]| result(for(v, appender[i32], |b,i,e| @(predicate:true)if(e>0, merge(b,e), b)))");
     predicate_merge_expr(&mut e);
     vectorize(&mut e);
     assert!(!has_vectorized_merge(&e));
@@ -513,7 +503,7 @@ fn predicated_appender() {
 #[test]
 fn non_vectorizable_type() {
     // This code should NOT be vectorized because we can't vectorize merges of vectors.
-    let mut e = typed_expr("|v:vec[i32]| result(for(v, appender[vec[i32]], |b,i,e| merge(b,v)))");
+    let mut e = typed_expression("|v:vec[i32]| result(for(v, appender[vec[i32]], |b,i,e| merge(b,v)))");
     vectorize(&mut e);
     assert!(!has_vectorized_merge(&e));
 }
@@ -521,14 +511,14 @@ fn non_vectorizable_type() {
 #[test]
 fn non_vectorizable_expr() {
     // This code should NOT be vectorized because we can't vectorize lookup().
-    let mut e = typed_expr("|v:vec[i32]| result(for(v, appender[i32], |b,i,e| merge(b,lookup(v,i))))");
+    let mut e = typed_expression("|v:vec[i32]| result(for(v, appender[i32], |b,i,e| merge(b,lookup(v,i))))");
     vectorize(&mut e);
     assert!(!has_vectorized_merge(&e));
 }
 
 #[test]
 fn zipped_input() {
-    let mut e = typed_expr("|v:vec[i32]| result(for(zip(v,v), appender[i32], |b,i,e| merge(b,e.$0+e.$1)))");
+    let mut e = typed_expression("|v:vec[i32]| result(for(zip(v,v), appender[i32], |b,i,e| merge(b,e.$0+e.$1)))");
     vectorize(&mut e);
     assert!(has_vectorized_merge(&e));
 }
@@ -536,7 +526,7 @@ fn zipped_input() {
 // Pointless test as dictmerger cannot be vectorized anyway.
 // #[test]
 // fn zips_in_body() {
-//     let mut e = typed_expr("|v:vec[i32]| result(for(v, dictmerger[{i32,i32},i32,+], |b,i,e| merge(b,{{e,e},e})))");
+//     let mut e = typed_expression("|v:vec[i32]| result(for(v, dictmerger[{i32,i32},i32,+], |b,i,e| merge(b,{{e,e},e})))");
 //     vectorize(&mut e);
 //     assert!(has_vectorized_merge(&e));
 // }

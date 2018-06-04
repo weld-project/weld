@@ -3,6 +3,11 @@ use ast::*;
 use ast::ExprKind::*;
 use exprs::*;
 
+#[cfg(test)]
+use tests::*;
+#[cfg(test)]
+use type_inference::InferTypes;
+
 pub fn short_circuit_booleans(expr: &mut Expr) {
     // For If statements annotated as predicated, do not apply the transform on the condition,
     // since it removes the predication opportunity.
@@ -38,14 +43,9 @@ pub fn short_circuit_booleans(expr: &mut Expr) {
     }
 }
 
-#[cfg(test)]
-use syntax::parser::*;
-#[cfg(test)]
-use type_inference::*;
-
 /// Parse and perform type inference on an expression.
 #[cfg(test)]
-fn typed_expr(code: &str) -> Expr {
+fn typed_expression(code: &str) -> Expr {
     let mut e = parse_expr(code).unwrap();
     assert!(e.infer_types().is_ok());
     e
@@ -53,42 +53,42 @@ fn typed_expr(code: &str) -> Expr {
 
 #[test]
 fn simple_and() {
-    let mut e = typed_expr("|x:i32| (x > 5 && x < 10)");
+    let mut e = typed_expression("|x:i32| (x > 5 && x < 10)");
     short_circuit_booleans(&mut e);
-    let ref expect = typed_expr("|x:i32| if (x > 5, x < 10, false)");
+    let ref expect = typed_expression("|x:i32| if (x > 5, x < 10, false)");
     assert!(e.compare_ignoring_symbols(expect).unwrap());
 }
 
 
 #[test]
 fn simple_or() {
-    let mut e = typed_expr("|x:i32| (x > 5 || x < 10)");
+    let mut e = typed_expression("|x:i32| (x > 5 || x < 10)");
     short_circuit_booleans(&mut e);
-    let ref expect = typed_expr("|x:i32| if (x > 5, true, x < 10)");
+    let ref expect = typed_expression("|x:i32| if (x > 5, true, x < 10)");
     assert!(e.compare_ignoring_symbols(expect).unwrap());
 }
 
 #[test]
 fn compound_and() {
-    let mut e = typed_expr("|x:i32| x > 5 && x < 10 && x == 7");
+    let mut e = typed_expression("|x:i32| x > 5 && x < 10 && x == 7");
     short_circuit_booleans(&mut e);
-    let ref expect = typed_expr("|x:i32| if ( if (x > 5, x < 10, false),  x == 7, false)");
+    let ref expect = typed_expression("|x:i32| if ( if (x > 5, x < 10, false),  x == 7, false)");
     assert!(e.compare_ignoring_symbols(expect).unwrap());
 }
 
 #[test]
 fn compound_or() {
-    let mut e = typed_expr("|x:i32| (x > 5 || x < 10 || x == 7)");
+    let mut e = typed_expression("|x:i32| (x > 5 || x < 10 || x == 7)");
     short_circuit_booleans(&mut e);
-    let ref expect = typed_expr("|x:i32| if ( if (x > 5, true, x < 10), true, x == 7 )");
+    let ref expect = typed_expression("|x:i32| if ( if (x > 5, true, x < 10), true, x == 7 )");
     assert!(e.compare_ignoring_symbols(expect).unwrap());
 }
 
 #[test]
 fn complex_and_or() {
-    let mut e = typed_expr("|x:i32| (x > 5 || x < 10) && (x == 7 || x == 2)");
+    let mut e = typed_expression("|x:i32| (x > 5 || x < 10) && (x == 7 || x == 2)");
     short_circuit_booleans(&mut e);
-    let ref expect = typed_expr("|x:i32|
+    let ref expect = typed_expression("|x:i32|
                     if(
                         if (x > 5, true, x < 10),
                         if (x == 7, true, x == 2),
@@ -99,9 +99,9 @@ fn complex_and_or() {
 
 #[test]
 fn complex_and_or_2() {
-    let mut e = typed_expr("|x:i32| (x > 5 && x < 10) || (x == 15)");
+    let mut e = typed_expression("|x:i32| (x > 5 && x < 10) || (x == 15)");
     short_circuit_booleans(&mut e);
-    let ref expect = typed_expr("|x:i32|
+    let ref expect = typed_expression("|x:i32|
                     if(
                         if (x > 5, x < 10, false),
                         true,
@@ -112,11 +112,11 @@ fn complex_and_or_2() {
 
 #[test]
 fn predicated_if() {
-    let mut e = typed_expr("|x:i32| @(predicate:true) if (x > 5 && x < 10, x > 3 || x < 4, false)");
+    let mut e = typed_expression("|x:i32| @(predicate:true) if (x > 5 && x < 10, x > 3 || x < 4, false)");
     short_circuit_booleans(&mut e);
 
     // Since the If is predicated, the condition should not be short-circuited.
-    let ref expect = typed_expr("|x:i32|
+    let ref expect = typed_expression("|x:i32|
                     @(predicate:true)
                     if (
                         x > 5 && x < 10, 
