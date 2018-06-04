@@ -2,7 +2,7 @@
 //!
 //! A pass is a named collection of related transforms applied in sequence until fix point.
 use ast::*;
-use ast::expr_hash::*;
+use ast::hash::*;
 use error::*;
 
 use super::transforms::loop_fusion;

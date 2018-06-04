@@ -4,7 +4,7 @@ use ast::*;
 use ast::ExprKind::*;
 use ast::Type::*;
 use ast::BuilderKind::*;
-use exprs::*;
+use ast::constructors::*;
 use util::SymbolGenerator;
 
 struct NewAppender<'a> {

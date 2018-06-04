@@ -1,12 +1,12 @@
 
 use ast::*;
 use ast::ExprKind::*;
-use exprs::*;
+use ast::constructors::*;
 
 #[cfg(test)]
 use tests::*;
 #[cfg(test)]
-use type_inference::InferTypes;
+use ast::type_inference::InferTypes;
 
 pub fn short_circuit_booleans(expr: &mut Expr) {
     // For If statements annotated as predicated, do not apply the transform on the condition,

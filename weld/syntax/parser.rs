@@ -15,7 +15,7 @@ use ast::ExprKind::*;
 use ast::LiteralKind::*;
 use ast::BuilderKind::*;
 use ast::IterKind::*;
-use colors::*;
+use util::colors::*;
 use error::*;
 
 use super::program::*;

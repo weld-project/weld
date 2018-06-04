@@ -95,7 +95,7 @@ impl<'a> MapIter<'a> {
 ///   - Like all Zip-based transforms, this function currently assumes that the output of each
 ///     expression in the Zip is the same length.
 pub fn fuse_loops_2(expr: &mut Expr) {
-    use exprs::*;
+    use ast::constructors::*;
     if expr.uniquify().is_err() {
         return;
     }
@@ -256,7 +256,7 @@ pub fn fuse_loops_2(expr: &mut Expr) {
 /// enable further pattern matching on map functions downstream. This is only allowed when the let
 /// statement is not defining some symbol that's used in the builder expression, so we check for that.
 pub fn move_merge_before_let(expr: &mut Expr) {
-    use exprs::*;
+    use ast::constructors::*;
     expr.transform_up(&mut |ref mut expr| {
         if let Let { ref name, value: ref let_value, ref body } = expr.kind {
             if let Merge { ref builder, value: ref merge_value } = body.kind {
@@ -353,7 +353,7 @@ pub fn aggressive_inline_let(expr: &mut Expr) {
 /// Caveats: This transformation will only fire if each vector in the iterator is bound to an
 /// identifier.
 pub fn merge_makestruct_loops(expr: &mut Expr) {
-    use exprs::*;
+    use ast::constructors::*;
     expr.uniquify().unwrap();
     expr.transform(&mut |ref mut expr| {
         if let MakeStruct { ref elems } = expr.kind {

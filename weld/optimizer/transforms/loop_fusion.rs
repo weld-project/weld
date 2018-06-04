@@ -8,7 +8,7 @@ use ast::BuilderKind::*;
 use ast::LiteralKind::*;
 use error::*;
 use annotation::*;
-use exprs;
+use ast::constructors;
 
 use super::inliner::inline_apply;
 
@@ -193,7 +193,7 @@ pub fn fuse_loops_vertical(expr: &mut Expr) {
                             if let NewBuilder(_) = bldr2.kind {
                                 if let Builder(ref kind, _) = bldr2.ty {
                                     if let Appender(_) = *kind {
-                                        let mut e = exprs::for_expr(iters2.clone(), *bldr1.clone(), replace_builder(lambda, nested, &mut sym_gen)?, false)?;
+                                        let mut e = constructors::for_expr(iters2.clone(), *bldr1.clone(), replace_builder(lambda, nested, &mut sym_gen)?, false)?;
                                         e.annotations = expr.annotations.clone();
                                         return Ok((Some(e), true));
                                     }
@@ -271,19 +271,19 @@ fn replace_builder(lambda: &Expr,
             let ref old_arg = args[2];
             let new_bldr_sym = sym_gen.new_symbol(&old_bldr.name.name);
             let new_index_sym = sym_gen.new_symbol(&old_index.name.name);
-            let new_bldr = exprs::ident_expr(new_bldr_sym.clone(), nested_args[0].ty.clone())?;
-            let new_index = exprs::ident_expr(new_index_sym.clone(), nested_args[1].ty.clone())?;
+            let new_bldr = constructors::ident_expr(new_bldr_sym.clone(), nested_args[0].ty.clone())?;
+            let new_index = constructors::ident_expr(new_index_sym.clone(), nested_args[1].ty.clone())?;
 
             // Fix expressions to use the new builder.
             new_body.transform_and_continue_res(&mut |ref mut e| match e.kind {
                 Merge { ref builder, ref value } if same_iden(&(*builder).kind, &old_bldr.name) => {
                     let params: Vec<Expr> = vec![new_bldr.clone(), new_index.clone(), *value.clone()];
-                    let mut expr = exprs::apply_expr(nested.clone(), params)?;
+                    let mut expr = constructors::apply_expr(nested.clone(), params)?;
                     inline_apply(&mut expr);
                     Ok((Some(expr), true))
                 }
                 For { iters: ref data, builder: ref bldr, ref func } if same_iden(&(*bldr).kind, &old_bldr.name) => {
-                    let expr = exprs::for_expr(data.clone(), new_bldr.clone(), replace_builder(func, nested, sym_gen)?, false)?;
+                    let expr = constructors::for_expr(data.clone(), new_bldr.clone(), replace_builder(func, nested, sym_gen)?, false)?;
                     Ok((Some(expr), false))
                 }
                 Ident(ref mut symbol) if *symbol == old_bldr.name => {
@@ -310,7 +310,7 @@ fn replace_builder(lambda: &Expr,
                                       ty: old_arg.ty.clone(),
                                       name: old_arg.name.clone(),
                                   }];
-            return exprs::lambda_expr(new_params, new_body);
+            return constructors::lambda_expr(new_params, new_body);
         }
     }
     return compile_err!("Inconsistency in replace_builder");

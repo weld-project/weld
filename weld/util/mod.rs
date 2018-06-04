@@ -15,6 +15,7 @@ use ast::*;
 use ast::ExprKind::*;
 
 pub mod stats;
+pub mod colors;
 
 /// Utility struct that can track and generate unique IDs and symbols for use in an expression.
 /// Each SymbolGenerator tracks the maximum ID used for every symbol name, and can be used to

@@ -8,7 +8,7 @@ pub use ast::uniquify::Uniquify;
 /// Returns a typed expression.
 #[cfg(test)]
 pub fn typed_expression(s: &str) -> Expr {
-    use type_inference::*;
+    use ast::type_inference::*;
     let mut expr = parse_expr(s).unwrap();
     expr.infer_types().unwrap();
     expr

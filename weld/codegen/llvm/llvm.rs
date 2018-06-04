@@ -34,7 +34,7 @@ use sir::Statement;
 use sir::StatementKind::*;
 use sir::Terminator::*;
 use sir::optimizations;
-use type_inference::InferTypes;
+use ast::type_inference::InferTypes;
 use util::IdGenerator;
 use annotation::*;
 use conf::ParsedConf;

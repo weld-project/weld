@@ -135,14 +135,11 @@ macro_rules! weld_err {
 mod error;
 
 mod annotation;
-mod colors;
 mod codegen;
 mod optimizer;
 mod syntax;
 mod sir;
-mod type_inference;
 mod conf;
-mod exprs;
 
 // Public interfaces.
 // TODO these probably shouldn't all be public...
@@ -419,13 +416,12 @@ pub fn load_linked_library<S: AsRef<str>>(filename: S) -> WeldResult<()> {
     codegen::llvm::load_library(filename.as_ref()).map_err(|e| WeldError::from(WeldCompileError::from(e)))
 }
 
-#[no_mangle]
 /// Enables logging to stderr in Weld with the given log level.
 /// This function is ignored if it has already been called once, or if some other code in the
 /// process has initialized logging using Rust's `log` crate.
 pub fn set_log_level(level: WeldLogLevel) {
-    use self::colors::*;
-    use self::colors::Color::*;
+    use util::colors::*;
+    use util::colors::Color::*;
 
     let filter = match level {
         WeldLogLevel::Error => log::LogLevelFilter::Error,

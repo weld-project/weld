@@ -129,7 +129,7 @@ pub fn inline_let(expr: &mut Expr) {
 /// Changes negations of literal values to be literal negated values.
 pub fn inline_negate(expr: &mut Expr) {
     use ast::LiteralKind::*;
-    use exprs::literal_expr;
+    use ast::constructors::literal_expr;
     expr.transform(&mut |ref mut expr| {
         if let Negate(ref child_expr) = expr.kind {
             if let Literal(ref literal_kind) = child_expr.kind {
@@ -153,7 +153,7 @@ pub fn inline_negate(expr: &mut Expr) {
 pub fn inline_cast(expr: &mut Expr) {
     use ast::ScalarKind::*;
     use ast::LiteralKind::*;
-    use exprs::literal_expr;
+    use ast::constructors::literal_expr;
     expr.transform(&mut |ref mut expr| {
         if let Cast { kind: ref scalar_kind, ref child_expr } = expr.kind {
             if let Literal(ref literal_kind) = child_expr.kind {
@@ -200,7 +200,7 @@ fn getfield_on_symbol(expr: &Expr, sym: &Symbol) -> Option<u32> {
 /// us + us#1 + us#2
 ///
 pub fn unroll_structs(expr: &mut Expr) {
-    use exprs::*;
+    use ast::constructors::*;
     use util::SymbolGenerator;
 
     expr.uniquify().unwrap();

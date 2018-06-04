@@ -1,13 +1,13 @@
 //! Constructors for creating typed expressions.
 #![allow(dead_code)]
 
-use super::ast::*;
-use super::ast::ExprKind::*;
-use super::ast::Type::*;
-use super::ast::BuilderKind::*;
-use super::ast::LiteralKind::*;
-use super::error::*;
-use super::annotation::*;
+use ast::*;
+use ast::ExprKind::*;
+use ast::Type::*;
+use ast::BuilderKind::*;
+use ast::LiteralKind::*;
+use error::*;
+use annotation::*;
 
 pub fn new_expr(kind: ExprKind, ty: Type) -> WeldResult<Expr> {
     Ok(Expr {
