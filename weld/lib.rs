@@ -134,20 +134,17 @@ macro_rules! weld_err {
 #[macro_use]
 mod error;
 
-mod annotations;
+mod annotation;
 mod colors;
 mod llvm;
-mod macro_processor;
 mod passes;
-mod parser;
+mod syntax;
 mod program;
 mod sir;
-mod tokenizer;
 mod transforms;
 mod type_inference;
 mod conf;
 mod exprs;
-mod expr_hash;
 mod easy_ll;
 mod stats;
 
@@ -155,7 +152,6 @@ mod stats;
 // TODO these probably shouldn't all be public...
 pub mod ast;
 pub mod util;
-pub mod common;
 pub mod ffi;
 pub mod runtime;
 
@@ -163,11 +159,8 @@ pub mod runtime;
 #[cfg(test)]
 mod tests;
 
-// Re-export the FFI.
-pub use ffi::*;
-
-use common::WeldRuntimeErrno;
-use common::WeldLogLevel;
+use runtime::WeldRuntimeErrno;
+use runtime::WeldLogLevel;
 use stats::CompilationStats;
 
 // This is needed to free the output struct of a Weld run.
@@ -356,7 +349,7 @@ impl WeldModule {
         let code = code.as_ref();
 
         let start = PreciseTime::now();
-        let program = parser::parse_program(code)?;
+        let program = syntax::parser::parse_program(code)?;
         let end = PreciseTime::now();
         stats.weld_times.push(("Parsing".to_string(), start.to(end)));
 

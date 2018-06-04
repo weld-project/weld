@@ -1,6 +1,6 @@
 //! Defines the Weld abstract syntax tree.
 
-use annotations::Annotations;
+use annotation::Annotations;
 use error::*;
 use util;
 
@@ -11,6 +11,7 @@ use self::BinOpKind::*;
 use std::fmt;
 use std::vec;
 
+/// A type on a Weld expression.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Type {
     /// A scalar.
@@ -280,6 +281,7 @@ impl fmt::Display for ScalarKind {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+/// Defines the builder types in Weld.
 pub enum BuilderKind {
     /// A builder that appends items to a list.
     Appender(Box<Type>),
@@ -355,7 +357,7 @@ impl fmt::Display for BuilderKind {
 
 // -------------------------------
 
-/// A symbol (identifier name); for now these are strings, but we may add some kind of scope ID.
+/// A named symbol in the Weld AST.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Symbol {
     pub name: String,

@@ -44,7 +44,7 @@ pub enum BuilderImplementationKind {
 
 impl fmt::Display for BuilderImplementationKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use annotations::BuilderImplementationKind::*;
+        use annotation::BuilderImplementationKind::*;
         let text = match *self {
             Local => "local",
             Global => "global",

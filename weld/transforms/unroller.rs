@@ -191,7 +191,7 @@ fn combine_unrolled_values(bk: BuilderKind, values: Vec<Expr>) -> WeldResult<Exp
 }
 
 #[cfg(test)]
-use parser::*;
+use syntax::parser::*;
 #[cfg(test)]
 use type_inference::*;
 

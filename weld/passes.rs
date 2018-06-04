@@ -10,7 +10,7 @@ use super::transforms::annotator;
 use super::transforms::vectorizer;
 use super::transforms::unroller;
 
-use super::expr_hash::*;
+use ast::expr_hash::*;
 
 use std::collections::HashMap;
 

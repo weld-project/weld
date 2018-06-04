@@ -14,7 +14,7 @@ use exprs;
 use util::SymbolGenerator;
 
 #[cfg(test)]
-use parser::*;
+use syntax::parser::*;
 #[cfg(test)]
 use type_inference::*;
 

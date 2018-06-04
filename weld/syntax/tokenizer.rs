@@ -12,7 +12,7 @@ use std::vec::Vec;
 
 use regex::Regex;
 
-use super::error::*;
+use error::*;
 
 #[derive(Clone,Debug,PartialEq)]
 pub enum Token {

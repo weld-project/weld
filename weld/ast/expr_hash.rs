@@ -1,5 +1,4 @@
-//! Implements hashing for expressions, which can be used for comparing two expressions for
-//! equality.
+//! Hash-based symbol agnostic AST comparison.
 //! 
 //! Developers should use the `expr_hash` module when checking whether an AST has changed, or in
 //! other scenarios that would otherwise require cloning the AST. In general, computing a hash,
@@ -7,13 +6,12 @@
 //! than cloning the AST and then checking if the tree was mutated using
 //! `compare_ignoring_symbols`.
 
-// Fast hash function used by Rust's compiler.
 extern crate fnv;
 
 use super::ast::*;
 use super::ast::ExprKind::*;
 use super::ast::LiteralKind::*;
-use super::error::*;
+use error::*;
 
 use std::collections::hash_map::Entry;
 use std::hash::{Hash, Hasher};
@@ -166,7 +164,7 @@ impl PartialEq for ExprHash {
 }
 
 #[cfg(test)]
-use super::parser::*;
+use syntax::parser::*;
 
 #[test]
 fn test_compare_same() {

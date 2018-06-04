@@ -10,7 +10,7 @@ extern crate code_builder;
 use time::PreciseTime;
 use code_builder::CodeBuilder;
 
-use common::WeldRuntimeErrno;
+use runtime::WeldRuntimeErrno;
 
 use std::io::Write;
 use std::path::PathBuf;
@@ -22,11 +22,11 @@ use super::ast::LiteralKind::*;
 use super::ast::ScalarKind::*;
 use super::ast::BuilderKind::*;
 use super::error::*;
-use super::macro_processor;
+use super::syntax;
 use super::passes::*;
 use super::ast::pretty_print::*;
 use super::program::Program;
-use super::runtime::*;
+use super::runtime;
 use super::sir;
 use super::sir::*;
 use super::sir::Statement;
@@ -36,14 +36,14 @@ use super::sir::optimizations;
 use super::transforms::uniquify;
 use super::type_inference::InferTypes;
 use super::util::IdGenerator;
-use super::annotations::*;
+use super::annotation::*;
 
 use super::conf::ParsedConf;
 
 use super::CompilationStats;
 
 #[cfg(test)]
-use super::parser::*;
+use super::syntax::parser::*;
 
 #[cfg(test)]
 use tests::print_typed_expr_without_indent;
@@ -145,7 +145,7 @@ impl HasPointer for Type {
 /// Generate a compiled LLVM module from a program whose body is a function.
 pub fn compile_program(program: &Program, conf: &ParsedConf, stats: &mut CompilationStats)
         -> WeldResult<CompiledModule> {
-    let mut expr = macro_processor::process_program(program)?;
+    let mut expr = syntax::macro_processor::process_program(program)?;
     debug!("After macro substitution:\n{}\n", expr.pretty_print());
 
     let start = PreciseTime::now();
@@ -238,7 +238,7 @@ pub fn compile_program(program: &Program, conf: &ParsedConf, stats: &mut Compila
     debug!("Started runtime_init call");
     let start = PreciseTime::now();
     unsafe {
-        weld_runtime_init();
+        runtime::weld_runtime_init();
     }
     let end = PreciseTime::now();
     debug!("Done runtime_init call");

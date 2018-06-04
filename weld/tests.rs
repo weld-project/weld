@@ -1,13 +1,13 @@
-use super::ast::{Expr, Type, ExprKind, Symbol};
-use super::parser::parse_expr;
-use super::type_inference::*;
-use super::annotations::*;
+use ast::{Expr, Type, ExprKind, Symbol};
+use syntax::parser::parse_expr;
+use type_inference::*;
+use annotation::*;
 
 // Transforms. TODO(shoumik) move these tests somewhere else?
-use super::transforms::loop_fusion::fuse_loops_vertical;
-use super::transforms::loop_fusion::fuse_loops_horizontal;
-use super::transforms::inliner::inline_let;
-use super::transforms::uniquify::uniquify;
+use transforms::loop_fusion::fuse_loops_vertical;
+use transforms::loop_fusion::fuse_loops_horizontal;
+use transforms::inliner::inline_let;
+use transforms::uniquify::uniquify;
 
 /// Returns a typed expression.
 #[cfg(test)]

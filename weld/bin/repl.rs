@@ -20,7 +20,7 @@ use std::fmt;
 use std::collections::HashMap;
 
 use weld::*;
-use weld::common::*;
+use weld::runtime::*;
 
 const PROMPT: &'static str = ">>> ";
 
@@ -231,7 +231,7 @@ fn main() {
         process_setconf(conf, "weld.compile.dumpCode", "true");
     }
 
-    weld_set_log_level(log_level);
+    set_log_level(log_level);
     println!("Log Level set to '{}'", log_str);
 
     if let Some(filename) = matches.value_of("input") {

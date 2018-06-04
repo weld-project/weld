@@ -7,7 +7,7 @@ use ast::Type::*;
 use ast::BuilderKind::*;
 use ast::LiteralKind::*;
 use error::*;
-use annotations::*;
+use annotation::*;
 use exprs;
 
 use super::inliner::inline_apply;

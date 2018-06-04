@@ -6,21 +6,21 @@
 use std::vec::Vec;
 use std::cmp::min;
 
-use super::ast::*;
-use super::ast::Type::*;
-use super::ast::BinOpKind::*;
-use super::ast::UnaryOpKind::*;
-use super::ast::ExprKind::*;
-use super::ast::LiteralKind::*;
-use super::ast::BuilderKind::*;
-use super::ast::IterKind::*;
-use super::colors::*;
-use super::error::*;
-use super::program::*;
+use annotation::*;
+use ast::*;
+use ast::Type::*;
+use ast::BinOpKind::*;
+use ast::UnaryOpKind::*;
+use ast::ExprKind::*;
+use ast::LiteralKind::*;
+use ast::BuilderKind::*;
+use ast::IterKind::*;
+use colors::*;
+use error::*;
+use program::*;
+
 use super::tokenizer::*;
 use super::tokenizer::Token::*;
-
-use super::annotations::*;
 
 use std::error::Error;
 

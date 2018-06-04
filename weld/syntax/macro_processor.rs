@@ -7,13 +7,13 @@
 use std::collections::HashMap;
 use std::vec::Vec;
 
-use super::ast::*;
-use super::ast::ExprKind::*;
-use super::program::*;
+use ast::*;
+use ast::ExprKind::*;
+use program::*;
 use super::parser::*;
-use super::error::*;
-use super::util::SymbolGenerator;
-use super::annotations::*;
+use error::*;
+use util::SymbolGenerator;
+use annotation::*;
 
 #[cfg(test)]
 use tests::print_expr_without_indent;
@@ -22,7 +22,7 @@ const MAX_MACRO_DEPTH: i32 = 30;
 
 lazy_static! {
     static ref STANDARD_MACROS: Vec<Macro> = {
-        let code = include_str!("resources/standard_macros.weld");
+        let code = include_str!("../resources/standard_macros.weld");
         parse_macros(code).unwrap()
     };
 }

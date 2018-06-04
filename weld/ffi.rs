@@ -7,7 +7,7 @@ use std::ptr;
 use std::ffi::CStr;
 
 use super::*;
-use super::common::WeldRuntimeErrno;
+use runtime::WeldRuntimeErrno;
 
 trait ToRustStr {
     fn to_str(&self) -> &str;

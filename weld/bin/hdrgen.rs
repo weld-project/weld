@@ -9,7 +9,8 @@ extern crate code_builder;
 use code_builder::CodeBuilder;
 
 use weld::*;
-use weld::common::*;
+use weld::ffi::*;
+use weld::runtime::*;
 
 use clap::{Arg, App};
 use libc::c_char;

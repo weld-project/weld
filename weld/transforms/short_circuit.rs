@@ -39,7 +39,7 @@ pub fn short_circuit_booleans(expr: &mut Expr) {
 }
 
 #[cfg(test)]
-use parser::*;
+use syntax::parser::*;
 #[cfg(test)]
 use type_inference::*;
 

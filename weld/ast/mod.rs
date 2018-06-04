@@ -6,5 +6,6 @@
 pub use self::ast::*;
 
 pub mod pretty_print;
+pub mod expr_hash;
 
 mod ast;

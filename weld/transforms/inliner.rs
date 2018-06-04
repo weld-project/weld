@@ -4,7 +4,7 @@
 use ast::*;
 use ast::ExprKind::*;
 
-use annotations::*;
+use annotation::*;
 
 use super::uniquify::uniquify;
 

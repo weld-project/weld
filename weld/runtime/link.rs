@@ -1,3 +1,8 @@
+//! C Functions called by the Weld runtime.
+//!
+//! These functions should not be called by users of Weld - they are exposed because LLVM cannot
+//! resolve them unless they are marked with `pub`.
+
 use libc::{c_void, int64_t, int32_t, size_t};
 
 #[allow(non_camel_case_types)]
