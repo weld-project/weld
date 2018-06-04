@@ -9,7 +9,7 @@ use std::vec;
 use super::ast::*;
 use super::ast::Type::*;
 use super::error::*;
-use super::ast::pretty_print::*;
+use super::ast::pretty_print::PrettyPrint;
 use super::util::SymbolGenerator;
 
 extern crate fnv;
@@ -1347,11 +1347,11 @@ fn gen_expr(expr: &Expr,
                                 });
                 Ok((cont_func, cont_block, builder_sym))
             } else {
-                compile_err!("Argument to For was not a Lambda: {}", print_expr(func))
+                compile_err!("Argument to For was not a Lambda: {}", func.pretty_print())
             }
         }
 
-        _ => compile_err!("Unsupported expression: {}", print_expr(expr)),
+        _ => compile_err!("Unsupported expression: {}", expr.pretty_print())
     }
 }
 

@@ -45,6 +45,9 @@ use super::CompilationStats;
 #[cfg(test)]
 use super::parser::*;
 
+#[cfg(test)]
+use tests::print_typed_expr_without_indent;
+
 /// useful to make the code related to accessing elements from the array less verbose.
 #[derive(Clone)]
 pub struct VecLLVMInfo {
@@ -114,7 +117,7 @@ pub fn apply_opt_passes(expr: &mut Expr,
         pass.transform(expr, use_experimental)?;
         let end = PreciseTime::now();
         stats.pass_times.push((pass.pass_name(), start.to(end)));
-        debug!("After {} pass:\n{}", pass.pass_name(), print_typed_expr(&expr));
+        debug!("After {} pass:\n{}", pass.pass_name(), expr.pretty_print());
     }
     Ok(())
 }
@@ -143,7 +146,7 @@ impl HasPointer for Type {
 pub fn compile_program(program: &Program, conf: &ParsedConf, stats: &mut CompilationStats)
         -> WeldResult<CompiledModule> {
     let mut expr = macro_processor::process_program(program)?;
-    debug!("After macro substitution:\n{}\n", print_typed_expr(&expr));
+    debug!("After macro substitution:\n{}\n", expr.pretty_print());
 
     let start = PreciseTime::now();
     uniquify::uniquify(&mut expr)?;
@@ -154,7 +157,7 @@ pub fn compile_program(program: &Program, conf: &ParsedConf, stats: &mut Compila
     let start = PreciseTime::now();
     expr.infer_types()?;
     let end = PreciseTime::now();
-    debug!("After type inference:\n{}\n", print_typed_expr(&expr));
+    debug!("After type inference:\n{}\n", expr.pretty_print());
     stats.weld_times.push(("Type Inference".to_string(), start.to(end)));
 
     apply_opt_passes(&mut expr, &conf.optimization_passes, stats, conf.enable_experimental_passes)?;
@@ -166,7 +169,7 @@ pub fn compile_program(program: &Program, conf: &ParsedConf, stats: &mut Compila
 
     stats.weld_times.push(("Uniquify outside Passes".to_string(), uniquify_dur));
 
-    debug!("Optimized Weld program:\n{}\n", print_expr(&expr));
+    debug!("Optimized Weld program:\n{}\n", expr.pretty_print());
 
     let start = PreciseTime::now();
     let mut sir_prog = sir::ast_to_sir(&expr, conf.support_multithread)?;
@@ -210,7 +213,7 @@ pub fn compile_program(program: &Program, conf: &ParsedConf, stats: &mut Compila
     // Dump files if needed. Do this here in case the actual LLVM code gen fails.
     if conf.dump_code.enabled {
         info!("Writing code to directory '{}' with timestamp {}", &conf.dump_code.dir.display(), timestamp);
-        write_code(&print_typed_expr(&expr), "weld", timestamp, &conf.dump_code.dir);
+        write_code(expr.pretty_print().as_ref(), "weld", timestamp, &conf.dump_code.dir);
         write_code(&format!("{}", &sir_prog), "sir", timestamp, &conf.dump_code.dir);
         write_code(&llvm_code, "ll", timestamp, &conf.dump_code.dir);
     }

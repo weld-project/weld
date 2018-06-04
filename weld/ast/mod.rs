@@ -5,5 +5,6 @@
 
 pub use self::ast::*;
 
-mod ast;
 pub mod pretty_print;
+
+mod ast;

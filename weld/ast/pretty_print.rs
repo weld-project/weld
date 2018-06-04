@@ -1,4 +1,7 @@
-//! Pretty print expressions in the AST.
+//! Pretty print Weld expression trees.
+//!
+//! This module prints Weld expressions. The printed expression is a valid Weld program and can be
+//! re-parsed using the Weld API.
 
 use ast::*;
 use ast::ExprKind::*;
@@ -6,12 +9,8 @@ use ast::ExprKind::*;
 use util::join;
 
 /// The number of spaces used when indenting code.
-pub const INDENT_LEVEL: i32 = 2;
+const INDENT_LEVEL: i32 = 2;
 
-pub fn print_typed_expr(_e: &Expr) -> String { "".to_string() }
-pub fn print_expr(_e: &Expr) -> String { "".to_string() }
-
-// todo probably want to rename this...
 pub trait PrettyPrint {
     /// Pretty print an expression.
     ///
@@ -52,6 +51,8 @@ pub struct PrettyPrintConfig {
     pub should_indent: bool,
     /// Tracks the indentation level.
     indent: i32,
+    /// Specifies whether this is the top of the expression tree.
+    top: bool,
 }
 
 impl PrettyPrintConfig {
@@ -60,9 +61,10 @@ impl PrettyPrintConfig {
     /// The default configuration does not show types for each symbol name and indents code.
     pub fn new() -> Self {
         PrettyPrintConfig {
-            indent: INDENT_LEVEL,
             show_types: false,
             should_indent: true,
+            indent: INDENT_LEVEL,
+            top: true,
         }
     }
 
@@ -86,9 +88,9 @@ impl PrettyPrintConfig {
 /// character.
 fn indentation(config: &PrettyPrintConfig) -> (String, String, String) {
     if config.should_indent {
-        ("".to_string(), "".to_string(), "".to_string())
-    } else {
         (" ".repeat((config.indent - 2) as usize), " ".repeat(config.indent as usize), "\n".to_string())
+    } else {
+        ("".to_string(), "".to_string(), "".to_string())
     }
 }
 
@@ -97,7 +99,6 @@ fn print_iters(iters: &Vec<Iter>, config: &mut PrettyPrintConfig) -> String {
     use self::IterKind::*;
     let mut iter_strs = vec![];
     let (less_indent_str, indent_str, newline) = indentation(config);
-
     for iter in iters {
         match iter.kind {
             NdIter => {
@@ -109,7 +110,7 @@ fn print_iters(iters: &Vec<Iter>, config: &mut PrettyPrintConfig) -> String {
                     to_string_impl(iter.shape.as_ref().unwrap(), config),
                     to_string_impl(iter.strides.as_ref().unwrap(), config),
                 ));
-            } 
+            }
             _ if iter.start.is_some() => {
                 iter_strs.push(format!("{}({},{},{},{})",
                     iter.kind,
@@ -144,6 +145,8 @@ fn print_iters(iters: &Vec<Iter>, config: &mut PrettyPrintConfig) -> String {
 /// Pretty print each expression in an AST recursively.
 fn to_string_impl(expr: &Expr, config: &mut PrettyPrintConfig) -> String {
     let (less_indent_str, indent_str, newline) = indentation(config);
+    let top = config.top;
+    config.top = false;
     let expr_str = match expr.kind {
         Literal(ref lit) => {
             lit.to_string()
@@ -232,7 +235,7 @@ fn to_string_impl(expr: &Expr, config: &mut PrettyPrintConfig) -> String {
 
         GetField { ref expr, index } => {
             // If the expression is a symbol, don't show its type in a GetField.
-            if !config.show_types {
+            if config.show_types {
                 if let Ident(ref symbol) = expr.kind {
                     return format!("{}.${}", symbol, index)
                 }
@@ -266,8 +269,14 @@ fn to_string_impl(expr: &Expr, config: &mut PrettyPrintConfig) -> String {
         }
 
         Lambda { ref params, ref body } => {
-            let mut res = join("|", ",", "|",
-                               params.iter().map(|e| print_parameter(e, config.show_types)));
+            // Print types for a top-level Lambda even if show_types is disabled - this allows
+            // type inference to infer the remaining types in the program.
+            let mut res = join("|", ",", "|", params.iter()
+                               .map(|e| if top || config.show_types {
+                                   e.to_string()
+                               } else {
+                                   e.name.to_string()
+                               }));
             config.indent += INDENT_LEVEL;
             let body = to_string_impl(body, config);
             config.indent -= INDENT_LEVEL;
@@ -344,13 +353,4 @@ fn to_string_impl(expr: &Expr, config: &mut PrettyPrintConfig) -> String {
         }
     };
     format!("{}{}", expr.annotations, expr_str)
-}
-
-/// Print a parameter, optionally showing its type.
-fn print_parameter(param: &Parameter, typed: bool) -> String {
-    if typed {
-        format!("{}:{}", param.name, param.ty)
-    } else {
-        format!("{}", param.name)
-    }
 }

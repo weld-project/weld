@@ -541,7 +541,7 @@ pub fn result_expr(builder: Expr) -> WeldResult<Expr> {
 }
 
 #[cfg(test)]
-use super::pretty_print::*;
+use tests::print_expr_without_indent;
 
 #[test]
 fn literal_test() {

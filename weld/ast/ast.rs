@@ -178,7 +178,7 @@ impl fmt::Display for Type {
                 res
             }
             Builder(ref kind, ref annotations) => {
-                format!("{}{}", kind, annotations)
+                format!("{}{}", annotations, kind)
             }
             Unknown => String::from("?")
         };
@@ -412,7 +412,7 @@ impl fmt::Display for IterKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use self::IterKind::*;
         let ref text = match *self {
-            ScalarIter => "scalar",
+            ScalarIter => "",
             SimdIter => "simd",
             FringeIter => "fringe",
             NdIter => "nditer",
@@ -726,6 +726,12 @@ impl fmt::Display for UnaryOpKind {
 pub struct Parameter {
     pub name: Symbol,
     pub ty: Type,
+}
+
+impl fmt::Display for Parameter {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}:{}", self.name, self.ty)
+    }
 }
 
 impl Expr {
