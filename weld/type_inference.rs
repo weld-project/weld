@@ -219,7 +219,7 @@ impl InferTypesInternal for Expr {
         loop {
             let ref mut env = TypeMap::default();
             if !self.infer_up(env)? {
-                if self.ty.partial_type() {
+                if self.partially_typed() {
                     return compile_err!("Could not infer some types")
                 } else {
                     return Ok(())

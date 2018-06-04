@@ -1,5 +1,9 @@
-use super::ast::*;
-use super::error::*;
+//! Manages passes over the AST.
+//!
+//! A pass is a named collection of related transforms applied in sequence until fix point.
+use ast::*;
+use ast::expr_hash::*;
+use error::*;
 
 use super::transforms::loop_fusion;
 use super::transforms::loop_fusion_2;
@@ -9,8 +13,6 @@ use super::transforms::short_circuit;
 use super::transforms::annotator;
 use super::transforms::vectorizer;
 use super::transforms::unroller;
-
-use ast::expr_hash::*;
 
 use std::collections::HashMap;
 

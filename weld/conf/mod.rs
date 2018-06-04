@@ -2,8 +2,8 @@
 
 use super::WeldConf;
 use super::error::WeldResult;
-use super::passes::OPTIMIZATION_PASSES;
-use super::passes::Pass;
+use optimizer::OPTIMIZATION_PASSES;
+use optimizer::Pass;
 
 use std::path::{Path, PathBuf};
 

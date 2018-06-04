@@ -947,6 +947,18 @@ impl Expr {
         }.into_iter()
     }
 
+
+    /// Returns whether this `Expr` is partially typed.
+    ///
+    /// A type is partial if it or any of its subtypes is `Unknown`.
+    pub fn partially_typed(&self) -> bool {
+        use self::Type::Unknown;
+        match self.ty {
+            Unknown => true,
+            _ => self.children().any(|e| e.ty.partial_type()),
+        }
+    }
+
     /// Compares two expression trees, returning true if they are the same modulo symbol names.
     /// Symbols in the two expressions must have a one to one correspondance for the trees to be
     /// considered equal. If an undefined symbol is encountered during the comparison, it must

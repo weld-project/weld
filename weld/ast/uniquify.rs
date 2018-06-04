@@ -1,17 +1,27 @@
-//! Transform to uniquify symbols in an expession.
+//! Defines the `Uniquify` trait on expressions.
+//!
+//! This trait makes symbol names unique in the AST.
 
-use ast::*;
-use ast::ExprKind::*;
+use super::ast::*;
+use super::ast::ExprKind::*;
 use error::*;
 
 use std::collections::hash_map::Entry;
 
 extern crate fnv;
 
-/// Modifies symbol names so each symbol is unique in the AST.  Returns an error if an undeclared
-/// symbol appears in the program.
-pub fn uniquify(expr: &mut Expr) -> WeldResult<()> {
-    uniquify_helper(expr, &mut SymbolStack::new())
+/// Modifies an expression to make symbol names unique.
+pub trait Uniquify {
+    /// Modifies an expression to make symbol names unique.
+    ///
+    /// Returns an error if an undefined symbol is encountered.
+    fn uniquify(&mut self) -> WeldResult<()>;
+}
+
+impl Uniquify for Expr {
+    fn uniquify(&mut self) -> WeldResult<()> {
+        uniquify_helper(self, &mut SymbolStack::new())
+    }
 }
 
 /// A stack which keeps track of unique variables names and scoping information for symbols.

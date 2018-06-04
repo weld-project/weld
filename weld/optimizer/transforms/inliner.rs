@@ -2,11 +2,10 @@
 //! and fuse them into a single one.
 
 use ast::*;
+use ast::uniquify::Uniquify;
 use ast::ExprKind::*;
 
 use annotation::*;
-
-use super::uniquify::uniquify;
 
 /// Inlines GetField(MakeStruct(*)) expressions, which can occur during loop fusion when some
 /// of the loops are zipping together multiple column vectors.
@@ -100,7 +99,7 @@ pub fn inline_apply(expr: &mut Expr) {
 /// Inlines Let calls if the symbol defined by the Let statement is used
 /// never or only one time.
 pub fn inline_let(expr: &mut Expr) {
-    if let Ok(_) = uniquify(expr) {
+    if expr.uniquify().is_ok() {
         expr.transform(&mut |ref mut expr| {
             if let Let {
                 ref mut name,
@@ -201,7 +200,7 @@ pub fn unroll_structs(expr: &mut Expr) {
     use exprs::*;
     use util::SymbolGenerator;
 
-    uniquify(expr).unwrap();
+    expr.uniquify().unwrap();
     let mut sym_gen = SymbolGenerator::from_expression(expr);
     expr.transform_up(&mut |ref mut expr| {
         match expr.kind {

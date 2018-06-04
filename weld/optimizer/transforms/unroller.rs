@@ -13,7 +13,7 @@ use ast::Type::*;
 use error::*;
 use exprs::*;
 
-use super::uniquify::uniquify;
+use ast::uniquify::Uniquify;
 
 /// Maximum number of iterations this transformation will unroll.
 pub const UNROLL_LIMIT: i64 = 8;
@@ -66,7 +66,7 @@ impl<'a> UnrollPattern<'a> {
 pub fn unroll_static_loop(expr: &mut Expr) {
     use util::SymbolGenerator;
 
-    if let Err(_) = uniquify(expr) {
+    if let Err(_) = expr.uniquify() {
         return;
     }
 

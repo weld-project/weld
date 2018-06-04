@@ -5,6 +5,7 @@
 
 pub use self::ast::*;
 
+pub mod uniquify;
 pub mod pretty_print;
 pub mod expr_hash;
 

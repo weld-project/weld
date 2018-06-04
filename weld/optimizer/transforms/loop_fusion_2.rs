@@ -1,12 +1,12 @@
 //! Richer loop fusion rules.
 
 use ast::*;
+use ast::uniquify::Uniquify;
 use ast::ExprKind::*;
 use ast::Type::*;
 use ast::BuilderKind::*;
 use error::*;
 
-use super::uniquify;
 
 use util::SymbolGenerator;
 
@@ -96,7 +96,7 @@ impl<'a> MapIter<'a> {
 ///     expression in the Zip is the same length.
 pub fn fuse_loops_2(expr: &mut Expr) {
     use exprs::*;
-    if uniquify::uniquify(expr).is_err() {
+    if expr.uniquify().is_err() {
         return;
     }
     let mut gen = SymbolGenerator::from_expression(expr);
@@ -354,7 +354,7 @@ pub fn aggressive_inline_let(expr: &mut Expr) {
 /// identifier.
 pub fn merge_makestruct_loops(expr: &mut Expr) {
     use exprs::*;
-    super::uniquify::uniquify(expr).unwrap();
+    expr.uniquify().unwrap();
     expr.transform(&mut |ref mut expr| {
         if let MakeStruct { ref elems } = expr.kind {
             // Each member of the `GetStruct` must be a ResForAppender pattern.

@@ -1,3 +1,6 @@
+//! A Foreign Function Interface to Weld.
+//!
+//! This module provides a C-compatible interface to the Weld library.
 
 extern crate libc;
 

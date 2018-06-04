@@ -10,11 +10,13 @@ extern crate code_builder;
 use time::PreciseTime;
 use code_builder::CodeBuilder;
 
-use runtime::WeldRuntimeErrno;
-
 use std::io::Write;
 use std::path::PathBuf;
 use std::fs::OpenOptions;
+
+use ast::uniquify::Uniquify;
+use optimizer::*;
+use runtime::WeldRuntimeErrno;
 
 use super::ast::*;
 use super::ast::Type::*;
@@ -23,7 +25,6 @@ use super::ast::ScalarKind::*;
 use super::ast::BuilderKind::*;
 use super::error::*;
 use super::syntax;
-use super::passes::*;
 use super::ast::pretty_print::*;
 use super::program::Program;
 use super::runtime;
@@ -33,7 +34,6 @@ use super::sir::Statement;
 use super::sir::StatementKind::*;
 use super::sir::Terminator::*;
 use super::sir::optimizations;
-use super::transforms::uniquify;
 use super::type_inference::InferTypes;
 use super::util::IdGenerator;
 use super::annotation::*;
@@ -149,7 +149,7 @@ pub fn compile_program(program: &Program, conf: &ParsedConf, stats: &mut Compila
     debug!("After macro substitution:\n{}\n", expr.pretty_print());
 
     let start = PreciseTime::now();
-    uniquify::uniquify(&mut expr)?;
+    expr.uniquify()?;
     let end = PreciseTime::now();
 
     let mut uniquify_dur = start.to(end);
@@ -163,7 +163,7 @@ pub fn compile_program(program: &Program, conf: &ParsedConf, stats: &mut Compila
     apply_opt_passes(&mut expr, &conf.optimization_passes, stats, conf.enable_experimental_passes)?;
 
     let start = PreciseTime::now();
-    uniquify::uniquify(&mut expr)?;
+    expr.uniquify()?;
     let end = PreciseTime::now();
     uniquify_dur = uniquify_dur + start.to(end);
 
