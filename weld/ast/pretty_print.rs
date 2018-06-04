@@ -11,6 +11,7 @@ use util::join;
 /// The number of spaces used when indenting code.
 const INDENT_LEVEL: i32 = 2;
 
+/// A trait for pretty printing expression trees.
 pub trait PrettyPrint {
     /// Pretty print an expression.
     ///
@@ -43,6 +44,10 @@ impl PrettyPrint for Expr {
     }
 }
 
+/// A struct used to configure pretty printing.
+///
+/// This struct is used with the `PrettyPrint::pretty_print_config` function to configure how the
+/// Weld expression is printed.
 #[derive(Clone)]
 pub struct PrettyPrintConfig {
     /// Sets whether to print the type of each symbol.
