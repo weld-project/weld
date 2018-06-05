@@ -1,6 +1,6 @@
 //! Defines the Weld abstract syntax tree.
 
-use annotations::Annotations;
+use annotation::Annotations;
 use error::*;
 use util;
 
@@ -11,6 +11,10 @@ use self::BinOpKind::*;
 use std::fmt;
 use std::vec;
 
+#[cfg(test)]
+use tests::*;
+
+/// A type on a Weld expression.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Type {
     /// A scalar.
@@ -280,6 +284,7 @@ impl fmt::Display for ScalarKind {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+/// Defines the builder types in Weld.
 pub enum BuilderKind {
     /// A builder that appends items to a list.
     Appender(Box<Type>),
@@ -355,7 +360,7 @@ impl fmt::Display for BuilderKind {
 
 // -------------------------------
 
-/// A symbol (identifier name); for now these are strings, but we may add some kind of scope ID.
+/// A named symbol in the Weld AST.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Symbol {
     pub name: String,
@@ -945,6 +950,18 @@ impl Expr {
         }.into_iter()
     }
 
+
+    /// Returns whether this `Expr` is partially typed.
+    ///
+    /// A type is partial if it or any of its subtypes is `Unknown`.
+    pub fn partially_typed(&self) -> bool {
+        use self::Type::Unknown;
+        match self.ty {
+            Unknown => true,
+            _ => self.children().any(|e| e.ty.partial_type()),
+        }
+    }
+
     /// Compares two expression trees, returning true if they are the same modulo symbol names.
     /// Symbols in the two expressions must have a one to one correspondance for the trees to be
     /// considered equal. If an undefined symbol is encountered during the comparison, it must
@@ -1229,4 +1246,35 @@ pub fn expr_box(kind: ExprKind, annot: Annotations) -> Box<Expr> {
                  kind: kind,
                  annotations: annot,
              })
+}
+
+#[test]
+fn compare_expressions() {
+    let e1 = parse_expr("for([1,2], appender, |e| e+1)").unwrap();
+    let e2 = parse_expr("for([1,2], appender, |f| f+1)").unwrap();
+    assert!(e1.compare_ignoring_symbols(&e2).unwrap());
+
+    let e1 = parse_expr("let a = 2; a").unwrap();
+    let e2 = parse_expr("let b = 2; b").unwrap();
+    assert!(e1.compare_ignoring_symbols(&e2).unwrap());
+
+    let e2 = parse_expr("let b = 2; c").unwrap();
+    assert!(!e1.compare_ignoring_symbols(&e2).unwrap());
+
+    // Undefined symbols should work as long as the symbol is the same.
+    let e1 = parse_expr("[1, 2, 3, d]").unwrap();
+    let e2 = parse_expr("[1, 2, 3, d]").unwrap();
+    assert!(e1.compare_ignoring_symbols(&e2).unwrap());
+
+    let e2 = parse_expr("[1, 2, 3, e]").unwrap();
+    assert!(!e1.compare_ignoring_symbols(&e2).unwrap());
+
+    // Symbols can be substituted, so equal.
+    let e1 = parse_expr("|a, b| a + b").unwrap();
+    let e2 = parse_expr("|c, d| c + d").unwrap();
+    assert!(e1.compare_ignoring_symbols(&e2).unwrap());
+
+    // Symbols don't match up.
+    let e2 = parse_expr("|c, d| d + c").unwrap();
+    assert!(!e1.compare_ignoring_symbols(&e2).unwrap());
 }

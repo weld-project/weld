@@ -134,28 +134,17 @@ macro_rules! weld_err {
 #[macro_use]
 mod error;
 
-mod annotations;
-mod colors;
-mod llvm;
-mod macro_processor;
-mod passes;
-mod parser;
-mod program;
+mod annotation;
+mod codegen;
+mod optimizer;
+mod syntax;
 mod sir;
-mod tokenizer;
-mod transforms;
-mod type_inference;
 mod conf;
-mod exprs;
-mod expr_hash;
-mod easy_ll;
-mod stats;
 
 // Public interfaces.
 // TODO these probably shouldn't all be public...
 pub mod ast;
 pub mod util;
-pub mod common;
 pub mod ffi;
 pub mod runtime;
 
@@ -163,12 +152,9 @@ pub mod runtime;
 #[cfg(test)]
 mod tests;
 
-// Re-export the FFI.
-pub use ffi::*;
-
-use common::WeldRuntimeErrno;
-use common::WeldLogLevel;
-use stats::CompilationStats;
+use runtime::WeldRuntimeErrno;
+use runtime::WeldLogLevel;
+use util::stats::CompilationStats;
 
 // This is needed to free the output struct of a Weld run.
 extern "C" {
@@ -242,13 +228,6 @@ impl Default for WeldError {
 impl From<error::WeldCompileError> for WeldError {
     fn from(err: error::WeldCompileError) -> WeldError {
         WeldError::new(CString::new(err.description()).unwrap(), WeldRuntimeErrno::CompileError)
-    }
-}
-
-// Conversion from a compilation error to an external WeldError.
-impl From<easy_ll::LlvmError> for WeldError {
-    fn from(err: easy_ll::LlvmError) -> WeldError {
-        WeldError::new(err.to_string(), WeldRuntimeErrno::CompileError)
     }
 }
 
@@ -339,7 +318,7 @@ impl WeldConf {
 
 /// A compiled runnable Weld module.
 pub struct WeldModule {
-    llvm_module: llvm::CompiledModule,
+    llvm_module: codegen::llvm::CompiledModule,
 }
 
 impl WeldModule {
@@ -356,11 +335,11 @@ impl WeldModule {
         let code = code.as_ref();
 
         let start = PreciseTime::now();
-        let program = parser::parse_program(code)?;
+        let program = syntax::parser::parse_program(code)?;
         let end = PreciseTime::now();
         stats.weld_times.push(("Parsing".to_string(), start.to(end)));
 
-        let module = llvm::compile_program(&program, parsed_conf, &mut stats)?;
+        let module = codegen::llvm::compile_program(&program, parsed_conf, &mut stats)?;
         debug!("\n{}\n", stats.pretty_print());
 
         Ok(WeldModule { llvm_module: module })
@@ -388,7 +367,7 @@ impl WeldModule {
         let ref parsed_conf = conf::parse(conf)?;
 
         // This is the required input format of data passed into a compiled module.
-        let input = Box::new(llvm::WeldInputArgs {
+        let input = Box::new(codegen::llvm::WeldInputArgs {
                              input: arg.data as i64,
                              nworkers: parsed_conf.threads,
                              mem_limit: parsed_conf.memory_limit,
@@ -396,7 +375,7 @@ impl WeldModule {
         let ptr = Box::into_raw(input) as i64;
 
         // Runs the Weld program.
-        let raw = callable.run(ptr) as *const llvm::WeldOutputArgs;
+        let raw = callable.run(ptr) as *const codegen::llvm::WeldOutputArgs;
         let result = (*raw).clone();
 
         let value = WeldValue {
@@ -433,16 +412,16 @@ impl WeldModule {
 ///
 /// The dynamic library is a C dynamic library identified by its filename.
 pub fn load_linked_library<S: AsRef<str>>(filename: S) -> WeldResult<()> {
-    easy_ll::load_library(filename.as_ref()).map_err(|e| WeldError::from(e))
+    use error::WeldCompileError;
+    codegen::llvm::load_library(filename.as_ref()).map_err(|e| WeldError::from(WeldCompileError::from(e)))
 }
 
-#[no_mangle]
 /// Enables logging to stderr in Weld with the given log level.
 /// This function is ignored if it has already been called once, or if some other code in the
 /// process has initialized logging using Rust's `log` crate.
 pub fn set_log_level(level: WeldLogLevel) {
-    use self::colors::*;
-    use self::colors::Color::*;
+    use util::colors::*;
+    use util::colors::Color::*;
 
     let filter = match level {
         WeldLogLevel::Error => log::LogLevelFilter::Error,

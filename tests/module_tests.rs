@@ -5,8 +5,8 @@
 extern crate libc;
 extern crate weld;
 
-use weld::common::WeldRuntimeErrno;
-use weld::*;
+use weld::runtime::WeldRuntimeErrno;
+use weld::ffi::*;
 
 use std::ffi::CString;
 use std::thread;
