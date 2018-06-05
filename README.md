@@ -64,6 +64,12 @@ $ ln -s /usr/bin/llvm-config-3.8 /usr/local/bin/llvm-config
 
 To make sure this worked correctly, run `llvm-config --version`. You should see `3.8.x` or newer.
 
+You will also need `zlib`:
+
+```bash
+$ sudo apt-get install zlib1g-dev
+```
+
 #### Building Weld
 
 With LLVM and Rust installed, you can build Weld. Clone this repository, set the `WELD_HOME` environment variable, and build using `cargo`:
