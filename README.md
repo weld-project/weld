@@ -48,18 +48,19 @@ Enter the `weld_rt/cpp` directory and try running `make`. If the command fails w
 
 #### Ubuntu LLVM Installation
 
-To install LLVM on Ubuntu:
+To install LLVM on Ubuntu, get the LLVM 6.0 sources and then `apt-get`:
 
 ```bash
-$ sudo apt-get install llvm-6.0
-$ sudo apt-get install llvm-6.0-dev
-$ sudo apt-get install clang-6.0
+wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
+sudo apt-add-repository "deb http://apt.llvm.org/xenial/ llvm-toolchain-xenial-6.0 main"
+sudo apt-get update
+sudo apt-get install llvm-6.0-dev clang-6.0
 ```
 
-Weld's dependencies require `llvm-config`, so you may need to create a symbolic link so the correct `llvm-config` is picked up:
+Weld's dependencies require `llvm-config`, so you may need to create a symbolic link so the correct `llvm-config` is picked up. `sudo` may be required:
 
 ```bash
-$ ln -s /usr/bin/llvm-config /usr/local/bin/llvm-config
+$ ln -s /usr/bin/llvm-config-6.0 /usr/local/bin/llvm-config
 ```
 
 To make sure this worked correctly, run `llvm-config --version`. You should see `6.0.x` or newer.
