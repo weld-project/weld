@@ -1,7 +1,6 @@
 //! Richer loop fusion rules.
 
 use ast::*;
-use ast::uniquify::Uniquify;
 use ast::ExprKind::*;
 use ast::Type::*;
 use ast::BuilderKind::*;

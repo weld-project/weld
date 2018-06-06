@@ -2,7 +2,6 @@
 //!
 //! A pass is a named collection of related transforms applied in sequence until fix point.
 use ast::*;
-use ast::hash::*;
 use error::*;
 
 use super::transforms::loop_fusion;
@@ -57,7 +56,7 @@ impl Pass {
 
     pub fn transform(&self, mut expr: &mut Expr, use_experimental: bool) -> WeldResult<()> {
         let mut continue_pass = true;
-        let mut before = ExprHash::from(expr)?.value();
+        let mut before = expr.hash_ignoring_symbols()?;
         while continue_pass {
             for transform in self.transforms.iter() {
                 // Skip experimental transformations unless the flag is explicitly set.
@@ -66,7 +65,7 @@ impl Pass {
                 }
                 (transform.func)(&mut expr);
             }
-            let after = ExprHash::from(expr)?.value();
+            let after = expr.hash_ignoring_symbols()?;
             continue_pass = !(before == after);
             before = after;
         }

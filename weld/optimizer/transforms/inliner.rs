@@ -2,7 +2,6 @@
 //! and fuse them into a single one.
 
 use ast::*;
-use ast::uniquify::Uniquify;
 use ast::ExprKind::*;
 
 use annotation::*;

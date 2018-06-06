@@ -20,7 +20,6 @@ use std::fmt;
 use std::collections::HashMap;
 
 use weld::*;
-use weld::runtime::*;
 
 const PROMPT: &'static str = ">>> ";
 

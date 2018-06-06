@@ -13,7 +13,7 @@ extern crate fnv;
 #[cfg(test)]
 use tests::*;
 
-/// Modifies an expression to make symbol names unique.
+/// A trait that uniquifies symbol names in-place.
 pub trait Uniquify {
     /// Modifies an expression to make symbol names unique.
     ///

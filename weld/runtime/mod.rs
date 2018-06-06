@@ -53,20 +53,3 @@ impl fmt::Display for WeldRuntimeErrno {
     }
 }
 
-/// A logging level for the compiler.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd)]
-#[repr(u64)]
-pub enum WeldLogLevel {
-    Off = 0,
-    Error,
-    Warn,
-    Info,
-    Debug,
-    Trace,
-}
-
-impl fmt::Display for WeldLogLevel {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
