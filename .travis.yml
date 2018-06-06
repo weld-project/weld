@@ -12,14 +12,13 @@ addons:
   apt:
     sources:
     - deadsnakes
-    - sourceline: deb http://llvm.org/apt/trusty/ llvm-toolchain-trusty-3.8 main
-      key_url: http://llvm.org/apt/llvm-snapshot.gpg.key
+    - sourceline: deb https://apt.llvm.org/trusty llvm-toolchain-trusty-6.0 main
+      key_url: http://apt.llvm.org/llvm-snapshot.gpg.key
     packages:
     - gcc
     - make
-    - llvm-3.8
-    - llvm-3.8-dev
-    - clang-3.8
+    - llvm-6.0-dev
+    - clang-6.0
     - lib32z1-dev
     - python2.7
     - python3.6
