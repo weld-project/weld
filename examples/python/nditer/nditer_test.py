@@ -14,7 +14,6 @@ def assert_correct(np_a, z):
 
     for i in range((z.shape[0])):
         for j in range(z.shape[1]):
-            print('{}, {}'.format(i,j))
             assert np_a[i][j] == z[i][j]
 
 def test_view():

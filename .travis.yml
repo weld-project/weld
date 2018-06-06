@@ -12,14 +12,15 @@ addons:
   apt:
     sources:
     - deadsnakes
-    - sourceline: deb http://llvm.org/apt/trusty/ llvm-toolchain-trusty-3.8 main
-      key_url: http://llvm.org/apt/llvm-snapshot.gpg.key
+    - sourceline: deb http://apt.llvm.org/trusty/ llvm-toolchain-trusty-6.0 main
+      key_url: https://apt.llvm.org/llvm-snapshot.gpg.key
+    - sourceline: deb http://ppa.launchpad.net/ubuntu-toolchain-r/test/ubuntu trusty main
     packages:
     - gcc
     - make
-    - llvm-3.8
-    - llvm-3.8-dev
-    - clang-3.8
+    - llvm-6.0
+    - llvm-6.0-dev
+    - clang-6.0
     - lib32z1-dev
     - python2.7
     - python3.6
@@ -33,4 +34,4 @@ install:
 - git clone https://github.com/weld-project/weld-benchmarks.git
 - cd weld-benchmarks; TEST_HOME=`pwd` ./download-data.sh; cd ..
 script:
-- bash -e -x build_tools/travis/test_multi_version.sh 3.8 38.0.1 2.7
+- bash -e -x build_tools/travis/test_multi_version.sh 6.0 60.0.3 2.7
