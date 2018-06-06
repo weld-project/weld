@@ -32,4 +32,4 @@ install:
 - git clone https://github.com/weld-project/weld-benchmarks.git
 - cd weld-benchmarks; TEST_HOME=`pwd` ./download-data.sh; cd ..
 script:
-- bash -e -x build_tools/travis/test_multi_version.sh 3.8 38.0.1 2.7
+- bash -e -x build_tools/travis/test_multi_version.sh 6.0 60.0.3 2.7
