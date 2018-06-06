@@ -21,6 +21,7 @@ use annotation::*;
 type TypeMap = FnvHashMap<Symbol, Type>;
 type Binding = (Symbol, Option<Type>);
 
+/// A trait for checking and infering types in-place. 
 pub trait InferTypes {
     /// Checks and infers types in place.
     ///

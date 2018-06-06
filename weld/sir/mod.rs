@@ -9,7 +9,6 @@ use std::vec;
 use super::ast::*;
 use super::ast::Type::*;
 use super::error::*;
-use super::ast::pretty_print::PrettyPrint;
 use super::util::SymbolGenerator;
 
 extern crate fnv;

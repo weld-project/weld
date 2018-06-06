@@ -13,8 +13,6 @@ use ast::Type::*;
 
 use error::*;
 
-use ast::uniquify::Uniquify;
-
 /// Maximum number of iterations this transformation will unroll.
 pub const UNROLL_LIMIT: i64 = 8;
 

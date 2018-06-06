@@ -122,6 +122,7 @@ use self::time::PreciseTime;
 use std::error::Error;
 use std::default::Default;
 use std::ffi::{CString, CStr};
+use std::fmt;
 
 /// A macro for creating a `WeldError` with a message and an unknown error code.
 #[macro_export]
@@ -153,7 +154,6 @@ pub mod runtime;
 mod tests;
 
 use runtime::WeldRuntimeErrno;
-use runtime::WeldLogLevel;
 use util::stats::CompilationStats;
 
 // This is needed to free the output struct of a Weld run.
@@ -408,6 +408,50 @@ impl WeldModule {
     }
 }
 
+/// A logging level for the compiler.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd)]
+#[repr(u64)]
+pub enum WeldLogLevel {
+    Off = 0,
+    Error,
+    Warn,
+    Info,
+    Debug,
+    Trace,
+}
+
+impl fmt::Display for WeldLogLevel {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl From<WeldLogLevel> for log::LogLevelFilter {
+    fn from(level: WeldLogLevel) -> log::LogLevelFilter {
+        match level {
+            WeldLogLevel::Error => log::LogLevelFilter::Error,
+            WeldLogLevel::Warn => log::LogLevelFilter::Warn,
+            WeldLogLevel::Info => log::LogLevelFilter::Info,
+            WeldLogLevel::Debug => log::LogLevelFilter::Debug,
+            WeldLogLevel::Trace => log::LogLevelFilter::Trace,
+            _ => log::LogLevelFilter::Off
+        }
+    }
+}
+
+impl From<log::LogLevelFilter> for WeldLogLevel {
+    fn from(level: log::LogLevelFilter) -> WeldLogLevel {
+        match level {
+            log::LogLevelFilter::Error => WeldLogLevel::Error,
+            log::LogLevelFilter::Warn => WeldLogLevel::Warn,
+            log::LogLevelFilter::Info => WeldLogLevel::Info,
+            log::LogLevelFilter::Debug => WeldLogLevel::Debug,
+            log::LogLevelFilter::Trace => WeldLogLevel::Trace,
+            _ => WeldLogLevel::Off
+        }
+    }
+}
+
 /// Load a dynamic library that a Weld program can access.
 ///
 /// The dynamic library is a C dynamic library identified by its filename.
@@ -417,21 +461,14 @@ pub fn load_linked_library<S: AsRef<str>>(filename: S) -> WeldResult<()> {
 }
 
 /// Enables logging to stderr in Weld with the given log level.
+///
 /// This function is ignored if it has already been called once, or if some other code in the
 /// process has initialized logging using Rust's `log` crate.
 pub fn set_log_level(level: WeldLogLevel) {
     use util::colors::*;
     use util::colors::Color::*;
 
-    let filter = match level {
-        WeldLogLevel::Error => log::LogLevelFilter::Error,
-        WeldLogLevel::Warn => log::LogLevelFilter::Warn,
-        WeldLogLevel::Info => log::LogLevelFilter::Info,
-        WeldLogLevel::Debug => log::LogLevelFilter::Debug,
-        WeldLogLevel::Trace => log::LogLevelFilter::Trace,
-        _ => log::LogLevelFilter::Off
-    };
-
+    let filter: log::LogLevelFilter = level.into();
     let format = |rec: &log::LogRecord| {
         let prefix = match rec.level() {
             log::LogLevel::Error => format_color(Red, "error"),

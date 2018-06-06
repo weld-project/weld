@@ -18,8 +18,25 @@ use std::hash::{Hash, Hasher};
 
 use std::fmt;
 
+/// A trait that implements symbol-agnostic hashing.
+pub trait HashIgnoringSymbols {
+    /// Hash an AST ignoring symbol names.
+    ///
+    /// This method is useful for comparing two ASTs for structural equality, e.g., to check if an
+    /// optimization pass changed the AST modulo changing symbol names. Comparing using a hash
+    /// value is generally faster than cloning a tree, changing it, and then checking if it
+    /// changed. This method may return an error if it encounters an undefined symbol.
+    fn hash_ignoring_symbols(&self) -> WeldResult<u64>;
+}
+
+impl HashIgnoringSymbols for Expr {
+    fn hash_ignoring_symbols(&self) -> WeldResult<u64> {
+        Ok(ExprHash::from(self)?.value())
+    }
+}
+
 /// A signature which uniquely represents an Expression in a concise manner.
-pub struct ExprHash {
+struct ExprHash {
     hasher: fnv::FnvHasher,
 }
 
