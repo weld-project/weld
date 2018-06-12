@@ -375,6 +375,10 @@ impl Symbol {
         }
     }
 
+    pub fn unused() -> Symbol {
+        Symbol::new("unused", 0)
+    }
+
     pub fn name(name: &str) -> Symbol {
         Symbol {
             name: name.into(),

@@ -12,3 +12,4 @@
 //! `llvm` module.
 
 pub mod llvm;
+pub mod llvm2;

@@ -38,12 +38,14 @@ lazy_static! {
 }
 
 /// Options for dumping code.
+#[derive(Clone)]
 pub struct DumpCodeConf {
     pub enabled: bool,
     pub dir: PathBuf,
 }
 
 /// A parsed configuration with correctly typed fields.
+#[derive(Clone)]
 pub struct ParsedConf {
     pub memory_limit: i64,
     pub threads: i32,
