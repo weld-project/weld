@@ -50,9 +50,20 @@ Enter the `weld_rt/cpp` directory and try running `make`. If the command fails w
 
 To install LLVM on Ubuntu, get the LLVM 6.0 sources and then `apt-get`:
 
+On Ubuntu 16.04 (Xenial):
 ```bash
 wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
 sudo apt-add-repository "deb http://apt.llvm.org/xenial/ llvm-toolchain-xenial-6.0 main"
+sudo apt-get update
+sudo apt-get install llvm-6.0-dev clang-6.0
+```
+On Ubuntu 14.04 (Trusty):
+```bash
+wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
+sudo apt-add-repository "deb http://apt.llvm.org/trusty/ llvm-toolchain-trusty-6.0 main"
+
+# gcc backport is required on 14.04, for libstdc++. See https://apt.llvm.org/
+sudo apt-add-repository "deb http://ppa.launchpad.net/ubuntu-toolchain-r/test/ubuntu trusty main"
 sudo apt-get update
 sudo apt-get install llvm-6.0-dev clang-6.0
 ```
