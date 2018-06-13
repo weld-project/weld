@@ -95,17 +95,14 @@ pub fn compile_program(program: &Program,
     if conf.enable_sir_opt {
         use sir::optimizations;
         info!("Applying SIR optimizations");
-        //optimizations::fold_constants::fold_constants(&mut sir_prog)?;
+        optimizations::fold_constants::fold_constants(&mut sir_prog)?;
     }
     let end = PreciseTime::now();
     debug!("Optimized SIR program:\n{}\n", &sir_prog);
     stats.weld_times.push(("SIR Optimization".to_string(), start.to(end)));
 
-    // XXX Generate code here.
-    let mut codegen = LlvmGenerator::new(conf.clone());
-    unsafe { codegen.generate(&sir_prog)?; }
+    let codegen = unsafe { LlvmGenerator::generate(conf.clone(), &sir_prog)? };
     println!("{}", codegen);
-
     Ok(CompiledModule)
 }
 
@@ -135,31 +132,34 @@ pub struct LlvmGenerator {
 }
 
 impl LlvmGenerator {
-    fn new(conf: ParsedConf) -> LlvmGenerator {
-        unsafe {
-            LlvmGenerator {
-                conf: conf,
-                context: LLVMContextCreate(),
-                module: LLVMModuleCreateWithName(c_str!("main")),
-                functions: FnvHashMap::default(),
-                vectors: FnvHashMap::default(),
-                dictionaries: FnvHashMap::default(),
-            }
-        }
-    }
+    /// Generate code for an SIR program.
+    unsafe fn generate(conf: ParsedConf, program: &SirProgram) -> WeldResult<LlvmGenerator> {
+        let mut gen = LlvmGenerator {
+            conf: conf,
+            context: LLVMContextCreate(),
+            module: LLVMModuleCreateWithName(c_str!("main")),
+            functions: FnvHashMap::default(),
+            vectors: FnvHashMap::default(),
+            dictionaries: FnvHashMap::default(),
+        };
 
-    // XXX This can just go in `new`?
-    unsafe fn generate(&mut self, program: &SirProgram) -> WeldResult<()> {
         // Declare each function first to create a reference to it.
         for func in program.funcs.iter() {
-            self.declare_function(func)?;
+            gen.declare_function(func)?;
         }
 
         // Generate each function in turn.
         for func in program.funcs.iter() {
-            self.generate_function(program, func)?;
+            gen.generate_function(program, func)?;
         }
 
+        // Generate entry point.
+        gen.generate_entry(&program)?;
+        Ok(gen)
+    }
+
+    /// Generate the entry point to the module.
+    unsafe fn generate_entry(&mut self, program: &SirProgram) -> WeldResult<()> {
         Ok(())
     }
 
@@ -215,7 +215,7 @@ impl LlvmGenerator {
         }
 
         // Store the parameter values in the alloca'd symbols.
-        for (i, (symbol, ty)) in func.params.iter().enumerate() {
+        for (i, (symbol, _)) in func.params.iter().enumerate() {
             let pointer = context.get_value(symbol)?;
             let value = LLVMGetParam(function, i as u32);
             LLVMBuildStore(context.builder, value, pointer);
@@ -258,7 +258,7 @@ impl LlvmGenerator {
         use sir::StatementKind::*;
         match statement.kind {
             Assign(ref value) => {
-                let loaded = LLVMBuildLoad(context.builder, context.get_value(value)?, NULL_NAME.as_ptr());
+                let loaded = self.load(context.builder, context.get_value(value)?)?;
                 LLVMBuildStore(context.builder, loaded, context.get_value(statement.output.as_ref().unwrap())?);
                 Ok(())
             }
@@ -309,12 +309,28 @@ impl LlvmGenerator {
         Ok(())
     }
 
+    // Common instructions or wrappers.
+
+    /// Loads a value.
+    ///
+    /// This method includes a check to ensure that `pointer` is actually a pointer: otherwise, the
+    /// LLVM API seg-faults.
+    unsafe fn load(&mut self, builder: LLVMBuilderRef, pointer: LLVMValueRef) -> WeldResult<LLVMValueRef> {
+        use self::llvm_sys::LLVMTypeKind;
+        if LLVMGetTypeKind(LLVMTypeOf(pointer)) != LLVMTypeKind::LLVMPointerTypeKind {
+            compile_err!("Non-pointer type passed to load")
+        } else {
+            Ok(LLVMBuildLoad(builder, pointer, NULL_NAME.as_ptr()))
+        }
+    }
+
     // TODO move to own file...?
     unsafe fn llvm_type(&mut self, ty: &Type) -> WeldResult<LLVMTypeRef> {
         use ast::Type::*;
         use ast::ScalarKind::*;
         let result = match *ty {
             Scalar(kind) => match kind {
+                // TODO use contextual version?
                 Bool => LLVMInt1Type(),
                 I8 | U8 => LLVMInt8Type(),
                 I16 | U16 => LLVMInt16Type(),

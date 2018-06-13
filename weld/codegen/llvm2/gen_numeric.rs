@@ -32,14 +32,17 @@ pub trait NumericExpressionGen {
     ///
     /// This method supports both scalar and SIMD values.
     unsafe fn gen_literal(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()>;
+    /// Generates a cast.
+    unsafe fn gen_cast(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()>;
+
 }
 
 impl NumericExpressionGen for LlvmGenerator {
     unsafe fn gen_binop(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()> {
         use sir::StatementKind::BinOp;
         if let BinOp { op, ref left, ref right } = statement.kind {
-            let llvm_left = LLVMBuildLoad(ctx.builder, ctx.get_value(left)?, c_str!(""));
-            let llvm_right = LLVMBuildLoad(ctx.builder, ctx.get_value(right)?, c_str!(""));
+            let llvm_left = self.load(ctx.builder, ctx.get_value(left)?)?;
+            let llvm_right = self.load(ctx.builder, ctx.get_value(right)?)?;
             let ty = ctx.sir_function.symbol_type(left)?;
             let result = gen_binop(ctx.builder, op, llvm_left, llvm_right, ty)?;
             let output = ctx.get_value(statement.output.as_ref().unwrap())?;
@@ -84,6 +87,15 @@ impl NumericExpressionGen for LlvmGenerator {
             unreachable!()
         }
     }
+
+    unsafe fn gen_cast(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()> {
+        use sir::StatementKind::Cast;
+        if let Cast(ref child, _) = statement.kind {
+            Ok(())
+        } else {
+            unreachable!()
+        }
+    }
 }
 
 /// Generates a binary op instruction.
@@ -99,7 +111,7 @@ unsafe fn gen_binop(builder: LLVMBuilderRef,
     let result = match ty {
         &Scalar(s) | &Simd(s) => {
             match op {
-                Add if s.is_integer() => LLVMBuildAdd(builder, LLVMConstInt(LLVMInt64Type(), 0, 1), right, name),
+                Add if s.is_integer() => LLVMBuildAdd(builder, left, right, name),
                 Add if s.is_float() => LLVMBuildFAdd(builder, left, right, name),
 
                 Subtract if s.is_integer() => LLVMBuildSub(builder, left, right, name),
