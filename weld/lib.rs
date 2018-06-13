@@ -134,7 +134,6 @@ macro_rules! weld_err {
 
 #[macro_use]
 mod error;
-
 mod annotation;
 mod codegen;
 mod optimizer;
