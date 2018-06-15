@@ -1,7 +1,4 @@
-//! A port of the LLVM backend with optimized single-threaded performance.
-//!
-//! Unlike the other backend, this one directly uses the LLVM APIs.
-
+//! An LLVM backend currently optimized for single-threaded execution.
 extern crate fnv;
 extern crate time;
 extern crate libc;
@@ -36,8 +33,6 @@ macro_rules! c_str {
 
 // Traits implementing code generation for various expressions.
 mod gen_numeric;
-
-use self::gen_numeric::{llvm_i32, llvm_i64};
 
 pub struct CompiledModule;
 
@@ -206,14 +201,18 @@ impl LlvmGenerator {
                 use self::gen_numeric::NumericExpressionGen;
                 self.gen_binop(context, statement)
             }
+            GetField { ref value, index } => {
+                let pointer = context.get_value(output)?;
+                let value_pointer = context.get_value(value)?;
+                let elem_pointer = LLVMBuildStructGEP(context.builder, value_pointer, index, NULL_NAME.as_ptr());
+                let elem = self.load(context.builder, elem_pointer)?;
+                LLVMBuildStore(context.builder, elem, pointer);
+                Ok(())
+            }
             MakeStruct(ref elems) => {
                 let pointer = context.get_value(output)?;
                 for (i, elem) in elems.iter().enumerate() {
-                    let elem_pointer = LLVMBuildInBoundsGEP(context.builder,
-                                                            pointer,
-                                                            [llvm_i32(i as i32)].as_mut_ptr(),
-                                                            1,
-                                                            NULL_NAME.as_ptr());
+                    let elem_pointer = LLVMBuildStructGEP(context.builder, pointer, i as u32, NULL_NAME.as_ptr());
                     let value = self.load(context.builder, context.get_value(elem)?)?;
                     LLVMBuildStore(context.builder, value, elem_pointer);
                 }
@@ -278,6 +277,12 @@ impl LlvmGenerator {
         use ast::Type::*;
         use ast::ScalarKind::*;
         let result = match *ty {
+            Builder(_, _) => {
+                unimplemented!()
+            }
+            Dict(_, _) => {
+                unimplemented!()
+            }
             Scalar(kind) => match kind {
                 Bool => LLVMInt1TypeInContext(self.context),
                 I8 | U8 => LLVMInt8TypeInContext(self.context),
@@ -287,15 +292,29 @@ impl LlvmGenerator {
                 F32 => LLVMFloatTypeInContext(self.context),
                 F64 => LLVMDoubleTypeInContext(self.context),
             }
-            Struct(ref elems) => {
-                // XXX Do we want to name structs? We also need to track struct names here if we do...
-                let named = LLVMStructCreateNamed(self.context, c_str!("s"));
-                let mut llvm_types: Vec<_> = elems.iter().map(&mut |t| self.llvm_type(t)).collect::<WeldResult<_>>()?;
-                LLVMStructSetBody(named, llvm_types.as_mut_ptr(), llvm_types.len() as u32, 0);
-                named
-                //LLVMStructTypeInContext(self.context, llvm_types.as_mut_ptr(), llvm_types.len() as u32, 0)
+            Simd(kind) => {
+                let base = self.llvm_type(&Scalar(kind))?;
+                // TODO set the vector width...
+                LLVMVectorType(base, 4)
             }
-            _ => unimplemented!(),
+            Struct(ref elems) => {
+                let mut llvm_types: Vec<_> = elems.iter().map(&mut |t| self.llvm_type(t)).collect::<WeldResult<_>>()?;
+                // XXX Do we want to name structs? We also need to track struct names here if we do...
+                // let named = LLVMStructCreateNamed(self.context, c_str!("s"));
+                // LLVMStructSetBody(named, llvm_types.as_mut_ptr(), llvm_types.len() as u32, 0);
+                // named
+                LLVMStructTypeInContext(self.context, llvm_types.as_mut_ptr(), llvm_types.len() as u32, 0)
+            }
+            Vector(ref elem_type) => {
+                // TODO build vector methods and track names...
+                let mut layout = [LLVMPointerType(self.llvm_type(elem_type)?, 0), self.llvm_type(&Scalar(I64))?];
+                let vector = LLVMStructCreateNamed(self.context, c_str!("vec"));
+                LLVMStructSetBody(vector, layout.as_mut_ptr(), layout.len() as u32, 0);
+                vector
+            }
+            Function(_, _) | Unknown => {
+                return compile_err!("Invalid type {} for code generation", ty)
+            }
         };
         Ok(result)
     }
