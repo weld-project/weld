@@ -23,6 +23,17 @@ use self::llvm_sys::core::*;
 
 use super::{LlvmGenerator, FunctionContext};
 
+// Literal builders.
+
+pub unsafe fn llvm_i32(v: i32) -> LLVMValueRef {
+    LLVMConstInt(LLVMInt32Type(), v as c_ulonglong, 1)
+}
+
+
+pub unsafe fn llvm_i64(v: i64) -> LLVMValueRef {
+    LLVMConstInt(LLVMInt64Type(), v as c_ulonglong, 1)
+}
+
 pub trait NumericExpressionGen {
     /// Generates code for a numeric binary operator.
     ///

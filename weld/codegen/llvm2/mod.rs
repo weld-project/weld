@@ -37,74 +37,9 @@ macro_rules! c_str {
 // Traits implementing code generation for various expressions.
 mod gen_numeric;
 
+use self::gen_numeric::{llvm_i32, llvm_i64};
+
 pub struct CompiledModule;
-
-// XXX Why is this here...
-pub fn apply_opt_passes(expr: &mut Expr,
-                        opt_passes: &Vec<Pass>,
-                        stats: &mut CompilationStats,
-                        use_experimental: bool) -> WeldResult<()> {
-
-    for pass in opt_passes {
-        let start = PreciseTime::now();
-        pass.transform(expr, use_experimental)?;
-        let end = PreciseTime::now();
-        stats.pass_times.push((pass.pass_name(), start.to(end)));
-        debug!("After {} pass:\n{}", pass.pass_name(), expr.pretty_print());
-    }
-    Ok(())
-}
-
-pub fn compile_program(program: &Program,
-                       conf: &ParsedConf,
-                       stats: &mut CompilationStats) -> WeldResult<CompiledModule> {
-    use syntax::macro_processor;
-    use sir;
-
-    let mut expr = macro_processor::process_program(program)?;
-    debug!("After macro substitution:\n{}\n", expr.pretty_print());
-
-    let start = PreciseTime::now();
-    expr.uniquify()?;
-    let end = PreciseTime::now();
-
-    let mut uniquify_dur = start.to(end);
-
-    let start = PreciseTime::now();
-    expr.infer_types()?;
-    let end = PreciseTime::now();
-    stats.weld_times.push(("Type Inference".to_string(), start.to(end)));
-    debug!("After type inference:\n{}\n", expr.pretty_print());
-
-    apply_opt_passes(&mut expr, &conf.optimization_passes, stats, conf.enable_experimental_passes)?;
-
-    let start = PreciseTime::now();
-    expr.uniquify()?;
-    let end = PreciseTime::now();
-    uniquify_dur = uniquify_dur + start.to(end);
-    stats.weld_times.push(("Uniquify outside Passes".to_string(), uniquify_dur));
-    debug!("Optimized Weld program:\n{}\n", expr.pretty_print());
-
-    let start = PreciseTime::now();
-    let mut sir_prog = sir::ast_to_sir(&expr, conf.support_multithread)?;
-    let end = PreciseTime::now();
-    stats.weld_times.push(("AST to SIR".to_string(), start.to(end)));
-    debug!("SIR program:\n{}\n", &sir_prog);
-
-    let start = PreciseTime::now();
-    if conf.enable_sir_opt {
-        use sir::optimizations;
-        info!("Applying SIR optimizations");
-        optimizations::fold_constants::fold_constants(&mut sir_prog)?;
-    }
-    let end = PreciseTime::now();
-    debug!("Optimized SIR program:\n{}\n", &sir_prog);
-    stats.weld_times.push(("SIR Optimization".to_string(), start.to(end)));
-
-    let codegen = unsafe { LlvmGenerator::generate(conf.clone(), &sir_prog)? };
-    println!("{}", codegen);
-    Ok(CompiledModule)
-}
 
 /// TODO
 type VectorMethods = i32;
@@ -153,7 +88,7 @@ impl LlvmGenerator {
             gen.generate_function(program, func)?;
         }
 
-        // Generate entry point.
+        // Generate the entry point.
         gen.generate_entry(&program)?;
         Ok(gen)
     }
@@ -256,10 +191,11 @@ impl LlvmGenerator {
     /// Generate code for an SIR statement.
     unsafe fn generate_statement(&mut self, context: &mut FunctionContext, statement: &Statement) -> WeldResult<()> {
         use sir::StatementKind::*;
+        let ref output = statement.output.clone().unwrap_or(Symbol::new("unused", 0));
         match statement.kind {
             Assign(ref value) => {
                 let loaded = self.load(context.builder, context.get_value(value)?)?;
-                LLVMBuildStore(context.builder, loaded, context.get_value(statement.output.as_ref().unwrap())?);
+                LLVMBuildStore(context.builder, loaded, context.get_value(output)?);
                 Ok(())
             }
             AssignLiteral(_) => {
@@ -269,6 +205,19 @@ impl LlvmGenerator {
             BinOp { .. } => {
                 use self::gen_numeric::NumericExpressionGen;
                 self.gen_binop(context, statement)
+            }
+            MakeStruct(ref elems) => {
+                let pointer = context.get_value(output)?;
+                for (i, elem) in elems.iter().enumerate() {
+                    let elem_pointer = LLVMBuildInBoundsGEP(context.builder,
+                                                            pointer,
+                                                            [llvm_i32(i as i32)].as_mut_ptr(),
+                                                            1,
+                                                            NULL_NAME.as_ptr());
+                    let value = self.load(context.builder, context.get_value(elem)?)?;
+                    LLVMBuildStore(context.builder, value, elem_pointer);
+                }
+                Ok(())
             }
             _ => unimplemented!(),
         }
@@ -330,14 +279,21 @@ impl LlvmGenerator {
         use ast::ScalarKind::*;
         let result = match *ty {
             Scalar(kind) => match kind {
-                // TODO use contextual version?
-                Bool => LLVMInt1Type(),
-                I8 | U8 => LLVMInt8Type(),
-                I16 | U16 => LLVMInt16Type(),
-                I32 | U32 => LLVMInt32Type(),
-                I64 | U64 => LLVMInt64Type(),
-                F32 => LLVMFloatType(),
-                F64 => LLVMDoubleType(),
+                Bool => LLVMInt1TypeInContext(self.context),
+                I8 | U8 => LLVMInt8TypeInContext(self.context),
+                I16 | U16 => LLVMInt16TypeInContext(self.context),
+                I32 | U32 => LLVMInt32TypeInContext(self.context),
+                I64 | U64 => LLVMInt64TypeInContext(self.context),
+                F32 => LLVMFloatTypeInContext(self.context),
+                F64 => LLVMDoubleTypeInContext(self.context),
+            }
+            Struct(ref elems) => {
+                // XXX Do we want to name structs? We also need to track struct names here if we do...
+                let named = LLVMStructCreateNamed(self.context, c_str!("s"));
+                let mut llvm_types: Vec<_> = elems.iter().map(&mut |t| self.llvm_type(t)).collect::<WeldResult<_>>()?;
+                LLVMStructSetBody(named, llvm_types.as_mut_ptr(), llvm_types.len() as u32, 0);
+                named
+                //LLVMStructTypeInContext(self.context, llvm_types.as_mut_ptr(), llvm_types.len() as u32, 0)
             }
             _ => unimplemented!(),
         };
@@ -400,4 +356,71 @@ impl<'a> Drop for FunctionContext<'a> {
     fn drop(&mut self) {
         unsafe { LLVMDisposeBuilder(self.builder); }
     }
+}
+
+// XXX Why is this here...
+pub fn apply_opt_passes(expr: &mut Expr,
+                        opt_passes: &Vec<Pass>,
+                        stats: &mut CompilationStats,
+                        use_experimental: bool) -> WeldResult<()> {
+
+    for pass in opt_passes {
+        let start = PreciseTime::now();
+        pass.transform(expr, use_experimental)?;
+        let end = PreciseTime::now();
+        stats.pass_times.push((pass.pass_name(), start.to(end)));
+        debug!("After {} pass:\n{}", pass.pass_name(), expr.pretty_print());
+    }
+    Ok(())
+}
+
+pub fn compile_program(program: &Program,
+                       conf: &ParsedConf,
+                       stats: &mut CompilationStats) -> WeldResult<CompiledModule> {
+    use syntax::macro_processor;
+    use sir;
+
+    let mut expr = macro_processor::process_program(program)?;
+    debug!("After macro substitution:\n{}\n", expr.pretty_print());
+
+    let start = PreciseTime::now();
+    expr.uniquify()?;
+    let end = PreciseTime::now();
+
+    let mut uniquify_dur = start.to(end);
+
+    let start = PreciseTime::now();
+    expr.infer_types()?;
+    let end = PreciseTime::now();
+    stats.weld_times.push(("Type Inference".to_string(), start.to(end)));
+    debug!("After type inference:\n{}\n", expr.pretty_print());
+
+    apply_opt_passes(&mut expr, &conf.optimization_passes, stats, conf.enable_experimental_passes)?;
+
+    let start = PreciseTime::now();
+    expr.uniquify()?;
+    let end = PreciseTime::now();
+    uniquify_dur = uniquify_dur + start.to(end);
+    stats.weld_times.push(("Uniquify outside Passes".to_string(), uniquify_dur));
+    debug!("Optimized Weld program:\n{}\n", expr.pretty_print());
+
+    let start = PreciseTime::now();
+    let mut sir_prog = sir::ast_to_sir(&expr, conf.support_multithread)?;
+    let end = PreciseTime::now();
+    stats.weld_times.push(("AST to SIR".to_string(), start.to(end)));
+    debug!("SIR program:\n{}\n", &sir_prog);
+
+    let start = PreciseTime::now();
+    if conf.enable_sir_opt {
+        use sir::optimizations;
+        info!("Applying SIR optimizations");
+        optimizations::fold_constants::fold_constants(&mut sir_prog)?;
+    }
+    let end = PreciseTime::now();
+    debug!("Optimized SIR program:\n{}\n", &sir_prog);
+    stats.weld_times.push(("SIR Optimization".to_string(), start.to(end)));
+
+    let codegen = unsafe { LlvmGenerator::generate(conf.clone(), &sir_prog)? };
+    println!("{}", codegen);
+    Ok(CompiledModule)
 }
