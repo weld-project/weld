@@ -32,14 +32,10 @@ macro_rules! c_str {
 }
 
 // Traits implementing code generation for various expressions.
-mod gen_numeric;
+mod numeric;
+mod vector;
 
 pub struct CompiledModule;
-
-/// TODO
-type VectorMethods = i32;
-/// TODO
-type DictMethods = i32;
 
 /// A struct holding the global codegen state for an SIR program.
 pub struct LlvmGenerator {
@@ -54,11 +50,11 @@ pub struct LlvmGenerator {
     /// A map tracking generated vectors.
     ///
     /// The key maps the vector's element type to the vector's type reference and methods on it.
-    vectors: FnvHashMap<Type, VectorMethods>,
+    vectors: FnvHashMap<Type, vector::Vector>,
     /// A map tracking generated dictionaries.
     ///
     /// The key maps the vector's element type to the vector's type reference and methods on it.
-    dictionaries: FnvHashMap<Type, DictMethods>,
+    dictionaries: FnvHashMap<Type, u32>,
 }
 
 impl LlvmGenerator {
@@ -194,11 +190,11 @@ impl LlvmGenerator {
                 Ok(())
             }
             AssignLiteral(_) => {
-                use self::gen_numeric::NumericExpressionGen;
+                use self::numeric::NumericExpressionGen;
                 self.gen_literal(context, statement)
             }
             BinOp { .. } => {
-                use self::gen_numeric::NumericExpressionGen;
+                use self::numeric::NumericExpressionGen;
                 self.gen_binop(context, statement)
             }
             GetField { ref value, index } => {
@@ -208,6 +204,23 @@ impl LlvmGenerator {
                 let elem = self.load(context.builder, elem_pointer)?;
                 LLVMBuildStore(context.builder, elem, pointer);
                 Ok(())
+            }
+            Lookup { ref child, ref index } => {
+                use ast::Type::{Vector, Dict};
+                let output_pointer = context.get_value(output)?;
+                let child_value = self.load(context.builder, context.get_value(child)?)?;
+                let index_value = self.load(context.builder, context.get_value(index)?)?;
+                let child_type = context.sir_function.symbol_type(child)?;
+                if let Vector(ref elem_type) = *child_type {
+                    let mut methods = self.vectors.get_mut(elem_type).unwrap();
+                    let result = methods.generate_at(context.builder, child_value, index_value)?;
+                    LLVMBuildStore(context.builder, result, output_pointer);
+                    Ok(())
+                } else if let Dict(_, _) = *child_type {
+                    unimplemented!() 
+                } else {
+                    unreachable!()
+                }
             }
             MakeStruct(ref elems) => {
                 let pointer = context.get_value(output)?;
@@ -306,11 +319,12 @@ impl LlvmGenerator {
                 LLVMStructTypeInContext(self.context, llvm_types.as_mut_ptr(), llvm_types.len() as u32, 0)
             }
             Vector(ref elem_type) => {
-                // TODO build vector methods and track names...
-                let mut layout = [LLVMPointerType(self.llvm_type(elem_type)?, 0), self.llvm_type(&Scalar(I64))?];
-                let vector = LLVMStructCreateNamed(self.context, c_str!("vec"));
-                LLVMStructSetBody(vector, layout.as_mut_ptr(), layout.len() as u32, 0);
-                vector
+                if !self.vectors.contains_key(elem_type) {
+                    let llvm_elem_type = self.llvm_type(elem_type)?;
+                    let vector = vector::Vector::define("vec", llvm_elem_type, self.context, self.module);
+                    self.vectors.insert(elem_type.as_ref().clone(), vector);
+                }
+                self.vectors.get(elem_type).unwrap().vector_ty
             }
             Function(_, _) | Unknown => {
                 return compile_err!("Invalid type {} for code generation", ty)
