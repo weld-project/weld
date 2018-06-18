@@ -76,36 +76,26 @@ impl Vector {
             let (function, builder, _) = self.define_function(ret_ty, &mut arg_tys, name);
 
             let size = LLVMGetParam(function, 0);
-            debug!("got param...");
             let mut indices = [LLVMConstInt(LLVMInt32TypeInContext(self.context), 1, 1)];
             let elem_size_ptr = LLVMConstGEP(LLVMConstPointerNull(LLVMPointerType(self.elem_ty, 0)),
                                             indices.as_mut_ptr(),
                                             indices.len() as u32);
-            debug!("constructed gep");
              let elem_size = LLVMBuildPtrToInt(builder, elem_size_ptr, int64, c_str!("elemSize"));
-            debug!("constructed ptrtoint");
             let alloc_size = LLVMBuildMul(builder, elem_size, size, c_str!("size"));
-            debug!("constructed mul");
             let run_id = LLVMBuildCall(builder,
                                        intrinsics.get("weld_rt_get_run_id").unwrap(),
                                        [].as_mut_ptr(), 0, c_str!("runId"));
-            debug!("constructed call");
             let bytes = LLVMBuildCall(builder,
                                       intrinsics.get("weld_rt_malloc").unwrap(),
                                       [run_id, alloc_size].as_mut_ptr(), 2, c_str!("bytes"));
-            debug!("constructed call");
             let elements = LLVMBuildBitCast(builder, bytes, LLVMPointerType(self.elem_ty, 0), c_str!("elements"));
-            debug!("constructed bitcast");
             let one = LLVMBuildInsertValue(builder,
                                            LLVMGetUndef(self.vector_ty),
                                            elements, 0, c_str!(""));
-            debug!("constructed insertvalue");
             let result = LLVMBuildInsertValue(builder,
                                            one,
                                            size, 1, c_str!(""));
-            debug!("constructed insertvalue");
             LLVMBuildRet(builder, result);
-            debug!("constructed ret");
 
             self.new = Some(function);
             LLVMDisposeBuilder(builder);
