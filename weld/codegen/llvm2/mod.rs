@@ -32,6 +32,7 @@ macro_rules! c_str {
 }
 
 // Traits implementing code generation for various expressions.
+mod intrinsic;
 mod numeric;
 mod vector;
 
@@ -55,18 +56,62 @@ pub struct LlvmGenerator {
     ///
     /// The key maps the vector's element type to the vector's type reference and methods on it.
     dictionaries: FnvHashMap<Type, u32>,
+    /// Intrinsics defined in the module.
+    intrinsics: intrinsic::Intrinsics,
+}
+
+/// Defines helper methods for LLVM code generation.
+///
+/// The main methods here have default implementations: implemenators only need to implement the
+/// `module` and `context` methods.
+pub trait CodeGenExt {
+    /// Returns the module used by this code generator.
+    fn module(&self) -> LLVMModuleRef;
+    /// Returns the context used by this code generator.
+    fn context(&self) -> LLVMContextRef;
+    /// Define a function with the given return type and argument type.
+    ///
+    /// Returns a reference to the function, a builder used to build the function body, and the
+    /// entry basic block of the function. The builder is positioned at the end of the entry basic block.
+    unsafe fn define_function<T: Into<Vec<u8>>>(&mut self,
+                                      ret_ty: LLVMTypeRef,
+                                      arg_tys: &mut [LLVMTypeRef],
+                                      name: T) -> (LLVMValueRef, LLVMBuilderRef, LLVMBasicBlockRef) {
+        let func_ty = LLVMFunctionType(ret_ty, arg_tys.as_mut_ptr(), arg_tys.len() as u32, 0);
+        let name = CString::new(name).unwrap();
+        let function = LLVMAddFunction(self.module(), name.as_ptr(), func_ty); 
+        let builder = LLVMCreateBuilderInContext(self.context());
+        let block = LLVMAppendBasicBlockInContext(self.context(), function, c_str!("entry"));
+        LLVMPositionBuilderAtEnd(builder, block);
+        (function, builder, block)
+    }
+}
+
+impl CodeGenExt for LlvmGenerator {
+    fn module(&self) -> LLVMModuleRef {
+        self.module
+    }
+
+    fn context(&self) -> LLVMContextRef {
+        self.context
+    }
 }
 
 impl LlvmGenerator {
     /// Generate code for an SIR program.
     unsafe fn generate(conf: ParsedConf, program: &SirProgram) -> WeldResult<LlvmGenerator> {
+        let context = LLVMContextCreate();
+        let module = LLVMModuleCreateWithName(c_str!("main"));
+        // Adds the default intrinsic definitions.
+        let intrinsics = intrinsic::Intrinsics::defaults(context, module);
         let mut gen = LlvmGenerator {
             conf: conf,
-            context: LLVMContextCreate(),
-            module: LLVMModuleCreateWithName(c_str!("main")),
+            context: context,
+            module: module,
             functions: FnvHashMap::default(),
             vectors: FnvHashMap::default(),
             dictionaries: FnvHashMap::default(),
+            intrinsics: intrinsics,
         };
 
         // Declare each function first to create a reference to it.
@@ -125,6 +170,9 @@ impl LlvmGenerator {
 
         // Add the function parameters. Function parameters are stored in alloca'd variables. The
         // function parameters are always enumerated alphabetically sorted by symbol name.
+        //
+        // Note that the call to llvm_type here is also important, since it ensures that each type
+        // is defined when generating statements.
         for (symbol, ty) in func.params.iter() {
             debug!("Adding param symbol {} to context", symbol);
             let name = CString::new(symbol.to_string()).unwrap();
@@ -181,6 +229,7 @@ impl LlvmGenerator {
 
     /// Generate code for an SIR statement.
     unsafe fn generate_statement(&mut self, context: &mut FunctionContext, statement: &Statement) -> WeldResult<()> {
+        use ast::Type::*;
         use sir::StatementKind::*;
         let ref output = statement.output.clone().unwrap_or(Symbol::new("unused", 0));
         match statement.kind {
@@ -198,22 +247,37 @@ impl LlvmGenerator {
                 self.gen_binop(context, statement)
             }
             GetField { ref value, index } => {
-                let pointer = context.get_value(output)?;
+                let output_pointer = context.get_value(output)?;
                 let value_pointer = context.get_value(value)?;
                 let elem_pointer = LLVMBuildStructGEP(context.builder, value_pointer, index, NULL_NAME.as_ptr());
                 let elem = self.load(context.builder, elem_pointer)?;
-                LLVMBuildStore(context.builder, elem, pointer);
+                LLVMBuildStore(context.builder, elem, output_pointer);
                 Ok(())
             }
+            Length(ref child) => {
+                let output_pointer = context.get_value(output)?;
+                let child_value = self.load(context.builder, context.get_value(child)?)?;
+                let child_type = context.sir_function.symbol_type(child)?;
+                if let Vector(ref elem_type) = *child_type {
+                    let mut methods = self.vectors.get_mut(elem_type).unwrap();
+                    let result = methods.generate_size(context.builder, child_value)?;
+                    LLVMBuildStore(context.builder, result, output_pointer);
+                    Ok(())
+                } else {
+                    unreachable!()
+                }
+            }
             Lookup { ref child, ref index } => {
-                use ast::Type::{Vector, Dict};
                 let output_pointer = context.get_value(output)?;
                 let child_value = self.load(context.builder, context.get_value(child)?)?;
                 let index_value = self.load(context.builder, context.get_value(index)?)?;
                 let child_type = context.sir_function.symbol_type(child)?;
                 if let Vector(ref elem_type) = *child_type {
-                    let mut methods = self.vectors.get_mut(elem_type).unwrap();
-                    let result = methods.generate_at(context.builder, child_value, index_value)?;
+                    let pointer = {
+                        let mut methods = self.vectors.get_mut(elem_type).unwrap();
+                        methods.generate_at(context.builder, child_value, index_value)?
+                    };
+                    let result = self.load(context.builder, pointer)?;
                     LLVMBuildStore(context.builder, result, output_pointer);
                     Ok(())
                 } else if let Dict(_, _) = *child_type {
@@ -223,13 +287,42 @@ impl LlvmGenerator {
                 }
             }
             MakeStruct(ref elems) => {
-                let pointer = context.get_value(output)?;
+                let output_pointer = context.get_value(output)?;
                 for (i, elem) in elems.iter().enumerate() {
-                    let elem_pointer = LLVMBuildStructGEP(context.builder, pointer, i as u32, NULL_NAME.as_ptr());
+                    let elem_pointer = LLVMBuildStructGEP(context.builder, output_pointer, i as u32, NULL_NAME.as_ptr());
                     let value = self.load(context.builder, context.get_value(elem)?)?;
                     LLVMBuildStore(context.builder, value, elem_pointer);
                 }
                 Ok(())
+            }
+            MakeVector(ref elems) => {
+                let output_pointer = context.get_value(output)?;
+                let output_type = context.sir_function.symbol_type(output)?;
+                let size = numeric::llvm_i64(elems.len() as i64);
+                if let Vector(ref elem_type) = *output_type {
+                    let vector = {
+                        let mut methods = self.vectors.get_mut(elem_type).unwrap();
+                        debug!("calling generate_new");
+                        methods.generate_new(context.builder, &self.intrinsics, size)?
+                    };
+                    debug!("generate new called");
+                    for (i, elem) in elems.iter().enumerate() {
+                        debug!("inserting element {}", i);
+                        let index = numeric::llvm_i64(i as i64);
+                        // Scope to prevent borrow error with self.load...
+                        let vec_pointer = {
+                            let mut methods = self.vectors.get_mut(elem_type).unwrap();
+                            methods.generate_at(context.builder, vector, index)?
+                        };
+                        let loaded = self.load(context.builder, context.get_value(elem)?)?;
+                        LLVMBuildStore(context.builder, loaded, vec_pointer);
+                    }
+                    LLVMBuildStore(context.builder, vector, output_pointer);
+                    Ok(())
+                } else {
+                    unreachable!()
+                }
+
             }
             _ => unimplemented!(),
         }
@@ -285,7 +378,6 @@ impl LlvmGenerator {
         }
     }
 
-    // TODO move to own file...?
     unsafe fn llvm_type(&mut self, ty: &Type) -> WeldResult<LLVMTypeRef> {
         use ast::Type::*;
         use ast::ScalarKind::*;
@@ -319,6 +411,7 @@ impl LlvmGenerator {
                 LLVMStructTypeInContext(self.context, llvm_types.as_mut_ptr(), llvm_types.len() as u32, 0)
             }
             Vector(ref elem_type) => {
+                // Vectors are a named type, so only generate the name once.
                 if !self.vectors.contains_key(elem_type) {
                     let llvm_elem_type = self.llvm_type(elem_type)?;
                     let vector = vector::Vector::define("vec", llvm_elem_type, self.context, self.module);
