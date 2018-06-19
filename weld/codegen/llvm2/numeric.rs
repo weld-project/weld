@@ -171,7 +171,7 @@ unsafe fn gen_cast(builder: LLVMBuilderRef,
 }
 
 /// Generates a binary op instruction.
-unsafe fn gen_binop(builder: LLVMBuilderRef,
+pub unsafe fn gen_binop(builder: LLVMBuilderRef,
              op: BinOpKind,
              left: LLVMValueRef,
              right: LLVMValueRef, ty: &Type) -> WeldResult<LLVMValueRef> {

@@ -245,11 +245,16 @@ impl ScalarKind {
         }
     }
 
+    /// Returns whether this scalar is signed.
+    pub fn is_signed(&self) -> bool {
+        self.is_signed_integer() || self.is_float()
+    }
+
     /// Returns whether this scalar is an integer.
     ///
     /// Booleans are not considered to be integers.
     pub fn is_integer(&self) -> bool {
-        return self.is_signed_integer() || self.is_unsigned_integer();
+        self.is_signed_integer() || self.is_unsigned_integer()
     }
 
     /// Return the length of this scalar type in bits.
