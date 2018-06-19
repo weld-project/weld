@@ -8,6 +8,8 @@ use fnv::FnvHashMap;
 
 use libc::c_char;
 
+use error::*;
+
 use std::default::Default;
 use std::ffi::CString;
 
@@ -15,6 +17,9 @@ use self::llvm_sys::prelude::*;
 use self::llvm_sys::core::*;
 
 /// Intrinsics defined in the code generator.
+///
+/// An intrinsic is any function that appears without a definition in the generated module. Code
+/// generators must ensure that instrinics are properly linked upon compilation.
 pub struct Intrinsics {
     context: LLVMContextRef,
     module: LLVMModuleRef,
@@ -75,10 +80,29 @@ impl Intrinsics {
 
     /// Add a new intrinsic function with the given name, return type, and argument types.
     pub unsafe fn add<T: AsRef<str>>(&mut self, name: T, ret_ty: LLVMTypeRef, arg_tys: &mut [LLVMTypeRef]) {
-        let name = CString::new(name.as_ref()).unwrap();
-        let fn_type = LLVMFunctionType(ret_ty, arg_tys.as_mut_ptr(), arg_tys.len() as u32, 0);
-        let function = LLVMAddFunction(self.module, name.as_ptr(), fn_type);
-        self.intrinsics.insert(name.into_string().unwrap(), function);
+        if !self.intrinsics.contains_key(name.as_ref()) {
+            let name = CString::new(name.as_ref()).unwrap();
+            let fn_type = LLVMFunctionType(ret_ty, arg_tys.as_mut_ptr(), arg_tys.len() as u32, 0);
+            let function = LLVMAddFunction(self.module, name.as_ptr(), fn_type);
+            self.intrinsics.insert(name.into_string().unwrap(), function);
+        }
+    }
+
+    /// Generate code to call an intrinsic function with the given name and arguments.
+    ///
+    /// If the intrinsic is not defined, this function throws an error.
+    pub unsafe fn call<T: AsRef<str>>(&mut self,
+                                      builder: LLVMBuilderRef,
+                                      name: T,
+                                      args: &mut [LLVMValueRef]) -> WeldResult<LLVMValueRef> {
+        if let Some(func) = self.intrinsics.get(name.as_ref()) {
+            if args.len() != LLVMCountParams(*func) as usize {
+                unreachable!()
+            }
+            Ok(LLVMBuildCall(builder, *func, args.as_mut_ptr(), args.len() as u32, c_str!("")))
+        } else {
+            unreachable!()
+        }
     }
 
     /// Convinience wrapper for calling the `weld_rt_get_run_id` intrinsic.

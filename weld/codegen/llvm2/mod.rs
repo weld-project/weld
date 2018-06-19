@@ -24,6 +24,9 @@ use self::llvm_sys::core::*;
 
 static NULL_NAME:[c_char; 1] = [0];
 
+// TODO This should be based on the type!
+const LLVM_VECTOR_WIDTH: u32 = 4;
+
 /// Convert a string literal into a C string.
 macro_rules! c_str {
     ($s:expr) => (
@@ -284,9 +287,37 @@ impl LlvmGenerator {
                 use self::numeric::NumericExpressionGen;
                 self.gen_binop(context, statement)
             }
+            Broadcast(ref child) => {
+                let output_pointer = context.get_value(output)?;
+                let child_value = self.load(context.builder, context.get_value(child)?)?;
+                let mut elems = [child_value; LLVM_VECTOR_WIDTH as usize];
+                let result = LLVMConstVector(elems.as_mut_ptr(), elems.len() as u32);
+                LLVMBuildStore(context.builder, result, output_pointer);
+                Ok(())
+            }
             Cast(_, _) => {
                 use self::numeric::NumericExpressionGen;
                 self.gen_cast(context, statement)
+            }
+            CUDF { ref symbol_name, ref args } => {
+                let output_pointer = context.get_value(output)?;
+                let return_ty = self.llvm_type(context.sir_function.symbol_type(output)?)?;
+                let mut arg_tys = vec![];
+                for arg in args.iter() {
+                    arg_tys.push(self.llvm_type(context.sir_function.symbol_type(arg)?)?);
+                }
+                self.intrinsics.add(symbol_name, return_ty, &mut arg_tys);
+
+                let mut arg_values = vec![];
+                for arg in args.iter() {
+                    arg_values.push(self.load(context.builder, context.get_value(arg)?)?);
+                }
+                let result = self.intrinsics.call(context.builder, symbol_name, &mut arg_values)?;
+                LLVMBuildStore(context.builder, result, output_pointer);
+                Ok(())
+            }
+            Deserialize(_) => {
+                unimplemented!() 
             }
             GetField { ref value, index } => {
                 let output_pointer = context.get_value(output)?;
@@ -295,6 +326,9 @@ impl LlvmGenerator {
                 let elem = self.load(context.builder, elem_pointer)?;
                 LLVMBuildStore(context.builder, elem, output_pointer);
                 Ok(())
+            }
+            KeyExists { .. } => {
+                unimplemented!()
             }
             Length(ref child) => {
                 let output_pointer = context.get_value(output)?;
@@ -362,7 +396,36 @@ impl LlvmGenerator {
                     unreachable!()
                 }
             }
-            _ => unimplemented!(),
+            Merge { .. } => {
+                unimplemented!() 
+            }
+            Negate(_) => {
+                unimplemented!() 
+            }
+            NewBuilder { .. } => {
+                unimplemented!() 
+            }
+            Res(_) => {
+                unimplemented!() 
+            }
+            Select { .. } => {
+                unimplemented!() 
+            }
+            Serialize(_) => {
+                unimplemented!() 
+            }
+            Slice { .. } => {
+                unimplemented!() 
+            }
+            Sort { .. } => {
+                unimplemented!() 
+            }
+            ToVec(_) => {
+                unimplemented!() 
+            }
+            UnaryOp { .. }  => {
+                unimplemented!() 
+            }
         }
     }
 
@@ -438,7 +501,7 @@ impl LlvmGenerator {
             Simd(kind) => {
                 let base = self.llvm_type(&Scalar(kind))?;
                 // TODO set the vector width...
-                LLVMVectorType(base, 4)
+                LLVMVectorType(base, LLVM_VECTOR_WIDTH)
             }
             Struct(ref elems) => {
                 let mut llvm_types: Vec<_> = elems.iter().map(&mut |t| self.llvm_type(t)).collect::<WeldResult<_>>()?;
