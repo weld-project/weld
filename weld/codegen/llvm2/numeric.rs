@@ -23,17 +23,6 @@ use self::llvm_sys::core::*;
 
 use super::{LlvmGenerator, FunctionContext};
 
-// Literal builders.
-
-pub unsafe fn llvm_i32(v: i32) -> LLVMValueRef {
-    LLVMConstInt(LLVMInt32Type(), v as c_ulonglong, 1)
-}
-
-
-pub unsafe fn llvm_i64(v: i64) -> LLVMValueRef {
-    LLVMConstInt(LLVMInt64Type(), v as c_ulonglong, 1)
-}
-
 pub trait NumericExpressionGen {
     /// Generates code for a numeric binary operator.
     ///
@@ -101,12 +90,84 @@ impl NumericExpressionGen for LlvmGenerator {
 
     unsafe fn gen_cast(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()> {
         use sir::StatementKind::Cast;
+        let ref output = statement.output.clone().unwrap();
+        let output_pointer = ctx.get_value(output)?;
+        let output_type = ctx.sir_function.symbol_type(output)?;
         if let Cast(ref child, _) = statement.kind {
+            let child_type = ctx.sir_function.symbol_type(child)?;
+            let child_value = self.load(ctx.builder, ctx.get_value(child)?)?;
+            let result = gen_cast(ctx.builder, child_value, child_type, output_type, self.llvm_type(output_type)?)?;
+            let _ = LLVMBuildStore(ctx.builder, result, output_pointer);
             Ok(())
         } else {
             unreachable!()
         }
     }
+}
+
+unsafe fn gen_cast(builder: LLVMBuilderRef,
+                   value: LLVMValueRef,
+                   from: &Type,
+                   to: &Type,
+                   to_ll: LLVMTypeRef) -> WeldResult<LLVMValueRef> {
+    use ast::Type::Scalar;
+    use ast::ScalarKind::*;
+    let result = match (from, to) {
+        (&Scalar(s1), &Scalar(s2)) => {
+            match (s1, s2) {
+                // Floating point extension and truncation.
+                (F32, F64) => LLVMBuildFPExt(builder, value, to_ll, c_str!("")),
+                (F64, F32) => LLVMBuildFPTrunc(builder, value, to_ll, c_str!("")),
+
+                // Floating point to signed integer
+                (_, _) if s1.is_float() && s2.is_signed_integer() => {
+                    LLVMBuildFPToSI(builder, value, to_ll, c_str!(""))
+                }
+
+                // Floating point to unsigned integer
+                (_, _) if s1.is_float() && s2.is_unsigned_integer() => {
+                    LLVMBuildFPToUI(builder, value, to_ll, c_str!(""))
+                }
+
+                // Signed integer to floating point
+                (_, _) if s1.is_signed_integer() && s2.is_float() => {
+                    LLVMBuildSIToFP(builder, value, to_ll, c_str!(""))
+                }
+
+                // Unsigned integer to floating point
+                (_, _) if s1.is_unsigned_integer() && s2.is_float() => {
+                    LLVMBuildUIToFP(builder, value, to_ll, c_str!(""))
+                }
+
+                // Boolean to other integers.
+                (Bool, _) if s2.is_integer() => LLVMBuildZExt(builder, value, to_ll, c_str!("")),
+
+                // Zero-extension.
+                (_, _) if s1.is_unsigned_integer() && s2.bits() > s1.bits() => {
+                    LLVMBuildZExt(builder, value, to_ll, c_str!(""))
+                }
+
+                // Sign-extension.
+                (_, _) if s1.is_signed_integer() && s2.bits() > s1.bits() => {
+                    LLVMBuildSExt(builder, value, to_ll, c_str!(""))
+                }
+
+                // Truncation
+                (_, _) if s2.bits() < s1.bits() => LLVMBuildTrunc(builder, value, to_ll, c_str!("")),
+
+                // Bitcast
+                (_, _) if s2.bits() == s1.bits() => LLVMBuildBitCast(builder, value, to_ll, c_str!("")),
+
+                 _ => {
+                     return compile_err!("Cannot cast {} to {}", from, to)
+                 }
+            }
+        }
+        _ => {
+            return compile_err!("Cannot cast {} to {}", from, to)
+        }
+    };
+    Ok(result)
 }
 
 /// Generates a binary op instruction.

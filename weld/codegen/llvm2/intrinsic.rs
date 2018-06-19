@@ -1,14 +1,15 @@
 //! Defines intrinsics in the IR.
 
+extern crate libc;
 extern crate llvm_sys;
 extern crate fnv;
 
 use fnv::FnvHashMap;
 
+use libc::c_char;
+
 use std::default::Default;
 use std::ffi::CString;
-
-use error::*;
 
 use self::llvm_sys::prelude::*;
 use self::llvm_sys::core::*;
@@ -79,4 +80,52 @@ impl Intrinsics {
         let function = LLVMAddFunction(self.module, name.as_ptr(), fn_type);
         self.intrinsics.insert(name.into_string().unwrap(), function);
     }
+
+    /// Convinience wrapper for calling the `weld_rt_get_run_id` intrinsic.
+    pub unsafe fn call_weld_rt_get_run_id(&mut self,
+                                          builder: LLVMBuilderRef,
+                                          name: Option<*const c_char>) -> LLVMValueRef {
+        let mut args = [];
+        LLVMBuildCall(builder,
+                      self.get("weld_rt_get_run_id").unwrap(),
+                      args.as_mut_ptr(), args.len() as u32, name.unwrap_or(c_str!("")))
+    }
+
+    /// Convinience wrapper for calling the `weld_rt_malloc` intrinsic.
+    pub unsafe fn call_weld_rt_malloc(&mut self,
+                                      builder: LLVMBuilderRef,
+                                      run_id: LLVMValueRef,
+                                      size: LLVMValueRef,
+                                      name: Option<*const c_char>) -> LLVMValueRef {
+        let mut args = [run_id, size];
+        LLVMBuildCall(builder,
+                      self.get("weld_rt_malloc").unwrap(),
+                      args.as_mut_ptr(), args.len() as u32, name.unwrap_or(c_str!("")))
+    }
+
+    /// Convinience wrapper for calling the `weld_rt_remalloc` intrinsic.
+    pub unsafe fn call_weld_rt_realloc(&mut self,
+                                      builder: LLVMBuilderRef,
+                                      run_id: LLVMValueRef,
+                                      pointer: LLVMValueRef,
+                                      size: LLVMValueRef,
+                                      name: Option<*const c_char>) -> LLVMValueRef {
+        let mut args = [run_id, pointer, size];
+        LLVMBuildCall(builder,
+                      self.get("weld_rt_realloc").unwrap(),
+                      args.as_mut_ptr(), args.len() as u32, name.unwrap_or(c_str!("")))
+    }
+
+    /// Convinience wrapper for calling the `weld_rt_free` intrinsic.
+    pub unsafe fn call_weld_rt_free(&mut self,
+                                      builder: LLVMBuilderRef,
+                                      run_id: LLVMValueRef,
+                                      pointer: LLVMValueRef,
+                                      name: Option<*const c_char>) -> LLVMValueRef {
+        let mut args = [run_id, pointer];
+        LLVMBuildCall(builder,
+                      self.get("weld_rt_free").unwrap(),
+                      args.as_mut_ptr(), args.len() as u32, name.unwrap_or(c_str!("")))
+    }
+
 }

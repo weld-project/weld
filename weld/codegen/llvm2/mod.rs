@@ -8,7 +8,7 @@ use std::fmt;
 use std::ffi::{CStr, CString};
 
 use fnv::FnvHashMap;
-use libc::c_char;
+use libc::{c_char, c_ulonglong};
 use time::PreciseTime;
 
 use ast::*;
@@ -85,6 +85,42 @@ pub trait CodeGenExt {
         LLVMPositionBuilderAtEnd(builder, block);
         (function, builder, block)
     }
+
+    unsafe fn i8_type(&self) -> LLVMTypeRef {
+        LLVMInt8TypeInContext(self.context())
+    }
+
+    unsafe fn i16_type(&self) -> LLVMTypeRef {
+        LLVMInt16TypeInContext(self.context())
+    }
+
+    unsafe fn i32_type(&self) -> LLVMTypeRef {
+        LLVMInt32TypeInContext(self.context())
+    }
+
+    unsafe fn i64_type(&self) -> LLVMTypeRef {
+        LLVMInt64TypeInContext(self.context())
+    }
+
+    unsafe fn i8(&self, v: i8) -> LLVMValueRef {
+        LLVMConstInt(self.i8_type(), v as c_ulonglong, 1)
+    }
+
+    unsafe fn i16(&self, v: i16) -> LLVMValueRef {
+        LLVMConstInt(self.i16_type(), v as c_ulonglong, 1)
+    }
+
+    unsafe fn i32(&self, v: i32) -> LLVMValueRef {
+        LLVMConstInt(self.i32_type(), v as c_ulonglong, 1)
+    }
+
+    unsafe fn i64(&self, v: i64) -> LLVMValueRef {
+        LLVMConstInt(self.i64_type(), v as c_ulonglong, 1)
+    }
+
+    unsafe fn null_ptr(&self, ty: LLVMTypeRef) -> LLVMValueRef {
+        LLVMConstPointerNull(LLVMPointerType(ty, 0))
+    }
 }
 
 impl CodeGenExt for LlvmGenerator {
@@ -125,14 +161,16 @@ impl LlvmGenerator {
         }
 
         // Generate the entry point.
-        gen.generate_entry(&program)?;
+        // gen.generate_entry(&program)?;
         Ok(gen)
     }
 
+    /*
     /// Generate the entry point to the module.
-    unsafe fn generate_entry(&mut self, program: &SirProgram) -> WeldResult<()> {
+    unsafe fn generate_entry(&mut self, _program: &SirProgram) -> WeldResult<()> {
         Ok(())
     }
+    */
 
     /// Declare a function in the SIR module and track its reference.
     ///
@@ -246,6 +284,10 @@ impl LlvmGenerator {
                 use self::numeric::NumericExpressionGen;
                 self.gen_binop(context, statement)
             }
+            Cast(_, _) => {
+                use self::numeric::NumericExpressionGen;
+                self.gen_cast(context, statement)
+            }
             GetField { ref value, index } => {
                 let output_pointer = context.get_value(output)?;
                 let value_pointer = context.get_value(value)?;
@@ -298,17 +340,14 @@ impl LlvmGenerator {
             MakeVector(ref elems) => {
                 let output_pointer = context.get_value(output)?;
                 let output_type = context.sir_function.symbol_type(output)?;
-                let size = numeric::llvm_i64(elems.len() as i64);
+                let size = self.i64(elems.len() as i64);
                 if let Vector(ref elem_type) = *output_type {
                     let vector = {
                         let mut methods = self.vectors.get_mut(elem_type).unwrap();
-                        debug!("calling generate_new");
-                        methods.generate_new(context.builder, &self.intrinsics, size)?
+                        methods.generate_new(context.builder, &mut self.intrinsics, size)?
                     };
-                    debug!("generate new called");
                     for (i, elem) in elems.iter().enumerate() {
-                        debug!("inserting element {}", i);
-                        let index = numeric::llvm_i64(i as i64);
+                        let index = self.i64(i as i64);
                         // Scope to prevent borrow error with self.load...
                         let vec_pointer = {
                             let mut methods = self.vectors.get_mut(elem_type).unwrap();
@@ -322,7 +361,6 @@ impl LlvmGenerator {
                 } else {
                     unreachable!()
                 }
-
             }
             _ => unimplemented!(),
         }
