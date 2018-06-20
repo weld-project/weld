@@ -15,7 +15,9 @@ use annotation::Annotations;
 use ast::*;
 use ast::BuilderKind::*;
 use ast::Type::*;
+
 use error::*;
+
 use sir::*;
 use sir::StatementKind::*;
 
@@ -23,7 +25,8 @@ use self::llvm_sys::prelude::*;
 use self::llvm_sys::core::*;
 
 use super::{CodeGenExt, FunctionContext, LlvmGenerator};
-use super::merger;
+
+pub mod merger;
 
 /// A trait for generating builder code.
 ///

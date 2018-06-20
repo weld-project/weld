@@ -13,9 +13,9 @@ use self::llvm_sys::prelude::*;
 use self::llvm_sys::core::*;
 use self::llvm_sys::LLVMTypeKind;
 
-use super::CodeGenExt;
-use super::numeric::generate_binop;
-use super::LLVM_VECTOR_WIDTH;
+use codegen::llvm2::CodeGenExt;
+use codegen::llvm2::numeric::generate_binop;
+use codegen::llvm2::LLVM_VECTOR_WIDTH;
 
 const SCALAR_INDEX: u32 = 0;
 const VECTOR_INDEX: u32 = 1;

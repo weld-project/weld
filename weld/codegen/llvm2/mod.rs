@@ -37,10 +37,10 @@ macro_rules! c_str {
 // Traits implementing code generation for various expressions.
 mod builder;
 mod intrinsic;
-// TODO make this a submodule of builder?
-mod merger;
 mod numeric;
 mod vector;
+
+use self::builder::merger;
 
 pub struct CompiledModule;
 
