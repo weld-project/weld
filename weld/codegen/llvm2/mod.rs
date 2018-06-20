@@ -21,6 +21,7 @@ use util::stats::CompilationStats;
 
 use self::llvm_sys::prelude::*;
 use self::llvm_sys::core::*;
+use self::llvm_sys::LLVMLinkage;
 
 static NULL_NAME:[c_char; 1] = [0];
 
@@ -93,6 +94,7 @@ pub trait CodeGenExt {
         let builder = LLVMCreateBuilderInContext(self.context());
         let block = LLVMAppendBasicBlockInContext(self.context(), function, c_str!("entry"));
         LLVMPositionBuilderAtEnd(builder, block);
+        LLVMSetLinkage(function, LLVMLinkage::LLVMPrivateLinkage);
         (function, builder, block)
     }
 
@@ -315,6 +317,7 @@ impl LlvmGenerator {
         let func_ty = LLVMFunctionType(ret_ty, arg_tys.as_mut_ptr(), arg_tys.len() as u32, 0);
         let name = CString::new(format!("f{}", func.id)).unwrap();
         let function = LLVMAddFunction(self.module, name.as_ptr(), func_ty);
+        LLVMSetLinkage(function, LLVMLinkage::LLVMPrivateLinkage);
 
         self.functions.insert(func.id, function);
         Ok(())
@@ -578,8 +581,9 @@ impl LlvmGenerator {
             JumpFunction(ref _func) => {
                 unimplemented!()
             }
-            ParallelFor(ref _parfor) => {
-                unimplemented!()
+            ParallelFor(ref parfor) => {
+                use self::builder::BuilderExpressionGen;
+                self.gen_for(context, parfor)?;
             }
             EndFunction => {
                 LLVMBuildRetVoid(context.builder);

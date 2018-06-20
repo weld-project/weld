@@ -26,6 +26,8 @@ use self::llvm_sys::core::*;
 
 use super::{CodeGenExt, FunctionContext, LlvmGenerator};
 
+mod for_loop;
+
 pub mod merger;
 
 /// A trait for generating builder code.
@@ -40,7 +42,7 @@ pub trait BuilderExpressionGen {
     /// Generates code for the `Result` statement.
     unsafe fn gen_result(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()>;
     /// Generates code for the `ParallelFor` terminator.
-    unsafe fn gen_for(&mut self, ctx: &mut FunctionContext) -> WeldResult<()>;
+    unsafe fn gen_for(&mut self, ctx: &mut FunctionContext, parfor: &ParallelForData) -> WeldResult<()>;
     /// Generates code to define builder types.
     unsafe fn builder_type(&mut self, builder: &Type) -> WeldResult<LLVMTypeRef>;
 }
@@ -191,8 +193,9 @@ impl BuilderExpressionGen for LlvmGenerator {
         }
     }
 
-    unsafe fn gen_for(&mut self, ctx: &mut FunctionContext) -> WeldResult<()> {
-        Ok(())
+    unsafe fn gen_for(&mut self, ctx: &mut FunctionContext, parfor: &ParallelForData) -> WeldResult<()> {
+        use self::for_loop::ForLoopGenInternal;
+        self.gen_for_internal(ctx, parfor)
     }
 
     unsafe fn builder_type(&mut self, builder: &Type) -> WeldResult<LLVMTypeRef> {
