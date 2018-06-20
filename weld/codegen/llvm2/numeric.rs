@@ -12,8 +12,6 @@ extern crate time;
 extern crate libc;
 extern crate llvm_sys;
 
-use libc::{c_double, c_ulonglong};
-
 use ast::*;
 use error::*;
 use sir::*;
@@ -21,30 +19,29 @@ use sir::*;
 use self::llvm_sys::prelude::*;
 use self::llvm_sys::core::*;
 
-use super::{LlvmGenerator, FunctionContext};
+use super::{LlvmGenerator, CodeGenExt, FunctionContext, LLVM_VECTOR_WIDTH};
 
 pub trait NumericExpressionGen {
     /// Generates code for a numeric binary operator.
     ///
     /// This method supports operators over both scalar and SIMD values.
-    unsafe fn gen_binop(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()>;
+    unsafe fn generate_binop(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()>;
     /// Generates a literal.
     ///
     /// This method supports both scalar and SIMD values.
-    unsafe fn gen_literal(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()>;
-    /// Generates a cast.
-    unsafe fn gen_cast(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()>;
-
+    unsafe fn generate_assign_literal(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()>;
+    /// Generates a cast expression.
+    unsafe fn generate_cast(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()>;
 }
 
 impl NumericExpressionGen for LlvmGenerator {
-    unsafe fn gen_binop(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()> {
+    unsafe fn generate_binop(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()> {
         use sir::StatementKind::BinOp;
         if let BinOp { op, ref left, ref right } = statement.kind {
             let llvm_left = self.load(ctx.builder, ctx.get_value(left)?)?;
             let llvm_right = self.load(ctx.builder, ctx.get_value(right)?)?;
             let ty = ctx.sir_function.symbol_type(left)?;
-            let result = gen_binop(ctx.builder, op, llvm_left, llvm_right, ty)?;
+            let result = generate_binop(ctx.builder, op, llvm_left, llvm_right, ty)?;
             let output = ctx.get_value(statement.output.as_ref().unwrap())?;
             let _ = LLVMBuildStore(ctx.builder, result, output);
             Ok(())
@@ -53,42 +50,24 @@ impl NumericExpressionGen for LlvmGenerator {
         }
     }
 
-    unsafe fn gen_literal(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()> {
+    unsafe fn generate_assign_literal(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()> {
         use sir::StatementKind::AssignLiteral;
         if let AssignLiteral(ref value) = statement.kind {
             let output = statement.output.as_ref().unwrap();
             let output_type = ctx.sir_function.symbol_type(output)?;
-            let llvm_ty = self.llvm_type(output_type)?;
-
-            // Generate the LLVM constant.
-            let constant = if let Type::Simd(_) = output_type {
-                unimplemented!()
-            } else {
-                use ast::LiteralKind::*;
-                match *value {
-                    BoolLiteral(val) => LLVMConstInt(llvm_ty, val as c_ulonglong, 0),
-                    I8Literal(val) => LLVMConstInt(llvm_ty, val as c_ulonglong, 1),
-                    I16Literal(val) => LLVMConstInt(llvm_ty, val as c_ulonglong, 1),
-                    I32Literal(val) => LLVMConstInt(llvm_ty, val as c_ulonglong, 1),
-                    I64Literal(val) => LLVMConstInt(llvm_ty, val as c_ulonglong, 1),
-                    U8Literal(val) => LLVMConstInt(llvm_ty, val as c_ulonglong, 0),
-                    U16Literal(val) => LLVMConstInt(llvm_ty, val as c_ulonglong, 0),
-                    U32Literal(val) => LLVMConstInt(llvm_ty, val as c_ulonglong, 0),
-                    U64Literal(val) => LLVMConstInt(llvm_ty, val as c_ulonglong, 0),
-                    F32Literal(val) => LLVMConstReal(llvm_ty, f32::from_bits(val) as c_double),
-                    F64Literal(val) => LLVMConstReal(llvm_ty, f64::from_bits(val) as c_double),
-                    StringLiteral(_) => unimplemented!()
-                }
-            };
+            let mut result = self.scalar_literal(value);
+            if let Type::Simd(_) = output_type {
+                result = LLVMConstVector([result; LLVM_VECTOR_WIDTH as usize].as_mut_ptr(), LLVM_VECTOR_WIDTH)
+            }
             let pointer = ctx.get_value(output)?;
-            let _ = LLVMBuildStore(ctx.builder, constant, pointer);
+            let _ = LLVMBuildStore(ctx.builder, result, pointer);
             Ok(())
         } else {
             unreachable!()
         }
     }
 
-    unsafe fn gen_cast(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()> {
+    unsafe fn generate_cast(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()> {
         use sir::StatementKind::Cast;
         let ref output = statement.output.clone().unwrap();
         let output_pointer = ctx.get_value(output)?;
@@ -96,7 +75,7 @@ impl NumericExpressionGen for LlvmGenerator {
         if let Cast(ref child, _) = statement.kind {
             let child_type = ctx.sir_function.symbol_type(child)?;
             let child_value = self.load(ctx.builder, ctx.get_value(child)?)?;
-            let result = gen_cast(ctx.builder, child_value, child_type, output_type, self.llvm_type(output_type)?)?;
+            let result = generate_cast(ctx.builder, child_value, child_type, output_type, self.llvm_type(output_type)?)?;
             let _ = LLVMBuildStore(ctx.builder, result, output_pointer);
             Ok(())
         } else {
@@ -105,7 +84,7 @@ impl NumericExpressionGen for LlvmGenerator {
     }
 }
 
-unsafe fn gen_cast(builder: LLVMBuilderRef,
+unsafe fn generate_cast(builder: LLVMBuilderRef,
                    value: LLVMValueRef,
                    from: &Type,
                    to: &Type,
@@ -171,7 +150,7 @@ unsafe fn gen_cast(builder: LLVMBuilderRef,
 }
 
 /// Generates a binary op instruction.
-pub unsafe fn gen_binop(builder: LLVMBuilderRef,
+pub unsafe fn generate_binop(builder: LLVMBuilderRef,
              op: BinOpKind,
              left: LLVMValueRef,
              right: LLVMValueRef, ty: &Type) -> WeldResult<LLVMValueRef> {

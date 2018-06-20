@@ -35,7 +35,9 @@ macro_rules! c_str {
 }
 
 // Traits implementing code generation for various expressions.
+mod builder;
 mod intrinsic;
+// TODO make this a submodule of builder?
 mod merger;
 mod numeric;
 mod vector;
@@ -77,7 +79,7 @@ pub trait CodeGenExt {
     fn module(&self) -> LLVMModuleRef;
     /// Returns the context used by this code generator.
     fn context(&self) -> LLVMContextRef;
-    /// Define a function with the given return type and argument type.
+    /// Generates code to define a function with the given return type and argument type.
     ///
     /// Returns a reference to the function, a builder used to build the function body, and the
     /// entry basic block of the function. The builder is positioned at the end of the entry basic block.
@@ -94,22 +96,45 @@ pub trait CodeGenExt {
         (function, builder, block)
     }
 
-    /// Returns the identity for a given type and binary operator.
-    unsafe fn binop_identity(&self, op: BinOpKind, ty: LLVMTypeRef, signed: bool) -> WeldResult<LLVMValueRef> {
+    /// Converts a `LiteralKind` into a constant LLVM scalar literal value.
+    ///
+    /// This method does not generate any code.
+    unsafe fn scalar_literal(&self, kind: &LiteralKind) -> LLVMValueRef {
+        use ast::LiteralKind::*;
+        match *kind {
+            BoolLiteral(val) => self.bool(val),
+            I8Literal(val) => self.i8(val),
+            I16Literal(val) => self.i16(val),
+            I32Literal(val) => self.i32(val),
+            I64Literal(val) => self.i64(val),
+            U8Literal(val) => self.u8(val),
+            U16Literal(val) => self.u16(val),
+            U32Literal(val) => self.u32(val),
+            U64Literal(val) => self.u64(val),
+            F32Literal(val) => self.f32(f32::from_bits(val)),
+            F64Literal(val) => self.f64(f64::from_bits(val)),
+            StringLiteral(_) => unimplemented!()
+        }
+    }
+
+    /// Returns the identity for a given scalar kind and binary operator.
+    unsafe fn binop_identity(&self, op: BinOpKind, kind: ScalarKind) -> WeldResult<LLVMValueRef> {
         use ast::BinOpKind::*;
-        use self::llvm_sys::LLVMTypeKind::*;
-        let kind = LLVMGetTypeKind(ty);
+        use ast::ScalarKind::*;
         match kind {
-            LLVMIntegerTypeKind => {
+            _ if kind.is_integer() => {
+                let ty = LLVMIntTypeInContext(self.context(), kind.bits());
+                let signed = kind.is_signed() as i32;
                 match op {
-                    Add => Ok(LLVMConstInt(ty, 0, signed as i32)),
-                    Multiply => Ok(LLVMConstInt(ty, 1, signed as i32)),
-                    Max => Ok(LLVMConstInt(ty, ::std::u64::MIN, signed as i32)),
-                    Min => Ok(LLVMConstInt(ty, ::std::u64::MAX, signed as i32)),
+                    Add => Ok(LLVMConstInt(ty, 0, signed)),
+                    Multiply => Ok(LLVMConstInt(ty, 1, signed)),
+                    Max => Ok(LLVMConstInt(ty, ::std::u64::MIN, signed)),
+                    Min => Ok(LLVMConstInt(ty, ::std::u64::MAX, signed)),
                     _ => compile_err!("No identity for given type and op"),
                 }
             }
-            LLVMFloatTypeKind => {
+            F32  => {
+                let ty = self.f32_type();
                 match op {
                     Add => Ok(LLVMConstReal(ty, 0.0)),
                     Multiply => Ok(LLVMConstReal(ty, 1.0)),
@@ -118,7 +143,8 @@ pub trait CodeGenExt {
                     _ => compile_err!("No identity for given type and op"),
                 }
             }
-            LLVMDoubleTypeKind => {
+            F64 => {
+                let ty = self.f64_type();
                 match op {
                     Add => Ok(LLVMConstReal(ty, 0.0)),
                     Multiply => Ok(LLVMConstReal(ty, 1.0)),
@@ -131,7 +157,15 @@ pub trait CodeGenExt {
         }
     }
 
+    unsafe fn bool_type(&self) -> LLVMTypeRef {
+        LLVMInt1TypeInContext(self.context())
+    }
+
     unsafe fn i8_type(&self) -> LLVMTypeRef {
+        LLVMInt8TypeInContext(self.context())
+    }
+
+    unsafe fn u8_type(&self) -> LLVMTypeRef {
         LLVMInt8TypeInContext(self.context())
     }
 
@@ -139,11 +173,15 @@ pub trait CodeGenExt {
         LLVMInt16TypeInContext(self.context())
     }
 
-    unsafe fn u32_type(&self) -> LLVMTypeRef {
-        LLVMInt32TypeInContext(self.context())
+    unsafe fn u16_type(&self) -> LLVMTypeRef {
+        LLVMInt16TypeInContext(self.context())
     }
 
     unsafe fn i32_type(&self) -> LLVMTypeRef {
+        LLVMInt32TypeInContext(self.context())
+    }
+
+    unsafe fn u32_type(&self) -> LLVMTypeRef {
         LLVMInt32TypeInContext(self.context())
     }
 
@@ -151,24 +189,60 @@ pub trait CodeGenExt {
         LLVMInt64TypeInContext(self.context())
     }
 
+    unsafe fn u64_type(&self) -> LLVMTypeRef {
+        LLVMInt64TypeInContext(self.context())
+    }
+
+    unsafe fn f32_type(&self) -> LLVMTypeRef {
+        LLVMFloatTypeInContext(self.context())
+    }
+
+    unsafe fn f64_type(&self) -> LLVMTypeRef {
+        LLVMDoubleTypeInContext(self.context())
+    }
+
+    unsafe fn bool(&self, v: bool) -> LLVMValueRef {
+        LLVMConstInt(self.bool_type(), v as c_ulonglong, 0)
+    }
+
     unsafe fn i8(&self, v: i8) -> LLVMValueRef {
         LLVMConstInt(self.i8_type(), v as c_ulonglong, 1)
+    }
+
+    unsafe fn u8(&self, v: u8) -> LLVMValueRef {
+        LLVMConstInt(self.u8_type(), v as c_ulonglong, 0)
     }
 
     unsafe fn i16(&self, v: i16) -> LLVMValueRef {
         LLVMConstInt(self.i16_type(), v as c_ulonglong, 1)
     }
 
-    unsafe fn u32(&self, v: u32) -> LLVMValueRef {
-        LLVMConstInt(self.u32_type(), v as c_ulonglong, 0)
+    unsafe fn u16(&self, v: u16) -> LLVMValueRef {
+        LLVMConstInt(self.u16_type(), v as c_ulonglong, 0)
     }
 
     unsafe fn i32(&self, v: i32) -> LLVMValueRef {
         LLVMConstInt(self.i32_type(), v as c_ulonglong, 1)
     }
 
+    unsafe fn u32(&self, v: u32) -> LLVMValueRef {
+        LLVMConstInt(self.u32_type(), v as c_ulonglong, 0)
+    }
+
     unsafe fn i64(&self, v: i64) -> LLVMValueRef {
         LLVMConstInt(self.i64_type(), v as c_ulonglong, 1)
+    }
+
+    unsafe fn u64(&self, v: u64) -> LLVMValueRef {
+        LLVMConstInt(self.u64_type(), v as c_ulonglong, 0)
+    }
+
+    unsafe fn f32(&self, v: f32) -> LLVMValueRef {
+        LLVMConstReal(self.f32_type(), v as c_double)
+    }
+
+    unsafe fn f64(&self, v: f64) -> LLVMValueRef {
+        LLVMConstReal(self.f64_type(), v as c_double)
     }
 
     unsafe fn null_ptr(&self, ty: LLVMTypeRef) -> LLVMValueRef {
@@ -332,11 +406,11 @@ impl LlvmGenerator {
             }
             AssignLiteral(_) => {
                 use self::numeric::NumericExpressionGen;
-                self.gen_literal(context, statement)
+                self.generate_assign_literal(context, statement)
             }
             BinOp { .. } => {
                 use self::numeric::NumericExpressionGen;
-                self.gen_binop(context, statement)
+                self.generate_binop(context, statement)
             }
             Broadcast(ref child) => {
                 let output_pointer = context.get_value(output)?;
@@ -348,7 +422,7 @@ impl LlvmGenerator {
             }
             Cast(_, _) => {
                 use self::numeric::NumericExpressionGen;
-                self.gen_cast(context, statement)
+                self.generate_cast(context, statement)
             }
             CUDF { ref symbol_name, ref args } => {
                 let output_pointer = context.get_value(output)?;
@@ -447,81 +521,20 @@ impl LlvmGenerator {
                     unreachable!()
                 }
             }
-            Merge { ref builder, ref value } => {
-                use ast::BuilderKind::*;
-                let builder_pointer = context.get_value(builder)?;
-                let llvm_value = self.load(context.builder, context.get_value(value)?)?;
-                let builder_ty = context.sir_function.symbol_type(builder)?;
-                if let Builder(ref kind, _) = *builder_ty {
-                    match *kind {
-                        Merger(_, _) => {
-                            let mut methods = self.mergers.get_mut(kind).unwrap();
-                            let _ = methods.generate_merge(context.builder, builder_pointer, llvm_value)?;
-                            Ok(())
-                        }
-                        _ => {
-                            unimplemented!()
-                        }
-                    }
-                } else {
-                    unreachable!()
-                }
+            Merge { .. } => {
+                use self::builder::BuilderExpressionGen;
+                self.gen_merge(context, statement)
             }
             Negate(_) => {
                 unimplemented!() 
             }
-            NewBuilder { ref arg, ref ty } => {
-                use ast::BuilderKind::*;
-                let output_pointer = context.get_value(output)?;
-                if let Builder(ref kind, _) = *ty {
-                    match *kind {
-                        Merger(_, _) => {
-                            // The argument is the initial value of the merger.
-                            let arg_value = if let Some(ref arg) = arg {
-                                self.load(context.builder, context.get_value(arg)?)?
-                            } else {
-                                let mut methods = self.mergers.get_mut(kind).unwrap();
-                                methods.binop_identity(methods.op,
-                                                       methods.elem_ty,
-                                                       methods.scalar_kind.is_signed())?
-                            };
-                            let merger = {
-                                let mut methods = self.mergers.get_mut(kind).unwrap();
-                                methods.generate_new(context.builder, arg_value)?
-                            };
-                            LLVMBuildStore(context.builder, merger, output_pointer);
-                            Ok(())
-                        }
-                        _ => {
-                            unimplemented!()
-                        }
-                    }
-                } else {
-                    unreachable!()
-                }
+            NewBuilder { .. } => {
+                use self::builder::BuilderExpressionGen;
+                self.gen_new_builder(context, statement)
             }
-            Res(ref builder) => {
-                use ast::BuilderKind::*;
-                let output_pointer = context.get_value(output)?;
-                let builder_pointer = context.get_value(builder)?;
-                let builder_ty = context.sir_function.symbol_type(builder)?;
-                if let Builder(ref kind, _) = *builder_ty {
-                    match *kind {
-                        Merger(_, _) => {
-                            let result = {
-                                let mut methods = self.mergers.get_mut(kind).unwrap();
-                                methods.generate_result(context.builder, builder_pointer)?
-                            };
-                            LLVMBuildStore(context.builder, result, output_pointer);
-                            Ok(())
-                        }
-                        _ => {
-                            unimplemented!()
-                        }
-                    }
-                } else {
-                    unreachable!()
-                }
+            Res(_) => {
+                use self::builder::BuilderExpressionGen;
+                self.gen_result(context, statement)
             }
             Select { .. } => {
                 unimplemented!() 
@@ -597,31 +610,10 @@ impl LlvmGenerator {
     unsafe fn llvm_type(&mut self, ty: &Type) -> WeldResult<LLVMTypeRef> {
         use ast::Type::*;
         use ast::ScalarKind::*;
-        use ast::BuilderKind::*;
         let result = match *ty {
-            Builder(ref kind, _) => {
-                // TODO move this and  all the builder stuff to its own module?
-                match *kind {
-                    Merger(ref elem_type, ref binop) => {
-                        if !self.mergers.contains_key(kind) {
-                            let scalar_kind = if let Scalar(ref kind) = *elem_type.as_ref() {
-                                *kind
-                            } else {
-                                unreachable!()
-                            };
-                            let llvm_elem_type = self.llvm_type(elem_type)?;
-                            let merger = merger::Merger::define("merger",
-                                                                *binop,
-                                                                llvm_elem_type,
-                                                                scalar_kind,
-                                                                self.context,
-                                                                self.module);
-                            self.mergers.insert(kind.clone(), merger);
-                        }
-                        self.mergers.get(kind).unwrap().merger_ty
-                    }
-                    _ => unimplemented!()
-                }
+            Builder(_, _) => {
+                use self::builder::BuilderExpressionGen;
+                self.builder_type(ty)?
             }
             Dict(_, _) => {
                 unimplemented!()
@@ -642,10 +634,6 @@ impl LlvmGenerator {
             }
             Struct(ref elems) => {
                 let mut llvm_types: Vec<_> = elems.iter().map(&mut |t| self.llvm_type(t)).collect::<WeldResult<_>>()?;
-                // XXX Do we want to name structs? We also need to track struct names here if we do...
-                // let named = LLVMStructCreateNamed(self.context, c_str!("s"));
-                // LLVMStructSetBody(named, llvm_types.as_mut_ptr(), llvm_types.len() as u32, 0);
-                // named
                 LLVMStructTypeInContext(self.context, llvm_types.as_mut_ptr(), llvm_types.len() as u32, 0)
             }
             Vector(ref elem_type) => {

@@ -14,7 +14,7 @@ use self::llvm_sys::core::*;
 use self::llvm_sys::LLVMTypeKind;
 
 use super::CodeGenExt;
-use super::numeric::gen_binop;
+use super::numeric::generate_binop;
 use super::LLVM_VECTOR_WIDTH;
 
 const SCALAR_INDEX: u32 = 0;
@@ -89,10 +89,9 @@ impl Merger {
             let name = format!("{}.new", self.name);
             let (function, builder, _) = self.define_function(ret_ty, &mut arg_tys, name);
 
-            let identity = self.binop_identity(self.op, self.elem_ty, self.scalar_kind.is_signed())?;
+            let identity = self.binop_identity(self.op, self.scalar_kind)?;
             let mut vector_elems = [identity; LLVM_VECTOR_WIDTH as usize];
             let vector_identity = LLVMConstVector(vector_elems.as_mut_ptr(), vector_elems.len() as u32);
-
             let one = LLVMBuildInsertValue(builder,
                                            LLVMGetUndef(self.merger_ty),
                                            LLVMGetParam(function, 0),
@@ -109,47 +108,45 @@ impl Merger {
         return Ok(LLVMBuildCall(builder, self.new.unwrap(), args.as_mut_ptr(), args.len() as u32, c_str!("")))
     }
 
+    /// Builds the `Merge` function and returns a reference to the function.
+    ///
+    /// The merge function is similar for the scalar and vector variant: the `gep_index determines
+    /// which one is generated.
+    unsafe fn generate_merge_internal(&mut self,
+                                      name: String,
+                                      arguments: &mut [LLVMTypeRef],
+                                      gep_index: u32) -> WeldResult<LLVMValueRef> {
+        let ret_ty = LLVMVoidTypeInContext(self.context);
+        let (function, fn_builder, _) = self.define_function(ret_ty, arguments, name);
+
+        // Load the vector element, apply the binary operator, and then store it back.
+        let elem_pointer = LLVMBuildStructGEP(fn_builder, LLVMGetParam(function, 0), gep_index, c_str!(""));
+        let elem = LLVMBuildLoad(fn_builder, elem_pointer, c_str!(""));
+        let result = generate_binop(fn_builder, self.op, elem, LLVMGetParam(function, 1), &Simd(self.scalar_kind))?;
+        LLVMBuildStore(fn_builder, result, elem_pointer);
+        LLVMBuildRetVoid(fn_builder);
+        LLVMDisposeBuilder(fn_builder);
+        Ok(function)
+    }
+
     pub unsafe fn generate_merge(&mut self,
                                  llvm_builder: LLVMBuilderRef,
                                  builder: LLVMValueRef,
                                  value: LLVMValueRef) -> WeldResult<LLVMValueRef> {
-        // TODO this is somewhat messy right now...lots of repeated logic!
         let vectorized = LLVMGetTypeKind(LLVMTypeOf(value)) == LLVMTypeKind::LLVMVectorTypeKind;
         if vectorized {
             if self.vmerge.is_none() {
-                let ret_ty = LLVMVoidTypeInContext(self.context);
                 let mut arg_tys = [LLVMPointerType(self.merger_ty, 0), LLVMVectorType(self.elem_ty, LLVM_VECTOR_WIDTH as u32)];
                 let name = format!("{}.vmerge", self.name);
-                let (function, fn_builder, _) = self.define_function(ret_ty, &mut arg_tys, name);
-
-                // Load the vector element, apply the binary operator, and then store it back.
-                let elem_pointer = LLVMBuildStructGEP(fn_builder, LLVMGetParam(function, 0), VECTOR_INDEX, c_str!(""));
-                let elem = LLVMBuildLoad(fn_builder, elem_pointer, c_str!(""));
-                let result = gen_binop(fn_builder, self.op, elem, LLVMGetParam(function, 1), &Simd(self.scalar_kind))?;
-                LLVMBuildStore(fn_builder, result, elem_pointer);
-                LLVMBuildRetVoid(fn_builder);
-
-                self.vmerge = Some(function);
-                LLVMDisposeBuilder(fn_builder);
+                self.vmerge = Some(self.generate_merge_internal(name, &mut arg_tys, VECTOR_INDEX)?);
             }
             let mut args = [builder, value];
             Ok(LLVMBuildCall(llvm_builder, self.vmerge.unwrap(), args.as_mut_ptr(), args.len() as u32, c_str!("")))
         } else {
             if self.merge.is_none() {
-                let ret_ty = LLVMVoidTypeInContext(self.context);
                 let mut arg_tys = [LLVMPointerType(self.merger_ty, 0), self.elem_ty];
                 let name = format!("{}.merge", self.name);
-                let (function, fn_builder, _) = self.define_function(ret_ty, &mut arg_tys, name);
-
-                // Load the scalar element, apply the binary operator, and then store it back.
-                let elem_pointer = LLVMBuildStructGEP(fn_builder, LLVMGetParam(function, 0), SCALAR_INDEX, c_str!(""));
-                let elem = LLVMBuildLoad(fn_builder, elem_pointer, c_str!(""));
-                let result = gen_binop(fn_builder, self.op, elem, LLVMGetParam(function, 1), &Scalar(self.scalar_kind))?;
-                LLVMBuildStore(fn_builder, result, elem_pointer);
-                LLVMBuildRetVoid(fn_builder);
-
-                self.merge = Some(function);
-                LLVMDisposeBuilder(fn_builder);
+                self.merge = Some(self.generate_merge_internal(name, &mut arg_tys, SCALAR_INDEX)?);
             }
             let mut args = [builder, value];
             Ok(LLVMBuildCall(llvm_builder, self.merge.unwrap(), args.as_mut_ptr(), args.len() as u32, c_str!("")))
@@ -175,7 +172,7 @@ impl Merger {
 
             for i in 0..LLVM_VECTOR_WIDTH {
                 let vector_element = LLVMBuildExtractElement(fn_builder, vector, self.i32(i as i32), c_str!(""));
-                result = gen_binop(fn_builder, self.op, result, vector_element, &Scalar(self.scalar_kind))?;
+                result = generate_binop(fn_builder, self.op, result, vector_element, &Scalar(self.scalar_kind))?;
             }
 
             LLVMBuildRet(fn_builder, result);
