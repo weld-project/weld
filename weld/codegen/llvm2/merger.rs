@@ -6,6 +6,7 @@ use std::ffi::CString;
 
 use ast::BinOpKind;
 use ast::ScalarKind;
+use ast::Type::{Scalar, Simd};
 use error::*;
 
 use self::llvm_sys::prelude::*;
@@ -13,7 +14,6 @@ use self::llvm_sys::core::*;
 use self::llvm_sys::LLVMTypeKind;
 
 use super::CodeGenExt;
-use super::intrinsic::Intrinsics;
 use super::numeric::gen_binop;
 use super::LLVM_VECTOR_WIDTH;
 
@@ -41,6 +41,7 @@ pub struct Merger {
     new: Option<LLVMValueRef>,
     merge: Option<LLVMValueRef>,
     vmerge: Option<LLVMValueRef>,
+    result: Option<LLVMValueRef>,
 }
 
 impl CodeGenExt for Merger {
@@ -75,6 +76,7 @@ impl Merger {
             new: None,
             merge: None,
             vmerge: None,
+            result: None,
         }
     }
 
@@ -112,7 +114,6 @@ impl Merger {
                                  builder: LLVMValueRef,
                                  value: LLVMValueRef) -> WeldResult<LLVMValueRef> {
         // TODO this is somewhat messy right now...lots of repeated logic!
-        use ast::Type::{Scalar, Simd};
         let vectorized = LLVMGetTypeKind(LLVMTypeOf(value)) == LLVMTypeKind::LLVMVectorTypeKind;
         if vectorized {
             if self.vmerge.is_none() {
@@ -154,6 +155,35 @@ impl Merger {
             Ok(LLVMBuildCall(llvm_builder, self.merge.unwrap(), args.as_mut_ptr(), args.len() as u32, c_str!("")))
         }
     }
+
+    pub unsafe fn generate_result(&mut self,
+                                 llvm_builder: LLVMBuilderRef,
+                                 builder: LLVMValueRef) -> WeldResult<LLVMValueRef> {
+        if self.result.is_none() {
+            let ret_ty = self.elem_ty;
+            let mut arg_tys = [LLVMPointerType(self.merger_ty, 0)];
+            let name = format!("{}.result", self.name);
+            let (function, fn_builder, _) = self.define_function(ret_ty, &mut arg_tys, name);
+
+            // Load the scalar element, apply the binary operator, and then store it back.
+            let builder_pointer = LLVMGetParam(function, 0);
+            let scalar_pointer = LLVMBuildStructGEP(fn_builder, builder_pointer, SCALAR_INDEX, c_str!(""));
+            let mut result = LLVMBuildLoad(fn_builder, scalar_pointer, c_str!(""));
+
+            let vector_pointer = LLVMBuildStructGEP(fn_builder, builder_pointer, VECTOR_INDEX, c_str!(""));
+            let vector = LLVMBuildLoad(fn_builder, vector_pointer, c_str!(""));
+
+            for i in 0..LLVM_VECTOR_WIDTH {
+                let vector_element = LLVMBuildExtractElement(fn_builder, vector, self.i32(i as i32), c_str!(""));
+                result = gen_binop(fn_builder, self.op, result, vector_element, &Scalar(self.scalar_kind))?;
+            }
+
+            LLVMBuildRet(fn_builder, result);
+
+            self.result = Some(function);
+            LLVMDisposeBuilder(fn_builder);
+        }
+        let mut args = [builder];
+        Ok(LLVMBuildCall(llvm_builder, self.result.unwrap(), args.as_mut_ptr(), args.len() as u32, c_str!("")))
+    }
 }
-
-

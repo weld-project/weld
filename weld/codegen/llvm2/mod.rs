@@ -139,6 +139,10 @@ pub trait CodeGenExt {
         LLVMInt16TypeInContext(self.context())
     }
 
+    unsafe fn u32_type(&self) -> LLVMTypeRef {
+        LLVMInt32TypeInContext(self.context())
+    }
+
     unsafe fn i32_type(&self) -> LLVMTypeRef {
         LLVMInt32TypeInContext(self.context())
     }
@@ -153,6 +157,10 @@ pub trait CodeGenExt {
 
     unsafe fn i16(&self, v: i16) -> LLVMValueRef {
         LLVMConstInt(self.i16_type(), v as c_ulonglong, 1)
+    }
+
+    unsafe fn u32(&self, v: u32) -> LLVMValueRef {
+        LLVMConstInt(self.u32_type(), v as c_ulonglong, 0)
     }
 
     unsafe fn i32(&self, v: i32) -> LLVMValueRef {
@@ -492,8 +500,28 @@ impl LlvmGenerator {
                     unreachable!()
                 }
             }
-            Res(_) => {
-                unimplemented!() 
+            Res(ref builder) => {
+                use ast::BuilderKind::*;
+                let output_pointer = context.get_value(output)?;
+                let builder_pointer = context.get_value(builder)?;
+                let builder_ty = context.sir_function.symbol_type(builder)?;
+                if let Builder(ref kind, _) = *builder_ty {
+                    match *kind {
+                        Merger(_, _) => {
+                            let result = {
+                                let mut methods = self.mergers.get_mut(kind).unwrap();
+                                methods.generate_result(context.builder, builder_pointer)?
+                            };
+                            LLVMBuildStore(context.builder, result, output_pointer);
+                            Ok(())
+                        }
+                        _ => {
+                            unimplemented!()
+                        }
+                    }
+                } else {
+                    unreachable!()
+                }
             }
             Select { .. } => {
                 unimplemented!() 
