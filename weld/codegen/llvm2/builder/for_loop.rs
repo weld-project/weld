@@ -16,6 +16,7 @@ use self::llvm_sys::{LLVMIntPredicate, LLVMLinkage};
 use self::llvm_sys::prelude::*;
 use self::llvm_sys::core::*;
 
+use codegen::llvm2::LLVM_VECTOR_WIDTH;
 use super::{CodeGenExt, FunctionContext, LlvmGenerator};
 
 /*
@@ -344,11 +345,44 @@ impl ForLoopGenInternal for LlvmGenerator {
                 }
                 SimdIter if iter.start.is_some() => unimplemented!(),
                 SimdIter => {
-                    unimplemented!()
+                    let i = LLVMBuildNSWMul(ctx.builder, i, self.i64(LLVM_VECTOR_WIDTH as i64), c_str!(""));
+                    let vector = self.load(ctx.builder, ctx.get_value(&iter.data)?)?;
+                    let vector_type = ctx.sir_function.symbol_type(&iter.data)?;
+                    let element_pointer = if let Vector(ref elem_type) = *vector_type {
+                        let mut methods = self.vectors.get_mut(elem_type).unwrap();
+                        methods.generate_vat(ctx.builder, vector, i)?
+                    } else {
+                        unreachable!()
+                    };
+                    let element = self.load(ctx.builder, element_pointer)?;
+                    values.push(element);
                 }
                 FringeIter if iter.start.is_some() => unimplemented!(),
                 FringeIter => {
-                    unimplemented!()
+                    let vector = self.load(ctx.builder, ctx.get_value(&iter.data)?)?;
+                    let vector_type = ctx.sir_function.symbol_type(&iter.data)?;
+                    let size = if let Vector(ref elem_type) = *vector_type {
+                        let mut methods = self.vectors.get_mut(elem_type).unwrap();
+                        methods.generate_size(ctx.builder, vector)?
+                    } else {
+                        unreachable!()
+                    };
+
+                    // Start = Len(vector) - Len(vector) % VECTOR_WIDTH
+                    // Index = start + i
+                    let tmp = LLVMBuildSRem(ctx.builder, size, self.i64(LLVM_VECTOR_WIDTH as i64), c_str!(""));
+                    let start = LLVMBuildNSWSub(ctx.builder, size, tmp, c_str!(""));
+                    let i = LLVMBuildNSWAdd(ctx.builder, start, i, c_str!(""));
+
+                    let element_pointer = if let Vector(ref elem_type) = *vector_type {
+                        let mut methods = self.vectors.get_mut(elem_type).unwrap();
+                        methods.generate_at(ctx.builder, vector, i)?
+                    } else {
+                        unreachable!()
+                    };
+
+                    let element = self.load(ctx.builder, element_pointer)?;
+                    values.push(element);
                 }
                 RangeIter => {
                     unimplemented!()

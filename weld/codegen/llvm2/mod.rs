@@ -726,10 +726,6 @@ pub fn apply_opt_passes(expr: &mut Expr,
                         use_experimental: bool) -> WeldResult<()> {
 
     for pass in opt_passes {
-        // For now...
-        if pass.pass_name() == "vectorize" {
-            continue;
-        }
         let start = PreciseTime::now();
         pass.transform(expr, use_experimental)?;
         let end = PreciseTime::now();

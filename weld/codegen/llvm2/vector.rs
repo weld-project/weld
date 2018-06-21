@@ -15,6 +15,7 @@ use error::*;
 use self::llvm_sys::prelude::*;
 use self::llvm_sys::core::*;
 
+use super::LLVM_VECTOR_WIDTH;
 use super::CodeGenExt;
 use super::intrinsic::Intrinsics;
 
@@ -28,6 +29,7 @@ pub struct Vector {
     new: Option<LLVMValueRef>,
     clone: Option<LLVMValueRef>,
     at: Option<LLVMValueRef>,
+    vat: Option<LLVMValueRef>,
     size: Option<LLVMValueRef>,
 }
 
@@ -60,6 +62,7 @@ impl Vector {
             new: None,
             clone: None,
             at: None,
+            vat: None,
             size: None,
         }
     }
@@ -121,6 +124,32 @@ impl Vector {
 
         let mut args = [vector, index];
         Ok(LLVMBuildCall(builder, self.at.unwrap(), args.as_mut_ptr(), args.len() as u32, c_str!("")))
+    }
+
+    pub unsafe fn generate_vat(&mut self,
+                              builder: LLVMBuilderRef,
+                              vector: LLVMValueRef,
+                              index: LLVMValueRef) -> WeldResult<LLVMValueRef> {
+        if self.vat.is_none() {
+            let mut arg_tys = [self.vector_ty, LLVMInt64TypeInContext(self.context)];
+            let ret_ty = LLVMPointerType(LLVMVectorType(self.elem_ty, LLVM_VECTOR_WIDTH), 0);
+
+            let name = format!("{}.vat", self.name);
+            let (function, builder, _) = self.define_function(ret_ty, &mut arg_tys, name);
+
+            let vector = LLVMGetParam(function, 0);
+            let index = LLVMGetParam(function, 1);
+            let pointer = LLVMBuildExtractValue(builder, vector, 0, c_str!(""));
+            let value_pointer = LLVMBuildGEP(builder, pointer, [index].as_mut_ptr(), 1, c_str!(""));
+            let value_pointer = LLVMBuildBitCast(builder, value_pointer, ret_ty, c_str!(""));
+            LLVMBuildRet(builder, value_pointer);
+
+            self.vat = Some(function);
+            LLVMDisposeBuilder(builder);
+        }
+
+        let mut args = [vector, index];
+        Ok(LLVMBuildCall(builder, self.vat.unwrap(), args.as_mut_ptr(), args.len() as u32, c_str!("")))
     }
 
     pub unsafe fn generate_size(&mut self,
