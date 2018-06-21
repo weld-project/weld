@@ -1,4 +1,4 @@
-//! Defines intrinsics in the IR.
+//! Defines intrinsics in the LLVM IR.
 
 extern crate libc;
 extern crate llvm_sys;

@@ -280,30 +280,20 @@ impl LlvmGenerator {
             intrinsics: intrinsics,
         };
 
-        // Declare each function first to create a reference to it.
-        for func in program.funcs.iter() {
-            gen.declare_function(func)?;
+        // Declare each function first to create a reference to it. Loop body functions are only
+        // called by their ParallelForData terminators, so those are generated on-the-fly during
+        // loop code generation.
+        for func in program.funcs.iter().filter(|f| !f.loop_body) {
+            gen.declare_sir_function(func)?;
         }
 
         // Generate each non-loop body function in turn. Loop body functions are constructed when
         // the For loop is generated, with the loop control flow injected into the function.
-        // Notably, loop bodies are only called from the loop terminator and can in theory be
-        // inlined.
         for func in program.funcs.iter().filter(|f| !f.loop_body) {
-            gen.generate_function(program, func)?;
+            gen.generate_sir_function(program, func)?;
         }
-
-        // Generate the entry point.
-        // gen.generate_entry(&program)?;
         Ok(gen)
     }
-
-    /*
-    /// Generate the entry point to the module.
-    unsafe fn generate_entry(&mut self, _program: &SirProgram) -> WeldResult<()> {
-        Ok(())
-    }
-    */
 
     /// Declare a function in the SIR module and track its reference.
     ///
@@ -314,8 +304,11 @@ impl LlvmGenerator {
     /// generation.
     ///
     /// This method only defines functions and does not generate code for the function.
-    unsafe fn declare_function(&mut self, func: &SirFunction) -> WeldResult<()> {
+    unsafe fn declare_sir_function(&mut self, func: &SirFunction) -> WeldResult<()> {
         // Convert each argument to an SIR function.
+        //
+        // TODO we may need to add additional arguments that are runtime specific, or that only
+        // appear in the loop body.
         let mut arg_tys = vec![];
         for (_, ty) in func.params.iter() {
             arg_tys.push(self.llvm_type(ty)?);
@@ -333,10 +326,10 @@ impl LlvmGenerator {
     }
 
     /// Generate code for a defined SIR `function` from `program`.
-    unsafe fn generate_function(&mut self, program: &SirProgram, func: &SirFunction) -> WeldResult<()> {
+    unsafe fn generate_sir_function(&mut self, program: &SirProgram, func: &SirFunction) -> WeldResult<()> {
         let function = *self.functions.get(&func.id).unwrap();
         if LLVMCountParams(function) != func.params.len() as u32 {
-            return compile_err!("Internal error");
+            unreachable!()
         }
 
         // Create a context for the function.
@@ -352,7 +345,6 @@ impl LlvmGenerator {
         // Note that the call to llvm_type here is also important, since it ensures that each type
         // is defined when generating statements.
         for (symbol, ty) in func.params.iter() {
-            debug!("Adding param symbol {} to context", symbol);
             let name = CString::new(symbol.to_string()).unwrap();
             let value = LLVMBuildAlloca(context.builder, self.llvm_type(ty)?, name.as_ptr()); 
             context.symbols.insert(symbol.clone(), value);
@@ -360,7 +352,6 @@ impl LlvmGenerator {
 
         // Generate local variables.
         for (symbol, ty) in func.locals.iter() {
-            debug!("Adding local symbol {} to context", symbol);
             let name = CString::new(symbol.to_string()).unwrap();
             let value = LLVMBuildAlloca(context.builder, self.llvm_type(ty)?, name.as_ptr()); 
             context.symbols.insert(symbol.clone(), value);
@@ -401,7 +392,7 @@ impl LlvmGenerator {
         for statement in bb.statements.iter() {
             self.generate_statement(context, statement)?;
         }
-        self.generate_terminator(context, &bb)?;
+        self.generate_terminator(context, &bb, None)?;
         Ok(())
     }
 
@@ -570,7 +561,10 @@ impl LlvmGenerator {
     }
 
     /// Generate code for a terminator within an SIR basic block.
-    unsafe fn generate_terminator(&mut self, context: &mut FunctionContext, bb: &BasicBlock) -> WeldResult<()> {
+    unsafe fn generate_terminator(&mut self,
+                                  context: &mut FunctionContext,
+                                  bb: &BasicBlock,
+                                  loop_terminator: Option<LLVMBasicBlockRef>) -> WeldResult<()> {
         use sir::Terminator::*;
         match bb.terminator {
             ProgramReturn(ref _sym) => {
@@ -595,7 +589,11 @@ impl LlvmGenerator {
                 self.gen_for(context, parfor)?;
             }
             EndFunction => {
-                LLVMBuildRetVoid(context.builder);
+                if let Some(bb) = loop_terminator {
+                    LLVMBuildBr(context.builder, bb);
+                } else {
+                    LLVMBuildRetVoid(context.builder);
+                }
             }
             Crash => {
                 // Set errno?
@@ -604,8 +602,6 @@ impl LlvmGenerator {
         };
         Ok(())
     }
-
-    // Common instructions or wrappers.
 
     /// Loads a value.
     ///
@@ -730,6 +726,10 @@ pub fn apply_opt_passes(expr: &mut Expr,
                         use_experimental: bool) -> WeldResult<()> {
 
     for pass in opt_passes {
+        // For now...
+        if pass.pass_name() == "vectorize" {
+            continue;
+        }
         let start = PreciseTime::now();
         pass.transform(expr, use_experimental)?;
         let end = PreciseTime::now();

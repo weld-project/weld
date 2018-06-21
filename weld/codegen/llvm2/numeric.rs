@@ -3,7 +3,6 @@
 //! Specifically, this module provides code generation for the following SIR statements:
 //! * `UnaryOp`
 //! * `BinaryOp`
-//! * `Broadcast`
 //! * `AssignLiteral`
 //! * `Cast`
 //! * `Negate`

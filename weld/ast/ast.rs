@@ -99,6 +99,15 @@ impl Type {
         }
     }
 
+    /// Returns whether this `Type` is a builder.
+    pub fn is_builder(&self) -> bool {
+        use self::Type::Builder;
+        match *self {
+            Builder(_, _) => true,
+            _ => false
+        }
+    }
+
     /// Return the vectorized version of a type.
     ///
     /// This method returns an error if this `Type` is not vectorizable.
