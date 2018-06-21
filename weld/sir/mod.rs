@@ -387,6 +387,7 @@ pub struct SirFunction {
     pub params: BTreeMap<Symbol, Type>,
     pub locals: BTreeMap<Symbol, Type>,
     pub blocks: Vec<BasicBlock>,
+    pub loop_body: bool,
 }
 
 impl SirFunction {
@@ -428,6 +429,7 @@ impl SirProgram {
             params: BTreeMap::new(),
             blocks: vec![],
             locals: BTreeMap::new(),
+            loop_body: false,
         };
         self.funcs.push(func);
         self.funcs.len() - 1
@@ -644,7 +646,7 @@ impl fmt::Display for BasicBlock {
 
 impl fmt::Display for SirFunction {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "F{}:\n", self.id)?;
+        write!(f, "{} F{}:\n", if self.loop_body { "loopbody" } else { "" }, self.id)?;
         write!(f, "Params:\n")?;
         let params_sorted: BTreeMap<&Symbol, &Type> = self.params.iter().collect();
         for (name, ty) in params_sorted {
@@ -1285,6 +1287,7 @@ fn gen_expr(expr: &Expr,
                 let (cur_func, cur_block, builder_sym) =
                     gen_expr(builder, prog, cur_func, cur_block, tracker, multithreaded)?;
                 let body_func = prog.add_func();
+                prog.funcs[body_func].loop_body = true;
                 let body_block = prog.funcs[body_func].add_block();
                 prog.add_local_named(&params[0].ty, &params[0].name, body_func);
                 prog.add_local_named(&params[1].ty, &params[1].name, body_func);

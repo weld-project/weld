@@ -67,8 +67,4 @@ impl ForLoopGenInternal for LlvmGenerator {
     unsafe fn gen_bounds_check(&mut self, ctx: &mut FunctionContext, iterator: &ParallelForIter) -> WeldResult<()> {
         Ok(())
     }
-
-    unsafe fn gen_loop_body_function(&mut self, ctx: &mut FunctionContext, iterator: &ParallelForIter) -> WeldResult<()> {
-        Ok(())
-    }
 }

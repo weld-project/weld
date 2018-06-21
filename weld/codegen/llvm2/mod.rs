@@ -285,8 +285,11 @@ impl LlvmGenerator {
             gen.declare_function(func)?;
         }
 
-        // Generate each function in turn.
-        for func in program.funcs.iter() {
+        // Generate each non-loop body function in turn. Loop body functions are constructed when
+        // the For loop is generated, with the loop control flow injected into the function.
+        // Notably, loop bodies are only called from the loop terminator and can in theory be
+        // inlined.
+        for func in program.funcs.iter().filter(|f| !f.loop_body) {
             gen.generate_function(program, func)?;
         }
 
@@ -304,7 +307,13 @@ impl LlvmGenerator {
 
     /// Declare a function in the SIR module and track its reference.
     ///
-    /// This method does not generate code for the function.
+    /// Since the SIR does not expose runtime-related parameters (e.g., thread IDs and number of
+    /// threads), this function may additionally inject additional parameters into the function
+    /// parameter list if the function is a loop body. Invocations to those functions must be
+    /// managed appropriately to ensure that the parameters added here are passed during call
+    /// generation.
+    ///
+    /// This method only defines functions and does not generate code for the function.
     unsafe fn declare_function(&mut self, func: &SirFunction) -> WeldResult<()> {
         // Convert each argument to an SIR function.
         let mut arg_tys = vec![];
