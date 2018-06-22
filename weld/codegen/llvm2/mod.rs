@@ -78,12 +78,30 @@ pub struct LlvmGenerator {
 pub trait CodeGenExt {
     /// Returns the module used by this code generator.
     fn module(&self) -> LLVMModuleRef;
+
     /// Returns the context used by this code generator.
     fn context(&self) -> LLVMContextRef;
+
+
+    /// Loads a value.
+    ///
+    /// This method includes a check to ensure that `pointer` is actually a pointer: otherwise, the
+    /// LLVM API throws a segmentation fault.
+    unsafe fn load(&mut self,
+                   builder: LLVMBuilderRef,
+                   pointer: LLVMValueRef) -> WeldResult<LLVMValueRef> {
+        use self::llvm_sys::LLVMTypeKind;
+        if LLVMGetTypeKind(LLVMTypeOf(pointer)) != LLVMTypeKind::LLVMPointerTypeKind {
+            unreachable!()
+        } else {
+            Ok(LLVMBuildLoad(builder, pointer, NULL_NAME.as_ptr()))
+        }
+    }
+
+
     /// Generates code to define a function with the given return type and argument type.
     ///
     /// Returns a reference to the function, a builder used to build the function body, and the
-    /// entry basic block of the function. The builder is positioned at the end of the entry basic block.
     unsafe fn define_function<T: Into<Vec<u8>>>(&mut self,
                                       ret_ty: LLVMTypeRef,
                                       arg_tys: &mut [LLVMTypeRef],
@@ -367,8 +385,6 @@ impl LlvmGenerator {
     /// This function does not actually generate the basic block code: it only adds the basic
     /// blocks to the context so they can be forward referenced if necessary.
     unsafe fn gen_basic_block_defs(&mut self, context: &mut FunctionContext) -> WeldResult<()> {
-        // Generate the basic block references by appending each basic block to the function. We do
-        // this first so we can forward reference blocks if necessary.
         for bb in context.sir_function.blocks.iter() {
             let name = CString::new(format!("b{}", bb.id)).unwrap();
             let block = LLVMAppendBasicBlockInContext(self.context,
@@ -629,19 +645,6 @@ impl LlvmGenerator {
             }
         };
         Ok(())
-    }
-
-    /// Loads a value.
-    ///
-    /// This method includes a check to ensure that `pointer` is actually a pointer: otherwise, the
-    /// LLVM API seg-faults.
-    unsafe fn load(&mut self, builder: LLVMBuilderRef, pointer: LLVMValueRef) -> WeldResult<LLVMValueRef> {
-        use self::llvm_sys::LLVMTypeKind;
-        if LLVMGetTypeKind(LLVMTypeOf(pointer)) != LLVMTypeKind::LLVMPointerTypeKind {
-            compile_err!("Non-pointer type passed to load")
-        } else {
-            Ok(LLVMBuildLoad(builder, pointer, NULL_NAME.as_ptr()))
-        }
     }
 
     unsafe fn llvm_type(&mut self, ty: &Type) -> WeldResult<LLVMTypeRef> {
