@@ -4,6 +4,10 @@ extern crate time;
 extern crate libc;
 extern crate llvm_sys;
 
+use std::fs::OpenOptions;
+use std::io::Write;
+use std::path::PathBuf;
+
 use std::fmt;
 use std::ffi::{CStr, CString};
 
@@ -416,39 +420,40 @@ impl LlvmGenerator {
         let argument = LLVMGetParam(function, 0);
         let pointer = LLVMBuildIntToPtr(builder, argument, LLVMPointerType(input_type, 0), c_str!(""));
 
-        let arg_pointer = LLVMBuildStructGEP(builder, pointer, WeldInputArgs::input_index(), c_str!(""));
-
-        let nworkers_pointer = LLVMBuildStructGEP(builder, pointer, WeldInputArgs::nworkers_index(), c_str!(""));
+        let nworkers_pointer = LLVMBuildStructGEP(builder, pointer, WeldInputArgs::nworkers_index(), c_str!("nworkers"));
         let nworkers = self.load(builder, nworkers_pointer)?;
-        let memlimit_pointer = LLVMBuildStructGEP(builder, pointer, WeldInputArgs::memlimit_index(), c_str!(""));
+        let memlimit_pointer = LLVMBuildStructGEP(builder, pointer, WeldInputArgs::memlimit_index(), c_str!("memlimit"));
         let memlimit = self.load(builder, memlimit_pointer)?;
 
+        let run_id = self.intrinsics.call_weld_run_init(builder, nworkers, memlimit, None);
+
+        let arg_pointer = LLVMBuildStructGEP(builder, pointer, WeldInputArgs::input_index(), c_str!("argptr"));
+        // Still a pointer, but now as an integer.
+        let arg_pointer = self.load(builder, arg_pointer)?;
         // The first SIR function is the entry point.
         let ref arg_ty = Struct(program.top_params.iter().map(|p| p.ty.clone()).collect());
         let llvm_arg_ty = self.llvm_type(arg_ty)?;
-
-        let arg_struct_pointer = LLVMBuildIntToPtr(builder, arg_pointer, LLVMPointerType(llvm_arg_ty, 0), c_str!(""));
+        let arg_struct_pointer = LLVMBuildIntToPtr(builder, arg_pointer, LLVMPointerType(llvm_arg_ty, 0), c_str!("arg"));
 
         let mut func_args = vec![];
         for (i, _) in program.top_params.iter().enumerate() {
-            let pointer = LLVMBuildStructGEP(builder, arg_struct_pointer, i as u32, c_str!(""));
+            let pointer = LLVMBuildStructGEP(builder, arg_struct_pointer, i as u32, c_str!("param"));
             let value = self.load(builder, pointer)?;
             func_args.push(value);
         }
-
-        let run_id = self.intrinsics.call_weld_run_init(builder, nworkers, memlimit, None);
 
         // Run the Weld program.
         let entry_function = *self.functions.get(&program.funcs[0].id).unwrap();
         let _ = LLVMBuildCall(builder, entry_function, func_args.as_mut_ptr(), func_args.len() as u32, c_str!(""));
 
         let result = self.intrinsics.call_weld_run_get_result(builder, run_id, None);
+        let result = LLVMBuildPtrToInt(builder, result, self.i64_type(), c_str!(""));
 
         let mut output = LLVMGetUndef(output_type);
-        output = LLVMBuildInsertValue(builder, output, result, WeldOutputArgs::output_index(), c_str!(""));
-        output = LLVMBuildInsertValue(builder, output, run_id, WeldOutputArgs::runid_index(), c_str!(""));
+        output = LLVMBuildInsertValue(builder, output, result, WeldOutputArgs::output_index(), c_str!("result"));
+        output = LLVMBuildInsertValue(builder, output, run_id, WeldOutputArgs::runid_index(), c_str!("runid"));
         // TODO Get and set the actual errno.
-        output = LLVMBuildInsertValue(builder, output, self.i64(0), WeldOutputArgs::errno_index(), c_str!(""));
+        output = LLVMBuildInsertValue(builder, output, self.i64(0), WeldOutputArgs::errno_index(), c_str!("errno"));
 
         let return_pointer = LLVMBuildMalloc(builder, output_type, c_str!(""));
         LLVMBuildStore(builder, output, return_pointer);
@@ -558,14 +563,6 @@ impl LlvmGenerator {
         self.gen_allocas(context)?;
         self.gen_store_parameters(context)?;
         self.gen_basic_block_defs(context)?;
-
-        // Generate the basic block references by appending each basic block to the function. We do
-        // this first so we can forward reference blocks if necessary.
-        for bb in func.blocks.iter() {
-            let name = CString::new(format!("b{}", bb.id)).unwrap();
-            let block = LLVMAppendBasicBlockInContext(self.context, context.llvm_function, name.as_ptr());
-            context.blocks.insert(bb.id, block);
-        }
 
         // Jump from locals to the first basic block.
         LLVMPositionBuilderAtEnd(context.builder, entry_bb);
@@ -910,6 +907,29 @@ impl<'a> Drop for FunctionContext<'a> {
     }
 }
 
+/// Writes code to a file specified by `PathBuf`. Writes a log message if it failed.
+fn write_code(code: &str, ext: &str, timestamp: &str, dir_path: &PathBuf) {
+    let mut options = OpenOptions::new();
+    options.write(true)
+        .create_new(true)
+        .create(true);
+    let ref mut path = dir_path.clone();
+    path.push(format!("code-{}", timestamp));
+    path.set_extension(ext);
+
+    let ref path_str = format!("{}", path.display());
+    match options.open(path) {
+        Ok(ref mut file) => {
+            if let Err(_) = file.write_all(code.as_bytes()) {
+                error!("Write failed: could not write code to file {}", path_str);
+            }
+        }
+        Err(_) => {
+            error!("Open failed: could not write code to file {}", path_str);
+        }
+    }
+}
+
 // XXX Why is this here...
 pub fn apply_opt_passes(expr: &mut Expr,
                         opt_passes: &Vec<Pass>,
@@ -917,6 +937,9 @@ pub fn apply_opt_passes(expr: &mut Expr,
                         use_experimental: bool) -> WeldResult<()> {
 
     for pass in opt_passes {
+        if pass.pass_name() == "vectorize" {
+            continue;
+        }
         let start = PreciseTime::now();
         pass.transform(expr, use_experimental)?;
         let end = PreciseTime::now();
@@ -929,6 +952,7 @@ pub fn apply_opt_passes(expr: &mut Expr,
 pub fn compile_program(program: &Program,
                        conf: &ParsedConf,
                        stats: &mut CompilationStats) -> WeldResult<CompiledModule> {
+
     use syntax::macro_processor;
     use sir;
 
@@ -973,6 +997,16 @@ pub fn compile_program(program: &Program,
     stats.weld_times.push(("SIR Optimization".to_string(), start.to(end)));
 
     let codegen = unsafe { LlvmGenerator::generate(conf.clone(), &sir_prog)? };
+
+    let ref timestamp = format!("{}", time::now().to_timespec().sec);
+    // Dump files if needed. Do this here in case the actual LLVM code gen fails.
+    if conf.dump_code.enabled {
+        info!("Writing code to directory '{}' with timestamp {}", &conf.dump_code.dir.display(), timestamp);
+        write_code(expr.pretty_print().as_ref(), "weld", timestamp, &conf.dump_code.dir);
+        write_code(&format!("{}", &sir_prog), "sir", timestamp, &conf.dump_code.dir);
+        write_code(&format!("{}", &codegen), "ll", timestamp, &conf.dump_code.dir);
+    }
+
     println!("{}", codegen);
     Ok(CompiledModule)
 }

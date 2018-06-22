@@ -18,35 +18,6 @@ use self::llvm_sys::core::*;
 use codegen::llvm2::LLVM_VECTOR_WIDTH;
 use super::{CodeGenExt, FunctionContext, LlvmGenerator};
 
-/*
-#[derive(Clone, PartialEq, Eq, Hash)]
-pub struct ParallelForData {
-    pub data: Vec<ParallelForIter>,
-    pub builder: Symbol,
-    pub data_arg: Symbol,
-    pub builder_arg: Symbol,
-    pub idx_arg: Symbol,
-    pub body: FunctionId,
-    pub cont: FunctionId,
-    pub innermost: bool,
-    /// If `true`, always invoke parallel runtime for the loop.
-    pub always_use_runtime: bool,
-    pub grain_size: Option<i32>
-}
-
-#[derive(Clone, PartialEq, Eq, Hash)]
-pub struct ParallelForIter {
-    pub data: Symbol,
-    pub start: Option<Symbol>,
-    pub end: Option<Symbol>,
-    pub stride: Option<Symbol>,
-    pub kind: IterKind,
-    // NdIter specific fields
-    pub strides: Option<Symbol>,
-    pub shape: Option<Symbol>,
-}
-*/
-
 /// An internal trait for generating parallel For loops.
 pub trait ForLoopGenInternal {
     /// Entry point to generating a for loop.
@@ -125,7 +96,7 @@ impl ForLoopGenInternal for LlvmGenerator {
         LLVMBuildStore(ctx.builder, builder, ctx.get_value(&parfor.builder)?);
 
         // Create a new exit block, jump to it, and then load the arguments to the continuation and
-        // call it. The call is a tail call.
+        // call it.
         let block = LLVMAppendBasicBlockInContext(self.context, ctx.llvm_function, c_str!("exit"));
         LLVMBuildBr(ctx.builder, block);
         LLVMPositionBuilderAtEnd(ctx.builder, block);
@@ -140,7 +111,6 @@ impl ForLoopGenInternal for LlvmGenerator {
         let cont_function = *self.functions.get(&parfor.cont).unwrap();
 
         let _ = LLVMBuildCall(ctx.builder, cont_function, arguments.as_mut_ptr(), arguments.len() as u32, c_str!(""));
-        LLVMSetTailCall(LLVMGetLastInstruction(block), 1);
         LLVMBuildRetVoid(ctx.builder);
         Ok(())
     }
@@ -248,7 +218,7 @@ impl ForLoopGenInternal for LlvmGenerator {
         let max = LLVMGetParam(context.llvm_function, num_iterations_index);
         let i = self.load(context.builder, context.get_value(&parfor.idx_arg)?)?;
         let continue_cond = LLVMBuildICmp(context.builder,
-                                          LLVMIntPredicate::LLVMIntSGE, max, i, c_str!(""));
+                                          LLVMIntPredicate::LLVMIntSGT, max, i, c_str!(""));
 
         // First body block of the SIR function.
         let first_body_block = *context.blocks.get(&0).unwrap();
@@ -277,13 +247,13 @@ impl ForLoopGenInternal for LlvmGenerator {
 
         // Increment the iteration variable i.
         let i = self.load(context.builder, context.get_value(&parfor.idx_arg)?)?;
-        LLVMBuildNSWAdd(context.builder, i, self.i64(1), c_str!(""));
-        LLVMBuildStore(context.builder, i, context.get_value(&parfor.idx_arg)?);
+        let updated = LLVMBuildNSWAdd(context.builder, i, self.i64(1), c_str!(""));
+        LLVMBuildStore(context.builder, updated, context.get_value(&parfor.idx_arg)?);
         LLVMBuildBr(context.builder, loop_entry_bb);
 
         // The last basic block loads the updated builder and returns it.
         LLVMPositionBuilderAtEnd(context.builder, loop_exit_bb);
-        let updated_builder = self.load(context.builder, context.get_value(&parfor.builder)?)?;
+        let updated_builder = self.load(context.builder, context.get_value(&parfor.builder_arg)?)?;
         LLVMBuildRet(context.builder, updated_builder);
         Ok(())
     }
@@ -440,6 +410,7 @@ impl ForLoopGenInternal for LlvmGenerator {
     }
 
     unsafe fn gen_check_equal(&mut self, ctx: &mut FunctionContext, iterations: &Vec<LLVMValueRef>) -> WeldResult<()> {
+        // TODO
         Ok(())
     }
 }
