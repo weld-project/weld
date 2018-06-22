@@ -87,6 +87,8 @@ pub trait ForLoopGenInternal {
 
 impl ForLoopGenInternal for LlvmGenerator {
     unsafe fn gen_for_internal(&mut self, ctx: &mut FunctionContext, parfor: &ParallelForData) -> WeldResult<()> {
+        // Generate a bounds check and determine the number of iterations each iterator will
+        // produce.
         let ref mut num_iterations = vec![];
         for iter in parfor.data.iter() {
             let iterations = self.gen_bounds_check(ctx, iter)?;
@@ -104,7 +106,6 @@ impl ForLoopGenInternal for LlvmGenerator {
         assert!(sir_function.loop_body);
 
         self.gen_loop_body_function(ctx.sir_program, sir_function, parfor)?;
-
         let body_function = *self.functions.get(&parfor.body).unwrap();
 
         // The parameters of the body function have symbol names that must exist in the current
@@ -115,8 +116,7 @@ impl ForLoopGenInternal for LlvmGenerator {
             arguments.push(value);
         }
         let iterations = num_iterations[0];
-        // The body function has an additional arguement representing the number of iterations the
-        // loop executes for.
+        // The body function has an additional arguement representing the number of iterations.
         arguments.push(iterations);
 
         // Call the body function, which runs the loop and updates the builder. The updated builder
@@ -170,7 +170,10 @@ impl ForLoopGenInternal for LlvmGenerator {
     ///     br loop.entry
     /// loop.exit:
     ///     return { builders }
-    unsafe fn gen_loop_body_function(&mut self, program: &SirProgram, func: &SirFunction, parfor: &ParallelForData) -> WeldResult<()> {
+    unsafe fn gen_loop_body_function(&mut self,
+                                     program: &SirProgram,
+                                     func: &SirFunction,
+                                     parfor: &ParallelForData) -> WeldResult<()> {
         // Construct the return type, which is the builders passed into the function sorted by the
         // argument parameter names.
         let builders: Vec<Type> = func.params.values()
@@ -183,10 +186,7 @@ impl ForLoopGenInternal for LlvmGenerator {
         assert_eq!(builders.len(), 1);
         let ref weld_ty = builders[0];
 
-        let mut arg_tys = vec![];
-        for (_, ty) in func.params.iter() {
-            arg_tys.push(self.llvm_type(ty)?);
-        }
+        let mut arg_tys = self.argument_types(func)?;
         // The last argument is the *total* number of iterations across all threads (in a
         // multi-threaded setting) that this loop will execute for.
         arg_tys.push(self.i64_type());
@@ -202,51 +202,33 @@ impl ForLoopGenInternal for LlvmGenerator {
 
         // Create a context for the function.
         let ref mut context = FunctionContext::new(self.context, program, func, function);
-
         // Create the entry basic block, where we define alloca'd variables.
-        let entry_bb = LLVMAppendBasicBlockInContext(self.context, context.llvm_function, c_str!("entry"));
+        let entry_bb = LLVMAppendBasicBlockInContext(self.context,
+                                                     context.llvm_function,
+                                                     c_str!("entry"));
         LLVMPositionBuilderAtEnd(context.builder, entry_bb);
 
-        // Add the function parameters. Function parameters are stored in alloca'd variables. The
-        // function parameters are always enumerated alphabetically sorted by symbol name.
-        //
-        // Note that the call to llvm_type here is also important, since it ensures that each type
-        // is defined when generating statements.
-        for (symbol, ty) in func.params.iter() {
-            let name = CString::new(symbol.to_string()).unwrap();
-            let value = LLVMBuildAlloca(context.builder, self.llvm_type(ty)?, name.as_ptr()); 
-            context.symbols.insert(symbol.clone(), value);
-        }
+        self.gen_allocas(context)?;
+        self.gen_store_parameters(context)?;
 
-        // Generate local variables.
-        for (symbol, ty) in func.locals.iter() {
-            let name = CString::new(symbol.to_string()).unwrap();
-            let value = LLVMBuildAlloca(context.builder, self.llvm_type(ty)?, name.as_ptr()); 
-            context.symbols.insert(symbol.clone(), value);
-        }
+        // Append the loop start basic blocks.
+        let loop_begin_bb = LLVMAppendBasicBlockInContext(self.context,
+                                                          context.llvm_function,
+                                                          c_str!("loop.begin"));
+        let loop_entry_bb = LLVMAppendBasicBlockInContext(self.context,
+                                                          context.llvm_function,
+                                                          c_str!("loop.entry"));
 
-        // Store the parameter values in the alloca'd symbols.
-        for (i, (symbol, _)) in func.params.iter().enumerate() {
-            let pointer = context.get_value(symbol)?;
-            let value = LLVMGetParam(function, i as u32);
-            LLVMBuildStore(context.builder, value, pointer);
-        }
-
-        // Append the loop basic blocks.
-        let loop_begin_bb = LLVMAppendBasicBlockInContext(self.context, context.llvm_function, c_str!("loop.begin"));
-        let loop_entry_bb = LLVMAppendBasicBlockInContext(self.context, context.llvm_function, c_str!("loop.entry"));
-
-        // Generate the basic block references by appending each basic block to the function. We do
-        // this first so we can forward reference blocks if necessary.
-        for bb in func.blocks.iter() {
-            let name = CString::new(format!("b{}", bb.id)).unwrap();
-            let block = LLVMAppendBasicBlockInContext(self.context, context.llvm_function, name.as_ptr());
-            context.blocks.insert(bb.id, block);
-        }
+        // Add the SIR function basic blocks.
+        self.gen_basic_block_defs(context)?;
 
         // Finally, add the loop end basic blocks.
-        let loop_end_bb = LLVMAppendBasicBlockInContext(self.context, context.llvm_function, c_str!("loop.end"));
-        let loop_exit_bb = LLVMAppendBasicBlockInContext(self.context, context.llvm_function, c_str!("loop.exit"));
+        let loop_end_bb = LLVMAppendBasicBlockInContext(self.context,
+                                                        context.llvm_function,
+                                                        c_str!("loop.end"));
+        let loop_exit_bb = LLVMAppendBasicBlockInContext(self.context,
+                                                         context.llvm_function,
+                                                         c_str!("loop.exit"));
 
         // Build the loop.
         LLVMPositionBuilderAtEnd(context.builder, entry_bb);
@@ -256,8 +238,6 @@ impl ForLoopGenInternal for LlvmGenerator {
         LLVMBuildStore(context.builder,
                         self.load(context.builder, context.get_value(&parfor.builder)?)?,
                         context.get_value(&parfor.builder_arg)?);
-
-        // XXX set the start to a function of the thread ID in a multi-threaded setting.
         LLVMBuildStore(context.builder,
                        self.i64(0),
                        context.get_value(&parfor.idx_arg)?);
@@ -267,13 +247,13 @@ impl ForLoopGenInternal for LlvmGenerator {
 
         let max = LLVMGetParam(context.llvm_function, num_iterations_index);
         let i = self.load(context.builder, context.get_value(&parfor.idx_arg)?)?;
-        let continue_cond = LLVMBuildICmp(context.builder, LLVMIntPredicate::LLVMIntSGE, max, i, c_str!(""));
+        let continue_cond = LLVMBuildICmp(context.builder,
+                                          LLVMIntPredicate::LLVMIntSGE, max, i, c_str!(""));
 
         // First body block of the SIR function.
         let first_body_block = *context.blocks.get(&0).unwrap();
 
         let _ = LLVMBuildCondBr(context.builder, continue_cond, first_body_block, loop_exit_bb);
-
         LLVMPositionBuilderAtEnd(context.builder, first_body_block);
 
         // Load the loop element.

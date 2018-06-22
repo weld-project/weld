@@ -203,6 +203,10 @@ pub trait CodeGenExt {
         LLVMDoubleTypeInContext(self.context())
     }
 
+    unsafe fn void_type(&self) -> LLVMTypeRef {
+        LLVMVoidTypeInContext(self.context())
+    }
+
     unsafe fn bool(&self, v: bool) -> LLVMValueRef {
         LLVMConstInt(self.bool_type(), v as c_ulonglong, 0)
     }
@@ -295,6 +299,15 @@ impl LlvmGenerator {
         Ok(gen)
     }
 
+    /// Build the list of argument and return type for an SIR function.
+    unsafe fn argument_types(&mut self, func: &SirFunction) -> WeldResult<Vec<LLVMTypeRef>> {
+        let mut types = vec![];
+        for (_, ty) in func.params.iter() {
+            types.push(self.llvm_type(ty)?);
+        }
+        Ok(types)
+    }
+
     /// Declare a function in the SIR module and track its reference.
     ///
     /// Since the SIR does not expose runtime-related parameters (e.g., thread IDs and number of
@@ -305,17 +318,8 @@ impl LlvmGenerator {
     ///
     /// This method only defines functions and does not generate code for the function.
     unsafe fn declare_sir_function(&mut self, func: &SirFunction) -> WeldResult<()> {
-        // Convert each argument to an SIR function.
-        //
-        // TODO we may need to add additional arguments that are runtime specific, or that only
-        // appear in the loop body.
-        let mut arg_tys = vec![];
-        for (_, ty) in func.params.iter() {
-            arg_tys.push(self.llvm_type(ty)?);
-        }
-
-        // All SIR functions have a void return type.
-        let ret_ty = LLVMVoidTypeInContext(self.context);
+        let mut arg_tys = self.argument_types(func)?;
+        let ret_ty = self.void_type();
         let func_ty = LLVMFunctionType(ret_ty, arg_tys.as_mut_ptr(), arg_tys.len() as u32, 0);
         let name = CString::new(format!("f{}", func.id)).unwrap();
         let function = LLVMAddFunction(self.module, name.as_ptr(), func_ty);
@@ -325,7 +329,59 @@ impl LlvmGenerator {
         Ok(())
     }
 
+    /// Generates the Allocas for a function.
+    ///
+    /// The allocas should generally be generated in the entry block of the function. The caller
+    /// should ensure that the context builder is appropriately positioned.
+    unsafe fn gen_allocas(&mut self, context: &mut FunctionContext) -> WeldResult<()> {
+        // Add the function parameters, which are stored in alloca'd variables. The
+        // function parameters are always enumerated alphabetically sorted by symbol name.
+        for (symbol, ty) in context.sir_function.params.iter() {
+            let name = CString::new(symbol.to_string()).unwrap();
+            let value = LLVMBuildAlloca(context.builder, self.llvm_type(ty)?, name.as_ptr()); 
+            context.symbols.insert(symbol.clone(), value);
+        }
+
+        // alloca the local variables.
+        for (symbol, ty) in context.sir_function.locals.iter() {
+            let name = CString::new(symbol.to_string()).unwrap();
+            let value = LLVMBuildAlloca(context.builder, self.llvm_type(ty)?, name.as_ptr()); 
+            context.symbols.insert(symbol.clone(), value);
+        }
+        Ok(())
+    }
+
+    /// Generates code to store function parameters in alloca'd variables.
+    unsafe fn gen_store_parameters(&mut self, context: &mut FunctionContext) -> WeldResult<()> {
+        // Store the parameter values in the alloca'd symbols.
+        for (i, (symbol, _)) in context.sir_function.params.iter().enumerate() {
+            let pointer = context.get_value(symbol)?;
+            let value = LLVMGetParam(context.llvm_function, i as u32);
+            LLVMBuildStore(context.builder, value, pointer);
+        }
+        Ok(())
+    }
+
+    /// Generates code to define each basic block in the function.
+    ///
+    /// This function does not actually generate the basic block code: it only adds the basic
+    /// blocks to the context so they can be forward referenced if necessary.
+    unsafe fn gen_basic_block_defs(&mut self, context: &mut FunctionContext) -> WeldResult<()> {
+        // Generate the basic block references by appending each basic block to the function. We do
+        // this first so we can forward reference blocks if necessary.
+        for bb in context.sir_function.blocks.iter() {
+            let name = CString::new(format!("b{}", bb.id)).unwrap();
+            let block = LLVMAppendBasicBlockInContext(self.context,
+                                                      context.llvm_function,
+                                                      name.as_ptr());
+            context.blocks.insert(bb.id, block);
+        }
+        Ok(())
+    }
+
     /// Generate code for a defined SIR `function` from `program`.
+    ///
+    /// This function specifically generates code for non-loop body functions.
     unsafe fn generate_sir_function(&mut self, program: &SirProgram, func: &SirFunction) -> WeldResult<()> {
         let function = *self.functions.get(&func.id).unwrap();
         if LLVMCountParams(function) != func.params.len() as u32 {
@@ -336,33 +392,14 @@ impl LlvmGenerator {
         let ref mut context = FunctionContext::new(self.context, program, func, function);
 
         // Create the entry basic block, where we define alloca'd variables.
-        let entry_bb = LLVMAppendBasicBlockInContext(self.context, context.llvm_function, c_str!("entry"));
+        let entry_bb = LLVMAppendBasicBlockInContext(self.context,
+                                                     context.llvm_function,
+                                                     c_str!("entry"));
         LLVMPositionBuilderAtEnd(context.builder, entry_bb);
 
-        // Add the function parameters. Function parameters are stored in alloca'd variables. The
-        // function parameters are always enumerated alphabetically sorted by symbol name.
-        //
-        // Note that the call to llvm_type here is also important, since it ensures that each type
-        // is defined when generating statements.
-        for (symbol, ty) in func.params.iter() {
-            let name = CString::new(symbol.to_string()).unwrap();
-            let value = LLVMBuildAlloca(context.builder, self.llvm_type(ty)?, name.as_ptr()); 
-            context.symbols.insert(symbol.clone(), value);
-        }
-
-        // Generate local variables.
-        for (symbol, ty) in func.locals.iter() {
-            let name = CString::new(symbol.to_string()).unwrap();
-            let value = LLVMBuildAlloca(context.builder, self.llvm_type(ty)?, name.as_ptr()); 
-            context.symbols.insert(symbol.clone(), value);
-        }
-
-        // Store the parameter values in the alloca'd symbols.
-        for (i, (symbol, _)) in func.params.iter().enumerate() {
-            let pointer = context.get_value(symbol)?;
-            let value = LLVMGetParam(function, i as u32);
-            LLVMBuildStore(context.builder, value, pointer);
-        }
+        self.gen_allocas(context)?;
+        self.gen_store_parameters(context)?;
+        self.gen_basic_block_defs(context)?;
 
         // Generate the basic block references by appending each basic block to the function. We do
         // this first so we can forward reference blocks if necessary.
@@ -378,21 +415,12 @@ impl LlvmGenerator {
 
         // Generate code for the basic blocks in order.
         for bb in func.blocks.iter() {
-            self.generate_basic_block(context, bb)?;
+            LLVMPositionBuilderAtEnd(context.builder, context.get_block(&bb.id)?);
+            for statement in bb.statements.iter() {
+                self.generate_statement(context, statement)?;
+            }
+            self.generate_terminator(context, &bb, None)?;
         }
-
-        Ok(())
-    }
-
-    /// Generate code for a basic block.
-    ///
-    /// This function should only be called once per basic block.
-    unsafe fn generate_basic_block(&mut self, context: &mut FunctionContext, bb: &BasicBlock) -> WeldResult<()> {
-        LLVMPositionBuilderAtEnd(context.builder, context.get_block(&bb.id)?);
-        for statement in bb.statements.iter() {
-            self.generate_statement(context, statement)?;
-        }
-        self.generate_terminator(context, &bb, None)?;
         Ok(())
     }
 
