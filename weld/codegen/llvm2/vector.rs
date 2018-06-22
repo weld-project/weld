@@ -79,11 +79,10 @@ impl Vector {
             let (function, builder, _) = self.define_function(ret_ty, &mut arg_tys, name);
 
             let size = LLVMGetParam(function, 0);
-            let elem_size_ptr = LLVMConstGEP(self.null_ptr(self.elem_ty), [self.i32(1)].as_mut_ptr(), 1);
-            let elem_size = LLVMBuildPtrToInt(builder, elem_size_ptr, self.i64_type(), c_str!("elemSize"));
+            let elem_size = self.size_of(self.elem_ty);
             let alloc_size = LLVMBuildMul(builder, elem_size, size, c_str!("size"));
-            let run_id = intrinsics.call_weld_rt_get_run_id(builder, Some(c_str!("runId")));
-            let bytes = intrinsics.call_weld_rt_malloc(builder, run_id, alloc_size, Some(c_str!("bytes")));
+            let run_id = intrinsics.call_weld_run_get_run_id(builder, Some(c_str!("runId")));
+            let bytes = intrinsics.call_weld_run_malloc(builder, run_id, alloc_size, Some(c_str!("bytes")));
             let elements = LLVMBuildBitCast(builder, bytes, LLVMPointerType(self.elem_ty, 0), c_str!("elements"));
             let one = LLVMBuildInsertValue(builder,
                                            LLVMGetUndef(self.vector_ty),

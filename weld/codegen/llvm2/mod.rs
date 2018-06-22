@@ -15,6 +15,7 @@ use ast::*;
 use conf::ParsedConf;
 use error::*;
 use optimizer::*;
+use runtime::WeldRuntimeErrno;
 use sir::*;
 use syntax::program::Program;
 use util::stats::CompilationStats;
@@ -45,6 +46,74 @@ use self::builder::merger;
 
 pub struct CompiledModule;
 
+/// A wrapper for a struct passed as input to the Weld runtime.
+#[derive(Clone, Debug)]
+#[repr(C)]
+pub struct WeldInputArgs {
+    pub input: i64,
+    pub nworkers: i32,
+    pub mem_limit: i64,
+}
+
+impl WeldInputArgs {
+    unsafe fn llvm_type(context: LLVMContextRef) -> LLVMTypeRef {
+        let mut types = [
+            LLVMInt64TypeInContext(context),
+            LLVMInt32TypeInContext(context),
+            LLVMInt64TypeInContext(context)
+        ];
+        let args = LLVMStructCreateNamed(context, c_str!("input_args_t"));
+        LLVMStructSetBody(args, types.as_mut_ptr(), types.len() as u32, 0);
+        args
+    }
+
+    fn input_index() -> u32 {
+        0
+    }
+
+    fn nworkers_index() -> u32 {
+        1
+    }
+
+    fn memlimit_index() -> u32 {
+        2
+    }
+}
+
+/// A wrapper for outputs passed out of the Weld runtime.
+#[derive(Clone, Debug)]
+#[repr(C)]
+pub struct WeldOutputArgs {
+    pub output: i64,
+    pub run_id: i64,
+    pub errno: WeldRuntimeErrno,
+}
+
+impl WeldOutputArgs {
+    unsafe fn llvm_type(context: LLVMContextRef) -> LLVMTypeRef {
+        let mut types = [
+            LLVMInt64TypeInContext(context),
+            LLVMInt64TypeInContext(context),
+            LLVMInt64TypeInContext(context)
+        ];
+        let args = LLVMStructCreateNamed(context, c_str!("output_args_t"));
+        LLVMStructSetBody(args, types.as_mut_ptr(), types.len() as u32, 0);
+        args
+    }
+
+    fn output_index() -> u32 {
+        0
+    }
+
+    fn runid_index() -> u32 {
+        1
+    }
+
+    fn errno_index() -> u32 {
+        2
+    }
+}
+
 /// A struct holding the global codegen state for an SIR program.
 pub struct LlvmGenerator {
     /// A configuration for generating code.
@@ -57,7 +126,7 @@ pub struct LlvmGenerator {
     functions: FnvHashMap<FunctionId, LLVMValueRef>,
     /// A map tracking generated vectors.
     ///
-    /// The key maps the vector's element type to the vector's type reference and methods on it.
+    /// The key maps the element type to the vector's type reference and methods on it.
     vectors: FnvHashMap<Type, vector::Vector>,
     /// A map tracking generated mergers.
     ///
@@ -82,7 +151,6 @@ pub trait CodeGenExt {
     /// Returns the context used by this code generator.
     fn context(&self) -> LLVMContextRef;
 
-
     /// Loads a value.
     ///
     /// This method includes a check to ensure that `pointer` is actually a pointer: otherwise, the
@@ -97,7 +165,6 @@ pub trait CodeGenExt {
             Ok(LLVMBuildLoad(builder, pointer, NULL_NAME.as_ptr()))
         }
     }
-
 
     /// Generates code to define a function with the given return type and argument type.
     ///
@@ -150,7 +217,7 @@ pub trait CodeGenExt {
                     Multiply => Ok(LLVMConstInt(ty, 1, signed)),
                     Max => Ok(LLVMConstInt(ty, ::std::u64::MIN, signed)),
                     Min => Ok(LLVMConstInt(ty, ::std::u64::MAX, signed)),
-                    _ => compile_err!("No identity for given type and op"),
+                    _ => unreachable!(),
                 }
             }
             F32  => {
@@ -160,7 +227,7 @@ pub trait CodeGenExt {
                     Multiply => Ok(LLVMConstReal(ty, 1.0)),
                     Max => Ok(LLVMConstReal(ty, ::std::f32::MIN as c_double)),
                     Min => Ok(LLVMConstReal(ty, ::std::f32::MAX as c_double)),
-                    _ => compile_err!("No identity for given type and op"),
+                    _ => unreachable!(),
                 }
             }
             F64 => {
@@ -170,11 +237,17 @@ pub trait CodeGenExt {
                     Multiply => Ok(LLVMConstReal(ty, 1.0)),
                     Max => Ok(LLVMConstReal(ty, ::std::f64::MIN)),
                     Min => Ok(LLVMConstReal(ty, ::std::f64::MAX)),
-                    _ => compile_err!("No identity for given type and op"),
+                    _ => unreachable!(),
                 }
             }
-            _ => compile_err!("No identity for given type and op"),
+            _ => unreachable!(),
         }
+    }
+
+    /// Returns the constant size of a type.
+    unsafe fn size_of(&self, ty: LLVMTypeRef) -> LLVMValueRef {
+        let size_pointer = LLVMConstGEP(self.null_ptr(ty), [self.i32(1)].as_mut_ptr(), 1);
+        LLVMConstPtrToInt(size_pointer, self.i64_type())
     }
 
     unsafe fn bool_type(&self) -> LLVMTypeRef {
@@ -314,7 +387,76 @@ impl LlvmGenerator {
         for func in program.funcs.iter().filter(|f| !f.loop_body) {
             gen.generate_sir_function(program, func)?;
         }
+
+        // Generates a callable entry function in the module.
+        gen.gen_entry(program)?;
+
         Ok(gen)
+    }
+
+    /// Generates the entry point to the Weld program.
+    ///
+    /// The entry function takes an `i64` and returns an `i64`. Both represent pointers that
+    /// point to a `WeldInputAgs` and `WeldOutputArgs` respectively.
+    unsafe fn gen_entry(&mut self, program: &SirProgram) -> WeldResult<()> {
+        use ast::Type::Struct;
+
+        let input_type = WeldInputArgs::llvm_type(self.context);
+        let output_type = WeldOutputArgs::llvm_type(self.context);
+
+        let name = CString::new("run").unwrap();
+        let func_ty = LLVMFunctionType(self.i64_type(), [self.i64_type()].as_mut_ptr(), 1, 0);
+        let function = LLVMAddFunction(self.module, name.as_ptr(), func_ty);
+        LLVMSetLinkage(function, LLVMLinkage::LLVMExternalLinkage);
+
+        let builder = LLVMCreateBuilderInContext(self.context);
+        let block = LLVMAppendBasicBlockInContext(self.context, function, c_str!(""));
+        LLVMPositionBuilderAtEnd(builder, block);
+
+        let argument = LLVMGetParam(function, 0);
+        let pointer = LLVMBuildIntToPtr(builder, argument, LLVMPointerType(input_type, 0), c_str!(""));
+
+        let arg_pointer = LLVMBuildStructGEP(builder, pointer, WeldInputArgs::input_index(), c_str!(""));
+
+        let nworkers_pointer = LLVMBuildStructGEP(builder, pointer, WeldInputArgs::nworkers_index(), c_str!(""));
+        let nworkers = self.load(builder, nworkers_pointer)?;
+        let memlimit_pointer = LLVMBuildStructGEP(builder, pointer, WeldInputArgs::memlimit_index(), c_str!(""));
+        let memlimit = self.load(builder, memlimit_pointer)?;
+
+        // The first SIR function is the entry point.
+        let ref arg_ty = Struct(program.top_params.iter().map(|p| p.ty.clone()).collect());
+        let llvm_arg_ty = self.llvm_type(arg_ty)?;
+
+        let arg_struct_pointer = LLVMBuildIntToPtr(builder, arg_pointer, LLVMPointerType(llvm_arg_ty, 0), c_str!(""));
+
+        let mut func_args = vec![];
+        for (i, _) in program.top_params.iter().enumerate() {
+            let pointer = LLVMBuildStructGEP(builder, arg_struct_pointer, i as u32, c_str!(""));
+            let value = self.load(builder, pointer)?;
+            func_args.push(value);
+        }
+
+        let run_id = self.intrinsics.call_weld_run_init(builder, nworkers, memlimit, None);
+
+        // Run the Weld program.
+        let entry_function = *self.functions.get(&program.funcs[0].id).unwrap();
+        let _ = LLVMBuildCall(builder, entry_function, func_args.as_mut_ptr(), func_args.len() as u32, c_str!(""));
+
+        let result = self.intrinsics.call_weld_run_get_result(builder, run_id, None);
+
+        let mut output = LLVMGetUndef(output_type);
+        output = LLVMBuildInsertValue(builder, output, result, WeldOutputArgs::output_index(), c_str!(""));
+        output = LLVMBuildInsertValue(builder, output, run_id, WeldOutputArgs::runid_index(), c_str!(""));
+        // TODO Get and set the actual errno.
+        output = LLVMBuildInsertValue(builder, output, self.i64(0), WeldOutputArgs::errno_index(), c_str!(""));
+
+        let return_pointer = LLVMBuildMalloc(builder, output_type, c_str!(""));
+        LLVMBuildStore(builder, output, return_pointer);
+        let return_value  = LLVMBuildPtrToInt(builder, return_pointer, self.i64_type(), c_str!(""));
+        LLVMBuildRet(builder, return_value);
+
+        LLVMDisposeBuilder(builder);
+        Ok(())
     }
 
     /// Build the list of argument and return type for an SIR function.
@@ -611,7 +753,15 @@ impl LlvmGenerator {
                                   loop_terminator: Option<LLVMBasicBlockRef>) -> WeldResult<()> {
         use sir::Terminator::*;
         match bb.terminator {
-            ProgramReturn(ref _sym) => {
+            ProgramReturn(ref sym) => {
+                let value = self.load(context.builder, context.get_value(sym)?)?;
+                let run_id = self.intrinsics.call_weld_run_get_run_id(context.builder, None);
+                let ty = LLVMTypeOf(value);
+                let size = self.size_of(ty);
+                let bytes = self.intrinsics.call_weld_run_malloc(context.builder, run_id, size, None);
+                let pointer = LLVMBuildBitCast(context.builder, bytes, LLVMPointerType(ty, 0), c_str!(""));
+                LLVMBuildStore(context.builder, value, pointer);
+                let _ = self.intrinsics.call_weld_run_set_result(context.builder, bytes, None);
                 LLVMBuildRetVoid(context.builder);
             }
             Branch { ref cond, ref on_true, ref on_false } => {
@@ -669,25 +819,28 @@ impl LlvmGenerator {
             }
             Simd(kind) => {
                 let base = self.llvm_type(&Scalar(kind))?;
-                // TODO set the vector width...
                 LLVMVectorType(base, LLVM_VECTOR_WIDTH)
             }
             Struct(ref elems) => {
-                let mut llvm_types: Vec<_> = elems.iter().map(&mut |t| self.llvm_type(t)).collect::<WeldResult<_>>()?;
-                LLVMStructTypeInContext(self.context, llvm_types.as_mut_ptr(), llvm_types.len() as u32, 0)
+                let mut llvm_types: Vec<_> = elems.iter()
+                    .map(&mut |t| self.llvm_type(t)).collect::<WeldResult<_>>()?;
+                LLVMStructTypeInContext(self.context,
+                                        llvm_types.as_mut_ptr(),
+                                        llvm_types.len() as u32, 0)
             }
             Vector(ref elem_type) => {
                 // Vectors are a named type, so only generate the name once.
                 if !self.vectors.contains_key(elem_type) {
                     let llvm_elem_type = self.llvm_type(elem_type)?;
-                    let vector = vector::Vector::define("vec", llvm_elem_type, self.context, self.module);
+                    let vector = vector::Vector::define("vec",
+                                                        llvm_elem_type,
+                                                        self.context,
+                                                        self.module);
                     self.vectors.insert(elem_type.as_ref().clone(), vector);
                 }
                 self.vectors.get(elem_type).unwrap().vector_ty
             }
-            Function(_, _) | Unknown => {
-                return compile_err!("Invalid type {} for code generation", ty)
-            }
+            Function(_, _) | Unknown => unreachable!(),
         };
         Ok(result)
     }
@@ -695,6 +848,8 @@ impl LlvmGenerator {
 
 impl Drop for LlvmGenerator {
     fn drop(&mut self) {
+        // TODO only free these if the generator *did not* compiled code. Otherwise,
+        // the compiled module takes ownership of these references.
         unsafe {
             LLVMDisposeModule(self.module);
             LLVMContextDispose(self.context);
@@ -736,11 +891,16 @@ impl<'a> FunctionContext<'a> {
     }
 
     pub fn get_value(&self, sym: &Symbol) -> WeldResult<LLVMValueRef> {
-        self.symbols.get(sym).cloned().ok_or(WeldCompileError::new("Undefined symbol in function codegen"))
+        self.symbols
+            .get(sym)
+            .cloned()
+            .ok_or(WeldCompileError::new("Undefined symbol in function codegen"))
     }
 
     pub fn get_block(&self, id: &BasicBlockId) -> WeldResult<LLVMBasicBlockRef> {
-        self.blocks.get(id).cloned().ok_or(WeldCompileError::new("Undefined basic block in function codegen"))
+        self.blocks.get(id)
+            .cloned()
+            .ok_or(WeldCompileError::new("Undefined basic block in function codegen"))
     }
 }
 
