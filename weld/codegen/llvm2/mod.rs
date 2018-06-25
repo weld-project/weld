@@ -7,29 +7,22 @@ extern crate time;
 extern crate libc;
 extern crate llvm_sys;
 
-use std::fs::OpenOptions;
-use std::io::Write;
-use std::path::PathBuf;
-
 use std::fmt;
 use std::ffi::{CStr, CString};
 
 use fnv::FnvHashMap;
 use libc::{c_char, c_double, c_ulonglong};
-use time::PreciseTime;
 
-use ast::*;
 use conf::ParsedConf;
 use error::*;
-use optimizer::*;
-use runtime::{WeldRuntimeErrno, WeldRun};
 use sir::*;
-use syntax::program::Program;
 use util::stats::CompilationStats;
 
 use self::llvm_sys::prelude::*;
 use self::llvm_sys::core::*;
 use self::llvm_sys::LLVMLinkage;
+
+use super::*;
 
 static NULL_NAME:[c_char; 1] = [0];
 
@@ -52,37 +45,42 @@ mod vector;
 
 use self::builder::merger;
 
-/// A compiled module.
-pub struct CompiledModule {
-    module: jit::CompiledModule,
-    param_types: Vec<Type>,
-    return_type: Type,
-}
+pub fn compile(program: &SirProgram,
+               conf: &ParsedConf,
+               stats: &mut CompilationStats,
+               dump_prefix: &str) -> WeldResult<Box<Runnable>> {
 
-impl CompiledModule {
-    pub fn run(&self, data: i64) -> i64 {
-        self.module.run(data)
+    info!("Compiling using single thread runtime");
+
+    use runtime::strt;
+
+    let codegen = unsafe { LlvmGenerator::generate(conf.clone(), &program)? };
+    if conf.dump_code.enabled {
+        write_code(codegen.to_string(), "ll", dump_prefix, &conf.dump_code.dir);
+    }
+    trace!("{}", codegen);
+
+    unsafe {
+        strt::weld_init();
     }
 
-    pub fn param_types(&self) -> &Vec<Type> {
-        &self.param_types
-    }
+    let module = unsafe { jit::compile(codegen.context, codegen.module, conf, stats)? };
 
-    pub fn return_type(&self) -> &Type {
-        &self.return_type
+    if conf.dump_code.enabled {
+        write_code(module.asm()?, "S", format!("{}-opt", dump_prefix), &conf.dump_code.dir);
+        write_code(module.llvm()?, "ll", format!("{}-opt", dump_prefix), &conf.dump_code.dir);
     }
+    Ok(Box::new(module))
 }
 
-/// A wrapper for a struct passed as input to the Weld runtime.
-#[derive(Clone, Debug)]
-#[repr(C)]
-pub struct WeldInputArgs {
-    pub input: i64,
-    pub nworkers: i32,
-    pub mem_limit: i64,
+trait LlvmInputArg {
+    unsafe fn llvm_type(context: LLVMContextRef) -> LLVMTypeRef; 
+    fn input_index() -> u32;
+    fn nworkers_index() -> u32;
+    fn memlimit_index() -> u32;
 }
 
-impl WeldInputArgs {
+impl LlvmInputArg for WeldInputArgs {
     unsafe fn llvm_type(context: LLVMContextRef) -> LLVMTypeRef {
         let mut types = [
             LLVMInt64TypeInContext(context),
@@ -107,16 +105,14 @@ impl WeldInputArgs {
     }
 }
 
-/// A wrapper for outputs passed out of the Weld runtime.
-#[derive(Clone, Debug)]
-#[repr(C)]
-pub struct WeldOutputArgs {
-    pub output: i64,
-    pub run: *mut WeldRun,
-    pub errno: WeldRuntimeErrno,
+trait LlvmOutputArg {
+    unsafe fn llvm_type(context: LLVMContextRef) -> LLVMTypeRef; 
+    fn output_index() -> u32;
+    fn runid_index() -> u32;
+    fn errno_index() -> u32;
 }
 
-impl WeldOutputArgs {
+impl LlvmOutputArg for WeldOutputArgs {
     unsafe fn llvm_type(context: LLVMContextRef) -> LLVMTypeRef {
         let mut types = [
             LLVMInt64TypeInContext(context),
@@ -931,124 +927,5 @@ impl<'a> FunctionContext<'a> {
 impl<'a> Drop for FunctionContext<'a> {
     fn drop(&mut self) {
         unsafe { LLVMDisposeBuilder(self.builder); }
-    }
-}
-
-/// Writes code to a file specified by `PathBuf`. Writes a log message if it failed.
-fn write_code(code: &str, ext: &str, timestamp: &str, dir_path: &PathBuf) {
-    let mut options = OpenOptions::new();
-    options.write(true)
-        .create_new(true)
-        .create(true);
-    let ref mut path = dir_path.clone();
-    path.push(format!("code-{}", timestamp));
-    path.set_extension(ext);
-
-    let ref path_str = format!("{}", path.display());
-    match options.open(path) {
-        Ok(ref mut file) => {
-            if let Err(_) = file.write_all(code.as_bytes()) {
-                error!("Write failed: could not write code to file {}", path_str);
-            }
-        }
-        Err(_) => {
-            error!("Open failed: could not write code to file {}", path_str);
-        }
-    }
-}
-
-// XXX Why is this here...
-pub fn apply_opt_passes(expr: &mut Expr,
-                        opt_passes: &Vec<Pass>,
-                        stats: &mut CompilationStats,
-                        use_experimental: bool) -> WeldResult<()> {
-
-    for pass in opt_passes {
-        let start = PreciseTime::now();
-        pass.transform(expr, use_experimental)?;
-        let end = PreciseTime::now();
-        stats.pass_times.push((pass.pass_name(), start.to(end)));
-        debug!("After {} pass:\n{}", pass.pass_name(), expr.pretty_print());
-    }
-    Ok(())
-}
-
-pub fn compile_program(program: &Program,
-                       conf: &ParsedConf,
-                       stats: &mut CompilationStats) -> WeldResult<CompiledModule> {
-
-    use runtime::strt::weld_init;
-    use syntax::macro_processor;
-    use sir;
-
-    unsafe { weld_init() } ;
-
-    let mut expr = macro_processor::process_program(program)?;
-    debug!("After macro substitution:\n{}\n", expr.pretty_print());
-
-    let start = PreciseTime::now();
-    expr.uniquify()?;
-    let end = PreciseTime::now();
-
-    let mut uniquify_dur = start.to(end);
-
-    let start = PreciseTime::now();
-    expr.infer_types()?;
-    let end = PreciseTime::now();
-    stats.weld_times.push(("Type Inference".to_string(), start.to(end)));
-    debug!("After type inference:\n{}\n", expr.pretty_print());
-
-    apply_opt_passes(&mut expr, &conf.optimization_passes, stats, conf.enable_experimental_passes)?;
-
-    let start = PreciseTime::now();
-    expr.uniquify()?;
-    let end = PreciseTime::now();
-    uniquify_dur = uniquify_dur + start.to(end);
-    stats.weld_times.push(("Uniquify outside Passes".to_string(), uniquify_dur));
-    debug!("Optimized Weld program:\n{}\n", expr.pretty_print());
-
-    let start = PreciseTime::now();
-    let mut sir_prog = sir::ast_to_sir(&expr, conf.support_multithread)?;
-    let end = PreciseTime::now();
-    stats.weld_times.push(("AST to SIR".to_string(), start.to(end)));
-    debug!("SIR program:\n{}\n", &sir_prog);
-
-    let start = PreciseTime::now();
-    if conf.enable_sir_opt {
-        use sir::optimizations;
-        info!("Applying SIR optimizations");
-        optimizations::fold_constants::fold_constants(&mut sir_prog)?;
-    }
-    let end = PreciseTime::now();
-    debug!("Optimized SIR program:\n{}\n", &sir_prog);
-    stats.weld_times.push(("SIR Optimization".to_string(), start.to(end)));
-
-    let codegen = unsafe { LlvmGenerator::generate(conf.clone(), &sir_prog)? };
-
-    let ref timestamp = format!("{}", time::now().to_timespec().sec);
-    // Dump files if needed. Do this here in case the actual LLVM code gen fails.
-    if conf.dump_code.enabled {
-        info!("Writing code to directory '{}' with timestamp {}", &conf.dump_code.dir.display(), timestamp);
-        write_code(expr.pretty_print().as_ref(), "weld", timestamp, &conf.dump_code.dir);
-        write_code(&format!("{}", &sir_prog), "sir", timestamp, &conf.dump_code.dir);
-        write_code(&format!("{}", &codegen), "ll", timestamp, &conf.dump_code.dir);
-    }
-
-    trace!("{}", codegen);
-
-    let module = unsafe { jit::compile(codegen.context, codegen.module, conf, stats)? };
-    if conf.dump_code.enabled {
-        write_code(&module.asm()?, "S", &format!("{}-opt", timestamp), &conf.dump_code.dir);
-        write_code(&module.llvm()?, "ll", &format!("{}-opt", timestamp), &conf.dump_code.dir);
-    }
-
-    if let Type::Function(ref param_tys, ref return_ty) = expr.ty {
-        Ok(CompiledModule {
-            module: module,
-            param_types: param_tys.clone(),
-            return_type: *return_ty.clone(),
-        })
-    } else {
-        unreachable!()
     }
 }

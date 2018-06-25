@@ -10,32 +10,25 @@ extern crate code_builder;
 use time::PreciseTime;
 use code_builder::CodeBuilder;
 
-use std::io::Write;
-use std::path::PathBuf;
-use std::fs::OpenOptions;
-
-use optimizer::*;
 use runtime::WeldRuntimeErrno;
-use syntax::program::*;
 
-use ast::*;
 use ast::Type::*;
 use ast::LiteralKind::*;
 use ast::ScalarKind::*;
 use ast::BuilderKind::*;
 use error::*;
-use syntax;
 use runtime;
 use sir;
 use sir::*;
 use sir::Statement;
 use sir::StatementKind::*;
 use sir::Terminator::*;
-use sir::optimizations;
 use util::IdGenerator;
 use annotation::*;
 use conf::ParsedConf;
 use util::stats::CompilationStats;
+
+use codegen::*;
 
 #[cfg(test)]
 use syntax::parser::*;
@@ -60,67 +53,6 @@ const WELD_INLINE_LIB: &'static [u8] = include_bytes!("../../../weld_rt/cpp/inli
 static DEFAULT_INNER_GRAIN_SIZE: i32 = 16384;
 static DEFAULT_OUTER_GRAIN_SIZE: i32 = 4096;
 
-/// A wrapper for a struct passed as input to the Weld runtime.
-#[derive(Clone, Debug)]
-#[repr(C)]
-pub struct WeldInputArgs {
-    pub input: i64,
-    pub nworkers: i32,
-    pub mem_limit: i64,
-}
-
-/// A wrapper for outputs passed out of the Weld runtime.
-#[derive(Clone, Debug)]
-#[repr(C)]
-pub struct WeldOutputArgs {
-    pub output: i64,
-    pub run_id: i64,
-    pub errno: WeldRuntimeErrno,
-}
-
-/// A compiled module holding the generated LLVM module and some additional
-/// information (e.g., the parameter and return types of the module).
-pub struct CompiledModule {
-    llvm_module: easy_ll::CompiledModule,
-    param_types: Vec<Type>,
-    return_type: Type,
-}
-
-impl CompiledModule {
-    pub fn run(&self, data: i64) -> i64 {
-        self.llvm_module.run(data)
-    }
-
-    /// Returns a mutable reference to the LLVM module.
-    pub fn llvm_mut(&mut self) -> &mut easy_ll::CompiledModule {
-        &mut self.llvm_module
-    }
-
-    /// Returns the parameter types of the module.
-    pub fn param_types(&self) -> &Vec<Type> {
-        &self.param_types
-    }
-
-    /// Returns the return type of the module.
-    pub fn return_type(&self) -> &Type {
-        &self.return_type
-    }
-}
-
-pub fn apply_opt_passes(expr: &mut Expr,
-                        opt_passes: &Vec<Pass>,
-                        stats: &mut CompilationStats,
-                        use_experimental: bool) -> WeldResult<()> {
-    for pass in opt_passes {
-        let start = PreciseTime::now();
-        pass.transform(expr, use_experimental)?;
-        let end = PreciseTime::now();
-        stats.pass_times.push((pass.pass_name(), start.to(end)));
-        debug!("After {} pass:\n{}", pass.pass_name(), expr.pretty_print());
-    }
-    Ok(())
-}
-
 /// Returns `true` if the target contains a pointer, or false otherwise.
 trait HasPointer {
     fn has_pointer(&self) -> bool;
@@ -141,53 +73,11 @@ impl HasPointer for Type {
     }
 }
 
-/// Generate a compiled LLVM module from a program whose body is a function.
-pub fn compile_program(program: &Program, conf: &ParsedConf, stats: &mut CompilationStats)
-        -> WeldResult<CompiledModule> {
-    let mut expr = syntax::macro_processor::process_program(program)?;
-    debug!("After macro substitution:\n{}\n", expr.pretty_print());
-
-    let start = PreciseTime::now();
-    expr.uniquify()?;
-    let end = PreciseTime::now();
-
-    let mut uniquify_dur = start.to(end);
-
-    let start = PreciseTime::now();
-    expr.infer_types()?;
-    let end = PreciseTime::now();
-    debug!("After type inference:\n{}\n", expr.pretty_print());
-    stats.weld_times.push(("Type Inference".to_string(), start.to(end)));
-
-    apply_opt_passes(&mut expr, &conf.optimization_passes, stats, conf.enable_experimental_passes)?;
-
-    let start = PreciseTime::now();
-    expr.uniquify()?;
-    let end = PreciseTime::now();
-    uniquify_dur = uniquify_dur + start.to(end);
-
-    stats.weld_times.push(("Uniquify outside Passes".to_string(), uniquify_dur));
-
-    debug!("Optimized Weld program:\n{}\n", expr.pretty_print());
-
-    let start = PreciseTime::now();
-    let mut sir_prog = sir::ast_to_sir(&expr, conf.support_multithread)?;
-    let end = PreciseTime::now();
-    debug!("SIR program:\n{}\n", &sir_prog);
-    stats.weld_times.push(("AST to SIR".to_string(), start.to(end)));
-
-    // Optimizations over the SIR.
-    // TODO(shoumik): A pass manager like the one used over the AST representation will eventually
-    // be useful.
-    let start = PreciseTime::now();
-    if conf.enable_sir_opt {
-        info!("Applying SIR optimizations");
-        optimizations::fold_constants::fold_constants(&mut sir_prog)?;
-    }
-    let end = PreciseTime::now();
-    debug!("Optimized SIR program:\n{}\n", &sir_prog);
-    stats.weld_times.push(("SIR Optimization".to_string(), start.to(end)));
-
+pub fn compile(sir_prog: &SirProgram,
+               conf: &ParsedConf,
+               stats: &mut CompilationStats,
+               dump_prefix: &str) -> WeldResult<Box<Runnable>> {
+    info!("Compiling using work stealing multithreaded runtime");
     let start = PreciseTime::now();
     let mut gen = LlvmGenerator::new();
     gen.multithreaded = conf.support_multithread;
@@ -207,14 +97,9 @@ pub fn compile_program(program: &Program, conf: &ParsedConf, stats: &mut Compila
     trace!("LLVM program:\n{}\n", &llvm_code);
     stats.weld_times.push(("LLVM Codegen".to_string(), start.to(end)));
 
-    let ref timestamp = format!("{}", time::now().to_timespec().sec);
-
     // Dump files if needed. Do this here in case the actual LLVM code gen fails.
     if conf.dump_code.enabled {
-        info!("Writing code to directory '{}' with timestamp {}", &conf.dump_code.dir.display(), timestamp);
-        write_code(expr.pretty_print().as_ref(), "weld", timestamp, &conf.dump_code.dir);
-        write_code(&format!("{}", &sir_prog), "sir", timestamp, &conf.dump_code.dir);
-        write_code(&llvm_code, "ll", timestamp, &conf.dump_code.dir);
+        write_code(&llvm_code, "ll", dump_prefix, &conf.dump_code.dir);
     }
 
     debug!("Started compiling LLVM");
@@ -247,42 +132,10 @@ pub fn compile_program(program: &Program, conf: &ParsedConf, stats: &mut Compila
     if conf.dump_code.enabled {
         let llvm_op_code = llvm_op_code.unwrap();
         // Write the optimized LLVM code and assembly.
-        write_code(&llvm_op_code.optimized_llvm, "ll", format!("{}-opt", timestamp).as_ref(), &conf.dump_code.dir);
-        write_code(&llvm_op_code.assembly, "S", format!("{}-opt", timestamp).as_ref(), &conf.dump_code.dir);
+        write_code(llvm_op_code.optimized_llvm, "ll", format!("{}-opt", dump_prefix), &conf.dump_code.dir);
+        write_code(llvm_op_code.assembly, "S", format!("{}-opt", dump_prefix), &conf.dump_code.dir);
     }
-
-    if let Function(ref param_tys, ref return_ty) = expr.ty {
-        Ok(CompiledModule {
-            llvm_module: module,
-            param_types: param_tys.clone(),
-            return_type: *return_ty.clone(),
-        })
-    } else {
-        unreachable!();
-    }
-}
-
-/// Writes code to a file specified by `PathBuf`. Writes a log message if it failed.
-fn write_code(code: &str, ext: &str, timestamp: &str, dir_path: &PathBuf) {
-    let mut options = OpenOptions::new();
-    options.write(true)
-        .create_new(true)
-        .create(true);
-    let ref mut path = dir_path.clone();
-    path.push(format!("code-{}", timestamp));
-    path.set_extension(ext);
-
-    let ref path_str = format!("{}", path.display());
-    match options.open(path) {
-        Ok(ref mut file) => {
-            if let Err(_) = file.write_all(code.as_bytes()) {
-                error!("Write failed: could not write code to file {}", path_str);
-            }
-        }
-        Err(_) => {
-            error!("Open failed: could not write code to file {}", path_str);
-        }
-    }
+    Ok(Box::new(module))
 }
 
 /// Stores whether the code generator has created certain helper functions for a given type.
@@ -4701,6 +4554,8 @@ fn get_combined_params(sir: &SirProgram, par_for: &ParallelForData) -> BTreeMap<
 
 #[cfg(test)]
 fn predicate_only(code: &str) -> WeldResult<Expr> {
+    use optimizer::apply_passes;
+
     let mut e = parse_expr(code).unwrap();
     assert!(e.infer_types().is_ok());
     let mut typed_e = e;
@@ -4708,7 +4563,7 @@ fn predicate_only(code: &str) -> WeldResult<Expr> {
     let optstr = ["predicate"];
     let optpass = optstr.iter().map(|x| (*OPTIMIZATION_PASSES.get(x).unwrap()).clone()).collect();
 
-    apply_opt_passes(&mut typed_e, &optpass, &mut CompilationStats::new(), false)?;
+    apply_passes(&mut typed_e, &optpass, &mut CompilationStats::new(), false)?;
 
     Ok(typed_e)
 }

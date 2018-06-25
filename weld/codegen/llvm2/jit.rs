@@ -22,6 +22,8 @@ use self::llvm_sys::prelude::*;
 use self::llvm_sys::execution_engine::*;
 use self::llvm_sys::target_machine::*;
 
+use codegen::Runnable;
+
 static ONCE: Once = ONCE_INIT;
 static mut INITIALIZE_FAILED: bool = false;
 
@@ -36,11 +38,13 @@ pub struct CompiledModule {
     run_function: I64Func,
 }
 
-impl CompiledModule {
-    pub fn run(&self, arg: i64) -> i64 {
+impl Runnable for CompiledModule {
+    fn run(&self, arg: i64) -> i64 {
         (self.run_function)(arg)
     }
+}
 
+impl CompiledModule {
     /// Dumps assembly for this module.
     pub fn asm(&self) -> WeldResult<String> {
         unsafe {

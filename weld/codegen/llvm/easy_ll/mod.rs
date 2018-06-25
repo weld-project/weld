@@ -4,6 +4,8 @@ extern crate llvm_sys as llvm;
 extern crate libc;
 extern crate time;
 
+use error::*;
+
 use std::error::Error;
 use std::ffi::{CStr, CString, NulError};
 use std::fmt;
@@ -23,6 +25,8 @@ use self::llvm::target_machine::{LLVMCodeGenFileType, LLVMTargetMachineEmitToMem
 use self::llvm::core::{LLVMGetBufferStart, LLVMPrintModuleToString};
 use self::llvm::analysis::LLVMVerifierFailureAction;
 use self::llvm::transforms::pass_manager_builder as pmb;
+
+use codegen::Runnable;
 
 use time::{Duration, PreciseTime};
 
@@ -111,9 +115,8 @@ pub struct Compiled {
    pub timing: LlvmTimingInfo,
 }
 
-impl CompiledModule {
-    /// Call the module's `run` function, which must take and return i64.
-    pub fn run(&self, arg: i64) -> i64 {
+impl Runnable for CompiledModule {
+    fn run(&self, arg: i64) -> i64 {
         (self.run_function.unwrap())(arg)
     }
 }
@@ -130,13 +133,13 @@ impl Drop for CompiledModule {
 
 /// Loads a dynamic library from a file using LLVMLoadLibraryPermanently. It is safe to call
 /// this function multiple times for the same library.
-pub fn load_library(libname: &str) -> Result<(), LlvmError> {
+pub fn load_library(libname: &str) -> WeldResult<()> {
     let c_string = CString::new(libname.clone()).unwrap();
     let c_string_raw = c_string.into_raw() as *const c_char;
     if unsafe { LLVMLoadLibraryPermanently(c_string_raw) } == 0 {
         Ok(())
     } else {
-        Err(LlvmError::new(format!("Couldn't load library {}", libname).as_ref()))
+        compile_err!("Couldn't load library {}", libname)
     }
 }
 
