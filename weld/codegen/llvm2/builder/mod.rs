@@ -149,7 +149,7 @@ impl BuilderExpressionGen for LlvmGenerator {
                 };
                 let merger = {
                     let mut methods = self.mergers.get_mut(nb.kind).unwrap();
-                    methods.generate_new(ctx.builder, argument)?
+                    methods.gen_new(ctx.builder, argument)?
                 };
                 LLVMBuildStore(ctx.builder, merger, output_pointer);
                 Ok(())
@@ -167,7 +167,7 @@ impl BuilderExpressionGen for LlvmGenerator {
         match *m.kind {
             Merger(_, _) => {
                 let mut methods = self.mergers.get_mut(m.kind).unwrap();
-                let _ = methods.generate_merge(ctx.builder, builder_pointer, merge_value)?;
+                let _ = methods.gen_merge(ctx.builder, builder_pointer, merge_value)?;
                 Ok(())
             }
             _ => unimplemented!()
@@ -182,7 +182,7 @@ impl BuilderExpressionGen for LlvmGenerator {
             Merger(_, _) => {
                 let result = {
                     let mut methods = self.mergers.get_mut(m.kind).unwrap();
-                    methods.generate_result(ctx.builder, builder_pointer)?
+                    methods.gen_result(ctx.builder, builder_pointer)?
                 };
                 LLVMBuildStore(ctx.builder, result, output_pointer);
                 Ok(())

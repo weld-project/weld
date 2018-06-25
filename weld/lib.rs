@@ -334,6 +334,10 @@ impl WeldModule {
         let ref parsed_conf = conf::parse(conf)?;
         let code = code.as_ref();
 
+        // TODO create a macro like this to measure steps...
+        // TODO move compilation stuff in llvm::codegen::mod.rs to here.
+        // let program = profile!("Parsing", stats, syntax::parser::parse_program(code)?);
+
         let start = PreciseTime::now();
         let program = syntax::parser::parse_program(code)?;
         let end = PreciseTime::now();

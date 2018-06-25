@@ -67,7 +67,7 @@ impl Vector {
         }
     }
 
-    pub unsafe fn generate_new(&mut self,
+    pub unsafe fn gen_new(&mut self,
                                builder: LLVMBuilderRef,
                                intrinsics: &mut Intrinsics,
                                size: LLVMValueRef) -> WeldResult<LLVMValueRef> {
@@ -100,7 +100,7 @@ impl Vector {
         return Ok(LLVMBuildCall(builder, self.new.unwrap(), args.as_mut_ptr(), args.len() as u32, c_str!("")))
     }
 
-    pub unsafe fn generate_at(&mut self,
+    pub unsafe fn gen_at(&mut self,
                               builder: LLVMBuilderRef,
                               vector: LLVMValueRef,
                               index: LLVMValueRef) -> WeldResult<LLVMValueRef> {
@@ -125,7 +125,7 @@ impl Vector {
         Ok(LLVMBuildCall(builder, self.at.unwrap(), args.as_mut_ptr(), args.len() as u32, c_str!("")))
     }
 
-    pub unsafe fn generate_vat(&mut self,
+    pub unsafe fn gen_vat(&mut self,
                               builder: LLVMBuilderRef,
                               vector: LLVMValueRef,
                               index: LLVMValueRef) -> WeldResult<LLVMValueRef> {
@@ -151,7 +151,7 @@ impl Vector {
         Ok(LLVMBuildCall(builder, self.vat.unwrap(), args.as_mut_ptr(), args.len() as u32, c_str!("")))
     }
 
-    pub unsafe fn generate_size(&mut self,
+    pub unsafe fn gen_size(&mut self,
                                 builder: LLVMBuilderRef,
                                 vector: LLVMValueRef) -> WeldResult<LLVMValueRef> {
         if self.size.is_none() {

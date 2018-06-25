@@ -236,9 +236,9 @@ impl ForLoopGenInternal for LlvmGenerator {
         for bb in func.blocks.iter() {
             LLVMPositionBuilderAtEnd(context.builder, context.get_block(&bb.id)?);
             for statement in bb.statements.iter() {
-                self.generate_statement(context, statement)?;
+                self.gen_statement(context, statement)?;
             }
-            self.generate_terminator(context, &bb, Some(loop_end_bb))?;
+            self.gen_terminator(context, &bb, Some(loop_end_bb))?;
         }
 
         // The EndFunction terminators in the loop body jump to this block, so no explicit jumps to
@@ -279,7 +279,7 @@ impl ForLoopGenInternal for LlvmGenerator {
                     let vector_type = ctx.sir_function.symbol_type(&iter.data)?;
                     let element_pointer = if let Vector(ref elem_type) = *vector_type {
                         let mut methods = self.vectors.get_mut(elem_type).unwrap();
-                        methods.generate_at(ctx.builder, vector, i)?
+                        methods.gen_at(ctx.builder, vector, i)?
                     } else {
                         unreachable!()
                     };
@@ -294,7 +294,7 @@ impl ForLoopGenInternal for LlvmGenerator {
                     let vector_type = ctx.sir_function.symbol_type(&iter.data)?;
                     let element_pointer = if let Vector(ref elem_type) = *vector_type {
                         let mut methods = self.vectors.get_mut(elem_type).unwrap();
-                        methods.generate_at(ctx.builder, vector, i)?
+                        methods.gen_at(ctx.builder, vector, i)?
                     } else {
                         unreachable!()
                     };
@@ -308,7 +308,7 @@ impl ForLoopGenInternal for LlvmGenerator {
                     let vector_type = ctx.sir_function.symbol_type(&iter.data)?;
                     let element_pointer = if let Vector(ref elem_type) = *vector_type {
                         let mut methods = self.vectors.get_mut(elem_type).unwrap();
-                        methods.generate_vat(ctx.builder, vector, i)?
+                        methods.gen_vat(ctx.builder, vector, i)?
                     } else {
                         unreachable!()
                     };
@@ -321,7 +321,7 @@ impl ForLoopGenInternal for LlvmGenerator {
                     let vector_type = ctx.sir_function.symbol_type(&iter.data)?;
                     let size = if let Vector(ref elem_type) = *vector_type {
                         let mut methods = self.vectors.get_mut(elem_type).unwrap();
-                        methods.generate_size(ctx.builder, vector)?
+                        methods.gen_size(ctx.builder, vector)?
                     } else {
                         unreachable!()
                     };
@@ -334,7 +334,7 @@ impl ForLoopGenInternal for LlvmGenerator {
 
                     let element_pointer = if let Vector(ref elem_type) = *vector_type {
                         let mut methods = self.vectors.get_mut(elem_type).unwrap();
-                        methods.generate_at(ctx.builder, vector, i)?
+                        methods.gen_at(ctx.builder, vector, i)?
                     } else {
                         unreachable!()
                     };
@@ -374,7 +374,7 @@ impl ForLoopGenInternal for LlvmGenerator {
                 let vector_type = ctx.sir_function.symbol_type(&iter.data)?;
                 if let Vector(ref elem_type) = *vector_type {
                     let mut methods = self.vectors.get_mut(elem_type).unwrap();
-                    methods.generate_size(ctx.builder, vector)
+                    methods.gen_size(ctx.builder, vector)
                 } else {
                     unreachable!()
                 }
@@ -387,7 +387,7 @@ impl ForLoopGenInternal for LlvmGenerator {
                 let vector_type = ctx.sir_function.symbol_type(&iter.data)?;
                 let size = if let Vector(ref elem_type) = *vector_type {
                     let mut methods = self.vectors.get_mut(elem_type).unwrap();
-                    methods.generate_size(ctx.builder, vector)?
+                    methods.gen_size(ctx.builder, vector)?
                 } else {
                     unreachable!()
                 };
@@ -399,7 +399,7 @@ impl ForLoopGenInternal for LlvmGenerator {
                 let vector_type = ctx.sir_function.symbol_type(&iter.data)?;
                 let size = if let Vector(ref elem_type) = *vector_type {
                     let mut methods = self.vectors.get_mut(elem_type).unwrap();
-                    methods.generate_size(ctx.builder, vector)?
+                    methods.gen_size(ctx.builder, vector)?
                 } else {
                     unreachable!()
                 };

@@ -24,23 +24,23 @@ pub trait NumericExpressionGen {
     /// Generates code for a numeric binary operator.
     ///
     /// This method supports operators over both scalar and SIMD values.
-    unsafe fn generate_binop(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()>;
+    unsafe fn gen_binop(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()>;
     /// Generates a literal.
     ///
     /// This method supports both scalar and SIMD values.
-    unsafe fn generate_assign_literal(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()>;
+    unsafe fn gen_assign_literal(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()>;
     /// Generates a cast expression.
-    unsafe fn generate_cast(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()>;
+    unsafe fn gen_cast(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()>;
 }
 
 impl NumericExpressionGen for LlvmGenerator {
-    unsafe fn generate_binop(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()> {
+    unsafe fn gen_binop(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()> {
         use sir::StatementKind::BinOp;
         if let BinOp { op, ref left, ref right } = statement.kind {
             let llvm_left = self.load(ctx.builder, ctx.get_value(left)?)?;
             let llvm_right = self.load(ctx.builder, ctx.get_value(right)?)?;
             let ty = ctx.sir_function.symbol_type(left)?;
-            let result = generate_binop(ctx.builder, op, llvm_left, llvm_right, ty)?;
+            let result = gen_binop(ctx.builder, op, llvm_left, llvm_right, ty)?;
             let output = ctx.get_value(statement.output.as_ref().unwrap())?;
             let _ = LLVMBuildStore(ctx.builder, result, output);
             Ok(())
@@ -49,7 +49,7 @@ impl NumericExpressionGen for LlvmGenerator {
         }
     }
 
-    unsafe fn generate_assign_literal(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()> {
+    unsafe fn gen_assign_literal(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()> {
         use sir::StatementKind::AssignLiteral;
         if let AssignLiteral(ref value) = statement.kind {
             let output = statement.output.as_ref().unwrap();
@@ -66,7 +66,7 @@ impl NumericExpressionGen for LlvmGenerator {
         }
     }
 
-    unsafe fn generate_cast(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()> {
+    unsafe fn gen_cast(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()> {
         use sir::StatementKind::Cast;
         let ref output = statement.output.clone().unwrap();
         let output_pointer = ctx.get_value(output)?;
@@ -74,7 +74,7 @@ impl NumericExpressionGen for LlvmGenerator {
         if let Cast(ref child, _) = statement.kind {
             let child_type = ctx.sir_function.symbol_type(child)?;
             let child_value = self.load(ctx.builder, ctx.get_value(child)?)?;
-            let result = generate_cast(ctx.builder, child_value, child_type, output_type, self.llvm_type(output_type)?)?;
+            let result = gen_cast(ctx.builder, child_value, child_type, output_type, self.llvm_type(output_type)?)?;
             let _ = LLVMBuildStore(ctx.builder, result, output_pointer);
             Ok(())
         } else {
@@ -83,7 +83,7 @@ impl NumericExpressionGen for LlvmGenerator {
     }
 }
 
-unsafe fn generate_cast(builder: LLVMBuilderRef,
+unsafe fn gen_cast(builder: LLVMBuilderRef,
                    value: LLVMValueRef,
                    from: &Type,
                    to: &Type,
@@ -149,7 +149,7 @@ unsafe fn generate_cast(builder: LLVMBuilderRef,
 }
 
 /// Generates a binary op instruction.
-pub unsafe fn generate_binop(builder: LLVMBuilderRef,
+pub unsafe fn gen_binop(builder: LLVMBuilderRef,
              op: BinOpKind,
              left: LLVMValueRef,
              right: LLVMValueRef, ty: &Type) -> WeldResult<LLVMValueRef> {

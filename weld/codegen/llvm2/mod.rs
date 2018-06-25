@@ -1,4 +1,7 @@
 //! An LLVM backend currently optimized for single-threaded execution.
+//!
+//! The `LlvmGenerator` struct is responsible for converting an SIR program into an LLVM module.
+//! This module is then JIT'd and returned into a runnable executable.
 extern crate fnv;
 extern crate time;
 extern crate libc;
@@ -43,12 +46,14 @@ macro_rules! c_str {
 // Traits implementing code generation for various expressions.
 mod builder;
 mod intrinsic;
+mod jit;
 mod numeric;
 mod vector;
 
+pub use self::jit::CompiledModule;
+
 use self::builder::merger;
 
-pub struct CompiledModule;
 
 /// A wrapper for a struct passed as input to the Weld runtime.
 #[derive(Clone, Debug)]
@@ -365,9 +370,10 @@ impl LlvmGenerator {
     /// Generate code for an SIR program.
     unsafe fn generate(conf: ParsedConf, program: &SirProgram) -> WeldResult<LlvmGenerator> {
         let context = LLVMContextCreate();
-        let module = LLVMModuleCreateWithName(c_str!("main"));
+        let module = LLVMModuleCreateWithNameInContext(c_str!("main"), context);
         // Adds the default intrinsic definitions.
         let intrinsics = intrinsic::Intrinsics::defaults(context, module);
+
         let mut gen = LlvmGenerator {
             conf: conf,
             context: context,
@@ -389,7 +395,7 @@ impl LlvmGenerator {
         // Generate each non-loop body function in turn. Loop body functions are constructed when
         // the For loop is generated, with the loop control flow injected into the function.
         for func in program.funcs.iter().filter(|f| !f.loop_body) {
-            gen.generate_sir_function(program, func)?;
+            gen.gen_sir_function(program, func)?;
         }
 
         // Generates a callable entry function in the module.
@@ -545,7 +551,7 @@ impl LlvmGenerator {
     /// Generate code for a defined SIR `function` from `program`.
     ///
     /// This function specifically generates code for non-loop body functions.
-    unsafe fn generate_sir_function(&mut self, program: &SirProgram, func: &SirFunction) -> WeldResult<()> {
+    unsafe fn gen_sir_function(&mut self, program: &SirProgram, func: &SirFunction) -> WeldResult<()> {
         let function = *self.functions.get(&func.id).unwrap();
         if LLVMCountParams(function) != func.params.len() as u32 {
             unreachable!()
@@ -557,7 +563,7 @@ impl LlvmGenerator {
         // Create the entry basic block, where we define alloca'd variables.
         let entry_bb = LLVMAppendBasicBlockInContext(self.context,
                                                      context.llvm_function,
-                                                     c_str!("entry"));
+                                                     c_str!(""));
         LLVMPositionBuilderAtEnd(context.builder, entry_bb);
 
         self.gen_allocas(context)?;
@@ -572,15 +578,15 @@ impl LlvmGenerator {
         for bb in func.blocks.iter() {
             LLVMPositionBuilderAtEnd(context.builder, context.get_block(&bb.id)?);
             for statement in bb.statements.iter() {
-                self.generate_statement(context, statement)?;
+                self.gen_statement(context, statement)?;
             }
-            self.generate_terminator(context, &bb, None)?;
+            self.gen_terminator(context, &bb, None)?;
         }
         Ok(())
     }
 
     /// Generate code for an SIR statement.
-    unsafe fn generate_statement(&mut self, context: &mut FunctionContext, statement: &Statement) -> WeldResult<()> {
+    unsafe fn gen_statement(&mut self, context: &mut FunctionContext, statement: &Statement) -> WeldResult<()> {
         use ast::Type::*;
         use sir::StatementKind::*;
         let ref output = statement.output.clone().unwrap_or(Symbol::new("unused", 0));
@@ -592,23 +598,26 @@ impl LlvmGenerator {
             }
             AssignLiteral(_) => {
                 use self::numeric::NumericExpressionGen;
-                self.generate_assign_literal(context, statement)
+                self.gen_assign_literal(context, statement)
             }
             BinOp { .. } => {
                 use self::numeric::NumericExpressionGen;
-                self.generate_binop(context, statement)
+                self.gen_binop(context, statement)
             }
             Broadcast(ref child) => {
                 let output_pointer = context.get_value(output)?;
                 let child_value = self.load(context.builder, context.get_value(child)?)?;
-                let mut elems = [child_value; LLVM_VECTOR_WIDTH as usize];
-                let result = LLVMConstVector(elems.as_mut_ptr(), elems.len() as u32);
+                let ty = self.llvm_type(context.sir_function.symbol_type(output)?)?;
+                let mut result = LLVMGetUndef(ty);
+                for i in 0..LLVM_VECTOR_WIDTH {
+                    result = LLVMBuildInsertElement(context.builder, result, child_value, self.i32(i as i32), c_str!(""));
+                }
                 LLVMBuildStore(context.builder, result, output_pointer);
                 Ok(())
             }
             Cast(_, _) => {
                 use self::numeric::NumericExpressionGen;
-                self.generate_cast(context, statement)
+                self.gen_cast(context, statement)
             }
             CUDF { ref symbol_name, ref args } => {
                 let output_pointer = context.get_value(output)?;
@@ -647,7 +656,7 @@ impl LlvmGenerator {
                 let child_type = context.sir_function.symbol_type(child)?;
                 if let Vector(ref elem_type) = *child_type {
                     let mut methods = self.vectors.get_mut(elem_type).unwrap();
-                    let result = methods.generate_size(context.builder, child_value)?;
+                    let result = methods.gen_size(context.builder, child_value)?;
                     LLVMBuildStore(context.builder, result, output_pointer);
                     Ok(())
                 } else {
@@ -662,7 +671,7 @@ impl LlvmGenerator {
                 if let Vector(ref elem_type) = *child_type {
                     let pointer = {
                         let mut methods = self.vectors.get_mut(elem_type).unwrap();
-                        methods.generate_at(context.builder, child_value, index_value)?
+                        methods.gen_at(context.builder, child_value, index_value)?
                     };
                     let result = self.load(context.builder, pointer)?;
                     LLVMBuildStore(context.builder, result, output_pointer);
@@ -689,14 +698,14 @@ impl LlvmGenerator {
                 if let Vector(ref elem_type) = *output_type {
                     let vector = {
                         let mut methods = self.vectors.get_mut(elem_type).unwrap();
-                        methods.generate_new(context.builder, &mut self.intrinsics, size)?
+                        methods.gen_new(context.builder, &mut self.intrinsics, size)?
                     };
                     for (i, elem) in elems.iter().enumerate() {
                         let index = self.i64(i as i64);
                         // Scope to prevent borrow error with self.load...
                         let vec_pointer = {
                             let mut methods = self.vectors.get_mut(elem_type).unwrap();
-                            methods.generate_at(context.builder, vector, index)?
+                            methods.gen_at(context.builder, vector, index)?
                         };
                         let loaded = self.load(context.builder, context.get_value(elem)?)?;
                         LLVMBuildStore(context.builder, loaded, vec_pointer);
@@ -744,7 +753,7 @@ impl LlvmGenerator {
     }
 
     /// Generate code for a terminator within an SIR basic block.
-    unsafe fn generate_terminator(&mut self,
+    unsafe fn gen_terminator(&mut self,
                                   context: &mut FunctionContext,
                                   bb: &BasicBlock,
                                   loop_terminator: Option<LLVMBasicBlockRef>) -> WeldResult<()> {
@@ -840,17 +849,6 @@ impl LlvmGenerator {
             Function(_, _) | Unknown => unreachable!(),
         };
         Ok(result)
-    }
-}
-
-impl Drop for LlvmGenerator {
-    fn drop(&mut self) {
-        // TODO only free these if the generator *did not* compiled code. Otherwise,
-        // the compiled module takes ownership of these references.
-        unsafe {
-            LLVMDisposeModule(self.module);
-            LLVMContextDispose(self.context);
-        }
     }
 }
 
@@ -1008,5 +1006,11 @@ pub fn compile_program(program: &Program,
     }
 
     println!("{}", codegen);
-    Ok(CompiledModule)
+
+    let module = unsafe { jit::compile(codegen.context, codegen.module, conf)? };
+    if conf.dump_code.enabled {
+        write_code(&module.asm()?, "S", &format!("{}-opt", timestamp), &conf.dump_code.dir);
+        write_code(&module.llvm()?, "ll", &format!("{}-opt", timestamp), &conf.dump_code.dir);
+    }
+    Ok(module)
 }

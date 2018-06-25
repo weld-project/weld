@@ -14,7 +14,7 @@ use self::llvm_sys::core::*;
 use self::llvm_sys::LLVMTypeKind;
 
 use codegen::llvm2::CodeGenExt;
-use codegen::llvm2::numeric::generate_binop;
+use codegen::llvm2::numeric::gen_binop;
 use codegen::llvm2::LLVM_VECTOR_WIDTH;
 
 const SCALAR_INDEX: u32 = 0;
@@ -80,7 +80,7 @@ impl Merger {
         }
     }
 
-    pub unsafe fn generate_new(&mut self,
+    pub unsafe fn gen_new(&mut self,
                                builder: LLVMBuilderRef,
                                init: LLVMValueRef) -> WeldResult<LLVMValueRef> {
         if self.new.is_none() {
@@ -112,7 +112,7 @@ impl Merger {
     ///
     /// The merge function is similar for the scalar and vector variant: the `gep_index determines
     /// which one is generated.
-    unsafe fn generate_merge_internal(&mut self,
+    unsafe fn gen_merge_internal(&mut self,
                                       name: String,
                                       arguments: &mut [LLVMTypeRef],
                                       gep_index: u32) -> WeldResult<LLVMValueRef> {
@@ -122,14 +122,14 @@ impl Merger {
         // Load the vector element, apply the binary operator, and then store it back.
         let elem_pointer = LLVMBuildStructGEP(fn_builder, LLVMGetParam(function, 0), gep_index, c_str!(""));
         let elem = LLVMBuildLoad(fn_builder, elem_pointer, c_str!(""));
-        let result = generate_binop(fn_builder, self.op, elem, LLVMGetParam(function, 1), &Simd(self.scalar_kind))?;
+        let result = gen_binop(fn_builder, self.op, elem, LLVMGetParam(function, 1), &Simd(self.scalar_kind))?;
         LLVMBuildStore(fn_builder, result, elem_pointer);
         LLVMBuildRetVoid(fn_builder);
         LLVMDisposeBuilder(fn_builder);
         Ok(function)
     }
 
-    pub unsafe fn generate_merge(&mut self,
+    pub unsafe fn gen_merge(&mut self,
                                  llvm_builder: LLVMBuilderRef,
                                  builder: LLVMValueRef,
                                  value: LLVMValueRef) -> WeldResult<LLVMValueRef> {
@@ -138,7 +138,7 @@ impl Merger {
             if self.vmerge.is_none() {
                 let mut arg_tys = [LLVMPointerType(self.merger_ty, 0), LLVMVectorType(self.elem_ty, LLVM_VECTOR_WIDTH as u32)];
                 let name = format!("{}.vmerge", self.name);
-                self.vmerge = Some(self.generate_merge_internal(name, &mut arg_tys, VECTOR_INDEX)?);
+                self.vmerge = Some(self.gen_merge_internal(name, &mut arg_tys, VECTOR_INDEX)?);
             }
             let mut args = [builder, value];
             Ok(LLVMBuildCall(llvm_builder, self.vmerge.unwrap(), args.as_mut_ptr(), args.len() as u32, c_str!("")))
@@ -146,14 +146,14 @@ impl Merger {
             if self.merge.is_none() {
                 let mut arg_tys = [LLVMPointerType(self.merger_ty, 0), self.elem_ty];
                 let name = format!("{}.merge", self.name);
-                self.merge = Some(self.generate_merge_internal(name, &mut arg_tys, SCALAR_INDEX)?);
+                self.merge = Some(self.gen_merge_internal(name, &mut arg_tys, SCALAR_INDEX)?);
             }
             let mut args = [builder, value];
             Ok(LLVMBuildCall(llvm_builder, self.merge.unwrap(), args.as_mut_ptr(), args.len() as u32, c_str!("")))
         }
     }
 
-    pub unsafe fn generate_result(&mut self,
+    pub unsafe fn gen_result(&mut self,
                                  llvm_builder: LLVMBuilderRef,
                                  builder: LLVMValueRef) -> WeldResult<LLVMValueRef> {
         if self.result.is_none() {
@@ -172,7 +172,7 @@ impl Merger {
 
             for i in 0..LLVM_VECTOR_WIDTH {
                 let vector_element = LLVMBuildExtractElement(fn_builder, vector, self.i32(i as i32), c_str!(""));
-                result = generate_binop(fn_builder, self.op, result, vector_element, &Scalar(self.scalar_kind))?;
+                result = gen_binop(fn_builder, self.op, result, vector_element, &Scalar(self.scalar_kind))?;
             }
 
             LLVMBuildRet(fn_builder, result);
