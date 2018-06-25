@@ -89,6 +89,8 @@ impl ForLoopGenInternal for LlvmGenerator {
         let iterations = num_iterations[0];
         // The body function has an additional arguement representing the number of iterations.
         arguments.push(iterations);
+        // Last argument is always the run handle.
+        arguments.push(ctx.get_run());
 
         // Call the body function, which runs the loop and updates the builder. The updated builder
         // is returned to the current function.
@@ -108,6 +110,7 @@ impl ForLoopGenInternal for LlvmGenerator {
             let value = self.load(ctx.builder, ctx.get_value(symbol)?)?;
             arguments.push(value);
         }
+        arguments.push(ctx.get_run());
         let cont_function = *self.functions.get(&parfor.cont).unwrap();
 
         let _ = LLVMBuildCall(ctx.builder, cont_function, arguments.as_mut_ptr(), arguments.len() as u32, c_str!(""));
@@ -157,11 +160,12 @@ impl ForLoopGenInternal for LlvmGenerator {
         let ref weld_ty = builders[0];
 
         let mut arg_tys = self.argument_types(func)?;
-        // The last argument is the *total* number of iterations across all threads (in a
-        // multi-threaded setting) that this loop will execute for.
+        // The second-to-last argument is the *total* number of iterations across all threads (in a
+        // multi-threaded setting) that this loop will execute for (the last argument is the run
+        // handle).
         arg_tys.push(self.i64_type());
-
         let num_iterations_index = (arg_tys.len() - 1) as u32;
+        arg_tys.push(self.run_handle_type());
 
         let ret_ty = self.llvm_type(weld_ty)?;
         let func_ty = LLVMFunctionType(ret_ty, arg_tys.as_mut_ptr(), arg_tys.len() as u32, 0);

@@ -22,7 +22,7 @@ use ast::*;
 use conf::ParsedConf;
 use error::*;
 use optimizer::*;
-use runtime::WeldRuntimeErrno;
+use runtime::{WeldRuntimeErrno, WeldRun};
 use sir::*;
 use syntax::program::Program;
 use util::stats::CompilationStats;
@@ -50,10 +50,28 @@ mod jit;
 mod numeric;
 mod vector;
 
-pub use self::jit::CompiledModule;
-
 use self::builder::merger;
 
+/// A compiled module.
+pub struct CompiledModule {
+    module: jit::CompiledModule,
+    param_types: Vec<Type>,
+    return_type: Type,
+}
+
+impl CompiledModule {
+    pub fn run(&self, data: i64) -> i64 {
+        self.module.run(data)
+    }
+
+    pub fn param_types(&self) -> &Vec<Type> {
+        &self.param_types
+    }
+
+    pub fn return_type(&self) -> &Type {
+        &self.return_type
+    }
+}
 
 /// A wrapper for a struct passed as input to the Weld runtime.
 #[derive(Clone, Debug)]
@@ -94,7 +112,7 @@ impl WeldInputArgs {
 #[repr(C)]
 pub struct WeldOutputArgs {
     pub output: i64,
-    pub run_id: i64,
+    pub run: *mut WeldRun,
     pub errno: WeldRuntimeErrno,
 }
 
@@ -102,7 +120,7 @@ impl WeldOutputArgs {
     unsafe fn llvm_type(context: LLVMContextRef) -> LLVMTypeRef {
         let mut types = [
             LLVMInt64TypeInContext(context),
-            LLVMInt64TypeInContext(context),
+            LLVMPointerType(LLVMInt8TypeInContext(context), 0),
             LLVMInt64TypeInContext(context)
         ];
         let args = LLVMStructCreateNamed(context, c_str!("output_args_t"));
@@ -307,6 +325,10 @@ pub trait CodeGenExt {
         LLVMVoidTypeInContext(self.context())
     }
 
+    unsafe fn run_handle_type(&self) -> LLVMTypeRef {
+        LLVMPointerType(self.i8_type(), 0)
+    }
+
     unsafe fn bool(&self, v: bool) -> LLVMValueRef {
         LLVMConstInt(self.bool_type(), v as c_ulonglong, 0)
     }
@@ -431,7 +453,7 @@ impl LlvmGenerator {
         let memlimit_pointer = LLVMBuildStructGEP(builder, pointer, WeldInputArgs::memlimit_index(), c_str!("memlimit"));
         let memlimit = self.load(builder, memlimit_pointer)?;
 
-        let run_id = self.intrinsics.call_weld_run_init(builder, nworkers, memlimit, None);
+        let run = self.intrinsics.call_weld_run_init(builder, nworkers, memlimit, None);
 
         let arg_pointer = LLVMBuildStructGEP(builder, pointer, WeldInputArgs::input_index(), c_str!("argptr"));
         // Still a pointer, but now as an integer.
@@ -447,17 +469,19 @@ impl LlvmGenerator {
             let value = self.load(builder, pointer)?;
             func_args.push(value);
         }
+        // Push the run handle.
+        func_args.push(run);
 
         // Run the Weld program.
         let entry_function = *self.functions.get(&program.funcs[0].id).unwrap();
         let _ = LLVMBuildCall(builder, entry_function, func_args.as_mut_ptr(), func_args.len() as u32, c_str!(""));
 
-        let result = self.intrinsics.call_weld_run_get_result(builder, run_id, None);
+        let result = self.intrinsics.call_weld_run_get_result(builder, run, None);
         let result = LLVMBuildPtrToInt(builder, result, self.i64_type(), c_str!(""));
 
         let mut output = LLVMGetUndef(output_type);
         output = LLVMBuildInsertValue(builder, output, result, WeldOutputArgs::output_index(), c_str!("result"));
-        output = LLVMBuildInsertValue(builder, output, run_id, WeldOutputArgs::runid_index(), c_str!("runid"));
+        output = LLVMBuildInsertValue(builder, output, run, WeldOutputArgs::runid_index(), c_str!("runid"));
         // TODO Get and set the actual errno.
         output = LLVMBuildInsertValue(builder, output, self.i64(0), WeldOutputArgs::errno_index(), c_str!("errno"));
 
@@ -481,15 +505,14 @@ impl LlvmGenerator {
 
     /// Declare a function in the SIR module and track its reference.
     ///
-    /// Since the SIR does not expose runtime-related parameters (e.g., thread IDs and number of
-    /// threads), this function may additionally inject additional parameters into the function
-    /// parameter list if the function is a loop body. Invocations to those functions must be
-    /// managed appropriately to ensure that the parameters added here are passed during call
-    /// generation.
+    /// In addition to the SIR-defined parameters, the runtime adds an `i8*` pointer as the last
+    /// argument to each function, representing the handle to the run data. This handle is always
+    /// guaranteed to be the last argument.
     ///
     /// This method only defines functions and does not generate code for the function.
     unsafe fn declare_sir_function(&mut self, func: &SirFunction) -> WeldResult<()> {
         let mut arg_tys = self.argument_types(func)?;
+        arg_tys.push(self.run_handle_type());
         let ret_ty = self.void_type();
         let func_ty = LLVMFunctionType(ret_ty, arg_tys.as_mut_ptr(), arg_tys.len() as u32, 0);
         let name = CString::new(format!("f{}", func.id)).unwrap();
@@ -553,7 +576,8 @@ impl LlvmGenerator {
     /// This function specifically generates code for non-loop body functions.
     unsafe fn gen_sir_function(&mut self, program: &SirProgram, func: &SirFunction) -> WeldResult<()> {
         let function = *self.functions.get(&func.id).unwrap();
-        if LLVMCountParams(function) != func.params.len() as u32 {
+        // + 1 to account for the run handle.
+        if LLVMCountParams(function) != (1 + func.params.len()) as u32 {
             unreachable!()
         }
 
@@ -698,7 +722,7 @@ impl LlvmGenerator {
                 if let Vector(ref elem_type) = *output_type {
                     let vector = {
                         let mut methods = self.vectors.get_mut(elem_type).unwrap();
-                        methods.gen_new(context.builder, &mut self.intrinsics, size)?
+                        methods.gen_new(context.builder, &mut self.intrinsics, context.get_run(), size)?
                     };
                     for (i, elem) in elems.iter().enumerate() {
                         let index = self.i64(i as i64);
@@ -761,13 +785,13 @@ impl LlvmGenerator {
         match bb.terminator {
             ProgramReturn(ref sym) => {
                 let value = self.load(context.builder, context.get_value(sym)?)?;
-                let run_id = self.intrinsics.call_weld_run_get_run_id(context.builder, None);
+                let run = context.get_run();
                 let ty = LLVMTypeOf(value);
                 let size = self.size_of(ty);
-                let bytes = self.intrinsics.call_weld_run_malloc(context.builder, run_id, size, None);
+                let bytes = self.intrinsics.call_weld_run_malloc(context.builder, run, size, None);
                 let pointer = LLVMBuildBitCast(context.builder, bytes, LLVMPointerType(ty, 0), c_str!(""));
                 LLVMBuildStore(context.builder, value, pointer);
-                let _ = self.intrinsics.call_weld_run_set_result(context.builder, bytes, None);
+                let _ = self.intrinsics.call_weld_run_set_result(context.builder, run, bytes, None);
                 LLVMBuildRetVoid(context.builder);
             }
             Branch { ref cond, ref on_true, ref on_false } => {
@@ -897,6 +921,11 @@ impl<'a> FunctionContext<'a> {
             .cloned()
             .ok_or(WeldCompileError::new("Undefined basic block in function codegen"))
     }
+
+    /// Get the handle to the run.
+    pub fn get_run(&self) -> LLVMValueRef {
+        unsafe { LLVMGetLastParam(self.llvm_function) }
+    }
 }
 
 impl<'a> Drop for FunctionContext<'a> {
@@ -935,9 +964,6 @@ pub fn apply_opt_passes(expr: &mut Expr,
                         use_experimental: bool) -> WeldResult<()> {
 
     for pass in opt_passes {
-        if pass.pass_name() == "vectorize" {
-            continue;
-        }
         let start = PreciseTime::now();
         pass.transform(expr, use_experimental)?;
         let end = PreciseTime::now();
@@ -951,8 +977,11 @@ pub fn compile_program(program: &Program,
                        conf: &ParsedConf,
                        stats: &mut CompilationStats) -> WeldResult<CompiledModule> {
 
+    use runtime::strt::weld_init;
     use syntax::macro_processor;
     use sir;
+
+    unsafe { weld_init() } ;
 
     let mut expr = macro_processor::process_program(program)?;
     debug!("After macro substitution:\n{}\n", expr.pretty_print());
@@ -1005,12 +1034,21 @@ pub fn compile_program(program: &Program,
         write_code(&format!("{}", &codegen), "ll", timestamp, &conf.dump_code.dir);
     }
 
-    println!("{}", codegen);
+    trace!("{}", codegen);
 
     let module = unsafe { jit::compile(codegen.context, codegen.module, conf)? };
     if conf.dump_code.enabled {
         write_code(&module.asm()?, "S", &format!("{}-opt", timestamp), &conf.dump_code.dir);
         write_code(&module.llvm()?, "ll", &format!("{}-opt", timestamp), &conf.dump_code.dir);
     }
-    Ok(module)
+
+    if let Type::Function(ref param_tys, ref return_ty) = expr.ty {
+        Ok(CompiledModule {
+            module: module,
+            param_types: param_tys.clone(),
+            return_type: *return_ty.clone(),
+        })
+    } else {
+        unreachable!()
+    }
 }

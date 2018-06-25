@@ -70,9 +70,10 @@ impl Vector {
     pub unsafe fn gen_new(&mut self,
                                builder: LLVMBuilderRef,
                                intrinsics: &mut Intrinsics,
+                               run: LLVMValueRef,
                                size: LLVMValueRef) -> WeldResult<LLVMValueRef> {
         if self.new.is_none() {
-            let mut arg_tys = [self.i64_type()];
+            let mut arg_tys = [self.i64_type(), self.run_handle_type()];
             let ret_ty = self.vector_ty;
 
             let name = format!("{}.new", self.name);
@@ -81,8 +82,8 @@ impl Vector {
             let size = LLVMGetParam(function, 0);
             let elem_size = self.size_of(self.elem_ty);
             let alloc_size = LLVMBuildMul(builder, elem_size, size, c_str!("size"));
-            let run_id = intrinsics.call_weld_run_get_run_id(builder, Some(c_str!("runId")));
-            let bytes = intrinsics.call_weld_run_malloc(builder, run_id, alloc_size, Some(c_str!("bytes")));
+            let run = LLVMGetParam(function, 1);
+            let bytes = intrinsics.call_weld_run_malloc(builder, run, alloc_size, Some(c_str!("bytes")));
             let elements = LLVMBuildBitCast(builder, bytes, LLVMPointerType(self.elem_ty, 0), c_str!("elements"));
             let one = LLVMBuildInsertValue(builder,
                                            LLVMGetUndef(self.vector_ty),
@@ -96,7 +97,7 @@ impl Vector {
             LLVMDisposeBuilder(builder);
         }
         
-        let mut args = [size];
+        let mut args = [size, run];
         return Ok(LLVMBuildCall(builder, self.new.unwrap(), args.as_mut_ptr(), args.len() as u32, c_str!("")))
     }
 

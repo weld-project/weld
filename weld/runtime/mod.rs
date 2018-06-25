@@ -5,6 +5,9 @@ use std::fmt;
 pub use self::link::{weld_runtime_init, weld_run_memory_usage, weld_run_dispose};
 
 pub mod link;
+pub mod strt;
+
+pub use self::strt::WeldRun;
 
 /// An errno set by the runtime but also used by the Weld API.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd)]
