@@ -477,6 +477,8 @@ impl LlvmGenerator {
 
         let mut output = LLVMGetUndef(output_type);
         output = LLVMBuildInsertValue(builder, output, result, WeldOutputArgs::output_index(), c_str!("result"));
+        // NOTE: The run ID is an `i64` when passed back to the library, but we pass it as an `i8`
+        // handle to a `WeldRun` object here.
         output = LLVMBuildInsertValue(builder, output, run, WeldOutputArgs::runid_index(), c_str!("runid"));
         // TODO Get and set the actual errno.
         output = LLVMBuildInsertValue(builder, output, self.i64(0), WeldOutputArgs::errno_index(), c_str!("errno"));

@@ -152,7 +152,8 @@ pub mod runtime;
 #[cfg(test)]
 mod tests;
 
-use runtime::WeldRuntimeErrno;
+use conf::Backend;
+use runtime::{WeldRuntimeErrno, WeldRun};
 use util::stats::CompilationStats;
 
 /// A wrapper for a C pointer.
@@ -229,7 +230,8 @@ impl From<error::WeldCompileError> for WeldError {
 #[derive(Debug,Clone)]
 pub struct WeldValue {
     data: Data,
-    run_id: Option<RunId>,
+    run: Option<RunId>,
+    backend: Backend,
 }
 
 impl WeldValue {
@@ -241,7 +243,8 @@ impl WeldValue {
     pub fn new_from_data(data: Data) -> WeldValue {
         WeldValue {
             data: data,
-            run_id: None,
+            run: None,
+            backend: Backend::Unknown,
         }
     }
 
@@ -256,23 +259,47 @@ impl WeldValue {
     /// `WeldValue` that is created using `WeldValue::new_from_data` will always have a `run_id` of
     /// `None`.
     pub fn run_id(&self) -> Option<RunId> {
-        self.run_id
+        match self.backend {
+            Backend::LLVMWorkStealingBackend => self.run.clone(),
+            Backend::LLVMSingleThreadBackend => {
+                let run = unsafe { &mut *(self.run.unwrap() as *mut WeldRun) };
+                Some(run.run_id())
+            }
+            Backend::Unknown => None,
+        }
     }
 
-    /// Returns the memory usage of this value.
+    /// Returns the memory usage of this value in bytes.
     ///
     /// This equivalently returns the amount of memory allocated by a Weld run. If the value was
     /// not returned by Weld, returns `None`.
     pub fn memory_usage(&self) -> Option<i64> {
-        self.run_id.map(|v| unsafe { runtime::weld_run_memory_usage(v) } )
+        match self.backend {
+            Backend::LLVMWorkStealingBackend => {
+                self.run.map(|v| unsafe { runtime::weld_run_memory_usage(v) } )
+            } 
+            Backend::LLVMSingleThreadBackend => {
+                let run = unsafe { &mut *(self.run.unwrap() as *mut WeldRun) };
+                Some(run.memory_usage())
+            }
+            Backend::Unknown => None,
+        }
     }
 }
 
 // Custom Drop implementation that disposes a run.
 impl Drop for WeldValue {
     fn drop(&mut self) {
-        if let Some(run_id) = self.run_id {
-            unsafe { runtime::weld_run_dispose(run_id); }
+        match self.backend {
+            Backend::LLVMWorkStealingBackend => {
+                if let Some(run_id) = self.run {
+                    unsafe { runtime::weld_run_dispose(run_id); }
+                }
+            }
+            Backend::LLVMSingleThreadBackend => {
+                unsafe { Box::from_raw(self.run.unwrap() as *mut WeldRun) };
+            }
+            Backend::Unknown => (),
         }
     }
 }
@@ -381,8 +408,8 @@ impl WeldModule {
 
         let value = WeldValue {
             data: result.output as *const c_void,
-            // TODO change this to Option<WeldRun>!
-            run_id: Some(0),
+            run: Some(result.run),
+            backend: parsed_conf.backend.clone(),
         };
 
         // Check whether the run was successful -- if not, free the data in the module, andn return

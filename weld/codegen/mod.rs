@@ -18,7 +18,7 @@ use conf::ParsedConf;
 use conf::Backend;
 use error::*;
 use optimizer::*;
-use runtime::{WeldRuntimeErrno, WeldRun};
+use runtime::WeldRuntimeErrno;
 use sir::*;
 use syntax::macro_processor;
 use syntax::program::Program;
@@ -50,7 +50,7 @@ pub struct WeldInputArgs {
 #[repr(C)]
 pub struct WeldOutputArgs {
     pub output: i64,
-    pub run: *mut WeldRun,
+    pub run: i64,
     pub errno: WeldRuntimeErrno,
 }
 

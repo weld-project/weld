@@ -33,6 +33,7 @@ pub struct WeldRun {
     allocated: i64,
 }
 
+/// Private API used by the FFI.
 impl WeldRun {
     fn new(nworkers: i32, memlimit: i64) -> WeldRun {
         WeldRun {
@@ -94,6 +95,19 @@ impl WeldRun {
 
     fn result(&mut self) -> Pointer {
         self.result
+    }
+}
+
+/// Public read-only API used to query information about the run.
+impl WeldRun {
+
+    pub fn memory_usage(&self) -> i64 {
+        self.allocations.values().sum()
+    }
+
+    // TODO
+    pub fn run_id(&self) -> i64 {
+        0
     }
 }
 
