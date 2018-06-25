@@ -1,6 +1,7 @@
 //! JIT a constructed LLVM module into an executable module.
 
 extern crate llvm_sys;
+extern crate time;
 extern crate libc;
 
 use std::ffi::{CStr, CString};
@@ -10,8 +11,11 @@ use std::sync::{Once, ONCE_INIT};
 
 use libc::c_char;
 
+use self::time::PreciseTime;
+
 use conf::ParsedConf;
 use error::*;
+use util::stats::CompilationStats;
 
 use self::llvm_sys::core::*;
 use self::llvm_sys::prelude::*;
@@ -83,19 +87,34 @@ impl Drop for CompiledModule {
 /// Compile a constructed module in the given context.
 pub unsafe fn compile(context: LLVMContextRef,
                module: LLVMModuleRef,
-               conf: &ParsedConf) -> WeldResult<CompiledModule> {
+               conf: &ParsedConf,
+               stats: &mut CompilationStats) -> WeldResult<CompiledModule> {
 
     ONCE.call_once(|| initialize());
     if INITIALIZE_FAILED {
         unreachable!()
     }
 
+    let start = PreciseTime::now();
     verify_module(module)?;
+    let end = PreciseTime::now();
+    stats.llvm_times.push(("Module Verification".to_string(), start.to(end)));
+
+    let start = PreciseTime::now();
     optimize_module(module, conf.llvm_optimization_level)?;
+    let end = PreciseTime::now();
+    stats.llvm_times.push(("Module Optimization".to_string(), start.to(end)));
     
+    let start = PreciseTime::now();
     // Takes ownership of the module.
     let engine = create_exec_engine(module, conf.llvm_optimization_level)?;
+    let end = PreciseTime::now();
+    stats.llvm_times.push(("Create Exec Engine".to_string(), start.to(end)));
+
+    let start = PreciseTime::now();
     let run_func = find_function(engine, "run")?;
+    let end = PreciseTime::now();
+    stats.llvm_times.push(("Find Run Func Address".to_string(), start.to(end)));
 
     let result = CompiledModule {
         context: context,

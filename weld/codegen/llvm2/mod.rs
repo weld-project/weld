@@ -1036,7 +1036,7 @@ pub fn compile_program(program: &Program,
 
     trace!("{}", codegen);
 
-    let module = unsafe { jit::compile(codegen.context, codegen.module, conf)? };
+    let module = unsafe { jit::compile(codegen.context, codegen.module, conf, stats)? };
     if conf.dump_code.enabled {
         write_code(&module.asm()?, "S", &format!("{}-opt", timestamp), &conf.dump_code.dir);
         write_code(&module.llvm()?, "ll", &format!("{}-opt", timestamp), &conf.dump_code.dir);

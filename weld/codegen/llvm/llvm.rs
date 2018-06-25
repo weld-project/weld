@@ -87,6 +87,10 @@ pub struct CompiledModule {
 }
 
 impl CompiledModule {
+    pub fn run(&self, data: i64) -> i64 {
+        self.llvm_module.run(data)
+    }
+
     /// Returns a mutable reference to the LLVM module.
     pub fn llvm_mut(&mut self) -> &mut easy_ll::CompiledModule {
         &mut self.llvm_module
