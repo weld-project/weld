@@ -459,9 +459,17 @@ impl LlvmGenerator {
         let llvm_arg_ty = self.llvm_type(arg_ty)?;
         let arg_struct_pointer = LLVMBuildIntToPtr(builder, arg_pointer, LLVMPointerType(llvm_arg_ty, 0), c_str!("arg"));
 
+        // Function arguments are sorted by symbol name - arrange the inputs in the proper order.
+        let mut params: Vec<(&Symbol, u32)> = program.top_params.iter()
+            .enumerate()
+            .map(|(i, p)| (&p.name, i as u32))
+            .collect();
+
+        params.sort();
+
         let mut func_args = vec![];
-        for (i, _) in program.top_params.iter().enumerate() {
-            let pointer = LLVMBuildStructGEP(builder, arg_struct_pointer, i as u32, c_str!("param"));
+        for (_, i) in params.iter() {
+            let pointer = LLVMBuildStructGEP(builder, arg_struct_pointer, *i, c_str!("param"));
             let value = self.load(builder, pointer)?;
             func_args.push(value);
         }

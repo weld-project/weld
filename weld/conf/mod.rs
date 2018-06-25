@@ -29,7 +29,7 @@ pub const DEFAULT_LLVM_OPTIMIZATION_LEVEL: u32 = 2;
 pub const DEFAULT_DUMP_CODE: bool = false;
 pub const DEFAULT_TRACE_RUN: bool = false;
 pub const DEFAULT_EXPERIMENTAL_PASSES: bool = false;
-pub const DEFAULT_BACKEND: Backend = Backend::LLVMWorkStealingBackend;
+pub const DEFAULT_BACKEND: Backend = Backend::LLVMSingleThreadBackend;
 
 lazy_static! {
     pub static ref DEFAULT_OPTIMIZATION_PASSES: Vec<Pass> = {
