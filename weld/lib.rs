@@ -142,7 +142,6 @@ mod sir;
 mod conf;
 
 // Public interfaces.
-// TODO these probably shouldn't all be public...
 pub mod ast;
 pub mod util;
 pub mod ffi;
