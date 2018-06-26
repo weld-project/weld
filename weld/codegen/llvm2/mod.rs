@@ -777,7 +777,8 @@ impl LlvmGenerator {
                 unimplemented!() 
             }
             UnaryOp { .. }  => {
-                unimplemented!() 
+                use self::numeric::NumericExpressionGen;
+                self.gen_unaryop(context, statement)
             }
         }
     }

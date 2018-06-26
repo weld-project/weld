@@ -24,6 +24,10 @@ use super::{LlvmGenerator, CodeGenExt, FunctionContext, LLVM_VECTOR_WIDTH};
 
 /// Generates numeric expresisons.
 pub trait NumericExpressionGen {
+    /// Generates code for a numeric unary operator.
+    ///
+    /// This method supports operators over both scalar and SIMD values.
+    unsafe fn gen_unaryop(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()>;
     /// Generates code for a numeric binary operator.
     ///
     /// This method supports operators over both scalar and SIMD values.
@@ -38,6 +42,7 @@ pub trait NumericExpressionGen {
 
 /// Helper trait for generating numeric code.
 trait NumericExpressionGenInternal {
+    /// Generates the math `Pow` operator.
     unsafe fn gen_pow(&mut self,
                ctx: &mut FunctionContext,
                left: LLVMValueRef,
@@ -80,7 +85,90 @@ impl NumericExpressionGenInternal for LlvmGenerator {
     }
 }
 
+trait UnaryOpSupport {
+    fn llvm_intrinsic(&self) -> Option<&'static str>;
+}
+
+impl UnaryOpSupport for UnaryOpKind {
+    fn llvm_intrinsic(&self) -> Option<&'static str> {
+        use ast::UnaryOpKind::*;
+        match *self {
+            Exp => Some("exp"),
+            Log => Some("log"),
+            Sqrt => Some("sqrt"),
+            Sin => Some("sin"),
+            Cos => Some("cos"),
+            _ => None
+        }
+    }
+}
+
 impl NumericExpressionGen for LlvmGenerator {
+    unsafe fn gen_unaryop(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()> {
+        use ast::Type::{Scalar, Simd};
+        use self::UnaryOpSupport;
+        use sir::StatementKind::UnaryOp;
+        if let UnaryOp { op, ref child } = statement.kind {
+            let ty = ctx.sir_function.symbol_type(child)?;
+            let (kind, simd) = match *ty {
+                Scalar(kind) => (kind, false),
+                Simd(kind) => (kind, true),
+                _ => unreachable!(),
+            };
+            let child = self.load(ctx.builder, ctx.get_value(child)?)?;
+            let result = if let Some(name) = op.llvm_intrinsic() {
+                let name = Intrinsics::llvm_numeric(name, kind, simd); 
+                let ret_ty = LLVMTypeOf(child);
+                let mut arg_tys = [ret_ty];
+                self.intrinsics.add(&name, ret_ty, &mut arg_tys);
+                self.intrinsics.call(ctx.builder, name, &mut [child])?
+            } else {
+                use ast::UnaryOpKind::*;
+                use ast::ScalarKind::{F32, F64};
+                let name = match (op, kind) {
+                    (Tan, F32) => "tanf",
+                    (ASin, F32) => "asinf",
+                    (ACos, F32) => "acosf",
+                    (ATan, F32) => "atanf",
+                    (Sinh, F32) => "sinhf",
+                    (Cosh, F32) => "coshf",
+                    (Tanh, F32) => "tanhf",
+                    (Erf, F32) => "erff",
+                    (Tan, F64) => "tan",
+                    (ASin, F64) => "asin",
+                    (ACos, F64) => "acos",
+                    (ATan, F64) => "atan",
+                    (Sinh, F64) => "sinh",
+                    (Cosh, F64) => "cosh",
+                    (Tanh, F64) => "tanh",
+                    (Erf, F64) => "erf",
+                    _ => unreachable!(),
+                };
+                let ret_ty = self.llvm_type(&Scalar(kind))?;
+                let mut arg_tys = [ret_ty];
+                self.intrinsics.add(&name, ret_ty, &mut arg_tys);
+                // If the value is a scalar, just call the intrinsic. If it's a SIMD value, unroll
+                // the vector and apply the intrinsic to each element.
+                if !simd {
+                    self.intrinsics.call(ctx.builder, name, &mut [child])?
+                } else {
+                    let mut result = LLVMGetUndef(LLVMVectorType(ret_ty, LLVM_VECTOR_WIDTH));
+                    for i in 0..LLVM_VECTOR_WIDTH {
+                        let element = LLVMBuildExtractElement(ctx.builder, child, self.i32(i as i32), c_str!(""));
+                        let value = self.intrinsics.call(ctx.builder, &name, &mut [element])?;
+                        result = LLVMBuildInsertElement(ctx.builder, result, value, self.i32(i as i32), c_str!(""));
+                    }
+                    result
+                }
+            };
+            let output = ctx.get_value(statement.output.as_ref().unwrap())?;
+            LLVMBuildStore(ctx.builder, result, output);
+            Ok(())
+        } else {
+            unreachable!()
+        }
+    }
+
     unsafe fn gen_binop(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()> {
         use ast::BinOpKind;
         use ast::Type::{Scalar, Simd, Vector};

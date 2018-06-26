@@ -347,7 +347,7 @@ impl InferTypesInternal for Expr {
 
             UnaryOp { ref value, ref kind } => {
                 match value.ty {
-                    Scalar(ref kind) if kind.is_float() => {
+                    Scalar(ref kind) | Simd(ref kind) if kind.is_float() => {
                         self.ty.push(&value.ty)
                     }
                     Unknown => Ok(false),
