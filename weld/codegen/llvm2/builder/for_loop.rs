@@ -147,6 +147,7 @@ impl ForLoopGenInternal for LlvmGenerator {
                                      program: &SirProgram,
                                      func: &SirFunction,
                                      parfor: &ParallelForData) -> WeldResult<()> {
+
         // Construct the return type, which is the builders passed into the function sorted by the
         // argument parameter names.
         let builders: Vec<Type> = func.params.values()

@@ -101,9 +101,10 @@ impl Type {
 
     /// Returns whether this `Type` is a builder.
     pub fn is_builder(&self) -> bool {
-        use self::Type::Builder;
+        use self::Type::{Builder, Struct};
         match *self {
             Builder(_, _) => true,
+            Struct(ref tys) => tys.iter().all(|t| t.is_builder()),
             _ => false
         }
     }
