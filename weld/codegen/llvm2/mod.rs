@@ -783,10 +783,17 @@ impl LlvmGenerator {
     }
 
     /// Generate code for a terminator within an SIR basic block.
+    ///
+    /// `loop_terminator` is an optional tuple that is present only when generating loop body
+    /// functions. The first argument is a basic block to jump to to continue looping instead of
+    /// returning from a function
+    ///
+    /// The second arugment is a value representing the loop's builder argument pointer. The terminator
+    /// generates code to store any updated builder values into this pointer.
     unsafe fn gen_terminator(&mut self,
                                   context: &mut FunctionContext,
                                   bb: &BasicBlock,
-                                  loop_terminator: Option<LLVMBasicBlockRef>) -> WeldResult<()> {
+                                  loop_terminator: Option<(LLVMBasicBlockRef, LLVMValueRef)>) -> WeldResult<()> {
         use sir::Terminator::*;
         match bb.terminator {
             ProgramReturn(ref sym) => {
@@ -817,10 +824,31 @@ impl LlvmGenerator {
             ParallelFor(ref parfor) => {
                 use self::builder::BuilderExpressionGen;
                 self.gen_for(context, parfor)?;
+                if let Some((jumpto, loop_builder)) = loop_terminator {
+                    let pointer = context.get_value(&parfor.builder)?;
+                    let updated_builder = self.load(context.builder, pointer)?;
+                    LLVMBuildStore(context.builder, updated_builder, loop_builder);
+                    LLVMBuildBr(context.builder, jumpto);
+                } else {
+                    LLVMBuildRetVoid(context.builder);
+                }
             }
             EndFunction => {
-                if let Some(bb) = loop_terminator {
-                    LLVMBuildBr(context.builder, bb);
+                if let Some((jumpto, loop_builder)) = loop_terminator {
+                    use sir::StatementKind::Merge;
+                    let last_statement = bb.statements.last().unwrap();
+                    if let Merge { ref builder, .. } = last_statement.kind {
+                        let pointer = context.get_value(builder)?;
+                        let updated_builder = self.load(context.builder, pointer)?;
+                        LLVMBuildStore(context.builder, updated_builder, loop_builder);
+                    } else {
+                        let output = last_statement.output.as_ref().unwrap(); 
+                        assert!(context.sir_function.symbol_type(output)?.is_builder());
+                        let pointer = context.get_value(output)?;
+                        let updated_builder = self.load(context.builder, pointer)?;
+                        LLVMBuildStore(context.builder, updated_builder, loop_builder);
+                    }
+                    LLVMBuildBr(context.builder, jumpto);
                 } else {
                     LLVMBuildRetVoid(context.builder);
                 }

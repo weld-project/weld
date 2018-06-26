@@ -114,7 +114,6 @@ impl ForLoopGenInternal for LlvmGenerator {
         let cont_function = *self.functions.get(&parfor.cont).unwrap();
 
         let _ = LLVMBuildCall(ctx.builder, cont_function, arguments.as_mut_ptr(), arguments.len() as u32, c_str!(""));
-        LLVMBuildRetVoid(ctx.builder);
         Ok(())
     }
 
@@ -124,8 +123,8 @@ impl ForLoopGenInternal for LlvmGenerator {
     ///
     /// { builders } FuncName(arg1, arg2, ...):
     /// entry:
-    ///     alloca all variables
-    ///     store builder in parfor.builder_arg
+    ///     alloca all variables except the local builder.
+    ///     alias builder argument with parfor.builder_arg
     ///     br loop.begin
     /// loop.begin:
     ///     i = <initializer code>
@@ -148,8 +147,7 @@ impl ForLoopGenInternal for LlvmGenerator {
                                      func: &SirFunction,
                                      parfor: &ParallelForData) -> WeldResult<()> {
 
-        // Construct the return type, which is the builders passed into the function sorted by the
-        // argument parameter names.
+        // Construct the return type, which is the builders passed into the function.
         let builders: Vec<Type> = func.params.values()
             .filter(|v| v.is_builder())
             .map(|v| v.clone())
@@ -243,11 +241,11 @@ impl ForLoopGenInternal for LlvmGenerator {
             for statement in bb.statements.iter() {
                 self.gen_statement(context, statement)?;
             }
-            self.gen_terminator(context, &bb, Some(loop_end_bb))?;
+            let loop_terminator = (loop_end_bb, context.get_value(&parfor.builder_arg)?);
+            self.gen_terminator(context, &bb, Some(loop_terminator))?;
         }
 
-        // The EndFunction terminators in the loop body jump to this block, so no explicit jumps to
-        // it are necessary.
+        // The EndFunction terminators in the loop body jump to this block.
         LLVMPositionBuilderAtEnd(context.builder, loop_end_bb);
 
         // Increment the iteration variable i.

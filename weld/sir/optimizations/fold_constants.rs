@@ -112,7 +112,6 @@ pub fn fold_constants(prog: &mut SirProgram) -> WeldResult<()> {
 
 fn fold_constants_in_function(func: &mut SirFunction, global_params: &fnv::FnvHashSet<Symbol>) -> WeldResult<()> {
     use sir::StatementKind::*;
-
     let mut assignment_counts: fnv::FnvHashMap<Symbol, i32> = fnv::FnvHashMap::default();
     for block in func.blocks.iter_mut() {
         for statement in block.statements.iter_mut() {
@@ -122,10 +121,24 @@ fn fold_constants_in_function(func: &mut SirFunction, global_params: &fnv::FnvHa
             }
         }
     }
+
     // Maps a Symbol to a known literal value.
     let mut values: fnv::FnvHashMap<Symbol, LiteralKind> = fnv::FnvHashMap::default();
     // Set of used symbols in a function.
     let mut used_symbols = fnv::FnvHashSet::default();
+
+    // Initialize the used_symbols with all builder-typed expressions. These expressions may be
+    // "unused" in the SIR, but backends may represent assignments of them via mutable state, so
+    // removing them is potentially unsafe.
+    for block in func.blocks.iter() {
+        for statement in block.statements.iter() {
+            if let Some(ref sym) = statement.output {
+                if func.symbol_type(sym)?.is_builder() {
+                    used_symbols.insert(sym.clone());
+                }
+            }
+        }
+    }
 
     for block in func.blocks.iter_mut() {
         for statement in block.statements.iter_mut() {
