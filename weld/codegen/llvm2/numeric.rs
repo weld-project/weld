@@ -18,8 +18,11 @@ use sir::*;
 use self::llvm_sys::prelude::*;
 use self::llvm_sys::core::*;
 
+use codegen::llvm2::intrinsic::Intrinsics;
+
 use super::{LlvmGenerator, CodeGenExt, FunctionContext, LLVM_VECTOR_WIDTH};
 
+/// Generates numeric expresisons.
 pub trait NumericExpressionGen {
     /// Generates code for a numeric binary operator.
     ///
@@ -33,14 +36,71 @@ pub trait NumericExpressionGen {
     unsafe fn gen_cast(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()>;
 }
 
+/// Helper trait for generating numeric code.
+trait NumericExpressionGenInternal {
+    unsafe fn gen_pow(&mut self,
+               ctx: &mut FunctionContext,
+               left: LLVMValueRef,
+               right: LLVMValueRef,
+               ty: &Type) -> WeldResult<LLVMValueRef>; 
+}
+
+impl NumericExpressionGenInternal for LlvmGenerator {
+    unsafe fn gen_pow(&mut self,
+               ctx: &mut FunctionContext,
+               left: LLVMValueRef,
+               right: LLVMValueRef,
+               ty: &Type) -> WeldResult<LLVMValueRef> {
+        use ast::Type::{Scalar, Simd};
+        match *ty {
+            Scalar(kind) if kind.is_float() => {
+                let name = Intrinsics::llvm_numeric("pow", kind, false); 
+                let ret_ty = LLVMTypeOf(left);
+                let mut arg_tys = [ret_ty, ret_ty];
+                self.intrinsics.add(&name, ret_ty, &mut arg_tys);
+                self.intrinsics.call(ctx.builder, name, &mut [left, right])
+            }
+            Simd(kind) if kind.is_float() => {
+                let name = Intrinsics::llvm_numeric("pow", kind, false); 
+                let ret_ty = self.llvm_type(&Scalar(kind))?;
+                let mut arg_tys = [ret_ty, ret_ty];
+                self.intrinsics.add(&name, ret_ty, &mut arg_tys);
+                // Unroll vector and apply function to each element.
+                let mut result = LLVMGetUndef(LLVMVectorType(ret_ty, LLVM_VECTOR_WIDTH));
+                for i in 0..LLVM_VECTOR_WIDTH {
+                    let base = LLVMBuildExtractElement(ctx.builder, left, self.i32(i as i32), c_str!(""));
+                    let power = LLVMBuildExtractElement(ctx.builder, right, self.i32(i as i32), c_str!(""));
+                    let value = self.intrinsics.call(ctx.builder, &name, &mut [base, power])?;
+                    result = LLVMBuildInsertElement(ctx.builder, result, value, self.i32(i as i32), c_str!(""));
+                }
+                Ok(result)
+            }
+            _ => unreachable!(),
+        }
+    }
+}
+
 impl NumericExpressionGen for LlvmGenerator {
     unsafe fn gen_binop(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()> {
+        use ast::BinOpKind;
+        use ast::Type::{Scalar, Simd, Vector};
         use sir::StatementKind::BinOp;
         if let BinOp { op, ref left, ref right } = statement.kind {
             let llvm_left = self.load(ctx.builder, ctx.get_value(left)?)?;
             let llvm_right = self.load(ctx.builder, ctx.get_value(right)?)?;
             let ty = ctx.sir_function.symbol_type(left)?;
-            let result = gen_binop(ctx.builder, op, llvm_left, llvm_right, ty)?;
+            let result = match ty {
+                &Scalar(_) | &Simd(_) => { 
+                    match op {
+                        BinOpKind::Pow => self.gen_pow(ctx, llvm_left, llvm_right, ty)?,
+                        _ => gen_binop(ctx.builder, op, llvm_left, llvm_right, ty)?,
+                    }
+                }
+                &Vector(_) if op.is_comparison() => {
+                    unimplemented!()
+                }
+                _ => unreachable!(),
+            };
             let output = ctx.get_value(statement.output.as_ref().unwrap())?;
             let _ = LLVMBuildStore(ctx.builder, result, output);
             Ok(())
@@ -149,6 +209,8 @@ unsafe fn gen_cast(builder: LLVMBuilderRef,
 }
 
 /// Generates a binary op instruction without intrinsics.
+///
+/// This function supports code generation for both scalar and SIMD values.
 pub unsafe fn gen_binop(builder: LLVMBuilderRef,
              op: BinOpKind,
              left: LLVMValueRef,
