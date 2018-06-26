@@ -10,6 +10,7 @@ extern crate llvm_sys;
 
 use std::ffi::CString;
 
+use ast::Type;
 use error::*;
 
 use self::llvm_sys::prelude::*;
@@ -17,9 +18,87 @@ use self::llvm_sys::core::*;
 
 use super::LLVM_VECTOR_WIDTH;
 use super::CodeGenExt;
+use super::FunctionContext;
+use super::LlvmGenerator;
 use super::intrinsic::Intrinsics;
 
-/// A vector type.
+/// Extensions for generating methods on vectors.
+///
+/// This provides convinience wrappers for calling methods on vectors.
+pub trait VectorExt {
+    unsafe fn gen_new(&mut self,
+               ctx: &mut FunctionContext,
+               vector_type: &Type,
+               size: LLVMValueRef) -> WeldResult<LLVMValueRef>;
+    unsafe fn gen_at(&mut self,
+              ctx: &mut FunctionContext,
+              vector_type: &Type,
+              vec: LLVMValueRef,
+              index: LLVMValueRef) -> WeldResult<LLVMValueRef>;
+    unsafe fn gen_vat(&mut self,
+               ctx: &mut FunctionContext,
+               vector_type: &Type,
+               vec: LLVMValueRef,
+               index: LLVMValueRef) -> WeldResult<LLVMValueRef>;
+    unsafe fn gen_size(&mut self,
+                ctx: &mut FunctionContext,
+                vector_type: &Type,
+                vec: LLVMValueRef) -> WeldResult<LLVMValueRef>;
+}
+
+impl VectorExt for LlvmGenerator {
+    unsafe fn gen_new(&mut self,
+               ctx: &mut FunctionContext,
+               vector_type: &Type,
+               size: LLVMValueRef) -> WeldResult<LLVMValueRef> {
+        if let Type::Vector(ref elem_type) = *vector_type {
+            let mut methods = self.vectors.get_mut(elem_type).unwrap();
+            methods.gen_new(ctx.builder, &mut self.intrinsics, ctx.get_run(), size)
+        } else {
+            unreachable!()
+        }
+    }
+
+    unsafe fn gen_at(&mut self,
+              ctx: &mut FunctionContext,
+              vector_type: &Type,
+              vector: LLVMValueRef,
+              index: LLVMValueRef) -> WeldResult<LLVMValueRef> {
+        if let Type::Vector(ref elem_type) = *vector_type {
+            let mut methods = self.vectors.get_mut(elem_type).unwrap();
+            methods.gen_at(ctx.builder, vector, index)
+        } else {
+            unreachable!()
+        }
+    }
+
+    unsafe fn gen_vat(&mut self,
+               ctx: &mut FunctionContext,
+               vector_type: &Type,
+               vector: LLVMValueRef,
+               index: LLVMValueRef) -> WeldResult<LLVMValueRef> {
+        if let Type::Vector(ref elem_type) = *vector_type {
+            let mut methods = self.vectors.get_mut(elem_type).unwrap();
+            methods.gen_vat(ctx.builder, vector, index)
+        } else {
+            unreachable!()
+        }
+    }
+
+    unsafe fn gen_size(&mut self,
+                ctx: &mut FunctionContext,
+                vector_type: &Type,
+                vector: LLVMValueRef) -> WeldResult<LLVMValueRef> {
+        if let Type::Vector(ref elem_type) = *vector_type {
+            let mut methods = self.vectors.get_mut(elem_type).unwrap();
+            methods.gen_size(ctx.builder, vector)
+        } else {
+            unreachable!()
+        }
+    }
+}
+
+/// A vector type and its associated methods.
 pub struct Vector {
     pub vector_ty: LLVMTypeRef,
     pub name: String,

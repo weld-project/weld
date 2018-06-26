@@ -761,8 +761,14 @@ impl LlvmGenerator {
                 use self::builder::BuilderExpressionGen;
                 self.gen_result(context, statement)
             }
-            Select { .. } => {
-                unimplemented!() 
+            Select { ref cond, ref on_true, ref on_false } => {
+                let output_pointer = context.get_value(output)?;
+                let cond = self.load(context.builder, context.get_value(cond)?)?;
+                let on_true = self.load(context.builder, context.get_value(on_true)?)?;
+                let on_false = self.load(context.builder, context.get_value(on_false)?)?;
+                let result = LLVMBuildSelect(context.builder, cond, on_true, on_false, c_str!(""));
+                LLVMBuildStore(context.builder, result, output_pointer);
+                Ok(())
             }
             Serialize(_) => {
                 unimplemented!() 
