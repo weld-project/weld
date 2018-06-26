@@ -93,14 +93,17 @@ impl WeldRun {
         self.result = result;
     }
 
-    fn result(&mut self) -> Pointer {
+    fn result(&self) -> Pointer {
         self.result
+    }
+
+    fn errno(&self) -> WeldRuntimeErrno {
+        self.errno
     }
 }
 
 /// Public read-only API used to query information about the run.
 impl WeldRun {
-
     pub fn memory_usage(&self) -> i64 {
         self.allocations.values().sum()
     }
@@ -176,6 +179,13 @@ pub unsafe extern "C" fn weld_runst_set_result(run: WeldRunRef, ptr: Pointer) {
 pub unsafe extern "C" fn weld_runst_set_errno(run: WeldRunRef, errno: WeldRuntimeErrno) {
     let run = &mut *run;
     run.set_errno(errno)
+}
+
+#[no_mangle]
+/// Get the errno value.
+pub unsafe extern "C" fn weld_runst_get_errno(run: WeldRunRef) -> WeldRuntimeErrno {
+    let run = &mut *run;
+    run.errno()
 }
 
 #[no_mangle]

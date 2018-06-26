@@ -108,7 +108,7 @@ impl LlvmInputArg for WeldInputArgs {
 trait LlvmOutputArg {
     unsafe fn llvm_type(context: LLVMContextRef) -> LLVMTypeRef; 
     fn output_index() -> u32;
-    fn runid_index() -> u32;
+    fn run_index() -> u32;
     fn errno_index() -> u32;
 }
 
@@ -116,7 +116,7 @@ impl LlvmOutputArg for WeldOutputArgs {
     unsafe fn llvm_type(context: LLVMContextRef) -> LLVMTypeRef {
         let mut types = [
             LLVMInt64TypeInContext(context),
-            LLVMPointerType(LLVMInt8TypeInContext(context), 0),
+            LLVMInt64TypeInContext(context),
             LLVMInt64TypeInContext(context)
         ];
         let args = LLVMStructCreateNamed(context, c_str!("output_args_t"));
@@ -128,7 +128,7 @@ impl LlvmOutputArg for WeldOutputArgs {
         0
     }
 
-    fn runid_index() -> u32 {
+    fn run_index() -> u32 {
         1
     }
 
@@ -481,15 +481,14 @@ impl LlvmGenerator {
         let _ = LLVMBuildCall(builder, entry_function, func_args.as_mut_ptr(), func_args.len() as u32, c_str!(""));
 
         let result = self.intrinsics.call_weld_run_get_result(builder, run, None);
-        let result = LLVMBuildPtrToInt(builder, result, self.i64_type(), c_str!(""));
+        let result = LLVMBuildPtrToInt(builder, result, self.i64_type(), c_str!("result"));
+        let errno = self.intrinsics.call_weld_run_get_errno(builder, run, Some(c_str!("errno")));
+        let run_int = LLVMBuildPtrToInt(builder, run, self.i64_type(), c_str!("run"));
 
         let mut output = LLVMGetUndef(output_type);
-        output = LLVMBuildInsertValue(builder, output, result, WeldOutputArgs::output_index(), c_str!("result"));
-        // NOTE: The run ID is an `i64` when passed back to the library, but we pass it as an `i8`
-        // handle to a `WeldRun` object here.
-        output = LLVMBuildInsertValue(builder, output, run, WeldOutputArgs::runid_index(), c_str!("runid"));
-        // TODO Get and set the actual errno.
-        output = LLVMBuildInsertValue(builder, output, self.i64(0), WeldOutputArgs::errno_index(), c_str!("errno"));
+        output = LLVMBuildInsertValue(builder, output, result, WeldOutputArgs::output_index(), c_str!(""));
+        output = LLVMBuildInsertValue(builder, output, run_int, WeldOutputArgs::run_index(), c_str!(""));
+        output = LLVMBuildInsertValue(builder, output, errno, WeldOutputArgs::errno_index(), c_str!(""));
 
         let return_pointer = LLVMBuildMalloc(builder, output_type, c_str!(""));
         LLVMBuildStore(builder, output, return_pointer);
