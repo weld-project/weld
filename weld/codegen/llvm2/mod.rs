@@ -751,7 +751,8 @@ impl LlvmGenerator {
                 self.gen_merge(context, statement)
             }
             Negate(_) => {
-                unimplemented!() 
+                use self::numeric::NumericExpressionGen;
+                self.gen_negate(context, statement)
             }
             NewBuilder { .. } => {
                 use self::builder::BuilderExpressionGen;

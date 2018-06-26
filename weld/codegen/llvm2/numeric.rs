@@ -32,6 +32,8 @@ pub trait NumericExpressionGen {
     ///
     /// This method supports operators over both scalar and SIMD values.
     unsafe fn gen_binop(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()>;
+    /// Generates code for the negation operator.
+    unsafe fn gen_negate(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()>;
     /// Generates a literal.
     ///
     /// This method supports both scalar and SIMD values.
@@ -116,6 +118,9 @@ impl NumericExpressionGen for LlvmGenerator {
                 _ => unreachable!(),
             };
             let child = self.load(ctx.builder, ctx.get_value(child)?)?;
+
+            // Use the LLVM intrinsic if one is available, since LLVM may be able to vectorize it.
+            // Otherwise, fall back to the libc math variant and unroll SIMD values manually.
             let result = if let Some(name) = op.llvm_intrinsic() {
                 let name = Intrinsics::llvm_numeric(name, kind, simd); 
                 let ret_ty = LLVMTypeOf(child);
@@ -163,6 +168,39 @@ impl NumericExpressionGen for LlvmGenerator {
             };
             let output = ctx.get_value(statement.output.as_ref().unwrap())?;
             LLVMBuildStore(ctx.builder, result, output);
+            Ok(())
+        } else {
+            unreachable!()
+        }
+    }
+
+    unsafe fn gen_negate(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()> {
+        use ast::BinOpKind::Subtract;
+        use ast::ScalarKind::{F32, F64};
+        use ast::Type::{Scalar, Simd};
+        use sir::StatementKind::Negate;
+        if let Negate(ref child) = statement.kind {
+            let ty = ctx.sir_function.symbol_type(child)?;
+            let (kind, simd) = match *ty {
+                Scalar(kind) => (kind, false),
+                Simd(kind) => (kind, true),
+                _ => unreachable!(),
+            };
+
+            let mut zero = match kind {
+                F32 => LLVMConstReal(self.f32_type(), 0.0),
+                F64 => LLVMConstReal(self.f64_type(), 0.0),
+                _ => LLVMConstInt(LLVMIntTypeInContext(self.context, kind.bits()), 0, 1),
+            };
+
+            if simd {
+                zero = LLVMConstVector([zero; LLVM_VECTOR_WIDTH as usize].as_mut_ptr(), LLVM_VECTOR_WIDTH);
+            }
+
+            let child = self.load(ctx.builder, ctx.get_value(child)?)?;
+            let result = gen_binop(ctx.builder, Subtract, zero, child, ty)?;
+            let output = ctx.get_value(statement.output.as_ref().unwrap())?;
+            let _ = LLVMBuildStore(ctx.builder, result, output);
             Ok(())
         } else {
             unreachable!()
