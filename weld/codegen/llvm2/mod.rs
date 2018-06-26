@@ -200,7 +200,7 @@ pub trait CodeGenExt {
         let name = CString::new(name).unwrap();
         let function = LLVMAddFunction(self.module(), name.as_ptr(), func_ty); 
         let builder = LLVMCreateBuilderInContext(self.context());
-        let block = LLVMAppendBasicBlockInContext(self.context(), function, c_str!("entry"));
+        let block = LLVMAppendBasicBlockInContext(self.context(), function, c_str!(""));
         LLVMPositionBuilderAtEnd(builder, block);
         LLVMSetLinkage(function, LLVMLinkage::LLVMPrivateLinkage);
         (function, builder, block)
@@ -773,8 +773,22 @@ impl LlvmGenerator {
             Serialize(_) => {
                 unimplemented!() 
             }
-            Slice { .. } => {
-                unimplemented!() 
+            Slice { ref child, ref index, ref size } => {
+                let output_pointer = context.get_value(output)?;
+                let child_value = self.load(context.builder, context.get_value(child)?)?;
+                let index_value = self.load(context.builder, context.get_value(index)?)?;
+                let size_value = self.load(context.builder, context.get_value(size)?)?;
+                let child_type = context.sir_function.symbol_type(child)?;
+                if let Vector(ref elem_type) = *child_type {
+                    let result = {
+                        let mut methods = self.vectors.get_mut(elem_type).unwrap();
+                        methods.gen_slice(context.builder, child_value, index_value, size_value)?
+                    };
+                    LLVMBuildStore(context.builder, result, output_pointer);
+                    Ok(())
+                } else {
+                    unreachable!()
+                }
             }
             Sort { .. } => {
                 unimplemented!() 

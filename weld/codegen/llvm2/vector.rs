@@ -106,10 +106,10 @@ pub struct Vector {
     context: LLVMContextRef,
     module: LLVMModuleRef,
     new: Option<LLVMValueRef>,
-    clone: Option<LLVMValueRef>,
     at: Option<LLVMValueRef>,
     vat: Option<LLVMValueRef>,
     size: Option<LLVMValueRef>,
+    slice: Option<LLVMValueRef>,
 }
 
 impl CodeGenExt for Vector {
@@ -139,10 +139,10 @@ impl Vector {
             vector_ty: vector,
             elem_ty: elem_ty,
             new: None,
-            clone: None,
             at: None,
             vat: None,
             size: None,
+            slice: None,
         }
     }
 
@@ -185,8 +185,8 @@ impl Vector {
                               vector: LLVMValueRef,
                               index: LLVMValueRef) -> WeldResult<LLVMValueRef> {
         if self.at.is_none() {
-            let mut arg_tys = [self.vector_ty, LLVMInt64TypeInContext(self.context)];
-            let ret_ty = LLVMPointerType(self.elem_ty, 0) ;
+            let mut arg_tys = [self.vector_ty, self.i64_type()];
+            let ret_ty = LLVMPointerType(self.elem_ty, 0);
 
             let name = format!("{}.at", self.name);
             let (function, builder, _) = self.define_function(ret_ty, &mut arg_tys, name);
@@ -205,12 +205,52 @@ impl Vector {
         Ok(LLVMBuildCall(builder, self.at.unwrap(), args.as_mut_ptr(), args.len() as u32, c_str!("")))
     }
 
+    pub unsafe fn gen_slice(&mut self,
+                            builder: LLVMBuilderRef,
+                            vector: LLVMValueRef,
+                            index: LLVMValueRef,
+                            size: LLVMValueRef) -> WeldResult<LLVMValueRef> {
+        use self::llvm_sys::LLVMIntPredicate::LLVMIntUGT;
+        if self.slice.is_none() {
+            let mut arg_tys = [self.vector_ty, self.i64_type(), self.i64_type()];
+            let ret_ty = self.vector_ty;
+
+            let name = format!("{}.slice", self.name);
+            let (function, builder, _) = self.define_function(ret_ty, &mut arg_tys, name);
+
+            let vector = LLVMGetParam(function, 0);
+            let index = LLVMGetParam(function, 1);
+            let size = LLVMGetParam(function, 2);
+
+            // Compute the size of the array. We use the remaining size if the new size does not
+            // accomodate the vector starting at the given index.
+            let cur_size = LLVMBuildExtractValue(builder, vector, 1, c_str!(""));
+            let remaining = LLVMBuildSub(builder, cur_size, index, c_str!(""));
+            let size_cmp = LLVMBuildICmp(builder, LLVMIntUGT, size, remaining, c_str!(""));
+            let new_size = LLVMBuildSelect(builder, size_cmp, remaining, size, c_str!(""));
+
+            let elements = LLVMBuildExtractValue(builder, vector, 0, c_str!(""));
+            let new_elements = LLVMBuildGEP(builder, elements, [index].as_mut_ptr(), 1, c_str!(""));
+
+            let mut result = LLVMGetUndef(self.vector_ty);
+            result = LLVMBuildInsertValue(builder, result, new_elements, 0, c_str!(""));
+            result = LLVMBuildInsertValue(builder, result, new_size, 1, c_str!(""));
+            LLVMBuildRet(builder, result);
+
+            self.slice = Some(function);
+            LLVMDisposeBuilder(builder);
+        }
+
+        let mut args = [vector, index, size];
+        Ok(LLVMBuildCall(builder, self.slice.unwrap(), args.as_mut_ptr(), args.len() as u32, c_str!("")))
+    }
+
     pub unsafe fn gen_vat(&mut self,
                               builder: LLVMBuilderRef,
                               vector: LLVMValueRef,
                               index: LLVMValueRef) -> WeldResult<LLVMValueRef> {
         if self.vat.is_none() {
-            let mut arg_tys = [self.vector_ty, LLVMInt64TypeInContext(self.context)];
+            let mut arg_tys = [self.vector_ty, self.i64_type()];
             let ret_ty = LLVMPointerType(LLVMVectorType(self.elem_ty, LLVM_VECTOR_WIDTH), 0);
 
             let name = format!("{}.vat", self.name);
@@ -236,7 +276,7 @@ impl Vector {
                                 vector: LLVMValueRef) -> WeldResult<LLVMValueRef> {
         if self.size.is_none() {
             let mut arg_tys = [self.vector_ty];
-            let ret_ty = LLVMInt64TypeInContext(self.context);
+            let ret_ty = self.i64_type();
 
             let name = format!("{}.size", self.name);
             let (function, builder, _) = self.define_function(ret_ty, &mut arg_tys, name);
