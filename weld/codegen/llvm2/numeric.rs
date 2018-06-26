@@ -148,7 +148,7 @@ unsafe fn gen_cast(builder: LLVMBuilderRef,
     Ok(result)
 }
 
-/// Generates a binary op instruction.
+/// Generates a binary op instruction without intrinsics.
 pub unsafe fn gen_binop(builder: LLVMBuilderRef,
              op: BinOpKind,
              left: LLVMValueRef,
@@ -207,6 +207,16 @@ pub unsafe fn gen_binop(builder: LLVMBuilderRef,
                 BitwiseOr if s.is_integer() || s.is_bool() => LLVMBuildOr(builder, left, right, name),
 
                 Xor if s.is_integer() || s.is_bool() => LLVMBuildXor(builder, left, right, name),
+
+                Max => {
+                    let compare = gen_binop(builder, GreaterThanOrEqual, left, right, ty)?;
+                    LLVMBuildSelect(builder, compare, left, right, c_str!(""))
+                }
+
+                Min => {
+                    let compare = gen_binop(builder, LessThanOrEqual, left, right, ty)?;
+                    LLVMBuildSelect(builder, compare, left, right, c_str!(""))
+                }
 
                 _ => return compile_err!("Unsupported binary op: {} on {}", op, ty)
             }
