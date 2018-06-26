@@ -76,7 +76,7 @@ impl HasPointer for Type {
 pub fn compile(sir_prog: &SirProgram,
                conf: &ParsedConf,
                stats: &mut CompilationStats,
-               dump_prefix: &str) -> WeldResult<Box<Runnable>> {
+               dump_prefix: &str) -> WeldResult<Box<dyn Runnable>> {
     info!("Compiling using work stealing multithreaded runtime");
     let start = PreciseTime::now();
     let mut gen = LlvmGenerator::new();

@@ -61,7 +61,7 @@ pub trait Runnable {
 
 /// A compiled, runnable module.
 pub struct CompiledModule {
-    runnable: Box<Runnable>,
+    runnable: Box<dyn Runnable>,
     param_types: Vec<Type>,
     return_type: Type,
 }
@@ -70,8 +70,8 @@ impl CompiledModule {
     /// Run the compiled module.
     ///
     /// This calls the `run` function on the internal `Runnable`.
-    pub fn run(&self, data: i64) -> i64 {
-        self.runnable.run(data)
+    pub fn run(&self, arg: i64) -> i64 {
+        self.runnable.run(arg)
     }
 
     /// Get the Weld parameter types of the compiled function.

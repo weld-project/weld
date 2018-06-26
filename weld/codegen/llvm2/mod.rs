@@ -48,7 +48,7 @@ use self::builder::merger;
 pub fn compile(program: &SirProgram,
                conf: &ParsedConf,
                stats: &mut CompilationStats,
-               dump_prefix: &str) -> WeldResult<Box<Runnable>> {
+               dump_prefix: &str) -> WeldResult<Box<dyn Runnable>> {
 
     info!("Compiling using single thread runtime");
 
