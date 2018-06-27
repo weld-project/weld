@@ -28,6 +28,14 @@ pub trait ForLoopGenInternal {
     unsafe fn gen_for_internal(&mut self,
                                ctx: &mut FunctionContext,
                                parfor: &ParallelForData) -> WeldResult<()>; 
+    /// Generates bounds checking code for the loop and return number of iterations.
+    ///
+    /// This function ensures that each iterator will only access in-bounds vector elements and
+    /// also ensures that each zipped vector has the same number of consumed elements. If these
+    /// checks fail, the generated code raises an error.
+    unsafe fn gen_bounds_check(&mut self,
+                               ctx: &mut FunctionContext,
+                               parfor: &ParallelForData) -> WeldResult<LLVMValueRef>; 
     /// Generates the loop body.
     ///
     /// This generates both the loop control flow and the executing body of the loop.
@@ -38,7 +46,7 @@ pub trait ForLoopGenInternal {
     /// Generates a bounds check for the given iterator.
     ///
     /// Returns a value representing the number of iterations the iterator will produce.
-    unsafe fn gen_bounds_check(&mut self,
+    unsafe fn gen_iter_bounds_check(&mut self,
                                ctx: &mut FunctionContext,
                                iterator: &ParallelForIter,
                                pass_block: LLVMBasicBlockRef,
@@ -62,32 +70,104 @@ pub trait ForLoopGenInternal {
 }
 
 impl ForLoopGenInternal for LlvmGenerator {
-    unsafe fn gen_for_internal(&mut self, ctx: &mut FunctionContext, parfor: &ParallelForData) -> WeldResult<()> {
-        // Generate a runtime bounds check and determine the number of iterations each iterator
-        // will produce.
-        //
-        // The bounds check looks as follows:
-        //
-        // passed0 = <check bounds of iterator 0>
-        // if passed: goto next, else: goto fail
-        // next:
-        // passed1 = <check bounds of iterator 1>
-        // ...
-        // fail:
-        // raise error
+    /// Entry point to generating a for loop.
+    unsafe fn gen_for_internal(&mut self,
+                               ctx: &mut FunctionContext,
+                               parfor: &ParallelForData) -> WeldResult<()> {
+
+        let iterations = self.gen_bounds_check(ctx, parfor)?;
+
+        let ref sir_function = ctx.sir_program.funcs[parfor.body];
+        assert!(sir_function.loop_body);
+
+        self.gen_loop_body_function(ctx.sir_program, sir_function, parfor)?;
+        let body_function = *self.functions.get(&parfor.body).unwrap();
+
+        // The parameters of the body function have symbol names that must exist in the current
+        // context.
+        let mut arguments = vec![];
+        for (symbol, _) in sir_function.params.iter() {
+            let value = self.load(ctx.builder, ctx.get_value(symbol)?)?;
+            arguments.push(value);
+        }
+        // The body function has an additional arguement representing the number of iterations.
+        arguments.push(iterations);
+        // Last argument is always the run handle.
+        arguments.push(ctx.get_run());
+
+        // Call the body function, which runs the loop and updates the builder. The updated builder
+        // is returned to the current function.
+        let builder = LLVMBuildCall(ctx.builder,
+                                    body_function,
+                                    arguments.as_mut_ptr(),
+                                    arguments.len() as u32,
+                                    c_str!(""));
+        LLVMBuildStore(ctx.builder, builder, ctx.get_value(&parfor.builder)?);
+
+        // Create a new exit block, jump to it, and then load the arguments to the continuation and
+        // call it.
+        let block = LLVMAppendBasicBlockInContext(self.context, ctx.llvm_function, c_str!("exit"));
+        LLVMBuildBr(ctx.builder, block);
+        LLVMPositionBuilderAtEnd(ctx.builder, block);
+
+        // Call the continuation, which can be built as a tail call.
+        let ref sir_function = ctx.sir_program.funcs[parfor.cont];
+        let mut arguments = vec![];
+        for (symbol, _) in sir_function.params.iter() {
+            let value = self.load(ctx.builder, ctx.get_value(symbol)?)?;
+            arguments.push(value);
+        }
+        arguments.push(ctx.get_run());
+        let cont_function = *self.functions.get(&parfor.cont).unwrap();
+
+        let _ = LLVMBuildCall(ctx.builder,
+                              cont_function,
+                              arguments.as_mut_ptr(),
+                              arguments.len() as u32,
+                              c_str!(""));
+        Ok(())
+    }
+
+    /// Generate runtime bounds checking, which looks as follows:
+    ///
+    /// passed0 = <check bounds of iterator 0>
+    /// if passed: goto next, else: goto fail
+    /// next:
+    /// passed1 = <check bounds of iterator 1>
+    /// ...
+    /// fail:
+    /// raise error
+    ///
+    /// The bounds check code positions the `FunctionContext` builder after all bounds checking is
+    /// complete.
+    unsafe fn gen_bounds_check(&mut self,
+                               ctx: &mut FunctionContext,
+                               parfor: &ParallelForData) -> WeldResult<LLVMValueRef> {
         let mut pass_blocks = vec![];
         for _ in 0..parfor.data.len() {
-            pass_blocks.push(LLVMAppendBasicBlockInContext(self.context, ctx.llvm_function, c_str!("bounds.check")));
+            pass_blocks.push(LLVMAppendBasicBlockInContext(self.context, ctx
+                                                           llvm_function,
+                                                           c_str!("bounds.check")));
         }
         // Jump here if the iterator will cause an array out of bounds error. 
-        let fail_boundscheck_block = LLVMAppendBasicBlockInContext(self.context, ctx.llvm_function, c_str!("bounds.fail"));
+        let fail_boundscheck_block = LLVMAppendBasicBlockInContext(self.context,
+                                                                   ctx.llvm_function,
+                                                                   c_str!("bounds.fail"));
         // Jump here if the zipped vectors produce different numbers of iterations.
-        let fail_zip_block = LLVMAppendBasicBlockInContext(self.context, ctx.llvm_function, c_str!("bounds.fail"));
-        let pass_all_block = LLVMAppendBasicBlockInContext(self.context, ctx.llvm_function, c_str!("bounds.passed"));
+        let fail_zip_block = LLVMAppendBasicBlockInContext(self.context,
+                                                           ctx.llvm_function,
+                                                           c_str!("bounds.fail"));
+        // Jump here if all checks pass.
+        let pass_all_block = LLVMAppendBasicBlockInContext(self.context,
+                                                           ctx.llvm_function,
+                                                           c_str!("bounds.passed"));
 
-        let ref mut num_iterations = vec![];
+        let mut num_iterations = vec![];
         for (iter, pass_block) in parfor.data.iter().zip(pass_blocks) {
-            let iterations = self.gen_bounds_check(ctx, iter, pass_block, fail_boundscheck_block)?;
+            let iterations = self.gen_iter_bounds_check(ctx,
+                                                        iter,
+                                                        pass_block,
+                                                        fail_boundscheck_block)?;
             num_iterations.push(iterations);
             LLVMPositionBuilderAtEnd(ctx.builder, pass_block);
         }
@@ -96,7 +176,7 @@ impl ForLoopGenInternal for LlvmGenerator {
 
         // Make sure each iterator produces the same number of iterations.
         if num_iterations.len() > 1 {
-            self.gen_check_equal(ctx, num_iterations, pass_all_block, fail_zip_block)?;
+            self.gen_check_equal(ctx, &num_iterations, pass_all_block, fail_zip_block)?;
         } else {
             let _ = LLVMBuildBr(ctx.builder, pass_all_block);
         }
@@ -117,58 +197,16 @@ impl ForLoopGenInternal for LlvmGenerator {
                                                 None);
         LLVMBuildUnreachable(ctx.builder);
 
-        // Bounds check passed. Generate code to invoke the loop.
+        // Bounds check passed - jump to the final block.
         LLVMPositionBuilderAtEnd(ctx.builder, pass_all_block);
-
-        let ref sir_function = ctx.sir_program.funcs[parfor.body];
-        assert!(sir_function.loop_body);
-
-        self.gen_loop_body_function(ctx.sir_program, sir_function, parfor)?;
-        let body_function = *self.functions.get(&parfor.body).unwrap();
-
-        // The parameters of the body function have symbol names that must exist in the current
-        // context.
-        let mut arguments = vec![];
-        for (symbol, _) in sir_function.params.iter() {
-            let value = self.load(ctx.builder, ctx.get_value(symbol)?)?;
-            arguments.push(value);
-        }
-        let iterations = num_iterations[0];
-        // The body function has an additional arguement representing the number of iterations.
-        arguments.push(iterations);
-        // Last argument is always the run handle.
-        arguments.push(ctx.get_run());
-
-        // Call the body function, which runs the loop and updates the builder. The updated builder
-        // is returned to the current function.
-        let builder = LLVMBuildCall(ctx.builder, body_function, arguments.as_mut_ptr(), arguments.len() as u32, c_str!(""));
-        LLVMBuildStore(ctx.builder, builder, ctx.get_value(&parfor.builder)?);
-
-        // Create a new exit block, jump to it, and then load the arguments to the continuation and
-        // call it.
-        let block = LLVMAppendBasicBlockInContext(self.context, ctx.llvm_function, c_str!("exit"));
-        LLVMBuildBr(ctx.builder, block);
-        LLVMPositionBuilderAtEnd(ctx.builder, block);
-
-        // Call the continuation, which can be built as a tail call.
-        let ref sir_function = ctx.sir_program.funcs[parfor.cont];
-        let mut arguments = vec![];
-        for (symbol, _) in sir_function.params.iter() {
-            let value = self.load(ctx.builder, ctx.get_value(symbol)?)?;
-            arguments.push(value);
-        }
-        arguments.push(ctx.get_run());
-        let cont_function = *self.functions.get(&parfor.cont).unwrap();
-
-        let _ = LLVMBuildCall(ctx.builder, cont_function, arguments.as_mut_ptr(), arguments.len() as u32, c_str!(""));
-        Ok(())
+        Ok(num_iterations[0])
     }
 
     /// Generate a loop body function.
     ///
     /// A loop body function has the following layout:
     ///
-    /// { builders } FuncName(arg1, arg2, ...):
+    /// { builders } FuncName(arg1, arg2, ..., iterations, run):
     /// entry:
     ///     alloca all variables except the local builder.
     ///     alias builder argument with parfor.builder_arg
@@ -383,7 +421,7 @@ impl ForLoopGenInternal for LlvmGenerator {
         Ok(())
     }
 
-    unsafe fn gen_bounds_check(&mut self,
+    unsafe fn gen_iter_bounds_check(&mut self,
                                ctx: &mut FunctionContext,
                                iter: &ParallelForIter,
                                pass_block: LLVMBasicBlockRef,
@@ -427,8 +465,6 @@ impl ForLoopGenInternal for LlvmGenerator {
             }
             SimdIter if iter.start.is_some() => unimplemented!(),
             SimdIter => {
-                // The number of iterations is the size of the vector. No explicit bounds check is
-                // necessary here. TODO definitely want a function for this...
                 let iterations = LLVMBuildSDiv(ctx.builder, size, self.i64(LLVM_VECTOR_WIDTH as i64), c_str!(""));
                 let _ = LLVMBuildBr(ctx.builder, pass_block);
                 Ok(iterations)
