@@ -829,14 +829,12 @@ impl LlvmGenerator {
                 LLVMBuildRetVoid(context.builder);
             }
             Branch { ref cond, ref on_true, ref on_false } => {
-                LLVMPositionBuilderAtEnd(context.builder, context.get_block(&bb.id)?);
                 let _ = LLVMBuildCondBr(context.builder,
                                         context.get_value(cond)?,
                                         context.get_block(&on_true)?,
                                         context.get_block(&on_false)?);
             }
             JumpBlock(ref id) => {
-                LLVMPositionBuilderAtEnd(context.builder, context.get_block(&bb.id)?);
                 LLVMBuildBr(context.builder, context.get_block(id)?);
             }
             JumpFunction(ref _func) => {
@@ -851,6 +849,7 @@ impl LlvmGenerator {
                     LLVMBuildStore(context.builder, updated_builder, loop_builder);
                     LLVMBuildBr(context.builder, jumpto);
                 } else {
+                    // Continuation will continue the program - this ends the current function.
                     LLVMBuildRetVoid(context.builder);
                 }
             }

@@ -6,16 +6,17 @@ use std::ffi::CString;
 
 use ast::*;
 use ast::IterKind::*;
-use ast::Type::*;
 use error::*;
-
+use runtime::WeldRuntimeErrno;
 use sir::*;
 
 use self::llvm_sys::{LLVMIntPredicate, LLVMLinkage};
 use self::llvm_sys::prelude::*;
 use self::llvm_sys::core::*;
 
+use codegen::llvm2::vector::VectorExt;
 use codegen::llvm2::LLVM_VECTOR_WIDTH;
+
 use super::{CodeGenExt, FunctionContext, LlvmGenerator};
 
 /// An internal trait for generating parallel For loops.
@@ -39,13 +40,17 @@ pub trait ForLoopGenInternal {
     /// Returns a value representing the number of iterations the iterator will produce.
     unsafe fn gen_bounds_check(&mut self,
                                ctx: &mut FunctionContext,
-                               iterator: &ParallelForIter) -> WeldResult<LLVMValueRef>;
+                               iterator: &ParallelForIter,
+                               pass_block: LLVMBasicBlockRef,
+                               fail_block: LLVMBasicBlockRef) -> WeldResult<LLVMValueRef>;
     /// Generates code to check whether the number of iterations in each value is the same.
     ///
     /// If the number of iterations is not the same, the module raises an error and exits.
     unsafe fn gen_check_equal(&mut self,
                               ctx: &mut FunctionContext,
-                              iterations: &Vec<LLVMValueRef>) -> WeldResult<()>;
+                              iterations: &Vec<LLVMValueRef>,
+                              pass_block: LLVMBasicBlockRef,
+                              fail_block: LLVMBasicBlockRef) -> WeldResult<()>;
     /// Generates code to load potentially zipped elements at index `i` into `e`.
     /// 
     /// `e` must be a pointer, and `i` must be a loaded index argument of type `i64`.
@@ -58,20 +63,62 @@ pub trait ForLoopGenInternal {
 
 impl ForLoopGenInternal for LlvmGenerator {
     unsafe fn gen_for_internal(&mut self, ctx: &mut FunctionContext, parfor: &ParallelForData) -> WeldResult<()> {
-        // Generate a bounds check and determine the number of iterations each iterator will
-        // produce.
+        // Generate a runtime bounds check and determine the number of iterations each iterator
+        // will produce.
+        //
+        // The bounds check looks as follows:
+        //
+        // passed0 = <check bounds of iterator 0>
+        // if passed: goto next, else: goto fail
+        // next:
+        // passed1 = <check bounds of iterator 1>
+        // ...
+        // fail:
+        // raise error
+        let mut pass_blocks = vec![];
+        for _ in 0..parfor.data.len() {
+            pass_blocks.push(LLVMAppendBasicBlockInContext(self.context, ctx.llvm_function, c_str!("bounds.check")));
+        }
+        // Jump here if the iterator will cause an array out of bounds error. 
+        let fail_boundscheck_block = LLVMAppendBasicBlockInContext(self.context, ctx.llvm_function, c_str!("bounds.fail"));
+        // Jump here if the zipped vectors produce different numbers of iterations.
+        let fail_zip_block = LLVMAppendBasicBlockInContext(self.context, ctx.llvm_function, c_str!("bounds.fail"));
+        let pass_all_block = LLVMAppendBasicBlockInContext(self.context, ctx.llvm_function, c_str!("bounds.passed"));
+
         let ref mut num_iterations = vec![];
-        for iter in parfor.data.iter() {
-            let iterations = self.gen_bounds_check(ctx, iter)?;
+        for (iter, pass_block) in parfor.data.iter().zip(pass_blocks) {
+            let iterations = self.gen_bounds_check(ctx, iter, pass_block, fail_boundscheck_block)?;
             num_iterations.push(iterations);
+            LLVMPositionBuilderAtEnd(ctx.builder, pass_block);
         }
 
         assert!(num_iterations.len() > 0);
 
         // Make sure each iterator produces the same number of iterations.
         if num_iterations.len() > 1 {
-            self.gen_check_equal(ctx, num_iterations)?;
+            self.gen_check_equal(ctx, num_iterations, pass_all_block, fail_zip_block)?;
+        } else {
+            let _ = LLVMBuildBr(ctx.builder, pass_all_block);
         }
+
+        LLVMPositionBuilderAtEnd(ctx.builder, fail_boundscheck_block);
+        let error = self.i64(WeldRuntimeErrno::BadIteratorLength as i64);
+        self.intrinsics.call_weld_run_set_errno(ctx.builder,
+                                                ctx.get_run(),
+                                                error,
+                                                None);
+        LLVMBuildUnreachable(ctx.builder);
+        
+        LLVMPositionBuilderAtEnd(ctx.builder, fail_zip_block);
+        let error = self.i64(WeldRuntimeErrno::MismatchedZipSize as i64);
+        self.intrinsics.call_weld_run_set_errno(ctx.builder,
+                                                ctx.get_run(),
+                                                error,
+                                                None);
+        LLVMBuildUnreachable(ctx.builder);
+
+        // Bounds check passed. Generate code to invoke the loop.
+        LLVMPositionBuilderAtEnd(ctx.builder, pass_all_block);
 
         let ref sir_function = ctx.sir_program.funcs[parfor.body];
         assert!(sir_function.loop_body);
@@ -266,7 +313,6 @@ impl ForLoopGenInternal for LlvmGenerator {
                                     i: LLVMValueRef,
                                     e: LLVMValueRef,
                                     parfor: &ParallelForData) -> WeldResult<()> {
-        use codegen::llvm2::vector::VectorExt;
         let mut values = vec![];
         for iter in parfor.data.iter() {
             match iter.kind {
@@ -337,55 +383,78 @@ impl ForLoopGenInternal for LlvmGenerator {
         Ok(())
     }
 
-    unsafe fn gen_bounds_check(&mut self, ctx: &mut FunctionContext, iter: &ParallelForIter) -> WeldResult<LLVMValueRef> {
+    unsafe fn gen_bounds_check(&mut self,
+                               ctx: &mut FunctionContext,
+                               iter: &ParallelForIter,
+                               pass_block: LLVMBasicBlockRef,
+                               fail_block: LLVMBasicBlockRef) -> WeldResult<LLVMValueRef> {
+        let vector = self.load(ctx.builder, ctx.get_value(&iter.data)?)?;
+        let vector_type = ctx.sir_function.symbol_type(&iter.data)?;
+        let size = self.gen_size(ctx, vector_type, vector)?;
         match iter.kind {
             ScalarIter if iter.start.is_some() => {
-                unimplemented!()
+                use self::llvm_sys::LLVMIntPredicate::{LLVMIntSLT, LLVMIntEQ};
+                let start = self.load(ctx.builder, ctx.get_value(iter.start.as_ref().unwrap())?)?;
+                let stride = self.load(ctx.builder, ctx.get_value(iter.stride.as_ref().unwrap())?)?;
+                let end = self.load(ctx.builder, ctx.get_value(iter.end.as_ref().unwrap())?)?;
+
+                // Checks required:
+                // start < size
+                // end < size
+                // start < end
+                // (end - start) % stride == 0
+                // Iterations = (end - start) / stride
+                let start_check = LLVMBuildICmp(ctx.builder, LLVMIntSLT, start, size, c_str!(""));
+                let end_check = LLVMBuildICmp(ctx.builder, LLVMIntSLT, end, size, c_str!(""));
+                let end_start_check = LLVMBuildICmp(ctx.builder, LLVMIntSLT, start, end, c_str!(""));
+                let diff = LLVMBuildNSWSub(ctx.builder, end, start, c_str!(""));
+                let mod_check = LLVMBuildSRem(ctx.builder, diff, stride, c_str!(""));
+                let mod_check = LLVMBuildICmp(ctx.builder, LLVMIntEQ, mod_check, self.i64(0), c_str!(""));
+                let iterations = LLVMBuildSDiv(ctx.builder, diff, stride, c_str!(""));
+
+                let mut check = LLVMBuildAnd(ctx.builder, start_check, end_check, c_str!(""));
+                check = LLVMBuildAnd(ctx.builder, check, end_start_check, c_str!(""));
+                check = LLVMBuildAnd(ctx.builder, check, mod_check, c_str!(""));
+
+                let _ = LLVMBuildCondBr(ctx.builder, check, pass_block, fail_block);
+                Ok(iterations)
             }
             ScalarIter => {
                 // The number of iterations is the size of the vector. No explicit bounds check is
                 // necessary here.
-                let vector = self.load(ctx.builder, ctx.get_value(&iter.data)?)?;
-                let vector_type = ctx.sir_function.symbol_type(&iter.data)?;
-                if let Vector(ref elem_type) = *vector_type {
-                    let mut methods = self.vectors.get_mut(elem_type).unwrap();
-                    methods.gen_size(ctx.builder, vector)
-                } else {
-                    unreachable!()
-                }
+                let _ = LLVMBuildBr(ctx.builder, pass_block);
+                Ok(size)
             }
             SimdIter if iter.start.is_some() => unimplemented!(),
             SimdIter => {
                 // The number of iterations is the size of the vector. No explicit bounds check is
                 // necessary here. TODO definitely want a function for this...
-                let vector = self.load(ctx.builder, ctx.get_value(&iter.data)?)?;
-                let vector_type = ctx.sir_function.symbol_type(&iter.data)?;
-                let size = if let Vector(ref elem_type) = *vector_type {
-                    let mut methods = self.vectors.get_mut(elem_type).unwrap();
-                    methods.gen_size(ctx.builder, vector)?
-                } else {
-                    unreachable!()
-                };
-                Ok(LLVMBuildSDiv(ctx.builder, size, self.i64(LLVM_VECTOR_WIDTH as i64), c_str!("")))
+                let iterations = LLVMBuildSDiv(ctx.builder, size, self.i64(LLVM_VECTOR_WIDTH as i64), c_str!(""));
+                let _ = LLVMBuildBr(ctx.builder, pass_block);
+                Ok(iterations)
             }
             FringeIter if iter.start.is_some() => unimplemented!(),
             FringeIter => {
-                let vector = self.load(ctx.builder, ctx.get_value(&iter.data)?)?;
-                let vector_type = ctx.sir_function.symbol_type(&iter.data)?;
-                let size = if let Vector(ref elem_type) = *vector_type {
-                    let mut methods = self.vectors.get_mut(elem_type).unwrap();
-                    methods.gen_size(ctx.builder, vector)?
-                } else {
-                    unreachable!()
-                };
-                Ok(LLVMBuildSRem(ctx.builder, size, self.i64(LLVM_VECTOR_WIDTH as i64), c_str!("")))
+                let iterations = LLVMBuildSRem(ctx.builder, size, self.i64(LLVM_VECTOR_WIDTH as i64), c_str!(""));
+                let _ = LLVMBuildBr(ctx.builder, pass_block);
+                Ok(iterations)
             }
             NdIter | RangeIter => unimplemented!()
         }
     }
 
-    unsafe fn gen_check_equal(&mut self, ctx: &mut FunctionContext, iterations: &Vec<LLVMValueRef>) -> WeldResult<()> {
-        // TODO
+    unsafe fn gen_check_equal(&mut self,
+                              ctx: &mut FunctionContext,
+                              iterations: &Vec<LLVMValueRef>,
+                              pass_block: LLVMBasicBlockRef,
+                              fail_block: LLVMBasicBlockRef) -> WeldResult<()> {
+        use self::llvm_sys::LLVMIntPredicate::LLVMIntEQ;
+        let mut passed = self.bool(true);
+        for value in iterations.iter().skip(1) {
+            let mut check = LLVMBuildICmp(ctx.builder, LLVMIntEQ, iterations[0], *value, c_str!(""));
+            passed = LLVMBuildAnd(ctx.builder, passed, check, c_str!(""));
+        }
+        LLVMBuildCondBr(ctx.builder, passed, pass_block, fail_block);
         Ok(())
     }
 }
