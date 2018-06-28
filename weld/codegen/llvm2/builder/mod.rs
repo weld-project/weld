@@ -29,6 +29,7 @@ use super::{CodeGenExt, FunctionContext, LlvmGenerator};
 mod for_loop;
 
 pub mod merger;
+pub mod appender;
 
 /// A trait for generating builder code.
 ///
@@ -154,6 +155,21 @@ impl BuilderExpressionGen for LlvmGenerator {
                 LLVMBuildStore(ctx.builder, merger, output_pointer);
                 Ok(())
             }
+            Appender(_) => {
+                // The argument is either the provided one or the default capacity.
+                let argument = if let Some(arg) = nb.arg {
+                    self.load(ctx.builder, ctx.get_value(arg)?)?
+                } else {
+                    self.i64(appender::DEFAULT_CAPACITY)
+                };
+                let appender = {
+                    let mut methods = self.appenders.get_mut(nb.kind).unwrap();
+                    let run = ctx.get_run();
+                    methods.gen_new(ctx.builder, &mut self.intrinsics, run, argument)?
+                };
+                LLVMBuildStore(ctx.builder, appender, output_pointer);
+                Ok(())
+            }
             _ => {
                 unimplemented!()
             }
@@ -201,6 +217,17 @@ impl BuilderExpressionGen for LlvmGenerator {
     unsafe fn builder_type(&mut self, builder: &Type) -> WeldResult<LLVMTypeRef> {
         if let Builder(ref kind, _) = *builder {
             match *kind {
+                Appender(ref elem_type) => {
+                    if !self.appenders.contains_key(kind) {
+                        let llvm_elem_type = self.llvm_type(elem_type)?;
+                        let appender = appender::Appender::define("appender",
+                                                            llvm_elem_type,
+                                                            self.context,
+                                                            self.module);
+                        self.appenders.insert(kind.clone(), appender);
+                    }
+                    Ok(self.appenders.get(kind).unwrap().appender_ty)
+                }
                 Merger(ref elem_type, ref binop) => {
                     if !self.mergers.contains_key(kind) {
                         let scalar_kind = if let Scalar(ref kind) = *elem_type.as_ref() {

@@ -145,8 +145,8 @@ impl ForLoopGenInternal for LlvmGenerator {
                                parfor: &ParallelForData) -> WeldResult<LLVMValueRef> {
         let mut pass_blocks = vec![];
         for _ in 0..parfor.data.len() {
-            pass_blocks.push(LLVMAppendBasicBlockInContext(self.context, ctx
-                                                           llvm_function,
+            pass_blocks.push(LLVMAppendBasicBlockInContext(self.context,
+                                                           ctx.llvm_function,
                                                            c_str!("bounds.check")));
         }
         // Jump here if the iterator will cause an array out of bounds error. 

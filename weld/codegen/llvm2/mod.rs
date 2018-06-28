@@ -44,6 +44,7 @@ mod numeric;
 mod vector;
 
 use self::builder::merger;
+use self::builder::appender;
 
 pub fn compile(program: &SirProgram,
                conf: &ParsedConf,
@@ -155,6 +156,10 @@ pub struct LlvmGenerator {
     ///
     /// The key maps the merger type to the merger's type reference and methods on it.
     mergers: FnvHashMap<BuilderKind, merger::Merger>,
+    /// A map tracking generated appenders.
+    ///
+    /// The key maps the appender type to the appender's type reference and methods on it.
+    appenders: FnvHashMap<BuilderKind, appender::Appender>,
     /// A map tracking generated dictionaries.
     ///
     /// The key maps the vector's element type to the vector's type reference and methods on it.
@@ -399,6 +404,7 @@ impl LlvmGenerator {
             functions: FnvHashMap::default(),
             vectors: FnvHashMap::default(),
             mergers: FnvHashMap::default(),
+            appenders: FnvHashMap::default(),
             dictionaries: FnvHashMap::default(),
             intrinsics: intrinsics,
         };
