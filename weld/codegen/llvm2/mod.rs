@@ -909,13 +909,13 @@ impl LlvmGenerator {
                 unimplemented!()
             }
             Scalar(kind) => match kind {
-                Bool => LLVMInt1TypeInContext(self.context),
-                I8 | U8 => LLVMInt8TypeInContext(self.context),
-                I16 | U16 => LLVMInt16TypeInContext(self.context),
-                I32 | U32 => LLVMInt32TypeInContext(self.context),
-                I64 | U64 => LLVMInt64TypeInContext(self.context),
-                F32 => LLVMFloatTypeInContext(self.context),
-                F64 => LLVMDoubleTypeInContext(self.context),
+                Bool => self.bool_type(),
+                I8 | U8 => self.i8_type(),
+                I16 | U16 => self.i16_type(),
+                I32 | U32 => self.i32_type(),
+                I64 | U64 => self.i64_type(),
+                F32 => self.f32_type(),
+                F64 => self.f64_type(),
             }
             Simd(kind) => {
                 let base = self.llvm_type(&Scalar(kind))?;
