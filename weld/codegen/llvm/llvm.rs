@@ -4105,7 +4105,7 @@ impl LlvmGenerator {
                 ctx.code.add("br label %body.end");
             }
 
-            EndFunction => {
+            EndFunction(_) => {
                 ctx.code.add("br label %body.end");
             }
 

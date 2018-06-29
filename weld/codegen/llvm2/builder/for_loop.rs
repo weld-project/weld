@@ -27,7 +27,7 @@ pub trait ForLoopGenInternal {
     /// helpers. 
     unsafe fn gen_for_internal(&mut self,
                                ctx: &mut FunctionContext,
-                               parfor: &ParallelForData) -> WeldResult<()>; 
+                               parfor: &ParallelForData) -> WeldResult<LLVMValueRef>; 
     /// Generates bounds checking code for the loop and return number of iterations.
     ///
     /// This function ensures that each iterator will only access in-bounds vector elements and
@@ -73,7 +73,7 @@ impl ForLoopGenInternal for LlvmGenerator {
     /// Entry point to generating a for loop.
     unsafe fn gen_for_internal(&mut self,
                                ctx: &mut FunctionContext,
-                               parfor: &ParallelForData) -> WeldResult<()> {
+                               parfor: &ParallelForData) -> WeldResult<LLVMValueRef> {
 
         let iterations = self.gen_bounds_check(ctx, parfor)?;
 
@@ -120,12 +120,11 @@ impl ForLoopGenInternal for LlvmGenerator {
         arguments.push(ctx.get_run());
         let cont_function = *self.functions.get(&parfor.cont).unwrap();
 
-        let _ = LLVMBuildCall(ctx.builder,
+        Ok(LLVMBuildCall(ctx.builder,
                               cont_function,
                               arguments.as_mut_ptr(),
                               arguments.len() as u32,
-                              c_str!(""));
-        Ok(())
+                              c_str!("")))
     }
 
     /// Generate runtime bounds checking, which looks as follows:

@@ -20,8 +20,8 @@ fn simple_for_dictmerger_loop() {
     let code = "|x:vec[i32], y:vec[i32]| tovec(result(for(zip(x,y), dictmerger[i32,i32,+],
                 |b,i,e| merge(b, e))))";
     let ref conf = default_conf();
-    let keys = [1, 2, 2, 1, 3];
-    let vals = [2, 3, 4, 2, 1];
+    let keys = vec![1, 2, 2, 1, 3];
+    let vals = vec![2, 3, 4, 2, 1];
     let ref input_data = I32KeyValArgs {
         x: WeldVec::from(&keys),
         y: WeldVec::from(&vals),
@@ -31,8 +31,8 @@ fn simple_for_dictmerger_loop() {
     let data = ret_value.data() as *const WeldVec<Pair<_,_>>;
     let result = unsafe { (*data).clone() };
 
-    let output_keys = [1, 2, 3];
-    let output_vals = [4, 7, 1];
+    let output_keys = vec![1, 2, 3];
+    let output_vals = vec![4, 7, 1];
 
     assert_eq!(result.len, output_keys.len() as i64);
     for i in 0..(output_keys.len() as isize) {
@@ -70,8 +70,8 @@ fn dictmerger_with_structs() {
                         dictmerger[{i32,i32},{i32,f32},+],
                         |b,i,e| merge(b, {{e.$0, e.$0}, {e.$1, f32(e.$1)}}))))";
     let ref conf = default_conf();
-    let keys = [1, 2, 2, 1, 3];
-    let vals = [2, 3, 4, 2, 1];
+    let keys = vec![1, 2, 2, 1, 3];
+    let vals = vec![2, 3, 4, 2, 1];
     let ref input_data = I32KeyValArgs {
         x: WeldVec::from(&keys),
         y: WeldVec::from(&vals),
@@ -81,8 +81,8 @@ fn dictmerger_with_structs() {
     let data = ret_value.data() as *const WeldVec<Entry>;
     let result = unsafe { (*data).clone() };
 
-    let output_keys = [1, 2, 3];
-    let output_vals = [4, 7, 1];
+    let output_keys = vec![1, 2, 3];
+    let output_vals = vec![4, 7, 1];
 
     assert_eq!(result.len, output_keys.len() as i64);
     for i in 0..(output_keys.len() as isize) {
@@ -107,8 +107,8 @@ fn simple_groupmerger() {
                 |b,i,e| merge(b, e))))";
 
     let ref conf = default_conf();
-    let keys = [1, 2, 2, 3, 3, 1];
-    let vals = [2, 3, 4, 1, 0, 2];
+    let keys = vec![1, 2, 2, 3, 3, 1];
+    let vals = vec![2, 3, 4, 1, 0, 2];
     let ref input_data = I32KeyValArgs {
         x: WeldVec::from(&keys),
         y: WeldVec::from(&vals),
@@ -151,9 +151,9 @@ fn complex_groupmerger_with_struct_key() {
                 |b,i,e| merge(b, {{e.$0, e.$1}, e.$2}))))";
 
     let ref conf = default_conf();
-    let keys1 = [1, 1, 2, 2, 3, 3, 3, 3];
-    let keys2 = [1, 1, 2, 2, 3, 3, 4, 4];
-    let vals = [2, 3, 4, 2, 1, 0, 3, 2];
+    let keys1 = vec![1, 1, 2, 2, 3, 3, 3, 3];
+    let keys2 = vec![1, 1, 2, 2, 3, 3, 4, 4];
+    let vals = vec![2, 3, 4, 2, 1, 0, 3, 2];
 
     let ref input_data = Args {
         x: WeldVec::from(&keys1),
@@ -261,8 +261,8 @@ fn simple_dict_lookup() {
                 |b,i,e| merge(b, e))); lookup(a, 1)";
     let ref conf = default_conf();
 
-    let keys = [1, 2, 2, 1, 3];
-    let vals = [2, 3, 4, 2, 1];
+    let keys = vec![1, 2, 2, 1, 3];
+    let vals = vec![2, 3, 4, 2, 1];
 
     let ref input_data = I32KeyValArgs {
         x: WeldVec::from(&keys),
@@ -279,12 +279,12 @@ fn simple_dict_lookup() {
 
 #[test]
 fn string_dict_lookup() {
-    let code = "|x:vec[i32]| let v = [\"abcdefghi\", \"abcdefghi\", \"abcdefghi\"];
+    let code = "|x:vec[i32]| let v = vec![\"abcdefghi\", \"abcdefghi\", \"abcdefghi\"];
                 let d = result(for(zip(v,x), dictmerger[vec[i8],i32,+], |b,i,e| merge(b, e)));
                 lookup(d, \"abcdefghi\")";
     let ref conf = default_conf();
 
-    let input_vec = [1, 1, 1];
+    let input_vec = vec![1, 1, 1];
     let ref input_data = WeldVec::from(&input_vec);
 
     let ret_value = compile_and_run(code, conf, input_data);
@@ -297,8 +297,8 @@ fn string_dict_lookup() {
 
 #[test]
 fn simple_dict_exists() {
-    let keys = [1, 2, 2, 1, 3];
-    let vals = [2, 3, 4, 2, 1];
+    let keys = vec![1, 2, 2, 1, 3];
+    let vals = vec![2, 3, 4, 2, 1];
 
     let code_true = "|x:vec[i32], y:vec[i32]| let a = result(for(zip(x,y), dictmerger[i32,i32,+],
                 |b,i,e| merge(b, e))); keyexists(a, 1)";

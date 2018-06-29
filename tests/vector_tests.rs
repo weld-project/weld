@@ -10,7 +10,7 @@ fn map_comparison() {
     let code = "|e0: vec[i32]| map(e0, |a: i32| a == i32(100))";
     let ref conf = default_conf();
 
-    let input_vec = [100, 200, 0, 100];
+    let input_vec = vec![100, 200, 0, 100];
     let ref input_data = WeldVec::from(&input_vec);
 
     let ret_value = compile_and_run(code, conf, input_data);
@@ -35,8 +35,8 @@ fn eq_between_vectors() {
     let ref conf = default_conf();
 
     let code = "|e0: vec[i32], e1: vec[i32]| e0 == e1";
-    let input_vec1 = [1, 2, 3, 4, 5];
-    let input_vec2 = [1, 2, 3, 4, 5];
+    let input_vec1 = vec![1, 2, 3, 4, 5];
+    let input_vec2 = vec![1, 2, 3, 4, 5];
     let ref input_data = Args {
         x: WeldVec::from(&input_vec1),
         y: WeldVec::from(&input_vec2),
@@ -58,8 +58,8 @@ fn eq_between_diff_length_vectors() {
     let ref conf = default_conf();
 
     let code = "|e0: vec[i32], e1: vec[i32]| e0 == e1";
-    let input_vec1 = [1, 2, 3, 4, 5];
-    let input_vec2 = [1, 2, 3, 4, 5, 6, 7];
+    let input_vec1 = vec![1, 2, 3, 4, 5];
+    let input_vec2 = vec![1, 2, 3, 4, 5, 6, 7];
     let ref input_data = Args {
         x: WeldVec::from(&input_vec1),
         y: WeldVec::from(&input_vec2),
@@ -81,8 +81,8 @@ fn ne_between_vectors() {
     let ref conf = default_conf();
 
     let code = "|e0: vec[i32], e1: vec[i32]| e0 != e1";
-    let input_vec1 = [1, 2, 3, 4, 5];
-    let input_vec2 = [3, 2, 3, 4, 5];
+    let input_vec1 = vec![1, 2, 3, 4, 5];
+    let input_vec2 = vec![3, 2, 3, 4, 5];
     let ref input_data = Args {
         x: WeldVec::from(&input_vec1),
         y: WeldVec::from(&input_vec2),
@@ -104,8 +104,8 @@ fn lt_between_vectors() {
     let ref conf = default_conf();
 
     let code = "|e0: vec[i32], e1: vec[i32]| e0 < e1";
-    let input_vec1 = [1, 2, 3, 4, 5];
-    let input_vec2 = [2, 3, 4, 5, 6];
+    let input_vec1 = vec![1, 2, 3, 4, 5];
+    let input_vec2 = vec![2, 3, 4, 5, 6];
     let ref input_data = Args {
         x: WeldVec::from(&input_vec1),
         y: WeldVec::from(&input_vec2),
@@ -127,8 +127,8 @@ fn le_between_vectors() {
     let ref conf = default_conf();
 
     let code = "|e0: vec[i32], e1: vec[i32]| e0 <= e1";
-    let input_vec1 = [-1, 0, 3, 4, 5];
-    let input_vec2 = [-1, -3, 4, 5, 6];
+    let input_vec1 = vec![-1, 0, 3, 4, 5];
+    let input_vec2 = vec![-1, -3, 4, 5, 6];
     let ref input_data = Args {
         x: WeldVec::from(&input_vec1),
         y: WeldVec::from(&input_vec2),
@@ -151,8 +151,8 @@ fn le_between_unsigned_vectors() {
 
     // Note that we pass our integers in as unsigneds in Weld
     let code = "|e0: vec[u32], e1: vec[u32]| e0 <= e1";
-    let input_vec1 = [-1, 0, 3, 4, 5];
-    let input_vec2 = [-1, -3, 4, 5, 6];
+    let input_vec1 = vec![-1, 0, 3, 4, 5];
+    let input_vec2 = vec![-1, -3, 4, 5, 6];
     let ref input_data = Args {
         x: WeldVec::from(&input_vec1),
         y: WeldVec::from(&input_vec2),
@@ -174,8 +174,8 @@ fn eq_between_u8_vectors() {
     let ref conf = default_conf();
 
     let code = "|e0: vec[u8], e1: vec[u8]| e0 == e1";
-    let input_vec1 = [1u8, 2u8, 3u8, 4u8, 5u8];
-    let input_vec2 = [1u8, 2u8, 3u8, 4u8, 5u8];
+    let input_vec1 = vec![1u8, 2u8, 3u8, 4u8, 5u8];
+    let input_vec2 = vec![1u8, 2u8, 3u8, 4u8, 5u8];
     let ref input_data = Args {
         x: WeldVec::from(&input_vec1),
         y: WeldVec::from(&input_vec2),
@@ -197,8 +197,8 @@ fn eq_between_different_length_u8_vectors() {
     let ref conf = default_conf();
 
     let code = "|e0: vec[u8], e1: vec[u8]| e0 == e1";
-    let input_vec1 = [1u8, 2u8, 3u8, 4u8, 5u8];
-    let input_vec2 = [1u8, 2u8, 3u8, 4u8, 5u8, 6u8];
+    let input_vec1 = vec![1u8, 2u8, 3u8, 4u8, 5u8];
+    let input_vec2 = vec![1u8, 2u8, 3u8, 4u8, 5u8, 6u8];
     let ref input_data = Args {
         x: WeldVec::from(&input_vec1),
         y: WeldVec::from(&input_vec2),
@@ -220,8 +220,8 @@ fn le_between_u8_vectors() {
     let ref conf = default_conf();
 
     let code = "|e0: vec[u8], e1: vec[u8]| e0 <= e1";
-    let input_vec1 = [1u8, 2u8, 3u8, 4u8, 5u8];
-    let input_vec2 = [1u8, 2u8, 3u8, 255u8, 5u8];
+    let input_vec1 = vec![1u8, 2u8, 3u8, 4u8, 5u8];
+    let input_vec2 = vec![1u8, 2u8, 3u8, 255u8, 5u8];
     let ref input_data = Args {
         x: WeldVec::from(&input_vec1),
         y: WeldVec::from(&input_vec2),
@@ -238,7 +238,7 @@ fn simple_vector_lookup() {
     let code = "|x:vec[i32]| lookup(x, 3L)";
     let ref conf = default_conf();
 
-    let input_vec = [1, 2, 3, 4, 5];
+    let input_vec = vec![1, 2, 3, 4, 5];
     let ref input_data = WeldVec::from(&input_vec);
 
     let ret_value = compile_and_run(code, conf, input_data);
@@ -252,13 +252,13 @@ fn simple_vector_slice() {
     let code = "|x:vec[i32]| slice(x, 1L, 3L)";
     let ref conf = default_conf();
 
-    let input_vec = [1, 2, 3, 4, 5];
+    let input_vec = vec![1, 2, 3, 4, 5];
     let ref input_data = WeldVec::from(&input_vec);
 
     let ret_value = compile_and_run(code, conf, input_data);
     let data = ret_value.data() as *const WeldVec<i32>;
     let result = unsafe { (*data).clone() };
-    let output = [2, 3, 4];
+    let output = vec![2, 3, 4];
 
     assert_eq!(output.len() as isize, result.len as isize);
     for i in 0..(result.len as isize) {
@@ -268,13 +268,13 @@ fn simple_vector_slice() {
     // Test slicing out of bounds case
     let ref conf = default_conf();
 
-    let input_vec = [1, 2];
+    let input_vec = vec![1, 2];
     let ref input_data = WeldVec::from(&input_vec);
 
     let ret_value = compile_and_run(code, conf, input_data);
     let data = ret_value.data() as *const WeldVec<i32>;
     let result = unsafe { (*data).clone() };
-    let output = [2];
+    let output = vec![2];
 
     assert_eq!(output.len() as isize, result.len as isize);
     for i in 0..(result.len as isize) {

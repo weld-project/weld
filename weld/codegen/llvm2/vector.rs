@@ -22,6 +22,9 @@ use super::FunctionContext;
 use super::LlvmGenerator;
 use super::intrinsic::Intrinsics;
 
+pub const POINTER_INDEX: u32 = 0;
+pub const SIZE_INDEX: u32 = 1;
+
 /// Extensions for generating methods on vectors.
 ///
 /// This provides convinience wrappers for calling methods on vectors.
@@ -166,10 +169,10 @@ impl Vector {
             let elements = LLVMBuildBitCast(builder, bytes, LLVMPointerType(self.elem_ty, 0), c_str!("elements"));
             let one = LLVMBuildInsertValue(builder,
                                            LLVMGetUndef(self.vector_ty),
-                                           elements, 0, c_str!(""));
+                                           elements, POINTER_INDEX, c_str!(""));
             let result = LLVMBuildInsertValue(builder,
                                            one,
-                                           size, 1, c_str!(""));
+                                           size, SIZE_INDEX, c_str!(""));
             LLVMBuildRet(builder, result);
 
             self.new = Some(function);
@@ -193,7 +196,7 @@ impl Vector {
 
             let vector = LLVMGetParam(function, 0);
             let index = LLVMGetParam(function, 1);
-            let pointer = LLVMBuildExtractValue(builder, vector, 0, c_str!(""));
+            let pointer = LLVMBuildExtractValue(builder, vector, POINTER_INDEX, c_str!(""));
             let value_pointer = LLVMBuildGEP(builder, pointer, [index].as_mut_ptr(), 1, c_str!(""));
             LLVMBuildRet(builder, value_pointer);
 
@@ -224,17 +227,17 @@ impl Vector {
 
             // Compute the size of the array. We use the remaining size if the new size does not
             // accomodate the vector starting at the given index.
-            let cur_size = LLVMBuildExtractValue(builder, vector, 1, c_str!(""));
+            let cur_size = LLVMBuildExtractValue(builder, vector, SIZE_INDEX, c_str!(""));
             let remaining = LLVMBuildSub(builder, cur_size, index, c_str!(""));
             let size_cmp = LLVMBuildICmp(builder, LLVMIntUGT, size, remaining, c_str!(""));
             let new_size = LLVMBuildSelect(builder, size_cmp, remaining, size, c_str!(""));
 
-            let elements = LLVMBuildExtractValue(builder, vector, 0, c_str!(""));
+            let elements = LLVMBuildExtractValue(builder, vector, POINTER_INDEX, c_str!(""));
             let new_elements = LLVMBuildGEP(builder, elements, [index].as_mut_ptr(), 1, c_str!(""));
 
             let mut result = LLVMGetUndef(self.vector_ty);
-            result = LLVMBuildInsertValue(builder, result, new_elements, 0, c_str!(""));
-            result = LLVMBuildInsertValue(builder, result, new_size, 1, c_str!(""));
+            result = LLVMBuildInsertValue(builder, result, new_elements, POINTER_INDEX, c_str!(""));
+            result = LLVMBuildInsertValue(builder, result, new_size, SIZE_INDEX, c_str!(""));
             LLVMBuildRet(builder, result);
 
             self.slice = Some(function);
@@ -282,7 +285,7 @@ impl Vector {
             let (function, builder, _) = self.define_function(ret_ty, &mut arg_tys, name);
 
             let vector = LLVMGetParam(function, 0);
-            let size = LLVMBuildExtractValue(builder, vector, 1, c_str!(""));
+            let size = LLVMBuildExtractValue(builder, vector, SIZE_INDEX, c_str!(""));
             LLVMBuildRet(builder, size);
 
             self.size = Some(function);

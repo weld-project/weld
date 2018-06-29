@@ -78,8 +78,8 @@ fn iters_for_loop() {
                 merge(b,e.$0+e.$1)))";
     let ref conf = default_conf();
 
-    let x = [1, 2, 3, 4];
-    let y = [5, 6];
+    let x = vec![1, 2, 3, 4];
+    let y = vec![5, 6];
     let ref input_data = Args {
         x: WeldVec::from(&x),
         y: WeldVec::from(&y),
@@ -89,7 +89,7 @@ fn iters_for_loop() {
     let data = ret_value.data() as *const WeldVec<i32>;
     let result = unsafe { (*data).clone() };
 
-    let output = [6, 9];
+    let output = vec![6, 9];
     for i in 0..(result.len as isize) {
         assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
     }
@@ -106,7 +106,7 @@ fn get_idx(counter: [i64; 3], strides: [i64; 3]) -> i64 {
     return sum;
 }
 /// increments counter as in numpy / and nditer implementation. For e.g.,
-/// let shapes :[i64; 3] = [2, 3, 4];
+/// let shapes :[i64; 3] = vec![2, 3, 4];
 /// Now counter would start from (0,0,0).
 /// Each index would go upto shapes, and then reset to 0.
 /// eg. (0,0,0), (0,0,1), (0,0,2), (0,0,3), (0,1,0) etc.
@@ -147,10 +147,10 @@ fn nditer_basic_op_test() {
      * These are arbitrarily chosen here for testing purposes so get_idx can simulate the behaviour
      * nditer should be doing (idx = dot(counter, strides).
      */
-    let strides = [5, 2, 3];
+    let strides = vec![5, 2, 3];
     // nditer with this shape will contain: 2*3*4 = 24 elements.
-    let shapes = [2, 3, 4];
-    let mut counter = [0, 0, 0];
+    let shapes = vec![2, 3, 4];
+    let mut counter = vec![0, 0, 0];
 
     let ref input_data = Args {
         x: WeldVec::from(&x),
@@ -193,9 +193,9 @@ fn nditer_zip() {
         y[i] = i as i64;
     }
 
-    let strides = [5, 2, 2];
-    let shapes = [2, 3, 4];
-    let mut counter = [0, 0, 0];
+    let strides = vec![5, 2, 2];
+    let shapes = vec![2, 3, 4];
+    let mut counter = vec![0, 0, 0];
 
     let ref input_data = Args {
         x: WeldVec::from(&x),

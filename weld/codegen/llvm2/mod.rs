@@ -524,7 +524,7 @@ impl LlvmGenerator {
     unsafe fn declare_sir_function(&mut self, func: &SirFunction) -> WeldResult<()> {
         let mut arg_tys = self.argument_types(func)?;
         arg_tys.push(self.run_handle_type());
-        let ret_ty = self.void_type();
+        let ret_ty = self.llvm_type(&func.return_type)?;
         let func_ty = LLVMFunctionType(ret_ty, arg_tys.as_mut_ptr(), arg_tys.len() as u32, 0);
         let name = CString::new(format!("f{}", func.id)).unwrap();
         let function = LLVMAddFunction(self.module, name.as_ptr(), func_ty);
@@ -813,10 +813,10 @@ impl LlvmGenerator {
     ///
     /// `loop_terminator` is an optional tuple that is present only when generating loop body
     /// functions. The first argument is a basic block to jump to to continue looping instead of
-    /// returning from a function
-    ///
-    /// The second arugment is a value representing the loop's builder argument pointer. The terminator
-    /// generates code to store any updated builder values into this pointer.
+    /// returning from a function.  The second argument is a value representing the loop's builder
+    /// argument pointer. In cases where the loop body function returns, this function stores the
+    /// resulting builder into this pointer. The function is guaranteed to return a builder (since
+    /// For loop functions must return builders derived from their input builder).
     unsafe fn gen_terminator(&mut self,
                                   context: &mut FunctionContext,
                                   bb: &BasicBlock,
@@ -832,56 +832,66 @@ impl LlvmGenerator {
                 let pointer = LLVMBuildBitCast(context.builder, bytes, LLVMPointerType(ty, 0), c_str!(""));
                 LLVMBuildStore(context.builder, value, pointer);
                 let _ = self.intrinsics.call_weld_run_set_result(context.builder, run, bytes, None);
-                LLVMBuildRetVoid(context.builder);
+                LLVMBuildRet(context.builder, value);
             }
             Branch { ref cond, ref on_true, ref on_false } => {
+                let cond = self.load(context.builder, context.get_value(cond)?)?;
                 let _ = LLVMBuildCondBr(context.builder,
-                                        context.get_value(cond)?,
+                                        cond,
                                         context.get_block(&on_true)?,
                                         context.get_block(&on_false)?);
             }
             JumpBlock(ref id) => {
                 LLVMBuildBr(context.builder, context.get_block(id)?);
             }
-            JumpFunction(ref _func) => {
-                unimplemented!()
+            JumpFunction(ref func) => {
+                let ref sir_function = context.sir_program.funcs[*func];
+                let mut arguments = vec![];
+                for (symbol, _) in sir_function.params.iter() {
+                    let value = self.load(context.builder, context.get_value(symbol)?)?;
+                    arguments.push(value);
+                }
+                arguments.push(context.get_run());
+                let jump_function = *self.functions.get(func).unwrap();
+                let result = LLVMBuildCall(context.builder,
+                              jump_function,
+                              arguments.as_mut_ptr(),
+                              arguments.len() as u32,
+                              c_str!(""));
+                // XXX Should we return the builder here?
+                LLVMBuildRet(context.builder, result);
             }
             ParallelFor(ref parfor) => {
                 use self::builder::BuilderExpressionGen;
-                self.gen_for(context, parfor)?;
+                let updated_builder = self.gen_for(context, parfor)?;
                 if let Some((jumpto, loop_builder)) = loop_terminator {
-                    let pointer = context.get_value(&parfor.builder)?;
-                    let updated_builder = self.load(context.builder, pointer)?;
                     LLVMBuildStore(context.builder, updated_builder, loop_builder);
                     LLVMBuildBr(context.builder, jumpto);
                 } else {
                     // Continuation will continue the program - this ends the current function.
-                    LLVMBuildRetVoid(context.builder);
+                    LLVMBuildRet(context.builder, updated_builder);
                 }
             }
-            EndFunction => {
+            EndFunction(ref sym) => {
                 if let Some((jumpto, loop_builder)) = loop_terminator {
-                    use sir::StatementKind::Merge;
-                    let last_statement = bb.statements.last().unwrap();
-                    if let Merge { ref builder, .. } = last_statement.kind {
-                        let pointer = context.get_value(builder)?;
-                        let updated_builder = self.load(context.builder, pointer)?;
-                        LLVMBuildStore(context.builder, updated_builder, loop_builder);
-                    } else {
-                        let output = last_statement.output.as_ref().unwrap(); 
-                        assert!(context.sir_function.symbol_type(output)?.is_builder());
-                        let pointer = context.get_value(output)?;
-                        let updated_builder = self.load(context.builder, pointer)?;
-                        LLVMBuildStore(context.builder, updated_builder, loop_builder);
-                    }
+                    let pointer = context.get_value(sym)?;
+                    let updated_builder = self.load(context.builder, pointer)?;
+                    LLVMBuildStore(context.builder, updated_builder, loop_builder);
                     LLVMBuildBr(context.builder, jumpto);
                 } else {
-                    LLVMBuildRetVoid(context.builder);
+                    let pointer = context.get_value(sym)?;
+                    let return_value = self.load(context.builder, pointer)?;
+                    LLVMBuildRet(context.builder, return_value);
                 }
             }
             Crash => {
-                // Set errno?
-                LLVMBuildRetVoid(context.builder);
+                use runtime::WeldRuntimeErrno;
+                let errno = self.i64(WeldRuntimeErrno::Unknown as i64);
+                self.intrinsics.call_weld_run_set_errno(context.builder,
+                                                        context.get_run(),
+                                                        errno,
+                                                        None);
+                LLVMBuildUnreachable(context.builder);
             }
         };
         Ok(())

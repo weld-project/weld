@@ -12,7 +12,7 @@ fn simple_for_vecmerger_loop() {
     let code = "|x:vec[i32]| result(for(x, vecmerger[i32,+](x), |b,i,e| b))";
     let ref conf = default_conf();
 
-    let input_vec = [1, 1, 1, 1, 1];
+    let input_vec = vec![1, 1, 1, 1, 1];
     let ref input_data = WeldVec::from(&input_vec);
 
     let ret_value = compile_and_run(code, conf, input_data);

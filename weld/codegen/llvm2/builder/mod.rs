@@ -43,7 +43,7 @@ pub trait BuilderExpressionGen {
     /// Generates code for the `Result` statement.
     unsafe fn gen_result(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()>;
     /// Generates code for the `ParallelFor` terminator.
-    unsafe fn gen_for(&mut self, ctx: &mut FunctionContext, parfor: &ParallelForData) -> WeldResult<()>;
+    unsafe fn gen_for(&mut self, ctx: &mut FunctionContext, parfor: &ParallelForData) -> WeldResult<LLVMValueRef>;
     /// Generates code to define builder types.
     unsafe fn builder_type(&mut self, builder: &Type) -> WeldResult<LLVMTypeRef>;
 }
@@ -186,6 +186,11 @@ impl BuilderExpressionGen for LlvmGenerator {
                 let _ = methods.gen_merge(ctx.builder, builder_pointer, merge_value)?;
                 Ok(())
             }
+            Appender(_) => {
+                let mut methods = self.appenders.get_mut(m.kind).unwrap();
+                let _ = methods.gen_merge(ctx.builder, &mut self.intrinsics, ctx.get_run(), builder_pointer, merge_value)?;
+                Ok(())
+            }
             _ => unimplemented!()
         }
     }
@@ -203,13 +208,25 @@ impl BuilderExpressionGen for LlvmGenerator {
                 LLVMBuildStore(ctx.builder, result, output_pointer);
                 Ok(())
             }
+            Appender(ref elem_type) => {
+                let ref vector = Vector(elem_type.clone());
+                let vector_type = self.llvm_type(vector)?;
+                let result = {
+                    let mut methods = self.appenders.get_mut(m.kind).unwrap();
+                    methods.gen_result(ctx.builder, vector_type, builder_pointer)?
+                };
+                LLVMBuildStore(ctx.builder, result, output_pointer);
+                Ok(())
+            }
             _ => {
                 unimplemented!()
             }
         }
     }
 
-    unsafe fn gen_for(&mut self, ctx: &mut FunctionContext, parfor: &ParallelForData) -> WeldResult<()> {
+    unsafe fn gen_for(&mut self,
+                      ctx: &mut FunctionContext,
+                      parfor: &ParallelForData) -> WeldResult<LLVMValueRef> {
         use self::for_loop::ForLoopGenInternal;
         self.gen_for_internal(ctx, parfor)
     }

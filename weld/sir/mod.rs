@@ -332,7 +332,7 @@ pub enum Terminator {
     JumpBlock(BasicBlockId),
     JumpFunction(FunctionId),
     ProgramReturn(Symbol),
-    EndFunction,
+    EndFunction(Symbol),
     ParallelFor(ParallelForData),
     Crash,
 }
@@ -367,7 +367,12 @@ impl Terminator {
                     }
                 }
             }
-            _ => {}
+            EndFunction(ref sym) => {
+                vars.push(&sym)
+            }
+            Crash => (),
+            JumpBlock(_) => (),
+            JumpFunction(_) => (),
         };
         vars.into_iter()
     }
@@ -387,6 +392,7 @@ pub struct SirFunction {
     pub params: BTreeMap<Symbol, Type>,
     pub locals: BTreeMap<Symbol, Type>,
     pub blocks: Vec<BasicBlock>,
+    pub return_type: Type,
     pub loop_body: bool,
 }
 
@@ -419,16 +425,17 @@ impl SirProgram {
             sym_gen: SymbolGenerator::new(),
         };
         // Add the main function.
-        prog.add_func();
+        prog.add_func(ret_ty.clone());
         prog
     }
 
-    pub fn add_func(&mut self) -> FunctionId {
+    pub fn add_func(&mut self, return_type: Type) -> FunctionId {
         let func = SirFunction {
             id: self.funcs.len(),
             params: BTreeMap::new(),
             blocks: vec![],
             locals: BTreeMap::new(),
+            return_type: Unknown,
             loop_body: false,
         };
         self.funcs.push(func);
@@ -590,7 +597,7 @@ impl fmt::Display for Terminator {
             JumpBlock(block) => write!(f, "jump B{}", block),
             JumpFunction(func) => write!(f, "jump F{}", func),
             ProgramReturn(ref sym) => write!(f, "return {}", sym),
-            EndFunction => write!(f, "end"),
+            EndFunction(ref sym) => write!(f, "end {}", sym),
             Crash => write!(f, "crash"),
         }
     }
@@ -646,7 +653,12 @@ impl fmt::Display for BasicBlock {
 
 impl fmt::Display for SirFunction {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{} F{}:\n", if self.loop_body { "loopbody" } else { "" }, self.id)?;
+        let loopbody = if self.loop_body {
+            " (loopbody)"
+        } else {
+            ""
+        };
+        write!(f, "F{} -> {}{}:\n", self.id, &self.return_type, loopbody)?;
         write!(f, "Params:\n")?;
         let params_sorted: BTreeMap<&Symbol, &Type> = self.params.iter().collect();
         for (name, ty) in params_sorted {
@@ -734,7 +746,9 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
             }
             JumpBlock(_) => {}
             JumpFunction(_) => {}
-            EndFunction => {}
+            EndFunction(ref sym) => {
+                vars.push(sym.clone()); 
+            }
             Crash => {}
         }
         for var in &vars {
@@ -758,7 +772,7 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
             Branch { .. } => {}
             JumpBlock(_) => {}
             ProgramReturn(_) => {}
-            EndFunction => {}
+            EndFunction(_) => {}
             Crash => {}
         }
         for var in inner_closure {
@@ -770,6 +784,60 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
             }
         }
     }
+}
+
+fn helper(prog: &mut SirProgram, func: FunctionId) -> WeldResult<Type> {
+    use sir::Terminator::*;
+
+    // Base case - already visited this function!
+    if prog.funcs[func].return_type != Unknown {
+        return Ok(prog.funcs[func].return_type.clone())
+    }
+
+    let mut result = None;
+    let mut return_symbol = None;
+    {
+        let ref function = prog.funcs[func];
+        for block in function.blocks.iter() {
+            match block.terminator {
+                Branch { .. } => (),
+                JumpBlock(_) => (),
+                JumpFunction(ref id) => {
+                    result = Some(*id);
+                    break;
+                }
+                ProgramReturn(ref sym) | EndFunction(ref sym) => {
+                    // Type should be set during AST -> SIR.
+                    return_symbol = Some(sym.clone());
+                },
+                ParallelFor(ref parfor) => {
+                    result = Some(parfor.cont);
+                }
+                Crash => (),
+            }
+        }
+    }
+
+    // Need to do this nonsense to circumvent borrow checker...
+    if let Some(symbol) = return_symbol {
+        let return_type = prog.funcs[func].symbol_type(&symbol)?.clone();
+        prog.funcs[func].return_type = return_type.clone();
+        Ok(return_type)
+    } else if let Some(child) = result { 
+        let return_type = helper(prog, child)?;
+        prog.funcs[func].return_type = return_type.clone();
+        Ok(return_type)
+    } else {
+        // Indicates that the function did not return...
+        unreachable!()
+    }
+}
+
+fn assign_return_types(prog: &mut SirProgram) -> WeldResult<()> {
+    for funcs in 0..prog.funcs.len() {
+        helper(prog, funcs)?;
+    }
+    Ok(())
 }
 
 /// gen_expr may result in the use of symbols across function boundaries,
@@ -794,7 +862,7 @@ fn sir_param_correction(prog: &mut SirProgram) -> WeldResult<()> {
 /// Convert an AST to a SIR program. Symbols must be unique in expr.
 pub fn ast_to_sir(expr: &Expr, multithreaded: bool) -> WeldResult<SirProgram> {
     if let ExprKind::Lambda { ref params, ref body } = expr.kind {
-        let mut prog = SirProgram::new(&expr.ty, params);
+        let mut prog = SirProgram::new(&body.ty, params);
         prog.sym_gen = SymbolGenerator::from_expression(expr);
         for tp in params {
             prog.funcs[0].params.insert(tp.name.clone(), tp.ty.clone());
@@ -806,6 +874,7 @@ pub fn ast_to_sir(expr: &Expr, multithreaded: bool) -> WeldResult<SirProgram> {
         // second call is necessary in the case where there are loops in the call graph, since
         // some parameter dependencies may not have been propagated through back edges
         sir_param_correction(&mut prog)?;
+        assign_return_types(&mut prog)?;
         Ok(prog)
     } else {
         compile_err!("Expression passed to ast_to_sir was not a Lambda")
@@ -851,6 +920,15 @@ fn gen_expr(expr: &Expr,
             -> WeldResult<(FunctionId, BasicBlockId, Symbol)> {
     use self::StatementKind::*;
     use self::Terminator::*;
+
+    /*
+    if prog.funcs[cur_func].return_type == Unknown {
+        prog.funcs[cur_func].return_type = expr.ty.clone();
+        debug!("F{} generating code for top expression\n{}", cur_func, expr.pretty_print());
+    } else {
+        trace!("F{} generating code for child expression\n{}", cur_func, expr.pretty_print());
+    }
+    */
 
     match expr.kind {
         ExprKind::Ident(ref sym) => Ok((cur_func, cur_block, sym.clone())),
@@ -990,7 +1068,7 @@ fn gen_expr(expr: &Expr,
                        ref params,
                        ref body,
             } = keyfunc.kind {
-                let keyfunc_id = prog.add_func();
+                let keyfunc_id = prog.add_func(body.ty.clone());
                 let keyblock = prog.funcs[keyfunc_id].add_block();
                 let (keyfunc_id, keyblock, key_sym) = gen_expr(body, prog, keyfunc_id, keyblock, tracker, multithreaded)?;
 
@@ -1065,7 +1143,7 @@ fn gen_expr(expr: &Expr,
                 prog.add_local_named(&expr.ty, &res_sym, false_func);
                 // the part after the if-else block is split out into a separate continuation
                 // function so that we don't have to duplicate this code
-                let cont_func = prog.add_func();
+                let cont_func = prog.add_func(expr.ty.clone());
                 let cont_block = prog.funcs[cont_func].add_block();
                 prog.funcs[true_func].blocks[true_block].terminator = JumpFunction(cont_func);
                 prog.funcs[false_func].blocks[false_block].terminator = JumpFunction(cont_func);
@@ -1110,7 +1188,7 @@ fn gen_expr(expr: &Expr,
             // make the loop body be another basic block in the current function.
             let parallel_body = contains_parallel_expressions(func_body);
             let body_start_func = if parallel_body {
-                let new_func = prog.add_func();
+                let new_func = prog.add_func(func_body.ty.clone());
                 new_func
             } else {
                 cur_func
@@ -1286,7 +1364,7 @@ fn gen_expr(expr: &Expr,
                    } = func.kind {
                 let (cur_func, cur_block, builder_sym) =
                     gen_expr(builder, prog, cur_func, cur_block, tracker, multithreaded)?;
-                let body_func = prog.add_func();
+                let body_func = prog.add_func(body.ty.clone());
                 prog.funcs[body_func].loop_body = true;
                 let body_block = prog.funcs[body_func].add_block();
                 prog.add_local_named(&params[0].ty, &params[0].name, body_func);
@@ -1325,10 +1403,10 @@ fn gen_expr(expr: &Expr,
                                       strides: strides_sym,
                                   });
                 }
-                let (body_end_func, body_end_block, _) =
+                let (body_end_func, body_end_block, result_sym) =
                     gen_expr(body, prog, body_func, body_block, tracker, multithreaded)?;
-                prog.funcs[body_end_func].blocks[body_end_block].terminator = EndFunction;
-                let cont_func = prog.add_func();
+                prog.funcs[body_end_func].blocks[body_end_block].terminator = EndFunction(result_sym);
+                let cont_func = prog.add_func(expr.ty.clone());
                 let cont_block = prog.funcs[cont_func].add_block();
                 let mut is_innermost = true;
                 body.traverse(&mut |ref e| if let ExprKind::For { .. } = e.kind {
