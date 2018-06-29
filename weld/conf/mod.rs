@@ -146,7 +146,7 @@ fn get_value(conf: &WeldConf, key: &str) -> Option<String> {
 fn parse_backend(s: &str) -> WeldResult<Backend> {
     match s {
         "workstealing" => Ok(Backend::LLVMWorkStealingBackend),
-        "default" => Ok(Backend::LLVMWorkStealingBackend),
+        "default" => Ok(DEFAULT_BACKEND),
         "multithreaded" => Ok(Backend::LLVMWorkStealingBackend),
         "singlethreaded" => Ok(Backend::LLVMSingleThreadBackend),
         _ => compile_err!("Invalid backend {}", s)
