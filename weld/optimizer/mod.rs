@@ -25,11 +25,6 @@ pub fn apply_passes(expr: &mut Expr,
                         stats: &mut CompilationStats,
                         use_experimental: bool) -> WeldResult<()> {
     for pass in passes {
-
-        if pass.pass_name() == "vectorize" {
-            continue;
-        }
-        
         let start = PreciseTime::now();
         pass.transform(expr, use_experimental)?;
         let end = PreciseTime::now();

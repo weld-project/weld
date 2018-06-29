@@ -190,9 +190,15 @@ pub trait CodeGenExt {
         if LLVMGetTypeKind(LLVMTypeOf(pointer)) != LLVMTypeKind::LLVMPointerTypeKind {
             unreachable!()
         } else {
-            Ok(LLVMBuildLoad(builder, pointer, NULL_NAME.as_ptr()))
+            let loaded = LLVMBuildLoad(builder, pointer, NULL_NAME.as_ptr());
+            if LLVMGetTypeKind(LLVMTypeOf(loaded)) == LLVMTypeKind::LLVMVectorTypeKind {
+                LLVMSetAlignment(loaded, 1);
+            }
+            Ok(loaded)
         }
     }
+
+
 
     /// Generates code to define a function with the given return type and argument type.
     ///
@@ -428,6 +434,18 @@ impl LlvmGenerator {
         Ok(gen)
     }
 
+    /// Generates a print call with the given string.
+    unsafe fn gen_print<T: AsRef<CStr>>(&mut self,
+                                        builder: LLVMBuilderRef,
+                                        run: LLVMValueRef,
+                                        string: T) -> WeldResult<()> {
+        let string = LLVMBuildGlobalStringPtr(builder,
+                                              string.as_ref().as_ptr(), c_str!(""));
+        let pointer = LLVMConstBitCast(string, LLVMPointerType(self.i8_type(), 0));
+        let _ = self.intrinsics.call_weld_run_print(builder, run, pointer);
+        Ok(())
+    }
+
     /// Generates the entry point to the Weld program.
     ///
     /// The entry function takes an `i64` and returns an `i64`. Both represent pointers that
@@ -454,6 +472,7 @@ impl LlvmGenerator {
         let nworkers = self.load(builder, nworkers_pointer)?;
         let memlimit_pointer = LLVMBuildStructGEP(builder, pointer, WeldInputArgs::memlimit_index(), c_str!("memlimit"));
         let memlimit = self.load(builder, memlimit_pointer)?;
+
 
         let run = self.intrinsics.call_weld_run_init(builder, nworkers, memlimit, None);
 
@@ -625,6 +644,11 @@ impl LlvmGenerator {
         use ast::Type::*;
         use sir::StatementKind::*;
         let ref output = statement.output.clone().unwrap_or(Symbol::new("unused", 0));
+
+        if self.conf.trace_run {
+            self.gen_print(context.builder, context.get_run(), CString::new(format!("{}", statement)).unwrap())?;
+        }
+
         match statement.kind {
             Assign(ref value) => {
                 let loaded = self.load(context.builder, context.get_value(value)?)?;
@@ -821,6 +845,11 @@ impl LlvmGenerator {
                                   context: &mut FunctionContext,
                                   bb: &BasicBlock,
                                   loop_terminator: Option<(LLVMBasicBlockRef, LLVMValueRef)>) -> WeldResult<()> {
+
+        if self.conf.trace_run {
+            self.gen_print(context.builder, context.get_run(), CString::new(format!("{}", bb.terminator)).unwrap())?;
+        }
+
         use sir::Terminator::*;
         match bb.terminator {
             ProgramReturn(ref sym) => {

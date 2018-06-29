@@ -3,11 +3,12 @@
 extern crate libc;
 extern crate fnv;
 
-use libc::{int32_t, int64_t, size_t};
+use libc::{c_char, int32_t, int64_t, size_t};
 use libc::{malloc, realloc, free};
 
 use fnv::FnvHashMap;
 
+use std::ffi::CStr;
 use std::ptr;
 use std::sync::{Once, ONCE_INIT};
 
@@ -193,4 +194,12 @@ pub unsafe extern "C" fn weld_runst_get_errno(run: WeldRunRef) -> WeldRuntimeErr
 pub unsafe extern "C" fn weld_runst_get_result(run: WeldRunRef) -> Pointer {
     let run = &mut *run;
     run.result()
+}
+
+#[no_mangle]
+/// Print a value from generated code.
+pub unsafe extern "C" fn weld_runst_print(_run: WeldRunRef, string: *const c_char) {
+    let string = CStr::from_ptr(string).to_str().unwrap();
+    // XXX We could switch to a custom printer here too.
+    println!("{}", string);
 }

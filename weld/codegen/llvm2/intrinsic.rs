@@ -203,12 +203,22 @@ impl Intrinsics {
                       self.get("weld_runst_set_errno").unwrap(),
                       args.as_mut_ptr(), args.len() as u32, name.unwrap_or(c_str!("")))
     }
+
+    /// Convinience wrapper for calling the `weld_run_set_errno` intrinsic.
+    pub unsafe fn call_weld_run_print(&mut self,
+                                      builder: LLVMBuilderRef,
+                                      run: LLVMValueRef,
+                                      string: LLVMValueRef) -> LLVMValueRef {
+        let mut args = [run, string];
+        LLVMBuildCall(builder,
+                      self.get("weld_runst_print").unwrap(),
+                      args.as_mut_ptr(), args.len() as u32, c_str!(""))
+    }
 }
 
 /// Private methods.
 impl Intrinsics {
-
-
+    /// Populate the default intrinsics.
     unsafe fn populate_defaults(&mut self) {
         let int8p = LLVMPointerType(self.i8_type(), 0);
 
@@ -257,6 +267,12 @@ impl Intrinsics {
 
         let mut params = vec![self.run_handle_type(), self.i64_type()];
         let name = CString::new("weld_runst_set_errno").unwrap();
+        let fn_type = LLVMFunctionType(self.void_type(), params.as_mut_ptr(), params.len() as u32, 0);
+        let function = LLVMAddFunction(self.module, name.as_ptr(), fn_type);
+        self.intrinsics.insert(name.into_string().unwrap(), function);
+
+        let mut params = vec![self.run_handle_type(), int8p];
+        let name = CString::new("weld_runst_print").unwrap();
         let fn_type = LLVMFunctionType(self.void_type(), params.as_mut_ptr(), params.len() as u32, 0);
         let function = LLVMAddFunction(self.module, name.as_ptr(), fn_type);
         self.intrinsics.insert(name.into_string().unwrap(), function);

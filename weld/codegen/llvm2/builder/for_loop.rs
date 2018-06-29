@@ -430,19 +430,19 @@ impl ForLoopGenInternal for LlvmGenerator {
         let size = self.gen_size(ctx, vector_type, vector)?;
         match iter.kind {
             ScalarIter if iter.start.is_some() => {
-                use self::llvm_sys::LLVMIntPredicate::{LLVMIntSLT, LLVMIntEQ};
+                use self::llvm_sys::LLVMIntPredicate::{LLVMIntSLT, LLVMIntSLE, LLVMIntEQ};
                 let start = self.load(ctx.builder, ctx.get_value(iter.start.as_ref().unwrap())?)?;
                 let stride = self.load(ctx.builder, ctx.get_value(iter.stride.as_ref().unwrap())?)?;
                 let end = self.load(ctx.builder, ctx.get_value(iter.end.as_ref().unwrap())?)?;
 
                 // Checks required:
                 // start < size
-                // end < size
+                // end <= size
                 // start < end
                 // (end - start) % stride == 0
                 // Iterations = (end - start) / stride
                 let start_check = LLVMBuildICmp(ctx.builder, LLVMIntSLT, start, size, c_str!(""));
-                let end_check = LLVMBuildICmp(ctx.builder, LLVMIntSLT, end, size, c_str!(""));
+                let end_check = LLVMBuildICmp(ctx.builder, LLVMIntSLE, end, size, c_str!(""));
                 let end_start_check = LLVMBuildICmp(ctx.builder, LLVMIntSLT, start, end, c_str!(""));
                 let diff = LLVMBuildNSWSub(ctx.builder, end, start, c_str!(""));
                 let mod_check = LLVMBuildSRem(ctx.builder, diff, stride, c_str!(""));

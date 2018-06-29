@@ -98,7 +98,7 @@ fn iters_for_loop() {
 /// Helper function for nditer - in order to simulate the behaviour of numpy's non-contiguous
 /// multi-dimensional arrays using counter, strides.
 /// returns idx = dot(counter, strides)
-fn get_idx(counter: [i64; 3], strides: [i64; 3]) -> i64 {
+fn get_idx(counter: &Vec<i64>, strides: &Vec<i64>) -> i64 {
     let mut sum: i64 = 0;
     for i in 0..3 {
         sum += counter[i] * strides[i];
@@ -110,17 +110,16 @@ fn get_idx(counter: [i64; 3], strides: [i64; 3]) -> i64 {
 /// Now counter would start from (0,0,0).
 /// Each index would go upto shapes, and then reset to 0.
 /// eg. (0,0,0), (0,0,1), (0,0,2), (0,0,3), (0,1,0) etc.
-fn update_counter(mut counter: [i64; 3], shapes: [i64; 3]) -> [i64; 3] {
+fn update_counter(counter: &mut Vec<i64>, shapes: &Vec<i64>) {
     let v = vec![2, 1, 0];
     for i in v {
         counter[i] += 1;
         if counter[i] == shapes[i] {
             counter[i] = 0;
         } else {
-            return counter;
+            return;
         }
     }
-    return counter;
 }
 
 /// Tests that nditer correctly iterates over each element of a non-contiguous array and applies
@@ -164,10 +163,10 @@ fn nditer_basic_op_test() {
     for i in 0..(result.len as isize) {
         /* next idx for the original array, x, based on how numpy would behave with the given
          * shapes/strides */
-        let idx = get_idx(counter, strides);
+        let idx = get_idx(&counter, &strides);
         assert_eq!(unsafe { *result.data.offset(i) }, x[idx as usize].ln());
         /* update counter according to the numpy above */
-        counter = update_counter(counter, shapes);
+        update_counter(&mut counter, &shapes);
     }
 }
 
@@ -209,11 +208,11 @@ fn nditer_zip() {
     let result = unsafe { (*data).clone() };
 
     for i in 0..(result.len as isize) {
-        let idx = get_idx(counter, strides);
+        let idx = get_idx(&counter, &strides);
         assert_eq!(
             unsafe { *result.data.offset(i) },
             x[idx as usize] + y[idx as usize]
         );
-        counter = update_counter(counter, shapes);
+        update_counter(&mut counter, &shapes);
     }
 }

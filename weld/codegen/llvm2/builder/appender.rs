@@ -198,7 +198,10 @@ impl Appender {
                                              LLVMPointerType(merge_ty, 0),
                                              c_str!(""));
         }
-        LLVMBuildStore(builder, merge_value, merge_pointer);
+        let store_inst = LLVMBuildStore(builder, merge_value, merge_pointer);
+        if vectorized {
+            LLVMSetAlignment(store_inst, 1);
+        }
         LLVMBuildStore(builder, new_size, size_slot);
         LLVMBuildRetVoid(builder);
 
