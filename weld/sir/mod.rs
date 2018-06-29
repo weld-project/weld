@@ -425,11 +425,11 @@ impl SirProgram {
             sym_gen: SymbolGenerator::new(),
         };
         // Add the main function.
-        prog.add_func(ret_ty.clone());
+        prog.add_func();
         prog
     }
 
-    pub fn add_func(&mut self, return_type: Type) -> FunctionId {
+    pub fn add_func(&mut self) -> FunctionId {
         let func = SirFunction {
             id: self.funcs.len(),
             params: BTreeMap::new(),
@@ -804,7 +804,6 @@ fn helper(prog: &mut SirProgram, func: FunctionId) -> WeldResult<Type> {
                 JumpBlock(_) => (),
                 JumpFunction(ref id) => {
                     result = Some(*id);
-                    break;
                 }
                 ProgramReturn(ref sym) | EndFunction(ref sym) => {
                     // Type should be set during AST -> SIR.
@@ -1068,7 +1067,7 @@ fn gen_expr(expr: &Expr,
                        ref params,
                        ref body,
             } = keyfunc.kind {
-                let keyfunc_id = prog.add_func(body.ty.clone());
+                let keyfunc_id = prog.add_func();
                 let keyblock = prog.funcs[keyfunc_id].add_block();
                 let (keyfunc_id, keyblock, key_sym) = gen_expr(body, prog, keyfunc_id, keyblock, tracker, multithreaded)?;
 
@@ -1143,7 +1142,7 @@ fn gen_expr(expr: &Expr,
                 prog.add_local_named(&expr.ty, &res_sym, false_func);
                 // the part after the if-else block is split out into a separate continuation
                 // function so that we don't have to duplicate this code
-                let cont_func = prog.add_func(expr.ty.clone());
+                let cont_func = prog.add_func();
                 let cont_block = prog.funcs[cont_func].add_block();
                 prog.funcs[true_func].blocks[true_block].terminator = JumpFunction(cont_func);
                 prog.funcs[false_func].blocks[false_block].terminator = JumpFunction(cont_func);
@@ -1188,7 +1187,7 @@ fn gen_expr(expr: &Expr,
             // make the loop body be another basic block in the current function.
             let parallel_body = contains_parallel_expressions(func_body);
             let body_start_func = if parallel_body {
-                let new_func = prog.add_func(func_body.ty.clone());
+                let new_func = prog.add_func();
                 new_func
             } else {
                 cur_func
@@ -1364,7 +1363,7 @@ fn gen_expr(expr: &Expr,
                    } = func.kind {
                 let (cur_func, cur_block, builder_sym) =
                     gen_expr(builder, prog, cur_func, cur_block, tracker, multithreaded)?;
-                let body_func = prog.add_func(body.ty.clone());
+                let body_func = prog.add_func();
                 prog.funcs[body_func].loop_body = true;
                 let body_block = prog.funcs[body_func].add_block();
                 prog.add_local_named(&params[0].ty, &params[0].name, body_func);
@@ -1406,7 +1405,7 @@ fn gen_expr(expr: &Expr,
                 let (body_end_func, body_end_block, result_sym) =
                     gen_expr(body, prog, body_func, body_block, tracker, multithreaded)?;
                 prog.funcs[body_end_func].blocks[body_end_block].terminator = EndFunction(result_sym);
-                let cont_func = prog.add_func(expr.ty.clone());
+                let cont_func = prog.add_func();
                 let cont_block = prog.funcs[cont_func].add_block();
                 let mut is_innermost = true;
                 body.traverse(&mut |ref e| if let ExprKind::For { .. } = e.kind {
