@@ -99,6 +99,10 @@ pub unsafe fn compile(context: LLVMContextRef,
         unreachable!()
     }
 
+    let target_triple = get_default_target_triple();
+    debug!("Set module target {:?}", target_triple);
+    LLVMSetTarget(module, target_triple.as_ptr() as *const _);
+
     let start = PreciseTime::now();
     verify_module(module)?;
     let end = PreciseTime::now();
@@ -144,6 +148,14 @@ unsafe fn initialize() {
         return;
     }
     LLVMLinkInMCJIT();
+}
+
+/// Get the target triple for the machine.
+unsafe fn get_default_target_triple() -> CString {
+    let target_triple_ptr = LLVMGetDefaultTargetTriple();
+    let target_triple = CStr::from_ptr(target_triple_ptr as *const _).to_owned();
+    LLVMDisposeMessage(target_triple_ptr);
+    target_triple
 }
 
 /// Verify a module using LLVM's verifier.
