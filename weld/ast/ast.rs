@@ -77,6 +77,11 @@ impl Type {
         }.into_iter()
     }
 
+    /// Returns the type of a string.
+    pub fn string_type() -> Type {
+        Type::Vector(Box::new(Type::Scalar(ScalarKind::I8)))
+    }
+
     /// Returns whether this `Type` is a SIMD value.
     ///
     /// A value is a SIMD value if its a `Simd` type or it is a `Struct` where each member is a

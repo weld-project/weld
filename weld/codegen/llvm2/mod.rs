@@ -37,6 +37,7 @@ macro_rules! c_str {
 }
 
 mod builder;
+mod dict;
 mod intrinsic;
 mod jit;
 mod numeric;
@@ -170,7 +171,7 @@ pub struct LlvmGenerator {
     functions: FnvHashMap<FunctionId, LLVMValueRef>,
     /// A map tracking generated vectors.
     ///
-    /// The key maps the element type to the vector's type reference and methods on it.
+    /// The key maps the *element type* to the vector's type reference and methods on it.
     vectors: FnvHashMap<Type, vector::Vector>,
     /// A map tracking generated mergers.
     ///
@@ -182,10 +183,12 @@ pub struct LlvmGenerator {
     appenders: FnvHashMap<BuilderKind, appender::Appender>,
     /// A map tracking generated dictionaries.
     ///
-    /// The key maps the vector's element type to the vector's type reference and methods on it.
-    dictionaries: FnvHashMap<Type, u32>,
+    /// The key maps the dictionary's `Dict` type to the type reference and methods on it.
+    dictionaries: FnvHashMap<Type, dict::Dict>,
     /// Intrinsics defined in the module.
     intrinsics: intrinsic::Intrinsics,
+    /// Generated string literal values.
+    strings: FnvHashMap<CString, LLVMValueRef>,
 }
 
 /// Defines helper methods for LLVM code generation.
@@ -270,7 +273,8 @@ pub trait CodeGenExt {
             U64Literal(val) => self.u64(val),
             F32Literal(val) => self.f32(f32::from_bits(val)),
             F64Literal(val) => self.f64(f64::from_bits(val)),
-            StringLiteral(_) => unimplemented!()
+            // Handled by the `gen_numeric`.
+            StringLiteral(_) => unreachable!(),
         }
     }
 
@@ -448,6 +452,7 @@ impl LlvmGenerator {
             mergers: FnvHashMap::default(),
             appenders: FnvHashMap::default(),
             dictionaries: FnvHashMap::default(),
+            strings: FnvHashMap::default(),
             intrinsics: intrinsics,
         };
 
@@ -470,13 +475,20 @@ impl LlvmGenerator {
         Ok(gen)
     }
 
+    /// Generates a global string literal and returns a `i8*` to it.
+    unsafe fn gen_global_string(&mut self, builder: LLVMBuilderRef, string: CString) -> LLVMValueRef {
+        let ptr = string.as_ptr();
+        self.strings.entry(string).or_insert_with(|| {
+            LLVMBuildGlobalStringPtr(builder, ptr, c_str!(""))
+        }).clone()
+    }
+
     /// Generates a print call with the given string.
-    unsafe fn gen_print<T: AsRef<CStr>>(&mut self,
-                                        builder: LLVMBuilderRef,
-                                        run: LLVMValueRef,
-                                        string: T) -> WeldResult<()> {
-        let string = LLVMBuildGlobalStringPtr(builder,
-                                              string.as_ref().as_ptr(), c_str!(""));
+    unsafe fn gen_print(&mut self,
+                        builder: LLVMBuilderRef,
+                        run: LLVMValueRef,
+                        string: CString) -> WeldResult<()> {
+        let string = self.gen_global_string(builder, string);
         let pointer = LLVMConstBitCast(string, LLVMPointerType(self.i8_type(), 0));
         let _ = self.intrinsics.call_weld_run_print(builder, run, pointer);
         Ok(())
@@ -508,7 +520,6 @@ impl LlvmGenerator {
         let nworkers = self.load(builder, nworkers_pointer)?;
         let memlimit_pointer = LLVMBuildStructGEP(builder, pointer, WeldInputArgs::memlimit_index(), c_str!("memlimit"));
         let memlimit = self.load(builder, memlimit_pointer)?;
-
 
         let run = self.intrinsics.call_weld_run_init(builder, nworkers, memlimit, None);
 
@@ -742,8 +753,18 @@ impl LlvmGenerator {
                 LLVMBuildStore(context.builder, elem, output_pointer);
                 Ok(())
             }
-            KeyExists { .. } => {
-                unimplemented!()
+            KeyExists { ref child, ref key } => {
+                let output_pointer = context.get_value(output)?;
+                let child_value = self.load(context.builder, context.get_value(child)?)?;
+                let key_value = self.load(context.builder, context.get_value(key)?)?;
+                let child_type = context.sir_function.symbol_type(child)?;
+                let pointer = {
+                    let mut methods = self.dictionaries.get_mut(child_type).unwrap();
+                    methods.gen_key_exists(context.builder, child_value, key_value)?
+                };
+                let result = self.load(context.builder, pointer)?;
+                LLVMBuildStore(context.builder, result, output_pointer);
+                Ok(())
             }
             Length(ref child) => {
                 let output_pointer = context.get_value(output)?;
@@ -752,6 +773,14 @@ impl LlvmGenerator {
                 if let Vector(ref elem_type) = *child_type {
                     let mut methods = self.vectors.get_mut(elem_type).unwrap();
                     let result = methods.gen_size(context.builder, child_value)?;
+                    LLVMBuildStore(context.builder, result, output_pointer);
+                    Ok(())
+                } else if let Dict(_, _) = *child_type {
+                    let pointer = {
+                        let mut methods = self.dictionaries.get_mut(child_type).unwrap();
+                        methods.gen_size(context.builder, child_value)?
+                    };
+                    let result = self.load(context.builder, pointer)?;
                     LLVMBuildStore(context.builder, result, output_pointer);
                     Ok(())
                 } else {
@@ -772,7 +801,13 @@ impl LlvmGenerator {
                     LLVMBuildStore(context.builder, result, output_pointer);
                     Ok(())
                 } else if let Dict(_, _) = *child_type {
-                    unimplemented!() 
+                    let pointer = {
+                        let mut methods = self.dictionaries.get_mut(child_type).unwrap();
+                        methods.gen_get(context.builder, child_value, index_value)?
+                    };
+                    let result = self.load(context.builder, pointer)?;
+                    LLVMBuildStore(context.builder, result, output_pointer);
+                    Ok(())
                 } else {
                     unreachable!()
                 }
@@ -859,8 +894,17 @@ impl LlvmGenerator {
             Sort { .. } => {
                 unimplemented!() 
             }
-            ToVec(_) => {
-                unimplemented!() 
+            ToVec(ref child) => {
+                let output_pointer = context.get_value(output)?;
+                let child_value = self.load(context.builder, context.get_value(child)?)?;
+                let child_type = context.sir_function.symbol_type(child)?;
+                let pointer = {
+                    let mut methods = self.dictionaries.get_mut(child_type).unwrap();
+                    methods.gen_to_vec(context.builder, child_value)?
+                };
+                let result = self.load(context.builder, pointer)?;
+                LLVMBuildStore(context.builder, result, output_pointer);
+                Ok(())
             }
             UnaryOp { .. }  => {
                 use self::numeric::NumericExpressionGen;
@@ -923,7 +967,6 @@ impl LlvmGenerator {
                               arguments.as_mut_ptr(),
                               arguments.len() as u32,
                               c_str!(""));
-                // XXX Should we return the builder here?
                 LLVMBuildRet(context.builder, result);
             }
             ParallelFor(ref parfor) => {

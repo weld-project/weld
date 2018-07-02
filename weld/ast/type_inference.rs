@@ -330,7 +330,7 @@ impl InferTypesInternal for Expr {
             Literal(BoolLiteral(_)) =>
                 self.ty.push_complete(Scalar(Bool)),
             Literal(StringLiteral(_)) =>
-                self.ty.push_complete(Vector(Box::new(Scalar(I8)))),
+                self.ty.push_complete(Type::string_type()),
 
             BinOp { kind: op, ref mut left, ref mut right } => {
                 // First, sync the left and right types into the elem_type.

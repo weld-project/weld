@@ -155,6 +155,12 @@ impl Vector {
         }
     }
 
+    pub unsafe fn const_literal_from_parts(&self, pointer: LLVMValueRef, size: LLVMValueRef) -> LLVMValueRef {
+        let undef = LLVMGetUndef(self.vector_ty);
+        let result = LLVMConstInsertValue(undef, pointer, [POINTER_INDEX].as_mut_ptr(), 1);
+        LLVMConstInsertValue(result, size, [SIZE_INDEX].as_mut_ptr(), 1)
+    }
+
     pub unsafe fn gen_new(&mut self,
                                builder: LLVMBuilderRef,
                                intrinsics: &mut Intrinsics,

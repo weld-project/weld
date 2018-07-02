@@ -15,6 +15,8 @@ use ast::*;
 use error::*;
 use sir::*;
 
+use std::ffi::CString;
+
 use self::llvm_sys::prelude::*;
 use self::llvm_sys::core::*;
 
@@ -240,7 +242,18 @@ impl NumericExpressionGen for LlvmGenerator {
         if let AssignLiteral(ref value) = statement.kind {
             let output = statement.output.as_ref().unwrap();
             let output_type = ctx.sir_function.symbol_type(output)?;
-            let mut result = self.scalar_literal(value);
+            let mut result = if let LiteralKind::StringLiteral(ref val) = value {
+                use codegen::llvm2::vector::Vector;
+                let c_str = CString::new(val.as_str()).unwrap();
+                // Add one for the NULL-byte!
+                let len = (c_str.to_bytes().len() + 1) as i64;
+                let string = self.gen_global_string(ctx.builder, c_str);
+                let pointer = LLVMConstBitCast(string, LLVMPointerType(self.i8_type(), 0));
+                let methods = self.vectors.get(&Type::Scalar(ScalarKind::I8)).unwrap();
+                methods.const_literal_from_parts(pointer, self.i64(len))
+            } else {
+                self.scalar_literal(value)
+            };
             if let Type::Simd(_) = output_type {
                 result = LLVMConstVector([result; LLVM_VECTOR_WIDTH as usize].as_mut_ptr(), LLVM_VECTOR_WIDTH)
             }
