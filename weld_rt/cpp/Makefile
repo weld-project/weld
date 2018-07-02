@@ -25,7 +25,7 @@ inline.bc: inline.cpp
 vb.o: vb.cpp
 	${CLANG} ${CFLAGS} -c $< -o $@
 
-dict.o: dict-new.cpp
+dict.o: dict-st.cpp
 	${CLANG} ${CFLAGS} -c $< -o $@
 
 gb.o: gb-new.cpp

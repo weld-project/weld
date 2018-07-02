@@ -11,16 +11,8 @@
  * */
 typedef int32_t (*KeyComparator)(void *, void *);
 
-/** A merge function for merging a new value with an existing one in the dictionary.
- *
- * @param metadata that the merge function can use.
- * @param filled specifies whether a value was in this slot already.
- * @param value to updated
- * @pram value to merge.
- */
-typedef void (*MergeFn)(void *, int32_t, void *, void *);
-
-/** Creates a new Weld dictionary.
+/**
+ * Creates a new Weld dictionary.
  *
  * @param key_size the size of the key in bytes.
  * @param keys_eq the comparator the check if two keys are equal
@@ -37,43 +29,29 @@ typedef void (*MergeFn)(void *, int32_t, void *, void *);
  *
  * @return a handle to the created dictionary.
  */
-extern "C" void *weld_rt_dict_new(int32_t key_size,
+extern "C" void *weld_rt_dict_new(
+		int32_t key_size,
+		int32_t value_size,
     KeyComparator keys_eq,
-    MergeFn merge_fn,
-    MergeFn finalize_merge_fn,
-    void *metadata,
-    int32_t val_size,
-    int32_t packed_value_size,
-    int64_t max_local_bytes,
-    int64_t capacity);
-
-/* Same as `weld_rt_dict_new` above, but always initialize the dictionary as
- * finalized (this allows multi-threaded writes, but still allocates space for
- * multi-threading in case the dictionary is converted into a builder).
- */
-extern "C" void *weld_rt_dict_new_finalized(int32_t key_size,
-    KeyComparator keys_eq,
-    MergeFn merge_fn,
-    MergeFn finalize_merge_fn,
-    void *metadata,
-    int32_t val_size,
-    int32_t packed_value_size,
-    int64_t max_local_bytes,
     int64_t capacity);
 
 /** Frees a dictionary created using `weld_rt_dict_new`. */
 extern "C" void weld_rt_dict_free(void *d);
 
-/** Lookup a value in a dictionary given a key and its hash. */
-extern "C" void *weld_rt_dict_lookup(void *d, int32_t hash, void *key);
+/**
+ * Returns the slot for the given hash/key. If the dictionary does not have an entry for hash/key
+ * then its slot is initialized with the init_value and returned.
+ * Returns NULL if no slot could be found or created.
+ */
+extern "C" void *weld_rt_upsert_slot(void *d, int32_t hash, void *key, void *init_value);
 
-/** Merge a value into a dictionary given a key, its hash, and a corresponding value. */
-extern "C" void weld_rt_dict_merge(void *d, int32_t hash, void *key, void *value);
+/**
+ * Returns the size of the dictionary.
+ */
+extern "C" int64_t weld_rt_dict_size(void *d);
 
-/** Finalize the dictionary, transitioning from "writes-only" mode to "read-only" mode. */
-extern "C" void weld_rt_dict_finalize(void *d);
-
-/** Return an array of structs, where structs contain the key and value. This allocates
+/**
+ * Return an array of structs, where structs contain the key and value. This allocates
  * memory that can be freed with `weld_run_free`.
  *
  * @param d the dictionary.
@@ -88,11 +66,7 @@ extern "C" void weld_rt_dict_finalize(void *d);
  */
 extern "C" void *weld_rt_dict_to_array(void *d, int32_t value_offset, int32_t struct_size);
 
-/** Returns the size of the dictionary.
- *
- * PRE-REQUISITES: The dictionary must be finalized.
- */
-extern "C" int64_t weld_rt_dict_size(void *d);
+
 
 /** Writes serialized bytes representing the dictionary `d` into `buf`.
  *
