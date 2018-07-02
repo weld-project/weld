@@ -401,7 +401,13 @@ impl ForLoopGenInternal for LlvmGenerator {
                     values.push(element);
                 }
                 RangeIter => {
-                    unimplemented!()
+                    let start = self.load(ctx.builder, ctx.get_value(iter.start.as_ref().unwrap())?)?;
+                    let stride = self.load(ctx.builder, ctx.get_value(iter.stride.as_ref().unwrap())?)?;
+
+                    // Index = (start + stride * i)
+                    let tmp = LLVMBuildNSWMul(ctx.builder, stride, i, c_str!(""));
+                    let i = LLVMBuildNSWAdd(ctx.builder, start, tmp, c_str!(""));
+                    values.push(i);
                 }
                 NdIter => unimplemented!(),
             }
@@ -474,7 +480,27 @@ impl ForLoopGenInternal for LlvmGenerator {
                 let _ = LLVMBuildBr(ctx.builder, pass_block);
                 Ok(iterations)
             }
-            NdIter | RangeIter => unimplemented!()
+            RangeIter => {
+                use self::llvm_sys::LLVMIntPredicate::{LLVMIntSLT, LLVMIntSLE, LLVMIntEQ};
+                let start = self.load(ctx.builder, ctx.get_value(iter.start.as_ref().unwrap())?)?;
+                let stride = self.load(ctx.builder, ctx.get_value(iter.stride.as_ref().unwrap())?)?;
+                let end = self.load(ctx.builder, ctx.get_value(iter.end.as_ref().unwrap())?)?;
+
+                // Checks required:
+                // start < end
+                // (end - start) % stride == 0
+                // Iterations = (end - start) / stride
+                let end_start_check = LLVMBuildICmp(ctx.builder, LLVMIntSLT, start, end, c_str!(""));
+                let diff = LLVMBuildNSWSub(ctx.builder, end, start, c_str!(""));
+                let mod_check = LLVMBuildSRem(ctx.builder, diff, stride, c_str!(""));
+                let mod_check = LLVMBuildICmp(ctx.builder, LLVMIntEQ, mod_check, self.i64(0), c_str!(""));
+                let iterations = LLVMBuildSDiv(ctx.builder, diff, stride, c_str!(""));
+
+                let check = LLVMBuildAnd(ctx.builder, end_start_check, mod_check, c_str!(""));
+                let _ = LLVMBuildCondBr(ctx.builder, check, pass_block, fail_block);
+                Ok(iterations)
+            }
+            NdIter => unimplemented!()
         }
     }
 
