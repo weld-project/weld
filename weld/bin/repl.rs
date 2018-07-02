@@ -206,6 +206,12 @@ fn main() {
              .value_name("FILE")
              .help("Run the REPL on the input and quit")
              .takes_value(true))
+        .arg(Arg::with_name("backend")
+             .short("b")
+             .long("backend")
+             .value_name("BACKEND <singlethreaded|multithreaded>")
+             .help("Specify the backend to use")
+             .takes_value(true))
         .get_matches();
 
     // Parse the log level.
@@ -229,6 +235,9 @@ fn main() {
     if matches.is_present("dumpcode") {
         process_setconf(conf, "weld.compile.dumpCode", "true");
     }
+
+    let backend = matches.value_of("backend").unwrap_or("singlethreaded");
+    process_setconf(conf, "weld.compile.backend", backend);
 
     set_log_level(log_level);
     println!("Log Level set to '{}'", log_str);
