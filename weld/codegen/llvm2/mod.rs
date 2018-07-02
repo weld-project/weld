@@ -1013,8 +1013,18 @@ impl LlvmGenerator {
                 use self::builder::BuilderExpressionGen;
                 self.builder_type(ty)?
             }
-            Dict(_, _) => {
-                unimplemented!()
+            Dict(ref key, ref value) => {
+                if !self.dictionaries.contains_key(ty) {
+                    let key_ty = self.llvm_type(key)?;
+                    let value_ty = self.llvm_type(value)?;
+                    let dict = dict::Dict::define("dict",
+                                                    key_ty,
+                                                    value_ty,
+                                                    self.context,
+                                                    self.module);
+                    self.dictionaries.insert(ty.clone(), dict);
+                }
+                self.dictionaries.get(ty).unwrap().dict_ty
             }
             Scalar(kind) => match kind {
                 Bool => self.bool_type(),
