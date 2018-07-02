@@ -109,6 +109,21 @@ impl Type {
         }
     }
 
+    /// Returns whether this `Type` is a hashable.
+    pub fn is_hashable(&self) -> bool {
+        use self::Type::*;
+        match *self {
+            Scalar(_) => true,
+            // XXX Is this hashable...?
+            Simd(_) => true,
+            Struct(ref tys) => tys.iter().all(|t| t.is_hashable()),
+            Vector(ref elem) => elem.is_hashable(),
+            Builder(_, _) => false,
+            Dict(_, _) => false,
+            Function(_, _) | Unknown => false
+        }
+    }
+
     /// Return the vectorized version of a type.
     ///
     /// This method returns an error if this `Type` is not vectorizable.

@@ -28,8 +28,10 @@ use super::{CodeGenExt, FunctionContext, LlvmGenerator};
 
 mod for_loop;
 
-pub mod merger;
 pub mod appender;
+pub mod dictmerger;
+pub mod merger;
+pub mod vecmerger;
 
 /// A trait for generating builder code.
 ///

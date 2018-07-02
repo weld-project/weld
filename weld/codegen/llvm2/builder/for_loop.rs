@@ -375,7 +375,7 @@ impl ForLoopGenInternal for LlvmGenerator {
                     let element = self.load(ctx.builder, element_pointer)?;
                     values.push(element);
                 }
-                SimdIter if iter.start.is_some() => unimplemented!(),
+                SimdIter if iter.start.is_some() => unreachable!(),
                 SimdIter => {
                     let i = LLVMBuildNSWMul(ctx.builder, i, self.i64(LLVM_VECTOR_WIDTH as i64), c_str!(""));
                     let vector = self.load(ctx.builder, ctx.get_value(&iter.data)?)?;
@@ -384,7 +384,7 @@ impl ForLoopGenInternal for LlvmGenerator {
                     let element = self.load(ctx.builder, element_pointer)?;
                     values.push(element);
                 }
-                FringeIter if iter.start.is_some() => unimplemented!(),
+                FringeIter if iter.start.is_some() => unreachable!(),
                 FringeIter => {
                     let vector = self.load(ctx.builder, ctx.get_value(&iter.data)?)?;
                     let vector_type = ctx.sir_function.symbol_type(&iter.data)?;
@@ -462,13 +462,13 @@ impl ForLoopGenInternal for LlvmGenerator {
                 let _ = LLVMBuildBr(ctx.builder, pass_block);
                 Ok(size)
             }
-            SimdIter if iter.start.is_some() => unimplemented!(),
+            SimdIter if iter.start.is_some() => unreachable!(),
             SimdIter => {
                 let iterations = LLVMBuildSDiv(ctx.builder, size, self.i64(LLVM_VECTOR_WIDTH as i64), c_str!(""));
                 let _ = LLVMBuildBr(ctx.builder, pass_block);
                 Ok(iterations)
             }
-            FringeIter if iter.start.is_some() => unimplemented!(),
+            FringeIter if iter.start.is_some() => unreachable!(),
             FringeIter => {
                 let iterations = LLVMBuildSRem(ctx.builder, size, self.i64(LLVM_VECTOR_WIDTH as i64), c_str!(""));
                 let _ = LLVMBuildBr(ctx.builder, pass_block);

@@ -36,11 +36,11 @@ macro_rules! c_str {
     );
 }
 
-// Traits implementing code generation for various expressions.
 mod builder;
 mod intrinsic;
 mod jit;
 mod numeric;
+mod serde;
 mod vector;
 
 use self::builder::merger;
@@ -72,6 +72,26 @@ pub fn compile(program: &SirProgram,
         write_code(module.llvm()?, "ll", format!("{}-opt", dump_prefix), &conf.dump_code.dir);
     }
     Ok(Box::new(module))
+}
+
+/// Specifies whether a type contains a pointer.
+pub trait HasPointer {
+    fn has_pointer(&self) -> bool;
+}
+
+impl HasPointer for Type {
+    fn has_pointer(&self) -> bool {
+        use ast::Type::*;
+        match *self {
+            Scalar(_) => false,
+            Simd(_) => false,
+            Vector(_) => true,
+            Dict(_, _) => true,
+            Builder(_, _) => true,
+            Struct(ref tys) => tys.iter().any(|ref t| t.has_pointer()),
+            Function(_, _) | Unknown => unreachable!(),
+        }
+    }
 }
 
 trait LlvmInputArg {
@@ -199,6 +219,22 @@ pub trait CodeGenExt {
     }
 
 
+    /// Mixes a 32-bit hash values using the MurMur3 finalization function.
+    ///
+    /// https://github.com/PeterScott/murmur3/blob/master/murmur3.c
+    unsafe fn fmix32(&mut self, builder: LLVMBuilderRef, value: LLVMValueRef) -> LLVMValueRef {
+        let mut result;
+        let mut tmp;
+        result = LLVMBuildLShr(builder, value, self.i32(16), c_str!(""));
+        result = LLVMBuildXor(builder, result, value, c_str!(""));
+        result = LLVMBuildMul(builder, result, self.i32(-2048144789), c_str!(""));
+        tmp = LLVMBuildLShr(builder, result, self.i32(13), c_str!(""));
+        result = LLVMBuildXor(builder, result, tmp, c_str!(""));
+        result = LLVMBuildMul(builder, result, self.i32(-1028477387), c_str!(""));
+        tmp = LLVMBuildLShr(builder, result, self.i32(16), c_str!(""));
+        result = LLVMBuildXor(builder, result, tmp, c_str!(""));
+        result
+    }
 
     /// Generates code to define a function with the given return type and argument type.
     ///

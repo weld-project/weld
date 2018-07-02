@@ -22,6 +22,9 @@ use super::FunctionContext;
 use super::LlvmGenerator;
 use super::intrinsic::Intrinsics;
 
+// The vecmerger builder builds on top of the Vector.
+use codegen::llvm2::builder::vecmerger::VecMerger;
+
 pub const POINTER_INDEX: u32 = 0;
 pub const SIZE_INDEX: u32 = 1;
 
@@ -113,6 +116,8 @@ pub struct Vector {
     vat: Option<LLVMValueRef>,
     size: Option<LLVMValueRef>,
     slice: Option<LLVMValueRef>,
+    /// VecMerger extension methods.
+    vecmerger: Option<VecMerger>,
 }
 
 impl CodeGenExt for Vector {
@@ -146,6 +151,7 @@ impl Vector {
             vat: None,
             size: None,
             slice: None,
+            vecmerger: None,
         }
     }
 
