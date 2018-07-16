@@ -1359,6 +1359,16 @@ impl<'t> Parser<'t> {
                            annotations))
             }
 
+            TGroupMerger => {
+                self.consume(TOpenBracket)?;
+                let key_type = self.type_()?;
+                self.consume(TComma)?;
+                let value_type = self.type_()?;
+                self.consume(TCloseBracket)?;
+                let group_merger = GroupMerger(Box::new(key_type), Box::new(value_type));
+                Ok(Builder(group_merger, annotations))
+            }
+
             TVecMerger => {
                 let elem_type: Type;
                 self.consume(TOpenBracket)?;
