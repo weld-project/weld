@@ -279,7 +279,7 @@ fn simple_dict_lookup() {
 
 #[test]
 fn string_dict_lookup() {
-    let code = "|x:vec[i32]| let v = vec![\"abcdefghi\", \"abcdefghi\", \"abcdefghi\"];
+    let code = "|x:vec[i32]| let v = [\"abcdefghi\", \"abcdefghi\", \"abcdefghi\"];
                 let d = result(for(zip(v,x), dictmerger[vec[i8],i32,+], |b,i,e| merge(b, e)));
                 lookup(d, \"abcdefghi\")";
     let ref conf = default_conf();

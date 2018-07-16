@@ -9,7 +9,7 @@ mod common;
 use common::*;
 
 #[test]
-#[should_panic]
+#[should_panic] // XXX The new runtime throws panics for these currently.
 fn iters_outofbounds_error_test() {
     let code = "|x:vec[i32]| result(for(iter(x,0L,20000L,1L), merger[i32,+], |b,i,e| merge(b,e)))";
     let ref conf = many_threads_conf();
@@ -21,7 +21,7 @@ fn iters_outofbounds_error_test() {
 }
 
 #[test]
-#[should_panic]
+#[should_panic] // XXX The new runtime throws panics for these currently.
 fn outofmemory_error_test() {
     let code = "|x:vec[i32]| result(for(x, vecmerger[i32,+](x), |b,i,e| merge(b,{i,e+1})))";
     let ref mut conf = default_conf();
