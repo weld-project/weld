@@ -927,7 +927,9 @@ impl LlvmGenerator {
                                   loop_terminator: Option<(LLVMBasicBlockRef, LLVMValueRef)>) -> WeldResult<()> {
 
         if self.conf.trace_run {
-            self.gen_print(context.builder, context.get_run(), CString::new(format!("{}", bb.terminator)).unwrap())?;
+            self.gen_print(context.builder,
+                           context.get_run(),
+                           CString::new(format!("{}", bb.terminator)).unwrap())?;
         }
 
         use sir::Terminator::*;

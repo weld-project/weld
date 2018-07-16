@@ -231,7 +231,7 @@ impl ForLoopGenInternal for LlvmGenerator {
                                      func: &SirFunction,
                                      parfor: &ParallelForData) -> WeldResult<()> {
 
-        // Construct the return type, which is the builders passed into the function.
+        // Construct the return type, which is the builder passed into the function.
         let builders: Vec<Type> = func.params.values()
             .filter(|v| v.is_builder())
             .map(|v| v.clone())
@@ -244,10 +244,10 @@ impl ForLoopGenInternal for LlvmGenerator {
 
         let mut arg_tys = self.argument_types(func)?;
         // The second-to-last argument is the *total* number of iterations across all threads (in a
-        // multi-threaded setting) that this loop will execute for (the last argument is the run
-        // handle).
+        // multi-threaded setting) that this loop will execute for.
         arg_tys.push(self.i64_type());
         let num_iterations_index = (arg_tys.len() - 1) as u32;
+        // Last argument is run handle, as always.
         arg_tys.push(self.run_handle_type());
 
         let ret_ty = self.llvm_type(weld_ty)?;
@@ -257,29 +257,31 @@ impl ForLoopGenInternal for LlvmGenerator {
         LLVMSetLinkage(function, LLVMLinkage::LLVMPrivateLinkage);
         self.functions.insert(func.id, function);
 
+
+
         // Create a context for the function.
         let ref mut context = FunctionContext::new(self.context, program, func, function);
+        // Reference to the parameter storing the max number of iterations.
+        let max = LLVMGetParam(context.llvm_function, num_iterations_index);
         // Create the entry basic block, where we define alloca'd variables.
         let entry_bb = LLVMAppendBasicBlockInContext(self.context,
                                                      context.llvm_function,
-                                                     c_str!("entry"));
+                                                     c_str!(""));
         LLVMPositionBuilderAtEnd(context.builder, entry_bb);
 
         self.gen_allocas(context)?;
         self.gen_store_parameters(context)?;
 
-        // Append the loop start basic blocks.
-        let loop_begin_bb = LLVMAppendBasicBlockInContext(self.context,
-                                                          context.llvm_function,
-                                                          c_str!("loop.begin"));
-        let loop_entry_bb = LLVMAppendBasicBlockInContext(self.context,
-                                                          context.llvm_function,
-                                                          c_str!("loop.entry"));
+        // Store the loop induction variable and the builder argument.
+        LLVMBuildStore(context.builder,
+                       self.load(context.builder, context.get_value(&parfor.builder)?)?,
+                       context.get_value(&parfor.builder_arg)?);
+        LLVMBuildStore(context.builder, self.i64(0), context.get_value(&parfor.idx_arg)?);
 
         // Add the SIR function basic blocks.
         self.gen_basic_block_defs(context)?;
 
-        // Finally, add the loop end basic blocks.
+        // Add the loop end basic blocks.
         let loop_end_bb = LLVMAppendBasicBlockInContext(self.context,
                                                         context.llvm_function,
                                                         c_str!("loop.end"));
@@ -287,33 +289,17 @@ impl ForLoopGenInternal for LlvmGenerator {
                                                          context.llvm_function,
                                                          c_str!("loop.exit"));
 
-        // Build the loop.
-        LLVMPositionBuilderAtEnd(context.builder, entry_bb);
-        LLVMBuildBr(context.builder, loop_begin_bb);
-
-        LLVMPositionBuilderAtEnd(context.builder, loop_begin_bb);
-        LLVMBuildStore(context.builder,
-                        self.load(context.builder, context.get_value(&parfor.builder)?)?,
-                        context.get_value(&parfor.builder_arg)?);
-        LLVMBuildStore(context.builder,
-                       self.i64(0),
-                       context.get_value(&parfor.idx_arg)?);
-
-        LLVMBuildBr(context.builder, loop_entry_bb);
-        LLVMPositionBuilderAtEnd(context.builder, loop_entry_bb);
-
-        let max = LLVMGetParam(context.llvm_function, num_iterations_index);
-        let i = self.load(context.builder, context.get_value(&parfor.idx_arg)?)?;
-        let continue_cond = LLVMBuildICmp(context.builder,
-                                          LLVMIntPredicate::LLVMIntSGT, max, i, c_str!(""));
-
+        // Check whether we need to loop at all.
+        let any_iters_cond = LLVMBuildICmp(context.builder, LLVMIntPredicate::LLVMIntNE, max, self.i64(0), c_str!(""));
         // First body block of the SIR function.
         let first_body_block = *context.blocks.get(&0).unwrap();
+        LLVMBuildCondBr(context.builder, any_iters_cond, first_body_block, loop_exit_bb);
 
-        let _ = LLVMBuildCondBr(context.builder, continue_cond, first_body_block, loop_exit_bb);
+        // Build the loop body.
         LLVMPositionBuilderAtEnd(context.builder, first_body_block);
 
         // Load the loop element.
+        let i = self.load(context.builder, context.get_value(&parfor.idx_arg)?)?;
         let e = context.get_value(&parfor.data_arg)?;
         self.gen_loop_element(context, i, e, parfor)?;
 
@@ -332,11 +318,14 @@ impl ForLoopGenInternal for LlvmGenerator {
         // The EndFunction terminators in the loop body jump to this block.
         LLVMPositionBuilderAtEnd(context.builder, loop_end_bb);
 
-        // Increment the iteration variable i.
-        let i = self.load(context.builder, context.get_value(&parfor.idx_arg)?)?;
+        // Increment the iteration variable i. We don't need to load it again because this block is
+        // only reachable from the loop body, which does not mutate i.
         let updated = LLVMBuildNSWAdd(context.builder, i, self.i64(1), c_str!(""));
         LLVMBuildStore(context.builder, updated, context.get_value(&parfor.idx_arg)?);
-        LLVMBuildBr(context.builder, loop_entry_bb);
+
+        // Check whether to continue looping.
+        let continue_cond = LLVMBuildICmp(context.builder, LLVMIntPredicate::LLVMIntSGT, max, updated, c_str!(""));
+        let _ = LLVMBuildCondBr(context.builder, continue_cond, first_body_block, loop_exit_bb);
 
         // The last basic block loads the updated builder and returns it.
         LLVMPositionBuilderAtEnd(context.builder, loop_exit_bb);
