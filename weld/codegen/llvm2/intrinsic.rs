@@ -204,7 +204,7 @@ impl Intrinsics {
                       args.as_mut_ptr(), args.len() as u32, name.unwrap_or(c_str!("")))
     }
 
-    /// Convinience wrapper for calling the `weld_run_set_errno` intrinsic.
+    /// Convinience wrapper for calling the `weld_run_print` intrinsic.
     pub unsafe fn call_weld_run_print(&mut self,
                                       builder: LLVMBuilderRef,
                                       run: LLVMValueRef,
@@ -212,6 +212,20 @@ impl Intrinsics {
         let mut args = [run, string];
         LLVMBuildCall(builder,
                       self.get("weld_runst_print").unwrap(),
+                      args.as_mut_ptr(), args.len() as u32, c_str!(""))
+    }
+
+    /// Convinience wrapper for calling `memcpy`.
+    ///
+    /// This assumes the `memcpy` is non-volatile and uses an default alignment value of 8.
+    pub unsafe fn call_memcpy(&mut self,
+                                      builder: LLVMBuilderRef,
+                                      dst: LLVMValueRef,
+                                      src: LLVMValueRef,
+                                      size: LLVMValueRef) -> LLVMValueRef {
+        let mut args = [dst, src, size, self.i32(8), self.bool(false)];
+        LLVMBuildCall(builder,
+                      self.get("llvm.memcpy.p0i8.p0i8.i64").unwrap(),
                       args.as_mut_ptr(), args.len() as u32, c_str!(""))
     }
 }
@@ -273,6 +287,13 @@ impl Intrinsics {
 
         let mut params = vec![self.run_handle_type(), int8p];
         let name = CString::new("weld_runst_print").unwrap();
+        let fn_type = LLVMFunctionType(self.void_type(), params.as_mut_ptr(), params.len() as u32, 0);
+        let function = LLVMAddFunction(self.module, name.as_ptr(), fn_type);
+        self.intrinsics.insert(name.into_string().unwrap(), function);
+
+        let i8_ptr = LLVMPointerType(self.i8_type(), 0);
+        let mut params = vec![i8_ptr, i8_ptr, self.i64_type(), self.i32_type(), self.bool_type()];
+        let name = CString::new("llvm.memcpy.p0i8.p0i8.i64").unwrap();
         let fn_type = LLVMFunctionType(self.void_type(), params.as_mut_ptr(), params.len() as u32, 0);
         let function = LLVMAddFunction(self.module, name.as_ptr(), fn_type);
         self.intrinsics.insert(name.into_string().unwrap(), function);

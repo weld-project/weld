@@ -50,6 +50,11 @@ pub trait VectorExt {
                 ctx: &mut FunctionContext,
                 vector_type: &Type,
                 vec: LLVMValueRef) -> WeldResult<LLVMValueRef>;
+    unsafe fn gen_extend(&mut self,
+                ctx: &mut FunctionContext,
+                vector_type: &Type,
+                vec: LLVMValueRef,
+                size: LLVMValueRef) -> WeldResult<LLVMValueRef>;
 }
 
 impl VectorExt for LlvmGenerator {
@@ -102,6 +107,19 @@ impl VectorExt for LlvmGenerator {
             unreachable!()
         }
     }
+
+    unsafe fn gen_extend(&mut self,
+                ctx: &mut FunctionContext,
+                vector_type: &Type,
+                vec: LLVMValueRef,
+                size: LLVMValueRef) -> WeldResult<LLVMValueRef> {
+        if let Type::Vector(ref elem_type) = *vector_type {
+            let mut methods = self.vectors.get_mut(elem_type).unwrap();
+            methods.gen_extend(ctx.builder, vec, size)
+        } else {
+            unreachable!()
+        }
+    }
 }
 
 /// A vector type and its associated methods.
@@ -116,6 +134,7 @@ pub struct Vector {
     vat: Option<LLVMValueRef>,
     size: Option<LLVMValueRef>,
     slice: Option<LLVMValueRef>,
+    extend: Option<LLVMValueRef>,
     /// VecMerger extension methods.
     vecmerger: Option<VecMerger>,
 }
@@ -151,6 +170,7 @@ impl Vector {
             vat: None,
             size: None,
             slice: None,
+            extend: None,
             vecmerger: None,
         }
     }
@@ -306,5 +326,13 @@ impl Vector {
 
         let mut args = [vector];
         Ok(LLVMBuildCall(builder, self.size.unwrap(), args.as_mut_ptr(), args.len() as u32, c_str!("")))
+    }
+
+    pub unsafe fn gen_extend(&mut self,
+                                builder: LLVMBuilderRef,
+                                vector: LLVMValueRef,
+                                size: LLVMValueRef) -> WeldResult<LLVMValueRef> {
+        // TODO!!!
+        Ok(vector)
     }
 }

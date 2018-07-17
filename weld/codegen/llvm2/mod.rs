@@ -75,26 +75,6 @@ pub fn compile(program: &SirProgram,
     Ok(Box::new(module))
 }
 
-/// Specifies whether a type contains a pointer.
-pub trait HasPointer {
-    fn has_pointer(&self) -> bool;
-}
-
-impl HasPointer for Type {
-    fn has_pointer(&self) -> bool {
-        use ast::Type::*;
-        match *self {
-            Scalar(_) => false,
-            Simd(_) => false,
-            Vector(_) => true,
-            Dict(_, _) => true,
-            Builder(_, _) => true,
-            Struct(ref tys) => tys.iter().any(|ref t| t.has_pointer()),
-            Function(_, _) | Unknown => unreachable!(),
-        }
-    }
-}
-
 trait LlvmInputArg {
     unsafe fn llvm_type(context: LLVMContextRef) -> LLVMTypeRef; 
     fn input_index() -> u32;
@@ -743,7 +723,8 @@ impl LlvmGenerator {
                 Ok(())
             }
             Deserialize(_) => {
-                unimplemented!() 
+                use self::serde::SerDeGen;
+                self.gen_deserialize(context, statement)
             }
             GetField { ref value, index } => {
                 let output_pointer = context.get_value(output)?;
@@ -872,7 +853,8 @@ impl LlvmGenerator {
                 Ok(())
             }
             Serialize(_) => {
-                unimplemented!() 
+                use self::serde::SerDeGen;
+                self.gen_serialize(context, statement)
             }
             Slice { ref child, ref index, ref size } => {
                 let output_pointer = context.get_value(output)?;

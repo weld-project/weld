@@ -1,4 +1,5 @@
 //! A wrapper for dictionaries in Weld.
+#[allow(dead_code)]
 
 extern crate llvm_sys;
 
