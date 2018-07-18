@@ -10,7 +10,7 @@ use common::*;
 /// A helper for serialization tests.
 ///
 /// Each Weld function should take a vec[i32] and return `T`.
-fn check<T: Clone+Debug+PartialEq+Display>(code: &str,
+fn check<T: Clone+Debug+PartialEq>(code: &str,
                              input_vec: &Vec<i32>,
                              expect: T) {
     let ref mut conf = default_conf();
@@ -50,11 +50,11 @@ fn vector_nopointers() {
 fn nested_vectors() {
     let code = "|v: vec[i32]| deserialize[vec[vec[i32]]](serialize([v, v, v]))";
     let input_vec: Vec<i32> = (10..20).collect();
-    let expect = {
-        let input_data = WeldVec::from(&input_vec);
-        let ref vv = vec![input_data.clone(), input_data.clone(), input_data.clone()];
-        WeldVec::from(vv)
-    };
+
+    let input_data = WeldVec::from(&input_vec);
+    let ref vv = vec![input_data.clone(), input_data.clone(), input_data.clone()];
+    let expect = WeldVec::from(vv);
+
     check(code, &input_vec, expect);
 }
 
@@ -72,8 +72,8 @@ fn dict_nopointers() {
         let dict1 = result(for(v, dictmerger[i32,i32,+], |b,i,e| merge(b, {e,e})));
         tovec(deserialize[dict[i32,i32]](serialize(dict1)))";
     let input_vec: Vec<i32> = (10..20).collect();
-    let expect = input_vec.iter().map(|e| Pair::new(*e, *e)).collect::<Vec<_>>();
-    let expect = WeldVec::from(&expect);
+    let expect_vec = input_vec.iter().map(|e| Pair::new(*e, *e)).collect::<Vec<_>>();
+    let expect = WeldVec::from(&expect_vec);
 
     let ref conf = default_conf();
     let ref input_data = WeldVec::from(&input_vec);
@@ -105,18 +105,16 @@ fn dict_pointers() {
         let dict2 = result(for(v, groupmerger[i32,i32], |b,i,e| merge(b, {e,e})));
         tovec(deserialize[dict[i32,vec[i32]]](serialize(dict2)))";
     let input_vec: Vec<i32> = (10..20).collect();
-    let expect = {
-        let dict2_inners: Vec<_> = input_vec.iter().map(|e| (*e, vec![*e])).collect();
-        dict2_inners
-            .iter()
-            .map(|e| {
-                let e1 = e.0;
-                let e2 = WeldVec::from(&e.1);
-                Pair::new(e1, e2)
-            })
-        .collect::<Vec<_>>()
-    };
-    let expect = WeldVec::from(&expect);
+
+    let dict2_inners: Vec<_> = input_vec.iter().map(|e| (*e, vec![*e])).collect();
+    let expect_vec = dict2_inners.iter()
+        .map(|e| {
+            let e1 = e.0;
+            let e2 = WeldVec::from(&e.1);
+            Pair::new(e1, e2)
+        })
+    .collect::<Vec<_>>();
+    let expect = WeldVec::from(&expect_vec);
 
     let ref conf = default_conf();
     let ref input_data = WeldVec::from(&input_vec);

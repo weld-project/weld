@@ -22,7 +22,7 @@ use self::llvm_sys::core::*;
 
 use codegen::llvm2::intrinsic::Intrinsics;
 
-use super::{LlvmGenerator, CodeGenExt, FunctionContext, LLVM_VECTOR_WIDTH};
+use super::{LlvmGenerator, CodeGenExt, FunctionContext};
 
 lazy_static! {
     /// The serialized type, which is a vec[i8].
@@ -87,11 +87,11 @@ impl SerDeGen for LlvmGenerator {
             let output = ctx.get_value(output)?;
             let buffer = self.load(ctx.builder, ctx.get_value(child)?)?;
             let zero = self.i64(0);
-            let deserialized = self.gen_deserialize_helper(ctx,
-                                                       &mut SerializePosition::new(zero),
-                                                       output,
-                                                       output_ty,
-                                                       buffer)?;
+            self.gen_deserialize_helper(ctx,
+                                        &mut SerializePosition::new(zero),
+                                        output,
+                                        output_ty,
+                                        buffer)?;
             // This function writes directly into the output, so a store afterward is not
             // necessary.
             Ok(())
@@ -236,13 +236,97 @@ impl SerHelper for LlvmGenerator {
                 Ok(buffer)
             }
             Vector(ref elem) => {
-                // Iterate over the vector and serialize each one individually...
-                unimplemented!()
+                use self::llvm_sys::LLVMIntPredicate::LLVMIntSGT;
+                // This will, sadly, lead to some hard to read LLVM. Logically, these blocks are
+                // inserted into the current SIR basic block. The loop created here will always
+                // finish at `ser.end` and the builder is always guaranteed to be positioned at the
+                // end of ser.end.
+                let start_block = LLVMAppendBasicBlockInContext(self.context, ctx.llvm_function, c_str!("ser.start"));
+                let loop_block = LLVMAppendBasicBlockInContext(self.context, ctx.llvm_function, c_str!("ser.loop"));
+                let end_block = LLVMAppendBasicBlockInContext(self.context, ctx.llvm_function, c_str!("ser.end"));
+
+                LLVMBuildBr(ctx.builder, start_block);
+                LLVMPositionBuilderAtEnd(ctx.builder, start_block);
+
+                let value = self.load(ctx.builder, value)?;
+
+                let size = self.gen_size(ctx, ty, value)?;
+                let start_buffer = self.gen_put_value(ctx, size, buffer, position)?;
+                let zero = self.i64(0);
+                let compare = LLVMBuildICmp(ctx.builder, LLVMIntSGT, size, zero, c_str!(""));
+                LLVMBuildCondBr(ctx.builder, compare, loop_block, end_block);
+
+                // Save reference to position so we can PHI from it later.
+                //
+                // The PHI stuff is a little confusing because it conflates the recursion in
+                // setting position with the control flow of the generated code. Here's a summary
+                // of what's happening:
+                //
+                // ser.start:
+                //      write size with gen_put_value, which updates position.index. <- start_position is set
+                //      to the value of position here, which we will call %START in *generated
+                //      code*.
+                //
+                //  ser.loop
+                //      phi_position = phi [ser.start, %START], [ser.loop, %UPDATED]
+                //      position.index is set to phi_position.
+                //      recursive call to serialize helper updates position.index to a variable in
+                //      the generated code we will call %UPDATED (note that phi_position is
+                //      actually updated after calling serializer_helper for this reason).
+                //
+                //  ser.end
+                //      When we generate this basic block, position.index = %UPDATED.
+                //      phi_position = phi [ser.start, %START], [ser.loop, %UPDATED] <- call the
+                //      phi_position here %FINAL in generated code.
+                //
+                //      Now to get the correct position for subsequence calls, we want the value
+                //      %FINAL in position.index. Hence, the position.index = phi_position.
+                //
+                //  The deserialization code works similarly.
+                let start_position = position.index;
+
+                // Looping block.
+                LLVMPositionBuilderAtEnd(ctx.builder, loop_block);
+                let i = LLVMBuildPhi(ctx.builder, self.i64_type(), c_str!(""));
+                let phi_buffer = LLVMBuildPhi(ctx.builder, LLVMTypeOf(buffer), c_str!(""));
+                let phi_position = LLVMBuildPhi(ctx.builder, self.i64_type(), c_str!(""));
+                position.index = phi_position;
+
+                let value_pointer = self.gen_at(ctx, ty, value, i)?;
+                let updated_buffer = self.gen_serialize_helper(ctx, position, value_pointer, elem, phi_buffer)?;
+                let updated_position = position.index;
+                let updated_i = LLVMBuildNSWAdd(ctx.builder, i, self.i64(1), c_str!(""));
+                let compare = LLVMBuildICmp(ctx.builder, LLVMIntSGT, size, updated_i, c_str!(""));
+                LLVMBuildCondBr(ctx.builder, compare, loop_block, end_block);
+
+                let mut blocks = [start_block, loop_block];
+
+                // Set up the PHI nodes.
+                let mut values = [self.i64(0), updated_i];
+                LLVMAddIncoming(i, values.as_mut_ptr(), blocks.as_mut_ptr(), values.len() as u32);
+                let mut values = [start_buffer, updated_buffer];
+                LLVMAddIncoming(phi_buffer, values.as_mut_ptr(), blocks.as_mut_ptr(), values.len() as u32);
+                let mut values = [start_position, updated_position];
+                LLVMAddIncoming(phi_position, values.as_mut_ptr(), blocks.as_mut_ptr(), values.len() as u32);
+
+                // End block.
+                LLVMPositionBuilderAtEnd(ctx.builder, end_block);
+                let buffer = LLVMBuildPhi(ctx.builder, LLVMTypeOf(buffer), c_str!(""));
+                let mut values = [start_buffer, updated_buffer];
+                LLVMAddIncoming(buffer, values.as_mut_ptr(), blocks.as_mut_ptr(), values.len() as u32);
+
+                let phi_position = LLVMBuildPhi(ctx.builder, self.i64_type(), c_str!(""));
+                let mut values = [start_position, updated_position];
+                LLVMAddIncoming(phi_position, values.as_mut_ptr(), blocks.as_mut_ptr(), values.len() as u32);
+                // This "backtracks" position if necessary: without the phi, it assumes that the
+                // loop fired.
+                position.index = phi_position;
+                Ok(buffer)
             }
             Dict(ref key, ref value) if !key.has_pointer() && !value.has_pointer() => {
                 unimplemented!()
             }
-            Dict(ref key, ref value) => {
+            Dict(_, _) => {
                 unimplemented!()
             }
             Unknown | Simd(_) | Function(_,_) | Builder(_, _) => unreachable!(),
@@ -364,13 +448,63 @@ impl DeHelper for LlvmGenerator {
                 Ok(())
             }
             Vector(ref elem) => {
-                // Iterate over the vector and serialize each one individually...
-                unimplemented!()
+                use self::llvm_sys::LLVMIntPredicate::LLVMIntSGT;
+                // Similar to the serialization version.
+                let start_block = LLVMAppendBasicBlockInContext(self.context, ctx.llvm_function, c_str!("de.start"));
+                let loop_block = LLVMAppendBasicBlockInContext(self.context, ctx.llvm_function, c_str!("de.loop"));
+                let end_block = LLVMAppendBasicBlockInContext(self.context, ctx.llvm_function, c_str!("de.end"));
+
+                LLVMBuildBr(ctx.builder, start_block);
+                LLVMPositionBuilderAtEnd(ctx.builder, start_block);
+
+                let size_type = self.i64_type();
+                let size = self.gen_get_value(ctx, size_type, buffer, position)?;
+                let vector = self.gen_new(ctx, ty, size)?;
+
+                let start_position = position.index;
+
+                let zero = self.i64(0);
+                let compare = LLVMBuildICmp(ctx.builder, LLVMIntSGT, size, zero, c_str!(""));
+                LLVMBuildCondBr(ctx.builder, compare, loop_block, end_block);
+
+                // Looping block.
+                LLVMPositionBuilderAtEnd(ctx.builder, loop_block);
+                // phi for the loop induction variable.
+                let i = LLVMBuildPhi(ctx.builder, self.i64_type(), c_str!(""));
+                // phi for the position at which to read the buffer.
+                let phi_position = LLVMBuildPhi(ctx.builder, self.i64_type(), c_str!(""));
+                position.index = phi_position;
+
+                let value_pointer = self.gen_at(ctx, ty, vector, i)?;
+                self.gen_deserialize_helper(ctx, position, value_pointer, elem, buffer)?;
+                let updated_position = position.index;
+
+                let updated_i = LLVMBuildNSWAdd(ctx.builder, i, self.i64(1), c_str!(""));
+                let compare = LLVMBuildICmp(ctx.builder, LLVMIntSGT, size, updated_i, c_str!(""));
+                LLVMBuildCondBr(ctx.builder, compare, loop_block, end_block);
+
+                let mut blocks = [start_block, loop_block];
+
+                // Set up the PHI nodes.
+                let mut values = [self.i64(0), updated_i];
+                LLVMAddIncoming(i, values.as_mut_ptr(), blocks.as_mut_ptr(), values.len() as u32);
+                let mut values = [start_position, updated_position];
+                LLVMAddIncoming(phi_position, values.as_mut_ptr(), blocks.as_mut_ptr(), values.len() as u32);
+
+                // End block.
+                LLVMPositionBuilderAtEnd(ctx.builder, end_block);
+                let phi_position = LLVMBuildPhi(ctx.builder, self.i64_type(), c_str!(""));
+                let mut values = [start_position, updated_position];
+                let mut blocks = [start_block, loop_block];
+                LLVMAddIncoming(phi_position, values.as_mut_ptr(), blocks.as_mut_ptr(), values.len() as u32);
+                LLVMBuildStore(ctx.builder, vector, output);
+                position.index = phi_position;
+                Ok(())
             }
             Dict(ref key, ref value) if !key.has_pointer() && !value.has_pointer() => {
                 unimplemented!()
             }
-            Dict(ref key, ref value) => {
+            Dict(_, _) => {
                 unimplemented!()
             }
             Unknown | Simd(_) | Function(_,_) | Builder(_, _) => unreachable!(),

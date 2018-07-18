@@ -919,6 +919,10 @@ impl LlvmGenerator {
     /// argument pointer. In cases where the loop body function returns, this function stores the
     /// resulting builder into this pointer. The function is guaranteed to return a builder (since
     /// For loop functions must return builders derived from their input builder).
+    ///
+    /// This function does not make any assumptions about which *LLVM basic block* the
+    /// builder is positioned in, as long as the builder is logically within the passed SIR basic
+    /// block.
     unsafe fn gen_terminator(&mut self,
                                   context: &mut FunctionContext,
                                   bb: &BasicBlock,
