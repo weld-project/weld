@@ -67,7 +67,7 @@ impl SerDeGen for LlvmGenerator {
             let zero = self.i64(0);
             let buffer = self.gen_new(ctx, &SER_TY, initial_size)?;
             let child_ty = ctx.sir_function.symbol_type(child)?;
-            let child = self.load(ctx.builder, ctx.get_value(child)?)?;
+            let child = ctx.get_value(child)?;
             let serialized = self.gen_serialize_helper(ctx,
                                                        &mut SerializePosition::new(zero),
                                                        child,
@@ -109,8 +109,11 @@ impl SerializePosition {
 }
 
 /// Helper for serialization.
-trait SerDeHelper {
+trait SerHelper {
     /// Copy a value into the serialization buffer.
+    ///
+    /// This function assumes that the value being put contains no nested pointers, and is also
+    /// optimized for "small" values
     unsafe fn gen_put_value(&mut self,
                            ctx: &mut FunctionContext,
                            value: LLVMValueRef,
@@ -130,7 +133,8 @@ trait SerDeHelper {
     /// A recursive function for serializing a value.
     ///
     /// The serialized value is written into buffer, with the next byte being written at `index`.
-    /// The function updates `index` to point to the last byte in the buffer if necessary.
+    /// The function updates `index` to point to the last byte in the buffer if necessary. The
+    /// passed value should be a pointer.
     unsafe fn gen_serialize_helper(&mut self,
                            ctx: &mut FunctionContext,
                            position: &mut SerializePosition,
@@ -139,9 +143,7 @@ trait SerDeHelper {
                            buffer: LLVMValueRef) -> WeldResult<LLVMValueRef>;
 }
 
-impl SerDeHelper for LlvmGenerator {
-
-    /// Copy a value into the serialization buffer.
+impl SerHelper for LlvmGenerator {
     unsafe fn gen_put_value(&mut self,
                            ctx: &mut FunctionContext,
                            value: LLVMValueRef,
@@ -167,9 +169,6 @@ impl SerDeHelper for LlvmGenerator {
         Ok(buffer)
     }
 
-    /// Copy a typed buffer of values into the serialization buffer.
-    ///
-    /// The buffer should have `size` objects, and the objects should not contain any nested pointers.
     unsafe fn gen_put_values(&mut self,
                            ctx: &mut FunctionContext,
                            ptr: LLVMValueRef,
@@ -203,13 +202,17 @@ impl SerDeHelper for LlvmGenerator {
         use ast::Type::*;
         match *ty {
             Scalar(_) => {
+                let value = self.load(ctx.builder, value)?;
                 self.gen_put_value(ctx, value, buffer, position)
             }
             Struct(_) if !ty.has_pointer() => {
-                self.gen_put_value(ctx, value, buffer, position)
+                // Use a memcpy intrinsic instead of a load and store for structs.
+                let count = self.i64(1);
+                self.gen_put_values(ctx, value, count, buffer, position)
             }
             Vector(ref elem) if !elem.has_pointer() => {
                 let zero = self.i64(0);
+                let value = self.load(ctx.builder, value)?;
                 let vec_size = self.gen_size(ctx, ty, value)?;
                 let vec_ptr = self.gen_at(ctx, ty, value, zero)?;
                 // Write the 8-byte length followed by the data buffer.

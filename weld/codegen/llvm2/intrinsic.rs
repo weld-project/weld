@@ -233,6 +233,9 @@ impl Intrinsics {
 /// Private methods.
 impl Intrinsics {
     /// Populate the default intrinsics.
+    ///
+    /// By default, the code generator adds the Weld Run API (functions prefixed with `weld_run`)
+    /// and a few other utility functions, such as `memcpy`.
     unsafe fn populate_defaults(&mut self) {
         let int8p = LLVMPointerType(self.i8_type(), 0);
 

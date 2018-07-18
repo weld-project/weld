@@ -115,7 +115,7 @@ impl VectorExt for LlvmGenerator {
                 size: LLVMValueRef) -> WeldResult<LLVMValueRef> {
         if let Type::Vector(ref elem_type) = *vector_type {
             let mut methods = self.vectors.get_mut(elem_type).unwrap();
-            methods.gen_extend(ctx.builder, vec, size)
+            methods.gen_extend(ctx.builder, &mut self.intrinsics, ctx.get_run(), vec, size)
         } else {
             unreachable!()
         }
@@ -150,6 +150,9 @@ impl CodeGenExt for Vector {
 }
 
 impl Vector {
+    /// Define a new vector type with the given element type.
+    ///
+    /// This function only inserts a definition for the vector, but does not generate any new code.
     pub unsafe fn define<T: AsRef<str>>(name: T,
                                 elem_ty: LLVMTypeRef,
                                 context: LLVMContextRef,
@@ -175,12 +178,17 @@ impl Vector {
         }
     }
 
+    /// Build a constant vector given a `pointer` and `size`.
     pub unsafe fn const_literal_from_parts(&self, pointer: LLVMValueRef, size: LLVMValueRef) -> LLVMValueRef {
         let undef = LLVMGetUndef(self.vector_ty);
         let result = LLVMConstInsertValue(undef, pointer, [POINTER_INDEX].as_mut_ptr(), 1);
         LLVMConstInsertValue(result, size, [SIZE_INDEX].as_mut_ptr(), 1)
     }
 
+    /// Generates the `new` method on vectors and calls it.
+    ///
+    /// The new method allocates a buffer of size exactly `size`. The memory allocated for the
+    /// vector is uninitialized.
     pub unsafe fn gen_new(&mut self,
                                builder: LLVMBuilderRef,
                                intrinsics: &mut Intrinsics,
@@ -215,6 +223,10 @@ impl Vector {
         return Ok(LLVMBuildCall(builder, self.new.unwrap(), args.as_mut_ptr(), args.len() as u32, c_str!("")))
     }
 
+    /// Generates the `at` method on vectors and calls it.
+    ///
+    /// This method performs an index computation into the vector.  The function returns a pointer
+    /// to the requested index: it does not dereference the pointer.
     pub unsafe fn gen_at(&mut self,
                               builder: LLVMBuilderRef,
                               vector: LLVMValueRef,
@@ -240,6 +252,11 @@ impl Vector {
         Ok(LLVMBuildCall(builder, self.at.unwrap(), args.as_mut_ptr(), args.len() as u32, c_str!("")))
     }
 
+    /// Generate the `slice` method on vectors and calls it.
+    ///
+    /// This method takes an index and size returns returns a view into the given vector. If index
+    /// is out of bounds, behavior is undefined. If `index + size` is greater than the length of
+    /// the vector, a slice up to the end of the vector starting at index is returned.
     pub unsafe fn gen_slice(&mut self,
                             builder: LLVMBuilderRef,
                             vector: LLVMValueRef,
@@ -280,6 +297,11 @@ impl Vector {
         Ok(LLVMBuildCall(builder, self.slice.unwrap(), args.as_mut_ptr(), args.len() as u32, c_str!("")))
     }
 
+    /// Generates the `vat` method on vectors and calls it.
+    ///
+    /// This method performs an index computation into the vector.  The function returns a SIMD pointer
+    /// to the requested index: it does not dereference the pointer. The generated method does not perform
+    /// any bounds checking.
     pub unsafe fn gen_vat(&mut self,
                               builder: LLVMBuilderRef,
                               vector: LLVMValueRef,
@@ -306,6 +328,9 @@ impl Vector {
         Ok(LLVMBuildCall(builder, self.vat.unwrap(), args.as_mut_ptr(), args.len() as u32, c_str!("")))
     }
 
+    /// Generates the `size` method on vectors and calls it.
+    ///
+    /// This returns the size (equivalently, the capacity) of the vector.
     pub unsafe fn gen_size(&mut self,
                                 builder: LLVMBuilderRef,
                                 vector: LLVMValueRef) -> WeldResult<LLVMValueRef> {
@@ -328,11 +353,71 @@ impl Vector {
         Ok(LLVMBuildCall(builder, self.size.unwrap(), args.as_mut_ptr(), args.len() as u32, c_str!("")))
     }
 
+    /// Generates the `extend` method on vectors and calls it.
+    ///
+    /// This method grows the capacity of vector to at least `size` and returns a new vector. If
+    /// the input vector can already accomdate `size` elements, the same vector is returned
+    /// unmodified.
     pub unsafe fn gen_extend(&mut self,
                                 builder: LLVMBuilderRef,
+                                intrinsics: &mut Intrinsics,
+                                run: LLVMValueRef,
                                 vector: LLVMValueRef,
                                 size: LLVMValueRef) -> WeldResult<LLVMValueRef> {
-        // TODO!!!
-        Ok(vector)
+        use self::llvm_sys::LLVMIntPredicate::LLVMIntSGT;
+        if self.extend.is_none() {
+            let mut arg_tys = [self.vector_ty, self.i64_type(), self.run_handle_type()];
+            let ret_ty = self.vector_ty;
+
+            let name = format!("{}.extend", self.name);
+            let (function, builder, entry_block) = self.define_function(ret_ty, &mut arg_tys, name);
+
+            let realloc_block = LLVMAppendBasicBlockInContext(self.context, function, c_str!(""));
+            let finish_block = LLVMAppendBasicBlockInContext(self.context, function, c_str!(""));
+
+            let vector = LLVMGetParam(function, 0);
+            let requested_size = LLVMGetParam(function, 1);
+            let run_handle = LLVMGetParam(function, 2);
+            
+            let current_size = LLVMBuildExtractValue(builder, vector, SIZE_INDEX, c_str!(""));
+
+            let resize_flag = LLVMBuildICmp(builder, LLVMIntSGT, requested_size, current_size, c_str!(""));
+            LLVMBuildCondBr(builder, resize_flag, realloc_block, finish_block);
+
+            // Build block where memory is grown to accomdate the requested size.
+            LLVMPositionBuilderAtEnd(builder, realloc_block);
+            let pointer = LLVMBuildExtractValue(builder, vector, POINTER_INDEX, c_str!(""));
+            let alloc_size = LLVMBuildNSWMul(builder, requested_size, self.size_of(self.elem_ty), c_str!(""));
+            let raw_pointer = LLVMBuildBitCast(builder,
+                                               pointer,
+                                               LLVMPointerType(self.i8_type(), 0),
+                                               c_str!(""));
+            let bytes = intrinsics.call_weld_run_realloc(builder,
+                                                         run_handle,
+                                                         raw_pointer,
+                                                         alloc_size,
+                                                         Some(c_str!("")));
+            let resized_elements = LLVMBuildBitCast(builder, bytes, LLVMTypeOf(pointer), c_str!(""));
+
+            let resized = LLVMBuildInsertValue(builder,
+                                              LLVMGetUndef(self.vector_ty),
+                                              resized_elements,
+                                              POINTER_INDEX, c_str!(""));
+            let resized = LLVMBuildInsertValue(builder, resized, requested_size, SIZE_INDEX, c_str!(""));
+            LLVMBuildBr(builder, finish_block);
+
+            LLVMPositionBuilderAtEnd(builder, finish_block);
+            let return_value = LLVMBuildPhi(builder, self.vector_ty, c_str!(""));
+            let mut values = [vector, resized];
+            let mut blocks = [entry_block, realloc_block];
+            LLVMAddIncoming(return_value, values.as_mut_ptr(), blocks.as_mut_ptr(), values.len() as u32);
+            LLVMBuildRet(builder, return_value);
+
+            self.extend = Some(function);
+            LLVMDisposeBuilder(builder);
+        }
+
+        let mut args = [vector, size, run];
+        Ok(LLVMBuildCall(builder, self.extend.unwrap(), args.as_mut_ptr(), args.len() as u32, c_str!("")))
     }
 }
