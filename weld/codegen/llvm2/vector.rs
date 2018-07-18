@@ -357,8 +357,8 @@ impl Vector {
 
     /// Generates the `extend` method on vectors and calls it.
     ///
-    /// This method grows the capacity of vector to at least `size` and returns a new vector. If
-    /// the input vector can already accomdate `size` elements, the same vector is returned
+    /// This method grows the capacity of vector to exactly`size` and returns a new vector. If
+    /// the input vector can already accomodate `size` elements, the same vector is returned
     /// unmodified.
     pub unsafe fn gen_extend(&mut self,
                                 builder: LLVMBuilderRef,

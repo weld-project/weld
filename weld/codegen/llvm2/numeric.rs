@@ -90,6 +90,7 @@ impl NumericExpressionGenInternal for LlvmGenerator {
 }
 
 trait UnaryOpSupport {
+    /// Returns the intrinsic name for a unary op. 
     fn llvm_intrinsic(&self) -> Option<&'static str>;
 }
 
@@ -282,6 +283,7 @@ impl NumericExpressionGen for LlvmGenerator {
     }
 }
 
+/// Workhorse for generating casts.
 unsafe fn gen_cast(builder: LLVMBuilderRef,
                    value: LLVMValueRef,
                    from: &Type,

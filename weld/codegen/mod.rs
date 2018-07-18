@@ -85,6 +85,22 @@ impl CompiledModule {
     }
 }
 
+/// Compile a Weld program with a given configuration.
+///
+/// This function is the main entry point into compiling a Weld program. It performs the following
+/// tasks in order:
+///
+/// 1. Evaluate macros
+/// 2. Infer types
+/// 3. Apply optimization passes (either the default set or the ones in `conf`)
+/// 4. Convert the AST to SIR
+/// 5. Apply SIR optimizations, if enabled.
+/// 6. Dump Weld and SIR code, if specified in `conf`.
+/// 7. Compile to native code depending on the backend specified in `conf`.
+/// 8. Dump native code, if specified in `conf`.
+/// 9. Return compiled, runnable module.
+///
+/// This function is a driver: most of the above tasks are implemented elsewhere.
 pub fn compile_program(program: &Program,
                        conf: &ParsedConf,
                        stats: &mut CompilationStats) -> WeldResult<CompiledModule> {

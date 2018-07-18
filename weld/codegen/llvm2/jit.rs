@@ -38,6 +38,8 @@ pub struct CompiledModule {
     run_function: I64Func,
 }
 
+// The codegen interface requires that modules implement this trait. This allows supporting
+// multiple backends via dynamic dispatch.
 impl Runnable for CompiledModule {
     fn run(&self, arg: i64) -> i64 {
         (self.run_function)(arg)
@@ -88,7 +90,7 @@ impl Drop for CompiledModule {
     }
 }
 
-/// Compile a constructed module in the given context.
+/// Compile a constructed module in the given LLVM context.
 pub unsafe fn compile(context: LLVMContextRef,
                module: LLVMModuleRef,
                conf: &ParsedConf,
@@ -133,6 +135,9 @@ pub unsafe fn compile(context: LLVMContextRef,
     Ok(result)
 }
 
+/// Initialize LLVM.
+///
+/// This function should only be called once.
 unsafe fn initialize() {
     use self::llvm_sys::target::*;
     if LLVM_InitializeNativeTarget() != 0 {

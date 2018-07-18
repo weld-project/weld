@@ -47,6 +47,10 @@ mod vector;
 use self::builder::merger;
 use self::builder::appender;
 
+/// Compile Weld SIR into a runnable module.
+///
+/// The runnable module is wrapped as a trait object which the `CompiledModule` struct in `codegen`
+/// calls.
 pub fn compile(program: &SirProgram,
                conf: &ParsedConf,
                stats: &mut CompilationStats,
@@ -75,10 +79,15 @@ pub fn compile(program: &SirProgram,
     Ok(Box::new(module))
 }
 
+/// A helper trait that defines the LLVM type and structure of an input to the runtime.
 trait LlvmInputArg {
+    /// LLVM type of the input struct.
     unsafe fn llvm_type(context: LLVMContextRef) -> LLVMTypeRef; 
+    /// Index of the data pointer in the struct.
     fn input_index() -> u32;
+    /// Index of the number of workers value in the struct.
     fn nworkers_index() -> u32;
+    /// Index of the memory limit value in the struct.
     fn memlimit_index() -> u32;
 }
 
@@ -107,10 +116,15 @@ impl LlvmInputArg for WeldInputArgs {
     }
 }
 
+/// A helper trait that defines the LLVM type and structure of an output from the runtime.
 trait LlvmOutputArg {
+    /// LLVM type of the output struct.
     unsafe fn llvm_type(context: LLVMContextRef) -> LLVMTypeRef; 
+    /// Index of the output data pointer in the struct.
     fn output_index() -> u32;
+    /// Index of the run ID/data pointer in the struct.
     fn run_index() -> u32;
+    /// Index of the errno pointer in the struct.
     fn errno_index() -> u32;
 }
 
@@ -666,7 +680,9 @@ impl LlvmGenerator {
         Ok(())
     }
 
-    /// Generate code for an SIR statement.
+    /// Generate code for a single SIR statement.
+    ///
+    /// The code is generated at the position specified by the function context.
     unsafe fn gen_statement(&mut self, context: &mut FunctionContext, statement: &Statement) -> WeldResult<()> {
         use ast::Type::*;
         use sir::StatementKind::*;
@@ -899,7 +915,7 @@ impl LlvmGenerator {
     ///
     /// `loop_terminator` is an optional tuple that is present only when generating loop body
     /// functions. The first argument is a basic block to jump to to continue looping instead of
-    /// returning from a function.  The second argument is a value representing the loop's builder
+    /// returning from a function. The second argument is a value representing the loop's builder
     /// argument pointer. In cases where the loop body function returns, this function stores the
     /// resulting builder into this pointer. The function is guaranteed to return a builder (since
     /// For loop functions must return builders derived from their input builder).
@@ -989,6 +1005,10 @@ impl LlvmGenerator {
         Ok(())
     }
 
+    /// Returns the LLVM type for a Weld Type.
+    ///
+    /// This method may generate auxillary code before returning the type. For example, for complex
+    /// data structures, this function may generate a definition for the data structure first.
     unsafe fn llvm_type(&mut self, ty: &Type) -> WeldResult<LLVMTypeRef> {
         use ast::Type::*;
         use ast::ScalarKind::*;
@@ -1057,12 +1077,26 @@ impl fmt::Display for LlvmGenerator {
     }
 }
 
+/// A context for generating code in an SIR function.
+///
+/// The function context holds the position at which new code should be generated.
 pub struct FunctionContext<'a> {
+    /// A reference to the SIR program.
     sir_program: &'a SirProgram,
+    /// The SIR function to which this context belongs.
+    ///
+    /// Equivalently, this context represents code generation state for this function.
     sir_function: &'a SirFunction,
+    /// An LLVM reference to this function.
     llvm_function: LLVMValueRef,
+    /// The LLVM values for symbols defined in this function.
+    ///
+    /// These symbols are the ones defined in the SIR (i.e., locals and parameters). The symbols
+    /// values are thus all alloca'd pointers.
     symbols: FnvHashMap<Symbol, LLVMValueRef>,
+    /// An mapping from SIR basic blocks to LLVM basic blocks.
     blocks: FnvHashMap<BasicBlockId, LLVMBasicBlockRef>,
+    /// The LLVM builder, which marks where to insert new code.
     builder: LLVMBuilderRef,
 }
 
@@ -1081,6 +1115,7 @@ impl<'a> FunctionContext<'a> {
         }
     }
 
+    /// Returns the LLVM value for a symbol in this function.
     pub fn get_value(&self, sym: &Symbol) -> WeldResult<LLVMValueRef> {
         self.symbols
             .get(sym)
@@ -1088,6 +1123,7 @@ impl<'a> FunctionContext<'a> {
             .ok_or(WeldCompileError::new("Undefined symbol in function codegen"))
     }
 
+    /// Returns the LLVM basic block for a basic block ID in this function.
     pub fn get_block(&self, id: &BasicBlockId) -> WeldResult<LLVMBasicBlockRef> {
         self.blocks.get(id)
             .cloned()
@@ -1095,6 +1131,8 @@ impl<'a> FunctionContext<'a> {
     }
 
     /// Get the handle to the run.
+    ///
+    /// The run handle is always the last argument of an SIR function.
     pub fn get_run(&self) -> LLVMValueRef {
         unsafe { LLVMGetLastParam(self.llvm_function) }
     }
