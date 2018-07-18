@@ -6,6 +6,7 @@ extern crate weld;
 
 use weld::*;
 use std::convert::AsRef;
+use std::fmt;
 
 #[derive(Clone, Debug)]
 #[repr(C)]
@@ -54,6 +55,21 @@ where
     }
 }
 
+impl<T> fmt::Display for WeldVec<T>
+where
+    T: fmt::Display + Clone,
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "[ ")?;
+        for i in 0..self.len {
+            let v = unsafe { (*self.data.offset(i as isize)).clone() };
+            write!(f, "{} ", v)?;
+        }
+        write!(f, "] ")?;
+        write!(f, "(length={})", self.len)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 #[repr(C)]
 pub struct Pair<K, V> {
@@ -64,6 +80,16 @@ pub struct Pair<K, V> {
 impl<K, V> Pair<K, V> {
     pub fn new(a: K, b: V) -> Pair<K, V> {
         Pair { ele1: a, ele2: b }
+    }
+}
+
+impl<K, V> fmt::Display for Pair<K, V>
+where
+    K: fmt::Display,
+    V: fmt::Display
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "({}, {})", self.ele1, self.ele2)
     }
 }
 

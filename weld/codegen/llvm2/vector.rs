@@ -25,7 +25,9 @@ use super::intrinsic::Intrinsics;
 // The vecmerger builder builds on top of the Vector.
 use codegen::llvm2::builder::vecmerger::VecMerger;
 
+/// Index of the pointer into the vector data structure.
 pub const POINTER_INDEX: u32 = 0;
+/// Index of the size into the vector data structure.
 pub const SIZE_INDEX: u32 = 1;
 
 /// Extensions for generating methods on vectors.

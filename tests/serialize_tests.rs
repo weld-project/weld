@@ -2,7 +2,7 @@
 
 extern crate weld;
 
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 
 mod common;
 use common::*;
@@ -10,13 +10,11 @@ use common::*;
 /// A helper for serialization tests.
 ///
 /// Each Weld function should take a vec[i32] and return `T`.
-fn check<T: Clone+Debug+PartialEq>(code: &str,
+fn check<T: Clone+Debug+PartialEq+Display>(code: &str,
                              input_vec: &Vec<i32>,
                              expect: T) {
-    let ref conf = default_conf();
-
+    let ref mut conf = default_conf();
     let ref input_data = WeldVec::from(input_vec);
-
     let ret_value = compile_and_run(code, conf, input_data);
     let data = ret_value.data() as *const T;
     let result = unsafe { (*data).clone() };
@@ -48,7 +46,6 @@ fn vector_nopointers() {
     check(code, &input_vec, expect);
 }
 
-
 #[test]
 fn nested_vectors() {
     let code = "|v: vec[i32]| deserialize[vec[vec[i32]]](serialize([v, v, v]))";
@@ -61,9 +58,8 @@ fn nested_vectors() {
     check(code, &input_vec, expect);
 }
 
-
 #[test]
-fn nested_vectors_with_structs() {
+fn struct_with_pointers() {
     let code = "|v:vec[i32]| deserialize[{i32,vec[i32]}](serialize({lookup(v, 0L), v}))";
     let input_vec: Vec<i32> = (10..20).collect();
     let expect = Pair::new(input_vec[0], WeldVec::from(&input_vec));
