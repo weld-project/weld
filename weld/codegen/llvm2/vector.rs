@@ -243,7 +243,7 @@ impl Vector {
             let name = format!("{}.at", self.name);
             let (function, builder, _) = self.define_function(ret_ty, &mut arg_tys, name);
 
-            LLVMExtAddAttrOnFunction(self.context, function, AlwaysInline);
+            LLVMExtAddAttrsOnFunction(self.context, function, &[AlwaysInline]);
 
             let vector = LLVMGetParam(function, 0);
             let index = LLVMGetParam(function, 1);
@@ -320,7 +320,7 @@ impl Vector {
             let name = format!("{}.vat", self.name);
             let (function, builder, _) = self.define_function(ret_ty, &mut arg_tys, name);
 
-            LLVMExtAddAttrOnFunction(self.context, function, AlwaysInline);
+            LLVMExtAddAttrsOnFunction(self.context, function, &[AlwaysInline]);
 
             let vector = LLVMGetParam(function, 0);
             let index = LLVMGetParam(function, 1);
@@ -350,7 +350,7 @@ impl Vector {
             let name = format!("{}.size", self.name);
             let (function, builder, _) = self.define_function(ret_ty, &mut arg_tys, name);
 
-            LLVMExtAddAttrOnFunction(self.context, function, AlwaysInline);
+            LLVMExtAddAttrsOnFunction(self.context, function, &[AlwaysInline]);
 
             let vector = LLVMGetParam(function, 0);
             let size = LLVMBuildExtractValue(builder, vector, SIZE_INDEX, c_str!(""));

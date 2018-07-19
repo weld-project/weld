@@ -83,46 +83,48 @@ impl fmt::Display for LLVMExtAttribute {
     }
 }
 
-/// Add an attribute on an LLVM function, parameter, or return value.
+/// Add attributes on an LLVM function, parameter, or return value.
 ///
 /// The `index` passed determines what the attribute is added on.
-unsafe fn add_attr(context: LLVMContextRef,
+unsafe fn add_attrs(context: LLVMContextRef,
                              function: LLVMValueRef,
-                             attr: LLVMExtAttribute,
+                             attrs: &[LLVMExtAttribute],
                              index: u32) {
-    // TODO just make these constants...
-    let name = CString::new(attr.to_string()).unwrap();
-    let kind = LLVMGetEnumAttributeKindForName(name.as_ptr(), name.as_bytes().len());
-    assert_ne!(kind, 0);
+    for attr in attrs {
+        // TODO just make these constants...
+        let name = CString::new(attr.to_string()).unwrap();
+        let kind = LLVMGetEnumAttributeKindForName(name.as_ptr(), name.as_bytes().len());
+        assert_ne!(kind, 0);
 
-    let attr = LLVMCreateEnumAttribute(context, kind, 0);
-    // This function uses parameter numbers 1..N
-    LLVMAddAttributeAtIndex(function, index, attr);
+        let attr = LLVMCreateEnumAttribute(context, kind, 0);
+        // This function uses parameter numbers 1..N
+        LLVMAddAttributeAtIndex(function, index, attr);
+    }
 }
 
 
 
-/// Add an attribute on an LLVM function parameter.
+/// Add attributes on an LLVM function parameter.
 ///
 /// `param` indicates the parameter index.
-pub fn LLVMExtAddAttrOnParameter(context: LLVMContextRef,
+pub fn LLVMExtAddAttrsOnParameter(context: LLVMContextRef,
                              function: LLVMValueRef,
-                             attr: LLVMExtAttribute,
+                             attrs: &[LLVMExtAttribute],
                              index: u32) {
     // Parameters are indexed 1..N
-    unsafe { add_attr(context, function, attr, index + 1); }
+    unsafe { add_attrs(context, function, attrs, index + 1); }
 }
 
-/// Add an attribute on an LLVM function.
-pub fn LLVMExtAddAttrOnFunction(context: LLVMContextRef,
+/// Add attributes on an LLVM function.
+pub fn LLVMExtAddAttrsOnFunction(context: LLVMContextRef,
                              function: LLVMValueRef,
-                             attr: LLVMExtAttribute) {
-    unsafe { add_attr(context, function, attr, LLVMAttributeFunctionIndex); }
+                             attrs: &[LLVMExtAttribute]) {
+    unsafe { add_attrs(context, function, attrs, LLVMAttributeFunctionIndex); }
 }
 
-/// Add an attribute on an LLVM return value.
-pub fn LLVMExtAddAttrOnReturn(context: LLVMContextRef,
+/// Add attributes on an LLVM return value.
+pub fn LLVMExtAddAttrsOnReturn(context: LLVMContextRef,
                              function: LLVMValueRef,
-                             attr: LLVMExtAttribute) {
-    unsafe { add_attr(context, function, attr, LLVMAttributeReturnIndex); }
+                             attrs: &[LLVMExtAttribute]) {
+    unsafe { add_attrs(context, function, attrs, LLVMAttributeReturnIndex); }
 }
