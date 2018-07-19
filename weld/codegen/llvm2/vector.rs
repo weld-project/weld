@@ -13,6 +13,9 @@ use std::ffi::CString;
 use ast::Type;
 use error::*;
 
+use super::llvm_exts::*;
+use super::llvm_exts::LLVMExtAttribute::*;
+
 use self::llvm_sys::prelude::*;
 use self::llvm_sys::core::*;
 
@@ -240,6 +243,8 @@ impl Vector {
             let name = format!("{}.at", self.name);
             let (function, builder, _) = self.define_function(ret_ty, &mut arg_tys, name);
 
+            LLVMExtAddAttrOnFunction(self.context, function, AlwaysInline);
+
             let vector = LLVMGetParam(function, 0);
             let index = LLVMGetParam(function, 1);
             let pointer = LLVMBuildExtractValue(builder, vector, POINTER_INDEX, c_str!(""));
@@ -315,6 +320,8 @@ impl Vector {
             let name = format!("{}.vat", self.name);
             let (function, builder, _) = self.define_function(ret_ty, &mut arg_tys, name);
 
+            LLVMExtAddAttrOnFunction(self.context, function, AlwaysInline);
+
             let vector = LLVMGetParam(function, 0);
             let index = LLVMGetParam(function, 1);
             let pointer = LLVMBuildExtractValue(builder, vector, 0, c_str!(""));
@@ -342,6 +349,8 @@ impl Vector {
 
             let name = format!("{}.size", self.name);
             let (function, builder, _) = self.define_function(ret_ty, &mut arg_tys, name);
+
+            LLVMExtAddAttrOnFunction(self.context, function, AlwaysInline);
 
             let vector = LLVMGetParam(function, 0);
             let size = LLVMBuildExtractValue(builder, vector, SIZE_INDEX, c_str!(""));

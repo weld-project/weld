@@ -2,6 +2,7 @@
 //!
 //! The `LlvmGenerator` struct is responsible for converting an SIR program into an LLVM module.
 //! This module is then JIT'd and returned into a runnable executable.
+
 extern crate fnv;
 extern crate time;
 extern crate libc;
@@ -36,6 +37,7 @@ macro_rules! c_str {
     );
 }
 
+mod llvm_exts;
 mod builder;
 mod dict;
 mod intrinsic;

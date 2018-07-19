@@ -244,7 +244,6 @@ impl NumericExpressionGen for LlvmGenerator {
             let output = statement.output.as_ref().unwrap();
             let output_type = ctx.sir_function.symbol_type(output)?;
             let mut result = if let LiteralKind::StringLiteral(ref val) = value {
-                use codegen::llvm2::vector::Vector;
                 let c_str = CString::new(val.as_str()).unwrap();
                 // Add one for the NULL-byte!
                 let len = (c_str.to_bytes().len() + 1) as i64;

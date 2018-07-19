@@ -13,6 +13,8 @@ use error::*;
 
 use std::ffi::CString;
 
+use super::llvm_exts::*;
+
 use super::CodeGenExt;
 use super::LLVM_VECTOR_WIDTH;
 
@@ -232,11 +234,14 @@ impl Intrinsics {
 
 /// Private methods.
 impl Intrinsics {
+
     /// Populate the default intrinsics.
     ///
     /// By default, the code generator adds the Weld Run API (functions prefixed with `weld_run`)
     /// and a few other utility functions, such as `memcpy`.
     unsafe fn populate_defaults(&mut self) {
+        use super::llvm_exts::LLVMExtAttribute::*;
+
         let int8p = LLVMPointerType(self.i8_type(), 0);
 
         // Defines the default intrinsics used by the Weld runtime.
@@ -250,55 +255,81 @@ impl Intrinsics {
         let name = CString::new("weld_runst_get_result").unwrap();
         let fn_type = LLVMFunctionType(int8p, params.as_mut_ptr(), params.len() as u32, 0);
         let function = LLVMAddFunction(self.module, name.as_ptr(), fn_type);
+        LLVMExtAddAttrOnFunction(self.context, function, NoUnwind);
+        LLVMExtAddAttrOnParameter(self.context, function, NoCapture, 0);
+        LLVMExtAddAttrOnParameter(self.context, function, NonNull, 0);
+        LLVMExtAddAttrOnParameter(self.context, function, ReadOnly, 0);
         self.intrinsics.insert(name.into_string().unwrap(), function);
 
         let mut params = vec![self.run_handle_type(), int8p];
         let name = CString::new("weld_runst_set_result").unwrap();
         let fn_type = LLVMFunctionType(self.void_type(), params.as_mut_ptr(), params.len() as u32, 0);
         let function = LLVMAddFunction(self.module, name.as_ptr(), fn_type);
+        LLVMExtAddAttrOnFunction(self.context, function, NoUnwind);
+        LLVMExtAddAttrOnParameter(self.context, function, NoCapture, 0);
+        LLVMExtAddAttrOnParameter(self.context, function, NonNull, 0);
         self.intrinsics.insert(name.into_string().unwrap(), function);
 
         let mut params = vec![self.run_handle_type(), self.i64_type()];
         let name = CString::new("weld_runst_malloc").unwrap();
         let fn_type = LLVMFunctionType(int8p, params.as_mut_ptr(), params.len() as u32, 0);
         let function = LLVMAddFunction(self.module, name.as_ptr(), fn_type);
+        LLVMExtAddAttrOnParameter(self.context, function, NoCapture, 0);
+        LLVMExtAddAttrOnParameter(self.context, function, NonNull, 0);
         self.intrinsics.insert(name.into_string().unwrap(), function);
 
         let mut params = vec![self.run_handle_type(), int8p, self.i64_type()];
         let name = CString::new("weld_runst_realloc").unwrap();
         let fn_type = LLVMFunctionType(int8p, params.as_mut_ptr(), params.len() as u32, 0);
         let function = LLVMAddFunction(self.module, name.as_ptr(), fn_type);
+        LLVMExtAddAttrOnParameter(self.context, function, NoCapture, 0);
+        LLVMExtAddAttrOnParameter(self.context, function, NonNull, 0);
         self.intrinsics.insert(name.into_string().unwrap(), function);
 
         let mut params = vec![self.run_handle_type(), int8p];
         let name = CString::new("weld_runst_free").unwrap();
         let fn_type = LLVMFunctionType(self.void_type(), params.as_mut_ptr(), params.len() as u32, 0);
         let function = LLVMAddFunction(self.module, name.as_ptr(), fn_type);
+        LLVMExtAddAttrOnParameter(self.context, function, NoCapture, 0);
+        LLVMExtAddAttrOnParameter(self.context, function, NonNull, 0);
         self.intrinsics.insert(name.into_string().unwrap(), function);
 
         let mut params = vec![self.run_handle_type()];
         let name = CString::new("weld_runst_get_errno").unwrap();
         let fn_type = LLVMFunctionType(self.i64_type(), params.as_mut_ptr(), params.len() as u32, 0);
         let function = LLVMAddFunction(self.module, name.as_ptr(), fn_type);
+        LLVMExtAddAttrOnFunction(self.context, function, NoUnwind);
+        LLVMExtAddAttrOnParameter(self.context, function, NoCapture, 0);
+        LLVMExtAddAttrOnParameter(self.context, function, NonNull, 0);
+        LLVMExtAddAttrOnParameter(self.context, function, ReadOnly, 0);
         self.intrinsics.insert(name.into_string().unwrap(), function);
 
         let mut params = vec![self.run_handle_type(), self.i64_type()];
         let name = CString::new("weld_runst_set_errno").unwrap();
         let fn_type = LLVMFunctionType(self.void_type(), params.as_mut_ptr(), params.len() as u32, 0);
         let function = LLVMAddFunction(self.module, name.as_ptr(), fn_type);
+        LLVMExtAddAttrOnFunction(self.context, function, NoReturn);
+        LLVMExtAddAttrOnParameter(self.context, function, NoCapture, 0);
+        LLVMExtAddAttrOnParameter(self.context, function, NonNull, 0);
         self.intrinsics.insert(name.into_string().unwrap(), function);
 
         let mut params = vec![self.run_handle_type(), int8p];
         let name = CString::new("weld_runst_print").unwrap();
         let fn_type = LLVMFunctionType(self.void_type(), params.as_mut_ptr(), params.len() as u32, 0);
         let function = LLVMAddFunction(self.module, name.as_ptr(), fn_type);
+        LLVMExtAddAttrOnParameter(self.context, function, NoCapture, 0);
+        LLVMExtAddAttrOnParameter(self.context, function, NonNull, 0);
+        LLVMExtAddAttrOnParameter(self.context, function, ReadOnly, 0);
+        LLVMExtAddAttrOnParameter(self.context, function, NoCapture, 1);
+        LLVMExtAddAttrOnParameter(self.context, function, NonNull, 1);
+        LLVMExtAddAttrOnParameter(self.context, function, ReadOnly, 1);
         self.intrinsics.insert(name.into_string().unwrap(), function);
 
-        let i8_ptr = LLVMPointerType(self.i8_type(), 0);
-        let mut params = vec![i8_ptr, i8_ptr, self.i64_type(), self.i32_type(), self.bool_type()];
+        let mut params = vec![int8p, int8p, self.i64_type(), self.i32_type(), self.bool_type()];
         let name = CString::new("llvm.memcpy.p0i8.p0i8.i64").unwrap();
         let fn_type = LLVMFunctionType(self.void_type(), params.as_mut_ptr(), params.len() as u32, 0);
         let function = LLVMAddFunction(self.module, name.as_ptr(), fn_type);
+        // LLVM sets attributes on `memcpy` automatically.
         self.intrinsics.insert(name.into_string().unwrap(), function);
     }
 }

@@ -15,12 +15,8 @@ use ast::*;
 use error::*;
 use sir::*;
 
-use std::ffi::CString;
-
 use self::llvm_sys::prelude::*;
 use self::llvm_sys::core::*;
-
-use codegen::llvm2::intrinsic::Intrinsics;
 
 use super::{LlvmGenerator, CodeGenExt, FunctionContext};
 
