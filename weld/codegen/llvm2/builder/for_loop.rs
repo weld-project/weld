@@ -14,7 +14,8 @@ use self::llvm_sys::{LLVMIntPredicate, LLVMLinkage};
 use self::llvm_sys::prelude::*;
 use self::llvm_sys::core::*;
 
-use codegen::llvm2::llvm_exts;
+use codegen::llvm2::llvm_exts::*;
+use codegen::llvm2::llvm_exts::LLVMExtAttribute::*;
 use codegen::llvm2::vector::VectorExt;
 use codegen::llvm2::LLVM_VECTOR_WIDTH;
 
@@ -255,8 +256,15 @@ impl ForLoopGenInternal for LlvmGenerator {
         let func_ty = LLVMFunctionType(ret_ty, arg_tys.as_mut_ptr(), arg_tys.len() as u32, 0);
         let name = CString::new(format!("f{}_loop", func.id)).unwrap();
         let function = LLVMAddFunction(self.module, name.as_ptr(), func_ty);
-        llvm_exts::LLVMExtAddDefaultAttrs(self.context(), function);
         LLVMSetLinkage(function, LLVMLinkage::LLVMPrivateLinkage);
+
+        LLVMExtAddDefaultAttrs(self.context(), function);
+        // We always inline this since it will appear only once in the program, so there's no code
+        // size cost to doing it.
+        //
+        // XXX this should only be here in the single threaded setting.
+        LLVMExtAddAttrsOnFunction(self.context, function, &[AlwaysInline]);
+
         self.functions.insert(func.id, function);
 
 
@@ -326,8 +334,11 @@ impl ForLoopGenInternal for LlvmGenerator {
         LLVMBuildStore(context.builder, updated, context.get_value(&parfor.idx_arg)?);
 
         // Check whether to continue looping.
-        let continue_cond = LLVMBuildICmp(context.builder, LLVMIntPredicate::LLVMIntSGT, max, updated, c_str!(""));
-        let _ = LLVMBuildCondBr(context.builder, continue_cond, first_body_block, loop_exit_bb);
+        //
+        // NOTE: It's important to use `eq` here! LLVM checks for it in its analyses and won't
+        // unroll loops without it.
+        let finished_cond = LLVMBuildICmp(context.builder, LLVMIntPredicate::LLVMIntEQ, max, updated, c_str!(""));
+        let _ = LLVMBuildCondBr(context.builder, finished_cond, loop_exit_bb, first_body_block);
 
         // The last basic block loads the updated builder and returns it.
         LLVMPositionBuilderAtEnd(context.builder, loop_exit_bb);

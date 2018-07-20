@@ -188,6 +188,7 @@ unsafe fn optimize_module(module: LLVMModuleRef, level: u32) -> WeldResult<()> {
     assert!(!builder.is_null());
 
     LLVMPassManagerBuilderSetOptLevel(builder, level);
+    // LLVMPassManagerBuilderSetDisableUnrollLoops(builder, 0);
     LLVMPassManagerBuilderPopulateLTOPassManager(builder, manager, 1, 1);
     LLVMPassManagerBuilderDispose(builder);
     LLVMRunPassManager(manager, module);
