@@ -14,6 +14,7 @@ use self::llvm_sys::{LLVMIntPredicate, LLVMLinkage};
 use self::llvm_sys::prelude::*;
 use self::llvm_sys::core::*;
 
+use codegen::llvm2::llvm_exts;
 use codegen::llvm2::vector::VectorExt;
 use codegen::llvm2::LLVM_VECTOR_WIDTH;
 
@@ -254,6 +255,7 @@ impl ForLoopGenInternal for LlvmGenerator {
         let func_ty = LLVMFunctionType(ret_ty, arg_tys.as_mut_ptr(), arg_tys.len() as u32, 0);
         let name = CString::new(format!("f{}_loop", func.id)).unwrap();
         let function = LLVMAddFunction(self.module, name.as_ptr(), func_ty);
+        llvm_exts::LLVMExtAddDefaultAttrs(self.context(), function);
         LLVMSetLinkage(function, LLVMLinkage::LLVMPrivateLinkage);
         self.functions.insert(func.id, function);
 

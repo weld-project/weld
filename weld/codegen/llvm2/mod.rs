@@ -28,7 +28,7 @@ use super::*;
 static NULL_NAME:[c_char; 1] = [0];
 
 // TODO This should be based on the type!
-pub const LLVM_VECTOR_WIDTH: u32 = 4;
+pub const LLVM_VECTOR_WIDTH: u32 = 8;
 
 /// Convert a string literal into a C string.
 macro_rules! c_str {
@@ -245,6 +245,9 @@ pub trait CodeGenExt {
         let func_ty = LLVMFunctionType(ret_ty, arg_tys.as_mut_ptr(), arg_tys.len() as u32, 0);
         let name = CString::new(name).unwrap();
         let function = LLVMAddFunction(self.module(), name.as_ptr(), func_ty); 
+        // Add the default attributes to all functions.
+        llvm_exts::LLVMExtAddDefaultAttrs(self.context(), function);
+
         let builder = LLVMCreateBuilderInContext(self.context());
         let block = LLVMAppendBasicBlockInContext(self.context(), function, c_str!(""));
         LLVMPositionBuilderAtEnd(builder, block);
@@ -503,6 +506,10 @@ impl LlvmGenerator {
         let name = CString::new("run").unwrap();
         let func_ty = LLVMFunctionType(self.i64_type(), [self.i64_type()].as_mut_ptr(), 1, 0);
         let function = LLVMAddFunction(self.module, name.as_ptr(), func_ty);
+
+        // Add the default attributes to all functions.
+        llvm_exts::LLVMExtAddDefaultAttrs(self.context(), function);
+
         LLVMSetLinkage(function, LLVMLinkage::LLVMExternalLinkage);
 
         let builder = LLVMCreateBuilderInContext(self.context);
@@ -590,6 +597,7 @@ impl LlvmGenerator {
         let func_ty = LLVMFunctionType(ret_ty, arg_tys.as_mut_ptr(), arg_tys.len() as u32, 0);
         let name = CString::new(format!("f{}", func.id)).unwrap();
         let function = LLVMAddFunction(self.module, name.as_ptr(), func_ty);
+        llvm_exts::LLVMExtAddDefaultAttrs(self.context(), function);
         LLVMSetLinkage(function, LLVMLinkage::LLVMPrivateLinkage);
 
         self.functions.insert(func.id, function);

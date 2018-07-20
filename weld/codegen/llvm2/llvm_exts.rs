@@ -6,13 +6,33 @@
 #![allow(non_snake_case)]
 
 extern crate llvm_sys;
+extern crate lazy_static;
+extern crate libc;
 
-use std::ffi::CString;
+use libc::c_char;
+
+use std::ffi::{CStr, CString};
 use std::fmt;
 
 use self::llvm_sys::prelude::*;
 use self::llvm_sys::core::*;
 use self::llvm_sys::{LLVMAttributeReturnIndex, LLVMAttributeFunctionIndex};
+
+// Preload the target-specific features.
+lazy_static! {
+    static ref PROCESS_TRIPLE: CString = unsafe {
+        let c_str = LLVMExtGetProcessTriple();
+        CStr::from_ptr(c_str).to_owned()
+    };
+    static ref HOST_CPU_NAME: CString = unsafe {
+        let c_str = LLVMExtGetHostCPUName();
+        CStr::from_ptr(c_str).to_owned()
+    };
+    static ref HOST_CPU_FEATURES: CString = unsafe {
+        let c_str = LLVMExtGetHostCPUFeatures();
+        CStr::from_ptr(c_str).to_owned()
+    };
+}
 
 /// LLVM attributes.
 ///
@@ -102,8 +122,6 @@ unsafe fn add_attrs(context: LLVMContextRef,
     }
 }
 
-
-
 /// Add attributes on an LLVM function parameter.
 ///
 /// `param` indicates the parameter index.
@@ -127,4 +145,34 @@ pub fn LLVMExtAddAttrsOnReturn(context: LLVMContextRef,
                              function: LLVMValueRef,
                              attrs: &[LLVMExtAttribute]) {
     unsafe { add_attrs(context, function, attrs, LLVMAttributeReturnIndex); }
+}
+
+/// Add the host-specific attributes to a function.
+///
+/// These attributes should be added to each function, since they define target-specific features
+/// that enhance generated machine code quality.
+pub fn LLVMExtAddDefaultAttrs(context: LLVMContextRef, function: LLVMValueRef) {
+    unsafe {
+        let cpu_name_attr = LLVMCreateStringAttribute(context,
+                                                      c_str!("target-cpu"), 10,
+                                                      HOST_CPU_NAME.as_ptr(),
+                                                      HOST_CPU_NAME.as_bytes().len() as u32);
+        let cpu_features_attr = LLVMCreateStringAttribute(context,
+                                                          c_str!("target-features"), 15,
+                                                          HOST_CPU_FEATURES.as_ptr(),
+                                                          HOST_CPU_FEATURES.as_bytes().len() as u32);
+
+        LLVMAddAttributeAtIndex(function, LLVMAttributeFunctionIndex, cpu_name_attr);
+        LLVMAddAttributeAtIndex(function, LLVMAttributeFunctionIndex, cpu_features_attr);
+    }
+}
+
+#[link(name="llvmext", kind="static")]
+extern "C" {
+    #[no_mangle]
+    pub fn LLVMExtGetProcessTriple() -> *const c_char;
+    #[no_mangle]
+    pub fn LLVMExtGetHostCPUName() -> *const c_char;
+    #[no_mangle]
+    pub fn LLVMExtGetHostCPUFeatures() -> *const c_char;
 }
