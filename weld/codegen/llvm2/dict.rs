@@ -1,5 +1,7 @@
 //! A wrapper for dictionaries in Weld.
-#[allow(dead_code)]
+
+// Suppress annoying warnings for now.
+#![allow(unused_variables,unused_imports)]
 
 extern crate llvm_sys;
 

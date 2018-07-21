@@ -13,6 +13,7 @@ use self::llvm_sys::prelude::*;
 use self::llvm_sys::core::*;
 use self::llvm_sys::LLVMTypeKind;
 
+use codegen::llvm2::llvm_exts::*;
 use codegen::llvm2::CodeGenExt;
 use codegen::llvm2::numeric::gen_binop;
 use codegen::llvm2::LLVM_VECTOR_WIDTH;
@@ -119,6 +120,8 @@ impl Merger {
         let ret_ty = LLVMVoidTypeInContext(self.context);
         let (function, fn_builder, _) = self.define_function(ret_ty, arguments, name);
 
+        LLVMExtAddAttrsOnFunction(self.context, function, &[LLVMExtAttribute::AlwaysInline]);
+
         // Load the vector element, apply the binary operator, and then store it back.
         let elem_pointer = LLVMBuildStructGEP(fn_builder, LLVMGetParam(function, 0), gep_index, c_str!(""));
         let elem = LLVMBuildLoad(fn_builder, elem_pointer, c_str!(""));
@@ -136,12 +139,18 @@ impl Merger {
         let vectorized = LLVMGetTypeKind(LLVMTypeOf(value)) == LLVMTypeKind::LLVMVectorTypeKind;
         if vectorized {
             if self.vmerge.is_none() {
-                let mut arg_tys = [LLVMPointerType(self.merger_ty, 0), LLVMVectorType(self.elem_ty, LLVM_VECTOR_WIDTH as u32)];
+                let mut arg_tys = [
+                    LLVMPointerType(self.merger_ty, 0),
+                    LLVMVectorType(self.elem_ty, LLVM_VECTOR_WIDTH as u32)
+                ];
                 let name = format!("{}.vmerge", self.name);
                 self.vmerge = Some(self.gen_merge_internal(name, &mut arg_tys, VECTOR_INDEX)?);
             }
             let mut args = [builder, value];
-            Ok(LLVMBuildCall(llvm_builder, self.vmerge.unwrap(), args.as_mut_ptr(), args.len() as u32, c_str!("")))
+            Ok(LLVMBuildCall(llvm_builder,
+                             self.vmerge.unwrap(),
+                             args.as_mut_ptr(),
+                             args.len() as u32, c_str!("")))
         } else {
             if self.merge.is_none() {
                 let mut arg_tys = [LLVMPointerType(self.merger_ty, 0), self.elem_ty];
@@ -149,7 +158,10 @@ impl Merger {
                 self.merge = Some(self.gen_merge_internal(name, &mut arg_tys, SCALAR_INDEX)?);
             }
             let mut args = [builder, value];
-            Ok(LLVMBuildCall(llvm_builder, self.merge.unwrap(), args.as_mut_ptr(), args.len() as u32, c_str!("")))
+            Ok(LLVMBuildCall(llvm_builder,
+                             self.merge.unwrap(),
+                             args.as_mut_ptr(),
+                             args.len() as u32, c_str!("")))
         }
     }
 

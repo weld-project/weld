@@ -11,6 +11,7 @@ use self::llvm_sys::core::*;
 use self::llvm_sys::LLVMTypeKind;
 use self::llvm_sys::LLVMIntPredicate::*;
 
+use codegen::llvm2::llvm_exts::*;
 use codegen::llvm2::intrinsic::Intrinsics;
 use codegen::llvm2::CodeGenExt;
 use codegen::llvm2::LLVM_VECTOR_WIDTH;
@@ -146,6 +147,8 @@ impl Appender {
         let mut arg_tys = [LLVMPointerType(self.appender_ty, 0), merge_ty, self.run_handle_type()];
         let ret_ty = LLVMVoidTypeInContext(self.context);
         let (function, builder, _) = self.define_function(ret_ty, &mut arg_tys, name);
+
+        LLVMExtAddAttrsOnFunction(self.context, function, &[LLVMExtAttribute::AlwaysInline]);
 
         let full_block = LLVMAppendBasicBlockInContext(self.context, function, c_str!("isFull"));
         let finish_block = LLVMAppendBasicBlockInContext(self.context, function, c_str!("finish"));

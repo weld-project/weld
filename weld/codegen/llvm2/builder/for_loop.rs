@@ -472,18 +472,22 @@ impl ForLoopGenInternal for LlvmGenerator {
             }
             SimdIter if iter.start.is_some() => unreachable!(),
             SimdIter => {
-                let iterations = LLVMBuildSDiv(ctx.builder, size, self.i64(LLVM_VECTOR_WIDTH as i64), c_str!(""));
+                let iterations = LLVMBuildSDiv(ctx.builder,
+                                               size,
+                                               self.i64(LLVM_VECTOR_WIDTH as i64), c_str!(""));
                 let _ = LLVMBuildBr(ctx.builder, pass_block);
                 Ok(iterations)
             }
             FringeIter if iter.start.is_some() => unreachable!(),
             FringeIter => {
-                let iterations = LLVMBuildSRem(ctx.builder, size, self.i64(LLVM_VECTOR_WIDTH as i64), c_str!(""));
+                let iterations = LLVMBuildSRem(ctx.builder,
+                                               size,
+                                               self.i64(LLVM_VECTOR_WIDTH as i64), c_str!(""));
                 let _ = LLVMBuildBr(ctx.builder, pass_block);
                 Ok(iterations)
             }
             RangeIter => {
-                use self::llvm_sys::LLVMIntPredicate::{LLVMIntSLT, LLVMIntSLE, LLVMIntEQ};
+                use self::llvm_sys::LLVMIntPredicate::{LLVMIntSLT, LLVMIntEQ};
                 let start = self.load(ctx.builder, ctx.get_value(iter.start.as_ref().unwrap())?)?;
                 let stride = self.load(ctx.builder, ctx.get_value(iter.stride.as_ref().unwrap())?)?;
                 let end = self.load(ctx.builder, ctx.get_value(iter.end.as_ref().unwrap())?)?;
