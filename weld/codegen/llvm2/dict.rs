@@ -4,6 +4,9 @@
 #![allow(unused_variables,unused_imports)]
 
 extern crate llvm_sys;
+extern crate libc;
+
+use libc::c_char;
 
 use std::ffi::CString;
 
@@ -43,6 +46,7 @@ pub struct Dict {
     key_exists: Option<LLVMValueRef>,
     size: Option<LLVMValueRef>,
     to_vec: Option<LLVMValueRef>,
+    free: Option<LLVMValueRef>,
 }
 
 impl CodeGenExt for Dict {
@@ -95,6 +99,8 @@ pub struct Intrinsics {
     /// Arguments: Run Handle, Dictionary
     /// Returns: vector of Key/Value structs.
     to_vec: Option<LLVMValueRef>,
+    /// Free a dictionary.
+    free: Option<LLVMValueRef>,
     context: LLVMContextRef,
     module: LLVMModuleRef,
 }
@@ -118,6 +124,7 @@ impl Intrinsics {
             key_exists: None,
             size: None,
             to_vec: None,
+            free: None,
             context: context,
             module: module,
         };
@@ -125,6 +132,83 @@ impl Intrinsics {
         intrinsics
     }
 
+    /// Generate a call to the `new` intrinsic.
+    pub unsafe fn call_new(&self, builder: LLVMBuilderRef,
+                           run: LLVMValueRef,
+                           capacity: LLVMValueRef,
+                           name: Option<*const c_char>) -> LLVMValueRef {
+        let mut args = [run, capacity];
+        LLVMBuildCall(builder, self.new.unwrap(), args.as_mut_ptr(), args.len() as u32, name.unwrap_or(c_str!("")))
+    }
+
+    /// Generate a call to the `get` intrinsic.
+    pub unsafe fn call_get(&self,
+                           builder: LLVMBuilderRef,
+                           run: LLVMValueRef,
+                           dictionary: LLVMValueRef,
+                           key: LLVMValueRef,
+                           hash: LLVMValueRef,
+                            name: Option<*const c_char>) -> LLVMValueRef {
+        let mut args = [run, dictionary, key, hash];
+        LLVMBuildCall(builder, self.get.unwrap(), args.as_mut_ptr(), args.len() as u32, name.unwrap_or(c_str!("")))
+    }
+
+    /// Generate a call to the `upsert` intrinsic.
+    pub unsafe fn call_upsert(&self,
+                              builder: LLVMBuilderRef,
+                              run: LLVMValueRef,
+                              dictionary: LLVMValueRef,
+                              key: LLVMValueRef,
+                              hash: LLVMValueRef,
+                              default: LLVMValueRef,
+                              name: Option<*const c_char>) -> LLVMValueRef {
+        let mut args = [run, dictionary, key, hash, default];
+        LLVMBuildCall(builder, self.upsert.unwrap(), args.as_mut_ptr(), args.len() as u32, name.unwrap_or(c_str!("")))
+    }
+
+    /// Generate a call to the `key_exists` intrinsic.
+    pub unsafe fn call_key_exists(&self,
+                              builder: LLVMBuilderRef,
+                              run: LLVMValueRef,
+                              dictionary: LLVMValueRef,
+                              key: LLVMValueRef,
+                              hash: LLVMValueRef,
+                              name: Option<*const c_char>) -> LLVMValueRef {
+        let mut args = [run, dictionary, key, hash];
+        LLVMBuildCall(builder, self.key_exists.unwrap(), args.as_mut_ptr(), args.len() as u32, name.unwrap_or(c_str!("")))
+    }
+
+    /// Generate a call to the `size` intrinsic.
+    pub unsafe fn call_size(&self,
+                              builder: LLVMBuilderRef,
+                              run: LLVMValueRef,
+                              dictionary: LLVMValueRef,
+                              name: Option<*const c_char>) -> LLVMValueRef {
+        let mut args = [run, dictionary];
+        LLVMBuildCall(builder, self.size.unwrap(), args.as_mut_ptr(), args.len() as u32, name.unwrap_or(c_str!("")))
+    }
+
+    /// Generate a call to the `to_vec` intrinsic.
+    pub unsafe fn call_to_vec(&self,
+                              builder: LLVMBuilderRef,
+                              run: LLVMValueRef,
+                              dictionary: LLVMValueRef,
+                              name: Option<*const c_char>) -> LLVMValueRef {
+        let mut args = [run, dictionary];
+        LLVMBuildCall(builder, self.to_vec.unwrap(), args.as_mut_ptr(), args.len() as u32, name.unwrap_or(c_str!("")))
+    }
+
+    /// Generate a call to the `free` intrinsic.
+    pub unsafe fn call_free(&self,
+                              builder: LLVMBuilderRef,
+                              run: LLVMValueRef,
+                              dictionary: LLVMValueRef,
+                              name: Option<*const c_char>) -> LLVMValueRef {
+        let mut args = [run, dictionary];
+        LLVMBuildCall(builder, self.free.unwrap(), args.as_mut_ptr(), args.len() as u32, name.unwrap_or(c_str!("")))
+    }
+
+    /// Populate `self` with the dictionary intrinsics.
     unsafe fn populate(&mut self) {
         // Common types.
         let dict_type = LLVMPointerType(self.i8_type(), 0);
@@ -210,6 +294,18 @@ impl Intrinsics {
         LLVMExtAddAttrsOnParameter(self.context, function, &[NoCapture, NoAlias, NonNull, ReadOnly], 1);
         LLVMExtAddAttrsOnReturn(self.context, function, &[NoAlias]);
         self.to_vec = Some(function);
+
+        // Parameters: Run Handle, Dictionary
+        // Returns: Nothing
+        let mut params = vec![self.run_handle_type(), dict_type];
+        let name = CString::new("weld_runst_dict_free").unwrap();
+        let fn_type = LLVMFunctionType(self.void_type(), params.as_mut_ptr(), params.len() as u32, 0);
+        let function = LLVMAddFunction(self.module, name.as_ptr(), fn_type);
+        // Run handle
+        LLVMExtAddAttrsOnParameter(self.context, function, &[NoCapture, NoAlias, NonNull, ReadOnly], 0);
+        // Dictionary
+        LLVMExtAddAttrsOnParameter(self.context, function, &[NoAlias, NonNull], 1);
+        self.free = Some(function);
     }
 }
 
@@ -255,6 +351,7 @@ impl Dict {
             key_exists: None,
             size: None,
             to_vec: None,
+            free: None,
         }
     }
 
@@ -324,5 +421,15 @@ impl Dict {
         }
         let mut args = [dict];
         return Ok(LLVMBuildCall(builder, self.to_vec.unwrap(), args.as_mut_ptr(), args.len() as u32, c_str!("")))
+    }
+
+    pub unsafe fn gen_free(&mut self,
+                          builder: LLVMBuilderRef,
+                          dict: LLVMValueRef) -> WeldResult<LLVMValueRef> {
+        if self.free.is_none() {
+            unimplemented!()
+        }
+        let mut args = [dict];
+        return Ok(LLVMBuildCall(builder, self.free.unwrap(), args.as_mut_ptr(), args.len() as u32, c_str!("")))
     }
 }
