@@ -377,6 +377,10 @@ pub trait CodeGenExt {
         LLVMVoidTypeInContext(self.context())
     }
 
+    unsafe fn void_pointer_type(&self) -> LLVMTypeRef {
+        LLVMPointerType(self.i8_type(), 0)
+    }
+
     unsafe fn run_handle_type(&self) -> LLVMTypeRef {
         LLVMPointerType(self.i8_type(), 0)
     }
@@ -795,7 +799,7 @@ impl LlvmGenerator {
                 } else if let Dict(_, _) = *child_type {
                     let pointer = {
                         let mut methods = self.dictionaries.get_mut(child_type).unwrap();
-                        methods.gen_size(context.builder, child_value)?
+                        methods.gen_size(context.builder, &self.dict_intrinsics, context.get_run(), child_value)?
                     };
                     let result = self.load(context.builder, pointer)?;
                     LLVMBuildStore(context.builder, result, output_pointer);
@@ -917,9 +921,12 @@ impl LlvmGenerator {
                 let output_pointer = context.get_value(output)?;
                 let child_value = self.load(context.builder, context.get_value(child)?)?;
                 let child_type = context.sir_function.symbol_type(child)?;
+                // This is the type of the resulting key/value vector (vec[{K,V}])
+                let output_type = self.llvm_type(
+                    context.sir_function.symbol_type(statement.output.as_ref().unwrap())?)?;
                 let pointer = {
                     let mut methods = self.dictionaries.get_mut(child_type).unwrap();
-                    methods.gen_to_vec(context.builder, child_value)?
+                    methods.gen_to_vec(context.builder, &self.dict_intrinsics, output_type, context.get_run(), child_value)?
                 };
                 let result = self.load(context.builder, pointer)?;
                 LLVMBuildStore(context.builder, result, output_pointer);
@@ -1049,6 +1056,7 @@ impl LlvmGenerator {
                     let dict = dict::Dict::define("dict",
                                                     key_ty,
                                                     value_ty,
+                                                    self.i64(0), // TODO(shoumik) REPLACE THIS WITH KEY COMPARATOR!!!
                                                     self.context,
                                                     self.module);
                     self.dictionaries.insert(ty.clone(), dict);

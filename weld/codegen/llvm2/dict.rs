@@ -3,6 +3,7 @@
 // Suppress annoying warnings for now.
 #![allow(unused_variables,unused_imports)]
 
+extern crate lazy_static;
 extern crate llvm_sys;
 extern crate libc;
 
@@ -36,6 +37,7 @@ pub struct Dict {
     pub dict_ty: LLVMTypeRef,
     pub key_ty: LLVMTypeRef,
     pub val_ty: LLVMTypeRef,
+    pub key_comparator: LLVMValueRef,
     entry_ty: LLVMTypeRef,
     slot_ty: LLVMTypeRef,
     context: LLVMContextRef,
@@ -66,8 +68,10 @@ impl CodeGenExt for Dict {
 pub struct Intrinsics {
     /// Allocates a new dictionary.
     ///
-    /// Arguments: Run Handle
+    /// Arguments: Run Handle, Key Size, Value Size, Comparator Function, Capacity.
     /// Returns: Newly allocated dictionary
+    ///
+    /// Sizes and capacities are expressed in *bytes*.
     new: Option<LLVMValueRef>,
     /// Gets a value for a given key.
     ///
@@ -132,12 +136,20 @@ impl Intrinsics {
         intrinsics
     }
 
+    pub unsafe fn key_comparator_type(&self) -> LLVMTypeRef {
+        let mut arg_tys = [self.i8_type(), self.i8_type()];
+        LLVMFunctionType(self.i32_type(), arg_tys.as_mut_ptr(), arg_tys.len() as u32, 0)
+    }
+
     /// Generate a call to the `new` intrinsic.
     pub unsafe fn call_new(&self, builder: LLVMBuilderRef,
                            run: LLVMValueRef,
+                           key_size: LLVMValueRef,
+                           val_size: LLVMValueRef,
+                           comparator: LLVMValueRef,
                            capacity: LLVMValueRef,
                            name: Option<*const c_char>) -> LLVMValueRef {
-        let mut args = [run, capacity];
+        let mut args = [run, key_size, val_size, comparator, capacity];
         LLVMBuildCall(builder, self.new.unwrap(), args.as_mut_ptr(), args.len() as u32, name.unwrap_or(c_str!("")))
     }
 
@@ -148,7 +160,7 @@ impl Intrinsics {
                            dictionary: LLVMValueRef,
                            key: LLVMValueRef,
                            hash: LLVMValueRef,
-                            name: Option<*const c_char>) -> LLVMValueRef {
+                           name: Option<*const c_char>) -> LLVMValueRef {
         let mut args = [run, dictionary, key, hash];
         LLVMBuildCall(builder, self.get.unwrap(), args.as_mut_ptr(), args.len() as u32, name.unwrap_or(c_str!("")))
     }
@@ -215,9 +227,15 @@ impl Intrinsics {
         let void_ptr = LLVMPointerType(self.i8_type(), 0);
         let hash_type = self.i32_type();
 
-        // Parameters: Run Handle, Capacity.
+        // Parameters: Run Handle, Key Size, Value Size, KeyComparator, Capacity.
         // Returns: Pointer to Dictionary
-        let mut params = vec![self.run_handle_type(), self.i64_type()];
+        let mut params = vec![
+            self.run_handle_type(),
+            self.i64_type(),
+            self.i64_type(),
+            self.key_comparator_type(),
+            self.i64_type()
+        ];
         let name = CString::new("weld_runst_dict_new").unwrap();
         let fn_type = LLVMFunctionType(dict_type, params.as_mut_ptr(), params.len() as u32, 0);
         let function = LLVMAddFunction(self.module, name.as_ptr(), fn_type);
@@ -310,12 +328,19 @@ impl Intrinsics {
 }
 
 impl Dict {
+    /// Define a new dictionary type.
+    ///
+    /// The definition requires a key and a value type, as well as a generated LLVM function *with
+    /// external visiblity* for comparing two keys.
     pub unsafe fn define<T: AsRef<str>>(name: T,
                                 key_ty: LLVMTypeRef,
                                 val_ty: LLVMTypeRef,
+                                key_comparator: LLVMValueRef,
                                 context: LLVMContextRef,
                                 module: LLVMModuleRef) -> Dict {
         let c_name = CString::new(name.as_ref()).unwrap();
+        // This is not really neccessary, but from a readability/debuggability standpoint, it makes
+        // things nicer since it gives the dictionary type a name.
         let mut layout = [LLVMPointerType(LLVMInt8TypeInContext(context), 0)];
         let dict_ty = LLVMStructCreateNamed(context, c_name.as_ptr());
         LLVMStructSetBody(dict_ty, layout.as_mut_ptr(), layout.len() as u32, 0);
@@ -341,6 +366,7 @@ impl Dict {
             dict_ty: dict_ty,
             key_ty: key_ty,
             val_ty: val_ty,
+            key_comparator: key_comparator,
             entry_ty: entry_ty,
             slot_ty: LLVMPointerType(entry_ty, 0),
             context: context,
@@ -355,24 +381,77 @@ impl Dict {
         }
     }
 
+    unsafe fn hash_type(&self) -> LLVMTypeRef {
+        self.i32_type()
+    }
+
     pub unsafe fn gen_new(&mut self,
                           builder: LLVMBuilderRef,
+                          intrinsics: &Intrinsics,
+                          run: LLVMValueRef,
                           capacity: LLVMValueRef) -> WeldResult<LLVMValueRef> {
         if self.new.is_none() {
-            unimplemented!()
+            let mut arg_tys = [self.i64_type(), self.run_handle_type()];
+            let ret_ty = self.dict_ty;
+
+            let name = format!("{}.new", self.name);
+            let (function, builder, _) = self.define_function(ret_ty, &mut arg_tys, name);
+
+            let capacity = LLVMGetParam(function, 0);
+            let run = LLVMGetParam(function, 1);
+            let key_size = self.size_of(self.key_ty);
+            let val_size = self.size_of(self.val_ty);
+            let result = intrinsics.call_new(builder, run, key_size, val_size, self.key_comparator, capacity, None);
+
+            // Wrap the pointer in the struct.
+            let result = LLVMBuildInsertValue(builder, LLVMGetUndef(self.dict_ty), result, 0, c_str!(""));
+
+            LLVMBuildRet(builder, result);
+
+            self.new = Some(function);
+            LLVMDisposeBuilder(builder);
         }
-        let mut args = [capacity];
+        let mut args = [capacity, run];
         return Ok(LLVMBuildCall(builder, self.new.unwrap(), args.as_mut_ptr(), args.len() as u32, c_str!("")))
     }
 
     pub unsafe fn gen_upsert(&mut self,
                           builder: LLVMBuilderRef,
+                          intrinsics: &Intrinsics,
                           dict: LLVMValueRef,
                           key: LLVMValueRef,
                           hash: LLVMValueRef,
                           val: LLVMValueRef) -> WeldResult<LLVMValueRef> {
         if self.upsert.is_none() {
-            unimplemented!()
+            let mut arg_tys = [
+                self.dict_ty,
+                LLVMPointerType(self.key_ty, 0),
+                self.hash_type(),
+                LLVMPointerType(self.val_ty, 0),
+                self.run_handle_type()
+            ];
+            let ret_ty = LLVMPointerType(self.val_ty, 0);
+
+            let name = format!("{}.get", self.name);
+            let (function, builder, _) = self.define_function(ret_ty, &mut arg_tys, name);
+
+            let dict = LLVMGetParam(function, 0);
+            let key = LLVMGetParam(function, 1);
+            let hash = LLVMGetParam(function, 2);
+            let val = LLVMGetParam(function, 3);
+            let run = LLVMGetParam(function, 4);
+
+            let dict = LLVMBuildExtractValue(builder, dict, 0, c_str!(""));
+            let key = LLVMBuildBitCast(builder, key, self.void_pointer_type(), c_str!(""));
+            let val = LLVMBuildBitCast(builder, val, self.void_pointer_type(), c_str!(""));
+            let slot_pointer = intrinsics.call_upsert(builder, run, dict, key, hash, val, None);
+            let slot_pointer = LLVMBuildBitCast(builder, slot_pointer, self.slot_ty, c_str!(""));
+            let result = LLVMBuildStructGEP(builder, slot_pointer, VALUE_INDEX, c_str!(""));
+
+            LLVMBuildRet(builder, result);
+
+            self.get = Some(function);
+            LLVMDisposeBuilder(builder);
         }
         let mut args = [dict, key, hash, val];
         return Ok(LLVMBuildCall(builder, self.upsert.unwrap(), args.as_mut_ptr(), args.len() as u32, c_str!("")))
@@ -380,56 +459,167 @@ impl Dict {
 
     pub unsafe fn gen_get(&mut self,
                           builder: LLVMBuilderRef,
+                          intrinsics: &Intrinsics,
+                          run: LLVMValueRef,
                           dict: LLVMValueRef,
                           key: LLVMValueRef,
                           hash: LLVMValueRef) -> WeldResult<LLVMValueRef> {
         if self.get.is_none() {
-            unimplemented!()
+            let mut arg_tys = [
+                self.dict_ty,
+                LLVMPointerType(self.key_ty, 0),
+                self.hash_type(),
+                self.run_handle_type()
+            ];
+            let ret_ty = self.val_ty;
+
+            let name = format!("{}.get", self.name);
+            let (function, builder, _) = self.define_function(ret_ty, &mut arg_tys, name);
+
+            let dict = LLVMGetParam(function, 0);
+            let key = LLVMGetParam(function, 1);
+            let hash = LLVMGetParam(function, 2);
+            let run = LLVMGetParam(function, 3);
+
+            let dict = LLVMBuildExtractValue(builder, dict, 0, c_str!(""));
+            let key = LLVMBuildBitCast(builder, key, self.void_pointer_type(), c_str!(""));
+            let slot_pointer = intrinsics.call_get(builder, run, dict, key, hash, None);
+            let slot_pointer = LLVMBuildBitCast(builder, slot_pointer, self.slot_ty, c_str!(""));
+            let value_pointer = LLVMBuildStructGEP(builder, slot_pointer, VALUE_INDEX, c_str!(""));
+            let result = self.load(builder, value_pointer)?;
+
+            LLVMBuildRet(builder, result);
+
+            self.get = Some(function);
+            LLVMDisposeBuilder(builder);
         }
-        let mut args = [dict, key, hash];
+        let mut args = [dict, key, hash, run];
         return Ok(LLVMBuildCall(builder, self.get.unwrap(), args.as_mut_ptr(), args.len() as u32, c_str!("")))
     }
 
     pub unsafe fn gen_key_exists(&mut self,
                           builder: LLVMBuilderRef,
+                          intrinsics: &Intrinsics,
+                          run: LLVMValueRef,
                           dict: LLVMValueRef,
                           key: LLVMValueRef,
                           hash: LLVMValueRef) -> WeldResult<LLVMValueRef> {
         if self.key_exists.is_none() {
-            unimplemented!()
+            let mut arg_tys = [
+                self.dict_ty,
+                LLVMPointerType(self.key_ty, 0),
+                self.hash_type(),
+                self.run_handle_type()
+            ];
+            let ret_ty = self.bool_type();
+
+            let name = format!("{}.keyexists", self.name);
+            let (function, builder, _) = self.define_function(ret_ty, &mut arg_tys, name);
+
+            let dict = LLVMGetParam(function, 0);
+            let key = LLVMGetParam(function, 1);
+            let hash = LLVMGetParam(function, 2);
+            let run = LLVMGetParam(function, 3);
+
+            let dict = LLVMBuildExtractValue(builder, dict, 0, c_str!(""));
+            let key = LLVMBuildBitCast(builder, key, self.void_pointer_type(), c_str!(""));
+            let slot_pointer = intrinsics.call_key_exists(builder, run, dict, key, hash, None);
+            let slot_pointer = LLVMBuildBitCast(builder, slot_pointer, self.slot_ty, c_str!(""));
+            let value_pointer = LLVMBuildStructGEP(builder, slot_pointer, FILLED_INDEX, c_str!(""));
+            let filled = self.load(builder, value_pointer)?;
+            let result = LLVMBuildTrunc(builder, filled, ret_ty, c_str!(""));
+
+            LLVMBuildRet(builder, result);
+
+            self.key_exists = Some(function);
+            LLVMDisposeBuilder(builder);
         }
-        let mut args = [dict, key, hash];
+        let mut args = [dict, key, hash, run];
         return Ok(LLVMBuildCall(builder, self.key_exists.unwrap(), args.as_mut_ptr(), args.len() as u32, c_str!("")))
     }
 
     pub unsafe fn gen_size(&mut self,
                           builder: LLVMBuilderRef,
+                          intrinsics: &Intrinsics,
+                          run: LLVMValueRef,
                           dict: LLVMValueRef) -> WeldResult<LLVMValueRef> {
         if self.size.is_none() {
-            unimplemented!()
+            let mut arg_tys = [self.dict_ty, self.run_handle_type()];
+            let ret_ty = self.i64_type();
+
+            let name = format!("{}.size", self.name);
+            let (function, builder, _) = self.define_function(ret_ty, &mut arg_tys, name);
+
+            let dict = LLVMGetParam(function, 0);
+            let run = LLVMGetParam(function, 1);
+
+            let dict = LLVMBuildExtractValue(builder, dict, 0, c_str!(""));
+            let result = intrinsics.call_size(builder, run, dict, None);
+
+            LLVMBuildRet(builder, result);
+
+            self.size = Some(function);
+            LLVMDisposeBuilder(builder);
         }
-        let mut args = [dict];
+        let mut args = [dict, run];
         return Ok(LLVMBuildCall(builder, self.size.unwrap(), args.as_mut_ptr(), args.len() as u32, c_str!("")))
 
     }
 
     pub unsafe fn gen_to_vec(&mut self,
                           builder: LLVMBuilderRef,
+                          intrinsics: &Intrinsics,
+                          kv_vec_ty: LLVMTypeRef,
+                          run: LLVMValueRef,
                           dict: LLVMValueRef) -> WeldResult<LLVMValueRef> {
         if self.to_vec.is_none() {
-            unimplemented!()
+            let mut arg_tys = [self.dict_ty, self.run_handle_type()];
+            let ret_ty = kv_vec_ty;
+
+            let name = format!("{}.tovec", self.name);
+            let (function, builder, _) = self.define_function(ret_ty, &mut arg_tys, name);
+
+            let dict = LLVMGetParam(function, 0);
+            let run = LLVMGetParam(function, 1);
+
+            let dict = LLVMBuildExtractValue(builder, dict, 0, c_str!(""));
+            let pointer = intrinsics.call_to_vec(builder, run, dict, None);
+            let result = LLVMBuildBitCast(builder, pointer, LLVMPointerType(kv_vec_ty, 0), c_str!(""));
+            let result = self.load(builder, result)?;
+
+            LLVMBuildRet(builder, result);
+
+            self.to_vec = Some(function);
+            LLVMDisposeBuilder(builder);
         }
-        let mut args = [dict];
+        let mut args = [dict, run];
         return Ok(LLVMBuildCall(builder, self.to_vec.unwrap(), args.as_mut_ptr(), args.len() as u32, c_str!("")))
     }
 
     pub unsafe fn gen_free(&mut self,
                           builder: LLVMBuilderRef,
+                          intrinsics: &Intrinsics,
+                          run: LLVMValueRef,
                           dict: LLVMValueRef) -> WeldResult<LLVMValueRef> {
         if self.free.is_none() {
-            unimplemented!()
+            let mut arg_tys = [self.dict_ty, self.run_handle_type()];
+            let ret_ty = self.void_type();
+
+            let name = format!("{}.free", self.name);
+            let (function, builder, _) = self.define_function(ret_ty, &mut arg_tys, name);
+
+            let dict = LLVMGetParam(function, 0);
+            let run = LLVMGetParam(function, 1);
+
+            let dict = LLVMBuildExtractValue(builder, dict, 0, c_str!(""));
+            let _ = intrinsics.call_free(builder, run, dict, None);
+
+            LLVMBuildRetVoid(builder);
+
+            self.free = Some(function);
+            LLVMDisposeBuilder(builder);
         }
-        let mut args = [dict];
+        let mut args = [dict, run];
         return Ok(LLVMBuildCall(builder, self.free.unwrap(), args.as_mut_ptr(), args.len() as u32, c_str!("")))
     }
 }
