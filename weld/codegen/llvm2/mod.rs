@@ -84,7 +84,7 @@ pub fn compile(program: &SirProgram,
 /// A helper trait that defines the LLVM type and structure of an input to the runtime.
 trait LlvmInputArg {
     /// LLVM type of the input struct.
-    unsafe fn llvm_type(context: LLVMContextRef) -> LLVMTypeRef; 
+    unsafe fn llvm_type(context: LLVMContextRef) -> LLVMTypeRef;
     /// Index of the data pointer in the struct.
     fn input_index() -> u32;
     /// Index of the number of workers value in the struct.
@@ -121,7 +121,7 @@ impl LlvmInputArg for WeldInputArgs {
 /// A helper trait that defines the LLVM type and structure of an output from the runtime.
 trait LlvmOutputArg {
     /// LLVM type of the output struct.
-    unsafe fn llvm_type(context: LLVMContextRef) -> LLVMTypeRef; 
+    unsafe fn llvm_type(context: LLVMContextRef) -> LLVMTypeRef;
     /// Index of the output data pointer in the struct.
     fn output_index() -> u32;
     /// Index of the run ID/data pointer in the struct.
@@ -152,6 +152,26 @@ impl LlvmOutputArg for WeldOutputArgs {
 
     fn errno_index() -> u32 {
         2
+    }
+}
+
+/// Specifies whether a type contains a pointer in generated code.
+pub trait HasPointer {
+    fn has_pointer(&self) -> bool;
+}
+
+impl HasPointer for Type {
+    fn has_pointer(&self) -> bool {
+        use ast::Type::*;
+        match *self {
+            Scalar(_) => false,
+            Simd(_) => false,
+            Vector(_) => true,
+            Dict(_, _) => true,
+            Builder(_, _) => true,
+            Struct(ref tys) => tys.iter().any(|ref t| t.has_pointer()),
+            Function(_, _) | Unknown => unreachable!(),
+        }
     }
 }
 
@@ -191,6 +211,14 @@ pub struct LlvmGenerator {
     intrinsics: intrinsic::Intrinsics,
     /// Generated string literal values.
     strings: FnvHashMap<CString, LLVMValueRef>,
+    /// Equality functions on various types.
+    eq_fns: FnvHashMap<Type, LLVMValueRef>,
+    /// Opaque, externally visible wrappers for equality functions.
+    ///
+    /// These are used by the dicitonary.
+    opaque_eq_fns: FnvHashMap<Type, LLVMValueRef>,
+    /// Hash functions on various types.
+    hash_fns: FnvHashMap<Type, LLVMValueRef>,
 }
 
 /// Defines helper methods for LLVM code generation.
@@ -244,20 +272,34 @@ pub trait CodeGenExt {
     /// Generates code to define a function with the given return type and argument type.
     ///
     /// Returns a reference to the function, a builder used to build the function body, and the
+    /// entry basic block. This method uses the default private linkage type, meaning functions
+    /// generated using this method cannot be passed or called outside of the module.
     unsafe fn define_function<T: Into<Vec<u8>>>(&mut self,
                                       ret_ty: LLVMTypeRef,
                                       arg_tys: &mut [LLVMTypeRef],
                                       name: T) -> (LLVMValueRef, LLVMBuilderRef, LLVMBasicBlockRef) {
+        self.define_function_with_visability(ret_ty, arg_tys, LLVMLinkage::LLVMPrivateLinkage, name)
+    }
+
+    /// Generates code to define a function with the given return type and argument type.
+    ///
+    /// Returns a reference to the function, a builder used to build the function body, and the
+    /// entry basic block.
+    unsafe fn define_function_with_visability<T: Into<Vec<u8>>>(&mut self,
+                                      ret_ty: LLVMTypeRef,
+                                      arg_tys: &mut [LLVMTypeRef],
+                                      visibility: LLVMLinkage,
+                                      name: T) -> (LLVMValueRef, LLVMBuilderRef, LLVMBasicBlockRef) {
         let func_ty = LLVMFunctionType(ret_ty, arg_tys.as_mut_ptr(), arg_tys.len() as u32, 0);
         let name = CString::new(name).unwrap();
-        let function = LLVMAddFunction(self.module(), name.as_ptr(), func_ty); 
+        let function = LLVMAddFunction(self.module(), name.as_ptr(), func_ty);
         // Add the default attributes to all functions.
         llvm_exts::LLVMExtAddDefaultAttrs(self.context(), function);
 
         let builder = LLVMCreateBuilderInContext(self.context());
         let block = LLVMAppendBasicBlockInContext(self.context(), function, c_str!(""));
         LLVMPositionBuilderAtEnd(builder, block);
-        LLVMSetLinkage(function, LLVMLinkage::LLVMPrivateLinkage);
+        LLVMSetLinkage(function, visibility);
         (function, builder, block)
     }
 
@@ -464,6 +506,9 @@ impl LlvmGenerator {
             dictionaries: FnvHashMap::default(),
             dict_intrinsics: dict_intrinsics,
             strings: FnvHashMap::default(),
+            eq_fns: FnvHashMap::default(),
+            opaque_eq_fns: FnvHashMap::default(),
+            hash_fns: FnvHashMap::default(),
             intrinsics: intrinsics,
         };
 
@@ -626,14 +671,14 @@ impl LlvmGenerator {
         // function parameters are always enumerated alphabetically sorted by symbol name.
         for (symbol, ty) in context.sir_function.params.iter() {
             let name = CString::new(symbol.to_string()).unwrap();
-            let value = LLVMBuildAlloca(context.builder, self.llvm_type(ty)?, name.as_ptr()); 
+            let value = LLVMBuildAlloca(context.builder, self.llvm_type(ty)?, name.as_ptr());
             context.symbols.insert(symbol.clone(), value);
         }
 
         // alloca the local variables.
         for (symbol, ty) in context.sir_function.locals.iter() {
             let name = CString::new(symbol.to_string()).unwrap();
-            let value = LLVMBuildAlloca(context.builder, self.llvm_type(ty)?, name.as_ptr()); 
+            let value = LLVMBuildAlloca(context.builder, self.llvm_type(ty)?, name.as_ptr());
             context.symbols.insert(symbol.clone(), value);
         }
         Ok(())
@@ -915,7 +960,7 @@ impl LlvmGenerator {
                 }
             }
             Sort { .. } => {
-                unimplemented!() 
+                unimplemented!()
             }
             ToVec(ref child) => {
                 let output_pointer = context.get_value(output)?;
@@ -1053,10 +1098,11 @@ impl LlvmGenerator {
                 if !self.dictionaries.contains_key(ty) {
                     let key_ty = self.llvm_type(key)?;
                     let value_ty = self.llvm_type(value)?;
+                    let key_comparator = self.gen_eq_fn(key)?;
                     let dict = dict::Dict::define("dict",
                                                     key_ty,
                                                     value_ty,
-                                                    self.i64(0), // TODO(shoumik) REPLACE THIS WITH KEY COMPARATOR!!!
+                                                    key_comparator,
                                                     self.context,
                                                     self.module);
                     self.dictionaries.insert(ty.clone(), dict);
@@ -1098,6 +1144,121 @@ impl LlvmGenerator {
             Function(_, _) | Unknown => unreachable!(),
         };
         Ok(result)
+    }
+
+    /// Generates an opaque equality function for a type.
+    unsafe fn gen_opaque_eq_fn(&mut self, ty: &Type) -> WeldResult<LLVMValueRef> {
+        use self::llvm_exts::*;
+        use self::llvm_exts::LLVMExtAttribute::*;
+        let result = self.opaque_eq_fns.get(ty).cloned();
+        if let Some(result) = result {
+            Ok(result)
+        } else {
+            let llvm_ty = self.llvm_type(ty)?;
+            let mut arg_tys = [self.void_pointer_type(), self.void_pointer_type()];
+            let ret_ty = self.i32_type();
+
+            let c_prefix = LLVMPrintTypeToString(llvm_ty);
+            let prefix = CStr::from_ptr(c_prefix);
+            let prefix = prefix.to_str().unwrap();
+            let name = format!("{}.opaque_eq", prefix);
+
+            // Free the allocated string.
+            LLVMDisposeMessage(c_prefix);
+
+            let (function, builder, _) = self.define_function_with_visability(ret_ty,
+                                                                              &mut arg_tys,
+                                                                              LLVMLinkage::LLVMExternalLinkage,
+                                                                              name);
+
+            LLVMExtAddAttrsOnFunction(self.context, function, &[InlineHint]);
+            LLVMExtAddAttrsOnParameter(self.context, function, &[ReadOnly, NoAlias, NonNull, NoCapture], 0);
+            LLVMExtAddAttrsOnParameter(self.context, function, &[ReadOnly, NoAlias, NonNull, NoCapture], 1);
+
+            let left = LLVMGetParam(function, 0);
+            let right = LLVMGetParam(function, 1);
+            let left = LLVMBuildBitCast(builder, left, LLVMPointerType(llvm_ty, 0), c_str!(""));
+            let right = LLVMBuildBitCast(builder, right, LLVMPointerType(llvm_ty, 0), c_str!(""));
+
+            let func = self.gen_eq_fn(ty)?;
+            let mut args = [left, right];
+            let result = LLVMBuildCall(builder, func, args.as_mut_ptr(), args.len() as u32, c_str!(""));
+            let result = LLVMBuildZExt(builder, result, self.i32_type(), c_str!(""));
+            LLVMBuildRet(builder, result);
+            LLVMDisposeBuilder(builder);
+
+            self.opaque_eq_fns.insert(ty.clone(), function);
+            Ok(function)
+        }
+    }
+
+    /// Generates an equality function for a type.
+    ///
+    /// The equality functions are over pointers of the type, e.g., an equality function for `i32`
+    /// has the type signature `i1 (i32*, i32*)`.
+    unsafe fn gen_eq_fn(&mut self, ty: &Type) -> WeldResult<LLVMValueRef> {
+        use ast::Type::*;
+        use self::llvm_exts::*;
+        use self::llvm_exts::LLVMExtAttribute::*;
+        let result = self.eq_fns.get(ty).cloned();
+        if let Some(result) = result {
+            Ok(result)
+        } else {
+            let llvm_ty = self.llvm_type(ty)?;
+            // XXX Do we need the run handle?
+            let mut arg_tys = [LLVMPointerType(llvm_ty, 0), LLVMPointerType(llvm_ty, 0)];
+            let ret_ty = self.bool_type();
+
+            let c_prefix = LLVMPrintTypeToString(llvm_ty);
+            let prefix = CStr::from_ptr(c_prefix);
+            let prefix = prefix.to_str().unwrap();
+            let name = format!("{}.eq", prefix);
+            // Free the allocated string.
+            LLVMDisposeMessage(c_prefix);
+
+            let (function, builder, _) = self.define_function(ret_ty, &mut arg_tys, name);
+
+            LLVMExtAddAttrsOnFunction(self.context, function, &[InlineHint]);
+            LLVMExtAddAttrsOnParameter(self.context, function, &[ReadOnly, NoAlias, NonNull, NoCapture], 0);
+            LLVMExtAddAttrsOnParameter(self.context, function, &[ReadOnly, NoAlias, NonNull, NoCapture], 1);
+
+            let left = LLVMGetParam(function, 0);
+            let right = LLVMGetParam(function, 1);
+
+            let result = match *ty {
+                Builder(_, _) => unreachable!(),
+                Dict(_, _) => unimplemented!(),
+                Scalar(_) | Simd(_) => {
+                    use ast::BinOpKind::Equal;
+                    use codegen::llvm2::numeric::gen_binop;
+                    let left = self.load(builder, left)?;
+                    let right = self.load(builder, right)?;
+                    gen_binop(builder, Equal, left, right, ty)?
+                }
+                Struct(ref elems) => {
+                    let mut result = self.bool(true);
+                    for (i, elem) in elems.iter().enumerate() {
+                        let func = self.gen_eq_fn(elem)?;
+                        let field_left = LLVMBuildStructGEP(builder, left, i as u32, c_str!(""));
+                        let field_right = LLVMBuildStructGEP(builder, right, i as u32, c_str!(""));
+                        let mut args = [field_left, field_right];
+                        let field_result = LLVMBuildCall(builder, func, args.as_mut_ptr(), args.len() as u32, c_str!(""));
+                        result = LLVMBuildAnd(builder, result, field_result, c_str!(""));
+                    }
+                    result
+                }
+                Vector(_) => {
+                    unimplemented!()
+                }
+                Function(_,_) | Unknown => unreachable!()
+            };
+
+            LLVMBuildRet(builder, result);
+            LLVMDisposeBuilder(builder);
+
+            self.eq_fns.insert(ty.clone(), function);
+            Ok(function)
+        }
     }
 }
 

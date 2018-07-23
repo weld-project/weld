@@ -18,7 +18,7 @@ use sir::*;
 use self::llvm_sys::prelude::*;
 use self::llvm_sys::core::*;
 
-use super::{LlvmGenerator, CodeGenExt, FunctionContext};
+use super::{LlvmGenerator, HasPointer, CodeGenExt, FunctionContext};
 
 lazy_static! {
     /// The serialized type, which is a vec[i8].
@@ -29,26 +29,6 @@ lazy_static! {
 pub trait SerDeGen {
     unsafe fn gen_serialize(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()>;
     unsafe fn gen_deserialize(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()>;
-}
-
-/// Specifies whether a type contains a pointer.
-trait HasPointer {
-    fn has_pointer(&self) -> bool;
-}
-
-impl HasPointer for Type {
-    fn has_pointer(&self) -> bool {
-        use ast::Type::*;
-        match *self {
-            Scalar(_) => false,
-            Simd(_) => false,
-            Vector(_) => true,
-            Dict(_, _) => true,
-            Builder(_, _) => true,
-            Struct(ref tys) => tys.iter().any(|ref t| t.has_pointer()),
-            Function(_, _) | Unknown => unreachable!(),
-        }
-    }
 }
 
 impl SerDeGen for LlvmGenerator {

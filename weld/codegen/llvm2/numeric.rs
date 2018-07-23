@@ -283,7 +283,7 @@ impl NumericExpressionGen for LlvmGenerator {
 }
 
 /// Workhorse for generating casts.
-unsafe fn gen_cast(builder: LLVMBuilderRef,
+pub unsafe fn gen_cast(builder: LLVMBuilderRef,
                    value: LLVMValueRef,
                    from: &Type,
                    to: &Type,
