@@ -181,7 +181,13 @@ pub struct LlvmGenerator {
     ///
     /// The key maps the dictionary's `Dict` type to the type reference and methods on it.
     dictionaries: FnvHashMap<Type, dict::Dict>,
-    /// Intrinsics defined in the module.
+    /// Dictionary intrinsics.
+    ///
+    /// These are functions that call out to an external dictionary implementation.
+    dict_intrinsics: dict::Intrinsics,
+    /// Common intrinsics defined in the module.
+    ///
+    /// An intrinsic is any function defined outside of module (i.e., is not code generated).
     intrinsics: intrinsic::Intrinsics,
     /// Generated string literal values.
     strings: FnvHashMap<CString, LLVMValueRef>,
@@ -441,6 +447,7 @@ impl LlvmGenerator {
         let module = LLVMModuleCreateWithNameInContext(c_str!("main"), context);
         // Adds the default intrinsic definitions.
         let intrinsics = intrinsic::Intrinsics::defaults(context, module);
+        let dict_intrinsics = dict::Intrinsics::new(context, module);
 
         let mut gen = LlvmGenerator {
             conf: conf,
@@ -451,6 +458,7 @@ impl LlvmGenerator {
             mergers: FnvHashMap::default(),
             appenders: FnvHashMap::default(),
             dictionaries: FnvHashMap::default(),
+            dict_intrinsics: dict_intrinsics,
             strings: FnvHashMap::default(),
             intrinsics: intrinsics,
         };
@@ -470,7 +478,6 @@ impl LlvmGenerator {
 
         // Generates a callable entry function in the module.
         gen.gen_entry(program)?;
-
         Ok(gen)
     }
 
@@ -510,6 +517,8 @@ impl LlvmGenerator {
         // Add the default attributes to all functions.
         llvm_exts::LLVMExtAddDefaultAttrs(self.context(), function);
 
+        // This function is the global entry point into the program, so we must give it externally
+        // visible linkage.
         LLVMSetLinkage(function, LLVMLinkage::LLVMExternalLinkage);
 
         let builder = LLVMCreateBuilderInContext(self.context);
@@ -767,7 +776,8 @@ impl LlvmGenerator {
                 let child_type = context.sir_function.symbol_type(child)?;
                 let pointer = {
                     let mut methods = self.dictionaries.get_mut(child_type).unwrap();
-                    methods.gen_key_exists(context.builder, child_value, key_value)?
+                    unimplemented!()
+                    // methods.gen_key_exists(context.builder, child_value, key_value, hash)?
                 };
                 let result = self.load(context.builder, pointer)?;
                 LLVMBuildStore(context.builder, result, output_pointer);
@@ -810,7 +820,8 @@ impl LlvmGenerator {
                 } else if let Dict(_, _) = *child_type {
                     let pointer = {
                         let mut methods = self.dictionaries.get_mut(child_type).unwrap();
-                        methods.gen_get(context.builder, child_value, index_value)?
+                        // methods.gen_get(context.builder, child_value, index_value, hash)?
+                        unimplemented!()
                     };
                     let result = self.load(context.builder, pointer)?;
                     LLVMBuildStore(context.builder, result, output_pointer);

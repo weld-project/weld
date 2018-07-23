@@ -414,7 +414,7 @@ impl DeHelper for LlvmGenerator {
                            output: LLVMValueRef,
                            ty: &Type,
                            buffer: LLVMValueRef) -> WeldResult<()> {
-        use codegen::llvm2::vector::{POINTER_INDEX, VectorExt};
+        use codegen::llvm2::vector::VectorExt;
         use ast::Type::*;
         match *ty {
             Scalar(_) => {
@@ -431,7 +431,8 @@ impl DeHelper for LlvmGenerator {
                 let size_type = self.i64_type();
                 let size = self.gen_get_value(ctx, size_type, buffer, position)?;
                 let vector = self.gen_new(ctx, ty, size)?;
-                let data_pointer = LLVMBuildExtractValue(ctx.builder, vector, POINTER_INDEX, c_str!(""));
+                let zero = self.i64(0);
+                let data_pointer = self.gen_at(ctx, ty, vector, zero)?;
                 self.gen_get_values(ctx, data_pointer, size, buffer, position)?;
                 LLVMBuildStore(ctx.builder, vector, output);
                 Ok(())

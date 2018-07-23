@@ -35,7 +35,8 @@ pub const SIZE_INDEX: u32 = 1;
 
 /// Extensions for generating methods on vectors.
 ///
-/// This provides convinience wrappers for calling methods on vectors.
+/// This provides convinience wrappers for calling methods on vectors. The `vector_type` is the
+/// vector type (not the element type).
 pub trait VectorExt {
     unsafe fn gen_new(&mut self,
                ctx: &mut FunctionContext,

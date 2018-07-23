@@ -1,4 +1,6 @@
 //! Defines intrinsics in the LLVM IR.
+//!
+//! For documentation on the default intrinsics, see `weld::runtime::strt`.
 
 extern crate libc;
 extern crate llvm_sys;
@@ -234,7 +236,6 @@ impl Intrinsics {
 
 /// Private methods.
 impl Intrinsics {
-
     /// Populate the default intrinsics.
     ///
     /// By default, the code generator adds the Weld Run API (functions prefixed with `weld_run`)
