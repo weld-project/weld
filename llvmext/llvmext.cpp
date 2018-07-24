@@ -15,19 +15,26 @@
 #include <llvm/ADT/StringMap.h>
 #include <llvm/ADT/Triple.h>
 #include <llvm/Analysis/TargetLibraryInfo.h>
+#include <llvm/Target/TargetMachine.h>
+#include <llvm/IR/LegacyPassManager.h>
+#include "llvm/CodeGen/TargetPassConfig.h"
+
 
 #include <llvm-c/Target.h>
+#include <llvm-c/TargetMachine.h>
+#include <llvm-c/Types.h>
 
 #define BUFSZ 4096
 
 using namespace std;
+using namespace llvm;
 
 /**
  * Returns a target triple for the JIT. 
  */
 extern "C" const char *LLVMExtGetProcessTriple() {
   static char buf[BUFSZ];
-  string triple = llvm::sys::getProcessTriple();
+  string triple = sys::getProcessTriple();
   strncpy(buf, triple.c_str(), BUFSZ);
   return buf;
 }
@@ -38,7 +45,7 @@ extern "C" const char *LLVMExtGetProcessTriple() {
  */
 extern "C" const char *LLVMExtGetHostCPUName() {
   static char buf[BUFSZ];
-  string host_name = llvm::sys::getHostCPUName();
+  string host_name = sys::getHostCPUName();
   strncpy(buf, host_name.c_str(), BUFSZ);
   return buf;
 }
@@ -50,8 +57,8 @@ extern "C" const char *LLVMExtGetHostCPUName() {
  */
 extern "C" const char *LLVMExtGetHostCPUFeatures() {
   static char buf[BUFSZ];
-  llvm::StringMap<bool> features;
-  llvm::sys::getHostCPUFeatures(features);
+  StringMap<bool> features;
+  sys::getHostCPUFeatures(features);
   vector<string> features_present;
   vector<string> features_missing;
   for (auto it = features.begin(); it != features.end(); it++) {
@@ -79,10 +86,19 @@ extern "C" const char *LLVMExtGetHostCPUFeatures() {
   return buf;
 }
 
+
+extern "C" void LLVMExtAddTargetPassConfig(LLVMTargetMachineRef target, LLVMPassManagerRef manager) {
+  legacy::PassManagerBase *Passes = reinterpret_cast<legacy::PassManagerBase *>(manager);
+  TargetMachine *TM = reinterpret_cast<TargetMachine *>(target);
+  auto &LTM = static_cast<LLVMTargetMachine &>(*TM);
+  Pass *TPC = LTM.createPassConfig(static_cast<PassManagerBase &>(*Passes));
+  Passes->add(TPC);
+}
+
 extern "C" LLVMTargetLibraryInfoRef LLVMExtTargetLibraryInfo() {
-  llvm::Triple triple = llvm::Triple(LLVMExtGetProcessTriple());
+  Triple triple = Triple(LLVMExtGetProcessTriple());
   // TODO this currently leaks!!
-  llvm::TargetLibraryInfoImpl *P = new llvm::TargetLibraryInfoImpl(triple);
-  llvm::TargetLibraryInfoImpl *X = const_cast<llvm::TargetLibraryInfoImpl*>(P);
+  TargetLibraryInfoImpl *P = new TargetLibraryInfoImpl(triple);
+  TargetLibraryInfoImpl *X = const_cast<TargetLibraryInfoImpl*>(P);
   return reinterpret_cast<LLVMTargetLibraryInfoRef>(X);
 }

@@ -233,14 +233,27 @@ unsafe fn optimize_module(module: LLVMModuleRef, level: u32) -> WeldResult<()> {
 
     // Target specific analyses so LLVM can query the backend.
     let target_machine = target_machine()?;
+
+    let target = LLVMGetTargetMachineTarget(target_machine);
+
+    // Log some information about the machine...
+    // TODO this leaks stuff
+    let cpu = CStr::from_ptr(LLVMGetTargetMachineCPU(target_machine)).to_str().unwrap();
+    let description = CStr::from_ptr(LLVMGetTargetDescription(target)).to_str().unwrap();
+    let features = CStr::from_ptr(LLVMGetTargetMachineFeatureString(target_machine)).to_str().unwrap();
+
+    debug!("CPU: {}, Description: {} Features: {}", cpu, description, features);
+
     LLVMAddTargetLibraryInfo(LLVMExtTargetLibraryInfo(), passes);
     LLVMAddAnalysisPasses(target_machine, passes);
+    LLVMExtAddTargetPassConfig(target_machine, passes);
 
     LLVMAddAnalysisPasses(target_machine, fpasses);
+    LLVMExtAddTargetPassConfig(target_machine, fpasses);
 
     // LTO passes
     let builder = LLVMPassManagerBuilderCreate();
-    LLVMPassManagerBuilderSetOptLevel(builder, level);
+    LLVMPassManagerBuilderSetOptLevel(builder, 3);
     LLVMPassManagerBuilderSetSizeLevel(builder, 0);
     LLVMPassManagerBuilderSetDisableUnrollLoops(builder, 0);
     LLVMPassManagerBuilderPopulateLTOPassManager(builder, passes, 1, 1);
@@ -248,12 +261,11 @@ unsafe fn optimize_module(module: LLVMModuleRef, level: u32) -> WeldResult<()> {
 
     // Function and Module passes
     let builder = LLVMPassManagerBuilderCreate();
-    LLVMPassManagerBuilderSetOptLevel(builder, level);
+    LLVMPassManagerBuilderSetOptLevel(builder, 3);
     LLVMPassManagerBuilderSetSizeLevel(builder, 0);
     LLVMPassManagerBuilderSetDisableUnrollLoops(builder, 0);
 
     LLVMPassManagerBuilderPopulateModulePassManager(builder, passes);
-    LLVMAddLoopVectorizePass(passes);
 
     LLVMPassManagerBuilderPopulateFunctionPassManager(builder, fpasses);
 

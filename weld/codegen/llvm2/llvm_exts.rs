@@ -19,6 +19,7 @@ use self::llvm_sys::core::*;
 use self::llvm_sys::{LLVMAttributeReturnIndex, LLVMAttributeFunctionIndex};
 
 use self::llvm_sys::target::LLVMTargetLibraryInfoRef;
+use self::llvm_sys::target_machine::LLVMTargetMachineRef;
 
 // Preload the target-specific features.
 lazy_static! {
@@ -179,4 +180,7 @@ extern "C" {
     pub fn LLVMExtGetHostCPUFeatures() -> *const c_char;
     #[no_mangle]
     pub fn LLVMExtTargetLibraryInfo() -> LLVMTargetLibraryInfoRef;
+    #[no_mangle]
+    pub fn LLVMExtAddTargetPassConfig(target: LLVMTargetMachineRef, manager: LLVMPassManagerRef);
+
 }
