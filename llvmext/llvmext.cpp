@@ -13,6 +13,10 @@
 
 #include <llvm/Support/Host.h>
 #include <llvm/ADT/StringMap.h>
+#include <llvm/ADT/Triple.h>
+#include <llvm/Analysis/TargetLibraryInfo.h>
+
+#include <llvm-c/Target.h>
 
 #define BUFSZ 4096
 
@@ -73,4 +77,12 @@ extern "C" const char *LLVMExtGetHostCPUFeatures() {
   result.pop_back();
   strncpy(buf, result.c_str(), BUFSZ);
   return buf;
+}
+
+extern "C" LLVMTargetLibraryInfoRef LLVMExtTargetLibraryInfo() {
+  llvm::Triple triple = llvm::Triple(LLVMExtGetProcessTriple());
+  // TODO this currently leaks!!
+  llvm::TargetLibraryInfoImpl *P = new llvm::TargetLibraryInfoImpl(triple);
+  llvm::TargetLibraryInfoImpl *X = const_cast<llvm::TargetLibraryInfoImpl*>(P);
+  return reinterpret_cast<LLVMTargetLibraryInfoRef>(X);
 }

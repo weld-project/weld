@@ -18,17 +18,19 @@ use self::llvm_sys::prelude::*;
 use self::llvm_sys::core::*;
 use self::llvm_sys::{LLVMAttributeReturnIndex, LLVMAttributeFunctionIndex};
 
+use self::llvm_sys::target::LLVMTargetLibraryInfoRef;
+
 // Preload the target-specific features.
 lazy_static! {
-    static ref PROCESS_TRIPLE: CString = unsafe {
+    pub static ref PROCESS_TRIPLE: CString = unsafe {
         let c_str = LLVMExtGetProcessTriple();
         CStr::from_ptr(c_str).to_owned()
     };
-    static ref HOST_CPU_NAME: CString = unsafe {
+    pub static ref HOST_CPU_NAME: CString = unsafe {
         let c_str = LLVMExtGetHostCPUName();
         CStr::from_ptr(c_str).to_owned()
     };
-    static ref HOST_CPU_FEATURES: CString = unsafe {
+    pub static ref HOST_CPU_FEATURES: CString = unsafe {
         let c_str = LLVMExtGetHostCPUFeatures();
         CStr::from_ptr(c_str).to_owned()
     };
@@ -175,4 +177,6 @@ extern "C" {
     pub fn LLVMExtGetHostCPUName() -> *const c_char;
     #[no_mangle]
     pub fn LLVMExtGetHostCPUFeatures() -> *const c_char;
+    #[no_mangle]
+    pub fn LLVMExtTargetLibraryInfo() -> LLVMTargetLibraryInfoRef;
 }

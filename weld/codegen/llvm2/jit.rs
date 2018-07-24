@@ -20,9 +20,12 @@ use util::stats::CompilationStats;
 use self::llvm_sys::core::*;
 use self::llvm_sys::prelude::*;
 use self::llvm_sys::execution_engine::*;
+use self::llvm_sys::target::*;
 use self::llvm_sys::target_machine::*;
 
 use codegen::Runnable;
+
+use codegen::llvm2::llvm_exts::*;
 
 static ONCE: Once = ONCE_INIT;
 static mut INITIALIZE_FAILED: bool = false;
@@ -63,6 +66,7 @@ impl CompiledModule {
                 let err = CStr::from_ptr(err as *mut c_char).to_str().unwrap();
                 return compile_err!("Machine code generation failed with error {}", err);
             }
+            LLVMDisposeMessage(err);
 
             let start = LLVMGetBufferStart(output_buf);
             let c_str = CStr::from_ptr(start as *mut c_char);
@@ -90,20 +94,20 @@ impl Drop for CompiledModule {
     }
 }
 
+pub unsafe fn init() {
+    ONCE.call_once(|| initialize());
+    if INITIALIZE_FAILED {
+        unreachable!()
+    }
+}
+
 /// Compile a constructed module in the given LLVM context.
 pub unsafe fn compile(context: LLVMContextRef,
                module: LLVMModuleRef,
                conf: &ParsedConf,
                stats: &mut CompilationStats) -> WeldResult<CompiledModule> {
 
-    ONCE.call_once(|| initialize());
-    if INITIALIZE_FAILED {
-        unreachable!()
-    }
-
-    let target_triple = get_default_target_triple();
-    debug!("Set module target {:?}", target_triple);
-    LLVMSetTarget(module, target_triple.as_ptr() as *const _);
+    init();
 
     let start = PreciseTime::now();
     verify_module(module)?;
@@ -152,15 +156,53 @@ unsafe fn initialize() {
         INITIALIZE_FAILED = true;
         return;
     }
+
+    // No version that just initializes the current one?
+    LLVM_InitializeAllTargetInfos();
     LLVMLinkInMCJIT();
+
+    use self::llvm_sys::initialization::*;
+
+    let registry = LLVMGetGlobalPassRegistry();
+    LLVMInitializeCore(registry);
+    LLVMInitializeAnalysis(registry);
+    LLVMInitializeCodeGen(registry);
+    LLVMInitializeIPA(registry);
+    LLVMInitializeIPO(registry);
+    LLVMInitializeInstrumentation(registry);
+    LLVMInitializeObjCARCOpts(registry);
+    LLVMInitializeScalarOpts(registry);
+    LLVMInitializeTarget(registry);
+    LLVMInitializeTransformUtils(registry);
+    LLVMInitializeVectorization(registry);
 }
 
-/// Get the target triple for the machine.
-unsafe fn get_default_target_triple() -> CString {
-    let target_triple_ptr = LLVMGetDefaultTargetTriple();
-    let target_triple = CStr::from_ptr(target_triple_ptr as *const _).to_owned();
-    LLVMDisposeMessage(target_triple_ptr);
-    target_triple
+unsafe fn target_machine() -> WeldResult<LLVMTargetMachineRef> {
+    let mut target = mem::uninitialized();
+    let mut err = ptr::null_mut();
+    let result = LLVMGetTargetFromTriple(PROCESS_TRIPLE.as_ptr(), &mut target, &mut err);
+    if result == 1 {
+        let err = CStr::from_ptr(err as *mut c_char).to_str().unwrap();
+        return compile_err!("Target initialization failed with error {}", err);
+    }
+    LLVMDisposeMessage(err);
+    Ok(LLVMCreateTargetMachine(target,
+                            PROCESS_TRIPLE.as_ptr(),
+                            HOST_CPU_NAME.as_ptr(),
+                            HOST_CPU_FEATURES.as_ptr(),
+                            LLVMCodeGenOptLevel::LLVMCodeGenLevelAggressive,
+                            LLVMRelocMode::LLVMRelocDefault,
+                            LLVMCodeModel::LLVMCodeModelDefault))
+}
+
+pub unsafe fn set_triple_and_layout(module: LLVMModuleRef) -> WeldResult<()> {
+    LLVMSetTarget(module, PROCESS_TRIPLE.as_ptr() as *const _);
+    debug!("Set module target {:?}", PROCESS_TRIPLE.to_str().unwrap());
+    let target_machine = target_machine()?;
+    let layout = LLVMCreateTargetDataLayout(target_machine);
+    LLVMSetModuleDataLayout(module, layout);
+    LLVMDisposeTargetMachine(target_machine);
+    Ok(())
 }
 
 /// Verify a module using LLVM's verifier.
@@ -181,18 +223,55 @@ unsafe fn verify_module(module: LLVMModuleRef) -> WeldResult<()> {
 
 /// Optimize an LLVM module using a given LLVM optimization level.
 unsafe fn optimize_module(module: LLVMModuleRef, level: u32) -> WeldResult<()> {
+    info!("Optimizing LLVM module");
     use self::llvm_sys::transforms::pass_manager_builder::*;
-    let manager = LLVMCreatePassManager();
-    assert!(!manager.is_null());
-    let builder = LLVMPassManagerBuilderCreate();
-    assert!(!builder.is_null());
+    use self::llvm_sys::transforms::vectorize::*;
+    use self::llvm_sys::transforms::ipo::*;
 
+    let passes = LLVMCreatePassManager();
+    let fpasses = LLVMCreateFunctionPassManagerForModule(module);
+
+    // Target specific analyses so LLVM can query the backend.
+    let target_machine = target_machine()?;
+    LLVMAddTargetLibraryInfo(LLVMExtTargetLibraryInfo(), passes);
+    LLVMAddAnalysisPasses(target_machine, passes);
+
+    LLVMAddAnalysisPasses(target_machine, fpasses);
+
+    // LTO passes
+    let builder = LLVMPassManagerBuilderCreate();
     LLVMPassManagerBuilderSetOptLevel(builder, level);
-    // LLVMPassManagerBuilderSetDisableUnrollLoops(builder, 0);
-    LLVMPassManagerBuilderPopulateLTOPassManager(builder, manager, 1, 1);
+    LLVMPassManagerBuilderSetSizeLevel(builder, 0);
+    LLVMPassManagerBuilderSetDisableUnrollLoops(builder, 0);
+    LLVMPassManagerBuilderPopulateLTOPassManager(builder, passes, 1, 1);
     LLVMPassManagerBuilderDispose(builder);
-    LLVMRunPassManager(manager, module);
-    LLVMDisposePassManager(manager);
+
+    // Function and Module passes
+    let builder = LLVMPassManagerBuilderCreate();
+    LLVMPassManagerBuilderSetOptLevel(builder, level);
+    LLVMPassManagerBuilderSetSizeLevel(builder, 0);
+    LLVMPassManagerBuilderSetDisableUnrollLoops(builder, 0);
+
+    LLVMPassManagerBuilderPopulateModulePassManager(builder, passes);
+    LLVMAddLoopVectorizePass(passes);
+
+    LLVMPassManagerBuilderPopulateFunctionPassManager(builder, fpasses);
+
+    LLVMPassManagerBuilderDispose(builder);
+
+    let mut func = LLVMGetFirstFunction(module);
+    while func != ptr::null_mut() {
+        LLVMRunFunctionPassManager(fpasses, func);
+        func = LLVMGetNextFunction(func);
+    }
+    LLVMFinalizeFunctionPassManager(fpasses);
+
+    LLVMRunPassManager(passes, module);
+
+    LLVMDisposePassManager(passes);
+    LLVMDisposePassManager(fpasses);
+    LLVMDisposeTargetMachine(target_machine);
+
     Ok(())
 }
 
@@ -205,6 +284,7 @@ unsafe fn create_exec_engine(module: LLVMModuleRef,
     let options_size = mem::size_of::<LLVMMCJITCompilerOptions>();
     LLVMInitializeMCJITCompilerOptions(&mut options, options_size);
     options.OptLevel = level;
+    options.CodeModel = LLVMCodeModel::LLVMCodeModelDefault;
 
     let result_code = LLVMCreateMCJITCompilerForModule(&mut engine,
                                                        module,

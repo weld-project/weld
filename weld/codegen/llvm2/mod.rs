@@ -497,6 +497,9 @@ impl LlvmGenerator {
         let intrinsics = intrinsic::Intrinsics::defaults(context, module);
         let dict_intrinsics = dict::Intrinsics::new(context, module);
 
+        jit::init();
+        jit::set_triple_and_layout(module)?;
+
         let mut gen = LlvmGenerator {
             conf: conf,
             context: context,
