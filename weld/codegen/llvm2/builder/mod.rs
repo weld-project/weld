@@ -26,6 +26,9 @@ use self::llvm_sys::core::*;
 
 use super::{CodeGenExt, FunctionContext, LlvmGenerator};
 
+use super::hash;
+use super::numeric;
+
 mod for_loop;
 
 pub mod appender;
@@ -172,6 +175,16 @@ impl BuilderExpressionGen for LlvmGenerator {
                 LLVMBuildStore(ctx.builder, merger, output_pointer);
                 Ok(())
             }
+            DictMerger(ref key, ref val, _) => {
+                let ref dict_type = Dict(key.clone(), val.clone());
+                let default_capacity = self.i64(0);
+                let dictmerger = {
+                    let mut methods = self.dictionaries.get_mut(dict_type).unwrap();
+                    methods.gen_new(ctx.builder, &self.dict_intrinsics, ctx.get_run(), default_capacity)?
+                };
+                LLVMBuildStore(ctx.builder, dictmerger, output_pointer);
+                Ok(())
+            }
             _ => {
                 unimplemented!()
             }
@@ -181,16 +194,68 @@ impl BuilderExpressionGen for LlvmGenerator {
     unsafe fn gen_merge(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()> {
         let m = MergeStatement::extract(statement, ctx.sir_function)?;
         let builder_pointer = ctx.get_value(m.builder)?;
-        let merge_value = self.load(ctx.builder, ctx.get_value(m.value)?)?;
         match *m.kind {
             Appender(_) => {
+                let merge_value = self.load(ctx.builder, ctx.get_value(m.value)?)?;
                 let mut methods = self.appenders.get_mut(m.kind).unwrap();
                 let _ = methods.gen_merge(ctx.builder, &mut self.intrinsics, ctx.get_run(), builder_pointer, merge_value)?;
                 Ok(())
             }
             Merger(_, _) => {
+                let merge_value = self.load(ctx.builder, ctx.get_value(m.value)?)?;
                 let mut methods = self.mergers.get_mut(m.kind).unwrap();
                 let _ = methods.gen_merge(ctx.builder, builder_pointer, merge_value)?;
+                Ok(())
+            }
+            DictMerger(ref key, ref val, ref binop) => {
+                use ast::Type::Scalar;
+                use self::hash::GenHash;
+
+                // Build the default value that we upsert if the key is not present in the
+                // dictionary yet.
+                let default = if let &Scalar(ref kind) = val.as_ref() {
+                    self.binop_identity(*binop, *kind)?
+                } else {
+                    unreachable!()
+                };
+
+                // The type of the merge value is {key, value} so use GEP to extract
+                // the key and the key pointer.
+                let merge_type = ctx.sir_function.symbol_type(m.value)?;
+                let (key_pointer, value_pointer) = match *merge_type {
+                    // We need this to make sure LLVM doesn't freak out when we use GEP on a
+                    // non-struct type or access something out-of-bounds.
+                    Struct(ref elems) if elems.len() == 2 => {
+                        let merge_value = ctx.get_value(m.value)?;
+                        let key_pointer = LLVMBuildStructGEP(ctx.builder, merge_value, 0, c_str!(""));
+                        let val_pointer = LLVMBuildStructGEP(ctx.builder, merge_value, 1, c_str!(""));
+                        (key_pointer, val_pointer)
+                    }
+                    _ => unreachable!()
+                };
+
+                let hash_fn = self.gen_hash_fn(key)?;
+                let mut args = [self.load(ctx.builder, key_pointer)?];
+                let hash = LLVMBuildCall(ctx.builder, hash_fn, args.as_mut_ptr(), args.len() as u32, c_str!(""));
+
+                let builder_loaded = self.load(ctx.builder, builder_pointer)?;
+
+                let ref dict_type = Dict(key.clone(), val.clone());
+                let slot_value_pointer = {
+                    let mut methods = self.dictionaries.get_mut(dict_type).unwrap();
+                    methods.gen_upsert(ctx.builder,
+                                       &self.dict_intrinsics,
+                                       ctx.get_run(),
+                                       builder_loaded,
+                                       key_pointer,
+                                       hash,
+                                       default)?
+                };
+
+                let slot_value = self.load(ctx.builder, slot_value_pointer)?;
+                let merge_value = self.load(ctx.builder, value_pointer)?;
+                let merged = numeric::gen_binop(ctx.builder, *binop, merge_value, slot_value, val)?;
+                LLVMBuildStore(ctx.builder, merged, slot_value_pointer);
                 Ok(())
             }
             _ => unimplemented!()
@@ -218,6 +283,13 @@ impl BuilderExpressionGen for LlvmGenerator {
                     methods.gen_result(ctx.builder, builder_pointer)?
                 };
                 LLVMBuildStore(ctx.builder, result, output_pointer);
+                Ok(())
+            }
+            DictMerger(_, _, _) => {
+                // A dictmerger just updates a dictionary in-place, so return the produced
+                // dictionary.
+                let builder_loaded = self.load(ctx.builder, builder_pointer)?;
+                LLVMBuildStore(ctx.builder, builder_loaded, output_pointer);
                 Ok(())
             }
             _ => {
@@ -264,6 +336,10 @@ impl BuilderExpressionGen for LlvmGenerator {
                         self.appenders.insert(kind.clone(), appender);
                     }
                     Ok(self.appenders.get(kind).unwrap().appender_ty)
+                }
+                DictMerger(ref key, ref val, _) => {
+                    let ref dict_type = Dict(key.clone(), val.clone());
+                    self.llvm_type(dict_type)
                 }
                 _ => unimplemented!()
             }

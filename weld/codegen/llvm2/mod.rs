@@ -821,14 +821,28 @@ impl LlvmGenerator {
                 Ok(())
             }
             KeyExists { ref child, ref key } => {
+                use self::hash::GenHash;
                 let output_pointer = context.get_value(output)?;
                 let child_value = self.load(context.builder, context.get_value(child)?)?;
                 let key_value = self.load(context.builder, context.get_value(key)?)?;
                 let child_type = context.sir_function.symbol_type(child)?;
+
+                let hash = if let Dict(ref key, ref value) = *child_type {
+                    let hash_fn = self.gen_hash_fn(key)?;
+                    let mut args = [key_value];
+                    LLVMBuildCall(context.builder, hash_fn, args.as_mut_ptr(), args.len() as u32, c_str!(""))
+                } else {
+                    unreachable!()
+                };
+
                 let pointer = {
                     let mut methods = self.dictionaries.get_mut(child_type).unwrap();
-                    unimplemented!()
-                    // methods.gen_key_exists(context.builder, child_value, key_value, hash)?
+                    methods.gen_key_exists(context.builder,
+                                           &self.dict_intrinsics,
+                                           context.get_run(),
+                                           child_value,
+                                           context.get_value(key)?,
+                                           hash)?
                 };
                 let result = self.load(context.builder, pointer)?;
                 LLVMBuildStore(context.builder, result, output_pointer);

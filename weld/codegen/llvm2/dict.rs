@@ -425,6 +425,7 @@ impl Dict {
     pub unsafe fn gen_upsert(&mut self,
                           builder: LLVMBuilderRef,
                           intrinsics: &Intrinsics,
+                          run: LLVMValueRef,
                           dict: LLVMValueRef,
                           key: LLVMValueRef,
                           hash: LLVMValueRef,
@@ -434,12 +435,12 @@ impl Dict {
                 self.dict_ty,
                 LLVMPointerType(self.key_ty, 0),
                 self.hash_type(),
-                LLVMPointerType(self.val_ty, 0),
+                self.val_ty,
                 self.run_handle_type()
             ];
             let ret_ty = LLVMPointerType(self.val_ty, 0);
 
-            let name = format!("{}.get", self.name);
+            let name = format!("{}.upsert", self.name);
             let (function, builder, _) = self.define_function(ret_ty, &mut arg_tys, name);
 
             let dict = LLVMGetParam(function, 0);
@@ -448,19 +449,22 @@ impl Dict {
             let val = LLVMGetParam(function, 3);
             let run = LLVMGetParam(function, 4);
 
+            let val_pointer = LLVMBuildAlloca(builder, self.val_ty, c_str!(""));
+            LLVMBuildStore(builder, val, val_pointer);
+
             let dict = LLVMBuildExtractValue(builder, dict, 0, c_str!(""));
             let key = LLVMBuildBitCast(builder, key, self.void_pointer_type(), c_str!(""));
-            let val = LLVMBuildBitCast(builder, val, self.void_pointer_type(), c_str!(""));
+            let val = LLVMBuildBitCast(builder, val_pointer, self.void_pointer_type(), c_str!(""));
             let slot_pointer = intrinsics.call_upsert(builder, run, dict, key, hash, val, None);
             let slot_pointer = LLVMBuildBitCast(builder, slot_pointer, self.slot_ty, c_str!(""));
             let result = LLVMBuildStructGEP(builder, slot_pointer, VALUE_INDEX, c_str!(""));
 
             LLVMBuildRet(builder, result);
 
-            self.get = Some(function);
+            self.upsert = Some(function);
             LLVMDisposeBuilder(builder);
         }
-        let mut args = [dict, key, hash, val];
+        let mut args = [dict, key, hash, val, run];
         return Ok(LLVMBuildCall(builder, self.upsert.unwrap(), args.as_mut_ptr(), args.len() as u32, c_str!("")))
     }
 
