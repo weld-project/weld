@@ -137,8 +137,9 @@ impl Intrinsics {
     }
 
     pub unsafe fn key_comparator_type(&self) -> LLVMTypeRef {
-        let mut arg_tys = [self.i8_type(), self.i8_type()];
-        LLVMFunctionType(self.i32_type(), arg_tys.as_mut_ptr(), arg_tys.len() as u32, 0)
+        let mut arg_tys = [self.void_pointer_type(), self.void_pointer_type()];
+        let fn_type = LLVMFunctionType(self.i32_type(), arg_tys.as_mut_ptr(), arg_tys.len() as u32, 0);
+        LLVMPointerType(fn_type, 0)
     }
 
     /// Generate a call to the `new` intrinsic.
@@ -339,11 +340,11 @@ impl Dict {
                                 context: LLVMContextRef,
                                 module: LLVMModuleRef) -> Dict {
         let c_name = CString::new(name.as_ref()).unwrap();
-        // This is not really neccessary, but from a readability/debuggability standpoint, it makes
-        // things nicer since it gives the dictionary type a name.
         let mut layout = [LLVMPointerType(LLVMInt8TypeInContext(context), 0)];
         let dict_ty = LLVMStructCreateNamed(context, c_name.as_ptr());
         LLVMStructSetBody(dict_ty, layout.as_mut_ptr(), layout.len() as u32, 0);
+
+        let name = c_name.into_string().unwrap();
 
         // Create the entry type.
         let mut layout = [
@@ -355,14 +356,14 @@ impl Dict {
             val_ty
         ];
 
-        let mut name = c_name.into_string().unwrap();
-        name.push_str(".entry");
-        let c_name = CString::new(name).unwrap();
-        let entry_ty = LLVMStructCreateNamed(context, c_name.as_ptr());
+
+        let entry_name = format!("{}.entry", &name);
+        let c_entry_name = CString::new(entry_name).unwrap();
+        let entry_ty = LLVMStructCreateNamed(context, c_entry_name.as_ptr());
         LLVMStructSetBody(entry_ty, layout.as_mut_ptr(), layout.len() as u32, 0);
 
         Dict {
-            name: c_name.into_string().unwrap(),
+            name: name,
             dict_ty: dict_ty,
             key_ty: key_ty,
             val_ty: val_ty,
@@ -385,6 +386,7 @@ impl Dict {
         self.i32_type()
     }
 
+    /// Generates the `new` method.
     pub unsafe fn gen_new(&mut self,
                           builder: LLVMBuilderRef,
                           intrinsics: &Intrinsics,
@@ -415,6 +417,11 @@ impl Dict {
         return Ok(LLVMBuildCall(builder, self.new.unwrap(), args.as_mut_ptr(), args.len() as u32, c_str!("")))
     }
 
+    /// Generates the `upsert` method.
+    ///
+    /// This method looks up the key in the dictionary. If a value is found, a pointer to the value
+    /// is returned. Otherwise, `val` is inserted into the dictionary, and a pointer to the newly
+    /// created slot value is returned.
     pub unsafe fn gen_upsert(&mut self,
                           builder: LLVMBuilderRef,
                           intrinsics: &Intrinsics,
@@ -457,6 +464,9 @@ impl Dict {
         return Ok(LLVMBuildCall(builder, self.upsert.unwrap(), args.as_mut_ptr(), args.len() as u32, c_str!("")))
     }
 
+    /// Generates the `get` method, which returns a loaded value.
+    ///
+    /// This function can raise an error if the key is not found.
     pub unsafe fn gen_get(&mut self,
                           builder: LLVMBuilderRef,
                           intrinsics: &Intrinsics,
@@ -497,6 +507,7 @@ impl Dict {
         return Ok(LLVMBuildCall(builder, self.get.unwrap(), args.as_mut_ptr(), args.len() as u32, c_str!("")))
     }
 
+    /// Generates the `key_exists` method.
     pub unsafe fn gen_key_exists(&mut self,
                           builder: LLVMBuilderRef,
                           intrinsics: &Intrinsics,
@@ -538,6 +549,9 @@ impl Dict {
         return Ok(LLVMBuildCall(builder, self.key_exists.unwrap(), args.as_mut_ptr(), args.len() as u32, c_str!("")))
     }
 
+    /// Generates the `size` method.
+    ///
+    /// This method returns the number of keys in a dictionary.
     pub unsafe fn gen_size(&mut self,
                           builder: LLVMBuilderRef,
                           intrinsics: &Intrinsics,
@@ -566,6 +580,9 @@ impl Dict {
 
     }
 
+    /// Returns the `to_vec` method.
+    ///
+    /// This method converts a dictionary into a vector of key/value pairs.
     pub unsafe fn gen_to_vec(&mut self,
                           builder: LLVMBuilderRef,
                           intrinsics: &Intrinsics,
@@ -596,6 +613,7 @@ impl Dict {
         return Ok(LLVMBuildCall(builder, self.to_vec.unwrap(), args.as_mut_ptr(), args.len() as u32, c_str!("")))
     }
 
+    /// Generates the `free` method to free a dictionary.
     pub unsafe fn gen_free(&mut self,
                           builder: LLVMBuilderRef,
                           intrinsics: &Intrinsics,
