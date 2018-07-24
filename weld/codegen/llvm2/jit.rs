@@ -106,7 +106,6 @@ pub unsafe fn compile(context: LLVMContextRef,
                module: LLVMModuleRef,
                conf: &ParsedConf,
                stats: &mut CompilationStats) -> WeldResult<CompiledModule> {
-
     init();
 
     let start = PreciseTime::now();
@@ -192,7 +191,7 @@ unsafe fn target_machine() -> WeldResult<LLVMTargetMachineRef> {
                             HOST_CPU_FEATURES.as_ptr(),
                             LLVMCodeGenOptLevel::LLVMCodeGenLevelAggressive,
                             LLVMRelocMode::LLVMRelocDefault,
-                            LLVMCodeModel::LLVMCodeModelDefault))
+                            LLVMCodeModel::LLVMCodeModelMedium))
 }
 
 pub unsafe fn set_triple_and_layout(module: LLVMModuleRef) -> WeldResult<()> {
@@ -221,6 +220,45 @@ unsafe fn verify_module(module: LLVMModuleRef) -> WeldResult<()> {
     }
 }
 
+/*
+/// Parse a string of IR code into an `LLVMModuleRef` for the given context.
+unsafe fn parse_module_str(context: LLVMContextRef,
+                           code: &str)
+                           -> WeldResult<LLVMModuleRef> {
+    // Create an LLVM memory buffer around the code
+    let code_len = code.len();
+    let name = CString::new("module").unwrap();
+    let code = CString::new(code).unwrap();
+    let buffer = LLVMCreateMemoryBufferWithMemoryRange(code.as_ptr(),
+                                                                   code_len,
+                                                                   name.as_ptr(),
+                                                                   0);
+    if buffer.is_null() {
+        return compile_err!("create buf failed");
+    }
+
+    parse_module_helper(context, buffer)
+}
+
+unsafe fn parse_module_helper(context: LLVMContextRef,
+                              buffer: LLVMMemoryBufferRef)
+                              -> WeldResult<LLVMModuleRef> {
+    // Parse IR into a module
+    let mut module = 0 as LLVMModuleRef;
+    let mut error_str = 0 as *mut c_char;
+
+    let result_code =
+        ir_reader::LLVMParseIRInContext(context, buffer, &mut module, &mut error_str);
+    if result_code != 0 {
+        let msg = format!("Compile error: {}",
+                          CStr::from_ptr(error_str).to_str().unwrap());
+        return compile_err!("{}", msg);
+    }
+
+    Ok(module)
+}
+*/
+
 /// Optimize an LLVM module using a given LLVM optimization level.
 unsafe fn optimize_module(module: LLVMModuleRef, level: u32) -> WeldResult<()> {
     info!("Optimizing LLVM module");
@@ -228,8 +266,8 @@ unsafe fn optimize_module(module: LLVMModuleRef, level: u32) -> WeldResult<()> {
     use self::llvm_sys::transforms::vectorize::*;
     use self::llvm_sys::transforms::ipo::*;
 
-    let passes = LLVMCreatePassManager();
-    let fpasses = LLVMCreateFunctionPassManagerForModule(module);
+    let mpm = LLVMCreatePassManager();
+    let fpm = LLVMCreateFunctionPassManagerForModule(module);
 
     // Target specific analyses so LLVM can query the backend.
     let target_machine = target_machine()?;
@@ -244,44 +282,49 @@ unsafe fn optimize_module(module: LLVMModuleRef, level: u32) -> WeldResult<()> {
 
     debug!("CPU: {}, Description: {} Features: {}", cpu, description, features);
 
-    LLVMAddTargetLibraryInfo(LLVMExtTargetLibraryInfo(), passes);
-    LLVMAddAnalysisPasses(target_machine, passes);
-    LLVMExtAddTargetPassConfig(target_machine, passes);
+    LLVMAddTargetLibraryInfo(LLVMExtTargetLibraryInfo(), mpm);
+    LLVMAddAnalysisPasses(target_machine, mpm);
+    LLVMExtAddTargetPassConfig(target_machine, mpm);
 
-    LLVMAddAnalysisPasses(target_machine, fpasses);
-    LLVMExtAddTargetPassConfig(target_machine, fpasses);
+    //LLVMAddTargetLibraryInfo(LLVMExtTargetLibraryInfo(), fpm);
+    LLVMAddAnalysisPasses(target_machine, fpm);
+    //LLVMExtAddTargetPassConfig(target_machine, fpm);
 
-    // LTO passes
+    // LTO
+    /*
     let builder = LLVMPassManagerBuilderCreate();
     LLVMPassManagerBuilderSetOptLevel(builder, 3);
     LLVMPassManagerBuilderSetSizeLevel(builder, 0);
     LLVMPassManagerBuilderSetDisableUnrollLoops(builder, 0);
-    LLVMPassManagerBuilderPopulateLTOPassManager(builder, passes, 1, 1);
+    LLVMPassManagerBuilderPopulateLTOPassManager(builder, mpm, 1, 1);
     LLVMPassManagerBuilderDispose(builder);
+    */
 
-    // Function and Module passes
+    // Function and Module
     let builder = LLVMPassManagerBuilderCreate();
     LLVMPassManagerBuilderSetOptLevel(builder, 3);
     LLVMPassManagerBuilderSetSizeLevel(builder, 0);
     LLVMPassManagerBuilderSetDisableUnrollLoops(builder, 0);
+    LLVMExtPassManagerBuilderSetVectorize(builder);
+    // 250 should correspond to OptLevel = 3
+    LLVMPassManagerBuilderUseInlinerWithThreshold(builder, 250);
 
-    LLVMPassManagerBuilderPopulateModulePassManager(builder, passes);
-
-    LLVMPassManagerBuilderPopulateFunctionPassManager(builder, fpasses);
+    LLVMPassManagerBuilderPopulateFunctionPassManager(builder, fpm);
+    LLVMPassManagerBuilderPopulateModulePassManager(builder, mpm);
 
     LLVMPassManagerBuilderDispose(builder);
 
     let mut func = LLVMGetFirstFunction(module);
     while func != ptr::null_mut() {
-        LLVMRunFunctionPassManager(fpasses, func);
+        LLVMRunFunctionPassManager(fpm, func);
         func = LLVMGetNextFunction(func);
     }
-    LLVMFinalizeFunctionPassManager(fpasses);
+    LLVMFinalizeFunctionPassManager(fpm);
 
-    LLVMRunPassManager(passes, module);
+    LLVMRunPassManager(mpm, module);
 
-    LLVMDisposePassManager(passes);
-    LLVMDisposePassManager(fpasses);
+    LLVMDisposePassManager(fpm);
+    LLVMDisposePassManager(mpm);
     LLVMDisposeTargetMachine(target_machine);
 
     Ok(())

@@ -17,12 +17,14 @@
 #include <llvm/Analysis/TargetLibraryInfo.h>
 #include <llvm/Target/TargetMachine.h>
 #include <llvm/IR/LegacyPassManager.h>
-#include "llvm/CodeGen/TargetPassConfig.h"
+#include <llvm/CodeGen/TargetPassConfig.h>
+#include <llvm/Transforms/IPO/PassManagerBuilder.h>
 
 
 #include <llvm-c/Target.h>
 #include <llvm-c/TargetMachine.h>
 #include <llvm-c/Types.h>
+#include <llvm-c/Transforms/PassManagerBuilder.h>
 
 #define BUFSZ 4096
 
@@ -101,4 +103,10 @@ extern "C" LLVMTargetLibraryInfoRef LLVMExtTargetLibraryInfo() {
   TargetLibraryInfoImpl *P = new TargetLibraryInfoImpl(triple);
   TargetLibraryInfoImpl *X = const_cast<TargetLibraryInfoImpl*>(P);
   return reinterpret_cast<LLVMTargetLibraryInfoRef>(X);
+}
+
+extern "C" void LLVMExtPassManagerBuilderSetVectorize(LLVMPassManagerBuilderRef P) {
+  PassManagerBuilder *b = reinterpret_cast<PassManagerBuilder*>(P);
+  b->LoopVectorize = true;
+  b->SLPVectorize = true;
 }
