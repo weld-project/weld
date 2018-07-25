@@ -103,7 +103,7 @@ pub struct Intrinsics {
     /// Returns a vec[{K,V}] from the dictionary.
     ///
     /// Arguments: Run Handle, Dictionary
-    /// Returns: vector of Key/Value structs.
+    /// Returns: vector of Key/Value structs. The vector is already in the weld format.
     to_vec: Option<LLVMValueRef>,
     /// Free a dictionary.
     free: Option<LLVMValueRef>,
@@ -246,8 +246,9 @@ impl Intrinsics {
                               dictionary: LLVMValueRef,
                               offset: LLVMValueRef,
                               struct_size: LLVMValueRef,
+                              out_pointer: LLVMValueRef,
                               name: Option<*const c_char>) -> LLVMValueRef {
-        let mut args = [run, dictionary, offset, struct_size];
+        let mut args = [run, dictionary, offset, struct_size, out_pointer];
         LLVMBuildCall(builder, self.to_vec.unwrap(), args.as_mut_ptr(), args.len() as u32, name.unwrap_or(c_str!("")))
     }
 
@@ -309,8 +310,6 @@ impl Intrinsics {
         LLVMExtAddAttrsOnParameter(self.context, function, &[NoCapture, NoAlias, NonNull, ReadOnly], 0);
         // Dictionary
         LLVMExtAddAttrsOnParameter(self.context, function, &[NoCapture, NoAlias, NonNull], 1);
-        // Key
-        LLVMExtAddAttrsOnParameter(self.context, function, &[NoAlias, NonNull, ReadOnly], 2);
         // Default value
         LLVMExtAddAttrsOnParameter(self.context, function, &[NoAlias, NonNull, ReadOnly], 4);
         self.upsert = Some(function);
@@ -341,17 +340,24 @@ impl Intrinsics {
         LLVMExtAddAttrsOnParameter(self.context, function, &[NoCapture, NoAlias, NonNull, ReadOnly], 1);
         self.size = Some(function);
 
-        // Parameters: Run Handle, Dictionary, Value offset, Padded Struct Size
+        // Parameters: Run Handle, Dictionary, Value offset, Padded Struct Size, Out Pointer
         // Returns: A vector of key/value pairs.
-        let mut params = vec![self.run_handle_type(), dict_type, self.i32_type(), self.i32_type()];
+        let mut params = vec![
+            self.run_handle_type(),
+            dict_type,
+            self.i32_type(),
+            self.i32_type(),
+            self.void_pointer_type()
+        ];
         let name = CString::new("weld_st_dict_tovec").unwrap();
-        let fn_type = LLVMFunctionType(void_ptr, params.as_mut_ptr(), params.len() as u32, 0);
+        let fn_type = LLVMFunctionType(self.void_type(), params.as_mut_ptr(), params.len() as u32, 0);
         let function = LLVMAddFunction(self.module, name.as_ptr(), fn_type);
         // Run handle
         LLVMExtAddAttrsOnParameter(self.context, function, &[NoCapture, NoAlias, NonNull, ReadOnly], 0);
         // Dictionary
         LLVMExtAddAttrsOnParameter(self.context, function, &[NoCapture, NoAlias, NonNull, ReadOnly], 1);
-        LLVMExtAddAttrsOnReturn(self.context, function, &[NoAlias]);
+        // Out Pointer
+        LLVMExtAddAttrsOnParameter(self.context, function, &[NoAlias, NonNull, WriteOnly], 4);
         self.to_vec = Some(function);
 
         // Parameters: Run Handle, Dictionary
@@ -656,11 +662,18 @@ impl Dict {
             let dict = LLVMGetParam(function, 0);
             let run = LLVMGetParam(function, 1);
 
-            let dict = LLVMBuildExtractValue(builder, dict, 0, c_str!(""));
-            let pointer = intrinsics.call_to_vec(builder, run, dict, offset, struct_size, None);
-            let result = LLVMBuildBitCast(builder, pointer, LLVMPointerType(kv_vec_ty, 0), c_str!(""));
-            let result = self.load(builder, result)?;
+            let out_pointer = LLVMBuildAlloca(builder, kv_vec_ty, c_str!(""));
 
+            let dict = LLVMBuildExtractValue(builder, dict, 0, c_str!(""));
+            let out_pointer_opaque = LLVMBuildBitCast(builder, out_pointer, self.void_pointer_type(), c_str!(""));
+            // No return type for to_vec.
+            let _ = intrinsics.call_to_vec(builder,
+                                                run,
+                                                dict,
+                                                offset,
+                                                struct_size,
+                                                out_pointer_opaque, None);
+            let result = self.load(builder, out_pointer)?;
             LLVMBuildRet(builder, result);
 
             self.to_vec = Some(function);

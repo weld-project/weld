@@ -1,5 +1,6 @@
-//! Trait implementing the `DictMerger` builder.
+//! Utilities for the DictMeger
 //!
-//! This builder builds on top of the `Dictionary` data structure.
+//! This builder builds on top of the `Dictionary` data structure, so most of its implementation is
+//! there.
 
-pub struct DictMerger;
+pub const DEFAULT_CAPACITY: i64 = 16;

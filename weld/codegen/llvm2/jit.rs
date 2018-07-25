@@ -260,12 +260,12 @@ unsafe fn parse_module_helper(context: LLVMContextRef,
 */
 
 /// Optimize an LLVM module using a given LLVM optimization level.
+///
+/// This function is currently modeled after the `AddOptimizationPasses` in the LLVM `opt` tool:
+/// https://github.com/llvm-mirror/llvm/blob/master/tools/opt/opt.cpp
 unsafe fn optimize_module(module: LLVMModuleRef, level: u32) -> WeldResult<()> {
     info!("Optimizing LLVM module");
     use self::llvm_sys::transforms::pass_manager_builder::*;
-    use self::llvm_sys::transforms::vectorize::*;
-    use self::llvm_sys::transforms::ipo::*;
-
     let mpm = LLVMCreatePassManager();
     let fpm = LLVMCreateFunctionPassManagerForModule(module);
 
@@ -286,23 +286,12 @@ unsafe fn optimize_module(module: LLVMModuleRef, level: u32) -> WeldResult<()> {
     LLVMAddAnalysisPasses(target_machine, mpm);
     LLVMExtAddTargetPassConfig(target_machine, mpm);
 
-    //LLVMAddTargetLibraryInfo(LLVMExtTargetLibraryInfo(), fpm);
     LLVMAddAnalysisPasses(target_machine, fpm);
-    //LLVMExtAddTargetPassConfig(target_machine, fpm);
 
-    // LTO
-    /*
+    // TODO set the size and inliner threshold depending on the optimization level. Right now, we
+    // set the inliner to be as aggressive as the -O3 inliner in Clang.
     let builder = LLVMPassManagerBuilderCreate();
-    LLVMPassManagerBuilderSetOptLevel(builder, 3);
-    LLVMPassManagerBuilderSetSizeLevel(builder, 0);
-    LLVMPassManagerBuilderSetDisableUnrollLoops(builder, 0);
-    LLVMPassManagerBuilderPopulateLTOPassManager(builder, mpm, 1, 1);
-    LLVMPassManagerBuilderDispose(builder);
-    */
-
-    // Function and Module
-    let builder = LLVMPassManagerBuilderCreate();
-    LLVMPassManagerBuilderSetOptLevel(builder, 3);
+    LLVMPassManagerBuilderSetOptLevel(builder, level);
     LLVMPassManagerBuilderSetSizeLevel(builder, 0);
     LLVMPassManagerBuilderSetDisableUnrollLoops(builder, 0);
     LLVMExtPassManagerBuilderSetVectorize(builder);

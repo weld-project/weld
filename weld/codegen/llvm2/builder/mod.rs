@@ -177,7 +177,7 @@ impl BuilderExpressionGen for LlvmGenerator {
             }
             DictMerger(ref key, ref val, _) => {
                 let ref dict_type = Dict(key.clone(), val.clone());
-                let default_capacity = self.i64(0);
+                let default_capacity = self.i64(dictmerger::DEFAULT_CAPACITY);
                 let dictmerger = {
                     let mut methods = self.dictionaries.get_mut(dict_type).unwrap();
                     methods.gen_new(ctx.builder, &self.dict_intrinsics, ctx.get_run(), default_capacity)?
@@ -213,10 +213,24 @@ impl BuilderExpressionGen for LlvmGenerator {
 
                 // Build the default value that we upsert if the key is not present in the
                 // dictionary yet.
-                let default = if let &Scalar(ref kind) = val.as_ref() {
-                    self.binop_identity(*binop, *kind)?
-                } else {
-                    unreachable!()
+                let default = match *val.as_ref() {
+                    Scalar(ref kind) => self.binop_identity(*binop, *kind)?,
+                    Struct(ref elems) => {
+                        let mut default = LLVMGetUndef(self.llvm_type(val)?);
+                        for (i, elem) in elems.iter().enumerate() {
+                            if let Scalar(ref kind) = *elem {
+                                let mut indices = [i as u32];
+                                default = LLVMConstInsertValue(default,
+                                                               self.binop_identity(*binop, *kind)?,
+                                                               indices.as_mut_ptr(),
+                                                               indices.len() as u32);
+                            } else {
+                                unreachable!()
+                            }
+                        }
+                        default
+                    }
+                    _ => unreachable!()
                 };
 
                 // The type of the merge value is {key, value} so use GEP to extract
@@ -252,10 +266,33 @@ impl BuilderExpressionGen for LlvmGenerator {
                                        default)?
                 };
 
-                let slot_value = self.load(ctx.builder, slot_value_pointer)?;
-                let merge_value = self.load(ctx.builder, value_pointer)?;
-                let merged = numeric::gen_binop(ctx.builder, *binop, merge_value, slot_value, val)?;
-                LLVMBuildStore(ctx.builder, merged, slot_value_pointer);
+                // Generate the merge code. We either load the values and add them, or, if the
+                // values are structs, we load each element at a time and apply the binop.
+                let merged = match *val.as_ref() {
+                    Scalar(ref kind) => {
+                        let merge_value = self.load(ctx.builder, value_pointer)?;
+                        let slot_value = self.load(ctx.builder, slot_value_pointer)?;
+                        let merged = numeric::gen_binop(ctx.builder, *binop, merge_value, slot_value, val)?;
+                        LLVMBuildStore(ctx.builder, merged, slot_value_pointer);
+                    }
+                    Struct(ref elems) => {
+                        for (i, elem) in elems.iter().enumerate() {
+                            let merge_elem_pointer = LLVMBuildStructGEP(ctx.builder,
+                                                                        value_pointer,
+                                                                        i as u32,
+                                                                        c_str!(""));
+                            let slot_elem_pointer = LLVMBuildStructGEP(ctx.builder,
+                                                                       slot_value_pointer,
+                                                                       i as u32,
+                                                                       c_str!(""));
+                            let merge_value = self.load(ctx.builder, merge_elem_pointer)?;
+                            let slot_value = self.load(ctx.builder, slot_elem_pointer)?;
+                            let merged = numeric::gen_binop(ctx.builder, *binop, merge_value, slot_value, elem)?;
+                            LLVMBuildStore(ctx.builder, merged, slot_elem_pointer);
+                        }
+                    }
+                    _ => unreachable!()
+                };
                 Ok(())
             }
             _ => unimplemented!()

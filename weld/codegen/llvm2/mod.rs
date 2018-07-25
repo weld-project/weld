@@ -7,6 +7,7 @@ extern crate fnv;
 extern crate time;
 extern crate libc;
 extern crate llvm_sys;
+extern crate lazy_static;
 
 use std::fmt;
 use std::ffi::{CStr, CString};
@@ -26,6 +27,11 @@ use self::llvm_sys::LLVMLinkage;
 use super::*;
 
 static NULL_NAME:[c_char; 1] = [0];
+
+lazy_static! {
+    /// Name of the run handle struct in generated code.
+    static ref RUN_HANDLE_NAME: CString = CString::new("RunHandle").unwrap();
+}
 
 // TODO This should be based on the type!
 pub const LLVM_VECTOR_WIDTH: u32 = 8;
@@ -426,7 +432,13 @@ pub trait CodeGenExt {
     }
 
     unsafe fn run_handle_type(&self) -> LLVMTypeRef {
-        LLVMPointerType(self.i8_type(), 0)
+        let mut ty = LLVMGetTypeByName(self.module(), RUN_HANDLE_NAME.as_ptr());
+        if ty.is_null() {
+            let mut layout = [self.i8_type()];
+            ty = LLVMStructCreateNamed(self.context(), RUN_HANDLE_NAME.as_ptr());
+            LLVMStructSetBody(ty, layout.as_mut_ptr(), layout.len() as u32, 0);
+        }
+        LLVMPointerType(ty, 0)
     }
 
     unsafe fn bool(&self, v: bool) -> LLVMValueRef {
@@ -838,7 +850,7 @@ impl LlvmGenerator {
                     unreachable!()
                 };
 
-                let pointer = {
+                let result = {
                     let mut methods = self.dictionaries.get_mut(child_type).unwrap();
                     methods.gen_key_exists(context.builder,
                                            &self.dict_intrinsics,
@@ -847,7 +859,6 @@ impl LlvmGenerator {
                                            context.get_value(key)?,
                                            hash)?
                 };
-                let result = self.load(context.builder, pointer)?;
                 LLVMBuildStore(context.builder, result, output_pointer);
                 Ok(())
             }

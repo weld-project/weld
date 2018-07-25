@@ -101,6 +101,7 @@ fn dictmerger_with_structs() {
 
 }
 
+/*
 #[test]
 fn simple_groupmerger() {
     let code = "|x:vec[i32], y:vec[i32]| tovec(result(for(zip(x,y), groupmerger[i32,i32],
@@ -188,6 +189,7 @@ fn complex_groupmerger_with_struct_key() {
     assert_eq!(res, output);
 
 }
+*/
 
 /// Tests a the dictionary by merging multiple keys key multiple times into a dictionary.
 /// `use_local` specifies whether to use the local-global adaptive dictionary or the purely global
@@ -250,10 +252,12 @@ fn simple_parallel_for_dictmerger_loop_local() {
     simple_parallel_for_dictmerger_loop_helper(true);
 }
 
+/*
 #[test]
 fn simple_parallel_for_dictmerger_loop_global() {
     simple_parallel_for_dictmerger_loop_helper(false);
 }
+*/
 
 #[test]
 fn simple_dict_lookup() {
@@ -277,6 +281,7 @@ fn simple_dict_lookup() {
     assert_eq!(output, result);
 }
 
+/*
 #[test]
 fn string_dict_lookup() {
     let code = "|x:vec[i32]| let v = [\"abcdefghi\", \"abcdefghi\", \"abcdefghi\"];
@@ -294,14 +299,18 @@ fn string_dict_lookup() {
     let output = 3;
     assert_eq!(output, result);
 }
+*/
 
 #[test]
 fn simple_dict_exists() {
     let keys = vec![1, 2, 2, 1, 3];
     let vals = vec![2, 3, 4, 2, 1];
 
-    let code_true = "|x:vec[i32], y:vec[i32]| let a = result(for(zip(x,y), dictmerger[i32,i32,+],
-                |b,i,e| merge(b, e))); keyexists(a, 1)";
+    let code_true = "|x:vec[i32], y:vec[i32]|
+    let a = result(for(zip(x,y),
+                dictmerger[i32,i32,+],
+                |b,i,e| merge(b, e))); 
+    keyexists(a, 1) && keyexists(a, 2) && keyexists(a, 3)";
     let code_false = "|x:vec[i32], y:vec[i32]| let a = result(for(zip(x,y),
                       dictmerger[i32,i32,+], |b,i,e| merge(b, e))); keyexists(a, 4)";
     let ref conf = default_conf();
@@ -326,5 +335,4 @@ fn simple_dict_exists() {
 
     let output = false;
     assert_eq!(output, result);
-
 }

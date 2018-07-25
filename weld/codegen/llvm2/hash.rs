@@ -12,14 +12,12 @@ use super::llvm_exts::LLVMExtAttribute::*;
 
 use self::llvm_sys::prelude::*;
 use self::llvm_sys::core::*;
-use self::llvm_sys::LLVMLinkage;
 
 use super::llvm_exts::*;
 use super::llvm_exts::LLVMExtAttribute::*;
 
 use super::CodeGenExt;
 use super::LlvmGenerator;
-use super::intrinsic::Intrinsics;
 
 /// Trait for generating hashing code.
 pub trait GenHash {

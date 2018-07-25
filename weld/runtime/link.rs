@@ -52,7 +52,8 @@ extern "C" {
     pub fn weld_st_dict_tovec(run: RunHandleRef, 
                             dict: VoidPtr,
                             value_offset: int32_t,
-                            struct_size: int32_t) -> int64_t; 
+                            struct_size: int32_t,
+                            out_pointer: VoidPtr); 
 }
 
 #[link(name="weldrt", kind="static")]
