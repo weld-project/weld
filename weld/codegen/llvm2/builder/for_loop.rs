@@ -411,7 +411,7 @@ impl ForLoopGenInternal for LlvmGenerator {
                     let i = LLVMBuildNSWAdd(ctx.builder, start, tmp, c_str!(""));
                     values.push(i);
                 }
-                NdIter => unimplemented!(),
+                NdIter => unimplemented!(), // NdIter Load Element
             }
         }
 
@@ -506,7 +506,7 @@ impl ForLoopGenInternal for LlvmGenerator {
                 let _ = LLVMBuildCondBr(ctx.builder, check, pass_block, fail_block);
                 Ok(iterations)
             }
-            NdIter => unimplemented!()
+            NdIter => unimplemented!() // NdIter Compute Bounds Check
         }
     }
 

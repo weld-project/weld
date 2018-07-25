@@ -300,10 +300,10 @@ impl SerHelper for LlvmGenerator {
                 Ok(buffer)
             }
             Dict(ref key, ref value) if !key.has_pointer() && !value.has_pointer() => {
-                unimplemented!()
+                unimplemented!() // Dictionary Serialize without pointers
             }
             Dict(_, _) => {
-                unimplemented!()
+                unimplemented!() // Dictionary Serialize with pointers
             }
             Unknown | Simd(_) | Function(_,_) | Builder(_, _) => unreachable!(),
         }
@@ -479,10 +479,10 @@ impl DeHelper for LlvmGenerator {
                 Ok(())
             }
             Dict(ref key, ref value) if !key.has_pointer() && !value.has_pointer() => {
-                unimplemented!()
+                unimplemented!() // Dictionary deserialize without pointers
             }
             Dict(_, _) => {
-                unimplemented!()
+                unimplemented!() // Dictionary deserialize with pointers
             }
             Unknown | Simd(_) | Function(_,_) | Builder(_, _) => unreachable!(),
         }

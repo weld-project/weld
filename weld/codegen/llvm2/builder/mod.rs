@@ -185,8 +185,11 @@ impl BuilderExpressionGen for LlvmGenerator {
                 LLVMBuildStore(ctx.builder, dictmerger, output_pointer);
                 Ok(())
             }
-            _ => {
-                unimplemented!()
+            VecMerger(_, _) => {
+                unimplemented!() // VecMerger NewBuilder
+            }
+            GroupMerger(_, _) => {
+                unimplemented!() // GroupMerger NewBuilder
             }
         }
     }
@@ -295,7 +298,12 @@ impl BuilderExpressionGen for LlvmGenerator {
                 };
                 Ok(())
             }
-            _ => unimplemented!()
+            VecMerger(_, _) => {
+                unimplemented!() // VecMerger Merge
+            }
+            GroupMerger(_, _) => {
+                unimplemented!() // GroupMerger Merge
+            }
         }
     }
 
@@ -329,8 +337,11 @@ impl BuilderExpressionGen for LlvmGenerator {
                 LLVMBuildStore(ctx.builder, builder_loaded, output_pointer);
                 Ok(())
             }
-            _ => {
-                unimplemented!()
+            VecMerger(_, _) => {
+                unimplemented!() // VecMerger Result
+            }
+            GroupMerger(_, _) => {
+                unimplemented!() // GroupMerger Result
             }
         }
     }
@@ -378,7 +389,12 @@ impl BuilderExpressionGen for LlvmGenerator {
                     let ref dict_type = Dict(key.clone(), val.clone());
                     self.llvm_type(dict_type)
                 }
-                _ => unimplemented!()
+                VecMerger(_, _) => {
+                    unimplemented!() // VecMerger Builder Type
+                }
+                GroupMerger(_, _) => {
+                    unimplemented!() // GroupMerger Builder Type
+                }
             }
         } else {
             unreachable!()

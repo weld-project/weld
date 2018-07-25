@@ -226,7 +226,7 @@ impl NumericExpressionGen for LlvmGenerator {
                     }
                 }
                 &Vector(_) if op.is_comparison() => {
-                    unimplemented!()
+                    unimplemented!() // Comparison for vectors
                 }
                 _ => unreachable!(),
             };

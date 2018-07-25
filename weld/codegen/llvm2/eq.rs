@@ -88,7 +88,7 @@ impl GenEq for LlvmGenerator {
 
         let result = match *ty {
             Builder(_, _) => unreachable!(),
-            Dict(_, _) => unimplemented!(),
+            Dict(_, _) => unimplemented!(), // Dictionary Equality
             Scalar(_) | Simd(_) => {
                 let left = self.load(builder, left)?;
                 let right = self.load(builder, right)?;
@@ -161,7 +161,7 @@ impl GenEq for LlvmGenerator {
                 result
             }
             Vector(ref _elem) => {
-                unimplemented!()
+                unimplemented!() // Vector equality without memcmp
             }
             Function(_,_) | Unknown => unreachable!()
         };
