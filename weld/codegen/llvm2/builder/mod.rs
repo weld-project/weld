@@ -268,8 +268,8 @@ impl BuilderExpressionGen for LlvmGenerator {
 
                 // Generate the merge code. We either load the values and add them, or, if the
                 // values are structs, we load each element at a time and apply the binop.
-                let merged = match *val.as_ref() {
-                    Scalar(ref kind) => {
+                match *val.as_ref() {
+                    Scalar(_) => {
                         let merge_value = self.load(ctx.builder, value_pointer)?;
                         let slot_value = self.load(ctx.builder, slot_value_pointer)?;
                         let merged = numeric::gen_binop(ctx.builder, *binop, merge_value, slot_value, val)?;

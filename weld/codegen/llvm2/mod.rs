@@ -842,7 +842,7 @@ impl LlvmGenerator {
                 let key_value = self.load(context.builder, context.get_value(key)?)?;
                 let child_type = context.sir_function.symbol_type(child)?;
 
-                let hash = if let Dict(ref key, ref value) = *child_type {
+                let hash = if let Dict(ref key, _) = *child_type {
                     let hash_fn = self.gen_hash_fn(key)?;
                     let mut args = [key_value];
                     LLVMBuildCall(context.builder, hash_fn, args.as_mut_ptr(), args.len() as u32, c_str!(""))

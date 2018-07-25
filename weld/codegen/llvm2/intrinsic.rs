@@ -86,13 +86,16 @@ impl Intrinsics {
 
     /// Add a new intrinsic function with the given name, return type, and argument types.
     ///
-    /// If the function already exists in the module, this function does nothing.
-    pub unsafe fn add<T: AsRef<str>>(&mut self, name: T, ret_ty: LLVMTypeRef, arg_tys: &mut [LLVMTypeRef]) {
+    /// Returns true if the function was added or false if it was already registered.
+    pub unsafe fn add<T: AsRef<str>>(&mut self, name: T, ret_ty: LLVMTypeRef, arg_tys: &mut [LLVMTypeRef]) -> bool {
         if !self.intrinsics.contains_key(name.as_ref()) {
             let name = CString::new(name.as_ref()).unwrap();
             let fn_type = LLVMFunctionType(ret_ty, arg_tys.as_mut_ptr(), arg_tys.len() as u32, 0);
             let function = LLVMAddFunction(self.module, name.as_ptr(), fn_type);
             self.intrinsics.insert(name.into_string().unwrap(), function);
+            true
+        } else {
+            false
         }
     }
 
