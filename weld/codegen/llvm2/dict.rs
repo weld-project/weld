@@ -11,7 +11,6 @@
 //! 2. The layout of the dictionary slot in `Dict::define` must be consistent with the C++
 //!    definition. In particular, the slot is defined as a header followed by a key and value here,
 //!    and the header is redefined in C++: the headers must thus be consistent.
-!
 
 extern crate lazy_static;
 extern crate llvm_sys;
@@ -40,10 +39,6 @@ pub const HASH_INDEX: u32 = 0;
 pub const STATE_INDEX: u32 = 1;
 pub const KEY_INDEX: u32 = 2;
 pub const VALUE_INDEX: u32 = 3;
-
-// XXX Currently linked as an external library.
-// /// LLVM bytecode that we will link with our module.
-// const DICTIONARY: &'static [u8] = include_bytes!("../../../weld_rt/cpp/st/dict-st.bc");
 
 pub struct Dict {
     pub name: String,
@@ -149,42 +144,10 @@ impl Intrinsics {
             module: module,
         };
         intrinsics.populate();
-        // intrinsics.link();
         intrinsics
     }
 
-    /// Link the dictionary into the module.
-    pub unsafe fn link(&mut self) {
-        use std::mem;
-        use self::llvm_sys::ir_reader;
-        use self::llvm_sys::linker;
-
-        let name = CString::new("dictionary").unwrap();
-        let buffer = LLVMCreateMemoryBufferWithMemoryRange(
-            DICTIONARY.as_ptr() as *const i8,
-            DICTIONARY.len(),
-            name.as_ptr(),
-            0);
-
-        assert!(!buffer.is_null());
-
-        // Parse IR into a module
-        let mut dict_module = mem::uninitialized();
-        let mut error_str = mem::uninitialized();
-
-        let err_code = ir_reader::LLVMParseIRInContext(self.context,
-                                                       buffer,
-                                                       &mut dict_module,
-                                                       &mut error_str);
-        assert_eq!(err_code, 0);
-
-        linker::LLVMLinkModules2(self.module, dict_module);
-        debug!("Linked Dictionary bytecode with main module.");
-
-        // LLVMDisposeMessage(error_str);
-        // LLVMDisposeMemoryBuffer(buffer);
-    }
-
+    /// Returns the type of the key comparator over opaque pointers.
     pub unsafe fn key_comparator_type(&self) -> LLVMTypeRef {
         let mut arg_tys = [self.void_pointer_type(), self.void_pointer_type()];
         let fn_type = LLVMFunctionType(self.i32_type(), arg_tys.as_mut_ptr(), arg_tys.len() as u32, 0);
@@ -273,115 +236,115 @@ impl Intrinsics {
         LLVMBuildCall(builder, self.free.unwrap(), args.as_mut_ptr(), args.len() as u32, name.unwrap_or(c_str!("")))
     }
 
+    /// Add a function to the module.
+    unsafe fn declare(&mut self,
+                      name: &str,
+                      params: &mut Vec<LLVMTypeRef>,
+                      ret: LLVMTypeRef) -> LLVMValueRef {
+        let name = CString::new(name).unwrap();
+        let fn_type = LLVMFunctionType(ret, params.as_mut_ptr(), params.len() as u32, 0);
+        LLVMAddFunction(self.module, name.as_ptr(), fn_type)
+    }
+
     /// Populate `self` with the dictionary intrinsics.
     ///
-    /// These intrinsic definitions must be consistent with the C++ equivalent.
+    /// These intrinsic definitions must be consistent with the C++ equivalent, so this function
+    /// should be modified with care.
     unsafe fn populate(&mut self) {
+
         // Common types.
         let dict_type = LLVMPointerType(self.i8_type(), 0);
-        let void_ptr = LLVMPointerType(self.i8_type(), 0);
         let hash_type = self.i32_type();
 
-        // Parameters: Run Handle, Key Size, Value Size, KeyComparator, Capacity.
-        // Returns: Pointer to Dictionary
-        let mut params = vec![
-            self.run_handle_type(),
-            self.i32_type(),
-            self.i32_type(),
-            self.key_comparator_type(),
-            self.i64_type()
+        let ref mut params = vec![
+            self.run_handle_type(),     // run
+            self.i32_type(),            // key size 
+            self.i32_type(),            // val size
+            self.key_comparator_type(), // key comparator function
+            self.i64_type()             // initial capacity (power of 2)
         ];
-        let name = CString::new("weld_st_dict_new").unwrap();
-        let fn_type = LLVMFunctionType(dict_type, params.as_mut_ptr(), params.len() as u32, 0);
-        let function = LLVMAddFunction(self.module, name.as_ptr(), fn_type);
-        // Run handle
+        let ret = dict_type;
+        let function = self.declare("weld_st_dict_new", params, ret);
+
         LLVMExtAddAttrsOnParameter(self.context, function, &[NoCapture, NoAlias, NonNull], 0);
         LLVMExtAddAttrsOnReturn(self.context, function, &[NoAlias]);
         self.new = Some(function);
 
-        // Parameters: Run Handle, Dictionary, Key, Hash
-        // Returns: A pointer to the slot. Raises an error if slot doesn't exist.
-        let mut params = vec![self.run_handle_type(), dict_type, void_ptr, hash_type];
-        let name = CString::new("weld_st_dict_get").unwrap();
-        let fn_type = LLVMFunctionType(void_ptr, params.as_mut_ptr(), params.len() as u32, 0);
-        let function = LLVMAddFunction(self.module, name.as_ptr(), fn_type);
-        // Run handle
+        let ref mut params = vec![
+            self.run_handle_type(),     // run
+            dict_type,                  // dictionary
+            self.void_pointer_type(),   // key
+            hash_type                   // hash
+        ];
+        let ret = self.void_pointer_type();
+        let function = self.declare("weld_st_dict_get", params, ret);
         LLVMExtAddAttrsOnParameter(self.context, function, &[NoCapture, NoAlias, NonNull, ReadOnly], 0);
-        // Dictionary
         LLVMExtAddAttrsOnParameter(self.context, function, &[NoCapture, NoAlias, NonNull, ReadOnly], 1);
-        // Key
         LLVMExtAddAttrsOnParameter(self.context, function, &[NoCapture, NoAlias, NonNull, ReadOnly], 2);
         self.get = Some(function);
 
-        // Parameters: Run Handle, Dictionary, Key, Hash, Default.
-        // Returns: the slot for the given key.
-        let mut params = vec![self.run_handle_type(), dict_type, void_ptr, hash_type, void_ptr];
-        let name = CString::new("weld_st_dict_upsert").unwrap();
-        let fn_type = LLVMFunctionType(void_ptr, params.as_mut_ptr(), params.len() as u32, 0);
-        let function = LLVMAddFunction(self.module, name.as_ptr(), fn_type);
-        // Run handle
+        let ref mut params = vec![
+            self.run_handle_type(),     // run
+            dict_type,                  // dictionary
+            self.void_pointer_type(),   // key
+            hash_type,                  // hash
+            self.void_pointer_type()    // init value
+        ];
+        let ret = self.void_pointer_type();
+        let function = self.declare("weld_st_dict_upsert", params, ret);
         LLVMExtAddAttrsOnParameter(self.context, function, &[NoCapture, NoAlias, NonNull, ReadOnly], 0);
-        // Dictionary
         LLVMExtAddAttrsOnParameter(self.context, function, &[NoCapture, NoAlias, NonNull], 1);
-        // Default value
         LLVMExtAddAttrsOnParameter(self.context, function, &[NoAlias, NonNull, ReadOnly], 4);
         self.upsert = Some(function);
 
-        // Parameters: Run Handle, Dictionary, Key, Hash
-        // Returns: `i32` that will be 0 or 1 depending on whether the key exists.
-        let mut params = vec![self.run_handle_type(), dict_type, void_ptr, hash_type];
-        let name = CString::new("weld_st_dict_keyexists").unwrap();
-        let fn_type = LLVMFunctionType(self.i32_type(), params.as_mut_ptr(), params.len() as u32, 0);
-        let function = LLVMAddFunction(self.module, name.as_ptr(), fn_type);
-        // Run handle
+        let ref mut params = vec![
+            self.run_handle_type(),     // run
+            dict_type,                  // dictionary
+            self.void_pointer_type(),   // key
+            hash_type                   // hash
+        ];
+        let ret = self.i32_type();
+        let function = self.declare("weld_st_dict_keyexists", params, ret);
         LLVMExtAddAttrsOnParameter(self.context, function, &[NoCapture, NoAlias, NonNull, ReadOnly], 0);
-        // Dictionary
         LLVMExtAddAttrsOnParameter(self.context, function, &[NoCapture, NoAlias, NonNull, ReadOnly], 1);
-        // Key
         LLVMExtAddAttrsOnParameter(self.context, function, &[NoCapture, NoAlias, NonNull, ReadOnly], 2);
         self.key_exists = Some(function);
 
-        // Parameters: Run Handle, Dictionary
-        // Returns: Size of dictionary in # of keys.
-        let mut params = vec![self.run_handle_type(), dict_type];
-        let name = CString::new("weld_st_dict_size").unwrap();
-        let fn_type = LLVMFunctionType(self.i64_type(), params.as_mut_ptr(), params.len() as u32, 0);
-        let function = LLVMAddFunction(self.module, name.as_ptr(), fn_type);
-        // Run handle
+        let ref mut params = vec![
+            self.run_handle_type(),     // run
+            dict_type                   // dictionary
+        ];
+        let ret = self.i64_type();
+        let function = self.declare("weld_st_dict_size", params, ret);
         LLVMExtAddAttrsOnParameter(self.context, function, &[NoCapture, NoAlias, NonNull, ReadOnly], 0);
-        // Dictionary
         LLVMExtAddAttrsOnParameter(self.context, function, &[NoCapture, NoAlias, NonNull, ReadOnly], 1);
         self.size = Some(function);
 
         // Parameters: Run Handle, Dictionary, Value offset, Padded Struct Size, Out Pointer
         // Returns: A vector of key/value pairs.
-        let mut params = vec![
-            self.run_handle_type(),
-            dict_type,
-            self.i32_type(),
-            self.i32_type(),
-            self.void_pointer_type()
+        let ref mut params = vec![
+            self.run_handle_type(),     // run
+            dict_type,                  // dictionary
+            self.i32_type(),            // value offset in struct
+            self.i32_type(),            // total struct size
+            self.void_pointer_type()    // output vec[T] pointer
         ];
-        let name = CString::new("weld_st_dict_tovec").unwrap();
-        let fn_type = LLVMFunctionType(self.void_type(), params.as_mut_ptr(), params.len() as u32, 0);
-        let function = LLVMAddFunction(self.module, name.as_ptr(), fn_type);
-        // Run handle
+        let ret = self.void_type();
+        let function = self.declare("weld_st_dict_tovec", params, ret);
         LLVMExtAddAttrsOnParameter(self.context, function, &[NoCapture, NoAlias, NonNull, ReadOnly], 0);
-        // Dictionary
         LLVMExtAddAttrsOnParameter(self.context, function, &[NoCapture, NoAlias, NonNull, ReadOnly], 1);
-        // Out Pointer
         LLVMExtAddAttrsOnParameter(self.context, function, &[NoAlias, NonNull, WriteOnly], 4);
         self.to_vec = Some(function);
 
         // Parameters: Run Handle, Dictionary
         // Returns: Nothing
-        let mut params = vec![self.run_handle_type(), dict_type];
-        let name = CString::new("weld_st_dict_free").unwrap();
-        let fn_type = LLVMFunctionType(self.void_type(), params.as_mut_ptr(), params.len() as u32, 0);
-        let function = LLVMAddFunction(self.module, name.as_ptr(), fn_type);
-        // Run handle
+        let ref mut params = vec![
+            self.run_handle_type(),     // run
+            dict_type                   // dictionary
+        ];
+        let ret = self.void_type();
+        let function = self.declare("weld_st_dict_free", params, ret);
         LLVMExtAddAttrsOnParameter(self.context, function, &[NoCapture, NoAlias, NonNull, ReadOnly], 0);
-        // Dictionary
         LLVMExtAddAttrsOnParameter(self.context, function, &[NoAlias, NonNull], 1);
         self.free = Some(function);
     }
