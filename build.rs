@@ -21,6 +21,13 @@ fn main() {
 
     let status = Command::new("make")
         .arg("-C")
+        .arg(format!("{}/weld_rt/cpp/st", project_dir))
+        .status()
+        .unwrap();
+    assert!(status.success());
+
+    let status = Command::new("make")
+        .arg("-C")
         .arg(format!("{}/llvmext/", project_dir))
         .status()
         .unwrap();
@@ -39,6 +46,10 @@ fn main() {
     // Link the weldrt C++ library
     println!("cargo:rustc-link-lib=static=weldrt");
     println!("cargo:rustc-link-search=native={}/weld_rt/cpp", project_dir);
+
+    // Link the dictst C++ library
+    println!("cargo:rustc-link-lib=static=dictst");
+    println!("cargo:rustc-link-search=native={}/weld_rt/cpp/st", project_dir);
 
     // Link the LLVM extensions library
     println!("cargo:rustc-link-lib=static=llvmext");

@@ -191,7 +191,7 @@ unsafe fn target_machine() -> WeldResult<LLVMTargetMachineRef> {
                             HOST_CPU_FEATURES.as_ptr(),
                             LLVMCodeGenOptLevel::LLVMCodeGenLevelAggressive,
                             LLVMRelocMode::LLVMRelocDefault,
-                            LLVMCodeModel::LLVMCodeModelMedium))
+                            LLVMCodeModel::LLVMCodeModelDefault))
 }
 
 pub unsafe fn set_triple_and_layout(module: LLVMModuleRef) -> WeldResult<()> {

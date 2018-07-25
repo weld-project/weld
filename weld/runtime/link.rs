@@ -17,6 +17,44 @@ pub struct vec_output {
     size: i64,
 }
 
+type RunHandleRef = *mut c_void;
+type VoidPtr = *mut c_void;
+type KeyComparator = extern "C" fn(VoidPtr, VoidPtr) -> int32_t;
+
+#[link(name="dictst", kind="static")]
+extern "C" {
+    #[no_mangle]
+    pub fn weld_st_dict_new(run: RunHandleRef,
+                            keysz: int32_t,
+                            valsz: int32_t,
+                            eq: KeyComparator,
+                            capacity: int64_t) -> VoidPtr;
+    #[no_mangle]
+    pub fn weld_st_dict_get(run: RunHandleRef, 
+                            dict: VoidPtr, 
+                            key: VoidPtr, 
+                            hash: int32_t) -> VoidPtr;
+    #[no_mangle]
+    pub fn weld_st_dict_upsert(run: RunHandleRef,
+                               dict: VoidPtr,
+                               key: VoidPtr,
+                               hash: int32_t,
+                               val: VoidPtr) -> VoidPtr;
+    #[no_mangle]
+    pub fn weld_st_dict_keyexists(run: RunHandleRef, 
+                            dict: VoidPtr, 
+                            key: VoidPtr, 
+                            hash: int32_t) -> int32_t;
+    #[no_mangle]
+    pub fn weld_st_dict_size(run: RunHandleRef, 
+                            dict: VoidPtr) -> int64_t; 
+    #[no_mangle]
+    pub fn weld_st_dict_tovec(run: RunHandleRef, 
+                            dict: VoidPtr,
+                            value_offset: int32_t,
+                            struct_size: int32_t) -> int64_t; 
+}
+
 #[link(name="weldrt", kind="static")]
 extern "C" {
     #[no_mangle]

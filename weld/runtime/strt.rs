@@ -124,6 +124,15 @@ unsafe fn initialize() {
     x += weld_runst_realloc as i64;
     x += weld_runst_free as i64;
     x += weld_runst_set_errno as i64;
+
+    use super::link::*;
+    x += weld_st_dict_new as i64;
+    x += weld_st_dict_get as i64;
+    x += weld_st_dict_upsert as i64;
+    x += weld_st_dict_keyexists as i64;
+    x += weld_st_dict_size as i64;
+    x += weld_st_dict_tovec as i64;
+
     trace!("Runtime initialized with hashed values {}", x);
 }
 

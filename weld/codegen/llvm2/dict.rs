@@ -7,7 +7,7 @@ extern crate lazy_static;
 extern crate llvm_sys;
 extern crate libc;
 
-use libc::c_char;
+use libc::{c_char, c_void, int32_t, int64_t};
 
 use std::ffi::CString;
 
@@ -27,10 +27,12 @@ use super::LlvmGenerator;
 use super::intrinsic;
 
 pub const HASH_INDEX: u32 = 0;
-pub const FILLED_INDEX: u32 = 1;
-pub const LOCK_INDEX: u32 = 2;
-pub const KEY_INDEX: u32 = 4;
-pub const VALUE_INDEX: u32 = 5;
+pub const STATE_INDEX: u32 = 1;
+pub const KEY_INDEX: u32 = 2;
+pub const VALUE_INDEX: u32 = 3;
+
+/// LLVM bytecode that we will link with our module.
+const DICTIONARY: &'static [u8] = include_bytes!("../../../weld_rt/cpp/st/dict-st.bc");
 
 pub struct Dict {
     pub name: String,
@@ -120,6 +122,9 @@ impl CodeGenExt for Intrinsics {
 }
 
 impl Intrinsics {
+    /// Generate intrinsics for a dictionary.
+    ///
+    /// This function also splices in the dictionary code into the module.
     pub unsafe fn new(context: LLVMContextRef, module: LLVMModuleRef) -> Intrinsics {
         let mut intrinsics = Intrinsics {
             new: None,
@@ -133,7 +138,40 @@ impl Intrinsics {
             module: module,
         };
         intrinsics.populate();
+        // intrinsics.link();
         intrinsics
+    }
+
+    /// Link the dictionary into the module.
+    pub unsafe fn link(&mut self) {
+        use std::mem;
+        use self::llvm_sys::ir_reader;
+        use self::llvm_sys::linker;
+
+        let name = CString::new("dictionary").unwrap();
+        let buffer = LLVMCreateMemoryBufferWithMemoryRange(
+            DICTIONARY.as_ptr() as *const i8,
+            DICTIONARY.len(),
+            name.as_ptr(),
+            0);
+
+        assert!(!buffer.is_null());
+
+        // Parse IR into a module
+        let mut dict_module = mem::uninitialized();
+        let mut error_str = mem::uninitialized();
+
+        let err_code = ir_reader::LLVMParseIRInContext(self.context,
+                                                       buffer,
+                                                       &mut dict_module,
+                                                       &mut error_str);
+        assert_eq!(err_code, 0);
+
+        linker::LLVMLinkModules2(self.module, dict_module);
+        debug!("Linked Dictionary bytecode with main module.");
+
+        // LLVMDisposeMessage(error_str);
+        // LLVMDisposeMemoryBuffer(buffer);
     }
 
     pub unsafe fn key_comparator_type(&self) -> LLVMTypeRef {
@@ -206,8 +244,10 @@ impl Intrinsics {
                               builder: LLVMBuilderRef,
                               run: LLVMValueRef,
                               dictionary: LLVMValueRef,
+                              offset: LLVMValueRef,
+                              struct_size: LLVMValueRef,
                               name: Option<*const c_char>) -> LLVMValueRef {
-        let mut args = [run, dictionary];
+        let mut args = [run, dictionary, offset, struct_size];
         LLVMBuildCall(builder, self.to_vec.unwrap(), args.as_mut_ptr(), args.len() as u32, name.unwrap_or(c_str!("")))
     }
 
@@ -232,12 +272,12 @@ impl Intrinsics {
         // Returns: Pointer to Dictionary
         let mut params = vec![
             self.run_handle_type(),
-            self.i64_type(),
-            self.i64_type(),
+            self.i32_type(),
+            self.i32_type(),
             self.key_comparator_type(),
             self.i64_type()
         ];
-        let name = CString::new("weld_runst_dict_new").unwrap();
+        let name = CString::new("weld_st_dict_new").unwrap();
         let fn_type = LLVMFunctionType(dict_type, params.as_mut_ptr(), params.len() as u32, 0);
         let function = LLVMAddFunction(self.module, name.as_ptr(), fn_type);
         // Run handle
@@ -246,9 +286,9 @@ impl Intrinsics {
         self.new = Some(function);
 
         // Parameters: Run Handle, Dictionary, Key, Hash
-        // Returns: `i32` that will be 0 or 1 depending on whether the key exists.
+        // Returns: A pointer to the slot. Raises an error if slot doesn't exist.
         let mut params = vec![self.run_handle_type(), dict_type, void_ptr, hash_type];
-        let name = CString::new("weld_runst_dict_get").unwrap();
+        let name = CString::new("weld_st_dict_get").unwrap();
         let fn_type = LLVMFunctionType(void_ptr, params.as_mut_ptr(), params.len() as u32, 0);
         let function = LLVMAddFunction(self.module, name.as_ptr(), fn_type);
         // Run handle
@@ -262,7 +302,7 @@ impl Intrinsics {
         // Parameters: Run Handle, Dictionary, Key, Hash, Default.
         // Returns: the slot for the given key.
         let mut params = vec![self.run_handle_type(), dict_type, void_ptr, hash_type, void_ptr];
-        let name = CString::new("weld_runst_dict_upsert").unwrap();
+        let name = CString::new("weld_st_dict_upsert").unwrap();
         let fn_type = LLVMFunctionType(void_ptr, params.as_mut_ptr(), params.len() as u32, 0);
         let function = LLVMAddFunction(self.module, name.as_ptr(), fn_type);
         // Run handle
@@ -278,7 +318,7 @@ impl Intrinsics {
         // Parameters: Run Handle, Dictionary, Key, Hash
         // Returns: `i32` that will be 0 or 1 depending on whether the key exists.
         let mut params = vec![self.run_handle_type(), dict_type, void_ptr, hash_type];
-        let name = CString::new("weld_runst_dict_keyexists").unwrap();
+        let name = CString::new("weld_st_dict_keyexists").unwrap();
         let fn_type = LLVMFunctionType(self.i32_type(), params.as_mut_ptr(), params.len() as u32, 0);
         let function = LLVMAddFunction(self.module, name.as_ptr(), fn_type);
         // Run handle
@@ -292,7 +332,7 @@ impl Intrinsics {
         // Parameters: Run Handle, Dictionary
         // Returns: Size of dictionary in # of keys.
         let mut params = vec![self.run_handle_type(), dict_type];
-        let name = CString::new("weld_runst_dict_size").unwrap();
+        let name = CString::new("weld_st_dict_size").unwrap();
         let fn_type = LLVMFunctionType(self.i64_type(), params.as_mut_ptr(), params.len() as u32, 0);
         let function = LLVMAddFunction(self.module, name.as_ptr(), fn_type);
         // Run handle
@@ -301,10 +341,10 @@ impl Intrinsics {
         LLVMExtAddAttrsOnParameter(self.context, function, &[NoCapture, NoAlias, NonNull, ReadOnly], 1);
         self.size = Some(function);
 
-        // Parameters: Run Handle, Dictionary
+        // Parameters: Run Handle, Dictionary, Value offset, Padded Struct Size
         // Returns: A vector of key/value pairs.
-        let mut params = vec![self.run_handle_type(), dict_type];
-        let name = CString::new("weld_runst_dict_tovec").unwrap();
+        let mut params = vec![self.run_handle_type(), dict_type, self.i32_type(), self.i32_type()];
+        let name = CString::new("weld_st_dict_tovec").unwrap();
         let fn_type = LLVMFunctionType(void_ptr, params.as_mut_ptr(), params.len() as u32, 0);
         let function = LLVMAddFunction(self.module, name.as_ptr(), fn_type);
         // Run handle
@@ -317,7 +357,7 @@ impl Intrinsics {
         // Parameters: Run Handle, Dictionary
         // Returns: Nothing
         let mut params = vec![self.run_handle_type(), dict_type];
-        let name = CString::new("weld_runst_dict_free").unwrap();
+        let name = CString::new("weld_st_dict_free").unwrap();
         let fn_type = LLVMFunctionType(self.void_type(), params.as_mut_ptr(), params.len() as u32, 0);
         let function = LLVMAddFunction(self.module, name.as_ptr(), fn_type);
         // Run handle
@@ -347,11 +387,17 @@ impl Dict {
         let name = c_name.into_string().unwrap();
 
         // Create the entry type.
+        //
+        // The entry is laid out as followed, and *must* be consistent with the entry definition in
+        // c++:
+        //
+        // 32-bit hash
+        // 32-bit Internal state
+        // <key>
+        // <value>
         let mut layout = [
             LLVMInt32TypeInContext(context),
-            LLVMInt8TypeInContext(context),
-            LLVMInt8TypeInContext(context),
-            LLVMInt16TypeInContext(context),
+            LLVMInt32TypeInContext(context),
             key_ty,
             val_ty
         ];
@@ -401,8 +447,8 @@ impl Dict {
 
             let capacity = LLVMGetParam(function, 0);
             let run = LLVMGetParam(function, 1);
-            let key_size = self.size_of(self.key_ty);
-            let val_size = self.size_of(self.val_ty);
+            let key_size = LLVMConstTruncOrBitCast(self.size_of(self.key_ty), self.i32_type());
+            let val_size = LLVMConstTruncOrBitCast(self.size_of(self.val_ty), self.i32_type());
             let result = intrinsics.call_new(builder, run, key_size, val_size, self.key_comparator, capacity, None);
 
             // Wrap the pointer in the struct.
@@ -538,10 +584,7 @@ impl Dict {
 
             let dict = LLVMBuildExtractValue(builder, dict, 0, c_str!(""));
             let key = LLVMBuildBitCast(builder, key, self.void_pointer_type(), c_str!(""));
-            let slot_pointer = intrinsics.call_key_exists(builder, run, dict, key, hash, None);
-            let slot_pointer = LLVMBuildBitCast(builder, slot_pointer, self.slot_ty, c_str!(""));
-            let value_pointer = LLVMBuildStructGEP(builder, slot_pointer, FILLED_INDEX, c_str!(""));
-            let filled = self.load(builder, value_pointer)?;
+            let filled = intrinsics.call_key_exists(builder, run, dict, key, hash, None);
             let result = LLVMBuildTrunc(builder, filled, ret_ty, c_str!(""));
 
             LLVMBuildRet(builder, result);
@@ -591,6 +634,7 @@ impl Dict {
                           builder: LLVMBuilderRef,
                           intrinsics: &Intrinsics,
                           kv_vec_ty: LLVMTypeRef,
+                          kv_ty: LLVMTypeRef,
                           run: LLVMValueRef,
                           dict: LLVMValueRef) -> WeldResult<LLVMValueRef> {
         if self.to_vec.is_none() {
@@ -600,11 +644,20 @@ impl Dict {
             let name = format!("{}.tovec", self.name);
             let (function, builder, _) = self.define_function(ret_ty, &mut arg_tys, name);
 
+            // Compute the (constant) parameters required to convert the dictionary into a
+            // key/value vector.
+            let mut indices = [self.i32(0), self.i32(1)];
+            let offset = LLVMConstGEP(self.null_ptr(kv_ty),
+            indices.as_mut_ptr(),
+            indices.len() as u32);
+            let offset = LLVMConstPtrToInt(offset, self.i32_type());
+            let struct_size = LLVMConstTruncOrBitCast(self.size_of(kv_ty), self.i32_type());
+
             let dict = LLVMGetParam(function, 0);
             let run = LLVMGetParam(function, 1);
 
             let dict = LLVMBuildExtractValue(builder, dict, 0, c_str!(""));
-            let pointer = intrinsics.call_to_vec(builder, run, dict, None);
+            let pointer = intrinsics.call_to_vec(builder, run, dict, offset, struct_size, None);
             let result = LLVMBuildBitCast(builder, pointer, LLVMPointerType(kv_vec_ty, 0), c_str!(""));
             let result = self.load(builder, result)?;
 
@@ -613,6 +666,7 @@ impl Dict {
             self.to_vec = Some(function);
             LLVMDisposeBuilder(builder);
         }
+
         let mut args = [dict, run];
         return Ok(LLVMBuildCall(builder, self.to_vec.unwrap(), args.as_mut_ptr(), args.len() as u32, c_str!("")))
     }

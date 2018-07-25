@@ -43,6 +43,8 @@ pub enum WeldRuntimeErrno {
     ///
     /// This error occurs if a buffer being deserialized has an invalid length.
     DeserializationError,
+    /// A key was not found in a dictionary.
+    KeyNotFoundError,
     /// Maximum errno value.
     ///
     /// All errors will have a value less than this value and greater than 0.
