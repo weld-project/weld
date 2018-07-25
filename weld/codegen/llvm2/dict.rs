@@ -1,7 +1,17 @@
 //! A wrapper for dictionaries in Weld.
-
-// Suppress annoying warnings for now.
-#![allow(unused_variables,unused_imports)]
+//!
+//! The dictionary is currently implemented as a statically linked C++ library. This means that
+//! this file mostly contains wrappers for calling into that implementation. It should thus be
+//! modified with care, and should ensure that the following properties always hold:
+//!
+//! 1. The definition of each function in `Intrinsics::populate` must *exactly* match the
+//!    corresponding C++ `"extern" C` definition. The LLVM compiler will not check to see whether
+//!    the argument lists and return types match: it only checks the symbol name. If there is a
+//!    mismatch here, it can lead to some hairy bugs.
+//! 2. The layout of the dictionary slot in `Dict::define` must be consistent with the C++
+//!    definition. In particular, the slot is defined as a header followed by a key and value here,
+//!    and the header is redefined in C++: the headers must thus be consistent.
+!
 
 extern crate lazy_static;
 extern crate llvm_sys;
@@ -31,8 +41,9 @@ pub const STATE_INDEX: u32 = 1;
 pub const KEY_INDEX: u32 = 2;
 pub const VALUE_INDEX: u32 = 3;
 
-/// LLVM bytecode that we will link with our module.
-const DICTIONARY: &'static [u8] = include_bytes!("../../../weld_rt/cpp/st/dict-st.bc");
+// XXX Currently linked as an external library.
+// /// LLVM bytecode that we will link with our module.
+// const DICTIONARY: &'static [u8] = include_bytes!("../../../weld_rt/cpp/st/dict-st.bc");
 
 pub struct Dict {
     pub name: String,
@@ -263,6 +274,8 @@ impl Intrinsics {
     }
 
     /// Populate `self` with the dictionary intrinsics.
+    ///
+    /// These intrinsic definitions must be consistent with the C++ equivalent.
     unsafe fn populate(&mut self) {
         // Common types.
         let dict_type = LLVMPointerType(self.i8_type(), 0);
