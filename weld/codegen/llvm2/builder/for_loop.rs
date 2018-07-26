@@ -365,7 +365,7 @@ impl ForLoopGenInternal for LlvmGenerator {
 
                     let vector = self.load(ctx.builder, ctx.get_value(&iter.data)?)?;
                     let vector_type = ctx.sir_function.symbol_type(&iter.data)?;
-                    let element_pointer = self.gen_at(ctx, vector_type, vector, i)?;
+                    let element_pointer = self.gen_at(ctx.builder, vector_type, vector, i)?;
                     let element = self.load(ctx.builder, element_pointer)?;
                     values.push(element);
                 }
@@ -373,7 +373,7 @@ impl ForLoopGenInternal for LlvmGenerator {
                     // Iterates over the full vector: Index = i.
                     let vector = self.load(ctx.builder, ctx.get_value(&iter.data)?)?;
                     let vector_type = ctx.sir_function.symbol_type(&iter.data)?;
-                    let element_pointer = self.gen_at(ctx, vector_type, vector, i)?;
+                    let element_pointer = self.gen_at(ctx.builder, vector_type, vector, i)?;
                     let element = self.load(ctx.builder, element_pointer)?;
                     values.push(element);
                 }
@@ -382,7 +382,7 @@ impl ForLoopGenInternal for LlvmGenerator {
                     let i = LLVMBuildNSWMul(ctx.builder, i, self.i64(LLVM_VECTOR_WIDTH as i64), c_str!(""));
                     let vector = self.load(ctx.builder, ctx.get_value(&iter.data)?)?;
                     let vector_type = ctx.sir_function.symbol_type(&iter.data)?;
-                    let element_pointer = self.gen_vat(ctx, vector_type, vector, i)?;
+                    let element_pointer = self.gen_vat(ctx.builder, vector_type, vector, i)?;
                     let element = self.load(ctx.builder, element_pointer)?;
                     values.push(element);
                 }
@@ -390,7 +390,7 @@ impl ForLoopGenInternal for LlvmGenerator {
                 FringeIter => {
                     let vector = self.load(ctx.builder, ctx.get_value(&iter.data)?)?;
                     let vector_type = ctx.sir_function.symbol_type(&iter.data)?;
-                    let size = self.gen_size(ctx, vector_type, vector)?;
+                    let size = self.gen_size(ctx.builder, vector_type, vector)?;
 
                     // Start = Len(vector) - Len(vector) % VECTOR_WIDTH
                     // Index = start + i
@@ -398,7 +398,7 @@ impl ForLoopGenInternal for LlvmGenerator {
                     let start = LLVMBuildNSWSub(ctx.builder, size, tmp, c_str!(""));
                     let i = LLVMBuildNSWAdd(ctx.builder, start, i, c_str!(""));
 
-                    let element_pointer = self.gen_at(ctx, vector_type, vector, i)?;
+                    let element_pointer = self.gen_at(ctx.builder, vector_type, vector, i)?;
                     let element = self.load(ctx.builder, element_pointer)?;
                     values.push(element);
                 }
@@ -435,7 +435,7 @@ impl ForLoopGenInternal for LlvmGenerator {
                                fail_block: LLVMBasicBlockRef) -> WeldResult<LLVMValueRef> {
         let vector = self.load(ctx.builder, ctx.get_value(&iter.data)?)?;
         let vector_type = ctx.sir_function.symbol_type(&iter.data)?;
-        let size = self.gen_size(ctx, vector_type, vector)?;
+        let size = self.gen_size(ctx.builder, vector_type, vector)?;
         match iter.kind {
             ScalarIter if iter.start.is_some() => {
                 use self::llvm_sys::LLVMIntPredicate::{LLVMIntSLT, LLVMIntSLE, LLVMIntEQ};

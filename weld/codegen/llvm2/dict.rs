@@ -16,11 +16,10 @@ extern crate lazy_static;
 extern crate llvm_sys;
 extern crate libc;
 
-use libc::{c_char, c_void, int32_t, int64_t};
+use libc::{c_char};
 
 use std::ffi::CString;
 
-use ast::Type;
 use error::*;
 
 use self::llvm_sys::prelude::*;
@@ -29,11 +28,7 @@ use self::llvm_sys::core::*;
 use codegen::llvm2::llvm_exts::LLVMExtAttribute::*;
 use codegen::llvm2::llvm_exts::*;
 
-use super::LLVM_VECTOR_WIDTH;
 use super::CodeGenExt;
-use super::FunctionContext;
-use super::LlvmGenerator;
-use super::intrinsic;
 
 pub const HASH_INDEX: u32 = 0;
 pub const STATE_INDEX: u32 = 1;

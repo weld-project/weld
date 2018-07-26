@@ -888,11 +888,9 @@ impl LlvmGenerator {
                 let child_value = self.load(context.builder, context.get_value(child)?)?;
                 let index_value = self.load(context.builder, context.get_value(index)?)?;
                 let child_type = context.sir_function.symbol_type(child)?;
-                if let Vector(ref elem_type) = *child_type {
-                    let pointer = {
-                        let mut methods = self.vectors.get_mut(elem_type).unwrap();
-                        methods.gen_at(context.builder, child_value, index_value)?
-                    };
+                if let Vector(_) = *child_type {
+                    use self::vector::VectorExt;
+                    let pointer = self.gen_at(context.builder, child_type, child_value, index_value)?;
                     let result = self.load(context.builder, pointer)?;
                     LLVMBuildStore(context.builder, result, output_pointer);
                     Ok(())
@@ -926,29 +924,19 @@ impl LlvmGenerator {
                 Ok(())
             }
             MakeVector(ref elems) => {
+                use self::vector::VectorExt;
                 let output_pointer = context.get_value(output)?;
                 let output_type = context.sir_function.symbol_type(output)?;
                 let size = self.i64(elems.len() as i64);
-                if let Vector(ref elem_type) = *output_type {
-                    let vector = {
-                        let mut methods = self.vectors.get_mut(elem_type).unwrap();
-                        methods.gen_new(context.builder, &mut self.intrinsics, context.get_run(), size)?
-                    };
-                    for (i, elem) in elems.iter().enumerate() {
-                        let index = self.i64(i as i64);
-                        // Scope to prevent borrow error with self.load...
-                        let vec_pointer = {
-                            let mut methods = self.vectors.get_mut(elem_type).unwrap();
-                            methods.gen_at(context.builder, vector, index)?
-                        };
-                        let loaded = self.load(context.builder, context.get_value(elem)?)?;
-                        LLVMBuildStore(context.builder, loaded, vec_pointer);
-                    }
-                    LLVMBuildStore(context.builder, vector, output_pointer);
-                    Ok(())
-                } else {
-                    unreachable!()
+                let vector = self.gen_new(context.builder, output_type, size, context.get_run())?;
+                for (i, elem) in elems.iter().enumerate() {
+                    let index = self.i64(i as i64);
+                    let vec_pointer = self.gen_at(context.builder, output_type, vector, index)?;
+                    let loaded = self.load(context.builder, context.get_value(elem)?)?;
+                    LLVMBuildStore(context.builder, loaded, vec_pointer);
                 }
+                LLVMBuildStore(context.builder, vector, output_pointer);
+                Ok(())
             }
             Merge { .. } => {
                 use self::builder::BuilderExpressionGen;

@@ -21,7 +21,6 @@ use self::llvm_sys::core::*;
 
 use super::LLVM_VECTOR_WIDTH;
 use super::CodeGenExt;
-use super::FunctionContext;
 use super::LlvmGenerator;
 use super::intrinsic::Intrinsics;
 
@@ -39,89 +38,93 @@ pub const SIZE_INDEX: u32 = 1;
 /// vector type (not the element type).
 pub trait VectorExt {
     unsafe fn gen_new(&mut self,
-               ctx: &mut FunctionContext,
+               builder: LLVMBuilderRef,
                vector_type: &Type,
-               size: LLVMValueRef) -> WeldResult<LLVMValueRef>;
+               size: LLVMValueRef,
+               run: LLVMValueRef) -> WeldResult<LLVMValueRef>;
     unsafe fn gen_at(&mut self,
-              ctx: &mut FunctionContext,
+              builder: LLVMBuilderRef,
               vector_type: &Type,
               vec: LLVMValueRef,
               index: LLVMValueRef) -> WeldResult<LLVMValueRef>;
     unsafe fn gen_vat(&mut self,
-               ctx: &mut FunctionContext,
+               builder: LLVMBuilderRef,
                vector_type: &Type,
                vec: LLVMValueRef,
                index: LLVMValueRef) -> WeldResult<LLVMValueRef>;
     unsafe fn gen_size(&mut self,
-                ctx: &mut FunctionContext,
+                builder: LLVMBuilderRef,
                 vector_type: &Type,
                 vec: LLVMValueRef) -> WeldResult<LLVMValueRef>;
     unsafe fn gen_extend(&mut self,
-                ctx: &mut FunctionContext,
+                builder: LLVMBuilderRef,
                 vector_type: &Type,
                 vec: LLVMValueRef,
-                size: LLVMValueRef) -> WeldResult<LLVMValueRef>;
+                size: LLVMValueRef,
+                run: LLVMValueRef) -> WeldResult<LLVMValueRef>;
 }
 
 impl VectorExt for LlvmGenerator {
     unsafe fn gen_new(&mut self,
-               ctx: &mut FunctionContext,
+               builder: LLVMBuilderRef,
                vector_type: &Type,
-               size: LLVMValueRef) -> WeldResult<LLVMValueRef> {
+               size: LLVMValueRef,
+               run: LLVMValueRef) -> WeldResult<LLVMValueRef> {
         if let Type::Vector(ref elem_type) = *vector_type {
             let mut methods = self.vectors.get_mut(elem_type).unwrap();
-            methods.gen_new(ctx.builder, &mut self.intrinsics, ctx.get_run(), size)
+            methods.gen_new(builder, &mut self.intrinsics, run, size)
         } else {
             unreachable!()
         }
     }
 
     unsafe fn gen_at(&mut self,
-              ctx: &mut FunctionContext,
+              builder: LLVMBuilderRef,
               vector_type: &Type,
               vector: LLVMValueRef,
               index: LLVMValueRef) -> WeldResult<LLVMValueRef> {
         if let Type::Vector(ref elem_type) = *vector_type {
             let mut methods = self.vectors.get_mut(elem_type).unwrap();
-            methods.gen_at(ctx.builder, vector, index)
+            methods.gen_at(builder, vector, index)
         } else {
             unreachable!()
         }
     }
 
     unsafe fn gen_vat(&mut self,
-               ctx: &mut FunctionContext,
+               builder: LLVMBuilderRef,
                vector_type: &Type,
                vector: LLVMValueRef,
                index: LLVMValueRef) -> WeldResult<LLVMValueRef> {
         if let Type::Vector(ref elem_type) = *vector_type {
             let mut methods = self.vectors.get_mut(elem_type).unwrap();
-            methods.gen_vat(ctx.builder, vector, index)
+            methods.gen_vat(builder, vector, index)
         } else {
             unreachable!()
         }
     }
 
     unsafe fn gen_size(&mut self,
-                ctx: &mut FunctionContext,
+                builder: LLVMBuilderRef,
                 vector_type: &Type,
                 vector: LLVMValueRef) -> WeldResult<LLVMValueRef> {
         if let Type::Vector(ref elem_type) = *vector_type {
             let mut methods = self.vectors.get_mut(elem_type).unwrap();
-            methods.gen_size(ctx.builder, vector)
+            methods.gen_size(builder, vector)
         } else {
             unreachable!()
         }
     }
 
     unsafe fn gen_extend(&mut self,
-                ctx: &mut FunctionContext,
+                builder: LLVMBuilderRef,
                 vector_type: &Type,
                 vec: LLVMValueRef,
-                size: LLVMValueRef) -> WeldResult<LLVMValueRef> {
+                size: LLVMValueRef,
+                run: LLVMValueRef) -> WeldResult<LLVMValueRef> {
         if let Type::Vector(ref elem_type) = *vector_type {
             let mut methods = self.vectors.get_mut(elem_type).unwrap();
-            methods.gen_extend(ctx.builder, &mut self.intrinsics, ctx.get_run(), vec, size)
+            methods.gen_extend(builder, &mut self.intrinsics, run, vec, size)
         } else {
             unreachable!()
         }

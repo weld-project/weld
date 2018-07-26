@@ -39,14 +39,16 @@ impl SerDeGen for LlvmGenerator {
         use codegen::llvm2::vector::VectorExt;
         if let Serialize(ref child) = statement.kind {
             let zero = self.i64(0);
-            let buffer = self.gen_new(ctx, &SER_TY, zero)?;
+            let buffer = self.gen_new(ctx.builder, &SER_TY, zero, ctx.get_run())?;
             let child_ty = ctx.sir_function.symbol_type(child)?;
             let child = ctx.get_value(child)?;
-            let serialized = self.gen_serialize_helper(ctx,
+            let serialized = self.gen_serialize_helper(ctx.llvm_function,
+                                                       ctx.builder,
                                                        &mut SerializePosition::new(zero),
                                                        child,
                                                        child_ty,
-                                                       buffer)?;
+                                                       buffer,
+                                                       ctx.get_run())?;
             let output = statement.output.as_ref().unwrap();
             LLVMBuildStore(ctx.builder, serialized, ctx.get_value(output)?);
             Ok(())
@@ -63,11 +65,13 @@ impl SerDeGen for LlvmGenerator {
             let output = ctx.get_value(output)?;
             let buffer = self.load(ctx.builder, ctx.get_value(child)?)?;
             let zero = self.i64(0);
-            self.gen_deserialize_helper(ctx,
+            self.gen_deserialize_helper(ctx.llvm_function,
+                                        ctx.builder,
                                         &mut SerializePosition::new(zero),
                                         output,
                                         output_ty,
-                                        buffer)?;
+                                        buffer,
+                                        ctx.get_run())?;
             // This function writes directly into the output, so a store afterward is not
             // necessary.
             Ok(())
@@ -96,19 +100,21 @@ trait SerHelper {
     /// This function assumes that the value being put contains no nested pointers, and is also
     /// optimized for "small" values
     unsafe fn gen_put_value(&mut self,
-                           ctx: &mut FunctionContext,
+                           builder: LLVMBuilderRef,
                            value: LLVMValueRef,
                            buffer: LLVMValueRef,
+                           run: LLVMValueRef,
                            position: &mut SerializePosition) -> WeldResult<LLVMValueRef>;
 
     /// Copy a typed buffer of values into the serialization buffer.
     ///
     /// The buffer should have `size` objects, and the objects should not contain any nested pointers.
     unsafe fn gen_put_values(&mut self,
-                           ctx: &mut FunctionContext,
+                           builder: LLVMBuilderRef,
                            ptr: LLVMValueRef,
                            size: LLVMValueRef,
                            buffer: LLVMValueRef,
+                           run: LLVMValueRef,
                            position: &mut SerializePosition) -> WeldResult<LLVMValueRef>;
 
     /// A recursive function for serializing a value.
@@ -117,34 +123,37 @@ trait SerHelper {
     /// The function updates `index` to point to the last byte in the buffer if necessary. The
     /// passed value should be a pointer.
     unsafe fn gen_serialize_helper(&mut self,
-                           ctx: &mut FunctionContext,
+                           llvm_function: LLVMValueRef,
+                           builder: LLVMBuilderRef,
                            position: &mut SerializePosition,
                            value: LLVMValueRef,
                            ty: &Type,
-                           buffer: LLVMValueRef) -> WeldResult<LLVMValueRef>;
+                           buffer: LLVMValueRef,
+                           run: LLVMValueRef) -> WeldResult<LLVMValueRef>;
 }
 
 impl SerHelper for LlvmGenerator {
     unsafe fn gen_put_value(&mut self,
-                           ctx: &mut FunctionContext,
+                           builder: LLVMBuilderRef,
                            value: LLVMValueRef,
                            buffer: LLVMValueRef,
+                           run: LLVMValueRef,
                            position: &mut SerializePosition) -> WeldResult<LLVMValueRef> {
 
         use codegen::llvm2::vector::VectorExt;
         let size = self.size_of(LLVMTypeOf(value));
 
         // Grow the vector to the required capacity.
-        let required_size = LLVMBuildAdd(ctx.builder, position.index, size, c_str!(""));
-        let buffer = self.gen_extend(ctx, &SER_TY, buffer, required_size)?;
+        let required_size = LLVMBuildAdd(builder, position.index, size, c_str!(""));
+        let buffer = self.gen_extend(builder, &SER_TY, buffer, required_size, run)?;
 
         let ty = LLVMTypeOf(value);
         let pointer_ty = LLVMPointerType(ty, 0);
-        let pointer = self.gen_at(ctx, &SER_TY, buffer, position.index)?;
+        let pointer = self.gen_at(builder, &SER_TY, buffer, position.index)?;
 
         // Write the value.
-        let pointer_typed = LLVMBuildBitCast(ctx.builder, pointer, pointer_ty, c_str!(""));
-        LLVMBuildStore(ctx.builder, value, pointer_typed);
+        let pointer_typed = LLVMBuildBitCast(builder, pointer, pointer_ty, c_str!(""));
+        LLVMBuildStore(builder, value, pointer_typed);
 
         // Update the position.
         position.index = required_size;
@@ -152,62 +161,65 @@ impl SerHelper for LlvmGenerator {
     }
 
     unsafe fn gen_put_values(&mut self,
-                           ctx: &mut FunctionContext,
+                           builder: LLVMBuilderRef,
                            ptr: LLVMValueRef,
                            size: LLVMValueRef,
                            buffer: LLVMValueRef,
+                           run: LLVMValueRef,
                            position: &mut SerializePosition) -> WeldResult<LLVMValueRef> {
         use codegen::llvm2::vector::VectorExt;
 
         let elem_size = self.size_of(LLVMGetElementType(LLVMTypeOf(ptr)));
-        let size = LLVMBuildMul(ctx.builder, size, elem_size, c_str!(""));
-        let required_size = LLVMBuildAdd(ctx.builder, position.index, size, c_str!(""));
-        let buffer = self.gen_extend(ctx, &SER_TY, buffer, required_size)?;
-        let pointer = self.gen_at(ctx, &SER_TY, buffer, position.index)?;
+        let size = LLVMBuildMul(builder, size, elem_size, c_str!(""));
+        let required_size = LLVMBuildAdd(builder, position.index, size, c_str!(""));
+        let buffer = self.gen_extend(builder, &SER_TY, buffer, required_size, run)?;
+        let pointer = self.gen_at(builder, &SER_TY, buffer, position.index)?;
 
         // Write the value.
-        let pointer_untyped = LLVMBuildBitCast(ctx.builder,
+        let pointer_untyped = LLVMBuildBitCast(builder,
                                                ptr,
                                                LLVMPointerType(self.i8_type(), 0),
                                                c_str!(""));
-        self.intrinsics.call_memcpy(ctx.builder, pointer, pointer_untyped, size);
+        self.intrinsics.call_memcpy(builder, pointer, pointer_untyped, size);
         position.index = required_size;
         Ok(buffer)
     }
 
     unsafe fn gen_serialize_helper(&mut self,
-                           ctx: &mut FunctionContext,
+                           llvm_function: LLVMValueRef,
+                           builder: LLVMBuilderRef,
                            position: &mut SerializePosition,
                            value: LLVMValueRef,
                            ty: &Type,
-                           buffer: LLVMValueRef) -> WeldResult<LLVMValueRef> {
+                           buffer: LLVMValueRef,
+                           run: LLVMValueRef) -> WeldResult<LLVMValueRef> {
         use codegen::llvm2::vector::VectorExt;
         use ast::Type::*;
         match *ty {
             Scalar(_) => {
-                let value = self.load(ctx.builder, value)?;
-                self.gen_put_value(ctx, value, buffer, position)
+                let value = self.load(builder, value)?;
+                self.gen_put_value(builder, value, buffer, run, position)
             }
             Struct(_) if !ty.has_pointer() => {
                 // Use a memcpy intrinsic instead of a load and store for structs.
                 let count = self.i64(1);
-                self.gen_put_values(ctx, value, count, buffer, position)
+                self.gen_put_values(builder, value, count, buffer, run, position)
             }
             Vector(ref elem) if !elem.has_pointer() => {
                 let zero = self.i64(0);
-                let value = self.load(ctx.builder, value)?;
-                let vec_size = self.gen_size(ctx, ty, value)?;
-                let vec_ptr = self.gen_at(ctx, ty, value, zero)?;
+                let value = self.load(builder, value)?;
+                let vec_size = self.gen_size(builder, ty, value)?;
+                let vec_ptr = self.gen_at(builder, ty, value, zero)?;
                 // Write the 8-byte length followed by the data buffer.
-                let buffer = self.gen_put_value(ctx, vec_size, buffer, position)?;
-                self.gen_put_values(ctx, vec_ptr, vec_size, buffer, position)
+                let buffer = self.gen_put_value(builder, vec_size, buffer, run, position)?;
+                self.gen_put_values(builder, vec_ptr, vec_size, buffer, run, position)
             }
             Struct(ref tys) => {
                 info!("Serializing a struct with pointers");
                 let mut buffer = buffer;
                 for (i, ty) in tys.iter().enumerate() {
-                    let value_pointer = LLVMBuildStructGEP(ctx.builder, value, i as u32, c_str!(""));
-                    buffer = self.gen_serialize_helper(ctx, position, value_pointer, ty, buffer)?;
+                    let value_pointer = LLVMBuildStructGEP(builder, value, i as u32, c_str!(""));
+                    buffer = self.gen_serialize_helper(llvm_function, builder, position, value_pointer, ty, buffer, run)?;
                 }
                 Ok(buffer)
             }
@@ -217,20 +229,20 @@ impl SerHelper for LlvmGenerator {
                 // inserted into the current SIR basic block. The loop created here will always
                 // finish at `ser.end` and the builder is always guaranteed to be positioned at the
                 // end of ser.end.
-                let start_block = LLVMAppendBasicBlockInContext(self.context, ctx.llvm_function, c_str!("ser.start"));
-                let loop_block = LLVMAppendBasicBlockInContext(self.context, ctx.llvm_function, c_str!("ser.loop"));
-                let end_block = LLVMAppendBasicBlockInContext(self.context, ctx.llvm_function, c_str!("ser.end"));
+                let start_block = LLVMAppendBasicBlockInContext(self.context, llvm_function, c_str!("ser.start"));
+                let loop_block = LLVMAppendBasicBlockInContext(self.context, llvm_function, c_str!("ser.loop"));
+                let end_block = LLVMAppendBasicBlockInContext(self.context, llvm_function, c_str!("ser.end"));
 
-                LLVMBuildBr(ctx.builder, start_block);
-                LLVMPositionBuilderAtEnd(ctx.builder, start_block);
+                LLVMBuildBr(builder, start_block);
+                LLVMPositionBuilderAtEnd(builder, start_block);
 
-                let value = self.load(ctx.builder, value)?;
+                let value = self.load(builder, value)?;
 
-                let size = self.gen_size(ctx, ty, value)?;
-                let start_buffer = self.gen_put_value(ctx, size, buffer, position)?;
+                let size = self.gen_size(builder, ty, value)?;
+                let start_buffer = self.gen_put_value(builder, size, buffer, run, position)?;
                 let zero = self.i64(0);
-                let compare = LLVMBuildICmp(ctx.builder, LLVMIntSGT, size, zero, c_str!(""));
-                LLVMBuildCondBr(ctx.builder, compare, loop_block, end_block);
+                let compare = LLVMBuildICmp(builder, LLVMIntSGT, size, zero, c_str!(""));
+                LLVMBuildCondBr(builder, compare, loop_block, end_block);
 
                 // Save reference to position so we can PHI from it later.
                 //
@@ -262,18 +274,18 @@ impl SerHelper for LlvmGenerator {
                 let start_position = position.index;
 
                 // Looping block.
-                LLVMPositionBuilderAtEnd(ctx.builder, loop_block);
-                let i = LLVMBuildPhi(ctx.builder, self.i64_type(), c_str!(""));
-                let phi_buffer = LLVMBuildPhi(ctx.builder, LLVMTypeOf(buffer), c_str!(""));
-                let phi_position = LLVMBuildPhi(ctx.builder, self.i64_type(), c_str!(""));
+                LLVMPositionBuilderAtEnd(builder, loop_block);
+                let i = LLVMBuildPhi(builder, self.i64_type(), c_str!(""));
+                let phi_buffer = LLVMBuildPhi(builder, LLVMTypeOf(buffer), c_str!(""));
+                let phi_position = LLVMBuildPhi(builder, self.i64_type(), c_str!(""));
                 position.index = phi_position;
 
-                let value_pointer = self.gen_at(ctx, ty, value, i)?;
-                let updated_buffer = self.gen_serialize_helper(ctx, position, value_pointer, elem, phi_buffer)?;
+                let value_pointer = self.gen_at(builder, ty, value, i)?;
+                let updated_buffer = self.gen_serialize_helper(llvm_function, builder, position, value_pointer, elem, phi_buffer, run)?;
                 let updated_position = position.index;
-                let updated_i = LLVMBuildNSWAdd(ctx.builder, i, self.i64(1), c_str!(""));
-                let compare = LLVMBuildICmp(ctx.builder, LLVMIntSGT, size, updated_i, c_str!(""));
-                LLVMBuildCondBr(ctx.builder, compare, loop_block, end_block);
+                let updated_i = LLVMBuildNSWAdd(builder, i, self.i64(1), c_str!(""));
+                let compare = LLVMBuildICmp(builder, LLVMIntSGT, size, updated_i, c_str!(""));
+                LLVMBuildCondBr(builder, compare, loop_block, end_block);
 
                 let mut blocks = [start_block, loop_block];
 
@@ -286,12 +298,12 @@ impl SerHelper for LlvmGenerator {
                 LLVMAddIncoming(phi_position, values.as_mut_ptr(), blocks.as_mut_ptr(), values.len() as u32);
 
                 // End block.
-                LLVMPositionBuilderAtEnd(ctx.builder, end_block);
-                let buffer = LLVMBuildPhi(ctx.builder, LLVMTypeOf(buffer), c_str!(""));
+                LLVMPositionBuilderAtEnd(builder, end_block);
+                let buffer = LLVMBuildPhi(builder, LLVMTypeOf(buffer), c_str!(""));
                 let mut values = [start_buffer, updated_buffer];
                 LLVMAddIncoming(buffer, values.as_mut_ptr(), blocks.as_mut_ptr(), values.len() as u32);
 
-                let phi_position = LLVMBuildPhi(ctx.builder, self.i64_type(), c_str!(""));
+                let phi_position = LLVMBuildPhi(builder, self.i64_type(), c_str!(""));
                 let mut values = [start_position, updated_position];
                 LLVMAddIncoming(phi_position, values.as_mut_ptr(), blocks.as_mut_ptr(), values.len() as u32);
                 // This "backtracks" position if necessary: without the phi, it assumes that the
@@ -315,7 +327,7 @@ impl SerHelper for LlvmGenerator {
 trait DeHelper {
     /// Return a typed value from the serialization buffer and update offset.
     unsafe fn gen_get_value(&mut self,
-                           ctx: &mut FunctionContext,
+                           builder: LLVMBuilderRef,
                            ty: LLVMTypeRef,
                            buffer: LLVMValueRef,
                            position: &mut SerializePosition) -> WeldResult<LLVMValueRef>;
@@ -324,7 +336,7 @@ trait DeHelper {
     ///
     /// Returns the pointer.
     unsafe fn gen_get_values(&mut self,
-                           ctx: &mut FunctionContext,
+                           builder: LLVMBuilderRef,
                            ptr: LLVMValueRef,
                            size: LLVMValueRef,
                            buffer: LLVMValueRef,
@@ -334,31 +346,33 @@ trait DeHelper {
     ///
     /// This function recursively deserializes `value`, assuming `value` has type `ty`.
     unsafe fn gen_deserialize_helper(&mut self,
-                           ctx: &mut FunctionContext,
+                           llvm_function: LLVMValueRef,
+                           builder: LLVMBuilderRef,
                            position: &mut SerializePosition,
                            output: LLVMValueRef,
                            ty: &Type,
-                           buffer: LLVMValueRef) -> WeldResult<()>;
+                           buffer: LLVMValueRef,
+                           run: LLVMValueRef) -> WeldResult<()>;
 }
 
 impl DeHelper for LlvmGenerator {
     /// Read a value into a register from the serialization buffer.
     unsafe fn gen_get_value(&mut self,
-                           ctx: &mut FunctionContext,
+                           builder: LLVMBuilderRef,
                            ty: LLVMTypeRef,
                            buffer: LLVMValueRef,
                            position: &mut SerializePosition) -> WeldResult<LLVMValueRef> {
         use codegen::llvm2::vector::VectorExt;
 
         let size = self.size_of(ty);
-        let pointer = self.gen_at(ctx, &SER_TY, buffer, position.index)?;
+        let pointer = self.gen_at(builder, &SER_TY, buffer, position.index)?;
 
         // Write the value.
-        let pointer_typed = LLVMBuildBitCast(ctx.builder, pointer, LLVMPointerType(ty, 0), c_str!(""));
-        let value = self.load(ctx.builder, pointer_typed)?;
+        let pointer_typed = LLVMBuildBitCast(builder, pointer, LLVMPointerType(ty, 0), c_str!(""));
+        let value = self.load(builder, pointer_typed)?;
 
         // Update the position.
-        position.index = LLVMBuildAdd(ctx.builder, position.index, size, c_str!(""));
+        position.index = LLVMBuildAdd(builder, position.index, size, c_str!(""));
         Ok(value)
     }
 
@@ -367,98 +381,100 @@ impl DeHelper for LlvmGenerator {
     /// The passed pointer should have enough allocated space to hold the deserialized values; this
     /// method does not perform allocation.
     unsafe fn gen_get_values(&mut self,
-                           ctx: &mut FunctionContext,
+                           builder: LLVMBuilderRef,
                            ptr: LLVMValueRef,
                            size: LLVMValueRef,
                            buffer: LLVMValueRef,
                            position: &mut SerializePosition) -> WeldResult<()> {
         use codegen::llvm2::vector::VectorExt;
         let elem_size = self.size_of(LLVMGetElementType(LLVMTypeOf(ptr)));
-        let size = LLVMBuildNSWMul(ctx.builder, size, elem_size, c_str!(""));
+        let size = LLVMBuildNSWMul(builder, size, elem_size, c_str!(""));
 
-        let pointer = self.gen_at(ctx, &SER_TY, buffer, position.index)?;
+        let pointer = self.gen_at(builder, &SER_TY, buffer, position.index)?;
 
         // Write the value.
-        let pointer_untyped = LLVMBuildBitCast(ctx.builder,
+        let pointer_untyped = LLVMBuildBitCast(builder,
                                                ptr,
                                                LLVMPointerType(self.i8_type(), 0),
                                                c_str!(""));
-        self.intrinsics.call_memcpy(ctx.builder, pointer_untyped, pointer, size);
-        position.index = LLVMBuildAdd(ctx.builder, position.index, size, c_str!(""));
+        self.intrinsics.call_memcpy(builder, pointer_untyped, pointer, size);
+        position.index = LLVMBuildAdd(builder, position.index, size, c_str!(""));
         Ok(())
     }
 
     unsafe fn gen_deserialize_helper(&mut self,
-                           ctx: &mut FunctionContext,
+                           llvm_function: LLVMValueRef,
+                           builder: LLVMBuilderRef,
                            position: &mut SerializePosition,
                            output: LLVMValueRef,
                            ty: &Type,
-                           buffer: LLVMValueRef) -> WeldResult<()> {
+                           buffer: LLVMValueRef,
+                           run: LLVMValueRef) -> WeldResult<()> {
         use codegen::llvm2::vector::VectorExt;
         use ast::Type::*;
         match *ty {
             Scalar(_) => {
-                let value = self.gen_get_value(ctx, LLVMGetElementType(LLVMTypeOf(output)), buffer, position)?;
-                LLVMBuildStore(ctx.builder, value, output);
+                let value = self.gen_get_value(builder, LLVMGetElementType(LLVMTypeOf(output)), buffer, position)?;
+                LLVMBuildStore(builder, value, output);
                 Ok(())
             }
             Struct(_) if !ty.has_pointer() => {
                 let one = self.i64(1);
-                self.gen_get_values(ctx, output, one, buffer, position)?;
+                self.gen_get_values(builder, output, one, buffer, position)?;
                 Ok(())
             }
             Vector(ref elem) if !elem.has_pointer() => {
                 let size_type = self.i64_type();
-                let size = self.gen_get_value(ctx, size_type, buffer, position)?;
-                let vector = self.gen_new(ctx, ty, size)?;
+                let size = self.gen_get_value(builder, size_type, buffer, position)?;
+                let vector = self.gen_new(builder, ty, size, run)?;
                 let zero = self.i64(0);
-                let data_pointer = self.gen_at(ctx, ty, vector, zero)?;
-                self.gen_get_values(ctx, data_pointer, size, buffer, position)?;
-                LLVMBuildStore(ctx.builder, vector, output);
+                let data_pointer = self.gen_at(builder, ty, vector, zero)?;
+                self.gen_get_values(builder, data_pointer, size, buffer, position)?;
+                LLVMBuildStore(builder, vector, output);
                 Ok(())
             }
             Struct(ref tys) => {
                 for (i, ty) in tys.iter().enumerate() {
-                    let value_pointer = LLVMBuildStructGEP(ctx.builder, output, i as u32, c_str!(""));
-                    self.gen_deserialize_helper(ctx, position, value_pointer, ty, buffer)?;
+                    let value_pointer = LLVMBuildStructGEP(builder, output, i as u32, c_str!(""));
+                    self.gen_deserialize_helper(llvm_function, builder, position, value_pointer, ty, buffer, run)?;
                 }
                 Ok(())
             }
             Vector(ref elem) => {
                 use self::llvm_sys::LLVMIntPredicate::LLVMIntSGT;
                 // Similar to the serialization version.
-                let start_block = LLVMAppendBasicBlockInContext(self.context, ctx.llvm_function, c_str!("de.start"));
-                let loop_block = LLVMAppendBasicBlockInContext(self.context, ctx.llvm_function, c_str!("de.loop"));
-                let end_block = LLVMAppendBasicBlockInContext(self.context, ctx.llvm_function, c_str!("de.end"));
+                let start_block = LLVMAppendBasicBlockInContext(self.context, llvm_function, c_str!("de.start"));
+                let loop_block = LLVMAppendBasicBlockInContext(self.context, llvm_function, c_str!("de.loop"));
+                let end_block = LLVMAppendBasicBlockInContext(self.context, llvm_function, c_str!("de.end"));
 
-                LLVMBuildBr(ctx.builder, start_block);
-                LLVMPositionBuilderAtEnd(ctx.builder, start_block);
+                LLVMBuildBr(builder, start_block);
+                LLVMPositionBuilderAtEnd(builder, start_block);
 
                 let size_type = self.i64_type();
-                let size = self.gen_get_value(ctx, size_type, buffer, position)?;
-                let vector = self.gen_new(ctx, ty, size)?;
+                let size = self.gen_get_value(builder, size_type, buffer, position)?;
+                let vector = self.gen_new(builder, ty, size, run)?;
 
                 let start_position = position.index;
 
                 let zero = self.i64(0);
-                let compare = LLVMBuildICmp(ctx.builder, LLVMIntSGT, size, zero, c_str!(""));
-                LLVMBuildCondBr(ctx.builder, compare, loop_block, end_block);
+                let compare = LLVMBuildICmp(builder, LLVMIntSGT, size, zero, c_str!(""));
+                LLVMBuildCondBr(builder, compare, loop_block, end_block);
 
                 // Looping block.
-                LLVMPositionBuilderAtEnd(ctx.builder, loop_block);
+                LLVMPositionBuilderAtEnd(builder, loop_block);
                 // phi for the loop induction variable.
-                let i = LLVMBuildPhi(ctx.builder, self.i64_type(), c_str!(""));
+                let i = LLVMBuildPhi(builder, self.i64_type(), c_str!(""));
                 // phi for the position at which to read the buffer.
-                let phi_position = LLVMBuildPhi(ctx.builder, self.i64_type(), c_str!(""));
+                let phi_position = LLVMBuildPhi(builder, self.i64_type(), c_str!(""));
                 position.index = phi_position;
 
-                let value_pointer = self.gen_at(ctx, ty, vector, i)?;
-                self.gen_deserialize_helper(ctx, position, value_pointer, elem, buffer)?;
+                let value_pointer = self.gen_at(builder, ty, vector, i)?;
+                self.gen_deserialize_helper(llvm_function, builder, position, value_pointer, elem, buffer, run)?;
                 let updated_position = position.index;
 
-                let updated_i = LLVMBuildNSWAdd(ctx.builder, i, self.i64(1), c_str!(""));
-                let compare = LLVMBuildICmp(ctx.builder, LLVMIntSGT, size, updated_i, c_str!(""));
-                LLVMBuildCondBr(ctx.builder, compare, loop_block, end_block);
+                let updated_i = LLVMBuildNSWAdd(builder, i, self.i64(1), c_str!(""));
+                let compare = LLVMBuildICmp(builder, LLVMIntSGT, size, updated_i, c_str!(""));
+                LLVMBuildCondBr(builder, compare, loop_block, end_block);
 
                 let mut blocks = [start_block, loop_block];
 
@@ -469,12 +485,12 @@ impl DeHelper for LlvmGenerator {
                 LLVMAddIncoming(phi_position, values.as_mut_ptr(), blocks.as_mut_ptr(), values.len() as u32);
 
                 // End block.
-                LLVMPositionBuilderAtEnd(ctx.builder, end_block);
-                let phi_position = LLVMBuildPhi(ctx.builder, self.i64_type(), c_str!(""));
+                LLVMPositionBuilderAtEnd(builder, end_block);
+                let phi_position = LLVMBuildPhi(builder, self.i64_type(), c_str!(""));
                 let mut values = [start_position, updated_position];
                 let mut blocks = [start_block, loop_block];
                 LLVMAddIncoming(phi_position, values.as_mut_ptr(), blocks.as_mut_ptr(), values.len() as u32);
-                LLVMBuildStore(ctx.builder, vector, output);
+                LLVMBuildStore(builder, vector, output);
                 position.index = phi_position;
                 Ok(())
             }
