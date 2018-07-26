@@ -7,6 +7,7 @@
  */
 #include "strt.h"
 #include "dict-st.h"
+#include "vec.h"
 
 #include <algorithm>
 #include <assert.h>
@@ -21,44 +22,13 @@
 // Resize threshold. Resizes when RESIZE_THRES * 10 percent of slots are full.
 const int RESIZE_THRES = 7;
 
-// The growable vector type used for serialization.
-struct GrowableVec {
-
-public:
-  struct {
-    uint8_t *data;
-    int64_t capacity;
-  } vector;
-
-  int64_t size;
-  // Reference to the run.
-  WeldRunHandleRef _run;
-
-public:
-
-  // Size the vector to fit `bytes` data in the vector. Does nothing if the vector already
-  // has the capacity to hold `bytes`.
-  void resize_to_fit(int64_t bytes) {
-    if (vector.capacity - size < bytes) {
-      int64_t new_capacity;
-      if (vector.capacity + bytes > vector.capacity * 2) {
-        new_capacity = vector.capacity + bytes;
-      } else {
-        new_capacity = vector.capacity * 2;
-      }
-      vector.data = (uint8_t *)weld_runst_realloc(_run, vector.data, new_capacity);
-      vector.capacity = new_capacity;
-    }
-  }
-};
-
 /**Type alias for serialization function over pointers
  *
  * @param the growable vector where the serialized data is written
  * @param the value being serialized.
  *
  */
-typedef void (*SerializeFn)(GrowableVec *, void *);
+typedef void (*SerializeFn)(Vec<uint8_t> *, void *);
 
 // A single slot. The header is followed by sizeof(key_size) +
 // sizeof(value_size) bytes. The header + the key and value define a full slot.
@@ -353,22 +323,29 @@ fail:
   }
 
   /** Serializes a dictionary, flattening pointers if necessary. */
-  void serialize(GrowableVec *gvec, int32_t has_pointer, SerializeFn serialize_key_fn, SerializeFn serialize_value_fn) {
+  void serialize(Vec<uint8_t> *vec,
+      int32_t has_pointer,
+      SerializeFn serialize_key_fn,
+      SerializeFn serialize_value_fn) {
   	if (!has_pointer) {
-      serialize_no_pointers(gvec);
+      serialize_no_pointers(vec);
     } else {
-      serialize_with_pointers(gvec, serialize_key_fn, serialize_value_fn);
+      assert(0);
+      serialize_with_pointers(vec, serialize_key_fn, serialize_value_fn);
     }
   }
 private:
 
   /** Serializes a dictionary, where the keys and values have no pointers. */
-  void serialize_with_pointers(GrowableVec *gvec, SerializeFn serialize_key_fn, SerializeFn serialize_value_fn) {
-    gvec->resize_to_fit(sizeof(int64_t));
+  void serialize_with_pointers(
+      Vec<uint8_t> *gvec,
+      SerializeFn serialize_key_fn,
+      SerializeFn serialize_value_fn) {
+    gvec->extend(_run, sizeof(int64_t));
 
-    int64_t *as_i64_ptr = (int64_t *)(gvec->vector.data + gvec->size);
+    int64_t *as_i64_ptr = (int64_t *)(gvec->data + gvec->capacity);
     *as_i64_ptr = _size;
-    gvec->size += sizeof(int64_t);
+    gvec->capacity += sizeof(int64_t);
 
     // Copy each key/value pair into the buffer.
     for (long i = 0; i < _capacity; ++i) {
@@ -380,11 +357,12 @@ private:
   }
 
   /** Serializes a dictionary, where the keys and values have no pointers. */
-  void serialize_no_pointers(GrowableVec *gvec) {
+  void serialize_no_pointers(Vec<uint8_t> *vec) {
   	const int64_t bytes = sizeof(int64_t) + (_key_size + _value_size) * _size;
-  	gvec->resize_to_fit(bytes);
+    const int64_t old_capacity = vec->capacity;
+  	vec->extend(_run, vec->capacity + bytes);
 
-  	uint8_t *offset = gvec->vector.data + gvec->size;
+  	uint8_t *offset = vec->data + old_capacity;
   	int64_t *as_i64_ptr = (int64_t *)offset;
   	*as_i64_ptr = _size;
   	offset += 8;
@@ -398,9 +376,8 @@ private:
   		memcpy(offset, slot->value(_key_size), _value_size);
   		offset += _value_size;
   	}
-
-  	assert(offset - gvec->vector.data == bytes);
-  	gvec->size += bytes;
+  	assert(offset - vec->data == bytes);
+  	vec->capacity += bytes;
   }
 };
 
@@ -481,6 +458,10 @@ extern "C" void weld_st_dict_serialize(
     void *key_ser,
     void *val_ser) {
   WeldDict *wd = static_cast<WeldDict*>(d);
-  wd->serialize(static_cast<GrowableVec*>(buf), has_pointer,
-  		reinterpret_cast<SerializeFn>(key_ser), reinterpret_cast<SerializeFn>(val_ser));
+  Vec<uint8_t> *serbuf = static_cast<Vec<uint8_t>*>(buf);
+  wd->serialize(
+      serbuf,
+      has_pointer,
+  		reinterpret_cast<SerializeFn>(key_ser),
+      reinterpret_cast<SerializeFn>(val_ser));
 }

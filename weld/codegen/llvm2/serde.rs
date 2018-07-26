@@ -97,8 +97,8 @@ impl SerializePosition {
 trait SerHelper {
     /// Copy a value into the serialization buffer.
     ///
-    /// This function assumes that the value being put contains no nested pointers, and is also
-    /// optimized for "small" values
+    /// This function assumes that the value being put contains no nested pointers (and that the
+    /// value is itself not a pointer), and is also optimized for "small" values.
     unsafe fn gen_put_value(&mut self,
                            builder: LLVMBuilderRef,
                            value: LLVMValueRef,
@@ -106,7 +106,7 @@ trait SerHelper {
                            run: LLVMValueRef,
                            position: &mut SerializePosition) -> WeldResult<LLVMValueRef>;
 
-    /// Copy a typed buffer of values into the serialization buffer.
+    /// Copy a typed buffer of values into the serialization buffer using `memcpy`.
     ///
     /// The buffer should have `size` objects, and the objects should not contain any nested pointers.
     unsafe fn gen_put_values(&mut self,
@@ -119,9 +119,9 @@ trait SerHelper {
 
     /// A recursive function for serializing a value.
     ///
-    /// The serialized value is written into buffer, with the next byte being written at `index`.
-    /// The function updates `index` to point to the last byte in the buffer if necessary. The
-    /// passed value should be a pointer.
+    /// The serialized value is written into buffer, with the next byte being written at
+    /// `position.index`.  The function updates `position.index` to point to the last byte in the
+    /// buffer. The passed value should be a pointer.
     unsafe fn gen_serialize_helper(&mut self,
                            llvm_function: LLVMValueRef,
                            builder: LLVMBuilderRef,
@@ -311,8 +311,22 @@ impl SerHelper for LlvmGenerator {
                 position.index = phi_position;
                 Ok(buffer)
             }
-            Dict(ref key, ref value) if !key.has_pointer() && !value.has_pointer() => {
-                unimplemented!() // Dictionary Serialize without pointers
+            Dict(ref key, ref val) if !key.has_pointer() && !val.has_pointer() => {
+                // No functions required here.
+                // Dictionaries are special because we need to generate functions for the key and
+                // value, and then call the intrinsic.
+                let dictionary = self.load(builder, value)?;
+                let null_pointer = self.null_ptr(self.i8_type());
+                let no_pointer_flag = self.bool(false);
+                let mut methods = self.dictionaries.get_mut(ty).unwrap();
+                methods.gen_serialize(builder,
+                                      &self.dict_intrinsics,
+                                      run,
+                                      dictionary,
+                                      buffer,
+                                      no_pointer_flag,
+                                      null_pointer,
+                                      null_pointer)
             }
             Dict(_, _) => {
                 unimplemented!() // Dictionary Serialize with pointers

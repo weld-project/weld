@@ -52,6 +52,7 @@ pub struct Dict {
     size: Option<LLVMValueRef>,
     to_vec: Option<LLVMValueRef>,
     free: Option<LLVMValueRef>,
+    serialize: Option<LLVMValueRef>,
 }
 
 impl CodeGenExt for Dict {
@@ -108,6 +109,8 @@ pub struct Intrinsics {
     to_vec: Option<LLVMValueRef>,
     /// Free a dictionary.
     free: Option<LLVMValueRef>,
+    /// Serialize a dictionary.
+    serialize: Option<LLVMValueRef>,
     context: LLVMContextRef,
     module: LLVMModuleRef,
 }
@@ -135,6 +138,7 @@ impl Intrinsics {
             size: None,
             to_vec: None,
             free: None,
+            serialize: None,
             context: context,
             module: module,
         };
@@ -219,6 +223,20 @@ impl Intrinsics {
                               name: Option<*const c_char>) -> LLVMValueRef {
         let mut args = [run, dictionary, offset, struct_size, out_pointer];
         LLVMBuildCall(builder, self.to_vec.unwrap(), args.as_mut_ptr(), args.len() as u32, name.unwrap_or(c_str!("")))
+    }
+
+    /// Generate a call to the `serialize` intrinsic.
+    pub unsafe fn call_serialize(&self,
+                              builder: LLVMBuilderRef,
+                              run: LLVMValueRef,
+                              dictionary: LLVMValueRef,
+                              buf: LLVMValueRef,
+                              has_pointer: LLVMValueRef,
+                              keys_ser: LLVMValueRef,
+                              vals_ser: LLVMValueRef,
+                              name: Option<*const c_char>) -> LLVMValueRef {
+        let mut args = [run, dictionary, buf, has_pointer, keys_ser, vals_ser];
+        LLVMBuildCall(builder, self.serialize.unwrap(), args.as_mut_ptr(), args.len() as u32, name.unwrap_or(c_str!("")))
     }
 
     /// Generate a call to the `free` intrinsic.
@@ -315,8 +333,6 @@ impl Intrinsics {
         LLVMExtAddAttrsOnParameter(self.context, function, &[NoCapture, NoAlias, NonNull, ReadOnly], 1);
         self.size = Some(function);
 
-        // Parameters: Run Handle, Dictionary, Value offset, Padded Struct Size, Out Pointer
-        // Returns: A vector of key/value pairs.
         let ref mut params = vec![
             self.run_handle_type(),     // run
             dict_type,                  // dictionary
@@ -331,8 +347,6 @@ impl Intrinsics {
         LLVMExtAddAttrsOnParameter(self.context, function, &[NoAlias, NonNull, WriteOnly], 4);
         self.to_vec = Some(function);
 
-        // Parameters: Run Handle, Dictionary
-        // Returns: Nothing
         let ref mut params = vec![
             self.run_handle_type(),     // run
             dict_type                   // dictionary
@@ -342,6 +356,22 @@ impl Intrinsics {
         LLVMExtAddAttrsOnParameter(self.context, function, &[NoCapture, NoAlias, NonNull, ReadOnly], 0);
         LLVMExtAddAttrsOnParameter(self.context, function, &[NoAlias, NonNull], 1);
         self.free = Some(function);
+
+        let ref mut params = vec![
+            self.run_handle_type(),     // run
+            dict_type,                  // dictionary
+            self.void_pointer_type(),   // buffer
+            self.i32_type(),            // has pointer in key or value flag
+            self.void_pointer_type(),   // key serialize function (null if has_pointer == false)
+            self.void_pointer_type(),   // val serialize function (null if has_pointer == false)
+
+        ];
+        let ret = self.void_type();
+        let function = self.declare("weld_st_dict_serialize", params, ret);
+        LLVMExtAddAttrsOnParameter(self.context, function, &[NoCapture, NoAlias, NonNull, ReadOnly], 0);
+        LLVMExtAddAttrsOnParameter(self.context, function, &[NoAlias, NonNull, ReadOnly], 1);
+        LLVMExtAddAttrsOnParameter(self.context, function, &[NoCapture, NoAlias, NonNull], 2);
+        self.serialize = Some(function);
     }
 }
 
@@ -402,6 +432,7 @@ impl Dict {
             size: None,
             to_vec: None,
             free: None,
+            serialize: None,
         }
     }
 
@@ -681,5 +712,69 @@ impl Dict {
         }
         let mut args = [dict, run];
         return Ok(LLVMBuildCall(builder, self.free.unwrap(), args.as_mut_ptr(), args.len() as u32, c_str!("")))
+    }
+
+    /// Generates the `serialize` method to serialize a dictionary.
+    ///
+    /// The type of the serialization buffer is inferred from the `buf` argument.
+    pub unsafe fn gen_serialize(&mut self,
+                              builder: LLVMBuilderRef,
+                              intrinsics: &Intrinsics,
+                              run: LLVMValueRef,
+                              dictionary: LLVMValueRef,
+                              buf: LLVMValueRef,
+                              has_pointer: LLVMValueRef,
+                              keys_ser: LLVMValueRef,
+                              vals_ser: LLVMValueRef) -> WeldResult<LLVMValueRef> {
+
+        if self.serialize.is_none() {
+            let ser_ty = LLVMTypeOf(buf);
+            let mut arg_tys = [
+                self.dict_ty,
+                ser_ty,
+                self.bool_type(),
+                self.void_pointer_type(),
+                self.void_pointer_type(),
+                self.run_handle_type()
+            ];
+            let ret_ty = ser_ty;
+
+            let name = format!("{}.serialize", self.name);
+            let (function, builder, _) = self.define_function(ret_ty, &mut arg_tys, name);
+
+            let buf_pointer = LLVMBuildAlloca(builder, ser_ty, c_str!(""));
+
+            let dict = LLVMGetParam(function, 0);
+            let buf = LLVMGetParam(function, 1);
+            let has_pointer = LLVMGetParam(function, 2);
+            let key_ser = LLVMGetParam(function, 3);
+            let val_ser = LLVMGetParam(function, 4);
+            let run = LLVMGetParam(function, 5);
+
+            // Store the serialize buffer so we can pass a pointer to it.
+            LLVMBuildStore(builder, buf, buf_pointer);
+            let buffer_opaque = LLVMBuildBitCast(builder, buf_pointer, self.void_pointer_type(), c_str!(""));
+            let flag_as_i32 = LLVMBuildSExt(builder, has_pointer, self.i32_type(), c_str!(""));
+
+            let dict = LLVMBuildExtractValue(builder, dict, 0, c_str!(""));
+            let result = intrinsics.call_serialize(
+                builder,
+                run,
+                dict,
+                buffer_opaque,
+                flag_as_i32,
+                key_ser,
+                val_ser,
+                None);
+
+            // The serialize buffer is updated in place.
+            let result = self.load(builder, buf_pointer)?;
+            LLVMBuildRet(builder, result);
+
+            self.serialize = Some(function);
+            LLVMDisposeBuilder(builder);
+        }
+        let mut args = [dictionary, buf, has_pointer, keys_ser, vals_ser, run];
+        return Ok(LLVMBuildCall(builder, self.serialize.unwrap(), args.as_mut_ptr(), args.len() as u32, c_str!("")))
     }
 }
