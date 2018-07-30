@@ -86,13 +86,15 @@ extern "C" void weld_rt_dict_tovec(WeldRunHandleRef,
 
 /** Writes serialized bytes representing the dictionary `d` into `buf`.
  *
+ * Returns the new offset to write at into the buffer.
+ *
  *
  * PRE-REQUISITES:
  * `d`, the dictionary, must be finalized.
  * `buf` must be a Weld growable vec[i8].
  *
  */
-extern "C" void weld_rt_dict_serialize(
+extern "C" int64_t weld_rt_dict_serialize(
     WeldRunHandleRef run,
     void *d,
     void *buf,

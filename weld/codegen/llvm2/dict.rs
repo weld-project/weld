@@ -403,7 +403,7 @@ impl Intrinsics {
             self.void_pointer_type(),   // val serialize function (null if has_pointer == false)
 
         ];
-        let ret = self.void_type();
+        let ret = self.i64_type();
         let function = self.declare("weld_st_dict_serialize", params, ret);
         LLVMExtAddAttrsOnParameter(self.context, function, &[NoCapture, NoAlias, NonNull, ReadOnly], 0);
         LLVMExtAddAttrsOnParameter(self.context, function, &[NoAlias, NonNull, ReadOnly], 1);

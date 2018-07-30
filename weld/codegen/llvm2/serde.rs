@@ -11,12 +11,18 @@ extern crate libc;
 extern crate llvm_sys;
 extern crate lazy_static;
 
+use std::ffi::CStr;
+
 use ast::*;
 use error::*;
 use sir::*;
 
 use self::llvm_sys::prelude::*;
 use self::llvm_sys::core::*;
+use self::llvm_sys::LLVMLinkage;
+
+use codegen::llvm2::vector::VectorExt;
+use ast::Type::*;
 
 use super::{LlvmGenerator, HasPointer, CodeGenExt, FunctionContext};
 
@@ -130,6 +136,12 @@ trait SerHelper {
                            ty: &Type,
                            buffer: LLVMValueRef,
                            run: LLVMValueRef) -> WeldResult<LLVMValueRef>;
+
+    /// Builds a serialization routine wrapped in a function.
+    ///
+    /// This is used for data structures (currently, just the dictionary) that call into a
+    /// serialize function. The signature of the generated function is (SER_TY, T*) -> void.
+    unsafe fn gen_serialize_fn(&mut self, ty: &Type) -> WeldResult<LLVMValueRef>;
 }
 
 impl SerHelper for LlvmGenerator {
@@ -183,6 +195,47 @@ impl SerHelper for LlvmGenerator {
         self.intrinsics.call_memcpy(builder, pointer, pointer_untyped, size);
         position.index = required_size;
         Ok(buffer)
+    }
+
+    unsafe fn gen_serialize_fn(&mut self, ty: &Type) -> WeldResult<LLVMValueRef> {
+        let llvm_ty = self.llvm_type(ty)?;
+        let mut arg_tys = [
+            LLVMPointerType(self.llvm_type(&SER_TY)?, 0),
+            LLVMPointerType(llvm_ty, 0),
+            self.run_handle_type()
+        ];
+        let ret_ty = self.void_type();
+        let c_prefix = LLVMPrintTypeToString(llvm_ty);
+        let prefix = CStr::from_ptr(c_prefix);
+        let prefix = prefix.to_str().unwrap();
+        let name = format!("{}.serialize", prefix);
+
+        // Free the allocated string.
+        LLVMDisposeMessage(c_prefix);
+
+        let (function, builder, _) = self.define_function_with_visability(ret_ty,
+                                                                          &mut arg_tys,
+                                                                          LLVMLinkage::LLVMExternalLinkage,
+                                                                          name);
+        let buffer_pointer = LLVMGetParam(function, 0);
+        let value_pointer = LLVMGetParam(function, 1);
+        let run = LLVMGetParam(function, 2);
+
+        let buffer = self.load(builder, buffer_pointer)?;
+        let offset = self.gen_size(builder, &SER_TY, buffer)?;
+        let ref mut position = SerializePosition::new(offset);
+        let updated_buffer = self.gen_serialize_helper(function,
+                                                       builder,
+                                                       position,
+                                                       value_pointer,
+                                                       ty,
+                                                       buffer,
+                                                       run)?;
+        LLVMBuildStore(builder, updated_buffer, buffer_pointer);
+        LLVMBuildRetVoid(builder);
+
+        LLVMDisposeBuilder(builder);
+        Ok(function)
     }
 
     unsafe fn gen_serialize_helper(&mut self,
@@ -316,18 +369,45 @@ impl SerHelper for LlvmGenerator {
                 let dictionary = self.load(builder, value)?;
                 let null_pointer = self.null_ptr(self.i8_type());
                 let no_pointer_flag = self.bool(false);
-                let mut methods = self.dictionaries.get_mut(ty).unwrap();
-                methods.gen_serialize(builder,
-                                      &self.dict_intrinsics,
-                                      run,
-                                      dictionary,
-                                      buffer,
-                                      no_pointer_flag,
-                                      null_pointer,
-                                      null_pointer)
+                let result = {
+                    let mut methods = self.dictionaries.get_mut(ty).unwrap();
+                    methods.gen_serialize(builder,
+                                          &self.dict_intrinsics,
+                                          run,
+                                          dictionary,
+                                          buffer,
+                                          no_pointer_flag,
+                                          null_pointer,
+                                          null_pointer)?
+                };
+                position.index  = self.gen_size(builder, &SER_TY, result)?;
+                Ok(result)
             }
-            Dict(_, _) => {
-                unimplemented!() // Dictionary Serialize with pointers
+            Dict(ref key, ref val) => {
+                // Generate externally visible deseriazation functions for the key and value types.
+                let dictionary = self.load(builder, value)?;
+                let pointer_flag = self.bool(true);
+                // Deserialization functions have the signature (SER_TY, T*) -> void
+                // Generate the serialize function for the key.
+                let key_ser_fn = self.gen_serialize_fn(key)?;
+                let val_ser_fn = self.gen_serialize_fn(val)?;
+
+                let key_ser_fn = LLVMBuildBitCast(builder, key_ser_fn, self.void_pointer_type(), c_str!(""));
+                let val_ser_fn = LLVMBuildBitCast(builder, val_ser_fn, self.void_pointer_type(), c_str!(""));
+
+                let result = {
+                    let mut methods = self.dictionaries.get_mut(ty).unwrap();
+                    methods.gen_serialize(builder,
+                                          &self.dict_intrinsics,
+                                          run,
+                                          dictionary,
+                                          buffer,
+                                          pointer_flag,
+                                          key_ser_fn,
+                                          val_ser_fn)?
+                };
+                position.index  = self.gen_size(builder, &SER_TY, result)?;
+                Ok(result)
             }
             Unknown | Simd(_) | Function(_,_) | Builder(_, _) => unreachable!(),
         }

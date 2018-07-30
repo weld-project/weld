@@ -28,7 +28,7 @@ const int RESIZE_THRES = 7;
  * @param the value being serialized.
  *
  */
-typedef void (*SerializeFn)(Vec<uint8_t> *, void *);
+typedef void (*SerializeFn)(Vec<uint8_t> *, void *, WeldRunHandleRef);
 
 // A single slot. The header is followed by sizeof(key_size) +
 // sizeof(value_size) bytes. The header + the key and value define a full slot.
@@ -343,41 +343,47 @@ fail:
   }
 
   /** Serializes a dictionary, flattening pointers if necessary. */
-  void serialize(Vec<uint8_t> *vec,
+  int64_t serialize(Vec<uint8_t> *vec,
       int32_t has_pointer,
       SerializeFn serialize_key_fn,
       SerializeFn serialize_value_fn) {
   	if (!has_pointer) {
-      serialize_no_pointers(vec);
+      return serialize_no_pointers(vec);
     } else {
-      assert(0);
-      serialize_with_pointers(vec, serialize_key_fn, serialize_value_fn);
+      return serialize_with_pointers(vec, serialize_key_fn, serialize_value_fn);
     }
   }
 private:
 
-  /** Serializes a dictionary, where the keys and values have no pointers. */
-  void serialize_with_pointers(
-      Vec<uint8_t> *gvec,
+  /** Serializes a dictionary, where the keys and values have pointers. */
+  int64_t serialize_with_pointers(
+      Vec<uint8_t> *vec,
       SerializeFn serialize_key_fn,
       SerializeFn serialize_value_fn) {
-    gvec->extend(_run, sizeof(int64_t));
 
-    int64_t *as_i64_ptr = (int64_t *)(gvec->data + gvec->capacity);
+    // Offset where we write new data.
+    int64_t base = vec->capacity;
+
+    vec->extend(_run, sizeof(int64_t));
+  	uint8_t *offset = vec->data + base;
+    int64_t *as_i64_ptr = (int64_t *)(offset);
     *as_i64_ptr = _size;
-    gvec->capacity += sizeof(int64_t);
+
+    base += sizeof(int64_t);
 
     // Copy each key/value pair into the buffer.
     for (long i = 0; i < _capacity; ++i) {
     	Slot *slot = slot_at_idx(i);
     	if (!slot->header.filled) continue;
-    	serialize_key_fn(gvec, slot->key());
-    	serialize_value_fn(gvec, slot->value(_key_size));
+    	serialize_key_fn(vec, slot->key(), _run);
+    	serialize_value_fn(vec, slot->value(_key_size), _run);
     }
+    return vec->capacity;
   }
 
   /** Serializes a dictionary, where the keys and values have no pointers. */
-  void serialize_no_pointers(Vec<uint8_t> *vec) {
+  int64_t serialize_no_pointers(Vec<uint8_t> *vec) {
+    // Number of bytes we will write.
   	const int64_t bytes = sizeof(int64_t) + (_key_size + _value_size) * _size;
     const int64_t old_capacity = vec->capacity;
   	vec->extend(_run, vec->capacity + bytes);
@@ -397,7 +403,7 @@ private:
   		offset += _value_size;
   	}
   	assert(offset - vec->data == bytes);
-  	vec->capacity += bytes;
+    return vec->capacity;
   }
 };
 
@@ -480,7 +486,7 @@ extern "C" void weld_st_dict_tovec(
   wd->new_kv_vector(value_offset, struct_size, out);
 }
 
-extern "C" void weld_st_dict_serialize(
+extern "C" int64_t weld_st_dict_serialize(
     WeldRunHandleRef run,
     void *d,
     void *buf,
@@ -489,7 +495,7 @@ extern "C" void weld_st_dict_serialize(
     void *val_ser) {
   WeldDict *wd = static_cast<WeldDict*>(d);
   Vec<uint8_t> *serbuf = static_cast<Vec<uint8_t>*>(buf);
-  wd->serialize(
+  return wd->serialize(
       serbuf,
       has_pointer,
   		reinterpret_cast<SerializeFn>(key_ser),
