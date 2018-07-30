@@ -1006,7 +1006,7 @@ impl LlvmGenerator {
                 }
             }
             Sort { .. } => {
-                unimplemented!()
+                unimplemented!() // Sort
             }
             ToVec(ref child) => {
                 let output_pointer = context.get_value(output)?;
