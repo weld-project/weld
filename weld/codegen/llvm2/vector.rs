@@ -1,10 +1,12 @@
-//! Extensions to generate vectors and vector-related builders.
+//! Extensions to generate vectors. 
 //!
-//! This trait specifically provides code generation for:
+//! This module provides a wrapper interface for methods and utilities on vector types. Other
+//! modules use it for vector-related functionality or operators over vectors.
 //!
-//! * The `vec[T]` type
-//! * The `appender` builder
-//! * The `vecmerger` builder
+//! Many of the methods here are marked as `alwaysinline`, so method calls on vectors usually have
+//! no overhead. Because of the fundamental nature of vectors, their layout is always fixed to be a
+//! tuple (pointer, size). Other modules may use knowledge of this layout to, e.g., provide vector
+//! operators over pointers (the methods here are over loaded structs).
 
 extern crate llvm_sys;
 

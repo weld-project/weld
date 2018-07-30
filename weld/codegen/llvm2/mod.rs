@@ -379,6 +379,27 @@ pub trait CodeGenExt {
         LLVMConstPtrToInt(size_pointer, self.i64_type())
     }
 
+    /// Computes the next power of two for the given value.
+    ///
+    /// `value` must be either an `i32` or `i64` type.
+    /// Uses the algorithm from https://graphics.stanford.edu/~seander/bithacks.html.
+    unsafe fn next_pow2(&self, builder: LLVMBuilderRef, value: LLVMValueRef) -> LLVMValueRef {
+        use self::llvm_sys::LLVMTypeKind;
+        let ty = LLVMTypeOf(value);
+        assert!(LLVMGetTypeKind(ty) == LLVMTypeKind::LLVMIntegerTypeKind); 
+        let bits = LLVMGetIntTypeWidth(ty);
+        let one = LLVMConstInt(ty, 1 as c_ulonglong, 0);
+        let mut result = LLVMBuildSub(builder, value, one, c_str!(""));
+        let mut shift_amount = 1;
+        while shift_amount < bits {
+            let amount = LLVMConstInt(ty, shift_amount as c_ulonglong, 0);
+            let shift = LLVMBuildAShr(builder, result, amount, c_str!(""));
+            result = LLVMBuildOr(builder, result, shift, c_str!(""));
+            shift_amount *= 2;
+        }
+        LLVMBuildAdd(builder, result, one, c_str!(""))
+    }
+
     unsafe fn bool_type(&self) -> LLVMTypeRef {
         LLVMInt1TypeInContext(self.context())
     }

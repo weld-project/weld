@@ -1,5 +1,11 @@
 //! A wrapper for dictionaries in Weld.
 //!
+//! This module provides a wrapper interface for methods and utilities on dictionary types. Other
+//! modules use it for dictionary-related functionality or operators over dictionaries.
+//!
+//! Many of the methods here are marked as `alwaysinline`, so method calls on dictionaries usually
+//! have no overhead.
+//!
 //! The dictionary is currently implemented as a statically linked C++ library. This means that
 //! this file mostly contains wrappers for calling into that implementation. It should thus be
 //! modified with care, and should ensure that the following properties always hold:
@@ -48,6 +54,7 @@ pub struct Dict {
     new: Option<LLVMValueRef>,
     get: Option<LLVMValueRef>,
     upsert: Option<LLVMValueRef>,
+    get_slot: Option<LLVMValueRef>,
     key_exists: Option<LLVMValueRef>,
     size: Option<LLVMValueRef>,
     to_vec: Option<LLVMValueRef>,
@@ -92,6 +99,11 @@ pub struct Intrinsics {
     /// Arguments: Run Handle, Dictionary, Key, Hash, Default Value
     /// Returns: Slot for Key
     upsert: Option<LLVMValueRef>,
+    /// Get a pointer to a slot.
+    ///
+    /// This method returns the slot for a key, and allocates one *without initializing it* if the
+    /// slot does not exist.
+    get_slot: Option<LLVMValueRef>,
     /// Returns whether a key exists in a dictonary.
     ///
     /// Arguments: Run Handle, Dictionary, Key, Hash
@@ -134,6 +146,7 @@ impl Intrinsics {
             new: None,
             get: None,
             upsert: None,
+            get_slot: None,
             key_exists: None,
             size: None,
             to_vec: None,
@@ -188,6 +201,18 @@ impl Intrinsics {
                               name: Option<*const c_char>) -> LLVMValueRef {
         let mut args = [run, dictionary, key, hash, default];
         LLVMBuildCall(builder, self.upsert.unwrap(), args.as_mut_ptr(), args.len() as u32, name.unwrap_or(c_str!("")))
+    }
+
+    /// Generate a call to the `get_slot` intrinsic.
+    pub unsafe fn call_get_slot(&self,
+                              builder: LLVMBuilderRef,
+                              run: LLVMValueRef,
+                              dictionary: LLVMValueRef,
+                              key: LLVMValueRef,
+                              hash: LLVMValueRef,
+                              name: Option<*const c_char>) -> LLVMValueRef {
+        let mut args = [run, dictionary, key, hash];
+        LLVMBuildCall(builder, self.get_slot.unwrap(), args.as_mut_ptr(), args.len() as u32, name.unwrap_or(c_str!("")))
     }
 
     /// Generate a call to the `key_exists` intrinsic.
@@ -279,7 +304,7 @@ impl Intrinsics {
         let ret = dict_type;
         let function = self.declare("weld_st_dict_new", params, ret);
 
-        LLVMExtAddAttrsOnParameter(self.context, function, &[NoCapture, NoAlias, NonNull], 0);
+        LLVMExtAddAttrsOnParameter(self.context, function, &[NoAlias, NonNull], 0);
         LLVMExtAddAttrsOnReturn(self.context, function, &[NoAlias]);
         self.new = Some(function);
 
@@ -309,6 +334,18 @@ impl Intrinsics {
         LLVMExtAddAttrsOnParameter(self.context, function, &[NoCapture, NoAlias, NonNull], 1);
         LLVMExtAddAttrsOnParameter(self.context, function, &[NoAlias, NonNull, ReadOnly], 4);
         self.upsert = Some(function);
+
+        let ref mut params = vec![
+            self.run_handle_type(),     // run
+            dict_type,                  // dictionary
+            self.void_pointer_type(),   // key
+            hash_type,                  // hash
+        ];
+        let ret = self.void_pointer_type();
+        let function = self.declare("weld_st_dict_get_slot", params, ret);
+        LLVMExtAddAttrsOnParameter(self.context, function, &[NoCapture, NoAlias, NonNull, ReadOnly], 0);
+        LLVMExtAddAttrsOnParameter(self.context, function, &[NoCapture, NoAlias, NonNull], 1);
+        self.get_slot = Some(function);
 
         let ref mut params = vec![
             self.run_handle_type(),     // run
@@ -428,6 +465,7 @@ impl Dict {
             new: None,
             get: None,
             upsert: None,
+            get_slot: None,
             key_exists: None,
             size: None,
             to_vec: None,
@@ -436,7 +474,8 @@ impl Dict {
         }
     }
 
-    unsafe fn hash_type(&self) -> LLVMTypeRef {
+    /// Returns the type of a hash code.
+    pub unsafe fn hash_type(&self) -> LLVMTypeRef {
         self.i32_type()
     }
 
@@ -469,6 +508,50 @@ impl Dict {
         }
         let mut args = [capacity, run];
         return Ok(LLVMBuildCall(builder, self.new.unwrap(), args.as_mut_ptr(), args.len() as u32, c_str!("")))
+    }
+
+    /// Generates the `get_slot` method.
+    ///
+    /// This method looks up the key in the dictionary. If a value is found, a pointer to the value
+    /// is returned. Otherwise, a new slot is initialized and returned. The returned slot has an
+    /// *uninitialized* value.
+    pub unsafe fn gen_get_slot(&mut self,
+                          builder: LLVMBuilderRef,
+                          intrinsics: &Intrinsics,
+                          run: LLVMValueRef,
+                          dict: LLVMValueRef,
+                          key: LLVMValueRef,
+                          hash: LLVMValueRef) -> WeldResult<LLVMValueRef> {
+        if self.upsert.is_none() {
+            let mut arg_tys = [
+                self.dict_ty,
+                LLVMPointerType(self.key_ty, 0),
+                self.hash_type(),
+                self.run_handle_type()
+            ];
+            let ret_ty = LLVMPointerType(self.val_ty, 0);
+
+            let name = format!("{}.upsert", self.name);
+            let (function, builder, _) = self.define_function(ret_ty, &mut arg_tys, name);
+
+            let dict = LLVMGetParam(function, 0);
+            let key = LLVMGetParam(function, 1);
+            let hash = LLVMGetParam(function, 2);
+            let run = LLVMGetParam(function, 3);
+
+            let dict = LLVMBuildExtractValue(builder, dict, 0, c_str!(""));
+            let key = LLVMBuildBitCast(builder, key, self.void_pointer_type(), c_str!(""));
+            let slot_pointer = intrinsics.call_get_slot(builder, run, dict, key, hash, None);
+            let slot_pointer = LLVMBuildBitCast(builder, slot_pointer, self.slot_ty, c_str!(""));
+            let result = LLVMBuildStructGEP(builder, slot_pointer, VALUE_INDEX, c_str!(""));
+
+            LLVMBuildRet(builder, result);
+
+            self.upsert = Some(function);
+            LLVMDisposeBuilder(builder);
+        }
+        let mut args = [dict, key, hash, run];
+        return Ok(LLVMBuildCall(builder, self.upsert.unwrap(), args.as_mut_ptr(), args.len() as u32, c_str!("")))
     }
 
     /// Generates the `upsert` method.
@@ -757,7 +840,7 @@ impl Dict {
             let flag_as_i32 = LLVMBuildSExt(builder, has_pointer, self.i32_type(), c_str!(""));
 
             let dict = LLVMBuildExtractValue(builder, dict, 0, c_str!(""));
-            let result = intrinsics.call_serialize(
+            let _ = intrinsics.call_serialize(
                 builder,
                 run,
                 dict,

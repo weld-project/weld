@@ -128,11 +128,10 @@ public:
 
 
   // Initialize a new slot. Returns true if the initialization caused a resize.
-  inline bool init_slot(Slot *slot, int32_t hash, void *key, void *value) {
+  inline bool init_slot(Slot *slot, int32_t hash, void *key) {
     DBG("slot %p: hash=%d\n", slot, hash);
   	slot->header.filled = true;
   	memcpy(slot->key(), key, _key_size);
-  	memcpy(slot->value(_key_size), value, _value_size);
   	++_size;
   	// Check if a resize is needed.
     if (_size * 10 >= _capacity * RESIZE_THRES) {
@@ -149,6 +148,18 @@ public:
    * Returns NULL if no slot could be found or created.
    */
   Slot *upsert_slot(int32_t hash, void *key, void *init_value) {
+    Slot *slot = get_slot(hash, key);
+    memcpy(slot->value(_key_size), init_value, _value_size);
+    return slot;
+  }
+
+  /**
+   * Returns the slot for the given hash/key. If the dictionary does not have an entry
+   * for the hash/key then its slot is initialized (with an uninitialized value).
+   * The dictionary may be resized as a result of initializing a new slot.
+   * Returns NULL if no slot could be found or created.
+   */
+  Slot *get_slot(int32_t hash, void *key) {
     // Linear probing.
     DBG("hash=%d, key=%lld, init_value=%lld\n",
         hash,
@@ -162,7 +173,7 @@ public:
       if (!slot->header.filled) {
         // The dictionary resized - we need to re-retrieve the slot!
         // Fortunately, it's guarnateed to be in the dictionary now.
-      	if (init_slot(slot, hash, key, init_value)) {
+      	if (init_slot(slot, hash, key)) {
           DBG("returned new slot for hash=%d, key=%lld\n", hash, dbg_print(key, _key_size));
           return get(hash, key);
         } else {
@@ -413,6 +424,15 @@ extern "C" void *weld_st_dict_upsert(
     void *init_value) {
   WeldDict *wd = static_cast<WeldDict*>(d);
   return wd->upsert_slot(hash, key, init_value);
+}
+
+extern "C" void *weld_st_dict_get_slot(
+    WeldRunHandleRef run,
+    void *d,
+    void *key,
+    int32_t hash) {
+  WeldDict *wd = static_cast<WeldDict*>(d);
+  return wd->get_slot(hash, key);
 }
 
 extern "C" void *weld_st_dict_get(

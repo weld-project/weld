@@ -229,9 +229,9 @@ impl SerHelper for LlvmGenerator {
                 // inserted into the current SIR basic block. The loop created here will always
                 // finish at `ser.end` and the builder is always guaranteed to be positioned at the
                 // end of ser.end.
-                let start_block = LLVMAppendBasicBlockInContext(self.context, llvm_function, c_str!("ser.start"));
-                let loop_block = LLVMAppendBasicBlockInContext(self.context, llvm_function, c_str!("ser.loop"));
-                let end_block = LLVMAppendBasicBlockInContext(self.context, llvm_function, c_str!("ser.end"));
+                let start_block = LLVMAppendBasicBlockInContext(self.context, llvm_function, c_str!("ser.vec.start"));
+                let loop_block = LLVMAppendBasicBlockInContext(self.context, llvm_function, c_str!("ser.vec.loop"));
+                let end_block = LLVMAppendBasicBlockInContext(self.context, llvm_function, c_str!("ser.vec.end"));
 
                 LLVMBuildBr(builder, start_block);
                 LLVMPositionBuilderAtEnd(builder, start_block);
@@ -313,8 +313,6 @@ impl SerHelper for LlvmGenerator {
             }
             Dict(ref key, ref val) if !key.has_pointer() && !val.has_pointer() => {
                 // No functions required here.
-                // Dictionaries are special because we need to generate functions for the key and
-                // value, and then call the intrinsic.
                 let dictionary = self.load(builder, value)?;
                 let null_pointer = self.null_ptr(self.i8_type());
                 let no_pointer_flag = self.bool(false);
@@ -457,9 +455,9 @@ impl DeHelper for LlvmGenerator {
             Vector(ref elem) => {
                 use self::llvm_sys::LLVMIntPredicate::LLVMIntSGT;
                 // Similar to the serialization version.
-                let start_block = LLVMAppendBasicBlockInContext(self.context, llvm_function, c_str!("de.start"));
-                let loop_block = LLVMAppendBasicBlockInContext(self.context, llvm_function, c_str!("de.loop"));
-                let end_block = LLVMAppendBasicBlockInContext(self.context, llvm_function, c_str!("de.end"));
+                let start_block = LLVMAppendBasicBlockInContext(self.context, llvm_function, c_str!("de.vec.start"));
+                let loop_block = LLVMAppendBasicBlockInContext(self.context, llvm_function, c_str!("de.vec.loop"));
+                let end_block = LLVMAppendBasicBlockInContext(self.context, llvm_function, c_str!("de.vec.end"));
 
                 LLVMBuildBr(builder, start_block);
                 LLVMPositionBuilderAtEnd(builder, start_block);
@@ -508,11 +506,86 @@ impl DeHelper for LlvmGenerator {
                 position.index = phi_position;
                 Ok(())
             }
-            Dict(ref key, ref value) if !key.has_pointer() && !value.has_pointer() => {
-                unimplemented!() // Dictionary deserialize without pointers
-            }
-            Dict(_, _) => {
-                unimplemented!() // Dictionary deserialize with pointers
+            Dict(ref key_ty, ref value_ty) => {
+                use self::llvm_sys::LLVMIntPredicate::LLVMIntSGT;
+                use codegen::llvm2::hash::GenHash;
+                // Codepath for dictionary deserialization is the same with and without pointers.
+                // Dictionaries are encoded as a length followed by a list of key/value pairs.
+                let size_type = self.i64_type();
+                let size = self.gen_get_value(builder, size_type, buffer, position)?;
+                // Computes the next power-of-2.
+                let capacity = self.next_pow2(builder, size);
+                let dictionary = {
+                    let mut methods = self.dictionaries.get_mut(ty).unwrap();
+                    methods.gen_new(builder, &self.dict_intrinsics, run, capacity)?
+                };
+
+                // Build a loop that iterates over the key-value pairs.
+                //
+                // The loop logic here is again similar to the serialization of vectors with
+                // pointers/deserialization of vectors without pointers.
+                let start_block = LLVMAppendBasicBlockInContext(self.context, llvm_function, c_str!("de.dict.start"));
+                let loop_block = LLVMAppendBasicBlockInContext(self.context, llvm_function, c_str!("de.dict.loop"));
+                let end_block = LLVMAppendBasicBlockInContext(self.context, llvm_function, c_str!("de.dict.end"));
+
+                LLVMBuildBr(builder, start_block);
+                LLVMPositionBuilderAtEnd(builder, start_block);
+
+                let start_position = position.index;
+
+                let zero = self.i64(0);
+                let compare = LLVMBuildICmp(builder, LLVMIntSGT, size, zero, c_str!(""));
+                LLVMBuildCondBr(builder, compare, loop_block, end_block);
+
+                // Looping block.
+                LLVMPositionBuilderAtEnd(builder, loop_block);
+                // phi for the loop induction variable.
+                let i = LLVMBuildPhi(builder, self.i64_type(), c_str!(""));
+                // phi for the position at which to read the buffer.
+                let phi_position = LLVMBuildPhi(builder, self.i64_type(), c_str!(""));
+                position.index = phi_position;
+
+                // XXX Key pointer??
+                let key_pointer: LLVMValueRef;
+                key_pointer = self.i64(0);
+                self.gen_deserialize_helper(llvm_function, builder, position, key_pointer, key_ty, buffer, run)?;
+
+                let hash_fn = self.gen_hash_fn(key_ty)?;
+                let mut args = [self.load(builder, key_pointer)?];
+                let hash = LLVMBuildCall(builder, hash_fn, args.as_mut_ptr(), args.len() as u32, c_str!(""));
+                let value_pointer = {
+                    let mut methods = self.dictionaries.get_mut(ty).unwrap();
+                    methods.gen_get_slot(builder,
+                                    &self.dict_intrinsics,
+                                    run,
+                                    dictionary,
+                                    key_pointer,
+                                    hash)? // XXX This should just return a slot pointer: get currently crashes if not found.
+                };
+                self.gen_deserialize_helper(llvm_function, builder, position, value_pointer, value_ty, buffer, run)?;
+                let updated_position = position.index;
+
+                let updated_i = LLVMBuildNSWAdd(builder, i, self.i64(1), c_str!(""));
+                let compare = LLVMBuildICmp(builder, LLVMIntSGT, size, updated_i, c_str!(""));
+                LLVMBuildCondBr(builder, compare, loop_block, end_block);
+
+                let mut blocks = [start_block, loop_block];
+
+                // Set up the PHI nodes.
+                let mut values = [self.i64(0), updated_i];
+                LLVMAddIncoming(i, values.as_mut_ptr(), blocks.as_mut_ptr(), values.len() as u32);
+                let mut values = [start_position, updated_position];
+                LLVMAddIncoming(phi_position, values.as_mut_ptr(), blocks.as_mut_ptr(), values.len() as u32);
+
+                // End block.
+                LLVMPositionBuilderAtEnd(builder, end_block);
+                let phi_position = LLVMBuildPhi(builder, self.i64_type(), c_str!(""));
+                let mut values = [start_position, updated_position];
+                let mut blocks = [start_block, loop_block];
+                LLVMAddIncoming(phi_position, values.as_mut_ptr(), blocks.as_mut_ptr(), values.len() as u32);
+                LLVMBuildStore(builder, dictionary, output);
+                position.index = phi_position;
+                Ok(())
             }
             Unknown | Simd(_) | Function(_,_) | Builder(_, _) => unreachable!(),
         }

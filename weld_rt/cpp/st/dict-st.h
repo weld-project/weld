@@ -49,6 +49,17 @@ extern "C" void weld_rt_dict_free(WeldRunHandleRef, void *d);
 extern "C" void *weld_rt_upsert_slot(WeldRunHandleRef, void *d, int32_t hash, void *key, void *init_value);
 
 /**
+ * Allocates a new slot for the key if it does not exist.
+ *
+ * The value in the ne slot is uninitialized. This may resize the dictionary.
+ */
+extern "C" void *weld_st_dict_get_slot(
+    WeldRunHandleRef run,
+    void *d,
+    void *key,
+    int32_t hash);
+
+/**
  * Returns the size of the dictionary.
  */
 extern "C" int64_t weld_rt_dict_size(WeldRunHandleRef, void *d);
