@@ -131,6 +131,7 @@ public:
   inline bool init_slot(Slot *slot, int32_t hash, void *key) {
     DBG("slot %p: hash=%d\n", slot, hash);
   	slot->header.filled = true;
+    slot->header.hash = hash;
   	memcpy(slot->key(), key, _key_size);
   	++_size;
   	// Check if a resize is needed.
@@ -426,15 +427,6 @@ extern "C" void *weld_st_dict_upsert(
   return wd->upsert_slot(hash, key, init_value);
 }
 
-extern "C" void *weld_st_dict_get_slot(
-    WeldRunHandleRef run,
-    void *d,
-    void *key,
-    int32_t hash) {
-  WeldDict *wd = static_cast<WeldDict*>(d);
-  return wd->get_slot(hash, key);
-}
-
 extern "C" void *weld_st_dict_get(
     WeldRunHandleRef run,
     void *d,
@@ -442,6 +434,15 @@ extern "C" void *weld_st_dict_get(
     int32_t hash) {
   WeldDict *wd = static_cast<WeldDict*>(d);
   return wd->get(hash, key);
+}
+
+extern "C" void *weld_st_dict_get_slot(
+    WeldRunHandleRef run,
+    void *d,
+    void *key,
+    int32_t hash) {
+  WeldDict *wd = static_cast<WeldDict*>(d);
+  return wd->get_slot(hash, key);
 }
 
 extern "C" int32_t weld_st_dict_keyexists(

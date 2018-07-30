@@ -545,9 +545,16 @@ impl DeHelper for LlvmGenerator {
                 let phi_position = LLVMBuildPhi(builder, self.i64_type(), c_str!(""));
                 position.index = phi_position;
 
-                // XXX Key pointer??
-                let key_pointer: LLVMValueRef;
-                key_pointer = self.i64(0);
+                // XXX this is hacky, we add an alloca at the top of the function.
+                let entry_block = LLVMGetFirstBasicBlock(llvm_function);
+                let first_inst = LLVMGetFirstInstruction(entry_block);
+                let alloca_builder = LLVMCreateBuilderInContext(self.context);
+                LLVMPositionBuilderBefore(alloca_builder, first_inst);
+                let key_pointer = LLVMBuildAlloca(alloca_builder,
+                                                  self.llvm_type(key_ty)?,
+                                                  c_str!(""));
+                LLVMDisposeBuilder(alloca_builder);
+
                 self.gen_deserialize_helper(llvm_function, builder, position, key_pointer, key_ty, buffer, run)?;
 
                 let hash_fn = self.gen_hash_fn(key_ty)?;
@@ -560,7 +567,7 @@ impl DeHelper for LlvmGenerator {
                                     run,
                                     dictionary,
                                     key_pointer,
-                                    hash)? // XXX This should just return a slot pointer: get currently crashes if not found.
+                                    hash)?
                 };
                 self.gen_deserialize_helper(llvm_function, builder, position, value_pointer, value_ty, buffer, run)?;
                 let updated_position = position.index;

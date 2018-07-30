@@ -513,8 +513,8 @@ impl Dict {
     /// Generates the `get_slot` method.
     ///
     /// This method looks up the key in the dictionary. If a value is found, a pointer to the value
-    /// is returned. Otherwise, a new slot is initialized and returned. The returned slot has an
-    /// *uninitialized* value.
+    /// is returned. Otherwise, a new slot is initialized and a pointer to its value is returned.
+    /// The returned slot has an *uninitialized* value.
     pub unsafe fn gen_get_slot(&mut self,
                           builder: LLVMBuilderRef,
                           intrinsics: &Intrinsics,
@@ -522,7 +522,7 @@ impl Dict {
                           dict: LLVMValueRef,
                           key: LLVMValueRef,
                           hash: LLVMValueRef) -> WeldResult<LLVMValueRef> {
-        if self.upsert.is_none() {
+        if self.get_slot.is_none() {
             let mut arg_tys = [
                 self.dict_ty,
                 LLVMPointerType(self.key_ty, 0),
@@ -531,7 +531,9 @@ impl Dict {
             ];
             let ret_ty = LLVMPointerType(self.val_ty, 0);
 
-            let name = format!("{}.upsert", self.name);
+            // XXX this is a bit of a misnomer since it returns a pointer to the value, not to the
+            // slot.
+            let name = format!("{}.get_slot", self.name);
             let (function, builder, _) = self.define_function(ret_ty, &mut arg_tys, name);
 
             let dict = LLVMGetParam(function, 0);
@@ -547,11 +549,11 @@ impl Dict {
 
             LLVMBuildRet(builder, result);
 
-            self.upsert = Some(function);
+            self.get_slot = Some(function);
             LLVMDisposeBuilder(builder);
         }
         let mut args = [dict, key, hash, run];
-        return Ok(LLVMBuildCall(builder, self.upsert.unwrap(), args.as_mut_ptr(), args.len() as u32, c_str!("")))
+        return Ok(LLVMBuildCall(builder, self.get_slot.unwrap(), args.as_mut_ptr(), args.len() as u32, c_str!("")))
     }
 
     /// Generates the `upsert` method.
