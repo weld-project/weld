@@ -149,8 +149,11 @@ public:
    * Returns NULL if no slot could be found or created.
    */
   Slot *upsert_slot(int32_t hash, void *key, void *init_value) {
-    Slot *slot = get_slot(hash, key);
-    memcpy(slot->value(_key_size), init_value, _value_size);
+    bool filled;
+    Slot *slot = get_slot(hash, key, &filled);
+    if (!filled) {
+      memcpy(slot->value(_key_size), init_value, _value_size);
+    }
     return slot;
   }
 
@@ -159,8 +162,11 @@ public:
    * for the hash/key then its slot is initialized (with an uninitialized value).
    * The dictionary may be resized as a result of initializing a new slot.
    * Returns NULL if no slot could be found or created.
+   *
+   * If the slot was not filled and a new slot was allocated, *filled is set to
+   * `true`. Otherwise, *filled is set to `false`.
    */
-  Slot *get_slot(int32_t hash, void *key) {
+  Slot *get_slot(int32_t hash, void *key, bool *filled) {
     // Linear probing.
     DBG("hash=%d, key=%lld, init_value=%lld\n",
         hash,
@@ -174,6 +180,7 @@ public:
       if (!slot->header.filled) {
         // The dictionary resized - we need to re-retrieve the slot!
         // Fortunately, it's guarnateed to be in the dictionary now.
+        *filled = false;
       	if (init_slot(slot, hash, key)) {
           DBG("returned new slot for hash=%d, key=%lld\n", hash, dbg_print(key, _key_size));
           return get(hash, key);
@@ -185,6 +192,7 @@ public:
 
       // Slot is filled - check it.
       if (slot->header.hash == hash && _keys_eq(key, slot->key())) {
+        *filled = true;
         DBG("returned existing slot for hash=%d, key=%lld, cur_value=%lld\n",
             hash, dbg_print(key, _key_size), dbg_print(slot->value(_key_size), _value_size));
         return slot;
@@ -441,8 +449,9 @@ extern "C" void *weld_st_dict_get_slot(
     void *d,
     void *key,
     int32_t hash) {
+  bool filled;
   WeldDict *wd = static_cast<WeldDict*>(d);
-  return wd->get_slot(hash, key);
+  return wd->get_slot(hash, key, &filled);
 }
 
 extern "C" int32_t weld_st_dict_keyexists(
