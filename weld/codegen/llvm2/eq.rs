@@ -192,7 +192,7 @@ impl GenEq for LlvmGenerator {
         // Free the allocated string.
         LLVMDisposeMessage(c_prefix);
 
-        let (function, builder, _) = self.define_function_with_visability(ret_ty,
+        let (function, builder, _) = self.define_function_with_visibility(ret_ty,
                                                                           &mut arg_tys,
                                                                           LLVMLinkage::LLVMExternalLinkage,
                                                                           name);

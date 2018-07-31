@@ -286,14 +286,14 @@ pub trait CodeGenExt {
                                       ret_ty: LLVMTypeRef,
                                       arg_tys: &mut [LLVMTypeRef],
                                       name: T) -> (LLVMValueRef, LLVMBuilderRef, LLVMBasicBlockRef) {
-        self.define_function_with_visability(ret_ty, arg_tys, LLVMLinkage::LLVMPrivateLinkage, name)
+        self.define_function_with_visibility(ret_ty, arg_tys, LLVMLinkage::LLVMPrivateLinkage, name)
     }
 
     /// Generates code to define a function with the given return type and argument type.
     ///
     /// Returns a reference to the function, a builder used to build the function body, and the
     /// entry basic block.
-    unsafe fn define_function_with_visability<T: Into<Vec<u8>>>(&mut self,
+    unsafe fn define_function_with_visibility<T: Into<Vec<u8>>>(&mut self,
                                       ret_ty: LLVMTypeRef,
                                       arg_tys: &mut [LLVMTypeRef],
                                       visibility: LLVMLinkage,

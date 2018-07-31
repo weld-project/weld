@@ -220,7 +220,7 @@ impl SerHelper for LlvmGenerator {
 
         // The serialization function has external visibility so data structures linked dynamically
         // with the runtime can access it.
-        let (function, builder, _) = self.define_function_with_visability(ret_ty,
+        let (function, builder, _) = self.define_function_with_visibility(ret_ty,
                                                                           &mut arg_tys,
                                                                           LLVMLinkage::LLVMExternalLinkage,
                                                                           name);
@@ -429,13 +429,15 @@ impl SerHelper for LlvmGenerator {
 /// Helper for deserialization.
 trait DeHelper {
     /// Return a typed value from the serialization buffer and update offset.
+    ///
+    /// The typed value is stored in a register.
     unsafe fn gen_get_value(&mut self,
                            builder: LLVMBuilderRef,
                            ty: LLVMTypeRef,
                            buffer: LLVMValueRef,
                            position: &mut SerializePosition) -> WeldResult<LLVMValueRef>;
 
-    /// Write a series of values from the serialization buffer and update offset.
+    /// Write a series of values to `ptr` from the serialization buffer and update offset.
     ///
     /// Returns the pointer.
     unsafe fn gen_get_values(&mut self,
