@@ -657,7 +657,7 @@ impl DeHelper for LlvmGenerator {
                 self.gen_deserialize_helper(llvm_function, builder, position, key_pointer, key_ty, buffer, run)?;
 
                 let hash_fn = self.gen_hash_fn(key_ty)?;
-                let mut args = [self.load(builder, key_pointer)?];
+                let mut args = [key_pointer];
                 let hash = LLVMBuildCall(builder, hash_fn, args.as_mut_ptr(), args.len() as u32, c_str!(""));
                 let value_pointer = {
                     let mut methods = self.dictionaries.get_mut(ty).unwrap();

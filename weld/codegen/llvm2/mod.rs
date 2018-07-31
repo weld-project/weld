@@ -860,12 +860,11 @@ impl LlvmGenerator {
                 use self::hash::GenHash;
                 let output_pointer = context.get_value(output)?;
                 let child_value = self.load(context.builder, context.get_value(child)?)?;
-                let key_value = self.load(context.builder, context.get_value(key)?)?;
+                let key_pointer = context.get_value(key)?;
                 let child_type = context.sir_function.symbol_type(child)?;
-
                 let hash = if let Dict(ref key, _) = *child_type {
                     let hash_fn = self.gen_hash_fn(key)?;
-                    let mut args = [key_value];
+                    let mut args = [key_pointer];
                     LLVMBuildCall(context.builder, hash_fn, args.as_mut_ptr(), args.len() as u32, c_str!(""))
                 } else {
                     unreachable!()
@@ -907,10 +906,10 @@ impl LlvmGenerator {
             Lookup { ref child, ref index } => {
                 let output_pointer = context.get_value(output)?;
                 let child_value = self.load(context.builder, context.get_value(child)?)?;
-                let index_value = self.load(context.builder, context.get_value(index)?)?;
                 let child_type = context.sir_function.symbol_type(child)?;
                 if let Vector(_) = *child_type {
                     use self::vector::VectorExt;
+                    let index_value = self.load(context.builder, context.get_value(index)?)?;
                     let pointer = self.gen_at(context.builder, child_type, child_value, index_value)?;
                     let result = self.load(context.builder, pointer)?;
                     LLVMBuildStore(context.builder, result, output_pointer);
@@ -918,7 +917,7 @@ impl LlvmGenerator {
                 } else if let Dict(ref key, _) = *child_type {
                     use self::hash::GenHash;
                     let hash_fn = self.gen_hash_fn(key)?;
-                    let mut args = [index_value];
+                    let mut args = [context.get_value(index)?];
                     let hash = LLVMBuildCall(context.builder, hash_fn, args.as_mut_ptr(), args.len() as u32, c_str!(""));
                     let result = {
                         let mut methods = self.dictionaries.get_mut(child_type).unwrap();

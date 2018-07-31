@@ -252,7 +252,7 @@ impl BuilderExpressionGen for LlvmGenerator {
                 };
 
                 let hash_fn = self.gen_hash_fn(key)?;
-                let mut args = [self.load(ctx.builder, key_pointer)?];
+                let mut args = [key_pointer];
                 let hash = LLVMBuildCall(ctx.builder, hash_fn, args.as_mut_ptr(), args.len() as u32, c_str!(""));
 
                 let builder_loaded = self.load(ctx.builder, builder_pointer)?;
