@@ -159,12 +159,6 @@ impl Intrinsics {
         intrinsics
     }
 
-    /// Returns the type of the key comparator over opaque pointers.
-    pub unsafe fn key_comparator_type(&self) -> LLVMTypeRef {
-        let mut arg_tys = [self.void_pointer_type(), self.void_pointer_type()];
-        let fn_type = LLVMFunctionType(self.i32_type(), arg_tys.as_mut_ptr(), arg_tys.len() as u32, 0);
-        LLVMPointerType(fn_type, 0)
-    }
 
     /// Generate a call to the `new` intrinsic.
     pub unsafe fn call_new(&self, builder: LLVMBuilderRef,
@@ -298,7 +292,7 @@ impl Intrinsics {
             self.run_handle_type(),     // run
             self.i32_type(),            // key size 
             self.i32_type(),            // val size
-            self.key_comparator_type(), // key comparator function
+            self.opaque_cmp_type(), // key comparator function
             self.i64_type()             // initial capacity (power of 2)
         ];
         let ret = dict_type;
@@ -424,9 +418,12 @@ impl Dict {
                                 context: LLVMContextRef,
                                 module: LLVMModuleRef) -> Dict {
         let c_name = CString::new(name.as_ref()).unwrap();
-        let mut layout = [LLVMPointerType(LLVMInt8TypeInContext(context), 0)];
+        let mut layout = [LLVMInt8TypeInContext(context)];
         let dict_ty = LLVMStructCreateNamed(context, c_name.as_ptr());
         LLVMStructSetBody(dict_ty, layout.as_mut_ptr(), layout.len() as u32, 0);
+
+        // A dictionary is just an opaque named pointer.
+        let dict_ty = LLVMPointerType(dict_ty, 0);
 
         let name = c_name.into_string().unwrap();
 
@@ -472,11 +469,6 @@ impl Dict {
             free: None,
             serialize: None,
         }
-    }
-
-    /// Returns the type of a hash code.
-    pub unsafe fn hash_type(&self) -> LLVMTypeRef {
-        self.i32_type()
     }
 
     /// Generates the `new` method.
@@ -541,7 +533,7 @@ impl Dict {
             let hash = LLVMGetParam(function, 2);
             let run = LLVMGetParam(function, 3);
 
-            let dict = LLVMBuildExtractValue(builder, dict, 0, c_str!(""));
+            let dict = LLVMBuildBitCast(builder, dict, self.void_pointer_type(), c_str!(""));
             let key = LLVMBuildBitCast(builder, key, self.void_pointer_type(), c_str!(""));
             let slot_pointer = intrinsics.call_get_slot(builder, run, dict, key, hash, None);
             let slot_pointer = LLVMBuildBitCast(builder, slot_pointer, self.slot_ty, c_str!(""));
@@ -591,7 +583,7 @@ impl Dict {
             let val_pointer = LLVMBuildAlloca(builder, self.val_ty, c_str!(""));
             LLVMBuildStore(builder, val, val_pointer);
 
-            let dict = LLVMBuildExtractValue(builder, dict, 0, c_str!(""));
+            let dict = LLVMBuildBitCast(builder, dict, self.void_pointer_type(), c_str!(""));
             let key = LLVMBuildBitCast(builder, key, self.void_pointer_type(), c_str!(""));
             let val = LLVMBuildBitCast(builder, val_pointer, self.void_pointer_type(), c_str!(""));
             let slot_pointer = intrinsics.call_upsert(builder, run, dict, key, hash, val, None);
@@ -634,7 +626,7 @@ impl Dict {
             let hash = LLVMGetParam(function, 2);
             let run = LLVMGetParam(function, 3);
 
-            let dict = LLVMBuildExtractValue(builder, dict, 0, c_str!(""));
+            let dict = LLVMBuildBitCast(builder, dict, self.void_pointer_type(), c_str!(""));
             let key = LLVMBuildBitCast(builder, key, self.void_pointer_type(), c_str!(""));
             let slot_pointer = intrinsics.call_get(builder, run, dict, key, hash, None);
             let slot_pointer = LLVMBuildBitCast(builder, slot_pointer, self.slot_ty, c_str!(""));
@@ -675,7 +667,7 @@ impl Dict {
             let hash = LLVMGetParam(function, 2);
             let run = LLVMGetParam(function, 3);
 
-            let dict = LLVMBuildExtractValue(builder, dict, 0, c_str!(""));
+            let dict = LLVMBuildBitCast(builder, dict, self.void_pointer_type(), c_str!(""));
             let key = LLVMBuildBitCast(builder, key, self.void_pointer_type(), c_str!(""));
             let filled = intrinsics.call_key_exists(builder, run, dict, key, hash, None);
             let result = LLVMBuildTrunc(builder, filled, ret_ty, c_str!(""));
@@ -707,7 +699,7 @@ impl Dict {
             let dict = LLVMGetParam(function, 0);
             let run = LLVMGetParam(function, 1);
 
-            let dict = LLVMBuildExtractValue(builder, dict, 0, c_str!(""));
+            let dict = LLVMBuildBitCast(builder, dict, self.void_pointer_type(), c_str!(""));
             let result = intrinsics.call_size(builder, run, dict, None);
 
             LLVMBuildRet(builder, result);
@@ -751,7 +743,7 @@ impl Dict {
 
             let out_pointer = LLVMBuildAlloca(builder, kv_vec_ty, c_str!(""));
 
-            let dict = LLVMBuildExtractValue(builder, dict, 0, c_str!(""));
+            let dict = LLVMBuildBitCast(builder, dict, self.void_pointer_type(), c_str!(""));
             let out_pointer_opaque = LLVMBuildBitCast(builder, out_pointer, self.void_pointer_type(), c_str!(""));
             // No return type for to_vec.
             let _ = intrinsics.call_to_vec(builder,
@@ -787,7 +779,7 @@ impl Dict {
             let dict = LLVMGetParam(function, 0);
             let run = LLVMGetParam(function, 1);
 
-            let dict = LLVMBuildExtractValue(builder, dict, 0, c_str!(""));
+            let dict = LLVMBuildBitCast(builder, dict, self.void_pointer_type(), c_str!(""));
             let _ = intrinsics.call_free(builder, run, dict, None);
 
             LLVMBuildRetVoid(builder);
@@ -841,7 +833,7 @@ impl Dict {
             let buffer_opaque = LLVMBuildBitCast(builder, buf_pointer, self.void_pointer_type(), c_str!(""));
             let flag_as_i32 = LLVMBuildSExt(builder, has_pointer, self.i32_type(), c_str!(""));
 
-            let dict = LLVMBuildExtractValue(builder, dict, 0, c_str!(""));
+            let dict = LLVMBuildBitCast(builder, dict, self.void_pointer_type(), c_str!(""));
             let _ = intrinsics.call_serialize(
                 builder,
                 run,

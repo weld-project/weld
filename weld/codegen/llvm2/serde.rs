@@ -22,7 +22,6 @@ use self::llvm_sys::core::*;
 use self::llvm_sys::LLVMLinkage;
 
 use codegen::llvm2::vector::VectorExt;
-use ast::Type::*;
 
 use super::{LlvmGenerator, HasPointer, CodeGenExt, FunctionContext};
 

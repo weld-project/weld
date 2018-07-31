@@ -19,6 +19,36 @@
 #define DBG(fmt, args...)
 #endif
 
+// The initial capacity of a growable vector.
+const int INITIAL_CAPACITY = 16;
+
+// The canonical layout for a weld vector.
+class WeldVec {
+public:
+  // Data Pointer
+  void *data;
+  // Size in the number of elements
+  int64_t size;
+};
+
+class GrowableWeldVec {
+  public:
+    WeldVec wv;
+    // Capacity in number of elements.
+    int64_t capacity;
+
+  public:
+    void resize(WeldRunHandleRef run, int32_t value_size, int64_t new_capacity) {
+      wv.data = weld_runst_realloc(run, wv.data, new_capacity * value_size);
+      capacity = new_capacity;
+    }
+
+    void *at(int32_t val_size, int64_t i) {
+      return (void *)((uint8_t *)wv.data + i * val_size);
+    }
+};
+
+
 // Resize threshold. Resizes when RESIZE_THRES * 10 percent of slots are full.
 const int RESIZE_THRES = 7;
 
@@ -67,10 +97,18 @@ private:
   // Reference to the run that owns this dictionary.
   WeldRunHandleRef _run;
 
+  // Size of a packed value. This can be used to trim bytes off the end of a value.
+  // Currently only used for groupmerger.
+  int32_t _packed_value_size;
+
 public:
   WeldDict(WeldRunHandleRef run, int64_t key_size, int64_t value_size, KeyComparator keys_eq, int64_t capacity)
       : _key_size(key_size), _value_size(value_size),
-        _keys_eq(keys_eq), _data(nullptr), _capacity(capacity), _size(0), _run(run) {
+        _keys_eq(keys_eq), _data(nullptr), _capacity(capacity), _size(0), _run(run), _packed_value_size(value_size) {
+  }
+
+  void set_packed_value_size(int64_t v) {
+    _packed_value_size = v;
   }
 
   bool init() {
@@ -109,6 +147,14 @@ public:
    */
   inline int64_t slot_size() const {
     return sizeof(Slot::SlotHeader) + _key_size + _value_size;
+  }
+
+  inline int64_t key_size() const {
+    return _key_size;
+  }
+
+  inline int64_t value_size() const {
+    return _value_size;
   }
 
   /*
@@ -165,6 +211,8 @@ public:
    *
    * If the slot was not filled and a new slot was allocated, *filled is set to
    * `true`. Otherwise, *filled is set to `false`.
+   *
+   * If an unfilled slot is returned, the value is guaranteed to be zeroed.
    */
   Slot *get_slot(int32_t hash, void *key, bool *filled) {
     // Linear probing.
@@ -327,8 +375,7 @@ fail:
           (int64_t)(offset_buf - buf));
   		memcpy(offset_buf, slot->key(), _key_size);
   		offset_buf += _key_size + key_padding_bytes;
-  		// TODO(Alex): The value size used to be the _packed_value_size. Clean up the LLVM interop.
-  		memcpy(offset_buf, slot->value(_key_size), _value_size);
+  		memcpy(offset_buf, slot->value(_key_size), _packed_value_size);
   		offset++;
   	}
   	assert(offset == _size);
@@ -384,7 +431,7 @@ private:
   /** Serializes a dictionary, where the keys and values have no pointers. */
   int64_t serialize_no_pointers(Vec<uint8_t> *vec) {
     // Number of bytes we will write.
-  	const int64_t bytes = sizeof(int64_t) + (_key_size + _value_size) * _size;
+  	const int64_t bytes = sizeof(int64_t) + (_key_size + _packed_value_size) * _size;
     const int64_t old_capacity = vec->capacity;
   	vec->extend(_run, vec->capacity + bytes);
 
@@ -399,13 +446,21 @@ private:
   		if (!slot->header.filled) continue;
   		memcpy(offset, slot->key(), _key_size);
   		offset += _key_size;
-  		memcpy(offset, slot->value(_key_size), _value_size);
-  		offset += _value_size;
+  		memcpy(offset, slot->value(_key_size), _packed_value_size);
+  		offset += _packed_value_size;
   	}
   	assert(offset - vec->data == bytes);
     return vec->capacity;
   }
 };
+
+struct GroupMerger {
+  // Dictionary that holds the K -> vec[V] mappings.
+  WeldDict *dict;
+  // Size of the value in bytes.
+  int32_t value_size;
+};
+
 
 extern "C" void *weld_st_dict_new(
     WeldRunHandleRef run,
@@ -500,4 +555,63 @@ extern "C" int64_t weld_st_dict_serialize(
       has_pointer,
   		reinterpret_cast<SerializeFn>(key_ser),
       reinterpret_cast<SerializeFn>(val_ser));
+}
+
+// -------------------------------------------------------------------------------
+
+extern "C" void *weld_rt_gb_new(
+    WeldRunHandleRef run,
+    int32_t key_size,
+    int32_t val_size,
+    KeyComparator keys_eq,
+    int64_t capacity) {
+
+  GroupMerger *gm = reinterpret_cast<GroupMerger*>(
+  		weld_runst_malloc(run, sizeof(GroupMerger)));
+  assert(gm);
+
+  gm->dict = reinterpret_cast<WeldDict*>(weld_st_dict_new(
+      run,
+      key_size,
+      sizeof(GrowableWeldVec),
+      keys_eq,
+      capacity));
+  gm->dict->set_packed_value_size(sizeof(WeldVec));
+  gm->value_size = val_size;
+  return gm;
+}
+
+extern "C" void weld_rt_gb_merge(
+    WeldRunHandleRef run,
+    void *p,
+    void *key,
+    int32_t hash,
+    void *value) {
+
+  GroupMerger *gm = (GroupMerger *)p;
+  bool filled;
+  Slot *s = gm->dict->get_slot(hash, key, &filled);
+
+  GrowableWeldVec *vec = reinterpret_cast<GrowableWeldVec*>(s->value(gm->dict->key_size()));
+
+  if (filled && vec->capacity == vec->wv.size) {
+      vec->resize(run, gm->value_size, vec->capacity * 2);
+  }
+
+  if (!filled) {
+    vec->capacity = INITIAL_CAPACITY;
+    vec->wv.data = weld_runst_malloc(run, INITIAL_CAPACITY * gm->value_size);
+    vec->wv.size = 0;
+  }
+  memcpy(vec->at(gm->value_size, vec->wv.size), value, gm->value_size);
+  vec->wv.size++;
+}
+
+extern "C" void *weld_rt_gb_result(
+    WeldRunHandleRef run,
+    void *p) {
+  GroupMerger *gm = (GroupMerger *)p;
+  WeldDict *result = gm->dict;
+  weld_runst_free(run, gm);
+  return result;
 }

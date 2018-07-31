@@ -14,16 +14,13 @@ else
   $(error Unsupported platform: $(OS))
 endif
 
-all: dict-st.bc $(LIB)
+all: $(LIB)
 
 debug: CFLAGS += -DDEBUG -g
 debug: all
 
 dict-st.o: dict-st.cpp
 	$(CLANG) $(CFLAGS) -c $< -o $@
-
-dict-st.bc: dict-st.cpp
-	$(CLANG) $(CFLAGS) -c -emit-llvm $< -o $@
 
 $(LIB): dict-st.o
 	ar rcs $@ $^

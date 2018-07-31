@@ -54,8 +54,9 @@ mod numeric;
 mod serde;
 mod vector;
 
-use self::builder::merger;
 use self::builder::appender;
+use self::builder::groupmerger;
+use self::builder::merger;
 
 /// Compile Weld SIR into a runnable module.
 ///
@@ -205,6 +206,10 @@ pub struct LlvmGenerator {
     ///
     /// The key maps the appender type to the appender's type reference and methods on it.
     appenders: FnvHashMap<BuilderKind, appender::Appender>,
+    /// A map tracking generated groupmergers.
+    ///
+    /// The key maps the groupmerger type to the appender's type reference and methods on it.
+    groupmergers: FnvHashMap<BuilderKind, groupmerger::GroupMerger>,
     /// A map tracking generated dictionaries.
     ///
     /// The key maps the dictionary's `Dict` type to the type reference and methods on it.
@@ -213,6 +218,10 @@ pub struct LlvmGenerator {
     ///
     /// These are functions that call out to an external dictionary implementation.
     dict_intrinsics: dict::Intrinsics,
+    /// GroupMerger intrinsics.
+    ///
+    /// These are functions that call out to an external GroupMerger implementation.
+    groupmerger_intrinsics: groupmerger::Intrinsics,
     /// Common intrinsics defined in the module.
     ///
     /// An intrinsic is any function defined outside of module (i.e., is not code generated).
@@ -275,6 +284,18 @@ pub trait CodeGenExt {
         tmp = LLVMBuildLShr(builder, result, self.i32(16), c_str!(""));
         result = LLVMBuildXor(builder, result, tmp, c_str!(""));
         result
+    }
+
+    /// Returns the type of a hash code.
+    unsafe fn hash_type(&self) -> LLVMTypeRef {
+        self.i32_type()
+    }
+
+    /// Returns the type of the key comparator over opaque pointers.
+    unsafe fn opaque_cmp_type(&self) -> LLVMTypeRef {
+        let mut arg_tys = [self.void_pointer_type(), self.void_pointer_type()];
+        let fn_type = LLVMFunctionType(self.i32_type(), arg_tys.as_mut_ptr(), arg_tys.len() as u32, 0);
+        LLVMPointerType(fn_type, 0)
     }
 
     /// Generates code to define a function with the given return type and argument type.
@@ -529,6 +550,7 @@ impl LlvmGenerator {
         // Adds the default intrinsic definitions.
         let intrinsics = intrinsic::Intrinsics::defaults(context, module);
         let dict_intrinsics = dict::Intrinsics::new(context, module);
+        let groupmerger_intrinsics = groupmerger::Intrinsics::new(context, module);
 
         jit::init();
         jit::set_triple_and_layout(module)?;
@@ -541,8 +563,10 @@ impl LlvmGenerator {
             vectors: FnvHashMap::default(),
             mergers: FnvHashMap::default(),
             appenders: FnvHashMap::default(),
+            groupmergers: FnvHashMap::default(),
             dictionaries: FnvHashMap::default(),
             dict_intrinsics: dict_intrinsics,
+            groupmerger_intrinsics: groupmerger_intrinsics,
             strings: FnvHashMap::default(),
             eq_fns: FnvHashMap::default(),
             opaque_eq_fns: FnvHashMap::default(),

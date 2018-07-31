@@ -33,6 +33,7 @@ mod for_loop;
 
 pub mod appender;
 pub mod dictmerger;
+pub mod groupmerger;
 pub mod merger;
 pub mod vecmerger;
 
@@ -160,6 +161,28 @@ impl BuilderExpressionGen for LlvmGenerator {
                 LLVMBuildStore(ctx.builder, appender, output_pointer);
                 Ok(())
             }
+            DictMerger(ref key, ref val, _) => {
+                let ref dict_type = Dict(key.clone(), val.clone());
+                let default_capacity = self.i64(dictmerger::DEFAULT_CAPACITY);
+                let dictmerger = {
+                    let mut methods = self.dictionaries.get_mut(dict_type).unwrap();
+                    methods.gen_new(ctx.builder, &self.dict_intrinsics, ctx.get_run(), default_capacity)?
+                };
+                LLVMBuildStore(ctx.builder, dictmerger, output_pointer);
+                Ok(())
+            }
+            GroupMerger(_, _) => {
+                let default_capacity = self.i64(groupmerger::DEFAULT_CAPACITY);
+                let groupmerger = {
+                    let mut methods = self.groupmergers.get_mut(nb.kind).unwrap();
+                    methods.gen_new(ctx.builder,
+                                    &self.groupmerger_intrinsics,
+                                    ctx.get_run(),
+                                    default_capacity)?
+                };
+                LLVMBuildStore(ctx.builder, groupmerger, output_pointer);
+                Ok(())
+            }
             Merger(_, _) => {
                 // The argument is either the provided one or the identity.
                 let argument = if let Some(arg) = nb.arg {
@@ -175,21 +198,8 @@ impl BuilderExpressionGen for LlvmGenerator {
                 LLVMBuildStore(ctx.builder, merger, output_pointer);
                 Ok(())
             }
-            DictMerger(ref key, ref val, _) => {
-                let ref dict_type = Dict(key.clone(), val.clone());
-                let default_capacity = self.i64(dictmerger::DEFAULT_CAPACITY);
-                let dictmerger = {
-                    let mut methods = self.dictionaries.get_mut(dict_type).unwrap();
-                    methods.gen_new(ctx.builder, &self.dict_intrinsics, ctx.get_run(), default_capacity)?
-                };
-                LLVMBuildStore(ctx.builder, dictmerger, output_pointer);
-                Ok(())
-            }
             VecMerger(_, _) => {
                 unimplemented!() // VecMerger NewBuilder
-            }
-            GroupMerger(_, _) => {
-                unimplemented!() // GroupMerger NewBuilder
             }
         }
     }
@@ -298,11 +308,31 @@ impl BuilderExpressionGen for LlvmGenerator {
                 };
                 Ok(())
             }
+            GroupMerger(ref key, _) => {
+                use self::hash::GenHash;
+                // The merge value is a {K, V} struct.
+                let merge_value_ptr = ctx.get_value(m.value)?;
+                let key_pointer = LLVMBuildStructGEP(ctx.builder, merge_value_ptr, 0, c_str!(""));
+
+                let hash_fn = self.gen_hash_fn(key)?;
+                let mut args = [key_pointer];
+                let hash = LLVMBuildCall(ctx.builder, hash_fn, args.as_mut_ptr(), args.len() as u32, c_str!(""));
+
+                let val_pointer = LLVMBuildStructGEP(ctx.builder, merge_value_ptr, 1, c_str!(""));
+
+                let builder_loaded = self.load(ctx.builder, builder_pointer)?;
+                let mut methods = self.groupmergers.get_mut(m.kind).unwrap();
+                let _ = methods.gen_merge(ctx.builder,
+                                          &self.groupmerger_intrinsics,
+                                          ctx.get_run(),
+                                          builder_loaded,
+                                          key_pointer,
+                                          hash,
+                                          val_pointer)?;
+                Ok(())
+            }
             VecMerger(_, _) => {
                 unimplemented!() // VecMerger Merge
-            }
-            GroupMerger(_, _) => {
-                unimplemented!() // GroupMerger Merge
             }
         }
     }
@@ -341,7 +371,17 @@ impl BuilderExpressionGen for LlvmGenerator {
                 unimplemented!() // VecMerger Result
             }
             GroupMerger(_, _) => {
-                unimplemented!() // GroupMerger Result
+                let result_ty = ctx.sir_function.symbol_type(m.output)?;
+                let result_ty = self.llvm_type(result_ty)?;
+                let builder_loaded = self.load(ctx.builder, builder_pointer)?;
+                let mut methods = self.groupmergers.get_mut(m.kind).unwrap();
+                let result = methods.gen_result(ctx.builder,
+                                          &self.groupmerger_intrinsics,
+                                          ctx.get_run(),
+                                          builder_loaded,
+                                          result_ty)?;
+                LLVMBuildStore(ctx.builder, result, output_pointer);
+                Ok(())
             }
         }
     }
