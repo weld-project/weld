@@ -74,6 +74,7 @@ impl WeldRun {
         self.allocated += size;
         let mem = realloc(pointer, size as size_t);
         assert!(mem as i64 != 0);
+        let _ = self.allocations.remove(&pointer);
         self.allocations.insert(mem.clone(), size);
         mem
     }
@@ -120,6 +121,7 @@ impl Drop for WeldRun {
         // Free memory allocated by the run.
         unsafe {
             for (pointer, _) in self.allocations.iter() {
+                println!("Freeing pointer {}", *pointer as i64);
                 free(*pointer);
             }
         }
