@@ -35,8 +35,7 @@ impl GenHash for LlvmGenerator {
         let llvm_ty = self.llvm_type(ty)?;
         let mut arg_tys = [LLVMPointerType(llvm_ty, 0)];
 
-        // TODO maybe put this in CodeGenExt as `hash_type`?
-        let ret_ty = self.i32_type();
+        let ret_ty = self.hash_type();
 
         let c_prefix = LLVMPrintTypeToString(llvm_ty);
         let prefix = CStr::from_ptr(c_prefix);
