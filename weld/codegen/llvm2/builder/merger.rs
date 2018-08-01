@@ -21,15 +21,6 @@ use codegen::llvm2::LLVM_VECTOR_WIDTH;
 const SCALAR_INDEX: u32 = 0;
 const VECTOR_INDEX: u32 = 1;
 
-/// A potential builder API.
-pub trait Builder {
-    fn new(&mut self) -> LLVMValueRef;
-    fn merge(&mut self, value: LLVMValueRef) -> LLVMValueRef;
-    fn scatter(&mut self) -> LLVMValueRef;
-    fn gather(&mut self, values: &[LLVMValueRef]) -> LLVMValueRef;
-    fn result(&mut self) -> LLVMValueRef;
-}
-
 /// The merger type.
 pub struct Merger {
     pub merger_ty: LLVMTypeRef,

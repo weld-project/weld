@@ -10,6 +10,9 @@ use error::*;
 use self::llvm_sys::prelude::*;
 use self::llvm_sys::core::*;
 
+use super::llvm_exts::*;
+use super::llvm_exts::LLVMExtAttribute::*;
+
 use super::CodeGenExt;
 use super::LlvmGenerator;
 
@@ -24,7 +27,6 @@ pub trait GenHash {
 
 impl GenHash for LlvmGenerator {
     unsafe fn gen_hash_fn(&mut self, ty: &Type) -> WeldResult<LLVMValueRef> {
-        use ast::Type::*;
         let result = self.hash_fns.get(ty).cloned();
         if let Some(result) = result {
             return Ok(result)

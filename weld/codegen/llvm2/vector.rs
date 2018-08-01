@@ -44,6 +44,11 @@ pub trait VectorExt {
                vector_type: &Type,
                size: LLVMValueRef,
                run: LLVMValueRef) -> WeldResult<LLVMValueRef>;
+    unsafe fn gen_clone(&mut self,
+               builder: LLVMBuilderRef,
+               vector_type: &Type,
+               vec: LLVMValueRef,
+               run: LLVMValueRef) -> WeldResult<LLVMValueRef>;
     unsafe fn gen_at(&mut self,
               builder: LLVMBuilderRef,
               vector_type: &Type,
@@ -75,6 +80,19 @@ impl VectorExt for LlvmGenerator {
         if let Type::Vector(ref elem_type) = *vector_type {
             let mut methods = self.vectors.get_mut(elem_type).unwrap();
             methods.gen_new(builder, &mut self.intrinsics, run, size)
+        } else {
+            unreachable!()
+        }
+    }
+
+    unsafe fn gen_clone(&mut self,
+              builder: LLVMBuilderRef,
+              vector_type: &Type,
+              vector: LLVMValueRef,
+              run: LLVMValueRef) -> WeldResult<LLVMValueRef> {
+        if let Type::Vector(ref elem_type) = *vector_type {
+            let mut methods = self.vectors.get_mut(elem_type).unwrap();
+            methods.gen_clone(builder, &mut self.intrinsics, vector, run)
         } else {
             unreachable!()
         }
@@ -141,6 +159,7 @@ pub struct Vector {
     context: LLVMContextRef,
     module: LLVMModuleRef,
     new: Option<LLVMValueRef>,
+    clone: Option<LLVMValueRef>,
     at: Option<LLVMValueRef>,
     vat: Option<LLVMValueRef>,
     size: Option<LLVMValueRef>,
@@ -180,6 +199,7 @@ impl Vector {
             vector_ty: vector,
             elem_ty: elem_ty,
             new: None,
+            clone: None,
             at: None,
             vat: None,
             size: None,
@@ -232,6 +252,48 @@ impl Vector {
         
         let mut args = [size, run];
         return Ok(LLVMBuildCall(builder, self.new.unwrap(), args.as_mut_ptr(), args.len() as u32, c_str!("")))
+    }
+
+    /// Generates the `clone` method on vectors and calls it.
+    ///
+    /// The clone method performs a shallow copy of the vector.
+    pub unsafe fn gen_clone(&mut self,
+                               builder: LLVMBuilderRef,
+                               intrinsics: &mut Intrinsics,
+                               vector: LLVMValueRef,
+                               run: LLVMValueRef) -> WeldResult<LLVMValueRef> {
+        if self.clone.is_none() {
+            let mut arg_tys = [self.vector_ty, self.run_handle_type()];
+            let ret_ty = self.vector_ty;
+
+            let name = format!("{}.clone", self.name);
+            let (function, builder, _) = self.define_function(ret_ty, &mut arg_tys, name);
+
+            let vector = LLVMGetParam(function, 0);
+            let run = LLVMGetParam(function, 1);
+
+            let elem_size = self.size_of(self.elem_ty);
+            let size = LLVMBuildExtractValue(builder, vector, SIZE_INDEX, c_str!("")); 
+            let alloc_size = LLVMBuildMul(builder, elem_size, size, c_str!("size"));
+
+            let dst_bytes = intrinsics.call_weld_run_malloc(builder, run, alloc_size, Some(c_str!("")));
+            let source_bytes = LLVMBuildExtractValue(builder, vector, POINTER_INDEX, c_str!("")); 
+            let source_bytes = LLVMBuildBitCast(builder, source_bytes, self.void_pointer_type(), c_str!(""));
+            let _ = intrinsics.call_memcpy(builder, dst_bytes, source_bytes, alloc_size);
+
+            let elements = LLVMBuildBitCast(builder, dst_bytes, LLVMPointerType(self.elem_ty, 0), c_str!(""));
+            let result = LLVMBuildInsertValue(builder,
+                                           LLVMGetUndef(self.vector_ty),
+                                           elements, POINTER_INDEX, c_str!(""));
+            let result = LLVMBuildInsertValue(builder, result, size, SIZE_INDEX, c_str!(""));
+            LLVMBuildRet(builder, result);
+
+            self.clone = Some(function);
+            LLVMDisposeBuilder(builder);
+        }
+        
+        let mut args = [vector, run];
+        return Ok(LLVMBuildCall(builder, self.clone.unwrap(), args.as_mut_ptr(), args.len() as u32, c_str!("")))
     }
 
     /// Generates the `at` method on vectors and calls it.

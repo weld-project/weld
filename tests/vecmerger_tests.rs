@@ -90,6 +90,4 @@ fn parallel_for_vecmerger_loop() {
             input_vec[i as usize] + input_vec[i as usize] * 7
         );
     }
-
-
 }
