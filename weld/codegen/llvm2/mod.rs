@@ -71,18 +71,25 @@ pub fn unsupported(program: &SirProgram) -> Option<String> {
             for statement in block.statements.iter() {
                 match statement.kind {
                     Sort { .. } => {
+                        // No support for sorting.
                         return Some(statement.to_string());
                     }
                     BinOp { ref left, ref op, .. } if op.is_comparison() => {
                         let ty = func.symbol_type(left).unwrap();
                         if let Vector(_) = *ty {
+                            // No support for vector comparison
+                            return Some(statement.to_string());
+                        }
+                        if let Dict(_, _) = *ty {
+                            // No support for dictionary equality checking.
                             return Some(statement.to_string());
                         }
                     }
                     _ => ()
                 };
             }
-            // Check the terminators: we do not yet support NdIter.
+
+            // Check the terminators: No support for NdIter.
             match block.terminator {
                 ParallelFor(ref pfd) => {
                     if pfd.data.iter().any(|ref pfi| pfi.kind == IterKind::NdIter) {
@@ -93,6 +100,8 @@ pub fn unsupported(program: &SirProgram) -> Option<String> {
             };
         }       
     }
+
+    // All expressions supported.
     None
 }
 
