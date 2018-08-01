@@ -36,7 +36,6 @@ pub mod appender;
 pub mod dictmerger;
 pub mod groupmerger;
 pub mod merger;
-pub mod vecmerger;
 
 /// A trait for generating builder code.
 ///

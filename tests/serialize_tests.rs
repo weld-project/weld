@@ -116,7 +116,6 @@ fn dict_pointers() {
     let expect = WeldVec::from(&expect_vec);
 
     let ref mut conf = default_conf();
-    conf.set("weld.compile.traceExecution", "true");
 
     let ref input_data = WeldVec::from(&input_vec);
 
