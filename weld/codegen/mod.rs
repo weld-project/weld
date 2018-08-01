@@ -173,6 +173,9 @@ pub fn compile_program(program: &Program,
                     set weld.compile.enableFallback=true to automatically fall back to MT runtime or use different backend", reason);
                 }
             } else {
+                if conf.support_multithread {
+                    warn!("Compiling with ST backend, but multithread support is set to true");
+                }
                 llvm2::compile(&sir_prog, conf, stats, timestamp)
             }
         }

@@ -98,7 +98,9 @@ pub fn default_conf() -> WeldConf {
 }
 
 pub fn many_threads_conf() -> WeldConf {
-    conf(4)
+    let mut conf = conf(4);
+    conf.set("weld.compile.multithreadSupport", "true");
+    conf
 }
 
 fn conf(threads: i32) -> WeldConf {

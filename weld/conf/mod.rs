@@ -24,14 +24,14 @@ pub const FALLBACK_KEY: &'static str = "weld.compile.enableFallback";
 // Default values of each key
 pub const DEFAULT_MEMORY_LIMIT: i64 = 1000000000;
 pub const DEFAULT_THREADS: i32 = 1;
-pub const DEFAULT_SUPPORT_MULTITHREAD: bool = true;
+pub const DEFAULT_SUPPORT_MULTITHREAD: bool = false;
 pub const DEFAULT_SIR_OPT: bool = true;
 pub const DEFAULT_LLVM_OPTIMIZATION_LEVEL: u32 = 2;
 pub const DEFAULT_DUMP_CODE: bool = false;
 pub const DEFAULT_TRACE_RUN: bool = false;
 pub const DEFAULT_EXPERIMENTAL_PASSES: bool = false;
 pub const DEFAULT_BACKEND: Backend = Backend::LLVMSingleThreadBackend;
-pub const DEFAULT_FALLBACK: bool = true;
+pub const DEFAULT_FALLBACK: bool = false;
 
 lazy_static! {
     pub static ref DEFAULT_OPTIMIZATION_PASSES: Vec<Pass> = {

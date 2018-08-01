@@ -9,6 +9,7 @@
 #include "dict-st.h"
 #include "vec.h"
 
+#include <cstring>
 #include <algorithm>
 #include <assert.h>
 

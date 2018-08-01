@@ -65,7 +65,7 @@ use self::builder::merger;
 pub fn unsupported(program: &SirProgram) -> Option<String> {
     use sir::StatementKind::*;
     use sir::Terminator::*;
-    use ast::Type::Vector;
+    use ast::Type::{Vector, Dict};
     for func in program.funcs.iter() {
         for block in func.blocks.iter() {
             for statement in block.statements.iter() {
