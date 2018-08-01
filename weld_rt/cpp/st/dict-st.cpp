@@ -69,7 +69,7 @@ public:
     int32_t hash;
     uint32_t filled : 1;
     uint32_t pad    : 31;
-  } header;
+  } header __attribute__((packed));
 
   // Returns the key, which immediately follows the header.
   inline void *key() {
@@ -195,6 +195,10 @@ public:
    * Returns NULL if no slot could be found or created.
    */
   Slot *upsert_slot(int32_t hash, void *key, void *init_value) {
+    DBG("hash=%d, key=%lld, init_value=%lld\n",
+        hash,
+        dbg_print(key, _key_size),
+        dbg_print(init_value, _value_size));
     bool filled;
     Slot *slot = get_slot(hash, key, &filled);
     if (!filled) {
@@ -216,11 +220,10 @@ public:
    */
   Slot *get_slot(int32_t hash, void *key, bool *filled) {
     // Linear probing.
-    DBG("hash=%d, key=%lld, init_value=%lld\n",
+    DBG("hash=%d, key=%lld\n",
         hash,
-        dbg_print(key, _key_size),
-        dbg_print(init_value,
-        _value_size));
+        dbg_print(key, _key_size));
+
   	int64_t start_slot_idx = hash & (_capacity - 1);
     for (int64_t i = 0; i < _capacity; ++i) {
       int64_t slot_idx = (start_slot_idx + i) & (_capacity - 1);
@@ -237,6 +240,16 @@ public:
       	  return slot;
         }
       }
+
+      /*
+      if (_value_size > 8) {
+        Vec<int32_t> *v = reinterpret_cast<Vec<int32_t>*>(slot->value(_key_size));
+        DBG("(hack) vec len: %lld\n", v->capacity);
+        for (int i = 0; i < v->capacity; i++) {
+          DBG("elem %d: %d\n", i, v->data[i]);
+        }
+      }
+      */
 
       // Slot is filled - check it.
       if (slot->header.hash == hash && _keys_eq(key, slot->key())) {
@@ -348,13 +361,14 @@ fail:
    * dictionary. The dictionary must be finalized.
    *
    * @param value_offset the offset of the value after the key. This accounts
-   * for padding in the returned struct.
+   * for padding between the key and value in the returned struct.
    * @param struct_size the total struct size. This handles padding after the
    * value.
    *
    * @return a buffer of {key, value} pairs.
    */
   void new_kv_vector(int32_t value_offset, int32_t struct_size, void *out) {
+    DBG("value_offset: %d struct_size: %d size: %lld\n", value_offset, struct_size, _size);
   	int64_t key_padding_bytes = value_offset - _key_size;
     DBG("padding: %lld\n", key_padding_bytes);
   	uint8_t *buf = reinterpret_cast<uint8_t*>(
@@ -375,7 +389,7 @@ fail:
           (int64_t)(offset_buf - buf));
   		memcpy(offset_buf, slot->key(), _key_size);
   		offset_buf += _key_size + key_padding_bytes;
-  		memcpy(offset_buf, slot->value(_key_size), _packed_value_size);
+      memcpy(offset_buf, slot->value(_key_size), _packed_value_size);
   		offset++;
   	}
   	assert(offset == _size);
@@ -394,10 +408,11 @@ fail:
       int32_t has_pointer,
       SerializeFn serialize_key_fn,
       SerializeFn serialize_value_fn) {
-  	if (!has_pointer) {
-      return serialize_no_pointers(vec);
-    } else {
+    DBG("has_pointer: %d\n", has_pointer);
+  	if (has_pointer) {
       return serialize_with_pointers(vec, serialize_key_fn, serialize_value_fn);
+    } else {
+      return serialize_no_pointers(vec);
     }
   }
 private:
@@ -410,6 +425,8 @@ private:
 
     // Offset where we write new data.
     int64_t base = vec->capacity;
+    DBG("base: %lld\n", base);
+    DBG("writing size %lld @ offset %lld\n", _size, vec->capacity);
 
     vec->extend(_run, sizeof(int64_t));
   	uint8_t *offset = vec->data + base;
@@ -422,9 +439,14 @@ private:
     for (long i = 0; i < _capacity; ++i) {
     	Slot *slot = slot_at_idx(i);
     	if (!slot->header.filled) continue;
+      DBG("writing key %lld @ offset %lld\n",
+        dbg_print(slot->key(), _key_size), vec->capacity);
     	serialize_key_fn(vec, slot->key(), _run);
+      DBG("writing value %lld @ offset %lld\n",
+        dbg_print(slot->key(), _key_size), vec->capacity);
     	serialize_value_fn(vec, slot->value(_key_size), _run);
     }
+    DBG("ser buf capacity: %lld\n", vec->capacity);
     return vec->capacity;
   }
 
@@ -559,7 +581,7 @@ extern "C" int64_t weld_st_dict_serialize(
 
 // -------------------------------------------------------------------------------
 
-extern "C" void *weld_rt_gb_new(
+extern "C" void *weld_st_gb_new(
     WeldRunHandleRef run,
     int32_t key_size,
     int32_t val_size,
@@ -581,7 +603,7 @@ extern "C" void *weld_rt_gb_new(
   return gm;
 }
 
-extern "C" void weld_rt_gb_merge(
+extern "C" void weld_st_gb_merge(
     WeldRunHandleRef run,
     void *p,
     void *key,
@@ -593,12 +615,15 @@ extern "C" void weld_rt_gb_merge(
   Slot *s = gm->dict->get_slot(hash, key, &filled);
 
   GrowableWeldVec *vec = reinterpret_cast<GrowableWeldVec*>(s->value(gm->dict->key_size()));
+  DBG("Accessed growable vec for key\n");
 
   if (filled && vec->capacity == vec->wv.size) {
-      vec->resize(run, gm->value_size, vec->capacity * 2);
+    vec->resize(run, gm->value_size, vec->capacity * 2);
+    DBG("Resizing vec from %lld to %lld elem capacity\n", vec->capacity, vec->capacity * 2);
   }
 
   if (!filled) {
+    DBG("initializing vec\n");
     vec->capacity = INITIAL_CAPACITY;
     vec->wv.data = weld_runst_malloc(run, INITIAL_CAPACITY * gm->value_size);
     vec->wv.size = 0;
@@ -607,7 +632,7 @@ extern "C" void weld_rt_gb_merge(
   vec->wv.size++;
 }
 
-extern "C" void *weld_rt_gb_result(
+extern "C" void *weld_st_gb_result(
     WeldRunHandleRef run,
     void *p) {
   GroupMerger *gm = (GroupMerger *)p;

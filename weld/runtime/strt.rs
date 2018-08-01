@@ -115,6 +115,17 @@ impl WeldRun {
     }
 }
 
+impl Drop for WeldRun {
+    fn drop(&mut self) {
+        // Free memory allocated by the run.
+        unsafe {
+            for (pointer, _) in self.allocations.iter() {
+                free(*pointer);
+            }
+        }
+    }
+}
+
 unsafe fn initialize() {
     // Hack to prevent symbols from being compiled out in a Rust binary.
     let mut x =  weld_runst_init as i64;
@@ -132,6 +143,11 @@ unsafe fn initialize() {
     x += weld_st_dict_keyexists as i64;
     x += weld_st_dict_size as i64;
     x += weld_st_dict_tovec as i64;
+    x += weld_st_dict_serialize as i64;
+
+    x += weld_st_gb_new as i64;
+    x += weld_st_gb_merge as i64;
+    x += weld_st_gb_result as i64;
 
     trace!("Runtime initialized with hashed values {}", x);
 }

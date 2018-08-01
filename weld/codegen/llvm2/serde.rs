@@ -667,7 +667,7 @@ impl DeHelper for LlvmGenerator {
                                     key_pointer,
                                     hash)?
                 };
-                
+
                 // Deserialize the value directly into the dictionary slot.
                 self.gen_deserialize_helper(llvm_function, builder, position, value_pointer, value_ty, buffer, run)?;
                 let updated_position = position.index;

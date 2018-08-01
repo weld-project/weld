@@ -432,8 +432,21 @@ impl BuilderExpressionGen for LlvmGenerator {
                 VecMerger(_, _) => {
                     unimplemented!() // VecMerger Builder Type
                 }
-                GroupMerger(_, _) => {
-                    unimplemented!() // GroupMerger Builder Type
+                GroupMerger(ref key, ref value) => {
+                    use super::eq::GenEq;
+                    if !self.groupmergers.contains_key(kind) {
+                        let llvm_key_ty = self.llvm_type(key)?;
+                        let llvm_val_ty = self.llvm_type(value)?;
+                        let key_comparator = self.gen_opaque_eq_fn(key)?;
+                        let groupmerger = groupmerger::GroupMerger::define("groupmerger",
+                                                            llvm_key_ty,
+                                                            llvm_val_ty,
+                                                            key_comparator,
+                                                            self.context,
+                                                            self.module);
+                        self.groupmergers.insert(kind.clone(), groupmerger);
+                    }
+                    Ok(self.groupmergers.get(kind).unwrap().groupmerger_ty)
                 }
             }
         } else {

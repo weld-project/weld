@@ -337,7 +337,11 @@ impl WeldConf {
 
 /// A compiled runnable Weld module.
 pub struct WeldModule {
+    /// A compiled, runnable module.
     llvm_module: codegen::CompiledModule,
+    /// The backend the compiled module uses. This is passed to the `WeldValue` produced when the
+    /// module is run.
+    backend: Backend,
 }
 
 impl WeldModule {
@@ -370,7 +374,10 @@ impl WeldModule {
         let module = codegen::compile_program(&program, parsed_conf, &mut stats)?;
         debug!("\n{}\n", stats.pretty_print());
 
-        Ok(WeldModule { llvm_module: module })
+        Ok(WeldModule { 
+            llvm_module: module,
+            backend: parsed_conf.backend.clone(),
+        })
     }
 
     /// Run this `WeldModule` with a configuration and argument.
@@ -408,7 +415,7 @@ impl WeldModule {
         let value = WeldValue {
             data: result.output as *const c_void,
             run: Some(result.run),
-            backend: parsed_conf.backend.clone(),
+            backend: self.backend.clone(),
         };
 
         // Check whether the run was successful -- if not, free the data in the module, andn return
@@ -418,7 +425,7 @@ impl WeldModule {
             let message = CString::new(format!("Weld program failed with error {:?}", result.errno)).unwrap();
             Err(WeldError::new(message, result.errno))
         } else {
-            // Weld allocates the output using malloc, but we cloned it, so free the output struct
+            // Weld allocates the output using libc malloc, but we cloned it, so free the output struct
             // here.
             free(raw as DataMut);
             Ok(value)

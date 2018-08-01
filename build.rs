@@ -22,6 +22,7 @@ fn main() {
     let status = Command::new("make")
         .arg("-C")
         .arg(format!("{}/weld_rt/cpp/st", project_dir))
+        .arg("debug")
         .status()
         .unwrap();
     assert!(status.success());

@@ -23,6 +23,9 @@ type KeyComparator = extern "C" fn(VoidPtr, VoidPtr) -> int32_t;
 
 #[link(name="dictst", kind="static")]
 extern "C" {
+
+    // Dictionary
+    
     #[no_mangle]
     pub fn weld_st_dict_new(run: RunHandleRef,
                             keysz: int32_t,
@@ -31,6 +34,11 @@ extern "C" {
                             capacity: int64_t) -> VoidPtr;
     #[no_mangle]
     pub fn weld_st_dict_get(run: RunHandleRef, 
+                            dict: VoidPtr, 
+                            key: VoidPtr, 
+                            hash: int32_t) -> VoidPtr;
+    #[no_mangle]
+    pub fn weld_st_dict_get_slot(run: RunHandleRef, 
                             dict: VoidPtr, 
                             key: VoidPtr, 
                             hash: int32_t) -> VoidPtr;
@@ -49,11 +57,39 @@ extern "C" {
     pub fn weld_st_dict_size(run: RunHandleRef, 
                             dict: VoidPtr) -> int64_t; 
     #[no_mangle]
+    pub fn weld_st_dict_free(run: RunHandleRef, 
+                            dict: VoidPtr); 
+    #[no_mangle]
     pub fn weld_st_dict_tovec(run: RunHandleRef, 
                             dict: VoidPtr,
                             value_offset: int32_t,
                             struct_size: int32_t,
                             out_pointer: VoidPtr); 
+    #[no_mangle]
+    pub fn weld_st_dict_serialize(run: RunHandleRef, 
+                            dict: VoidPtr,
+                            buf: VoidPtr,
+                            has_pointer: int32_t,
+                            key_ser: VoidPtr,
+                            val_ser: VoidPtr); 
+
+    // GroupMerger
+ 
+    #[no_mangle]
+    pub fn weld_st_gb_new(run: RunHandleRef,
+                            keysz: int32_t,
+                            valsz: int32_t,
+                            eq: KeyComparator,
+                            capacity: int64_t) -> VoidPtr;
+    #[no_mangle]
+    pub fn weld_st_gb_merge(run: RunHandleRef, 
+                            dict: VoidPtr, 
+                            key: VoidPtr, 
+                            hash: int32_t,
+                            val: VoidPtr);
+    #[no_mangle]
+    pub fn weld_st_gb_result(run: RunHandleRef, 
+                            dict: VoidPtr) -> VoidPtr; 
 }
 
 #[link(name="weldrt", kind="static")]

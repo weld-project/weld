@@ -447,7 +447,8 @@ impl Dict {
         let entry_name = format!("{}.entry", &name);
         let c_entry_name = CString::new(entry_name).unwrap();
         let entry_ty = LLVMStructCreateNamed(context, c_entry_name.as_ptr());
-        LLVMStructSetBody(entry_ty, layout.as_mut_ptr(), layout.len() as u32, 0);
+        // Marked as packed.
+        LLVMStructSetBody(entry_ty, layout.as_mut_ptr(), layout.len() as u32, 1);
 
         Dict {
             name: name,
@@ -490,8 +491,7 @@ impl Dict {
             let val_size = LLVMConstTruncOrBitCast(self.size_of(self.val_ty), self.i32_type());
             let result = intrinsics.call_new(builder, run, key_size, val_size, self.key_comparator, capacity, None);
 
-            // Wrap the pointer in the struct.
-            let result = LLVMBuildInsertValue(builder, LLVMGetUndef(self.dict_ty), result, 0, c_str!(""));
+            let result = LLVMBuildBitCast(builder, result, self.dict_ty, c_str!(""));
 
             LLVMBuildRet(builder, result);
 
@@ -831,7 +831,7 @@ impl Dict {
             // Store the serialize buffer so we can pass a pointer to it.
             LLVMBuildStore(builder, buf, buf_pointer);
             let buffer_opaque = LLVMBuildBitCast(builder, buf_pointer, self.void_pointer_type(), c_str!(""));
-            let flag_as_i32 = LLVMBuildSExt(builder, has_pointer, self.i32_type(), c_str!(""));
+            let flag_as_i32 = LLVMBuildZExt(builder, has_pointer, self.i32_type(), c_str!(""));
 
             let dict = LLVMBuildBitCast(builder, dict, self.void_pointer_type(), c_str!(""));
             let _ = intrinsics.call_serialize(

@@ -2,7 +2,7 @@
 
 extern crate weld;
 
-use std::fmt::{Debug, Display};
+use std::fmt::Debug;
 
 mod common;
 use common::*;
@@ -21,6 +21,7 @@ fn check<T: Clone+Debug+PartialEq>(code: &str,
     assert_eq!(expect, result);
 }
 
+/*
 #[test]
 fn scalar() {
     let code = "|v: vec[i32]| deserialize[i32](serialize(lookup(v, 0L)))";
@@ -97,7 +98,7 @@ fn dict_nopointers() {
     }
     assert_eq!(to_native(&expect), to_native(&result));
 }
-
+*/
 
 #[test]
 fn dict_pointers() {
@@ -116,7 +117,9 @@ fn dict_pointers() {
     .collect::<Vec<_>>();
     let expect = WeldVec::from(&expect_vec);
 
-    let ref conf = default_conf();
+    let ref mut conf = default_conf();
+    conf.set("weld.compile.traceExecution", "true");
+
     let ref input_data = WeldVec::from(&input_vec);
 
     let ret_value = compile_and_run(code, conf, input_data);

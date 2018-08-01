@@ -96,7 +96,9 @@ weld_value_t serialize_test(const char *program, SerializeCheckerFn checker) {
 }
 
 /** Runs a serialize test on a program that takes a vec[i8] has input. */
-void deserialize_test(const char *program, weld_vec<int8_t> *a, SerializeCheckerFn checker) {
+void deserialize_test(const char *program,
+    weld_vec<int8_t> *a,
+    SerializeCheckerFn checker) {
 
     weld_error_t e = weld_error_new();
     weld_conf_t conf = weld_conf_new();
@@ -126,7 +128,7 @@ void deserialize_test(const char *program, weld_vec<int8_t> *a, SerializeChecker
     checker(result_data);
 
     // Free the values.
-    weld_value_free(result_data);
+    weld_value_free(result);
     weld_value_free(arg);
     weld_conf_free(conf);
 
@@ -214,13 +216,21 @@ void check_deserialize_pointers(void *inp) {
 }
 
 int main() {
+  /*
   printf("Serializing Dictionary of type 'dict[i32,i32]':\n");
   weld_value_t no_ptrs = serialize_test(program_no_pointers, check_nopointers);
   printf("Deserializing Dictionary of type 'dict[i32,i32]':\n");
   deserialize_test(deser_no_pointers, (weld_vec<int8_t> *)weld_value_data(no_ptrs), check_deserialize_nopointers);
   weld_value_free(no_ptrs);
+  */
+
+  weld_set_log_level(WELD_LOG_LEVEL_INFO);
 
   weld_value_t ptrs = serialize_test(program_pointers, check_pointers);
-  deserialize_test(deser_pointers, (weld_vec<int8_t> *)weld_value_data(ptrs), check_deserialize_pointers);
-  weld_value_free(ptrs);
+  deserialize_test(deser_pointers,
+      (weld_vec<int8_t> *)weld_value_data(ptrs),
+      check_deserialize_pointers);
+  // weld_value_free(ptrs);
+  printf("Success!\n");
+  return 0;
 }

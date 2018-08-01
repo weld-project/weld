@@ -223,7 +223,7 @@ impl GroupMerger {
             let result = intrinsics.call_new(builder, run, key_size, val_size, self.key_comparator, capacity, None);
 
             // Wrap the pointer in the struct.
-            let result = LLVMBuildInsertValue(builder, LLVMGetUndef(self.groupmerger_ty), result, 0, c_str!(""));
+            let result = LLVMBuildBitCast(builder, result, self.groupmerger_ty, c_str!(""));
 
             LLVMBuildRet(builder, result);
 
