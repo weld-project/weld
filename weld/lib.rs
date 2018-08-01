@@ -355,7 +355,7 @@ impl WeldModule {
     #[allow(unreachable_code)]
     pub fn compile<S: AsRef<str>>(code: S, conf: &WeldConf) -> WeldResult<WeldModule> {
         let mut stats = CompilationStats::new();
-        let ref parsed_conf = conf::parse(conf)?;
+        let ref mut parsed_conf = conf::parse(conf)?;
         let code = code.as_ref();
 
         // Configuration.

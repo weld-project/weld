@@ -58,6 +58,44 @@ use self::builder::appender;
 use self::builder::groupmerger;
 use self::builder::merger;
 
+/// Returns whether this program is supported by this backend.
+///
+/// If it is, this function returns `None`. Otherwise, a string reason is specified for why the
+/// runtime is not supported.
+pub fn unsupported(program: &SirProgram) -> Option<String> {
+    use sir::StatementKind::*;
+    use sir::Terminator::*;
+    use ast::Type::Vector;
+    for func in program.funcs.iter() {
+        for block in func.blocks.iter() {
+            for statement in block.statements.iter() {
+                match statement.kind {
+                    Sort { .. } => {
+                        return Some(statement.to_string());
+                    }
+                    BinOp { ref left, ref op, .. } if op.is_comparison() => {
+                        let ty = func.symbol_type(left).unwrap();
+                        if let Vector(_) = *ty {
+                            return Some(statement.to_string());
+                        }
+                    }
+                    _ => ()
+                };
+            }
+            // Check the terminators: we do not yet support NdIter.
+            match block.terminator {
+                ParallelFor(ref pfd) => {
+                    if pfd.data.iter().any(|ref pfi| pfi.kind == IterKind::NdIter) {
+                        return Some(block.terminator.to_string());
+                    }
+                }
+                _ => (),
+            };
+        }       
+    }
+    None
+}
+
 /// Compile Weld SIR into a runnable module.
 ///
 /// The runnable module is wrapped as a trait object which the `CompiledModule` struct in `codegen`

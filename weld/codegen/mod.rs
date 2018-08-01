@@ -87,6 +87,10 @@ impl CompiledModule {
 
 /// Compile a Weld program with a given configuration.
 ///
+/// The given configuration may be modified to reflect the actual configuration used (e.g., if a
+/// backend specified in the configuration is not supported). Weld will log cases where the
+/// configuration changes.
+///
 /// This function is the main entry point into compiling a Weld program. It performs the following
 /// tasks in order:
 ///
@@ -102,7 +106,7 @@ impl CompiledModule {
 ///
 /// This function is a driver: most of the above tasks are implemented elsewhere.
 pub fn compile_program(program: &Program,
-                       conf: &ParsedConf,
+                       conf: &mut ParsedConf,
                        stats: &mut CompilationStats) -> WeldResult<CompiledModule> {
     let mut expr = macro_processor::process_program(program)?;
     debug!("After macro substitution:\n{}\n", expr.pretty_print());
@@ -152,8 +156,27 @@ pub fn compile_program(program: &Program,
     }
 
     let runnable = match conf.backend {
+        // Check if the single threaded runtime supports the SIR program.
+        Backend::LLVMSingleThreadBackend => {
+            if let Some(reason) = llvm2::unsupported(&sir_prog) {
+                // If fallback is enabled, we can fall back to the old runtime. Otherwise, raise an
+                // error.
+                if conf.enable_fallback {
+                    warn!("ST Found unsupported SIR statement '{}': falling back to MT runtime",
+                          reason);
+                    conf.backend = Backend::LLVMWorkStealingBackend;
+                    conf.support_multithread = false;
+                    conf.threads = 1;
+                    llvm::compile(&sir_prog, conf, stats, timestamp)
+                } else {
+                    return compile_err!("Unsupported SIR statement '{}' for ST runtime:
+                    set weld.compile.enableFallback=true to automatically fall back to MT runtime or use different backend", reason);
+                }
+            } else {
+                llvm2::compile(&sir_prog, conf, stats, timestamp)
+            }
+        }
         Backend::LLVMWorkStealingBackend => llvm::compile(&sir_prog, conf, stats, timestamp),
-        Backend::LLVMSingleThreadBackend => llvm2::compile(&sir_prog, conf, stats, timestamp),
         _ => compile_err!("Unsupported backend variant {:?}", conf.backend),
     }?;
 

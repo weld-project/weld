@@ -19,6 +19,7 @@ pub const LLVM_OPTIMIZATION_LEVEL_KEY: &'static str = "weld.llvm.optimization.le
 pub const DUMP_CODE_KEY: &'static str = "weld.compile.dumpCode";
 pub const DUMP_CODE_DIR_KEY: &'static str = "weld.compile.dumpCodeDir";
 pub const BACKEND_KEY: &'static str = "weld.compile.backend";
+pub const FALLBACK_KEY: &'static str = "weld.compile.enableFallback";
 
 // Default values of each key
 pub const DEFAULT_MEMORY_LIMIT: i64 = 1000000000;
@@ -30,6 +31,7 @@ pub const DEFAULT_DUMP_CODE: bool = false;
 pub const DEFAULT_TRACE_RUN: bool = false;
 pub const DEFAULT_EXPERIMENTAL_PASSES: bool = false;
 pub const DEFAULT_BACKEND: Backend = Backend::LLVMSingleThreadBackend;
+pub const DEFAULT_FALLBACK: bool = true;
 
 lazy_static! {
     pub static ref DEFAULT_OPTIMIZATION_PASSES: Vec<Pass> = {
@@ -66,6 +68,7 @@ pub struct ParsedConf {
     pub llvm_optimization_level: u32,
     pub dump_code: DumpCodeConf,
     pub backend: Backend,
+    pub enable_fallback: bool,
 }
 
 /// Parse a configuration from a WeldConf key-value dictionary.
@@ -120,6 +123,11 @@ pub fn parse(conf: &WeldConf) -> WeldResult<ParsedConf> {
                       .unwrap_or(Ok(DEFAULT_BACKEND))?;
 
 
+    let value = get_value(conf, FALLBACK_KEY);
+    let enable_fallback = value.map(|s| parse_bool_flag(&s, "Invalid flag for enableFallback"))
+                      .unwrap_or(Ok(DEFAULT_FALLBACK))?;
+
+
     Ok(ParsedConf {
         memory_limit: memory_limit,
         threads: threads,
@@ -130,6 +138,7 @@ pub fn parse(conf: &WeldConf) -> WeldResult<ParsedConf> {
         optimization_passes: passes,
         llvm_optimization_level: level,
         backend: backend,
+        enable_fallback: enable_fallback,
         dump_code: DumpCodeConf {
             enabled: dump_code_enabled,
             dir: dump_code_dir,
