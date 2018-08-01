@@ -54,9 +54,9 @@ impl WeldRun {
                    self.memlimit,
                    self.allocated + size);
         }
-        self.allocated += size;
         let mem = malloc(size as size_t);
         assert!(mem as i64 != 0);
+        self.allocated += size;
         self.allocations.insert(mem.clone(), size);
         mem
     }
@@ -70,10 +70,10 @@ impl WeldRun {
                    self.allocated - allocated + size);
         }
 
-        self.allocated -= allocated;
-        self.allocated += size;
         let mem = realloc(pointer, size as size_t);
         assert!(mem as i64 != 0);
+        self.allocated -= allocated;
+        self.allocated += size;
         let _ = self.allocations.remove(&pointer);
         self.allocations.insert(mem.clone(), size);
         mem
@@ -81,8 +81,8 @@ impl WeldRun {
 
     unsafe fn free(&mut self, pointer: Pointer) {
         let allocated = *self.allocations.get(&pointer).unwrap();
-        self.allocated -= allocated;
         free(pointer);
+        self.allocated -= allocated;
         self.allocations.remove(&pointer);
     }
 
@@ -106,11 +106,12 @@ impl WeldRun {
 
 /// Public read-only API used to query information about the run.
 impl WeldRun {
+    /// Returns the number of bytes allocated by this Weld run.
     pub fn memory_usage(&self) -> i64 {
         self.allocations.values().sum()
     }
 
-    // TODO
+    /// Returns a 64-bit ID identifying this run.
     pub fn run_id(&self) -> i64 {
         0
     }
