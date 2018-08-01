@@ -3,18 +3,12 @@
 extern crate llvm_sys;
 
 use std::ffi::CStr;
-
 use ast::Type;
-use error::*;
 
-use super::llvm_exts::*;
-use super::llvm_exts::LLVMExtAttribute::*;
+use error::*;
 
 use self::llvm_sys::prelude::*;
 use self::llvm_sys::core::*;
-
-use super::llvm_exts::*;
-use super::llvm_exts::LLVMExtAttribute::*;
 
 use super::CodeGenExt;
 use super::LlvmGenerator;

@@ -19,9 +19,6 @@ fn basic_program() {
 
 // #[test]
 fn basic_string() {
-    use std::slice;
-    use std::str;
-
     // XXX This test is segfaulting for some reason with a regular string...
     let code = r#"|| "hello""#;
     let ref conf = default_conf();

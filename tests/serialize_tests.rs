@@ -21,7 +21,6 @@ fn check<T: Clone+Debug+PartialEq>(code: &str,
     assert_eq!(expect, result);
 }
 
-/*
 #[test]
 fn scalar() {
     let code = "|v: vec[i32]| deserialize[i32](serialize(lookup(v, 0L)))";
@@ -98,7 +97,6 @@ fn dict_nopointers() {
     }
     assert_eq!(to_native(&expect), to_native(&result));
 }
-*/
 
 #[test]
 fn dict_pointers() {

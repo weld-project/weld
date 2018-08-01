@@ -18,6 +18,7 @@ fn iters_outofbounds_error_test() {
     let ref input_data = WeldVec::from(&input_vec);
 
     let err_value = compile_and_run_error(code, conf, input_data);
+    assert_eq!(err_value.code(), WeldRuntimeErrno::ArrayOutOfBounds);
 }
 
 #[test]

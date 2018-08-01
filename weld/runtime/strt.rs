@@ -121,7 +121,6 @@ impl Drop for WeldRun {
         // Free memory allocated by the run.
         unsafe {
             for (pointer, _) in self.allocations.iter() {
-                println!("Freeing pointer {}", *pointer as i64);
                 free(*pointer);
             }
         }
