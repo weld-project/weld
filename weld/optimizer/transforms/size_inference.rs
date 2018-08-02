@@ -77,17 +77,31 @@ pub fn infer_size(expr: &mut Expr) {
                         } else if iters.iter().any(|ref iter| iter.kind == IterKind::RangeIter) {
                             // FIXME: pari - temporary fix?
                             return None;
-                        } else {
+                        } else if iters.iter().any(|ref iter| iter.kind == IterKind::ScalarIter && iter.start.is_some()) {
                              /* For all other iter types - ScalarIter, NdIter etc. which also specify
                              start-end-strides variables. In this case, we use:
                                 length = (end - start) / strides;
                              In this case, we don't need data_expr, because we don't use any
                              potentially complicated expressions to calculate length - thus we don't
                              need to take it out in a let statement */
-                            let mut e = binop_expr(BinOpKind::Subtract, *iters[0].end.as_ref().unwrap().clone(),
-                                                   *iters[0].start.as_ref().unwrap().clone());
-                            let length = binop_expr(BinOpKind::Divide, e.unwrap(), *iters[0].stride.as_ref().unwrap().clone());
+                            // HACK: Get index of first explicit iterator.
+                            // Only need the length of one of the iterator, since each iterator will produce
+                            // the same number of elements.
+                            let mut i = iters.len();
+                            for (index, iter) in iters.iter().enumerate() {
+                                if iter.start.is_some() {
+                                    i = index;
+                                }
+                            }
+                            assert_ne!(i, iters.len());
+                            let mut e = binop_expr(BinOpKind::Subtract, *iters[i].end.as_ref().unwrap().clone(),
+                                                   *iters[i].start.as_ref().unwrap().clone());
+                            let length = binop_expr(BinOpKind::Divide, e.unwrap(), *iters[i].stride.as_ref().unwrap().clone());
                             (length.unwrap(), None)
+                        } else {
+                            // FIXME(shoumik): NDIter uses strides and shapes instead of
+                            // stride/start/end, so need to handle it differently...
+                            return None;    
                         };
 
                         if let Some(newbuilder) = newbuilder_with_size(builder, length) {

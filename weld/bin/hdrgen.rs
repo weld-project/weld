@@ -10,7 +10,6 @@ use code_builder::CodeBuilder;
 
 use weld::*;
 use weld::ffi::*;
-use weld::runtime::*;
 
 use clap::{Arg, App};
 use libc::c_char;

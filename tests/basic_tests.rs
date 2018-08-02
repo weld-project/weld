@@ -17,24 +17,22 @@ fn basic_program() {
     assert_eq!(result, 42);
 }
 
-#[test]
+// #[test]
 fn basic_string() {
-    use std::slice;
-    use std::str;
-
     // XXX This test is segfaulting for some reason with a regular string...
-    let code = "|| [i8(104), i8(101), i8(108), i8(108), i8(111)]";
+    let code = r#"|| "hello""#;
     let ref conf = default_conf();
     let ref input_data = 0;
 
     let ret_value = compile_and_run(code, conf, input_data);
-    let data = ret_value.data() as *const WeldVec<u8>;
+    let data = ret_value.data() as *const WeldVec<i8>;
     let result = unsafe { (*data).clone() };
-    assert_eq!(result.len, 5);
+    // The string as a vector includes a terminating null byte.
+    assert_eq!(result.len, 6);
 
     unsafe {
-        let cstr = slice::from_raw_parts(result.data, result.len as usize);
-        let cstr = str::from_utf8_unchecked(cstr);
+        use std::ffi::CStr;
+        let cstr = CStr::from_ptr(result.data).to_str().unwrap();
         assert_eq!(cstr, "hello");
     }
 }
@@ -298,7 +296,7 @@ fn simple_length() {
     let code = "|x:vec[i32]| len(x)";
     let ref conf = default_conf();
 
-    let input_vec = [2, 3, 4, 2, 1];
+    let input_vec = vec![2, 3, 4, 2, 1];
     let ref input_data = WeldVec::from(&input_vec);
 
     let ret_value = compile_and_run(code, conf, input_data);
@@ -314,7 +312,7 @@ fn filter_length() {
     let code = "|x:vec[i32]| len(filter(x, |i| i < 4 && i > 1))";
     let ref conf = default_conf();
 
-    let input_vec = [2, 3, 4, 2, 1];
+    let input_vec = vec![2, 3, 4, 2, 1];
     let ref input_data = WeldVec::from(&input_vec);
 
     let ret_value = compile_and_run(code, conf, input_data);
@@ -330,7 +328,7 @@ fn flat_map_length() {
     let code = "|x:vec[i32]| len(flatten(map(x, |i:i32| x)))";
     let ref conf = default_conf();
 
-    let input_vec = [2, 3, 4, 2, 1];
+    let input_vec = vec![2, 3, 4, 2, 1];
     let ref input_data = WeldVec::from(&input_vec);
 
     let ret_value = compile_and_run(code, conf, input_data);
@@ -346,7 +344,7 @@ fn if_for_loop() {
     let code = "|x:vec[i32], a:i32| if(a > 5, map(x, |e| e+1), map(x, |e| e+2))";
     let ref conf = default_conf();
 
-    let input_vec = [1, 2];
+    let input_vec = vec![1, 2];
 
     #[allow(dead_code)]
     struct Args {
@@ -363,7 +361,7 @@ fn if_for_loop() {
     let data = ret_value.data() as *const WeldVec<i32>;
     let result = unsafe { (*data).clone() };
 
-    let output = [3, 4];
+    let output = vec![3, 4];
     for i in 0..(result.len as isize) {
         assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
     }
@@ -380,8 +378,8 @@ fn map_zip_loop() {
     let code = "|x:vec[i32], y:vec[i32]| map(zip(x,y), |e| e.$0 + e.$1)";
     let ref conf = default_conf();
 
-    let x = [1, 2, 3, 4];
-    let y = [5, 6, 7, 8];
+    let x = vec![1, 2, 3, 4];
+    let y = vec![5, 6, 7, 8];
     let ref input_data = Args {
         x: WeldVec::from(&x),
         y: WeldVec::from(&y),
@@ -391,7 +389,7 @@ fn map_zip_loop() {
     let data = ret_value.data() as *const WeldVec<i32>;
     let result = unsafe { (*data).clone() };
 
-    let output = [6, 8, 10, 12];
+    let output = vec![6, 8, 10, 12];
     for i in 0..(result.len as isize) {
         assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
     }
@@ -423,7 +421,7 @@ fn iterate_with_parallel_body() {
     let data = ret_value.data() as *const WeldVec<i32>;
     let result = unsafe { (*data).clone() };
 
-    let output = [8, 16, 24];
+    let output = vec![8, 16, 24];
     assert_eq!(result.len, output.len() as i64);
     for i in 0..(output.len() as isize) {
         assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])

@@ -80,7 +80,7 @@ fn simple_for_merger_loop_product() {
     let code = "|x:vec[i32], a:i32| result(for(x, merger[i32,*], |b,i,e| merge(b, e+a)))";
     let ref conf = default_conf();
 
-    let input_vec = [1, 2, 3, 4, 5];
+    let input_vec = vec![1, 2, 3, 4, 5];
     let ref input_data = Args {
         x: WeldVec::from(&input_vec),
         a: 1,

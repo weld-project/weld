@@ -78,8 +78,8 @@ fn iters_for_loop() {
                 merge(b,e.$0+e.$1)))";
     let ref conf = default_conf();
 
-    let x = [1, 2, 3, 4];
-    let y = [5, 6];
+    let x = vec![1, 2, 3, 4];
+    let y = vec![5, 6];
     let ref input_data = Args {
         x: WeldVec::from(&x),
         y: WeldVec::from(&y),
@@ -89,7 +89,7 @@ fn iters_for_loop() {
     let data = ret_value.data() as *const WeldVec<i32>;
     let result = unsafe { (*data).clone() };
 
-    let output = [6, 9];
+    let output = vec![6, 9];
     for i in 0..(result.len as isize) {
         assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
     }
@@ -98,7 +98,7 @@ fn iters_for_loop() {
 /// Helper function for nditer - in order to simulate the behaviour of numpy's non-contiguous
 /// multi-dimensional arrays using counter, strides.
 /// returns idx = dot(counter, strides)
-fn get_idx(counter: [i64; 3], strides: [i64; 3]) -> i64 {
+fn get_idx(counter: &Vec<i64>, strides: &Vec<i64>) -> i64 {
     let mut sum: i64 = 0;
     for i in 0..3 {
         sum += counter[i] * strides[i];
@@ -106,21 +106,20 @@ fn get_idx(counter: [i64; 3], strides: [i64; 3]) -> i64 {
     return sum;
 }
 /// increments counter as in numpy / and nditer implementation. For e.g.,
-/// let shapes :[i64; 3] = [2, 3, 4];
+/// let shapes :[i64; 3] = vec![2, 3, 4];
 /// Now counter would start from (0,0,0).
 /// Each index would go upto shapes, and then reset to 0.
 /// eg. (0,0,0), (0,0,1), (0,0,2), (0,0,3), (0,1,0) etc.
-fn update_counter(mut counter: [i64; 3], shapes: [i64; 3]) -> [i64; 3] {
+fn update_counter(counter: &mut Vec<i64>, shapes: &Vec<i64>) {
     let v = vec![2, 1, 0];
     for i in v {
         counter[i] += 1;
         if counter[i] == shapes[i] {
             counter[i] = 0;
         } else {
-            return counter;
+            return;
         }
     }
-    return counter;
 }
 
 /// Tests that nditer correctly iterates over each element of a non-contiguous array and applies
@@ -147,10 +146,10 @@ fn nditer_basic_op_test() {
      * These are arbitrarily chosen here for testing purposes so get_idx can simulate the behaviour
      * nditer should be doing (idx = dot(counter, strides).
      */
-    let strides = [5, 2, 3];
+    let strides = vec![5, 2, 3];
     // nditer with this shape will contain: 2*3*4 = 24 elements.
-    let shapes = [2, 3, 4];
-    let mut counter = [0, 0, 0];
+    let shapes = vec![2, 3, 4];
+    let mut counter = vec![0, 0, 0];
 
     let ref input_data = Args {
         x: WeldVec::from(&x),
@@ -164,10 +163,10 @@ fn nditer_basic_op_test() {
     for i in 0..(result.len as isize) {
         /* next idx for the original array, x, based on how numpy would behave with the given
          * shapes/strides */
-        let idx = get_idx(counter, strides);
+        let idx = get_idx(&counter, &strides);
         assert_eq!(unsafe { *result.data.offset(i) }, x[idx as usize].ln());
         /* update counter according to the numpy above */
-        counter = update_counter(counter, shapes);
+        update_counter(&mut counter, &shapes);
     }
 }
 
@@ -193,9 +192,9 @@ fn nditer_zip() {
         y[i] = i as i64;
     }
 
-    let strides = [5, 2, 2];
-    let shapes = [2, 3, 4];
-    let mut counter = [0, 0, 0];
+    let strides = vec![5, 2, 2];
+    let shapes = vec![2, 3, 4];
+    let mut counter = vec![0, 0, 0];
 
     let ref input_data = Args {
         x: WeldVec::from(&x),
@@ -209,11 +208,11 @@ fn nditer_zip() {
     let result = unsafe { (*data).clone() };
 
     for i in 0..(result.len as isize) {
-        let idx = get_idx(counter, strides);
+        let idx = get_idx(&counter, &strides);
         assert_eq!(
             unsafe { *result.data.offset(i) },
             x[idx as usize] + y[idx as usize]
         );
-        counter = update_counter(counter, shapes);
+        update_counter(&mut counter, &shapes);
     }
 }
