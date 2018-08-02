@@ -2,6 +2,18 @@
 
 [![Build Status](https://travis-ci.org/weld-project/weld.svg?branch=master)](https://travis-ci.org/weld-project/weld)
 
+**This is an under-development branch that only supports single-threaded execution and [lacks a few features from the main branch](#llvm-st-unsupported-features). For multi-threaded support, use the `master` branch. For workloads that only require single-threaded execution and do not rely on the missing features, this branch provides a next-generation backend that should deliver substantially improved performance.**
+
+### LLVM ST Unsupported Features
+This backend currently lacks a few features. These features are tracked via the `unimplemented.sh` script.
+
+* Sorting
+* Comparing Vectors (e.g., `>=`, `==`)
+* The `NdIter` iterator
+* Vector keys in dictionaries where the vector contain pointers.
+
+--- 
+
 [Documentation](https://www.weld.rs/docs/weld/)
 
 Weld is a language and runtime for improving the performance of data-intensive applications. It optimizes across libraries and functions by expressing the core computations in libraries using a common intermediate representation, and optimizing across each framework.
