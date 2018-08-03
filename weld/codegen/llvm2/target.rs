@@ -66,10 +66,25 @@ pub enum TargetFeatures {
     Unknown,
 }
 
+impl fmt::Display for TargetFeatures {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use self::TargetFeatures::*;
+        match *self {
+            X86(ref features) => {
+                let features = features.iter().map(|s| s.to_string()).collect::<Vec<_>>().join(",");
+                write!(f, "target=x86, features=[{}]", features)
+            }
+            Unknown => {
+                write!(f, "target=unknown, features=[]")
+            }
+        }
+    }
+}
+
 impl TargetFeatures {
     /// Checks whether this `TargetFeatures` supports the given x86 feature.
     ///
-    /// Returns `false` if this isn't an x86 target.
+    /// Returns `false` if this is not an x86 target or the feature is not supported.
     pub fn x86_supports(&self, feature: X86Feature) -> bool {
         match *self {
             TargetFeatures::X86(ref features) if features.contains(&feature) => true,
@@ -80,8 +95,8 @@ impl TargetFeatures {
 
 
 pub struct Target {
-    cpu: String,
-    features: TargetFeatures,
+    pub cpu: String,
+    pub features: TargetFeatures,
 }
 
 
@@ -95,7 +110,13 @@ impl Target {
             let mut features = FnvHashSet::default();
             let feature_tokens = feature_string.as_ref().split(",").filter(|s| s.starts_with("+"));
             for feature_token in feature_tokens {
-                features.insert(feature_token.parse::<X86Feature>()?);
+                // Since we use the LLVM string, just ignore errors. They indicate features that we
+                // don't support/know about yet.
+                if let Ok(feature) = feature_token.get(1..).unwrap().parse::<X86Feature>() {
+                    features.insert(feature);
+                } else {
+                    trace!("Unrecognized x86 feature {}", feature_token);
+                }
             }
             TargetFeatures::X86(features)
         } else {

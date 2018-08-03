@@ -611,6 +611,8 @@ impl LlvmGenerator {
             llvm_exts::HOST_CPU_FEATURES.to_str().unwrap()
             )?;
 
+        debug!("LlvmGenerator features: {}", target.features);
+
         let mut gen = LlvmGenerator {
             conf: conf,
             context: context,
