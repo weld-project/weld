@@ -446,8 +446,15 @@ pub trait CodeGenExt {
 
     /// Returns the constant size of a type.
     unsafe fn size_of(&self, ty: LLVMTypeRef) -> LLVMValueRef {
-        let size_pointer = LLVMConstGEP(self.null_ptr(ty), [self.i32(1)].as_mut_ptr(), 1);
-        LLVMConstPtrToInt(size_pointer, self.i64_type())
+        LLVMSizeOf(ty)
+    }
+
+    /// Returns the constant size of a type in bits.
+    ///
+    /// Unlike `size_of`, this returns the size of the value at compile time.
+    unsafe fn size_of_bits(&self, ty: LLVMTypeRef) -> u64 {
+        let layout = llvm_sys::target::LLVMGetModuleDataLayout(self.module());
+        llvm_sys::target::LLVMSizeOfTypeInBits(layout, ty) as u64
     }
 
     /// Computes the next power of two for the given value.
@@ -597,13 +604,15 @@ impl LlvmGenerator {
     unsafe fn generate(conf: ParsedConf, program: &SirProgram) -> WeldResult<LlvmGenerator> {
         let context = LLVMContextCreate();
         let module = LLVMModuleCreateWithNameInContext(c_str!("main"), context);
+
+        // These methods *must* be called before using any of the `CodeGenExt` extension methods.
+        jit::init();
+        jit::set_triple_and_layout(module)?;
+
         // Adds the default intrinsic definitions.
         let intrinsics = intrinsic::Intrinsics::defaults(context, module);
         let dict_intrinsics = dict::Intrinsics::new(context, module);
         let groupmerger_intrinsics = groupmerger::Intrinsics::new(context, module);
-
-        jit::init();
-        jit::set_triple_and_layout(module)?;
 
         let target = target::Target::from_llvm_strings(
             llvm_exts::PROCESS_TRIPLE.to_str().unwrap(),

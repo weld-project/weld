@@ -99,7 +99,6 @@ pub struct Target {
     pub features: TargetFeatures,
 }
 
-
 impl Target {
     /// Returns a new `TargetFeature` using an LLVM feature and CPU string.
     pub fn from_llvm_strings<T: AsRef<str>, U: AsRef<str>, V: AsRef<str>>(triple_string: T,
