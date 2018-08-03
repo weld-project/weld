@@ -52,6 +52,7 @@ mod jit;
 mod llvm_exts;
 mod numeric;
 mod serde;
+mod target;
 mod vector;
 
 use self::builder::appender;
@@ -235,6 +236,8 @@ impl HasPointer for Type {
 pub struct LlvmGenerator {
     /// A configuration for generating code.
     conf: ParsedConf,
+    /// Target-specific information used during code generation.
+    target: target::Target,
     /// An LLVM Context for isolating code generation.
     context: LLVMContextRef,
     /// The main LLVM module to which code is added.
@@ -602,10 +605,17 @@ impl LlvmGenerator {
         jit::init();
         jit::set_triple_and_layout(module)?;
 
+        let target = target::Target::from_llvm_strings(
+            llvm_exts::PROCESS_TRIPLE.to_str().unwrap(),
+            llvm_exts::HOST_CPU_NAME.to_str().unwrap(),
+            llvm_exts::HOST_CPU_FEATURES.to_str().unwrap()
+            )?;
+
         let mut gen = LlvmGenerator {
             conf: conf,
             context: context,
             module: module,
+            target: target,
             functions: FnvHashMap::default(),
             vectors: FnvHashMap::default(),
             mergers: FnvHashMap::default(),
