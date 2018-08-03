@@ -96,7 +96,8 @@ impl GenHash for LlvmGenerator {
             // XXX Set a proper seed (large prime?)
             self.hash(function, builder, ty, funcs, seed, param)?
         } else {
-            seed
+            // TODO implement a default hashing scheme such as MurMur3.
+            unimplemented!()
         };
 
         LLVMBuildRet(builder, hash);
