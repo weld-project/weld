@@ -956,7 +956,7 @@ impl LlvmGenerator {
                 let child_type = context.sir_function.symbol_type(child)?;
                 let hash = if let Dict(ref key, _) = *child_type {
                     let hash_fn = self.gen_hash_fn(key)?;
-                    let mut args = [key_pointer];
+                    let mut args = [key_pointer, self.u32(self::hash::CRC32_SEED)];
                     LLVMBuildCall(context.builder, hash_fn, args.as_mut_ptr(), args.len() as u32, c_str!(""))
                 } else {
                     unreachable!()
@@ -1009,7 +1009,7 @@ impl LlvmGenerator {
                 } else if let Dict(ref key, _) = *child_type {
                     use self::hash::GenHash;
                     let hash_fn = self.gen_hash_fn(key)?;
-                    let mut args = [context.get_value(index)?];
+                    let mut args = [context.get_value(index)?, self.u32(self::hash::CRC32_SEED)];
                     let hash = LLVMBuildCall(context.builder, hash_fn, args.as_mut_ptr(), args.len() as u32, c_str!(""));
                     let result = {
                         let mut methods = self.dictionaries.get_mut(child_type).unwrap();

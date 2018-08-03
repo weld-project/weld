@@ -26,6 +26,87 @@ use super::LlvmGenerator;
 
 pub const CRC32_SEED: u32 = 0xffffffff;
 
+/// Trait for generating hashing code.
+pub trait GenHash {
+    /// Generates a hash function for a type.
+    ///
+    /// Hash functions have the type signature `T -> i32`. This method returns the generated
+    /// function.
+    unsafe fn gen_hash_fn(&mut self, ty: &Type) -> WeldResult<LLVMValueRef>;
+}
+
+
+impl GenHash for LlvmGenerator {
+    unsafe fn gen_hash_fn(&mut self, ty: &Type) -> WeldResult<LLVMValueRef> {
+        let result = self.hash_fns.get(ty).cloned();
+        if let Some(result) = result {
+            return Ok(result)
+        }
+
+        let llvm_ty = self.llvm_type(ty)?;
+        let mut arg_tys = [LLVMPointerType(llvm_ty, 0), self.hash_type()];
+
+        let ret_ty = self.hash_type();
+
+        let c_prefix = LLVMPrintTypeToString(llvm_ty);
+        let prefix = CStr::from_ptr(c_prefix);
+        let prefix = prefix.to_str().unwrap();
+        let name = format!("{}.hash", prefix);
+        // Free the allocated string.
+        LLVMDisposeMessage(c_prefix);
+
+        let (function, builder, _) = self.define_function(ret_ty, &mut arg_tys, name);
+
+        LLVMExtAddAttrsOnFunction(self.context, function, &[InlineHint]);
+
+        let param = LLVMGetParam(function, 0);
+        let seed = LLVMGetParam(function, 1);
+
+        // We use a CRC32 hash function using the SSE4.2 intrinsic.
+        let hash = if self.target.features.x86_supports(X86Feature::SSE4_2) {
+            // x86 CRC intrinsics.
+            let crc64 = "llvm.x86.sse42.crc32.64.64";
+            let crc32 = "llvm.x86.sse42.crc32.32.32";
+            let crc16 = "llvm.x86.sse42.crc32.32.16";
+            let crc8 = "llvm.x86.sse42.crc32.32.8";
+
+            let u64_ty = self.u64_type();
+            let u32_ty = self.u32_type();
+            let u16_ty = self.u16_type();
+            let u8_ty = self.u8_type();
+
+            let _ = self.intrinsics.add(crc64, u64_ty, &mut [u64_ty, u64_ty]);
+            let _ = self.intrinsics.add(crc32, u32_ty, &mut [u32_ty, u32_ty]);
+            let _ = self.intrinsics.add(crc16, u32_ty, &mut [u32_ty, u16_ty]);
+            let _ = self.intrinsics.add(crc8, u32_ty, &mut [u32_ty, u8_ty]);
+
+            // Use the CRC-32 set of hash functions. These functions are exposed as target-specific
+            // x86 intrinsics.
+            let ref funcs = HashFuncs {
+                hash64: self.intrinsics.get(crc64).unwrap(),
+                hash32: self.intrinsics.get(crc32).unwrap(),
+                hash16: self.intrinsics.get(crc16).unwrap(),
+                hash8: self.intrinsics.get(crc8).unwrap(),
+            };
+
+            // Generate the hash code. We use a method similar to
+            // https://github.com/apache/impala/blob/master/be/src/codegen/llvm-codegen.cc
+            // (see the LlvmCodeGen::GetHashFunction function).
+            //
+            // XXX Set a proper seed (large prime?)
+            self.hash(function, builder, ty, funcs, seed, param)?
+        } else {
+            seed
+        };
+
+        LLVMBuildRet(builder, hash);
+        LLVMDisposeBuilder(builder);
+
+        self.hash_fns.insert(ty.clone(), function);
+        Ok(function)
+    }
+}
+
 /// A wrapper for holding hash functions for different native widths.
 struct HashFuncs {
     /// 64-bit hash function.
@@ -48,15 +129,6 @@ struct HashFuncs {
     /// This function combines a 32-bit hash value with an 8-bit bitstring to produce a new
     /// 32-bit hash value.
     hash8: LLVMValueRef,
-}
-
-/// Trait for generating hashing code.
-pub trait GenHash {
-    /// Generates a hash function for a type.
-    ///
-    /// Hash functions have the type signature `T -> i32`. This method returns the generated
-    /// function.
-    unsafe fn gen_hash_fn(&mut self, ty: &Type) -> WeldResult<LLVMValueRef>;
 }
 
 /// An internal trait for hashing values.
@@ -241,6 +313,9 @@ impl Hash for LlvmGenerator {
                 let loaded = self.load(builder, param)?;
                 self.hash_scalar(builder, kind, funcs, seed, loaded)
             }
+            Simd(kind) => {
+                unimplemented!()
+            }
             Struct(_) if !ty.has_pointer() => {
                 // The static size of the value in bits. We decompose this into a series of
                 // calls to `hash_scalar`, calling the widest possible version.
@@ -290,8 +365,10 @@ impl Hash for LlvmGenerator {
                 // individually.
                 let mut hash = seed;
                 for (i, ty) in elems.iter().enumerate() {
+                    let elem_hash_fn = self.gen_hash_fn(ty)?;
                     let pointer = LLVMBuildStructGEP(builder, param, i as u32, c_str!(""));
-                    hash = self.hash(function, builder, ty, funcs, hash, pointer)?;
+                    let mut args = [pointer, hash];
+                    hash = LLVMBuildCall(builder, elem_hash_fn, args.as_mut_ptr(), args.len() as u32, c_str!(""));
                 }
                 hash
             }
@@ -365,79 +442,60 @@ impl Hash for LlvmGenerator {
                 }
                 hash
             }
-            _ => unimplemented!(),
+            Vector(ref elem) => {
+                // elems has pointers, so loop over the vector and call the hash function on each
+                // element.
+                let elem_hash_fn = self.gen_hash_fn(elem)?;
+
+                let start_block = LLVMAppendBasicBlockInContext(self.context(), function,  c_str!(""));
+                let loop_block = LLVMAppendBasicBlockInContext(self.context(), function,  c_str!(""));
+                let end_block = LLVMAppendBasicBlockInContext(self.context(), function,  c_str!(""));
+
+                LLVMBuildBr(builder, start_block);
+                LLVMPositionBuilderAtEnd(builder, start_block);
+
+                let vector = self.load(builder, param)?;
+                let size = self.gen_size(builder, ty, vector)?;
+
+                // Build a loop that hashes each vector element.
+                let check = LLVMBuildICmp(builder, LLVMIntNE, size, self.i64(0), c_str!(""));
+                LLVMBuildCondBr(builder, check, loop_block, end_block);
+                LLVMPositionBuilderAtEnd(builder, loop_block);
+
+                // Induction variable.
+                let phi_i = LLVMBuildPhi(builder, self.i64_type(), c_str!(""));
+                // Hash value so far.
+                let phi_hash = LLVMBuildPhi(builder, LLVMTypeOf(seed), c_str!(""));
+
+                let pointer = self.gen_at(builder, ty, vector, phi_i)?;
+                let mut args = [pointer, phi_hash];
+                let updated_hash = LLVMBuildCall(builder, elem_hash_fn, args.as_mut_ptr(), args.len() as u32, c_str!(""));
+
+                let updated_i = LLVMBuildNSWAdd(builder, phi_i, self.i64(1), c_str!(""));
+                let check2 = LLVMBuildICmp(builder, LLVMIntEQ, updated_i, size, c_str!(""));
+                LLVMBuildCondBr(builder, check2, end_block, loop_block);
+
+                let mut blocks = [start_block, loop_block];
+                let mut values = [self.i64(0), updated_i];
+                LLVMAddIncoming(phi_i, values.as_mut_ptr(), blocks.as_mut_ptr(), values.len() as u32);
+
+                let mut values = [seed, updated_hash];
+                LLVMAddIncoming(phi_hash, values.as_mut_ptr(), blocks.as_mut_ptr(), values.len() as u32);
+
+                // Finish block - set result and compute number of consumed bits.
+                LLVMPositionBuilderAtEnd(builder, end_block);
+
+                let result = LLVMBuildPhi(builder, LLVMTypeOf(seed), c_str!(""));
+                let mut blocks = [start_block, loop_block];
+                let mut values = [seed, updated_hash];
+                LLVMAddIncoming(result, values.as_mut_ptr(), blocks.as_mut_ptr(), values.len() as u32);
+                result
+            }
+            Dict(_,_) | Builder(_,_) | Function(_,_) | Unknown => {
+                return compile_err!("Unhashable type {}", ty);
+            }
         };
         Ok(hash)
     }
 }
 
-impl GenHash for LlvmGenerator {
-    unsafe fn gen_hash_fn(&mut self, ty: &Type) -> WeldResult<LLVMValueRef> {
-        let result = self.hash_fns.get(ty).cloned();
-        if let Some(result) = result {
-            return Ok(result)
-        }
-
-        let llvm_ty = self.llvm_type(ty)?;
-        let mut arg_tys = [LLVMPointerType(llvm_ty, 0)];
-
-        let ret_ty = self.hash_type();
-
-        let c_prefix = LLVMPrintTypeToString(llvm_ty);
-        let prefix = CStr::from_ptr(c_prefix);
-        let prefix = prefix.to_str().unwrap();
-        let name = format!("{}.hash", prefix);
-        // Free the allocated string.
-        LLVMDisposeMessage(c_prefix);
-
-        let (function, builder, _) = self.define_function(ret_ty, &mut arg_tys, name);
-
-        LLVMExtAddAttrsOnFunction(self.context, function, &[InlineHint]);
-
-        let param = LLVMGetParam(function, 0);
-
-        // We use a CRC32 hash function using the SSE4.2 intrinsic.
-        let hash = if self.target.features.x86_supports(X86Feature::SSE4_2) {
-            // x86 CRC intrinsics.
-            let crc64 = "llvm.x86.sse42.crc32.64.64";
-            let crc32 = "llvm.x86.sse42.crc32.32.32";
-            let crc16 = "llvm.x86.sse42.crc32.32.16";
-            let crc8 = "llvm.x86.sse42.crc32.32.8";
-
-            let u64_ty = self.u64_type();
-            let u32_ty = self.u32_type();
-            let u16_ty = self.u16_type();
-            let u8_ty = self.u8_type();
-
-            let _ = self.intrinsics.add(crc64, u64_ty, &mut [u64_ty, u64_ty]);
-            let _ = self.intrinsics.add(crc32, u32_ty, &mut [u32_ty, u32_ty]);
-            let _ = self.intrinsics.add(crc16, u32_ty, &mut [u32_ty, u16_ty]);
-            let _ = self.intrinsics.add(crc8, u32_ty, &mut [u32_ty, u8_ty]);
-
-            // Use the CRC-32 set of hash functions. These functions are exposed as target-specific
-            // x86 intrinsics.
-            let ref funcs = HashFuncs {
-                hash64: self.intrinsics.get(crc64).unwrap(),
-                hash32: self.intrinsics.get(crc32).unwrap(),
-                hash16: self.intrinsics.get(crc16).unwrap(),
-                hash8: self.intrinsics.get(crc8).unwrap(),
-            };
-
-            // Generate the hash code. We use a method similar to
-            // https://github.com/apache/impala/blob/master/be/src/codegen/llvm-codegen.cc
-            // (see the LlvmCodeGen::GetHashFunction function).
-            //
-            // XXX Set a proper seed (large prime?)
-            let seed = self.u32(CRC32_SEED);
-            self.hash(function, builder, ty, funcs, seed, param)?
-        } else {
-            self.u32(CRC32_SEED)
-        };
-
-        LLVMBuildRet(builder, hash);
-        LLVMDisposeBuilder(builder);
-
-        self.hash_fns.insert(ty.clone(), function);
-        Ok(function)
-    }
-}

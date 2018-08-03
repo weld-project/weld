@@ -606,7 +606,7 @@ impl DeHelper for LlvmGenerator {
                 // NOTE: This requires re-hashing: we could look into encoding dictionaries without
                 // having to do this.
                 use self::llvm_sys::LLVMIntPredicate::LLVMIntSGT;
-                use codegen::llvm2::hash::GenHash;
+                use codegen::llvm2::hash::{GenHash, CRC32_SEED};
 
                 let size_type = self.i64_type();
                 let size = self.gen_get_value(builder, size_type, buffer, position)?;
@@ -656,7 +656,7 @@ impl DeHelper for LlvmGenerator {
                 self.gen_deserialize_helper(llvm_function, builder, position, key_pointer, key_ty, buffer, run)?;
 
                 let hash_fn = self.gen_hash_fn(key_ty)?;
-                let mut args = [key_pointer];
+                let mut args = [key_pointer, self.u32(CRC32_SEED)];
                 let hash = LLVMBuildCall(builder, hash_fn, args.as_mut_ptr(), args.len() as u32, c_str!(""));
                 let value_pointer = {
                     let mut methods = self.dictionaries.get_mut(ty).unwrap();
