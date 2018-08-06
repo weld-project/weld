@@ -327,7 +327,7 @@ impl Hash for LlvmGenerator {
                 let loaded = self.load(builder, param)?;
                 self.hash_scalar(builder, kind, funcs, seed, loaded)
             }
-            Simd(kind) => {
+            Simd(_) => {
                 unimplemented!()
             }
             Struct(_) if !ty.has_pointer() => {
