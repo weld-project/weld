@@ -141,8 +141,9 @@ declare void    @weld_rt_gb_free(i8*)
 ; vec_output struct in runtime.h
 %vb.out = type { i8*, i64 }
 
-; Input argument (input data pointer, nworkers, mem_limit)
-%input_arg_t = type { i64, i32, i64 }
+; Input argument (input data pointer, nworkers, mem_limit, _runHandle)
+; NOTE: The _runHandle is unused in this runtime.
+%input_arg_t = type { i64, i32, i64 , i64 }
 ; Return type (output data pointer, run ID, errno)
 %output_arg_t = type { i64, i64, i64 }
 

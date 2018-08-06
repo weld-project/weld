@@ -395,8 +395,8 @@ impl WeldModule {
     /// This method is, as a result, `unsafe` because passing invalid data into a Weld program will
     /// cause undefined behavior.
     ///
-    /// Note that most Rust values cannot be passed into Weld directly. That is, it is *not* safe
-    /// to simply pass a pointer to a `Vec<T>` into Weld directly.
+    /// Note that most Rust values cannot be passed into Weld directly. For example, it is *not*
+    /// safe to simply pass a raw pointer to a `Vec<T>` into Weld directly.
     pub unsafe fn run(&mut self, conf: &WeldConf, arg: &WeldValue) -> WeldResult<WeldValue> {
         let ref parsed_conf = conf::parse(conf)?;
 
@@ -405,6 +405,7 @@ impl WeldModule {
                              input: arg.data as i64,
                              nworkers: parsed_conf.threads,
                              mem_limit: parsed_conf.memory_limit,
+                             run: 0,
                          });
         let ptr = Box::into_raw(input) as i64;
 

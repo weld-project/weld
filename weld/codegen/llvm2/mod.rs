@@ -148,6 +148,8 @@ trait LlvmInputArg {
     fn nworkers_index() -> u32;
     /// Index of the memory limit value in the struct.
     fn memlimit_index() -> u32;
+    /// Index of run handle pointer in the struct.
+    fn run_index() -> u32;
 }
 
 impl LlvmInputArg for WeldInputArgs {
@@ -155,7 +157,8 @@ impl LlvmInputArg for WeldInputArgs {
         let mut types = [
             LLVMInt64TypeInContext(context),
             LLVMInt32TypeInContext(context),
-            LLVMInt64TypeInContext(context)
+            LLVMInt64TypeInContext(context),
+            LLVMInt64TypeInContext(context),
         ];
         let args = LLVMStructCreateNamed(context, c_str!("input_args_t"));
         LLVMStructSetBody(args, types.as_mut_ptr(), types.len() as u32, 0);
@@ -172,6 +175,10 @@ impl LlvmInputArg for WeldInputArgs {
 
     fn memlimit_index() -> u32 {
         2
+    }
+
+    fn run_index() -> u32 {
+        3
     }
 }
 
@@ -682,7 +689,7 @@ impl LlvmGenerator {
     /// Generates the entry point to the Weld program.
     ///
     /// The entry function takes an `i64` and returns an `i64`. Both represent pointers that
-    /// point to a `WeldInputAgs` and `WeldOutputArgs` respectively.
+    /// point to a `WeldInputArgs` and `WeldOutputArgs` respectively.
     unsafe fn gen_entry(&mut self, program: &SirProgram) -> WeldResult<()> {
         use ast::Type::Struct;
 
@@ -701,18 +708,35 @@ impl LlvmGenerator {
         LLVMSetLinkage(function, LLVMLinkage::LLVMExternalLinkage);
 
         let builder = LLVMCreateBuilderInContext(self.context);
-        let block = LLVMAppendBasicBlockInContext(self.context, function, c_str!(""));
-        LLVMPositionBuilderAtEnd(builder, block);
+        let entry_block = LLVMAppendBasicBlockInContext(self.context, function, c_str!(""));
+        let init_run_block = LLVMAppendBasicBlockInContext(self.context, function, c_str!(""));
+        let get_arg_block = LLVMAppendBasicBlockInContext(self.context, function, c_str!(""));
 
+        LLVMPositionBuilderAtEnd(builder, entry_block);
         let argument = LLVMGetParam(function, 0);
         let pointer = LLVMBuildIntToPtr(builder, argument, LLVMPointerType(input_type, 0), c_str!(""));
 
+        // Check whether we already have an existing run.
+        let run_pointer = LLVMBuildStructGEP(builder, pointer, WeldInputArgs::run_index(), c_str!(""));
+        let run_pointer = self.load(builder, run_pointer)?;
+        let run_arg = LLVMBuildIntToPtr(builder, run_pointer, self.run_handle_type(), c_str!(""));
+        let null = LLVMConstNull(self.run_handle_type());
+        let null_check = LLVMBuildICmp(builder, llvm_sys::LLVMIntPredicate::LLVMIntEQ, run_arg, null, c_str!(""));
+        LLVMBuildCondBr(builder, null_check, init_run_block, get_arg_block);
+
+        LLVMPositionBuilderAtEnd(builder, init_run_block);
         let nworkers_pointer = LLVMBuildStructGEP(builder, pointer, WeldInputArgs::nworkers_index(), c_str!("nworkers"));
         let nworkers = self.load(builder, nworkers_pointer)?;
         let memlimit_pointer = LLVMBuildStructGEP(builder, pointer, WeldInputArgs::memlimit_index(), c_str!("memlimit"));
         let memlimit = self.load(builder, memlimit_pointer)?;
+        let run_new = self.intrinsics.call_weld_run_init(builder, nworkers, memlimit, None);
+        LLVMBuildBr(builder, get_arg_block);
 
-        let run = self.intrinsics.call_weld_run_init(builder, nworkers, memlimit, None);
+        LLVMPositionBuilderAtEnd(builder, get_arg_block);
+        let run = LLVMBuildPhi(builder, self.run_handle_type(), c_str!(""));
+        let mut blocks = [entry_block, init_run_block];
+        let mut values = [run_arg, run_new];
+        LLVMAddIncoming(run, values.as_mut_ptr(), blocks.as_mut_ptr(), blocks.len() as u32);
 
         let arg_pointer = LLVMBuildStructGEP(builder, pointer, WeldInputArgs::input_index(), c_str!("argptr"));
         // Still a pointer, but now as an integer.

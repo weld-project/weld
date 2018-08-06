@@ -40,17 +40,29 @@ pub use self::llvm::load_library;
 #[derive(Clone, Debug)]
 #[repr(C)]
 pub struct WeldInputArgs {
+    /// A pointer to the input data.
     pub input: i64,
+    /// Number of worker threads to use.
     pub nworkers: i32,
+    /// Memory limit in bytes.
     pub mem_limit: i64,
+    /// A run handle if this input is to continue an existing run.
+    ///
+    /// This value should be 0 if a new run should be initialized.
+    pub run: i64,
 }
 
 /// A wrapper for outputs passed out of Weld.
 #[derive(Clone, Debug)]
 #[repr(C)]
 pub struct WeldOutputArgs {
+    /// A pointer to the output data.
     pub output: i64,
+    /// A reference to the run.
+    ///
+    /// This can either be a numerical identifier or a pointer to some handle.
     pub run: i64,
+    /// An error, if one was set.
     pub errno: WeldRuntimeErrno,
 }
 
