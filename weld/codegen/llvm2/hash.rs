@@ -186,10 +186,10 @@ trait Hash {
 
     /// Build a loop to hash a value.
     ///
-    /// The constructed loop uses `kind` to determine how many bytes to hash per loop iteration. For
-    /// example, if kind == `I64`, then each loop iteration will load a 64-bit value and hash it.
-    /// The built loop will not hash more than `size_in_bytes` bytes are not hashed (but may hash
-    /// fewer bytes if the `size_in_bytes` is not a multiple of `kind.bits()`.
+    /// The constructed loop uses `kind` to determine how many bytes to hash per loop iteration.
+    /// For example, if kind == `I64`, then each loop iteration will load a 64-bit value and hash
+    /// it.  The built loop will not hash more than `size_in_bytes` bytes (but may hash fewer bytes
+    /// if the `size_in_bytes` is not a multiple of `kind.bits()`).
     ///
     /// This function returns 1) the updated hash value and 2) the number of bytes actually
     /// consumed. The number of bytes consumed will be `kind.bits() % size_in_bytes`.
@@ -243,17 +243,6 @@ impl Hash for LlvmGenerator {
     }
 
     /// Build a loop to hash a value.
-    ///
-    /// The constructed loop uses `kind` to determine how many bytes to hash per loop iteration. For
-    /// example, if kind == `I64`, then each loop iteration will load a 64-bit value and hash it.
-    /// The built loop will not hash more than `size_in_bytes` bytes are not hashed (but may hash
-    /// fewer bytes if the `size_in_bytes` is not a multiple of `kind.bits()`.
-    ///
-    /// This function returns 1) the updated hash value and 2) the number of bytes actually
-    /// consumed.
-    ///
-    /// The LLVM builder will always be positioned at the end of the loop exit block after this
-    /// function is called.
     unsafe fn hash_loop(&mut self,
                         function: LLVMValueRef,
                         builder: LLVMBuilderRef,

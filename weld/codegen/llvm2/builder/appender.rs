@@ -1,4 +1,9 @@
-//! Code generation for the merger builder type.
+//! Code generation for the appender builder type.
+//!
+//! Much of this code mirrors the implementation of the `vector` type, and it may be worth merging
+//! this module with `llvm2::vector` one day. The main difference between a vector and an appender
+//! is that an appender has a third capacity field (in addition to the vector's data pointer and
+//! size). The appender also contains methods for dynamic resizing.
 
 extern crate llvm_sys;
 

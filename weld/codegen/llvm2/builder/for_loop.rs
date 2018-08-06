@@ -1,4 +1,11 @@
 //! Code generation for the parallel for loop.
+//!
+//! This backend currently only generates single threaded code, but its structure is amenable to
+//! parallelization (e.g., loops are still divided out into their own function, albeit marked with
+//! `alwaysinline` at the moment).
+//!
+//! The `GenForLoopInternal` is the main workhorse of this module, and provides methods for
+//! building a loop, creating bounds checks, loading elements, and so forth.
 
 extern crate llvm_sys;
 

@@ -1,3 +1,7 @@
+//! Implements a wrapper for the `groupmerger` builder.
+//!
+//! This module resembles `llvm2::dict`, in that most of the code here calls out into an external
+//! implementation, and the data structures here facilitate making those calls.
 
 extern crate lazy_static;
 extern crate llvm_sys;
