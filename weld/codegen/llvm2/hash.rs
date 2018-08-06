@@ -1,4 +1,9 @@
 //! Implements hashing for Weld types.
+//!
+//! The main trait this module exposes is `GenHash`, which provides an interface for generating a
+//! hash function for the specified Weld type. Currently, this module only supports hashing with
+//! CRC32 using Intel's SSE 4.2 CRC32 intrinsics. Eventually, the module is slated to use a Weld
+//! configuration to choose among a collection of hash functions.
 
 extern crate llvm_sys;
 
@@ -72,6 +77,9 @@ impl GenHash for LlvmGenerator {
             let seed = LLVMGetParam(function, 1);
 
             // We use a CRC32 hash function using the SSE4.2 intrinsic.
+            //
+            // TODO This can be a dyn Trait so we can support multiple hash functions. For now,
+            // since everything we care about will have SSE 4.2, this is sufficient.
             let hash = if self.target.features.x86_supports(X86Feature::SSE4_2) {
                 // x86 CRC intrinsics.
                 let crc64 = "llvm.x86.sse42.crc32.64.64";
