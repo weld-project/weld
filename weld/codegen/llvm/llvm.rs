@@ -4554,7 +4554,7 @@ fn get_combined_params(sir: &SirProgram, par_for: &ParallelForData) -> BTreeMap<
 
 #[cfg(test)]
 fn predicate_only(code: &str) -> WeldResult<Expr> {
-    use optimizer::apply_passes;
+    use optimizer::*;
 
     let mut e = parse_expr(code).unwrap();
     assert!(e.infer_types().is_ok());
