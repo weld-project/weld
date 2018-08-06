@@ -310,7 +310,7 @@ pub trait CodeGenExt {
         if LLVMGetTypeKind(LLVMTypeOf(pointer)) != LLVMTypeKind::LLVMPointerTypeKind {
             unreachable!()
         } else {
-            let loaded = LLVMBuildLoad(builder, pointer, NULL_NAME.as_ptr());
+            let loaded = LLVMBuildLoad(builder, pointer, c_str!(""));
             if LLVMGetTypeKind(LLVMTypeOf(loaded)) == LLVMTypeKind::LLVMVectorTypeKind {
                 // LLVMSetAlignment(loaded, 1);
             }
@@ -943,7 +943,7 @@ impl LlvmGenerator {
             GetField { ref value, index } => {
                 let output_pointer = context.get_value(output)?;
                 let value_pointer = context.get_value(value)?;
-                let elem_pointer = LLVMBuildStructGEP(context.builder, value_pointer, index, NULL_NAME.as_ptr());
+                let elem_pointer = LLVMBuildStructGEP(context.builder, value_pointer, index, c_str!(""));
                 let elem = self.load(context.builder, elem_pointer)?;
                 LLVMBuildStore(context.builder, elem, output_pointer);
                 Ok(())
@@ -955,9 +955,7 @@ impl LlvmGenerator {
                 let key_pointer = context.get_value(key)?;
                 let child_type = context.sir_function.symbol_type(child)?;
                 let hash = if let Dict(ref key, _) = *child_type {
-                    let hash_fn = self.gen_hash_fn(key)?;
-                    let mut args = [key_pointer, self.u32(self::hash::CRC32_SEED)];
-                    LLVMBuildCall(context.builder, hash_fn, args.as_mut_ptr(), args.len() as u32, c_str!(""))
+                    self.gen_hash(key, context.builder, key_pointer, None)?
                 } else {
                     unreachable!()
                 };
@@ -1008,9 +1006,7 @@ impl LlvmGenerator {
                     Ok(())
                 } else if let Dict(ref key, _) = *child_type {
                     use self::hash::GenHash;
-                    let hash_fn = self.gen_hash_fn(key)?;
-                    let mut args = [context.get_value(index)?, self.u32(self::hash::CRC32_SEED)];
-                    let hash = LLVMBuildCall(context.builder, hash_fn, args.as_mut_ptr(), args.len() as u32, c_str!(""));
+                    let hash = self.gen_hash(key, context.builder, context.get_value(index)?, None)?;
                     let result = {
                         let mut methods = self.dictionaries.get_mut(child_type).unwrap();
                         methods.gen_get(context.builder,
@@ -1029,7 +1025,10 @@ impl LlvmGenerator {
             MakeStruct(ref elems) => {
                 let output_pointer = context.get_value(output)?;
                 for (i, elem) in elems.iter().enumerate() {
-                    let elem_pointer = LLVMBuildStructGEP(context.builder, output_pointer, i as u32, NULL_NAME.as_ptr());
+                    let elem_pointer = LLVMBuildStructGEP(context.builder,
+                                                          output_pointer,
+                                                          i as u32,
+                                                          c_str!(""));
                     let value = self.load(context.builder, context.get_value(elem)?)?;
                     LLVMBuildStore(context.builder, value, elem_pointer);
                 }

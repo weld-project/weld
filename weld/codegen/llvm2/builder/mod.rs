@@ -307,10 +307,7 @@ impl BuilderExpressionGen for LlvmGenerator {
                     _ => unreachable!()
                 };
 
-                let hash_fn = self.gen_hash_fn(key)?;
-                let mut args = [key_pointer, self.u32(CRC32_SEED)];
-                let hash = LLVMBuildCall(ctx.builder, hash_fn, args.as_mut_ptr(), args.len() as u32, c_str!(""));
-
+                let hash = self.gen_hash(key, ctx.builder, key_pointer, None)?;
                 let builder_loaded = self.load(ctx.builder, builder_pointer)?;
 
                 let ref dict_type = Dict(key.clone(), val.clone());
@@ -335,10 +332,7 @@ impl BuilderExpressionGen for LlvmGenerator {
                 let merge_value_ptr = ctx.get_value(m.value)?;
                 let key_pointer = LLVMBuildStructGEP(ctx.builder, merge_value_ptr, 0, c_str!(""));
 
-                let hash_fn = self.gen_hash_fn(key)?;
-                let mut args = [key_pointer, self.u32(CRC32_SEED)];
-                let hash = LLVMBuildCall(ctx.builder, hash_fn, args.as_mut_ptr(), args.len() as u32, c_str!(""));
-
+                let hash = self.gen_hash(key, ctx.builder, key_pointer, None)?;
                 let val_pointer = LLVMBuildStructGEP(ctx.builder, merge_value_ptr, 1, c_str!(""));
 
                 let builder_loaded = self.load(ctx.builder, builder_pointer)?;
