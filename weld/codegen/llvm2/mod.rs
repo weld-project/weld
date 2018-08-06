@@ -1,7 +1,52 @@
 //! An LLVM backend currently optimized for single-threaded execution.
 //!
 //! The `LlvmGenerator` struct is responsible for converting an SIR program into an LLVM module.
-//! This module is then JIT'd and returned into a runnable executable.
+//! The LLVM module is then JIT'd and returned as a runnable executable.
+//!
+//! # Overview
+//!
+//! This code generator is divided into a number of submodules, most of which implement extension
+//! traits on top of `LlvmGenerator`. For example, the `hash` module implements the `GenHash`
+//! trait, whose sole implemenator is `LlvmGenerator`. The `gen_hash` function in the `GenHash`
+//! trait thus adds using state maintained in the `LlvmGenerator` to hash Weld types.
+//! `LlvmGenerator` tracks code that has been generated already: for most extension traits, this
+//! usually involves some state to ensure that the same code is not generated twice.
+//!
+//! # The `CodeGenExt` trait
+//!
+//! The `CodeGenExt` trait contains a number of helper functions for generating LLVM code,
+//! retrieving types, etc. Implementors should implement the `module` and `context` functions: all
+//! other methods in the trait have standard default implementations that should not be overridden.
+//!
+//! ## Submodules
+//!
+//! * The `builder` module provides code generation for the builder types.  `builder` also contains
+//! extension traits for generating builder-related expressions (Result, Merge, and For).
+//!
+//! * The `dict` and `vector` modules define the layout of dictionaries and vectors, and also
+//! provide methods over them.
+//!
+//! * The `eq` module defines equality-check code generation.
+//!
+//! * The `hash` module implements hashing.
+//!
+//! * The `intrinsics` module manages intrinsics, or functions that are declared but not generated.
+//! This module adds a number of "default" intrinsics, such as the Weld runtime functions (prefixed
+//! with `weld_strt_`), `memcpy`, and so forth.
+//!
+//! * The `jit` module manages compiling a constructed LLVM module into a runnable executable.
+//! Among other things, it manages LLVM optimization passes and module verification.
+//!
+//! The `llvm_exts` modules uses `libllvmext` to provide LLVM functionality that `llvm_sys` (and by
+//! extension, the `llvm-c` API) does not provide. It is effectively a wrapper around a few
+//! required C++ library calls.
+//!
+//! * The `numeric` module generates code for numeric expressions such as binary and unary
+//! operators, comparisons, etc.
+//!
+//! * The `serde` module generates code for serializing and deserializing types.
+//!
+//! * The `target` module provides parsed target specific feature information.
 
 extern crate fnv;
 extern crate time;
@@ -33,6 +78,7 @@ lazy_static! {
     static ref RUN_HANDLE_NAME: CString = CString::new("RunHandle").unwrap();
 }
 
+/// Width of a SIMD vector.
 // TODO This should be based on the type!
 pub const LLVM_VECTOR_WIDTH: u32 = 8;
 

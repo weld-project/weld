@@ -1,5 +1,9 @@
 //! Defines intrinsics in the LLVM IR.
 //!
+//! An intrinsic is any function that is defined but not generated in the current module. This
+//! module provides utilities for calling some default intrinsics, as well as a utility for adding
+//! an calling new ones.
+//!
 //! For documentation on the default intrinsics, see `weld::runtime::strt`.
 
 extern crate libc;

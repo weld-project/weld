@@ -1,4 +1,7 @@
 //! JIT a constructed LLVM module into an executable module.
+//!
+//! This module manages verifying the generated LLVM module, optimizing it using the LLVM
+//! optimization passes, and compiling it to machine code.
 
 extern crate llvm_sys;
 extern crate time;
