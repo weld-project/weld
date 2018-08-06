@@ -483,6 +483,9 @@ impl WeldModule {
         let raw = self.llvm_module.run(ptr) as *const codegen::WeldOutputArgs;
         let result = (*raw).clone();
 
+        // Free the boxed input.
+        let _ = Box::from_raw(ptr as *mut codegen::WeldInputArgs);
+
         let value = WeldValue {
             data: result.output as *const c_void,
             run: Some(result.run),
