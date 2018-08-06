@@ -268,7 +268,7 @@ impl BuilderExpressionGen for LlvmGenerator {
             }
             DictMerger(ref key, ref val, ref binop) => {
                 use ast::Type::Scalar;
-                use self::hash::GenHash;
+                use self::hash::*;
 
                 // Build the default value that we upsert if the key is not present in the
                 // dictionary yet.
@@ -308,7 +308,7 @@ impl BuilderExpressionGen for LlvmGenerator {
                 };
 
                 let hash_fn = self.gen_hash_fn(key)?;
-                let mut args = [key_pointer];
+                let mut args = [key_pointer, self.u32(CRC32_SEED)];
                 let hash = LLVMBuildCall(ctx.builder, hash_fn, args.as_mut_ptr(), args.len() as u32, c_str!(""));
 
                 let builder_loaded = self.load(ctx.builder, builder_pointer)?;
@@ -330,13 +330,13 @@ impl BuilderExpressionGen for LlvmGenerator {
                 self.merge_values(ctx.builder, val.as_ref(), *binop, slot_value_pointer, value_pointer)
             }
             GroupMerger(ref key, _) => {
-                use self::hash::GenHash;
+                use self::hash::*;
                 // The merge value is a {K, V} struct.
                 let merge_value_ptr = ctx.get_value(m.value)?;
                 let key_pointer = LLVMBuildStructGEP(ctx.builder, merge_value_ptr, 0, c_str!(""));
 
                 let hash_fn = self.gen_hash_fn(key)?;
-                let mut args = [key_pointer];
+                let mut args = [key_pointer, self.u32(CRC32_SEED)];
                 let hash = LLVMBuildCall(ctx.builder, hash_fn, args.as_mut_ptr(), args.len() as u32, c_str!(""));
 
                 let val_pointer = LLVMBuildStructGEP(ctx.builder, merge_value_ptr, 1, c_str!(""));
