@@ -116,7 +116,7 @@ extern crate fnv;
 extern crate time;
 extern crate code_builder;
 
-use libc::c_void;
+use libc::{free, c_void};
 use self::time::PreciseTime;
 
 use std::error::Error;
@@ -134,7 +134,6 @@ macro_rules! weld_err {
 
 #[macro_use]
 mod error;
-
 mod annotation;
 mod codegen;
 mod optimizer;
@@ -143,7 +142,6 @@ mod sir;
 mod conf;
 
 // Public interfaces.
-// TODO these probably shouldn't all be public...
 pub mod ast;
 pub mod util;
 pub mod ffi;
@@ -153,13 +151,9 @@ pub mod runtime;
 #[cfg(test)]
 mod tests;
 
-use runtime::WeldRuntimeErrno;
+use conf::Backend;
+use runtime::{WeldRuntimeErrno, WeldRun};
 use util::stats::CompilationStats;
-
-// This is needed to free the output struct of a Weld run.
-extern "C" {
-    fn free(ptr: *mut c_void);
-}
 
 /// A wrapper for a C pointer.
 pub type Data = *const libc::c_void;
@@ -235,11 +229,11 @@ impl From<error::WeldCompileError> for WeldError {
 #[derive(Debug,Clone)]
 pub struct WeldValue {
     data: Data,
-    run_id: Option<RunId>,
+    run: Option<RunId>,
+    backend: Backend,
 }
 
 impl WeldValue {
-
     /// Creates a new `WeldValue` with a particular data pointer.
     ///
     /// This function is used to wrap data that will be passed into Weld. Data passed into Weld
@@ -248,7 +242,8 @@ impl WeldValue {
     pub fn new_from_data(data: Data) -> WeldValue {
         WeldValue {
             data: data,
-            run_id: None,
+            run: None,
+            backend: Backend::Unknown,
         }
     }
 
@@ -263,23 +258,47 @@ impl WeldValue {
     /// `WeldValue` that is created using `WeldValue::new_from_data` will always have a `run_id` of
     /// `None`.
     pub fn run_id(&self) -> Option<RunId> {
-        self.run_id
+        match self.backend {
+            Backend::LLVMWorkStealingBackend => self.run.clone(),
+            Backend::LLVMSingleThreadBackend => {
+                let run = unsafe { &mut *(self.run.unwrap() as *mut WeldRun) };
+                Some(run.run_id())
+            }
+            Backend::Unknown => None,
+        }
     }
 
-    /// Returns the memory usage of this value.
+    /// Returns the memory usage of this value in bytes.
     ///
     /// This equivalently returns the amount of memory allocated by a Weld run. If the value was
     /// not returned by Weld, returns `None`.
     pub fn memory_usage(&self) -> Option<i64> {
-        self.run_id.map(|v| unsafe { runtime::weld_run_memory_usage(v) } )
+        match self.backend {
+            Backend::LLVMWorkStealingBackend => {
+                self.run.map(|v| unsafe { runtime::weld_run_memory_usage(v) } )
+            } 
+            Backend::LLVMSingleThreadBackend => {
+                let run = unsafe { &mut *(self.run.unwrap() as *mut WeldRun) };
+                Some(run.memory_usage())
+            }
+            Backend::Unknown => None,
+        }
     }
 }
 
 // Custom Drop implementation that disposes a run.
 impl Drop for WeldValue {
     fn drop(&mut self) {
-        if let Some(run_id) = self.run_id {
-            unsafe { runtime::weld_run_dispose(run_id); }
+        match self.backend {
+            Backend::LLVMWorkStealingBackend => {
+                if let Some(run_id) = self.run {
+                    unsafe { runtime::weld_run_dispose(run_id); }
+                }
+            }
+            Backend::LLVMSingleThreadBackend => {
+                unsafe { Box::from_raw(self.run.unwrap() as *mut WeldRun) };
+            }
+            Backend::Unknown => (),
         }
     }
 }
@@ -318,7 +337,16 @@ impl WeldConf {
 
 /// A compiled runnable Weld module.
 pub struct WeldModule {
-    llvm_module: codegen::llvm::CompiledModule,
+    /// A compiled, runnable module.
+    llvm_module: codegen::CompiledModule,
+    /// The backend the compiled module uses.
+    ///
+    /// This is passed to the `WeldValue` produced when the module is run.
+    backend: Backend,
+    /// The Weld parameter types this modules accepts.
+    param_types: Vec<ast::Type>,
+    /// The Weld return type of this module.
+    return_type: ast::Type,
 }
 
 impl WeldModule {
@@ -330,19 +358,96 @@ impl WeldModule {
     /// compilation options). Each configuration option has a default value, so setting
     /// configuration options is optional.
     pub fn compile<S: AsRef<str>>(code: S, conf: &WeldConf) -> WeldResult<WeldModule> {
+        use self::ast::*;
         let mut stats = CompilationStats::new();
-        let ref parsed_conf = conf::parse(conf)?;
+        let ref mut conf = conf::parse(conf)?;
         let code = code.as_ref();
 
+        // Configuration.
+        debug!("{:?}", conf);
+
+        // Parse the string into a Weld AST.
         let start = PreciseTime::now();
         let program = syntax::parser::parse_program(code)?;
         let end = PreciseTime::now();
         stats.weld_times.push(("Parsing".to_string(), start.to(end)));
 
-        let module = codegen::llvm::compile_program(&program, parsed_conf, &mut stats)?;
+        // Substitute macros in the parsed program.
+        let mut expr = syntax::macro_processor::process_program(&program)?;
+        debug!("After macro substitution:\n{}\n", expr.pretty_print());
+
+        // Uniquify symbol names.
+        let start = PreciseTime::now();
+        expr.uniquify()?;
+        let end = PreciseTime::now();
+        let mut uniquify_dur = start.to(end);
+
+        // Infer types of expressions.
+        let start = PreciseTime::now();
+        expr.infer_types()?;
+        let end = PreciseTime::now();
+        stats.weld_times.push(("Type Inference".to_string(), start.to(end)));
+        debug!("After type inference:\n{}\n", expr.pretty_print());
+
+        // Apply optimization passes.
+        optimizer::apply_passes(&mut expr,
+                                &conf.optimization_passes,
+                                &mut stats,
+                                conf.enable_experimental_passes)?;
+
+        // Uniquify again.
+        let start = PreciseTime::now();
+        expr.uniquify()?;
+        let end = PreciseTime::now();
+        uniquify_dur = uniquify_dur + start.to(end);
+        stats.weld_times.push(("Uniquify outside Passes".to_string(), uniquify_dur));
+        debug!("Optimized Weld program:\n{}\n", expr.pretty_print());
+
+        // Convert the AST to SIR.
+        let start = PreciseTime::now();
+        let mut sir_prog = sir::ast_to_sir(&expr, conf.support_multithread)?;
+        let end = PreciseTime::now();
+        stats.weld_times.push(("AST to SIR".to_string(), start.to(end)));
+        debug!("SIR program:\n{}\n", &sir_prog);
+
+        // If enabled, apply SIR optimizations.
+        let start = PreciseTime::now();
+        if conf.enable_sir_opt {
+            use sir::optimizations;
+            info!("Applying SIR optimizations");
+            optimizations::fold_constants::fold_constants(&mut sir_prog)?;
+        }
+        let end = PreciseTime::now();
+        debug!("Optimized SIR program:\n{}\n", &sir_prog);
+        stats.weld_times.push(("SIR Optimization".to_string(), start.to(end)));
+
+        // Dump files if needed.
+        let ref timestamp = format!("{}", time::now().to_timespec().sec);
+        if conf.dump_code.enabled {
+            info!("Writing code to directory '{}' with timestamp {}", &conf.dump_code.dir.display(), timestamp);
+            util::write_code(expr.pretty_print(), "weld", timestamp, &conf.dump_code.dir);
+            util::write_code(sir_prog.to_string(), "sir", timestamp, &conf.dump_code.dir);
+        }
+
+        // Generate code.
+        let compiled_module = codegen::compile_program(&sir_prog,
+                                                       conf,
+                                                       &mut stats,
+                                                       timestamp)?;
         debug!("\n{}\n", stats.pretty_print());
 
-        Ok(WeldModule { llvm_module: module })
+        let (param_types, return_type) = if let Type::Function(ref param_tys, ref return_ty) = expr.ty {
+            (param_tys.clone(), *return_ty.clone())
+        } else {
+            unreachable!()
+        };
+
+        Ok(WeldModule { 
+            llvm_module: compiled_module,
+            backend: conf.backend.clone(),
+            param_types: param_types,
+            return_type: return_type,
+        })
     }
 
     /// Run this `WeldModule` with a configuration and argument.
@@ -360,27 +465,31 @@ impl WeldModule {
     /// This method is, as a result, `unsafe` because passing invalid data into a Weld program will
     /// cause undefined behavior.
     ///
-    /// Note that most Rust values cannot be passed into Weld directly. That is, it is *not* safe
-    /// to simply pass a pointer to a `Vec<T>` into Weld directly.
+    /// Note that most Rust values cannot be passed into Weld directly. For example, it is *not*
+    /// safe to simply pass a raw pointer to a `Vec<T>` into Weld directly.
     pub unsafe fn run(&mut self, conf: &WeldConf, arg: &WeldValue) -> WeldResult<WeldValue> {
-        let callable = self.llvm_module.llvm_mut();
         let ref parsed_conf = conf::parse(conf)?;
 
         // This is the required input format of data passed into a compiled module.
-        let input = Box::new(codegen::llvm::WeldInputArgs {
+        let input = Box::new(codegen::WeldInputArgs {
                              input: arg.data as i64,
                              nworkers: parsed_conf.threads,
                              mem_limit: parsed_conf.memory_limit,
+                             run: 0,
                          });
         let ptr = Box::into_raw(input) as i64;
 
         // Runs the Weld program.
-        let raw = callable.run(ptr) as *const codegen::llvm::WeldOutputArgs;
+        let raw = self.llvm_module.run(ptr) as *const codegen::WeldOutputArgs;
         let result = (*raw).clone();
+
+        // Free the boxed input.
+        let _ = Box::from_raw(ptr as *mut codegen::WeldInputArgs);
 
         let value = WeldValue {
             data: result.output as *const c_void,
-            run_id: Some(result.run_id),
+            run: Some(result.run),
+            backend: self.backend.clone(),
         };
 
         // Check whether the run was successful -- if not, free the data in the module, andn return
@@ -390,7 +499,7 @@ impl WeldModule {
             let message = CString::new(format!("Weld program failed with error {:?}", result.errno)).unwrap();
             Err(WeldError::new(message, result.errno))
         } else {
-            // Weld allocates the output using malloc, but we cloned it, so free the output struct
+            // Weld allocates the output using libc malloc, but we cloned it, so free the output struct
             // here.
             free(raw as DataMut);
             Ok(value)
@@ -399,12 +508,12 @@ impl WeldModule {
 
     /// Returns the Weld arguments types of this `WeldModule`.
     pub fn param_types(&self) -> Vec<ast::Type> {
-        self.llvm_module.param_types().clone()
+        self.param_types.clone()
     }
 
     /// Returns the Weld return type of this `WeldModule`.
     pub fn return_type(&self) -> ast::Type {
-        self.llvm_module.return_type().clone()
+        self.return_type.clone()
     }
 }
 
@@ -456,8 +565,7 @@ impl From<log::LogLevelFilter> for WeldLogLevel {
 ///
 /// The dynamic library is a C dynamic library identified by its filename.
 pub fn load_linked_library<S: AsRef<str>>(filename: S) -> WeldResult<()> {
-    use error::WeldCompileError;
-    codegen::llvm::load_library(filename.as_ref()).map_err(|e| WeldError::from(WeldCompileError::from(e)))
+    codegen::load_library(filename.as_ref()).map_err(|e| WeldError::from(e))
 }
 
 /// Enables logging to stderr in Weld with the given log level.

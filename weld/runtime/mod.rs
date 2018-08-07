@@ -5,6 +5,9 @@ use std::fmt;
 pub use self::link::{weld_runtime_init, weld_run_memory_usage, weld_run_dispose};
 
 pub mod link;
+pub mod strt;
+
+pub use self::strt::WeldRun;
 
 /// An errno set by the runtime but also used by the Weld API.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd)]
@@ -40,6 +43,8 @@ pub enum WeldRuntimeErrno {
     ///
     /// This error occurs if a buffer being deserialized has an invalid length.
     DeserializationError,
+    /// A key was not found in a dictionary.
+    KeyNotFoundError,
     /// Maximum errno value.
     ///
     /// All errors will have a value less than this value and greater than 0.

@@ -24,6 +24,8 @@ python/grizzly/build
 python/grizzly/pygrizzly.egg-info/
 python/numpy/weldnumpy.egg-info/
 
+llvmext/test
+
 # Ignore Weld, SIR, and assembly programs - force add these for special cases (e.g., tests).
 *.weld
 *.sir

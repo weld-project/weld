@@ -7,12 +7,16 @@
 extern crate libc;
 extern crate fnv;
 
-use std::iter;
-
-use std::cmp::max;
-
 use ast::*;
 use ast::ExprKind::*;
+
+use std::iter;
+use std::cmp::max;
+
+// For dumping files.
+use std::io::Write;
+use std::path::PathBuf;
+use std::fs::OpenOptions;
 
 pub mod stats;
 pub mod colors;
@@ -105,4 +109,29 @@ pub fn join<T: iter::Iterator<Item = String>>(start: &str, sep: &str, end: &str,
     }
     res.push_str(end);
     res
+}
+
+
+/// Writes code to a file specified by `PathBuf`. Writes a log message if it failed.
+pub fn write_code<T: AsRef<str>, U: AsRef<str>, V: AsRef<str>>(code: T, ext: U, prefix: V, dir_path: &PathBuf) {
+    let mut options = OpenOptions::new();
+    options.write(true)
+        .create_new(true)
+        .create(true);
+
+    let ref mut path = dir_path.clone();
+    path.push(format!("code-{}", prefix.as_ref()));
+    path.set_extension(ext.as_ref());
+
+    let ref path_str = format!("{}", path.display());
+    match options.open(path) {
+        Ok(ref mut file) => {
+            if let Err(_) = file.write_all(code.as_ref().as_bytes()) {
+                error!("Write failed: could not write code to file {}", path_str);
+            }
+        }
+        Err(_) => {
+            error!("Open failed: could not write code to file {}", path_str);
+        }
+    }
 }
