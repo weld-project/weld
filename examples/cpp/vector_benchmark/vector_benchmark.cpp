@@ -36,8 +36,10 @@ int main() {
     weld_vector v;
     const uint64_t length = 100;
     int32_t *data = (int32_t *)malloc(sizeof(int32_t) * length);
+    int32_t expect = 0;
     for (int i = 0; i < length; i++) {
         data[i] = 1;
+        expect += data[i] + (i + 1);
     }
 
     v.data = data;
@@ -59,7 +61,7 @@ int main() {
     }
     void *result_data = weld_value_data(result);
     printf("Answer: %d\n", *(int32_t *)result_data);
-    printf("Expect: %llu\n", length);
+    printf("Expect: %d\n", expect);
 
     free(data);
 

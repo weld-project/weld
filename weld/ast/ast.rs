@@ -77,6 +77,11 @@ impl Type {
         }.into_iter()
     }
 
+    /// Returns the type of a string.
+    pub fn string_type() -> Type {
+        Type::Vector(Box::new(Type::Scalar(ScalarKind::I8)))
+    }
+
     /// Returns whether this `Type` is a SIMD value.
     ///
     /// A value is a SIMD value if its a `Simd` type or it is a `Struct` where each member is a
@@ -96,6 +101,31 @@ impl Type {
         match *self {
             Scalar(_) => true,
             _ => false
+        }
+    }
+
+    /// Returns whether this `Type` is a builder.
+    pub fn is_builder(&self) -> bool {
+        use self::Type::{Builder, Struct};
+        match *self {
+            Builder(_, _) => true,
+            Struct(ref tys) => tys.iter().all(|t| t.is_builder()),
+            _ => false
+        }
+    }
+
+    /// Returns whether this `Type` is a hashable.
+    pub fn is_hashable(&self) -> bool {
+        use self::Type::*;
+        match *self {
+            Scalar(_) => true,
+            // XXX Is this hashable...?
+            Simd(_) => true,
+            Struct(ref tys) => tys.iter().all(|t| t.is_hashable()),
+            Vector(ref elem) => elem.is_hashable(),
+            Builder(_, _) => false,
+            Dict(_, _) => false,
+            Function(_, _) | Unknown => false
         }
     }
 
@@ -245,11 +275,16 @@ impl ScalarKind {
         }
     }
 
+    /// Returns whether this scalar is signed.
+    pub fn is_signed(&self) -> bool {
+        self.is_signed_integer() || self.is_float()
+    }
+
     /// Returns whether this scalar is an integer.
     ///
     /// Booleans are not considered to be integers.
     pub fn is_integer(&self) -> bool {
-        return self.is_signed_integer() || self.is_unsigned_integer();
+        self.is_signed_integer() || self.is_unsigned_integer()
     }
 
     /// Return the length of this scalar type in bits.
@@ -373,6 +408,10 @@ impl Symbol {
             name: name.into(),
             id: id,
         }
+    }
+
+    pub fn unused() -> Symbol {
+        Symbol::new("unused", 0)
     }
 
     pub fn name(name: &str) -> Symbol {
