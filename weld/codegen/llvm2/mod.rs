@@ -708,7 +708,7 @@ impl LlvmGenerator {
         }
 
         // Generate each non-loop body function in turn. Loop body functions are constructed when
-        // the For loop is generated, with the loop control flow injected into the function.
+        // the For loop terminator is generated, with the loop control flow injected into the function.
         for func in program.funcs.iter().filter(|f| !f.loop_body) {
             gen.gen_sir_function(program, func)?;
         }

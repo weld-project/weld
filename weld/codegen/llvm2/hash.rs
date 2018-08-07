@@ -248,7 +248,6 @@ impl Hash for LlvmGenerator {
     }
 
     /// Build a loop to hash a value.
-    #[allow(dead_code)]
     unsafe fn hash_loop(&mut self,
                         function: LLVMValueRef,
                         builder: LLVMBuilderRef,
@@ -391,8 +390,9 @@ impl Hash for LlvmGenerator {
                 }
                 hash
             }
-            /* // NOTE: For now, since we use padded structs, these optimizations are not safe.
-            Vector(ref elem) if !elem.has_pointer() => {
+            // NOTE: Ideally, we would play this trick for any type without pointers. Padding gets
+            // in our way for now, however.
+            Vector(ref elem) if elem.is_scalar() => {
                 // Vectors are hashed in a manner similar to structs: we use the widest available
                 // hash function in a loop until all bytes are hashed. The generated code looks
                 // like this (where offsets are in *bits*):
@@ -472,7 +472,6 @@ impl Hash for LlvmGenerator {
                 }
                 hash
             }
-            */
             Vector(ref elem) => {
                 // Since each element has a pointer, we loop over the vector and call each
                 // element's hash function.
