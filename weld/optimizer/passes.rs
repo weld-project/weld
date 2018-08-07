@@ -1,6 +1,9 @@
 //! Manages passes over the AST.
 //!
 //! A pass is a named collection of related transforms applied in sequence until fix point.
+
+use std::fmt;
+
 use ast::*;
 use error::*;
 
@@ -24,6 +27,12 @@ pub struct Transformation {
     pub experimental: bool,
 }
 
+impl fmt::Debug for Transformation {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Transformation(experimental={})", self.experimental)
+    }
+}
+
 impl Transformation {
     pub fn new(func: PassFn) -> Transformation {
         Transformation {
@@ -40,7 +49,7 @@ impl Transformation {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone,Debug)]
 pub struct Pass {
     transforms: Vec<Transformation>,
     pass_name: String,

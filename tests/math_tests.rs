@@ -166,14 +166,14 @@ fn map_exp() {
     let code = "|x:vec[f32]| map(x, |a| exp(a))";
     let ref conf = default_conf();
 
-    let input_vec = [0.0f32, 1.0f32, 2.0f32, 3.0f32];
+    let input_vec = vec![0.0f32, 1.0f32, 2.0f32, 3.0f32];
     let ref input_data = WeldVec::from(&input_vec);
 
     let ret_value = compile_and_run(code, conf, input_data);
     let data = ret_value.data() as *const WeldVec<f32>;
     let result = unsafe { (*data).clone() };
 
-    let output = [1.0, 2.7182817, 7.389056, 20.085537];
+    let output = vec![1.0, 2.7182817, 7.389056, 20.085537];
     for i in 0..(result.len as isize) {
         assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])
     }

@@ -16,7 +16,7 @@ fn simple_for_appender_loop() {
     let code = "|x:vec[i32], a:i32| let b=a+1; map(x, |e| e+b)";
     let ref conf = default_conf();
 
-    let input_vec = [1, 2];
+    let input_vec = vec![1, 2];
     let ref input_data = Args {
         x: WeldVec::from(&input_vec),
         a: 1,
@@ -25,7 +25,7 @@ fn simple_for_appender_loop() {
     let ret_value = compile_and_run(code, conf, input_data);
     let data = ret_value.data() as *const WeldVec<i32>;
     let result = unsafe { (*data).clone() };
-    let output = [3, 4];
+    let output = vec![3, 4];
     assert_eq!(result.len as usize, output.len());
     for i in 0..(result.len as isize) {
         assert_eq!(unsafe { *result.data.offset(i) }, output[i as usize])

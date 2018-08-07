@@ -62,6 +62,14 @@ trait PushType {
     fn push_complete(&mut self, other: Self) -> WeldResult<bool>;
 }
 
+fn key_hashable(key: &Type) -> WeldResult<()> {
+    if *key != Unknown && !key.is_hashable() {
+        compile_err!("Non-hashable type {} as dictionary key", key)
+    } else {
+        Ok(())
+    }
+}
+
 impl PushType for Type {
     /// Sets this `Type` to be `other`.
     fn push_complete(&mut self, other: Type) -> WeldResult<bool> {
@@ -114,7 +122,9 @@ impl PushType for Type {
                 elem.push(other_elem)
             }
             (&mut Dict(ref mut key, ref mut value), &Dict(ref other_key, ref other_value)) => {
-                Ok(key.push(other_key)? || value.push(other_value)?)
+                let mut changed = key.push(other_key)? || value.push(other_value)?;
+                key_hashable(key.as_ref())?;
+                Ok(changed)
             }
             (&mut Struct(ref mut types), &Struct(ref other_types)) if types.len() == other_types.len() => {
                 let mut changed = false;
@@ -147,13 +157,17 @@ impl PushType for Type {
                         &mut DictMerger(ref mut key, ref mut value, ref mut op),
                         &DictMerger(ref other_key, ref other_value, ref other_op)
                     ) if *op == *other_op => {
-                        Ok(key.push(other_key)? | value.push(other_value)?)
+                        let mut changed = key.push(other_key)? || value.push(other_value)?;
+                        key_hashable(key.as_ref())?;
+                        Ok(changed)
                     }
                     (
                         &mut GroupMerger(ref mut key, ref mut value),
                         &GroupMerger(ref other_key, ref other_value)
                     ) => {
-                        Ok(key.push(other_key)? | value.push(other_value)?)
+                        let mut changed = key.push(other_key)? || value.push(other_value)?;
+                        key_hashable(key.as_ref())?;
+                        Ok(changed)
                     }
                     (
                         &mut VecMerger(ref mut elem, ref mut op),
@@ -316,7 +330,7 @@ impl InferTypesInternal for Expr {
             Literal(BoolLiteral(_)) =>
                 self.ty.push_complete(Scalar(Bool)),
             Literal(StringLiteral(_)) =>
-                self.ty.push_complete(Vector(Box::new(Scalar(I8)))),
+                self.ty.push_complete(Type::string_type()),
 
             BinOp { kind: op, ref mut left, ref mut right } => {
                 // First, sync the left and right types into the elem_type.
@@ -347,7 +361,7 @@ impl InferTypesInternal for Expr {
 
             UnaryOp { ref value, ref kind } => {
                 match value.ty {
-                    Scalar(ref kind) if kind.is_float() => {
+                    Scalar(ref kind) | Simd(ref kind) if kind.is_float() => {
                         self.ty.push(&value.ty)
                     }
                     Unknown => Ok(false),

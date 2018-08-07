@@ -6,7 +6,38 @@
 //! pass, and also provides utilities for applying passes until a fix point (that is, until the
 //! pass stops modifying the AST).
 
+extern crate time;
+
+use time::PreciseTime;
+
+use ast::*;
+use error::*;
+use util::stats::CompilationStats;
+
 pub use self::passes::*;
 
 pub mod transforms;
 mod passes;
+
+/// Apply passes from a list until fix point.
+pub fn apply_passes(expr: &mut Expr,
+                        passes: &Vec<Pass>,
+                        stats: &mut CompilationStats,
+                        use_experimental: bool) -> WeldResult<()> {
+    for pass in passes {
+
+        // XXX For now, disabling this because LLVM now produces pretty good vectorized code with
+        // the configuration options/passes we use. We should move those optimizations into Weld
+        // however: they are quite fickle (e.g., they seem to only fire for simple Merger-based
+        // workloads right now).
+        if pass.pass_name() == "vectorize" {
+            continue;
+        }
+        let start = PreciseTime::now();
+        pass.transform(expr, use_experimental)?;
+        let end = PreciseTime::now();
+        stats.pass_times.push((pass.pass_name(), start.to(end)));
+        debug!("After {} pass:\n{}", pass.pass_name(), expr.pretty_print());
+    }
+    Ok(())
+}
