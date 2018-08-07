@@ -113,6 +113,7 @@ pub fn unsupported(program: &SirProgram) -> Option<String> {
     use sir::StatementKind::*;
     use sir::Terminator::*;
     use ast::Type::{Vector, Dict};
+    use ast::BinOpKind;
     for func in program.funcs.iter() {
         for block in func.blocks.iter() {
             for statement in block.statements.iter() {
@@ -122,6 +123,10 @@ pub fn unsupported(program: &SirProgram) -> Option<String> {
                         return Some(statement.to_string());
                     }
                     BinOp { ref left, ref op, .. } if op.is_comparison() => {
+                        // Support equal now
+                        if *op == BinOpKind::Equal || *op == BinOpKind::NotEqual {
+                            continue;
+                        }
                         let ty = func.symbol_type(left).unwrap();
                         if let Vector(_) = *ty {
                             // No support for vector comparison

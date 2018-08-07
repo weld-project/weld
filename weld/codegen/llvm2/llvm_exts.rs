@@ -103,7 +103,7 @@ impl fmt::Display for LLVMExtAttribute {
             InReg => "inreg",
             SanitizeThread => "sanitize_thread", 
             SanitizeAddress => "sanitize_address",
-            SanitizeMemory => "santiize_memory",
+            SanitizeMemory => "sanitize_memory",
         };
         f.write_str(string)
     }
@@ -117,7 +117,6 @@ unsafe fn add_attrs(context: LLVMContextRef,
                              attrs: &[LLVMExtAttribute],
                              index: u32) {
     for attr in attrs {
-        // TODO just make these constants...
         let name = CString::new(attr.to_string()).unwrap();
         let kind = LLVMGetEnumAttributeKindForName(name.as_ptr(), name.as_bytes().len());
         assert_ne!(kind, 0);

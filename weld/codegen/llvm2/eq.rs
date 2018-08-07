@@ -117,7 +117,7 @@ impl GenEq for LlvmGenerator {
                 let done_block = LLVMAppendBasicBlockInContext(self.context, function, c_str!(""));
 
                 let left_vector = self.load(builder, left)?;
-                let right_vector = self.load(builder, left)?;
+                let right_vector = self.load(builder, right)?;
                 let left_size = self.gen_size(builder, ty, left_vector)?;
                 let right_size = self.gen_size(builder, ty, right_vector)?;
                 let size_eq = gen_binop(builder, Equal, left_size, right_size, &Scalar(I64))?;

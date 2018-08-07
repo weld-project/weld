@@ -71,7 +71,12 @@ impl GenHash for LlvmGenerator {
 
             let (function, builder, _) = self.define_function(ret_ty, &mut arg_tys, name);
 
-            LLVMExtAddAttrsOnFunction(self.context, function, &[InlineHint]);
+            // Always inline calls that do not generate loops.
+            if !ty.has_pointer() {
+                LLVMExtAddAttrsOnFunction(self.context, function, &[AlwaysInline]);
+            } else {
+                LLVMExtAddAttrsOnFunction(self.context, function, &[InlineHint]);
+            }
 
             let param = LLVMGetParam(function, 0);
             let seed = LLVMGetParam(function, 1);
@@ -243,6 +248,7 @@ impl Hash for LlvmGenerator {
     }
 
     /// Build a loop to hash a value.
+    #[allow(dead_code)]
     unsafe fn hash_loop(&mut self,
                         function: LLVMValueRef,
                         builder: LLVMBuilderRef,
@@ -320,8 +326,6 @@ impl Hash for LlvmGenerator {
                    funcs: &HashFuncs,
                    seed: LLVMValueRef,
                    param: LLVMValueRef) -> WeldResult<LLVMValueRef> {
-
-        let llvm_ty = self.llvm_type(ty)?;
         let hash = match *ty {
             Scalar(kind) => {
                 let loaded = self.load(builder, param)?;
@@ -330,9 +334,11 @@ impl Hash for LlvmGenerator {
             Simd(_) => {
                 unimplemented!()
             }
+            /*  // NOTE: For now, since we use padded structs, these optimizations are not safe.
             Struct(_) if !ty.has_pointer() => {
                 // The static size of the value in bits. We decompose this into a series of
                 // calls to `hash_scalar`, calling the widest possible version.
+                let llvm_ty = self.llvm_type(ty)?;
                 let size = self.size_of_bits(llvm_ty);
                 let mut remaining = size;
                 let mut hash = seed;
@@ -374,6 +380,7 @@ impl Hash for LlvmGenerator {
                 assert_eq!(remaining, 0);
                 hash
             }
+            */
             Struct(ref elems) => {
                 // We don't want to hash pointers, so just hash each struct element
                 // individually.
@@ -384,6 +391,7 @@ impl Hash for LlvmGenerator {
                 }
                 hash
             }
+            /* // NOTE: For now, since we use padded structs, these optimizations are not safe.
             Vector(ref elem) if !elem.has_pointer() => {
                 // Vectors are hashed in a manner similar to structs: we use the widest available
                 // hash function in a loop until all bytes are hashed. The generated code looks
@@ -407,12 +415,19 @@ impl Hash for LlvmGenerator {
                 let zero = self.i64(0);
                 let base_pointer = self.gen_at(builder, ty, vector, zero)?;
 
-                // The loops we will generate.
-                //
-                // TODO we can actually optimize this even more by getting the number of bits in
-                // elem_llvm_ty and checking whether that is a multiple of each of the below. This
-                // will allow us to eliminate some loops/codegen.
-                let kinds = [I64, I32, I16, I8];
+                // The loops we will generate. If the element type is a multiple of one of the
+                // widths, we do not need to generate loops for widths smaller than the multiple.
+                let mut kinds = vec![I64];
+                let elem_size_bits = self.size_of_bits(elem_llvm_ty);
+                if elem_size_bits % 64 != 0 {
+                    kinds.push(I32);
+                }
+                if elem_size_bits % 32 != 0 {
+                    kinds.push(I16);
+                }
+                if elem_size_bits % 16 != 0 {
+                    kinds.push(I8);
+                }
 
                 // Total number of bytes remaining in the vector (size * sizeof(elem))
                 let mut length_in_bytes = LLVMBuildNUWMul(builder,
@@ -435,7 +450,7 @@ impl Hash for LlvmGenerator {
                     // Generates the actual loop: hash holds the new hash value,
                     let (new_hash, new_consumed) = self.hash_loop(function,
                                                                   builder,
-                                                                  *kind,
+                                                                  kind,
                                                                   funcs,
                                                                   length_in_bytes,
                                                                   base_pointer,
@@ -457,6 +472,7 @@ impl Hash for LlvmGenerator {
                 }
                 hash
             }
+            */
             Vector(ref elem) => {
                 // Since each element has a pointer, we loop over the vector and call each
                 // element's hash function.

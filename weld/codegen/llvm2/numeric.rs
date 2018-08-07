@@ -215,19 +215,33 @@ impl NumericExpressionGen for LlvmGenerator {
         use ast::Type::{Scalar, Simd, Vector};
         use sir::StatementKind::BinOp;
         if let BinOp { op, ref left, ref right } = statement.kind {
-            let llvm_left = self.load(ctx.builder, ctx.get_value(left)?)?;
-            let llvm_right = self.load(ctx.builder, ctx.get_value(right)?)?;
             let ty = ctx.sir_function.symbol_type(left)?;
             let result = match ty {
                 &Scalar(_) | &Simd(_) => { 
+                    let llvm_left = self.load(ctx.builder, ctx.get_value(left)?)?;
+                    let llvm_right = self.load(ctx.builder, ctx.get_value(right)?)?;
                     match op {
                         BinOpKind::Pow => self.gen_pow(ctx, llvm_left, llvm_right, ty)?,
                         _ => gen_binop(ctx.builder, op, llvm_left, llvm_right, ty)?,
                     }
                 }
                 &Vector(_) if op.is_comparison() => {
-                    unimplemented!() // Comparison for vectors
+                    match op {
+                        BinOpKind::Equal | BinOpKind::NotEqual => {
+                            use super::eq::GenEq;
+                            let func = self.gen_eq_fn(ty)?;
+                            let mut args = [ctx.get_value(left)?, ctx.get_value(right)?];
+                            let equal = LLVMBuildCall(ctx.builder, func, args.as_mut_ptr(), args.len() as u32, c_str!(""));
+                            if op == BinOpKind::Equal {
+                                equal
+                            } else {
+                                LLVMBuildNot(ctx.builder, equal, c_str!(""))
+                            }
+                        }
+                        _ => unimplemented!(), // Vector comparison
+                    }
                 }
+                // Invalid binary operator.
                 _ => unreachable!(),
             };
             let output = ctx.get_value(statement.output.as_ref().unwrap())?;
