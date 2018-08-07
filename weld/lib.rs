@@ -363,6 +363,9 @@ impl WeldModule {
         let ref mut conf = conf::parse(conf)?;
         let code = code.as_ref();
 
+        // For dumping code, if enabled.
+        let ref timestamp = format!("{}", time::now().to_timespec().sec);
+
         // Configuration.
         debug!("{:?}", conf);
 
@@ -371,6 +374,12 @@ impl WeldModule {
         let program = syntax::parser::parse_program(code)?;
         let end = PreciseTime::now();
         stats.weld_times.push(("Parsing".to_string(), start.to(end)));
+
+        // Dump the generated Weld program before applying any analyses.
+        if conf.dump_code.enabled {
+            info!("Writing code to directory '{}' with timestamp {}", &conf.dump_code.dir.display(), timestamp);
+            util::write_code(expr.pretty_print(), "weld", timestamp, &conf.dump_code.dir);
+        }
 
         // Substitute macros in the parsed program.
         let mut expr = syntax::macro_processor::process_program(&program)?;
@@ -422,10 +431,8 @@ impl WeldModule {
         stats.weld_times.push(("SIR Optimization".to_string(), start.to(end)));
 
         // Dump files if needed.
-        let ref timestamp = format!("{}", time::now().to_timespec().sec);
         if conf.dump_code.enabled {
-            info!("Writing code to directory '{}' with timestamp {}", &conf.dump_code.dir.display(), timestamp);
-            util::write_code(expr.pretty_print(), "weld", timestamp, &conf.dump_code.dir);
+            util::write_code(expr.pretty_print(), "weld", format!("{}-opt", timestamp), &conf.dump_code.dir);
             util::write_code(sir_prog.to_string(), "sir", timestamp, &conf.dump_code.dir);
         }
 
