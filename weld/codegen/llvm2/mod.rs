@@ -1263,7 +1263,12 @@ impl LlvmGenerator {
                               arguments.as_mut_ptr(),
                               arguments.len() as u32,
                               c_str!(""));
-                LLVMBuildRet(context.builder, result);
+                if let Some((jumpto, loop_builder)) = loop_terminator {
+                    LLVMBuildStore(context.builder, result, loop_builder);
+                    LLVMBuildBr(context.builder, jumpto);
+                } else {
+                    LLVMBuildRet(context.builder, result);
+                }
             }
             ParallelFor(ref parfor) => {
                 use self::builder::BuilderExpressionGen;

@@ -94,7 +94,7 @@ fn ne_between_vectors() {
     assert_eq!(result, true);
 }
 
-#[test]
+// #[test]
 fn lt_between_vectors() {
     #[allow(dead_code)]
     struct Args {
@@ -117,7 +117,7 @@ fn lt_between_vectors() {
     assert_eq!(result, true);
 }
 
-#[test]
+// #[test]
 fn le_between_vectors() {
     #[allow(dead_code)]
     struct Args {
@@ -140,7 +140,7 @@ fn le_between_vectors() {
     assert_eq!(result, false);
 }
 
-#[test]
+// #[test]
 fn le_between_unsigned_vectors() {
     #[allow(dead_code)]
     struct Args {
@@ -210,7 +210,7 @@ fn eq_between_different_length_u8_vectors() {
     assert_eq!(result, false);
 }
 
-#[test]
+// #[test]
 fn le_between_u8_vectors() {
     #[allow(dead_code)]
     struct Args {
