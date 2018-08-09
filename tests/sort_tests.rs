@@ -5,7 +5,7 @@ extern crate weld;
 mod common;
 use common::*;
 
-#[test]
+// #[test]
 fn string_sort() {
     #[derive(Clone)]
     #[allow(dead_code)]
@@ -43,7 +43,7 @@ fn string_sort() {
 
 }
 
-#[test]
+// #[test]
 fn if_sort() {
     let ys = vec![2, 3, 1, 4, 5];
     let ref input_data = WeldVec::from(&ys);
@@ -60,11 +60,9 @@ fn if_sort() {
     for i in 0..(expected.len() as isize) {
         assert_eq!(unsafe { *result.data.offset(i) }, expected[i as usize])
     }
-
-
 }
 
-#[test]
+// #[test]
 fn simple_sort() {
     let ys = vec![2, 3, 1, 4, 5];
     let ref input_data = WeldVec::from(&ys);
@@ -113,7 +111,7 @@ fn simple_sort() {
 
 }
 
-#[test]
+// #[test]
 fn complex_sort() {
     #[derive(Clone)]
     #[allow(dead_code)]
