@@ -126,7 +126,7 @@ fn update_counter(counter: &mut Vec<i64>, shapes: &Vec<i64>) {
 /// the op to it. Note: In order to simulate non-contiguous arrays, we use counter/shapes/strides
 /// to mimic the behaviour of numpy. This has also been tested against numpy, and appears to work
 /// fine.
-#[test]
+// #[test]
 fn nditer_basic_op_test() {
     #[allow(dead_code)]
     struct Args {
@@ -170,7 +170,7 @@ fn nditer_basic_op_test() {
     }
 }
 
-#[test]
+// #[test]
 fn nditer_zip() {
     #[allow(dead_code)]
     struct Args {

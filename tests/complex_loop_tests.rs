@@ -6,6 +6,81 @@ mod common;
 use common::*;
 
 #[test]
+fn if_statement_with_dict_loop() {
+    #[derive(Clone)]
+    #[allow(dead_code)]
+    #[repr(C)]
+    struct Args {
+        left: WeldVec<i64>,
+        right: WeldVec<i64>,
+    }
+
+    // This code resembles a hash join!
+    let code = "
+        |left: vec[i64], right: vec[i64]|
+            let bd = result(for(left,
+                    groupmerger[i64,i64],
+                    |b,i,e| merge(b, {e, e})
+                    )
+                );
+            result(for(right,
+              appender[{i64, i64}],
+              |b: appender[{i64, i64}], i: i64, ns: i64|
+                if (keyexists(bd, ns),
+                  for(lookup(bd, ns),
+                    b,
+                    |b1: appender[{i64, i64}], i1: i64, ns1: i64|
+                    merge(b1, {ns1, ns})
+                  ),
+                  b)
+                ))";
+
+    let ref conf = default_conf();
+
+    let mut left = Vec::with_capacity(20);
+    let mut right = Vec::with_capacity(1000);
+
+    // 525, 550, ... 1000
+    for i in 500..1000 {
+        if i % 20 == 0 {
+            left.push(i as i64);
+        }
+    }
+
+    for i in 0..1000 {
+        right.push(i as i64);
+    }
+
+    let ref input_data = Args {
+        left: WeldVec::from(&left),
+        right: WeldVec::from(&right),
+    };
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = ret_value.data() as *const WeldVec<Pair<i64,i64>>;
+    let result = unsafe { (*data).clone() };
+
+    // Output should be the left-side as pairs (i.e., {525,525}, {550,550},etc.)
+    assert_eq!(result.len as usize, left.len());
+
+    let mut sorted = vec![];
+
+    for i in 0..(result.len as isize) {
+        let left = unsafe { (*result.data.offset(i)).ele1 };
+        let right = unsafe { (*result.data.offset(i)).ele2 };
+        sorted.push((left, right));
+    }
+
+    // Compare sorted pairs with the output.
+    sorted.sort();
+
+    for (a, (b, c)) in left.into_iter().zip(sorted) {
+        assert_eq!(a, b);
+        assert_eq!(a, c);
+    }
+}
+
+#[test]
 fn nested_if_statement_loop() {
     let code = "|p: vec[i64]|
     result(for(p,merger[i64, +], |bs, i, ns| if(ns >= 3L, if(ns < 7L, merge(bs, ns), bs), bs)))";
