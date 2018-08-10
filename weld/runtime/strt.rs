@@ -136,6 +136,7 @@ unsafe fn initialize() {
     x += weld_runst_malloc as i64;
     x += weld_runst_realloc as i64;
     x += weld_runst_free as i64;
+    x += weld_runst_get_errno as i64;
     x += weld_runst_set_errno as i64;
 
     use super::link::*;
@@ -150,6 +151,45 @@ unsafe fn initialize() {
     x += weld_st_gb_new as i64;
     x += weld_st_gb_merge as i64;
     x += weld_st_gb_result as i64;
+
+    // Weld Multi-threaded runtime.
+    x += weld_runtime_init as i64;
+    x += weld_rt_thread_id as i64;
+    x += weld_rt_abort_thread as i64;
+    x += weld_rt_get_nworkers as i64;
+    x += weld_rt_get_run_id as i64;
+    x += weld_rt_start_loop as i64;
+    x += weld_rt_set_result as i64;
+    x += weld_rt_new_vb as i64;
+    x += weld_rt_new_vb_piece as i64;
+    x += weld_rt_cur_vb_piece as i64;
+    x += weld_rt_set_vb_offset_if_fixed as i64;
+    x += weld_rt_result_vb as i64;
+    x += weld_rt_new_merger as i64;
+    x += weld_rt_get_merger_at_index as i64;
+    x += weld_rt_free_merger as i64;
+    x += weld_run_begin as i64;
+    x += weld_run_get_result as i64;
+    x += weld_run_dispose as i64;
+    x += weld_run_malloc as i64;
+    x += weld_run_realloc as i64;
+    x += weld_run_free as i64;
+    x += weld_run_memory_usage as i64;
+    x += weld_run_get_errno as i64;
+    x += weld_run_set_errno as i64;
+    x += weld_rt_dict_new as i64;
+    x += weld_rt_dict_new_finalized as i64;
+    x += weld_rt_dict_lookup as i64;
+    x += weld_rt_dict_merge as i64;
+    x += weld_rt_dict_finalize as i64;
+    x += weld_rt_dict_to_array as i64;
+    x += weld_rt_dict_size as i64;
+    x += weld_rt_dict_serialize as i64;
+    x += weld_rt_dict_free as i64;
+    x += weld_rt_gb_new as i64;
+    x += weld_rt_gb_merge as i64;
+    x += weld_rt_gb_result as i64;
+    x += weld_rt_gb_free as i64;
 
     trace!("Runtime initialized with hashed values {}", x);
 }
