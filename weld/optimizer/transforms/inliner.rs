@@ -148,8 +148,12 @@ pub fn inline_negate(expr: &mut Expr) {
     });
 }
 
-/// Changes casts of literal values to be literal values of the casted type.
+/// Inline casts.
+///
+/// This changes casts of literal values to be literal values of the casted type. It additionally
+/// removes "self casts" (e.g., `i64(x: i64)` becomes `x`).
 pub fn inline_cast(expr: &mut Expr) {
+    use ast::Type::Scalar;
     use ast::ScalarKind::*;
     use ast::LiteralKind::*;
     use ast::constructors::literal_expr;
@@ -160,8 +164,13 @@ pub fn inline_cast(expr: &mut Expr) {
                     (&F64, &I32Literal(a)) => Some(literal_expr(F64Literal((a as f64).to_bits())).unwrap()),
                     (&I64, &I32Literal(a)) => Some(literal_expr(I64Literal(a as i64)).unwrap()),
                     (&F64, &I64Literal(a)) => Some(literal_expr(F64Literal((a as f64).to_bits())).unwrap()),
-                    (&I64, &I64Literal(a)) => Some(literal_expr(I64Literal(a as i64)).unwrap()),
                     _ => None,
+                }
+            }
+            if let Scalar(ref kind) = child_expr.ty {
+                if kind == scalar_kind {
+                    // XXX Tombstone and mem::swap here!!
+                    return Some(*child_expr.clone());
                 }
             }
         }
@@ -180,6 +189,48 @@ fn getfield_on_symbol(expr: &Expr, sym: &Symbol) -> Option<u32> {
         }
     }
     None
+}
+
+/// Simplifies branches with `<expr> == False` to just be over <expr>`
+pub fn simplify_branch_conditions(expr: &mut Expr) {
+    use std::mem;
+    use ast::BinOpKind;
+    use ast::LiteralKind::BoolLiteral;
+    expr.uniquify().unwrap();
+    expr.transform_up(&mut |ref mut expr| {
+        if let If { ref mut cond, ref mut on_true, ref mut on_false } = expr.kind {
+
+            let ref mut taken = Box::new(Expr {
+                ty: cond.ty.clone(),
+                kind: Ident(Symbol::unused()),
+                annotations: Annotations::new()
+            });
+
+            let replaced = if let &mut BinOp { ref mut kind, ref mut left, ref mut right } = &mut cond.kind {
+                if *kind != BinOpKind::Equal {
+                    false
+                } else if let Literal(BoolLiteral(false)) = left.kind {
+                    mem::swap(right, taken);
+                    true
+                } else if let Literal(BoolLiteral(false)) = right.kind {
+                    mem::swap(left, taken);
+                    true
+                } else {
+                    false
+                }
+            } else {
+                false
+            };
+
+            if replaced {
+                mem::swap(cond, taken);
+                mem::swap(on_true, on_false);
+            }
+        }
+
+        // We just updated the expression in place instead of replacing it.
+        None
+    });
 }
 
 /// Changes struct definitions assigned to a name and only used in `GetField` operations

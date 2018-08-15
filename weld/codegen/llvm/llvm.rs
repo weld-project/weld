@@ -4588,7 +4588,7 @@ fn simple_predicate() {
 }
 
 #[test]
-fn predicate_iff_annotated() {
+fn predicate_nonsimple_iff_annotated() {
     /* Ensure predication is only applied if annotation is present. */
 
     /* annotation true */

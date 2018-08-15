@@ -9,7 +9,7 @@ extern crate llvm_sys;
 extern crate lazy_static;
 extern crate libc;
 
-use libc::c_char;
+use libc::{c_char, c_uint};
 
 use std::ffi::{CStr, CString};
 use std::fmt;
@@ -186,7 +186,7 @@ extern "C" {
     pub fn LLVMExtAddTargetPassConfig(target: LLVMTargetMachineRef,
                                       manager: LLVMPassManagerRef);
     #[no_mangle]
-    pub fn LLVMExtPassManagerBuilderSetVectorize(builder: LLVMPassManagerBuilderRef);
+    pub fn LLVMExtPassManagerBuilderSetDisableVectorize(builder: LLVMPassManagerBuilderRef, disabled: c_uint);
 
 
 }

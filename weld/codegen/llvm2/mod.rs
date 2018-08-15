@@ -80,7 +80,7 @@ lazy_static! {
 
 /// Width of a SIMD vector.
 // TODO This should be based on the type!
-pub const LLVM_VECTOR_WIDTH: u32 = 8;
+pub const LLVM_VECTOR_WIDTH: u32 = 4;
 
 /// Convert a string literal into a C string.
 macro_rules! c_str {
@@ -370,7 +370,7 @@ pub trait CodeGenExt {
         } else {
             let loaded = LLVMBuildLoad(builder, pointer, c_str!(""));
             if LLVMGetTypeKind(LLVMTypeOf(loaded)) == LLVMTypeKind::LLVMVectorTypeKind {
-                // LLVMSetAlignment(loaded, 1);
+                LLVMSetAlignment(loaded, 1);
             }
             Ok(loaded)
         }

@@ -115,6 +115,7 @@ extern crate chrono;
 extern crate fnv;
 extern crate time;
 extern crate code_builder;
+extern crate uuid;
 
 use libc::{free, c_void};
 use self::time::PreciseTime;
@@ -123,6 +124,8 @@ use std::error::Error;
 use std::default::Default;
 use std::ffi::{CString, CStr};
 use std::fmt;
+
+use uuid::Uuid;
 
 /// A macro for creating a `WeldError` with a message and an unknown error code.
 #[macro_export]
@@ -163,6 +166,12 @@ pub type DataMut = *mut libc::c_void;
 
 /// An identifier that uniquely identifies a call to `WeldModule::run`.
 pub type RunId = i64;
+
+const BUILD_UUID_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/build_uuid"));
+
+lazy_static! {
+    static ref BUILD_UUID: Uuid = Uuid::from_bytes(BUILD_UUID_BYTES).unwrap();
+}
 
 /// An error when compiling or running a Weld program.
 #[derive(Debug,Clone)]
@@ -347,6 +356,8 @@ pub struct WeldModule {
     param_types: Vec<ast::Type>,
     /// The Weld return type of this module.
     return_type: ast::Type,
+    /// A unique identifier for a module.
+    module_id: Uuid,
 }
 
 impl WeldModule {
@@ -359,12 +370,14 @@ impl WeldModule {
     /// configuration options is optional.
     pub fn compile<S: AsRef<str>>(code: S, conf: &WeldConf) -> WeldResult<WeldModule> {
         use self::ast::*;
+        let e2e_start = PreciseTime::now();
         let mut stats = CompilationStats::new();
         let ref mut conf = conf::parse(conf)?;
         let code = code.as_ref();
 
         // For dumping code, if enabled.
         let ref timestamp = format!("{}", time::now().to_timespec().sec);
+        let uuid = Uuid::new_v4();
 
         // Configuration.
         debug!("{:?}", conf);
@@ -379,10 +392,15 @@ impl WeldModule {
         let mut expr = syntax::macro_processor::process_program(&program)?;
         debug!("After macro substitution:\n{}\n", expr.pretty_print());
 
+        let unoptimized_code = expr.pretty_print();
+        info!("Compiling module with UUID={}, code\n{}",
+              uuid.hyphenated(),
+              unoptimized_code);
+
         // Dump the generated Weld program before applying any analyses.
         if conf.dump_code.enabled {
             info!("Writing code to directory '{}' with timestamp {}", &conf.dump_code.dir.display(), timestamp);
-            util::write_code(expr.pretty_print(), "weld", timestamp, &conf.dump_code.dir);
+            util::write_code(&unoptimized_code, "weld", timestamp, &conf.dump_code.dir);
         }
 
         // Uniquify symbol names.
@@ -449,11 +467,21 @@ impl WeldModule {
             unreachable!()
         };
 
+
+        let end = PreciseTime::now();
+        let duration = e2e_start.to(end);
+        let us = duration.num_microseconds().unwrap_or(std::i64::MAX);
+        let e2e_ms: f64 = us as f64 / 1000.0;
+        info!("Compiled module with UUID={} in {} ms",
+              uuid.hyphenated(),
+              e2e_ms);
+
         Ok(WeldModule { 
             llvm_module: compiled_module,
             backend: conf.backend.clone(),
             param_types: param_types,
             return_type: return_type,
+            module_id: uuid,
         })
     }
 
@@ -475,6 +503,7 @@ impl WeldModule {
     /// Note that most Rust values cannot be passed into Weld directly. For example, it is *not*
     /// safe to simply pass a raw pointer to a `Vec<T>` into Weld directly.
     pub unsafe fn run(&mut self, conf: &WeldConf, arg: &WeldValue) -> WeldResult<WeldValue> {
+        let start = PreciseTime::now();
         let ref parsed_conf = conf::parse(conf)?;
 
         // This is the required input format of data passed into a compiled module.
@@ -498,6 +527,13 @@ impl WeldModule {
             run: Some(result.run),
             backend: self.backend.clone(),
         };
+
+        let end = PreciseTime::now();
+        let duration = start.to(end);
+        let us = duration.num_microseconds().unwrap_or(std::i64::MAX);
+        let ms: f64 = us as f64 / 1000.0;
+        debug!("Ran module UUID={} in {} ms",
+              self.module_id.hyphenated(), ms);
 
         // Check whether the run was successful -- if not, free the data in the module, andn return
         // an error indicating what went wrong.
