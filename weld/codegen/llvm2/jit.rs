@@ -296,8 +296,8 @@ unsafe fn optimize_module(module: LLVMModuleRef, level: u32) -> WeldResult<()> {
     let builder = LLVMPassManagerBuilderCreate();
     LLVMPassManagerBuilderSetOptLevel(builder, level);
     LLVMPassManagerBuilderSetSizeLevel(builder, 0);
-    LLVMPassManagerBuilderSetDisableUnrollLoops(builder, 0);
-    LLVMExtPassManagerBuilderSetVectorize(builder);
+    LLVMPassManagerBuilderSetDisableUnrollLoops(builder, 1);
+    LLVMExtPassManagerBuilderSetDisableVectorize(builder, 1);
     // 250 should correspond to OptLevel = 3
     LLVMPassManagerBuilderUseInlinerWithThreshold(builder, 250);
 

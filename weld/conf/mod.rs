@@ -20,6 +20,7 @@ pub const DUMP_CODE_KEY: &'static str = "weld.compile.dumpCode";
 pub const DUMP_CODE_DIR_KEY: &'static str = "weld.compile.dumpCodeDir";
 pub const BACKEND_KEY: &'static str = "weld.compile.backend";
 pub const FALLBACK_KEY: &'static str = "weld.compile.enableFallback";
+pub const ENABLE_BOUNDS_CHECKS: &'static str = "weld.compile.enableBoundsChecks";
 
 // Default values of each key
 pub const DEFAULT_MEMORY_LIMIT: i64 = 1000000000;
@@ -32,10 +33,11 @@ pub const DEFAULT_TRACE_RUN: bool = false;
 pub const DEFAULT_EXPERIMENTAL_PASSES: bool = false;
 pub const DEFAULT_BACKEND: Backend = Backend::LLVMSingleThreadBackend;
 pub const DEFAULT_FALLBACK: bool = false;
+pub const DEFAULT_BOUNDS_CHECKS: bool = false;
 
 lazy_static! {
     pub static ref DEFAULT_OPTIMIZATION_PASSES: Vec<Pass> = {
-        let m = ["loop-fusion", "unroll-static-loop", "infer-size", "short-circuit-booleans", "predicate", "vectorize", "fix-iterate"];
+        let m = ["loop-fusion", "unroll-static-loop", "infer-size", "inline-literals", "short-circuit-booleans", "predicate", "vectorize", "fix-iterate"];
         m.iter().map(|e| (*OPTIMIZATION_PASSES.get(e).unwrap()).clone()).collect()
     };
     pub static ref DEFAULT_DUMP_CODE_DIR: PathBuf = Path::new(".").to_path_buf();
@@ -69,6 +71,7 @@ pub struct ParsedConf {
     pub dump_code: DumpCodeConf,
     pub backend: Backend,
     pub enable_fallback: bool,
+    pub enable_bounds_checks: bool,
 }
 
 /// Parse a configuration from a WeldConf key-value dictionary.
@@ -127,6 +130,10 @@ pub fn parse(conf: &WeldConf) -> WeldResult<ParsedConf> {
     let enable_fallback = value.map(|s| parse_bool_flag(&s, "Invalid flag for enableFallback"))
                       .unwrap_or(Ok(DEFAULT_FALLBACK))?;
 
+    let value = get_value(conf, ENABLE_BOUNDS_CHECKS);
+    let enable_bounds_check = value.map(|s| parse_bool_flag(&s, "Invalid flag for enableBoundsChecks"))
+                      .unwrap_or(Ok(DEFAULT_BOUNDS_CHECKS))?;
+
 
     Ok(ParsedConf {
         memory_limit: memory_limit,
@@ -139,6 +146,7 @@ pub fn parse(conf: &WeldConf) -> WeldResult<ParsedConf> {
         llvm_optimization_level: level,
         backend: backend,
         enable_fallback: enable_fallback,
+        enable_bounds_checks: enable_bounds_check,
         dump_code: DumpCodeConf {
             enabled: dump_code_enabled,
             dir: dump_code_dir,

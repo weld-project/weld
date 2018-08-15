@@ -105,8 +105,12 @@ extern "C" LLVMTargetLibraryInfoRef LLVMExtTargetLibraryInfo() {
   return reinterpret_cast<LLVMTargetLibraryInfoRef>(X);
 }
 
-extern "C" void LLVMExtPassManagerBuilderSetVectorize(LLVMPassManagerBuilderRef P) {
+/** Disable or enable vectorization.
+ *
+ * The naming scheme of this function mirrors the LLVM `SetDisableUnrollLoops` function.
+ */
+extern "C" void LLVMExtPassManagerBuilderSetDisableVectorize(LLVMPassManagerBuilderRef P, unsigned i) {
   PassManagerBuilder *b = reinterpret_cast<PassManagerBuilder*>(P);
-  b->LoopVectorize = true;
-  b->SLPVectorize = true;
+  b->LoopVectorize = (i == 0);
+  b->SLPVectorize = (i == 0);
 }

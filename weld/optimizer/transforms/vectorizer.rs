@@ -26,9 +26,8 @@ pub fn vectorize(expr: &mut Expr) {
     let mut sym_gen = SymbolGenerator::from_expression(expr);
 
     expr.transform_and_continue_res(&mut |ref mut expr| {
-        //  The Res is a stricter-than-necessary check, but prevents us from having to check nested
-        //  loops for now.
         if let Some(ref broadcast_idens) = vectorizable(expr) {
+            info!("Vectorizing For loop!");
             if let For { ref iters, builder: ref init_builder, ref func } = expr.kind {
                     if let Lambda { ref params, ref body } = func.kind {
                         // This is the vectorized body.
@@ -157,13 +156,19 @@ pub fn predicate_merge_expr(e: &mut Expr) {
     });
 }
 
+fn is_simple(e: &Expr) -> bool {
+    match e.kind {
+        Ident(_) | Literal(_) => true,
+        GetField { ref expr, .. } => is_simple(expr),
+        _ => false,
+    }
+}
+
 /// Predicate an `If` expression by checking for if(cond, scalar1, scalar2) and transforms it to select(cond, scalar1, scalar2).
+///
+/// Since this predicates only simple "zero-cost" expressions, it's always done.
 pub fn predicate_simple_expr(e: &mut Expr) {
     e.transform_and_continue_res(&mut |ref mut e| {
-        if !(should_be_predicated(e)) {
-            return Ok((None, true));
-        }
-
         // This pattern checks for if(cond, scalar1, scalar2).
         if let If { ref cond, ref on_true, ref on_false } = e.kind {
             // Check if any sub-expression has a builder; if so bail out in order to not break linearity.
@@ -175,6 +180,12 @@ pub fn predicate_simple_expr(e: &mut Expr) {
                 safe = false;
             });
             if !safe {
+                return Ok((None, true));
+            }
+
+            // Make sure the expression is "simple": for now, that's literals, getfields, and
+            // identifiers
+            if !(is_simple(on_true) && is_simple(on_false)) {
                 return Ok((None, true));
             }
 
@@ -259,7 +270,7 @@ fn vectorizable_builder(expr: &Expr) -> Option<bool> {
         Ident(_) | NewBuilder(_) => {
             if let Builder(ref bk, _) = expr.ty {
                 match *bk {
-                    Appender(_) | Merger(_, _) => return Some(true),
+                    Appender(ref elem) | Merger(ref elem, _) => return Some(elem.is_scalar()),
                     _ => return Some(false)
                 }
             } else {
@@ -267,10 +278,10 @@ fn vectorizable_builder(expr: &Expr) -> Option<bool> {
             }
         }
         MakeStruct { ref elems } => {
-            let mut vectorizable = false;
+            let mut vectorizable = true;
             for elem in elems.iter() {
                 match vectorizable_builder(elem) {
-                    Some(val) => vectorizable |= val,
+                    Some(val) => vectorizable &= val,
                     None => return None
                 }
             }
@@ -389,6 +400,7 @@ fn vectorizable(for_loop: &Expr) -> Option<HashSet<Symbol>> {
     None
 }
 
+/// Specifies whether to predicate non-simple expressions.
 fn should_be_predicated(e: &mut Expr) -> bool {
     e.annotations.predicate()
 }

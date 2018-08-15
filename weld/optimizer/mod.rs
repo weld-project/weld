@@ -25,14 +25,11 @@ pub fn apply_passes(expr: &mut Expr,
                         stats: &mut CompilationStats,
                         use_experimental: bool) -> WeldResult<()> {
     for pass in passes {
-
-        // XXX For now, disabling this because LLVM now produces pretty good vectorized code with
-        // the configuration options/passes we use. We should move those optimizations into Weld
-        // however: they are quite fickle (e.g., they seem to only fire for simple Merger-based
-        // workloads right now).
+        /*
         if pass.pass_name() == "vectorize" {
             continue;
         }
+        */
         let start = PreciseTime::now();
         pass.transform(expr, use_experimental)?;
         let end = PreciseTime::now();
