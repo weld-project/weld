@@ -370,7 +370,7 @@ pub trait CodeGenExt {
         } else {
             let loaded = LLVMBuildLoad(builder, pointer, c_str!(""));
             if LLVMGetTypeKind(LLVMTypeOf(loaded)) == LLVMTypeKind::LLVMVectorTypeKind {
-                // LLVMSetAlignment(loaded, 1);
+                LLVMSetAlignment(loaded, 1);
             }
             Ok(loaded)
         }

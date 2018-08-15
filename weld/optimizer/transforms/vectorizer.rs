@@ -165,12 +165,10 @@ fn is_simple(e: &Expr) -> bool {
 }
 
 /// Predicate an `If` expression by checking for if(cond, scalar1, scalar2) and transforms it to select(cond, scalar1, scalar2).
+///
+/// Since this predicates only simple "zero-cost" expressions, it's always done.
 pub fn predicate_simple_expr(e: &mut Expr) {
     e.transform_and_continue_res(&mut |ref mut e| {
-        if !(should_be_predicated(e)) {
-            return Ok((None, true));
-        }
-
         // This pattern checks for if(cond, scalar1, scalar2).
         if let If { ref cond, ref on_true, ref on_false } = e.kind {
             // Check if any sub-expression has a builder; if so bail out in order to not break linearity.
@@ -272,7 +270,7 @@ fn vectorizable_builder(expr: &Expr) -> Option<bool> {
         Ident(_) | NewBuilder(_) => {
             if let Builder(ref bk, _) = expr.ty {
                 match *bk {
-                    Appender(_) | Merger(_, _) => return Some(true),
+                    Appender(ref elem) | Merger(ref elem, _) => return Some(elem.is_scalar()),
                     _ => return Some(false)
                 }
             } else {
@@ -283,7 +281,7 @@ fn vectorizable_builder(expr: &Expr) -> Option<bool> {
             let mut vectorizable = false;
             for elem in elems.iter() {
                 match vectorizable_builder(elem) {
-                    Some(val) => vectorizable |= val,
+                    Some(val) => vectorizable &= val,
                     None => return None
                 }
             }
@@ -402,9 +400,9 @@ fn vectorizable(for_loop: &Expr) -> Option<HashSet<Symbol>> {
     None
 }
 
+/// Specifies whether to predicate non-simple expressions.
 fn should_be_predicated(e: &mut Expr) -> bool {
-    true
-    //e.annotations.predicate()
+    e.annotations.predicate()
 }
 
 fn get_id_element(ty: &Type, op: &BinOpKind) -> WeldResult<Option<Expr>> {

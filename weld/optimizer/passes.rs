@@ -122,7 +122,8 @@ lazy_static! {
                  Pass::new(vec![Transformation::new(short_circuit::short_circuit_booleans)],
                  "short-circuit-booleans"));
         m.insert("predicate",
-                 Pass::new(vec![Transformation::new(vectorizer::predicate_simple_expr)],
+                 Pass::new(vec![Transformation::new(vectorizer::predicate_merge_expr),
+                           Transformation::new(vectorizer::predicate_simple_expr)],
                  "predicate"));
         m.insert("vectorize",
                  Pass::new(vec![Transformation::new(vectorizer::vectorize)],

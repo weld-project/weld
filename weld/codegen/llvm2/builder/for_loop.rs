@@ -151,6 +151,7 @@ impl ForLoopGenInternal for LlvmGenerator {
     unsafe fn gen_bounds_check(&mut self,
                                ctx: &mut FunctionContext,
                                parfor: &ParallelForData) -> WeldResult<LLVMValueRef> {
+
         let mut pass_blocks = vec![];
         for _ in 0..parfor.data.len() {
             pass_blocks.push(LLVMAppendBasicBlockInContext(self.context,
@@ -169,6 +170,13 @@ impl ForLoopGenInternal for LlvmGenerator {
         let pass_all_block = LLVMAppendBasicBlockInContext(self.context,
                                                            ctx.llvm_function,
                                                            c_str!("bounds.passed"));
+
+
+        if self.conf.enable_bounds_checks {
+            info!("Generating bounds checking code")
+        } else {
+            info!("Omitting bounds checking code")
+        }
 
         let mut num_iterations = vec![];
         for (iter, pass_block) in parfor.data.iter().zip(pass_blocks) {
@@ -450,25 +458,30 @@ impl ForLoopGenInternal for LlvmGenerator {
                 let stride = self.load(ctx.builder, ctx.get_value(iter.stride.as_ref().unwrap())?)?;
                 let end = self.load(ctx.builder, ctx.get_value(iter.end.as_ref().unwrap())?)?;
 
-                // Checks required:
-                // start < size
-                // end <= size
-                // start < end
-                // (end - start) % stride == 0
-                // Iterations = (end - start) / stride
-                let start_check = LLVMBuildICmp(ctx.builder, LLVMIntSLT, start, size, c_str!(""));
-                let end_check = LLVMBuildICmp(ctx.builder, LLVMIntSLE, end, size, c_str!(""));
-                let end_start_check = LLVMBuildICmp(ctx.builder, LLVMIntSLT, start, end, c_str!(""));
                 let diff = LLVMBuildNSWSub(ctx.builder, end, start, c_str!(""));
-                let mod_check = LLVMBuildSRem(ctx.builder, diff, stride, c_str!(""));
-                let mod_check = LLVMBuildICmp(ctx.builder, LLVMIntEQ, mod_check, self.i64(0), c_str!(""));
                 let iterations = LLVMBuildSDiv(ctx.builder, diff, stride, c_str!(""));
 
-                let mut check = LLVMBuildAnd(ctx.builder, start_check, end_check, c_str!(""));
-                check = LLVMBuildAnd(ctx.builder, check, end_start_check, c_str!(""));
-                check = LLVMBuildAnd(ctx.builder, check, mod_check, c_str!(""));
+                if self.conf.enable_bounds_checks {
+                    // Checks required:
+                    // start < size
+                    // end <= size
+                    // start < end
+                    // (end - start) % stride == 0
+                    // Iterations = (end - start) / stride
+                    let start_check = LLVMBuildICmp(ctx.builder, LLVMIntSLT, start, size, c_str!(""));
+                    let end_check = LLVMBuildICmp(ctx.builder, LLVMIntSLE, end, size, c_str!(""));
+                    let end_start_check = LLVMBuildICmp(ctx.builder, LLVMIntSLT, start, end, c_str!(""));
+                    let mod_check = LLVMBuildSRem(ctx.builder, diff, stride, c_str!(""));
+                    let mod_check = LLVMBuildICmp(ctx.builder, LLVMIntEQ, mod_check, self.i64(0), c_str!(""));
 
-                let _ = LLVMBuildCondBr(ctx.builder, check, pass_block, fail_block);
+                    let mut check = LLVMBuildAnd(ctx.builder, start_check, end_check, c_str!(""));
+                    check = LLVMBuildAnd(ctx.builder, check, end_start_check, c_str!(""));
+                    check = LLVMBuildAnd(ctx.builder, check, mod_check, c_str!(""));
+                    let _ = LLVMBuildCondBr(ctx.builder, check, pass_block, fail_block);
+                } else {
+                    let _ = LLVMBuildBr(ctx.builder, pass_block);
+                }
+
                 Ok(iterations)
             }
             ScalarIter => {
@@ -498,19 +511,24 @@ impl ForLoopGenInternal for LlvmGenerator {
                 let start = self.load(ctx.builder, ctx.get_value(iter.start.as_ref().unwrap())?)?;
                 let stride = self.load(ctx.builder, ctx.get_value(iter.stride.as_ref().unwrap())?)?;
                 let end = self.load(ctx.builder, ctx.get_value(iter.end.as_ref().unwrap())?)?;
-
-                // Checks required:
-                // start < end
-                // (end - start) % stride == 0
-                // Iterations = (end - start) / stride
-                let end_start_check = LLVMBuildICmp(ctx.builder, LLVMIntSLT, start, end, c_str!(""));
                 let diff = LLVMBuildNSWSub(ctx.builder, end, start, c_str!(""));
-                let mod_check = LLVMBuildSRem(ctx.builder, diff, stride, c_str!(""));
-                let mod_check = LLVMBuildICmp(ctx.builder, LLVMIntEQ, mod_check, self.i64(0), c_str!(""));
                 let iterations = LLVMBuildSDiv(ctx.builder, diff, stride, c_str!(""));
 
-                let check = LLVMBuildAnd(ctx.builder, end_start_check, mod_check, c_str!(""));
-                let _ = LLVMBuildCondBr(ctx.builder, check, pass_block, fail_block);
+                if self.conf.enable_bounds_checks {
+                    // Checks required:
+                    // start < end
+                    // (end - start) % stride == 0
+                    // Iterations = (end - start) / stride
+                    let end_start_check = LLVMBuildICmp(ctx.builder, LLVMIntSLT, start, end, c_str!(""));
+                    let mod_check = LLVMBuildSRem(ctx.builder, diff, stride, c_str!(""));
+                    let mod_check = LLVMBuildICmp(ctx.builder, LLVMIntEQ, mod_check, self.i64(0), c_str!(""));
+
+                    let check = LLVMBuildAnd(ctx.builder, end_start_check, mod_check, c_str!(""));
+                    let _ = LLVMBuildCondBr(ctx.builder, check, pass_block, fail_block);
+                } else {
+                    let _ = LLVMBuildBr(ctx.builder, pass_block);
+                }
+
                 Ok(iterations)
             }
             NdIter => unimplemented!() // NdIter Compute Bounds Check
@@ -524,10 +542,13 @@ impl ForLoopGenInternal for LlvmGenerator {
                               fail_block: LLVMBasicBlockRef) -> WeldResult<()> {
         use self::llvm_sys::LLVMIntPredicate::LLVMIntEQ;
         let mut passed = self.bool(true);
-        for value in iterations.iter().skip(1) {
-            let mut check = LLVMBuildICmp(ctx.builder, LLVMIntEQ, iterations[0], *value, c_str!(""));
-            passed = LLVMBuildAnd(ctx.builder, passed, check, c_str!(""));
+        if self.conf.enable_bounds_checks {
+            for value in iterations.iter().skip(1) {
+                let mut check = LLVMBuildICmp(ctx.builder, LLVMIntEQ, iterations[0], *value, c_str!(""));
+                passed = LLVMBuildAnd(ctx.builder, passed, check, c_str!(""));
+            }
         }
+
         LLVMBuildCondBr(ctx.builder, passed, pass_block, fail_block);
         Ok(())
     }
