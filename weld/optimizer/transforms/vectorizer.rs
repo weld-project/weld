@@ -278,7 +278,7 @@ fn vectorizable_builder(expr: &Expr) -> Option<bool> {
             }
         }
         MakeStruct { ref elems } => {
-            let mut vectorizable = false;
+            let mut vectorizable = true;
             for elem in elems.iter() {
                 match vectorizable_builder(elem) {
                     Some(val) => vectorizable &= val,
