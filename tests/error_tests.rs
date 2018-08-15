@@ -12,7 +12,10 @@ use common::*;
 #[should_panic] // XXX The new runtime throws panics for these currently.
 fn iters_outofbounds_error_test() {
     let code = "|x:vec[i32]| result(for(iter(x,0L,20000L,1L), merger[i32,+], |b,i,e| merge(b,e)))";
-    let ref conf = many_threads_conf();
+    let ref mut conf = many_threads_conf();
+
+    // Need this to get errors! Awkwardly, this test will segfault without it.
+    conf.set("weld.compile.enableBoundsChecks", "true");
 
     let input_vec = vec![4; 1000 as usize];
     let ref input_data = WeldVec::from(&input_vec);

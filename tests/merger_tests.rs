@@ -263,6 +263,7 @@ fn many_mergers_test() {
 fn maxmin_mergers_test() {
     #[derive(Clone)]
     #[allow(dead_code)]
+    #[repr(C)]
     // Larger types have to be first, or else the struct won't be read back correctly
     struct Output {
         i64min: i64,
@@ -279,6 +280,7 @@ fn maxmin_mergers_test() {
 
     #[derive(Clone)]
     #[allow(dead_code)]
+    #[repr(C)]
     struct Args {
         i8in: WeldVec<i8>,
         i32in: WeldVec<i32>,
@@ -301,7 +303,7 @@ fn maxmin_mergers_test() {
     let f64max = result(for(f64in, merger[f64, max], |b, i, n| merge(b, n)));
     {i64min, i64max, f64min, f64max, f32min, f32max, i32min, i32max, i8min, i8max}";
 
-    let ref conf = default_conf();
+    let ref mut conf = default_conf();
 
     let i8in: Vec<i8> = vec![-2, -1, 0, 1, 2];
     let i32in: Vec<i32> = vec![-2, -1, 0, 1, 2];
