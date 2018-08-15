@@ -80,7 +80,7 @@ lazy_static! {
 
 /// Width of a SIMD vector.
 // TODO This should be based on the type!
-pub const LLVM_VECTOR_WIDTH: u32 = 8;
+pub const LLVM_VECTOR_WIDTH: u32 = 4;
 
 /// Convert a string literal into a C string.
 macro_rules! c_str {

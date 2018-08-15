@@ -26,9 +26,8 @@ pub fn vectorize(expr: &mut Expr) {
     let mut sym_gen = SymbolGenerator::from_expression(expr);
 
     expr.transform_and_continue_res(&mut |ref mut expr| {
-        //  The Res is a stricter-than-necessary check, but prevents us from having to check nested
-        //  loops for now.
         if let Some(ref broadcast_idens) = vectorizable(expr) {
+            info!("Vectorizing For loop!");
             if let For { ref iters, builder: ref init_builder, ref func } = expr.kind {
                     if let Lambda { ref params, ref body } = func.kind {
                         // This is the vectorized body.
@@ -157,6 +156,14 @@ pub fn predicate_merge_expr(e: &mut Expr) {
     });
 }
 
+fn is_simple(e: &Expr) -> bool {
+    match e.kind {
+        Ident(_) | Literal(_) => true,
+        GetField { ref expr, .. } => is_simple(expr),
+        _ => false,
+    }
+}
+
 /// Predicate an `If` expression by checking for if(cond, scalar1, scalar2) and transforms it to select(cond, scalar1, scalar2).
 pub fn predicate_simple_expr(e: &mut Expr) {
     e.transform_and_continue_res(&mut |ref mut e| {
@@ -175,6 +182,12 @@ pub fn predicate_simple_expr(e: &mut Expr) {
                 safe = false;
             });
             if !safe {
+                return Ok((None, true));
+            }
+
+            // Make sure the expression is "simple": for now, that's literals, getfields, and
+            // identifiers
+            if !(is_simple(on_true) && is_simple(on_false)) {
                 return Ok((None, true));
             }
 
@@ -390,7 +403,8 @@ fn vectorizable(for_loop: &Expr) -> Option<HashSet<Symbol>> {
 }
 
 fn should_be_predicated(e: &mut Expr) -> bool {
-    e.annotations.predicate()
+    true
+    //e.annotations.predicate()
 }
 
 fn get_id_element(ty: &Type, op: &BinOpKind) -> WeldResult<Option<Expr>> {
