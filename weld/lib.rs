@@ -197,7 +197,7 @@ impl WeldContext {
     /// Returns a new `WeldContext` with the given configuration.
     ///
     /// Returns an error if the configuration is malformed.
-    pub fn new_from_conf(conf: &WeldConf) -> WeldResult<WeldContext> {
+    pub fn new(conf: &WeldConf) -> WeldResult<WeldContext> {
         let ref mut conf = conf::parse(conf)?;
         let threads = conf.threads;
         let mem_limit = conf.memory_limit;
@@ -206,10 +206,14 @@ impl WeldContext {
         Ok(WeldContext::new_from_runtime_context(Rc::new(RefCell::new(run))))
     }
 
-    /// Returns a new `WeldContext` with a default configuration.
-    pub fn new() -> WeldContext {
-        let ref conf = WeldConf::new();
-        Self::new_from_conf(conf).unwrap()
+    /// Returns the memory used by this context.
+    pub fn memory_usage(&self) -> i64 {
+        self.context.borrow().memory_usage()
+    }
+
+    /// Returns the memory limit of this context.
+    pub fn memory_limit(&self) -> i64 {
+        self.context.borrow().memory_limit()
     }
 }
 
@@ -305,7 +309,7 @@ impl WeldValue {
             return self.data
         }
 
-        if let Some(_) = self.context.as_ref().unwrap().upgrade() {
+        if let Some(context) = self.context.as_ref().unwrap().upgrade() {
             return self.data
         } else {
             panic!("Attempted to access WeldValue data, but the owning context is freed");
@@ -324,7 +328,7 @@ impl WeldValue {
 
         // A context was set - check if it has been freed.
         if let Some(context) = self.context.as_ref().unwrap().upgrade() {
-            Some(WeldContext::new_from_runtime_context(context.clone()))
+            Some(WeldContext::new_from_runtime_context(Rc::clone(&context)))
         } else {
             None
         }
@@ -339,32 +343,14 @@ impl WeldValue {
         match self.backend {
             Backend::LLVMWorkStealingBackend => self.run.clone(),
             Backend::LLVMSingleThreadBackend => {
-                let run = unsafe { &mut *(self.run.unwrap() as *mut WeldRuntimeContext) };
-                Some(run.run_id())
-            }
-            Backend::Unknown => None,
-        }
-    }
-
-    /// Returns the memory usage of this value in bytes.
-    ///
-    /// This equivalently returns the amount of memory allocated by a Weld run. If the value was
-    /// not returned by Weld, returns `None`.
-    pub fn memory_usage(&self) -> Option<i64> {
-        match self.backend {
-            Backend::LLVMWorkStealingBackend => {
-                self.run.map(|v| unsafe { runtime::weld_run_memory_usage(v) } )
-            } 
-            Backend::LLVMSingleThreadBackend => {
-                let run = unsafe { &mut *(self.run.unwrap() as *mut WeldRuntimeContext) };
-                Some(run.memory_usage())
+                Some(0)
             }
             Backend::Unknown => None,
         }
     }
 }
 
-// Custom Drop implementation that disposes a run.
+// Custom Drop implementation that discards values allocated by the runtime.
 impl Drop for WeldValue {
     fn drop(&mut self) {
         match self.backend {
@@ -374,8 +360,12 @@ impl Drop for WeldValue {
                 }
             }
             Backend::LLVMSingleThreadBackend => {
-                unsafe { Box::from_raw(self.run.unwrap() as *mut WeldRuntimeContext) };
-            }
+                // Free the individual values. If the below returns `None`, the context (and the
+                // value's data) has already been freed.
+                if let Some(context) = self.context.as_ref().unwrap().upgrade() {
+                    unsafe { context.borrow_mut().free(self.data as DataMut) } ; 
+                }
+            },
             Backend::Unknown => (),
         }
     }
@@ -576,25 +566,36 @@ impl WeldModule {
                       arg: &WeldValue) -> WeldResult<WeldValue> {
         let start = PreciseTime::now();
 
-        // This is the required input format of data passed into a compiled module.
-        let input = Box::new(codegen::WeldInputArgs {
-                             input: arg.data as i64,
-                             nworkers: context.context.borrow().threads(),
-                             mem_limit: context.context.borrow().memory_limit(),
-                             run: 0,
-                         });
-        let ptr = Box::into_raw(input) as i64;
+        let nworkers = context.context.borrow().threads();
+        let mem_limit = context.context.borrow().memory_limit();
 
-        // Runs the Weld program.
-        let raw = self.llvm_module.run(ptr) as *const codegen::WeldOutputArgs;
-        let result = (*raw).clone();
+        // Borrow the inner context mutably since we pass a mutable pointer to it to the compiled
+        // module. This enforces the single-mutable-borrow rule manually for contexts.
+        let (raw, result) = {
+            let _borrowed_ref = context.context.borrow_mut();
 
-        // Free the boxed input.
-        let _ = Box::from_raw(ptr as *mut codegen::WeldInputArgs);
+            // This is the required input format of data passed into a compiled module.
+            let input = Box::new(codegen::WeldInputArgs {
+                input: arg.data as i64,
+                nworkers: nworkers,
+                mem_limit: mem_limit,
+                run: context.context.as_ptr() as i64,
+            });
+            let ptr = Box::into_raw(input) as i64;
+
+            // Runs the Weld program.
+            let raw = self.llvm_module.run(ptr) as *const codegen::WeldOutputArgs;
+            let result = (*raw).clone();
+
+            // Free the boxed input.
+            let _ = Box::from_raw(ptr as *mut codegen::WeldInputArgs);
+
+            (raw, result)
+        };
 
         let value = WeldValue {
             data: result.output as *const c_void,
-            run: Some(result.run),
+            run: None,
             backend: self.backend.clone(),
             context: Some(Rc::downgrade(&context.context)),
         };

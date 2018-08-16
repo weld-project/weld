@@ -44,8 +44,23 @@ impl ToRustStr for *const c_char {
 /// Creates a new context.
 ///
 /// This function is a wrapper for `WeldContext::new`.
-pub extern "C" fn weld_context_new() -> WeldContextRef {
-    Box::into_raw(Box::new(WeldContext::new()))
+pub unsafe extern "C" fn weld_context_new(conf: WeldConfRef) -> WeldContextRef {
+    let conf = &*conf;
+    if let Ok(context) = WeldContext::new(conf) {
+        Box::into_raw(Box::new(context))
+    } else {
+        // XXX Should this take an error too?
+        ptr::null_mut()
+    }
+}
+
+#[no_mangle]
+/// Gets the memory allocated by a Weld context.
+///
+/// This includes all live memory allocated in the given context.
+pub unsafe extern "C" fn weld_context_memory_usage(context: WeldContextRef) -> int64_t {
+    let context = &*context;
+    context.memory_usage() as int64_t
 }
 
 #[no_mangle]
@@ -120,6 +135,38 @@ pub unsafe extern "C" fn weld_value_run(value: WeldValueRef) -> int64_t {
 }
 
 #[no_mangle]
+/// Returns the context of a value.
+///
+/// If this value was not returned by a Weld program or the context is already freed, returns
+/// `NULL`. The returned context *must* be freed explicitly using `weld_context_free`.  The context
+/// is internally reference counted, so the context's underlying memory will not be garbage
+/// collected until all references to it are freed.
+///
+/// ```c,norun
+/// weld_conf_t conf = weld_conf_new();
+/// weld_context_t ctx = weld_context_new(conf);
+///
+/// weld_value_t result = weld_module_run(module, ctx, arg, err);
+///
+/// // Increases the reference count of the context!
+/// weld_context_t result_ctx = weld_value_context(ctx);
+///
+/// // Memory is not freed!
+/// weld_context_free(result_ctx);
+///
+/// // Last reference to the context freed - the context is now garbage collected.
+/// weld_context_free(ctx);
+/// ```
+pub unsafe extern "C" fn weld_value_context(value: WeldValueRef) -> WeldContextRef {
+    let value = &*value;
+    if let Some(context) = value.context() {
+        Box::into_raw(Box::new(context))
+    } else {
+        ptr::null_mut()
+    }
+}
+
+#[no_mangle]
 /// Returns the data pointer for a Weld value.
 ///
 /// This function is a wrapper for `WeldValue::data`.
@@ -140,15 +187,6 @@ pub unsafe extern "C" fn weld_value_free(value: WeldValueRef) {
     }
 }
 
-#[no_mangle]
-/// Gets the memory allocated to a Weld value.
-///
-/// This generally includes all live memory allocated during the run that produced the value.  it.
-/// This function returns `-1` if the value was not returned by a Weld program.
-pub unsafe extern "C" fn weld_value_memory_usage(value: WeldValueRef) -> int64_t {
-    let value = &mut *value;
-    value.memory_usage().unwrap_or(-1) as int64_t
-}
 
 #[no_mangle]
 /// Compiles a Weld program into a runnable module.

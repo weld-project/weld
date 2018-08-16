@@ -68,13 +68,6 @@ impl WeldRuntimeContext {
         mem
     }
 
-    unsafe fn free(&mut self, pointer: Pointer) {
-        let allocated = *self.allocations.get(&pointer).unwrap();
-        free(pointer);
-        self.allocated -= allocated;
-        self.allocations.remove(&pointer);
-    }
-
     fn set_errno(&mut self, errno: WeldRuntimeErrno) {
         self.errno = errno;
         panic!("Weld runtime threw error: {}", self.errno)
@@ -102,6 +95,16 @@ impl WeldRuntimeContext {
             memlimit: memlimit,
             allocated: 0,
         }
+    }
+
+    /// Free an allocated data value.
+    ///
+    /// Panics if the passed value was not allocated by the Weld runtime.
+    pub unsafe fn free(&mut self, pointer: Pointer) {
+        let allocated = *self.allocations.get(&pointer).unwrap();
+        free(pointer);
+        self.allocated -= allocated;
+        self.allocations.remove(&pointer);
     }
 
     /// Returns the number of bytes allocated by this Weld run.
