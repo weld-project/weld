@@ -998,17 +998,24 @@ impl LlvmGenerator {
                 let output_pointer = context.get_value(output)?;
                 let return_ty = self.llvm_type(context.sir_function.symbol_type(output)?)?;
                 let mut arg_tys = vec![];
+
+                // A CUDF with declaration Name[R](T1, T2, T3) has a signature `void Name(T1, T2, T3, R)`.
                 for arg in args.iter() {
-                    arg_tys.push(self.llvm_type(context.sir_function.symbol_type(arg)?)?);
+                    arg_tys.push(LLVMPointerType(self.llvm_type(context.sir_function.symbol_type(arg)?)?, 0));
                 }
-                self.intrinsics.add(symbol_name, return_ty, &mut arg_tys);
+                arg_tys.push(LLVMPointerType(return_ty, 0));
+
+                let fn_ret_ty = self.void_type();
+                self.intrinsics.add(symbol_name, fn_ret_ty, &mut arg_tys);
 
                 let mut arg_values = vec![];
                 for arg in args.iter() {
-                    arg_values.push(self.load(context.builder, context.get_value(arg)?)?);
+                    arg_values.push(context.get_value(arg)?);
                 }
-                let result = self.intrinsics.call(context.builder, symbol_name, &mut arg_values)?;
-                LLVMBuildStore(context.builder, result, output_pointer);
+
+                arg_values.push(output_pointer);
+                let _ = self.intrinsics.call(context.builder, symbol_name, &mut arg_values)?;
+
                 Ok(())
             }
             Deserialize(_) => {

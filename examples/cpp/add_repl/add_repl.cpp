@@ -12,11 +12,6 @@ int main() {
     weld_error_t e = weld_error_new();
     weld_conf_t conf = weld_conf_new();
 
-    // Some example configuration parameters.
-    
-    // Disable multithreading support
-    weld_conf_set(conf, "weld.compile.multithreadSupport", "false");
-
     // Print out the SIR while we execute. This is useful for debugging a crashing
     // program.
     weld_conf_set(conf, "weld.compile.traceExecution", "true");
@@ -26,6 +21,8 @@ int main() {
     weld_conf_set(conf, "weld.memory.limit", "1024");
 
     weld_module_t m = weld_module_compile("|x:i64| x+5L", conf, e);
+
+    weld_context_t context = weld_context_new(conf);
     weld_conf_free(conf);
 
     if (weld_error_code(e)) {
@@ -54,17 +51,20 @@ int main() {
         weld_value_t arg = weld_value_new(&input);
 
         // Run the module and get the result.
-        weld_conf_t conf = weld_conf_new();
-        weld_value_t result = weld_module_run(m, conf, arg, e);
+        weld_value_t result = weld_module_run(m, context, arg, e);
         void *result_data = weld_value_data(result);
-        printf("Answer: %lld\n", *(int64_t *)result_data);
+        printf("Answer: %lldB\n", *(int64_t *)result_data);
+
+        // Show the memory usage.
+        printf("memory usage: %lld\n",
+            weld_context_memory_usage(context));
 
         // Free the values.
         weld_value_free(result);
         weld_value_free(arg);
-        weld_conf_free(conf);
     }
 
+    weld_context_free(context);
     weld_error_free(e);
     weld_module_free(m);
     printf("Freeing data and quiting!\n");
