@@ -39,10 +39,13 @@
 //! let ref args = MyArgs { a: 1, b: 50 };
 //! let ref input = WeldValue::new_from_data(args as *const _ as Data);
 //!
+//! // A context manages memory.
+//! let ref mut context = WeldContext::new(conf);
+//!
 //! // Running a Weld module and reading a value out of it is unsafe!
 //! unsafe {
 //!     // Run the module, which returns a wrapper `WeldValue`.
-//!     let result = module.run(conf, input).unwrap();
+//!     let result = module.run(context, input).unwrap();
 //!     // The data is just a pointer: cast it to the expected type
 //!     let data = result.data() as *const i32;
 //!
@@ -99,7 +102,16 @@
 //! ```
 //!
 //! There is thus a straightforward conversion from `Vec<T>` to a `WeldVec<T>`.
-
+//!
+//! ## Contexts
+//!
+//! A context manages state such as allocation information. A context is passed into
+//! `WeldModule::run` and updated by the compiled Weld program.
+//!
+//! The `WeldContext` struct wraps a context. Contexts are internally reference counted because
+//! values produced by Weld hold (weak) references to the context in which they are allocated. The
+//! memory backing a `WeldContext` is freed when all references to the context are dropped.
+//!
 #![cfg_attr(not(test), allow(dead_code))]
 
 #[macro_use]
@@ -309,7 +321,7 @@ impl WeldValue {
             return self.data
         }
 
-        if let Some(context) = self.context.as_ref().unwrap().upgrade() {
+        if let Some(_) = self.context.as_ref().unwrap().upgrade() {
             return self.data
         } else {
             panic!("Attempted to access WeldValue data, but the owning context is freed");

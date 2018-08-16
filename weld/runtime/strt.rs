@@ -26,11 +26,19 @@ static mut INITIALIZE_FAILED: bool = false;
 /// Maintains information about a single Weld run.
 #[derive(Debug)]
 pub struct WeldRuntimeContext {
+    /// Maps pointers to allocation size in bytes.
     allocations: FnvHashMap<Pointer, i64>,
+    /// An error code set for the context.
     errno: WeldRuntimeErrno,
+    /// A result pointer set by the runtime.
     result: Pointer,
+    /// The number of worker threads.
     nworkers: i32,
+    /// A memory limit.
     memlimit: i64,
+    /// Number of allocated bytes so far.
+    ///
+    /// This will always be equal to `allocations.values().sum()`.
     allocated: i64,
 }
 
