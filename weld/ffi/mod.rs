@@ -19,6 +19,8 @@ pub type WeldErrorRef = *mut WeldError;
 pub type WeldModuleRef = *mut WeldModule;
 /// An opauqe handle to a Weld data value.
 pub type WeldValueRef = *mut WeldValue;
+/// An opauqe handle to a Weld context.
+pub type WeldContextRef = *mut WeldContext;
 
 pub use runtime::WeldRuntimeErrno;
 pub use super::WeldLogLevel;
@@ -35,6 +37,24 @@ impl ToRustStr for *const c_char {
     fn to_str(&self) -> &str {
         let c_str = unsafe { CStr::from_ptr(*self) };
         c_str.to_str().unwrap()
+    }
+}
+
+#[no_mangle]
+/// Creates a new context.
+///
+/// This function is a wrapper for `WeldContext::new`.
+pub extern "C" fn weld_context_new() -> WeldContextRef {
+    Box::into_raw(Box::new(WeldContext::new()))
+}
+
+#[no_mangle]
+/// Frees a context.
+///
+/// This passed configuration should have been allocated using `weld_context_new`.
+pub unsafe extern "C" fn weld_context_free(ptr: WeldContextRef) {
+    if ptr != ptr::null_mut() {
+        Box::from_raw(ptr);
     }
 }
 
@@ -164,15 +184,15 @@ pub unsafe extern "C" fn weld_module_compile(code: *const c_char,
 ///
 /// This function is a wrapper for `WeldModule::run`.
 pub unsafe extern "C" fn weld_module_run(module: WeldModuleRef,
-                                         conf: WeldConfRef,
+                                         context: WeldContextRef,
                                          arg: WeldValueRef,
                                          err: WeldErrorRef) -> WeldValueRef {
     let module = &mut *module;
-    let conf = &*conf;
+    let context = &mut *context;
     let arg = &*arg;
     let err = &mut *err;
 
-    match module.run(conf, arg) {
+    match module.run(context, arg) {
         Ok(result) => {
             *err = WeldError::new_success();
             Box::into_raw(Box::new(result))

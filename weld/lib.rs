@@ -125,6 +125,9 @@ use std::default::Default;
 use std::ffi::{CString, CStr};
 use std::fmt;
 
+use std::rc::{Rc, Weak};
+use std::cell::RefCell;
+
 use uuid::Uuid;
 
 /// A macro for creating a `WeldError` with a message and an unknown error code.
@@ -155,7 +158,7 @@ pub mod runtime;
 mod tests;
 
 use conf::Backend;
-use runtime::{WeldRuntimeErrno, WeldRun};
+use runtime::{WeldRuntimeErrno, WeldRuntimeContext};
 use util::stats::CompilationStats;
 
 /// A wrapper for a C pointer.
@@ -182,6 +185,42 @@ pub struct WeldError {
 
 /// A `Result` that uses `WeldError`.
 pub type WeldResult<T> = Result<T, WeldError>;
+
+/// A context for a Weld program.
+#[derive(Clone,Debug)]
+pub struct WeldContext {
+    context: Rc<RefCell<WeldRuntimeContext>>,
+}
+
+// Public API.
+impl WeldContext {
+    /// Returns a new `WeldContext` with the given configuration.
+    ///
+    /// Returns an error if the configuration is malformed.
+    pub fn new_from_conf(conf: &WeldConf) -> WeldResult<WeldContext> {
+        let ref mut conf = conf::parse(conf)?;
+        let threads = conf.threads;
+        let mem_limit = conf.memory_limit;
+
+        let run = WeldRuntimeContext::new(threads, mem_limit);
+        Ok(WeldContext::new_from_runtime_context(Rc::new(RefCell::new(run))))
+    }
+
+    /// Returns a new `WeldContext` with a default configuration.
+    pub fn new() -> WeldContext {
+        let ref conf = WeldConf::new();
+        Self::new_from_conf(conf).unwrap()
+    }
+}
+
+// Private API
+impl WeldContext {
+    fn new_from_runtime_context(runtime_context: Rc<RefCell<WeldRuntimeContext>>) -> Self {
+        WeldContext {
+            context: runtime_context,
+        }
+    }
+}
 
 impl WeldError {
     /// Creates a new error with a particular message and error code.
@@ -240,6 +279,7 @@ pub struct WeldValue {
     data: Data,
     run: Option<RunId>,
     backend: Backend,
+    context: Option<Weak<RefCell<WeldRuntimeContext>>>,
 }
 
 impl WeldValue {
@@ -253,12 +293,41 @@ impl WeldValue {
             data: data,
             run: None,
             backend: Backend::Unknown,
+            context: None,
         }
     }
 
     /// Returns the data pointer of this `WeldValue`.
+    ///
+    /// Panics if this value was owned by a context that was freed.
     pub fn data(&self) -> Data {
-        self.data
+        if self.context.is_none() {
+            return self.data
+        }
+
+        if let Some(_) = self.context.as_ref().unwrap().upgrade() {
+            return self.data
+        } else {
+            panic!("Attempted to access WeldValue data, but the owning context is freed");
+        }
+    }
+
+    /// Returns the context of this value.
+    ///
+    /// This method will return `None` if the value does not have a context (e.g., if it was
+    /// initialized using `new_from_data`) or if the owning context was already freed.
+    pub fn context(&self) -> Option<WeldContext> {
+        // A context was never set.
+        if self.context.is_none() {
+            return None;
+        }
+
+        // A context was set - check if it has been freed.
+        if let Some(context) = self.context.as_ref().unwrap().upgrade() {
+            Some(WeldContext::new_from_runtime_context(context.clone()))
+        } else {
+            None
+        }
     }
 
     /// Returns the run ID of this value if it has one.
@@ -270,7 +339,7 @@ impl WeldValue {
         match self.backend {
             Backend::LLVMWorkStealingBackend => self.run.clone(),
             Backend::LLVMSingleThreadBackend => {
-                let run = unsafe { &mut *(self.run.unwrap() as *mut WeldRun) };
+                let run = unsafe { &mut *(self.run.unwrap() as *mut WeldRuntimeContext) };
                 Some(run.run_id())
             }
             Backend::Unknown => None,
@@ -287,7 +356,7 @@ impl WeldValue {
                 self.run.map(|v| unsafe { runtime::weld_run_memory_usage(v) } )
             } 
             Backend::LLVMSingleThreadBackend => {
-                let run = unsafe { &mut *(self.run.unwrap() as *mut WeldRun) };
+                let run = unsafe { &mut *(self.run.unwrap() as *mut WeldRuntimeContext) };
                 Some(run.memory_usage())
             }
             Backend::Unknown => None,
@@ -305,7 +374,7 @@ impl Drop for WeldValue {
                 }
             }
             Backend::LLVMSingleThreadBackend => {
-                unsafe { Box::from_raw(self.run.unwrap() as *mut WeldRun) };
+                unsafe { Box::from_raw(self.run.unwrap() as *mut WeldRuntimeContext) };
             }
             Backend::Unknown => (),
         }
@@ -502,15 +571,16 @@ impl WeldModule {
     ///
     /// Note that most Rust values cannot be passed into Weld directly. For example, it is *not*
     /// safe to simply pass a raw pointer to a `Vec<T>` into Weld directly.
-    pub unsafe fn run(&mut self, conf: &WeldConf, arg: &WeldValue) -> WeldResult<WeldValue> {
+    pub unsafe fn run(&mut self,
+                      context: &mut WeldContext,
+                      arg: &WeldValue) -> WeldResult<WeldValue> {
         let start = PreciseTime::now();
-        let ref parsed_conf = conf::parse(conf)?;
 
         // This is the required input format of data passed into a compiled module.
         let input = Box::new(codegen::WeldInputArgs {
                              input: arg.data as i64,
-                             nworkers: parsed_conf.threads,
-                             mem_limit: parsed_conf.memory_limit,
+                             nworkers: context.context.borrow().threads(),
+                             mem_limit: context.context.borrow().memory_limit(),
                              run: 0,
                          });
         let ptr = Box::into_raw(input) as i64;
@@ -526,6 +596,7 @@ impl WeldModule {
             data: result.output as *const c_void,
             run: Some(result.run),
             backend: self.backend.clone(),
+            context: Some(Rc::downgrade(&context.context)),
         };
 
         let end = PreciseTime::now();

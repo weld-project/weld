@@ -14,7 +14,7 @@ use std::sync::{Once, ONCE_INIT};
 
 use super::WeldRuntimeErrno;
 
-pub type WeldRunRef = *mut WeldRun;
+pub type WeldRuntimeContextRef = *mut WeldRuntimeContext;
 
 /// An opaque pointer.
 type Pointer = *mut libc::c_void;
@@ -25,7 +25,7 @@ static mut INITIALIZE_FAILED: bool = false;
 
 /// Maintains information about a single Weld run.
 #[derive(Debug)]
-pub struct WeldRun {
+pub struct WeldRuntimeContext {
     allocations: FnvHashMap<Pointer, i64>,
     errno: WeldRuntimeErrno,
     result: Pointer,
@@ -35,18 +35,7 @@ pub struct WeldRun {
 }
 
 /// Private API used by the FFI.
-impl WeldRun {
-    fn new(nworkers: i32, memlimit: i64) -> WeldRun {
-        WeldRun {
-            allocations: FnvHashMap::default(),
-            errno: WeldRuntimeErrno::Success,
-            result: ptr::null_mut(),
-            nworkers: nworkers,
-            memlimit: memlimit,
-            allocated: 0,
-        }
-    }
-
+impl WeldRuntimeContext {
     unsafe fn malloc(&mut self, size: i64) -> Pointer {
         if self.allocated + size > self.memlimit {
             self.errno = WeldRuntimeErrno::OutOfMemory;
@@ -99,13 +88,22 @@ impl WeldRun {
         self.result
     }
 
-    fn errno(&self) -> WeldRuntimeErrno {
-        self.errno
-    }
 }
 
-/// Public read-only API used to query information about the run.
-impl WeldRun {
+// Public API.
+impl WeldRuntimeContext {
+    /// Construct a new `WeldRuntimeContext`.
+    pub fn new(nworkers: i32, memlimit: i64) -> WeldRuntimeContext {
+        WeldRuntimeContext {
+            allocations: FnvHashMap::default(),
+            errno: WeldRuntimeErrno::Success,
+            result: ptr::null_mut(),
+            nworkers: nworkers,
+            memlimit: memlimit,
+            allocated: 0,
+        }
+    }
+
     /// Returns the number of bytes allocated by this Weld run.
     pub fn memory_usage(&self) -> i64 {
         self.allocations.values().sum()
@@ -115,9 +113,24 @@ impl WeldRun {
     pub fn run_id(&self) -> i64 {
         0
     }
+
+    /// Returns the error code of this run.
+    fn errno(&self) -> WeldRuntimeErrno {
+        self.errno
+    }
+
+    /// Returns the number of worker threads set for this run.
+    pub fn threads(&self) -> i32 {
+        self.nworkers
+    }
+
+    /// Returns the memory limit of this run.
+    pub fn memory_limit(&self) -> i64 {
+        self.memlimit
+    }
 }
 
-impl Drop for WeldRun {
+impl Drop for WeldRuntimeContext {
     fn drop(&mut self) {
         // Free memory allocated by the run.
         unsafe {
@@ -208,20 +221,20 @@ pub unsafe extern "C" fn weld_init() {
 
 #[no_mangle]
 /// Initialize the runtime if necessary, and then initialize run-specific information.
-pub unsafe extern "C" fn weld_runst_init(nworkers: int32_t, memlimit: int64_t) -> WeldRunRef {
-    Box::into_raw(Box::new(WeldRun::new(nworkers, memlimit)))
+pub unsafe extern "C" fn weld_runst_init(nworkers: int32_t, memlimit: int64_t) -> WeldRuntimeContextRef {
+    Box::into_raw(Box::new(WeldRuntimeContext::new(nworkers, memlimit)))
 }
 
 #[no_mangle]
 /// Allocate memory using `libc` `malloc`, tracking memory usage information.
-pub unsafe extern "C" fn weld_runst_malloc(run: WeldRunRef, size: int64_t) -> Pointer {
+pub unsafe extern "C" fn weld_runst_malloc(run: WeldRuntimeContextRef, size: int64_t) -> Pointer {
     let run = &mut *run;
     run.malloc(size)
 }
 
 #[no_mangle]
 /// Allocate memory using `libc` `remalloc`, tracking memory usage information.
-pub unsafe extern "C" fn weld_runst_realloc(run: WeldRunRef,
+pub unsafe extern "C" fn weld_runst_realloc(run: WeldRuntimeContextRef,
                                      ptr: Pointer,
                                      newsize: int64_t) -> Pointer {
     let run = &mut *run;
@@ -230,42 +243,43 @@ pub unsafe extern "C" fn weld_runst_realloc(run: WeldRunRef,
 
 #[no_mangle]
 /// Free memory using `libc` `free`, tracking memory usage information.
-pub unsafe extern "C" fn weld_runst_free(run: WeldRunRef, ptr: Pointer) {
+pub unsafe extern "C" fn weld_runst_free(run: WeldRuntimeContextRef, ptr: Pointer) {
     let run = &mut *run;
     run.free(ptr)
 }
 
 #[no_mangle]
 /// Set the result pointer.
-pub unsafe extern "C" fn weld_runst_set_result(run: WeldRunRef, ptr: Pointer) {
+pub unsafe extern "C" fn weld_runst_set_result(run: WeldRuntimeContextRef, ptr: Pointer) {
     let run = &mut *run;
     run.set_result(ptr)
 }
 
 #[no_mangle]
 /// Set the errno value.
-pub unsafe extern "C" fn weld_runst_set_errno(run: WeldRunRef, errno: WeldRuntimeErrno) {
+pub unsafe extern "C" fn weld_runst_set_errno(run: WeldRuntimeContextRef,
+                                              errno: WeldRuntimeErrno) {
     let run = &mut *run;
     run.set_errno(errno)
 }
 
 #[no_mangle]
 /// Get the errno value.
-pub unsafe extern "C" fn weld_runst_get_errno(run: WeldRunRef) -> WeldRuntimeErrno {
+pub unsafe extern "C" fn weld_runst_get_errno(run: WeldRuntimeContextRef) -> WeldRuntimeErrno {
     let run = &mut *run;
     run.errno()
 }
 
 #[no_mangle]
 /// Get the result pointer.
-pub unsafe extern "C" fn weld_runst_get_result(run: WeldRunRef) -> Pointer {
+pub unsafe extern "C" fn weld_runst_get_result(run: WeldRuntimeContextRef) -> Pointer {
     let run = &mut *run;
     run.result()
 }
 
 #[no_mangle]
 /// Print a value from generated code.
-pub unsafe extern "C" fn weld_runst_print(_run: WeldRunRef, string: *const c_char) {
+pub unsafe extern "C" fn weld_runst_print(_run: WeldRuntimeContextRef, string: *const c_char) {
     let string = CStr::from_ptr(string).to_str().unwrap();
     // XXX We could switch to a custom printer here too.
     println!("{}", string);
