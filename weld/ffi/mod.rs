@@ -66,7 +66,8 @@ pub unsafe extern "C" fn weld_context_memory_usage(context: WeldContextRef) -> i
 #[no_mangle]
 /// Frees a context.
 ///
-/// This passed configuration should have been allocated using `weld_context_new`.
+/// All contexts created by the FFI should be freed. This includes contexts obtained from
+/// `weld_context_new` and `weld_value_context`.
 pub unsafe extern "C" fn weld_context_free(ptr: WeldContextRef) {
     if ptr != ptr::null_mut() {
         Box::from_raw(ptr);
@@ -118,7 +119,7 @@ pub unsafe extern "C" fn weld_conf_set(ptr: WeldConfRef, key: *const c_char, val
 /// Returns a new Weld value.
 ///
 /// The value returned by this method is *not* owned by the runtime, so any data this value refers
-/// to must be managed by the caller.
+/// to must be managed by the caller. The created value will always have a NULL context.
 ///
 /// This function is a wrapper for `WeldValue::new_from_data`.
 pub extern "C" fn weld_value_new(data: *const c_void) -> WeldValueRef {
@@ -137,26 +138,10 @@ pub unsafe extern "C" fn weld_value_run(value: WeldValueRef) -> int64_t {
 #[no_mangle]
 /// Returns the context of a value.
 ///
-/// If this value was not returned by a Weld program or the context is already freed, returns
-/// `NULL`. The returned context *must* be freed explicitly using `weld_context_free`.  The context
-/// is internally reference counted, so the context's underlying memory will not be garbage
-/// collected until all references to it are freed.
-///
-/// ```c,norun
-/// weld_conf_t conf = weld_conf_new();
-/// weld_context_t ctx = weld_context_new(conf);
-///
-/// weld_value_t result = weld_module_run(module, ctx, arg, err);
-///
-/// // Increases the reference count of the context!
-/// weld_context_t result_ctx = weld_value_context(ctx);
-///
-/// // Memory is not freed!
-/// weld_context_free(result_ctx);
-///
-/// // Last reference to the context freed - the context is now garbage collected.
-/// weld_context_free(ctx);
-/// ```
+/// Since contexts are internally reference-counted, this function increases the reference count of
+/// the context. The context must be freed with `weld_context_free` to decrement the internal
+/// reference count. Since Weld values owned by a context internally hold a reference to the
+/// context, the value is guaranteed to be live until `weld_value_free` is called.
 pub unsafe extern "C" fn weld_value_context(value: WeldValueRef) -> WeldContextRef {
     let value = &*value;
     if let Some(context) = value.context() {
@@ -169,7 +154,8 @@ pub unsafe extern "C" fn weld_value_context(value: WeldValueRef) -> WeldContextR
 #[no_mangle]
 /// Returns the data pointer for a Weld value.
 ///
-/// This function is a wrapper for `WeldValue::data`.
+/// This function is a wrapper for `WeldValue::data`. If this value is owned by the runtime, the
+/// returned pointer should never be freed -- instead, use `weld_value_free` to free the data.
 pub unsafe extern "C" fn weld_value_data(value: WeldValueRef) -> *const c_void {
     let value = &*value;
     value.data()

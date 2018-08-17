@@ -137,7 +137,7 @@ use std::default::Default;
 use std::ffi::{CString, CStr};
 use std::fmt;
 
-use std::rc::{Rc, Weak};
+use std::rc::Rc;
 use std::cell::RefCell;
 
 use uuid::Uuid;
@@ -215,7 +215,9 @@ impl WeldContext {
         let mem_limit = conf.memory_limit;
 
         let run = WeldRuntimeContext::new(threads, mem_limit);
-        Ok(WeldContext::new_from_runtime_context(Rc::new(RefCell::new(run))))
+        Ok(WeldContext {
+            context: Rc::new(RefCell::new(run))
+        })
     }
 
     /// Returns the memory used by this context.
@@ -226,15 +228,6 @@ impl WeldContext {
     /// Returns the memory limit of this context.
     pub fn memory_limit(&self) -> i64 {
         self.context.borrow().memory_limit()
-    }
-}
-
-// Private API
-impl WeldContext {
-    fn new_from_runtime_context(runtime_context: Rc<RefCell<WeldRuntimeContext>>) -> Self {
-        WeldContext {
-            context: runtime_context,
-        }
     }
 }
 
@@ -290,12 +283,15 @@ impl From<error::WeldCompileError> for WeldError {
 }
 
 /// A wrapper for data passed into and out of Weld.
+///
+/// Values produced by Weld (i.e., as a return value from `WeldModule::run`) hold a reference to
+/// the context they are allocated in.
 #[derive(Debug,Clone)]
 pub struct WeldValue {
     data: Data,
     run: Option<RunId>,
     backend: Backend,
-    context: Option<Weak<RefCell<WeldRuntimeContext>>>,
+    context: Option<WeldContext>,
 }
 
 impl WeldValue {
@@ -317,33 +313,17 @@ impl WeldValue {
     ///
     /// Panics if this value was owned by a context that was freed.
     pub fn data(&self) -> Data {
-        if self.context.is_none() {
-            return self.data
-        }
-
-        if let Some(_) = self.context.as_ref().unwrap().upgrade() {
-            return self.data
-        } else {
-            panic!("Attempted to access WeldValue data, but the owning context is freed");
-        }
+        self.data
     }
 
     /// Returns the context of this value.
     ///
     /// This method will return `None` if the value does not have a context (e.g., if it was
-    /// initialized using `new_from_data`) or if the owning context was already freed.
+    /// initialized using `new_from_data`). If it does have a context, the reference count of the
+    /// context is increased -- the context will thus not be dropped until this reference is
+    /// dropped.
     pub fn context(&self) -> Option<WeldContext> {
-        // A context was never set.
-        if self.context.is_none() {
-            return None;
-        }
-
-        // A context was set - check if it has been freed.
-        if let Some(context) = self.context.as_ref().unwrap().upgrade() {
-            Some(WeldContext::new_from_runtime_context(Rc::clone(&context)))
-        } else {
-            None
-        }
+        self.context.clone()
     }
 
     /// Returns the run ID of this value if it has one.
@@ -372,10 +352,9 @@ impl Drop for WeldValue {
                 }
             }
             Backend::LLVMSingleThreadBackend => {
-                // Free the individual values. If the below returns `None`, the context (and the
-                // value's data) has already been freed.
-                if let Some(context) = self.context.as_ref().unwrap().upgrade() {
-                    unsafe { context.borrow_mut().free(self.data as DataMut) } ; 
+                // Free this value from the context.
+                if let Some(ref mut context) = self.context {
+                    unsafe { context.context.borrow_mut().free(self.data as DataMut) } ; 
                 }
             },
             Backend::Unknown => (),
@@ -609,7 +588,7 @@ impl WeldModule {
             data: result.output as *const c_void,
             run: None,
             backend: self.backend.clone(),
-            context: Some(Rc::downgrade(&context.context)),
+            context: Some(context.clone()),
         };
 
         let end = PreciseTime::now();

@@ -92,27 +92,19 @@ int main() {
       printf("Expect: %d\n", expect);
       printf("Baseline: %lld\n", baseline_result);
 
+      weld_context_free(context);
+
+      // Even though we free the context, the WeldValue holds a reference to it,
+      // so the memory is still live. We can reobtain a reference to the context here.
+      context = weld_value_context(result);
+
       printf("Context Memory Usage Before Free: %lld\n",
           weld_context_memory_usage(context));
 
-      // Set true to see a panic - the context will be freed, which will disallow calls
-      // to `weld_value_data`.
-#define CAUSE_PANIC 0
-#if CAUSE_PANIC
-      weld_context_free(context);
-      printf("Freed a WeldContext\n");
-
-      // Panics!
-      void *data_again = weld_value_data(result);
-
-      // Never reached
-      fprintf(stderr, "Should have panicked...\n");
-      exit(1);
-#endif
-
+      // Free the result.
       weld_value_free(result);
 
-      printf("Context Memory Usage After Free: %lld\n",
+      printf("Context Memory Usage Before Free: %lld\n",
           weld_context_memory_usage(context));
     }
 
@@ -122,6 +114,8 @@ int main() {
     // Free the values.
     weld_value_free(arg);
     weld_conf_free(conf);
+
+    // Now free the context - this makes the reference count of the context 0, thus freeing it.
     weld_context_free(context);
 
     weld_error_free(e);
