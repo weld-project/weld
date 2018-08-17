@@ -40,7 +40,7 @@
 //! let ref input = WeldValue::new_from_data(args as *const _ as Data);
 //!
 //! // A context manages memory.
-//! let ref mut context = WeldContext::new(conf);
+//! let ref mut context = WeldContext::new(conf).unwrap();
 //!
 //! // Running a Weld module and reading a value out of it is unsafe!
 //! unsafe {

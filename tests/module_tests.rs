@@ -65,7 +65,8 @@ fn multithreaded_module_run() {
                 for _ in 0..num_runs {
                     // Run the module
                     let err = weld_error_new();
-                    let ret_value = weld_module_run(module.0, conf.0, input_value.0, err);
+                    let context = weld_context_new(conf.0);
+                    let ret_value = weld_module_run(module.0, context, input_value.0, err);
                     assert_eq!(weld_error_code(err), WeldRuntimeErrno::Success);
 
                     // Check the result
@@ -76,6 +77,7 @@ fn multithreaded_module_run() {
                         assert_eq!(i as i32, *result.data.offset(i as isize));
                     }
                     weld_value_free(ret_value);
+                    weld_context_free(context);
                 }
             }))
         }

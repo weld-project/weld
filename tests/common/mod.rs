@@ -122,7 +122,9 @@ unsafe fn _compile_and_run<T>(code: &str, conf: &WeldConf, ptr: &T) -> WeldResul
             return Err(err);
         }
     };
-    module.run(conf, input_value)
+
+    let ref mut context = WeldContext::new(conf).unwrap();
+    module.run(context, input_value)
 }
 
 /// Runs `code` with the given `conf` and input data pointer `ptr`, expecting
