@@ -124,3 +124,13 @@ pub fn compile_program(program: &SirProgram,
     };
     Ok(result)
 }
+
+/// Get the size of a value for a given target.
+pub fn size_of(ty: &Type, backend: Backend) -> usize {
+    match backend {
+        Backend::LLVMSingleThreadBackend => {
+            llvm2::size_of(ty) 
+        }
+        _ => 0
+    }
+}

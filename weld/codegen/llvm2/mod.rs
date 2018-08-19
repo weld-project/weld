@@ -157,6 +157,14 @@ pub fn unsupported(program: &SirProgram) -> Option<String> {
     None
 }
 
+/// Returns the size of a type in bytes.
+pub fn size_of(ty: &Type) -> usize {
+    unsafe {
+        let mut gen = LlvmGenerator::new(ParsedConf::new()).unwrap();
+        gen.size_of_ty(ty)
+    }
+}
+
 /// Compile Weld SIR into a runnable module.
 ///
 /// The runnable module is wrapped as a trait object which the `CompiledModule` struct in `codegen`
@@ -658,8 +666,9 @@ impl CodeGenExt for LlvmGenerator {
 }
 
 impl LlvmGenerator {
-    /// Generate code for an SIR program.
-    unsafe fn generate(conf: ParsedConf, program: &SirProgram) -> WeldResult<LlvmGenerator> {
+
+    /// Initialize a new LlvmGenerator.
+    unsafe fn new(conf: ParsedConf) -> WeldResult<LlvmGenerator> {
         let context = LLVMContextCreate();
         let module = LLVMModuleCreateWithNameInContext(c_str!("main"), context);
 
@@ -680,7 +689,7 @@ impl LlvmGenerator {
 
         debug!("LlvmGenerator features: {}", target.features);
 
-        let mut gen = LlvmGenerator {
+        Ok(LlvmGenerator {
             conf: conf,
             context: context,
             module: module,
@@ -698,7 +707,13 @@ impl LlvmGenerator {
             opaque_eq_fns: FnvHashMap::default(),
             hash_fns: FnvHashMap::default(),
             intrinsics: intrinsics,
-        };
+        })
+    }
+
+    /// Generate code for an SIR program.
+    unsafe fn generate(conf: ParsedConf, program: &SirProgram) -> WeldResult<LlvmGenerator> {
+
+        let mut gen = LlvmGenerator::new(conf)?;
 
         // Declare each function first to create a reference to it. Loop body functions are only
         // called by their ParallelForData terminators, so those are generated on-the-fly during
@@ -1376,6 +1391,11 @@ impl LlvmGenerator {
             Function(_, _) | Unknown => unreachable!(),
         };
         Ok(result)
+    }
+
+    unsafe fn size_of_ty(&mut self, ty: &Type) -> usize {
+        let ll_ty = self.llvm_type(ty).unwrap();
+        (self.size_of_bits(ll_ty) / 8) as usize
     }
 }
 

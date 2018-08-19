@@ -5,7 +5,7 @@
 //!
 //! # Using Weld
 //!
-//! Fundamentally, Weld is a small programming language that supports _parallel loops_ and
+//! Weld is a small programming language that supports _parallel loops_ and
 //! _builders_, which are declarative objects that specify how to buid results. The parallel loops
 //! can be used in conjunction with the builders to build a result in parallel.
 //!
@@ -164,6 +164,7 @@ pub mod ast;
 pub mod util;
 pub mod ffi;
 pub mod runtime;
+pub mod data;
 
 // Tests.
 #[cfg(test)]
