@@ -14,7 +14,7 @@
 //! the string into a runnable _module_, and then running the module with in-memory data.
 //!
 //! Weld JITs code into the current process using LLVM. As a result, Weld users must have a version
-//! of LLVM installed on their machine (currently, Weld uses LLVM 3.8).
+//! of LLVM installed on their machine (currently, Weld uses LLVM 6).
 //!
 //! ## Example
 //!
@@ -109,8 +109,8 @@
 //! `WeldModule::run` and updated by the compiled Weld program.
 //!
 //! The `WeldContext` struct wraps a context. Contexts are internally reference counted because
-//! values produced by Weld hold (weak) references to the context in which they are allocated. The
-//! memory backing a `WeldContext` is freed when all references to the context are dropped.
+//! values produced by Weld hold references to the context in which they are allocated. The memory
+//! backing a `WeldContext` is freed when all references to the context are dropped.
 //!
 #![cfg_attr(not(test), allow(dead_code))]
 
@@ -202,6 +202,14 @@ pub struct WeldError {
 pub type WeldResult<T> = Result<T, WeldError>;
 
 /// A context for a Weld program.
+///
+/// Contexts are internally reference counted, so cloning a context will produce a reference to the
+/// same internal object. The reference-counted internal object is protected via a `RefCell` to
+/// prevent double-mutable-borrows: this is necessary because contexts may not be passed into
+/// multiple `WeldModule::run` calls in parallel, even if they are cloned (since cloned contexts
+/// point to the same underlying object).
+///
+/// Contexts are *not* thread-safe, and thus do not implement `Send+Sync`.
 #[derive(Clone,Debug,PartialEq)]
 pub struct WeldContext {
     context: Rc<RefCell<WeldRuntimeContext>>,
@@ -756,14 +764,25 @@ impl WeldModule {
         })
     }
 
-    /// Run this `WeldModule` with a configuration and argument.
+    /// Run this `WeldModule` with a context and argument.
     ///
-    /// This is the entry point for running a Weld program. The `WeldConf` specifies how runtime
-    /// options for running the program (e.g., number of threads): see `conf.rs` for a list of
-    /// runtime options. Each configuration option has a default value, so setting configuration
-    /// options is optional.
+    /// This is the entry point for running a Weld program. The argument is a `WeldValue` that
+    /// encapsulates a pointer to the argument. See the section below about how this argument
+    /// should be structured.
     ///
-    /// # Weld Arguments
+    /// The context captures _state_: in particular, it holds the memory allocated by a `run`.
+    /// Contexts can be reused across runs and modules. Contexts are primarily useful for passing
+    /// mutable state---builders---in and out of Weld and updating them in place. For example, a
+    /// program can compute some partial result, return a builder, and then pass the builder as a
+    /// `WeldValue` back into `run` _with the same context_ to continue updating that builder.
+    ///
+    /// Contexts are not thread-safe---this is enforced in Rust by having this function take a
+    /// mutable reference to a context. If a context is cloned, this constraint is maintained via
+    /// _interior mutability_: contexts internally hold a `RefCell` that is mutably borrowed by
+    /// this function, so a panic will be thrown if multiple callers try to `run` a module with the
+    /// same context.
+    ///
+    /// # Structuring Arguments
     ///
     /// This function takes a `WeldValue` initialized using `WeldValue::new_from_data` or another Weld
     /// program. The value must encapsulate a valid pointer in a "Weld-compatible" format as
@@ -777,7 +796,14 @@ impl WeldModule {
     /// # Errors
     ///
     /// This method may return any of the errors specified in `WeldRuntimeErrno`, if a runtime
-    /// error occurs during the execution of the program.
+    /// error occurs during the execution of the program. Currently, the implementation panics if a
+    /// runtime error is thrown.
+    ///
+    /// # Panics
+    ///
+    /// The current implementation panics whenever the runtime throws an error. This function will
+    /// also panic if the same context is passed to `run` at once (this is possible if, e.g., if a
+    /// context is cloned).
     ///
     /// # Examples
     ///
@@ -787,14 +813,11 @@ impl WeldModule {
     ///
     /// // Wrap in Cell so we can get a raw pointer
     /// let input = Cell::new(1 as i32);
-    ///
     /// let ref conf = WeldConf::new();
     ///
-    /// // Program that adds one to an i32
+    /// // Program that adds one to an i32.
     /// let mut module = WeldModule::compile("|x: i32| x + 1", conf).unwrap();
-    ///
     /// let ref input_value = WeldValue::new_from_data(input.as_ptr() as Data);
-    ///
     /// let ref mut context = WeldContext::new(conf).unwrap();
     ///
     /// // Running is unsafe, since we're outside of Rust in JIT'd code, operating over
