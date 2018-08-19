@@ -21,6 +21,8 @@ use sir::*;
 use util::stats::CompilationStats;
 use util::write_code;
 
+use std::fmt;
+
 mod llvm;
 mod llvm2;
 
@@ -73,7 +75,12 @@ impl CompiledModule {
     pub fn run(&self, arg: i64) -> i64 {
         self.runnable.run(arg)
     }
+}
 
+impl fmt::Debug for CompiledModule {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "CompiledModule")
+    }
 }
 
 /// Compile a Weld SIR program with a given configuration.

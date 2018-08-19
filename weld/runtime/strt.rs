@@ -13,25 +13,24 @@ use std::ptr;
 use std::sync::{Once, ONCE_INIT};
 
 use super::WeldRuntimeErrno;
+use ::DataMut;
+
 
 pub type WeldRuntimeContextRef = *mut WeldRuntimeContext;
-
-/// An opaque pointer.
-type Pointer = *mut libc::c_void;
 
 /// Initialize the Weld runtime only once.
 static ONCE: Once = ONCE_INIT;
 static mut INITIALIZE_FAILED: bool = false;
 
 /// Maintains information about a single Weld run.
-#[derive(Debug)]
+#[derive(Debug,PartialEq)]
 pub struct WeldRuntimeContext {
     /// Maps pointers to allocation size in bytes.
-    allocations: FnvHashMap<Pointer, i64>,
+    allocations: FnvHashMap<DataMut, i64>,
     /// An error code set for the context.
     errno: WeldRuntimeErrno,
     /// A result pointer set by the runtime.
-    result: Pointer,
+    result: DataMut,
     /// The number of worker threads.
     nworkers: i32,
     /// A memory limit.
@@ -44,7 +43,7 @@ pub struct WeldRuntimeContext {
 
 /// Private API used by the FFI.
 impl WeldRuntimeContext {
-    unsafe fn malloc(&mut self, size: i64) -> Pointer {
+    unsafe fn malloc(&mut self, size: i64) -> DataMut {
         if self.allocated + size > self.memlimit {
             self.errno = WeldRuntimeErrno::OutOfMemory;
             panic!("Weld run ran out of memory (limit={}, attempted to allocate {}",
@@ -58,7 +57,7 @@ impl WeldRuntimeContext {
         mem
     }
 
-    unsafe fn realloc(&mut self, pointer: Pointer, size: i64) -> Pointer {
+    unsafe fn realloc(&mut self, pointer: DataMut, size: i64) -> DataMut {
         let allocated = *self.allocations.get(&pointer).unwrap();
         if self.allocated - allocated + size > self.memlimit {
             self.errno = WeldRuntimeErrno::OutOfMemory;
@@ -81,11 +80,11 @@ impl WeldRuntimeContext {
         panic!("Weld runtime threw error: {}", self.errno)
     }
 
-    fn set_result(&mut self, result: Pointer) {
+    fn set_result(&mut self, result: DataMut) {
         self.result = result;
     }
 
-    fn result(&self) -> Pointer {
+    fn result(&self) -> DataMut {
         self.result
     }
 
@@ -108,7 +107,7 @@ impl WeldRuntimeContext {
     /// Free an allocated data value.
     ///
     /// Panics if the passed value was not allocated by the Weld runtime.
-    pub unsafe fn free(&mut self, pointer: Pointer) {
+    pub unsafe fn free(&mut self, pointer: DataMut) {
         let allocated = *self.allocations.get(&pointer).unwrap();
         free(pointer);
         self.allocated -= allocated;
@@ -238,7 +237,7 @@ pub unsafe extern "C" fn weld_runst_init(nworkers: int32_t, memlimit: int64_t) -
 
 #[no_mangle]
 /// Allocate memory using `libc` `malloc`, tracking memory usage information.
-pub unsafe extern "C" fn weld_runst_malloc(run: WeldRuntimeContextRef, size: int64_t) -> Pointer {
+pub unsafe extern "C" fn weld_runst_malloc(run: WeldRuntimeContextRef, size: int64_t) -> DataMut {
     let run = &mut *run;
     run.malloc(size)
 }
@@ -246,22 +245,22 @@ pub unsafe extern "C" fn weld_runst_malloc(run: WeldRuntimeContextRef, size: int
 #[no_mangle]
 /// Allocate memory using `libc` `remalloc`, tracking memory usage information.
 pub unsafe extern "C" fn weld_runst_realloc(run: WeldRuntimeContextRef,
-                                     ptr: Pointer,
-                                     newsize: int64_t) -> Pointer {
+                                     ptr: DataMut,
+                                     newsize: int64_t) -> DataMut {
     let run = &mut *run;
     run.realloc(ptr, newsize)
 }
 
 #[no_mangle]
 /// Free memory using `libc` `free`, tracking memory usage information.
-pub unsafe extern "C" fn weld_runst_free(run: WeldRuntimeContextRef, ptr: Pointer) {
+pub unsafe extern "C" fn weld_runst_free(run: WeldRuntimeContextRef, ptr: DataMut) {
     let run = &mut *run;
     run.free(ptr)
 }
 
 #[no_mangle]
 /// Set the result pointer.
-pub unsafe extern "C" fn weld_runst_set_result(run: WeldRuntimeContextRef, ptr: Pointer) {
+pub unsafe extern "C" fn weld_runst_set_result(run: WeldRuntimeContextRef, ptr: DataMut) {
     let run = &mut *run;
     run.set_result(ptr)
 }
@@ -283,7 +282,7 @@ pub unsafe extern "C" fn weld_runst_get_errno(run: WeldRuntimeContextRef) -> Wel
 
 #[no_mangle]
 /// Get the result pointer.
-pub unsafe extern "C" fn weld_runst_get_result(run: WeldRuntimeContextRef) -> Pointer {
+pub unsafe extern "C" fn weld_runst_get_result(run: WeldRuntimeContextRef) -> DataMut {
     let run = &mut *run;
     run.result()
 }
