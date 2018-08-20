@@ -214,7 +214,7 @@ unsafe fn initialize() {
     x += weld_rt_gb_result as i64;
     x += weld_rt_gb_free as i64;
 
-    trace!("Runtime initialized with hashed values {}", x);
+    println!("Runtime initialized with hashed values {}", x);
 }
 
 #[no_mangle]
