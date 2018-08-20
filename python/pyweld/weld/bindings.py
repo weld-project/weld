@@ -12,11 +12,11 @@ import pkg_resources
 
 system = platform.system()
 if system == 'Linux':
-    lib_file = "libweld.so"
+    lib_file = "libcweld.so"
 elif system == 'Windows':
-    lib_file = "libweld.dll"
+    lib_file = "libcweld.dll"
 elif system == 'Darwin':
-    lib_file = "libweld.dylib"
+    lib_file = "libcweld.dylib"
 else:
     raise OSError("Unsupported platform {}", system)
 

@@ -11,11 +11,11 @@ from setuptools.extension import Extension
 
 system = platform.system()
 if system == 'Linux':
-    libweld = "libweld.so"
+    libweld = "libcweld.so"
 elif system == 'Windows':
-    libweld = "libweld.dll"
+    libweld = "libcweld.dll"
 elif system == 'Darwin':
-    libweld = "libweld.dylib"
+    libweld = "libcweld.dylib"
 else:
     raise OSError("Unsupported platform {}", system)
 
