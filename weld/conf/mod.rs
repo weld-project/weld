@@ -74,6 +74,31 @@ pub struct ParsedConf {
     pub enable_bounds_checks: bool,
 }
 
+impl ParsedConf {
+    /// Returns a new empty ParsedConf.
+    ///
+    /// All fields of the configuration are set to 0.
+    pub fn new() -> ParsedConf {
+        ParsedConf {
+            memory_limit: 0,
+            threads: 0,
+            support_multithread: false,
+            trace_run: false,
+            enable_sir_opt: false,
+            enable_experimental_passes: false,
+            optimization_passes: vec![],
+            llvm_optimization_level: 0,
+            dump_code: DumpCodeConf {
+                enabled: false,
+                dir: PathBuf::new(),
+            },
+            backend: Backend::LLVMSingleThreadBackend,
+            enable_fallback: false,
+            enable_bounds_checks: false,
+        }
+    }
+}
+
 /// Parse a configuration from a WeldConf key-value dictionary.
 pub fn parse(conf: &WeldConf) -> WeldResult<ParsedConf> {
     let value = get_value(conf, MEMORY_LIMIT_KEY);

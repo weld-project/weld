@@ -4,12 +4,11 @@
 
 extern crate libc;
 
+use super::*;
 use libc::{c_char, c_void, int64_t};
 
 use std::ptr;
 use std::ffi::CStr;
-
-use super::*;
 
 /// An opauqe handle to a Weld configuration.
 pub type WeldConfRef = *mut WeldConf;
@@ -19,8 +18,10 @@ pub type WeldErrorRef = *mut WeldError;
 pub type WeldModuleRef = *mut WeldModule;
 /// An opauqe handle to a Weld data value.
 pub type WeldValueRef = *mut WeldValue;
+/// An opauqe handle to a Weld context.
+pub type WeldContextRef = *mut WeldContext;
 
-pub use runtime::WeldRuntimeErrno;
+pub use super::WeldRuntimeErrno;
 pub use super::WeldLogLevel;
 
 trait ToRustStr {
@@ -35,6 +36,40 @@ impl ToRustStr for *const c_char {
     fn to_str(&self) -> &str {
         let c_str = unsafe { CStr::from_ptr(*self) };
         c_str.to_str().unwrap()
+    }
+}
+
+#[no_mangle]
+/// Creates a new context.
+///
+/// This function is a wrapper for `WeldContext::new`.
+pub unsafe extern "C" fn weld_context_new(conf: WeldConfRef) -> WeldContextRef {
+    let conf = &*conf;
+    if let Ok(context) = WeldContext::new(conf) {
+        Box::into_raw(Box::new(context))
+    } else {
+        // XXX Should this take an error too?
+        ptr::null_mut()
+    }
+}
+
+#[no_mangle]
+/// Gets the memory allocated by a Weld context.
+///
+/// This includes all live memory allocated in the given context.
+pub unsafe extern "C" fn weld_context_memory_usage(context: WeldContextRef) -> int64_t {
+    let context = &*context;
+    context.memory_usage() as int64_t
+}
+
+#[no_mangle]
+/// Frees a context.
+///
+/// All contexts created by the FFI should be freed. This includes contexts obtained from
+/// `weld_context_new` and `weld_value_context`.
+pub unsafe extern "C" fn weld_context_free(ptr: WeldContextRef) {
+    if ptr != ptr::null_mut() {
+        Box::from_raw(ptr);
     }
 }
 
@@ -83,7 +118,7 @@ pub unsafe extern "C" fn weld_conf_set(ptr: WeldConfRef, key: *const c_char, val
 /// Returns a new Weld value.
 ///
 /// The value returned by this method is *not* owned by the runtime, so any data this value refers
-/// to must be managed by the caller.
+/// to must be managed by the caller. The created value will always have a NULL context.
 ///
 /// This function is a wrapper for `WeldValue::new_from_data`.
 pub extern "C" fn weld_value_new(data: *const c_void) -> WeldValueRef {
@@ -100,9 +135,26 @@ pub unsafe extern "C" fn weld_value_run(value: WeldValueRef) -> int64_t {
 }
 
 #[no_mangle]
+/// Returns the context of a value.
+///
+/// Since contexts are internally reference-counted, this function increases the reference count of
+/// the context. The context must be freed with `weld_context_free` to decrement the internal
+/// reference count. Since Weld values owned by a context internally hold a reference to the
+/// context, the value is guaranteed to be live until `weld_value_free` is called.
+pub unsafe extern "C" fn weld_value_context(value: WeldValueRef) -> WeldContextRef {
+    let value = &*value;
+    if let Some(context) = value.context() {
+        Box::into_raw(Box::new(context))
+    } else {
+        ptr::null_mut()
+    }
+}
+
+#[no_mangle]
 /// Returns the data pointer for a Weld value.
 ///
-/// This function is a wrapper for `WeldValue::data`.
+/// This function is a wrapper for `WeldValue::data`. If this value is owned by the runtime, the
+/// returned pointer should never be freed -- instead, use `weld_value_free` to free the data.
 pub unsafe extern "C" fn weld_value_data(value: WeldValueRef) -> *const c_void {
     let value = &*value;
     value.data()
@@ -120,15 +172,6 @@ pub unsafe extern "C" fn weld_value_free(value: WeldValueRef) {
     }
 }
 
-#[no_mangle]
-/// Gets the memory allocated to a Weld value.
-///
-/// This generally includes all live memory allocated during the run that produced the value.  it.
-/// This function returns `-1` if the value was not returned by a Weld program.
-pub unsafe extern "C" fn weld_value_memory_usage(value: WeldValueRef) -> int64_t {
-    let value = &mut *value;
-    value.memory_usage().unwrap_or(-1) as int64_t
-}
 
 #[no_mangle]
 /// Compiles a Weld program into a runnable module.
@@ -164,15 +207,15 @@ pub unsafe extern "C" fn weld_module_compile(code: *const c_char,
 ///
 /// This function is a wrapper for `WeldModule::run`.
 pub unsafe extern "C" fn weld_module_run(module: WeldModuleRef,
-                                         conf: WeldConfRef,
+                                         context: WeldContextRef,
                                          arg: WeldValueRef,
                                          err: WeldErrorRef) -> WeldValueRef {
     let module = &mut *module;
-    let conf = &*conf;
+    let context = &mut *context;
     let arg = &*arg;
     let err = &mut *err;
 
-    match module.run(conf, arg) {
+    match module.run(context, arg) {
         Ok(result) => {
             *err = WeldError::new_success();
             Box::into_raw(Box::new(result))

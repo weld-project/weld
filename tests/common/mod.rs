@@ -4,71 +4,11 @@
 extern crate libc;
 extern crate weld;
 
+
 use weld::*;
-use std::convert::AsRef;
 use std::fmt;
 
-#[derive(Clone, Debug)]
-#[repr(C)]
-pub struct WeldVec<T> {
-    pub data: *const T,
-    pub len: i64,
-}
-
-impl<T> WeldVec<T> {
-    /// Return a new WeldVec from a pointer and a length.
-    ///
-    /// Consider using `WeldVec::from` instead, which automatically derives the length.
-    pub fn new(ptr: *const T, len: i64) -> WeldVec<T> {
-        WeldVec {
-            data: ptr,
-            len: len,
-        }
-    }
-}
-
-impl<'a, T, U> From<&'a U> for WeldVec<T>
-where
-    U: AsRef<[T]>,
-{
-    fn from(s: &'a U) -> WeldVec<T> {
-        WeldVec::new(s.as_ref().as_ptr(), s.as_ref().len() as i64)
-    }
-}
-
-impl<T> PartialEq for WeldVec<T>
-where
-    T: PartialEq + Clone,
-{
-    fn eq(&self, other: &WeldVec<T>) -> bool {
-        if self.len != other.len {
-            return false;
-        }
-        for i in 0..self.len {
-            let v1 = unsafe { (*self.data.offset(i as isize)).clone() };
-            let v2 = unsafe { (*other.data.offset(i as isize)).clone() };
-            if v1 != v2 {
-                return false;
-            }
-        }
-        true
-    }
-}
-
-impl<T> fmt::Display for WeldVec<T>
-where
-    T: fmt::Display + Clone,
-{
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "[ ")?;
-        for i in 0..self.len {
-            let v = unsafe { (*self.data.offset(i as isize)).clone() };
-            write!(f, "{} ", v)?;
-        }
-        write!(f, "] ")?;
-        write!(f, "(length={})", self.len)
-    }
-}
+pub use weld::data::*;
 
 #[derive(Clone, Debug, PartialEq)]
 #[repr(C)]
@@ -116,13 +56,15 @@ fn conf(threads: i32) -> WeldConf {
 /// function is freed.
 unsafe fn _compile_and_run<T>(code: &str, conf: &WeldConf, ptr: &T) -> WeldResult<WeldValue> {
     let ref input_value = WeldValue::new_from_data(ptr as *const _ as Data);
-    let mut module = match WeldModule::compile(code, conf) {
+    let module = match WeldModule::compile(code, conf) {
         Ok(module) => module,
         Err(err) => {
             return Err(err);
         }
     };
-    module.run(conf, input_value)
+
+    let ref mut context = WeldContext::new(conf).unwrap();
+    module.run(context, input_value)
 }
 
 /// Runs `code` with the given `conf` and input data pointer `ptr`, expecting

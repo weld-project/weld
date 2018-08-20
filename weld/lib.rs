@@ -5,7 +5,7 @@
 //!
 //! # Using Weld
 //!
-//! Fundamentally, Weld is a small programming language that supports _parallel loops_ and
+//! Weld is a small programming language that supports _parallel loops_ and
 //! _builders_, which are declarative objects that specify how to buid results. The parallel loops
 //! can be used in conjunction with the builders to build a result in parallel.
 //!
@@ -14,7 +14,7 @@
 //! the string into a runnable _module_, and then running the module with in-memory data.
 //!
 //! Weld JITs code into the current process using LLVM. As a result, Weld users must have a version
-//! of LLVM installed on their machine (currently, Weld uses LLVM 3.8).
+//! of LLVM installed on their machine (currently, Weld uses LLVM 6).
 //!
 //! ## Example
 //!
@@ -39,10 +39,13 @@
 //! let ref args = MyArgs { a: 1, b: 50 };
 //! let ref input = WeldValue::new_from_data(args as *const _ as Data);
 //!
+//! // A context manages memory.
+//! let ref mut context = WeldContext::new(conf).unwrap();
+//!
 //! // Running a Weld module and reading a value out of it is unsafe!
 //! unsafe {
 //!     // Run the module, which returns a wrapper `WeldValue`.
-//!     let result = module.run(conf, input).unwrap();
+//!     let result = module.run(context, input).unwrap();
 //!     // The data is just a pointer: cast it to the expected type
 //!     let data = result.data() as *const i32;
 //!
@@ -99,7 +102,16 @@
 //! ```
 //!
 //! There is thus a straightforward conversion from `Vec<T>` to a `WeldVec<T>`.
-
+//!
+//! ## Contexts
+//!
+//! A context manages state such as allocation information. A context is passed into
+//! `WeldModule::run` and updated by the compiled Weld program.
+//!
+//! The `WeldContext` struct wraps a context. Contexts are internally reference counted because
+//! values produced by Weld hold references to the context in which they are allocated. The memory
+//! backing a `WeldContext` is freed when all references to the context are dropped.
+//!
 #![cfg_attr(not(test), allow(dead_code))]
 
 #[macro_use]
@@ -125,6 +137,9 @@ use std::default::Default;
 use std::ffi::{CString, CStr};
 use std::fmt;
 
+use std::rc::Rc;
+use std::cell::RefCell;
+
 use uuid::Uuid;
 
 /// A macro for creating a `WeldError` with a message and an unknown error code.
@@ -137,26 +152,31 @@ macro_rules! weld_err {
 
 #[macro_use]
 mod error;
+
 mod annotation;
 mod codegen;
+mod conf;
 mod optimizer;
 mod syntax;
 mod sir;
-mod conf;
+mod util;
 
 // Public interfaces.
 pub mod ast;
-pub mod util;
 pub mod ffi;
 pub mod runtime;
+pub mod data;
 
 // Tests.
 #[cfg(test)]
 mod tests;
 
 use conf::Backend;
-use runtime::{WeldRuntimeErrno, WeldRun};
+use runtime::WeldRuntimeContext;
 use util::stats::CompilationStats;
+
+// Error codes are exposed publicly.
+pub use runtime::WeldRuntimeErrno;
 
 /// A wrapper for a C pointer.
 pub type Data = *const libc::c_void;
@@ -183,8 +203,98 @@ pub struct WeldError {
 /// A `Result` that uses `WeldError`.
 pub type WeldResult<T> = Result<T, WeldError>;
 
+/// A context for a Weld program.
+///
+/// Contexts are internally reference counted, so cloning a context will produce a reference to the
+/// same internal object. The reference-counted internal object is protected via a `RefCell` to
+/// prevent double-mutable-borrows: this is necessary because contexts may not be passed into
+/// multiple `WeldModule::run` calls in parallel, even if they are cloned (since cloned contexts
+/// point to the same underlying object).
+///
+/// Contexts are *not* thread-safe, and thus do not implement `Send+Sync`.
+#[derive(Clone,Debug,PartialEq)]
+pub struct WeldContext {
+    context: Rc<RefCell<WeldRuntimeContext>>,
+}
+
+// Public API.
+impl WeldContext {
+    /// Returns a new `WeldContext` with the given configuration.
+    ///
+    /// # Errors 
+    ///
+    /// Returns an error if the configuration is malformed.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use weld::{WeldConf, WeldContext};
+    ///
+    /// // Create a new default configuration.
+    /// let ref mut conf = WeldConf::new();
+    ///
+    /// // Set 1KB memory limit, 2 worker threads.
+    /// conf.set("weld.memory.limit", "1024");
+    /// conf.set("weld.threads", "2");
+    ///
+    /// // Create a context.
+    /// let context = WeldContext::new(conf).unwrap();
+    /// ```
+    pub fn new(conf: &WeldConf) -> WeldResult<WeldContext> {
+        let ref mut conf = conf::parse(conf)?;
+        let threads = conf.threads;
+        let mem_limit = conf.memory_limit;
+
+        let run = WeldRuntimeContext::new(threads, mem_limit);
+        Ok(WeldContext {
+            context: Rc::new(RefCell::new(run))
+        })
+    }
+
+    /// Returns the memory used by this context.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use weld::{WeldConf, WeldContext};
+    ///
+    /// let context = WeldContext::new(&WeldConf::new()).unwrap();
+    /// assert_eq!(context.memory_usage(), 0);
+    /// ```
+    pub fn memory_usage(&self) -> i64 {
+        self.context.borrow().memory_usage()
+    }
+
+    /// Returns the memory limit of this context.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use weld::{WeldConf, WeldContext};
+    ///
+    /// let ref mut conf = WeldConf::new();
+    ///
+    /// // Set 1KB memory limit, 2 worker threads.
+    /// conf.set("weld.memory.limit", "1024");
+    ///
+    /// let context = WeldContext::new(conf).unwrap();
+    /// assert_eq!(context.memory_limit(), 1024);
+    /// ```
+    pub fn memory_limit(&self) -> i64 {
+        self.context.borrow().memory_limit()
+    }
+}
+
 impl WeldError {
-    /// Creates a new error with a particular message and error code.
+    /// Creates a new error with a message and error code.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use weld::{WeldError, WeldRuntimeErrno};
+    ///
+    /// let err = WeldError::new("A new error", WeldRuntimeErrno::Unknown);
+    /// ```
     pub fn new<T: Into<Vec<u8>>>(message: T, code: WeldRuntimeErrno) -> WeldError {
         WeldError {
             message: CString::new(message).unwrap(),
@@ -193,6 +303,15 @@ impl WeldError {
     }
 
     /// Creates a new error with a particular message and an `Unknown` error code.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use weld::{WeldError, WeldRuntimeErrno};
+    ///
+    /// let err = WeldError::new_unknown("A new unknown error");
+    /// assert_eq!(err.code(), WeldRuntimeErrno::Unknown);
+    /// ```
     pub fn new_unknown<T: Into<Vec<u8>>>(message: T) -> WeldError {
         WeldError {
             message: CString::new(message).unwrap(),
@@ -202,17 +321,45 @@ impl WeldError {
 
     /// Creates a new error with a particular message indicating success.
     ///
-    /// The error returned by this function has a message "Success" and the error code `Success`.
+    /// The error returned by this function has a message "Success" and the error code
+    /// `WeldRuntimeErrno::Success`.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use weld::{WeldError, WeldRuntimeErrno};
+    ///
+    /// let err = WeldError::new_success();
+    /// assert_eq!(err.code(), WeldRuntimeErrno::Success);
+    /// assert_eq!(err.message().to_str().unwrap(), "Success");
+    /// ```
     pub fn new_success() -> WeldError {
         WeldError::new(CString::new("Success").unwrap(), WeldRuntimeErrno::Success)
     }
 
     /// Returns the error code of this `WeldError`.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use weld::{WeldError, WeldRuntimeErrno};
+    ///
+    /// let err = WeldError::new("An out of memory error", WeldRuntimeErrno::OutOfMemory);
+    /// assert_eq!(err.code(), WeldRuntimeErrno::OutOfMemory);
+    /// ```
     pub fn code(&self) -> WeldRuntimeErrno {
         self.code
     }
 
     /// Returns the error message of this `WeldError`.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use weld::{WeldError, WeldRuntimeErrno};
+    ///
+    /// let err = WeldError::new("Custom error", WeldRuntimeErrno::Unknown);
+    /// assert_eq!(err.message().to_str().unwrap(), "Custom error");
     pub fn message(&self) -> &CStr {
         self.message.as_ref()
     }
@@ -235,11 +382,15 @@ impl From<error::WeldCompileError> for WeldError {
 }
 
 /// A wrapper for data passed into and out of Weld.
+///
+/// Values produced by Weld (i.e., as a return value from `WeldModule::run`) hold a reference to
+/// the context they are allocated in.
 #[derive(Debug,Clone)]
 pub struct WeldValue {
     data: Data,
     run: Option<RunId>,
     backend: Backend,
+    context: Option<WeldContext>,
 }
 
 impl WeldValue {
@@ -248,17 +399,82 @@ impl WeldValue {
     /// This function is used to wrap data that will be passed into Weld. Data passed into Weld
     /// should be in a standard format that Weld understands: this is usually some kind of packed C
     /// structure with a particular field layout.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use weld::{Data, WeldValue};
+    ///
+    /// let vec = vec![1, 2, 3];
+    /// let value = WeldValue::new_from_data(vec.as_ptr() as Data);
+    /// ```
     pub fn new_from_data(data: Data) -> WeldValue {
         WeldValue {
             data: data,
             run: None,
             backend: Backend::Unknown,
+            context: None,
         }
     }
 
     /// Returns the data pointer of this `WeldValue`.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use weld::{Data, WeldValue};
+    ///
+    /// let vec = vec![1, 2, 3];
+    /// let value = WeldValue::new_from_data(vec.as_ptr() as Data);
+    ///
+    /// assert_eq!(vec.as_ptr() as Data, value.data() as Data);
+    /// ```
     pub fn data(&self) -> Data {
         self.data
+    }
+
+    /// Returns the context of this value.
+    ///
+    /// This method will return `None` if the value does not have a context (e.g., if it was
+    /// initialized using `new_from_data`). If it does have a context, the reference count of the
+    /// context is increased -- the context will thus not be dropped until this reference is
+    /// dropped.
+    ///
+    /// # Examples
+    ///
+    /// Values created using `new_from_data` return `None`:
+    ///
+    /// ```rust
+    /// use weld::{Data, WeldValue};
+    ///
+    /// let vec = vec![1, 2, 3];
+    /// let value = WeldValue::new_from_data(vec.as_ptr() as Data);
+    ///
+    /// assert!(value.context().is_none());
+    /// ```
+    ///
+    /// Values created by Weld return the context that owns the data:
+    ///
+    /// ```rust,no_run
+    /// use weld::*;
+    /// use std::cell::Cell;
+    ///
+    /// // Wrap in Cell so we can get a raw pointer
+    /// let input = Cell::new(1 as i32);
+    ///
+    /// let ref conf = WeldConf::new();
+    /// let mut module = WeldModule::compile("|x: i32| x + 1", conf).unwrap();
+    ///
+    /// let ref input_value = WeldValue::new_from_data(input.as_ptr() as Data);
+    ///
+    /// let ref mut context = WeldContext::new(conf).unwrap();
+    /// let result = unsafe { module.run(context, input_value).unwrap() };
+    ///
+    /// assert!(result.context().is_some());
+    /// assert_eq!(result.context().as_mut().unwrap(), context);
+    /// ```
+    pub fn context(&self) -> Option<WeldContext> {
+        self.context.clone()
     }
 
     /// Returns the run ID of this value if it has one.
@@ -270,32 +486,14 @@ impl WeldValue {
         match self.backend {
             Backend::LLVMWorkStealingBackend => self.run.clone(),
             Backend::LLVMSingleThreadBackend => {
-                let run = unsafe { &mut *(self.run.unwrap() as *mut WeldRun) };
-                Some(run.run_id())
-            }
-            Backend::Unknown => None,
-        }
-    }
-
-    /// Returns the memory usage of this value in bytes.
-    ///
-    /// This equivalently returns the amount of memory allocated by a Weld run. If the value was
-    /// not returned by Weld, returns `None`.
-    pub fn memory_usage(&self) -> Option<i64> {
-        match self.backend {
-            Backend::LLVMWorkStealingBackend => {
-                self.run.map(|v| unsafe { runtime::weld_run_memory_usage(v) } )
-            } 
-            Backend::LLVMSingleThreadBackend => {
-                let run = unsafe { &mut *(self.run.unwrap() as *mut WeldRun) };
-                Some(run.memory_usage())
+                Some(0)
             }
             Backend::Unknown => None,
         }
     }
 }
 
-// Custom Drop implementation that disposes a run.
+// Custom Drop implementation that discards values allocated by the runtime.
 impl Drop for WeldValue {
     fn drop(&mut self) {
         match self.backend {
@@ -305,8 +503,11 @@ impl Drop for WeldValue {
                 }
             }
             Backend::LLVMSingleThreadBackend => {
-                unsafe { Box::from_raw(self.run.unwrap() as *mut WeldRun) };
-            }
+                // Free this value from the context.
+                if let Some(ref mut context) = self.context {
+                    unsafe { context.context.borrow_mut().free(self.data as DataMut) } ; 
+                }
+            },
             Backend::Unknown => (),
         }
     }
@@ -325,6 +526,14 @@ impl WeldConf {
     /// how a Weld program is compiled (e.g., setting multi-thread support, configuring
     /// optimization passes, etc.) and how a Weld program is run (e.g., a memory limit, the number
     /// of threads to allocate the run, etc.).
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use weld::WeldConf;
+    ///
+    /// let conf = WeldConf::new();
+    /// ```
     pub fn new() -> WeldConf {
         WeldConf { dict: fnv::FnvHashMap::default() }
     }
@@ -334,17 +543,45 @@ impl WeldConf {
     /// This method does not perform any checks to ensure that the key/value pairs are valid. If
     /// a `WeldConf` contains an invalid configuration option, the `WeldModule` methods that
     /// compile and run modules will fail with an error.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use weld::WeldConf;
+    ///
+    /// let mut conf = WeldConf::new();
+    /// conf.set("weld.memory.limit", "1024");
+    ///
+    /// // Invalid key/value pairs are also allowed but may raise errors.
+    /// conf.set("weld.madeUpConfig", "madeUpValue");
+    /// ```
     pub fn set<K: Into<String>, V: Into<Vec<u8>>>(&mut self, key: K, value: V) {
         self.dict.insert(key.into(), CString::new(value).unwrap());
     }
 
     /// Get the value of the given key, or `None` if it is not set.
+    ///
+    /// # Examples
+    ///
+    ///```rust
+    /// use weld::WeldConf;
+    ///
+    /// let mut conf = WeldConf::new();
+    /// conf.set("weld.memory.limit", "1024");
+    ///
+    /// let value = conf.get("weld.memory.limit").unwrap().to_str().unwrap();
+    /// assert_eq!(value, "1024");
+    ///
+    /// let value = conf.get("non-existant key");
+    /// assert!(value.is_none());
+    /// ```
     pub fn get(&self, key: &str) -> Option<&CString> {
         self.dict.get(key)
     }
 }
 
 /// A compiled runnable Weld module.
+#[derive(Debug)]
 pub struct WeldModule {
     /// A compiled, runnable module.
     llvm_module: codegen::CompiledModule,
@@ -368,6 +605,48 @@ impl WeldModule {
     /// `WeldConf` can be used to configure how the code is compiled (see `conf.rs` for a list of
     /// compilation options). Each configuration option has a default value, so setting
     /// configuration options is optional.
+    ///
+    /// # Errors
+    ///
+    /// * If the provided code does not compile (e.g., due to a syntax error), a compile error is
+    /// returned.
+    /// * If the provided configuration has an invalid configuration option, a compile
+    /// error is returned.
+    ///
+    /// # Examples
+    ///
+    /// Compiling a valid program:
+    ///
+    /// ```rust,no_run
+    /// use weld::*;
+    ///
+    /// let ref conf = WeldConf::new();
+    /// let code = "|| 1";
+    ///
+    /// let mut module = WeldModule::compile(code, conf);
+    /// assert!(module.is_ok());
+    /// ```
+    ///
+    /// Invalid programs or configurations will return compile errors:
+    ///
+    /// ```rust,no_run
+    /// # use weld::*;
+    /// let ref mut conf = WeldConf::new();
+    ///
+    /// // Type error in program!
+    /// let mut module = WeldModule::compile("|| 1 + f32(1)", conf);
+    /// assert!(module.is_err());
+    ///
+    /// let err = module.unwrap_err();
+    /// assert_eq!(err.code(), WeldRuntimeErrno::CompileError);
+    ///
+    /// conf.set("weld.memory.limit", "invalidLimit");
+    /// let mut module = WeldModule::compile("|| 1", conf);
+    /// assert!(module.is_err());
+    ///
+    /// let err = module.unwrap_err();
+    /// assert_eq!(err.code(), WeldRuntimeErrno::CompileError);
+    /// ```
     pub fn compile<S: AsRef<str>>(code: S, conf: &WeldConf) -> WeldResult<WeldModule> {
         use self::ast::*;
         let e2e_start = PreciseTime::now();
@@ -399,7 +678,8 @@ impl WeldModule {
 
         // Dump the generated Weld program before applying any analyses.
         if conf.dump_code.enabled {
-            info!("Writing code to directory '{}' with timestamp {}", &conf.dump_code.dir.display(), timestamp);
+            info!("Writing code to directory '{}' with timestamp {}",
+                  &conf.dump_code.dir.display(), timestamp);
             util::write_code(&unoptimized_code, "weld", timestamp, &conf.dump_code.dir);
         }
 
@@ -450,7 +730,8 @@ impl WeldModule {
 
         // Dump files if needed.
         if conf.dump_code.enabled {
-            util::write_code(expr.pretty_print(), "weld", format!("{}-opt", timestamp), &conf.dump_code.dir);
+            util::write_code(expr.pretty_print(), "weld",
+                format!("{}-opt", timestamp), &conf.dump_code.dir);
             util::write_code(sir_prog.to_string(), "sir", timestamp, &conf.dump_code.dir);
         }
 
@@ -485,14 +766,25 @@ impl WeldModule {
         })
     }
 
-    /// Run this `WeldModule` with a configuration and argument.
+    /// Run this `WeldModule` with a context and argument.
     ///
-    /// This is the entry point for running a Weld program. The `WeldConf` specifies how runtime
-    /// options for running the program (e.g., number of threads): see `conf.rs` for a list of
-    /// runtime options. Each configuration option has a default value, so setting configuration
-    /// options is optional.
+    /// This is the entry point for running a Weld program. The argument is a `WeldValue` that
+    /// encapsulates a pointer to the argument. See the section below about how this argument
+    /// should be structured.
     ///
-    /// # Weld Arguments
+    /// The context captures _state_: in particular, it holds the memory allocated by a `run`.
+    /// Contexts can be reused across runs and modules. Contexts are primarily useful for passing
+    /// mutable state---builders---in and out of Weld and updating them in place. For example, a
+    /// program can compute some partial result, return a builder, and then pass the builder as a
+    /// `WeldValue` back into `run` _with the same context_ to continue updating that builder.
+    ///
+    /// Contexts are not thread-safe---this is enforced in Rust by having this function take a
+    /// mutable reference to a context. If a context is cloned, this constraint is maintained via
+    /// _interior mutability_: contexts internally hold a `RefCell` that is mutably borrowed by
+    /// this function, so a panic will be thrown if multiple callers try to `run` a module with the
+    /// same context.
+    ///
+    /// # Structuring Arguments
     ///
     /// This function takes a `WeldValue` initialized using `WeldValue::new_from_data` or another Weld
     /// program. The value must encapsulate a valid pointer in a "Weld-compatible" format as
@@ -502,30 +794,86 @@ impl WeldModule {
     ///
     /// Note that most Rust values cannot be passed into Weld directly. For example, it is *not*
     /// safe to simply pass a raw pointer to a `Vec<T>` into Weld directly.
-    pub unsafe fn run(&mut self, conf: &WeldConf, arg: &WeldValue) -> WeldResult<WeldValue> {
+    ///
+    /// # Errors
+    ///
+    /// This method may return any of the errors specified in `WeldRuntimeErrno`, if a runtime
+    /// error occurs during the execution of the program. Currently, the implementation panics if a
+    /// runtime error is thrown.
+    ///
+    /// # Panics
+    ///
+    /// The current implementation panics whenever the runtime throws an error. This function will
+    /// also panic if the same context is passed to `run` at once (this is possible if, e.g., if a
+    /// context is cloned).
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use weld::*;
+    /// use std::cell::Cell;
+    ///
+    /// // Wrap in Cell so we can get a raw pointer
+    /// let input = Cell::new(1 as i32);
+    /// let ref conf = WeldConf::new();
+    ///
+    /// // Program that adds one to an i32.
+    /// let mut module = WeldModule::compile("|x: i32| x + 1", conf).unwrap();
+    /// let ref input_value = WeldValue::new_from_data(input.as_ptr() as Data);
+    /// let ref mut context = WeldContext::new(conf).unwrap();
+    ///
+    /// // Running is unsafe, since we're outside of Rust in JIT'd code, operating over
+    /// // raw pointers.
+    /// let result = unsafe { module.run(context, input_value).unwrap() };
+    ///
+    /// assert!(result.context().is_some());
+    /// 
+    /// // Unsafe to read raw pointers!
+    /// unsafe {
+    ///     // The data is just a raw pointer: cast it to the expected type.
+    ///     let data = result.data() as *const i32;
+    ///
+    ///     let result = (*data).clone();
+    ///     assert_eq!(input.get() + 1, result);
+    /// }
+    /// ```
+    pub unsafe fn run(&self,
+                      context: &mut WeldContext,
+                      arg: &WeldValue) -> WeldResult<WeldValue> {
         let start = PreciseTime::now();
-        let ref parsed_conf = conf::parse(conf)?;
 
-        // This is the required input format of data passed into a compiled module.
-        let input = Box::new(codegen::WeldInputArgs {
-                             input: arg.data as i64,
-                             nworkers: parsed_conf.threads,
-                             mem_limit: parsed_conf.memory_limit,
-                             run: 0,
-                         });
-        let ptr = Box::into_raw(input) as i64;
+        let nworkers = context.context.borrow().threads();
+        let mem_limit = context.context.borrow().memory_limit();
 
-        // Runs the Weld program.
-        let raw = self.llvm_module.run(ptr) as *const codegen::WeldOutputArgs;
-        let result = (*raw).clone();
+        // Borrow the inner context mutably since we pass a mutable pointer to it to the compiled
+        // module. This enforces the single-mutable-borrow rule manually for contexts.
+        let (raw, result) = {
+            let _borrowed_ref = context.context.borrow_mut();
 
-        // Free the boxed input.
-        let _ = Box::from_raw(ptr as *mut codegen::WeldInputArgs);
+            // This is the required input format of data passed into a compiled module.
+            let input = Box::new(codegen::WeldInputArgs {
+                input: arg.data as i64,
+                nworkers: nworkers,
+                mem_limit: mem_limit,
+                run: context.context.as_ptr() as i64,
+            });
+            let ptr = Box::into_raw(input) as i64;
+
+            // Runs the Weld program.
+            let raw = self.llvm_module.run(ptr) as *const codegen::WeldOutputArgs;
+            let result = (*raw).clone();
+
+            // Free the boxed input.
+            let _ = Box::from_raw(ptr as *mut codegen::WeldInputArgs);
+
+            (raw, result)
+        };
 
         let value = WeldValue {
             data: result.output as *const c_void,
-            run: Some(result.run),
+            run: None,
             backend: self.backend.clone(),
+            context: Some(context.clone()),
         };
 
         let end = PreciseTime::now();

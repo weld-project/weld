@@ -21,6 +21,8 @@ use sir::*;
 use util::stats::CompilationStats;
 use util::write_code;
 
+use std::fmt;
+
 mod llvm;
 mod llvm2;
 
@@ -63,7 +65,7 @@ pub trait Runnable {
 
 /// A compiled, runnable module.
 pub struct CompiledModule {
-    runnable: Box<dyn Runnable>,
+    runnable: Box<dyn Runnable + Send + Sync>,
 }
 
 impl CompiledModule {
@@ -73,7 +75,12 @@ impl CompiledModule {
     pub fn run(&self, arg: i64) -> i64 {
         self.runnable.run(arg)
     }
+}
 
+impl fmt::Debug for CompiledModule {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "CompiledModule")
+    }
 }
 
 /// Compile a Weld SIR program with a given configuration.
@@ -116,4 +123,14 @@ pub fn compile_program(program: &SirProgram,
         runnable: runnable,
     };
     Ok(result)
+}
+
+/// Get the size of a value for a given target.
+pub fn size_of(ty: &Type, backend: Backend) -> usize {
+    match backend {
+        Backend::LLVMSingleThreadBackend => {
+            llvm2::size_of(ty) 
+        }
+        _ => 0
+    }
 }

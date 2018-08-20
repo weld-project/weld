@@ -52,6 +52,10 @@ impl Runnable for CompiledModule {
     }
 }
 
+// LLVM modules are thread-safe.
+unsafe impl Send for CompiledModule {}
+unsafe impl Sync for CompiledModule {}
+
 impl CompiledModule {
     /// Dumps assembly for this module.
     pub fn asm(&self) -> WeldResult<String> {

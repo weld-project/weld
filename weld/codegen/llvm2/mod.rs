@@ -157,6 +157,14 @@ pub fn unsupported(program: &SirProgram) -> Option<String> {
     None
 }
 
+/// Returns the size of a type in bytes.
+pub fn size_of(ty: &Type) -> usize {
+    unsafe {
+        let mut gen = LlvmGenerator::new(ParsedConf::new()).unwrap();
+        gen.size_of_ty(ty)
+    }
+}
+
 /// Compile Weld SIR into a runnable module.
 ///
 /// The runnable module is wrapped as a trait object which the `CompiledModule` struct in `codegen`
@@ -164,7 +172,7 @@ pub fn unsupported(program: &SirProgram) -> Option<String> {
 pub fn compile(program: &SirProgram,
                conf: &ParsedConf,
                stats: &mut CompilationStats,
-               dump_prefix: &str) -> WeldResult<Box<dyn Runnable>> {
+               dump_prefix: &str) -> WeldResult<Box<dyn Runnable + Send + Sync>> {
 
     info!("Compiling using single thread runtime");
 
@@ -658,8 +666,9 @@ impl CodeGenExt for LlvmGenerator {
 }
 
 impl LlvmGenerator {
-    /// Generate code for an SIR program.
-    unsafe fn generate(conf: ParsedConf, program: &SirProgram) -> WeldResult<LlvmGenerator> {
+
+    /// Initialize a new LlvmGenerator.
+    unsafe fn new(conf: ParsedConf) -> WeldResult<LlvmGenerator> {
         let context = LLVMContextCreate();
         let module = LLVMModuleCreateWithNameInContext(c_str!("main"), context);
 
@@ -680,7 +689,7 @@ impl LlvmGenerator {
 
         debug!("LlvmGenerator features: {}", target.features);
 
-        let mut gen = LlvmGenerator {
+        Ok(LlvmGenerator {
             conf: conf,
             context: context,
             module: module,
@@ -698,7 +707,13 @@ impl LlvmGenerator {
             opaque_eq_fns: FnvHashMap::default(),
             hash_fns: FnvHashMap::default(),
             intrinsics: intrinsics,
-        };
+        })
+    }
+
+    /// Generate code for an SIR program.
+    unsafe fn generate(conf: ParsedConf, program: &SirProgram) -> WeldResult<LlvmGenerator> {
+
+        let mut gen = LlvmGenerator::new(conf)?;
 
         // Declare each function first to create a reference to it. Loop body functions are only
         // called by their ParallelForData terminators, so those are generated on-the-fly during
@@ -998,17 +1013,24 @@ impl LlvmGenerator {
                 let output_pointer = context.get_value(output)?;
                 let return_ty = self.llvm_type(context.sir_function.symbol_type(output)?)?;
                 let mut arg_tys = vec![];
+
+                // A CUDF with declaration Name[R](T1, T2, T3) has a signature `void Name(T1, T2, T3, R)`.
                 for arg in args.iter() {
-                    arg_tys.push(self.llvm_type(context.sir_function.symbol_type(arg)?)?);
+                    arg_tys.push(LLVMPointerType(self.llvm_type(context.sir_function.symbol_type(arg)?)?, 0));
                 }
-                self.intrinsics.add(symbol_name, return_ty, &mut arg_tys);
+                arg_tys.push(LLVMPointerType(return_ty, 0));
+
+                let fn_ret_ty = self.void_type();
+                self.intrinsics.add(symbol_name, fn_ret_ty, &mut arg_tys);
 
                 let mut arg_values = vec![];
                 for arg in args.iter() {
-                    arg_values.push(self.load(context.builder, context.get_value(arg)?)?);
+                    arg_values.push(context.get_value(arg)?);
                 }
-                let result = self.intrinsics.call(context.builder, symbol_name, &mut arg_values)?;
-                LLVMBuildStore(context.builder, result, output_pointer);
+
+                arg_values.push(output_pointer);
+                let _ = self.intrinsics.call(context.builder, symbol_name, &mut arg_values)?;
+
                 Ok(())
             }
             Deserialize(_) => {
@@ -1369,6 +1391,11 @@ impl LlvmGenerator {
             Function(_, _) | Unknown => unreachable!(),
         };
         Ok(result)
+    }
+
+    unsafe fn size_of_ty(&mut self, ty: &Type) -> usize {
+        let ll_ty = self.llvm_type(ty).unwrap();
+        (self.size_of_bits(ll_ty) / 8) as usize
     }
 }
 
