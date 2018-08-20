@@ -1,5 +1,5 @@
 [package]
-name = "weld-ffi"
+name = "weld-capi"
 version = "0.2.0"
 authors = ["Weld Developers <weld-group@lists.stanford.edu>"]
 description = "C bindings to Weld"
@@ -9,7 +9,7 @@ homepage = "https://www.weld.rs"
 repository = "https://github.com/weld-project/weld"
 
 [lib]
-name = "weld"
+name = "cweld"
 crate-type = [ "staticlib", "cdylib" ]
 
 [dependencies]
