@@ -51,29 +51,14 @@ lazy_static! {
 #[derive(Debug,Copy,Clone,Eq,PartialEq)]
 pub enum LLVMExtAttribute {
     AlwaysInline,
-    ByVal,
-    Cold,
     InlineHint,
-    MinSize,
-    Naked,
     NoAlias,
     NoCapture,
-    NoInline,
     NonNull,
-    NoRedZone,
     NoReturn,
     NoUnwind,
-    OptimizeForSize,
     ReadOnly,
     WriteOnly,
-    SExt,
-    StructRet,
-    UWTable,
-    ZExt,
-    InReg,
-    SanitizeThread,
-    SanitizeAddress,
-    SanitizeMemory,
 }
 
 impl fmt::Display for LLVMExtAttribute {
@@ -81,29 +66,14 @@ impl fmt::Display for LLVMExtAttribute {
         use self::LLVMExtAttribute::*;
         let ref string = match *self {
             AlwaysInline => "alwaysinline",
-            ByVal => "byval",
-            Cold => "cold",
             InlineHint => "inlinehint",
-            MinSize => "minsize",
-            Naked => "naked",
             NoAlias => "noalias",
             NoCapture => "nocapture",
-            NoInline => "noinline",
             NonNull => "nonnull",
-            NoRedZone => "noredzone",
             NoReturn => "noreturn",
             NoUnwind => "nounwind",
-            OptimizeForSize => "optsize",
             ReadOnly => "readonly",
             WriteOnly => "writeonly",
-            SExt => "sext",
-            StructRet => "sret",
-            UWTable => "uwtable",
-            ZExt => "zext",
-            InReg => "inreg",
-            SanitizeThread => "sanitize_thread", 
-            SanitizeAddress => "sanitize_address",
-            SanitizeMemory => "sanitize_memory",
         };
         f.write_str(string)
     }

@@ -36,6 +36,9 @@ class c_weld_err(c_void_p):
 class c_weld_value(c_void_p):
     pass
 
+class c_weld_context(c_void_p):
+    pass
+
 class WeldModule(c_void_p):
 
     def __init__(self, code, conf, err):
@@ -48,13 +51,25 @@ class WeldModule(c_void_p):
         self.module = weld_module_compile(code, conf.conf, err.error)
 
     def run(self, conf, arg, err):
+        """
+        WeldContext is currently hidden from the Python API. We create a new
+        context per Weld run and give ownership of it to the resulting value.
+
+        NOTE: This can leak the context if the result of the Weld run is an
+        error.
+        """
+        weld_context_new = weld.weld_context_new
+        weld_context_new.argtypes = [c_weld_conf]
+        weld_context_new.restype = c_weld_context
+        ctx = weld_context_new(conf)
+
         weld_module_run = weld.weld_module_run
-        # module, conf, arg, &err
+        # module, context, arg, &err
         weld_module_run.argtypes = [
-            c_weld_module, c_weld_conf, c_weld_value, c_weld_err]
+            c_weld_module, c_weld_context, c_weld_value, c_weld_err]
         weld_module_run.restype = c_weld_value
-        ret = weld_module_run(self.module, conf.conf, arg.val, err.error)
-        return WeldValue(ret, assign=True)
+        ret = weld_module_run(self.module, ctx, arg.val, err.error)
+        return WeldValue(ret, assign=True, _ctx=ctx)
 
     def __del__(self):
         weld_module_free = weld.weld_module_free
@@ -65,7 +80,7 @@ class WeldModule(c_void_p):
 
 class WeldValue(c_void_p):
 
-    def __init__(self, value, assign=False):
+    def __init__(self, value, assign=False, _ctx=None):
         if assign is False:
             weld_value_new = weld.weld_value_new
             weld_value_new.argtypes = [c_void_p]
@@ -73,6 +88,8 @@ class WeldValue(c_void_p):
             self.val = weld_value_new(value)
         else:
             self.val = value
+
+        self._ctx = _ctx
         self.freed = False
 
     def _check(self):
@@ -98,6 +115,15 @@ class WeldValue(c_void_p):
         weld_value_free = weld.weld_value_free
         weld_value_free.argtypes = [c_weld_value]
         weld_value_free.restype = None
+
+        # One context per value for now -- free the context if there is one.
+        if self._ctx != None:
+            weld_context_free = weld.weld_context_free
+            weld_context_free.argtypes = [c_weld_context]
+            weld_context_free.restype = None
+            weld_context_free(self._ctx)
+            self._ctx = None
+
         self.freed = True
         return weld_value_free(self.val)
 

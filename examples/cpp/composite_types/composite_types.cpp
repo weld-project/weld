@@ -53,9 +53,10 @@ int main() {
 
         weld_value_t arg = weld_value_new(&input);
 
-        // Run the module and get the result.
         weld_conf_t conf = weld_conf_new();
-        weld_value_t result = weld_module_run(m, conf, arg, e);
+        weld_context_t context = weld_context_new(conf);
+
+        weld_value_t result = weld_module_run(m, context, arg, e);
         if (weld_error_code(e)) {
             const char *err = weld_error_message(e);
             printf("Error message: %s\n", err);

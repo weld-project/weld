@@ -1,11 +1,11 @@
 CC=clang++
-LDFLAGS=-L../../../target/release/
+LDFLAGS=-L../../../target/debug/
 LIBS=-lweld
 
 .PHONY: all clean
 
 all:
-	${CC} ${LDFLAGS} ${LIBS} udfs.cpp -o run
+	${CC} ${LDFLAGS} ${LIBS} -fPIC udfs.cpp -o run
 
 clean:
 	rm -rf run

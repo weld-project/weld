@@ -38,6 +38,8 @@ int main() {
     weld_error_t e = weld_error_new();
     weld_conf_t conf = weld_conf_new();
     weld_module_t m = weld_module_compile(program, conf, e);
+    weld_context_t context = weld_context_new(conf);
+
     weld_conf_free(conf);
 
     if (weld_error_code(e)) {
@@ -71,8 +73,7 @@ int main() {
     fflush(stdout);
 
     // Run the module and get the result.
-    conf = weld_conf_new();
-    weld_value_t result = weld_module_run(m, conf, arg, e);
+    weld_value_t result = weld_module_run(m, context, arg, e);
     if (weld_error_code(e)) {
         const char *err = weld_error_message(e);
         printf("Error message: %s\n", err);
@@ -92,10 +93,11 @@ int main() {
 
     free(data);
 
+
     // Free the values.
     weld_value_free(result);
     weld_value_free(arg);
-    weld_conf_free(conf);
+    weld_context_free(context);
 
     weld_error_free(e);
     weld_module_free(m);

@@ -73,7 +73,10 @@ weld_value_t serialize_test(const char *program, SerializeCheckerFn checker) {
 
     // Run the module and get the result.
     conf = weld_conf_new();
-    weld_value_t result = weld_module_run(m, conf, arg, e);
+
+    //  XXX Leaks We should return/free this context!
+    weld_context_t context = weld_context_new(conf);
+    weld_value_t result = weld_module_run(m, context, arg, e);
     if (weld_error_code(e)) {
         const char *err = weld_error_message(e);
         fprintf(stderr, "Error message: %s\n", err);
@@ -117,7 +120,8 @@ void deserialize_test(const char *program,
 
     // Run the module and get the result.
     conf = weld_conf_new();
-    weld_value_t result = weld_module_run(m, conf, arg, e);
+    weld_context_t context = weld_context_new(conf);
+    weld_value_t result = weld_module_run(m, context, arg, e);
     if (weld_error_code(e)) {
         const char *err = weld_error_message(e);
         fprintf(stderr, "Error message: %s\n", err);
@@ -131,6 +135,7 @@ void deserialize_test(const char *program,
     weld_value_free(result);
     weld_value_free(arg);
     weld_conf_free(conf);
+    weld_context_free(context);
 
     weld_error_free(e);
     weld_module_free(m);

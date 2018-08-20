@@ -22,13 +22,16 @@ int main() {
     // Compile Weld module.
     weld_conf_t conf = weld_conf_new();
     weld_module_t m = weld_module_compile("|x:i64| cudf[add_five,i64](x)", conf, e);
-    weld_conf_free(conf);
 
     if (weld_error_code(e)) {
         const char *err = weld_error_message(e);
         printf("Error during compilation: %s\n", err);
         exit(1);
     }
+
+    // Run the module and get the result.
+    weld_context_t context = weld_context_new(conf);
+    weld_conf_free(conf);
 
     while(true) {
         char buf[4096];
@@ -49,18 +52,17 @@ int main() {
         int64_t input = (int64_t)x;
         weld_value_t arg = weld_value_new(&input);
 
-        // Run the module and get the result.
-        weld_conf_t conf = weld_conf_new();
-        weld_value_t result = weld_module_run(m, conf, arg, e);
+
+        weld_value_t result = weld_module_run(m, context, arg, e);
         void *result_data = weld_value_data(result);
         printf("Answer: %lld\n", *(int64_t *)result_data);
 
         // Free the values.
         weld_value_free(result);
         weld_value_free(arg);
-        weld_conf_free(conf);
     }
 
+    weld_context_free(context);
     weld_error_free(e);
     weld_module_free(m);
     printf("Freeing data and quiting!\n");

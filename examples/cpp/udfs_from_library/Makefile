@@ -1,5 +1,5 @@
 CC=clang++
-LDFLAGS=-L../../../target/release/
+LDFLAGS=-L../../../target/debug/
 LIBS=-lweld
 
 OS = $(shell uname -s)
