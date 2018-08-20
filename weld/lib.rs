@@ -616,7 +616,7 @@ impl WeldModule {
     ///
     /// Compiling a valid program:
     ///
-    /// ```rust
+    /// ```rust,no_run
     /// use weld::*;
     ///
     /// let ref conf = WeldConf::new();
@@ -628,7 +628,7 @@ impl WeldModule {
     ///
     /// Invalid programs or configurations will return compile errors:
     ///
-    /// ```rust
+    /// ```rust,no_run
     /// # use weld::*;
     /// let ref mut conf = WeldConf::new();
     ///
@@ -808,7 +808,7 @@ impl WeldModule {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```rust,no_run
     /// use weld::*;
     /// use std::cell::Cell;
     ///
