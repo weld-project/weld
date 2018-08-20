@@ -152,16 +152,17 @@ macro_rules! weld_err {
 
 #[macro_use]
 mod error;
+
 mod annotation;
 mod codegen;
+mod conf;
 mod optimizer;
 mod syntax;
 mod sir;
-mod conf;
+mod util;
 
 // Public interfaces.
 pub mod ast;
-pub mod util;
 pub mod ffi;
 pub mod runtime;
 pub mod data;
