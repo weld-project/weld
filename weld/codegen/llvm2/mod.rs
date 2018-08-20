@@ -172,7 +172,7 @@ pub fn size_of(ty: &Type) -> usize {
 pub fn compile(program: &SirProgram,
                conf: &ParsedConf,
                stats: &mut CompilationStats,
-               dump_prefix: &str) -> WeldResult<Box<dyn Runnable>> {
+               dump_prefix: &str) -> WeldResult<Box<dyn Runnable + Send + Sync>> {
 
     info!("Compiling using single thread runtime");
 

@@ -163,7 +163,6 @@ mod util;
 
 // Public interfaces.
 pub mod ast;
-pub mod ffi;
 pub mod runtime;
 pub mod data;
 
@@ -837,7 +836,7 @@ impl WeldModule {
     ///     assert_eq!(input.get() + 1, result);
     /// }
     /// ```
-    pub unsafe fn run(&mut self,
+    pub unsafe fn run(&self,
                       context: &mut WeldContext,
                       arg: &WeldValue) -> WeldResult<WeldValue> {
         let start = PreciseTime::now();

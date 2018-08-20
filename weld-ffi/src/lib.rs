@@ -3,13 +3,13 @@
 //! This module provides a C-compatible interface to the Weld library.
 
 extern crate libc;
+extern crate weld;
 
+use weld::*;
 use libc::{c_char, c_void, int64_t};
 
 use std::ptr;
 use std::ffi::CStr;
-
-use super::*;
 
 /// An opauqe handle to a Weld configuration.
 pub type WeldConfRef = *mut WeldConf;
@@ -22,8 +22,8 @@ pub type WeldValueRef = *mut WeldValue;
 /// An opauqe handle to a Weld context.
 pub type WeldContextRef = *mut WeldContext;
 
-pub use runtime::WeldRuntimeErrno;
-pub use super::WeldLogLevel;
+pub use weld::WeldRuntimeErrno;
+pub use weld::WeldLogLevel;
 
 trait ToRustStr {
     fn to_str(&self) -> &str;

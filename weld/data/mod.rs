@@ -30,6 +30,9 @@ pub struct WeldVec<T> {
     pub len: i64,
 }
 
+unsafe impl<T> Send for WeldVec<T> {}
+unsafe impl<T> Sync for WeldVec<T> {}
+
 impl<T> WeldVec<T> {
     /// Return a new WeldVec from a pointer and a length.
     ///

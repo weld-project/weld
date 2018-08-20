@@ -2,19 +2,15 @@
 
 #[macro_use]
 extern crate weld;
-extern crate libc;
 extern crate clap;
 extern crate code_builder;
 
 use code_builder::CodeBuilder;
 
 use weld::*;
-use weld::ffi::*;
 
 use clap::{Arg, App};
-use libc::c_char;
 
-use std::ffi::{CStr, CString};
 use std::collections::HashMap;
 
 use std::path::Path;
@@ -56,29 +52,13 @@ struct LambdaTypes {
 }
 
 fn parse_weld_lambda(code: &str) -> WeldResult<LambdaTypes> {
-    unsafe {
-        let code = CString::new(code).unwrap();
-        let err = weld_error_new();
-        let conf = weld_conf_new();
-        let module = weld_module_compile(code.into_raw() as *const c_char, conf, err);
-        if weld_error_code(err) != WeldRuntimeErrno::Success {
-            return weld_err!("Compile error: {}",
-                     CStr::from_ptr(weld_error_message(err)).to_str().unwrap());
-        }
-        weld_error_free(err);
-        weld_conf_free(conf);
-
-        let module_ref = &*module;
-
-        let result = LambdaTypes {
-            return_type: module_ref.return_type().clone(),
-            param_types: module_ref.param_types().clone(),
-        };
-        
-        // Don't actually need the code, just the types.
-        weld_module_free(module);
-        Ok(result)
-    }
+    let ref conf = WeldConf::new();
+    let ref module = WeldModule::compile(code, conf)?;
+    let result = LambdaTypes {
+        return_type: module.return_type(),
+        param_types: module.param_types(),
+    };
+    Ok(result)
 }
 
 struct CppHeaderGenerator {

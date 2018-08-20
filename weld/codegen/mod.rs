@@ -65,7 +65,7 @@ pub trait Runnable {
 
 /// A compiled, runnable module.
 pub struct CompiledModule {
-    runnable: Box<dyn Runnable>,
+    runnable: Box<dyn Runnable + Send + Sync>,
 }
 
 impl CompiledModule {

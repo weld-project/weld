@@ -56,7 +56,7 @@ fn conf(threads: i32) -> WeldConf {
 /// function is freed.
 unsafe fn _compile_and_run<T>(code: &str, conf: &WeldConf, ptr: &T) -> WeldResult<WeldValue> {
     let ref input_value = WeldValue::new_from_data(ptr as *const _ as Data);
-    let mut module = match WeldModule::compile(code, conf) {
+    let module = match WeldModule::compile(code, conf) {
         Ok(module) => module,
         Err(err) => {
             return Err(err);
