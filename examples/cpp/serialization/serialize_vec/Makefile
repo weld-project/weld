@@ -1,6 +1,6 @@
 CC=clang++
 LDFLAGS=-L../../../../target/debug/
-LIBS=-lcweld
+LIBS=-lweld
 
 .PHONY: all clean
 

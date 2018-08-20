@@ -163,6 +163,7 @@ mod util;
 
 // Public interfaces.
 pub mod ast;
+pub mod ffi;
 pub mod runtime;
 pub mod data;
 
