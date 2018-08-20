@@ -455,7 +455,7 @@ impl WeldValue {
     ///
     /// Values created by Weld return the context that owns the data:
     ///
-    /// ```rust
+    /// ```rust,no_run
     /// use weld::*;
     /// use std::cell::Cell;
     ///
