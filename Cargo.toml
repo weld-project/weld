@@ -30,14 +30,12 @@ uuid = { version = "0.6.5", features = ["v4"] }
 
 [lib]
 path = "weld/lib.rs"
-crate-type = ["cdylib", "rlib"]
 bench = false
 
 [[bin]]
 name = "repl"
 path = "weld/bin/repl.rs"
 bench = false
-
 
 [[bin]]
 name = "hdrgen"

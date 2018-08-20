@@ -150,8 +150,3 @@ This repository contains a number of useful command line tools which are built
 automatically with the main Weld repository, including an interactive REPL for
 inspecting and debugging programs.  More information on those tools can be
 found under [docs/tools.md](https://github.com/weld-project/weld/tree/master/docs/tools.md).
-
-## Current performance metrics
-
-![Current performance metrics](https://s3-us-west-2.amazonaws.com/weld-travis-ci/master/performance.png)
-

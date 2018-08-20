@@ -25,7 +25,7 @@ fn main() {
     let status = Command::new("make")
         .arg("clean")
         .arg("-C")
-        .arg(format!("{}/weld_rt/cpp/", project_dir))
+        .arg(format!("{}/weld_rt/cpp/", &project_dir))
         .status()
         .unwrap();
     assert!(status.success());

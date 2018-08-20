@@ -24,16 +24,49 @@ static const weld_log_level_t WELD_LOG_LEVEL_TRACE = 5;
 // Types
 
 /** A type encapsulating a Weld value. */
-typedef void* weld_value_t;
+typedef struct weld_value_* weld_value_t;
 
 /** A runnable Weld module. */
-typedef void* weld_module_t;
+typedef struct weld_module_* weld_module_t;
 
 /** A handle to a Weld error. */
-typedef void* weld_error_t;
+typedef struct weld_error_* weld_error_t;
 
 /** A hanlde to a Weld configuration. */
-typedef void* weld_conf_t;
+typedef struct weld_conf_* weld_conf_t;
+
+/** A hanlde to a Weld context. */
+typedef struct weld_context_* weld_context_t;
+
+// ************* Contexts **************
+
+/**
+ * Returns a new Weld context configured with the given configuration.
+ *
+ * If the context failed to initialize properly, this function returns NULL.
+ * A context  can fail to initialize if the provided configuration is malformed.
+ *
+ * @param conf the configuration for the context.
+ * @return a new context.
+ */
+extern "C" weld_context_t
+weld_context_new(weld_conf_t conf);
+
+/* Gets the memory usage of the Weld context in bytes.
+ *
+ * @param context the context whose memory usage to report.
+ * @return the memory usage in bytes.
+ */
+extern "C" int64_t
+weld_context_memory_usage(weld_context_t context);
+
+/**
+ * Frees a weld context.
+ *
+ * @param context the context to free.
+ */
+extern "C" void
+weld_context_free(weld_context_t);
 
 // ************* Values ****************
 
@@ -52,19 +85,13 @@ extern "C" weld_value_t
 weld_value_new(void *data);
 
 /**
- * Returns 1 if the value's data is owned by the Weld runtime, or
- * 0 otherwise.
+ * Returns the context that owns this value.
  *
- * A value owned by the Weld runtime is freed using the `weld_value_free`
- * call. Non-owned values must have their *data buffers* (retrieved using
- * `weld_value_data`) freed by the caller; this Weld value must still
- * be garbage collected using `weld_value_free` however.
- *
- * @param obj the value to check
- * @return 1 if owned, 0 otherwise.
+ * @param value the value whose context to return.
+ * @return The context of this value, or NULL if the context was freed already.
  */
-extern "C" int
-weld_value_run(weld_value_t obj);
+extern "C" weld_context_t
+weld_value_context(weld_value_t obj);
 
 /**
  * Returns this value's data buffer.
@@ -88,15 +115,6 @@ weld_value_data(weld_value_t obj);
 extern "C" void
 weld_value_free(weld_value_t obj);
 
-/* Gets the memory usage of the Weld run that computed a given value
- * (in bytes). This includes all temporaries allocated during the run's
- * execution that have not yet been freed. If the value is not from a
- * run, returns -1.
- *
- * @param obj the value whose module to get memory usage for.
- */
-extern "C" int64_t
-weld_value_memory_usage(weld_value_t obj);
 
 // ************* Modules ****************
 
@@ -129,7 +147,7 @@ weld_module_compile(const char *code, weld_conf_t, weld_error_t);
  * the module she runs.
  */
 extern "C" weld_value_t
-weld_module_run(weld_module_t, weld_conf_t, weld_value_t, weld_error_t);
+weld_module_run(weld_module_t, weld_context_t, weld_value_t, weld_error_t);
 
 /**
  * Garbage collects a module.

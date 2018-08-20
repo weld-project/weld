@@ -121,6 +121,9 @@ impl Runnable for CompiledModule {
     }
 }
 
+unsafe impl Send for CompiledModule {}
+unsafe impl Sync for CompiledModule {}
+
 impl Drop for CompiledModule {
     /// Disposes of the LLVM execution engine and compiled function.
     fn drop(&mut self) {
