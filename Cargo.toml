@@ -10,7 +10,7 @@ homepage = "https://www.weld.rs"
 repository = "https://github.com/weld-project/weld"
 
 [workspace]
-members = [ "weld-ffi" ]
+members = [ "weld-capi" ]
 
 [dependencies]
 lazy_static = "0.2.1"
