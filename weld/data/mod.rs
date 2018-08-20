@@ -1,4 +1,4 @@
-//! Defines type layouts.
+//! Structures that can be passed into Weld.
 //!
 //! This currently defines the type layout specified for the single threaded backend. In general,
 //! type layouts vary from backend to backend especially for builders.
@@ -20,6 +20,9 @@ use std::marker::PhantomData;
 
 use std::fmt;
 
+/// A dynamically sized constant vector.
+///
+/// Vectors are always defined as a pointer and a length.
 #[derive(Clone, Debug)]
 #[repr(C)]
 pub struct WeldVec<T> {
@@ -82,11 +85,7 @@ where
     }
 }
 
-/// An Appender in Weld.
-///
-/// Because this type is a builder, its precise definition is undefined and may change at any time.
-/// Users of this type should treat it as an opaque sized struct. It should only be used to cast
-/// the result of a Weld run to the correct type and to create correctly-sized inputs.
+/// The `appender` builder type.
 #[derive(Clone, Debug)]
 #[repr(C)]
 pub struct Appender<T> {
@@ -95,11 +94,11 @@ pub struct Appender<T> {
     capacity: i64,
 }
 
-/// An Dictionary in Weld.
+/// The dictionary type.
 ///
-/// Because this type is a builder, its precise definition is undefined and may change at any time.
-/// Users of this type should treat it as an opaque sized struct. It should only be used to cast
-/// the result of a Weld run to the correct type and to create correctly-sized inputs.
+/// Like builders, dictionaries currently have an opaque format. At some point, dictionaries will
+/// have methods for accessing keys and values and iterating over them. For now, these operations
+/// require compiling a Weld program.
 #[derive(Clone, Debug)]
 #[repr(C)]
 pub struct Dict<K, V> {
@@ -109,18 +108,14 @@ pub struct Dict<K, V> {
     phantom_val: PhantomData<V>, // 0-sized
 }
 
-/// The DictMerger builder type.
-///
-/// Because this type is a builder, its precise definition is undefined and may change at any time.
-/// Users of this type should treat it as an opaque sized struct. It should only be used to cast
-/// the result of a Weld run to the correct type and to create correctly-sized inputs.
+/// The `dictmerger` builder type.
 #[derive(Clone, Debug)]
 #[repr(C)]
 pub struct DictMerger<K, V> {
     d: Dict<K, V>,
 }
 
-/// The GroupMerger builder type.
+/// The `groupmerger` builder type.
 #[derive(Clone, Debug)]
 #[repr(C)]
 pub struct GroupMerger<K, V> {
