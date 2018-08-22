@@ -220,6 +220,7 @@ impl Hash for LlvmGenerator {
             I64 | U64 | F64 => {
                 // Extend the 32-bit hash so we can pass it to the hashing function.
                 let mut hash = LLVMBuildZExt(builder, hash, self.u64_type(), c_str!(""));
+                let value = LLVMBuildBitCast(builder, value, self.u64_type(), c_str!(""));
                 let mut args = [hash, value];
                 hash = LLVMBuildCall(builder, funcs.hash64, args.as_mut_ptr(), args.len() as u32, c_str!(""));
                 LLVMBuildTrunc(builder, hash, self.hash_type(), c_str!(""))
