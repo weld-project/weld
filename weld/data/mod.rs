@@ -3,6 +3,12 @@
 //! This currently defines the type layout specified for the single threaded backend. In general,
 //! type layouts vary from backend to backend especially for builders.
 //!
+//! # Primitives
+//!
+//! Primitives in Weld match their Rust counterparts, _except for booleans_. Booleans in Weld are
+//! guaranteed to be one byte in size, but are defined as `_Bool` from `stdbool.h` in Rust when
+//! defined in a struct with `repr(C)`.
+//!
 //! # Vectors
 //!
 //! Vectors will always have the same layout: a pointer followed by a 64-bit length.
