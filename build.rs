@@ -23,21 +23,6 @@ fn main() {
     f.write_all(as_string.as_bytes()).unwrap();
 
     let status = Command::new("make")
-        .arg("clean")
-        .arg("-C")
-        .arg(format!("{}/weld_rt/cpp/", &project_dir))
-        .status()
-        .unwrap();
-    assert!(status.success());
-
-    let status = Command::new("make")
-        .arg("-C")
-        .arg(format!("{}/weld_rt/cpp/", project_dir))
-        .status()
-        .unwrap();
-    assert!(status.success());
-
-    let status = Command::new("make")
         .arg("-C")
         .arg(format!("{}/weld_rt/cpp/st", project_dir))
         .status()
@@ -60,10 +45,6 @@ fn main() {
         }
     }
     println!("cargo:rustc-link-lib=dylib=stdc++");
-
-    // Link the weldrt C++ library
-    println!("cargo:rustc-link-lib=static=weldrt");
-    println!("cargo:rustc-link-search=native={}/weld_rt/cpp", project_dir);
 
     // Link the dictst C++ library
     println!("cargo:rustc-link-lib=static=dictst");

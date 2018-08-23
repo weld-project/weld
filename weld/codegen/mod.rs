@@ -14,7 +14,7 @@
 extern crate time;
 
 use ast::*;
-use conf::{Backend, ParsedConf};
+use conf::ParsedConf;
 use error::*;
 use runtime::WeldRuntimeErrno;
 use sir::*;
@@ -23,10 +23,9 @@ use util::write_code;
 
 use std::fmt;
 
-mod llvm;
 mod llvm2;
 
-pub use self::llvm::load_library;
+pub use self::llvm2::load_library;
 
 /// A wrapper for a struct passed as input to Weld.
 #[derive(Clone, Debug)]
@@ -92,33 +91,7 @@ pub fn compile_program(program: &SirProgram,
                        conf: &mut ParsedConf,
                        stats: &mut CompilationStats,
                        timestamp: &str) -> WeldResult<CompiledModule> {
-    let runnable = match conf.backend {
-        // Check if the single threaded runtime supports the SIR program.
-        Backend::LLVMSingleThreadBackend => {
-            if let Some(reason) = llvm2::unsupported(&program) {
-                // If fallback is enabled, we can fall back to the old runtime. Otherwise, raise an
-                // error.
-                if conf.enable_fallback {
-                    warn!("ST Found unsupported SIR statement '{}': falling back to MT runtime",
-                          reason);
-                    conf.backend = Backend::LLVMWorkStealingBackend;
-                    conf.support_multithread = false;
-                    conf.threads = 1;
-                    llvm::compile(&program, conf, stats, timestamp)
-                } else {
-                    return compile_err!("Unsupported SIR statement '{}' for ST runtime", reason);
-                }
-            } else {
-                if conf.support_multithread {
-                    warn!("Compiling with ST backend, but multithread support is set to true");
-                }
-                llvm2::compile(&program, conf, stats, timestamp)
-            }
-        }
-        Backend::LLVMWorkStealingBackend => llvm::compile(&program, conf, stats, timestamp),
-        _ => compile_err!("Unsupported backend variant {:?}", conf.backend),
-    }?;
-
+    let runnable = llvm2::compile(&program, conf, stats, timestamp)?;
     let result = CompiledModule {
         runnable: runnable,
     };
@@ -126,11 +99,6 @@ pub fn compile_program(program: &SirProgram,
 }
 
 /// Get the size of a value for a given target.
-pub fn size_of(ty: &Type, backend: Backend) -> usize {
-    match backend {
-        Backend::LLVMSingleThreadBackend => {
-            llvm2::size_of(ty) 
-        }
-        _ => 0
-    }
+pub fn size_of(ty: &Type) -> usize {
+    llvm2::size_of(ty) 
 }

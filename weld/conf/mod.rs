@@ -18,8 +18,6 @@ pub const SIR_OPT_KEY: &'static str = "weld.optimization.sirOptimization";
 pub const LLVM_OPTIMIZATION_LEVEL_KEY: &'static str = "weld.llvm.optimization.level";
 pub const DUMP_CODE_KEY: &'static str = "weld.compile.dumpCode";
 pub const DUMP_CODE_DIR_KEY: &'static str = "weld.compile.dumpCodeDir";
-pub const BACKEND_KEY: &'static str = "weld.compile.backend";
-pub const FALLBACK_KEY: &'static str = "weld.compile.enableFallback";
 pub const ENABLE_BOUNDS_CHECKS: &'static str = "weld.compile.enableBoundsChecks";
 
 // Default values of each key
@@ -31,8 +29,6 @@ pub const DEFAULT_LLVM_OPTIMIZATION_LEVEL: u32 = 2;
 pub const DEFAULT_DUMP_CODE: bool = false;
 pub const DEFAULT_TRACE_RUN: bool = false;
 pub const DEFAULT_EXPERIMENTAL_PASSES: bool = false;
-pub const DEFAULT_BACKEND: Backend = Backend::LLVMSingleThreadBackend;
-pub const DEFAULT_FALLBACK: bool = false;
 pub const DEFAULT_BOUNDS_CHECKS: bool = false;
 
 lazy_static! {
@@ -50,13 +46,6 @@ pub struct DumpCodeConf {
     pub dir: PathBuf,
 }
 
-#[derive(Debug,Clone,PartialEq,Eq,Hash)]
-pub enum Backend {
-    LLVMWorkStealingBackend,
-    LLVMSingleThreadBackend,
-    Unknown,
-}
-
 /// A parsed configuration with correctly typed fields.
 #[derive(Clone,Debug)]
 pub struct ParsedConf {
@@ -69,8 +58,6 @@ pub struct ParsedConf {
     pub optimization_passes: Vec<Pass>,
     pub llvm_optimization_level: u32,
     pub dump_code: DumpCodeConf,
-    pub backend: Backend,
-    pub enable_fallback: bool,
     pub enable_bounds_checks: bool,
 }
 
@@ -92,8 +79,6 @@ impl ParsedConf {
                 enabled: false,
                 dir: PathBuf::new(),
             },
-            backend: Backend::LLVMSingleThreadBackend,
-            enable_fallback: false,
             enable_bounds_checks: false,
         }
     }
@@ -146,19 +131,9 @@ pub fn parse(conf: &WeldConf) -> WeldResult<ParsedConf> {
     let trace_run = value.map(|s| parse_bool_flag(&s, "Invalid flag for trace.run"))
                       .unwrap_or(Ok(DEFAULT_TRACE_RUN))?;
 
-    let value = get_value(conf, BACKEND_KEY);
-    let backend = value.map(|s| parse_backend(&s))
-                      .unwrap_or(Ok(DEFAULT_BACKEND))?;
-
-
-    let value = get_value(conf, FALLBACK_KEY);
-    let enable_fallback = value.map(|s| parse_bool_flag(&s, "Invalid flag for enableFallback"))
-                      .unwrap_or(Ok(DEFAULT_FALLBACK))?;
-
     let value = get_value(conf, ENABLE_BOUNDS_CHECKS);
     let enable_bounds_check = value.map(|s| parse_bool_flag(&s, "Invalid flag for enableBoundsChecks"))
                       .unwrap_or(Ok(DEFAULT_BOUNDS_CHECKS))?;
-
 
     Ok(ParsedConf {
         memory_limit: memory_limit,
@@ -169,8 +144,6 @@ pub fn parse(conf: &WeldConf) -> WeldResult<ParsedConf> {
         enable_experimental_passes: enable_experimental_passes,
         optimization_passes: passes,
         llvm_optimization_level: level,
-        backend: backend,
-        enable_fallback: enable_fallback,
         enable_bounds_checks: enable_bounds_check,
         dump_code: DumpCodeConf {
             enabled: dump_code_enabled,
@@ -183,16 +156,6 @@ fn get_value(conf: &WeldConf, key: &str) -> Option<String> {
     conf.get(key)
         .cloned()
         .map(|v| v.into_string().unwrap())
-}
-
-fn parse_backend(s: &str) -> WeldResult<Backend> {
-    match s {
-        "workstealing" => Ok(Backend::LLVMWorkStealingBackend),
-        "default" => Ok(DEFAULT_BACKEND),
-        "multithreaded" => Ok(Backend::LLVMWorkStealingBackend),
-        "singlethreaded" => Ok(Backend::LLVMSingleThreadBackend),
-        _ => compile_err!("Invalid backend {}", s)
-    }
 }
 
 /// Parses a string into a path and checks if the path is a directory in the filesystem.

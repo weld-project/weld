@@ -138,7 +138,7 @@ pub struct GroupMerger<K, V> {
     d: Dict<K, WeldVec<V>>
 }
 
-// Ensures that the sizes of the types defined here match the sizes of a the types in the backend.
+// Ensures that the sizes of the types defined here match the sizes of the types in the backend.
 #[test]
 fn size_check() {
     use annotation::Annotations;
@@ -147,39 +147,38 @@ fn size_check() {
     use ast::ScalarKind::I32;
     use ast::BinOpKind::Add;
     use codegen::size_of;
-    use conf::Backend::LLVMSingleThreadBackend;
     use std::mem;
 
     let i32_ty = Box::new(Type::Scalar(I32));
 
     let ref vector = Type::Vector(i32_ty.clone());
     assert_eq!(
-        size_of(vector, LLVMSingleThreadBackend),
+        size_of(vector),
         mem::size_of::<WeldVec<i32>>());
 
     let ref dict = Type::Dict(i32_ty.clone(), i32_ty.clone());
     assert_eq!(
-        size_of(dict, LLVMSingleThreadBackend),
+        size_of(dict),
         mem::size_of::<Dict<i32, i32>>());
 
     let ref appender = Type::Builder(
         BuilderKind::Appender(i32_ty.clone()),
         Annotations::new());
     assert_eq!(
-        size_of(appender, LLVMSingleThreadBackend),
+        size_of(appender),
         mem::size_of::<Appender<i32>>());
 
     let ref dictmerger = Type::Builder(
         BuilderKind::DictMerger(i32_ty.clone(), i32_ty.clone(), Add),
         Annotations::new());
     assert_eq!(
-        size_of(dictmerger, LLVMSingleThreadBackend),
+        size_of(dictmerger),
         mem::size_of::<DictMerger<i32, i32>>());
 
     let ref groupmerger = Type::Builder(
         BuilderKind::GroupMerger(i32_ty.clone(), i32_ty.clone()),
         Annotations::new());
     assert_eq!(
-        size_of(groupmerger, LLVMSingleThreadBackend),
+        size_of(groupmerger),
         mem::size_of::<GroupMerger<i32, i32>>());
 }
