@@ -113,8 +113,12 @@ public:
   }
 
   bool init() {
+    // TODO(shoumik): This may be wasteful, but it prevents odd uninitialized
+    // pointer errors later.
+    if (_capacity == 0) {
+      _capacity = 16;
+    }
     // Power of 2 check.
-    assert(_capacity > 0);
     assert((_capacity & (_capacity - 1)) == 0);
     size_t data_size = _capacity * slot_size();
     _data = static_cast<uint8_t *>(weld_runst_malloc(_run, data_size));

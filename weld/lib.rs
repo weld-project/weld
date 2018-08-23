@@ -150,6 +150,17 @@ macro_rules! weld_err {
     })
 }
 
+
+/// A build ID.
+///
+/// If Weld was compiled in a non-standard manner (i.e., without Cargo), this will be unknown.
+pub const BUILD: &'static str = env!("BUILD_ID");
+
+/// Weld version.
+///
+/// If Weld was compiled in a non-standard manner (i.e., without Cargo), this will be unknown.
+pub const VERSION: Option<&'static str> = option_env!("CARGO_PKG_VERSION");
+
 #[macro_use]
 mod error;
 
@@ -185,12 +196,6 @@ pub type DataMut = *mut libc::c_void;
 
 /// An identifier that uniquely identifies a call to `WeldModule::run`.
 pub type RunId = i64;
-
-const BUILD_UUID_BYTES: &'static [u8] = include_bytes!(concat!(env!("OUT_DIR"), "/build_uuid"));
-
-lazy_static! {
-    static ref BUILD_UUID: Uuid = Uuid::from_bytes(BUILD_UUID_BYTES).unwrap();
-}
 
 /// An error when compiling or running a Weld program.
 #[derive(Debug,Clone)]
@@ -958,4 +963,6 @@ pub fn set_log_level(level: WeldLogLevel) {
     builder.format(format);
     builder.filter(None, filter);
     builder.init().unwrap_or(());
+
+    info!("Weld Version {} (Build {})", VERSION.unwrap_or("unknown"), BUILD);
 }
