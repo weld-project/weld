@@ -809,7 +809,7 @@ impl Dict {
             let mut arg_tys = [
                 self.dict_ty,
                 ser_ty,
-                self.bool_type(),
+                self.i1_type(),
                 self.void_pointer_type(),
                 self.void_pointer_type(),
                 self.run_handle_type()

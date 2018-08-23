@@ -234,7 +234,7 @@ impl Intrinsics {
                                       dst: LLVMValueRef,
                                       src: LLVMValueRef,
                                       size: LLVMValueRef) -> LLVMValueRef {
-        let mut args = [dst, src, size, self.i32(8), self.bool(false)];
+        let mut args = [dst, src, size, self.i32(8), self.i1(false)];
         LLVMBuildCall(builder,
                       self.get("llvm.memcpy.p0i8.p0i8.i64").unwrap(),
                       args.as_mut_ptr(), args.len() as u32, c_str!(""))
@@ -322,7 +322,7 @@ impl Intrinsics {
         LLVMExtAddAttrsOnParameter(self.context, function, &[NoCapture, NoAlias, NonNull, ReadOnly], 1);
         self.intrinsics.insert(name.into_string().unwrap(), function);
 
-        let mut params = vec![int8p, int8p, self.i64_type(), self.i32_type(), self.bool_type()];
+        let mut params = vec![int8p, int8p, self.i64_type(), self.i32_type(), self.i1_type()];
         let name = CString::new("llvm.memcpy.p0i8.p0i8.i64").unwrap();
         let fn_type = LLVMFunctionType(self.void_type(), params.as_mut_ptr(), params.len() as u32, 0);
         let function = LLVMAddFunction(self.module, name.as_ptr(), fn_type);

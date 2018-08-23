@@ -541,7 +541,7 @@ impl ForLoopGenInternal for LlvmGenerator {
                               pass_block: LLVMBasicBlockRef,
                               fail_block: LLVMBasicBlockRef) -> WeldResult<()> {
         use self::llvm_sys::LLVMIntPredicate::LLVMIntEQ;
-        let mut passed = self.bool(true);
+        let mut passed = self.i1(true);
         if self.conf.enable_bounds_checks {
             for value in iterations.iter().skip(1) {
                 let mut check = LLVMBuildICmp(ctx.builder, LLVMIntEQ, iterations[0], *value, c_str!(""));
