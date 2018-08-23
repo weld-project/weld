@@ -25,7 +25,7 @@ sed -i "s/llvm-sys = \".*\"/llvm-sys = \"$LLVM_SYS_VERSION\"/g" Cargo.toml
 # build and test
 # Note that cargo build must, counterintuitively, come after setup.py install,
 # because numpy_weld_convertor.cpp is built by cargo.
-make -C weld_rt/cpp/
+make -C weld_rt/cpp/st
 cargo build #--release
 cargo test
 

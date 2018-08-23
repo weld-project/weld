@@ -2,8 +2,6 @@
 
 use std::fmt;
 
-pub use self::link::{weld_runtime_init, weld_run_memory_usage, weld_run_dispose};
-
 pub mod link;
 pub mod strt;
 
