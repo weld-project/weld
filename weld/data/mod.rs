@@ -20,6 +20,13 @@ use std::marker::PhantomData;
 
 use std::fmt;
 
+/// A boolean in Weld.
+///
+/// Weld booleans are always defined as a single-byte unsigned value. Weld will always return a
+/// boolean with value 0 or 1, corresponding to `false` and `true` respectively. When passing
+/// booleans as input, Weld will consider _any_ non-zero value to be `true`, and 0 to be false.
+pub type WeldBool = u8;
+
 /// A dynamically sized constant vector.
 ///
 /// Vectors are always defined as a pointer and a length.

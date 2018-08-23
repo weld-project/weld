@@ -150,7 +150,7 @@ pub fn unsupported(program: &SirProgram) -> Option<String> {
                 }
                 _ => (),
             };
-        }       
+        }
     }
 
     // All expressions supported.
@@ -530,7 +530,7 @@ pub trait CodeGenExt {
     unsafe fn next_pow2(&self, builder: LLVMBuilderRef, value: LLVMValueRef) -> LLVMValueRef {
         use self::llvm_sys::LLVMTypeKind;
         let ty = LLVMTypeOf(value);
-        assert!(LLVMGetTypeKind(ty) == LLVMTypeKind::LLVMIntegerTypeKind); 
+        assert!(LLVMGetTypeKind(ty) == LLVMTypeKind::LLVMIntegerTypeKind);
         let bits = LLVMGetIntTypeWidth(ty);
         let one = LLVMConstInt(ty, 1 as c_ulonglong, 0);
         let mut result = LLVMBuildSub(builder, value, one, c_str!(""));
@@ -544,7 +544,41 @@ pub trait CodeGenExt {
         LLVMBuildAdd(builder, result, one, c_str!(""))
     }
 
+    /// Convert a boolean to an `i1`.
+    ///
+    /// If the boolean is a vector, a vector of `i1` is produced.
+    unsafe fn bool_to_i1(&self, builder: LLVMBuilderRef, v: LLVMValueRef) -> LLVMValueRef {
+        let type_kind = LLVMGetTypeKind(LLVMTypeOf(v));
+        let mut zero = self.bool(false);
+        if type_kind == llvm_sys::LLVMTypeKind::LLVMVectorTypeKind {
+            let mut zeroes = [zero; LLVM_VECTOR_WIDTH as usize];
+            zero = LLVMConstVector(zeroes.as_mut_ptr(), zeroes.len() as u32);
+        }
+        LLVMBuildICmp(builder, llvm_sys::LLVMIntPredicate::LLVMIntNE, v, zero, c_str!(""))
+    }
+
+    /// Convert an `i1` to a boolean.
+    ///
+    /// If the input is a vector, a vector of `boolean` is produced.
+    unsafe fn i1_to_bool(&self, builder: LLVMBuilderRef, v: LLVMValueRef) -> LLVMValueRef {
+        let type_kind = LLVMGetTypeKind(LLVMTypeOf(v));
+        if type_kind == llvm_sys::LLVMTypeKind::LLVMVectorTypeKind {
+            LLVMBuildZExt(builder, v, LLVMVectorType(self.bool_type(), LLVM_VECTOR_WIDTH), c_str!(""))
+        } else {
+            LLVMBuildZExt(builder, v, self.bool_type(), c_str!(""))
+        }
+    }
+
+    /// Booleans are represented as `i8`.
+    ///
+    /// For instructions that require `i1` (e.g, conditional branching or select), the caller
+    /// should truncate this type to `i1_type` manually. The distinction between booleans and `i1`
+    /// is that boolean types are "externally visible", whereas `i1`s only appear in internal code.
     unsafe fn bool_type(&self) -> LLVMTypeRef {
+        LLVMInt8TypeInContext(self.context())
+    }
+
+    unsafe fn i1_type(&self) -> LLVMTypeRef {
         LLVMInt1TypeInContext(self.context())
     }
 
@@ -607,7 +641,11 @@ pub trait CodeGenExt {
     }
 
     unsafe fn bool(&self, v: bool) -> LLVMValueRef {
-        LLVMConstInt(self.bool_type(), v as c_ulonglong, 0)
+        LLVMConstInt(self.bool_type(), if v { 1 } else { 0 }, 0)
+    }
+
+    unsafe fn i1(&self, v: bool) -> LLVMValueRef {
+        LLVMConstInt(self.i1_type(), if v { 1 } else { 0 }, 0)
     }
 
     unsafe fn i8(&self, v: i8) -> LLVMValueRef {
@@ -1165,6 +1203,7 @@ impl LlvmGenerator {
             Select { ref cond, ref on_true, ref on_false } => {
                 let output_pointer = context.get_value(output)?;
                 let cond = self.load(context.builder, context.get_value(cond)?)?;
+                let cond = self.bool_to_i1(context.builder, cond);
                 let on_true = self.load(context.builder, context.get_value(on_true)?)?;
                 let on_false = self.load(context.builder, context.get_value(on_false)?)?;
                 let result = LLVMBuildSelect(context.builder, cond, on_true, on_false, c_str!(""));
@@ -1263,6 +1302,7 @@ impl LlvmGenerator {
             }
             Branch { ref cond, ref on_true, ref on_false } => {
                 let cond = self.load(context.builder, context.get_value(cond)?)?;
+                let cond = self.bool_to_i1(context.builder, cond);
                 let _ = LLVMBuildCondBr(context.builder,
                                         cond,
                                         context.get_block(&on_true)?,

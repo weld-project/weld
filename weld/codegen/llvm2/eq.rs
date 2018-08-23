@@ -70,7 +70,7 @@ impl GenEq for LlvmGenerator {
         let llvm_ty = self.llvm_type(ty)?;
         // XXX Do we need the run handle?
         let mut arg_tys = [LLVMPointerType(llvm_ty, 0), LLVMPointerType(llvm_ty, 0)];
-        let ret_ty = self.bool_type();
+        let ret_ty = self.i1_type();
 
         let c_prefix = LLVMPrintTypeToString(llvm_ty);
         let prefix = CStr::from_ptr(c_prefix);
@@ -97,7 +97,7 @@ impl GenEq for LlvmGenerator {
                 gen_binop(builder, Equal, left, right, ty)?
             }
             Struct(ref elems) => {
-                let mut result = self.bool(true);
+                let mut result = self.i1(true);
                 for (i, elem) in elems.iter().enumerate() {
                     let func = self.gen_eq_fn(elem)?;
                     let field_left = LLVMBuildStructGEP(builder, left, i as u32, c_str!(""));
@@ -151,7 +151,7 @@ impl GenEq for LlvmGenerator {
 
                 // Finished - build a PHI node to select the result.
                 LLVMPositionBuilderAtEnd(builder, done_block);
-                let result = LLVMBuildPhi(builder, self.bool_type(), c_str!(""));
+                let result = LLVMBuildPhi(builder, self.i1_type(), c_str!(""));
 
                 let mut incoming_blocks = [entry_block, compare_data_block];
                 let mut incoming_values = [size_eq, data_eq];
@@ -203,9 +203,9 @@ impl GenEq for LlvmGenerator {
 
                 // Finish block - set result and compute number of consumed bits.
                 LLVMPositionBuilderAtEnd(builder, done_block);
-                let result = LLVMBuildPhi(builder, self.bool_type(), c_str!(""));
+                let result = LLVMBuildPhi(builder, self.i1_type(), c_str!(""));
                 let mut blocks = [entry_block, compare_data_block, loop_block];
-                let mut values = [size_eq, self.bool(true), eq_result];
+                let mut values = [size_eq, self.i1(true), eq_result];
                 LLVMAddIncoming(result, values.as_mut_ptr(), blocks.as_mut_ptr(), values.len() as u32);
                 result
             }
