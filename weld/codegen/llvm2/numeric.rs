@@ -220,13 +220,20 @@ impl NumericExpressionGen for LlvmGenerator {
                 &Scalar(_) | &Simd(_) => { 
                     let llvm_left = self.load(ctx.builder, ctx.get_value(left)?)?;
                     let llvm_right = self.load(ctx.builder, ctx.get_value(right)?)?;
-                    match op {
+                    let result = match op {
                         BinOpKind::Pow => self.gen_pow(ctx, llvm_left, llvm_right, ty)?,
                         _ => gen_binop(ctx.builder, op, llvm_left, llvm_right, ty)?,
+                    };
+
+                    // Extend the returned `i1` to the `i8` boolean type.
+                    if op.is_comparison() {
+                        self.i1_to_bool(ctx.builder, result)
+                    } else {
+                        result
                     }
                 }
                 &Vector(_) if op.is_comparison() => {
-                    match op {
+                    let result = match op {
                         BinOpKind::Equal | BinOpKind::NotEqual => {
                             use super::eq::GenEq;
                             let func = self.gen_eq_fn(ty)?;
@@ -239,7 +246,10 @@ impl NumericExpressionGen for LlvmGenerator {
                             }
                         }
                         _ => unimplemented!(), // Vector comparison
-                    }
+                    };
+
+                    // Extend the `i1` result to a boolean.
+                    self.i1_to_bool(ctx.builder, result)
                 }
                 // Invalid binary operator.
                 _ => unreachable!(),
@@ -331,8 +341,10 @@ pub unsafe fn gen_cast(builder: LLVMBuilderRef,
                     LLVMBuildUIToFP(builder, value, to_ll, c_str!(""))
                 }
 
-                // Boolean to other integers.
-                (Bool, _) if s2.is_integer() => LLVMBuildZExt(builder, value, to_ll, c_str!("")),
+                // Boolean to other integers. Since booleans are i8s, we either zero-extend them if
+                // the target type is larger, or simply return the same type otherwise.
+                (Bool, _) if s2.is_integer() && s2.bits() > 8 => LLVMBuildZExt(builder, value, to_ll, c_str!("")),
+                (Bool, _) if s2.is_integer() => value,
 
                 // Zero-extension.
                 (_, _) if s1.is_unsigned_integer() && s2.bits() > s1.bits() => {
@@ -365,6 +377,11 @@ pub unsafe fn gen_cast(builder: LLVMBuilderRef,
 /// Generates a binary op instruction without intrinsics.
 ///
 /// This function supports code generation for both scalar and SIMD values.
+///
+/// # Return Types
+///
+/// If `op.is_comparison()` is true, this function returns a value with type `i1`. Otherwise, this
+/// function returns a value of type `LLVMTypeOf(left)`.
 pub unsafe fn gen_binop(builder: LLVMBuilderRef,
              op: BinOpKind,
              left: LLVMValueRef,
@@ -416,8 +433,8 @@ pub unsafe fn gen_binop(builder: LLVMBuilderRef,
                 GreaterThanOrEqual if s.is_unsigned_integer() => LLVMBuildICmp(builder, LLVMIntUGE, left, right, name),
                 GreaterThanOrEqual if s.is_float() => LLVMBuildFCmp(builder, LLVMRealOGE, left, right, name),
 
-                LogicalAnd if s.is_bool() => LLVMBuildAdd(builder, left, right, name),
-                BitwiseAnd if s.is_integer() || s.is_bool() =>LLVMBuildAdd(builder, left, right, name),
+                LogicalAnd if s.is_bool() => LLVMBuildAnd(builder, left, right, name),
+                BitwiseAnd if s.is_integer() || s.is_bool() =>LLVMBuildAnd(builder, left, right, name),
 
                 LogicalOr if s.is_bool() => LLVMBuildOr(builder, left, right, name),
                 BitwiseOr if s.is_integer() || s.is_bool() => LLVMBuildOr(builder, left, right, name),
