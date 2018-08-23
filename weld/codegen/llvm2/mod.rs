@@ -105,56 +105,17 @@ use self::builder::appender;
 use self::builder::groupmerger;
 use self::builder::merger;
 
-/// Returns whether this program is supported by this backend.
+/// Loads a dynamic library from a file using LLVMLoadLibraryPermanently.
 ///
-/// If it is, this function returns `None`. Otherwise, a string reason is specified for why the
-/// runtime is not supported.
-pub fn unsupported(program: &SirProgram) -> Option<String> {
-    use sir::StatementKind::*;
-    use sir::Terminator::*;
-    use ast::Type::{Vector, Dict};
-    use ast::BinOpKind;
-    for func in program.funcs.iter() {
-        for block in func.blocks.iter() {
-            for statement in block.statements.iter() {
-                match statement.kind {
-                    Sort { .. } => {
-                        // No support for sorting.
-                        return Some(statement.to_string());
-                    }
-                    BinOp { ref left, ref op, .. } if op.is_comparison() => {
-                        // Support equal now
-                        if *op == BinOpKind::Equal || *op == BinOpKind::NotEqual {
-                            continue;
-                        }
-                        let ty = func.symbol_type(left).unwrap();
-                        if let Vector(_) = *ty {
-                            // No support for vector comparison
-                            return Some(statement.to_string());
-                        }
-                        if let Dict(_, _) = *ty {
-                            // No support for dictionary equality checking.
-                            return Some(statement.to_string());
-                        }
-                    }
-                    _ => ()
-                };
-            }
-
-            // Check the terminators: No support for NdIter.
-            match block.terminator {
-                ParallelFor(ref pfd) => {
-                    if pfd.data.iter().any(|ref pfi| pfi.kind == IterKind::NdIter) {
-                        return Some(block.terminator.to_string());
-                    }
-                }
-                _ => (),
-            };
-        }
+/// It is safe to call this function multiple times for the same library.
+pub fn load_library(libname: &str) -> WeldResult<()> {
+    let c_string = CString::new(libname.clone()).unwrap();
+    let c_string_raw = c_string.into_raw() as *const c_char;
+    if unsafe { llvm_sys::support::LLVMLoadLibraryPermanently(c_string_raw) } == 0 {
+        Ok(())
+    } else {
+        compile_err!("Couldn't load library {}", libname)
     }
-
-    // All expressions supported.
-    None
 }
 
 /// Returns the size of a type in bytes.

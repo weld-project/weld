@@ -53,7 +53,7 @@
 //!     assert_eq!(args.a + args.b, result);
 //! }
 //! ```
-//! 
+//!
 //! Users write a Weld program as a string, compile it into a module, and then pass packed
 //! arguments into it to run the JITed code. The result is a pointer that represents the output of
 //! the Weld program: we can cast that to the appropriate pointer type and read it by
@@ -89,7 +89,7 @@
 //!
 //! * Primitive types such as `i8`, `i16`, and `f32`. These have a 1-1 correspondance with Weld.
 //! * Rust structs with `repr(C)`.
-//! 
+//!
 //! Notably, `Vec<T>` _cannot_ be passed without adhering to the custom Weld format. Currently,
 //! that format is defined as:
 //!
@@ -171,7 +171,6 @@ pub mod data;
 #[cfg(test)]
 mod tests;
 
-use conf::Backend;
 use runtime::WeldRuntimeContext;
 use util::stats::CompilationStats;
 
@@ -221,7 +220,7 @@ pub struct WeldContext {
 impl WeldContext {
     /// Returns a new `WeldContext` with the given configuration.
     ///
-    /// # Errors 
+    /// # Errors
     ///
     /// Returns an error if the configuration is malformed.
     ///
@@ -389,7 +388,6 @@ impl From<error::WeldCompileError> for WeldError {
 pub struct WeldValue {
     data: Data,
     run: Option<RunId>,
-    backend: Backend,
     context: Option<WeldContext>,
 }
 
@@ -412,7 +410,6 @@ impl WeldValue {
         WeldValue {
             data: data,
             run: None,
-            backend: Backend::Unknown,
             context: None,
         }
     }
@@ -483,32 +480,15 @@ impl WeldValue {
     /// `WeldValue` that is created using `WeldValue::new_from_data` will always have a `run_id` of
     /// `None`.
     pub fn run_id(&self) -> Option<RunId> {
-        match self.backend {
-            Backend::LLVMWorkStealingBackend => self.run.clone(),
-            Backend::LLVMSingleThreadBackend => {
-                Some(0)
-            }
-            Backend::Unknown => None,
-        }
+        Some(0)
     }
 }
 
 // Custom Drop implementation that discards values allocated by the runtime.
 impl Drop for WeldValue {
     fn drop(&mut self) {
-        match self.backend {
-            Backend::LLVMWorkStealingBackend => {
-                if let Some(run_id) = self.run {
-                    unsafe { runtime::weld_run_dispose(run_id); }
-                }
-            }
-            Backend::LLVMSingleThreadBackend => {
-                // Free this value from the context.
-                if let Some(ref mut context) = self.context {
-                    unsafe { context.context.borrow_mut().free(self.data as DataMut) } ; 
-                }
-            },
-            Backend::Unknown => (),
+        if let Some(ref mut context) = self.context {
+            unsafe { context.context.borrow_mut().free(self.data as DataMut) } ;
         }
     }
 }
@@ -585,10 +565,6 @@ impl WeldConf {
 pub struct WeldModule {
     /// A compiled, runnable module.
     llvm_module: codegen::CompiledModule,
-    /// The backend the compiled module uses.
-    ///
-    /// This is passed to the `WeldValue` produced when the module is run.
-    backend: Backend,
     /// The Weld parameter types this modules accepts.
     param_types: Vec<ast::Type>,
     /// The Weld return type of this module.
@@ -757,9 +733,8 @@ impl WeldModule {
               uuid.hyphenated(),
               e2e_ms);
 
-        Ok(WeldModule { 
+        Ok(WeldModule {
             llvm_module: compiled_module,
-            backend: conf.backend.clone(),
             param_types: param_types,
             return_type: return_type,
             module_id: uuid,
@@ -827,7 +802,7 @@ impl WeldModule {
     /// let result = unsafe { module.run(context, input_value).unwrap() };
     ///
     /// assert!(result.context().is_some());
-    /// 
+    ///
     /// // Unsafe to read raw pointers!
     /// unsafe {
     ///     // The data is just a raw pointer: cast it to the expected type.
@@ -872,7 +847,6 @@ impl WeldModule {
         let value = WeldValue {
             data: result.output as *const c_void,
             run: None,
-            backend: self.backend.clone(),
             context: Some(context.clone()),
         };
 
