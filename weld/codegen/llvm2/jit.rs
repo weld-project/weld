@@ -1,4 +1,4 @@
-//! JIT a constructed LLVM module into an executable module.
+
 //!
 //! This module manages verifying the generated LLVM module, optimizing it using the LLVM
 //! optimization passes, and compiling it to machine code.
@@ -288,6 +288,7 @@ unsafe fn optimize_module(module: LLVMModuleRef, level: u32) -> WeldResult<()> {
     let features = CStr::from_ptr(LLVMGetTargetMachineFeatureString(target_machine)).to_str().unwrap();
 
     debug!("CPU: {}, Description: {} Features: {}", cpu, description, features);
+    let start = PreciseTime::now();
 
     LLVMAddTargetLibraryInfo(LLVMExtTargetLibraryInfo(), mpm);
     LLVMAddAnalysisPasses(target_machine, mpm);
@@ -301,7 +302,7 @@ unsafe fn optimize_module(module: LLVMModuleRef, level: u32) -> WeldResult<()> {
     LLVMPassManagerBuilderSetOptLevel(builder, level);
     LLVMPassManagerBuilderSetSizeLevel(builder, 0);
     LLVMPassManagerBuilderSetDisableUnrollLoops(builder, 1);
-    LLVMExtPassManagerBuilderSetDisableVectorize(builder, 1);
+    LLVMExtPassManagerBuilderSetDisableVectorize(builder, 0);
     // 250 should correspond to OptLevel = 3
     LLVMPassManagerBuilderUseInlinerWithThreshold(builder, 250);
 
@@ -309,15 +310,23 @@ unsafe fn optimize_module(module: LLVMModuleRef, level: u32) -> WeldResult<()> {
     LLVMPassManagerBuilderPopulateModulePassManager(builder, mpm);
 
     LLVMPassManagerBuilderDispose(builder);
+    let end = PreciseTime::now();
+    debug!("LLVM Constructed PassManager in {} ms", start.to(end).num_milliseconds());
 
+    let start = PreciseTime::now();
     let mut func = LLVMGetFirstFunction(module);
     while func != ptr::null_mut() {
         LLVMRunFunctionPassManager(fpm, func);
         func = LLVMGetNextFunction(func);
     }
     LLVMFinalizeFunctionPassManager(fpm);
+    let end = PreciseTime::now();
+    debug!("LLVM Function Passes Ran in {} ms", start.to(end).num_milliseconds());
 
+    let start = PreciseTime::now();
     LLVMRunPassManager(mpm, module);
+    let end = PreciseTime::now();
+    debug!("LLVM Module Passes Ran in {} ms", start.to(end).num_milliseconds());
 
     LLVMDisposePassManager(fpm);
     LLVMDisposePassManager(mpm);
