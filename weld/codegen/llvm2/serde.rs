@@ -377,7 +377,7 @@ impl SerHelper for LlvmGenerator {
                 // keys and values are memcpy'd individually into the buffer.
                 let dictionary = self.load(builder, value)?;
                 let null_pointer = self.null_ptr(self.i8_type());
-                let no_pointer_flag = self.bool(false);
+                let no_pointer_flag = self.i1(false);
                 let result = {
                     let mut methods = self.dictionaries.get_mut(ty).unwrap();
                     methods.gen_serialize(builder,
@@ -397,7 +397,7 @@ impl SerHelper for LlvmGenerator {
                 // function to serialize each key and value. We thus generate an externalized key
                 // and value serialization function and pass it to the dictionary's serializer.
                 let dictionary = self.load(builder, value)?;
-                let pointer_flag = self.bool(true);
+                let pointer_flag = self.i1(true);
                 // Deserialization functions have the signature (SER_TY, T*) -> void
                 // Generate the serialize function for the key.
                 let key_ser_fn = self.gen_serialize_fn(key)?;

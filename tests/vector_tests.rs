@@ -14,12 +14,12 @@ fn map_comparison() {
     let ref input_data = WeldVec::from(&input_vec);
 
     let ret_value = compile_and_run(code, conf, input_data);
-    let data = ret_value.data() as *const WeldVec<bool>;
+    let data = ret_value.data() as *const WeldVec<WeldBool>;
     let result = unsafe { (*data).clone() };
     assert_eq!(result.len as usize, input_vec.len());
     for i in 0..(result.len as isize) {
         assert_eq!(
-            unsafe { *result.data.offset(i) },
+            unsafe { *result.data.offset(i) } != 0,
             input_vec[i as usize] == 100
         )
     }

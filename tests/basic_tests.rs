@@ -112,15 +112,15 @@ fn bool_eq() {
     let ref input_data: i32 = 0;
 
     let ret_value = compile_and_run(code, conf, input_data);
-    let data = ret_value.data() as *const WeldVec<bool>;
+    let data = ret_value.data() as *const WeldVec<WeldBool>;
     let result = unsafe { (*data).clone() };
 
     assert_eq!(result.len, 2);
 
     let bool1 = unsafe { (*result.data.offset(0)).clone() };
     let bool2 = unsafe { (*result.data.offset(1)).clone() };
-    assert_eq!(bool1, true);
-    assert_eq!(bool2, false);
+    assert_eq!(bool1 , 1);
+    assert_eq!(bool2 , 0);
 }
 
 #[test]
