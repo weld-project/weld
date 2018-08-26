@@ -405,7 +405,7 @@ impl SerHelper for LlvmGenerator {
             };
 
             let ret = LLVMBuildInsertValue(builder, LLVMGetUndef(ret_ty), updated_buffer, 0, c_str!(""));
-            let ret = LLVMBuildInsertValue(builder, ret, updated_position, 0, c_str!(""));
+            let ret = LLVMBuildInsertValue(builder, ret, updated_position, 1, c_str!(""));
             LLVMBuildRet(builder, ret);
 
             LLVMDisposeBuilder(builder);
@@ -561,7 +561,8 @@ impl DeHelper for LlvmGenerator {
             let buffer_ty = self.llvm_type(&SER_TY)?;
             // Buffer, position, output*, run
             let mut arg_tys = [buffer_ty, self.i64_type(), LLVMTypeOf(output), self.run_handle_type()];
-            let ret_ty = self.llvm_type(&SER_RET_TY)?;
+            // Return the position.
+            let ret_ty = self.i64_type();
 
             let c_prefix = LLVMPrintTypeToString(llvm_ty);
             let prefix = CStr::from_ptr(c_prefix);
