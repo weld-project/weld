@@ -6,6 +6,7 @@
 
 extern crate libc;
 extern crate fnv;
+extern crate time;
 
 use ast::*;
 use ast::ExprKind::*;
@@ -109,6 +110,25 @@ pub fn join<T: iter::Iterator<Item = String>>(start: &str, sep: &str, end: &str,
     }
     res.push_str(end);
     res
+}
+
+/// Return a timestamp-based filename for `dumpCode`.
+///
+/// If a Weld file with the produced filename already exists, the filename is uniquified. The
+/// uniquified filename will have a -<num> appended to the filename until a unique number is found.
+pub fn timestamp_unique(dir: &PathBuf) -> String {
+    let mut ext = 0;
+    loop {
+        let suffix = if ext == 0 { String::from("") } else { format!("-{}", ext) };
+        let timestamp = format!("{}{}", time::now().to_timespec().sec, suffix);
+        let ref mut path = dir.clone();
+        path.push(format!("code-{}", &timestamp));
+        path.set_extension("weld");
+        if !path.exists() {
+            return timestamp;
+        }
+        ext += 1;
+    }
 }
 
 

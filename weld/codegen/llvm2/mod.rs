@@ -313,6 +313,10 @@ pub struct LlvmGenerator {
     opaque_eq_fns: FnvHashMap<Type, LLVMValueRef>,
     /// Hash functions on various types.
     hash_fns: FnvHashMap<Type, LLVMValueRef>,
+    /// Serialization functions on various types.
+    serialize_fns: FnvHashMap<Type, LLVMValueRef>,
+    /// Deserialization functions on various types.
+    deserialize_fns: FnvHashMap<Type, LLVMValueRef>,
 }
 
 /// Defines helper methods for LLVM code generation.
@@ -705,6 +709,8 @@ impl LlvmGenerator {
             eq_fns: FnvHashMap::default(),
             opaque_eq_fns: FnvHashMap::default(),
             hash_fns: FnvHashMap::default(),
+            serialize_fns: FnvHashMap::default(),
+            deserialize_fns: FnvHashMap::default(),
             intrinsics: intrinsics,
         })
     }
