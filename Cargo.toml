@@ -28,6 +28,7 @@ uuid = { version = "0.6.5", features = ["v4"] }
 [lib]
 path = "weld/lib.rs"
 bench = false
+crate-type = ["cdylib", "rlib"]
 
 [[bin]]
 name = "repl"
