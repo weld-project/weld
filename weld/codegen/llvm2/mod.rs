@@ -317,6 +317,10 @@ pub struct LlvmGenerator {
     serialize_fns: FnvHashMap<Type, LLVMValueRef>,
     /// Deserialization functions on various types.
     deserialize_fns: FnvHashMap<Type, LLVMValueRef>,
+    /// Names of structs for readability.
+    struct_names: FnvHashMap<Type, CString>,
+    /// Counter for unique struct names.
+    struct_index: u32,
 }
 
 /// Defines helper methods for LLVM code generation.
@@ -711,6 +715,8 @@ impl LlvmGenerator {
             hash_fns: FnvHashMap::default(),
             serialize_fns: FnvHashMap::default(),
             deserialize_fns: FnvHashMap::default(),
+            struct_names: FnvHashMap::default(),
+            struct_index: 0,
             intrinsics: intrinsics,
         })
     }
@@ -1377,11 +1383,16 @@ impl LlvmGenerator {
                 LLVMVectorType(base, LLVM_VECTOR_WIDTH)
             }
             Struct(ref elems) => {
-                let mut llvm_types: Vec<_> = elems.iter()
-                    .map(&mut |t| self.llvm_type(t)).collect::<WeldResult<_>>()?;
-                LLVMStructTypeInContext(self.context,
-                                        llvm_types.as_mut_ptr(),
-                                        llvm_types.len() as u32, 0)
+                if !self.struct_names.contains_key(ty) {
+                    let name = CString::new(format!("s{}", self.struct_index)).unwrap();
+                    self.struct_index += 1;
+                    let mut llvm_types: Vec<_> = elems.iter()
+                        .map(&mut |t| self.llvm_type(t)).collect::<WeldResult<_>>()?;
+                    let struct_ty = LLVMStructCreateNamed(self.context, name.as_ptr());
+                    LLVMStructSetBody(struct_ty, llvm_types.as_mut_ptr(), llvm_types.len() as u32, 0);
+                    self.struct_names.insert(ty.clone(), name);
+                }
+                LLVMGetTypeByName(self.module, self.struct_names.get(ty).cloned().unwrap().as_ptr())
             }
             Vector(ref elem_type) => {
                 // Vectors are a named type, so only generate the name once.
