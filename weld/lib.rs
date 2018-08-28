@@ -636,7 +636,7 @@ impl WeldModule {
         let code = code.as_ref();
 
         // For dumping code, if enabled.
-        let ref timestamp = format!("{}", time::now().to_timespec().sec);
+        let ref timestamp = util::timestamp_unique(&conf.dump_code.dir);
         let uuid = Uuid::new_v4();
 
         // Configuration.
