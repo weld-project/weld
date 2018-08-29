@@ -900,6 +900,7 @@ impl LlvmGenerator {
         LLVMSetLinkage(function, LLVMLinkage::LLVMPrivateLinkage);
         LLVMSetFunctionCallConv(function, SIR_FUNC_CALL_CONV);
 
+        info!("Inlining SIR function F{}.", func.id);
         LLVMExtAddAttrsOnFunction(self.context, function, &[AlwaysInline]);
 
         self.functions.insert(func.id, function);
