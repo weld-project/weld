@@ -82,6 +82,9 @@ lazy_static! {
 // TODO This should be based on the type!
 pub const LLVM_VECTOR_WIDTH: u32 = 4;
 
+/// Calling convention for SIR function.
+pub const SIR_FUNC_CALL_CONV: u32 = llvm_sys::LLVMCallConv::LLVMFastCallConv as u32;
+
 /// Convert a string literal into a C string.
 macro_rules! c_str {
     ($s:expr) => (
@@ -104,6 +107,9 @@ mod vector;
 use self::builder::appender;
 use self::builder::groupmerger;
 use self::builder::merger;
+
+use self::llvm_exts::*;
+use self::llvm_exts::LLVMExtAttribute::*;
 
 /// Loads a dynamic library from a file using LLVMLoadLibraryPermanently.
 ///
@@ -842,7 +848,9 @@ impl LlvmGenerator {
 
         // Run the Weld program.
         let entry_function = *self.functions.get(&program.funcs[0].id).unwrap();
-        let _ = LLVMBuildCall(builder, entry_function, func_args.as_mut_ptr(), func_args.len() as u32, c_str!(""));
+        let inst = LLVMBuildCall(builder, entry_function,
+                              func_args.as_mut_ptr(), func_args.len() as u32, c_str!(""));
+        LLVMSetInstructionCallConv(inst, SIR_FUNC_CALL_CONV);
 
         let result = self.intrinsics.call_weld_run_get_result(builder, run, None);
         let result = LLVMBuildPtrToInt(builder, result, self.i64_type(), c_str!("result"));
@@ -886,8 +894,13 @@ impl LlvmGenerator {
         let func_ty = LLVMFunctionType(ret_ty, arg_tys.as_mut_ptr(), arg_tys.len() as u32, 0);
         let name = CString::new(format!("f{}", func.id)).unwrap();
         let function = LLVMAddFunction(self.module, name.as_ptr(), func_ty);
+
+        // Add attributes, set linkage, etc.
         llvm_exts::LLVMExtAddDefaultAttrs(self.context(), function);
         LLVMSetLinkage(function, LLVMLinkage::LLVMPrivateLinkage);
+        LLVMSetFunctionCallConv(function, SIR_FUNC_CALL_CONV);
+
+        LLVMExtAddAttrsOnFunction(self.context, function, &[AlwaysInline]);
 
         self.functions.insert(func.id, function);
         Ok(())
@@ -1298,10 +1311,14 @@ impl LlvmGenerator {
                               arguments.as_mut_ptr(),
                               arguments.len() as u32,
                               c_str!(""));
+                LLVMSetInstructionCallConv(result, SIR_FUNC_CALL_CONV);
+
                 if let Some((jumpto, loop_builder)) = loop_terminator {
                     LLVMBuildStore(context.builder, result, loop_builder);
                     LLVMBuildBr(context.builder, jumpto);
                 } else {
+                    // XXX Does this work?
+                    LLVMSetTailCall(result, 1);
                     LLVMBuildRet(context.builder, result);
                 }
             }

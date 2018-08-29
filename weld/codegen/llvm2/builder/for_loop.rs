@@ -24,7 +24,7 @@ use self::llvm_sys::core::*;
 use codegen::llvm2::llvm_exts::*;
 use codegen::llvm2::llvm_exts::LLVMExtAttribute::*;
 use codegen::llvm2::vector::VectorExt;
-use codegen::llvm2::LLVM_VECTOR_WIDTH;
+use codegen::llvm2::{SIR_FUNC_CALL_CONV, LLVM_VECTOR_WIDTH};
 
 use super::{CodeGenExt, FunctionContext, LlvmGenerator};
 
@@ -111,6 +111,7 @@ impl ForLoopGenInternal for LlvmGenerator {
                                     arguments.as_mut_ptr(),
                                     arguments.len() as u32,
                                     c_str!(""));
+        LLVMSetInstructionCallConv(builder, SIR_FUNC_CALL_CONV);
         LLVMBuildStore(ctx.builder, builder, ctx.get_value(&parfor.builder)?);
 
         // Create a new exit block, jump to it, and then load the arguments to the continuation and
@@ -129,11 +130,14 @@ impl ForLoopGenInternal for LlvmGenerator {
         arguments.push(ctx.get_run());
         let cont_function = *self.functions.get(&parfor.cont).unwrap();
 
-        Ok(LLVMBuildCall(ctx.builder,
+        let result = LLVMBuildCall(ctx.builder,
                               cont_function,
                               arguments.as_mut_ptr(),
                               arguments.len() as u32,
-                              c_str!("")))
+                              c_str!(""));
+
+        LLVMSetInstructionCallConv(result, SIR_FUNC_CALL_CONV);
+        Ok(result)
     }
 
     /// Generate runtime bounds checking, which looks as follows:
