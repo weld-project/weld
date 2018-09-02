@@ -1296,31 +1296,6 @@ impl LlvmGenerator {
             JumpBlock(ref id) => {
                 LLVMBuildBr(context.builder, context.get_block(id)?);
             }
-            JumpFunction(ref func) => {
-                let ref sir_function = context.sir_program.funcs[*func];
-                let mut arguments = vec![];
-                for (symbol, _) in sir_function.params.iter() {
-                    let value = self.load(context.builder, context.get_value(symbol)?)?;
-                    arguments.push(value);
-                }
-                arguments.push(context.get_run());
-                let jump_function = *self.functions.get(func).unwrap();
-                let result = LLVMBuildCall(context.builder,
-                              jump_function,
-                              arguments.as_mut_ptr(),
-                              arguments.len() as u32,
-                              c_str!(""));
-                LLVMSetInstructionCallConv(result, SIR_FUNC_CALL_CONV);
-
-                if let Some((jumpto, loop_builder)) = loop_terminator {
-                    LLVMBuildStore(context.builder, result, loop_builder);
-                    LLVMBuildBr(context.builder, jumpto);
-                } else {
-                    // XXX Does this work?
-                    LLVMSetTailCall(result, 1);
-                    LLVMBuildRet(context.builder, result);
-                }
-            }
             EndFunction(ref sym) => {
                 if let Some((jumpto, loop_builder)) = loop_terminator {
                     let pointer = context.get_value(sym)?;
@@ -1474,7 +1449,7 @@ impl<'a> FunctionContext<'a> {
         self.symbols
             .get(sym)
             .cloned()
-            .ok_or(WeldCompileError::new("Undefined symbol in function codegen"))
+            .ok_or(WeldCompileError::new(format!("Undefined symbol {} in function codegen", sym)))
     }
 
     /// Returns the LLVM basic block for a basic block ID in this function.

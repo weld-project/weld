@@ -123,9 +123,9 @@ impl StatementKind {
             }
             ParallelFor(ref data) => {
                 vars.push(&data.builder);
-                vars.push(&data.data_arg);
-                vars.push(&data.builder_arg);
-                vars.push(&data.idx_arg);
+                // vars.push(&data.data_arg);
+                // vars.push(&data.builder_arg);
+                // vars.push(&data.idx_arg);
                 for iter in data.data.iter() {
                     vars.push(&iter.data);
                     if iter.shape.is_some() {
@@ -351,7 +351,6 @@ pub enum Terminator {
         on_false: BasicBlockId,
     },
     JumpBlock(BasicBlockId),
-    JumpFunction(FunctionId),
     ProgramReturn(Symbol),
     EndFunction(Symbol),
     Crash,
@@ -374,7 +373,6 @@ impl Terminator {
             }
             Crash => (),
             JumpBlock(_) => (),
-            JumpFunction(_) => (),
         };
         vars.into_iter()
     }
@@ -393,6 +391,11 @@ pub struct SirFunction {
     pub id: FunctionId,
     pub params: BTreeMap<Symbol, Type>,
     pub locals: BTreeMap<Symbol, Type>,
+    // Local variables that are used for looping.
+    //
+    // This will be an empty vector if `loop_body` is false. If loop_body is true, the variables
+    // that appear here are guaranteed to also be in `locals`.
+    pub loop_variables: Vec<Symbol>,
     pub blocks: Vec<BasicBlock>,
     pub return_type: Type,
     pub loop_body: bool,
@@ -437,6 +440,7 @@ impl SirProgram {
             params: BTreeMap::new(),
             blocks: vec![],
             locals: BTreeMap::new(),
+            loop_variables: vec![],
             return_type: Unknown,
             loop_body: false,
         };
@@ -454,6 +458,10 @@ impl SirProgram {
     /// Add a local variable of the given type and name
     pub fn add_local_named(&mut self, ty: &Type, sym: &Symbol, func: FunctionId) {
         self.funcs[func].locals.insert(sym.clone(), ty.clone());
+    }
+
+    pub fn add_loop_variable(&mut self, sym: &Symbol, func: FunctionId) {
+        self.funcs[func].loop_variables.push(sym.clone());
     }
 }
 
@@ -596,7 +604,6 @@ impl fmt::Display for Terminator {
                 ref on_false,
             } => write!(f, "branch {} B{} B{}", cond, on_true, on_false),
             JumpBlock(block) => write!(f, "jump B{}", block),
-            JumpFunction(func) => write!(f, "jump F{}", func),
             ProgramReturn(ref sym) => write!(f, "return {}", sym),
             EndFunction(ref sym) => write!(f, "end {}", sym),
             Crash => write!(f, "crash"),
@@ -719,7 +726,6 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
             vars.extend(statement.kind.children().cloned());
         }
         vars.extend(block.terminator.children().cloned());
-        use self::Terminator::*;
         for var in &vars {
             println!("{}", var);
             if prog.funcs[func_id].locals.get(&var) == None {
@@ -741,12 +747,6 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
                 _ => (),
             }
         }
-        match block.terminator {
-            JumpFunction(jump_func) => {
-                sir_param_correction_helper(prog, jump_func, env, &mut inner_closure, visited);
-            }
-            _ => (),
-        };
 
         for var in inner_closure {
             if prog.funcs[func_id].locals.get(&var) == None {
@@ -771,8 +771,6 @@ fn assign_return_types_helper(prog: &mut SirProgram, func: FunctionId) -> WeldRe
         return Ok(prog.funcs[func].return_type.clone())
     }
 
-    // A child function this function's return type depends on.
-    let mut result = None;
     // Symbol returned by the terminator.
     let mut return_symbol = None;
     {
@@ -781,9 +779,6 @@ fn assign_return_types_helper(prog: &mut SirProgram, func: FunctionId) -> WeldRe
             match block.terminator {
                 Branch { .. } => (),
                 JumpBlock(_) => (),
-                JumpFunction(ref id) => {
-                    result = Some(*id);
-                }
                 ProgramReturn(ref sym) | EndFunction(ref sym) => {
                     // Type should be set during AST -> SIR.
                     return_symbol = Some(sym.clone());
@@ -796,10 +791,6 @@ fn assign_return_types_helper(prog: &mut SirProgram, func: FunctionId) -> WeldRe
     // Need to do this nonsense to circumvent borrow checker...
     if let Some(symbol) = return_symbol {
         let return_type = prog.funcs[func].symbol_type(&symbol)?.clone();
-        prog.funcs[func].return_type = return_type.clone();
-        Ok(return_type)
-    } else if let Some(child) = result { 
-        let return_type = assign_return_types_helper(prog, child)?;
         prog.funcs[func].return_type = return_type.clone();
         Ok(return_type)
     } else {
@@ -1309,6 +1300,12 @@ fn gen_expr(expr: &Expr,
                 prog.add_local_named(&params[0].ty, &params[0].name, body_func);
                 prog.add_local_named(&params[1].ty, &params[1].name, body_func);
                 prog.add_local_named(&params[2].ty, &params[2].name, body_func);
+
+                // Register the data, index, and builder arguments are loop variables.
+                prog.add_loop_variable(&params[0].name, body_func);
+                prog.add_loop_variable(&params[1].name, body_func);
+                prog.add_loop_variable(&params[2].name, body_func);
+
                 prog.funcs[body_func]
                     .params
                     .insert(builder_sym.clone(), builder.ty.clone());
@@ -1355,9 +1352,9 @@ fn gen_expr(expr: &Expr,
                 let kind = ParallelFor(ParallelForData {
                                     data: pf_iters,
                                     builder: builder_sym.clone(),
-                                    data_arg: params[2].name.clone(),
                                     builder_arg: params[0].name.clone(),
                                     idx_arg: params[1].name.clone(),
+                                    data_arg: params[2].name.clone(),
                                     body: body_func,
                                     innermost: is_innermost,
                                     always_use_runtime: expr.annotations.always_use_runtime(),
