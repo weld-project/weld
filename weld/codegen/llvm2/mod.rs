@@ -108,9 +108,6 @@ use self::builder::appender;
 use self::builder::groupmerger;
 use self::builder::merger;
 
-use self::llvm_exts::*;
-use self::llvm_exts::LLVMExtAttribute::*;
-
 /// Loads a dynamic library from a file using LLVMLoadLibraryPermanently.
 ///
 /// It is safe to call this function multiple times for the same library.
@@ -900,9 +897,6 @@ impl LlvmGenerator {
         LLVMSetLinkage(function, LLVMLinkage::LLVMPrivateLinkage);
         LLVMSetFunctionCallConv(function, SIR_FUNC_CALL_CONV);
 
-        info!("Inlining SIR function F{}.", func.id);
-        LLVMExtAddAttrsOnFunction(self.context, function, &[AlwaysInline]);
-
         self.functions.insert(func.id, function);
         Ok(())
     }
@@ -1183,6 +1177,10 @@ impl LlvmGenerator {
                 use self::builder::BuilderExpressionGen;
                 self.gen_new_builder(context, statement)
             }
+            ParallelFor(_) => {
+                use self::builder::BuilderExpressionGen;
+                self.gen_for(context, statement)
+            }
             Res(_) => {
                 use self::builder::BuilderExpressionGen;
                 self.gen_result(context, statement)
@@ -1321,17 +1319,6 @@ impl LlvmGenerator {
                     // XXX Does this work?
                     LLVMSetTailCall(result, 1);
                     LLVMBuildRet(context.builder, result);
-                }
-            }
-            ParallelFor(ref parfor) => {
-                use self::builder::BuilderExpressionGen;
-                let updated_builder = self.gen_for(context, parfor)?;
-                if let Some((jumpto, loop_builder)) = loop_terminator {
-                    LLVMBuildStore(context.builder, updated_builder, loop_builder);
-                    LLVMBuildBr(context.builder, jumpto);
-                } else {
-                    // Continuation will continue the program - this ends the current function.
-                    LLVMBuildRet(context.builder, updated_builder);
                 }
             }
             EndFunction(ref sym) => {

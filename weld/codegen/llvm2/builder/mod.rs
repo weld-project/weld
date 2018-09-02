@@ -58,7 +58,7 @@ pub trait BuilderExpressionGen {
     /// Generates code for the `Result` statement.
     unsafe fn gen_result(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()>;
     /// Generates code for the `ParallelFor` terminator.
-    unsafe fn gen_for(&mut self, ctx: &mut FunctionContext, parfor: &ParallelForData) -> WeldResult<LLVMValueRef>;
+    unsafe fn gen_for(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()>;
     /// Generates code to define builder types.
     unsafe fn builder_type(&mut self, builder: &Type) -> WeldResult<LLVMTypeRef>;
 }
@@ -433,9 +433,17 @@ impl BuilderExpressionGen for LlvmGenerator {
 
     unsafe fn gen_for(&mut self,
                       ctx: &mut FunctionContext,
-                      parfor: &ParallelForData) -> WeldResult<LLVMValueRef> {
+                      statement: &Statement) -> WeldResult<()> {
         use self::for_loop::ForLoopGenInternal;
-        self.gen_for_internal(ctx, parfor)
+        if statement.output.is_none() {
+            unreachable!()
+        }
+        if let ParallelFor(ref parfor) = statement.kind {
+            let output = statement.output.as_ref().unwrap();
+            self.gen_for_internal(ctx, output, parfor)
+        } else {
+            unreachable!()
+        }
     }
 
     unsafe fn builder_type(&mut self, builder: &Type) -> WeldResult<LLVMTypeRef> {
