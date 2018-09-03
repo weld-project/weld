@@ -142,7 +142,6 @@ fn fold_constants_in_function(func: &mut SirFunction, global_params: &fnv::FnvHa
     // backends may generate them unconditionally.
     for var in func.loop_variables.iter() {
         used_symbols.insert(var.clone());
-        println!("added loop variable {} to used_symbols", var);
     }
 
     for block in func.blocks.iter_mut() {
