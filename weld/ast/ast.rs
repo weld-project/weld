@@ -578,7 +578,7 @@ pub enum ExprKind {
     },
     /// Assign a `value` to `name`, and then evaluate `body`.
     ///
-    /// The enviornemnt is updated with `name` before `body` is run.
+    /// The environment is updated with `name` before `body` is run.
     Let {
         name: Symbol,
         value: Box<Expr>,
@@ -590,43 +590,61 @@ pub enum ExprKind {
         on_true: Box<Expr>,
         on_false: Box<Expr>,
     },
+    /// Iterate sequentially using an update function.
+    ///
+    /// The initial value has type `T`, and the update function has type `|T| -> {T, bool}`.
+    /// Iteration continues until the update function returns `false`.
     Iterate {
         initial: Box<Expr>,
         update_func: Box<Expr>,
     },
+    /// Select `on_true` or `on_false` depending on `cond`.
+    ///
+    /// Both `on_true`and `on_false` are evaluated unconditionally.
     Select {
         cond: Box<Expr>,
         on_true: Box<Expr>,
         on_false: Box<Expr>,
     },
+    /// An expression representing a function.
     Lambda {
         params: Vec<Parameter>,
         body: Box<Expr>,
     },
+    /// Apply a function using a list of parameters.
     Apply {
         func: Box<Expr>,
         params: Vec<Expr>,
     },
+    /// A C UDF called by symbol name.
     CUDF {
         sym_name: String,
         args: Vec<Expr>,
         return_ty: Box<Type>,
     },
+    /// Serialize an expression into a vector of bytes.
     Serialize(Box<Expr>),
+    /// Deserialize an expression from a vector of bytes.
+    ///
+    /// The expression should be serialized using `Serialize`.
     Deserialize {
         value: Box<Expr>,
         value_ty: Box<Type>,
     },
+    /// Create a new builder.
     NewBuilder(Option<Box<Expr>>),
+    /// Update a builder in parallel by iterating over data.
     For {
         iters: Vec<Iter>,
         builder: Box<Expr>,
         func: Box<Expr>,
     },
+    /// Update a builder value, returning a new builder.
     Merge {
         builder: Box<Expr>,
         value: Box<Expr>,
     },
+    /// Consume a builder and return its result.
     Res { builder: Box<Expr> },
 }
 
