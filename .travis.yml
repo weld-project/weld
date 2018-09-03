@@ -10,13 +10,13 @@ addons:
     key: $AWS_ACCESS_KEY
     secret: $AWS_SECRET_KEY
   apt:
-    update: true
     sources:
     - deadsnakes
     - sourceline: deb http://apt.llvm.org/trusty/ llvm-toolchain-trusty-6.0 main
       key_url: https://apt.llvm.org/llvm-snapshot.gpg.key
     - sourceline: deb http://ppa.launchpad.net/ubuntu-toolchain-r/test/ubuntu trusty main
     packages:
+    - gcc
     - make
     - llvm-6.0
     - llvm-6.0-dev
@@ -25,7 +25,6 @@ addons:
     - python2.7
       # - python3.6
       # - python-tk
-      #
 install:
 - sudo rm -f `which llvm-config`
 - export WELD_HOME=`pwd`
