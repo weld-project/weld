@@ -86,9 +86,7 @@ fn evaluate_binop(kind: BinOpKind, left: LiteralKind, right: LiteralKind) -> Wel
 }
 
 pub fn fold_constants(prog: &mut SirProgram) -> WeldResult<()> {
-
     let ref mut parameters = fnv::FnvHashSet::default();
-
     // Collect all the Symbols passed between functions. We will keep the
     // definitions of these symbols intact (even if we assign simple literal
     // values to them).
@@ -138,6 +136,12 @@ fn fold_constants_in_function(func: &mut SirFunction, global_params: &fnv::FnvHa
                 }
             }
         }
+    }
+
+    // Mark the loop variables as used - again, even if they are technically unused,
+    // backends may generate them unconditionally.
+    for var in func.loop_variables.iter() {
+        used_symbols.insert(var.clone());
     }
 
     for block in func.blocks.iter_mut() {

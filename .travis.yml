@@ -15,28 +15,14 @@ before_install:
 - echo "deb http://apt.llvm.org/trusty/ llvm-toolchain-trusty-6.0 main" | sudo tee -a /etc/apt/sources.list >/dev/null
 - curl -sSL "https://build.travis-ci.org/files/gpg/travis-security.asc" | sudo -E apt-key add -
 - echo "deb http://ppa.launchpad.net/ubuntu-toolchain-r/test/ubuntu trusty main" | sudo tee -a /etc/apt/sources.list >/dev/null
-  apt:
-    sources:
-    - deadsnakes
-    - sourceline: deb http://apt.llvm.org/trusty/ llvm-toolchain-trusty-6.0 main
-      key_url: https://apt.llvm.org/llvm-snapshot.gpg.key
-    - sourceline: deb http://ppa.launchpad.net/ubuntu-toolchain-r/test/ubuntu trusty main
-    packages:
-    - gcc
-    - make
-    - llvm-6.0
-    - llvm-6.0-dev
-    - clang-6.0
-    - lib32z1-dev
-    - python2.7
-      # - python3.6
-      # - python-tk
 install:
 - sudo rm -f `which llvm-config`
 - export WELD_HOME=`pwd`
 - sudo -E apt-get -yq update &>> ~/apt-get-update.log
 - sudo -E apt-get --no-install-suggests --no-install-recommends -qy --allow-unauthenticated install gcc make llvm-6.0 llvm-6.0-dev clang-6.0 lib32z1-dev python2.7 python3.6 python-tk
 - PATH=$PATH:/home/travis/.cargo/bin
+- sudo -E apt-get -yq update &>> ~/apt-get-update.log
+- sudo -E apt-get --no-install-suggests --no-install-recommends -qy --allow-unauthenticated install gcc make llvm-6.0 llvm-6.0-dev clang-6.0 lib32z1-dev python2.7
   # - pip install virtualenv==15.1.0
   # - bash -e build_tools/travis/init_virtualenvs.sh 2.7 3.6
   # - git clone https://github.com/weld-project/weld-benchmarks.git
