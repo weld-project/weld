@@ -9,7 +9,7 @@ use std::vec;
 use super::ast::*;
 use super::ast::Type::*;
 use super::error::*;
-use super::util::SymbolGenerator;
+use super::util::{SymbolGenerator, join};
 
 extern crate fnv;
 
@@ -56,6 +56,7 @@ pub enum StatementKind {
         arg: Option<Symbol>,
         ty: Type,
     },
+    ParallelFor(ParallelForData),
     Res(Symbol),
     Select {
         cond: Symbol,
@@ -80,6 +81,32 @@ pub enum StatementKind {
     }
 }
 
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct ParallelForIter {
+    pub data: Symbol,
+    pub start: Option<Symbol>,
+    pub end: Option<Symbol>,
+    pub stride: Option<Symbol>,
+    pub kind: IterKind,
+    // NdIter specific fields
+    pub strides: Option<Symbol>,
+    pub shape: Option<Symbol>,
+}
+
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct ParallelForData {
+    pub data: Vec<ParallelForIter>,
+    pub builder: Symbol,
+    pub data_arg: Symbol,
+    pub builder_arg: Symbol,
+    pub idx_arg: Symbol,
+    pub body: FunctionId,
+    pub innermost: bool,
+    /// If `true`, always invoke parallel runtime for the loop.
+    pub always_use_runtime: bool,
+    pub grain_size: Option<i32>
+}
+
 impl StatementKind {
     pub fn children(&self) -> vec::IntoIter<&Symbol> {
         use self::StatementKind::*;
@@ -93,6 +120,26 @@ impl StatementKind {
             } => {
                 vars.push(left);
                 vars.push(right);
+            }
+            ParallelFor(ref data) => {
+                vars.push(&data.builder);
+                // vars.push(&data.data_arg);
+                // vars.push(&data.builder_arg);
+                // vars.push(&data.idx_arg);
+                for iter in data.data.iter() {
+                    vars.push(&iter.data);
+                    if iter.shape.is_some() {
+                        vars.push(iter.start.as_ref().unwrap());
+                        vars.push(iter.end.as_ref().unwrap());
+                        vars.push(iter.stride.as_ref().unwrap());
+                        vars.push(iter.shape.as_ref().unwrap());
+                        vars.push(iter.strides.as_ref().unwrap());
+                    } else if iter.start.is_some() {
+                        vars.push(iter.start.as_ref().unwrap());
+                        vars.push(iter.end.as_ref().unwrap());
+                        vars.push(iter.stride.as_ref().unwrap());
+                    }
+                }
             }
             UnaryOp {
                 ref child,
@@ -294,32 +341,6 @@ impl StatementTracker {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Hash)]
-pub struct ParallelForIter {
-    pub data: Symbol,
-    pub start: Option<Symbol>,
-    pub end: Option<Symbol>,
-    pub stride: Option<Symbol>,
-    pub kind: IterKind,
-    // NdIter specific fields
-    pub strides: Option<Symbol>,
-    pub shape: Option<Symbol>,
-}
-
-#[derive(Clone, PartialEq, Eq, Hash)]
-pub struct ParallelForData {
-    pub data: Vec<ParallelForIter>,
-    pub builder: Symbol,
-    pub data_arg: Symbol,
-    pub builder_arg: Symbol,
-    pub idx_arg: Symbol,
-    pub body: FunctionId,
-    pub cont: FunctionId,
-    pub innermost: bool,
-    /// If `true`, always invoke parallel runtime for the loop.
-    pub always_use_runtime: bool,
-    pub grain_size: Option<i32>
-}
 
 /// A terminating statement inside a basic block.
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -330,10 +351,8 @@ pub enum Terminator {
         on_false: BasicBlockId,
     },
     JumpBlock(BasicBlockId),
-    JumpFunction(FunctionId),
     ProgramReturn(Symbol),
     EndFunction(Symbol),
-    ParallelFor(ParallelForData),
     Crash,
 }
 
@@ -349,30 +368,11 @@ impl Terminator {
             ProgramReturn(ref sym) => {
                 vars.push(sym);
             }
-            ParallelFor(ref data) => {
-                vars.push(&data.builder);
-                vars.push(&data.data_arg);
-                vars.push(&data.builder_arg);
-                vars.push(&data.idx_arg);
-                for iter in data.data.iter() {
-                    vars.push(&iter.data);
-                    if let Some(ref sym) = iter.start {
-                        vars.push(sym);
-                    }
-                    if let Some(ref sym) = iter.end {
-                        vars.push(sym);
-                    }
-                    if let Some(ref sym) = iter.stride {
-                        vars.push(sym);
-                    }
-                }
-            }
             EndFunction(ref sym) => {
                 vars.push(&sym)
             }
             Crash => (),
             JumpBlock(_) => (),
-            JumpFunction(_) => (),
         };
         vars.into_iter()
     }
@@ -391,6 +391,11 @@ pub struct SirFunction {
     pub id: FunctionId,
     pub params: BTreeMap<Symbol, Type>,
     pub locals: BTreeMap<Symbol, Type>,
+    // Local variables that are used for looping.
+    //
+    // This will be an empty vector if `loop_body` is false. If loop_body is true, the variables
+    // that appear here are guaranteed to also be in `locals`.
+    pub loop_variables: Vec<Symbol>,
     pub blocks: Vec<BasicBlock>,
     pub return_type: Type,
     pub loop_body: bool,
@@ -435,6 +440,7 @@ impl SirProgram {
             params: BTreeMap::new(),
             blocks: vec![],
             locals: BTreeMap::new(),
+            loop_variables: vec![],
             return_type: Unknown,
             loop_body: false,
         };
@@ -452,6 +458,10 @@ impl SirProgram {
     /// Add a local variable of the given type and name
     pub fn add_local_named(&mut self, ty: &Type, sym: &Symbol, func: FunctionId) {
         self.funcs[func].locals.insert(sym.clone(), ty.clone());
+    }
+
+    pub fn add_loop_variable(&mut self, sym: &Symbol, func: FunctionId) {
+        self.funcs[func].loop_variables.push(sym.clone());
     }
 }
 
@@ -537,6 +547,22 @@ impl fmt::Display for StatementKind {
                 ref child,
                 ref index,
             } => write!(f, "lookup({}, {})", child, index),
+            ParallelFor(ref pf) => {
+                write!(f, "for [")?;
+                for iter in &pf.data {
+                    write!(f, "{}, ", iter)?;
+                }
+                write!(f, "] ")?;
+                write!(f,
+                       "{} {} {} {} F{} {}",
+                       pf.builder,
+                       pf.builder_arg,
+                       pf.idx_arg,
+                       pf.data_arg,
+                       pf.body,
+                       pf.innermost)?;
+                Ok(())
+            }
             Res(ref builder) => write!(f, "result({})", builder),
             Select {
                 ref cond,
@@ -577,25 +603,7 @@ impl fmt::Display for Terminator {
                 ref on_true,
                 ref on_false,
             } => write!(f, "branch {} B{} B{}", cond, on_true, on_false),
-            ParallelFor(ref pf) => {
-                write!(f, "for [")?;
-                for iter in &pf.data {
-                    write!(f, "{}, ", iter)?;
-                }
-                write!(f, "] ")?;
-                write!(f,
-                       "{} {} {} {} F{} F{} {}",
-                       pf.builder,
-                       pf.builder_arg,
-                       pf.idx_arg,
-                       pf.data_arg,
-                       pf.body,
-                       pf.cont,
-                       pf.innermost)?;
-                Ok(())
-            }
             JumpBlock(block) => write!(f, "jump B{}", block),
-            JumpFunction(func) => write!(f, "jump F{}", func),
             ProgramReturn(ref sym) => write!(f, "return {}", sym),
             EndFunction(ref sym) => write!(f, "end {}", sym),
             Crash => write!(f, "crash"),
@@ -605,7 +613,6 @@ impl fmt::Display for Terminator {
 
 impl fmt::Display for ParallelForIter {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-
         let iterkind = match self.kind {
             IterKind::ScalarIter => "iter",
             IterKind::SimdIter => "simditer",
@@ -718,39 +725,7 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
         for statement in &block.statements {
             vars.extend(statement.kind.children().cloned());
         }
-        use self::Terminator::*;
-        match block.terminator {
-            // push any existing symbols that are used by the terminator
-            Branch { ref cond, .. } => {
-                vars.push(cond.clone());
-            }
-            ProgramReturn(ref sym) => {
-                vars.push(sym.clone());
-            }
-            ParallelFor(ref pf) => {
-                for iter in pf.data.iter() {
-                    vars.push(iter.data.clone());
-                    if iter.shape.is_some() {
-                        vars.push(iter.start.clone().unwrap());
-                        vars.push(iter.end.clone().unwrap());
-                        vars.push(iter.stride.clone().unwrap());
-                        vars.push(iter.shape.clone().unwrap());
-                        vars.push(iter.strides.clone().unwrap());
-                    } else if iter.start.is_some() {
-                        vars.push(iter.start.clone().unwrap());
-                        vars.push(iter.end.clone().unwrap());
-                        vars.push(iter.stride.clone().unwrap());
-                    }
-                }
-                vars.push(pf.builder.clone());
-            }
-            JumpBlock(_) => {}
-            JumpFunction(_) => {}
-            EndFunction(ref sym) => {
-                vars.push(sym.clone()); 
-            }
-            Crash => {}
-        }
+        vars.extend(block.terminator.children().cloned());
         for var in &vars {
             if prog.funcs[func_id].locals.get(&var) == None {
                 prog.funcs[func_id]
@@ -760,21 +735,18 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
             }
         }
         let mut inner_closure = HashSet::new();
-        match block.terminator {
-            // make a recursive call for other functions referenced by the terminator
-            ParallelFor(ref pf) => {
-                sir_param_correction_helper(prog, pf.body, env, &mut inner_closure, visited);
-                sir_param_correction_helper(prog, pf.cont, env, &mut inner_closure, visited);
+
+        // Recurse into other called functions.
+        for statement in &block.statements {
+            use self::StatementKind::ParallelFor;
+            match statement.kind {
+                ParallelFor(ref pf) => {
+                    sir_param_correction_helper(prog, pf.body, env, &mut inner_closure, visited);
+                }
+                _ => (),
             }
-            JumpFunction(jump_func) => {
-                sir_param_correction_helper(prog, jump_func, env, &mut inner_closure, visited);
-            }
-            Branch { .. } => {}
-            JumpBlock(_) => {}
-            ProgramReturn(_) => {}
-            EndFunction(_) => {}
-            Crash => {}
         }
+
         for var in inner_closure {
             if prog.funcs[func_id].locals.get(&var) == None {
                 prog.funcs[func_id]
@@ -786,7 +758,11 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
     }
 }
 
-fn helper(prog: &mut SirProgram, func: FunctionId) -> WeldResult<Type> {
+/// Recursive helper for `assign_return_types`.
+///
+/// This function recurses assigns a return type to the given function ID. It recurses into the
+/// terminators and propogates the return types of the terminator to current function.
+fn assign_return_types_helper(prog: &mut SirProgram, func: FunctionId) -> WeldResult<Type> {
     use sir::Terminator::*;
 
     // Base case - already visited this function!
@@ -794,7 +770,7 @@ fn helper(prog: &mut SirProgram, func: FunctionId) -> WeldResult<Type> {
         return Ok(prog.funcs[func].return_type.clone())
     }
 
-    let mut result = None;
+    // Symbol returned by the terminator.
     let mut return_symbol = None;
     {
         let ref function = prog.funcs[func];
@@ -802,16 +778,10 @@ fn helper(prog: &mut SirProgram, func: FunctionId) -> WeldResult<Type> {
             match block.terminator {
                 Branch { .. } => (),
                 JumpBlock(_) => (),
-                JumpFunction(ref id) => {
-                    result = Some(*id);
-                }
                 ProgramReturn(ref sym) | EndFunction(ref sym) => {
                     // Type should be set during AST -> SIR.
                     return_symbol = Some(sym.clone());
                 },
-                ParallelFor(ref parfor) => {
-                    result = Some(parfor.cont);
-                }
                 Crash => (),
             }
         }
@@ -822,19 +792,16 @@ fn helper(prog: &mut SirProgram, func: FunctionId) -> WeldResult<Type> {
         let return_type = prog.funcs[func].symbol_type(&symbol)?.clone();
         prog.funcs[func].return_type = return_type.clone();
         Ok(return_type)
-    } else if let Some(child) = result { 
-        let return_type = helper(prog, child)?;
-        prog.funcs[func].return_type = return_type.clone();
-        Ok(return_type)
     } else {
         // Indicates that the function did not return...
         unreachable!()
     }
 }
 
+/// Assigns return types to each function in the program.
 fn assign_return_types(prog: &mut SirProgram) -> WeldResult<()> {
     for funcs in 0..prog.funcs.len() {
-        helper(prog, funcs)?;
+        assign_return_types_helper(prog, funcs)?;
     }
     Ok(())
 }
@@ -1137,22 +1104,10 @@ fn gen_expr(expr: &Expr,
             prog.funcs[true_func].blocks[true_block].add_statement(Statement::new(Some(res_sym.clone()), Assign(true_sym)));
             prog.funcs[false_func].blocks[false_block].add_statement(Statement::new(Some(res_sym.clone()), Assign(false_sym)));
 
-            if true_func != cur_func || false_func != cur_func {
-                // TODO we probably want a better for name for this symbol than whatever res_sym is
-                prog.add_local_named(&expr.ty, &res_sym, false_func);
-                // the part after the if-else block is split out into a separate continuation
-                // function so that we don't have to duplicate this code
-                let cont_func = prog.add_func();
-                let cont_block = prog.funcs[cont_func].add_block();
-                prog.funcs[true_func].blocks[true_block].terminator = JumpFunction(cont_func);
-                prog.funcs[false_func].blocks[false_block].terminator = JumpFunction(cont_func);
-                Ok((cont_func, cont_block, res_sym))
-            } else {
-                let cont_block = prog.funcs[cur_func].add_block();
-                prog.funcs[true_func].blocks[true_block].terminator = JumpBlock(cont_block);
-                prog.funcs[false_func].blocks[false_block].terminator = JumpBlock(cont_block);
-                Ok((cur_func, cont_block, res_sym))
-            }
+            let cont_block = prog.funcs[cur_func].add_block();
+            prog.funcs[true_func].blocks[true_block].terminator = JumpBlock(cont_block);
+            prog.funcs[false_func].blocks[false_block].terminator = JumpBlock(cont_block);
+            Ok((cur_func, cont_block, res_sym))
         }
 
         ExprKind::Iterate {
@@ -1182,38 +1137,19 @@ fn gen_expr(expr: &Expr,
 
             prog.funcs[cur_func].blocks[cur_block].add_statement(Statement::new(Some(argument_sym.clone()), Assign(initial_sym)));
 
-            // Check whether the function's body contains any parallel loops. If so, we should put the loop body
-            // in a new function because we'll need to jump back to it from continuations. If not, we can just
-            // make the loop body be another basic block in the current function.
-            let parallel_body = contains_parallel_expressions(func_body);
-            let body_start_func = if parallel_body {
-                let new_func = prog.add_func();
-                new_func
-            } else {
-                cur_func
-            };
-
-            let body_start_block = prog.funcs[body_start_func].add_block();
+            let body_start_block = prog.funcs[cur_func].add_block();
 
             // Jump to where the body starts
-            if parallel_body {
-                prog.funcs[cur_func].blocks[cur_block].terminator = JumpFunction(body_start_func);
-            } else {
-                prog.funcs[cur_func].blocks[cur_block].terminator = JumpBlock(body_start_block);
-            }
+            prog.funcs[cur_func].blocks[cur_block].terminator = JumpBlock(body_start_block);
 
             // Generate the loop's body, which will work on argument_sym and produce result_sym.
             // The type of result_sym will be {ArgType, bool} and we will repeat the body if the bool is true.
             let (body_end_func, body_end_block, result_sym) =
-                gen_expr(func_body, prog, body_start_func, body_start_block, tracker, multithreaded)?;
+                gen_expr(func_body, prog, cur_func, body_start_block, tracker, multithreaded)?;
 
             // After the body, unpack the {state, bool} struct into symbols argument_sym and continue_sym.
             let continue_sym = prog.add_local(&Scalar(ScalarKind::Bool), body_end_func);
-            if parallel_body {
-                // this is needed because sir_param_correction does not add variables only used
-                // on the LHS of assignments to the params list
-                prog.funcs[body_end_func].params.insert(argument_sym.clone(), initial.ty.clone());
-            }
+
             prog.funcs[body_end_func].blocks[body_end_block].add_statement(
                 Statement::new(Some(argument_sym.clone()), GetField { value: result_sym.clone(), index: 0 }));
             prog.funcs[body_end_func].blocks[body_end_block].add_statement(
@@ -1225,17 +1161,11 @@ fn gen_expr(expr: &Expr,
             prog.funcs[body_end_func].blocks[body_end_block].terminator =
                 Branch { cond: continue_sym, on_true: repeat_block, on_false: finish_block };
 
-            // If we had a parallel body, repeat_block must do a JumpFunction to get back to body_start_func;
-            // otherwise it can just do a normal JumpBlock since it should be in the same function.
-            if parallel_body {
-                assert!(body_end_func != body_start_func);
-                prog.funcs[body_end_func].blocks[repeat_block].terminator = JumpFunction(body_start_func);
-            } else {
-                assert!(body_end_func == cur_func && body_start_func == cur_func);
-                prog.funcs[body_end_func].blocks[repeat_block].terminator = JumpBlock(body_start_block);
-            }
+            // Do a normal JumpBlock since it should be in the same function.
+            assert!(body_end_func == cur_func && cur_func == cur_func);
+            prog.funcs[body_end_func].blocks[repeat_block].terminator = JumpBlock(body_start_block);
 
-            // In either case, our final value is available in finish_block.
+            // Our final value is available in finish_block.
             Ok((body_end_func, finish_block, argument_sym.clone()))
         }
 
@@ -1369,6 +1299,12 @@ fn gen_expr(expr: &Expr,
                 prog.add_local_named(&params[0].ty, &params[0].name, body_func);
                 prog.add_local_named(&params[1].ty, &params[1].name, body_func);
                 prog.add_local_named(&params[2].ty, &params[2].name, body_func);
+
+                // Register the data, index, and builder arguments are loop variables.
+                prog.add_loop_variable(&params[0].name, body_func);
+                prog.add_loop_variable(&params[1].name, body_func);
+                prog.add_loop_variable(&params[2].name, body_func);
+
                 prog.funcs[body_func]
                     .params
                     .insert(builder_sym.clone(), builder.ty.clone());
@@ -1405,26 +1341,27 @@ fn gen_expr(expr: &Expr,
                 let (body_end_func, body_end_block, result_sym) =
                     gen_expr(body, prog, body_func, body_block, tracker, multithreaded)?;
                 prog.funcs[body_end_func].blocks[body_end_block].terminator = EndFunction(result_sym);
-                let cont_func = prog.add_func();
-                let cont_block = prog.funcs[cont_func].add_block();
+
+                // Check whether the loop is the innermost one.
                 let mut is_innermost = true;
                 body.traverse(&mut |ref e| if let ExprKind::For { .. } = e.kind {
                                        is_innermost = false;
                                    });
-                prog.funcs[cur_func].blocks[cur_block].terminator =
-                    ParallelFor(ParallelForData {
+
+                let kind = ParallelFor(ParallelForData {
                                     data: pf_iters,
                                     builder: builder_sym.clone(),
-                                    data_arg: params[2].name.clone(),
                                     builder_arg: params[0].name.clone(),
                                     idx_arg: params[1].name.clone(),
+                                    data_arg: params[2].name.clone(),
                                     body: body_func,
-                                    cont: cont_func,
                                     innermost: is_innermost,
                                     always_use_runtime: expr.annotations.always_use_runtime(),
                                     grain_size: expr.annotations.grain_size().clone()
                                 });
-                Ok((cont_func, cont_block, builder_sym))
+
+                let res_sym = tracker.symbol_for_statement(prog, cur_func, cur_block, &builder.ty, kind);
+                Ok((cur_func, cur_block, res_sym))
             } else {
                 compile_err!("Argument to For was not a Lambda: {}", func.pretty_print())
             }
@@ -1443,17 +1380,4 @@ fn contains_parallel_expressions(expr: &Expr) -> bool {
         }
     });
     found
-}
-
-fn join<T: Iterator<Item = String>>(start: &str, sep: &str, end: &str, strings: T) -> String {
-    let mut res = String::new();
-    res.push_str(start);
-    for (i, s) in strings.enumerate() {
-        if i > 0 {
-            res.push_str(sep);
-        }
-        res.push_str(&s);
-    }
-    res.push_str(end);
-    res
 }

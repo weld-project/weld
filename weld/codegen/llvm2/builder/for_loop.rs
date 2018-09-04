@@ -24,7 +24,7 @@ use self::llvm_sys::core::*;
 use codegen::llvm2::llvm_exts::*;
 use codegen::llvm2::llvm_exts::LLVMExtAttribute::*;
 use codegen::llvm2::vector::VectorExt;
-use codegen::llvm2::LLVM_VECTOR_WIDTH;
+use codegen::llvm2::{SIR_FUNC_CALL_CONV, LLVM_VECTOR_WIDTH};
 
 use super::{CodeGenExt, FunctionContext, LlvmGenerator};
 
@@ -36,7 +36,8 @@ pub trait ForLoopGenInternal {
     /// helpers. 
     unsafe fn gen_for_internal(&mut self,
                                ctx: &mut FunctionContext,
-                               parfor: &ParallelForData) -> WeldResult<LLVMValueRef>; 
+                               output: &Symbol,
+                               parfor: &ParallelForData) -> WeldResult<()>; 
     /// Generates bounds checking code for the loop and return number of iterations.
     ///
     /// This function ensures that each iterator will only access in-bounds vector elements and
@@ -82,7 +83,8 @@ impl ForLoopGenInternal for LlvmGenerator {
     /// Entry point to generating a for loop.
     unsafe fn gen_for_internal(&mut self,
                                ctx: &mut FunctionContext,
-                               parfor: &ParallelForData) -> WeldResult<LLVMValueRef> {
+                               output: &Symbol,
+                               parfor: &ParallelForData) -> WeldResult<()> {
 
         let iterations = self.gen_bounds_check(ctx, parfor)?;
 
@@ -111,29 +113,12 @@ impl ForLoopGenInternal for LlvmGenerator {
                                     arguments.as_mut_ptr(),
                                     arguments.len() as u32,
                                     c_str!(""));
+        LLVMSetInstructionCallConv(builder, SIR_FUNC_CALL_CONV);
+        // XXX what is parfor.builder now...
         LLVMBuildStore(ctx.builder, builder, ctx.get_value(&parfor.builder)?);
+        LLVMBuildStore(ctx.builder, builder, ctx.get_value(&output)?);
 
-        // Create a new exit block, jump to it, and then load the arguments to the continuation and
-        // call it.
-        let block = LLVMAppendBasicBlockInContext(self.context, ctx.llvm_function, c_str!("exit"));
-        LLVMBuildBr(ctx.builder, block);
-        LLVMPositionBuilderAtEnd(ctx.builder, block);
-
-        // Call the continuation, which can be built as a tail call.
-        let ref sir_function = ctx.sir_program.funcs[parfor.cont];
-        let mut arguments = vec![];
-        for (symbol, _) in sir_function.params.iter() {
-            let value = self.load(ctx.builder, ctx.get_value(symbol)?)?;
-            arguments.push(value);
-        }
-        arguments.push(ctx.get_run());
-        let cont_function = *self.functions.get(&parfor.cont).unwrap();
-
-        Ok(LLVMBuildCall(ctx.builder,
-                              cont_function,
-                              arguments.as_mut_ptr(),
-                              arguments.len() as u32,
-                              c_str!("")))
+        Ok(())
     }
 
     /// Generate runtime bounds checking, which looks as follows:

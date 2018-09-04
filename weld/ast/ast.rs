@@ -509,94 +509,142 @@ impl Iter {
 /// particular `ExprKind`.
 #[derive(Clone, Debug, PartialEq)]
 pub enum ExprKind {
+    /// A literal expression.
+    ///
+    /// Weld supports numerical scalar literals (e.g., 1.0 and -5) and ASCII string literals.
     Literal(LiteralKind),
+    /// An identifier.
     Ident(Symbol),
+    /// Negates a numerical expression.
     Negate(Box<Expr>),
-    // Broadcasts a scalar into a vector, e.g., 1 -> <1, 1, 1, 1>
+    /// Broadcasts a scalar into a vector.
     Broadcast(Box<Expr>),
+    /// Applies a binary operator to the child expressions.
     BinOp {
         kind: BinOpKind,
         left: Box<Expr>,
         right: Box<Expr>,
     },
+    /// Applies a unary operator to the child expressions.
     UnaryOp {
         kind: UnaryOpKind,
         value: Box<Expr>,
     },
+    /// Cast a scalar or SIMD child expression to another type.
     Cast {
         kind: ScalarKind,
         child_expr: Box<Expr>,
     },
+    /// Convert a dictionary into a vector of key/value pairs.
     ToVec { child_expr: Box<Expr> },
+    /// Construct a struct from a list of child expressions.
     MakeStruct { elems: Vec<Expr> },
+    /// Construct a vector from a list of child expressions.
     MakeVector { elems: Vec<Expr> },
+    /// Zip vectors together for iteration.
+    ///
+    /// This operator is only available within a For loop.
     Zip { vectors: Vec<Expr> },
+    /// Access a struct field at the given index.
     GetField { expr: Box<Expr>, index: u32 },
+    /// Get the length of a vector as an `i64`.
     Length { data: Box<Expr> },
+    /// Lookup a value in a collection.
+    ///
+    /// If `data` is a vector, `index` must be an `i64` specifying the vector index. If `data` is a
+    /// dictionary, `index` is a key. If the key is not present in the dictionary, this expression
+    /// raises a `KeyNotFoundError`.
     Lookup {
         data: Box<Expr>,
         index: Box<Expr>,
     },
+    /// Check whether a key exists in a dictionary.
     KeyExists {
         data: Box<Expr>,
         key: Box<Expr>,
     },
+    /// Slices a vector, creating a view into it.
+    ///
+    /// This does not allocate new data.
     Slice {
         data: Box<Expr>,
         index: Box<Expr>,
         size: Box<Expr>,
     },
+    /// Sort a vector.
     Sort {
         data: Box<Expr>,
         keyfunc: Box<Expr>,
     },
+    /// Assign a `value` to `name`, and then evaluate `body`.
+    ///
+    /// The environment is updated with `name` before `body` is run.
     Let {
         name: Symbol,
         value: Box<Expr>,
         body: Box<Expr>,
     },
+    /// Evaluate `on_true` or `on_false` depending on `cond`.
     If {
         cond: Box<Expr>,
         on_true: Box<Expr>,
         on_false: Box<Expr>,
     },
+    /// Iterate sequentially using an update function.
+    ///
+    /// The initial value has type `T`, and the update function has type `|T| -> {T, bool}`.
+    /// Iteration continues until the update function returns `false`.
     Iterate {
         initial: Box<Expr>,
         update_func: Box<Expr>,
     },
+    /// Select `on_true` or `on_false` depending on `cond`.
+    ///
+    /// Both `on_true`and `on_false` are evaluated unconditionally.
     Select {
         cond: Box<Expr>,
         on_true: Box<Expr>,
         on_false: Box<Expr>,
     },
+    /// An expression representing a function.
     Lambda {
         params: Vec<Parameter>,
         body: Box<Expr>,
     },
+    /// Apply a function using a list of parameters.
     Apply {
         func: Box<Expr>,
         params: Vec<Expr>,
     },
+    /// A C UDF called by symbol name.
     CUDF {
         sym_name: String,
         args: Vec<Expr>,
         return_ty: Box<Type>,
     },
+    /// Serialize an expression into a vector of bytes.
     Serialize(Box<Expr>),
+    /// Deserialize an expression from a vector of bytes.
+    ///
+    /// The expression should be serialized using `Serialize`.
     Deserialize {
         value: Box<Expr>,
         value_ty: Box<Type>,
     },
+    /// Create a new builder.
     NewBuilder(Option<Box<Expr>>),
+    /// Update a builder in parallel by iterating over data.
     For {
         iters: Vec<Iter>,
         builder: Box<Expr>,
         func: Box<Expr>,
     },
+    /// Update a builder value, returning a new builder.
     Merge {
         builder: Box<Expr>,
         value: Box<Expr>,
     },
+    /// Consume a builder and return its result.
     Res { builder: Box<Expr> },
 }
 

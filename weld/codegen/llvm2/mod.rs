@@ -82,6 +82,9 @@ lazy_static! {
 // TODO This should be based on the type!
 pub const LLVM_VECTOR_WIDTH: u32 = 4;
 
+/// Calling convention for SIR function.
+pub const SIR_FUNC_CALL_CONV: u32 = llvm_sys::LLVMCallConv::LLVMFastCallConv as u32;
+
 /// Convert a string literal into a C string.
 macro_rules! c_str {
     ($s:expr) => (
@@ -317,6 +320,10 @@ pub struct LlvmGenerator {
     serialize_fns: FnvHashMap<Type, LLVMValueRef>,
     /// Deserialization functions on various types.
     deserialize_fns: FnvHashMap<Type, LLVMValueRef>,
+    /// Names of structs for readability.
+    struct_names: FnvHashMap<Type, CString>,
+    /// Counter for unique struct names.
+    struct_index: u32,
 }
 
 /// Defines helper methods for LLVM code generation.
@@ -711,6 +718,8 @@ impl LlvmGenerator {
             hash_fns: FnvHashMap::default(),
             serialize_fns: FnvHashMap::default(),
             deserialize_fns: FnvHashMap::default(),
+            struct_names: FnvHashMap::default(),
+            struct_index: 0,
             intrinsics: intrinsics,
         })
     }
@@ -836,7 +845,9 @@ impl LlvmGenerator {
 
         // Run the Weld program.
         let entry_function = *self.functions.get(&program.funcs[0].id).unwrap();
-        let _ = LLVMBuildCall(builder, entry_function, func_args.as_mut_ptr(), func_args.len() as u32, c_str!(""));
+        let inst = LLVMBuildCall(builder, entry_function,
+                              func_args.as_mut_ptr(), func_args.len() as u32, c_str!(""));
+        LLVMSetInstructionCallConv(inst, SIR_FUNC_CALL_CONV);
 
         let result = self.intrinsics.call_weld_run_get_result(builder, run, None);
         let result = LLVMBuildPtrToInt(builder, result, self.i64_type(), c_str!("result"));
@@ -880,8 +891,11 @@ impl LlvmGenerator {
         let func_ty = LLVMFunctionType(ret_ty, arg_tys.as_mut_ptr(), arg_tys.len() as u32, 0);
         let name = CString::new(format!("f{}", func.id)).unwrap();
         let function = LLVMAddFunction(self.module, name.as_ptr(), func_ty);
+
+        // Add attributes, set linkage, etc.
         llvm_exts::LLVMExtAddDefaultAttrs(self.context(), function);
         LLVMSetLinkage(function, LLVMLinkage::LLVMPrivateLinkage);
+        LLVMSetFunctionCallConv(function, SIR_FUNC_CALL_CONV);
 
         self.functions.insert(func.id, function);
         Ok(())
@@ -1163,6 +1177,10 @@ impl LlvmGenerator {
                 use self::builder::BuilderExpressionGen;
                 self.gen_new_builder(context, statement)
             }
+            ParallelFor(_) => {
+                use self::builder::BuilderExpressionGen;
+                self.gen_for(context, statement)
+            }
             Res(_) => {
                 use self::builder::BuilderExpressionGen;
                 self.gen_result(context, statement)
@@ -1278,38 +1296,6 @@ impl LlvmGenerator {
             JumpBlock(ref id) => {
                 LLVMBuildBr(context.builder, context.get_block(id)?);
             }
-            JumpFunction(ref func) => {
-                let ref sir_function = context.sir_program.funcs[*func];
-                let mut arguments = vec![];
-                for (symbol, _) in sir_function.params.iter() {
-                    let value = self.load(context.builder, context.get_value(symbol)?)?;
-                    arguments.push(value);
-                }
-                arguments.push(context.get_run());
-                let jump_function = *self.functions.get(func).unwrap();
-                let result = LLVMBuildCall(context.builder,
-                              jump_function,
-                              arguments.as_mut_ptr(),
-                              arguments.len() as u32,
-                              c_str!(""));
-                if let Some((jumpto, loop_builder)) = loop_terminator {
-                    LLVMBuildStore(context.builder, result, loop_builder);
-                    LLVMBuildBr(context.builder, jumpto);
-                } else {
-                    LLVMBuildRet(context.builder, result);
-                }
-            }
-            ParallelFor(ref parfor) => {
-                use self::builder::BuilderExpressionGen;
-                let updated_builder = self.gen_for(context, parfor)?;
-                if let Some((jumpto, loop_builder)) = loop_terminator {
-                    LLVMBuildStore(context.builder, updated_builder, loop_builder);
-                    LLVMBuildBr(context.builder, jumpto);
-                } else {
-                    // Continuation will continue the program - this ends the current function.
-                    LLVMBuildRet(context.builder, updated_builder);
-                }
-            }
             EndFunction(ref sym) => {
                 if let Some((jumpto, loop_builder)) = loop_terminator {
                     let pointer = context.get_value(sym)?;
@@ -1377,11 +1363,16 @@ impl LlvmGenerator {
                 LLVMVectorType(base, LLVM_VECTOR_WIDTH)
             }
             Struct(ref elems) => {
-                let mut llvm_types: Vec<_> = elems.iter()
-                    .map(&mut |t| self.llvm_type(t)).collect::<WeldResult<_>>()?;
-                LLVMStructTypeInContext(self.context,
-                                        llvm_types.as_mut_ptr(),
-                                        llvm_types.len() as u32, 0)
+                if !self.struct_names.contains_key(ty) {
+                    let name = CString::new(format!("s{}", self.struct_index)).unwrap();
+                    self.struct_index += 1;
+                    let mut llvm_types: Vec<_> = elems.iter()
+                        .map(&mut |t| self.llvm_type(t)).collect::<WeldResult<_>>()?;
+                    let struct_ty = LLVMStructCreateNamed(self.context, name.as_ptr());
+                    LLVMStructSetBody(struct_ty, llvm_types.as_mut_ptr(), llvm_types.len() as u32, 0);
+                    self.struct_names.insert(ty.clone(), name);
+                }
+                LLVMGetTypeByName(self.module, self.struct_names.get(ty).cloned().unwrap().as_ptr())
             }
             Vector(ref elem_type) => {
                 // Vectors are a named type, so only generate the name once.
@@ -1458,7 +1449,7 @@ impl<'a> FunctionContext<'a> {
         self.symbols
             .get(sym)
             .cloned()
-            .ok_or(WeldCompileError::new("Undefined symbol in function codegen"))
+            .ok_or(WeldCompileError::new(format!("Undefined symbol {} in function codegen", sym)))
     }
 
     /// Returns the LLVM basic block for a basic block ID in this function.
