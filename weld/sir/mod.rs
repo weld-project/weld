@@ -727,7 +727,6 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
         }
         vars.extend(block.terminator.children().cloned());
         for var in &vars {
-            println!("{}", var);
             if prog.funcs[func_id].locals.get(&var) == None {
                 prog.funcs[func_id]
                     .params
