@@ -9,25 +9,17 @@ addons:
     s3_region: us-west-2
     key: $AWS_ACCESS_KEY
     secret: $AWS_SECRET_KEY
-  apt:
-    sources:
-    - deadsnakes
-    - sourceline: deb http://apt.llvm.org/trusty/ llvm-toolchain-trusty-6.0 main
-      key_url: https://apt.llvm.org/llvm-snapshot.gpg.key
-    - sourceline: deb http://ppa.launchpad.net/ubuntu-toolchain-r/test/ubuntu trusty main
-    packages:
-    - gcc
-    - make
-    - llvm-6.0
-    - llvm-6.0-dev
-    - clang-6.0
-    - lib32z1-dev
-    - python2.7
-    - python3.6
-    - python-tk
+before_install:
+- sudo -E apt-add-repository -y "ppa:deadsnakes/ppa"
+- curl -sSL "https://apt.llvm.org/llvm-snapshot.gpg.key" | sudo -E apt-key add -
+- echo "deb http://apt.llvm.org/trusty/ llvm-toolchain-trusty-6.0 main" | sudo tee -a /etc/apt/sources.list >/dev/null
+- curl -sSL "https://build.travis-ci.org/files/gpg/travis-security.asc" | sudo -E apt-key add -
+- echo "deb http://ppa.launchpad.net/ubuntu-toolchain-r/test/ubuntu trusty main" | sudo tee -a /etc/apt/sources.list >/dev/null
 install:
 - sudo rm -f `which llvm-config`
 - export WELD_HOME=`pwd`
+- sudo -E apt-get -yq update &>> ~/apt-get-update.log
+- sudo -E apt-get --no-install-suggests --no-install-recommends -qy --allow-unauthenticated install gcc make llvm-6.0 llvm-6.0-dev clang-6.0 lib32z1-dev python2.7 python3.6 python-tk
 - PATH=$PATH:/home/travis/.cargo/bin
 - pip install virtualenv==15.1.0
 - bash -e build_tools/travis/init_virtualenvs.sh 2.7 3.6
