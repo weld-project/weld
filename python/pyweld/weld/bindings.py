@@ -2,11 +2,9 @@
 # Implements a wrapper around the Weld API.
 #
 
-from ctypes import *
-
-import os
-import platform
 import copy
+import platform
+from ctypes import *
 
 import pkg_resources
 
@@ -46,7 +44,7 @@ class WeldModule(c_void_p):
             c_char_p, c_weld_conf, c_weld_err]
         weld_module_compile.restype = c_weld_module
 
-        code = c_char_p(code)
+        code = c_char_p(code.encode('utf-8'))
         self.module = weld_module_compile(code, conf.conf, err.error)
 
     def run(self, conf, arg, err):
@@ -113,7 +111,7 @@ class WeldConf(c_void_p):
         self.conf = weld_conf_new()
 
     def get(self, key):
-        key = c_char_p(key)
+        key = c_char_p(key.encode('utf-8'))
         weld_conf_get = weld.weld_conf_get
         weld_conf_get.argtypes = [c_weld_conf, c_char_p]
         weld_conf_get.restype = c_char_p
@@ -121,8 +119,8 @@ class WeldConf(c_void_p):
         return copy.copy(val)
 
     def set(self, key, value):
-        key = c_char_p(key)
-        value = c_char_p(value)
+        key = c_char_p(key.encode('utf-8'))
+        value = c_char_p(value.encode('utf-8'))
         weld_conf_set = weld.weld_conf_set
         weld_conf_set.argtypes = [c_weld_conf, c_char_p, c_char_p]
         weld_conf_set.restype = None

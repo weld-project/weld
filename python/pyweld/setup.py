@@ -2,10 +2,9 @@ import os
 import platform
 import shutil
 import subprocess
-import sys
 
-from setuptools import setup, Distribution
 import setuptools.command.build_ext as _build_ext
+from setuptools import setup, Distribution
 from setuptools.command.develop import develop
 from setuptools.extension import Extension
 
