@@ -40,6 +40,17 @@ class WeldType(object):
         """
         return hash(other) == hash(self)
 
+    def __ne__(self, other):
+        """Summary
+
+        Args:
+            other (TYPE): Description
+
+        Returns:
+            TYPE: Description
+        """
+        return hash(other) != hash(self)
+
     @property
     def ctype_class(self):
         """
