@@ -49,6 +49,41 @@ fn eq_between_vectors() {
 }
 
 #[test]
+fn eq_between_nested_vectors() {
+    #[allow(dead_code)]
+    struct Args {
+        x: WeldVec<WeldVec<i32>>,
+        y: WeldVec<WeldVec<i32>>,
+    }
+    let ref conf = default_conf();
+
+    let code = "|e0: vec[vec[i32]], e1: vec[vec[i32]]| e0 == e1";
+    let mut inner_vec1 = vec![1, 2, 3, 4, 5];
+    let inner_vec2 = vec![1, 2, 3, 4, 5];
+
+    let input_vec1 = vec![WeldVec::from(&inner_vec1); 5];
+    let input_vec2 = vec![WeldVec::from(&inner_vec2); 5];
+
+    let ref input_data = Args {
+        x: WeldVec::from(&input_vec1),
+        y: WeldVec::from(&input_vec2),
+    };
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = ret_value.data() as *const bool;
+    let result = unsafe { *data };
+    assert_eq!(result, true);
+
+    // Modify one of the vectors and run again - result should be false this time.
+    inner_vec1[0] = 0;
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = ret_value.data() as *const bool;
+    let result = unsafe { *data };
+    assert_eq!(result, false);
+}
+
+#[test]
 fn eq_between_diff_length_vectors() {
     #[allow(dead_code)]
     struct Args {
