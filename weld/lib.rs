@@ -103,6 +103,9 @@
 //!
 //! There is thus a straightforward conversion from `Vec<T>` to a `WeldVec<T>`.
 //!
+//! The `data` module defines layouts of Weld-compatible types, and also contains some methods for
+//! converting Rust values into Weld values.
+//!
 //! ## Contexts
 //!
 //! A context manages state such as allocation information. A context is passed into

@@ -13,3 +13,11 @@ macro flatten(data) = (
         |b, i, x| for(x, b, |b2, i2, x2| merge(b2, x2))
     ))
 );
+
+macro sum(data) = (
+  result(for(
+    data,
+    merger[?,+],
+    |b,i,x| merge(b, x)
+  ))
+);
