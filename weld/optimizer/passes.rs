@@ -12,7 +12,6 @@ use super::transforms::loop_fusion_2;
 use super::transforms::inliner;
 use super::transforms::size_inference;
 use super::transforms::short_circuit;
-use super::transforms::annotator;
 use super::transforms::vectorizer;
 use super::transforms::unroller;
 
@@ -128,9 +127,6 @@ lazy_static! {
         m.insert("vectorize",
                  Pass::new(vec![Transformation::new(vectorizer::vectorize)],
                  "vectorize"));
-        m.insert("fix-iterate",
-                 Pass::new(vec![Transformation::new(annotator::force_iterate_parallel_fors)],
-                 "fix-iterate"));
         m
     };
 }
