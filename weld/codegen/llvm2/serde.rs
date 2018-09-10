@@ -669,10 +669,6 @@ impl DeHelper for LlvmGenerator {
                     // having to do this.
                     use self::llvm_sys::LLVMIntPredicate::LLVMIntSGT;
                     use codegen::llvm2::hash::GenHash;
-                    use std::ffi::CString;
-
-
-                    self.gen_print(builder, run, CString::new("Deserializing dictionary").unwrap())?;
 
                     let size_type = self.i64_type();
                     let (size, start_position) = self.gen_get_value(builder, size_type, buffer, position)?;
