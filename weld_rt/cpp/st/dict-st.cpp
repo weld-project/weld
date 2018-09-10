@@ -373,17 +373,26 @@ fail:
    * @return a buffer of {key, value} pairs.
    */
   void new_kv_vector(int32_t value_offset, int32_t struct_size, void *out) {
-    DBG("value_offset: %d struct_size: %d size: %lld\n", value_offset, struct_size, _size);
   	int64_t key_padding_bytes = value_offset - _key_size;
+    int64_t offset = 0;
+    uint8_t *buf;
+
+    DBG("value_offset: %d struct_size: %d size: %lld\n", value_offset, struct_size, _size);
     DBG("padding: %lld\n", key_padding_bytes);
-  	uint8_t *buf = reinterpret_cast<uint8_t*>(
-  			weld_runst_malloc(_run, _size * struct_size));
-    assert(buf);
-  	memset(buf, 0, struct_size * _size);
+
+    if (_size > 0) {
+      buf = reinterpret_cast<uint8_t*>(
+          weld_runst_malloc(_run, _size * struct_size));
+      assert(buf);
+      memset(buf, 0, struct_size * _size);
+    } else {
+      buf = NULL;
+      DBG("Setting null buffer and exiting\n");
+      goto exit;
+    }
 
     DBG("kv allocation size: %lld\n", struct_size * _size);
 
-  	int64_t offset = 0;
   	for (int64_t i = 0; i < _capacity; ++i) {
   		Slot *slot = slot_at_idx(i);
   		if (!slot->header.filled) continue;
@@ -399,13 +408,10 @@ fail:
   	}
   	assert(offset == _size);
 
-    struct retvec {
-      void *pointer;
-      int64_t len;
-    };
-    retvec *out_typed = (retvec *)out;
-    out_typed->pointer = buf;
-    out_typed->len = _size;
+exit:
+    WeldVec *out_typed = (WeldVec *)out;
+    out_typed->data = buf;
+    out_typed->size = _size;
   }
 
   /** Serializes a dictionary, flattening pointers if necessary. */
@@ -509,6 +515,7 @@ extern "C" void *weld_st_dict_new(
 
 extern "C" void weld_st_dict_free(WeldRunHandleRef run, void *d) {
   WeldDict *wd = (WeldDict *)d;
+  assert(wd);
   wd->free_weld_dict();
   weld_runst_free(run, wd);
 }
@@ -520,6 +527,7 @@ extern "C" void *weld_st_dict_upsert(
     int32_t hash,
     void *init_value) {
   WeldDict *wd = static_cast<WeldDict*>(d);
+  assert(wd);
   return wd->upsert_slot(hash, key, init_value);
 }
 
@@ -529,6 +537,7 @@ extern "C" void *weld_st_dict_get(
     void *key,
     int32_t hash) {
   WeldDict *wd = static_cast<WeldDict*>(d);
+  assert(wd);
   return wd->get(hash, key);
 }
 
@@ -539,6 +548,7 @@ extern "C" void *weld_st_dict_get_slot(
     int32_t hash) {
   bool filled;
   WeldDict *wd = static_cast<WeldDict*>(d);
+  assert(wd);
   return wd->get_slot(hash, key, &filled);
 }
 
@@ -548,11 +558,13 @@ extern "C" int32_t weld_st_dict_keyexists(
     void *key,
     int32_t hash) {
   WeldDict *wd = static_cast<WeldDict*>(d);
+  assert(wd);
   return wd->keyexists(hash, key);
 }
 
 extern "C" int64_t weld_st_dict_size(WeldRunHandleRef run, void *d) {
   WeldDict *wd = static_cast<WeldDict*>(d);
+  assert(wd);
   return wd->size();
 }
 
@@ -562,9 +574,19 @@ extern "C" void weld_st_dict_tovec(
     int32_t value_offset,
     int32_t struct_size,
     void *out) {
+
   DBG("run: %p, dict: %p, offset: %d, struct_size: %d\n",
       run, d, value_offset, struct_size);
   WeldDict *wd = static_cast<WeldDict*>(d);
+
+  if (!wd) {
+    DBG("Returning empty vector for null tovec");
+    WeldVec *out_typed = static_cast<WeldVec *>(out);
+    out_typed->data = NULL;
+    out_typed->size = 0;
+    return;
+  }
+
   wd->new_kv_vector(value_offset, struct_size, out);
 }
 
@@ -576,6 +598,8 @@ extern "C" int64_t weld_st_dict_serialize(
     void *key_ser,
     void *val_ser) {
   WeldDict *wd = static_cast<WeldDict*>(d);
+  assert(wd);
+
   Vec<uint8_t> *serbuf = static_cast<Vec<uint8_t>*>(buf);
   return wd->serialize(
       serbuf,
@@ -616,6 +640,8 @@ extern "C" void weld_st_gb_merge(
     void *value) {
 
   GroupMerger *gm = (GroupMerger *)p;
+  assert(gm);
+
   bool filled;
   Slot *s = gm->dict->get_slot(hash, key, &filled);
 
@@ -641,6 +667,8 @@ extern "C" void *weld_st_gb_result(
     WeldRunHandleRef run,
     void *p) {
   GroupMerger *gm = (GroupMerger *)p;
+  assert(gm);
+
   WeldDict *result = gm->dict;
   weld_runst_free(run, gm);
   return result;
