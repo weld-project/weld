@@ -23,6 +23,8 @@ use super::LlvmGenerator;
 use ast::BinOpKind::Equal;
 use codegen::llvm2::numeric::gen_binop;
 
+mod dict_new;
+
 /// Returns whether a value can be compared with libc's `memcmp`.
 ///
 /// XXX For now, this returns true if `memcmp` can be used for equality.
