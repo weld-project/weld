@@ -4,17 +4,18 @@ extern crate lazy_static;
 extern crate llvm_sys;
 extern crate libc;
 
-use libc::{c_char};
-
 use std::ffi::CString;
 
 use error::*;
 
 use self::llvm_sys::prelude::*;
 use self::llvm_sys::core::*;
+use self::llvm_sys::LLVMIntPredicate::*;
+use self::llvm_sys::LLVMTypeKind;
 
 use codegen::llvm2::llvm_exts::LLVMExtAttribute::*;
 use codegen::llvm2::llvm_exts::*;
+
 
 use super::CodeGenExt;
 
@@ -73,6 +74,8 @@ struct SlotType {
     key_ty: LLVMTypeRef,
     /// The value type.
     val_ty: LLVMTypeRef,
+    module: LLVMModuleRef,
+    context: LLVMContextRef,
 }
 
 impl CodeGenExt for SlotType {
@@ -103,9 +106,9 @@ impl SlotType {
         ];
 
         // For consistency.
-        debug_assert!(LLVMGetTypeKind(layout[KEY_INDEX]) == LLVMGetTypeKind(key_ty));
-        debug_assert!(LLVMGetTypeKind(layout[VALUE_INDEX]) == LLVMGetTypeKind(value_ty));
-        debug_assert!(LLVMGetTypeKind(layout[FILLED_INDEX]) == LLVMTypeKind::LLVMIntegerTypeKind);
+        debug_assert!(LLVMGetTypeKind(layout[KEY_INDEX as usize]) == LLVMGetTypeKind(key_ty));
+        debug_assert!(LLVMGetTypeKind(layout[VALUE_INDEX as usize]) == LLVMGetTypeKind(val_ty));
+        debug_assert!(LLVMGetTypeKind(layout[FILLED_INDEX as usize]) == LLVMTypeKind::LLVMIntegerTypeKind);
 
         let slot_ty = LLVMStructCreateNamed(context, c_name.as_ptr());
         LLVMStructSetBody(slot_ty, layout.as_mut_ptr(), layout.len() as u32, 0);
@@ -114,48 +117,32 @@ impl SlotType {
             slot_ty: slot_ty,
             key_ty: key_ty,
             val_ty: val_ty,
+            context: context,
+            module: module,
         }
     }
 
     /// Return the key pointer for the provided slot.
     ///
     /// The slot should be a pointer.
-    unsafe fn key(&self, builder: LLVMBuilderRef, value: LLVMValueRef) -> LLVMValueRef {
-        debug_assert!(LLVMGetTypeKind(value) == LLVMTypeKind::LLVMPointerTypeKind);
+    unsafe fn key(&mut self, builder: LLVMBuilderRef, value: LLVMValueRef) -> LLVMValueRef {
         LLVMBuildStructGEP(builder, value, KEY_INDEX, c_str!(""))
     }
 
     /// Return the value pointer for the provide slot.
     ///
     /// The slot should be a pointer.
-    unsafe fn value(&self, builder: LLVMBuilderRef, value: LLVMValueRef) -> LLVMValueRef {
-        debug_assert!(LLVMGetTypeKind(value) == LLVMTypeKind::LLVMPointerTypeKind);
+    unsafe fn value(&mut self, builder: LLVMBuilderRef, value: LLVMValueRef) -> LLVMValueRef {
         LLVMBuildStructGEP(builder, value, VALUE_INDEX, c_str!(""))
     }
 
     /// Return whether the provided slot is filled as an `i1`.
     ///
     /// The slot should be a pointer.
-    unsafe fn filled(&self, builder: LLVMBuilderRef, value: LLVMValueRef) -> LLVMValueRef {
-        debug_assert!(LLVMGetTypeKind(value) == LLVMTypeKind::LLVMPointerTypeKind);
+    unsafe fn filled(&mut self, builder: LLVMBuilderRef, value: LLVMValueRef) -> LLVMValueRef {
         let filled_pointer = LLVMBuildStructGEP(builder, value, FILLED_INDEX, c_str!(""));
-        let filled = self.load(builder, filled_pointer);
-        LLVMBuildICmp(builder, LLVMIntNE, filled, self.i8_type(0), c_str!(""))
-    }
-}
-
-/// Struct used to check for presence of a key.
-struct KeyChecker {
-    pointer: LLVMValueRef,
-    comparator: LLVMValueRef,
-}
-
-impl KeyChecker {
-    fn new(ptr: LLVMValueRef, comparator: LLVMValueRef) -> KeyChecker {
-        KeyChecker {
-            key_pointer: ptr,
-            comparator: comparator,
-        }
+        let filled = self.load(builder, filled_pointer).unwrap();
+        LLVMBuildICmp(builder, LLVMIntNE, filled, self.i8(0), c_str!(""))
     }
 }
 
@@ -175,14 +162,14 @@ impl Dict {
 
         // A dictionary holds an array of slots along with a capacity and size.
         let mut layout = [
-            LLVMPointerType(slot.slot_ty, 0),
+            LLVMPointerType(slot_ty.slot_ty, 0),
             LLVMInt64TypeInContext(context),
             LLVMInt64TypeInContext(context)
         ];
 
-        debug_assert!(LLVMGetTypeKind(layout[DATA_INDEX]) == LLVMTypeKind::LLVMPointerTypeKind);
-        debug_assert!(LLVMGetTypeKind(layout[CAP_INDEX]) == LLVMTypeKind::LLVMIntegerTypeKind);
-        debug_assert!(LLVMGetTypeKind(layout[SIZE_INDEX]) == LLVMTypeKind::LLVMIntegerTypeKind);
+        debug_assert!(LLVMGetTypeKind(layout[DATA_INDEX as usize]) == LLVMTypeKind::LLVMPointerTypeKind);
+        debug_assert!(LLVMGetTypeKind(layout[CAP_INDEX as usize]) == LLVMTypeKind::LLVMIntegerTypeKind);
+        debug_assert!(LLVMGetTypeKind(layout[SIZE_INDEX as usize]) == LLVMTypeKind::LLVMIntegerTypeKind);
 
         let dict_ty = LLVMStructCreateNamed(context, c_name.as_ptr());
         LLVMStructSetBody(dict_ty, layout.as_mut_ptr(), layout.len() as u32, 0);
@@ -195,7 +182,7 @@ impl Dict {
             key_ty: key_ty,
             key_comparator: key_comparator,
             val_ty: val_ty,
-            slot: slot_ty,
+            slot_ty: slot_ty,
             context: context,
             module: module,
             slot_for_key: None,
@@ -220,7 +207,7 @@ impl Dict {
                              capacity: LLVMValueRef) -> LLVMValueRef {
         let hash = LLVMBuildZExt(builder, hash, self.i64_type(), c_str!(""));
         let val = LLVMBuildSub(builder, capacity, self.i64(1), c_str!(""));
-        LLVMBuildAnd(hash, val)
+        LLVMBuildAnd(builder, hash, val, c_str!(""))
     }
 
     /// Returns whether two keys are equal using their equality function.
@@ -231,6 +218,13 @@ impl Dict {
         let mut args = [slot_key, key];
         LLVMBuildCall(builder, self.key_comparator,
                       args.as_mut_ptr(), args.len() as u32, c_str!(""))
+    }
+
+    unsafe fn slot_at_index(&mut self,
+                            builder: LLVMBuilderRef,
+                            data: LLVMValueRef,
+                            index: LLVMValueRef) -> LLVMValueRef {
+        LLVMBuildGEP(builder, data, [index].as_mut_ptr(), 1, c_str!(""))
     }
 
     /// Return the slot for a given key.
@@ -259,7 +253,7 @@ impl Dict {
         //   return s
         // }
 
-        if self.gen_slot_for_key().is_none() {
+        if self.slot_for_key.is_none() {
             let mut arg_tys = [
                 LLVMPointerType(self.slot_ty.slot_ty, 0),
                 self.i64_type(),
@@ -278,20 +272,20 @@ impl Dict {
             let return_block = LLVMAppendBasicBlockInContext(self.context(), function, c_str!(""));
 
             let start_index = self.index_for_hash(builder, hash, capacity);
-            LLVMBuildBr(cond, top_block);
+            LLVMBuildBr(builder, top_block);
 
             LLVMPositionBuilderAtEnd(builder, top_block);
             let index = LLVMBuildPhi(builder, self.i64_type(), c_str!(""));
             let slot = self.slot_at_index(builder, data, index);
 
-            let filled = self.slot_ty.filled(slot);
+            let filled = self.slot_ty.filled(builder, slot);
             LLVMBuildCondBr(builder, filled, check_key_block, return_block);
 
             // Check keys.
             LLVMPositionBuilderAtEnd(builder, check_key_block);
 
             let update_index = LLVMBuildNSWAdd(builder, index, self.i64(1), c_str!(""));
-            let slot_key = self.slot_ty.key(slot);
+            let slot_key = self.slot_ty.key(builder, slot);
             let keys_eq = self.compare_keys(builder, slot_key, key);
             LLVMBuildCondBr(builder, keys_eq, return_block, top_block);
 
@@ -301,7 +295,7 @@ impl Dict {
 
             // Set the PHI value.
             let mut blocks = [entry_block, check_key_block];
-            let mut values = [start_index, update_index);
+            let mut values = [start_index, update_index];
             LLVMAddIncoming(index, values.as_mut_ptr(), blocks.as_mut_ptr(), values.len() as u32);
 
             self.slot_for_key = Some(function);
@@ -309,10 +303,10 @@ impl Dict {
         }
 
         let mut args = [data, capacity, hash, key];
-        Ok(LLVMBuildCall(builder,
+        LLVMBuildCall(builder,
                          self.slot_for_key.unwrap(),
                          args.as_mut_ptr(),
-                         args.len() as u32, c_str!("")))
+                         args.len() as u32, c_str!(""))
     }
 
     /*

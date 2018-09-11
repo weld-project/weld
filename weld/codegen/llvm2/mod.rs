@@ -104,6 +104,9 @@ mod serde;
 mod target;
 mod vector;
 
+// Temporary
+mod dict_new;
+
 use self::builder::appender;
 use self::builder::groupmerger;
 use self::builder::merger;
