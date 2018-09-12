@@ -13,8 +13,9 @@ use self::llvm_sys::core::*;
 use self::llvm_sys::LLVMIntPredicate::*;
 use self::llvm_sys::LLVMTypeKind;
 
-use codegen::llvm2::llvm_exts::LLVMExtAttribute::*;
-use codegen::llvm2::llvm_exts::*;
+// use codegen::llvm2::llvm_exts::LLVMExtAttribute::*;
+// use codegen::llvm2::llvm_exts::*;
+use codegen::llvm2::intrinsic::Intrinsics;
 
 
 use super::CodeGenExt;
@@ -23,8 +24,10 @@ use super::CodeGenExt;
 const KEY_INDEX: u32 = 0;
 /// Slot index of dictionary value.
 const VALUE_INDEX: u32 = KEY_INDEX + 1;
+/// Slot index storing the hash.
+const HASH_INDEX: u32 = VALUE_INDEX + 1;
 /// Slot index of whether a slot is filled.
-const FILLED_INDEX: u32 = VALUE_INDEX + 1;
+const FILLED_INDEX: u32 = HASH_INDEX + 1;
 
 // Dictionary Layout: { slot_array*, capacity, size }
 
@@ -34,6 +37,14 @@ const SLOT_ARR_INDEX: u32 = 0;
 const CAP_INDEX: u32 = SLOT_ARR_INDEX + 1;
 /// Size index.
 const SIZE_INDEX: u32 = CAP_INDEX + 1;
+
+/// Maximum load factor of the dictionary (out of 10).
+const MAX_LOAD_FACTOR: i64 = 7;
+/// Initial capacity of the dictionary. Must be a power-of-two.
+///
+/// After the initial capacity is resized, the load factor should be less than the maximum allowed
+/// load factor.
+const INITIAL_CAPACITY: i64 = 16;
 
 pub struct Dict {
     pub name: String,
@@ -45,16 +56,16 @@ pub struct Dict {
     slot_ty: SlotType,
     context: LLVMContextRef,
     module: LLVMModuleRef,
-    slot_for_key: Option<LLVMValueRef>,
-    new: Option<LLVMValueRef>,
-    lookup: Option<LLVMValueRef>,
-    upsert: Option<LLVMValueRef>,
-    resize: Option<LLVMValueRef>,
-    key_exists: Option<LLVMValueRef>,
-    size: Option<LLVMValueRef>,
-    to_vec: Option<LLVMValueRef>,
-    free: Option<LLVMValueRef>,
-    serialize: Option<LLVMValueRef>,
+    slot_for_key: Option<LLVMValueRef>,     // DONE
+    new: Option<LLVMValueRef>,              // TODO
+    lookup: Option<LLVMValueRef>,           // DONE
+    upsert: Option<LLVMValueRef>,           // DONE
+    resize: Option<LLVMValueRef>,           // DONE
+    key_exists: Option<LLVMValueRef>,       // TODO
+    size: Option<LLVMValueRef>,             // TODO
+    to_vec: Option<LLVMValueRef>,           // TODO
+    free: Option<LLVMValueRef>,             // TODO
+    serialize: Option<LLVMValueRef>,        // TODO
 }
 
 impl CodeGenExt for Dict {
@@ -123,6 +134,27 @@ impl SlotType {
         }
     }
 
+    /// Initialize a slot by marking it as filled and setting the key/value.
+    ///
+    /// The slot should be a pointer, and the key and value should be loaded (i.e., should have
+    /// type `key_ty` and `val_ty`).
+    pub unsafe fn init(&mut self,
+                       builder: LLVMBuilderRef,
+                       slot: LLVMValueRef,
+                       key: LLVMValueRef,
+                       hash: LLVMValueRef,
+                       value: LLVMValueRef) {
+
+        let key_pointer = self.key(builder, slot);
+        LLVMBuildStore(builder, key, key_pointer);
+        let value_pointer = self.value(builder, slot);
+        LLVMBuildStore(builder, value, value_pointer);
+        let hash_pointer = self.value(builder, slot);
+        LLVMBuildStore(builder, hash, hash_pointer);
+        let filled_pointer = LLVMBuildStructGEP(builder, value, FILLED_INDEX, c_str!(""));
+        LLVMBuildStore(builder, self.i8(1), filled_pointer);
+    }
+
     /// Return the key pointer for the provided slot.
     ///
     /// The slot should be a pointer.
@@ -135,6 +167,13 @@ impl SlotType {
     /// The slot should be a pointer.
     pub unsafe fn value(&mut self, builder: LLVMBuilderRef, value: LLVMValueRef) -> LLVMValueRef {
         LLVMBuildStructGEP(builder, value, VALUE_INDEX, c_str!(""))
+    }
+
+    /// Return the hash pointer for the provide slot.
+    ///
+    /// The slot should be a pointer.
+    pub unsafe fn hash(&mut self, builder: LLVMBuilderRef, value: LLVMValueRef) -> LLVMValueRef {
+        LLVMBuildStructGEP(builder, value, HASH_INDEX, c_str!(""))
     }
 
     /// Return whether the provided slot is filled as an `i1`.
@@ -212,16 +251,15 @@ impl Dict {
         self.load(builder, LLVMBuildStructGEP(builder, value, SIZE_INDEX, c_str!(""))).unwrap()
     }
 
-    /// Returns the probe start index for a hash.
+    /// Returns the probe index for an index value by computing the mod.
     ///
-    /// For a power-of-2 hash table, this is `hash & (capacity - 1)`.
-    unsafe fn index_for_hash(&mut self,
+    /// For a power-of-2 hash table, this is `value & (capacity - 1)`.
+    unsafe fn probe_index(&mut self,
                              builder: LLVMBuilderRef,
-                             hash: LLVMValueRef,
+                             value: LLVMValueRef,
                              capacity: LLVMValueRef) -> LLVMValueRef {
-        let hash = LLVMBuildZExt(builder, hash, self.i64_type(), c_str!(""));
-        let val = LLVMBuildSub(builder, capacity, self.i64(1), c_str!(""));
-        LLVMBuildAnd(builder, hash, val, c_str!(""))
+        let tmp = LLVMBuildSub(builder, capacity, self.i64(1), c_str!(""));
+        LLVMBuildAnd(builder, value, tmp, c_str!(""))
     }
 
     /// Returns whether two keys are equal using their equality function.
@@ -249,23 +287,70 @@ impl Dict {
                             capacity: LLVMValueRef) -> LLVMValueRef {
         let size = LLVMBuildNSWMul(builder, size, self.i64(10), c_str!(""));
         let capacity = LLVMBuildNSWMul(builder, capacity, self.i64(MAX_LOAD_FACTOR), c_str!(""));
-        LLVMBuildICmp(builder, LLVMIntSGE, size, capacity)
+        LLVMBuildICmp(builder, LLVMIntSGE, size, capacity, c_str!(""))
     }
 
+    unsafe fn gen_new(&mut self,
+                      builder: LLVMBuilderRef,
+                      intrinsics: &mut Intrinsics,
+                      capacity: LLVMValueRef,
+                      run: LLVMValueRef) -> LLVMValueRef {
+
+        if self.new.is_none() {
+            let mut arg_tys = [
+                self.i64_type(),
+                self.run_handle_type()
+            ];
+            let ret_ty = self.dict_ty;
+            let name = format!("{}.new", self.name);
+
+            let (function, builder, _) = self.define_function(ret_ty, &mut arg_tys, name);
+
+            let capacity = LLVMGetParam(function, 0);
+            let run = LLVMGetParam(function, 1);
+
+            // Use a minimum initial capacity.
+            let capacity_too_small = LLVMBuildICmp(builder, LLVMIntSGT, self.i64(INITIAL_CAPACITY), capacity, c_str!(""));
+            let capacity = LLVMBuildSelect(builder, capacity_too_small, self.i64(INITIAL_CAPACITY), capacity, c_str!(""));
+            let dict_inner = self.gen_new_dict_with_capacity(builder, intrinsics, capacity, run); 
+
+            // Wrap the dictionary in a pointer - the external view of a dictionary is always a
+            // pointer so its easier to change the internal layout.
+            
+            let alloc_size = self.size_of(self.dict_inner_ty);
+            let bytes = intrinsics.call_weld_run_malloc(builder, run, alloc_size, None);
+            let dict_pointer = LLVMBuildBitCast(builder, bytes, self.dict_ty, c_str!(""));
+            LLVMBuildStore(builder, dict_inner, dict_pointer);
+            LLVMBuildRet(builder, dict_pointer);
+
+            LLVMDisposeBuilder(builder);
+            self.new = Some(function);
+        }
+
+        let mut args = [capacity, run];
+        LLVMBuildCall(builder,
+                      self.new.unwrap(),
+                      args.as_mut_ptr(),
+                      args.len() as u32, c_str!(""))
+    }
+
+    /// Returns a new dictionary with the given capacity.
     unsafe fn gen_new_dict_with_capacity(&mut self,
                                          builder: LLVMBuilderRef,
-                                         intrinsics: &Intrisics,
+                                         intrinsics: &mut Intrinsics,
                                          capacity: LLVMValueRef,
                                          run: LLVMValueRef) -> LLVMValueRef {
 
-        let alloc_size = LLVMBuildNSWMul(builder, capacity, self.size_of(self.slot_ty.slot_ty));
+        let alloc_size = LLVMBuildNSWMul(builder, capacity, self.size_of(self.slot_ty.slot_ty), c_str!(""));
         let bytes = intrinsics.call_weld_run_malloc(builder, run, alloc_size, None);
-        let slot_array = LLVMBuildBitCast(builder, bytes, LLVMPointerType(self.slot_ty.slot_ty, 0));
+        let _ = intrinsics.call_memset_zero(builder, bytes, alloc_size);
+        let slot_array = LLVMBuildBitCast(builder, bytes, LLVMPointerType(self.slot_ty.slot_ty, 0), c_str!(""));
 
-        let mut dict = LLVMBuildInsertValue(
-            builder, LLVMGetUndef(self.dict_inner_ty), slot_array, SLOT_ARR_INDEX, c_str!(""));
-        dict = LLVMBuildInsertValue(builder, dict, self.i64(capacity), CAP_INDEX, c_str!(""));
-        LLVMBuildInsertValue(builder, dict, self.i64(0), SIZE_INDEX, c_str!(""))
+        let mut dict = LLVMGetUndef(self.dict_inner_ty);
+        dict = LLVMBuildInsertValue(builder, dict, slot_array, SLOT_ARR_INDEX, c_str!(""));
+        dict = LLVMBuildInsertValue(builder, dict, capacity, CAP_INDEX, c_str!(""));
+        dict = LLVMBuildInsertValue(builder, dict, self.i64(0), SIZE_INDEX, c_str!(""));
+        dict
     }
 
     /// Resize the dictionary if necessary.
@@ -274,7 +359,7 @@ impl Dict {
     /// acquired from the dictionary should be re-acquired.
     unsafe fn gen_resize(&mut self,
                          builder: LLVMBuilderRef,
-                         intrinsics: &Intrinsics,
+                         intrinsics: &mut Intrinsics,
                          dict: LLVMValueRef,
                          run: LLVMValueRef) -> LLVMValueRef {
 
@@ -283,11 +368,10 @@ impl Dict {
                 self.dict_ty,
                 self.run_handle_type()
             ];
-
-            let ret_ty = self.i1_type(),
+            let ret_ty = self.i1_type();
             let name = format!("{}.resize", self.name);
 
-            let (function, builder, entry_block) = self.define_function(ret_ty, &mut arg_tys, name);
+            let (function, builder, _) = self.define_function(ret_ty, &mut arg_tys, name);
 
             let dict = LLVMGetParam(function, 0);
             let run = LLVMGetParam(function, 1);
@@ -322,7 +406,7 @@ impl Dict {
 
             LLVMPositionBuilderAtEnd(builder, resize_block);
 
-            // Resize the dictionary.
+            // Resize the dictionary -- double it capacity.
             let new_capacity = LLVMBuildNSWMul(builder, old_capacity, self.i64(2), c_str!(""));
             let new_dictionary_inner = self.gen_new_dict_with_capacity(builder, intrinsics, new_capacity, run);
             LLVMBuildStore(builder, new_dictionary_inner, new_dictionary);
@@ -354,27 +438,29 @@ impl Dict {
             // Top Block.
             LLVMPositionBuilderAtEnd(builder, copy_top_block);
             let index = LLVMBuildPhi(builder, self.i64_type(), c_str!(""));
-            let old_slot = self.slot_at_index(builder, old_slot_array);
-            let filled = self.slot_ty.filled(old_slot);
+            let old_slot = self.slot_at_index(builder, old_slot_array, index);
+            let filled = self.slot_ty.filled(builder, old_slot);
             LLVMBuildCondBr(builder, filled, copy_cpy_block, copy_bot_block);
             
             // Copy Block.
             LLVMPositionBuilderAtEnd(builder, copy_cpy_block);
+            let hash_pointer = self.slot_ty.hash(builder, old_slot);
+            let old_slot_hash = self.load(builder, hash_pointer).unwrap();
             let new_slot = self.gen_probe_loop(builder,
                                            new_slot_array,
                                            new_capacity,
-                                           slot_hash,
-                                           (probe_top_block, probe_chk_block, probe_bot_block),
+                                           old_slot_hash,
+                                           (copy_cpy_block, probe_top_block, probe_chk_block, probe_bot_block),
                                            None);
-            let new_slot_bytes = LLVMBuildBitcast(builder, new_slot, self.void_pointer_type(), c_str!(""));
-            let old_slot_bytes = LLVMBuildBitcast(builder, old_slot, self.void_pointer_type(), c_str!(""));
+            let new_slot_bytes = LLVMBuildBitCast(builder, new_slot, self.void_pointer_type(), c_str!(""));
+            let old_slot_bytes = LLVMBuildBitCast(builder, old_slot, self.void_pointer_type(), c_str!(""));
             let _ = intrinsics.call_memcpy(builder, new_slot_bytes, old_slot_bytes, self.size_of(self.slot_ty.slot_ty));
             LLVMBuildBr(builder, copy_bot_block);
 
             // Bottom Block.
             LLVMPositionBuilderAtEnd(builder, copy_bot_block);
             let update_index = LLVMBuildNSWAdd(builder, index, self.i64(1), c_str!(""));
-            let finished = LLVMBuildICmp(builder, LLVMIntEQ, update_index, capacity, c_str!(""));
+            let finished = LLVMBuildICmp(builder, LLVMIntEQ, update_index, old_capacity, c_str!(""));
             LLVMBuildCondBr(builder, finished, copy_fin_block, copy_top_block);
 
             // Set the PHI value for the index.
@@ -385,18 +471,17 @@ impl Dict {
             // Finish Block.
             LLVMPositionBuilderAtEnd(builder, copy_fin_block);
             // 1. Free Old Dictionary buffer.
-            let old_slotarray_bytes = LLVMBuildBitcast(builder, old_slot_array, self.void_pointer_type(), c_str!(""));
+            let old_slotarray_bytes = LLVMBuildBitCast(builder, old_slot_array, self.void_pointer_type(), c_str!(""));
             let _ = intrinsics.call_weld_run_free(builder, run, old_slotarray_bytes);
             // 2. Move New Dictionary to Old Dictionary pointer.
-            let new_dict_bytes = LLVMBuildBitcast(builder, new_dictionary, self.void_pointer_type(), c_str!(""));
-            let old_dict_bytes = LLVMBuildBitcast(builder, dict, self.void_pointer_type(), c_str!(""));
-            let _ = intrinsics.call_memcpy(builder, dict, new_dict_bytes, self.size_of(self.dict_inner_ty));
+            let new_dict_bytes = LLVMBuildBitCast(builder, new_dictionary, self.void_pointer_type(), c_str!(""));
+            let old_dict_bytes = LLVMBuildBitCast(builder, dict, self.void_pointer_type(), c_str!(""));
+            let _ = intrinsics.call_memcpy(builder, old_dict_bytes, new_dict_bytes, self.size_of(self.dict_inner_ty));
             LLVMBuildBr(builder, exit_block);
 
             // Finished at last! Hallelujah. Who would've thought resizing a dictionary is so hard.
             LLVMPositionBuilderAtEnd(builder, exit_block);
-            let resized = LLVMBuildPhi(builder, self.i1_type(), c_str!(""));
-            LLVMBuildRet(builder, resized);
+            LLVMBuildRet(builder, should_resize);
 
             self.resize = Some(function);
             LLVMDisposeBuilder(builder);
@@ -415,8 +500,9 @@ impl Dict {
     /// returned. If a key is not provided, the first empty slot starting at the hash's index is
     /// returned.
     ///
-    /// This method takes three basic blocks for loop control flow: a top block, a check block to
-    /// check for the key, and an exit block.
+    /// This method takes four basic blocks for loop control flow: the basic block the builder is
+    /// currently positioned in, a top block, a check block to check for the key, and an exit
+    /// block.
     ///
     /// When the function returns, the builder is guaranteed to be positioned at the beginning of the
     /// exit block. The function returns the LLVMValue representing the slot found with the probe.
@@ -425,27 +511,29 @@ impl Dict {
                              slot_array: LLVMValueRef,
                              capacity: LLVMValueRef,
                              hash: LLVMValueRef,
-                             blocks: (LLVMValueRef, LLVMValueRef, LLVMValueRef),
+                             blocks: (LLVMBasicBlockRef, LLVMBasicBlockRef, LLVMBasicBlockRef, LLVMBasicBlockRef),
                              key: Option<LLVMValueRef>) -> LLVMValueRef {
 
         // Generated Code:
         //
-        //   start = getstart(hash, cap);
+        //   start = probe_index(hash, cap);
         //   jump top
         // top:
         //   i = phi [ start, top ] [ i2, check_key ] 
         //   s = getslot(i)
         //   br s.filled ? check_key : return
         // check_key:                                   
-        //   i2 = i + 1                                 
+        //   tmp = i + 1                                 
+        //   i2 = probe_index(tmp)
         //   br s.key == key ? return : top | br top, depending on `check_key`
         // return:
         //   return s
         // }
 
-        let (top_block, check_block, end_block) = blocks;
+        let (start_block, top_block, check_block, end_block) = blocks;
 
-        let start_index = self.index_for_hash(builder, hash, capacity);
+        let hash = LLVMBuildZExt(builder, hash, self.i64_type(), c_str!(""));
+        let start_index = self.probe_index(builder, hash, capacity);
         LLVMBuildBr(builder, top_block);
 
         LLVMPositionBuilderAtEnd(builder, top_block);
@@ -456,8 +544,8 @@ impl Dict {
         LLVMBuildCondBr(builder, filled, check_block, end_block);
 
         LLVMPositionBuilderAtEnd(builder, check_block);
-
         let update_index = LLVMBuildNSWAdd(builder, index, self.i64(1), c_str!(""));
+        let update_index = self.probe_index(builder, update_index, capacity);
         if let Some(key) = key {
             let slot_key = self.slot_ty.key(builder, slot);
             let keys_eq = self.compare_keys(builder, slot_key, key);
@@ -466,9 +554,12 @@ impl Dict {
             LLVMBuildBr(builder, top_block);
         }
 
+        let mut blocks = [start_block, check_block];
+        let mut values = [start_index, update_index];
+        LLVMAddIncoming(index, values.as_mut_ptr(), blocks.as_mut_ptr(), values.len() as u32);
+
         LLVMPositionBuilderAtEnd(builder, end_block);
         slot
-
     }
 
     /// Return the slot for a given key. The returned slot may be uninitialized if the key does not
@@ -510,15 +601,10 @@ impl Dict {
                                            slot_array,
                                            capacity,
                                            hash,
-                                           (top_block, check_key_block, return_block),
+                                           (entry_block, top_block, check_key_block, return_block),
                                            Some(key));
 
             LLVMBuildRet(builder, slot);
-
-            // Set the PHI value.
-            let mut blocks = [entry_block, check_key_block];
-            let mut values = [start_index, update_index];
-            LLVMAddIncoming(index, values.as_mut_ptr(), blocks.as_mut_ptr(), values.len() as u32);
 
             self.slot_for_key = Some(function);
             LLVMDisposeBuilder(builder);
@@ -536,14 +622,14 @@ impl Dict {
     /// If the key does not exist, the first uninitialized slot is returned.
     pub unsafe fn gen_upsert(&mut self,
                          builder: LLVMBuilderRef,
-                         intrinsics: &Intrinsics,
+                         intrinsics: &mut Intrinsics,
                          dict: LLVMValueRef,
                          key: LLVMValueRef,
                          hash: LLVMValueRef,
                          default: LLVMValueRef,
                          run: LLVMValueRef) -> WeldResult<LLVMValueRef> {
 
-        if self.lookup.is_none() {
+        if self.upsert.is_none() {
             let mut arg_tys = [
                 self.dict_ty,
                 LLVMPointerType(self.key_ty, 0),
@@ -571,19 +657,20 @@ impl Dict {
             let slot = self.gen_slot_for_key(builder, slot_array, capacity, hash, key);
 
             let filled = self.slot_ty.filled(builder, slot);
-            LLVMBuildCondBr(filled, return_block, set_default_block);
+            LLVMBuildCondBr(builder, filled, return_block, set_default_block);
 
             LLVMPositionBuilderAtEnd(builder, set_default_block);
 
-            self.slot_ty.init(builder, slot, key, default);
-            let size_pointer = LLVMBuildStructGEP(builder, value, SIZE_INDEX, c_str!(""));
-            let size = self.load(size_pointer).unwrap();
+            let key_loaded = self.load(builder, key).unwrap();
+            self.slot_ty.init(builder, slot, key_loaded, hash, default);
+            let size_pointer = LLVMBuildStructGEP(builder, dict, SIZE_INDEX, c_str!(""));
+            let size = self.load(builder, size_pointer).unwrap();
             let new_size = LLVMBuildNSWAdd(builder, size, self.i64(1), c_str!(""));
-            LLVMBuildStore(builder, size, size_pointer);
+            LLVMBuildStore(builder, new_size, size_pointer);
 
             // Check for resize.
             let resized = self.gen_resize(builder, intrinsics, dict, run);
-            LLVMBuildCondBr(resized, reacquire_slot_block, return_block);
+            LLVMBuildCondBr(builder, resized, reacquire_slot_block, return_block);
 
             LLVMPositionBuilderAtEnd(builder, reacquire_slot_block);
             // Builder was resized - we need to reacquire the slot.
