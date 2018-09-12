@@ -57,12 +57,11 @@ pub struct Dict {
     context: LLVMContextRef,
     module: LLVMModuleRef,
     slot_for_key: Option<LLVMValueRef>,     // DONE
-    new: Option<LLVMValueRef>,              // TODO
+    new: Option<LLVMValueRef>,              // DONE
     lookup: Option<LLVMValueRef>,           // DONE
     upsert: Option<LLVMValueRef>,           // DONE
     resize: Option<LLVMValueRef>,           // DONE
     key_exists: Option<LLVMValueRef>,       // TODO
-    size: Option<LLVMValueRef>,             // TODO
     to_vec: Option<LLVMValueRef>,           // TODO
     free: Option<LLVMValueRef>,             // TODO
     serialize: Option<LLVMValueRef>,        // TODO
@@ -232,7 +231,6 @@ impl Dict {
             upsert: None,
             resize: None,
             key_exists: None,
-            size: None,
             to_vec: None,
             free: None,
             serialize: None,
@@ -290,49 +288,6 @@ impl Dict {
         LLVMBuildICmp(builder, LLVMIntSGE, size, capacity, c_str!(""))
     }
 
-    unsafe fn gen_new(&mut self,
-                      builder: LLVMBuilderRef,
-                      intrinsics: &mut Intrinsics,
-                      capacity: LLVMValueRef,
-                      run: LLVMValueRef) -> LLVMValueRef {
-
-        if self.new.is_none() {
-            let mut arg_tys = [
-                self.i64_type(),
-                self.run_handle_type()
-            ];
-            let ret_ty = self.dict_ty;
-            let name = format!("{}.new", self.name);
-
-            let (function, builder, _) = self.define_function(ret_ty, &mut arg_tys, name);
-
-            let capacity = LLVMGetParam(function, 0);
-            let run = LLVMGetParam(function, 1);
-
-            // Use a minimum initial capacity.
-            let capacity_too_small = LLVMBuildICmp(builder, LLVMIntSGT, self.i64(INITIAL_CAPACITY), capacity, c_str!(""));
-            let capacity = LLVMBuildSelect(builder, capacity_too_small, self.i64(INITIAL_CAPACITY), capacity, c_str!(""));
-            let dict_inner = self.gen_new_dict_with_capacity(builder, intrinsics, capacity, run); 
-
-            // Wrap the dictionary in a pointer - the external view of a dictionary is always a
-            // pointer so its easier to change the internal layout.
-            
-            let alloc_size = self.size_of(self.dict_inner_ty);
-            let bytes = intrinsics.call_weld_run_malloc(builder, run, alloc_size, None);
-            let dict_pointer = LLVMBuildBitCast(builder, bytes, self.dict_ty, c_str!(""));
-            LLVMBuildStore(builder, dict_inner, dict_pointer);
-            LLVMBuildRet(builder, dict_pointer);
-
-            LLVMDisposeBuilder(builder);
-            self.new = Some(function);
-        }
-
-        let mut args = [capacity, run];
-        LLVMBuildCall(builder,
-                      self.new.unwrap(),
-                      args.as_mut_ptr(),
-                      args.len() as u32, c_str!(""))
-    }
 
     /// Returns a new dictionary with the given capacity.
     unsafe fn gen_new_dict_with_capacity(&mut self,
@@ -616,10 +571,61 @@ impl Dict {
                          args.as_mut_ptr(),
                          args.len() as u32, c_str!(""))
     }
+}
+
+/// Public API.
+impl Dict {
+    /// Create a new dictionary.
+    ///
+    /// Dictionaries are hidden behind pointers so their ABI type is always a `void*`.
+    pub unsafe fn gen_new(&mut self,
+                      builder: LLVMBuilderRef,
+                      intrinsics: &mut Intrinsics,
+                      capacity: LLVMValueRef,
+                      run: LLVMValueRef) -> WeldResult<LLVMValueRef> {
+
+        if self.new.is_none() {
+            let mut arg_tys = [
+                self.i64_type(),
+                self.run_handle_type()
+            ];
+            let ret_ty = self.dict_ty;
+            let name = format!("{}.new", self.name);
+
+            let (function, builder, _) = self.define_function(ret_ty, &mut arg_tys, name);
+
+            let capacity = LLVMGetParam(function, 0);
+            let run = LLVMGetParam(function, 1);
+
+            // Use a minimum initial capacity.
+            let capacity_too_small = LLVMBuildICmp(builder, LLVMIntSGT, self.i64(INITIAL_CAPACITY), capacity, c_str!(""));
+            let capacity = LLVMBuildSelect(builder, capacity_too_small, self.i64(INITIAL_CAPACITY), capacity, c_str!(""));
+            let dict_inner = self.gen_new_dict_with_capacity(builder, intrinsics, capacity, run); 
+
+            // Wrap the dictionary in a pointer - the external view of a dictionary is always a
+            // pointer so its easier to change the internal layout.
+            let alloc_size = self.size_of(self.dict_inner_ty);
+            let bytes = intrinsics.call_weld_run_malloc(builder, run, alloc_size, None);
+            let dict_pointer = LLVMBuildBitCast(builder, bytes, self.dict_ty, c_str!(""));
+            LLVMBuildStore(builder, dict_inner, dict_pointer);
+            LLVMBuildRet(builder, dict_pointer);
+
+            LLVMDisposeBuilder(builder);
+            self.new = Some(function);
+        }
+
+        let mut args = [capacity, run];
+        Ok(LLVMBuildCall(builder,
+                      self.new.unwrap(),
+                      args.as_mut_ptr(),
+                      args.len() as u32, c_str!("")))
+    }
 
     /// Returns the pointer to the slot for a key.
     ///
-    /// If the key does not exist, the first uninitialized slot is returned.
+    /// If the key does not exist, a slot is initialized for the key, and a default value is
+    /// inserted into the slot. The slot is then returned.  The insertion may cause the dictionary
+    /// to be resized.
     pub unsafe fn gen_upsert(&mut self,
                          builder: LLVMBuilderRef,
                          intrinsics: &mut Intrinsics,
@@ -738,6 +744,41 @@ impl Dict {
                                 args.as_mut_ptr(),
                                 args.len() as u32,
                                 c_str!("")))
+    }
+
+    /// Returns whether a key exists.
+    pub unsafe fn gen_key_exists(&mut self,
+                                 builder: LLVMBuilderRef,
+                                 dict: LLVMValueRef,
+                                 key: LLVMValueRef,
+                                 hash: LLVMValueRef) -> WeldResult<LLVMValueRef> {
+        unimplemented!()
+    }
+
+    /// Returns the number of keys in the dictionary.
+    pub unsafe fn gen_size(&mut self,
+                                 builder: LLVMBuilderRef,
+                                 dict: LLVMValueRef) -> WeldResult<LLVMValueRef> {
+        Ok(self.size(builder, dict))
+    }
+
+    /// Converts this dictionary to a vector of key/value pairs.
+    pub unsafe fn gen_to_vec(&mut self,
+                                 builder: LLVMBuilderRef,
+                                 dict: LLVMValueRef) -> WeldResult<LLVMValueRef> {
+        unimplemented!()
+    }
+
+    /// Serialize this dictionary into the provided serialization buffer.
+    pub unsafe fn gen_serialize(&mut self,
+                                builder: LLVMBuilderRef,
+                                intrinsics: &mut Intrinsics,
+                                key_ser: LLVMValueRef,
+                                val_ser: LLVMValueRef,
+                                dict: LLVMValueRef,
+                                buffer: LLVMValueRef,
+                                run: LLVMValueRef) -> WeldResult<LLVMValueRef> {
+        unimplemented!()
     }
 }
 

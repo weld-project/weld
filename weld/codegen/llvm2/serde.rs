@@ -352,51 +352,19 @@ impl SerHelper for LlvmGenerator {
                     // loop fired.
                     (buffer, phi_position)
                 }
-                Dict(ref key, ref val) if !key.has_pointer() && !val.has_pointer() => {
-                    // Dictionaries have a special codepath for keys and values without pointers. The
-                    // keys and values are memcpy'd individually into the buffer.
-                    let dictionary = self.load(builder, value)?;
-                    let null_pointer = self.null_ptr(self.i8_type());
-                    let no_pointer_flag = self.i1(false);
-                    let result = {
-                        let mut methods = self.dictionaries.get_mut(ty).unwrap();
-                        methods.gen_serialize(builder,
-                                              &self.dict_intrinsics,
-                                              run,
-                                              dictionary,
-                                              buffer,
-                                              no_pointer_flag,
-                                              null_pointer,
-                                              null_pointer)?
-                    };
-
-                    // XXX Assuming here that the size exactly matches the position!
-                    let position = self.gen_size(builder, &SER_TY, result)?;
-                    (result, position)
-                }
                 Dict(ref key, ref val) => {
-                    // For dictionaries with pointers, the dictionary implementation calls into a
-                    // function to serialize each key and value. We thus generate an externalized key
-                    // and value serialization function and pass it to the dictionary's serializer.
                     let dictionary = self.load(builder, value)?;
-                    let pointer_flag = self.i1(true);
-                    // Deserialization functions have the signature (SER_TY, T*) -> void
-                    // Generate the serialize function for the key.
                     let key_ser_fn = self.gen_serialize_fn(key)?;
                     let val_ser_fn = self.gen_serialize_fn(val)?;
-                    let key_ser_fn = LLVMBuildBitCast(builder, key_ser_fn, self.void_pointer_type(), c_str!(""));
-                    let val_ser_fn = LLVMBuildBitCast(builder, val_ser_fn, self.void_pointer_type(), c_str!(""));
-
                     let result = {
                         let mut methods = self.dictionaries.get_mut(ty).unwrap();
                         methods.gen_serialize(builder,
-                                              &self.dict_intrinsics,
-                                              run,
+                                              &mut self.intrinsics,
+                                              key_ser_fn,
+                                              val_ser_fn,
                                               dictionary,
                                               buffer,
-                                              pointer_flag,
-                                              key_ser_fn,
-                                              val_ser_fn)?
+                                              run)?
                     };
                     let position = self.gen_size(builder, &SER_TY, result)?;
                     (result, position)
@@ -676,7 +644,7 @@ impl DeHelper for LlvmGenerator {
                     let capacity = self.next_pow2(builder, size);
                     let dictionary = {
                         let mut methods = self.dictionaries.get_mut(ty).unwrap();
-                        methods.gen_new(builder, &self.dict_intrinsics, run, capacity)?
+                        methods.gen_new(builder, &mut self.intrinsics, capacity, run)?
                     };
 
                     // Build a loop that iterates over the key-value pairs.

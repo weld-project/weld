@@ -296,7 +296,7 @@ pub struct LlvmGenerator {
     /// A map tracking generated dictionaries.
     ///
     /// The key maps the dictionary's `Dict` type to the type reference and methods on it.
-    dictionaries: FnvHashMap<Type, dict::Dict>,
+    dictionaries: FnvHashMap<Type, dict_new::Dict>,
     /// Dictionary intrinsics.
     ///
     /// These are functions that call out to an external dictionary implementation.
@@ -1082,8 +1082,6 @@ impl LlvmGenerator {
                 let result = {
                     let mut methods = self.dictionaries.get_mut(child_type).unwrap();
                     methods.gen_key_exists(context.builder,
-                                           &self.dict_intrinsics,
-                                           context.get_run(),
                                            child_value,
                                            context.get_value(key)?,
                                            hash)?
@@ -1103,7 +1101,7 @@ impl LlvmGenerator {
                 } else if let Dict(_, _) = *child_type {
                     let pointer = {
                         let mut methods = self.dictionaries.get_mut(child_type).unwrap();
-                        methods.gen_size(context.builder, &self.dict_intrinsics, context.get_run(), child_value)?
+                        methods.gen_size(context.builder, child_value)?
                     };
                     let result = self.load(context.builder, pointer)?;
                     LLVMBuildStore(context.builder, result, output_pointer);
@@ -1128,9 +1126,7 @@ impl LlvmGenerator {
                     let hash = self.gen_hash(key, context.builder, context.get_value(index)?, None)?;
                     let result = {
                         let mut methods = self.dictionaries.get_mut(child_type).unwrap();
-                        methods.gen_get(context.builder,
-                                        &self.dict_intrinsics,
-                                        context.get_run(),
+                        methods.gen_lookup(context.builder,
                                         child_value,
                                         context.get_value(index)?,
                                         hash)?
@@ -1236,11 +1232,7 @@ impl LlvmGenerator {
                 let kv_vec_ty = self.llvm_type(output_type)?;
                 let result = {
                     let mut methods = self.dictionaries.get_mut(child_type).unwrap();
-                    methods.gen_to_vec(context.builder,
-                                       &self.dict_intrinsics,
-                                       kv_vec_ty,
-                                       kv_ty,
-                                       context.get_run(), child_value)?
+                    methods.gen_to_vec(context.builder, child_value)?
                 };
                 LLVMBuildStore(context.builder, result, output_pointer);
                 Ok(())
@@ -1341,11 +1333,11 @@ impl LlvmGenerator {
                 if !self.dictionaries.contains_key(ty) {
                     let key_ty = self.llvm_type(key)?;
                     let value_ty = self.llvm_type(value)?;
-                    let key_comparator = self.gen_opaque_eq_fn(key)?;
-                    let dict = dict::Dict::define("dict",
+                    let key_comparator = self.gen_eq_fn(key)?;
+                    let dict = dict_new::Dict::define("dict",
                                                     key_ty,
-                                                    value_ty,
                                                     key_comparator,
+                                                    value_ty,
                                                     self.context,
                                                     self.module);
                     self.dictionaries.insert(ty.clone(), dict);

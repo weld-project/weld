@@ -212,7 +212,7 @@ impl BuilderExpressionGen for LlvmGenerator {
                 let default_capacity = self.i64(dictmerger::DEFAULT_CAPACITY);
                 let dictmerger = {
                     let mut methods = self.dictionaries.get_mut(dict_type).unwrap();
-                    methods.gen_new(ctx.builder, &self.dict_intrinsics, ctx.get_run(), default_capacity)?
+                    methods.gen_new(ctx.builder, &mut self.intrinsics, default_capacity, ctx.get_run())?
                 };
                 LLVMBuildStore(ctx.builder, dictmerger, output_pointer);
                 Ok(())
@@ -314,12 +314,12 @@ impl BuilderExpressionGen for LlvmGenerator {
                 let slot_value_pointer = {
                     let mut methods = self.dictionaries.get_mut(dict_type).unwrap();
                     methods.gen_upsert(ctx.builder,
-                                       &self.dict_intrinsics,
-                                       ctx.get_run(),
+                                       &mut self.intrinsics,
                                        builder_loaded,
                                        key_pointer,
                                        hash,
-                                       default)?
+                                       default,
+                                       ctx.get_run())?
                 };
 
                 // Generate the merge code. We either load the values and add them, or, if the
