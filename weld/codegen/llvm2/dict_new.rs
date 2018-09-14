@@ -463,7 +463,7 @@ impl Dict {
 
         let mut args = [dict, run];
         LLVMBuildCall(builder,
-                         self.slot_for_key.unwrap(),
+                         self.resize.unwrap(),
                          args.as_mut_ptr(),
                          args.len() as u32, c_str!(""))
 
@@ -665,6 +665,35 @@ impl Dict {
 
             trace!("Generating upsert");
 
+            // Generated Code:
+            //
+            // slot_array = slot.slot_array
+            // capacity = slot.capacity
+            // slot = slot_for_key(slot, capacity, hash, key)
+            //
+            // br slot.filled ? return : set_default
+            //
+            // set_default:
+            // key = load keypointer
+            // slot.key = key           |
+            // slot.hash = hash         |-- slot.init
+            // slot.filled = filled     |
+            // dict.size = size + 1
+            // resized = dict.resize(dict)
+            // br resized ? reacquire : upsert
+            //
+            // reacquire:
+            // resized_slot = slot_for_key(slot, capacity, hash, key)
+            // br upsert
+            //
+            // upsert:
+            // upsert_slot = phi [ slot, setdefault ] [ resized_slot, require ]
+            // upsert_slot.value = default
+            // br return
+            //
+            // return:
+            // return_slot = phi [ slot, entry ] [ upsert_slot, upsert ]
+
             // XXX Change this later?
             let ret_ty = LLVMPointerType(self.val_ty, 0);
 
@@ -673,6 +702,7 @@ impl Dict {
 
             let set_default_block = LLVMAppendBasicBlockInContext(self.context(), function, c_str!(""));
             let reacquire_slot_block = LLVMAppendBasicBlockInContext(self.context(), function, c_str!(""));
+            let upsert_block = LLVMAppendBasicBlockInContext(self.context(), function, c_str!(""));
             let return_block = LLVMAppendBasicBlockInContext(self.context(), function, c_str!(""));
 
             let dict = LLVMGetParam(function, 0);
@@ -693,7 +723,6 @@ impl Dict {
             LLVMBuildCondBr(builder, filled, return_block, set_default_block);
 
             LLVMPositionBuilderAtEnd(builder, set_default_block);
-
             let key_loaded = self.load(builder, key).unwrap();
 
             trace!("Loaded key");
@@ -711,31 +740,39 @@ impl Dict {
 
             // Check for resize.
             let resized = self.gen_resize(builder, intrinsics, dict, run);
-            LLVMBuildCondBr(builder, resized, reacquire_slot_block, return_block);
+            LLVMBuildCondBr(builder, resized, reacquire_slot_block, upsert_block);
 
             trace!("finished gen resize");
 
             LLVMPositionBuilderAtEnd(builder, reacquire_slot_block);
             // Builder was resized - we need to reacquire the slot.
             let resized_slot = self.gen_slot_for_key(builder, slot_array, capacity, hash, key);
-
             trace!("Reacquired slot");
 
+            LLVMBuildBr(builder, upsert_block);
+            LLVMPositionBuilderAtEnd(builder, upsert_block);
+
+            let slot_pointer_ty = LLVMPointerType(self.slot_ty.slot_ty, 0);
+
+            let upsert_slot = LLVMBuildPhi(builder, slot_pointer_ty, c_str!(""));
+            let value_pointer = self.slot_ty.value(builder, upsert_slot);
+            LLVMBuildStore(builder, default, value_pointer);
+            LLVMBuildBr(builder, return_block);
+            trace!("Finished upsert codegen");
+
             LLVMPositionBuilderAtEnd(builder, return_block);
-
-            let return_slot = LLVMBuildPhi(builder, ret_ty, c_str!(""));
-
-            let filled = self.slot_ty.filled(builder, return_slot);
+            let return_slot = LLVMBuildPhi(builder, slot_pointer_ty, c_str!(""));
             let value_pointer = self.slot_ty.value(builder, return_slot);
-
-            // TODO 
-            // br filled : set default : end
-
             LLVMBuildRet(builder, value_pointer);
+            trace!("Finished return block codegen");
 
-            // Set the PHI value.
-            let mut blocks = [entry_block, reacquire_slot_block];
+            // Set the PHI values.
+            let mut blocks = [set_default_block, reacquire_slot_block];
             let mut values = [slot, resized_slot];
+            LLVMAddIncoming(upsert_slot, values.as_mut_ptr(), blocks.as_mut_ptr(), values.len() as u32);
+
+            let mut blocks = [entry_block, upsert_block];
+            let mut values = [slot, upsert_slot];
             LLVMAddIncoming(return_slot, values.as_mut_ptr(), blocks.as_mut_ptr(), values.len() as u32);
 
             self.upsert = Some(function);
