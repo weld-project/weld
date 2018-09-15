@@ -218,6 +218,7 @@ impl BuilderExpressionGen for LlvmGenerator {
                 Ok(())
             }
             GroupMerger(_, _) => {
+                unimplemented!();
                 let default_capacity = self.i64(groupmerger::DEFAULT_CAPACITY);
                 let groupmerger = {
                     let mut methods = self.groupmergers.get_mut(nb.kind).unwrap();
@@ -327,6 +328,7 @@ impl BuilderExpressionGen for LlvmGenerator {
                 self.merge_values(ctx.builder, val.as_ref(), *binop, slot_value_pointer, value_pointer)
             }
             GroupMerger(ref key, _) => {
+                unimplemented!();
                 use self::hash::*;
                 // The merge value is a {K, V} struct.
                 let merge_value_ptr = ctx.get_value(m.value)?;
@@ -402,6 +404,7 @@ impl BuilderExpressionGen for LlvmGenerator {
                 Ok(())
             }
             GroupMerger(_, _) => {
+                unimplemented!();
                 let result_ty = ctx.sir_function.symbol_type(m.output)?;
                 let result_ty = self.llvm_type(result_ty)?;
                 let builder_loaded = self.load(ctx.builder, builder_pointer)?;
@@ -465,6 +468,7 @@ impl BuilderExpressionGen for LlvmGenerator {
                     self.llvm_type(dict_type)
                 }
                 GroupMerger(ref key, ref value) => {
+                    unimplemented!();
                     use super::eq::GenEq;
                     if !self.groupmergers.contains_key(kind) {
                         let llvm_key_ty = self.llvm_type(key)?;

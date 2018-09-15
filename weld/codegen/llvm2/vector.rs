@@ -232,12 +232,9 @@ impl Vector {
             let run = LLVMGetParam(function, 1);
             let bytes = intrinsics.call_weld_run_malloc(builder, run, alloc_size, Some(c_str!("bytes")));
             let elements = LLVMBuildBitCast(builder, bytes, LLVMPointerType(self.elem_ty, 0), c_str!("elements"));
-            let one = LLVMBuildInsertValue(builder,
-                                           LLVMGetUndef(self.vector_ty),
-                                           elements, POINTER_INDEX, c_str!(""));
-            let result = LLVMBuildInsertValue(builder,
-                                           one,
-                                           size, SIZE_INDEX, c_str!(""));
+            let mut result = LLVMGetUndef(self.vector_ty);
+            result = LLVMBuildInsertValue(builder, result, elements, POINTER_INDEX, c_str!(""));
+            result = LLVMBuildInsertValue(builder, result, size, SIZE_INDEX, c_str!(""));
             LLVMBuildRet(builder, result);
 
             self.new = Some(function);

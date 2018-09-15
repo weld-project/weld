@@ -17,6 +17,9 @@ use self::llvm_sys::LLVMTypeKind;
 // use codegen::llvm2::llvm_exts::*;
 use codegen::llvm2::intrinsic::Intrinsics;
 
+// Need vector type for ToVec and Serialize.
+use codegen::llvm2::vector;
+use codegen::llvm2::vector::Vector;
 
 use super::CodeGenExt;
 
@@ -34,9 +37,9 @@ const FILLED_INDEX: u32 = 3;
 /// Data index.
 const SLOT_ARR_INDEX: u32 = 0;
 /// Capacity index.
-const CAP_INDEX: u32 = SLOT_ARR_INDEX + 1;
+const CAP_INDEX: u32 = 1;
 /// Size index.
-const SIZE_INDEX: u32 = CAP_INDEX + 1;
+const SIZE_INDEX: u32 = 2;
 
 /// Maximum load factor of the dictionary (out of 10).
 const MAX_LOAD_FACTOR: i64 = 7;
@@ -63,7 +66,6 @@ pub struct Dict {
     resize: Option<LLVMValueRef>,           // DONE
     key_exists: Option<LLVMValueRef>,       // TODO
     to_vec: Option<LLVMValueRef>,           // TODO
-    free: Option<LLVMValueRef>,             // TODO
     serialize: Option<LLVMValueRef>,        // TODO
 }
 
@@ -149,7 +151,7 @@ impl SlotType {
         LLVMBuildStore(builder, key, key_pointer);
         let value_pointer = self.value(builder, slot);
         LLVMBuildStore(builder, value, value_pointer);
-        let hash_pointer = self.value(builder, slot);
+        let hash_pointer = self.hash(builder, slot);
         LLVMBuildStore(builder, hash, hash_pointer);
         let filled_pointer = LLVMBuildStructGEP(builder, slot, FILLED_INDEX, c_str!(""));
         LLVMBuildStore(builder, self.i8(1), filled_pointer);
@@ -177,6 +179,8 @@ impl SlotType {
     }
 
     /// Return whether the provided slot is filled as an `i1`.
+    ///
+    /// The slot is filled if the byte value of the filled field is non-zero.
     ///
     /// The slot should be a pointer.
     pub unsafe fn filled(&mut self, builder: LLVMBuilderRef, value: LLVMValueRef) -> LLVMValueRef {
@@ -233,7 +237,6 @@ impl Dict {
             resize: None,
             key_exists: None,
             to_vec: None,
-            free: None,
             serialize: None,
         }
     }
@@ -847,9 +850,165 @@ impl Dict {
 
     /// Converts this dictionary to a vector of key/value pairs.
     pub unsafe fn gen_to_vec(&mut self,
-                                 builder: LLVMBuilderRef,
-                                 dict: LLVMValueRef) -> WeldResult<LLVMValueRef> {
-        unimplemented!()
+                             builder: LLVMBuilderRef,
+                             intrinsics: &mut Intrinsics,
+                             kv_vector: &mut Vector,
+                             dict: LLVMValueRef,
+                             run: LLVMValueRef) -> WeldResult<LLVMValueRef> {
+
+        if self.to_vec.is_none() {
+            trace!("Generating dictionary to_vec");
+            let mut arg_tys = [
+                self.dict_ty,
+                self.run_handle_type(),
+            ];
+            let ret_ty = kv_vector.vector_ty;
+
+            let name = format!("{}.tovec", self.name);
+            let (function, builder, entry_block) = self.define_function(ret_ty, &mut arg_tys, name);
+
+            let dict = LLVMGetParam(function, 0);
+            let run = LLVMGetParam(function, 1);
+
+            // Generated Code:
+            //
+            // size = dict.size
+            // size_nonzero = size > 0
+            // br size_nonzero, makekvvec, return0
+            //
+            // makekvvec:
+            // vec = vec.new(size)
+            // capacity = dict.capacity
+            // br top
+            //
+            // top:
+            // i = [makkvvec, 0], [other, i2]
+            // j = [makkvvec, 0], [other, j3]
+            // slot = getslot(i)
+            // br slot.filled ? tokv : bot
+            //
+            // tokv:
+            // vec_ptr = gep vec, j
+            // key_ptr = gep vecptr, 0
+            // store slot.key into key_ptr
+            // val_ptr = gep vecptr, 1
+            // store slot.val into val_ptr
+            // j2 = j+1
+            // br bot
+            //
+            // bot:
+            // j3 = phi [tokv, j2], [top, j]
+            // i++
+            // finished = i == capacity
+            // br finished ? top : done
+            //
+            // done:
+            // ret = phi [ bot, vec ], [ entry, zeroinitializer]
+            //
+            
+            let start_convert_block = LLVMAppendBasicBlockInContext(self.context(), function,  c_str!(""));
+            let top_block = LLVMAppendBasicBlockInContext(self.context(), function,  c_str!(""));
+            let copy_kv_block = LLVMAppendBasicBlockInContext(self.context(), function,  c_str!(""));
+            let bot_block = LLVMAppendBasicBlockInContext(self.context(), function,  c_str!(""));
+            let return_block = LLVMAppendBasicBlockInContext(self.context(), function,  c_str!(""));
+            
+            let size = self.size(builder, dict);
+
+            let mut zero_vector = LLVMGetUndef(kv_vector.vector_ty);
+            zero_vector = LLVMConstInsertValue(zero_vector,
+                                               self.i64(0), [vector::POINTER_INDEX].as_mut_ptr(), 1);
+            zero_vector = LLVMConstInsertValue(zero_vector,
+                                               self.i64(0), [vector::SIZE_INDEX].as_mut_ptr(), 1);
+            let size_nonzero = LLVMBuildICmp(builder, LLVMIntSGT, size, self.i64(0), c_str!(""));
+            LLVMBuildCondBr(builder, size_nonzero, start_convert_block, return_block);
+            trace!("Generated entry block");
+
+            LLVMPositionBuilderAtEnd(builder, start_convert_block);
+            let capacity = self.capacity(builder, dict);
+            let slot_array = self.slot_array(builder, dict);
+            let vec = kv_vector.gen_new(builder, intrinsics, run, size)?;
+            LLVMBuildBr(builder, top_block);
+            trace!("Generated start conversion block");
+
+            LLVMPositionBuilderAtEnd(builder, top_block);
+            // Index into the dictionary slot array.
+            let slot_arr_index = LLVMBuildPhi(builder, self.i64_type(), c_str!(""));
+            // Index into the vector.
+            let kv_vec_index = LLVMBuildPhi(builder, self.i64_type(), c_str!(""));
+
+            let slot = self.slot_at_index(builder, slot_array, slot_arr_index);
+            let filled = self.slot_ty.filled(builder, slot);
+            LLVMBuildCondBr(builder, filled, copy_kv_block, bot_block);
+            trace!("Generated loop top block");
+
+            // Copy block - copy the key/value into the vector.
+            LLVMPositionBuilderAtEnd(builder, copy_kv_block);
+            // Pointer to KV struct at the correct index.
+            let vector_ptr = kv_vector.gen_at(builder, vec, kv_vec_index)?;
+
+            // Copy the key.
+            let vec_key_ptr = LLVMBuildStructGEP(builder, vector_ptr, 0, c_str!(""));
+            let slot_key_ptr = self.slot_ty.key(builder, slot);
+            let slot_key = self.load(builder, slot_key_ptr).unwrap();
+            LLVMBuildStore(builder, slot_key, vec_key_ptr);
+            
+            // Copy the value.
+            let vec_val_ptr = LLVMBuildStructGEP(builder, vector_ptr, 1, c_str!(""));
+            let slot_val_ptr = self.slot_ty.value(builder, slot);
+            let slot_val = self.load(builder, slot_val_ptr).unwrap();
+            LLVMBuildStore(builder, slot_val, vec_val_ptr);
+
+            let inc_kv_vec_index = LLVMBuildNSWAdd(builder, kv_vec_index, self.i64(1), c_str!(""));
+            LLVMBuildBr(builder, bot_block);
+            trace!("Generated copy KV struct block");
+
+            // Bottom of loop -- increment induction variables and loop or exit.
+            LLVMPositionBuilderAtEnd(builder, bot_block);
+            let new_kv_vec_index = LLVMBuildPhi(builder, self.i64_type(), c_str!(""));
+            let new_slot_arr_index = LLVMBuildNSWAdd(builder, slot_arr_index, self.i64(1), c_str!(""));
+            let finished = LLVMBuildICmp(builder, LLVMIntEQ, slot_arr_index, capacity, c_str!(""));
+            LLVMBuildCondBr(builder, finished, return_block, top_block);
+            trace!("Generated bottom block");
+
+            // Return Block.
+            LLVMPositionBuilderAtEnd(builder, return_block);
+            let ret = LLVMBuildPhi(builder, kv_vector.vector_ty, c_str!(""));
+            LLVMBuildRet(builder, ret);
+            trace!("Generated return block");
+
+            // Set the PHI value for the return value.
+            let mut blocks = [entry_block, bot_block];
+            let mut values = [zero_vector, vec];
+            LLVMAddIncoming(ret, values.as_mut_ptr(), blocks.as_mut_ptr(), values.len() as u32);
+
+            // Set the PHI value for the slot array induction variable.
+            let mut blocks = [start_convert_block, bot_block];
+            let mut values = [self.i64(0), new_slot_arr_index];
+            LLVMAddIncoming(slot_arr_index,
+                            values.as_mut_ptr(), blocks.as_mut_ptr(), values.len() as u32);
+
+            // Set the PHI value for the offset into the KV vector.
+            let mut blocks = [start_convert_block, bot_block];
+            let mut values = [self.i64(0), new_kv_vec_index];
+            LLVMAddIncoming(kv_vec_index,
+                            values.as_mut_ptr(), blocks.as_mut_ptr(), values.len() as u32);
+
+            // Set the PHI value for the intermediate KV vector offset in bot_block.
+            let mut blocks = [top_block, copy_kv_block];
+            let mut values = [kv_vec_index, inc_kv_vec_index];
+            LLVMAddIncoming(new_kv_vec_index,
+                            values.as_mut_ptr(), blocks.as_mut_ptr(), values.len() as u32);
+
+            self.to_vec = Some(function);
+            LLVMDisposeBuilder(builder);
+        }
+
+        let mut args = [dict, run];
+        return Ok(LLVMBuildCall(builder,
+                                self.to_vec.unwrap(),
+                                args.as_mut_ptr(),
+                                args.len() as u32,
+                                c_str!("")))
     }
 
     /// Serialize this dictionary into the provided serialization buffer.

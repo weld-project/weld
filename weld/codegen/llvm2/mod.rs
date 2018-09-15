@@ -1223,16 +1223,23 @@ impl LlvmGenerator {
                 let child_value = self.load(context.builder, context.get_value(child)?)?;
                 let child_type = context.sir_function.symbol_type(child)?;
                 // This is the type of the resulting key/value vector (vec[{K,V}])
-                let output_type = context.sir_function.symbol_type(statement.output.as_ref().unwrap())?;
-                let kv_ty = if let Vector(ref elem) = *output_type {
-                    self.llvm_type(elem)?
+                let output_type = context.sir_function.symbol_type(
+                    statement.output.as_ref().unwrap())?;
+                let elem = if let Vector(ref elem) = *output_type {
+                    elem
                 } else {
                     unreachable!()
                 };
-                let kv_vec_ty = self.llvm_type(output_type)?;
+
+                let _ = self.llvm_type(output_type)?;
                 let result = {
+                    let mut vector_methods = self.vectors.get_mut(elem).unwrap();
                     let mut methods = self.dictionaries.get_mut(child_type).unwrap();
-                    methods.gen_to_vec(context.builder, child_value)?
+                    methods.gen_to_vec(context.builder,
+                                       &mut self.intrinsics,
+                                       vector_methods,
+                                       child_value,
+                                       context.get_run())?
                 };
                 LLVMBuildStore(context.builder, result, output_pointer);
                 Ok(())
