@@ -15,7 +15,7 @@ struct I32KeyValArgs {
     y: WeldVec<i32>,
 }
 
-#[test]
+// #[test]
 fn simple_for_dictmerger_loop() {
     let code = "|x:vec[i32], y:vec[i32]| tovec(result(for(zip(x,y), dictmerger[i32,i32,+],
                 |b,i,e| merge(b, e))))";
@@ -52,7 +52,7 @@ fn simple_for_dictmerger_loop() {
 }
 
 /// Similar case to parallel_for_vecmerger_loop but values and keys are structs
-#[test]
+//#[test]
 fn dictmerger_with_structs() {
     /// An entry after the final tovec call, which has an {i32,i32} key and {i32,f32} value.
     #[derive(Clone)]
@@ -193,12 +193,11 @@ fn complex_groupmerger_with_struct_key() {
 /// `use_local` specifies whether to use the local-global adaptive dictionary or the purely global
 /// dictionary.
 fn simple_parallel_for_dictmerger_loop_helper(use_local: bool) {
-    let code = format!(
-        "|x:vec[i32], y:vec[i32]| tovec(result(@(grain_size: 100)for(zip(x,y),
-                dictmerger[i32,i32,+]({}L), |b,i,e| merge(b, e))))",
-        if use_local { 100000000 } else { 0 }
-    );
-    let ref conf = many_threads_conf();
+    let code =
+        "|x:vec[i32], y:vec[i32]| tovec(result(for(zip(x,y),
+                dictmerger[i32,i32,+], |b,i,e| merge(b, e))))";
+    let ref mut conf = many_threads_conf();
+    // conf.set("weld.compile.traceExecution", "true");
 
     const DICT_SIZE: usize = 8192;
     const UNIQUE_KEYS: usize = 256;
@@ -217,8 +216,11 @@ fn simple_parallel_for_dictmerger_loop_helper(use_local: bool) {
     };
 
     let ret_value = compile_and_run(&code, conf, input_data);
+    println!("Dropping value");
     let data = ret_value.data() as *const WeldVec<Pair<_,_>>;
+    println!("Got data");
     let result = unsafe { (*data).clone() };
+    println!("Cloned result");
 
     assert_eq!(UNIQUE_KEYS as i64, result.len);
 
@@ -235,6 +237,7 @@ fn simple_parallel_for_dictmerger_loop_helper(use_local: bool) {
             }
         }
     }
+    
 
     for i in 0..(result.len as isize) {
         let key = unsafe { (*result.data.offset(i)).ele1 };
@@ -243,6 +246,7 @@ fn simple_parallel_for_dictmerger_loop_helper(use_local: bool) {
         assert_eq!(*expected_value, value);
     }
     assert_eq!(result.len, expected.len() as i64);
+    println!("Verified correctness");
 }
 
 #[test]
@@ -250,12 +254,12 @@ fn simple_parallel_for_dictmerger_loop_local() {
     simple_parallel_for_dictmerger_loop_helper(true);
 }
 
-#[test]
+//#[test]
 fn simple_parallel_for_dictmerger_loop_global() {
     simple_parallel_for_dictmerger_loop_helper(false);
 }
 
-#[test]
+//#[test]
 fn simple_dict_lookup() {
     let code = "|x:vec[i32], y:vec[i32]| let a = result(for(zip(x,y), dictmerger[i32,i32,+],
                 |b,i,e| merge(b, e))); lookup(a, 1)";
@@ -277,7 +281,7 @@ fn simple_dict_lookup() {
     assert_eq!(output, result);
 }
 
-#[test]
+//#[test]
 fn string_dict_lookup() {
     let code = "|x:vec[i32]| let v = [\"abcdefghi\", \"abcdefghi\", \"abcdefghi\"];
                 let d = result(for(zip(v,x), dictmerger[vec[i8],i32,+], |b,i,e| merge(b, e)));
@@ -320,7 +324,6 @@ fn simple_dict_exists() {
 
     let output = true;
     assert_eq!(output, result);
-
 
     let ref conf = default_conf();
     let ret_value = compile_and_run(code_false, conf, input_data.clone());

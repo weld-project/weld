@@ -496,7 +496,8 @@ impl WeldValue {
 impl Drop for WeldValue {
     fn drop(&mut self) {
         if let Some(ref mut context) = self.context {
-            unsafe { context.context.borrow_mut().free(self.data as DataMut) } ;
+            // trace!("Freeing pointer {:?} in WeldValue.drop()", self.data as DataMut);
+            // unsafe { context.context.borrow_mut().free(self.data as DataMut) } ;
         }
     }
 }
@@ -873,8 +874,10 @@ impl WeldModule {
             Err(WeldError::new(message, result.errno))
         } else {
             // Weld allocates the output using libc malloc, but we cloned it, so free the output struct
-            // here.
+            // here
+            trace!("Freeing allocated output pointer {:?}", raw as DataMut);
             free(raw as DataMut);
+            trace!("Freed allocated output");
             Ok(value)
         }
     }

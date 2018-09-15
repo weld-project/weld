@@ -377,6 +377,14 @@ impl Dict {
 
             let new_slot_array = self.slot_array(builder, new_dictionary);
 
+            let init_size = self.size(builder, new_dictionary);
+            let string = CString::new("Resized dictionary new init size").unwrap();
+            let string = LLVMBuildGlobalStringPtr(builder, string.as_ptr(), c_str!(""));
+            let pointer = LLVMConstBitCast(string, LLVMPointerType(self.i8_type(), 0));
+            let _ = intrinsics.call_weld_run_print(builder, run, pointer);
+            let _ = intrinsics.call_weld_run_print_int(builder, run, init_size);
+            let _ = intrinsics.call_weld_run_print_int(builder, run, new_capacity);
+
             trace!("Got slot array");
 
             LLVMBuildBr(builder, copy_top_block);
@@ -424,6 +432,19 @@ impl Dict {
             let new_slot_bytes = LLVMBuildBitCast(builder, new_slot, self.void_pointer_type(), c_str!(""));
             let old_slot_bytes = LLVMBuildBitCast(builder, old_slot, self.void_pointer_type(), c_str!(""));
             let _ = intrinsics.call_memcpy(builder, new_slot_bytes, old_slot_bytes, self.size_of(self.slot_ty.slot_ty));
+
+            // Update the size.
+            let size_pointer = LLVMBuildStructGEP(builder, new_dictionary, SIZE_INDEX, c_str!(""));
+            let size = self.load(builder, size_pointer).unwrap();
+            let new_size = LLVMBuildNSWAdd(builder, size, self.i64(1), c_str!(""));
+            LLVMBuildStore(builder, new_size, size_pointer);
+
+            let string = CString::new("Resize New Size").unwrap();
+            let string = LLVMBuildGlobalStringPtr(builder, string.as_ptr(), c_str!(""));
+            let pointer = LLVMConstBitCast(string, LLVMPointerType(self.i8_type(), 0));
+            let _ = intrinsics.call_weld_run_print(builder, run, pointer);
+            let _ = intrinsics.call_weld_run_print_int(builder, run, new_size);
+
             LLVMBuildBr(builder, copy_bot_block);
 
             trace!("Built copy block");
@@ -449,7 +470,8 @@ impl Dict {
             let old_slotarray_bytes = LLVMBuildBitCast(builder, old_slot_array, self.void_pointer_type(), c_str!(""));
             let _ = intrinsics.call_weld_run_free(builder, run, old_slotarray_bytes);
             trace!("Freed old data");
-            // 2. Move New Dictionary to Old Dictionary pointer.
+
+            // 2. Move the new dictionary state to the old dictionary pointer.
             let new_dict_bytes = LLVMBuildBitCast(builder, new_dictionary, self.void_pointer_type(), c_str!(""));
             let old_dict_bytes = LLVMBuildBitCast(builder, dict, self.void_pointer_type(), c_str!(""));
             let _ = intrinsics.call_memcpy(builder, old_dict_bytes, new_dict_bytes, self.size_of(self.dict_inner_ty));
@@ -646,7 +668,7 @@ impl Dict {
     /// Returns the pointer to the slot for a key.
     ///
     /// If the key does not exist, a slot is initialized for the key, and a default value is
-    /// inserted into the slot. The slot is then returned.  The insertion may cause the dictionary
+    /// inserted into the slot. The slot is then returned. The insertion may cause the dictionary
     /// to be resized.
     pub unsafe fn gen_upsert(&mut self,
                          builder: LLVMBuilderRef,
@@ -741,15 +763,32 @@ impl Dict {
 
             trace!("Generating resize");
 
+            /*
+            let string = CString::new("Resizing dictionary").unwrap();
+            let string = LLVMBuildGlobalStringPtr(builder, string.as_ptr(), c_str!(""));
+            let pointer = LLVMConstBitCast(string, LLVMPointerType(self.i8_type(), 0));
+            let _ = intrinsics.call_weld_run_print(builder, run, pointer);
+            */
+
             // Check for resize.
             let resized = self.gen_resize(builder, intrinsics, dict, run);
+
+            /*
+            let string = CString::new("Finished resizing dictionary").unwrap();
+            let string = LLVMBuildGlobalStringPtr(builder, string.as_ptr(), c_str!(""));
+            let pointer = LLVMConstBitCast(string, LLVMPointerType(self.i8_type(), 0));
+            let _ = intrinsics.call_weld_run_print(builder, run, pointer);
+            */
+
             LLVMBuildCondBr(builder, resized, reacquire_slot_block, upsert_block);
 
             trace!("finished gen resize");
 
             LLVMPositionBuilderAtEnd(builder, reacquire_slot_block);
             // Builder was resized - we need to reacquire the slot.
-            let resized_slot = self.gen_slot_for_key(builder, slot_array, capacity, hash, key);
+            let resized_slot_array = self.slot_array(builder, dict);
+            let resized_capacity = self.capacity(builder, dict);
+            let resized_slot = self.gen_slot_for_key(builder, resized_slot_array, resized_capacity, hash, key);
             trace!("Reacquired slot");
 
             LLVMBuildBr(builder, upsert_block);
@@ -917,6 +956,12 @@ impl Dict {
             
             let size = self.size(builder, dict);
 
+            let string = CString::new("Dictionary Size").unwrap();
+            let string = LLVMBuildGlobalStringPtr(builder, string.as_ptr(), c_str!(""));
+            let pointer = LLVMConstBitCast(string, LLVMPointerType(self.i8_type(), 0));
+            let _ = intrinsics.call_weld_run_print(builder, run, pointer);
+            let _ = intrinsics.call_weld_run_print_int(builder, run, size);
+
             let mut zero_vector = LLVMGetUndef(kv_vector.vector_ty);
             zero_vector = LLVMConstInsertValue(zero_vector,
                                                self.i64(0), [vector::POINTER_INDEX].as_mut_ptr(), 1);
@@ -938,6 +983,18 @@ impl Dict {
             let slot_arr_index = LLVMBuildPhi(builder, self.i64_type(), c_str!(""));
             // Index into the vector.
             let kv_vec_index = LLVMBuildPhi(builder, self.i64_type(), c_str!(""));
+
+            let string = CString::new("Slot Array Index").unwrap();
+            let string = LLVMBuildGlobalStringPtr(builder, string.as_ptr(), c_str!(""));
+            let pointer = LLVMConstBitCast(string, LLVMPointerType(self.i8_type(), 0));
+            let _ = intrinsics.call_weld_run_print(builder, run, pointer);
+            let _ = intrinsics.call_weld_run_print_int(builder, run, slot_arr_index);
+
+            let string = CString::new("KV Vector Index").unwrap();
+            let string = LLVMBuildGlobalStringPtr(builder, string.as_ptr(), c_str!(""));
+            let pointer = LLVMConstBitCast(string, LLVMPointerType(self.i8_type(), 0));
+            let _ = intrinsics.call_weld_run_print(builder, run, pointer);
+            let _ = intrinsics.call_weld_run_print_int(builder, run, kv_vec_index);
 
             let slot = self.slot_at_index(builder, slot_array, slot_arr_index);
             let filled = self.slot_ty.filled(builder, slot);
@@ -969,13 +1026,24 @@ impl Dict {
             LLVMPositionBuilderAtEnd(builder, bot_block);
             let new_kv_vec_index = LLVMBuildPhi(builder, self.i64_type(), c_str!(""));
             let new_slot_arr_index = LLVMBuildNSWAdd(builder, slot_arr_index, self.i64(1), c_str!(""));
-            let finished = LLVMBuildICmp(builder, LLVMIntEQ, slot_arr_index, capacity, c_str!(""));
+            let finished = LLVMBuildICmp(builder, LLVMIntEQ, new_slot_arr_index, capacity, c_str!(""));
             LLVMBuildCondBr(builder, finished, return_block, top_block);
             trace!("Generated bottom block");
 
             // Return Block.
             LLVMPositionBuilderAtEnd(builder, return_block);
             let ret = LLVMBuildPhi(builder, kv_vector.vector_ty, c_str!(""));
+
+            let string = CString::new("KV Vec Stuff:").unwrap();
+            let string = LLVMBuildGlobalStringPtr(builder, string.as_ptr(), c_str!(""));
+            let pointer = LLVMConstBitCast(string, LLVMPointerType(self.i8_type(), 0));
+            let _ = intrinsics.call_weld_run_print(builder, run, pointer);
+            let size = kv_vector.gen_size(builder, ret)?;
+            let pointer = kv_vector.gen_at(builder, ret, self.i64(0))?;
+            let pointer = LLVMBuildPtrToInt(builder, pointer, self.i64_type(), c_str!(""));
+            let _ = intrinsics.call_weld_run_print_int(builder, run, size);
+            let _ = intrinsics.call_weld_run_print_int(builder, run, pointer);
+
             LLVMBuildRet(builder, ret);
             trace!("Generated return block");
 

@@ -44,6 +44,7 @@ pub fn many_threads_conf() -> WeldConf {
 }
 
 fn conf(threads: i32) -> WeldConf {
+    set_log_level(WeldLogLevel::Trace);
     let threads = format!("{}", threads);
     let mut conf = WeldConf::new();
     conf.set("weld.threads", threads);

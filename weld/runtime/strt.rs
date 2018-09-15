@@ -3,7 +3,7 @@
 extern crate libc;
 extern crate fnv;
 
-use libc::{c_char, int32_t, int64_t, size_t};
+use libc::{c_char, int32_t, int64_t, uint64_t, size_t};
 use libc::{malloc, realloc, free};
 
 use fnv::FnvHashMap;
@@ -52,6 +52,7 @@ impl WeldRuntimeContext {
         let mem = malloc(size as size_t);
         assert!(mem as i64 != 0);
         self.allocated += size;
+        trace!("Alloc'd pointer {:?} ({} bytes)", mem, size);
         self.allocations.insert(mem.clone(), size);
         mem
     }
@@ -108,6 +109,7 @@ impl WeldRuntimeContext {
     /// Panics if the passed value was not allocated by the Weld runtime.
     pub unsafe fn free(&mut self, pointer: DataMut) {
         let allocated = *self.allocations.get(&pointer).unwrap();
+        trace!("Freeing pointer {:?} ({} bytes) in runst_free()", pointer, allocated);
         free(pointer);
         self.allocated -= allocated;
         self.allocations.remove(&pointer);
@@ -142,8 +144,10 @@ impl WeldRuntimeContext {
 impl Drop for WeldRuntimeContext {
     fn drop(&mut self) {
         // Free memory allocated by the run.
+        trace!("Allocations: {}", self.allocations.len());
         unsafe {
-            for (pointer, _) in self.allocations.iter() {
+            for (pointer, size) in self.allocations.iter() {
+                trace!("Freeing pointer {:?} ({} bytes) in drop()", *pointer, size);
                 free(*pointer);
             }
         }
@@ -160,6 +164,9 @@ unsafe fn initialize() {
     x += weld_runst_free as i64;
     x += weld_runst_get_errno as i64;
     x += weld_runst_set_errno as i64;
+
+    x += weld_runst_print_int as i64;
+    x += weld_runst_print as i64;
 
     use super::link::*;
     x += weld_st_dict_new as i64;
@@ -252,5 +259,11 @@ pub unsafe extern "C" fn weld_runst_get_result(run: WeldRuntimeContextRef) -> Da
 pub unsafe extern "C" fn weld_runst_print(_run: WeldRuntimeContextRef, string: *const c_char) {
     let string = CStr::from_ptr(string).to_str().unwrap();
     // XXX We could switch to a custom printer here too.
-    println!("{}", string);
+    print!("{} ", string);
+}
+
+#[no_mangle]
+/// Print a value from generated code.
+pub unsafe extern "C" fn weld_runst_print_int(_run: WeldRuntimeContextRef, i: uint64_t) {
+    println!("Printed integer: {}", i);
 }
