@@ -101,7 +101,7 @@ fn dictmerger_with_structs() {
 
 }
 
-#[test]
+// #[test]
 fn simple_groupmerger() {
     let code = "|x:vec[i32], y:vec[i32]| tovec(result(for(zip(x,y), groupmerger[i32,i32],
                 |b,i,e| merge(b, e))))";
@@ -137,7 +137,7 @@ fn simple_groupmerger() {
 
 }
 
-#[test]
+// #[test]
 fn complex_groupmerger_with_struct_key() {
     #[allow(dead_code)]
     struct Args {
@@ -295,7 +295,7 @@ fn string_dict_lookup() {
     assert_eq!(output, result);
 }
 
-#[test]
+// #[test]
 fn simple_dict_exists() {
     let keys = vec![1, 2, 2, 1, 3];
     let vals = vec![2, 3, 4, 2, 1];

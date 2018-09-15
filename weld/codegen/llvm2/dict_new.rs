@@ -65,7 +65,7 @@ pub struct Dict {
     upsert: Option<LLVMValueRef>,           // DONE
     resize: Option<LLVMValueRef>,           // DONE
     key_exists: Option<LLVMValueRef>,       // TODO
-    to_vec: Option<LLVMValueRef>,           // TODO
+    to_vec: Option<LLVMValueRef>,           // DONE
     serialize: Option<LLVMValueRef>,        // TODO
 }
 
@@ -805,7 +805,7 @@ impl Dict {
                 LLVMPointerType(self.key_ty, 0),
                 self.hash_type(),
             ];
-            let ret_ty = LLVMPointerType(self.slot_ty.slot_ty, 0);
+            let ret_ty = self.val_ty; // LLVMPointerType(self.slot_ty.slot_ty, 0);
 
             let name = format!("{}.lookup", self.name);
             let (function, builder, _) = self.define_function(ret_ty, &mut arg_tys, name);
@@ -818,7 +818,10 @@ impl Dict {
             let capacity = self.capacity(builder, dict);
             let slot = self.gen_slot_for_key(builder, slot_array, capacity, hash, key);
 
-            LLVMBuildRet(builder, slot);
+            // XXX This should probably just return the slot!
+            let value = self.slot_ty.value(builder, slot);
+            let value_loaded = self.load(builder, value)?;
+            LLVMBuildRet(builder, value_loaded);
 
             self.lookup = Some(function);
             LLVMDisposeBuilder(builder);
