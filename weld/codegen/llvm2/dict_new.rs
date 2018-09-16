@@ -49,6 +49,10 @@ const MAX_LOAD_FACTOR: i64 = 7;
 /// load factor.
 const INITIAL_CAPACITY: i64 = 16;
 
+/// A dictionary data structure and its associated methods.
+///
+/// This struct defines methods generated for a particular dictionary type. A dictionary type is
+/// defined by its key and value types.
 pub struct Dict {
     pub name: String,
     pub dict_ty: LLVMTypeRef,
@@ -64,9 +68,30 @@ pub struct Dict {
     lookup: Option<LLVMValueRef>,           // DONE
     upsert: Option<LLVMValueRef>,           // DONE
     resize: Option<LLVMValueRef>,           // DONE
-    key_exists: Option<LLVMValueRef>,       // TODO
+    key_exists: Option<LLVMValueRef>,       // DONE
     to_vec: Option<LLVMValueRef>,           // DONE
     serialize: Option<LLVMValueRef>,        // TODO
+}
+
+/// Extensions for grouping dictionaries (i.e., the GroupMerger).
+///
+/// The grouping dictionary supports grouping values into vectors. The same underlying Dict type is
+/// used for a grouping dictionary, except a special merge function is used to add values to the
+/// dictionaries.
+///
+/// It is *incorrect behavior* to use the `upsert` method on a grouping dictionary -- values should
+/// be inserted using the methods in this trait instead.
+pub trait GroupingDict {
+    /// Merge `value` into the group for `key` with the given `hash`.
+    ///
+    /// This method takes a `Vector`, which holds methods for the type `vec[V]`.
+    fn merge_value(builder: LLVMBuilderRef,
+                   intrinsics: &mut Intrinsics,
+                   group_vector: &mut Vector,
+                   key: LLVMValueRef,
+                   hash: LLVMValueRef,
+                   value: LLVMValueRef,
+                   run: LLVMValueRef) -> WeldResult<()>;
 }
 
 impl CodeGenExt for Dict {
@@ -875,12 +900,48 @@ impl Dict {
     }
 
     /// Returns whether a key exists.
+    ///
+    /// TODO This expression may become deprecated if Lookup returns a boolean to indicate whether
+    /// a value is contained within a dictionary.
     pub unsafe fn gen_key_exists(&mut self,
                                  builder: LLVMBuilderRef,
                                  dict: LLVMValueRef,
                                  key: LLVMValueRef,
                                  hash: LLVMValueRef) -> WeldResult<LLVMValueRef> {
-        unimplemented!()
+        if self.key_exists.is_none() {
+            let mut arg_tys = [
+                self.dict_ty,
+                LLVMPointerType(self.key_ty, 0),
+                self.hash_type(),
+            ];
+
+            let ret_ty = self.bool_type(); // LLVMPointerType(self.slot_ty.slot_ty, 0);
+
+            let name = format!("{}.keyexists", self.name);
+            let (function, builder, _) = self.define_function(ret_ty, &mut arg_tys, name);
+
+            let dict = LLVMGetParam(function, 0);
+            let key = LLVMGetParam(function, 1);
+            let hash = LLVMGetParam(function, 2);
+
+            let slot_array = self.slot_array(builder, dict);
+            let capacity = self.capacity(builder, dict);
+            let slot = self.gen_slot_for_key(builder, slot_array, capacity, hash, key);
+
+            let filled = self.slot_ty.filled(builder, slot);
+            let filled = self.i1_to_bool(builder, filled);
+            LLVMBuildRet(builder, filled);
+
+            self.key_exists = Some(function);
+            LLVMDisposeBuilder(builder);
+        }
+
+        let mut args = [dict, key, hash];
+        return Ok(LLVMBuildCall(builder,
+                                self.key_exists.unwrap(),
+                                args.as_mut_ptr(),
+                                args.len() as u32,
+                                c_str!("")))
     }
 
     /// Returns the number of keys in the dictionary.
