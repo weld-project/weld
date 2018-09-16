@@ -1045,12 +1045,26 @@ impl Dict {
             // ret = phi [ bot, vec ], [ entry, zeroinitializer]
             //
             
-            let start_convert_block = LLVMAppendBasicBlockInContext(self.context(), function,  c_str!(""));
-            let top_block = LLVMAppendBasicBlockInContext(self.context(), function,  c_str!(""));
-            let copy_kv_block = LLVMAppendBasicBlockInContext(self.context(), function,  c_str!(""));
-            let bot_block = LLVMAppendBasicBlockInContext(self.context(), function,  c_str!(""));
-            let return_block = LLVMAppendBasicBlockInContext(self.context(), function,  c_str!(""));
+            // A constant zero-vector.
+            let mut zero_vector = LLVMGetUndef(kv_vector.vector_ty);
+            zero_vector = LLVMConstInsertValue(zero_vector,
+                                               self.i64(0), [vector::POINTER_INDEX].as_mut_ptr(), 1);
+            zero_vector = LLVMConstInsertValue(zero_vector,
+                                               self.i64(0), [vector::SIZE_INDEX].as_mut_ptr(), 1);
             
+            let after_nullcheck_block = LLVMAppendBasicBlockInContext(self.context(), function,  c_str!("after.nullcheck"));
+            let start_convert_block = LLVMAppendBasicBlockInContext(self.context(), function,  c_str!("start.convert"));
+            let top_block = LLVMAppendBasicBlockInContext(self.context(), function,  c_str!("loop.top"));
+            let copy_kv_block = LLVMAppendBasicBlockInContext(self.context(), function,  c_str!("copy.kv"));
+            let bot_block = LLVMAppendBasicBlockInContext(self.context(), function,  c_str!("loop.bot"));
+            let return_block = LLVMAppendBasicBlockInContext(self.context(), function,  c_str!("return"));
+
+            // Hack: For uninitalized dictionaries (which *must* be null pointers), return a
+            // zero-vector.
+            let is_null = LLVMBuildICmp(builder, LLVMIntEQ,  dict, self.null_ptr(self.dict_inner_ty), c_str!("isNull"));
+            LLVMBuildCondBr(builder, is_null, return_block, after_nullcheck_block);
+
+            LLVMPositionBuilderAtEnd(builder, after_nullcheck_block);
             let size = self.size(builder, dict);
 
             let string = CString::new("Dictionary Size").unwrap();
@@ -1059,11 +1073,6 @@ impl Dict {
             let _ = intrinsics.call_weld_run_print(builder, run, pointer);
             let _ = intrinsics.call_weld_run_print_int(builder, run, size);
 
-            let mut zero_vector = LLVMGetUndef(kv_vector.vector_ty);
-            zero_vector = LLVMConstInsertValue(zero_vector,
-                                               self.i64(0), [vector::POINTER_INDEX].as_mut_ptr(), 1);
-            zero_vector = LLVMConstInsertValue(zero_vector,
-                                               self.i64(0), [vector::SIZE_INDEX].as_mut_ptr(), 1);
             let size_nonzero = LLVMBuildICmp(builder, LLVMIntSGT, size, self.i64(0), c_str!(""));
             LLVMBuildCondBr(builder, size_nonzero, start_convert_block, return_block);
             trace!("Generated entry block");
@@ -1145,8 +1154,8 @@ impl Dict {
             trace!("Generated return block");
 
             // Set the PHI value for the return value.
-            let mut blocks = [entry_block, bot_block];
-            let mut values = [zero_vector, vec];
+            let mut blocks = [entry_block, after_nullcheck_block, bot_block];
+            let mut values = [zero_vector, zero_vector, vec];
             LLVMAddIncoming(ret, values.as_mut_ptr(), blocks.as_mut_ptr(), values.len() as u32);
 
             // Set the PHI value for the slot array induction variable.
