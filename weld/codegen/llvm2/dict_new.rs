@@ -1275,6 +1275,10 @@ impl GroupingDict for Dict {
             trace!("Upserted slot");
 
             let value_pointer = self.slot_ty.value(builder, slot);
+
+            // Array's size pointer. This points into the slot's value.
+            let size_pointer = LLVMBuildStructGEP(builder, value_pointer, vector::SIZE_INDEX, c_str!("sizePtr"));
+
             let filled_value = self.slot_ty.filled_value(builder, slot);
             trace!("Got value pointer and filled value");
 
@@ -1289,6 +1293,12 @@ impl GroupingDict for Dict {
             LLVMPositionBuilderAtEnd(builder, init_block);
             let new_vector = group_vector.gen_new(builder, intrinsics, run, self.i64(DEFAULT_GROUP_CAPACITY))?;
             LLVMBuildStore(builder, new_vector, value_pointer);
+
+            // We must set the size to 0, since we manually track the size within the vector. The
+            // capacity is tracked via the filled byte.
+            LLVMBuildStore(builder, self.i64(0), size_pointer);
+
+            // Store the capacity as a power-of-2.
             let default_filled = self.i8(DEFAULT_GROUP_FILLED);
             self.slot_ty.set_filled(builder, slot, default_filled);
             LLVMBuildBr(builder, merge_block);
@@ -1300,6 +1310,7 @@ impl GroupingDict for Dict {
             let capacity = LLVMBuildShl(builder, self.i64(1), ext_filled_value, c_str!("capacity"));
             let cur_vector = self.load(builder, value_pointer).unwrap();
             let size = group_vector.gen_size(builder, cur_vector)?;
+            let _ = intrinsics.call_weld_run_print_int(builder, run, size);
             let needs_resize = LLVMBuildICmp(builder, LLVMIntEQ, size, capacity, c_str!("shouldResize"));
             LLVMBuildCondBr(builder, needs_resize, resize_block, merge_block);
             trace!("Finished vector check capacity block");
@@ -1312,11 +1323,7 @@ impl GroupingDict for Dict {
 
             // Since extend sets the size, we need to "reset" it back to the previous size.
             LLVMBuildStore(builder, resized_vector, value_pointer);
-            trace!("stored vector");
-            let size_pointer = LLVMBuildStructGEP(builder, value_pointer, vector::SIZE_INDEX, c_str!("sizePtr"));
-            trace!("got size pointer");
             LLVMBuildStore(builder, size, size_pointer);
-            trace!("Finished rewriting size");
 
             // Set the new capacity: since we double the size of the vector, we just incremented
             // the filled value by 1.
@@ -1330,7 +1337,6 @@ impl GroupingDict for Dict {
             LLVMPositionBuilderAtEnd(builder, merge_block);
             let array_pointer = LLVMBuildStructGEP(builder, value_pointer, vector::POINTER_INDEX, c_str!("arrayPtr"));
             let array_pointer = self.load(builder, array_pointer).unwrap();
-            let size_pointer = LLVMBuildStructGEP(builder, value_pointer, vector::SIZE_INDEX, c_str!("sizePointer"));
 
             // Merge the value.
             let offset = self.load(builder, size_pointer).unwrap();

@@ -15,7 +15,7 @@ struct I32KeyValArgs {
     y: WeldVec<i32>,
 }
 
-// #[test]
+#[test]
 fn simple_for_dictmerger_loop() {
     let code = "|x:vec[i32], y:vec[i32]| tovec(result(for(zip(x,y), dictmerger[i32,i32,+],
                 |b,i,e| merge(b, e))))";
@@ -52,7 +52,7 @@ fn simple_for_dictmerger_loop() {
 }
 
 /// Similar case to parallel_for_vecmerger_loop but values and keys are structs
-// #[test]
+#[test]
 fn dictmerger_with_structs() {
     /// An entry after the final tovec call, which has an {i32,i32} key and {i32,f32} value.
     #[derive(Clone)]
@@ -107,9 +107,26 @@ fn simple_groupmerger() {
                 |b,i,e| merge(b, e))))";
 
     let ref mut conf = default_conf();
-    conf.set("weld.compile.traceExecution", "true");
-    let keys = vec![1, 2, 2, 3, 3, 1];
-    let vals = vec![2, 3, 4, 1, 0, 2];
+
+    const DICT_SIZE: usize = 8192;
+    const UNIQUE_KEYS: usize = 256;
+    let mut keys = vec![0; DICT_SIZE];
+    let mut vals = vec![0; DICT_SIZE];
+
+    let mut output: Vec<(i32, Vec<i32>)> = vec![];
+
+    // Repeated keys will have their values summed.
+    for i in 0..DICT_SIZE {
+        keys[i] = (i % UNIQUE_KEYS) as i32;
+        vals[i] = i as i32;
+
+        if output.len() < UNIQUE_KEYS {
+            output.push((keys[i], vec![vals[i]]));
+        } else {
+            output.get_mut(keys[i] as usize).unwrap().1.push(vals[i]);
+        }
+    }
+
     let ref input_data = I32KeyValArgs {
         x: WeldVec::from(&keys),
         y: WeldVec::from(&vals),
@@ -118,7 +135,6 @@ fn simple_groupmerger() {
     let ret_value = compile_and_run(code, conf, input_data);
     let data = ret_value.data() as *const WeldVec<Pair<i32, WeldVec<i32>>>;
     let result = unsafe { (*data).clone() };
-    let output: Vec<(i32, Vec<i32>)> = vec![(1, vec![2, 2]), (2, vec![3, 4]), (3, vec![1, 0])];
 
     let mut res: Vec<(i32, Vec<i32>)> = (0..result.len)
         .into_iter()
@@ -138,7 +154,7 @@ fn simple_groupmerger() {
 
 }
 
-// #[test]
+#[test]
 fn complex_groupmerger_with_struct_key() {
     #[allow(dead_code)]
     struct Args {
@@ -249,17 +265,17 @@ fn simple_parallel_for_dictmerger_loop_helper(use_local: bool) {
     println!("Verified correctness");
 }
 
-// #[test]
+#[test]
 fn simple_parallel_for_dictmerger_loop_local() {
     simple_parallel_for_dictmerger_loop_helper(true);
 }
 
-// #[test]
+#[test]
 fn simple_parallel_for_dictmerger_loop_global() {
     simple_parallel_for_dictmerger_loop_helper(false);
 }
 
-// #[test]
+#[test]
 fn simple_dict_lookup() {
     let code = "|x:vec[i32], y:vec[i32]| let a = result(for(zip(x,y), dictmerger[i32,i32,+],
                 |b,i,e| merge(b, e))); lookup(a, 1)";
@@ -281,7 +297,7 @@ fn simple_dict_lookup() {
     assert_eq!(output, result);
 }
 
-// #[test]
+#[test]
 fn string_dict_lookup() {
     let code = "|x:vec[i32]| let v = [\"abcdefghi\", \"abcdefghi\", \"abcdefghi\"];
                 let d = result(for(zip(v,x), dictmerger[vec[i8],i32,+], |b,i,e| merge(b, e)));
@@ -299,7 +315,7 @@ fn string_dict_lookup() {
     assert_eq!(output, result);
 }
 
-// #[test]
+#[test]
 fn simple_dict_exists() {
     let keys = vec![1, 2, 2, 1, 3];
     let vals = vec![2, 3, 4, 2, 1];
