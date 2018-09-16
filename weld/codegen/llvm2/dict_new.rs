@@ -27,9 +27,13 @@ use super::CodeGenExt;
 const KEY_INDEX: u32 = 0;
 /// Slot index of dictionary value.
 const VALUE_INDEX: u32 = 1;
-/// Slot index storing the hash.
+/// Slot index storing the 32-bit hash.
 const HASH_INDEX: u32 = 2;
-/// Slot index of whether a slot is filled.
+/// Slot index of whether a slot is filled (a single byte value).
+///
+/// The filled byte also indicates the *capacity* of a grouping vector in a dictionary, in a power
+/// of two. The capacity of the vector is (1 << FILLED) - 1. If the filled byte is 0 (i.e., the
+/// slot is not filled, the vector is uninitialized.
 const FILLED_INDEX: u32 = 3;
 
 // Dictionary Layout: { slot_array*, capacity, size }
@@ -47,7 +51,14 @@ const MAX_LOAD_FACTOR: i64 = 7;
 ///
 /// After the initial capacity is resized, the load factor should be less than the maximum allowed
 /// load factor.
-const INITIAL_CAPACITY: i64 = 16;
+pub const INITIAL_CAPACITY: i64 = 16;
+
+/// The default capacity of a grouping vector.
+const DEFAULT_GROUP_CAPACITY: i64 = 8;
+/// The default value of the filled byte for grouping dictionaries, after initialization. 
+///
+/// (0x1 << DEFAULT_GROUP_FILLED) == DEFAULT_GROUP_CAPACITY.
+const DEFAULT_GROUP_FILLED: i8 = 3;
 
 /// A dictionary data structure and its associated methods.
 ///
@@ -56,11 +67,11 @@ const INITIAL_CAPACITY: i64 = 16;
 pub struct Dict {
     pub name: String,
     pub dict_ty: LLVMTypeRef,
-    dict_inner_ty: LLVMTypeRef,
     pub key_ty: LLVMTypeRef,
     pub val_ty: LLVMTypeRef,
+    pub slot_ty: SlotType,
     key_comparator: LLVMValueRef,
-    slot_ty: SlotType,
+    dict_inner_ty: LLVMTypeRef,
     context: LLVMContextRef,
     module: LLVMModuleRef,
     slot_for_key: Option<LLVMValueRef>,     // DONE
@@ -71,6 +82,9 @@ pub struct Dict {
     key_exists: Option<LLVMValueRef>,       // DONE
     to_vec: Option<LLVMValueRef>,           // DONE
     serialize: Option<LLVMValueRef>,        // TODO
+
+    // For grouping
+    merge_grouped: Option<LLVMValueRef>,    // TODO
 }
 
 /// Extensions for grouping dictionaries (i.e., the GroupMerger).
@@ -85,13 +99,15 @@ pub trait GroupingDict {
     /// Merge `value` into the group for `key` with the given `hash`.
     ///
     /// This method takes a `Vector`, which holds methods for the type `vec[V]`.
-    fn merge_value(builder: LLVMBuilderRef,
+    unsafe fn gen_merge_grouped(&mut self,
+                   builder: LLVMBuilderRef,
                    intrinsics: &mut Intrinsics,
                    group_vector: &mut Vector,
+                   dict: LLVMValueRef,
                    key: LLVMValueRef,
                    hash: LLVMValueRef,
                    value: LLVMValueRef,
-                   run: LLVMValueRef) -> WeldResult<()>;
+                   run: LLVMValueRef) -> WeldResult<LLVMValueRef>; 
 }
 
 impl CodeGenExt for Dict {
@@ -166,7 +182,7 @@ impl SlotType {
     ///
     /// The slot should be a pointer, and the key and value should be loaded (i.e., should have
     /// type `key_ty` and `val_ty`).
-    pub unsafe fn init(&mut self,
+    unsafe fn init(&mut self,
                        builder: LLVMBuilderRef,
                        slot: LLVMValueRef,
                        key: LLVMValueRef,
@@ -186,21 +202,21 @@ impl SlotType {
     ///
     /// The slot should be a pointer.
     pub unsafe fn key(&mut self, builder: LLVMBuilderRef, value: LLVMValueRef) -> LLVMValueRef {
-        LLVMBuildStructGEP(builder, value, KEY_INDEX, c_str!(""))
+        LLVMBuildStructGEP(builder, value, KEY_INDEX, c_str!("slot.key"))
     }
 
     /// Return the value pointer for the provide slot.
     ///
     /// The slot should be a pointer.
     pub unsafe fn value(&mut self, builder: LLVMBuilderRef, value: LLVMValueRef) -> LLVMValueRef {
-        LLVMBuildStructGEP(builder, value, VALUE_INDEX, c_str!(""))
+        LLVMBuildStructGEP(builder, value, VALUE_INDEX, c_str!("slot.value"))
     }
 
     /// Return the hash pointer for the provide slot.
     ///
     /// The slot should be a pointer.
     pub unsafe fn hash(&mut self, builder: LLVMBuilderRef, value: LLVMValueRef) -> LLVMValueRef {
-        LLVMBuildStructGEP(builder, value, HASH_INDEX, c_str!(""))
+        LLVMBuildStructGEP(builder, value, HASH_INDEX, c_str!("slot.hash"))
     }
 
     /// Return whether the provided slot is filled as an `i1`.
@@ -211,7 +227,27 @@ impl SlotType {
     pub unsafe fn filled(&mut self, builder: LLVMBuilderRef, value: LLVMValueRef) -> LLVMValueRef {
         let filled_pointer = LLVMBuildStructGEP(builder, value, FILLED_INDEX, c_str!(""));
         let filled = self.load(builder, filled_pointer).unwrap();
-        LLVMBuildICmp(builder, LLVMIntNE, filled, self.i8(0), c_str!(""))
+        LLVMBuildICmp(builder, LLVMIntNE, filled, self.i8(0), c_str!("slot.filled"))
+    }
+
+    /// Return the filled value (used for grouping dictionaries).
+    ///
+    /// The slot should be a pointer.
+    pub unsafe fn filled_value(&mut self, builder: LLVMBuilderRef, value: LLVMValueRef) -> LLVMValueRef {
+        let filled_pointer = LLVMBuildStructGEP(builder, value, FILLED_INDEX, c_str!(""));
+        LLVMBuildLoad(builder, filled_pointer, c_str!("slot.filledValue"))
+    }
+
+    /// Set the filled value to a value between 1 and 255.
+    ///
+    /// The filled value represents the capacity of a grouping vector in a grouping dictionary. A
+    /// nonzero filled value indicates an initialized slot.
+    ///
+    /// NOTE: It is invalid to "unfill" a slot by changing it from a nonzero value to a zero value.
+    /// We could add a debug assertion here to check that this never happens.
+    pub unsafe fn set_filled(&mut self, builder: LLVMBuilderRef, slot: LLVMValueRef, value: LLVMValueRef) {
+        let filled_pointer = LLVMBuildStructGEP(builder, slot, FILLED_INDEX, c_str!(""));
+        LLVMBuildStore(builder, value, filled_pointer);
     }
 }
 
@@ -263,6 +299,7 @@ impl Dict {
             key_exists: None,
             to_vec: None,
             serialize: None,
+            merge_grouped: None,
         }
     }
 
@@ -745,7 +782,7 @@ impl Dict {
             // return_slot = phi [ slot, entry ] [ upsert_slot, upsert ]
 
             // XXX Change this later?
-            let ret_ty = LLVMPointerType(self.val_ty, 0);
+            let ret_ty = LLVMPointerType(self.slot_ty.slot_ty, 0);
 
             let name = format!("{}.upsert", self.name);
             let (function, builder, entry_block) = self.define_function(ret_ty, &mut arg_tys, name);
@@ -828,9 +865,8 @@ impl Dict {
             trace!("Finished upsert codegen");
 
             LLVMPositionBuilderAtEnd(builder, return_block);
-            let return_slot = LLVMBuildPhi(builder, slot_pointer_ty, c_str!(""));
-            let value_pointer = self.slot_ty.value(builder, return_slot);
-            LLVMBuildRet(builder, value_pointer);
+            let return_slot = LLVMBuildPhi(builder, ret_ty, c_str!(""));
+            LLVMBuildRet(builder, return_slot);
             trace!("Finished return block codegen");
 
             // Set the PHI values.
@@ -1156,3 +1192,167 @@ impl Dict {
     }
 }
 
+
+impl GroupingDict for Dict {
+    /// Merge `value` into the group for `key` with the given `hash`.
+    ///
+    /// This method takes a `Vector`, which holds methods for the type `vec[V]`.
+    unsafe fn gen_merge_grouped(&mut self,
+                   builder: LLVMBuilderRef,
+                   intrinsics: &mut Intrinsics,
+                   group_vector: &mut Vector,
+                   dict: LLVMValueRef,
+                   key: LLVMValueRef,
+                   hash: LLVMValueRef,
+                   value: LLVMValueRef,
+                   run: LLVMValueRef) -> WeldResult<LLVMValueRef> {
+
+        if self.merge_grouped.is_none() {
+            let mut arg_tys = [
+                self.dict_ty,
+                LLVMPointerType(self.key_ty, 0),
+                self.hash_type(),
+                group_vector.elem_ty,
+                self.run_handle_type()
+            ];
+            let ret_ty = self.void_type();
+
+            trace!("Generating merged_grouped");
+
+            let name = format!("{}.merge_grouped", self.name);
+            let (function, builder, _) = self.define_function(ret_ty, &mut arg_tys, name);
+
+            let dict = LLVMGetParam(function, 0);
+            let key = LLVMGetParam(function, 1);
+            let hash = LLVMGetParam(function, 2);
+            let value = LLVMGetParam(function, 3);
+            let run = LLVMGetParam(function, 4);
+
+            let init_block = LLVMAppendBasicBlockInContext(self.context, function, c_str!("init"));
+            let checkcap_block = LLVMAppendBasicBlockInContext(self.context, function, c_str!("checkcapacity"));
+            let resize_block = LLVMAppendBasicBlockInContext(self.context, function, c_str!("resize"));
+            let merge_block = LLVMAppendBasicBlockInContext(self.context, function, c_str!("merge"));
+
+            let mut zero_vector = LLVMGetUndef(group_vector.vector_ty);
+            zero_vector = LLVMConstInsertValue(zero_vector,
+                                               self.i64(0), [vector::POINTER_INDEX].as_mut_ptr(), 1);
+            zero_vector = LLVMConstInsertValue(zero_vector,
+                                               self.i64(0), [vector::SIZE_INDEX].as_mut_ptr(), 1);
+
+            trace!("Created upsert zero vector");
+
+            // Upsert the zero vector. This will create a slot if one does not exist already. We
+            // can then initialize the grouping vector if necessary, and append the new value to
+            // the grouping vector.
+            //
+            // Generated Code:
+            //
+            //  slot = upsert(dict, key, hash, zeroinitializer, run)
+            //  filled = slot.filled 
+            //  if filled == 1 ? init : checkcapacity
+            // init:
+            //  vec = vector.new()
+            //  store vec into slot.value
+            //  filled = log2(DEFAULT_CAPACITY)
+            //  br merge
+            //
+            // checkcapacity:
+            //  capacity = (1 << filled)
+            //  vector = slot.value
+            //  if capacity <= vector.size ? resize : merge
+            //
+            // resize:
+            //  vector.extend
+            //  filled ++
+            //  br merge
+            //
+            // merge:
+            //  size = vector.size
+            //  ptr = vector.at(size)
+            //  store value at ptr
+            
+            let slot = self.gen_upsert(builder, intrinsics, dict, key, hash, zero_vector, run)?;
+            trace!("Upserted slot");
+
+            let value_pointer = self.slot_ty.value(builder, slot);
+            let filled_value = self.slot_ty.filled_value(builder, slot);
+            trace!("Got value pointer and filled value");
+
+            // If capacity == 1, the slot was just initialized via the upsert. We need to
+            // initialize the vector.
+            let was_initialized = LLVMBuildICmp(builder, LLVMIntEQ, filled_value, self.i8(1), c_str!("initialized"));
+            LLVMBuildCondBr(builder, was_initialized, init_block, checkcap_block);
+            trace!("Finished entry block");
+
+            // Initalize the vector with the default capacity. The vector capacity must be a
+            // power-of-2 so we can represent it using the filled byte.
+            LLVMPositionBuilderAtEnd(builder, init_block);
+            let new_vector = group_vector.gen_new(builder, intrinsics, run, self.i64(DEFAULT_GROUP_CAPACITY))?;
+            LLVMBuildStore(builder, new_vector, value_pointer);
+            let default_filled = self.i8(DEFAULT_GROUP_FILLED);
+            self.slot_ty.set_filled(builder, slot, default_filled);
+            LLVMBuildBr(builder, merge_block);
+            trace!("Finished vector initialization block");
+
+            // If the vector was already there, make sure we can fit the new element.
+            LLVMPositionBuilderAtEnd(builder, checkcap_block);
+            let ext_filled_value = LLVMBuildZExt(builder, filled_value, self.u64_type(), c_str!(""));
+            let capacity = LLVMBuildShl(builder, self.i64(1), ext_filled_value, c_str!("capacity"));
+            let cur_vector = self.load(builder, value_pointer).unwrap();
+            let size = group_vector.gen_size(builder, cur_vector)?;
+            let needs_resize = LLVMBuildICmp(builder, LLVMIntEQ, size, capacity, c_str!("shouldResize"));
+            LLVMBuildCondBr(builder, needs_resize, resize_block, merge_block);
+            trace!("Finished vector check capacity block");
+
+            // Extend the vector and update the slot.
+            LLVMPositionBuilderAtEnd(builder, resize_block);
+            let new_capacity = LLVMBuildNUWMul(builder, capacity, self.i64(2), c_str!("newCapacity"));
+            let resized_vector = group_vector.gen_extend(builder, intrinsics, run, cur_vector, new_capacity)?;
+            trace!("Finished resizing vector");
+
+            // Since extend sets the size, we need to "reset" it back to the previous size.
+            LLVMBuildStore(builder, resized_vector, value_pointer);
+            trace!("stored vector");
+            let size_pointer = LLVMBuildStructGEP(builder, value_pointer, vector::SIZE_INDEX, c_str!("sizePtr"));
+            trace!("got size pointer");
+            LLVMBuildStore(builder, size, size_pointer);
+            trace!("Finished rewriting size");
+
+            // Set the new capacity: since we double the size of the vector, we just incremented
+            // the filled value by 1.
+            let new_filled_value = LLVMBuildAdd(builder, filled_value, self.i8(1), c_str!("newFilled"));
+            self.slot_ty.set_filled(builder, slot, new_filled_value);
+            LLVMBuildBr(builder, merge_block);
+            trace!("Finished vector resize block");
+
+            // Merge the value. The capacity of the vector is guaranteed to accomdate the merge
+            // value now.
+            LLVMPositionBuilderAtEnd(builder, merge_block);
+            let array_pointer = LLVMBuildStructGEP(builder, value_pointer, vector::POINTER_INDEX, c_str!("arrayPtr"));
+            let array_pointer = self.load(builder, array_pointer).unwrap();
+            let size_pointer = LLVMBuildStructGEP(builder, value_pointer, vector::SIZE_INDEX, c_str!("sizePointer"));
+
+            // Merge the value.
+            let offset = self.load(builder, size_pointer).unwrap();
+            let merge_pointer = LLVMBuildGEP(builder, array_pointer, [offset].as_mut_ptr(), 1, c_str!("mergePtr"));
+            LLVMBuildStore(builder, value, merge_pointer);
+
+            // Update the size.
+            let inc_size = LLVMBuildNSWAdd(builder, offset, self.i64(1), c_str!("newSize"));
+            LLVMBuildStore(builder, inc_size, size_pointer);
+            LLVMBuildRetVoid(builder);
+            trace!("Finished merge block");
+
+            self.merge_grouped = Some(function);
+            LLVMDisposeBuilder(builder);
+        }
+
+        let mut args = [dict, key, hash, value, run];
+        Ok(LLVMBuildCall(builder,
+                                self.merge_grouped.unwrap(),
+                                args.as_mut_ptr(),
+                                args.len() as u32,
+                                c_str!("")))
+
+    }
+}

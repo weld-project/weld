@@ -25,6 +25,8 @@ use sir::StatementKind::*;
 use self::llvm_sys::prelude::*;
 use self::llvm_sys::core::*;
 
+use super::dict_new;
+
 use super::{CodeGenExt, FunctionContext, LlvmGenerator};
 
 use super::hash;
@@ -34,7 +36,6 @@ mod for_loop;
 
 pub mod appender;
 pub mod dictmerger;
-pub mod groupmerger;
 pub mod merger;
 
 /// A trait for generating builder code.
@@ -209,7 +210,7 @@ impl BuilderExpressionGen for LlvmGenerator {
             }
             DictMerger(ref key, ref val, _) => {
                 let ref dict_type = Dict(key.clone(), val.clone());
-                let default_capacity = self.i64(dictmerger::DEFAULT_CAPACITY);
+                let default_capacity = self.i64(dict_new::INITIAL_CAPACITY);
                 let dictmerger = {
                     let mut methods = self.dictionaries.get_mut(dict_type).unwrap();
                     methods.gen_new(ctx.builder, &mut self.intrinsics, default_capacity, ctx.get_run())?
@@ -217,15 +218,12 @@ impl BuilderExpressionGen for LlvmGenerator {
                 LLVMBuildStore(ctx.builder, dictmerger, output_pointer);
                 Ok(())
             }
-            GroupMerger(_, _) => {
-                unimplemented!();
-                let default_capacity = self.i64(groupmerger::DEFAULT_CAPACITY);
+            GroupMerger(ref key, ref val) => {
+                let ref dict_type = Dict(key.clone(), Box::new(Vector(val.clone())));
+                let default_capacity = self.i64(dict_new::INITIAL_CAPACITY);
                 let groupmerger = {
-                    let mut methods = self.groupmergers.get_mut(nb.kind).unwrap();
-                    methods.gen_new(ctx.builder,
-                                    &self.groupmerger_intrinsics,
-                                    ctx.get_run(),
-                                    default_capacity)?
+                    let mut methods = self.dictionaries.get_mut(dict_type).unwrap();
+                    methods.gen_new(ctx.builder, &mut self.intrinsics, default_capacity, ctx.get_run())?
                 };
                 LLVMBuildStore(ctx.builder, groupmerger, output_pointer);
                 Ok(())
@@ -314,38 +312,43 @@ impl BuilderExpressionGen for LlvmGenerator {
                 let ref dict_type = Dict(key.clone(), val.clone());
                 let slot_value_pointer = {
                     let mut methods = self.dictionaries.get_mut(dict_type).unwrap();
-                    methods.gen_upsert(ctx.builder,
+                    let slot = methods.gen_upsert(ctx.builder,
                                        &mut self.intrinsics,
                                        builder_loaded,
                                        key_pointer,
                                        hash,
                                        default,
-                                       ctx.get_run())?
+                                       ctx.get_run())?;
+                    methods.slot_ty.value(ctx.builder, slot)
                 };
 
                 // Generate the merge code. We either load the values and add them, or, if the
                 // values are structs, we load each element at a time and apply the binop.
                 self.merge_values(ctx.builder, val.as_ref(), *binop, slot_value_pointer, value_pointer)
             }
-            GroupMerger(ref key, _) => {
-                unimplemented!();
+            GroupMerger(ref key, ref value) => {
                 use self::hash::*;
+                use self::dict_new::GroupingDict;
                 // The merge value is a {K, V} struct.
                 let merge_value_ptr = ctx.get_value(m.value)?;
                 let key_pointer = LLVMBuildStructGEP(ctx.builder, merge_value_ptr, 0, c_str!(""));
-
                 let hash = self.gen_hash(key, ctx.builder, key_pointer, None)?;
+
                 let val_pointer = LLVMBuildStructGEP(ctx.builder, merge_value_ptr, 1, c_str!(""));
+                let val = self.load(ctx.builder, val_pointer).unwrap();
 
                 let builder_loaded = self.load(ctx.builder, builder_pointer)?;
-                let mut methods = self.groupmergers.get_mut(m.kind).unwrap();
-                let _ = methods.gen_merge(ctx.builder,
-                                          &self.groupmerger_intrinsics,
-                                          ctx.get_run(),
+
+                let ref dict_type = Dict(key.clone(), Box::new(Vector(value.clone())));
+                let mut methods = self.dictionaries.get_mut(dict_type).unwrap();
+                let _ = methods.gen_merge_grouped(ctx.builder,
+                                          &mut self.intrinsics,
+                                          self.vectors.get_mut(value).unwrap(),
                                           builder_loaded,
                                           key_pointer,
                                           hash,
-                                          val_pointer)?;
+                                          val,
+                                          ctx.get_run())?;
                 Ok(())
             }
             Merger(_, _) => {
@@ -396,25 +399,11 @@ impl BuilderExpressionGen for LlvmGenerator {
                 LLVMBuildStore(ctx.builder, result, output_pointer);
                 Ok(())
             }
-            DictMerger(_, _, _) => {
+            DictMerger(_, _, _) | GroupMerger(_, _) => {
                 // A dictmerger just updates a dictionary in-place, so return the produced
                 // dictionary.
                 let builder_loaded = self.load(ctx.builder, builder_pointer)?;
                 LLVMBuildStore(ctx.builder, builder_loaded, output_pointer);
-                Ok(())
-            }
-            GroupMerger(_, _) => {
-                unimplemented!();
-                let result_ty = ctx.sir_function.symbol_type(m.output)?;
-                let result_ty = self.llvm_type(result_ty)?;
-                let builder_loaded = self.load(ctx.builder, builder_pointer)?;
-                let mut methods = self.groupmergers.get_mut(m.kind).unwrap();
-                let result = methods.gen_result(ctx.builder,
-                                          &self.groupmerger_intrinsics,
-                                          ctx.get_run(),
-                                          builder_loaded,
-                                          result_ty)?;
-                LLVMBuildStore(ctx.builder, result, output_pointer);
                 Ok(())
             }
             Merger(_, _) => {
@@ -463,26 +452,14 @@ impl BuilderExpressionGen for LlvmGenerator {
                     }
                     Ok(self.appenders.get(kind).unwrap().appender_ty)
                 }
-                DictMerger(ref key, ref val, _) => {
-                    let ref dict_type = Dict(key.clone(), val.clone());
+                DictMerger(ref key, ref value, _) => {
+                    let ref dict_type = Dict(key.clone(), value.clone());
                     self.llvm_type(dict_type)
                 }
                 GroupMerger(ref key, ref value) => {
-                    unimplemented!();
-                    use super::eq::GenEq;
-                    if !self.groupmergers.contains_key(kind) {
-                        let llvm_key_ty = self.llvm_type(key)?;
-                        let llvm_val_ty = self.llvm_type(value)?;
-                        let key_comparator = self.gen_opaque_eq_fn(key)?;
-                        let groupmerger = groupmerger::GroupMerger::define("groupmerger",
-                                                                           llvm_key_ty,
-                                                                           llvm_val_ty,
-                                                                           key_comparator,
-                                                                           self.context,
-                                                                           self.module);
-                        self.groupmergers.insert(kind.clone(), groupmerger);
-                    }
-                    Ok(self.groupmergers.get(kind).unwrap().groupmerger_ty)
+                    // GroupMerger is backed by dictionary, but the value type is a vector.
+                    let ref dict_type = Dict(key.clone(), Box::new(Vector(value.clone())));
+                    self.llvm_type(dict_type)
                 }
                 Merger(ref elem_type, ref binop) => {
                     if !self.mergers.contains_key(kind) {

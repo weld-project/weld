@@ -108,7 +108,6 @@ mod vector;
 mod dict_new;
 
 use self::builder::appender;
-use self::builder::groupmerger;
 use self::builder::merger;
 
 /// Loads a dynamic library from a file using LLVMLoadLibraryPermanently.
@@ -289,10 +288,6 @@ pub struct LlvmGenerator {
     ///
     /// The key maps the appender type to the appender's type reference and methods on it.
     appenders: FnvHashMap<BuilderKind, appender::Appender>,
-    /// A map tracking generated groupmergers.
-    ///
-    /// The key maps the groupmerger type to the appender's type reference and methods on it.
-    groupmergers: FnvHashMap<BuilderKind, groupmerger::GroupMerger>,
     /// A map tracking generated dictionaries.
     ///
     /// The key maps the dictionary's `Dict` type to the type reference and methods on it.
@@ -301,10 +296,6 @@ pub struct LlvmGenerator {
     ///
     /// These are functions that call out to an external dictionary implementation.
     dict_intrinsics: dict::Intrinsics,
-    /// GroupMerger intrinsics.
-    ///
-    /// These are functions that call out to an external GroupMerger implementation.
-    groupmerger_intrinsics: groupmerger::Intrinsics,
     /// Common intrinsics defined in the module.
     ///
     /// An intrinsic is any function defined outside of module (i.e., is not code generated).
@@ -692,7 +683,6 @@ impl LlvmGenerator {
         // Adds the default intrinsic definitions.
         let intrinsics = intrinsic::Intrinsics::defaults(context, module);
         let dict_intrinsics = dict::Intrinsics::new(context, module);
-        let groupmerger_intrinsics = groupmerger::Intrinsics::new(context, module);
 
         let target = target::Target::from_llvm_strings(
             llvm_exts::PROCESS_TRIPLE.to_str().unwrap(),
@@ -711,10 +701,8 @@ impl LlvmGenerator {
             vectors: FnvHashMap::default(),
             mergers: FnvHashMap::default(),
             appenders: FnvHashMap::default(),
-            groupmergers: FnvHashMap::default(),
             dictionaries: FnvHashMap::default(),
             dict_intrinsics: dict_intrinsics,
-            groupmerger_intrinsics: groupmerger_intrinsics,
             strings: FnvHashMap::default(),
             eq_fns: FnvHashMap::default(),
             opaque_eq_fns: FnvHashMap::default(),

@@ -15,7 +15,7 @@ struct I32KeyValArgs {
     y: WeldVec<i32>,
 }
 
-#[test]
+// #[test]
 fn simple_for_dictmerger_loop() {
     let code = "|x:vec[i32], y:vec[i32]| tovec(result(for(zip(x,y), dictmerger[i32,i32,+],
                 |b,i,e| merge(b, e))))";
@@ -52,7 +52,7 @@ fn simple_for_dictmerger_loop() {
 }
 
 /// Similar case to parallel_for_vecmerger_loop but values and keys are structs
-#[test]
+// #[test]
 fn dictmerger_with_structs() {
     /// An entry after the final tovec call, which has an {i32,i32} key and {i32,f32} value.
     #[derive(Clone)]
@@ -101,12 +101,13 @@ fn dictmerger_with_structs() {
 
 }
 
-// #[test]
+#[test]
 fn simple_groupmerger() {
     let code = "|x:vec[i32], y:vec[i32]| tovec(result(for(zip(x,y), groupmerger[i32,i32],
                 |b,i,e| merge(b, e))))";
 
-    let ref conf = default_conf();
+    let ref mut conf = default_conf();
+    conf.set("weld.compile.traceExecution", "true");
     let keys = vec![1, 2, 2, 3, 3, 1];
     let vals = vec![2, 3, 4, 1, 0, 2];
     let ref input_data = I32KeyValArgs {
@@ -248,17 +249,17 @@ fn simple_parallel_for_dictmerger_loop_helper(use_local: bool) {
     println!("Verified correctness");
 }
 
-#[test]
+// #[test]
 fn simple_parallel_for_dictmerger_loop_local() {
     simple_parallel_for_dictmerger_loop_helper(true);
 }
 
-#[test]
+// #[test]
 fn simple_parallel_for_dictmerger_loop_global() {
     simple_parallel_for_dictmerger_loop_helper(false);
 }
 
-#[test]
+// #[test]
 fn simple_dict_lookup() {
     let code = "|x:vec[i32], y:vec[i32]| let a = result(for(zip(x,y), dictmerger[i32,i32,+],
                 |b,i,e| merge(b, e))); lookup(a, 1)";
@@ -280,7 +281,7 @@ fn simple_dict_lookup() {
     assert_eq!(output, result);
 }
 
-#[test]
+// #[test]
 fn string_dict_lookup() {
     let code = "|x:vec[i32]| let v = [\"abcdefghi\", \"abcdefghi\", \"abcdefghi\"];
                 let d = result(for(zip(v,x), dictmerger[vec[i8],i32,+], |b,i,e| merge(b, e)));
@@ -298,7 +299,7 @@ fn string_dict_lookup() {
     assert_eq!(output, result);
 }
 
-#[test]
+// #[test]
 fn simple_dict_exists() {
     let keys = vec![1, 2, 2, 1, 3];
     let vals = vec![2, 3, 4, 2, 1];

@@ -428,6 +428,8 @@ impl Vector {
     /// This method grows the capacity of vector to exactly `size` and returns a new vector. If
     /// the input vector can already accomodate `size` elements, the same vector is returned
     /// unmodified.
+    ///
+    /// This method modifies the size to be the new capacity if the vector is resized.
     pub unsafe fn gen_extend(&mut self,
                                 builder: LLVMBuilderRef,
                                 intrinsics: &mut Intrinsics,
@@ -436,6 +438,7 @@ impl Vector {
                                 size: LLVMValueRef) -> WeldResult<LLVMValueRef> {
         use self::llvm_sys::LLVMIntPredicate::LLVMIntSGT;
         if self.extend.is_none() {
+            trace!("Generated extend");
             let mut arg_tys = [self.vector_ty, self.i64_type(), self.run_handle_type()];
             let ret_ty = self.vector_ty;
 
@@ -453,6 +456,7 @@ impl Vector {
 
             let resize_flag = LLVMBuildICmp(builder, LLVMIntSGT, requested_size, current_size, c_str!(""));
             LLVMBuildCondBr(builder, resize_flag, realloc_block, finish_block);
+            trace!("finished entry block");
 
             // Build block where memory is grown to accomdate the requested size.
             LLVMPositionBuilderAtEnd(builder, realloc_block);
@@ -475,6 +479,7 @@ impl Vector {
                                               POINTER_INDEX, c_str!(""));
             let resized = LLVMBuildInsertValue(builder, resized, requested_size, SIZE_INDEX, c_str!(""));
             LLVMBuildBr(builder, finish_block);
+            trace!("finished reallocation block");
 
             LLVMPositionBuilderAtEnd(builder, finish_block);
             let return_value = LLVMBuildPhi(builder, self.vector_ty, c_str!(""));
@@ -482,6 +487,7 @@ impl Vector {
             let mut blocks = [entry_block, realloc_block];
             LLVMAddIncoming(return_value, values.as_mut_ptr(), blocks.as_mut_ptr(), values.len() as u32);
             LLVMBuildRet(builder, return_value);
+            trace!("finished extend");
 
             self.extend = Some(function);
             LLVMDisposeBuilder(builder);
