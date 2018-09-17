@@ -1,4 +1,6 @@
-//! A single threaded (st) runtime (rt) for Weld.
+//! Weld's runtime functions.
+//!
+//! These are functions that are accessed from generated code.
 
 extern crate libc;
 extern crate fnv;

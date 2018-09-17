@@ -71,8 +71,6 @@ use self::llvm_sys::LLVMLinkage;
 
 use super::*;
 
-static NULL_NAME:[c_char; 1] = [0];
-
 lazy_static! {
     /// Name of the run handle struct in generated code.
     static ref RUN_HANDLE_NAME: CString = CString::new("RunHandle").unwrap();
@@ -1117,10 +1115,14 @@ impl LlvmGenerator {
                     let hash = self.gen_hash(key, context.builder, context.get_value(index)?, None)?;
                     let result = {
                         let mut methods = self.dictionaries.get_mut(child_type).unwrap();
-                        methods.gen_lookup(context.builder,
-                                        child_value,
-                                        context.get_value(index)?,
-                                        hash)?
+                        let slot = methods.gen_lookup(context.builder,
+                                                      &mut self.intrinsics,
+                                                      child_value,
+                                                      context.get_value(index)?,
+                                                      hash,
+                                                      context.get_run())?;
+                        let value_pointer = methods.slot_ty.value(context.builder, slot);
+                        LLVMBuildLoad(context.builder, value_pointer, c_str!(""))
                     };
                     LLVMBuildStore(context.builder, result, output_pointer);
                     Ok(())

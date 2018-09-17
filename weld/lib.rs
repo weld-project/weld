@@ -863,11 +863,8 @@ impl WeldModule {
             let message = CString::new(format!("Weld program failed with error {:?}", result.errno)).unwrap();
             Err(WeldError::new(message, result.errno))
         } else {
-            // Weld allocates the output using libc malloc, but we cloned it, so free the output struct
-            // here
-            trace!("Freeing allocated output pointer {:?}", raw as DataMut);
+            // Weld allocates the output using libc malloc, but we cloned it, so free the output struct.
             free(raw as DataMut);
-            trace!("Freed allocated output");
             Ok(value)
         }
     }

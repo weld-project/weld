@@ -67,9 +67,9 @@ pub trait BuilderExpressionGen {
 struct NewBuilderStatement<'a> {
     output: &'a Symbol,
     arg: Option<&'a Symbol>,
-    ty: &'a Type,
+    _ty: &'a Type,
     kind: &'a BuilderKind,
-    annotations: &'a Annotations,
+    _annotations: &'a Annotations,
 }
 
 impl<'a> NewBuilderStatement<'a> {
@@ -84,9 +84,9 @@ impl<'a> NewBuilderStatement<'a> {
                 let result = NewBuilderStatement {
                     output: output,
                     arg: arg.as_ref(),
-                    ty: builder_type,
+                    _ty: builder_type,
                     kind: kind,
-                    annotations: annotations,
+                    _annotations: annotations,
                 };
                 return Ok(result);
             }
@@ -100,7 +100,7 @@ struct MergeStatement<'a> {
     builder: &'a Symbol,
     value: &'a Symbol,
     kind: &'a BuilderKind,
-    annotations: &'a Annotations,
+    _annotations: &'a Annotations,
 }
 
 impl<'a> MergeStatement<'a> {
@@ -112,7 +112,7 @@ impl<'a> MergeStatement<'a> {
                     builder: builder,
                     value: value,
                     kind: kind,
-                    annotations: annotations,
+                    _annotations: annotations,
                 };
                 return Ok(result);
             }
@@ -126,7 +126,7 @@ struct ResStatement<'a> {
     output: &'a Symbol,
     builder: &'a Symbol,
     kind: &'a BuilderKind,
-    annotations: &'a Annotations,
+    _annotations: &'a Annotations,
 }
 
 impl<'a> ResStatement<'a> {
@@ -141,7 +141,7 @@ impl<'a> ResStatement<'a> {
                     output: statement.output.as_ref().unwrap(),
                     builder: builder,
                     kind: kind,
-                    annotations: annotations,
+                    _annotations: annotations,
                 };
                 return Ok(result);
             }

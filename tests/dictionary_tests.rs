@@ -206,10 +206,9 @@ fn complex_groupmerger_with_struct_key() {
 
 }
 
-/// Tests a the dictionary by merging multiple keys key multiple times into a dictionary.
-/// `use_local` specifies whether to use the local-global adaptive dictionary or the purely global
-/// dictionary.
-fn simple_parallel_for_dictmerger_loop_helper(use_local: bool) {
+/// Larger dictmerger test with repeated keys
+#[test]
+fn dictmerger_repeated_keys() {
     let code =
         "|x:vec[i32], y:vec[i32]| tovec(result(for(zip(x,y),
                 dictmerger[i32,i32,+], |b,i,e| merge(b, e))))";
@@ -258,16 +257,6 @@ fn simple_parallel_for_dictmerger_loop_helper(use_local: bool) {
         assert_eq!(*expected_value, value);
     }
     assert_eq!(result.len, expected.len() as i64);
-}
-
-#[test]
-fn simple_parallel_for_dictmerger_loop_local() {
-    simple_parallel_for_dictmerger_loop_helper(true);
-}
-
-#[test]
-fn simple_parallel_for_dictmerger_loop_global() {
-    simple_parallel_for_dictmerger_loop_helper(false);
 }
 
 #[test]
