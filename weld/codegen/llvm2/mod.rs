@@ -350,22 +350,35 @@ pub trait CodeGenExt {
         }
     }
 
+    /// Get a constant zero-value of the given type.
+    unsafe fn zero(&self, ty: LLVMTypeRef) -> LLVMValueRef {
+        use self::llvm_sys::LLVMTypeKind::*;
+        use std::ptr;
+        match LLVMGetTypeKind(ty) {
+            LLVMFloatTypeKind => self.f32(0.0),
+            LLVMDoubleTypeKind => self.f64(0.0),
+            LLVMIntegerTypeKind => LLVMConstInt(ty, 0, 0),
+            LLVMStructTypeKind => {
+                let num_fields = LLVMCountStructElementTypes(ty) as usize;
+                let mut fields = vec![ ptr::null_mut() ; num_fields ];
+                LLVMGetStructElementTypes(ty, fields.as_mut_ptr());
 
-    /// Mixes a 32-bit hash values using the MurMur3 finalization function.
-    ///
-    /// https://github.com/PeterScott/murmur3/blob/master/murmur3.c
-    unsafe fn fmix32(&mut self, builder: LLVMBuilderRef, value: LLVMValueRef) -> LLVMValueRef {
-        let mut result;
-        let mut tmp;
-        result = LLVMBuildLShr(builder, value, self.i32(16), c_str!(""));
-        result = LLVMBuildXor(builder, result, value, c_str!(""));
-        result = LLVMBuildMul(builder, result, self.i32(-2048144789), c_str!(""));
-        tmp = LLVMBuildLShr(builder, result, self.i32(13), c_str!(""));
-        result = LLVMBuildXor(builder, result, tmp, c_str!(""));
-        result = LLVMBuildMul(builder, result, self.i32(-1028477387), c_str!(""));
-        tmp = LLVMBuildLShr(builder, result, self.i32(16), c_str!(""));
-        result = LLVMBuildXor(builder, result, tmp, c_str!(""));
-        result
+                let mut value = LLVMGetUndef(ty);
+                for (i, field) in fields.into_iter().enumerate() {
+                    value = LLVMConstInsertValue(value, self.zero(field), [i as u32].as_mut_ptr(), 1);
+                }
+                value
+            }
+            LLVMPointerTypeKind => self.null_ptr(ty),
+            LLVMVectorTypeKind => {
+                let size = LLVMGetVectorSize(ty);
+                let zero = self.zero(LLVMGetElementType(ty));
+                let mut constants = vec![ zero; size as usize ];
+                LLVMConstVector(constants.as_mut_ptr(), size)
+            }
+            // Other types are not used in the backend.
+            other => panic!("Unsupported type kind {:?} in CodeGenExt::zero()", other)
+        }
     }
 
     /// Returns the type of a hash code.

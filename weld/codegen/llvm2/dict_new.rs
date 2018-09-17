@@ -84,7 +84,7 @@ pub struct Dict {
     serialize: Option<LLVMValueRef>,        // TODO
 
     // For grouping
-    merge_grouped: Option<LLVMValueRef>,    // TODO
+    merge_grouped: Option<LLVMValueRef>,    // DONE
 }
 
 /// Extensions for grouping dictionaries (i.e., the GroupMerger).
@@ -1189,6 +1189,9 @@ impl Dict {
     }
 
     /// Serialize this dictionary into the provided serialization buffer.
+    ///
+    /// `key_ser` and `val_ser` are the serialization functions for the key and value,
+    /// respectively.
     pub unsafe fn gen_serialize(&mut self,
                                 builder: LLVMBuilderRef,
                                 intrinsics: &mut Intrinsics,

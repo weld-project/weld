@@ -682,22 +682,22 @@ impl DeHelper for LlvmGenerator {
 
                     let hash = self.gen_hash(key_ty, builder, key_pointer, None)?;
 
-                    // TODO!!!
-                    unimplemented!("Implement get slot here mate");
-                    /*
                     let value_pointer = {
+                        let value_llvm_ty = self.llvm_type(value_ty)?;
+                        let zero = self.zero(value_llvm_ty);
                         let mut methods = self.dictionaries.get_mut(ty).unwrap();
-                        methods.gen_get_slot(builder,
-                                             &self.dict_intrinsics,
-                                             run,
-                                             dictionary,
-                                             key_pointer,
-                                             hash)?
+                        let slot = methods.gen_upsert(builder,
+                                           &mut self.intrinsics,
+                                           dictionary,
+                                           key_pointer,
+                                           hash,
+                                           zero,
+                                           run)?;
+                        methods.slot_ty.value(builder, slot)
                     };
 
                     // Deserialize the value directly into the dictionary slot.
                     updated_position = self.gen_deserialize_helper(builder, updated_position, value_pointer, value_ty, buffer, run)?;
-                    */
 
                     let updated_i = LLVMBuildNSWAdd(builder, i, self.i64(1), c_str!(""));
                     let compare = LLVMBuildICmp(builder, LLVMIntSGT, size, updated_i, c_str!(""));
