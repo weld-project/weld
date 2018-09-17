@@ -1130,6 +1130,39 @@ impl LlvmGenerator {
                     unreachable!()
                 }
             }
+            OptLookup { ref child, ref index } => {
+                let output_pointer = context.get_value(output)?;
+                let child_value = self.load(context.builder, context.get_value(child)?)?;
+                let child_type = context.sir_function.symbol_type(child)?;
+                if let Dict(ref key, _) = *child_type {
+                    use self::hash::GenHash;
+                    let hash = self.gen_hash(key, context.builder, context.get_value(index)?, None)?;
+                    let (filled, value) = {
+                        let mut methods = self.dictionaries.get_mut(child_type).unwrap();
+                        let slot = methods.gen_opt_lookup(context.builder,
+                                                      child_value,
+                                                      context.get_value(index)?,
+                                                      hash)?;
+                        let filled = methods.slot_ty.filled(context.builder, slot);
+                        let value_pointer = methods.slot_ty.value(context.builder, slot);
+                        // NOTE: This could be an invalid (zeroed value) -- code should check the
+                        // boolean.
+                        let loaded_value = LLVMBuildLoad(context.builder, value_pointer, c_str!(""));
+
+                        (filled, loaded_value)
+                    };
+
+                    let filled = self.i1_to_bool(context.builder, filled);
+
+                    let filled_output_pointer = LLVMBuildStructGEP(context.builder, output_pointer, 0, c_str!(""));
+                    LLVMBuildStore(context.builder, filled, filled_output_pointer);
+                    let value_output_pointer = LLVMBuildStructGEP(context.builder, output_pointer, 1, c_str!(""));
+                    LLVMBuildStore(context.builder, value, value_output_pointer);
+                    Ok(())
+                } else {
+                    unreachable!()
+                }
+            }
             MakeStruct(ref elems) => {
                 let output_pointer = context.get_value(output)?;
                 for (i, elem) in elems.iter().enumerate() {

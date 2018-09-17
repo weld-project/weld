@@ -282,6 +282,42 @@ fn simple_dict_lookup() {
 }
 
 #[test]
+fn simple_dict_optlookup() {
+    let code = "|x:vec[i32], y:vec[i32]| let a = result(for(zip(x,y), dictmerger[i32,i32,+],
+                |b,i,e| merge(b, e))); {optlookup(a, 1), optlookup(a, 5)}";
+    let ref conf = default_conf();
+
+    let keys = vec![1, 2, 2, 1, 3];
+    let vals = vec![2, 3, 4, 2, 1];
+
+    #[derive(Clone)]
+    struct OptLookupResult {
+        flag: u8,
+        value: i32,
+    };
+
+    #[derive(Clone)]
+    struct Output {
+        a: OptLookupResult,
+        b: OptLookupResult,
+    }
+
+    let ref input_data = I32KeyValArgs {
+        x: WeldVec::from(&keys),
+        y: WeldVec::from(&vals),
+    };
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = ret_value.data() as *const Output;
+    let result = unsafe { (*data).clone() };
+
+    assert!(result.a.flag != 0);
+    assert!(result.a.value != 4);
+
+    assert!(result.b.flag == 0);
+}
+
+#[test]
 fn string_dict_lookup() {
     let code = "|x:vec[i32]| let v = [\"abcdefghi\", \"abcdefghi\", \"abcdefghi\"];
                 let d = result(for(zip(v,x), dictmerger[vec[i8],i32,+], |b,i,e| merge(b, e)));

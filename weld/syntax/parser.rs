@@ -994,6 +994,19 @@ impl<'t> Parser<'t> {
                             Annotations::new()))
             }
 
+            TOptLookup => {
+                try!(self.consume(TOpenParen));
+                let data = try!(self.expr());
+                try!(self.consume(TComma));
+                let index = try!(self.expr());
+                try!(self.consume(TCloseParen));
+                Ok(expr_box(OptLookup {
+                                data: data,
+                                index: index,
+                            },
+                            Annotations::new()))
+            }
+
             TKeyExists => {
                 try!(self.consume(TOpenParen));
                 let data = try!(self.expr());

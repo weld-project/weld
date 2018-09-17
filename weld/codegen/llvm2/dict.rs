@@ -87,6 +87,7 @@ pub struct Dict {
     slot_for_key: Option<LLVMValueRef>,     // DONE
     new: Option<LLVMValueRef>,              // DONE
     lookup: Option<LLVMValueRef>,           // DONE
+    opt_lookup: Option<LLVMValueRef>,           // DONE
     upsert: Option<LLVMValueRef>,           // DONE
     resize: Option<LLVMValueRef>,           // DONE
     key_exists: Option<LLVMValueRef>,       // DONE
@@ -302,6 +303,7 @@ impl Dict {
             slot_for_key: None,
             new: None,
             lookup: None,
+            opt_lookup: None,
             upsert: None,
             resize: None,
             key_exists: None,
@@ -841,6 +843,52 @@ impl Dict {
         let mut args = [dict, key, hash, default, run];
         return Ok(LLVMBuildCall(builder,
                                 self.upsert.unwrap(),
+                                args.as_mut_ptr(),
+                                args.len() as u32,
+                                c_str!("")))
+    }
+
+    /// Returns the slot for a key.
+    ///
+    /// If the key is not in the hash table, returns an uninitialized slot. It is *invalid
+    /// behavior* to modify an uninitialized slot: the caller should observe the `filled` value of
+    /// the slot to see whether it is initialized.
+    pub unsafe fn gen_opt_lookup(&mut self,
+                             builder: LLVMBuilderRef,
+                             dict: LLVMValueRef,
+                             key: LLVMValueRef,
+                             hash: LLVMValueRef) -> WeldResult<LLVMValueRef> {
+
+        if self.opt_lookup.is_none() {
+            let mut arg_tys = [
+                self.dict_ty,
+                LLVMPointerType(self.slot_ty.key_ty, 0),
+                self.hash_type()
+            ];
+            let ret_ty = LLVMPointerType(self.slot_ty.slot_ty, 0);
+
+            let name = format!("{}.optlookup", self.name);
+            let (function, builder, _) = self.define_function(ret_ty, &mut arg_tys, name);
+
+            LLVMExtAddAttrsOnParameter(self.context, function, &[NoAlias, ReadOnly], 0);
+            LLVMExtAddAttrsOnParameter(self.context, function, &[NoAlias, ReadOnly], 1);
+
+            let dict = LLVMGetParam(function, 0);
+            let key = LLVMGetParam(function, 1);
+            let hash = LLVMGetParam(function, 2);
+
+            let slot_array = self.slot_array(builder, dict);
+            let capacity = self.capacity(builder, dict);
+            let slot = self.gen_slot_for_key(builder, slot_array, capacity, hash, key);
+            LLVMBuildRet(builder, slot);
+
+            self.opt_lookup = Some(function);
+            LLVMDisposeBuilder(builder);
+        }
+
+        let mut args = [dict, key, hash];
+        return Ok(LLVMBuildCall(builder,
+                                self.opt_lookup.unwrap(),
                                 args.as_mut_ptr(),
                                 args.len() as u32,
                                 c_str!("")))
