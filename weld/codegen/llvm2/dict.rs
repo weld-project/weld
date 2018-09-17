@@ -1398,7 +1398,6 @@ impl GroupingDict for Dict {
             let capacity = LLVMBuildShl(builder, self.i64(1), ext_filled_value, c_str!("capacity"));
             let cur_vector = self.load(builder, value_pointer).unwrap();
             let size = group_vector.gen_size(builder, cur_vector)?;
-            let _ = intrinsics.call_weld_run_print_int(builder, run, size);
             let needs_resize = LLVMBuildICmp(builder, LLVMIntEQ, size, capacity, c_str!("shouldResize"));
             LLVMBuildCondBr(builder, needs_resize, resize_block, merge_block);
 

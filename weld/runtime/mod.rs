@@ -297,12 +297,11 @@ pub unsafe extern "C" fn weld_runst_get_result(run: WeldRuntimeContextRef) -> Da
 /// Print a value from generated code.
 pub unsafe extern "C" fn weld_runst_print(_run: WeldRuntimeContextRef, string: *const c_char) {
     let string = CStr::from_ptr(string).to_str().unwrap();
-    // XXX We could switch to a custom printer here too.
-    print!("{} ", string);
+    println!("{} ", string);
 }
 
 #[no_mangle]
 /// Print a value from generated code.
 pub unsafe extern "C" fn weld_runst_print_int(_run: WeldRuntimeContextRef, i: uint64_t) {
-    println!("Printed integer: {}", i);
+    println!("{}", i);
 }
