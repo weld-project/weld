@@ -121,6 +121,8 @@ impl CodeGenExt for Dict {
 }
 
 /// A dictionary slot.
+///
+/// This struct provides accessor methods local to a single dictionary slot.
 pub struct SlotType {
     /// The type of the slot.
     slot_ty: LLVMTypeRef,
@@ -304,15 +306,18 @@ impl Dict {
     }
 
     unsafe fn slot_array(&mut self, builder: LLVMBuilderRef, value: LLVMValueRef) -> LLVMValueRef {
-        self.load(builder, LLVMBuildStructGEP(builder, value, SLOT_ARR_INDEX, c_str!(""))).unwrap()
+        let slot_array_ptr = LLVMBuildStructGEP(builder, value, SLOT_ARR_INDEX, c_str!(""));
+        LLVMBuildLoad(builder, slot_array_ptr, c_str!("dict.slotarray"))
     }
 
     unsafe fn capacity(&mut self, builder: LLVMBuilderRef, value: LLVMValueRef) -> LLVMValueRef {
-        self.load(builder, LLVMBuildStructGEP(builder, value, CAP_INDEX, c_str!(""))).unwrap()
+        let capacity_ptr = LLVMBuildStructGEP(builder, value, CAP_INDEX, c_str!(""));
+        LLVMBuildLoad(builder, capacity_ptr, c_str!("dict.capacity"))
     }
 
     unsafe fn size(&mut self, builder: LLVMBuilderRef, value: LLVMValueRef) -> LLVMValueRef {
-        self.load(builder, LLVMBuildStructGEP(builder, value, SIZE_INDEX, c_str!(""))).unwrap()
+        let size_ptr = LLVMBuildStructGEP(builder, value, SIZE_INDEX, c_str!(""));
+        LLVMBuildLoad(builder, size_ptr, c_str!("dict.size"))
     }
 
     /// Returns the probe index for an index value by computing the mod.
@@ -781,7 +786,6 @@ impl Dict {
             // return:
             // return_slot = phi [ slot, entry ] [ upsert_slot, upsert ]
 
-            // XXX Change this later?
             let ret_ty = LLVMPointerType(self.slot_ty.slot_ty, 0);
 
             let name = format!("{}.upsert", self.name);
@@ -825,23 +829,8 @@ impl Dict {
 
             trace!("Generating resize");
 
-            /*
-            let string = CString::new("Resizing dictionary").unwrap();
-            let string = LLVMBuildGlobalStringPtr(builder, string.as_ptr(), c_str!(""));
-            let pointer = LLVMConstBitCast(string, LLVMPointerType(self.i8_type(), 0));
-            let _ = intrinsics.call_weld_run_print(builder, run, pointer);
-            */
-
             // Check for resize.
             let resized = self.gen_resize(builder, intrinsics, dict, run);
-
-            /*
-            let string = CString::new("Finished resizing dictionary").unwrap();
-            let string = LLVMBuildGlobalStringPtr(builder, string.as_ptr(), c_str!(""));
-            let pointer = LLVMConstBitCast(string, LLVMPointerType(self.i8_type(), 0));
-            let _ = intrinsics.call_weld_run_print(builder, run, pointer);
-            */
-
             LLVMBuildCondBr(builder, resized, reacquire_slot_block, upsert_block);
 
             trace!("finished gen resize");
@@ -1188,19 +1177,178 @@ impl Dict {
                                 c_str!("")))
     }
 
-    /// Serialize this dictionary into the provided serialization buffer.
+    /// Generates the serialize function for dictionaries.
+    ///
+    /// The serialize function takes four arguments: the serializeation buffer, the  position in
+    /// the buffer, the value to serialize (i.e., the dictionary), and the run handle.
+    ///
+    /// This function returns the updated serialization vector.
     ///
     /// `key_ser` and `val_ser` are the serialization functions for the key and value,
     /// respectively.
+    ///
+    /// # Return Value
+    ///
+    /// Returns the updated buffer and updated position.
     pub unsafe fn gen_serialize(&mut self,
                                 builder: LLVMBuilderRef,
+                                function: LLVMValueRef,
+                                entry_block: LLVMBasicBlockRef,
                                 intrinsics: &mut Intrinsics,
+                                buffer_vector: &mut Vector,
+                                arguments: (LLVMValueRef, LLVMValueRef, LLVMValueRef, LLVMValueRef),
                                 key_ser: LLVMValueRef,
-                                val_ser: LLVMValueRef,
-                                dict: LLVMValueRef,
-                                buffer: LLVMValueRef,
-                                run: LLVMValueRef) -> WeldResult<LLVMValueRef> {
-        unimplemented!()
+                                val_ser: LLVMValueRef) -> WeldResult<(LLVMValueRef, LLVMValueRef)> {
+
+        // Function is already defined by caller - we just need to generate code for it.
+ 
+        let (buffer, position, dict, run) = arguments;
+
+        let start_convert_block = LLVMAppendBasicBlockInContext(self.context(), function,  c_str!("start.ser"));
+        let top_block = LLVMAppendBasicBlockInContext(self.context(), function,  c_str!("ser.loop.top"));
+        let copy_kv_block = LLVMAppendBasicBlockInContext(self.context(), function,  c_str!("copy.kv"));
+        let bot_block = LLVMAppendBasicBlockInContext(self.context(), function,  c_str!("ser.loop.bot"));
+        let return_block = LLVMAppendBasicBlockInContext(self.context(), function,  c_str!("return"));
+
+        // Write the 8-byte size into the buffer.
+        let dict_size = self.size(builder, dict);
+
+        let dict_size_ty = LLVMTypeOf(dict_size);
+        let bytes_to_write = self.size_of(dict_size_ty);
+
+        let required_size = LLVMBuildAdd(builder, position, bytes_to_write, c_str!("capWithSize"));
+        let pre_loop_buffer = buffer_vector.gen_extend(builder, intrinsics, run, buffer, required_size)?;
+
+        let pointer_ty = LLVMPointerType(dict_size_ty, 0);
+        let pointer = buffer_vector.gen_at(builder, pre_loop_buffer, position)?;
+        let pointer_typed = LLVMBuildBitCast(builder, pointer, pointer_ty, c_str!(""));
+        LLVMBuildStore(builder, dict_size, pointer_typed);
+
+        let pre_loop_position = required_size;
+        trace!("Generated dictionary size write into serialization buffer");
+
+        /*
+        let string = CString::new("Dictionary Size").unwrap();
+        let string = LLVMBuildGlobalStringPtr(builder, string.as_ptr(), c_str!(""));
+        let pointer = LLVMConstBitCast(string, LLVMPointerType(self.i8_type(), 0));
+        let _ = intrinsics.call_weld_run_print(builder, run, pointer);
+        let _ = intrinsics.call_weld_run_print_int(builder, run, size);
+        */
+
+        let size_nonzero = LLVMBuildICmp(builder, LLVMIntSGT, dict_size, self.i64(0), c_str!("sizeNonZero"));
+        LLVMBuildCondBr(builder, size_nonzero, start_convert_block, return_block);
+        trace!("Generated entry block");
+
+        LLVMPositionBuilderAtEnd(builder, start_convert_block);
+        let capacity = self.capacity(builder, dict);
+        let slot_array = self.slot_array(builder, dict);
+        LLVMBuildBr(builder, top_block);
+        trace!("Generated start conversion block");
+
+        LLVMPositionBuilderAtEnd(builder, top_block);
+        // Index into the dictionary slot array.
+        let slot_arr_index = LLVMBuildPhi(builder, self.i64_type(), c_str!("slotArrIndex"));
+
+        // The buffer and serialization position.
+        let ser_buffer = LLVMBuildPhi(builder, buffer_vector.vector_ty, c_str!("serBuf"));
+        let ser_position = LLVMBuildPhi(builder, self.i64_type(), c_str!("serPos"));
+
+        ///////////////////////////////////////////////////////////////////////////////////////
+        let string = CString::new("Slot Array Index").unwrap();
+        let string = LLVMBuildGlobalStringPtr(builder, string.as_ptr(), c_str!(""));
+        let pointer = LLVMConstBitCast(string, LLVMPointerType(self.i8_type(), 0));
+        let _ = intrinsics.call_weld_run_print(builder, run, pointer);
+        let _ = intrinsics.call_weld_run_print_int(builder, run, slot_arr_index);
+
+        let string = CString::new("KV Vector Index").unwrap();
+        let string = LLVMBuildGlobalStringPtr(builder, string.as_ptr(), c_str!(""));
+        let pointer = LLVMConstBitCast(string, LLVMPointerType(self.i8_type(), 0));
+        let _ = intrinsics.call_weld_run_print(builder, run, pointer);
+        ///////////////////////////////////////////////////////////////////////////////////////
+
+        let slot = self.slot_at_index(builder, slot_array, slot_arr_index);
+        let filled = self.slot_ty.filled(builder, slot);
+        LLVMBuildCondBr(builder, filled, copy_kv_block, bot_block);
+        trace!("Generated loop top block");
+
+        // Copy block - copy the key/value into the vector.
+        LLVMPositionBuilderAtEnd(builder, copy_kv_block);
+
+        // Serialize the key and value.
+        let slot_key_ptr = self.slot_ty.key(builder, slot);
+        let mut args = [ser_buffer, ser_position, slot_key_ptr, run];
+
+        // The serializeation function returns a { buffer, position } struct.
+        let buffer_and_pos = LLVMBuildCall(builder, key_ser, args.as_mut_ptr(), args.len() as u32, c_str!(""));
+
+        let updated_buffer = LLVMBuildExtractValue(builder, buffer_and_pos, 0, c_str!("updatedBuf"));
+        let updated_position = LLVMBuildExtractValue(builder, buffer_and_pos, 1, c_str!("updatedPos"));
+
+        let slot_val_ptr = self.slot_ty.value(builder, slot);
+        let mut args = [updated_buffer, updated_position, slot_val_ptr, run];
+        let buffer_and_pos = LLVMBuildCall(builder, val_ser, args.as_mut_ptr(), args.len() as u32, c_str!(""));
+
+        let updated_buffer = LLVMBuildExtractValue(builder, buffer_and_pos, 0, c_str!("updatedBuf"));
+        let updated_position = LLVMBuildExtractValue(builder, buffer_and_pos, 1, c_str!("updatedPos"));
+
+        LLVMBuildBr(builder, bot_block);
+        trace!("Generated copy KV struct block");
+
+        // Bottom of loop -- increment induction variables and loop or exit.
+        LLVMPositionBuilderAtEnd(builder, bot_block);
+        let new_ser_buffer = LLVMBuildPhi(builder, buffer_vector.vector_ty, c_str!("newBuf"));
+        let new_ser_position = LLVMBuildPhi(builder, self.i64_type(), c_str!("newPos"));
+
+        let new_slot_arr_index = LLVMBuildNSWAdd(builder, slot_arr_index, self.i64(1), c_str!("newArrIdx"));
+        let finished = LLVMBuildICmp(builder, LLVMIntEQ, new_slot_arr_index, capacity, c_str!("finished"));
+        LLVMBuildCondBr(builder, finished, return_block, top_block);
+        trace!("Generated bottom block");
+
+        // Return Block.
+        LLVMPositionBuilderAtEnd(builder, return_block);
+        let ret_buffer = LLVMBuildPhi(builder, buffer_vector.vector_ty, c_str!("retBuf"));
+        let ret_position = LLVMBuildPhi(builder, self.i64_type(), c_str!("retPos"));
+
+        // Set the PHI value for the return value.
+        let mut blocks = [entry_block, bot_block];
+        let mut values = [pre_loop_buffer, new_ser_buffer];
+        LLVMAddIncoming(ret_buffer, values.as_mut_ptr(), blocks.as_mut_ptr(), values.len() as u32);
+        let mut values = [pre_loop_position, new_ser_position];
+        LLVMAddIncoming(ret_position, values.as_mut_ptr(), blocks.as_mut_ptr(), values.len() as u32);
+
+        // Set the PHI value for the slot array induction variable.
+        let mut blocks = [start_convert_block, bot_block];
+        let mut values = [self.i64(0), new_slot_arr_index];
+        LLVMAddIncoming(slot_arr_index,
+                        values.as_mut_ptr(), blocks.as_mut_ptr(), values.len() as u32);
+
+        // Set the PHI value for the offset into the KV vector.
+        let mut blocks = [start_convert_block, bot_block];
+        let mut values = [pre_loop_position, new_ser_position];
+        LLVMAddIncoming(ser_position,
+                        values.as_mut_ptr(), blocks.as_mut_ptr(), values.len() as u32);
+
+        // Set the PHI value for the intermediate KV vector offset in bot_block.
+        let mut blocks = [top_block, copy_kv_block];
+        let mut values = [ser_position, updated_position];
+        LLVMAddIncoming(new_ser_position,
+                        values.as_mut_ptr(), blocks.as_mut_ptr(), values.len() as u32);
+
+        // Set the PHI value for the buffer.
+        let mut blocks = [start_convert_block, bot_block];
+        let mut values = [pre_loop_buffer, new_ser_buffer];
+        LLVMAddIncoming(ser_buffer,
+                        values.as_mut_ptr(), blocks.as_mut_ptr(), values.len() as u32);
+
+        // Set the PHI value for the intermediate buffer in bot_block.
+        let mut blocks = [top_block, copy_kv_block];
+        let mut values = [ser_buffer, updated_buffer];
+        LLVMAddIncoming(new_ser_buffer,
+                        values.as_mut_ptr(), blocks.as_mut_ptr(), values.len() as u32);
+
+        // Return the values: the calling serialization code will package them into a struct and
+        // return them.
+        Ok((ret_buffer, ret_position))
     }
 }
 
