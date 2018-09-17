@@ -232,11 +232,8 @@ fn simple_parallel_for_dictmerger_loop_helper(use_local: bool) {
     };
 
     let ret_value = compile_and_run(&code, conf, input_data);
-    println!("Dropping value");
     let data = ret_value.data() as *const WeldVec<Pair<_,_>>;
-    println!("Got data");
     let result = unsafe { (*data).clone() };
-    println!("Cloned result");
 
     assert_eq!(UNIQUE_KEYS as i64, result.len);
 
@@ -253,7 +250,6 @@ fn simple_parallel_for_dictmerger_loop_helper(use_local: bool) {
             }
         }
     }
-    
 
     for i in 0..(result.len as isize) {
         let key = unsafe { (*result.data.offset(i)).ele1 };
@@ -262,7 +258,6 @@ fn simple_parallel_for_dictmerger_loop_helper(use_local: bool) {
         assert_eq!(*expected_value, value);
     }
     assert_eq!(result.len, expected.len() as i64);
-    println!("Verified correctness");
 }
 
 #[test]

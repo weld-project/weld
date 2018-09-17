@@ -93,7 +93,6 @@ macro_rules! c_str {
 }
 
 mod builder;
-mod dict;
 mod eq;
 mod hash;
 mod intrinsic;
@@ -140,9 +139,9 @@ pub fn compile(program: &SirProgram,
                stats: &mut CompilationStats,
                dump_prefix: &str) -> WeldResult<Box<dyn Runnable + Send + Sync>> {
 
-    info!("Compiling using single thread runtime");
+    use runtime;
 
-    use runtime::strt;
+    info!("Compiling using single thread runtime");
 
     let codegen = unsafe { LlvmGenerator::generate(conf.clone(), &program)? };
     if conf.dump_code.enabled {
@@ -151,7 +150,7 @@ pub fn compile(program: &SirProgram,
     trace!("{}", codegen);
 
     unsafe {
-        strt::weld_init();
+        runtime::weld_init();
     }
 
     let module = unsafe { jit::compile(codegen.context, codegen.module, conf, stats)? };
@@ -292,10 +291,6 @@ pub struct LlvmGenerator {
     ///
     /// The key maps the dictionary's `Dict` type to the type reference and methods on it.
     dictionaries: FnvHashMap<Type, dict_new::Dict>,
-    /// Dictionary intrinsics.
-    ///
-    /// These are functions that call out to an external dictionary implementation.
-    dict_intrinsics: dict::Intrinsics,
     /// Common intrinsics defined in the module.
     ///
     /// An intrinsic is any function defined outside of module (i.e., is not code generated).
@@ -683,7 +678,6 @@ impl CodeGenExt for LlvmGenerator {
 }
 
 impl LlvmGenerator {
-
     /// Initialize a new LlvmGenerator.
     unsafe fn new(conf: ParsedConf) -> WeldResult<LlvmGenerator> {
         let context = LLVMContextCreate();
@@ -695,7 +689,6 @@ impl LlvmGenerator {
 
         // Adds the default intrinsic definitions.
         let intrinsics = intrinsic::Intrinsics::defaults(context, module);
-        let dict_intrinsics = dict::Intrinsics::new(context, module);
 
         let target = target::Target::from_llvm_strings(
             llvm_exts::PROCESS_TRIPLE.to_str().unwrap(),
@@ -715,7 +708,6 @@ impl LlvmGenerator {
             mergers: FnvHashMap::default(),
             appenders: FnvHashMap::default(),
             dictionaries: FnvHashMap::default(),
-            dict_intrinsics: dict_intrinsics,
             strings: FnvHashMap::default(),
             eq_fns: FnvHashMap::default(),
             opaque_eq_fns: FnvHashMap::default(),

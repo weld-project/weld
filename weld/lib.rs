@@ -492,16 +492,6 @@ impl WeldValue {
     }
 }
 
-// Custom Drop implementation that discards values allocated by the runtime.
-impl Drop for WeldValue {
-    fn drop(&mut self) {
-        if let Some(ref mut context) = self.context {
-            // trace!("Freeing pointer {:?} in WeldValue.drop()", self.data as DataMut);
-            // unsafe { context.context.borrow_mut().free(self.data as DataMut) } ;
-        }
-    }
-}
-
 /// A struct used to configure compilation and the Weld runtime.
 #[derive(Debug,Clone)]
 pub struct WeldConf {

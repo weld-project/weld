@@ -35,7 +35,6 @@ use super::numeric;
 mod for_loop;
 
 pub mod appender;
-pub mod dictmerger;
 pub mod merger;
 
 /// A trait for generating builder code.
