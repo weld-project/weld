@@ -25,7 +25,7 @@ use sir::StatementKind::*;
 use self::llvm_sys::prelude::*;
 use self::llvm_sys::core::*;
 
-use super::dict_new;
+use super::dict;
 
 use super::{CodeGenExt, FunctionContext, LlvmGenerator};
 
@@ -209,7 +209,7 @@ impl BuilderExpressionGen for LlvmGenerator {
             }
             DictMerger(ref key, ref val, _) => {
                 let ref dict_type = Dict(key.clone(), val.clone());
-                let default_capacity = self.i64(dict_new::INITIAL_CAPACITY);
+                let default_capacity = self.i64(dict::INITIAL_CAPACITY);
                 let dictmerger = {
                     let mut methods = self.dictionaries.get_mut(dict_type).unwrap();
                     methods.gen_new(ctx.builder, &mut self.intrinsics, default_capacity, ctx.get_run())?
@@ -219,7 +219,7 @@ impl BuilderExpressionGen for LlvmGenerator {
             }
             GroupMerger(ref key, ref val) => {
                 let ref dict_type = Dict(key.clone(), Box::new(Vector(val.clone())));
-                let default_capacity = self.i64(dict_new::INITIAL_CAPACITY);
+                let default_capacity = self.i64(dict::INITIAL_CAPACITY);
                 let groupmerger = {
                     let mut methods = self.dictionaries.get_mut(dict_type).unwrap();
                     methods.gen_new(ctx.builder, &mut self.intrinsics, default_capacity, ctx.get_run())?
@@ -327,7 +327,7 @@ impl BuilderExpressionGen for LlvmGenerator {
             }
             GroupMerger(ref key, ref value) => {
                 use self::hash::*;
-                use self::dict_new::GroupingDict;
+                use self::dict::GroupingDict;
                 // The merge value is a {K, V} struct.
                 let merge_value_ptr = ctx.get_value(m.value)?;
                 let key_pointer = LLVMBuildStructGEP(ctx.builder, merge_value_ptr, 0, c_str!(""));

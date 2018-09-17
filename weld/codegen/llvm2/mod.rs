@@ -93,6 +93,7 @@ macro_rules! c_str {
 }
 
 mod builder;
+mod dict;
 mod eq;
 mod hash;
 mod intrinsic;
@@ -102,9 +103,6 @@ mod numeric;
 mod serde;
 mod target;
 mod vector;
-
-// Temporary
-mod dict_new;
 
 use self::builder::appender;
 use self::builder::merger;
@@ -290,7 +288,7 @@ pub struct LlvmGenerator {
     /// A map tracking generated dictionaries.
     ///
     /// The key maps the dictionary's `Dict` type to the type reference and methods on it.
-    dictionaries: FnvHashMap<Type, dict_new::Dict>,
+    dictionaries: FnvHashMap<Type, dict::Dict>,
     /// Common intrinsics defined in the module.
     ///
     /// An intrinsic is any function defined outside of module (i.e., is not code generated).
@@ -1334,7 +1332,7 @@ impl LlvmGenerator {
                     let key_ty = self.llvm_type(key)?;
                     let value_ty = self.llvm_type(value)?;
                     let key_comparator = self.gen_eq_fn(key)?;
-                    let dict = dict_new::Dict::define("dict",
+                    let dict = dict::Dict::define("dict",
                                                     key_ty,
                                                     key_comparator,
                                                     value_ty,
