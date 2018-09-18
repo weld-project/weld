@@ -109,9 +109,13 @@ pub fn inline_let(expr: &mut Expr) {
     expr.uniquify().unwrap();
     let ref mut usages = FnvHashMap::default();
     count_symbols(expr, usages);
+
+    println!("Symbol Counts: {:?}", usages);
+
     inline_let_helper(expr, usages)
 }
 
+#[derive(Debug,Clone)]
 struct SymbolTracker {
     count: u32,
     loop_nest: u32,
@@ -132,7 +136,7 @@ fn count_symbols(expr: &Expr, usage: &mut FnvHashMap<Symbol, SymbolTracker>) {
                 count_symbols(func, usage);
 
                 for value in usage.values_mut() {
-                    value.loop_nest += 1;
+                    value.loop_nest -= 1;
                 }
             }
             Let { ref name, .. } => {
@@ -181,7 +185,7 @@ fn inline_let_helper(expr: &mut Expr, usages: &FnvHashMap<Symbol, SymbolTracker>
                 };
 
                 if replace {
-                    **expr = *value.clone();
+                    mem::swap(*expr, value.as_mut());
                 }
 
                 return None;
