@@ -109,56 +109,59 @@ pub fn inline_let(expr: &mut Expr) {
     expr.uniquify().unwrap();
     let ref mut usages = FnvHashMap::default();
     count_symbols(expr, usages);
-
-    println!("Symbol Counts: {:?}", usages);
-
+    debug!("Symbol count: {:?}", usages);
     inline_let_helper(expr, usages)
 }
 
-#[derive(Debug,Clone)]
+#[derive(Debug)]
 struct SymbolTracker {
-    count: u32,
-    loop_nest: u32,
+    count: i32,
+    loop_nest: i32,
 }
 
 /// Count the occurances of each symbol defined by a `Let` statement.
 fn count_symbols(expr: &Expr, usage: &mut FnvHashMap<Symbol, SymbolTracker>) {
     use std::collections::hash_map::Entry::*;
-    expr.traverse(&mut |ref e| {
-        match e.kind {
-            For { ref func, .. } | Iterate { update_func: ref func, .. } => {
-                // Mark all symbols seen so far as "in a loop"       
-                for value in usage.values_mut() {
-                    value.loop_nest += 1;
-                }
+    match expr.kind {
+        For { ref func, .. } | Iterate { update_func: ref func, .. } => {
+            // Mark all symbols seen so far as "in a loop"
+            for value in usage.values_mut() {
+                value.loop_nest += 1;
+            }
 
-                // XXX How to skip func in traverse??
-                count_symbols(func, usage);
+            count_symbols(func, usage);
 
-                for value in usage.values_mut() {
-                    value.loop_nest -= 1;
-                }
+            for value in usage.values_mut() {
+                value.loop_nest -= 1;
             }
-            Let { ref name, .. } => {
-                usage.insert(name.clone(), SymbolTracker { count: 0, loop_nest: 0 });
-            }
-            Ident(ref symbol) => {
-                match usage.entry(symbol.clone()) {
-                    Occupied(ref mut ent) => {
-                        if ent.get_mut().loop_nest == 0 {
-                            ent.get_mut().count += 1;
-                        } else {
-                            // Used in a loop!
-                            ent.get_mut().count += 3;
-                        }
-                    }
-                    // Do nothing if vacant - the symbol is a parameter.
-                    Vacant(_) => (),
-                }
-            }
-            _ => ()
         }
-    });
+        Let { ref name, .. } => {
+            debug_assert!(!usage.contains_key(name));
+            let _ = usage.insert(name.clone(), SymbolTracker { count: 0, loop_nest: 0 });
+        }
+        Ident(ref symbol) => {
+            match usage.entry(symbol.clone()) {
+                Occupied(ref mut ent) => {
+                    if ent.get_mut().loop_nest == 0 {
+                        ent.get_mut().count += 1;
+                    } else {
+                        // Used in a loop!
+                        ent.get_mut().count += 3;
+                    }
+                }
+                // Do nothing if vacant - the symbol is a parameter.
+                Vacant(_) => (),
+            }
+        }
+        _ => ()
+    };
+
+    // Recurse into children - skip the functions in the parallel operators.
+    for child in expr.children() {
+        if let Lambda { .. } = child.kind {} else {
+            count_symbols(child, usage);
+        }
+    }
 }
 
 
@@ -409,6 +412,26 @@ fn inline_lets() {
     let mut e1 = typed_expression("let a = 1; let b = 2; let c = 3; a + b + c");
     inline_let(&mut e1);
     let e2 = typed_expression("1 + 2 + 3");
+    println!("{}, {}", e1.pretty_print(), e2.pretty_print());
+    assert!(e1.compare_ignoring_symbols(&e2).unwrap());
+
+    let mut e1 = typed_expression("|input: vec[i32]|
+        let b = 1;
+        result(for(input, merger[i32,+], |b,i,e| let a = 1; merge(b, e + a))) + b");
+    inline_let(&mut e1);
+
+    let e2 = typed_expression("|input: vec[i32]|
+        result(for(input, merger[i32,+], |b,i,e| merge(b, e + 1))) + 1");
+    println!("{}, {}", e1.pretty_print(), e2.pretty_print());
+    assert!(e1.compare_ignoring_symbols(&e2).unwrap());
+
+    let mut e1 = typed_expression("|input: vec[i32]|
+        let b = 1;
+        result(for(input, merger[i32,+], |b,i,e| let a = 1; merge(b, e + a + a))) + b");
+    inline_let(&mut e1);
+
+    let e2 = typed_expression("|input: vec[i32]|
+        result(for(input, merger[i32,+], |b,i,e| let a = 1; merge(b, e + a + a))) + 1");
     println!("{}, {}", e1.pretty_print(), e2.pretty_print());
     assert!(e1.compare_ignoring_symbols(&e2).unwrap());
 }
