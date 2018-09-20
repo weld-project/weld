@@ -121,7 +121,6 @@ struct SymbolTracker {
 
 /// Count the occurances of each symbol defined by a `Let` statement.
 fn count_symbols(expr: &Expr, usage: &mut FnvHashMap<Symbol, SymbolTracker>) {
-    use std::collections::hash_map::Entry::*;
     match expr.kind {
         For { ref func, .. } | Iterate { update_func: ref func, .. } => {
             // Mark all symbols seen so far as "in a loop"
@@ -140,26 +139,24 @@ fn count_symbols(expr: &Expr, usage: &mut FnvHashMap<Symbol, SymbolTracker>) {
             let _ = usage.insert(name.clone(), SymbolTracker { count: 0, loop_nest: 0 });
         }
         Ident(ref symbol) => {
-            match usage.entry(symbol.clone()) {
-                Occupied(ref mut ent) => {
-                    if ent.get_mut().loop_nest == 0 {
-                        ent.get_mut().count += 1;
-                    } else {
-                        // Used in a loop!
-                        ent.get_mut().count += 3;
-                    }
+            if let Some(ref mut tracker) = usage.get_mut(symbol) {
+                if tracker.loop_nest == 0 {
+                    tracker.count += 1;
+                } else {
+                    // Used in a loop!
+                    tracker.count += 3;
                 }
-                // Do nothing if vacant - the symbol is a parameter.
-                Vacant(_) => (),
             }
         }
         _ => ()
     };
 
-    // Recurse into children - skip the functions in the parallel operators.
+    // Recurse into children - skip functions that expressions may call repeatedly. We handled
+    // those already.
     for child in expr.children() {
-        if let Lambda { .. } = child.kind {} else {
-            count_symbols(child, usage);
+        match child.kind {
+            Lambda { .. } => (),
+            _ => count_symbols(child, usage),
         }
     }
 }
@@ -174,7 +171,6 @@ fn inline_let_helper(expr: &mut Expr, usages: &FnvHashMap<Symbol, SymbolTracker>
         //  Check whether the symbol is used one or fewer times.
         let entry = usages.get(name);
         if entry.is_some() && entry.unwrap().count <= 1 {
-
             taken_body = Some(Box::new(Expr {
                 ty: body.ty.clone(),
                 kind: Ident(Symbol::unused()),
