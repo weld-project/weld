@@ -1,8 +1,15 @@
-//! Various inlining transforms. These transforms take a set of nested expressions
-//! and fuse them into a single one.
+//! Various inlining transforms.
+//!
+//! These transforms take a set of nested expressions and fuse them into a single one.
+
+extern crate fnv;
 
 use ast::*;
 use ast::ExprKind::*;
+
+use fnv::FnvHashMap;
+
+use std::mem;
 
 use annotation::*;
 
@@ -98,30 +105,110 @@ pub fn inline_apply(expr: &mut Expr) {
     });
 }
 
-/// Inlines Let calls if the symbol defined by the Let statement is used
-/// never or only one time.
 pub fn inline_let(expr: &mut Expr) {
-    if expr.uniquify().is_ok() {
-        expr.transform(&mut |ref mut expr| {
-            if let Let {
-                ref mut name,
-                ref mut value,
-                ref mut body,
-            } = expr.kind {
-                if symbol_usage_count(name, body) <= 1 {
-                    body.transform(&mut |ref mut expr| {
-                        if let Ident(ref symbol) = expr.kind {
-                            if symbol == name {
-                                return Some(*value.clone());
-                            }
-                        }
-                        return None;
-                    });
-                    return Some(*body.clone());
+    expr.uniquify().unwrap();
+    let ref mut usages = FnvHashMap::default();
+    count_symbols(expr, usages);
+    debug!("Symbol count: {:?}", usages);
+    inline_let_helper(expr, usages)
+}
+
+#[derive(Debug)]
+struct SymbolTracker {
+    count: i32,
+    loop_nest: i32,
+    value: Option<Box<Expr>>,
+}
+
+impl Default for SymbolTracker {
+    fn default() -> SymbolTracker {
+        SymbolTracker {
+            count: 0,
+            loop_nest: 0,
+            value: None
+        }
+    }
+}
+
+/// Count the occurances of each symbol defined by a `Let` statement.
+fn count_symbols(expr: &Expr, usage: &mut FnvHashMap<Symbol, SymbolTracker>) {
+    match expr.kind {
+        For { ref func, .. } | Iterate { update_func: ref func, .. } => {
+            // Mark all symbols seen so far as "in a loop"
+            for value in usage.values_mut() {
+                value.loop_nest += 1;
+            }
+
+            count_symbols(func, usage);
+
+            for value in usage.values_mut() {
+                value.loop_nest -= 1;
+            }
+        }
+        Let { ref name, .. } => {
+            debug_assert!(!usage.contains_key(name));
+            let _ = usage.insert(name.clone(), SymbolTracker::default());
+        }
+        Ident(ref symbol) => {
+            if let Some(ref mut tracker) = usage.get_mut(symbol) {
+                if tracker.loop_nest == 0 {
+                    tracker.count += 1;
+                } else {
+                    // Used in a loop!
+                    tracker.count += 3;
                 }
             }
-            return None;
-        });
+        }
+        _ => ()
+    };
+
+    // Recurse into children - skip functions that expressions may call repeatedly. We handled
+    // those already.
+    for child in expr.children() {
+        match child.kind {
+            Lambda { .. } => (),
+            _ => count_symbols(child, usage),
+        }
+    }
+}
+
+/// Inlines Let calls if the symbol defined by the Let statement is used
+/// never or only one time.
+fn inline_let_helper(expr: &mut Expr, usages: &mut FnvHashMap<Symbol, SymbolTracker>) {
+    let mut taken_body = None;
+    match expr.kind {
+        Let { ref mut name, ref mut value, ref mut body } => {
+            // Check whether the symbol is used one or fewer times.
+            if let Some(tracker) = usages.get_mut(name) {
+                if tracker.count <= 1 {
+                    taken_body = Some(body.take());
+                    tracker.value = Some(value.take());
+                }
+            }
+        }
+        Ident(ref name) => {
+            // Check if the identifier maps to one that should be inlined.
+            if let Some(tracker) = usages.get_mut(name) {
+                if tracker.count <= 1 {
+                    // Value should have been set by a preceding Let.
+                    debug_assert!(tracker.value.is_some());
+                    // Value should only be swapped once.
+                    debug_assert!(!tracker.value.as_ref().unwrap().is_placeholder());
+                    mem::swap(&mut taken_body, &mut tracker.value);
+                }
+            }
+        }
+        _ => ()
+    }
+
+    // Set the body to this expression.
+    if taken_body.is_some() {
+        mem::swap(expr, taken_body.unwrap().as_mut());
+        inline_let_helper(expr, usages);
+    } else {
+        for child in expr.children_mut() {
+            inline_let_helper(child, usages);
+        }
     }
 }
 
@@ -192,42 +279,30 @@ fn getfield_on_symbol(expr: &Expr, sym: &Symbol) -> Option<u32> {
 }
 
 /// Simplifies branches with `<expr> == False` to just be over <expr>`
+///
+/// This switches the true condition and the false condition.
 pub fn simplify_branch_conditions(expr: &mut Expr) {
-    use std::mem;
     use ast::BinOpKind;
     use ast::LiteralKind::BoolLiteral;
     expr.uniquify().unwrap();
     expr.transform_up(&mut |ref mut expr| {
         if let If { ref mut cond, ref mut on_true, ref mut on_false } = expr.kind {
-
-            let ref mut taken = Box::new(Expr {
-                ty: cond.ty.clone(),
-                kind: Ident(Symbol::unused()),
-                annotations: Annotations::new()
-            });
-
-            let replaced = if let &mut BinOp { ref mut kind, ref mut left, ref mut right } = &mut cond.kind {
-                if *kind != BinOpKind::Equal {
-                    false
-                } else if let Literal(BoolLiteral(false)) = left.kind {
-                    mem::swap(right, taken);
-                    true
-                } else if let Literal(BoolLiteral(false)) = right.kind {
-                    mem::swap(left, taken);
-                    true
-                } else {
-                    false
+            let mut taken = None;
+            if let &mut BinOp { ref mut kind, ref mut left, ref mut right } = &mut cond.kind {
+                if *kind == BinOpKind::Equal {
+                    if let Literal(BoolLiteral(false)) = left.kind {
+                        taken = Some(right.take());
+                    } else if let Literal(BoolLiteral(false)) = right.kind {
+                        taken = Some(left.take());
+                    }
                 }
-            } else {
-                false
             };
 
-            if replaced {
-                mem::swap(cond, taken);
+            if let Some(ref mut expr) = taken {
+                mem::swap(cond, expr);
                 mem::swap(on_true, on_false);
             }
         }
-
         // We just updated the expression in place instead of replacing it.
         None
     });
@@ -236,7 +311,10 @@ pub fn simplify_branch_conditions(expr: &mut Expr) {
 /// Changes struct definitions assigned to a name and only used in `GetField` operations
 /// to `Let` definitions over the struct elements themselves.
 ///
-/// For example:
+/// This transformation is similar to a simple SROA (scalar replacement of aggregates) transform in
+/// other compilers.
+///
+/// ## Example
 ///
 /// let a = {1, 2, 3, 4};
 /// a.$0 + a.$1 + a.$2
@@ -304,26 +382,6 @@ pub fn unroll_structs(expr: &mut Expr) {
     });
 }
 
-
-/// Count the occurances of a `Symbol` in an expression.
-fn symbol_usage_count(sym: &Symbol, expr: &Expr) -> u32 {
-    let mut usage_count = 0;
-    expr.traverse(&mut |ref e| {
-        if let For { ref func, .. } = e.kind {
-            // The other child expressions of the For will be counted by traverse.
-            if symbol_usage_count(sym, func) >= 1 {
-                usage_count += 3;
-            }
-        } else if let Ident(ref symbol) = e.kind {
-            if sym == symbol {
-                usage_count += 1;
-            }
-        }
-    });
-
-    usage_count
-}
-
 #[test]
 fn inline_lets() {
     let mut e1 = typed_expression("let a = 1; a + 2");
@@ -348,5 +406,26 @@ fn inline_lets() {
     let mut e1 = typed_expression("let a = 1; let b = 2; let c = 3; a + b + c");
     inline_let(&mut e1);
     let e2 = typed_expression("1 + 2 + 3");
+    println!("{}, {}", e1.pretty_print(), e2.pretty_print());
+    assert!(e1.compare_ignoring_symbols(&e2).unwrap());
+
+    let mut e1 = typed_expression("|input: vec[i32]|
+        let b = 1;
+        result(for(input, merger[i32,+], |b,i,e| let a = 1; merge(b, e + a))) + b");
+    inline_let(&mut e1);
+
+    let e2 = typed_expression("|input: vec[i32]|
+        result(for(input, merger[i32,+], |b,i,e| merge(b, e + 1))) + 1");
+    println!("{}, {}", e1.pretty_print(), e2.pretty_print());
+    assert!(e1.compare_ignoring_symbols(&e2).unwrap());
+
+    let mut e1 = typed_expression("|input: vec[i32]|
+        let b = 1;
+        result(for(input, merger[i32,+], |b,i,e| let a = 1; merge(b, e + a + a))) + b");
+    inline_let(&mut e1);
+
+    let e2 = typed_expression("|input: vec[i32]|
+        result(for(input, merger[i32,+], |b,i,e| let a = 1; merge(b, e + a + a))) + 1");
+    println!("{}, {}", e1.pretty_print(), e2.pretty_print());
     assert!(e1.compare_ignoring_symbols(&e2).unwrap());
 }
