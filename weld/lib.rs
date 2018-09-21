@@ -137,7 +137,6 @@ extern crate time;
 extern crate code_builder;
 extern crate uuid;
 
-use libc::{free, c_void};
 use self::time::PreciseTime;
 
 use std::error::Error;
@@ -824,11 +823,11 @@ impl WeldModule {
         let nworkers = context.context.borrow().threads();
         let mem_limit = context.context.borrow().memory_limit();
 
-        // Borrow the inner context mutably since we pass a mutable pointer to it to the compiled
+         // Borrow the inner context mutably since we pass a mutable pointer to it to the compiled
         // module. This enforces the single-mutable-borrow rule manually for contexts.
-        let (raw, result) = {
-            let _borrowed_ref = context.context.borrow_mut();
+        let mut context_borrowed = context.context.borrow_mut();
 
+        let (raw, result) = {
             // This is the required input format of data passed into a compiled module.
             let input = Box::new(codegen::WeldInputArgs {
                 input: arg.data as i64,
@@ -849,7 +848,7 @@ impl WeldModule {
         };
 
         let value = WeldValue {
-            data: result.output as *const c_void,
+            data: result.output as Data,
             run: None,
             context: Some(context.clone()),
         };
@@ -868,8 +867,8 @@ impl WeldModule {
             let message = CString::new(format!("Weld program failed with error {:?}", result.errno)).unwrap();
             Err(WeldError::new(message, result.errno))
         } else {
-            // Weld allocates the output using libc malloc, but we cloned it, so free the output struct.
-            free(raw as DataMut);
+            // Free the WeldOutputArgs struct.
+            context_borrowed.free(raw as *mut u8);
             Ok(value)
         }
     }
