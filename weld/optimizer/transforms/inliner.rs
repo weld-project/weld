@@ -117,6 +117,17 @@ pub fn inline_let(expr: &mut Expr) {
 struct SymbolTracker {
     count: i32,
     loop_nest: i32,
+    value: Option<Box<Expr>>,
+}
+
+impl Default for SymbolTracker {
+    fn default() -> SymbolTracker {
+        SymbolTracker {
+            count: 0,
+            loop_nest: 0,
+            value: None
+        }
+    }
 }
 
 /// Count the occurances of each symbol defined by a `Let` statement.
@@ -136,7 +147,7 @@ fn count_symbols(expr: &Expr, usage: &mut FnvHashMap<Symbol, SymbolTracker>) {
         }
         Let { ref name, .. } => {
             debug_assert!(!usage.contains_key(name));
-            let _ = usage.insert(name.clone(), SymbolTracker { count: 0, loop_nest: 0 });
+            let _ = usage.insert(name.clone(), SymbolTracker::default());
         }
         Ident(ref symbol) => {
             if let Some(ref mut tracker) = usage.get_mut(symbol) {
@@ -161,38 +172,36 @@ fn count_symbols(expr: &Expr, usage: &mut FnvHashMap<Symbol, SymbolTracker>) {
     }
 }
 
-
-
 /// Inlines Let calls if the symbol defined by the Let statement is used
 /// never or only one time.
-fn inline_let_helper(expr: &mut Expr, usages: &FnvHashMap<Symbol, SymbolTracker>) {
+fn inline_let_helper(expr: &mut Expr, usages: &mut FnvHashMap<Symbol, SymbolTracker>) {
     let mut taken_body = None;
-    if let Let { ref mut name, ref mut value, ref mut body } = expr.kind {
-        //  Check whether the symbol is used one or fewer times.
-        let entry = usages.get(name);
-        if entry.is_some() && entry.unwrap().count <= 1 {
-            taken_body = Some(Box::new(Expr {
-                ty: body.ty.clone(),
-                kind: Ident(Symbol::unused()),
-                annotations: Annotations::new()
-            }));
-
-            body.transform(&mut |ref mut expr| {
-                let replace = match expr.kind {
-                    Ident(ref symbol) if symbol == name => true,
-                    _ => false,
-                };
-
-                if replace {
-                    mem::swap(*expr, value.as_mut());
+    match expr.kind {
+        Let { ref mut name, ref mut value, ref mut body } => {
+            // Check whether the symbol is used one or fewer times.
+            if let Some(tracker) = usages.get_mut(name) {
+                if tracker.count <= 1 {
+                    taken_body = Some(body.take());
+                    tracker.value = Some(value.take());
                 }
-
-                return None;
-            });
-            mem::swap(taken_body.as_mut().unwrap(), body);
+            }
         }
+        Ident(ref name) => {
+            // Check if the identifier maps to one that should be inlined.
+            if let Some(tracker) = usages.get_mut(name) {
+                if tracker.count <= 1 {
+                    // Value should have been set by a preceding Let.
+                    debug_assert!(tracker.value.is_some());
+                    // Value should only be swapped once.
+                    debug_assert!(!tracker.value.as_ref().unwrap().is_placeholder());
+                    mem::swap(&mut taken_body, &mut tracker.value);
+                }
+            }
+        }
+        _ => ()
     }
 
+    // Set the body to this expression.
     if taken_body.is_some() {
         mem::swap(expr, taken_body.unwrap().as_mut());
         inline_let_helper(expr, usages);
@@ -270,41 +279,30 @@ fn getfield_on_symbol(expr: &Expr, sym: &Symbol) -> Option<u32> {
 }
 
 /// Simplifies branches with `<expr> == False` to just be over <expr>`
+///
+/// This switches the true condition and the false condition.
 pub fn simplify_branch_conditions(expr: &mut Expr) {
     use ast::BinOpKind;
     use ast::LiteralKind::BoolLiteral;
     expr.uniquify().unwrap();
     expr.transform_up(&mut |ref mut expr| {
         if let If { ref mut cond, ref mut on_true, ref mut on_false } = expr.kind {
-
-            let ref mut taken = Box::new(Expr {
-                ty: cond.ty.clone(),
-                kind: Ident(Symbol::unused()),
-                annotations: Annotations::new()
-            });
-
-            let replaced = if let &mut BinOp { ref mut kind, ref mut left, ref mut right } = &mut cond.kind {
-                if *kind != BinOpKind::Equal {
-                    false
-                } else if let Literal(BoolLiteral(false)) = left.kind {
-                    mem::swap(right, taken);
-                    true
-                } else if let Literal(BoolLiteral(false)) = right.kind {
-                    mem::swap(left, taken);
-                    true
-                } else {
-                    false
+            let mut taken = None;
+            if let &mut BinOp { ref mut kind, ref mut left, ref mut right } = &mut cond.kind {
+                if *kind == BinOpKind::Equal {
+                    if let Literal(BoolLiteral(false)) = left.kind {
+                        taken = Some(right.take());
+                    } else if let Literal(BoolLiteral(false)) = right.kind {
+                        taken = Some(left.take());
+                    }
                 }
-            } else {
-                false
             };
 
-            if replaced {
-                mem::swap(cond, taken);
+            if let Some(ref mut expr) = taken {
+                mem::swap(cond, expr);
                 mem::swap(on_true, on_false);
             }
         }
-
         // We just updated the expression in place instead of replacing it.
         None
     });
