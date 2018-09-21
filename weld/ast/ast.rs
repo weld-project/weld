@@ -14,6 +14,9 @@ use std::vec;
 #[cfg(test)]
 use tests::*;
 
+/// Name used for placeholder expressions.
+const PLACEHOLDER_NAME: &'static str = "#placeholder";
+
 /// Types in the Weld IR.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Type {
@@ -410,8 +413,8 @@ impl Symbol {
         }
     }
 
-    pub fn unused() -> Symbol {
-        Symbol::new("unused", 0)
+    pub fn placeholder() -> Symbol {
+        Symbol::new(PLACEHOLDER_NAME, 0)
     }
 
     pub fn name(name: &str) -> Symbol {
@@ -1207,7 +1210,7 @@ impl Expr {
         where F: FnMut(&mut Expr) -> Option<Expr>
     {
         for c in self.children_mut() {
-            c.transform(func);
+            c.transform_up(func);
         }
         if let Some(e) = func(self) {
             *self = e;
@@ -1235,6 +1238,69 @@ pub fn expr_box(kind: ExprKind, annot: Annotations) -> Box<Expr> {
                  kind: kind,
                  annotations: annot,
              })
+}
+
+/// Creates a placeholder expression.
+pub trait Placeholder {
+    /// Returns whether this expression is a placeholder.
+    fn is_placeholder(&self) -> bool;
+
+    /// Create a new placeholder.
+    fn new_placeholder() -> Self;
+}
+
+impl Placeholder for Expr {
+    fn is_placeholder(&self) -> bool {
+        if let Ident(ref name) = self.kind {
+            return name.name == PLACEHOLDER_NAME
+        }
+        return false
+    }
+
+    fn new_placeholder() -> Expr {
+        Expr {
+            ty: Type::Unknown,
+            kind: Ident(Symbol::placeholder()),
+            annotations: Annotations::new()
+        }
+    }
+}
+
+impl Placeholder for Box<Expr> {
+    fn is_placeholder(&self) -> bool {
+        self.as_ref().is_placeholder()
+    }
+
+    fn new_placeholder() -> Box<Expr> {
+        Box::new(Expr {
+            ty: Type::Unknown,
+            kind: Ident(Symbol::placeholder()),
+            annotations: Annotations::new()
+        })
+    }
+}
+
+/// Takes an expression, replacing it with a placeholder.
+pub trait Takeable: Placeholder {
+    fn take(&mut self) -> Self;
+}
+
+impl Takeable for Expr {
+    fn take(&mut self) -> Expr {
+        use std::mem;
+        let mut new = Self::new_placeholder();
+        mem::swap(self, &mut new);
+        new
+    }
+}
+
+impl Takeable for Box<Expr> {
+    fn take(&mut self) -> Box<Expr> {
+        use std::mem;
+        let mut new = Self::new_placeholder();
+        mem::swap(self.as_mut(), new.as_mut());
+        new
+    }
 }
 
 #[test]
