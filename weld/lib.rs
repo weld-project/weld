@@ -123,6 +123,11 @@ extern crate lazy_static;
 #[macro_use]
 extern crate log;
 
+extern crate jemallocator;
+
+#[global_allocator]
+static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
+
 extern crate regex;
 extern crate libc;
 extern crate env_logger;
@@ -630,7 +635,7 @@ impl WeldModule {
         let code = code.as_ref();
 
         // For dumping code, if enabled.
-        let ref timestamp = util::timestamp_unique(&conf.dump_code.dir);
+        let ref timestamp = util::timestamp_unique();
         let uuid = Uuid::new_v4();
 
         // Configuration.
@@ -648,7 +653,7 @@ impl WeldModule {
 
         let unoptimized_code = expr.pretty_print();
         info!("Compiling module with UUID={}, code\n{}",
-              uuid.hyphenated(),
+              uuid.to_hyphenated(),
               unoptimized_code);
 
         // Dump the generated Weld program before applying any analyses.
@@ -729,7 +734,7 @@ impl WeldModule {
         let us = duration.num_microseconds().unwrap_or(std::i64::MAX);
         let e2e_ms: f64 = us as f64 / 1000.0;
         info!("Compiled module with UUID={} in {} ms",
-              uuid.hyphenated(),
+              uuid.to_hyphenated(),
               e2e_ms);
 
         Ok(WeldModule {
@@ -854,7 +859,7 @@ impl WeldModule {
         let us = duration.num_microseconds().unwrap_or(std::i64::MAX);
         let ms: f64 = us as f64 / 1000.0;
         debug!("Ran module UUID={} in {} ms",
-              self.module_id.hyphenated(), ms);
+              self.module_id.to_hyphenated(), ms);
 
         // Check whether the run was successful -- if not, free the data in the module, andn return
         // an error indicating what went wrong.
