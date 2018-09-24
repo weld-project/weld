@@ -23,7 +23,8 @@ llvm-sys = "60.0.3"
 fnv = "1.0.5"
 clap = "2.31.1"
 code_builder = "0.1.0"
-uuid = { version = "0.6.5", features = ["v4"] }
+jemallocator = "0.1.9"
+uuid = { version = "0.7.1", features = ["v4"] }
 
 [lib]
 path = "weld/lib.rs"
