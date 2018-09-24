@@ -58,6 +58,7 @@ pub enum LLVMExtAttribute {
     NoReturn,
     NoUnwind,
     ReadOnly,
+    WriteOnly,
 }
 
 impl fmt::Display for LLVMExtAttribute {
@@ -72,6 +73,7 @@ impl fmt::Display for LLVMExtAttribute {
             NoReturn => "noreturn",
             NoUnwind => "nounwind",
             ReadOnly => "readonly",
+            WriteOnly => "writeonly",
         };
         f.write_str(string)
     }

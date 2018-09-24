@@ -106,27 +106,9 @@ fn simple_groupmerger() {
     let code = "|x:vec[i32], y:vec[i32]| tovec(result(for(zip(x,y), groupmerger[i32,i32],
                 |b,i,e| merge(b, e))))";
 
-    let ref mut conf = default_conf();
-
-    const DICT_SIZE: usize = 8192;
-    const UNIQUE_KEYS: usize = 256;
-    let mut keys = vec![0; DICT_SIZE];
-    let mut vals = vec![0; DICT_SIZE];
-
-    let mut output: Vec<(i32, Vec<i32>)> = vec![];
-
-    // Repeated keys will have their values summed.
-    for i in 0..DICT_SIZE {
-        keys[i] = (i % UNIQUE_KEYS) as i32;
-        vals[i] = i as i32;
-
-        if output.len() < UNIQUE_KEYS {
-            output.push((keys[i], vec![vals[i]]));
-        } else {
-            output.get_mut(keys[i] as usize).unwrap().1.push(vals[i]);
-        }
-    }
-
+    let ref conf = default_conf();
+    let keys = vec![1, 2, 2, 3, 3, 1];
+    let vals = vec![2, 3, 4, 1, 0, 2];
     let ref input_data = I32KeyValArgs {
         x: WeldVec::from(&keys),
         y: WeldVec::from(&vals),
@@ -135,6 +117,7 @@ fn simple_groupmerger() {
     let ret_value = compile_and_run(code, conf, input_data);
     let data = ret_value.data() as *const WeldVec<Pair<i32, WeldVec<i32>>>;
     let result = unsafe { (*data).clone() };
+    let output: Vec<(i32, Vec<i32>)> = vec![(1, vec![2, 2]), (2, vec![3, 4]), (3, vec![1, 0])];
 
     let mut res: Vec<(i32, Vec<i32>)> = (0..result.len)
         .into_iter()
@@ -206,13 +189,16 @@ fn complex_groupmerger_with_struct_key() {
 
 }
 
-/// Larger dictmerger test with repeated keys
-#[test]
-fn dictmerger_repeated_keys() {
-    let code =
-        "|x:vec[i32], y:vec[i32]| tovec(result(for(zip(x,y),
-                dictmerger[i32,i32,+], |b,i,e| merge(b, e))))";
-    let ref mut conf = many_threads_conf();
+/// Tests a the dictionary by merging multiple keys key multiple times into a dictionary.
+/// `use_local` specifies whether to use the local-global adaptive dictionary or the purely global
+/// dictionary.
+fn simple_parallel_for_dictmerger_loop_helper(use_local: bool) {
+    let code = format!(
+        "|x:vec[i32], y:vec[i32]| tovec(result(@(grain_size: 100)for(zip(x,y),
+                dictmerger[i32,i32,+]({}L), |b,i,e| merge(b, e))))",
+        if use_local { 100000000 } else { 0 }
+    );
+    let ref conf = many_threads_conf();
 
     const DICT_SIZE: usize = 8192;
     const UNIQUE_KEYS: usize = 256;
@@ -257,6 +243,16 @@ fn dictmerger_repeated_keys() {
         assert_eq!(*expected_value, value);
     }
     assert_eq!(result.len, expected.len() as i64);
+}
+
+#[test]
+fn simple_parallel_for_dictmerger_loop_local() {
+    simple_parallel_for_dictmerger_loop_helper(true);
+}
+
+#[test]
+fn simple_parallel_for_dictmerger_loop_global() {
+    simple_parallel_for_dictmerger_loop_helper(false);
 }
 
 #[test]
@@ -324,6 +320,7 @@ fn simple_dict_exists() {
 
     let output = true;
     assert_eq!(output, result);
+
 
     let ref conf = default_conf();
     let ret_value = compile_and_run(code_false, conf, input_data.clone());
