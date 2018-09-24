@@ -4,9 +4,10 @@
 
 extern crate libc;
 extern crate fnv;
+extern crate jemallocator;
 
-use libc::{c_char, int32_t, int64_t, uint64_t, size_t};
-use libc::{malloc, realloc, free};
+use jemallocator::Jemalloc;
+use libc::{c_char, int32_t, int64_t, uint64_t};
 
 use fnv::FnvHashMap;
 
@@ -15,13 +16,16 @@ use std::fmt;
 use std::ptr;
 use std::sync::{Once, ONCE_INIT};
 
-use ::DataMut;
+use std::alloc::{Layout, GlobalAlloc};
 
+pub type Ptr = *mut u8;
 pub type WeldRuntimeContextRef = *mut WeldRuntimeContext;
 
 /// Initialize the Weld runtime only once.
 static ONCE: Once = ONCE_INIT;
 static mut INITIALIZE_FAILED: bool = false;
+
+const DEFAULT_ALIGN: usize = 8;
 
 /// An errno set by the runtime but also used by the Weld API.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd)]
@@ -77,53 +81,70 @@ impl fmt::Display for WeldRuntimeErrno {
 #[derive(Debug,PartialEq)]
 pub struct WeldRuntimeContext {
     /// Maps pointers to allocation size in bytes.
-    allocations: FnvHashMap<DataMut, i64>,
+    allocations: FnvHashMap<Ptr, Layout>,
     /// An error code set for the context.
     errno: WeldRuntimeErrno,
     /// A result pointer set by the runtime.
-    result: DataMut,
+    result: Ptr,
     /// The number of worker threads.
     nworkers: i32,
     /// A memory limit.
-    memlimit: i64,
+    memlimit: usize,
     /// Number of allocated bytes so far.
     ///
     /// This will always be equal to `allocations.values().sum()`.
-    allocated: i64,
+    allocated: usize,
 }
 
 /// Private API used by the FFI.
 impl WeldRuntimeContext {
-    unsafe fn malloc(&mut self, size: i64) -> DataMut {
+    unsafe fn malloc(&mut self, size: i64) -> Ptr {
+        if size == 0 {
+            trace!("Alloc'd 0-size pointer (null)");
+            return ptr::null_mut();
+        }
+
+        let size = size as usize;
+
         if self.allocated + size > self.memlimit {
             self.errno = WeldRuntimeErrno::OutOfMemory;
             panic!("Weld run ran out of memory (limit={}, attempted to allocate {}",
                    self.memlimit,
                    self.allocated + size);
         }
-        let mem = malloc(size as size_t);
-        assert!(mem as i64 != 0);
-        self.allocated += size;
-        trace!("Alloc'd pointer {:?} ({} bytes)", mem, size);
-        self.allocations.insert(mem.clone(), size);
+        let layout = Layout::from_size_align_unchecked(size as usize, DEFAULT_ALIGN);
+        let mem = Jemalloc.alloc(layout.clone());
+
+        self.allocated += layout.size();
+        trace!("Alloc'd pointer {:?} ({} bytes)", mem, layout.size());
+
+        self.allocations.insert(mem.clone(), layout);
         mem
     }
 
-    unsafe fn realloc(&mut self, pointer: DataMut, size: i64) -> DataMut {
-        let allocated = *self.allocations.get(&pointer).unwrap();
-        if self.allocated - allocated + size > self.memlimit {
+    unsafe fn realloc(&mut self, pointer: Ptr, size: i64) -> Ptr {
+
+        if pointer == ptr::null_mut() {
+            return self.malloc(size)
+        }
+
+        let size = size as usize;
+        let old_layout = self.allocations.remove(&pointer).unwrap();
+        if self.allocated - old_layout.size() + size > self.memlimit {
             self.errno = WeldRuntimeErrno::OutOfMemory;
             panic!("Weld run ran out of memory (limit={}, attempted to allocate {}",
                    self.memlimit,
-                   self.allocated - allocated + size);
+                   self.allocated - old_layout.size() + size);
         }
 
-        let mem = realloc(pointer, size as size_t);
-        assert!(mem as i64 != 0);
-        self.allocated -= allocated;
-        self.allocated += size;
-        let _ = self.allocations.remove(&pointer);
-        self.allocations.insert(mem.clone(), size);
+        // Must pass *old* layout to realloc!
+        let mem = Jemalloc.realloc(pointer, old_layout.clone(), size);
+        let new_layout = Layout::from_size_align_unchecked(size, DEFAULT_ALIGN);
+
+        self.allocated -= old_layout.size();
+        self.allocated += new_layout.size();
+
+        self.allocations.insert(mem, new_layout);
         mem
     }
 
@@ -132,11 +153,11 @@ impl WeldRuntimeContext {
         panic!("Weld runtime threw error: {}", self.errno)
     }
 
-    fn set_result(&mut self, result: DataMut) {
+    fn set_result(&mut self, result: Ptr) {
         self.result = result;
     }
 
-    fn result(&self) -> DataMut {
+    fn result(&self) -> Ptr {
         self.result
     }
 
@@ -151,7 +172,7 @@ impl WeldRuntimeContext {
             errno: WeldRuntimeErrno::Success,
             result: ptr::null_mut(),
             nworkers: nworkers,
-            memlimit: memlimit,
+            memlimit: memlimit as usize,
             allocated: 0,
         }
     }
@@ -159,17 +180,23 @@ impl WeldRuntimeContext {
     /// Free an allocated data value.
     ///
     /// Panics if the passed value was not allocated by the Weld runtime.
-    pub unsafe fn free(&mut self, pointer: DataMut) {
-        let allocated = *self.allocations.get(&pointer).unwrap();
-        trace!("Freeing pointer {:?} ({} bytes) in runst_free()", pointer, allocated);
-        free(pointer);
-        self.allocated -= allocated;
-        self.allocations.remove(&pointer);
+    pub unsafe fn free(&mut self, pointer: Ptr) {
+        if pointer == ptr::null_mut() {
+            trace!("Freed null pointer (no-op) in runst_free()");
+            return;
+        }
+
+        let layout = self.allocations.remove(&pointer).unwrap();
+
+        trace!("Freeing pointer {:?} ({} bytes) in runst_free()", pointer, layout.size());
+
+        Jemalloc.dealloc(pointer, layout.clone());
+        self.allocated -= layout.size();
     }
 
     /// Returns the number of bytes allocated by this Weld run.
     pub fn memory_usage(&self) -> i64 {
-        self.allocations.values().sum()
+        self.allocated as i64
     }
 
     /// Returns a 64-bit ID identifying this run.
@@ -189,7 +216,7 @@ impl WeldRuntimeContext {
 
     /// Returns the memory limit of this run.
     pub fn memory_limit(&self) -> i64 {
-        self.memlimit
+        self.memlimit as i64
     }
 }
 
@@ -198,9 +225,9 @@ impl Drop for WeldRuntimeContext {
         // Free memory allocated by the run.
         trace!("Allocations: {}", self.allocations.len());
         unsafe {
-            for (pointer, size) in self.allocations.iter() {
-                trace!("Freeing pointer {:?} ({} bytes) in drop()", *pointer, size);
-                free(*pointer);
+            for (pointer, layout) in self.allocations.iter() {
+                trace!("Freeing pointer {:?} ({} bytes) in drop()", *pointer, layout.size());
+                Jemalloc.dealloc(*pointer, layout.clone());
             }
         }
     }
@@ -243,7 +270,7 @@ pub unsafe extern "C" fn weld_runst_init(nworkers: int32_t, memlimit: int64_t) -
 
 #[no_mangle]
 /// Allocate memory using `libc` `malloc`, tracking memory usage information.
-pub unsafe extern "C" fn weld_runst_malloc(run: WeldRuntimeContextRef, size: int64_t) -> DataMut {
+pub unsafe extern "C" fn weld_runst_malloc(run: WeldRuntimeContextRef, size: int64_t) -> Ptr {
     let run = &mut *run;
     run.malloc(size)
 }
@@ -251,22 +278,22 @@ pub unsafe extern "C" fn weld_runst_malloc(run: WeldRuntimeContextRef, size: int
 #[no_mangle]
 /// Allocate memory using `libc` `remalloc`, tracking memory usage information.
 pub unsafe extern "C" fn weld_runst_realloc(run: WeldRuntimeContextRef,
-                                     ptr: DataMut,
-                                     newsize: int64_t) -> DataMut {
+                                     ptr: Ptr,
+                                     newsize: int64_t) -> Ptr {
     let run = &mut *run;
     run.realloc(ptr, newsize)
 }
 
 #[no_mangle]
 /// Free memory using `libc` `free`, tracking memory usage information.
-pub unsafe extern "C" fn weld_runst_free(run: WeldRuntimeContextRef, ptr: DataMut) {
+pub unsafe extern "C" fn weld_runst_free(run: WeldRuntimeContextRef, ptr: Ptr) {
     let run = &mut *run;
     run.free(ptr)
 }
 
 #[no_mangle]
 /// Set the result pointer.
-pub unsafe extern "C" fn weld_runst_set_result(run: WeldRuntimeContextRef, ptr: DataMut) {
+pub unsafe extern "C" fn weld_runst_set_result(run: WeldRuntimeContextRef, ptr: Ptr) {
     let run = &mut *run;
     run.set_result(ptr)
 }
@@ -288,7 +315,7 @@ pub unsafe extern "C" fn weld_runst_get_errno(run: WeldRuntimeContextRef) -> Wel
 
 #[no_mangle]
 /// Get the result pointer.
-pub unsafe extern "C" fn weld_runst_get_result(run: WeldRuntimeContextRef) -> DataMut {
+pub unsafe extern "C" fn weld_runst_get_result(run: WeldRuntimeContextRef) -> Ptr {
     let run = &mut *run;
     run.result()
 }

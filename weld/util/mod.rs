@@ -7,6 +7,7 @@
 extern crate libc;
 extern crate fnv;
 extern crate time;
+extern crate uuid;
 
 use ast::*;
 use ast::ExprKind::*;
@@ -18,6 +19,7 @@ use std::cmp::max;
 use std::io::Write;
 use std::path::PathBuf;
 use std::fs::OpenOptions;
+use uuid::Uuid;
 
 pub mod stats;
 pub mod colors;
@@ -83,21 +85,11 @@ pub fn join<T: iter::Iterator<Item = String>>(start: &str, sep: &str, end: &str,
 
 /// Return a timestamp-based filename for `dumpCode`.
 ///
-/// If a Weld file with the produced filename already exists, the filename is uniquified. The
-/// uniquified filename will have a -<num> appended to the filename until a unique number is found.
-pub fn timestamp_unique(dir: &PathBuf) -> String {
-    let mut ext = 0;
-    loop {
-        let suffix = if ext == 0 { String::from("") } else { format!("-{}", ext) };
-        let timestamp = format!("{}{}", time::now().to_timespec().sec, suffix);
-        let ref mut path = dir.clone();
-        path.push(format!("code-{}", &timestamp));
-        path.set_extension("weld");
-        if !path.exists() {
-            return timestamp;
-        }
-        ext += 1;
-    }
+/// The timestamp has a 2-character identifier attached to prevent naming conflicts.
+pub fn timestamp_unique() -> String {
+    let uuid = Uuid::new_v4().to_simple().to_string();
+    let ref suffix = uuid[0..2];
+    format!("{}-{}", time::now().to_timespec().sec, suffix)
 }
 
 
@@ -105,8 +97,7 @@ pub fn timestamp_unique(dir: &PathBuf) -> String {
 pub fn write_code<T: AsRef<str>, U: AsRef<str>, V: AsRef<str>>(code: T, ext: U, prefix: V, dir_path: &PathBuf) {
     let mut options = OpenOptions::new();
     options.write(true)
-        .create_new(true)
-        .create(true);
+        .create_new(true);
 
     let ref mut path = dir_path.clone();
     path.push(format!("code-{}", prefix.as_ref()));
