@@ -851,7 +851,10 @@ impl LlvmGenerator {
         output = LLVMBuildInsertValue(builder, output, run_int, WeldOutputArgs::run_index(), c_str!(""));
         output = LLVMBuildInsertValue(builder, output, errno, WeldOutputArgs::errno_index(), c_str!(""));
 
-        let return_pointer = LLVMBuildMalloc(builder, output_type, c_str!(""));
+        let return_size = self.size_of(output_type);
+        let return_pointer = self.intrinsics.call_weld_run_malloc(builder, run, return_size, None);
+        let return_pointer = LLVMBuildBitCast(builder, return_pointer, LLVMPointerType(output_type, 0), c_str!(""));
+
         LLVMBuildStore(builder, output, return_pointer);
         let return_value  = LLVMBuildPtrToInt(builder, return_pointer, self.i64_type(), c_str!(""));
         LLVMBuildRet(builder, return_value);
@@ -860,7 +863,7 @@ impl LlvmGenerator {
         Ok(())
     }
 
-    /// Build the list of argument and return type for an SIR function.
+    /// Build the list of argument types for an SIR function.
     unsafe fn argument_types(&mut self, func: &SirFunction) -> WeldResult<Vec<LLVMTypeRef>> {
         let mut types = vec![];
         for (_, ty) in func.params.iter() {

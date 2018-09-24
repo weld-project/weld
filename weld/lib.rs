@@ -123,6 +123,11 @@ extern crate lazy_static;
 #[macro_use]
 extern crate log;
 
+extern crate jemallocator;
+
+#[global_allocator]
+static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
+
 extern crate regex;
 extern crate libc;
 extern crate env_logger;
@@ -132,7 +137,6 @@ extern crate time;
 extern crate code_builder;
 extern crate uuid;
 
-use libc::{free, c_void};
 use self::time::PreciseTime;
 
 use std::error::Error;
@@ -630,7 +634,7 @@ impl WeldModule {
         let code = code.as_ref();
 
         // For dumping code, if enabled.
-        let ref timestamp = util::timestamp_unique(&conf.dump_code.dir);
+        let ref timestamp = util::timestamp_unique();
         let uuid = Uuid::new_v4();
 
         // Configuration.
@@ -648,7 +652,7 @@ impl WeldModule {
 
         let unoptimized_code = expr.pretty_print();
         info!("Compiling module with UUID={}, code\n{}",
-              uuid.hyphenated(),
+              uuid.to_hyphenated(),
               unoptimized_code);
 
         // Dump the generated Weld program before applying any analyses.
@@ -729,7 +733,7 @@ impl WeldModule {
         let us = duration.num_microseconds().unwrap_or(std::i64::MAX);
         let e2e_ms: f64 = us as f64 / 1000.0;
         info!("Compiled module with UUID={} in {} ms",
-              uuid.hyphenated(),
+              uuid.to_hyphenated(),
               e2e_ms);
 
         Ok(WeldModule {
@@ -819,11 +823,11 @@ impl WeldModule {
         let nworkers = context.context.borrow().threads();
         let mem_limit = context.context.borrow().memory_limit();
 
-        // Borrow the inner context mutably since we pass a mutable pointer to it to the compiled
+         // Borrow the inner context mutably since we pass a mutable pointer to it to the compiled
         // module. This enforces the single-mutable-borrow rule manually for contexts.
-        let (raw, result) = {
-            let _borrowed_ref = context.context.borrow_mut();
+        let mut context_borrowed = context.context.borrow_mut();
 
+        let (raw, result) = {
             // This is the required input format of data passed into a compiled module.
             let input = Box::new(codegen::WeldInputArgs {
                 input: arg.data as i64,
@@ -844,7 +848,7 @@ impl WeldModule {
         };
 
         let value = WeldValue {
-            data: result.output as *const c_void,
+            data: result.output as Data,
             run: None,
             context: Some(context.clone()),
         };
@@ -854,7 +858,7 @@ impl WeldModule {
         let us = duration.num_microseconds().unwrap_or(std::i64::MAX);
         let ms: f64 = us as f64 / 1000.0;
         debug!("Ran module UUID={} in {} ms",
-              self.module_id.hyphenated(), ms);
+              self.module_id.to_hyphenated(), ms);
 
         // Check whether the run was successful -- if not, free the data in the module, andn return
         // an error indicating what went wrong.
@@ -863,8 +867,8 @@ impl WeldModule {
             let message = CString::new(format!("Weld program failed with error {:?}", result.errno)).unwrap();
             Err(WeldError::new(message, result.errno))
         } else {
-            // Weld allocates the output using libc malloc, but we cloned it, so free the output struct.
-            free(raw as DataMut);
+            // Free the WeldOutputArgs struct.
+            context_borrowed.free(raw as *mut u8);
             Ok(value)
         }
     }
