@@ -4,11 +4,9 @@
 
 extern crate libc;
 extern crate fnv;
-
 extern crate jemallocator;
 
 use jemallocator::Jemalloc;
-
 use libc::{c_char, int32_t, int64_t, uint64_t};
 
 use fnv::FnvHashMap;
@@ -183,7 +181,6 @@ impl WeldRuntimeContext {
     ///
     /// Panics if the passed value was not allocated by the Weld runtime.
     pub unsafe fn free(&mut self, pointer: Ptr) {
-
         if pointer == ptr::null_mut() {
             trace!("Freed null pointer (no-op) in runst_free()");
             return;
