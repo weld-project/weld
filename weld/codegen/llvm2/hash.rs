@@ -216,15 +216,6 @@ impl Hash for LlvmGenerator {
                           funcs: &HashFuncs,
                           hash: LLVMValueRef,
                           value: LLVMValueRef) -> LLVMValueRef {
-
-        if self.conf.trace_run {
-            use std::ffi::CString;
-            let string = CString::new(format!("Hashing bitwidth {}", kind)).unwrap();
-            let rht = self.run_handle_type();
-            let rht = LLVMConstPointerNull(rht);
-            let _ = self.gen_print(builder, rht, string).unwrap();
-        }
-
         match kind {
             I64 | U64 | F64 => {
                 // Extend the 32-bit hash so we can pass it to the hashing function.

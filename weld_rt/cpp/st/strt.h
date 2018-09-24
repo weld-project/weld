@@ -1,16 +1,15 @@
-//! Functions and structs accessed from the Weld runtime.
+#ifndef _STRT_H_
+#define _STRT_H_
 
-use std::fmt;
+#include <stdint.h>
 
-pub mod link;
-pub mod strt;
+struct WeldOpaqueRunHandle {};
 
-pub use self::strt::WeldRuntimeContext;
+// Reference to the run handle.
+typedef struct WeldOpaqueRunHandle *WeldRunHandleRef;
 
-/// An errno set by the runtime but also used by the Weld API.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd)]
-#[repr(u64)]
-pub enum WeldRuntimeErrno {
+// Weld errors. This must match the definition in weld::runtime.
+typedef enum {
     /// Indicates success.
     ///
     /// This will always be 0.  
@@ -47,12 +46,13 @@ pub enum WeldRuntimeErrno {
     ///
     /// All errors will have a value less than this value and greater than 0.
     ErrnoMax,
+} WeldRuntimeErrno;
+
+extern "C" {
+  void *weld_runst_malloc(WeldRunHandleRef run, int64_t bytes);
+  void *weld_runst_realloc(WeldRunHandleRef run, void *pointer, int64_t new_size);
+  void *weld_runst_free(WeldRunHandleRef run, void *pointer);
+  void *weld_runst_set_errno(WeldRunHandleRef run, WeldRuntimeErrno errno);
 }
 
-impl fmt::Display for WeldRuntimeErrno {
-    /// Just return the errno name.
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
-
+#endif

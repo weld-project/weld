@@ -492,6 +492,15 @@ impl WeldValue {
     }
 }
 
+// Custom Drop implementation that discards values allocated by the runtime.
+impl Drop for WeldValue {
+    fn drop(&mut self) {
+        if let Some(ref mut context) = self.context {
+            unsafe { context.context.borrow_mut().free(self.data as DataMut) } ;
+        }
+    }
+}
+
 /// A struct used to configure compilation and the Weld runtime.
 #[derive(Debug,Clone)]
 pub struct WeldConf {
@@ -863,7 +872,8 @@ impl WeldModule {
             let message = CString::new(format!("Weld program failed with error {:?}", result.errno)).unwrap();
             Err(WeldError::new(message, result.errno))
         } else {
-            // Weld allocates the output using libc malloc, but we cloned it, so free the output struct.
+            // Weld allocates the output using libc malloc, but we cloned it, so free the output struct
+            // here.
             free(raw as DataMut);
             Ok(value)
         }
