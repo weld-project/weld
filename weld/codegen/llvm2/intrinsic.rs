@@ -184,12 +184,11 @@ impl Intrinsics {
     pub unsafe fn call_weld_run_free(&mut self,
                                       builder: LLVMBuilderRef,
                                       run: LLVMValueRef,
-                                      pointer: LLVMValueRef,
-                                      name: Option<*const c_char>) -> LLVMValueRef {
+                                      pointer: LLVMValueRef) -> LLVMValueRef {
         let mut args = [run, pointer];
         LLVMBuildCall(builder,
                       self.get("weld_runst_free").unwrap(),
-                      args.as_mut_ptr(), args.len() as u32, name.unwrap_or(c_str!("")))
+                      args.as_mut_ptr(), args.len() as u32, c_str!(""))
     }
 
     /// Convinience wrapper for calling the `weld_run_get_errno` intrinsic.
@@ -226,6 +225,17 @@ impl Intrinsics {
                       args.as_mut_ptr(), args.len() as u32, c_str!(""))
     }
 
+    /// Convinience wrapper for calling the `weld_run_print` intrinsic.
+    pub unsafe fn call_weld_run_print_int(&mut self,
+                                      builder: LLVMBuilderRef,
+                                      run: LLVMValueRef,
+                                      value: LLVMValueRef) -> LLVMValueRef {
+        let mut args = [run, value];
+        LLVMBuildCall(builder,
+                      self.get("weld_runst_print_int").unwrap(),
+                      args.as_mut_ptr(), args.len() as u32, c_str!(""))
+    }
+
     /// Convinience wrapper for calling `memcpy`.
     ///
     /// This assumes the `memcpy` is non-volatile and uses an default alignment value of 8.
@@ -237,6 +247,19 @@ impl Intrinsics {
         let mut args = [dst, src, size, self.i32(8), self.i1(false)];
         LLVMBuildCall(builder,
                       self.get("llvm.memcpy.p0i8.p0i8.i64").unwrap(),
+                      args.as_mut_ptr(), args.len() as u32, c_str!(""))
+    }
+
+    /// Convinience wrapper for calling `memset` with 0 bytes value.
+    ///
+    /// This assumes the `memset` is non-volatile.
+    pub unsafe fn call_memset_zero(&mut self,
+                                      builder: LLVMBuilderRef,
+                                      dst: LLVMValueRef,
+                                      size: LLVMValueRef) -> LLVMValueRef {
+        let mut args = [dst, self.i8(0), size, self.i32(8), self.i1(false)];
+        LLVMBuildCall(builder,
+                      self.get("llvm.memset.p0i8.i64").unwrap(),
                       args.as_mut_ptr(), args.len() as u32, c_str!(""))
     }
 }
@@ -322,11 +345,24 @@ impl Intrinsics {
         LLVMExtAddAttrsOnParameter(self.context, function, &[NoCapture, NoAlias, NonNull, ReadOnly], 1);
         self.intrinsics.insert(name.into_string().unwrap(), function);
 
+        let mut params = vec![self.run_handle_type(), self.i64_type()];
+        let name = CString::new("weld_runst_print_int").unwrap();
+        let fn_type = LLVMFunctionType(self.void_type(), params.as_mut_ptr(), params.len() as u32, 0);
+        let function = LLVMAddFunction(self.module, name.as_ptr(), fn_type);
+        self.intrinsics.insert(name.into_string().unwrap(), function);
+
         let mut params = vec![int8p, int8p, self.i64_type(), self.i32_type(), self.i1_type()];
         let name = CString::new("llvm.memcpy.p0i8.p0i8.i64").unwrap();
         let fn_type = LLVMFunctionType(self.void_type(), params.as_mut_ptr(), params.len() as u32, 0);
         let function = LLVMAddFunction(self.module, name.as_ptr(), fn_type);
         // LLVM sets attributes on `memcpy` automatically.
+        self.intrinsics.insert(name.into_string().unwrap(), function);
+
+        let mut params = vec![int8p, self.i8_type(), self.i64_type(), self.i32_type(), self.i1_type()];
+        let name = CString::new("llvm.memset.p0i8.i64").unwrap();
+        let fn_type = LLVMFunctionType(self.void_type(), params.as_mut_ptr(), params.len() as u32, 0);
+        let function = LLVMAddFunction(self.module, name.as_ptr(), fn_type);
+        // LLVM sets attributes on `memset` automatically.
         self.intrinsics.insert(name.into_string().unwrap(), function);
     }
 }

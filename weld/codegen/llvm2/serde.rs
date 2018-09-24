@@ -21,13 +21,13 @@ use sir::*;
 
 use self::llvm_sys::prelude::*;
 use self::llvm_sys::core::*;
-use self::llvm_sys::LLVMLinkage;
 
 use super::{LlvmGenerator, HasPointer, CodeGenExt, FunctionContext};
 
 lazy_static! {
     /// The serialized type, which is a vec[i8].
     static ref SER_TY: Type = Type::Vector(Box::new(Type::Scalar(ScalarKind::I8)));
+    /// The type returned by the serialization function.
     static ref SER_RET_TY: Type = Type::Struct(vec![SER_TY.clone(), Scalar(ScalarKind::I64)]);
 }
 
@@ -132,6 +132,11 @@ trait SerHelper {
     /// `position`. The passed value should be a pointer.
     ///
     /// The function returns the updated buffer and the position to write into it next.
+    ///
+    /// ## Notes
+    ///
+    /// This function uses `gen_serialize_fn` to generate functions to serialize each (sub)type. It
+    /// then calls the top-level function to serialize the passed value.
     unsafe fn gen_serialize_helper(&mut self,
                            builder: LLVMBuilderRef,
                            position: LLVMValueRef,
@@ -142,8 +147,8 @@ trait SerHelper {
 
     /// Builds a serialization routine wrapped in a function.
     ///
-    /// This is used for data structures (currently, just the dictionary) that call into a
-    /// serialize function. The signature of the generated function is (SER_TY, T*) -> void.
+    /// The generated function has the following signature:
+    /// (SER_TY, i64, *value, RunHandle) -> { SER_TY, i64 }
     unsafe fn gen_serialize_fn(&mut self, ty: &Type) -> WeldResult<LLVMValueRef>;
 }
 
@@ -192,19 +197,13 @@ impl SerHelper for LlvmGenerator {
         Ok((buffer, required_size))
     }
 
-    unsafe fn gen_serialize_helper(&mut self,
-                           builder: LLVMBuilderRef,
-                           position: LLVMValueRef,
-                           value: LLVMValueRef,
-                           ty: &Type,
-                           buffer: LLVMValueRef,
-                           run: LLVMValueRef) -> WeldResult<(LLVMValueRef, LLVMValueRef)> {
-
+    unsafe fn gen_serialize_fn(&mut self, ty: &Type) -> WeldResult<LLVMValueRef> {
         if !self.serialize_fns.contains_key(ty) {
             let llvm_ty = self.llvm_type(ty)?;
             let buffer_ty = self.llvm_type(&SER_TY)?;
+
             // Buffer, position, value*, run
-            let mut arg_tys = [buffer_ty, self.i64_type(), LLVMTypeOf(value), self.run_handle_type()];
+            let mut arg_tys = [buffer_ty, self.i64_type(), LLVMPointerType(llvm_ty, 0), self.run_handle_type()];
             let ret_ty = self.llvm_type(&SER_RET_TY)?;
 
             let c_prefix = LLVMPrintTypeToString(llvm_ty);
@@ -215,7 +214,7 @@ impl SerHelper for LlvmGenerator {
             // Free the allocated string.
             LLVMDisposeMessage(c_prefix);
 
-            let (function, builder, _) = self.define_function(ret_ty, &mut arg_tys, name);
+            let (function, builder, entry_block) = self.define_function(ret_ty, &mut arg_tys, name);
 
             // TODO Set alwaysinline
 
@@ -250,11 +249,11 @@ impl SerHelper for LlvmGenerator {
                     for (i, ty) in tys.iter().enumerate() {
                         let value_pointer = LLVMBuildStructGEP(builder, value, i as u32, c_str!(""));
                         let (buffer_tmp, position_tmp) = self.gen_serialize_helper(builder,
-                                                           position,
-                                                           value_pointer,
-                                                           ty,
-                                                           buffer,
-                                                           run)?;
+                                                                                   position,
+                                                                                   value_pointer,
+                                                                                   ty,
+                                                                                   buffer,
+                                                                                   run)?;
                         buffer = buffer_tmp;
                         position = position_tmp;
                     }
@@ -319,11 +318,11 @@ impl SerHelper for LlvmGenerator {
                     let value_pointer = self.gen_at(builder, ty, value, i)?;
                     // Serialize the element here.
                     let (updated_buffer, updated_position) = self.gen_serialize_helper(builder,
-                                                                   phi_position,
-                                                                   value_pointer,
-                                                                   elem,
-                                                                   phi_buffer,
-                                                                   run)?;
+                                                                                       phi_position,
+                                                                                       value_pointer,
+                                                                                       elem,
+                                                                                       phi_buffer,
+                                                                                       run)?;
 
                     let updated_i = LLVMBuildNSWAdd(builder, i, self.i64(1), c_str!(""));
                     let compare = LLVMBuildICmp(builder, LLVMIntSGT, size, updated_i, c_str!(""));
@@ -352,54 +351,20 @@ impl SerHelper for LlvmGenerator {
                     // loop fired.
                     (buffer, phi_position)
                 }
-                Dict(ref key, ref val) if !key.has_pointer() && !val.has_pointer() => {
-                    // Dictionaries have a special codepath for keys and values without pointers. The
-                    // keys and values are memcpy'd individually into the buffer.
-                    let dictionary = self.load(builder, value)?;
-                    let null_pointer = self.null_ptr(self.i8_type());
-                    let no_pointer_flag = self.i1(false);
-                    let result = {
-                        let mut methods = self.dictionaries.get_mut(ty).unwrap();
-                        methods.gen_serialize(builder,
-                                              &self.dict_intrinsics,
-                                              run,
-                                              dictionary,
-                                              buffer,
-                                              no_pointer_flag,
-                                              null_pointer,
-                                              null_pointer)?
-                    };
-
-                    // XXX Assuming here that the size exactly matches the position!
-                    let position = self.gen_size(builder, &SER_TY, result)?;
-                    (result, position)
-                }
                 Dict(ref key, ref val) => {
-                    // For dictionaries with pointers, the dictionary implementation calls into a
-                    // function to serialize each key and value. We thus generate an externalized key
-                    // and value serialization function and pass it to the dictionary's serializer.
                     let dictionary = self.load(builder, value)?;
-                    let pointer_flag = self.i1(true);
-                    // Deserialization functions have the signature (SER_TY, T*) -> void
-                    // Generate the serialize function for the key.
                     let key_ser_fn = self.gen_serialize_fn(key)?;
                     let val_ser_fn = self.gen_serialize_fn(val)?;
-                    let key_ser_fn = LLVMBuildBitCast(builder, key_ser_fn, self.void_pointer_type(), c_str!(""));
-                    let val_ser_fn = LLVMBuildBitCast(builder, val_ser_fn, self.void_pointer_type(), c_str!(""));
-
-                    let result = {
-                        let mut methods = self.dictionaries.get_mut(ty).unwrap();
-                        methods.gen_serialize(builder,
-                                              &self.dict_intrinsics,
-                                              run,
-                                              dictionary,
-                                              buffer,
-                                              pointer_flag,
-                                              key_ser_fn,
-                                              val_ser_fn)?
-                    };
-                    let position = self.gen_size(builder, &SER_TY, result)?;
-                    (result, position)
+                    let mut methods = self.dictionaries.get_mut(ty).unwrap();
+                    let mut buffer_vector = self.vectors.get_mut(&Scalar(ScalarKind::I8)).unwrap();
+                    methods.gen_serialize(builder,
+                                          function,
+                                          entry_block,
+                                          &mut self.intrinsics,
+                                          buffer_vector,
+                                          (buffer, position, dictionary, run),
+                                          key_ser_fn,
+                                          val_ser_fn)?
                 }
                 Unknown | Simd(_) | Function(_,_) | Builder(_, _) => unreachable!(),
             };
@@ -411,59 +376,25 @@ impl SerHelper for LlvmGenerator {
             LLVMDisposeBuilder(builder);
             self.serialize_fns.insert(ty.clone(), function);
         }
+        Ok(self.serialize_fns.get(ty).cloned().unwrap())
+    }
+
+    unsafe fn gen_serialize_helper(&mut self,
+                           builder: LLVMBuilderRef,
+                           position: LLVMValueRef,
+                           value: LLVMValueRef,
+                           ty: &Type,
+                           buffer: LLVMValueRef,
+                           run: LLVMValueRef) -> WeldResult<(LLVMValueRef, LLVMValueRef)> {
+
+        let function = self.gen_serialize_fn(ty)?;
 
         // Call the function.
-        let function = self.serialize_fns.get(ty).cloned().unwrap();
         let mut args = [buffer, position, value, run];
         let ret_val = LLVMBuildCall(builder, function, args.as_mut_ptr(), args.len() as u32, c_str!(""));
         let buffer = LLVMBuildExtractValue(builder, ret_val, 0, c_str!(""));
         let position = LLVMBuildExtractValue(builder, ret_val, 1, c_str!(""));
         Ok((buffer, position))
-    }
-
-    unsafe fn gen_serialize_fn(&mut self, ty: &Type) -> WeldResult<LLVMValueRef> {
-        let llvm_ty = self.llvm_type(ty)?;
-        let mut arg_tys = [
-            LLVMPointerType(self.llvm_type(&SER_TY)?, 0),
-            LLVMPointerType(llvm_ty, 0),
-            self.run_handle_type()
-        ];
-        let ret_ty = self.void_type();
-
-        let c_prefix = LLVMPrintTypeToString(llvm_ty);
-        let prefix = CStr::from_ptr(c_prefix);
-        let prefix = prefix.to_str().unwrap();
-        let name = format!("{}.serialize_opaque", prefix);
-
-        // Free the allocated string.
-        LLVMDisposeMessage(c_prefix);
-
-        // The serialization function has external visibility so data structures linked dynamically
-        // with the runtime can access it.
-        let (function, builder, _) = self.define_function_with_visibility(ret_ty,
-                                                                          &mut arg_tys,
-                                                                          LLVMLinkage::LLVMExternalLinkage,
-                                                                          name);
-        let buffer_pointer = LLVMGetParam(function, 0);
-        let value_pointer = LLVMGetParam(function, 1);
-        let run = LLVMGetParam(function, 2);
-
-        let buffer = self.load(builder, buffer_pointer)?;
-
-        // XXX This currently assumes that the buffer size == the offset, which is true right now
-        // but may not necessary hold later!!
-        let position = self.gen_size(builder, &SER_TY, buffer)?;
-        let (updated_buffer, _) = self.gen_serialize_helper(builder,
-                                                       position,
-                                                       value_pointer,
-                                                       ty,
-                                                       buffer,
-                                                       run)?;
-        LLVMBuildStore(builder, updated_buffer, buffer_pointer);
-        LLVMBuildRetVoid(builder);
-
-        LLVMDisposeBuilder(builder);
-        Ok(function)
     }
 }
 
@@ -676,7 +607,7 @@ impl DeHelper for LlvmGenerator {
                     let capacity = self.next_pow2(builder, size);
                     let dictionary = {
                         let mut methods = self.dictionaries.get_mut(ty).unwrap();
-                        methods.gen_new(builder, &self.dict_intrinsics, run, capacity)?
+                        methods.gen_new(builder, &mut self.intrinsics, capacity, run)?
                     };
 
                     // Build a loop that iterates over the key-value pairs.
@@ -713,14 +644,19 @@ impl DeHelper for LlvmGenerator {
                     let mut updated_position = self.gen_deserialize_helper(builder, phi_position, key_pointer, key_ty, buffer, run)?;
 
                     let hash = self.gen_hash(key_ty, builder, key_pointer, None)?;
+
                     let value_pointer = {
+                        let value_llvm_ty = self.llvm_type(value_ty)?;
+                        let zero = self.zero(value_llvm_ty);
                         let mut methods = self.dictionaries.get_mut(ty).unwrap();
-                        methods.gen_get_slot(builder,
-                                             &self.dict_intrinsics,
-                                             run,
-                                             dictionary,
-                                             key_pointer,
-                                             hash)?
+                        let slot = methods.gen_upsert(builder,
+                                           &mut self.intrinsics,
+                                           dictionary,
+                                           key_pointer,
+                                           hash,
+                                           zero,
+                                           run)?;
+                        methods.slot_ty.value(builder, slot)
                     };
 
                     // Deserialize the value directly into the dictionary slot.
