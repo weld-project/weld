@@ -1370,3 +1370,14 @@ fn gen_expr(expr: &Expr,
         _ => compile_err!("Unsupported expression: {}", expr.pretty_print())
     }
 }
+
+/// Return true if an expression contains parallel for operators
+fn contains_parallel_expressions(expr: &Expr) -> bool {
+    let mut found = false;
+    expr.traverse(&mut |ref e| {
+        if let ExprKind::For { .. } = e.kind {
+            found = true;
+        }
+    });
+    found
+}

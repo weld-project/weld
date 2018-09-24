@@ -71,6 +71,8 @@ use self::llvm_sys::LLVMLinkage;
 
 use super::*;
 
+static NULL_NAME:[c_char; 1] = [0];
+
 lazy_static! {
     /// Name of the run handle struct in generated code.
     static ref RUN_HANDLE_NAME: CString = CString::new("RunHandle").unwrap();
@@ -103,6 +105,7 @@ mod target;
 mod vector;
 
 use self::builder::appender;
+use self::builder::groupmerger;
 use self::builder::merger;
 
 /// Loads a dynamic library from a file using LLVMLoadLibraryPermanently.
@@ -135,9 +138,9 @@ pub fn compile(program: &SirProgram,
                stats: &mut CompilationStats,
                dump_prefix: &str) -> WeldResult<Box<dyn Runnable + Send + Sync>> {
 
-    use runtime;
-
     info!("Compiling using single thread runtime");
+
+    use runtime::strt;
 
     let codegen = unsafe { LlvmGenerator::generate(conf.clone(), &program)? };
     if conf.dump_code.enabled {
@@ -146,7 +149,7 @@ pub fn compile(program: &SirProgram,
     trace!("{}", codegen);
 
     unsafe {
-        runtime::weld_init();
+        strt::weld_init();
     }
 
     let module = unsafe { jit::compile(codegen.context, codegen.module, conf, stats)? };
@@ -283,10 +286,22 @@ pub struct LlvmGenerator {
     ///
     /// The key maps the appender type to the appender's type reference and methods on it.
     appenders: FnvHashMap<BuilderKind, appender::Appender>,
+    /// A map tracking generated groupmergers.
+    ///
+    /// The key maps the groupmerger type to the appender's type reference and methods on it.
+    groupmergers: FnvHashMap<BuilderKind, groupmerger::GroupMerger>,
     /// A map tracking generated dictionaries.
     ///
     /// The key maps the dictionary's `Dict` type to the type reference and methods on it.
     dictionaries: FnvHashMap<Type, dict::Dict>,
+    /// Dictionary intrinsics.
+    ///
+    /// These are functions that call out to an external dictionary implementation.
+    dict_intrinsics: dict::Intrinsics,
+    /// GroupMerger intrinsics.
+    ///
+    /// These are functions that call out to an external GroupMerger implementation.
+    groupmerger_intrinsics: groupmerger::Intrinsics,
     /// Common intrinsics defined in the module.
     ///
     /// An intrinsic is any function defined outside of module (i.e., is not code generated).
@@ -341,35 +356,22 @@ pub trait CodeGenExt {
         }
     }
 
-    /// Get a constant zero-value of the given type.
-    unsafe fn zero(&self, ty: LLVMTypeRef) -> LLVMValueRef {
-        use self::llvm_sys::LLVMTypeKind::*;
-        use std::ptr;
-        match LLVMGetTypeKind(ty) {
-            LLVMFloatTypeKind => self.f32(0.0),
-            LLVMDoubleTypeKind => self.f64(0.0),
-            LLVMIntegerTypeKind => LLVMConstInt(ty, 0, 0),
-            LLVMStructTypeKind => {
-                let num_fields = LLVMCountStructElementTypes(ty) as usize;
-                let mut fields = vec![ ptr::null_mut() ; num_fields ];
-                LLVMGetStructElementTypes(ty, fields.as_mut_ptr());
 
-                let mut value = LLVMGetUndef(ty);
-                for (i, field) in fields.into_iter().enumerate() {
-                    value = LLVMConstInsertValue(value, self.zero(field), [i as u32].as_mut_ptr(), 1);
-                }
-                value
-            }
-            LLVMPointerTypeKind => self.null_ptr(ty),
-            LLVMVectorTypeKind => {
-                let size = LLVMGetVectorSize(ty);
-                let zero = self.zero(LLVMGetElementType(ty));
-                let mut constants = vec![ zero; size as usize ];
-                LLVMConstVector(constants.as_mut_ptr(), size)
-            }
-            // Other types are not used in the backend.
-            other => panic!("Unsupported type kind {:?} in CodeGenExt::zero()", other)
-        }
+    /// Mixes a 32-bit hash values using the MurMur3 finalization function.
+    ///
+    /// https://github.com/PeterScott/murmur3/blob/master/murmur3.c
+    unsafe fn fmix32(&mut self, builder: LLVMBuilderRef, value: LLVMValueRef) -> LLVMValueRef {
+        let mut result;
+        let mut tmp;
+        result = LLVMBuildLShr(builder, value, self.i32(16), c_str!(""));
+        result = LLVMBuildXor(builder, result, value, c_str!(""));
+        result = LLVMBuildMul(builder, result, self.i32(-2048144789), c_str!(""));
+        tmp = LLVMBuildLShr(builder, result, self.i32(13), c_str!(""));
+        result = LLVMBuildXor(builder, result, tmp, c_str!(""));
+        result = LLVMBuildMul(builder, result, self.i32(-1028477387), c_str!(""));
+        tmp = LLVMBuildLShr(builder, result, self.i32(16), c_str!(""));
+        result = LLVMBuildXor(builder, result, tmp, c_str!(""));
+        result
     }
 
     /// Returns the type of a hash code.
@@ -674,6 +676,7 @@ impl CodeGenExt for LlvmGenerator {
 }
 
 impl LlvmGenerator {
+
     /// Initialize a new LlvmGenerator.
     unsafe fn new(conf: ParsedConf) -> WeldResult<LlvmGenerator> {
         let context = LLVMContextCreate();
@@ -685,6 +688,8 @@ impl LlvmGenerator {
 
         // Adds the default intrinsic definitions.
         let intrinsics = intrinsic::Intrinsics::defaults(context, module);
+        let dict_intrinsics = dict::Intrinsics::new(context, module);
+        let groupmerger_intrinsics = groupmerger::Intrinsics::new(context, module);
 
         let target = target::Target::from_llvm_strings(
             llvm_exts::PROCESS_TRIPLE.to_str().unwrap(),
@@ -703,7 +708,10 @@ impl LlvmGenerator {
             vectors: FnvHashMap::default(),
             mergers: FnvHashMap::default(),
             appenders: FnvHashMap::default(),
+            groupmergers: FnvHashMap::default(),
             dictionaries: FnvHashMap::default(),
+            dict_intrinsics: dict_intrinsics,
+            groupmerger_intrinsics: groupmerger_intrinsics,
             strings: FnvHashMap::default(),
             eq_fns: FnvHashMap::default(),
             opaque_eq_fns: FnvHashMap::default(),
@@ -1071,6 +1079,8 @@ impl LlvmGenerator {
                 let result = {
                     let mut methods = self.dictionaries.get_mut(child_type).unwrap();
                     methods.gen_key_exists(context.builder,
+                                           &self.dict_intrinsics,
+                                           context.get_run(),
                                            child_value,
                                            context.get_value(key)?,
                                            hash)?
@@ -1090,7 +1100,7 @@ impl LlvmGenerator {
                 } else if let Dict(_, _) = *child_type {
                     let pointer = {
                         let mut methods = self.dictionaries.get_mut(child_type).unwrap();
-                        methods.gen_size(context.builder, child_value)?
+                        methods.gen_size(context.builder, &self.dict_intrinsics, context.get_run(), child_value)?
                     };
                     let result = self.load(context.builder, pointer)?;
                     LLVMBuildStore(context.builder, result, output_pointer);
@@ -1115,14 +1125,12 @@ impl LlvmGenerator {
                     let hash = self.gen_hash(key, context.builder, context.get_value(index)?, None)?;
                     let result = {
                         let mut methods = self.dictionaries.get_mut(child_type).unwrap();
-                        let slot = methods.gen_lookup(context.builder,
-                                                      &mut self.intrinsics,
-                                                      child_value,
-                                                      context.get_value(index)?,
-                                                      hash,
-                                                      context.get_run())?;
-                        let value_pointer = methods.slot_ty.value(context.builder, slot);
-                        LLVMBuildLoad(context.builder, value_pointer, c_str!(""))
+                        methods.gen_get(context.builder,
+                                        &self.dict_intrinsics,
+                                        context.get_run(),
+                                        child_value,
+                                        context.get_value(index)?,
+                                        hash)?
                     };
                     LLVMBuildStore(context.builder, result, output_pointer);
                     Ok(())
@@ -1216,23 +1224,20 @@ impl LlvmGenerator {
                 let child_value = self.load(context.builder, context.get_value(child)?)?;
                 let child_type = context.sir_function.symbol_type(child)?;
                 // This is the type of the resulting key/value vector (vec[{K,V}])
-                let output_type = context.sir_function.symbol_type(
-                    statement.output.as_ref().unwrap())?;
-                let elem = if let Vector(ref elem) = *output_type {
-                    elem
+                let output_type = context.sir_function.symbol_type(statement.output.as_ref().unwrap())?;
+                let kv_ty = if let Vector(ref elem) = *output_type {
+                    self.llvm_type(elem)?
                 } else {
                     unreachable!()
                 };
-
-                let _ = self.llvm_type(output_type)?;
+                let kv_vec_ty = self.llvm_type(output_type)?;
                 let result = {
-                    let mut vector_methods = self.vectors.get_mut(elem).unwrap();
                     let mut methods = self.dictionaries.get_mut(child_type).unwrap();
                     methods.gen_to_vec(context.builder,
-                                       &mut self.intrinsics,
-                                       vector_methods,
-                                       child_value,
-                                       context.get_run())?
+                                       &self.dict_intrinsics,
+                                       kv_vec_ty,
+                                       kv_ty,
+                                       context.get_run(), child_value)?
                 };
                 LLVMBuildStore(context.builder, result, output_pointer);
                 Ok(())
@@ -1333,11 +1338,11 @@ impl LlvmGenerator {
                 if !self.dictionaries.contains_key(ty) {
                     let key_ty = self.llvm_type(key)?;
                     let value_ty = self.llvm_type(value)?;
-                    let key_comparator = self.gen_eq_fn(key)?;
+                    let key_comparator = self.gen_opaque_eq_fn(key)?;
                     let dict = dict::Dict::define("dict",
                                                     key_ty,
-                                                    key_comparator,
                                                     value_ty,
+                                                    key_comparator,
                                                     self.context,
                                                     self.module);
                     self.dictionaries.insert(ty.clone(), dict);
