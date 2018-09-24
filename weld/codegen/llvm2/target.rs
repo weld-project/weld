@@ -20,6 +20,7 @@ pub enum X86Feature {
     AVX2,
     CMov,
     FMA,
+    SGX,
     SSE,
     SSE2,
     SSE3,
