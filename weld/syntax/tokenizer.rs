@@ -53,6 +53,7 @@ pub enum Token {
     TRangeIter,
     TLen,
     TLookup,
+    TOptLookup,
     TKeyExists,
     TSlice,
     TSort,
@@ -172,7 +173,7 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
 
         // Regular expressions for various types of tokens.
         static ref KEYWORD_RE: Regex = Regex::new(
-            "^(if|for|zip|len|lookup|keyexists|slice|sort|exp|sin|cos|tan|asin|acos|atan|sinh|cosh|tanh|\
+            "^(if|for|zip|len|lookup|optlookup|keyexists|slice|sort|exp|sin|cos|tan|asin|acos|atan|sinh|cosh|tanh|\
              log|erf|sqrt|simd|select|broadcast|serialize|deserialize|\
              iterate|cudf|simditer|fringeiter|rangeiter|nditer|iter|merge|result|let|true|false|macro|\
              i8|i16|i32|i64|u8|u16|u32|u64|f32|f64|bool|vec|dict|appender|merger|vecmerger|\
@@ -249,6 +250,7 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
                             "rangeiter" => TRangeIter,
                             "len" => TLen,
                             "lookup" => TLookup,
+                            "optlookup" => TOptLookup,
                             "keyexists" => TKeyExists,
                             "slice" => TSlice,
                             "sort" => TSort,
@@ -422,6 +424,7 @@ impl fmt::Display for Token {
                     TRangeIter => "rangeiter",
                     TLen => "len",
                     TLookup => "lookup",
+                    TOptLookup => "optlookup",
                     TKeyExists => "keyexists",
                     TSlice => "slice",
                     TSort => "sort",

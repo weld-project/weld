@@ -256,6 +256,10 @@ fn to_string_impl(expr: &Expr, config: &mut PrettyPrintConfig) -> String {
             format!("lookup({},{})", to_string_impl(data, config), to_string_impl(index, config))
         }
 
+        OptLookup { ref data, ref index, } => {
+            format!("optlookup({},{})", to_string_impl(data, config), to_string_impl(index, config))
+        }
+
         KeyExists { ref data, ref key } => {
             format!("keyexists({},{})", to_string_impl(data, config), to_string_impl(key, config))
         }

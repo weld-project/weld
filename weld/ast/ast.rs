@@ -561,6 +561,13 @@ pub enum ExprKind {
         data: Box<Expr>,
         index: Box<Expr>,
     },
+    /// A variant of lookup on dictionaries that does not result in an error.
+    ///
+    /// Returns a `{bool, V}`, where the `bool` indicates whether the value was in the dictionary.
+    OptLookup {
+        data: Box<Expr>,
+        index: Box<Expr>,
+    },
     /// Check whether a key exists in a dictionary.
     KeyExists {
         data: Box<Expr>,
@@ -671,6 +678,7 @@ impl ExprKind {
             GetField { .. } => "GetField",
             Length { .. } => "Length",
             Lookup { .. } => "Lookup",
+            OptLookup { .. } => "OptLookup",
             KeyExists { .. } => "KeyExists",
             Slice { .. } => "Slice",
             Sort { .. } => "Sort",
@@ -882,6 +890,10 @@ impl Expr {
                 ref data,
                 ref index,
             } => vec![data.as_ref(), index.as_ref()],
+            OptLookup {
+                ref data,
+                ref index,
+            } => vec![data.as_ref(), index.as_ref()],
             KeyExists { ref data, ref key } => vec![data.as_ref(), key.as_ref()],
             Slice {
                 ref data,
@@ -982,6 +994,10 @@ impl Expr {
             GetField { ref mut expr, .. } => vec![expr.as_mut()],
             Length { ref mut data } => vec![data.as_mut()],
             Lookup {
+                ref mut data,
+                ref mut index,
+            } => vec![data.as_mut(), index.as_mut()],
+            OptLookup {
                 ref mut data,
                 ref mut index,
             } => vec![data.as_mut(), index.as_mut()],

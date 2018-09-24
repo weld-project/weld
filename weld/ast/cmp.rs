@@ -71,6 +71,7 @@ impl CompareIgnoringSymbols for Expr {
                 }
                 (&Length { .. }, &Length { .. }) => Ok(true),
                 (&Lookup { .. }, &Lookup { .. }) => Ok(true),
+                (&OptLookup { .. }, &OptLookup { .. }) => Ok(true),
                 (&KeyExists { .. }, &KeyExists { .. }) => Ok(true),
                 (&Slice { .. }, &Slice { .. }) => Ok(true),
                 (&Sort { .. }, &Sort { .. }) => Ok(true),
