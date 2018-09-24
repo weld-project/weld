@@ -66,37 +66,6 @@ impl SymbolGenerator {
             id: *id,
         }
     }
-
-    /// Return the next ID that will be given to a symbol with the given string name.
-    pub fn next_id(&self, name: &str) -> i32 {
-        match self.id_map.get(name) {
-            Some(id) => id + 1,
-            None => 0,
-        }
-    }
-}
-
-/// Utility struct to generate string IDs with a given prefix.
-pub struct IdGenerator {
-    prefix: String,
-    next_id: i32,
-}
-
-impl IdGenerator {
-    /// Initialize an IdGenerator that will begin counting up from 0.
-    pub fn new(prefix: &str) -> IdGenerator {
-        IdGenerator {
-            prefix: String::from(prefix),
-            next_id: 0,
-        }
-    }
-
-    /// Generate a new ID.
-    pub fn next(&mut self) -> String {
-        let res = format!("{}{}", self.prefix, self.next_id);
-        self.next_id += 1;
-        res
-    }
 }
 
 pub fn join<T: iter::Iterator<Item = String>>(start: &str, sep: &str, end: &str, strings: T) -> String {
