@@ -16,6 +16,21 @@ use util::SymbolGenerator;
 #[cfg(test)]
 use tests::*;
 
+/// Checks whether an annotation specifies predication.
+pub trait ShouldPredicate {
+    fn should_predicate(&self) -> bool;
+}
+
+impl ShouldPredicate for Expr {
+    fn should_predicate(&self) -> bool {
+        // If the annotation says we should predicate, always do it.
+        if let Some(ref value) = self.annotations.get("predicate") {
+            return value.to_lowercase() == "true"; 
+        }
+        false
+    }
+}
+
 /// Vectorize an expression.
 pub fn vectorize(expr: &mut Expr) {
     let mut vectorized = false;
@@ -92,7 +107,7 @@ pub fn vectorize(expr: &mut Expr) {
 /// Predicate an `If` expression by checking for if(cond, merge(b, e), b) and transforms it to merge(b, select(cond, e,identity)).
 pub fn predicate_merge_expr(e: &mut Expr) {
     e.transform_and_continue_res(&mut |ref mut e| {
-        if !(should_be_predicated(e)) {
+        if !e.should_predicate() {
             return Ok((None, true));
         }
 
@@ -398,11 +413,6 @@ fn vectorizable(for_loop: &Expr) -> Option<HashSet<Symbol>> {
     }
     trace!("Vectorization failed due to unsupported pattern");
     None
-}
-
-/// Specifies whether to predicate non-simple expressions.
-fn should_be_predicated(e: &mut Expr) -> bool {
-    e.annotations.predicate()
 }
 
 fn get_id_element(ty: &Type, op: &BinOpKind) -> WeldResult<Option<Expr>> {

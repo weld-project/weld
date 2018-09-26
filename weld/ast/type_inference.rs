@@ -13,10 +13,6 @@ use error::*;
 
 use fnv::FnvHashMap;
 
-#[cfg(test)]
-use tests::*;
-#[cfg(test)]
-use annotation::*;
 
 type TypeMap = FnvHashMap<Symbol, Type>;
 type Binding = (Symbol, Option<Type>);
@@ -889,6 +885,7 @@ impl InferTypesInternal for Expr {
 
 #[test]
 fn infer_types_test() {
+    use tests::*;
     let e = parse_expr("a").unwrap();
     assert_eq!(print_typed_expr_without_indent(&e).as_str(), "a:?");
 

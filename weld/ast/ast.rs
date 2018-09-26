@@ -1,6 +1,5 @@
 //! Defines the Weld abstract syntax tree.
 
-use annotation::Annotations;
 use error::*;
 use util;
 
@@ -10,12 +9,100 @@ use self::BinOpKind::*;
 
 use std::fmt;
 use std::vec;
+use std::collections::BTreeMap;
 
 #[cfg(test)]
 use tests::*;
 
 /// Name used for placeholder expressions.
 const PLACEHOLDER_NAME: &'static str = "#placeholder";
+
+/// An annotation over a type or expression.
+///
+/// Annotations are unstructured String key-value pairs. They can be added on expressions and
+/// interpreted in different ways by the compiler.
+///
+/// ## Limitations
+///
+/// Currently, the parser is only capable of parsing annotation values that are either identifiers (i.e.,
+/// single-token strings), boolean literals, floating point literals, and signed integer literals.
+/// Keys must be identifiers (i.e., non-numeric, non-boolean strings that are not reserved words).
+///
+/// The annotation system should in theory support arbitrary string key/value pairs: the parser
+/// will eventually be updated to support this.
+#[derive(Clone,Debug,PartialEq,Eq,Hash)]
+pub struct Annotations {
+    /// Holds the annotations.
+    ///
+    /// This is wrapped in an option so we don't need to allocate memory in cases where the HashMap
+    /// is empty (which will usually be the case).
+    values: Option<BTreeMap<String, String>>,
+}
+
+impl Annotations {
+    /// Create a new set of empty annotations.
+    pub fn new() -> Annotations {
+        Annotations {
+            values: None,
+        }
+    }
+
+    /// Set an annotation with key associated with value.
+    ///
+    /// The previous value for this key is returned if there was one. 
+    pub fn set<K: Into<String>, V: Into<String>>(&mut self, key: K, value: V) -> Option<String> {
+        if self.values.is_none() {
+            self.values = Some(BTreeMap::new());
+        }
+        self.values
+            .as_mut()
+            .unwrap()
+            .insert(key.into(), value.into())
+    }
+
+    /// Get the annotation value associated with a key.
+    ///
+    /// Returns `None` if the key was not found.
+    pub fn get<K: AsRef<str>>(&self, key: K) -> Option<&str> {
+        if self.values.is_none() {
+            return None
+        }
+        self.values
+            .as_ref()
+            .unwrap()
+            .get(key.as_ref())
+            .map(|v| v.as_ref())
+    }
+
+    /// Return whether the annotations are empty.
+    pub fn is_empty(&self) -> bool {
+        self.values.as_ref().map(|f| f.len()).unwrap_or(0) == 0
+    }
+
+    /// Clears the annotations.
+    pub fn clear(&mut self) {
+        self.values = None;
+    }
+}
+
+impl fmt::Display for Annotations {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if self.values.is_none() {
+            return write!(f, "");
+        }
+
+        let mut annotations = self.values.as_ref().unwrap()
+            .iter()
+            .map(|(k, v)| format!("{}:{}", k, v))
+            .collect::<Vec<String>>();
+
+        annotations.sort();
+        let annotations = annotations.join(",");
+
+        // Sort the annotations alphabetically when displaying them so the result is deterministic.
+        write!(f, "@({})", annotations)
+    }
+}
 
 /// Types in the Weld IR.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]

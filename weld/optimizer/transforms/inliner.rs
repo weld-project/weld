@@ -11,8 +11,6 @@ use fnv::FnvHashMap;
 
 use std::mem;
 
-use annotation::*;
-
 #[cfg(test)]
 use tests::*;
 

@@ -6,7 +6,6 @@
 use std::vec::Vec;
 use std::cmp::min;
 
-use annotation::*;
 use ast::*;
 use ast::Type::*;
 use ast::BinOpKind::*;
@@ -602,106 +601,33 @@ impl<'t> Parser<'t> {
     fn parse_annotations(&mut self, annotations: &mut Annotations) -> WeldResult<()> {
         if *self.peek() == TAtMark {
             self.consume(TAtMark)?;
-            try!(self.consume(TOpenParen));
+            self.consume(TOpenParen)?;
             while *self.peek() != TCloseParen {
-                match *self.peek() {
-                    TIdent(ref value) => {
-                        match value.as_ref() {
-                            "impl" => {
-                                self.consume(TIdent("impl".to_string()))?;
-                                try!(self.consume(TColon));
-                                let implementation = match *self.next() {
-                                    TIdent(ref inner_value) => {
-                                        match inner_value.as_ref() {
-                                            "global" => BuilderImplementationKind::Global,
-                                            "local" => BuilderImplementationKind::Local,
-                                            _ => return compile_err!("Invalid implementation type"),
-                                        }
-                                    }
-                                    _ => return compile_err!("Invalid implementation type"),
-                                };
-                                annotations.set_builder_implementation(implementation);
-                            }
-                            "predicate" => {
-                                self.consume(TIdent("predicate".to_string()))?;
-                                try!(self.consume(TColon));
-                                if let TBoolLiteral(l) = *self.next() {
-                                    annotations.set_predicate(l);
-                                } else {
-                                    return compile_err!("Invalid predicate type (must be a bool)");
-                                }
-                            }
-                            "vectorize" => {
-                                self.consume(TIdent("vectorize".to_string()))?;
-                                try!(self.consume(TColon));
-                                if let TBoolLiteral(l) = *self.next() {
-                                    annotations.set_vectorize(l);
-                                } else {
-                                    return compile_err!("Invalid vectorize type (must be a bool)");
-                                }
-                            }
-                            "tile_size" => {
-                                self.consume(TIdent("tile_size".to_string()))?;
-                                try!(self.consume(TColon));
-                                if let TI32Literal(l) = *self.next() {
-                                    annotations.set_tile_size(l);
-                                } else {
-                                    return compile_err!("Invalid tile size (must be a i32)");
-                                }
-                            }
-                            "grain_size" => {
-                                self.consume(TIdent("grain_size".to_string()))?;
-                                try!(self.consume(TColon));
-                                if let TI32Literal(l) = *self.next() {
-                                    annotations.set_grain_size(l);
-                                } else {
-                                    return compile_err!("Invalid tile size (must be a i32)");
-                                }
-                            }
-                            "size" => {
-                                self.consume(TIdent("size".to_string()))?;
-                                try!(self.consume(TColon));
-                                if let TI64Literal(l) = *self.next() {
-                                    annotations.set_size(l);
-                                } else {
-                                    return compile_err!("Invalid vector size (must be a i64)");
-                                }
-                            }
-                            "loopsize" => {
-                                self.consume(TIdent("loopsize".to_string()))?;
-                                try!(self.consume(TColon));
-                                if let TI64Literal(l) = *self.next() {
-                                    annotations.set_loopsize(l);
-                                } else {
-                                    return compile_err!("Invalid vector size (must be a i64)");
-                                }
-                            }
-                            "selectivity" => {
-                                self.consume(TIdent("selectivity".to_string()))?;
-                                try!(self.consume(TColon));
-                                if let TF32Literal(l) = *self.next() {
-                                    annotations.set_branch_selectivity((l * 100000.0) as i32);
-                                } else {
-                                    return compile_err!("Invalid selectivity (must be a f32)");
-                                }
-                            }
-                            "num_keys" => {
-                                self.consume(TIdent("num_keys".to_string()))?;
-                                try!(self.consume(TColon));
-                                if let TI64Literal(l) = *self.next() {
-                                    annotations.set_num_keys(l);
-                                } else {
-                                    return compile_err!("Invalid number of keys (must be a i64)");
-                                }
-                            }
-                            _ => return compile_err!("Invalid annotation type"),
-                        }
+                let key = self.symbol()?;
+                self.consume(TColon)?;
+                let value = match *self.peek() {
+                    TI32Literal(ref v) => v.to_string(),
+                    TI64Literal(ref v) => v.to_string(),
+                    TF32Literal(ref v) => v.to_string(),
+                    TF64Literal(ref v) => v.to_string(),
+                    TI16Literal(ref v) => v.to_string(),
+                    TI8Literal(ref v) => v.to_string(),
+                    TBoolLiteral(ref v) => v.to_string(),
+                    TStringLiteral(ref v) => v.clone(),
+                    TIdent(ref v) => v.clone(),
+                    _ => {
+                        return compile_err!("Annotation value must be a literal or identifier/string");
                     }
-                    _ => return compile_err!("Invalid annotation type -- expected an identifier"),
-                }
+                };
+
+                // Consume whatever we saw.
+                let token = self.peek().clone();
+                self.consume(token)?;
+
+                annotations.set(key.to_string(), value);
 
                 if *self.peek() == TComma {
-                    self.next();
+                    self.consume(TComma)?;
                 } else if *self.peek() != TCloseParen {
                     return compile_err!("Expected ',' or ')'");
                 }
@@ -1248,7 +1174,7 @@ impl<'t> Parser<'t> {
                        id: 0,
                    })
             }
-            ref other => compile_err!("Expected identifier but got '{}'", other),
+            ref other => compile_err!("Expected identifier but got {}", other),
         }
     }
 
@@ -1487,8 +1413,6 @@ fn basic_parsing() {
     let e = parse_expr("@(impl:local, num_keys:12l) dictmerger[i32,i32,+]").unwrap();
     assert_eq!(print_expr_without_indent(&e),
                "@(impl:local,num_keys:12)dictmerger[i32,i32,+]");
-
-    assert!(parse_expr("@(impl:local, num_keys:12) dictmerger[i32,i32,+]").is_err());
 
     let e = parse_expr("a: i32 + b").unwrap();
     assert_eq!(print_typed_expr_without_indent(&e), "(a:i32+b:?)");
