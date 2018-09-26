@@ -21,6 +21,15 @@ const PLACEHOLDER_NAME: &'static str = "#placeholder";
 ///
 /// Annotations are unstructured String key-value pairs. They can be added on expressions and
 /// interpreted in different ways by the compiler.
+///
+/// ## Limitations
+///
+/// Currently, the parser is only capable of parsing annotation values that are either identifiers (i.e.,
+/// single-token strings), boolean literals, floating point literals, and signed integer literals.
+/// Keys must be identifiers (i.e., non-numeric, non-boolean strings that are not reserved words).
+///
+/// The annotation system should in theory support arbitrary string key/value pairs: the parser
+/// will eventually be updated to support this.
 #[derive(Clone,Debug,PartialEq,Eq,Hash)]
 pub struct Annotations {
     /// Holds the annotations.
