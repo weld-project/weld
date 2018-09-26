@@ -60,7 +60,7 @@ class HelloWeldVector(object):
 
     def __str__(self):
         if self.cached is not None:
-            return str(v)
+            return str(self.cached)
         v = self.weldobj.evaluate(WeldVec(WeldInt()), verbose=False)
         self.cached = v
         return str(v)
