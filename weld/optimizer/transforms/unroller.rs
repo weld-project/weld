@@ -14,23 +14,38 @@ use ast::Type::*;
 use error::*;
 
 /// Maximum number of iterations this transformation will unroll.
-pub const UNROLL_LIMIT: i64 = 8;
+pub const UNROLL_LIMIT: u64 = 8;
 
 /// A simple map pattern, which is a Result(For(.. with a single merge expression as the
 /// For loop's function body.
 struct UnrollPattern<'a> {
-    loop_size: i64,
+    loop_size: u64,
     iters: &'a Vec<Iter>,
     builder_kind: &'a BuilderKind,
     merge_params: &'a Vec<Parameter>,
     merge_value: &'a Expr,
 }
 
+/// Returns the loop size from the annotation.
+///
+/// Returns None if the annotation does not exist or cannot be parsed as a 64-bit unsigned integer.
+trait LoopSizeAnnotation {
+    fn loopsize(&self) -> Option<u64>;
+}
+
+impl LoopSizeAnnotation for Expr {
+    fn loopsize(&self) -> Option<u64> {
+        println!("{}", self.annotations);
+        self.annotations.get("loopsize")
+            .and_then(|value| value.parse::<u64>().ok())
+    }
+}
+
 impl<'a> UnrollPattern<'a> {
     /// Extracts a `UnrollPattern` from the expression, or returns `None`.
     fn extract(expr: &'a Expr) -> Option<UnrollPattern> {
         if let Res { ref builder } = expr.kind {
-            if let Some(loopsize) = builder.annotations.loopsize() {
+            if let Some(loopsize) = builder.loopsize() {
                 if loopsize <= UNROLL_LIMIT {
                     if let For { ref iters, ref builder, ref func } = builder.kind {
                         if let Builder(ref bk, _) = builder.ty {
@@ -114,7 +129,7 @@ fn is_same_ident(expr: &Expr, other: &Expr) -> bool {
 
 /// Takes a `MergeSingle` and returns a list of expressions which replace the element
 /// in the merge with a Lookup.
-fn unroll_values(parameters: &Vec<Parameter>, value: &Expr, vectors: &Vec<Expr>, loopsize: i64) -> WeldResult<Vec<Expr>> {
+fn unroll_values(parameters: &Vec<Parameter>, value: &Expr, vectors: &Vec<Expr>, loopsize: u64) -> WeldResult<Vec<Expr>> {
     if parameters.len() != 3 {
         return compile_err!("Expected three parameters to Merge function");
     }

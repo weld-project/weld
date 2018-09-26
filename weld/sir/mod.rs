@@ -106,9 +106,6 @@ pub struct ParallelForData {
     pub idx_arg: Symbol,
     pub body: FunctionId,
     pub innermost: bool,
-    /// If `true`, always invoke parallel runtime for the loop.
-    pub always_use_runtime: bool,
-    pub grain_size: Option<i32>
 }
 
 impl StatementKind {
@@ -1386,8 +1383,6 @@ fn gen_expr(expr: &Expr,
                                     data_arg: params[2].name.clone(),
                                     body: body_func,
                                     innermost: is_innermost,
-                                    always_use_runtime: expr.annotations.always_use_runtime(),
-                                    grain_size: expr.annotations.grain_size().clone()
                                 });
 
                 let res_sym = tracker.symbol_for_statement(prog, cur_func, cur_block, &builder.ty, kind);
