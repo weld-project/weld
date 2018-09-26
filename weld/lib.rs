@@ -171,7 +171,6 @@ pub const VERSION: Option<&'static str> = option_env!("CARGO_PKG_VERSION");
 #[macro_use]
 mod error;
 
-mod annotation;
 mod codegen;
 mod conf;
 mod optimizer;

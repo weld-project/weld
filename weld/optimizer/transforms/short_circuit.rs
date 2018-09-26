@@ -3,14 +3,17 @@ use ast::*;
 use ast::ExprKind::*;
 use ast::constructors::*;
 
+use optimizer::transforms::vectorizer::ShouldPredicate;
+
 #[cfg(test)]
 use tests::*;
 
 pub fn short_circuit_booleans(expr: &mut Expr) {
     // For If statements annotated as predicated, do not apply the transform on the condition,
     // since it removes the predication opportunity.
+    let should_predicate = expr.should_predicate();
     let applied = match expr.kind {
-        If { ref mut on_true, ref mut on_false, .. } if expr.annotations.predicate() => {
+        If { ref mut on_true, ref mut on_false, .. } if should_predicate => {
             short_circuit_booleans(on_true);
             short_circuit_booleans(on_false);
             true
@@ -24,10 +27,16 @@ pub fn short_circuit_booleans(expr: &mut Expr) {
 
     let new = match expr.kind {
         BinOp { ref kind, ref left, ref right } if *kind == BinOpKind::LogicalAnd => {
-            Some(if_expr(left.as_ref().clone(), right.as_ref().clone(), literal_expr(LiteralKind::BoolLiteral(false)).unwrap()).unwrap())
+            Some(if_expr(
+                    left.as_ref().clone(),
+                    right.as_ref().clone(),
+                    literal_expr(LiteralKind::BoolLiteral(false)).unwrap()).unwrap())
         },
         BinOp { ref kind, ref left, ref right } if *kind == BinOpKind::LogicalOr => {
-            Some(if_expr(left.as_ref().clone(), literal_expr(LiteralKind::BoolLiteral(true)).unwrap(), right.as_ref().clone()).unwrap())
+            Some(if_expr(
+                    left.as_ref().clone(),
+                    literal_expr(LiteralKind::BoolLiteral(true)).unwrap(),
+                    right.as_ref().clone()).unwrap())
         },
         _ => None,
     };

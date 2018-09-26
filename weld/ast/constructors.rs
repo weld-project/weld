@@ -7,7 +7,6 @@ use ast::Type::*;
 use ast::BuilderKind::*;
 use ast::LiteralKind::*;
 use error::*;
-use annotation::*;
 
 pub fn new_expr(kind: ExprKind, ty: Type) -> WeldResult<Expr> {
     Ok(Expr {

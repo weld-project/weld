@@ -13,7 +13,6 @@ use super::parser::*;
 use super::program::*;
 use error::*;
 use util::SymbolGenerator;
-use annotation::*;
 
 #[cfg(test)]
 use tests::print_expr_without_indent;

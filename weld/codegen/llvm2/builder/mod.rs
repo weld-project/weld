@@ -10,8 +10,6 @@
 
 extern crate llvm_sys;
 
-use annotation::Annotations;
-
 use ast::*;
 use ast::BuilderKind::*;
 use ast::Type::*;
