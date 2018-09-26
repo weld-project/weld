@@ -91,15 +91,13 @@ impl fmt::Display for Annotations {
             return write!(f, "");
         }
 
-        let mut annotations = self.values.as_ref().unwrap()
+        // Annotations are always sorted alphabetically (due to BTreeMap's iter).
+        let annotations = self.values.as_ref().unwrap()
             .iter()
             .map(|(k, v)| format!("{}:{}", k, v))
-            .collect::<Vec<String>>();
+            .collect::<Vec<String>>()
+            .join(",");
 
-        annotations.sort();
-        let annotations = annotations.join(",");
-
-        // Sort the annotations alphabetically when displaying them so the result is deterministic.
         write!(f, "@({})", annotations)
     }
 }
