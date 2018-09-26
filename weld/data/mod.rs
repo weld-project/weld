@@ -141,9 +141,7 @@ pub struct GroupMerger<K, V> {
 // Ensures that the sizes of the types defined here match the sizes of the types in the backend.
 #[test]
 fn size_check() {
-    use annotation::Annotations;
-    use ast::Type;
-    use ast::BuilderKind;
+    use ast::*;
     use ast::ScalarKind::I32;
     use ast::BinOpKind::Add;
     use codegen::size_of;
