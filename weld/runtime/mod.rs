@@ -4,9 +4,8 @@
 
 extern crate libc;
 extern crate fnv;
-extern crate jemallocator;
 
-use jemallocator::Jemalloc;
+use std::alloc::System as Allocator;
 use libc::{c_char, int32_t, int64_t, uint64_t};
 
 use fnv::FnvHashMap;
@@ -113,7 +112,7 @@ impl WeldRuntimeContext {
                    self.allocated + size);
         }
         let layout = Layout::from_size_align_unchecked(size as usize, DEFAULT_ALIGN);
-        let mem = Jemalloc.alloc(layout.clone());
+        let mem = Allocator.alloc(layout.clone());
 
         self.allocated += layout.size();
         trace!("Alloc'd pointer {:?} ({} bytes)", mem, layout.size());
@@ -138,7 +137,7 @@ impl WeldRuntimeContext {
         }
 
         // Must pass *old* layout to realloc!
-        let mem = Jemalloc.realloc(pointer, old_layout.clone(), size);
+        let mem = Allocator.realloc(pointer, old_layout.clone(), size);
         let new_layout = Layout::from_size_align_unchecked(size, DEFAULT_ALIGN);
 
         self.allocated -= old_layout.size();
@@ -190,7 +189,7 @@ impl WeldRuntimeContext {
 
         trace!("Freeing pointer {:?} ({} bytes) in runst_free()", pointer, layout.size());
 
-        Jemalloc.dealloc(pointer, layout.clone());
+        Allocator.dealloc(pointer, layout.clone());
         self.allocated -= layout.size();
     }
 
@@ -227,7 +226,7 @@ impl Drop for WeldRuntimeContext {
         unsafe {
             for (pointer, layout) in self.allocations.iter() {
                 trace!("Freeing pointer {:?} ({} bytes) in drop()", *pointer, layout.size());
-                Jemalloc.dealloc(*pointer, layout.clone());
+                Allocator.dealloc(*pointer, layout.clone());
             }
         }
     }
