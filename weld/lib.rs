@@ -123,11 +123,6 @@ extern crate lazy_static;
 #[macro_use]
 extern crate log;
 
-extern crate jemallocator;
-
-#[global_allocator]
-static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
-
 extern crate regex;
 extern crate libc;
 extern crate env_logger;
