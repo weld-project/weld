@@ -116,7 +116,8 @@ lazy_static! {
                                 Transformation::new(inliner::simplify_branch_conditions)],
                  "inline-literals"));
         m.insert("cse",
-                 Pass::new(vec![Transformation::new(cse::common_subexpression_elimination)],
+                 Pass::new(vec![Transformation::new(cse::common_subexpression_elimination),
+                                Transformation::new(inliner::inline_let)],
                  "cse"));
         m.insert("unroll-structs",
                  Pass::new(vec![Transformation::new(inliner::unroll_structs)],
