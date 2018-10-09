@@ -40,6 +40,7 @@ impl Cse {
             debug.push_str(&format!("{} -> {}\n", k, v.pretty_print()));
         }
         trace!("bindings: {}", debug);
+        trace!("Expression after assigning cse symbols: {}", expr.pretty_print());
 
         let ref dependencies = cse.build_dependencies(bindings);
 
@@ -164,56 +165,79 @@ impl Cse {
                          generated: &mut HashSet<Symbol>,
                          stack: &mut Vec<Vec<(Symbol, Expr)>>) {
 
-        expr.transform(&mut |ref mut e| {
+        expr.transform_and_continue(&mut |ref mut e| {
             match e.kind {
                 Lambda { ref mut body, .. } => {
                     stack.push(vec![]);
+                    trace!("pushed to stack");
 
                     trace!("Processing lambda with body {}", body.pretty_print());
 
+                    let generated_before = generated.clone();
                     self.generate_bindings(body, bindings, dependencies, generated, stack);
 
                     let binding_list = stack.pop().unwrap();
+                    trace!("popped stack");
                     let mut prev = *body.take(); // XXX what is this?
                     for (sym, expr) in binding_list.into_iter().rev() {
+                        if !generated_before.contains(&sym) {
+                            generated.remove(&sym);
+                        }
                         prev = let_expr(sym, expr, prev).unwrap();
                     }
 
                     **body = prev;
                     trace!("Replaced lambda body with {}", body.pretty_print());
-                    None
+                    (None, false)
                 }
-                If { ref mut on_true, ref mut on_false , .. } => {
+                If { ref mut cond, ref mut on_true, ref mut on_false } => {
+
+                    // Generate bindings for the condition, since we won't recursive down into
+                    // subexpressions.
+                    self.generate_bindings(cond, bindings, dependencies, generated, stack);
+
                     // We want to keep definitions of If/Else statements within the branch target
                     // to prevent moving expressions out from behind a branch condition.
                     stack.push(vec![]);
+                    trace!("pushed to stack");
                     trace!("Processing If on_true {}", on_true.pretty_print());
+                    let generated_before = generated.clone();
                     self.generate_bindings(on_true, bindings, dependencies, generated, stack);
                     let binding_list = stack.pop().unwrap();
+                    trace!("popped stack");
                     let mut prev = *on_true.take(); // XXX what is this?
                     for (sym, expr) in binding_list.into_iter().rev() {
+                        if !generated_before.contains(&sym) {
+                            generated.remove(&sym);
+                        }
                         prev = let_expr(sym, expr, prev).unwrap();
                     }
                     **on_true = prev;
                     trace!("Replaced If on_true with {}", on_true.pretty_print());
 
                     stack.push(vec![]);
+                    trace!("pushed to stack");
                     trace!("Processing If on_false {}", on_false.pretty_print());
+                    let generated_before = generated.clone();
                     self.generate_bindings(on_false, bindings, dependencies, generated, stack);
                     let binding_list = stack.pop().unwrap();
+                    trace!("popped stack");
                     let mut prev = *on_false.take(); // XXX what is this?
                     for (sym, expr) in binding_list.into_iter().rev() {
+                        if !generated_before.contains(&sym) {
+                            generated.remove(&sym);
+                        }
                         prev = let_expr(sym, expr, prev).unwrap();
                     }
                     **on_false = prev;
                     trace!("Replaced If on_false with {}", on_false.pretty_print());
-                    None
+                    (None, false)
                 }
                 Ident(ref mut name) if !generated.contains(name) && dependencies.contains_key(name) => {
                     self.add_dependencies(name, bindings, dependencies, generated, stack);
-                    None
+                    (None, false)
                 }
-                _ => None,
+                _ => (None, true),
             }
         });
     }
@@ -228,13 +252,14 @@ impl Cse {
                             generated: &mut HashSet<Symbol>,
                             stack: &mut Vec<Vec<(Symbol, Expr)>>) {
         if !generated.contains(sym) {
-            let (sym, mut expr) = bindings.remove_entry(sym).unwrap();
+            let mut expr = bindings.get(sym).cloned().unwrap();
             generated.insert(sym.clone());
+
             self.generate_bindings(&mut expr, bindings, dependencies, generated, stack);
 
             trace!("Added binding {} -> {}", &sym, expr.pretty_print());
-            let mut binding_list = stack.last_mut().unwrap();
-            binding_list.push((sym, expr));
+            let binding_list = stack.last_mut().unwrap();
+            binding_list.push((sym.clone(), expr));
         }
     }
 }
