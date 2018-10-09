@@ -183,9 +183,34 @@ impl Cse {
                     trace!("Replaced lambda body with {}", body.pretty_print());
                     None
                 }
+                If { ref mut on_true, ref mut on_false , .. } => {
+                    // We want to keep definitions of If/Else statements within the branch target
+                    // to prevent moving expressions out from behind a branch condition.
+                    stack.push(vec![]);
+                    trace!("Processing If on_true {}", on_true.pretty_print());
+                    self.generate_bindings(on_true, bindings, dependencies, generated, stack);
+                    let binding_list = stack.pop().unwrap();
+                    let mut prev = *on_true.take(); // XXX what is this?
+                    for (sym, expr) in binding_list.into_iter().rev() {
+                        prev = let_expr(sym, expr, prev).unwrap();
+                    }
+                    **on_true = prev;
+                    trace!("Replaced If on_true with {}", on_true.pretty_print());
+
+                    stack.push(vec![]);
+                    trace!("Processing If on_false {}", on_false.pretty_print());
+                    self.generate_bindings(on_false, bindings, dependencies, generated, stack);
+                    let binding_list = stack.pop().unwrap();
+                    let mut prev = *on_false.take(); // XXX what is this?
+                    for (sym, expr) in binding_list.into_iter().rev() {
+                        prev = let_expr(sym, expr, prev).unwrap();
+                    }
+                    **on_false = prev;
+                    trace!("Replaced If on_false with {}", on_false.pretty_print());
+                    None
+                }
                 Ident(ref mut name) if !generated.contains(name) && dependencies.contains_key(name) => {
-                    let mut last_frame = stack.last_mut().unwrap();
-                    self.add_dependencies(name, bindings, dependencies, generated, last_frame);
+                    self.add_dependencies(name, bindings, dependencies, generated, stack);
                     None
                 }
                 _ => None,
@@ -201,19 +226,16 @@ impl Cse {
                             bindings: &mut HashMap<Symbol, Expr>,
                             dependencies: &HashMap<Symbol, HashSet<Symbol>>,
                             generated: &mut HashSet<Symbol>,
-                            binding_list: &mut Vec<(Symbol, Expr)>) {
+                            stack: &mut Vec<Vec<(Symbol, Expr)>>) {
+        if !generated.contains(sym) {
+            let (sym, mut expr) = bindings.remove_entry(sym).unwrap();
+            generated.insert(sym.clone());
+            self.generate_bindings(&mut expr, bindings, dependencies, generated, stack);
 
-        for dependency in dependencies.get(sym).unwrap().iter() {
-            if !generated.contains(dependency) {
-                self.add_dependencies(dependency, bindings, dependencies, generated, binding_list);
-            }
+            trace!("Added binding {} -> {}", &sym, expr.pretty_print());
+            let mut binding_list = stack.last_mut().unwrap();
+            binding_list.push((sym, expr));
         }
-        
-        let binding = bindings.remove_entry(sym).unwrap();
-        trace!("Added binding {} -> {}", binding.0, binding.1.pretty_print());
-        binding_list.push(binding);
-
-        generated.insert(sym.clone());
     }
 }
 
