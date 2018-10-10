@@ -4,8 +4,7 @@ use ast::*;
 use ast::constructors::*;
 use ast::ExprKind::*;
 
-use util::{join, SymbolGenerator};
-
+use util::SymbolGenerator;
 use std::collections::{HashMap, HashSet};
 
 /// State for the CSE transformation.
@@ -32,37 +31,28 @@ impl Cse {
         let ref mut bindings = bindings.drain()
             .map(|(k, v)| (v, k))
             .collect::<HashMap<Symbol, Expr>>();
+        // names should be unique, so number of keys == number of values.
         assert_eq!(bindings.len(), old_length);
 
-        // Print Bindings.
-        let mut debug = String::new();
-        for (k, v) in bindings.iter() {
-            debug.push_str(&format!("{} -> {}\n", k, v.pretty_print()));
+        let ref scopes =  cse.build_scope_map(expr, bindings);
+
+        // Debug.
+        {
+            let mut debug = String::new();
+            for (k, v) in bindings.iter() {
+                debug.push_str(&format!("{} -> {}\n", k, v.pretty_print()));
+            }
+            trace!("bindings: {}", debug);
+            trace!("Expression after assigning cse symbols: {}", expr.pretty_print());
+
+            let mut debug = String::new();
+            for (k, v) in scopes.iter() {
+                debug.push_str(&format!("{} -> {}\n", k, v));
+            }
+            trace!("scopes: {}", debug);
         }
-        trace!("bindings: {}", debug);
-        trace!("Expression after assigning cse symbols: {}", expr.pretty_print());
 
-        let ref dependencies = cse.build_dependencies(bindings);
-
-        // Print Bindings.
-        let mut debug = String::new();
-        for (k, v) in dependencies.iter() {
-            debug.push_str(&format!("{} -> {}\n",
-                                    k,
-                                    join("[", ",", "]", v.iter().map(|e| e.to_string()))
-                                    )
-                           );
-        }
-        trace!("dependencies: {}", debug);
-
-        let ref scopes =  cse.build_scopes(expr, bindings);
-        let mut debug = String::new();
-        for (k, v) in scopes.iter() {
-            debug.push_str(&format!("{} -> {}\n", k, v));
-        }
-        trace!("scopes: {}", debug);
-
-        cse.generate_bindings(expr, bindings, dependencies, &mut HashSet::new(), &mut vec![], scopes);
+        cse.generate_bindings(expr, bindings, &mut HashSet::new(), &mut vec![], scopes);
         
         trace!("After CSE: {}", expr.pretty_print());
     }
@@ -139,13 +129,13 @@ impl Cse {
     ///
     /// `cse0` appears in two scopes: depth-0 and depth-1. The scope map would indicate depth-0,
     /// since this is the least deep scope.
-    fn build_scopes(&mut self, expr: &Expr, bindings: &HashMap<Symbol, Expr>) -> HashMap<Symbol, isize> {
+    fn build_scope_map(&mut self, expr: &Expr, bindings: &HashMap<Symbol, Expr>) -> HashMap<Symbol, isize> {
         let mut scopes = HashMap::new();
-        self.build_scopes_helper(expr, bindings, &mut scopes, -1);
+        self.build_scope_map_helper(expr, bindings, &mut scopes, -1);
         scopes
     }
 
-    fn build_scopes_helper(&mut self,
+    fn build_scope_map_helper(&mut self,
                            expr: &Expr,
                            bindings: &HashMap<Symbol, Expr>, 
                            scope_map: &mut HashMap<Symbol, isize>,
@@ -154,12 +144,12 @@ impl Cse {
         let mut handled = true;
         match expr.kind {
             If { ref cond, ref on_true, ref on_false } => {
-                self.build_scopes_helper(cond, bindings, scope_map, current_scope);
-                self.build_scopes_helper(on_true, bindings, scope_map, current_scope + 1);
-                self.build_scopes_helper(on_false, bindings, scope_map, current_scope + 1);
+                self.build_scope_map_helper(cond, bindings, scope_map, current_scope);
+                self.build_scope_map_helper(on_true, bindings, scope_map, current_scope + 1);
+                self.build_scope_map_helper(on_false, bindings, scope_map, current_scope + 1);
             }
             Lambda { ref body, .. } => {
-                self.build_scopes_helper(body, bindings, scope_map, current_scope + 1);
+                self.build_scope_map_helper(body, bindings, scope_map, current_scope + 1);
             }
             Ident(ref name) if bindings.contains_key(name) => {
                 {
@@ -169,7 +159,7 @@ impl Cse {
                     }
                 }
                 let expr = bindings.get(name).unwrap();
-                self.build_scopes_helper(expr, bindings, scope_map, current_scope);
+                self.build_scope_map_helper(expr, bindings, scope_map, current_scope);
             }
             _ => {
                 handled = false;
@@ -178,49 +168,18 @@ impl Cse {
 
         if !handled {
             for child in expr.children() {
-                self.build_scopes_helper(child, bindings, scope_map, current_scope);
+                self.build_scope_map_helper(child, bindings, scope_map, current_scope);
             }
         }
     }
 
-    /// Returns a map with a list of dependencies for each binding in the given map.
-    ///
-    /// Dependencies track identifiers whose definition must be inserted *before* a given binding.
-    /// As an example, consider the following binding:
-    ///
-    /// ```
-    /// cse2 -> cse1 + cse0
-    /// ```
-    ///
-    /// The variable `cse2` depends on `cse1` and `cse0`, so the returned map will include the
-    /// value `cse2 -> [cse1, cse0]`.
-    ///
-    /// Only identifiers that are keys in the bindings map are considered dependencies here. Other
-    /// identifiers (i.e., function parameters) are already defined in the expression.
-    fn build_dependencies(&mut self, bindings: &HashMap<Symbol, Expr>) -> HashMap<Symbol, HashSet<Symbol>> {
-        let mut deps = HashMap::new();
-        for (sym, expr) in bindings.iter() {
-            let mut symbol_deps = HashSet::new();
-            expr.traverse(&mut |ref e| {
-                if let Ident(ref name) = e.kind {
-                    // We only want other bindings to be dependencies -- other identifiers (i.e.,
-                    // function parameters) already exist in the expression.
-                    if bindings.contains_key(name) {
-                        symbol_deps.insert(name.clone());
-                    }
-                }
-            });
-            deps.insert(sym.clone(), symbol_deps);
-        }
-        deps
-    }
-
     /// Generates bindings in the expression.
+    ///
+    /// # Arguments
     ///
     /// * `expr` is the expression to generate the bindings in.
     /// * `bindings` maps symbols to their values. Expressions from here are drained and added back
     /// into the expression.
-    /// * `dependencies` lists the dependent symbols of each symbol in `bindings`.
     /// * `generated` tracks which bindings have been inserted into `expr` already. 
     /// * `stack` is an ordered list of bindings to be generated in the current lambda.
     /// * `scopes` is the *highest* scope that an expression appears in. The expression is only
@@ -228,7 +187,6 @@ impl Cse {
     fn generate_bindings(&mut self,
                          expr: &mut Expr,
                          bindings: &mut HashMap<Symbol, Expr>,
-                         dependencies: &HashMap<Symbol, HashSet<Symbol>>,
                          generated: &mut HashSet<Symbol>,
                          stack: &mut Vec<Vec<(Symbol, Expr)>>,
                          scopes: &HashMap<Symbol, isize>) {
@@ -236,73 +194,32 @@ impl Cse {
         expr.transform_and_continue(&mut |ref mut e| {
             match e.kind {
                 Lambda { ref mut body, .. } => {
-                    stack.push(vec![]);
-                    trace!("pushed to stack");
-
-                    trace!("Processing lambda with body {}", body.pretty_print());
-
-                    let generated_before = generated.clone();
-                    self.generate_bindings(body, bindings, dependencies, generated, stack, scopes);
-
-                    let binding_list = stack.pop().unwrap();
-                    trace!("popped stack");
-                    let mut prev = *body.take(); // XXX what is this?
-                    for (sym, expr) in binding_list.into_iter().rev() {
-                        if !generated_before.contains(&sym) {
-                            generated.remove(&sym);
-                        }
-                        prev = let_expr(sym, expr, prev).unwrap();
-                    }
-
-                    **body = prev;
-                    trace!("Replaced lambda body with {}", body.pretty_print());
+                    self.generate_bindings_scoped(body, bindings, generated, stack, scopes);
                     (None, false)
                 }
                 If { ref mut cond, ref mut on_true, ref mut on_false } => {
-
                     // Generate bindings for the condition, since we won't recursive down into
                     // subexpressions.
-                    self.generate_bindings(cond, bindings, dependencies, generated, stack, scopes);
+                    self.generate_bindings(cond, bindings, generated, stack, scopes);
 
                     // We want to keep definitions of If/Else statements within the branch target
                     // to prevent moving expressions out from behind a branch condition.
-                    stack.push(vec![]);
-                    trace!("pushed to stack");
-                    trace!("Processing If on_true {}", on_true.pretty_print());
-                    let generated_before = generated.clone();
-                    self.generate_bindings(on_true, bindings, dependencies, generated, stack, scopes);
-                    let binding_list = stack.pop().unwrap();
-                    trace!("popped stack");
-                    let mut prev = *on_true.take(); // XXX what is this?
-                    for (sym, expr) in binding_list.into_iter().rev() {
-                        if !generated_before.contains(&sym) {
-                            generated.remove(&sym);
-                        }
-                        prev = let_expr(sym, expr, prev).unwrap();
-                    }
-                    **on_true = prev;
-                    trace!("Replaced If on_true with {}", on_true.pretty_print());
-
-                    stack.push(vec![]);
-                    trace!("pushed to stack");
-                    trace!("Processing If on_false {}", on_false.pretty_print());
-                    let generated_before = generated.clone();
-                    self.generate_bindings(on_false, bindings, dependencies, generated, stack, scopes);
-                    let binding_list = stack.pop().unwrap();
-                    trace!("popped stack");
-                    let mut prev = *on_false.take(); // XXX what is this?
-                    for (sym, expr) in binding_list.into_iter().rev() {
-                        if !generated_before.contains(&sym) {
-                            generated.remove(&sym);
-                        }
-                        prev = let_expr(sym, expr, prev).unwrap();
-                    }
-                    **on_false = prev;
-                    trace!("Replaced If on_false with {}", on_false.pretty_print());
+                    self.generate_bindings_scoped(on_true, bindings, generated, stack, scopes);
+                    self.generate_bindings_scoped(on_false, bindings, generated, stack, scopes);
                     (None, false)
                 }
-                Ident(ref mut name) if !generated.contains(name) && dependencies.contains_key(name) => {
-                    self.add_dependencies(name, bindings, dependencies, generated, stack, scopes);
+                Ident(ref mut sym) if !generated.contains(sym) && bindings.contains_key(sym) => {
+                    let mut expr = bindings.get(sym).cloned().unwrap();
+                    generated.insert(sym.clone());
+
+                    // Generate the definition of this identifier if it doesn't exist.
+                    self.generate_bindings(&mut expr, bindings, generated, stack, scopes);
+
+                    trace!("Added binding {} -> {}", &sym, expr.pretty_print());
+                    // We add the generated bindings to the highest scope.
+                    let scope = *scopes.get(&sym).unwrap() as usize;
+                    let binding_list = stack.get_mut(scope).unwrap();
+                    binding_list.push((sym.clone(), expr));
                     (None, false)
                 }
                 _ => (None, true),
@@ -310,26 +227,37 @@ impl Cse {
         });
     }
 
-    /// Add the dependencies of the given symbol to the given stack.
+    /// Generates bindings in a new scope.
     ///
-    /// Dependencies are added recursively.
-    fn add_dependencies(&mut self,
-                            sym: &Symbol,
-                            bindings: &mut HashMap<Symbol, Expr>,
-                            dependencies: &HashMap<Symbol, HashSet<Symbol>>,
-                            generated: &mut HashSet<Symbol>,
-                            stack: &mut Vec<Vec<(Symbol, Expr)>>,
-                            scopes: &HashMap<Symbol, isize>) {
-        if !generated.contains(sym) {
-            let mut expr = bindings.get(sym).cloned().unwrap();
-            generated.insert(sym.clone());
+    /// This method adds Let expressions within the given expression.
+    fn generate_bindings_scoped(&mut self,
+                               expr: &mut Expr,
+                               bindings: &mut HashMap<Symbol, Expr>,
+                               generated: &mut HashSet<Symbol>,
+                               stack: &mut Vec<Vec<(Symbol, Expr)>>,
+                               scopes: &HashMap<Symbol, isize>) {
 
-            self.generate_bindings(&mut expr, bindings, dependencies, generated, stack, scopes);
+        trace!("Processing scoped expression {}", expr.pretty_print());
 
-            trace!("Added binding {} -> {}", &sym, expr.pretty_print());
-            let binding_list = stack.get_mut(*scopes.get(&sym).unwrap() as usize).unwrap();
-            binding_list.push((sym.clone(), expr));
+        stack.push(vec![]);
+
+        // TODO Remove this!
+        let generated_before = generated.clone();
+        self.generate_bindings(expr, bindings, generated, stack, scopes);
+
+        // Generate the Let expressions for the bindings in this scope.
+        let binding_list = stack.pop().unwrap();
+        let mut prev = expr.take();
+        for (sym, expr) in binding_list.into_iter().rev() {
+            if !generated_before.contains(&sym) {
+                generated.remove(&sym);
+            }
+            prev = let_expr(sym, expr, prev).unwrap();
         }
+
+        // Update the expression to contain the Lets.
+        *expr = prev;
+        trace!("Replaced scoped expression with {}", expr.pretty_print());
     }
 }
 
