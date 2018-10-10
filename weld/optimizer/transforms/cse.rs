@@ -6,6 +6,7 @@ use ast::ExprKind::*;
 
 use util::SymbolGenerator;
 use std::collections::{HashMap, HashSet};
+use std::collections::hash_map::Entry;
 
 /// State for the CSE transformation.
 #[derive(Debug)]
@@ -23,16 +24,27 @@ impl Cse {
 
         // Maps expressions to symbol names.
         let ref mut bindings = HashMap::new();
+        let ref mut aliases = HashMap::new();
 
-        cse.remove_common_subexpressions(expr, bindings);
+        cse.remove_common_subexpressions(expr, bindings, aliases);
+
+        for value in bindings.values() {
+            println!("{}", value);
+        }
 
         // Convert the bindings map to map from Expr -> Symbol to Symbol -> Expr.
-        let old_length = bindings.len();
         let ref mut bindings = bindings.drain()
             .map(|(k, v)| (v, k))
             .collect::<HashMap<Symbol, Expr>>();
-        // names should be unique, so number of keys == number of values.
-        assert_eq!(bindings.len(), old_length);
+
+        // FIXME: Update bindings list with expressions. This unnecessarily copies the expression -
+        // we can CSE this by choosing the "outermost" alias and using it everywhere.
+        for (sym, alias_list) in aliases.drain() {
+            for alias in alias_list {
+                let expr = bindings.get(&sym).cloned().unwrap(); 
+                bindings.insert(alias, expr);
+            }
+        }
 
         let ref scopes =  cse.build_scope_map(expr, bindings);
 
@@ -62,45 +74,73 @@ impl Cse {
     /// This method updates the bindings map to hold identifier to expression information for each
     /// symbol in the expression. The resulting expression is transformed so common subexpressions
     /// are replaced with a common identifier and `Let` statements are removed.
+    ///
+    /// To handle the alias issue (see inline comment), we also return a mapping for a symbol name
+    /// with its aliases.
     fn remove_common_subexpressions(&mut self,
                                     expr: &mut Expr,
-                                    bindings: &mut HashMap<Expr, Symbol>) {
+                                    bindings: &mut HashMap<Expr, Symbol>,
+                                    aliases: &mut HashMap<Symbol, Vec<Symbol>>) {
 
         trace!("Remove Common Subexpressions called on {}", expr.pretty_print());
 
-        let mut cse_symbols = HashSet::new();
-
         expr.transform_up(&mut |ref mut e| {
+            trace!("Processing {}", e.pretty_print());
             let mut taken = None;
             match e.kind {
                 // literals and identifiers are "unit" expressions that are not eliminated.
-                // Lambdas should never be assigned to an identifier.
-                Literal(_) | Ident(_) | Lambda { .. } => (),
+                //
+                // TODO: Struct of newbuilder - should probably ignore anything with nested
+                // newbuilder...?
+                Literal(_) | Ident(_) | Lambda { .. } | NewBuilder(_) => (),
                 Let { ref name, ref mut value, ref mut body } => {
-                    
-                    // Recursive call to the value.
-                    self.remove_common_subexpressions(value, bindings);
-
                     // Let expressions represent "already CSE'd" values, so we can track them. 
-                    cse_symbols.insert(name.clone());
                     let taken_value = value.take();
-                    bindings.insert(*taken_value, name.clone());
+                    println!("\t Added symbol {} -> {}", name, taken_value.pretty_print());
+
+                    // ALIAS ISSUE.
+                    // We can have cases where a Let statement in the input redefines
+                    // the same expression, e.g.,:
+                    //
+                    // let a = x;
+                    // let b = x;
+                    //
+                    // a + a + b + b
+                    //
+                    // Since we map expression -> symbol name, the final bindings list will contain
+                    // b -> x
+                    //
+                    // and no reference to a.
+                    //
+                    // To handle this, we create another map `alises`, that maps the first symbol
+                    // with all of its aliases (same value expressions). The alias map is used to
+                    // create copies of expressions later in the bindings map.
+                    match bindings.entry(*taken_value) {
+                        Entry::Vacant(ent) => {
+                            ent.insert(name.clone());
+                        }
+                        Entry::Occupied(ref ent) => {
+                            // Alias! We assigned this expression a name already.
+                            let sym = ent.get().clone();
+                            let alias_list = aliases.entry(sym).or_insert(vec![]);
+                            alias_list.push(name.clone());
+                        }
+                    }
                     taken = Some(body.take());
                 }
                 _ => {
                     if !bindings.contains_key(e) {
                         let name = self.sym_gen.new_symbol("cse");
-                        cse_symbols.insert(name.clone());
                         bindings.insert(e.clone(), name);
                     }
 
                     // Replace the expression with its CSE name.
                     let name = bindings.get(e).cloned().unwrap();
-                    **e = Expr {
+                    return Some(Expr {
                         ty: e.ty.clone(),
                         kind: Ident(name),
                         annotations: Annotations::new(),
-                    };
+                    });
                 }
             };
 
@@ -119,7 +159,7 @@ impl Cse {
     /// The scope map maps a symbol to the *least deep* scope in an expression tree. For example,
     /// in the code below:
     ///
-    /// ```
+    /// ```weld
     /// let cse0 = ...; # depth 0
     /// if ( cond,
     ///     let cse0 = ...; # depth 1
