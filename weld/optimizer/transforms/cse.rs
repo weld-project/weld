@@ -167,6 +167,10 @@ trait UseCse {
 
 impl UseCse for Expr {
     fn use_cse(&self) -> bool {
+        if let Let { .. } = self.kind {
+            return true;
+        }
+
         if self.ty.contains_builder() {
             return false;
         }
