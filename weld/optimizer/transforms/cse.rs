@@ -8,7 +8,7 @@ use util::SymbolGenerator;
 use std::collections::{HashMap, HashSet};
 use std::collections::hash_map::Entry;
 
-/// Implements the CSE transform. 
+/// Implements the CSE transform.
 pub fn common_subexpression_elimination(expr: &mut Expr) {
     use super::inliner;
     if let Lambda { .. } = expr.kind {
@@ -27,7 +27,7 @@ struct Cse {
 }
 
 /// Specifies whether an expression should be considered for common subexpression elimination.
-/// 
+///
 /// We don't apply CSE to primitives such as literals and identifiers, as well as lambdas, since
 /// those can't be assigned to names in Weld.
 ///
@@ -76,39 +76,20 @@ impl Cse {
         // we can CSE this by choosing the "outermost" alias and using it everywhere.
         for (sym, alias_list) in aliases.drain() {
             for alias in alias_list {
-                let expr = bindings.get(&sym).cloned().unwrap(); 
+                let expr = bindings.get(&sym).cloned().unwrap();
                 bindings.insert(alias, expr);
             }
         }
 
         let ref scopes =  cse.build_scope_map(expr, bindings);
-
-        // Debug.
-        {
-            let mut debug = String::new();
-            for (k, v) in bindings.iter() {
-                debug.push_str(&format!("{} -> {}\n", k, v.pretty_print()));
-            }
-            trace!("bindings: {}", debug);
-            trace!("Expression after assigning cse symbols: {}", expr.pretty_print());
-
-            let mut debug = String::new();
-            for (k, v) in scopes.iter() {
-                debug.push_str(&format!("{} -> {}\n", k, v));
-            }
-            trace!("scopes: {}", debug);
-        }
-
         cse.generate_bindings(expr, bindings, &mut HashSet::new(), &mut vec![], scopes);
-        
-        trace!("After CSE: {}", expr.pretty_print());
     }
 
     /// Removes common subexpressions and remove bindings.
     ///
-    /// This method updates the bindings map to hold identifier to expression information for each
-    /// symbol in the expression. The resulting expression is transformed so common subexpressions
-    /// are replaced with a common identifier and `Let` statements are removed.
+    /// This method updates the bindings map to hold expression to identifier information for each
+    /// subexpression in the given expression tree. The expressions can be looked up in the
+    /// bindings map to find common subexpressions.
     ///
     /// To handle the alias issue (see inline comment), we also return a mapping for a symbol name
     /// with its aliases.
@@ -131,7 +112,7 @@ impl Cse {
             let taken;
             match e.kind {
                 Let { ref name, ref mut value, ref mut body } => {
-                    // Let expressions represent "already CSE'd" values, so we can track them. 
+                    // Let expressions represent "already CSE'd" values, so we can track them.
                     let taken_value = value.take();
 
                     // ALIAS ISSUE.
@@ -190,7 +171,7 @@ impl Cse {
         });
     }
 
-    /// Build a scope map for each identifier.
+    /// Builds a scope map for each identifier.
     ///
     /// The scope map maps a symbol to the *least deep* scope in an expression tree. For example,
     /// in the code below:
@@ -213,7 +194,7 @@ impl Cse {
 
     fn build_scope_map_helper(&mut self,
                            expr: &Expr,
-                           bindings: &HashMap<Symbol, Expr>, 
+                           bindings: &HashMap<Symbol, Expr>,
                            scope_map: &mut HashMap<Symbol, isize>,
                            current_scope: isize) {
 
@@ -251,15 +232,12 @@ impl Cse {
 
     /// Generates bindings in the expression.
     ///
-    /// # Arguments
+    /// This injects the definition of each symbol into the correct position in the final
+    /// expression. Specifically, a symbol is defined in the highest scope that symbol is used in.
     ///
-    /// * `expr` is the expression to generate the bindings in.
-    /// * `bindings` maps symbols to their values. Expressions from here are drained and added back
-    /// into the expression.
-    /// * `generated` tracks which bindings have been inserted into `expr` already. 
-    /// * `stack` is an ordered list of bindings to be generated in the current lambda.
-    /// * `scopes` is the *highest* scope that an expression appears in. The expression is only
-    /// inserted in this scope and is guaranteed to appear before all references to its symbol. 
+    /// The function updates `expr` with the symbol to value mappings in `bindings`. Bindings that
+    /// are already inserted are tracked in `generated`. The `stack` tracks scopes to generate
+    /// the bindings in, and `scopes` maps each symbol to its highest scope.
     fn generate_bindings(&mut self,
                          expr: &mut Expr,
                          bindings: &mut HashMap<Symbol, Expr>,
@@ -303,9 +281,11 @@ impl Cse {
         });
     }
 
-    /// Generates bindings in a new scope.
+    /// Creates a new scope (e.g., for a function or if statement) and generates bindings.
     ///
-    /// This method adds Let expressions within the given expression.
+    /// The created bindings may not necessarily be in the newest scope -- bindings for a symbol
+    /// `sym` are generated in the scope defined by `scopes` (i.e., in the scope
+    /// `stack[scopes.get(sym)]`
     fn generate_bindings_scoped(&mut self,
                                expr: &mut Expr,
                                bindings: &mut HashMap<Symbol, Expr>,
