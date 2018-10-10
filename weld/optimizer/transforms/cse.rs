@@ -1,4 +1,128 @@
 //! Implements common subexpression elimination.
+//!
+//! Common subexpression elimination (CSE) eliminates redundant work by assigning common
+//! subexpressions to a `let` expression. In this module, we refer to the symbol/value pair of a
+//! `let` expression as a "binding".
+//!
+//! The CSE algorithm works in two high level stops: _subexpression elimiation_ and  _binding
+//! generation_.
+//!
+//! # 1. Subexpression Elimination
+//!
+//! In subexpression elimination, first, we create a hash table that maps each expression to a
+//! symbol name. The hash table is created by traversing the expression tree bottom-up (from leaf
+//! to root), so sub-expressions are added to the table before parent expressions. When processing
+//! an expression, we check if its exists in the hash table, and if it does, we replace it with the
+//! corresponding symbol.
+//!
+//! The output of this step is a modified expression where each expression is assigned an
+//! identifier, as well as the bindings table that maps the expression to its symbol name. Note
+//! that at this stage, the expression itself _does not_ contain the identifier definitions.
+//!
+//! ## Considerations
+//!
+//! The subexpression elimination step does not eliminate redundant occurrances of the
+//! following expression kinds:
+//!
+//! * Literals
+//! * Identifiers
+//! * Expressions with Builder types
+//!
+//! Builder expressions may have side effects (e.g., memory allocations), so we don't eliminate
+//! them.
+//!
+//! # 2. Binding Generation
+//!
+//! In the binding generation phase, we need to insert definitions for each identifier in the
+//! expression produced by subexpression elimination. A variable may be used multiple times, and it
+//! may also be used in many different scopes (e.g., within a For loop's lambda as well as within
+//! the top level function), so there are potentially many sites where the binding can be inserted.
+//! We also do not want to hoist out expressions computed behind a branch.
+//!
+//! As an example, consider the following Weld program:
+//!
+//! ```weld
+//! lookup(w, 1) + if(x > 0, lookup(v, 0) + lookup(v, 0) + lookup(w, 1), lookup(z, 0))
+//! ```
+//!
+//! There are several expressions here: the lookup on `w`, the lookup on `v`, and the lookup on `z`
+//! are the most notable. Of these, `lookup(w, 1)` and `lookup(v, 0)` are redundant, but 
+//! `lookup(v, 0)` should occur after the `if` condition check.
+//!
+//! The bindings generator takes as input an expression that looks as follows:
+//!
+//! ```weld
+//! cse7
+//! ```
+//!
+//! and a bindings list:
+//!
+//! ```weld
+//! cse0 -> lookup(w, 1)
+//! cse1 -> lookup(v, 0)
+//! cse2 -> lookup(z, 0)
+//! cse3 -> x > 0
+//! cse4 -> cse1 + cse1
+//! cse5 -> cse1 + cse0
+//! cse6 -> if(cse3, cse5, cse2)
+//! cse7 -> cse0 + cse6
+//! ```
+//!
+//! Note that each expression only appears once: redundant expressions are assigned the same name.
+//! We just need to figure out where to insert the `let` definition for each expression.
+//!
+//! The algorithm for this is fairly simple: we simply insert the `let` at the *highest* scope
+//! where the identifier is used. This is the most "visible" place for the `let` definition. We
+//! also, of course, need to generate the dependencies of an identifier before generating its value
+//! (e.g., before `cse4`, we need to generate `cse1` in the example above).
+//!
+//! The bindings generation phase thus first generates a scope map which computes the scope depth
+//! of each symbol. We then recursively generate each expression, maintaining a stack of scopes:
+//! the value of each expression is generated in the scope from the scope map.
+//!
+//! The scope map for the example above would look as follows:
+//!
+//! ```weld
+//! cse0 -> 0
+//! cse1 -> 1
+//! cse2 -> 1
+//! cse3 -> 0
+//! cse4 -> 1
+//! cse5 -> 1
+//! cse6 -> 0
+//! cse7 -> 0
+//! ```
+//!
+//! The scope-0 variables can be generated at the top of the top function. The scope-1 variables
+//! are generated behind the if branch (the algorithm recursively ensures that dependencies are
+//! generated in order).
+//!
+//! The final output is:
+//!
+//! ```weld
+//! let cse0 = lookup(w, 1);
+//! let cse3 = x > 0;
+//! let cse6 = if(cse3,
+//!     let cse1 = lookup(v, 0);
+//!     cse1 + cse0,
+//!     let cse2 = lookup(z, 0);
+//!     cse2
+//! );
+//! let cse7 = cse0 + cse6;
+//! cse7
+//! ```
+//!
+//! Calling the inliner will result in a more sane-looking expression tree:
+//!
+//! ```weld
+//! let cse0 = lookup(w, 1);
+//! if (x > 0,
+//!     let cse1 = lookup(v, 0); cse1 + cse0,
+//!     lookup(z, 0)
+//! ) + cse0
+//! ```
+//!
+//! This is our final CSE'd output.
 
 use ast::*;
 use ast::constructors::*;
@@ -173,19 +297,7 @@ impl Cse {
 
     /// Builds a scope map for each identifier.
     ///
-    /// The scope map maps a symbol to the *least deep* scope in an expression tree. For example,
-    /// in the code below:
-    ///
-    /// ```weld
-    /// let cse0 = ...; # depth 0
-    /// if ( cond,
-    ///     let cse0 = ...; # depth 1
-    ///     ...
-    /// )
-    /// ```
-    ///
-    /// `cse0` appears in two scopes: depth-0 and depth-1. The scope map would indicate depth-0,
-    /// since this is the least deep scope.
+    /// The scope map maps a symbol to the *least deep* (i.e., highest) scope in an expression tree.
     fn build_scope_map(&mut self, expr: &Expr, bindings: &HashMap<Symbol, Expr>) -> HashMap<Symbol, isize> {
         let mut scopes = HashMap::new();
         self.build_scope_map_helper(expr, bindings, &mut scopes, -1);
@@ -285,7 +397,7 @@ impl Cse {
     ///
     /// The created bindings may not necessarily be in the newest scope -- bindings for a symbol
     /// `sym` are generated in the scope defined by `scopes` (i.e., in the scope
-    /// `stack[scopes.get(sym)]`
+    /// `stack[scopes.get(sym)]`)
     fn generate_bindings_scoped(&mut self,
                                expr: &mut Expr,
                                bindings: &mut HashMap<Symbol, Expr>,
