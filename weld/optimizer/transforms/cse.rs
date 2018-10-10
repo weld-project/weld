@@ -8,11 +8,50 @@ use util::SymbolGenerator;
 use std::collections::{HashMap, HashSet};
 use std::collections::hash_map::Entry;
 
+/// Implements the CSE transform. 
+pub fn common_subexpression_elimination(expr: &mut Expr) {
+    use super::inliner;
+    if let Lambda { .. } = expr.kind {
+        Cse::apply(expr);
+        // Put this here instead of the in the pass because the expression tree looks strange
+        // without it, even in tests.
+        inliner::inline_let(expr);
+    }
+}
+
 /// State for the CSE transformation.
 #[derive(Debug)]
 struct Cse {
     /// Tracks symbol names.
     sym_gen: SymbolGenerator,
+}
+
+/// Specifies whether an expression should be considered for common subexpression elimination.
+/// 
+/// We don't apply CSE to primitives such as literals and identifiers, as well as lambdas, since
+/// those can't be assigned to names in Weld.
+///
+/// Expressions which contain a builder type also cannot be CSE'd, since they are special
+/// expressions that can produce side effects (e.g., memory allocations that should not be aliased
+/// between two values).  In practice, only NewBuilder calls would not be candidates for CSE: since
+/// builder operations must be linear, a common subexpression after uniquify involving `merge` or
+/// `for` should never appear in a valid Weld program.
+trait UseCse {
+    /// Returns whether this expression creates a new builder without a Result call.
+    fn use_cse(&self) -> bool;
+}
+
+impl UseCse for Expr {
+    fn use_cse(&self) -> bool {
+        if self.ty.contains_builder() {
+            return false;
+        }
+
+        match self.kind {
+            Literal(_) | Ident(_) | Lambda { .. } => false,
+            _ => true
+        }
+    }
 }
 
 impl Cse {
@@ -27,10 +66,6 @@ impl Cse {
         let ref mut aliases = HashMap::new();
 
         cse.remove_common_subexpressions(expr, bindings, aliases);
-
-        for value in bindings.values() {
-            println!("{}", value);
-        }
 
         // Convert the bindings map to map from Expr -> Symbol to Symbol -> Expr.
         let ref mut bindings = bindings.drain()
@@ -82,21 +117,22 @@ impl Cse {
                                     bindings: &mut HashMap<Expr, Symbol>,
                                     aliases: &mut HashMap<Symbol, Vec<Symbol>>) {
 
+        use self::UseCse;
+
         trace!("Remove Common Subexpressions called on {}", expr.pretty_print());
 
         expr.transform_up(&mut |ref mut e| {
             trace!("Processing {}", e.pretty_print());
-            let mut taken = None;
+
+            if !e.use_cse() {
+                return None;
+            }
+
+            let taken;
             match e.kind {
-                // literals and identifiers are "unit" expressions that are not eliminated.
-                //
-                // TODO: Struct of newbuilder - should probably ignore anything with nested
-                // newbuilder...?
-                Literal(_) | Ident(_) | Lambda { .. } | NewBuilder(_) => (),
                 Let { ref name, ref mut value, ref mut body } => {
                     // Let expressions represent "already CSE'd" values, so we can track them. 
                     let taken_value = value.take();
-                    println!("\t Added symbol {} -> {}", name, taken_value.pretty_print());
 
                     // ALIAS ISSUE.
                     // We can have cases where a Let statement in the input redefines
@@ -301,7 +337,129 @@ impl Cse {
     }
 }
 
-/// Implements the CSE transform. 
-pub fn common_subexpression_elimination(expr: &mut Expr) {
-    Cse::apply(expr)
+#[cfg(test)]
+fn check_cse(input: &str, expect: &str) {
+    use tests::check_transform;
+    check_transform(input, expect, common_subexpression_elimination);
+}
+
+#[test]
+fn basic_test() {
+    let input = "|| (1+2) + (1+2)";
+    let expect = "|| let cse = (1+2); cse + cse";
+    check_cse(input, expect);
+}
+
+#[test]
+fn many_subexprs_test() {
+    let input = "|| (1+2) + (1+2) + (3+4) + (3+4)";
+    let expect = "|| let cse1 = (1+2); let cse2 = (3+4); cse1 + cse1 + cse2 + cse2";
+    check_cse(input, expect);
+}
+
+#[test]
+fn nesting_test() {
+    let input = "|| ((1+2) + (1+2)) + ((1+2) + (1+2))";
+    let expect = "|| let cse1 = (1+2); let cse2 = (cse1+cse1); cse2 + cse2";
+    check_cse(input, expect);
+}
+
+#[test]
+fn if_test() {
+    let input = "|x: i32, v:vec[i32]| if(x>0, lookup(v,0L), lookup(v,0L))";
+    // Currently, CSE does not hoist out of Ifs unless the expression appears outside the If as
+    // well.
+    let expect = input;
+    check_cse(input, expect);
+}
+
+#[test]
+fn if_test_2() {
+    let input = "|x:i32| if(x>0, (1+2) + (1+2), (1+2)+(1+2))";
+    let expect = "|x:i32| if(x>0,
+        let cse1 = (1+2); cse1 + cse1,
+        let cse2 = (1+2); cse2 + cse2)";
+    check_cse(input, expect);
+}
+
+#[test]
+fn if_test_3() {
+    let input = "|x:i32| (1+2) + if(x>0, (1+2) + (1+2), (1+2)+(1+2))";
+    let expect = "|x:i32| let cse = (1+2);
+        cse + if(x>0, cse+cse, cse+cse)";
+    check_cse(input, expect);
+}
+
+#[test]
+fn if_test_4() {
+    let input = "|x:i32| if(x>0, (1+2) + (1+2), (1+2)+(1+2)) + (1+2)";
+    let expect = "|x:i32| let cse = (1+2);
+        if(x>0, cse+cse, cse+cse) + cse";
+    check_cse(input, expect);
+}
+
+#[test]
+fn for_test() {
+    let input = "|| result(for([(1+2)], merger[i32,+], |b,i,e| merge(b, e + (1+2))))";
+    let expect = "|| let cse = (1+2); result(for([cse], merger[i32,+], |b,i,e| merge(b, e + cse)))";
+    check_cse(input, expect);
+}
+
+#[test]
+fn for_test_2() {
+    let input = "|| result(for([1], merger[i32,+], |b,i,e| merge(b, e + (1+2)))) + (1+2)";
+    let expect = "|| let cse = (1+2); result(for([1], merger[i32,+], |b,i,e| merge(b, e + cse))) + cse";
+    check_cse(input, expect);
+}
+
+#[test]
+fn for_test_3() {
+    let input = "|| result(for([1], merger[i32,+], |b,i,e| merge(b, e + (1+2) + (1+2))))";
+    let expect = "|| result(for([1], merger[i32,+], |b,i,e| let cse = (1+2); merge(b, e + cse + cse)))";
+    check_cse(input, expect);
+}
+
+
+#[test]
+fn builder_test() {
+    let input = "|| {appender[i32], appender[i32]}";
+    let expect = input;
+    check_cse(input, expect);
+}
+
+#[test]
+fn builder_test_2() {
+    let input = "|| {result(appender[i32]), result(appender[i32])}";
+    let expect = "|| let cse = result(appender[i32]); {cse, cse}";
+    check_cse(input, expect);
+}
+
+
+#[test]
+fn builder_test_3() {
+    let input = "|| {{appender[i32], appender[i32], 1}, {appender[i32], appender[i32], 1}}";
+    let expect = input;
+    check_cse(input, expect);
+}
+
+#[test]
+fn builder_test_4() {
+    let input = "|| {{appender[i32], appender[i32], (1+2)}, {appender[i32], appender[i32], (1+2)}}";
+    let expect = "|| let cse = (1+2); {{appender[i32], appender[i32], cse}, {appender[i32], appender[i32], cse}}";
+    check_cse(input, expect);
+}
+
+#[test]
+fn alias_test() {
+    let input = "|x:i32| let a = x; let b = x; a + a + b + b";
+    let expect = input;
+    check_cse(input, expect);
+}
+
+
+#[test]
+fn let_test() {
+    let input = "|x:i32| let a = (1+2); (1+2) + a + (1+2)";
+    let expect = "|x:i32| let cse = (1+2); cse + cse + cse";
+    check_cse(input, expect);
 }

@@ -192,6 +192,15 @@ impl Type {
         }
     }
 
+    /// Returns whether this `Type` contains a builder.
+    pub fn contains_builder(&self) -> bool {
+        use self::Type::Builder;
+        match *self {
+            Builder(_, _) => true,
+            _ => self.children().any(|t| t.contains_builder()),
+        }
+    }
+
     /// Returns whether this `Type` is a builder.
     pub fn is_builder(&self) -> bool {
         use self::Type::{Builder, Struct};
