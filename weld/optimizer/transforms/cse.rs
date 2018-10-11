@@ -2,10 +2,11 @@
 //!
 //! Common subexpression elimination (CSE) eliminates redundant work by assigning common
 //! subexpressions to a `let` expression. In this module, we refer to the symbol/value pair of a
-//! `let` expression as a "binding".
+//! `let` expression as a "binding", and the site of the `let` expression as a "scope".
 //!
-//! The CSE algorithm works in two high level stops: _subexpression elimiation_ and  _binding
-//! generation_.
+//! The CSE algorithm works in two high level steps: _subexpression elimination_ and  _binding
+//! generation_. The algorithm assumes symbol names in the expression are unique (the transform
+//! internally uses the uniquify pass).
 //!
 //! # 1. Subexpression Elimination
 //!
@@ -15,9 +16,10 @@
 //! an expression, we check if its exists in the hash table, and if it does, we replace it with the
 //! corresponding symbol.
 //!
-//! The output of this step is a modified expression where each expression is assigned an
-//! identifier, as well as the bindings table that maps the expression to its symbol name. Note
-//! that at this stage, the expression itself _does not_ contain the identifier definitions.
+//! The output of this step is a modified expression tree where each expression is assigned an
+//! identifier, as well as the bindings table that maps each sub-expression to its symbol name.
+//! Note that at this stage, the expression tree itself _does not_ contain the identifier
+//! definitions (i.e., there are no `let` statements -- only unbound identifiers).
 //!
 //! ## Considerations
 //!
@@ -29,7 +31,8 @@
 //! * Expressions with Builder types
 //!
 //! Builder expressions may have side effects (e.g., memory allocations), so we don't eliminate
-//! them.
+//! them. In practice, since builders are linear types, we can only have common sub-expressions
+//! involving the NewBuilder expression.
 //!
 //! # 2. Binding Generation
 //!
@@ -37,25 +40,36 @@
 //! expression produced by subexpression elimination. A variable may be used multiple times, and it
 //! may also be used in many different scopes (e.g., within a For loop's lambda as well as within
 //! the top level function), so there are potentially many sites where the binding can be inserted.
-//! We also do not want to hoist out expressions computed behind a branch.
+//! We also do not want to hoist out expressions computed behind a branch. Finally, identifiers
+//! whose values themselves depend on other identifiers must be generated in the correct order.
+//! Note that in our context, a _scope_ is a site where we can insert a binding. Lambdas and branch
+//! targets both create new scopes.
 //!
-//! As an example, consider the following Weld program:
+//! As an example, consider the following Weld program, annotated with scope depths:
 //!
 //! ```weld
-//! lookup(w, 1) + if(x > 0, lookup(v, 0) + lookup(v, 0) + lookup(w, 1), lookup(z, 0))
+//! |x: i32, w: vec[i32], v: vec[i32], z: vec[i32]|      | 
+//!     lookup(w, 1) +                                   |
+//!     if(x > 0,                                        |
+//!         lookup(v, 0) + lookup(v, 0) + lookup(w, 1),  | |_______scope depth 1
+//!         lookup(z, 0)                                 | |_______scope depth 1
+//!     )                                                |_________scope depth 0
 //! ```
 //!
 //! There are several expressions here: the lookup on `w`, the lookup on `v`, and the lookup on `z`
-//! are the most notable. Of these, `lookup(w, 1)` and `lookup(v, 0)` are redundant, but 
-//! `lookup(v, 0)` should occur after the `if` condition check.
+//! are the most notable. Of these, `lookup(w, 1)` and `lookup(v, 0)` are redundant, but `lookup(v,
+//! 0)` should occur after the `if` condition check (i.e., the let statement for it should occur in
+//! the true condition of the branch).
 //!
 //! The bindings generator takes as input an expression that looks as follows:
 //!
 //! ```weld
+//! |x: i32, w: vec[i32], v: vec[i32], z: vec[i32]|
 //! cse7
 //! ```
 //!
-//! and a bindings list:
+//! and a bindings list (not that this is the sub-expression -> symbol map generated during the
+//! first step with keys/values flipped):
 //!
 //! ```weld
 //! cse0 -> lookup(w, 1)
@@ -71,30 +85,31 @@
 //! Note that each expression only appears once: redundant expressions are assigned the same name.
 //! We just need to figure out where to insert the `let` definition for each expression.
 //!
-//! The algorithm for this is fairly simple: we simply insert the `let` at the *highest* scope
+//! The algorithm proceeds as follow. We insert the `let` for an identifier at the *highest* scope
 //! where the identifier is used. This is the most "visible" place for the `let` definition. We
 //! also, of course, need to generate the dependencies of an identifier before generating its value
 //! (e.g., before `cse4`, we need to generate `cse1` in the example above).
 //!
 //! The bindings generation phase thus first generates a scope map which computes the scope depth
-//! of each symbol. We then recursively generate each expression, maintaining a stack of scopes:
-//! the value of each expression is generated in the scope from the scope map.
+//! of each symbol. We then recursively generate each expression, maintaining a stack of variable
+//! bindings: entry `i` in the stack corresponds to the bindings at scope depth `i`.  the value of
+//! each expression is generated in the scope from the scope map.
 //!
 //! The scope map for the example above would look as follows:
 //!
 //! ```weld
-//! cse0 -> 0
-//! cse1 -> 1
-//! cse2 -> 1
-//! cse3 -> 0
-//! cse4 -> 1
-//! cse5 -> 1
-//! cse6 -> 0
-//! cse7 -> 0
+//! cse0 -> 0 (used in top level function)
+//! cse1 -> 1 (used only behind branch)
+//! cse2 -> 1 (used only behind branch)
+//! cse3 -> 0 (used in top level function)
+//! cse4 -> 1 (used only behind branch)
+//! cse5 -> 1 (used only behind branch)
+//! cse6 -> 0 (used in top level function)
+//! cse7 -> 0 (used in top level function)
 //! ```
 //!
 //! The scope-0 variables can be generated at the top of the top function. The scope-1 variables
-//! are generated behind the if branch (the algorithm recursively ensures that dependencies are
+//! are generated behind the branch target (the algorithm recursively ensures that dependencies are
 //! generated in order).
 //!
 //! The final output is:
@@ -104,7 +119,8 @@
 //! let cse3 = x > 0;
 //! let cse6 = if(cse3,
 //!     let cse1 = lookup(v, 0);
-//!     cse1 + cse0,
+//!     let cse4 = cse1 + cse1;
+//!     cse4 + cse0,
 //!     let cse2 = lookup(z, 0);
 //!     cse2
 //! );
@@ -116,10 +132,10 @@
 //!
 //! ```weld
 //! let cse0 = lookup(w, 1);
-//! if (x > 0,
-//!     let cse1 = lookup(v, 0); cse1 + cse0,
+//! cse0 + if (x > 0,
+//!     let cse1 = lookup(v, 0); cse1 + cse1 + cse0,
 //!     lookup(z, 0)
-//! ) + cse0
+//! )
 //! ```
 //!
 //! This is our final CSE'd output.
@@ -136,12 +152,15 @@ use std::collections::hash_map::Entry;
 pub fn common_subexpression_elimination(expr: &mut Expr) {
     use super::inliner;
     if let Lambda { .. } = expr.kind {
+        expr.uniquify().unwrap();
         Cse::apply(expr);
-        // Put this here instead of the in the pass because the expression tree looks strange
+        // Put this here instead of in the pass because the expression tree looks strange
         // without it, even in tests.
         inliner::inline_let(expr);
     }
 }
+
+type ScopeDepth = isize;
 
 /// State for the CSE transformation.
 #[derive(Debug)]
@@ -161,7 +180,6 @@ struct Cse {
 /// builder operations must be linear, a common subexpression after uniquify involving `merge` or
 /// `for` should never appear in a valid Weld program.
 trait UseCse {
-    /// Returns whether this expression creates a new builder without a Result call.
     fn use_cse(&self) -> bool;
 }
 
@@ -195,7 +213,7 @@ impl Cse {
 
         cse.remove_common_subexpressions(expr, bindings, aliases);
 
-        // Convert the bindings map to map from Expr -> Symbol to Symbol -> Expr.
+        // Convert the bindings map from Expr -> Symbol to Symbol -> Expr.
         let ref mut bindings = bindings.drain()
             .map(|(k, v)| (v, k))
             .collect::<HashMap<Symbol, Expr>>();
@@ -237,12 +255,10 @@ impl Cse {
                 return None;
             }
 
-            let taken;
             match e.kind {
                 Let { ref name, ref mut value, ref mut body } => {
                     // Let expressions represent "already CSE'd" values, so we can track them.
                     let taken_value = value.take();
-
                     // ALIAS ISSUE.
                     // We can have cases where a Let statement in the input redefines
                     // the same expression, e.g.,:
@@ -270,31 +286,25 @@ impl Cse {
                             let alias_list = aliases.entry(sym).or_insert(vec![]);
                             alias_list.push(name.clone());
                         }
-                    }
-                    taken = Some(body.take());
+                    };
+                    Some(*body.take())
                 }
                 _ => {
-                    if !bindings.contains_key(e) {
-                        let name = self.sym_gen.new_symbol("cse");
-                        bindings.insert(e.clone(), name);
-                    }
+                    let e = e.take();
+                    let ty = e.ty.clone();
+
+                    let name = bindings.entry(e)
+                        .or_insert_with(&mut || self.sym_gen.new_symbol("cse"))
+                        .clone();
 
                     // Replace the expression with its CSE name.
-                    let name = bindings.get(e).cloned().unwrap();
-                    return Some(Expr {
-                        ty: e.ty.clone(),
+                    let replacement = Expr {
+                        ty: ty,
                         kind: Ident(name),
                         annotations: Annotations::new(),
-                    });
+                    };
+                    Some(replacement)
                 }
-            };
-
-            // For Let statements, replace the Let with the body. The binding definition
-            // is tracked in the bindings map.
-            if let Some(body) = taken {
-                return Some(*body);
-            } else {
-                return None;
             }
         });
     }
@@ -302,8 +312,11 @@ impl Cse {
     /// Builds a scope map for each identifier.
     ///
     /// The scope map maps a symbol to the *least deep* (i.e., highest) scope in an expression tree.
-    fn build_scope_map(&mut self, expr: &Expr, bindings: &HashMap<Symbol, Expr>) -> HashMap<Symbol, isize> {
+    fn build_scope_map(&mut self,
+                       expr: &Expr,
+                       bindings: &HashMap<Symbol, Expr>) -> HashMap<Symbol, ScopeDepth> {
         let mut scopes = HashMap::new();
+        // Start at -1 so the top-level lambda gets a depth of 0.
         self.build_scope_map_helper(expr, bindings, &mut scopes, -1);
         scopes
     }
@@ -311,13 +324,14 @@ impl Cse {
     fn build_scope_map_helper(&mut self,
                            expr: &Expr,
                            bindings: &HashMap<Symbol, Expr>,
-                           scope_map: &mut HashMap<Symbol, isize>,
-                           current_scope: isize) {
+                           scope_map: &mut HashMap<Symbol, ScopeDepth>,
+                           current_scope: ScopeDepth) {
 
         let mut handled = true;
         match expr.kind {
             If { ref cond, ref on_true, ref on_false } => {
                 self.build_scope_map_helper(cond, bindings, scope_map, current_scope);
+                // Update current scope for branch targets.
                 self.build_scope_map_helper(on_true, bindings, scope_map, current_scope + 1);
                 self.build_scope_map_helper(on_false, bindings, scope_map, current_scope + 1);
             }
@@ -359,7 +373,7 @@ impl Cse {
                          bindings: &mut HashMap<Symbol, Expr>,
                          generated: &mut HashSet<Symbol>,
                          stack: &mut Vec<Vec<(Symbol, Expr)>>,
-                         scopes: &HashMap<Symbol, isize>) {
+                         scopes: &HashMap<Symbol, ScopeDepth>) {
 
         expr.transform_and_continue(&mut |ref mut e| {
             match e.kind {
@@ -368,7 +382,7 @@ impl Cse {
                     (None, false)
                 }
                 If { ref mut cond, ref mut on_true, ref mut on_false } => {
-                    // Generate bindings for the condition, since we won't recursive down into
+                    // Generate bindings for the condition, since we won't recurse down into
                     // subexpressions.
                     self.generate_bindings(cond, bindings, generated, stack, scopes);
 
@@ -399,31 +413,29 @@ impl Cse {
 
     /// Creates a new scope (e.g., for a function or if statement) and generates bindings.
     ///
+    /// The new scope represents a new site in the expression tree to insert let statements.
+    ///
     /// The created bindings may not necessarily be in the newest scope -- bindings for a symbol
     /// `sym` are generated in the scope defined by `scopes` (i.e., in the scope
-    /// `stack[scopes.get(sym)]`)
+    /// `stack[scopes.get(sym)]`).
     fn generate_bindings_scoped(&mut self,
                                expr: &mut Expr,
                                bindings: &mut HashMap<Symbol, Expr>,
                                generated: &mut HashSet<Symbol>,
                                stack: &mut Vec<Vec<(Symbol, Expr)>>,
-                               scopes: &HashMap<Symbol, isize>) {
+                               scopes: &HashMap<Symbol, ScopeDepth>) {
 
         trace!("Processing scoped expression {}", expr.pretty_print());
 
         stack.push(vec![]);
 
-        // TODO Remove this!
-        let generated_before = generated.clone();
         self.generate_bindings(expr, bindings, generated, stack, scopes);
 
         // Generate the Let expressions for the bindings in this scope.
         let binding_list = stack.pop().unwrap();
         let mut prev = expr.take();
         for (sym, expr) in binding_list.into_iter().rev() {
-            if !generated_before.contains(&sym) {
-                generated.remove(&sym);
-            }
+            generated.remove(&sym);
             prev = let_expr(sym, expr, prev).unwrap();
         }
 
