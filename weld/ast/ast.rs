@@ -486,12 +486,12 @@ impl fmt::Display for BuilderKind {
 /// A named symbol in the Weld AST.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Symbol {
-    pub name: String,
-    pub id: i32,
+    name: String,
+    id: i32,
 }
 
 impl Symbol {
-    pub fn new(name: &str, id: i32) -> Symbol {
+    pub fn new<T: Into<String>>(name: T, id: i32) -> Symbol {
         Symbol {
             name: name.into(),
             id: id,
@@ -502,11 +502,12 @@ impl Symbol {
         Symbol::new(PLACEHOLDER_NAME, 0)
     }
 
-    pub fn name(name: &str) -> Symbol {
-        Symbol {
-            name: name.into(),
-            id: 0,
-        }
+    pub fn name(&self) -> String {
+        self.name.to_string()
+    }
+
+    pub fn id(&self) -> i32 {
+        self.id
     }
 }
 

@@ -48,7 +48,7 @@ impl SymbolStack {
     fn symbol(&mut self, sym: Symbol) -> WeldResult<Symbol> {
         match self.stack.entry(sym.clone()) {
             Entry::Occupied(ref ent) => {
-                let name = ent.key().name.as_str();
+                let name = ent.key().name();
                 let id = ent.get()
                     .last()
                     .map(|v| *v)
@@ -64,9 +64,9 @@ impl SymbolStack {
     /// the name. The symbol can be retrieved with `symbol()`.
     fn push_symbol(&mut self, sym: Symbol) {
         let stack_entry = self.stack.entry(sym.clone()).or_insert(Vec::new());
-        let next_entry = self.next_unique_symbol.entry(sym.name).or_insert(-1);
-        *next_entry = if sym.id > *next_entry {
-            sym.id
+        let next_entry = self.next_unique_symbol.entry(sym.name()).or_insert(-1);
+        *next_entry = if sym.id() > *next_entry {
+            sym.id()
         } else {
            *next_entry + 1 
         };

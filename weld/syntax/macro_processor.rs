@@ -96,15 +96,15 @@ fn update_defined_ids(expr: &mut Expr, sym_gen: &mut SymbolGenerator) {
                ref value,
                ref mut body,
            } = expr.kind {
-        if sym.id == 0 {
-            let new_sym = sym_gen.new_symbol(&sym.name);
+        if sym.id() == 0 {
+            let new_sym = sym_gen.new_symbol(&sym.name());
             let new_ident = Expr {
                 kind: Ident(new_sym.clone()),
                 ty: value.ty.clone(),
                 annotations: Annotations::new(),
             };
             body.substitute(sym, &new_ident);
-            sym.id = new_sym.id;
+            *sym = Symbol::new(sym.name(), new_sym.id());
         }
     }
     if let Lambda {
@@ -113,15 +113,15 @@ fn update_defined_ids(expr: &mut Expr, sym_gen: &mut SymbolGenerator) {
            } = expr.kind {
         for ref mut param in params {
             let sym = &mut param.name;
-            if sym.id == 0 {
-                let new_sym = sym_gen.new_symbol(&sym.name);
+            if sym.id() == 0 {
+                let new_sym = sym_gen.new_symbol(&sym.name());
                 let new_ident = Expr {
                     kind: Ident(new_sym.clone()),
                     ty: param.ty.clone(),
                     annotations: Annotations::new(),
                 };
                 body.substitute(sym, &new_ident);
-                sym.id = new_sym.id;
+                *sym = Symbol::new(sym.name(), new_sym.id());
             }
         }
     }
