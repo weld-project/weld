@@ -890,10 +890,7 @@ fn infer_types_test() {
     assert_eq!(print_typed_expr_without_indent(&e).as_str(), "a:?");
 
     let e = Expr {
-        kind: ExprKind::Ident(Symbol {
-                                  name: "a".to_string(),
-                                  id: 1,
-                              }),
+        kind: ExprKind::Ident(Symbol::new("a", 1)),
         ty: Type::Unknown,
         annotations: Annotations::new(),
     };
