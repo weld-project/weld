@@ -228,7 +228,10 @@ impl Cse {
         }
 
         let ref scopes =  cse.build_scope_map(expr, bindings);
-        cse.generate_bindings(expr, bindings, &mut HashSet::new(), &mut vec![], scopes);
+
+        let ref mut generated = HashSet::new();
+        let ref mut stack = vec![];
+        cse.generate_bindings(expr, bindings, generated, stack, scopes);
     }
 
     /// Removes common subexpressions and remove bindings.
@@ -366,8 +369,9 @@ impl Cse {
     /// expression. Specifically, a symbol is defined in the highest scope that symbol is used in.
     ///
     /// The function updates `expr` with the symbol to value mappings in `bindings`. Bindings that
-    /// are already inserted are tracked in `generated`. The `stack` tracks scopes to generate
-    /// the bindings in, and `scopes` maps each symbol to its highest scope.
+    /// are already inserted are tracked in `generated`. The `stack` tracks scopes to generate the
+    /// bindings in (where each scope holds bindings to be generated at a particular site in the
+    /// expression tree), and `scopes` maps each symbol to its highest scope.
     fn generate_bindings(&mut self,
                          expr: &mut Expr,
                          bindings: &mut HashMap<Symbol, Expr>,
@@ -434,6 +438,8 @@ impl Cse {
         // Generate the Let expressions for the bindings in this scope.
         let binding_list = stack.pop().unwrap();
         let mut prev = expr.take();
+        // Reverse list since the tree of let statements is built bottom-up, but evaluated
+        // top-down.
         for (sym, expr) in binding_list.into_iter().rev() {
             generated.remove(&sym);
             prev = let_expr(sym, expr, prev).unwrap();
