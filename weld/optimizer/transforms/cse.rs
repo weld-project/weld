@@ -160,8 +160,6 @@ pub fn common_subexpression_elimination(expr: &mut Expr) {
     }
 }
 
-type ScopeDepth = isize;
-
 /// State for the CSE transformation.
 #[derive(Debug)]
 struct Cse {
@@ -200,6 +198,43 @@ impl UseCse for Expr {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct Site {
+    site: Vec<i8>,
+}
+
+impl Site {
+    fn new() -> Site {
+        Site {
+            site: vec![],
+        }
+    }
+
+    fn push(&mut self, index: i8) {
+        self.site.push(index); 
+    }
+
+    fn pop(&mut self) {
+        self.site.pop();
+    }
+
+    fn depth(&self) -> usize {
+        self.site.len()
+    }
+
+    /// Returns whether this site contains `other`.
+    ///
+    /// A site contains `a` contains another site `b` if `a` is a substring of `b`.
+    ///
+    /// Returns `true` if the two sites are equal.
+    fn contains(&self, other: &Site) -> bool {
+        if self.site.len() > other.site.len() {
+            return false;
+        }
+        self.site.iter().zip(other.site.iter()).all(|(a,b)| a == b)
+    }
+}
+
 impl Cse {
     /// Apply the CSE transformation on the given expression.
     pub fn apply(expr: &mut Expr) {
@@ -227,11 +262,28 @@ impl Cse {
             }
         }
 
-        let ref scopes =  cse.build_scope_map(expr, bindings);
+        let ref mut scopes =  cse.build_scope_map(expr, bindings);
+
+        // Debug.
+        {
+            let mut debug = String::new();
+            for (k, v) in bindings.iter() {
+                debug.push_str(&format!("{} -> {}\n", k, v.pretty_print()));
+            }
+            trace!("bindings: {}", debug);
+            trace!("Expression after assigning cse symbols: {}", expr.pretty_print());
+             let mut debug = String::new();
+            for (k, v) in scopes.iter() {
+                debug.push_str(&format!("{} -> {:?}\n", k, v));
+            }
+            trace!("scopes: {}", debug);
+        }
 
         let ref mut generated = HashSet::new();
-        let ref mut stack = vec![];
+        let ref mut stack = (Site::new(), vec![]);
         cse.generate_bindings(expr, bindings, generated, stack, scopes);
+
+        trace!("After CSE: {}", expr.pretty_print());
     }
 
     /// Removes common subexpressions and remove bindings.
@@ -317,39 +369,56 @@ impl Cse {
     /// The scope map maps a symbol to the *least deep* (i.e., highest) scope in an expression tree.
     fn build_scope_map(&mut self,
                        expr: &Expr,
-                       bindings: &HashMap<Symbol, Expr>) -> HashMap<Symbol, ScopeDepth> {
+                       bindings: &HashMap<Symbol, Expr>) -> HashMap<Symbol, Vec<Site>> {
         let mut scopes = HashMap::new();
-        // Start at -1 so the top-level lambda gets a depth of 0.
-        self.build_scope_map_helper(expr, bindings, &mut scopes, -1);
+        self.build_scope_map_helper(expr, bindings, &mut scopes, &mut Site::new());
         scopes
+    }
+
+    /// Adds a site into a list of sites.
+    ///
+    /// The site is de-duplicated with other sites that supercede this one.
+    fn add_site(&self, sites: &mut Vec<Site>, new: Site) {
+        // If any of the existing sites do not contain the new one already...
+        if !sites.iter().any(|s| s.contains(&new)) {
+            // keep only the sites that the new site does not contain, and add the new site.
+            sites.retain(|s| !new.contains(s));
+            sites.push(new);
+        }
     }
 
     fn build_scope_map_helper(&mut self,
                            expr: &Expr,
                            bindings: &HashMap<Symbol, Expr>,
-                           scope_map: &mut HashMap<Symbol, ScopeDepth>,
-                           current_scope: ScopeDepth) {
+                           scope_map: &mut HashMap<Symbol, Vec<Site>>,
+                           current_site: &mut Site) {
 
         let mut handled = true;
         match expr.kind {
             If { ref cond, ref on_true, ref on_false } => {
-                self.build_scope_map_helper(cond, bindings, scope_map, current_scope);
+                self.build_scope_map_helper(cond, bindings, scope_map, current_site);
+
                 // Update current scope for branch targets.
-                self.build_scope_map_helper(on_true, bindings, scope_map, current_scope + 1);
-                self.build_scope_map_helper(on_false, bindings, scope_map, current_scope + 1);
+                current_site.push(0);
+                self.build_scope_map_helper(on_true, bindings, scope_map, current_site);
+                current_site.pop();
+
+                current_site.push(1);
+                self.build_scope_map_helper(on_false, bindings, scope_map, current_site);
+                current_site.pop();
             }
             Lambda { ref body, .. } => {
-                self.build_scope_map_helper(body, bindings, scope_map, current_scope + 1);
+                current_site.push(0);
+                self.build_scope_map_helper(body, bindings, scope_map, current_site);
+                current_site.pop();
             }
             Ident(ref name) if bindings.contains_key(name) => {
                 {
-                    let ent = scope_map.entry(name.clone()).or_insert(current_scope);
-                    if current_scope < *ent {
-                        *ent = current_scope;
-                    }
+                    let ent = scope_map.entry(name.clone()).or_insert(vec![]);
+                    self.add_site(ent, current_site.clone());
                 }
                 let expr = bindings.get(name).unwrap();
-                self.build_scope_map_helper(expr, bindings, scope_map, current_scope);
+                self.build_scope_map_helper(expr, bindings, scope_map, current_site);
             }
             _ => {
                 handled = false;
@@ -358,7 +427,7 @@ impl Cse {
 
         if !handled {
             for child in expr.children() {
-                self.build_scope_map_helper(child, bindings, scope_map, current_scope);
+                self.build_scope_map_helper(child, bindings, scope_map, current_site);
             }
         }
     }
@@ -376,13 +445,16 @@ impl Cse {
                          expr: &mut Expr,
                          bindings: &mut HashMap<Symbol, Expr>,
                          generated: &mut HashSet<Symbol>,
-                         stack: &mut Vec<Vec<(Symbol, Expr)>>,
-                         scopes: &HashMap<Symbol, ScopeDepth>) {
+                         stack: &mut (Site, Vec<Vec<(Symbol, Expr)>>),
+                         scopes: &mut HashMap<Symbol, Vec<Site>>) {
 
         expr.transform_and_continue(&mut |ref mut e| {
             match e.kind {
                 Lambda { ref mut body, .. } => {
+                    stack.0.push(0);
                     self.generate_bindings_scoped(body, bindings, generated, stack, scopes);
+                    stack.0.pop();
+
                     (None, false)
                 }
                 If { ref mut cond, ref mut on_true, ref mut on_false } => {
@@ -392,22 +464,49 @@ impl Cse {
 
                     // We want to keep definitions of If/Else statements within the branch target
                     // to prevent moving expressions out from behind a branch condition.
+                    stack.0.push(0);
                     self.generate_bindings_scoped(on_true, bindings, generated, stack, scopes);
+                    stack.0.pop();
+
+                    stack.0.push(1);
                     self.generate_bindings_scoped(on_false, bindings, generated, stack, scopes);
+                    stack.0.pop();
+
                     (None, false)
                 }
                 Ident(ref mut sym) if !generated.contains(sym) && bindings.contains_key(sym) => {
                     let mut expr = bindings.get(sym).cloned().unwrap();
-                    generated.insert(sym.clone());
 
                     // Generate the definition of this identifier if it doesn't exist.
                     self.generate_bindings(&mut expr, bindings, generated, stack, scopes);
 
-                    trace!("Added binding {} -> {}", &sym, expr.pretty_print());
-                    // We add the generated bindings to the highest scope.
-                    let scope = *scopes.get(&sym).unwrap() as usize;
-                    let binding_list = stack.get_mut(scope).unwrap();
-                    binding_list.push((sym.clone(), expr));
+                    trace!("Saw identifier {} (sites {:?}) at site {:?}",
+                    &sym,
+                    scopes.get(&sym).unwrap(),
+                    stack.0);
+
+                    let sites = scopes.get_mut(&sym).unwrap();
+
+                    // There will be at most one parent site from the current site where this
+                    // identifier should be generated.
+                    let delete_index = {
+                        let gen_site = sites.iter().enumerate().filter(|(_, s)| s.contains(&stack.0)).next();
+                        if let Some(ref result) = gen_site {
+                            let gen_site = result.1;
+                            generated.insert(sym.clone());
+                            let index = gen_site.depth() - 1;
+                            let binding_list = stack.1.get_mut(index).unwrap();
+                            binding_list.push((sym.clone(), expr));
+                            Some(result.0)
+                        } else {
+                            None
+                        }
+                    };
+
+                    if let Some(delete_index) = delete_index {
+                        sites.swap_remove(delete_index);
+                    }
+
                     (None, false)
                 }
                 _ => (None, true),
@@ -426,17 +525,17 @@ impl Cse {
                                expr: &mut Expr,
                                bindings: &mut HashMap<Symbol, Expr>,
                                generated: &mut HashSet<Symbol>,
-                               stack: &mut Vec<Vec<(Symbol, Expr)>>,
-                               scopes: &HashMap<Symbol, ScopeDepth>) {
+                               stack: &mut (Site, Vec<Vec<(Symbol, Expr)>>),
+                               scopes: &mut HashMap<Symbol, Vec<Site>>) {
 
         trace!("Processing scoped expression {}", expr.pretty_print());
 
-        stack.push(vec![]);
+        stack.1.push(vec![]);
 
         self.generate_bindings(expr, bindings, generated, stack, scopes);
 
         // Generate the Let expressions for the bindings in this scope.
-        let binding_list = stack.pop().unwrap();
+        let binding_list = stack.1.pop().unwrap();
         let mut prev = expr.take();
         // Reverse list since the tree of let statements is built bottom-up, but evaluated
         // top-down.
@@ -509,6 +608,24 @@ fn if_test_4() {
     let input = "|x:i32| if(x>0, (1+2) + (1+2), (1+2)+(1+2)) + (1+2)";
     let expect = "|x:i32| let cse = (1+2);
         if(x>0, cse+cse, cse+cse) + cse";
+    check_cse(input, expect);
+}
+
+#[test]
+fn if_test_5() {
+    let input = "|x:i32|
+      if(x > 0,
+        if (x > 1,
+          (1+2),
+          (2+3)
+        ),
+        (1+2) + (1+2)
+      )";
+    
+    // Make sure siblings don't cause values to be hoisted out.
+    let expect = "|x:i32| if (x > 0,
+        if (x > 1, (1+2), (2+3)),
+        let cse = (1+2); cse + cse)";
     check_cse(input, expect);
 }
 
