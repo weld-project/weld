@@ -496,15 +496,16 @@ impl Cse {
                 site_map.get(&name),
                 current_site);
 
-                // XXX Uncomment to fix bug! Investigating why..
-                // if !resolved {
+                // Need to do this so visit order is consistent! A better way to do the pathing is
+                // to compute the path based on the expression...
+                if !resolved {
                     {
                         let ent = site_map.entry(name.clone()).or_insert(vec![]);
                         self.add_site(ent, current_site.clone());
                     }
                     let expr = bindings.get(name).unwrap();
                     self.build_site_map_helper(expr, bindings, site_map, current_site);
-                // }
+                }
             }
             _ => {
                 handled = false;
@@ -756,6 +757,31 @@ fn if_test_6() {
         let cse = (1+2); cse + cse,
         (2+3)
       )";
+    check_cse(input, expect);
+}
+
+#[test]
+fn if_test_7() {
+    // Tests cases where we can arrive at a common subexpression via multiple paths.
+    //
+    // This is important to test because it ensures that the scope map builder and bindings
+    // generator traverse expressions in a consistent way.
+    //
+    // In the input below, we can arrive at (1+2) via two different sites:
+    //
+    // 0 -> 1, (root, true condition), and
+    // 0 -> 3 -> 4 (root, true condition of second if, and true condition of first if).
+    //
+    // If the site builder and bindings generator handle this differently (e.g., by pruning paths),
+    // the count specifying the path will become inconsistent and yield an error, because later
+    // expressions will have inconsistent paths.
+    let input = "|x:i32|
+        let c = (if (x>0, (1+2), 0));
+        if (c > 0,
+            c + 5,
+            (if (x>1, (2+3), 0)) 
+        )";
+    let expect = input;
     check_cse(input, expect);
 }
 
