@@ -7,6 +7,7 @@ use self::ExprKind::*;
 use self::ScalarKind::*;
 use self::BinOpKind::*;
 
+use std::rc::Rc;
 use std::fmt;
 use std::vec;
 use std::collections::BTreeMap;
@@ -495,14 +496,14 @@ impl fmt::Display for BuilderKind {
 /// A named symbol in the Weld AST.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Symbol {
-    pub name: String,
-    pub id: i32,
+    name: Rc<String>,
+    id: i32,
 }
 
 impl Symbol {
-    pub fn new(name: &str, id: i32) -> Symbol {
+    pub fn new<T: Into<String>>(name: T, id: i32) -> Symbol {
         Symbol {
-            name: name.into(),
+            name: Rc::new(name.into()),
             id: id,
         }
     }
@@ -511,11 +512,12 @@ impl Symbol {
         Symbol::new(PLACEHOLDER_NAME, 0)
     }
 
-    pub fn name(name: &str) -> Symbol {
-        Symbol {
-            name: name.into(),
-            id: 0,
-        }
+    pub fn name(&self) -> String {
+        self.name.to_string()
+    }
+
+    pub fn id(&self) -> i32 {
+        self.id
     }
 }
 
@@ -1362,7 +1364,7 @@ pub trait Placeholder {
 impl Placeholder for Expr {
     fn is_placeholder(&self) -> bool {
         if let Ident(ref name) = self.kind {
-            return name.name == PLACEHOLDER_NAME
+            return name.name.as_ref() == PLACEHOLDER_NAME
         }
         return false
     }

@@ -19,8 +19,10 @@ use tests::print_expr_without_indent;
 
 const MAX_MACRO_DEPTH: i32 = 30;
 
-lazy_static! {
-    static ref STANDARD_MACROS: Vec<Macro> = {
+// thread_local instead of lazy_static because Rc on Symbol isn't Send.
+thread_local! {
+    /// Standard macros loaded once.
+    static STANDARD_MACROS: Vec<Macro> = {
         let code = include_str!("../resources/standard_macros.weld");
         parse_macros(code).unwrap()
     };
@@ -28,7 +30,7 @@ lazy_static! {
 
 /// Apply macros to a program, including the standard macros built into Weld.
 pub fn process_program(program: &Program) -> WeldResult<Expr> {
-    let mut all_macros = STANDARD_MACROS.clone();
+    let mut all_macros = STANDARD_MACROS.with(|v| v.clone());
     all_macros.extend(program.macros.iter().cloned());
     process_expression(&program.body, &all_macros)
 }
@@ -96,15 +98,15 @@ fn update_defined_ids(expr: &mut Expr, sym_gen: &mut SymbolGenerator) {
                ref value,
                ref mut body,
            } = expr.kind {
-        if sym.id == 0 {
-            let new_sym = sym_gen.new_symbol(&sym.name);
+        if sym.id() == 0 {
+            let new_sym = sym_gen.new_symbol(&sym.name());
             let new_ident = Expr {
                 kind: Ident(new_sym.clone()),
                 ty: value.ty.clone(),
                 annotations: Annotations::new(),
             };
             body.substitute(sym, &new_ident);
-            sym.id = new_sym.id;
+            *sym = Symbol::new(sym.name(), new_sym.id());
         }
     }
     if let Lambda {
@@ -113,15 +115,15 @@ fn update_defined_ids(expr: &mut Expr, sym_gen: &mut SymbolGenerator) {
            } = expr.kind {
         for ref mut param in params {
             let sym = &mut param.name;
-            if sym.id == 0 {
-                let new_sym = sym_gen.new_symbol(&sym.name);
+            if sym.id() == 0 {
+                let new_sym = sym_gen.new_symbol(&sym.name());
                 let new_ident = Expr {
                     kind: Ident(new_sym.clone()),
                     ty: param.ty.clone(),
                     annotations: Annotations::new(),
                 };
                 body.substitute(sym, &new_ident);
-                sym.id = new_sym.id;
+                *sym = Symbol::new(sym.name(), new_sym.id());
             }
         }
     }

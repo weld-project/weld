@@ -415,7 +415,7 @@ impl SirFunction {
     pub fn symbol_type(&self, sym: &Symbol) -> WeldResult<&Type> {
         self.locals.get(sym).map(|s| Ok(s)).unwrap_or_else(|| {
             self.params.get(sym).map(|s| Ok(s)).unwrap_or_else(|| {
-                compile_err!("Can't find symbol {}#{}", sym.name, sym.id)
+                compile_err!("Can't find symbol {}", sym.to_string())
             })
         })
     }
@@ -831,7 +831,7 @@ fn sir_param_correction(prog: &mut SirProgram) -> WeldResult<()> {
     let ref func = prog.funcs[0];
     for name in closure {
         if func.params.get(&name) == None {
-            compile_err!("Unbound symbol {}#{}", name.name, name.id)?;
+            compile_err!("Unbound symbol {}", name.to_string())?;
         }
     }
     Ok(())

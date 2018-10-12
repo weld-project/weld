@@ -43,8 +43,8 @@ impl SymbolGenerator {
         let mut id_map: fnv::FnvHashMap<String, i32> = fnv::FnvHashMap::default();
 
         let update_id = |id_map: &mut fnv::FnvHashMap<String, i32>, symbol: &Symbol| {
-            let id = id_map.entry(symbol.name.clone()).or_insert(0);
-            *id = max(*id, symbol.id);
+            let id = id_map.entry(symbol.name().clone()).or_insert(0);
+            *id = max(*id, symbol.id());
         };
 
         expr.traverse(&mut |e| match e.kind {
@@ -64,10 +64,7 @@ impl SymbolGenerator {
     pub fn new_symbol(&mut self, name: &str) -> Symbol {
         let id = self.id_map.entry(name.to_owned()).or_insert(-1);
         *id += 1;
-        Symbol {
-            name: name.to_owned(),
-            id: *id,
-        }
+        Symbol::new(name, *id)
     }
 }
 
