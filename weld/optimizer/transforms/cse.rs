@@ -243,6 +243,51 @@ impl Site {
     }
 }
 
+/// An unordered list of sites.
+struct SiteList {
+    sites: Vec<Site>
+}
+
+impl SiteList {
+    /// Creates a new site list.
+    fn new() -> SiteList {
+        SiteList {
+            sites: vec![],
+        }
+    }
+
+    /// Returns whether this site or a parent exists in the list.
+    fn parent_exists(&self, site: &Site) -> bool {
+        self.get_parent_and_index(site).is_some()
+    }
+
+    /// Gets the parent of the site and its index, or the site itself if it exists.
+    ///
+    /// Returns `None` if no ancestor exists in the list.
+    fn get_parent_and_index(&self, site: &Site) -> Option<(usize, &Site)> {
+        self.sites.iter()
+            .enumerate()
+            .filter(|(_, s)| s.contains(&site))
+            .next()
+    }
+
+    /// Deletes the site with the given index from the list.
+    fn delete_index(&mut self, site: usize) {
+        self.sites.swap_remove(site);
+    }
+
+    /// Adds a new site if that site or a parent of it does not exist in the list.
+    fn add_site(&mut self, new: Site) {
+        // If any of the existing sites do not contain the new one already...
+        if !self.sites.iter().any(|s| s.contains(&new)) {
+            // keep only the sites that the new site does not contain, and add the new site.
+            self.sites.retain(|s| !new.contains(s));
+            self.sites.push(new);
+        }
+    }
+}
+
+
 /// Maps a Symbol to its value.
 type Binding = (Symbol, Expr);
 
@@ -434,12 +479,31 @@ impl Cse {
                 current_site.pop();
             }
             Ident(ref name) if bindings.contains_key(name) => {
-                {
-                    let ent = site_map.entry(name.clone()).or_insert(vec![]);
-                    self.add_site(ent, current_site.clone());
-                }
-                let expr = bindings.get(name).unwrap();
-                self.build_site_map_helper(expr, bindings, site_map, current_site);
+
+                // Check if we already generated the identifier definition at a site higher than
+                // the one we're currently at.
+                let resolved = if site_map.contains_key(name) {
+                    let site_list = site_map.get(&name).unwrap();
+                    site_list.iter()
+                        .enumerate()
+                        .filter(|(_, s)| s.contains(current_site)).next().is_some()
+                } else {
+                    false
+                };
+
+                trace!("SCOPE_BUILDER: Saw identifier {} (sites {:?}) at site {:?}",
+                &name,
+                site_map.get(&name),
+                current_site);
+
+                // if !resolved {
+                    {
+                        let ent = site_map.entry(name.clone()).or_insert(vec![]);
+                        self.add_site(ent, current_site.clone());
+                    }
+                    let expr = bindings.get(name).unwrap();
+                    self.build_site_map_helper(expr, bindings, site_map, current_site);
+                // }
             }
             _ => {
                 handled = false;
@@ -491,35 +555,48 @@ impl Cse {
             }
             Ident(ref mut sym) if bindings.contains_key(sym) => {
 
-                // Generate the definition of this identifier if it doesn't exist.
-                let mut value = bindings.get(sym).cloned().unwrap();
-                self.generate_bindings(&mut value, bindings, generated, current_site, stack, sites);
-
-                trace!("Saw identifier {} (sites {:?}) at site {:?}",
-                &sym,
-                sites.get(&sym).unwrap(),
-                current_site);
-
-                let sites = sites.get_mut(&sym).unwrap();
-
-                // There will be at most one parent site from the current site where this
-                // identifier should be generated.
-                let delete_index = {
-                    let gen_site = sites.iter().enumerate().filter(|(_, s)| s.contains(&current_site)).next();
-                    if let Some(ref result) = gen_site {
-                        let gen_site = result.1;
-                        generated.insert(sym.clone());
-                        let index = gen_site.depth() - 1;
-                        let binding_list = stack.get_mut(index).unwrap();
-                        binding_list.push((sym.clone(), value));
-                        Some(result.0)
-                    } else {
-                        None
-                    }
+                // Determines whether the expression was already handled at _this_ site.
+                // Note that this is the same check used in build_site_map_helper!
+                let resolved_at_site = {
+                    let site_list = sites.get(&sym).unwrap();
+                    site_list.iter()
+                        .enumerate()
+                        // this is is_none here instead of is_some because the deletion of the site
+                        // indicates that we handled it.
+                        .filter(|(_, s)| s.contains(&current_site)).next().is_none()
                 };
 
-                if let Some(delete_index) = delete_index {
-                    sites.swap_remove(delete_index);
+                if !resolved_at_site {
+                    // Generate the definition of this identifier and its dependencies.
+                    let mut value = bindings.get(sym).cloned().unwrap();
+                    self.generate_bindings(&mut value, bindings, generated, current_site, stack, sites);
+
+                    let site_list = sites.get_mut(&sym).unwrap();
+
+                    trace!("GEN_BINDINGS: Saw identifier {} (sites {:?}) at site {:?}",
+                    &sym,
+                    site_list,
+                    current_site);
+
+                    // There will be at most one parent site from the current site where this
+                    // identifier should be generated.
+                    let delete_index = {
+                        let gen_site = site_list.iter().enumerate().filter(|(_, s)| s.contains(&current_site)).next();
+                        if let Some(ref result) = gen_site {
+                            let gen_site = result.1;
+                            generated.insert(sym.clone());
+                            let index = gen_site.depth() - 1;
+                            let binding_list = stack.get_mut(index).unwrap();
+                            binding_list.push((sym.clone(), value));
+                            Some(result.0)
+                        } else {
+                            None
+                        }
+                    };
+
+                    if let Some(delete_index) = delete_index {
+                        site_list.swap_remove(delete_index);
+                    }
                 }
                 true
             }
