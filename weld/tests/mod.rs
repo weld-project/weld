@@ -14,6 +14,29 @@ pub fn typed_expression(s: &str) -> Expr {
     expr
 }
 
+/// Checks whether transform(input) == expect.
+#[cfg(test)]
+pub fn check_transform(input: &str,
+                       expect: &str,
+                       transform: fn(&mut Expr)) {
+
+    use ast::{PrettyPrint, PrettyPrintConfig};
+
+    let ref conf = PrettyPrintConfig::new()
+        .show_types(true);
+
+    let ref mut input = typed_expression(input);
+    let ref expect = typed_expression(expect);
+
+    transform(input);
+
+    println!("\nInput: {}\nExpect: {}",
+             input.pretty_print_config(conf),
+             expect.pretty_print_config(conf));
+
+    assert!(input.compare_ignoring_symbols(expect).unwrap());
+}
+
 /// Print an un-indented expression for string comparison.
 #[cfg(test)]
 pub fn print_expr_without_indent(e: &Expr) -> String {
