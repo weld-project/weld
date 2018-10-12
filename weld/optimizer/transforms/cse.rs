@@ -244,6 +244,7 @@ impl Site {
 }
 
 /// An unordered list of sites.
+#[derive(Debug)]
 struct SiteList {
     sites: Vec<Site>
 }
@@ -256,15 +257,15 @@ impl SiteList {
         }
     }
 
-    /// Returns whether this site or a parent exists in the list.
-    fn parent_exists(&self, site: &Site) -> bool {
-        self.get_parent_and_index(site).is_some()
+    /// Returns whether this site or an ancestor exists in the list.
+    fn contains(&self, site: &Site) -> bool {
+        self.get_with_index(site).is_some()
     }
 
-    /// Gets the parent of the site and its index, or the site itself if it exists.
+    /// Gets the ancestor of the site and its index, or the site itself if it exists.
     ///
     /// Returns `None` if no ancestor exists in the list.
-    fn get_parent_and_index(&self, site: &Site) -> Option<(usize, &Site)> {
+    fn get_with_index(&self, site: &Site) -> Option<(usize, &Site)> {
         self.sites.iter()
             .enumerate()
             .filter(|(_, s)| s.contains(&site))
@@ -272,17 +273,26 @@ impl SiteList {
     }
 
     /// Deletes the site with the given index from the list.
+    ///
+    /// The index should be retrieved via `get_ancestor_and_index`.
     fn delete_index(&mut self, site: usize) {
         self.sites.swap_remove(site);
     }
 
-    /// Adds a new site if that site or a parent of it does not exist in the list.
-    fn add_site(&mut self, new: Site) {
+    /// Adds a new site if that site or a ancestor of it does not exist in the list and returns
+    /// whether `new` added.
+    ///
+    /// `new` will not be added if an ancestor already exists in the last. Conversely, if
+    /// children of `new` exist in the list, they will be removed when `new` is added.
+    fn add_site(&mut self, new: Site) -> bool {
         // If any of the existing sites do not contain the new one already...
         if !self.sites.iter().any(|s| s.contains(&new)) {
             // keep only the sites that the new site does not contain, and add the new site.
             self.sites.retain(|s| !new.contains(s));
             self.sites.push(new);
+            true
+        } else {
+            false
         }
     }
 }
@@ -292,7 +302,7 @@ impl SiteList {
 type Binding = (Symbol, Expr);
 
 /// Maps a symbol to the sites it should be generated in.
-type SiteMap = HashMap<Symbol, Vec<Site>>;
+type SiteMap = HashMap<Symbol, SiteList>;
 
 impl Cse {
     /// Apply the CSE transformation on the given expression.
@@ -367,7 +377,6 @@ impl Cse {
         trace!("Remove Common Subexpressions called on {}", expr.pretty_print());
 
         expr.transform_up(&mut |ref mut e| {
-            trace!("Processing {}", e.pretty_print());
 
             if !e.use_cse() {
                 return None;
@@ -432,28 +441,16 @@ impl Cse {
     /// The site map maps a symbol to the *least deep* (i.e., highest) site in an expression tree.
     fn build_site_map(&mut self,
                        expr: &Expr,
-                       bindings: &HashMap<Symbol, Expr>) -> HashMap<Symbol, Vec<Site>> {
-        let mut sites = HashMap::new();
+                       bindings: &HashMap<Symbol, Expr>) -> SiteMap {
+        let mut sites = SiteMap::new();
         self.build_site_map_helper(expr, bindings, &mut sites, &mut Site::new());
         sites
-    }
-
-    /// Adds a site into a list of sites.
-    ///
-    /// The site is de-duplicated with other sites that supercede this one.
-    fn add_site(&self, sites: &mut Vec<Site>, new: Site) {
-        // If any of the existing sites do not contain the new one already...
-        if !sites.iter().any(|s| s.contains(&new)) {
-            // keep only the sites that the new site does not contain, and add the new site.
-            sites.retain(|s| !new.contains(s));
-            sites.push(new);
-        }
     }
 
     fn build_site_map_helper(&mut self,
                            expr: &Expr,
                            bindings: &HashMap<Symbol, Expr>,
-                           site_map: &mut HashMap<Symbol, Vec<Site>>,
+                           site_map: &mut SiteMap,
                            current_site: &mut Site) {
 
         let mut handled = true;
@@ -479,30 +476,27 @@ impl Cse {
                 current_site.pop();
             }
             Ident(ref name) if bindings.contains_key(name) => {
+                // Enter a site for the expression.
+                //
+                // The expression is considered "resolved" at the current site if a binding for it
+                // already exists at an ancestor site. Equivalently, the expression is *not*
+                // resolved if a new site is added here.
+                let resolved = match site_map.entry(name.clone()) {
+                    Entry::Vacant(ent) => {
+                        let site_list = ent.insert(SiteList::new());
+                        site_list.add_site(current_site.clone());
 
-                // Check if we already generated the identifier definition at a site higher than
-                // the one we're currently at.
-                let resolved = if site_map.contains_key(name) {
-                    let site_list = site_map.get(&name).unwrap();
-                    site_list.iter()
-                        .enumerate()
-                        .filter(|(_, s)| s.contains(current_site)).next().is_some()
-                } else {
-                    false
+                        // Not resolved since we haven't seen the expression -- need to recurse.
+                        false
+                    }
+                    Entry::Occupied(ref mut ent) => {
+                        let site_list = ent.get_mut();
+                        // If we added a new site, not resolved.
+                        !site_list.add_site(current_site.clone())
+                    }
                 };
 
-                trace!("SCOPE_BUILDER: Saw identifier {} (sites {:?}) at site {:?}",
-                &name,
-                site_map.get(&name),
-                current_site);
-
-                // Need to do this so visit order is consistent! A better way to do the pathing is
-                // to compute the path based on the expression...
                 if !resolved {
-                    {
-                        let ent = site_map.entry(name.clone()).or_insert(vec![]);
-                        self.add_site(ent, current_site.clone());
-                    }
                     let expr = bindings.get(name).unwrap();
                     self.build_site_map_helper(expr, bindings, site_map, current_site);
                 }
@@ -556,49 +550,35 @@ impl Cse {
                 true
             }
             Ident(ref mut sym) if bindings.contains_key(sym) => {
-
-                // Determines whether the expression was already handled at _this_ site.
-                // Note that this is the same check used in build_site_map_helper!
-                let resolved_at_site = {
-                    let site_list = sites.get(&sym).unwrap();
-                    site_list.iter()
-                        .enumerate()
-                        // this is is_none here instead of is_some because the deletion of the site
-                        // indicates that we handled it.
-                        .filter(|(_, s)| s.contains(&current_site)).next().is_none()
-                };
-
-                if !resolved_at_site {
+                // If the site list for this symbol contains an ancestor or the current site, we
+                // have not resolved it yet. Generate the binding at the appropriate site and
+                // remove the site from the list.
+                if sites.get(&sym).unwrap().contains(&current_site) {
                     // Generate the definition of this identifier and its dependencies.
                     let mut value = bindings.get(sym).cloned().unwrap();
                     self.generate_bindings(&mut value, bindings, generated, current_site, stack, sites);
 
                     let site_list = sites.get_mut(&sym).unwrap();
 
-                    trace!("GEN_BINDINGS: Saw identifier {} (sites {:?}) at site {:?}",
-                    &sym,
-                    site_list,
-                    current_site);
+                    let delete_index = if let Some(ref result) = site_list.get_with_index(&current_site) {
+                        let index_in_list =  result.0;
+                        let site_with_expr =  result.1;
 
-                    // There will be at most one parent site from the current site where this
-                    // identifier should be generated.
-                    let delete_index = {
-                        let gen_site = site_list.iter().enumerate().filter(|(_, s)| s.contains(&current_site)).next();
-                        if let Some(ref result) = gen_site {
-                            let gen_site = result.1;
-                            generated.insert(sym.clone());
-                            let index = gen_site.depth() - 1;
-                            let binding_list = stack.get_mut(index).unwrap();
-                            binding_list.push((sym.clone(), value));
-                            Some(result.0)
-                        } else {
-                            None
-                        }
+                        // The depth gives us the index into the stack holding the bindings (e.g.,
+                        // if the site is (0,1), we access the second Binding list in `stack`).
+                        let index = site_with_expr.depth() - 1;
+                        let binding_list = stack.get_mut(index).unwrap();
+                        binding_list.push((sym.clone(), value));
+                        index_in_list
+                    } else {
+                        // We checked whether sites contains the current_site, and an identifier's dependencies
+                        // can't depend on that identifier!
+                        unreachable!()
                     };
 
-                    if let Some(delete_index) = delete_index {
-                        site_list.swap_remove(delete_index);
-                    }
+                    // Delete this site - this implicitly marks the binding as generated for this
+                    // site and all its children.
+                    site_list.delete_index(delete_index);
                 }
                 true
             }
@@ -625,9 +605,9 @@ impl Cse {
                                generated: &mut HashSet<Symbol>,
                                current_site: &mut Site,
                                stack: &mut Vec<Vec<(Symbol, Expr)>>,
-                               sites: &mut HashMap<Symbol, Vec<Site>>) {
+                               sites: &mut SiteMap) {
 
-        trace!("Processing sited expression {} (old site={:?}, counter={}",
+        trace!("Processing scoped expression {} (old site={:?}, counter={}",
                expr.pretty_print(),
                current_site,
                self.counter);
@@ -653,7 +633,7 @@ impl Cse {
 
         // Update the expression to contain the Lets.
         *expr = prev;
-        trace!("Replaced sited expression with {}", expr.pretty_print());
+        trace!("Replaced scoped expression with {}", expr.pretty_print());
     }
 }
 
