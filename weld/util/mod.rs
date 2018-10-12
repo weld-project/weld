@@ -27,6 +27,7 @@ pub mod colors;
 /// Utility struct that can track and generate unique IDs and symbols for use in an expression.
 /// Each SymbolGenerator tracks the maximum ID used for every symbol name, and can be used to
 /// create new symbols with the same name but a unique ID.
+#[derive(Debug,Clone)]
 pub struct SymbolGenerator {
     id_map: fnv::FnvHashMap<String, i32>,
 }

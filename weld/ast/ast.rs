@@ -103,7 +103,7 @@ impl fmt::Display for Annotations {
 }
 
 /// Types in the Weld IR.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone,Debug,PartialEq,Eq,Hash)]
 pub enum Type {
     /// A scalar.
     Scalar(ScalarKind),
@@ -189,6 +189,15 @@ impl Type {
         match *self {
             Scalar(_) => true,
             _ => false
+        }
+    }
+
+    /// Returns whether this `Type` contains a builder.
+    pub fn contains_builder(&self) -> bool {
+        use self::Type::Builder;
+        match *self {
+            Builder(_, _) => true,
+            _ => self.children().any(|t| t.contains_builder()),
         }
     }
 
@@ -521,7 +530,7 @@ impl fmt::Display for Symbol {
 }
 
 /// A typed Weld expression tree.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone,Debug,PartialEq,Eq,Hash)]
 pub struct Expr {
     pub ty: Type,
     pub kind: ExprKind,
@@ -531,7 +540,7 @@ pub struct Expr {
 /// Iterator kinds in the Weld IR.
 ///
 /// An iterator defines how a for loop iterates over data.
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone,Debug,Eq,PartialEq,Hash)]
 pub enum IterKind {
     /// A standard scalar iterator.
     ScalarIter,
@@ -568,7 +577,7 @@ impl fmt::Display for IterKind {
 
 /// An iterator, which specifies a vector to iterate over and optionally a start index,
 /// end index, and stride.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone,Debug,PartialEq,Eq,Hash)]
 pub struct Iter {
     pub data: Box<Expr>,
     pub start: Option<Box<Expr>>,
@@ -595,7 +604,7 @@ impl Iter {
 /// This enumeration defines the operators in the Weld IR. Each operator relies on zero or more
 /// sub-expressions, forming an expression tree. We use the term "expression" to refer to a
 /// particular `ExprKind`.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone,Debug,PartialEq,Hash,Eq)]
 pub enum ExprKind {
     /// A literal expression.
     ///
