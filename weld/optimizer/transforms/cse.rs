@@ -232,7 +232,7 @@ impl Site {
 
     /// Returns whether this site contains `other`.
     ///
-    /// A site contains `a` contains another site `b` if `a` is a substring of `b`.
+    /// A site contains `a` contains another site `b` if `a` is a prefix of `b`.
     ///
     /// Returns `true` if the two sites are equal.
     fn contains(&self, other: &Site) -> bool {
@@ -334,29 +334,11 @@ impl Cse {
 
         cse.counter = 0;
         let ref mut sites =  cse.build_site_map(expr, bindings);
-
-        // Debug.
-        {
-            let mut debug = String::new();
-            for (k, v) in bindings.iter() {
-                debug.push_str(&format!("{} -> {}\n", k, v.pretty_print()));
-            }
-            trace!("bindings: {}", debug);
-            trace!("Expression after assigning cse symbols: {}", expr.pretty_print());
-             let mut debug = String::new();
-            for (k, v) in sites.iter() {
-                debug.push_str(&format!("{} -> {:?}\n", k, v));
-            }
-            trace!("sites: {}", debug);
-        }
-
         let ref mut generated = HashSet::new();
         let ref mut stack = vec![];
 
         cse.counter = 0;
         cse.generate_bindings(expr, bindings, generated, &mut Site::new(), stack, sites);
-
-        trace!("After CSE: {}", expr.pretty_print());
     }
 
     /// Removes common subexpressions and remove bindings.
@@ -373,8 +355,6 @@ impl Cse {
                                     aliases: &mut HashMap<Symbol, Vec<Symbol>>) {
 
         use self::UseCse;
-
-        trace!("Remove Common Subexpressions called on {}", expr.pretty_print());
 
         expr.transform_up(&mut |ref mut e| {
 
@@ -607,11 +587,6 @@ impl Cse {
                                stack: &mut Vec<Vec<(Symbol, Expr)>>,
                                sites: &mut SiteMap) {
 
-        trace!("Processing scoped expression {} (old site={:?}, counter={}",
-               expr.pretty_print(),
-               current_site,
-               self.counter);
-
         current_site.push(self.counter);
         self.counter += 1; 
 
@@ -633,7 +608,6 @@ impl Cse {
 
         // Update the expression to contain the Lets.
         *expr = prev;
-        trace!("Replaced scoped expression with {}", expr.pretty_print());
     }
 }
 
