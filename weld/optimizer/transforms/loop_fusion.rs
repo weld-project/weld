@@ -94,9 +94,9 @@ pub fn fuse_loops_horizontal(expr: &mut Expr) {
                     // Parameters for the new fused function. Symbols names are generated using symbol
                     // names for the builder and element from an existing function.
                     let new_params = vec![
-                        Parameter{ty: builder_type.clone(), name: sym_gen.new_symbol(&lambdas[0].0[0].name.name)},
-                        Parameter{ty: Scalar(ScalarKind::I64), name: sym_gen.new_symbol(&lambdas[0].0[1].name.name)},
-                        Parameter{ty: func_elem_type.clone(), name: sym_gen.new_symbol(&lambdas[0].0[2].name.name)},
+                        Parameter{ty: builder_type.clone(), name: sym_gen.new_symbol(&lambdas[0].0[0].name.name())},
+                        Parameter{ty: Scalar(ScalarKind::I64), name: sym_gen.new_symbol(&lambdas[0].0[1].name.name())},
+                        Parameter{ty: func_elem_type.clone(), name: sym_gen.new_symbol(&lambdas[0].0[2].name.name())},
                     ];
 
                     // Generate Ident expressions for the new symbols and substitute them in the
@@ -268,8 +268,8 @@ fn replace_builder(lambda: &Expr,
             let ref old_bldr = args[0];
             let ref old_index = args[1];
             let ref old_arg = args[2];
-            let new_bldr_sym = sym_gen.new_symbol(&old_bldr.name.name);
-            let new_index_sym = sym_gen.new_symbol(&old_index.name.name);
+            let new_bldr_sym = sym_gen.new_symbol(&old_bldr.name.name());
+            let new_index_sym = sym_gen.new_symbol(&old_index.name.name());
             let new_bldr = constructors::ident_expr(new_bldr_sym.clone(), nested_args[0].ty.clone())?;
             let new_index = constructors::ident_expr(new_index_sym.clone(), nested_args[1].ty.clone())?;
 

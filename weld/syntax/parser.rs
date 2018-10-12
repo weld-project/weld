@@ -708,10 +708,7 @@ impl<'t> Parser<'t> {
             }
 
             TIdent(ref name) => {
-                Ok(expr_box(Ident(Symbol {
-                                      name: name.clone(),
-                                      id: 0,
-                                  }),
+                Ok(expr_box(Ident(Symbol::new(name.as_str(), 0)),
                             Annotations::new()))
             }
 
@@ -843,7 +840,7 @@ impl<'t> Parser<'t> {
                 }
                 try!(self.consume(TCloseParen));
                 Ok(expr_box(CUDF {
-                                sym_name: sym_name.name,
+                                sym_name: sym_name.name(),
                                 return_ty: Box::new(return_ty),
                                 args: args,
                             },
@@ -1168,13 +1165,8 @@ impl<'t> Parser<'t> {
     /// Parse a symbol starting at the current input position.
     fn symbol(&mut self) -> WeldResult<Symbol> {
         match *self.next() {
-            TIdent(ref name) => {
-                Ok(Symbol {
-                       name: name.clone(),
-                       id: 0,
-                   })
-            }
-            ref other => compile_err!("Expected identifier but got {}", other),
+            TIdent(ref name) => Ok(Symbol::new(name.as_str(), 0)),
+            ref other => compile_err!("Expected identifier but got {}", other.to_string()),
         }
     }
 
