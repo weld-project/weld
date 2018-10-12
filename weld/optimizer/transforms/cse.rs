@@ -496,6 +496,7 @@ impl Cse {
                 site_map.get(&name),
                 current_site);
 
+                // XXX Uncomment to fix bug! Investigating why..
                 // if !resolved {
                     {
                         let ent = site_map.entry(name.clone()).or_insert(vec![]);
