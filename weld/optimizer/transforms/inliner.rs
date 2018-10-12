@@ -107,7 +107,7 @@ pub fn inline_let(expr: &mut Expr) {
     expr.uniquify().unwrap();
     let ref mut usages = FnvHashMap::default();
     count_symbols(expr, usages);
-    debug!("Symbol count: {:?}", usages);
+    trace!("Symbol count: {:?}", usages);
     inline_let_helper(expr, usages)
 }
 
