@@ -48,7 +48,7 @@
 //! As an example, consider the following Weld program, annotated with sites:
 //!
 //! ```weld
-//! |x: i32, w: vec[i32], v: vec[i32], z: vec[i32]|      | 
+//! |x: i32, w: vec[i32], v: vec[i32], z: vec[i32]|      |
 //!     lookup(w, 1) +                                   |
 //!     if(x > 0,                                        |
 //!         lookup(v, 0) + lookup(v, 0) + lookup(w, 1),  | |_______site [0, 1]
@@ -90,9 +90,9 @@
 //! also, of course, need to generate the dependencies of an identifier before generating its value
 //! (e.g., before `cse4`, we need to generate `cse1` in the example above).
 //!
-//! The bindings generation phase thus first generates a site map which computes the site 
+//! The bindings generation phase thus first generates a site map which computes the site
 //! of each symbol. We then recursively generate each expression, maintaining a stack of variable
-//! bindings: entry `i` in the stack corresponds to the bindings at site `i`. 
+//! bindings: entry `i` in the stack corresponds to the bindings at site `i`.
 //!
 //! The site map for the example above would look as follows:
 //!
@@ -183,6 +183,7 @@ trait UseCse {
 }
 
 impl UseCse for Expr {
+
     fn use_cse(&self) -> bool {
         if let Let { .. } = self.kind {
             return true;
@@ -217,9 +218,9 @@ impl Site {
 
     /// Pushes a value to the site's path.
     fn push(&mut self, index: i32) {
-        self.site.push(index); 
+        self.site.push(index);
     }
- 
+
     /// Pops the last value from the site's path.
     fn pop(&mut self) {
         self.site.pop();
@@ -280,7 +281,7 @@ impl SiteList {
     }
 
     /// Adds a new site if that site or a ancestor of it does not exist in the list and returns
-    /// whether `new` added.
+    /// whether `new` added. Returns if a new *disjoint* site is added.
     ///
     /// `new` will not be added if an ancestor already exists in the last. Conversely, if
     /// children of `new` exist in the list, they will be removed when `new` is added.
@@ -337,8 +338,26 @@ impl Cse {
         let ref mut generated = HashSet::new();
         let ref mut stack = vec![];
 
+        // Debug.
+        {
+            let mut debug = String::new();
+            for (k, v) in bindings.iter() {
+                debug.push_str(&format!("{} -> {}\n", k, v.pretty_print()));
+            }
+            trace!("bindings: {}", debug);
+            trace!("Expression after assigning cse symbols: {}", expr.pretty_print());
+             let mut debug = String::new();
+            for (k, v) in sites.iter() {
+                debug.push_str(&format!("{} -> {:?}\n", k, v));
+            }
+            trace!("scopes: {}", debug);
+        }
+
         cse.counter = 0;
         cse.generate_bindings(expr, bindings, generated, &mut Site::new(), stack, sites);
+
+        trace!("After CSE: {}", expr.pretty_print());
+
     }
 
     /// Removes common subexpressions and remove bindings.
@@ -423,36 +442,42 @@ impl Cse {
                        expr: &Expr,
                        bindings: &HashMap<Symbol, Expr>) -> SiteMap {
         let mut sites = SiteMap::new();
-        self.build_site_map_helper(expr, bindings, &mut sites, &mut Site::new());
+        let mut counters = HashMap::new();
+        self.build_site_map_helper(expr, bindings, &mut counters, &mut sites, &mut Site::new());
         sites
     }
 
     fn build_site_map_helper(&mut self,
                            expr: &Expr,
                            bindings: &HashMap<Symbol, Expr>,
+                           counters: &mut HashMap<Symbol, i32>,
                            site_map: &mut SiteMap,
                            current_site: &mut Site) {
+
+        trace!("site builder expression {} (current site={:?})",
+               expr.pretty_print(),
+               current_site);
 
         let mut handled = true;
         match expr.kind {
             If { ref cond, ref on_true, ref on_false } => {
-                self.build_site_map_helper(cond, bindings, site_map, current_site);
+                self.build_site_map_helper(cond, bindings, counters, site_map, current_site);
 
                 // Update current site for branch targets.
                 current_site.push(self.counter);
-                self.counter += 1; 
-                self.build_site_map_helper(on_true, bindings, site_map, current_site);
+                self.counter += 1;
+                self.build_site_map_helper(on_true, bindings, counters, site_map, current_site);
                 current_site.pop();
 
                 current_site.push(self.counter);
-                self.counter += 1; 
-                self.build_site_map_helper(on_false, bindings, site_map, current_site);
+                self.counter += 1;
+                self.build_site_map_helper(on_false, bindings, counters, site_map, current_site);
                 current_site.pop();
             }
             Lambda { ref body, .. } => {
                 current_site.push(self.counter);
-                self.counter += 1; 
-                self.build_site_map_helper(body, bindings, site_map, current_site);
+                self.counter += 1;
+                self.build_site_map_helper(body, bindings, counters, site_map, current_site);
                 current_site.pop();
             }
             Ident(ref name) if bindings.contains_key(name) => {
@@ -461,24 +486,41 @@ impl Cse {
                 // The expression is considered "resolved" at the current site if a binding for it
                 // already exists at an ancestor site. Equivalently, the expression is *not*
                 // resolved if a new site is added here.
-                let resolved = match site_map.entry(name.clone()) {
+                let (resolved, new) = match site_map.entry(name.clone()) {
                     Entry::Vacant(ent) => {
                         let site_list = ent.insert(SiteList::new());
                         site_list.add_site(current_site.clone());
 
+                        counters.insert(name.clone(), self.counter);
+
                         // Not resolved since we haven't seen the expression -- need to recurse.
-                        false
+                        (false, true)
                     }
                     Entry::Occupied(ref mut ent) => {
                         let site_list = ent.get_mut();
                         // If we added a new site, not resolved.
-                        !site_list.add_site(current_site.clone())
+                        (!site_list.add_site(current_site.clone()), false)
                     }
                 };
 
                 if !resolved {
                     let expr = bindings.get(name).unwrap();
-                    self.build_site_map_helper(expr, bindings, site_map, current_site);
+                    // reset counter to what it was when we first generated (as if this
+                    // is the first place we are generating from).
+
+                    let mut counter = 0;
+                    if !new {
+                        counter = self.counter;
+                        self.counter = *counters.get(name).unwrap();
+                        trace!("Set counter to {} ({})", self.counter, name);
+                    }
+
+                    self.build_site_map_helper(expr, bindings, counters, site_map, current_site);
+
+                    if !new {
+                        self.counter = counter;
+                        trace!("Reset counter to {} ({})", self.counter, name);
+                    }
                 }
             }
             _ => {
@@ -488,7 +530,7 @@ impl Cse {
 
         if !handled {
             for child in expr.children() {
-                self.build_site_map_helper(child, bindings, site_map, current_site);
+                self.build_site_map_helper(child, bindings, counters, site_map, current_site);
             }
         }
     }
@@ -509,6 +551,10 @@ impl Cse {
                          current_site: &mut Site,
                          stack: &mut Vec<Vec<Binding>>,
                          sites: &mut SiteMap) {
+
+        trace!("scoped expression {} (current site={:?})",
+               expr.pretty_print(),
+               current_site);
 
         // NOTE: Because of the way paths are built, this method must traverse Lambdas and If
         // statements in the exact same order as build_site_map_helper!
@@ -588,7 +634,8 @@ impl Cse {
                                sites: &mut SiteMap) {
 
         current_site.push(self.counter);
-        self.counter += 1; 
+        self.counter += 1;
+
 
         stack.push(vec![]);
 
@@ -682,7 +729,7 @@ fn if_test_5() {
         ),
         (1+2) + (1+2)
       )";
-    
+
     // Make sure siblings don't cause values to be hoisted out.
     let expect = "|x:i32| if (x > 0,
         if (x > 1, (1+2), (2+3)),
@@ -696,7 +743,7 @@ fn if_test_6() {
       if(x > 0,
         (1 + 2) + (1+2),
         (2 + 3)
-      ) + 
+      ) +
       if(x > 1,
         (1 + 2) + (1+2),
         (2 + 3)
@@ -733,7 +780,7 @@ fn if_test_7() {
         let c = (if (x>0, (1+2), 0));
         if (c > 0,
             c + 5,
-            (if (x>1, (2+3), 0)) 
+            (if (x>1, (2+3), 0))
         )";
     let expect = input;
     check_cse(input, expect);
