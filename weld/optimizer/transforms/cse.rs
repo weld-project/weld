@@ -183,18 +183,12 @@ trait UseCse {
 }
 
 impl UseCse for Expr {
-
     fn use_cse(&self) -> bool {
-        if let Let { .. } = self.kind {
-            return true;
-        }
-
         if self.ty.contains_builder() {
             return false;
         }
-
         match self.kind {
-            Literal(_) | Ident(_) | Lambda { .. } => false,
+            Let { .. } | Literal(_) | Ident(_) | Lambda { .. } => false,
             _ => true
         }
     }
@@ -205,7 +199,9 @@ impl UseCse for Expr {
 ///
 /// A site represents a path taken by following "scopes".
 struct Site {
+    /// The path repesenting the site.
     site: Vec<i32>,
+    /// The first counter value seen at the site.
     first_seen: i32,
 }
 
@@ -393,64 +389,26 @@ impl Cse {
                                     aliases: &mut HashMap<Symbol, Vec<Symbol>>) {
 
         use self::UseCse;
-
         expr.transform_up(&mut |ref mut e| {
-
             if !e.use_cse() {
                 return None;
             }
 
-            match e.kind {
-                Let { ref name, ref mut value, ref mut body } => {
-                    // Let expressions represent "already CSE'd" values, so we can track them.
-                    let taken_value = value.take();
-                    // ALIAS ISSUE.
-                    // We can have cases where a Let statement in the input redefines
-                    // the same expression, e.g.,:
-                    //
-                    // let a = x;
-                    // let b = x;
-                    //
-                    // a + a + b + b
-                    //
-                    // Since we map expression -> symbol name, the final bindings list will contain
-                    // b -> x
-                    //
-                    // and no reference to a.
-                    //
-                    // To handle this, we create another map `alises`, that maps the first symbol
-                    // with all of its aliases (same value expressions). The alias map is used to
-                    // create copies of expressions later in the bindings map.
-                    match bindings.entry(*taken_value) {
-                        Entry::Vacant(ent) => {
-                            ent.insert(name.clone());
-                        }
-                        Entry::Occupied(ref ent) => {
-                            // Alias! We assigned this expression a name already.
-                            let sym = ent.get().clone();
-                            let alias_list = aliases.entry(sym).or_insert(vec![]);
-                            alias_list.push(name.clone());
-                        }
-                    };
-                    Some(*body.take())
-                }
-                _ => {
-                    let e = e.take();
-                    let ty = e.ty.clone();
+            let e = e.take();
+            let ty = e.ty.clone();
 
-                    let name = bindings.entry(e)
-                        .or_insert_with(&mut || self.sym_gen.new_symbol("cse"))
-                        .clone();
+            let name = bindings.entry(e)
+                .or_insert_with(&mut || self.sym_gen.new_symbol("cse"))
+                .clone();
 
-                    // Replace the expression with its CSE name.
-                    let replacement = Expr {
-                        ty: ty,
-                        kind: Ident(name),
-                        annotations: Annotations::new(),
-                    };
-                    Some(replacement)
-                }
-            }
+            // Replace the expression with its CSE name.
+            let replacement = Expr {
+                ty: ty,
+                kind: Ident(name),
+                annotations: Annotations::new(),
+            };
+
+            Some(replacement)
         });
     }
 
@@ -492,6 +450,14 @@ impl Cse {
                 current_site.pop();
             }
             Lambda { ref body, .. } => {
+                current_site.push(self.counter);
+                self.counter += 1;
+                self.build_site_map_helper(body, bindings, site_map, current_site);
+                current_site.pop();
+            }
+            Let { ref value, ref body, .. } => {
+                self.build_site_map_helper(value, bindings, site_map, current_site);
+
                 current_site.push(self.counter);
                 self.counter += 1;
                 self.build_site_map_helper(body, bindings, site_map, current_site);
@@ -575,6 +541,11 @@ impl Cse {
         // statements in the exact same order as build_site_map_helper!
         let handled = match expr.kind {
             Lambda { ref mut body, .. } => {
+                self.generate_bindings_scoped(body, bindings, generated, current_site, stack, sites);
+                true
+            }
+            Let { ref mut value, ref mut body, .. } => {
+                self.generate_bindings(value, bindings, generated, current_site, stack, sites);
                 self.generate_bindings_scoped(body, bindings, generated, current_site, stack, sites);
                 true
             }
@@ -798,6 +769,32 @@ fn if_test_7() {
             (if (x>1, (2+3), 0))
         )";
     let expect = input;
+    check_cse(input, expect);
+}
+
+#[test]
+fn if_test_8() {
+    // Tests whether seeing an expression and then seeing it at a higher scope messes up the path
+    // counter.
+    
+    // Things will get inlined -- this is just for readability. cse2 shouldn't cause
+    // the counter to go out of sync in `gen_site_map` and `generate_bindings`.
+    let input = "|x: i32|
+        let cse4 = (1+2);
+        let cse2 = if (x > 2, 1, 2);
+        let cse3 = if (x > 3, cse2, 2) + cse2;
+        let cse1 = if (x > 1, cse2, cse3);
+        if (x > 0, cse1, cse4)";
+    
+    let expect = "|x: i32|
+        let cse2 = if (x > 2, 1, 2);
+        if (x > 0,
+            if (x > 1,
+                cse2,
+                if (x > 3, cse2, 2) + cse2
+            ),
+            (1+2)
+        )";
     check_cse(input, expect);
 }
 
