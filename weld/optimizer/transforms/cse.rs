@@ -731,7 +731,7 @@ fn if_test_7() {
 fn if_test_8() {
     // Tests whether seeing an expression and then seeing it at a higher scope messes up the path
     // counter.
-    
+
     // Things will get inlined -- this is just for readability. cse2 shouldn't cause
     // the counter to go out of sync in `gen_site_map` and `generate_bindings`.
     let input = "|x: i32|
@@ -740,7 +740,7 @@ fn if_test_8() {
         let cse3 = if (x > 3, cse2, 2) + cse2;
         let cse1 = if (x > 1, cse2, cse3);
         if (x > 0, cse1, cse4)";
-    
+
     let expect = "|x: i32|
         let cse2 = if (x > 2, 1, 2);
         if (x > 0,
@@ -771,6 +771,14 @@ fn for_test_2() {
 fn for_test_3() {
     let input = "|| result(for([1], merger[i32,+], |b,i,e| merge(b, e + (1+2) + (1+2))))";
     let expect = "|| result(for([1], merger[i32,+], |b,i,e| let cse = (1+2); merge(b, e + cse + cse)))";
+    check_cse(input, expect);
+}
+
+#[test]
+fn for_test_4() {
+    // Make sure defined symbols don't get inlined.
+    let input = "|| let x = (1+2); result(for([1], merger[i32,+], |b,i,e| merge(b, e + x + x)))";
+    let expect = input;
     check_cse(input, expect);
 }
 
