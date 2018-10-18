@@ -278,11 +278,19 @@ impl SiteList {
         self.sites.swap_remove(site);
     }
 
-    /// Adds a new site if that site or a ancestor of it does not exist in the list and returns
-    /// the first counter value where the expression was added on this path.
+    /// Adds a new site if that site or a ancestor of it does not exist.
     ///
-    /// `new` will not be added if an ancestor already exists in the last. Conversely, if
-    /// children of `new` exist in the list, they will be removed when `new` is added.
+    /// Returns the first counter value recorded for this site if the site was added, or `None` if
+    /// the site was not added.
+    ///
+    /// In order to enable backtracking for symbols that need to be redefined at a higher site,
+    /// this method also takes the current counter value of the CSE, and tracks the counter value
+    /// for the first time the site was added. When the symbol is redefined, the counter
+    /// should be reset to this value so the site list and `generate_bindings` will maintain
+    /// consistent counter values.
+    ///
+    /// `new` will not be added if an ancestor already exists. Conversely, if children of `new`
+    /// exist in the list, they will be removed when `new` is added.
     fn add_site(&mut self, mut new: Site, counter: i32) -> Option<i32> {
         // If any of the existing sites do not contain the new one already...
         if !self.sites.iter().any(|s| s.contains(&new)) {
