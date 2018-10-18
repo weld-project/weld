@@ -206,6 +206,7 @@ impl UseCse for Expr {
 /// A site represents a path taken by following "scopes".
 struct Site {
     site: Vec<i32>,
+    first_seen: i32,
 }
 
 impl Site {
@@ -213,6 +214,7 @@ impl Site {
     fn new() -> Site {
         Site {
             site: vec![],
+            first_seen: i32::max_value(),
         }
     }
 
@@ -281,19 +283,36 @@ impl SiteList {
     }
 
     /// Adds a new site if that site or a ancestor of it does not exist in the list and returns
-    /// whether `new` added. Returns if a new *disjoint* site is added.
+    /// the first counter value where the expression was added on this path.
     ///
     /// `new` will not be added if an ancestor already exists in the last. Conversely, if
     /// children of `new` exist in the list, they will be removed when `new` is added.
-    fn add_site(&mut self, new: Site) -> bool {
+    fn add_site(&mut self, mut new: Site, counter: i32) -> Option<i32> {
         // If any of the existing sites do not contain the new one already...
         if !self.sites.iter().any(|s| s.contains(&new)) {
             // keep only the sites that the new site does not contain, and add the new site.
-            self.sites.retain(|s| !new.contains(s));
+            // TODO can replace with drain_filter when its stabilized.
+            let mut first_seen = i32::max_value();
+            let mut i = 0;
+            while i != self.sites.len() {
+                if new.contains(&mut self.sites[i]) {
+                    let previous_site = self.sites.swap_remove(i);
+                    first_seen = ::std::cmp::min(previous_site.first_seen, first_seen);
+                } else {
+                    i += 1;
+                }
+            }
+
+            if first_seen == i32::max_value() {
+                // The input counter is the first time we're seeing this site.
+                first_seen = counter;
+            }
+
+            new.first_seen = first_seen;
             self.sites.push(new);
-            true
+            Some(first_seen)
         } else {
-            false
+            None
         }
     }
 }
@@ -442,15 +461,13 @@ impl Cse {
                        expr: &Expr,
                        bindings: &HashMap<Symbol, Expr>) -> SiteMap {
         let mut sites = SiteMap::new();
-        let mut counters = HashMap::new();
-        self.build_site_map_helper(expr, bindings, &mut counters, &mut sites, &mut Site::new());
+        self.build_site_map_helper(expr, bindings, &mut sites, &mut Site::new());
         sites
     }
 
     fn build_site_map_helper(&mut self,
                            expr: &Expr,
                            bindings: &HashMap<Symbol, Expr>,
-                           counters: &mut HashMap<Symbol, i32>,
                            site_map: &mut SiteMap,
                            current_site: &mut Site) {
 
@@ -461,23 +478,23 @@ impl Cse {
         let mut handled = true;
         match expr.kind {
             If { ref cond, ref on_true, ref on_false } => {
-                self.build_site_map_helper(cond, bindings, counters, site_map, current_site);
+                self.build_site_map_helper(cond, bindings, site_map, current_site);
 
                 // Update current site for branch targets.
                 current_site.push(self.counter);
                 self.counter += 1;
-                self.build_site_map_helper(on_true, bindings, counters, site_map, current_site);
+                self.build_site_map_helper(on_true, bindings, site_map, current_site);
                 current_site.pop();
 
                 current_site.push(self.counter);
                 self.counter += 1;
-                self.build_site_map_helper(on_false, bindings, counters, site_map, current_site);
+                self.build_site_map_helper(on_false, bindings, site_map, current_site);
                 current_site.pop();
             }
             Lambda { ref body, .. } => {
                 current_site.push(self.counter);
                 self.counter += 1;
-                self.build_site_map_helper(body, bindings, counters, site_map, current_site);
+                self.build_site_map_helper(body, bindings, site_map, current_site);
                 current_site.pop();
             }
             Ident(ref name) if bindings.contains_key(name) => {
@@ -486,41 +503,39 @@ impl Cse {
                 // The expression is considered "resolved" at the current site if a binding for it
                 // already exists at an ancestor site. Equivalently, the expression is *not*
                 // resolved if a new site is added here.
-                let (resolved, new) = match site_map.entry(name.clone()) {
+                let resolved = match site_map.entry(name.clone()) {
                     Entry::Vacant(ent) => {
                         let site_list = ent.insert(SiteList::new());
-                        site_list.add_site(current_site.clone());
-
-                        counters.insert(name.clone(), self.counter);
-
                         // Not resolved since we haven't seen the expression -- need to recurse.
-                        (false, true)
+                        let result = site_list.add_site(current_site.clone(), self.counter);
+                        debug_assert!(result == Some(self.counter));
+                        result
                     }
                     Entry::Occupied(ref mut ent) => {
                         let site_list = ent.get_mut();
                         // If we added a new site, not resolved.
-                        (!site_list.add_site(current_site.clone()), false)
+                        site_list.add_site(current_site.clone(), self.counter)
                     }
                 };
 
-                if !resolved {
+                if let Some(first_seen) = resolved {
                     let expr = bindings.get(name).unwrap();
-                    // reset counter to what it was when we first generated (as if this
-                    // is the first place we are generating from).
 
-                    let mut counter = 0;
+                    let new = first_seen == self.counter;
+                    let current_counter = self.counter;
+                    // If this is the first time we are seeing this expression, this is a no-op.
+                    self.counter = first_seen;
+
+                    trace!("Set counter to {} ({})", self.counter, name);
+
+                    self.build_site_map_helper(expr, bindings, site_map, current_site);
+
+                    // We only want to "fix" the counter if we replaced some site!
                     if !new {
-                        counter = self.counter;
-                        self.counter = *counters.get(name).unwrap();
-                        trace!("Set counter to {} ({})", self.counter, name);
+                        self.counter = current_counter;
                     }
 
-                    self.build_site_map_helper(expr, bindings, counters, site_map, current_site);
-
-                    if !new {
-                        self.counter = counter;
-                        trace!("Reset counter to {} ({})", self.counter, name);
-                    }
+                    trace!("Reset counter to {} ({})", self.counter, name);
                 }
             }
             _ => {
@@ -530,7 +545,7 @@ impl Cse {
 
         if !handled {
             for child in expr.children() {
-                self.build_site_map_helper(child, bindings, counters, site_map, current_site);
+                self.build_site_map_helper(child, bindings, site_map, current_site);
             }
         }
     }
