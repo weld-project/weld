@@ -343,26 +343,8 @@ impl Cse {
         let ref mut generated = HashSet::new();
         let ref mut stack = vec![];
 
-        // Debug.
-        {
-            let mut debug = String::new();
-            for (k, v) in bindings.iter() {
-                debug.push_str(&format!("{} -> {}\n", k, v.pretty_print()));
-            }
-            trace!("bindings: {}", debug);
-            trace!("Expression after assigning cse symbols: {}", expr.pretty_print());
-             let mut debug = String::new();
-            for (k, v) in sites.iter() {
-                debug.push_str(&format!("{} -> {:?}\n", k, v));
-            }
-            trace!("scopes: {}", debug);
-        }
-
         cse.counter = 0;
         cse.generate_bindings(expr, bindings, generated, &mut Site::new(), stack, sites);
-
-        trace!("After CSE: {}", expr.pretty_print());
-
     }
 
     /// Removes common subexpressions and remove bindings.
@@ -414,10 +396,6 @@ impl Cse {
                            bindings: &HashMap<Symbol, Expr>,
                            site_map: &mut SiteMap,
                            current_site: &mut Site) {
-
-        trace!("site builder expression {} (current site={:?})",
-               expr.pretty_print(),
-               current_site);
 
         let mut handled = true;
         match expr.kind {
@@ -475,19 +453,15 @@ impl Cse {
 
                     let new = first_seen == self.counter;
                     let current_counter = self.counter;
+
                     // If this is the first time we are seeing this expression, this is a no-op.
                     self.counter = first_seen;
-
-                    trace!("Set counter to {} ({})", self.counter, name);
-
                     self.build_site_map_helper(expr, bindings, site_map, current_site);
 
                     // We only want to "fix" the counter if we replaced some site!
                     if !new {
                         self.counter = current_counter;
                     }
-
-                    trace!("Reset counter to {} ({})", self.counter, name);
                 }
             }
             _ => {
@@ -518,11 +492,6 @@ impl Cse {
                          current_site: &mut Site,
                          stack: &mut Vec<Vec<Binding>>,
                          sites: &mut SiteMap) {
-
-        trace!("scoped expression {} (current site={:?})",
-               expr.pretty_print(),
-               current_site);
-
         // NOTE: Because of the way paths are built, this method must traverse Lambdas and If
         // statements in the exact same order as build_site_map_helper!
         let handled = match expr.kind {
