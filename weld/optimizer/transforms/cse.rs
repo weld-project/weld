@@ -330,23 +330,13 @@ impl Cse {
 
         // Maps expressions to symbol names.
         let ref mut bindings = HashMap::new();
-        let ref mut aliases = HashMap::new();
 
-        cse.remove_common_subexpressions(expr, bindings, aliases);
+        cse.remove_common_subexpressions(expr, bindings);
 
         // Convert the bindings map from Expr -> Symbol to Symbol -> Expr.
         let ref mut bindings = bindings.drain()
             .map(|(k, v)| (v, k))
             .collect::<HashMap<Symbol, Expr>>();
-
-        // FIXME: Update bindings list with expressions. This unnecessarily copies the expression -
-        // we can CSE this by choosing the "outermost" alias and using it everywhere.
-        for (sym, alias_list) in aliases.drain() {
-            for alias in alias_list {
-                let expr = bindings.get(&sym).cloned().unwrap();
-                bindings.insert(alias, expr);
-            }
-        }
 
         cse.counter = 0;
         let ref mut sites =  cse.build_site_map(expr, bindings);
@@ -380,13 +370,9 @@ impl Cse {
     /// This method updates the bindings map to hold expression to identifier information for each
     /// subexpression in the given expression tree. The expressions can be looked up in the
     /// bindings map to find common subexpressions.
-    ///
-    /// To handle the alias issue (see inline comment), we also return a mapping for a symbol name
-    /// with its aliases.
     fn remove_common_subexpressions(&mut self,
                                     expr: &mut Expr,
-                                    bindings: &mut HashMap<Expr, Symbol>,
-                                    aliases: &mut HashMap<Symbol, Vec<Symbol>>) {
+                                    bindings: &mut HashMap<Expr, Symbol>) {
 
         use self::UseCse;
         expr.transform_up(&mut |ref mut e| {
