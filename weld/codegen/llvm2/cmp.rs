@@ -1,4 +1,4 @@
-//! Generates code to compare values for equality.
+//! Generates code to compare values using a comparison function.
 
 extern crate llvm_sys;
 
@@ -20,49 +20,56 @@ use self::llvm_sys::LLVMIntPredicate::*;
 use super::CodeGenExt;
 use super::LlvmGenerator;
 
-use ast::BinOpKind::Equal;
+use ast::BinOpKind::*;
 use codegen::llvm2::numeric::gen_binop;
 
 /// Returns whether a value can be compared with libc's `memcmp`.
 ///
 /// XXX For now, this returns true if `memcmp` can be used for equality.
-trait SupportsMemCmpEq {
-    fn supports_memcmp_eq(&self) -> bool;
+trait SupportsMemCmp {
+    fn supports_memcmp(&self) -> bool;
 }
 
-impl SupportsMemCmpEq for Type {
-    fn supports_memcmp_eq(&self) -> bool {
+impl SupportsMemCmp for Type {
+    fn supports_memcmp(&self) -> bool {
         use ast::Type::*;
         // Structs do not support memcmp because they may be padded.
         match *self {
-            Scalar(ref kind) => kind.is_integer(),
+            Scalar(ref kind) => {
+                use ast::ScalarKind::*;
+                match *kind {
+                    Bool | I8 => true,
+                    _ => false,
+                }
+            },
             _ => false,
         }
     }
 }
 
-/// Trait for generating equality-comparison code.
-pub trait GenEq {
-    /// Generates an equality function for a type.
+/// Trait for generating comparison code.
+pub trait GenCmp {
+    /// Generates a comparison function for a type.
     ///
     /// The equality functions are over pointers of the type, e.g., an equality function for `i32`
     /// has the type signature `i1 (i32*, i32*)`. This method returns the generated function. The
     /// function returns `true` if the two operands are equal.
-    unsafe fn gen_eq_fn(&mut self, ty: &Type) -> WeldResult<LLVMValueRef>; 
+    unsafe fn gen_cmp_fn(&mut self, ty: &Type) -> WeldResult<LLVMValueRef>; 
 
     /// Generates an opaque equality function for a type.
     ///
     /// Opaque equality functions are linked externally and operate over opaque (i.e., `void*`)
     /// arguments. These are used in, e.g., the dictionary implementation. This method returns the
     /// generated function.
-    unsafe fn gen_opaque_eq_fn(&mut self, ty: &Type) -> WeldResult<LLVMValueRef>;
+    unsafe fn gen_opaque_cmp_fn(&mut self, ty: &Type) -> WeldResult<LLVMValueRef>;
+
 }
 
-impl GenEq for LlvmGenerator {
-    /// Generates an equality function for a type.
-    unsafe fn gen_eq_fn(&mut self, ty: &Type) -> WeldResult<LLVMValueRef> {
+impl GenCmp for LlvmGenerator {
+    /// Generates a comparison function for a type.
+    unsafe fn gen_cmp_fn(&mut self, ty: &Type) -> WeldResult<LLVMValueRef> {
         use ast::Type::*;
-        let result = self.eq_fns.get(ty).cloned();
+        let result = self.cmp_fns.get(ty).cloned();
         if let Some(result) = result {
             return Ok(result)
         }
@@ -70,12 +77,12 @@ impl GenEq for LlvmGenerator {
         let llvm_ty = self.llvm_type(ty)?;
         // XXX Do we need the run handle?
         let mut arg_tys = [LLVMPointerType(llvm_ty, 0), LLVMPointerType(llvm_ty, 0)];
-        let ret_ty = self.i1_type();
+        let ret_ty = self.i32_type();
 
         let c_prefix = LLVMPrintTypeToString(llvm_ty);
         let prefix = CStr::from_ptr(c_prefix);
         let prefix = prefix.to_str().unwrap();
-        let name = format!("{}.eq", prefix);
+        let name = format!("{}.cmp", prefix);
         // Free the allocated string.
         LLVMDisposeMessage(c_prefix);
 
@@ -90,16 +97,39 @@ impl GenEq for LlvmGenerator {
 
         let result = match *ty {
             Builder(_, _) => unreachable!(),
-            Dict(_, _) => unimplemented!(), // Dictionary Equality
+            Dict(_, _) => unimplemented!(), // dictionary comparison
             Scalar(_) | Simd(_) => {
+                print!("generating cmp...\n");
                 let left = self.load(builder, left)?;
                 let right = self.load(builder, right)?;
-                gen_binop(builder, Equal, left, right, ty)?
+                let on_geq_block = LLVMAppendBasicBlockInContext(self.context, function, c_str!(""));
+                let done_block = LLVMAppendBasicBlockInContext(self.context, function, c_str!(""));
+                
+                // if lt
+                let cond = gen_binop(builder, LessThan, left, right, ty)?;
+                LLVMBuildCondBr(builder, cond, done_block, on_geq_block);
+
+                LLVMPositionBuilderAtEnd(builder, on_geq_block);
+                // else if equal
+                // this is less likely to occur during sort so we don't check it if the lt branch passes
+                // TODO: special case booleans for Select
+                let eq = gen_binop(builder, Equal, left, right, ty)?;
+                let on_geq = LLVMBuildSelect(builder, eq, self.i32(0), self.i32(1), c_str!(""));
+                LLVMBuildBr(builder, done_block);
+                
+                // Finish block - set result.
+                LLVMPositionBuilderAtEnd(builder, done_block);
+                let result = LLVMBuildPhi(builder, ret_ty, c_str!(""));
+                let mut blocks = [entry_block, on_geq_block];
+                let mut values = [self.i32(-1), on_geq];
+                LLVMAddIncoming(result, values.as_mut_ptr(), blocks.as_mut_ptr(), values.len() as u32);
+
+                result
             }
             Struct(ref elems) => {
                 let mut result = self.i1(true);
                 for (i, elem) in elems.iter().enumerate() {
-                    let func = self.gen_eq_fn(elem)?;
+                    let func = self.gen_cmp_fn(elem)?;
                     let field_left = LLVMBuildStructGEP(builder, left, i as u32, c_str!(""));
                     let field_right = LLVMBuildStructGEP(builder, right, i as u32, c_str!(""));
                     let mut args = [field_left, field_right];
@@ -108,11 +138,11 @@ impl GenEq for LlvmGenerator {
                 }
                 result
             }
-            // Vectors comprised of integers or structs of integers can be compared for equality using `memcmp`.
+            // Vectors comprised of integers or structs of integers can be compared for using `memcmp`.
             //
             // XXX Note eventually when we support comparison for sorting, this won't work! We can
             // then only support unsigned integers and booleans (and structs thereof).
-            Vector(ref elem) if elem.supports_memcmp_eq() => {
+            Vector(ref elem) if elem.supports_memcmp() => {
                 let compare_data_block = LLVMAppendBasicBlockInContext(self.context, function, c_str!(""));
                 let done_block = LLVMAppendBasicBlockInContext(self.context, function, c_str!(""));
 
@@ -184,12 +214,12 @@ impl GenEq for LlvmGenerator {
                 // Index variable.
                 let phi_i = LLVMBuildPhi(builder, self.i64_type(), c_str!(""));
 
-                let func = self.gen_eq_fn(elem)?;
+                let func = self.gen_cmp_fn(elem)?;
                 let left_value = self.gen_at(builder, ty, left_vector, phi_i)?;
                 let right_value = self.gen_at(builder, ty, right_vector, phi_i)?;
                 let mut args = [left_value, right_value];
-                let eq_result = LLVMBuildCall(builder, func, args.as_mut_ptr(), args.len() as u32, c_str!(""));
-                let neq = LLVMBuildNot(builder, eq_result, c_str!(""));
+                let cmp_result = LLVMBuildCall(builder, func, args.as_mut_ptr(), args.len() as u32, c_str!(""));
+                let neq = LLVMBuildNot(builder, cmp_result, c_str!(""));
 
                 let updated_i = LLVMBuildNSWAdd(builder, phi_i, self.i64(1), c_str!(""));
                 let check1 = LLVMBuildICmp(builder, LLVMIntEQ, updated_i, left_size, c_str!(""));
@@ -205,7 +235,7 @@ impl GenEq for LlvmGenerator {
                 LLVMPositionBuilderAtEnd(builder, done_block);
                 let result = LLVMBuildPhi(builder, self.i1_type(), c_str!(""));
                 let mut blocks = [entry_block, compare_data_block, loop_block];
-                let mut values = [size_eq, self.i1(true), eq_result];
+                let mut values = [size_eq, self.i1(true), cmp_result];
                 LLVMAddIncoming(result, values.as_mut_ptr(), blocks.as_mut_ptr(), values.len() as u32);
                 result
             }
@@ -215,13 +245,13 @@ impl GenEq for LlvmGenerator {
         LLVMBuildRet(builder, result);
         LLVMDisposeBuilder(builder);
 
-        self.eq_fns.insert(ty.clone(), function);
+        self.cmp_fns.insert(ty.clone(), function);
         Ok(function)
     }
 
-    /// Generates an opaque equality function for a type.
-    unsafe fn gen_opaque_eq_fn(&mut self, ty: &Type) -> WeldResult<LLVMValueRef> {
-        let result = self.opaque_eq_fns.get(ty).cloned();
+    /// Generates an opaque comparison function for a type.
+    unsafe fn gen_opaque_cmp_fn(&mut self, ty: &Type) -> WeldResult<LLVMValueRef> {
+        let result = self.opaque_cmp_fns.get(ty).cloned();
         if let Some(result) = result {
             return Ok(result)
         }
@@ -233,7 +263,7 @@ impl GenEq for LlvmGenerator {
         let c_prefix = LLVMPrintTypeToString(llvm_ty);
         let prefix = CStr::from_ptr(c_prefix);
         let prefix = prefix.to_str().unwrap();
-        let name = format!("{}.opaque_eq", prefix);
+        let name = format!("{}.opaque_cmp", prefix);
 
         // Free the allocated string.
         LLVMDisposeMessage(c_prefix);
@@ -252,14 +282,14 @@ impl GenEq for LlvmGenerator {
         let left = LLVMBuildBitCast(builder, left, LLVMPointerType(llvm_ty, 0), c_str!(""));
         let right = LLVMBuildBitCast(builder, right, LLVMPointerType(llvm_ty, 0), c_str!(""));
 
-        let func = self.gen_eq_fn(ty)?;
+        let func = self.gen_cmp_fn(ty)?;
         let mut args = [left, right];
         let result = LLVMBuildCall(builder, func, args.as_mut_ptr(), args.len() as u32, c_str!(""));
         let result = LLVMBuildZExt(builder, result, self.i32_type(), c_str!(""));
         LLVMBuildRet(builder, result);
         LLVMDisposeBuilder(builder);
 
-        self.opaque_eq_fns.insert(ty.clone(), function);
+        self.opaque_cmp_fns.insert(ty.clone(), function);
         Ok(function)
     }
 }

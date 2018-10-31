@@ -62,12 +62,12 @@ fn if_sort() {
     }
 }
 
-// #[test]
+#[test]
 fn simple_sort() {
     let ys = vec![2, 3, 1, 4, 5];
     let ref input_data = WeldVec::from(&ys);
 
-    let code = "|ys:vec[i32]| sort(ys, |x:i32| x + 1)";
+    let code = "|ys:vec[i32]| sort(ys, |x:i32| x+1)";
     let ref conf = default_conf();
     let ret_value = compile_and_run(code, conf, input_data);
     let data = ret_value.data() as *const WeldVec<i32>;
