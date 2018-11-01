@@ -61,7 +61,7 @@ class WeldModule(c_void_p):
         weld_context_new = weld.weld_context_new
         weld_context_new.argtypes = [c_weld_conf]
         weld_context_new.restype = c_weld_context
-        ctx = weld_context_new(conf)
+        ctx = weld_context_new(conf.conf)
 
         weld_module_run = weld.weld_module_run
         # module, context, arg, &err
