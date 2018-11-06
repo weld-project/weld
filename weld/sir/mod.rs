@@ -1065,7 +1065,7 @@ fn gen_expr(expr: &Expr,
                 let keyblock = prog.funcs[keyfunc_id].add_block();
                 let (keyfunc_id, keyblock, key_sym) = gen_expr(body, prog, keyfunc_id, keyblock, tracker, multithreaded)?;
                 prog.funcs[keyfunc_id].params.insert(params[0].name.clone(), params[0].ty.clone());
-                prog.funcs[keyfunc_id].blocks[keyblock].terminator = Terminator::ProgramReturn(key_sym.clone());
+                prog.funcs[keyfunc_id].blocks[keyblock].terminator = Terminator::EndFunction(key_sym.clone());
 
                 let (cur_func, cur_block, data_sym) = gen_expr(data, prog, cur_func, cur_block, tracker, multithreaded)?;
                 let key_function = prog.funcs[keyfunc_id].clone();

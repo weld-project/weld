@@ -307,6 +307,8 @@ pub struct LlvmGenerator {
     ///
     /// These are used by qsort.
     opaque_cmp_fns: FnvHashMap<Type, LLVMValueRef>,
+    /// Opaque comparison functions that contain a key function, indexed by the ID of the key function.
+    keyfunc_cmp_fns: FnvHashMap<FunctionId, LLVMValueRef>,
     /// Hash functions on various types.
     hash_fns: FnvHashMap<Type, LLVMValueRef>,
     /// Serialization functions on various types.
@@ -731,6 +733,7 @@ impl LlvmGenerator {
             opaque_eq_fns: FnvHashMap::default(),
             cmp_fns: FnvHashMap::default(),
             opaque_cmp_fns: FnvHashMap::default(),
+            keyfunc_cmp_fns: FnvHashMap::default(),
             hash_fns: FnvHashMap::default(),
             serialize_fns: FnvHashMap::default(),
             deserialize_fns: FnvHashMap::default(),
@@ -1300,20 +1303,27 @@ impl LlvmGenerator {
                             let ty_size = self.size_of(elem_ll_ty);
                             
                             use self::cmp::GenCmp;
-                            let comparator = self.gen_opaque_cmp_fn(&(keyfunc_func.return_type))?;
+                            let keyfunc_ll_fn = self.functions[keyfunc];
+
+                            let run = context.get_run();
+                            let comparator = self.gen_keyfunc_cmp_fn(&elem_ll_ty,
+                                                                     keyfunc,
+                                                                     &keyfunc_ll_fn,
+                                                                     &keyfunc_func.return_type)?;
 
                             // args to qsort are: base array pointer, num elements,
                             // element size, comparator function
-                            let mut args = vec![elems_ptr, size, ty_size, comparator];
+                            let mut args = vec![elems_ptr, size, ty_size, comparator, run];
                             let mut arg_tys = vec![LLVMTypeOf(elems_ptr),
                                                    LLVMTypeOf(size),
                                                    LLVMTypeOf(ty_size),
-                                                   LLVMTypeOf(comparator)];
+                                                   LLVMTypeOf(comparator),
+                                                   LLVMTypeOf(run)];
                             
                             // Generate the call to qsort
                             let void_type = self.void_type();
-                            self.intrinsics.add("qsort", void_type, &mut arg_tys); // In-place sort.
-                            self.intrinsics.call(context.builder, "qsort", &mut args);
+                            self.intrinsics.add("qsort_r", void_type, &mut arg_tys); // In-place sort.
+                            self.intrinsics.call(context.builder, "qsort_r", &mut args);
 
                             LLVMBuildStore(context.builder, child_value, output_pointer);
                             
