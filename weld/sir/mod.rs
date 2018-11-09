@@ -56,6 +56,7 @@ pub enum StatementKind {
     MakeVector(Vec<Symbol>),
     Merge { builder: Symbol, value: Symbol },
     Negate(Symbol),
+    Not(Symbol),
     NewBuilder {
         arg: Option<Symbol>,
         ty: Type,
@@ -152,6 +153,9 @@ impl StatementKind {
                 vars.push(child);
             }
             Negate(ref child) => {
+                vars.push(child);
+            }
+            Not(ref child) => {
                 vars.push(child);
             }
             Broadcast(ref child) => {
@@ -540,6 +544,7 @@ impl fmt::Display for StatementKind {
                 ref value,
             } => write!(f, "merge({}, {})", builder, value),
             Negate(ref child) => write!(f, "-{}", child),
+            Not(ref child) => write!(f, "!{}", child),
             NewBuilder {
                 ref arg,
                 ref ty,
@@ -961,6 +966,13 @@ fn gen_expr(expr: &Expr,
         ExprKind::Negate(ref child_expr) => {
             let (cur_func, cur_block, child_sym) = gen_expr(child_expr, prog, cur_func, cur_block, tracker)?;
             let kind = Negate(child_sym);
+            let res_sym = tracker.symbol_for_statement(prog, cur_func, cur_block, &expr.ty, kind);
+            Ok((cur_func, cur_block, res_sym))
+        }
+
+        ExprKind::Not(ref child_expr) => {
+            let (cur_func, cur_block, child_sym) = gen_expr(child_expr, prog, cur_func, cur_block, tracker)?;
+            let kind = Not(child_sym);
             let res_sym = tracker.symbol_for_statement(prog, cur_func, cur_block, &expr.ty, kind);
             Ok((cur_func, cur_block, res_sym))
         }

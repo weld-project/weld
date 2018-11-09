@@ -410,6 +410,14 @@ impl InferTypesInternal for Expr {
                 self.ty.push(&c.ty)
             }
 
+            Not(ref mut c) => {
+                let mut changed = false;
+                let ref boolean = Scalar(Bool);
+                changed |= c.ty.push(boolean)?;
+                changed |= self.ty.push(boolean)?;
+                Ok(changed)
+            }
+
             Broadcast(ref c) => {
                 if let Scalar(ref kind) = c.ty {
                     self.ty.push(&Simd(kind.clone()))

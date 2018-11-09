@@ -62,6 +62,7 @@ impl CompareIgnoringSymbols for Expr {
                 }
                 (&NewBuilder(_), &NewBuilder(_)) => Ok(true),
                 (&Negate(_), &Negate(_)) => Ok(true),
+                (&Not(_), &Not(_)) => Ok(true),
                 (&Broadcast(_), &Broadcast(_)) => Ok(true),
                 (&MakeStruct { .. }, &MakeStruct { .. }) => Ok(true),
                 (&MakeVector { .. }, &MakeVector { .. }) => Ok(true),

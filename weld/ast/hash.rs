@@ -145,7 +145,7 @@ impl ExprHash {
             }
             // Other expressions (listed explicitly so we don't forget to add new ones). If the
             // expression doesn't have a non-Expr field, it goes here.
-            Negate(_) | Broadcast(_) | Serialize(_) | ToVec{ .. } | MakeStruct { .. } | MakeVector { .. } |
+            Negate(_) | Not(_) | Broadcast(_) | Serialize(_) | ToVec{ .. } | MakeStruct { .. } | MakeVector { .. } |
                 Zip { .. } | Length { .. } | Lookup { .. } | OptLookup { .. } | KeyExists { .. } |
                 Slice { .. } | Sort { .. } | If { .. } | Iterate { .. } | Select { .. } | Apply { .. } |
                 NewBuilder(_) | Merge { .. } | Res { .. } => {}

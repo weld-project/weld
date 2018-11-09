@@ -1201,6 +1201,10 @@ impl LlvmGenerator {
                 use self::numeric::NumericExpressionGen;
                 self.gen_negate(context, statement)
             }
+            Not(_) => {
+                use self::numeric::NumericExpressionGen;
+                self.gen_not(context, statement)
+            }
             NewBuilder { .. } => {
                 use self::builder::BuilderExpressionGen;
                 self.gen_new_builder(context, statement)
