@@ -34,5 +34,11 @@ impl error::Error for WeldCompileError {
     }
 }
 
+impl From<String> for WeldCompileError {
+    fn from(string: String) -> WeldCompileError {
+        WeldCompileError(string)
+    }
+}
+
 /// Result type returned by Weld.
 pub type WeldResult<T> = Result<T, WeldCompileError>;
