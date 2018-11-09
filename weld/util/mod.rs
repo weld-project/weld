@@ -92,12 +92,18 @@ pub fn timestamp_unique() -> String {
 
 
 /// Writes code to a file specified by `PathBuf`. Writes a log message if it failed.
-pub fn write_code<T: AsRef<str>, U: AsRef<str>, V: AsRef<str>>(code: T, ext: U, prefix: V, dir_path: &PathBuf) {
+pub fn write_code<T: AsRef<str>, U: AsRef<str>, V: AsRef<str>>(code: T,
+                                                               ext: U,
+                                                               prefix: V,
+                                                               dir_path: &str) {
+
+    let ref mut path = PathBuf::new();
+    path.push(dir_path);
+
     let mut options = OpenOptions::new();
     options.write(true)
         .create_new(true);
 
-    let ref mut path = dir_path.clone();
     path.push(format!("code-{}", prefix.as_ref()));
     path.set_extension(ext.as_ref());
 
