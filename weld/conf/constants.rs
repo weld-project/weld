@@ -103,3 +103,15 @@ pub const CONF_ENABLE_BOUNDS_CHECKS_DEFAULT: bool = false;
 
 /// Default directory for dumping code.
 pub const CONF_DUMP_CODE_DIR_DEFAULT: &'static str = ".";
+
+/// Default set of optimization passes.
+pub const CONF_OPTIMIZATION_PASSES_DEFAULT: &[&'static str] =  &[
+"loop-fusion",
+"unroll-static-loop",
+"infer-size",
+"inline-literals",
+"cse",
+"short-circuit-booleans",
+"predicate",
+"vectorize"
+];

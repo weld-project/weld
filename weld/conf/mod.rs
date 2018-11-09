@@ -11,16 +11,10 @@ use self::constants::*;
 
 lazy_static! {
     pub static ref CONF_OPTIMIZATION_PASSES: Vec<Pass> = {
-        let m = ["loop-fusion",
-        "unroll-static-loop",
-        "infer-size",
-        "inline-literals",
-        "cse",
-        "short-circuit-booleans",
-        "predicate",
-        "vectorize"
-        ];
-        m.iter().map(|e| (*OPTIMIZATION_PASSES.get(e).unwrap()).clone()).collect()
+        CONF_OPTIMIZATION_PASSES_DEFAULT.iter()
+            .map(|e| (*OPTIMIZATION_PASSES.get(e).unwrap())
+            .clone())
+            .collect()
     };
 }
 
