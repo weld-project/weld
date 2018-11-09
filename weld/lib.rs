@@ -179,6 +179,8 @@ pub mod ffi;
 pub mod runtime;
 pub mod data;
 
+pub use conf::constants::*;
+
 // Tests.
 #[cfg(test)]
 mod tests;
@@ -652,7 +654,7 @@ impl WeldModule {
         // Dump the generated Weld program before applying any analyses.
         if conf.dump_code.enabled {
             info!("Writing code to directory '{}' with timestamp {}",
-                  &conf.dump_code.dir.display(), timestamp);
+                  &conf.dump_code.dir, timestamp);
             util::write_code(&unoptimized_code, "weld", timestamp, &conf.dump_code.dir);
         }
 
@@ -685,7 +687,7 @@ impl WeldModule {
 
         // Convert the AST to SIR.
         let start = PreciseTime::now();
-        let mut sir_prog = sir::ast_to_sir(&expr, conf.support_multithread)?;
+        let mut sir_prog = sir::ast_to_sir(&expr)?;
         let end = PreciseTime::now();
         stats.weld_times.push(("AST to SIR".to_string(), start.to(end)));
         debug!("SIR program:\n{}\n", &sir_prog);

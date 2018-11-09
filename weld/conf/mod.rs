@@ -5,45 +5,24 @@ use super::error::WeldResult;
 use optimizer::OPTIMIZATION_PASSES;
 use optimizer::Pass;
 
-use std::path::{Path, PathBuf};
+pub mod constants;
 
-// Keys used in textual representation of conf
-pub const MEMORY_LIMIT_KEY: &'static str = "weld.memory.limit";
-pub const THREADS_KEY: &'static str = "weld.threads";
-pub const SUPPORT_MULTITHREAD_KEY: &'static str = "weld.compile.multithreadSupport";
-pub const TRACE_RUN_KEY: &'static str = "weld.compile.traceExecution";
-pub const OPTIMIZATION_PASSES_KEY: &'static str = "weld.optimization.passes";
-pub const EXPERIMENTAL_PASSES_KEY: &'static str = "weld.optimization.applyExperimentalTransforms";
-pub const SIR_OPT_KEY: &'static str = "weld.optimization.sirOptimization";
-pub const LLVM_OPTIMIZATION_LEVEL_KEY: &'static str = "weld.llvm.optimization.level";
-pub const DUMP_CODE_KEY: &'static str = "weld.compile.dumpCode";
-pub const DUMP_CODE_DIR_KEY: &'static str = "weld.compile.dumpCodeDir";
-pub const ENABLE_BOUNDS_CHECKS: &'static str = "weld.compile.enableBoundsChecks";
-
-// Default values of each key
-pub const DEFAULT_MEMORY_LIMIT: i64 = 1000000000;
-pub const DEFAULT_THREADS: i32 = 1;
-pub const DEFAULT_SUPPORT_MULTITHREAD: bool = false;
-pub const DEFAULT_SIR_OPT: bool = true;
-pub const DEFAULT_LLVM_OPTIMIZATION_LEVEL: u32 = 2;
-pub const DEFAULT_DUMP_CODE: bool = false;
-pub const DEFAULT_TRACE_RUN: bool = false;
-pub const DEFAULT_EXPERIMENTAL_PASSES: bool = false;
-pub const DEFAULT_BOUNDS_CHECKS: bool = false;
+use self::constants::*;
 
 lazy_static! {
-    pub static ref DEFAULT_OPTIMIZATION_PASSES: Vec<Pass> = {
-        let m = ["loop-fusion", "unroll-static-loop", "infer-size", "inline-literals", "cse", "short-circuit-booleans", "predicate", "vectorize"];
-        m.iter().map(|e| (*OPTIMIZATION_PASSES.get(e).unwrap()).clone()).collect()
+    pub static ref CONF_OPTIMIZATION_PASSES: Vec<Pass> = {
+        CONF_OPTIMIZATION_PASSES_DEFAULT.iter()
+            .map(|e| (*OPTIMIZATION_PASSES.get(e).unwrap())
+            .clone())
+            .collect()
     };
-    pub static ref DEFAULT_DUMP_CODE_DIR: PathBuf = Path::new(".").to_path_buf();
 }
 
 /// Options for dumping code.
 #[derive(Clone,Debug)]
 pub struct DumpCodeConf {
     pub enabled: bool,
-    pub dir: PathBuf,
+    pub dir: String,
 }
 
 /// A parsed configuration with correctly typed fields.
@@ -51,7 +30,6 @@ pub struct DumpCodeConf {
 pub struct ParsedConf {
     pub memory_limit: i64,
     pub threads: i32,
-    pub support_multithread: bool,
     pub trace_run: bool,
     pub enable_sir_opt: bool,
     pub enable_experimental_passes: bool,
@@ -69,7 +47,6 @@ impl ParsedConf {
         ParsedConf {
             memory_limit: 0,
             threads: 0,
-            support_multithread: false,
             trace_run: false,
             enable_sir_opt: false,
             enable_experimental_passes: false,
@@ -77,7 +54,7 @@ impl ParsedConf {
             llvm_optimization_level: 0,
             dump_code: DumpCodeConf {
                 enabled: false,
-                dir: PathBuf::new(),
+                dir: "".to_string()
             },
             enable_bounds_checks: false,
         }
@@ -86,59 +63,53 @@ impl ParsedConf {
 
 /// Parse a configuration from a WeldConf key-value dictionary.
 pub fn parse(conf: &WeldConf) -> WeldResult<ParsedConf> {
-    let value = get_value(conf, MEMORY_LIMIT_KEY);
+    let value = get_value(conf, CONF_MEMORY_LIMIT_KEY);
     let memory_limit = value.map(|s| parse_memory_limit(&s))
-                            .unwrap_or(Ok(DEFAULT_MEMORY_LIMIT))?;
+                            .unwrap_or(Ok(CONF_MEMORY_LIMIT_DEFAULT))?;
 
-    let value = get_value(conf, THREADS_KEY);
+    let value = get_value(conf, CONF_THREADS_KEY);
     let threads = value.map(|s| parse_threads(&s))
-                       .unwrap_or(Ok(DEFAULT_THREADS))?;
+                       .unwrap_or(Ok(CONF_THREADS_DEFAULT))?;
 
-    let value = get_value(conf, OPTIMIZATION_PASSES_KEY);
+    let value = get_value(conf, CONF_OPTIMIZATION_PASSES_KEY);
     let mut passes = value.map(|s| parse_passes(&s))
-                      .unwrap_or(Ok(DEFAULT_OPTIMIZATION_PASSES.clone()))?;
+                      .unwrap_or(Ok(CONF_OPTIMIZATION_PASSES.clone()))?;
 
     // Insert mandatory passes to the beginning.
     passes.insert(0, OPTIMIZATION_PASSES.get("inline-zip").unwrap().clone());
     passes.insert(0, OPTIMIZATION_PASSES.get("inline-let").unwrap().clone());
     passes.insert(0, OPTIMIZATION_PASSES.get("inline-apply").unwrap().clone());
 
-    let value = get_value(conf, LLVM_OPTIMIZATION_LEVEL_KEY);
+    let value = get_value(conf, CONF_LLVM_OPTIMIZATION_LEVEL_KEY);
     let level = value.map(|s| parse_llvm_optimization_level(&s))
-                      .unwrap_or(Ok(DEFAULT_LLVM_OPTIMIZATION_LEVEL))?;
+                      .unwrap_or(Ok(CONF_LLVM_OPTIMIZATION_LEVEL_DEFAULT))?;
 
-    let value = get_value(conf, SUPPORT_MULTITHREAD_KEY);
-    let support_multithread = value.map(|s| parse_bool_flag(&s, "Invalid flag for multithreadSupport"))
-                      .unwrap_or(Ok(DEFAULT_SUPPORT_MULTITHREAD))?;
+    let value = get_value(conf, CONF_DUMP_CODE_DIR_KEY);
+    let dump_code_dir = value.unwrap_or(CONF_DUMP_CODE_DIR_DEFAULT.to_string());
 
-    let value = get_value(conf, DUMP_CODE_DIR_KEY);
-    let dump_code_dir = value.map(|s| parse_dir(&s))
-                      .unwrap_or(Ok(DEFAULT_DUMP_CODE_DIR.clone()))?;
-
-    let value = get_value(conf, DUMP_CODE_KEY);
+    let value = get_value(conf, CONF_DUMP_CODE_KEY);
     let dump_code_enabled = value.map(|s| parse_bool_flag(&s, "Invalid flag for dumpCode"))
-                      .unwrap_or(Ok(DEFAULT_DUMP_CODE))?;
+                      .unwrap_or(Ok(CONF_DUMP_CODE_DEFAULT))?;
 
-    let value = get_value(conf, SIR_OPT_KEY);
+    let value = get_value(conf, CONF_SIR_OPT_KEY);
     let sir_opt_enabled = value.map(|s| parse_bool_flag(&s, "Invalid flag for sirOptimization"))
-                      .unwrap_or(Ok(DEFAULT_SIR_OPT))?;
+                      .unwrap_or(Ok(CONF_SIR_OPT_DEFAULT))?;
 
-    let value = get_value(conf, EXPERIMENTAL_PASSES_KEY);
+    let value = get_value(conf, CONF_EXPERIMENTAL_PASSES_KEY);
     let enable_experimental_passes = value.map(|s| parse_bool_flag(&s, "Invalid flag for applyExperimentalPasses"))
-                      .unwrap_or(Ok(DEFAULT_EXPERIMENTAL_PASSES))?;
+                      .unwrap_or(Ok(CONF_EXPERIMENTAL_PASSES_DEFAULT))?;
 
-    let value = get_value(conf, TRACE_RUN_KEY);
+    let value = get_value(conf, CONF_TRACE_RUN_KEY);
     let trace_run = value.map(|s| parse_bool_flag(&s, "Invalid flag for trace.run"))
-                      .unwrap_or(Ok(DEFAULT_TRACE_RUN))?;
+                      .unwrap_or(Ok(CONF_TRACE_RUN_DEFAULT))?;
 
-    let value = get_value(conf, ENABLE_BOUNDS_CHECKS);
+    let value = get_value(conf, CONF_ENABLE_BOUNDS_CHECKS_KEY);
     let enable_bounds_check = value.map(|s| parse_bool_flag(&s, "Invalid flag for enableBoundsChecks"))
-                      .unwrap_or(Ok(DEFAULT_BOUNDS_CHECKS))?;
+                      .unwrap_or(Ok(CONF_ENABLE_BOUNDS_CHECKS_DEFAULT))?;
 
     Ok(ParsedConf {
         memory_limit: memory_limit,
         threads: threads,
-        support_multithread: support_multithread,
         trace_run: trace_run,
         enable_sir_opt: sir_opt_enabled,
         enable_experimental_passes: enable_experimental_passes,
@@ -156,15 +127,6 @@ fn get_value(conf: &WeldConf, key: &str) -> Option<String> {
     conf.get(key)
         .cloned()
         .map(|v| v.into_string().unwrap())
-}
-
-/// Parses a string into a path and checks if the path is a directory in the filesystem.
-fn parse_dir(s: &str) -> WeldResult<PathBuf> {
-    let path = Path::new(s);
-    match path.metadata() {
-        Ok(_) if path.is_dir() => Ok(path.to_path_buf()),
-        _ => compile_err!("WeldConf: {} is not a directory", s)
-    }
 }
 
 /// Parse a number of threads.
