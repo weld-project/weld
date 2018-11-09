@@ -838,7 +838,7 @@ fn sir_param_correction(prog: &mut SirProgram) -> WeldResult<()> {
 }
 
 /// Convert an AST to a SIR program. Symbols must be unique in expr.
-pub fn ast_to_sir(expr: &Expr, multithreaded: bool) -> WeldResult<SirProgram> {
+pub fn ast_to_sir(expr: &Expr) -> WeldResult<SirProgram> {
     if let ExprKind::Lambda { ref params, ref body } = expr.kind {
         let mut prog = SirProgram::new(&body.ty, params);
         prog.sym_gen = SymbolGenerator::from_expression(expr);
@@ -846,7 +846,7 @@ pub fn ast_to_sir(expr: &Expr, multithreaded: bool) -> WeldResult<SirProgram> {
             prog.funcs[0].params.insert(tp.name.clone(), tp.ty.clone());
         }
         let first_block = prog.funcs[0].add_block();
-        let (res_func, res_block, res_sym) = gen_expr(body, &mut prog, 0, first_block, &mut StatementTracker::new(), multithreaded)?;
+        let (res_func, res_block, res_sym) = gen_expr(body, &mut prog, 0, first_block, &mut StatementTracker::new())?;
         prog.funcs[res_func].blocks[res_block].terminator = Terminator::ProgramReturn(res_sym);
         sir_param_correction(&mut prog)?;
         // second call is necessary in the case where there are loops in the call graph, since
@@ -867,10 +867,9 @@ fn get_iter_sym(opt : &Option<Box<Expr>>,
             cur_func: &mut FunctionId,
             cur_block: &mut BasicBlockId,
             tracker: &mut StatementTracker,
-            multithreaded: bool,
             body_func: FunctionId) -> WeldResult<Option<Symbol>> {
     if let &Some(ref opt_expr) = opt {
-        let opt_res = gen_expr(&opt_expr, prog, *cur_func, *cur_block, tracker, multithreaded)?;
+        let opt_res = gen_expr(&opt_expr, prog, *cur_func, *cur_block, tracker)?;
         /* TODO pari: Originally, in gen_expr cur_func, and cur_block were also being set - but this
         does not seem to have any effect. Could potentially remove this if it wasn't needed? All
         the tests seem to pass fine without it as well.
@@ -893,8 +892,7 @@ fn gen_expr(expr: &Expr,
             prog: &mut SirProgram,
             cur_func: FunctionId,
             cur_block: BasicBlockId,
-            tracker: &mut StatementTracker,
-            multithreaded: bool)
+            tracker: &mut StatementTracker)
             -> WeldResult<(FunctionId, BasicBlockId, Symbol)> {
     use self::StatementKind::*;
     use self::Terminator::*;
@@ -922,12 +920,12 @@ fn gen_expr(expr: &Expr,
             ref value,
             ref body,
         } => {
-            let (cur_func, cur_block, val_sym) = gen_expr(value, prog, cur_func, cur_block, tracker, multithreaded)?;
+            let (cur_func, cur_block, val_sym) = gen_expr(value, prog, cur_func, cur_block, tracker)?;
 
             let kind = Assign(val_sym);
             tracker.named_symbol_for_statement(prog, cur_func, cur_block, &value.ty, kind, name.clone());
 
-            let (cur_func, cur_block, res_sym) = gen_expr(body, prog, cur_func, cur_block, tracker, multithreaded)?;
+            let (cur_func, cur_block, res_sym) = gen_expr(body, prog, cur_func, cur_block, tracker)?;
             Ok((cur_func, cur_block, res_sym))
         }
 
@@ -936,8 +934,8 @@ fn gen_expr(expr: &Expr,
             ref left,
             ref right,
         } => {
-            let (cur_func, cur_block, left_sym) = gen_expr(left, prog, cur_func, cur_block, tracker, multithreaded)?;
-            let (cur_func, cur_block, right_sym) = gen_expr(right, prog, cur_func, cur_block, tracker, multithreaded)?;
+            let (cur_func, cur_block, left_sym) = gen_expr(left, prog, cur_func, cur_block, tracker)?;
+            let (cur_func, cur_block, right_sym) = gen_expr(right, prog, cur_func, cur_block, tracker)?;
             let kind = BinOp {
                 op: kind,
                 left: left_sym,
@@ -951,7 +949,7 @@ fn gen_expr(expr: &Expr,
             kind,
             ref value,
         } => {
-            let (cur_func, cur_block, value_sym) = gen_expr(value, prog, cur_func, cur_block, tracker, multithreaded)?;
+            let (cur_func, cur_block, value_sym) = gen_expr(value, prog, cur_func, cur_block, tracker)?;
             let kind = UnaryOp {
                 op: kind,
                 child: value_sym,
@@ -961,35 +959,35 @@ fn gen_expr(expr: &Expr,
         }
 
         ExprKind::Negate(ref child_expr) => {
-            let (cur_func, cur_block, child_sym) = gen_expr(child_expr, prog, cur_func, cur_block, tracker, multithreaded)?;
+            let (cur_func, cur_block, child_sym) = gen_expr(child_expr, prog, cur_func, cur_block, tracker)?;
             let kind = Negate(child_sym);
             let res_sym = tracker.symbol_for_statement(prog, cur_func, cur_block, &expr.ty, kind);
             Ok((cur_func, cur_block, res_sym))
         }
 
         ExprKind::Broadcast(ref child_expr) => {
-            let (cur_func, cur_block, child_sym) = gen_expr(child_expr, prog, cur_func, cur_block, tracker, multithreaded)?;
+            let (cur_func, cur_block, child_sym) = gen_expr(child_expr, prog, cur_func, cur_block, tracker)?;
             let kind = Broadcast(child_sym);
             let res_sym = tracker.symbol_for_statement(prog, cur_func, cur_block, &expr.ty, kind);
             Ok((cur_func, cur_block, res_sym))
         }
 
         ExprKind::Serialize(ref child_expr) => {
-            let (cur_func, cur_block, child_sym) = gen_expr(child_expr, prog, cur_func, cur_block, tracker, multithreaded)?;
+            let (cur_func, cur_block, child_sym) = gen_expr(child_expr, prog, cur_func, cur_block, tracker)?;
             let kind = Serialize(child_sym);
             let res_sym = tracker.symbol_for_statement(prog, cur_func, cur_block, &expr.ty, kind);
             Ok((cur_func, cur_block, res_sym))
         }
 
         ExprKind::Deserialize {ref value, .. } => {
-            let (cur_func, cur_block, child_sym) = gen_expr(value, prog, cur_func, cur_block, tracker, multithreaded)?;
+            let (cur_func, cur_block, child_sym) = gen_expr(value, prog, cur_func, cur_block, tracker)?;
             let kind = Deserialize(child_sym);
             let res_sym = tracker.symbol_for_statement(prog, cur_func, cur_block, &expr.ty, kind);
             Ok((cur_func, cur_block, res_sym))
         }
 
         ExprKind::Cast {ref child_expr, .. } => {
-            let (cur_func, cur_block, child_sym) = gen_expr(child_expr, prog, cur_func, cur_block, tracker, multithreaded)?;
+            let (cur_func, cur_block, child_sym) = gen_expr(child_expr, prog, cur_func, cur_block, tracker)?;
             let kind = Cast(child_sym, expr.ty.clone());
             let res_sym = tracker.symbol_for_statement(prog, cur_func, cur_block, &expr.ty, kind);
             Ok((cur_func, cur_block, res_sym))
@@ -999,8 +997,8 @@ fn gen_expr(expr: &Expr,
             ref data,
             ref index,
         } => {
-            let (cur_func, cur_block, data_sym) = gen_expr(data, prog, cur_func, cur_block, tracker, multithreaded)?;
-            let (cur_func, cur_block, index_sym) = gen_expr(index, prog, cur_func, cur_block, tracker, multithreaded)?;
+            let (cur_func, cur_block, data_sym) = gen_expr(data, prog, cur_func, cur_block, tracker)?;
+            let (cur_func, cur_block, index_sym) = gen_expr(index, prog, cur_func, cur_block, tracker)?;
 
             let kind = Lookup {
                 child: data_sym,
@@ -1014,8 +1012,8 @@ fn gen_expr(expr: &Expr,
             ref data,
             ref index,
         } => {
-            let (cur_func, cur_block, data_sym) = gen_expr(data, prog, cur_func, cur_block, tracker, multithreaded)?;
-            let (cur_func, cur_block, index_sym) = gen_expr(index, prog, cur_func, cur_block, tracker, multithreaded)?;
+            let (cur_func, cur_block, data_sym) = gen_expr(data, prog, cur_func, cur_block, tracker)?;
+            let (cur_func, cur_block, index_sym) = gen_expr(index, prog, cur_func, cur_block, tracker)?;
 
             let kind = OptLookup {
                 child: data_sym,
@@ -1026,8 +1024,8 @@ fn gen_expr(expr: &Expr,
         }
 
         ExprKind::KeyExists { ref data, ref key } => {
-            let (cur_func, cur_block, data_sym) = gen_expr(data, prog, cur_func, cur_block, tracker, multithreaded)?;
-            let (cur_func, cur_block, key_sym) = gen_expr(key, prog, cur_func, cur_block, tracker, multithreaded)?;
+            let (cur_func, cur_block, data_sym) = gen_expr(data, prog, cur_func, cur_block, tracker)?;
+            let (cur_func, cur_block, key_sym) = gen_expr(key, prog, cur_func, cur_block, tracker)?;
             let kind = KeyExists {
                 child: data_sym,
                 key: key_sym.clone(),
@@ -1041,9 +1039,9 @@ fn gen_expr(expr: &Expr,
             ref index,
             ref size,
         } => {
-            let (cur_func, cur_block, data_sym) = gen_expr(data, prog, cur_func, cur_block, tracker, multithreaded)?;
-            let (cur_func, cur_block, index_sym) = gen_expr(index, prog, cur_func, cur_block, tracker, multithreaded)?;
-            let (cur_func, cur_block, size_sym) = gen_expr(size, prog, cur_func, cur_block, tracker, multithreaded)?;
+            let (cur_func, cur_block, data_sym) = gen_expr(data, prog, cur_func, cur_block, tracker)?;
+            let (cur_func, cur_block, index_sym) = gen_expr(index, prog, cur_func, cur_block, tracker)?;
+            let (cur_func, cur_block, size_sym) = gen_expr(size, prog, cur_func, cur_block, tracker)?;
             let kind = Slice {
                 child: data_sym,
                 index: index_sym.clone(),
@@ -1063,12 +1061,12 @@ fn gen_expr(expr: &Expr,
             } = keyfunc.kind {
                 let keyfunc_id = prog.add_func();
                 let keyblock = prog.funcs[keyfunc_id].add_block();
-                let (keyfunc_id, keyblock, key_sym) = gen_expr(body, prog, keyfunc_id, keyblock, tracker, multithreaded)?;
+                let (keyfunc_id, keyblock, key_sym) = gen_expr(body, prog, keyfunc_id, keyblock, tracker)?;
 
                 prog.funcs[keyfunc_id].params.insert(params[0].name.clone(), params[0].ty.clone());
                 prog.funcs[keyfunc_id].blocks[keyblock].terminator = Terminator::ProgramReturn(key_sym.clone());
 
-                let (cur_func, cur_block, data_sym) = gen_expr(data, prog, cur_func, cur_block, tracker, multithreaded)?;
+                let (cur_func, cur_block, data_sym) = gen_expr(data, prog, cur_func, cur_block, tracker)?;
                 let key_function = prog.funcs[keyfunc_id].clone();
 
                 let kind = Sort {
@@ -1086,9 +1084,9 @@ fn gen_expr(expr: &Expr,
             ref on_true,
             ref on_false,
         } => {
-            let (cur_func, cur_block, cond_sym) = gen_expr(cond, prog, cur_func, cur_block, tracker, multithreaded)?;
-            let (cur_func, cur_block, true_sym) = gen_expr(on_true, prog, cur_func, cur_block, tracker, multithreaded)?;
-            let (cur_func, cur_block, false_sym) = gen_expr(on_false, prog, cur_func, cur_block, tracker, multithreaded)?;
+            let (cur_func, cur_block, cond_sym) = gen_expr(cond, prog, cur_func, cur_block, tracker)?;
+            let (cur_func, cur_block, true_sym) = gen_expr(on_true, prog, cur_func, cur_block, tracker)?;
+            let (cur_func, cur_block, false_sym) = gen_expr(on_false, prog, cur_func, cur_block, tracker)?;
             let kind = Select {
                 cond: cond_sym,
                 on_true: true_sym.clone(),
@@ -1099,14 +1097,14 @@ fn gen_expr(expr: &Expr,
         }
 
         ExprKind::ToVec { ref child_expr } => {
-            let (cur_func, cur_block, child_sym) = gen_expr(child_expr, prog, cur_func, cur_block, tracker, multithreaded)?;
+            let (cur_func, cur_block, child_sym) = gen_expr(child_expr, prog, cur_func, cur_block, tracker)?;
             let kind = ToVec(child_sym);
             let res_sym = tracker.symbol_for_statement(prog, cur_func, cur_block, &expr.ty, kind);
             Ok((cur_func, cur_block, res_sym))
         }
 
         ExprKind::Length { ref data } => {
-            let (cur_func, cur_block, child_sym) = gen_expr(data, prog, cur_func, cur_block, tracker, multithreaded)?;
+            let (cur_func, cur_block, child_sym) = gen_expr(data, prog, cur_func, cur_block, tracker)?;
             let kind = Length(child_sym);
             let res_sym = tracker.symbol_for_statement(prog, cur_func, cur_block, &expr.ty, kind);
             Ok((cur_func, cur_block, res_sym))
@@ -1117,7 +1115,7 @@ fn gen_expr(expr: &Expr,
             ref on_true,
             ref on_false,
         } => {
-            let (cur_func, cur_block, cond_sym) = gen_expr(cond, prog, cur_func, cur_block, tracker, multithreaded)?;
+            let (cur_func, cur_block, cond_sym) = gen_expr(cond, prog, cur_func, cur_block, tracker)?;
             let true_block = prog.funcs[cur_func].add_block();
             let false_block = prog.funcs[cur_func].add_block();
             prog.funcs[cur_func].blocks[cur_block].terminator = Branch {
@@ -1125,8 +1123,8 @@ fn gen_expr(expr: &Expr,
                 on_true: true_block,
                 on_false: false_block,
             };
-            let (true_func, true_block, true_sym) = gen_expr(on_true, prog, cur_func, true_block, tracker, multithreaded)?;
-            let (false_func, false_block, false_sym) = gen_expr(on_false, prog, cur_func, false_block, tracker, multithreaded)?;
+            let (true_func, true_block, true_sym) = gen_expr(on_true, prog, cur_func, true_block, tracker)?;
+            let (false_func, false_block, false_sym) = gen_expr(on_false, prog, cur_func, false_block, tracker)?;
             let res_sym = prog.add_local(&expr.ty, true_func);
             prog.funcs[true_func].blocks[true_block].add_statement(Statement::new(Some(res_sym.clone()), Assign(true_sym)));
             prog.funcs[false_func].blocks[false_block].add_statement(Statement::new(Some(res_sym.clone()), Assign(false_sym)));
@@ -1142,7 +1140,7 @@ fn gen_expr(expr: &Expr,
             ref update_func,
         } => {
             // Generate the intial value.
-            let (cur_func, cur_block, initial_sym) = gen_expr(initial, prog, cur_func, cur_block, tracker, multithreaded)?;
+            let (cur_func, cur_block, initial_sym) = gen_expr(initial, prog, cur_func, cur_block, tracker)?;
 
             // Pull out the argument name and function body and validate that things type-check.
             let argument_sym;
@@ -1172,7 +1170,7 @@ fn gen_expr(expr: &Expr,
             // Generate the loop's body, which will work on argument_sym and produce result_sym.
             // The type of result_sym will be {ArgType, bool} and we will repeat the body if the bool is true.
             let (body_end_func, body_end_block, result_sym) =
-                gen_expr(func_body, prog, cur_func, body_start_block, tracker, multithreaded)?;
+                gen_expr(func_body, prog, cur_func, body_start_block, tracker)?;
 
             // After the body, unpack the {state, bool} struct into symbols argument_sym and continue_sym.
             let continue_sym = prog.add_local(&Scalar(ScalarKind::Bool), body_end_func);
@@ -1202,8 +1200,8 @@ fn gen_expr(expr: &Expr,
         } => {
             // This expression doesn't return a symbol, so just add a statement for it directly
             // instead of calling the tracker.
-            let (cur_func, cur_block, builder_sym) = gen_expr(builder, prog, cur_func, cur_block, tracker, multithreaded)?;
-            let (cur_func, cur_block, elem_sym) = gen_expr(value, prog, cur_func, cur_block, tracker, multithreaded)?;
+            let (cur_func, cur_block, builder_sym) = gen_expr(builder, prog, cur_func, cur_block, tracker)?;
+            let (cur_func, cur_block, elem_sym) = gen_expr(value, prog, cur_func, cur_block, tracker)?;
             prog.funcs[cur_func].blocks[cur_block].add_statement(Statement::new(None, Merge {
                                                                      builder: builder_sym.clone(),
                                                                      value: elem_sym,
@@ -1212,7 +1210,7 @@ fn gen_expr(expr: &Expr,
         }
 
         ExprKind::Res { ref builder } => {
-            let (cur_func, cur_block, builder_sym) = gen_expr(builder, prog, cur_func, cur_block, tracker, multithreaded)?;
+            let (cur_func, cur_block, builder_sym) = gen_expr(builder, prog, cur_func, cur_block, tracker)?;
             let kind = Res(builder_sym);
             let res_sym = tracker.symbol_for_statement(prog, cur_func, cur_block, &expr.ty, kind);
             Ok((cur_func, cur_block, res_sym))
@@ -1220,7 +1218,7 @@ fn gen_expr(expr: &Expr,
 
         ExprKind::NewBuilder(ref arg) => {
             let (cur_func, cur_block, arg_sym) = if let Some(ref a) = *arg {
-                let (cur_func, cur_block, arg_sym) = gen_expr(a, prog, cur_func, cur_block, tracker, multithreaded)?;
+                let (cur_func, cur_block, arg_sym) = gen_expr(a, prog, cur_func, cur_block, tracker)?;
                 (cur_func, cur_block, Some(arg_sym))
             } else {
                 (cur_func, cur_block, None)
@@ -1238,10 +1236,10 @@ fn gen_expr(expr: &Expr,
         ExprKind::MakeStruct { ref elems } => {
             let mut syms = vec![];
             let (mut cur_func, mut cur_block, mut sym) =
-                gen_expr(&elems[0], prog, cur_func, cur_block, tracker, multithreaded)?;
+                gen_expr(&elems[0], prog, cur_func, cur_block, tracker)?;
             syms.push(sym);
             for elem in elems.iter().skip(1) {
-                let r = gen_expr(elem, prog, cur_func, cur_block, tracker, multithreaded)?;
+                let r = gen_expr(elem, prog, cur_func, cur_block, tracker)?;
                 cur_func = r.0;
                 cur_block = r.1;
                 sym = r.2;
@@ -1257,7 +1255,7 @@ fn gen_expr(expr: &Expr,
             let mut cur_func = cur_func;
             let mut cur_block = cur_block;
             for elem in elems.iter() {
-                let r = gen_expr(elem, prog, cur_func, cur_block, tracker, multithreaded)?;
+                let r = gen_expr(elem, prog, cur_func, cur_block, tracker)?;
                 cur_func = r.0;
                 cur_block = r.1;
                 let sym = r.2;
@@ -1277,7 +1275,7 @@ fn gen_expr(expr: &Expr,
             let mut cur_func = cur_func;
             let mut cur_block = cur_block;
             for arg in args.iter() {
-                let r = gen_expr(arg, prog, cur_func, cur_block, tracker, multithreaded)?;
+                let r = gen_expr(arg, prog, cur_func, cur_block, tracker)?;
                 cur_func = r.0;
                 cur_block = r.1;
                 let sym = r.2;
@@ -1292,7 +1290,7 @@ fn gen_expr(expr: &Expr,
         }
 
         ExprKind::GetField { ref expr, index } => {
-            let (cur_func, cur_block, struct_sym) = gen_expr(expr, prog, cur_func, cur_block, tracker, multithreaded)?;
+            let (cur_func, cur_block, struct_sym) = gen_expr(expr, prog, cur_func, cur_block, tracker)?;
             let field_ty = match expr.ty {
                 super::ast::Type::Struct(ref v) => &v[index as usize],
                 _ => {
@@ -1319,7 +1317,7 @@ fn gen_expr(expr: &Expr,
                        ref body,
                    } = func.kind {
                 let (cur_func, cur_block, builder_sym) =
-                    gen_expr(builder, prog, cur_func, cur_block, tracker, multithreaded)?;
+                    gen_expr(builder, prog, cur_func, cur_block, tracker)?;
                 let body_func = prog.add_func();
                 prog.funcs[body_func].loop_body = true;
                 let body_block = prog.funcs[body_func].add_block();
@@ -1339,22 +1337,22 @@ fn gen_expr(expr: &Expr,
                 let mut cur_block = cur_block;
                 let mut pf_iters: Vec<ParallelForIter> = Vec::new();
                 for iter in iters.iter() {
-                    let data_res = gen_expr(&iter.data, prog, cur_func, cur_block, tracker, multithreaded)?;
+                    let data_res = gen_expr(&iter.data, prog, cur_func, cur_block, tracker)?;
                     cur_func = data_res.0;
                     cur_block = data_res.1;
                     prog.funcs[body_func]
                         .params
                         .insert(data_res.2.clone(), iter.data.ty.clone());
                     let start_sym = try!(get_iter_sym(&iter.start, prog, &mut cur_func, &mut cur_block,
-                                                      tracker, multithreaded, body_func));
+                                                      tracker, body_func));
                     let end_sym = try!(get_iter_sym(&iter.end, prog, &mut cur_func, &mut cur_block,
-                                                    tracker, multithreaded, body_func));
+                                                    tracker, body_func));
                     let stride_sym = try!(get_iter_sym(&iter.stride, prog, &mut cur_func, &mut cur_block,
-                                                       tracker, multithreaded, body_func));
+                                                       tracker, body_func));
                     let shape_sym = try!(get_iter_sym(&iter.shape, prog, &mut cur_func, &mut cur_block,
-                                                       tracker, multithreaded, body_func));
+                                                       tracker, body_func));
                     let strides_sym = try!(get_iter_sym(&iter.strides, prog, &mut cur_func, &mut cur_block,
-                                                        tracker, multithreaded, body_func));
+                                                        tracker, body_func));
                     pf_iters.push(ParallelForIter {
                                       data: data_res.2,
                                       start: start_sym,
@@ -1366,7 +1364,7 @@ fn gen_expr(expr: &Expr,
                                   });
                 }
                 let (body_end_func, body_end_block, result_sym) =
-                    gen_expr(body, prog, body_func, body_block, tracker, multithreaded)?;
+                    gen_expr(body, prog, body_func, body_block, tracker)?;
                 prog.funcs[body_end_func].blocks[body_end_block].terminator = EndFunction(result_sym);
 
                 // Check whether the loop is the innermost one.
