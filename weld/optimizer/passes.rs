@@ -15,6 +15,7 @@ use super::transforms::size_inference;
 use super::transforms::short_circuit;
 use super::transforms::vectorizer;
 use super::transforms::unroller;
+use super::transforms::algebraic;
 
 use std::collections::HashMap;
 
@@ -115,6 +116,16 @@ lazy_static! {
                                 Transformation::new(inliner::inline_cast),
                                 Transformation::new(inliner::simplify_branch_conditions)],
                  "inline-literals"));
+        m.insert(
+            "algebraic",
+            Pass::new(
+                vec![
+                    Transformation::new(algebraic::shift_work_to_constants),
+                    Transformation::new(algebraic::eliminate_redundant_negation),
+                ],
+                "algebraic",
+            ),
+        );
         m.insert("cse",
                  // Calls inline_let internally.
                  Pass::new(vec![Transformation::new(cse::common_subexpression_elimination)],

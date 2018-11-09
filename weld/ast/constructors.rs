@@ -82,6 +82,15 @@ pub fn negate_expr(expr: Expr) -> WeldResult<Expr> {
     new_expr(Negate(Box::new(expr)), ty)
 }
 
+pub fn not_expr(expr: Expr) -> WeldResult<Expr> {
+    let ty = if let Scalar(ref k) = expr.ty {
+        Scalar(k.clone())
+    } else {
+        return compile_err!("Internal error: Mismatched types in not_expr");
+    };
+    new_expr(Not(Box::new(expr)), ty)
+}
+
 pub fn broadcast_expr(expr: Expr) -> WeldResult<Expr> {
     let ty = if let Scalar(ref k) = expr.ty {
         Simd(k.clone())

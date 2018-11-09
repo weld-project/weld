@@ -110,6 +110,7 @@ pub const CONF_OPTIMIZATION_PASSES_DEFAULT: &[&'static str] =  &[
 "unroll-static-loop",
 "infer-size",
 "inline-literals",
+"algebraic",
 "cse",
 "short-circuit-booleans",
 "predicate",

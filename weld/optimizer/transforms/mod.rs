@@ -1,5 +1,6 @@
 //! Common transformations on expressions.
 
+pub mod algebraic;
 pub mod cse;
 pub mod loop_fusion;
 pub mod loop_fusion_2;

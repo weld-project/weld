@@ -193,6 +193,7 @@ impl Type {
         }
     }
 
+
     /// Returns whether this `Type` contains a builder.
     pub fn contains_builder(&self) -> bool {
         use self::Type::Builder;
@@ -385,6 +386,11 @@ impl ScalarKind {
         self.is_signed_integer() || self.is_unsigned_integer()
     }
 
+    /// Returns whether the scalar is a numeric.
+    pub fn is_numeric(&self) -> bool {
+        self.is_integer() || self.is_float()
+    }
+
     /// Return the length of this scalar type in bits.
     pub fn bits(&self) -> u32 {
         match *self {
@@ -394,6 +400,16 @@ impl ScalarKind {
             I32 | U32 | F32 => 32,
             I64 | U64 | F64 => 64
         }
+    }
+
+    /// Returns whether this type is smaller in bits than `target`.
+    pub fn is_upcast(&self, target: &ScalarKind) -> bool {
+        target.bits() >= self.bits()
+    }
+
+    /// Returns whether this type is strictly smaller in bits than `target`.
+    pub fn is_strict_upcast(&self, target: &ScalarKind) -> bool {
+        target.bits() > self.bits()
     }
 }
 
