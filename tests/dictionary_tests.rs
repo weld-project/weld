@@ -28,7 +28,7 @@ fn simple_for_dictmerger_loop() {
     };
 
     let ret_value = compile_and_run(code, conf, input_data);
-    let data = ret_value.data() as *const WeldVec<Pair<_,_>>;
+    let data = ret_value.data() as *const WeldVec<Pair<i32,i32>>;
     let result = unsafe { (*data).clone() };
 
     let output_keys = vec![1, 2, 3];
@@ -231,7 +231,7 @@ fn dictmerger_repeated_keys() {
     };
 
     let ret_value = compile_and_run(&code, conf, input_data);
-    let data = ret_value.data() as *const WeldVec<Pair<_,_>>;
+    let data = ret_value.data() as *const WeldVec<Pair<i32,i32>>;
     let result = unsafe { (*data).clone() };
 
     assert_eq!(UNIQUE_KEYS as i64, result.len);
