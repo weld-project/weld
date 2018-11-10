@@ -66,6 +66,24 @@ fn float_literals() {
 }
 
 #[test]
+fn not() {
+    let code = "|v:bool| !v";
+    let ref conf = default_conf();
+
+    let ref input_data: u8 = 0;
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = ret_value.data() as *const u8;
+    let result = unsafe { *data };
+    assert_eq!(result, 1);
+
+    let ref input_data: u8 = 1;
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = ret_value.data() as *const u8;
+    let result = unsafe { *data };
+    assert_eq!(result, 0);
+}
+
+#[test]
 fn negation() {
     let code = "|| -(1)";
     let ref conf = default_conf();

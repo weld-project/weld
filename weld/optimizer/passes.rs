@@ -15,6 +15,7 @@ use super::transforms::size_inference;
 use super::transforms::short_circuit;
 use super::transforms::vectorizer;
 use super::transforms::unroller;
+use super::transforms::algebraic;
 
 use std::collections::HashMap;
 
@@ -110,6 +111,16 @@ lazy_static! {
         m.insert("infer-size",
                  Pass::new(vec![Transformation::new(size_inference::infer_size)],
                  "infer-size"));
+        m.insert(
+            "algebraic",
+            Pass::new(
+                vec![
+                    Transformation::new(algebraic::shift_work_to_constants),
+                    Transformation::new(algebraic::eliminate_redundant_negation),
+                ],
+                "algebraic",
+            ),
+        );
         m.insert("inline-literals",
                  Pass::new(vec![Transformation::new(inliner::inline_negate),
                                 Transformation::new(inliner::inline_cast),
