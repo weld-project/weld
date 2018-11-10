@@ -31,7 +31,7 @@ const PLACEHOLDER_NAME: &'static str = "#placeholder";
 ///
 /// The annotation system should in theory support arbitrary string key/value pairs: the parser
 /// will eventually be updated to support this.
-#[derive(Clone,Debug,PartialEq,Eq,Hash)]
+#[derive(Clone,Debug,PartialEq,Eq,Hash,Serialize,Deserialize)]
 pub struct Annotations {
     /// Holds the annotations.
     ///
@@ -104,7 +104,7 @@ impl fmt::Display for Annotations {
 }
 
 /// Types in the Weld IR.
-#[derive(Clone,Debug,PartialEq,Eq,Hash)]
+#[derive(Clone,Debug,PartialEq,Eq,Hash,Serialize,Deserialize)]
 pub enum Type {
     /// A scalar.
     Scalar(ScalarKind),
@@ -318,7 +318,7 @@ impl fmt::Display for Type {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone,Copy,Debug,PartialEq,Eq,Hash,Serialize,Deserialize)]
 /// Scalar types in the Weld IR.
 pub enum ScalarKind {
     Bool,
@@ -416,7 +416,7 @@ impl fmt::Display for ScalarKind {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone,Debug,PartialEq,Eq,Hash,Serialize,Deserialize)]
 /// Builder types in the Weld IR.
 pub enum BuilderKind {
     /// A builder that appends items to a list.
@@ -494,7 +494,7 @@ impl fmt::Display for BuilderKind {
 // -------------------------------
 
 /// A named symbol in the Weld AST.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Clone,Debug,PartialEq,Eq,Hash,PartialOrd,Ord,Serialize,Deserialize)]
 pub struct Symbol {
     name: Rc<String>,
     id: i32,
@@ -532,7 +532,7 @@ impl fmt::Display for Symbol {
 }
 
 /// A typed Weld expression tree.
-#[derive(Clone,Debug,PartialEq,Eq,Hash)]
+#[derive(Clone,Debug,PartialEq,Eq,Hash,Serialize,Deserialize)]
 pub struct Expr {
     pub ty: Type,
     pub kind: ExprKind,
@@ -542,7 +542,7 @@ pub struct Expr {
 /// Iterator kinds in the Weld IR.
 ///
 /// An iterator defines how a for loop iterates over data.
-#[derive(Clone,Debug,Eq,PartialEq,Hash)]
+#[derive(Clone,Debug,Eq,PartialEq,Hash,Serialize,Deserialize)]
 pub enum IterKind {
     /// A standard scalar iterator.
     ScalarIter,
@@ -579,7 +579,7 @@ impl fmt::Display for IterKind {
 
 /// An iterator, which specifies a vector to iterate over and optionally a start index,
 /// end index, and stride.
-#[derive(Clone,Debug,PartialEq,Eq,Hash)]
+#[derive(Clone,Debug,PartialEq,Eq,Hash,Serialize,Deserialize)]
 pub struct Iter {
     pub data: Box<Expr>,
     pub start: Option<Box<Expr>>,
@@ -606,7 +606,7 @@ impl Iter {
 /// This enumeration defines the operators in the Weld IR. Each operator relies on zero or more
 /// sub-expressions, forming an expression tree. We use the term "expression" to refer to a
 /// particular `ExprKind`.
-#[derive(Clone,Debug,PartialEq,Hash,Eq)]
+#[derive(Clone,Debug,PartialEq,Hash,Eq,Serialize,Deserialize)]
 pub enum ExprKind {
     /// A literal expression.
     ///
@@ -804,7 +804,7 @@ impl ExprKind {
 }
 
 /// Literal types in the Weld IR.
-#[derive(Clone, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Clone,Debug,Hash,Eq,PartialEq,Ord,PartialOrd,Serialize,Deserialize)]
 pub enum LiteralKind {
     BoolLiteral(bool),
     I8Literal(i8),
@@ -857,7 +857,7 @@ impl fmt::Display for LiteralKind {
 }
 
 /// Binary operators over numerical values in the Weld IR.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone,Copy,Debug,PartialEq,Eq,Hash,Serialize,Deserialize)]
 pub enum BinOpKind {
     Add,
     Subtract,
@@ -919,7 +919,7 @@ impl fmt::Display for BinOpKind {
 }
 
 /// Unary operators over numerical values in the Weld IR.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone,Copy,Debug,PartialEq,Eq,Hash,Serialize,Deserialize)]
 pub enum UnaryOpKind {
     Exp,
     Log,
@@ -946,7 +946,7 @@ impl fmt::Display for UnaryOpKind {
 /// A Parameter in a Lambda.
 ///
 /// A parameter is a typed `Symbol`.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone,Debug,PartialEq,Eq,Hash,Serialize,Deserialize)]
 pub struct Parameter {
     pub name: Symbol,
     pub ty: Type,

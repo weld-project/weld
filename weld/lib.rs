@@ -117,19 +117,18 @@
 //!
 #![cfg_attr(not(test), allow(dead_code))]
 
-#[macro_use]
-extern crate lazy_static;
+#[macro_use] extern crate lazy_static;
+#[macro_use] extern crate log;
+#[macro_use] extern crate serde_derive;
 
-#[macro_use]
-extern crate log;
-
-extern crate regex;
-extern crate libc;
-extern crate env_logger;
 extern crate chrono;
-extern crate fnv;
-extern crate time;
 extern crate code_builder;
+extern crate env_logger;
+extern crate fnv;
+extern crate libc;
+extern crate regex;
+extern crate serde_json;
+extern crate time;
 extern crate uuid;
 
 use self::time::PreciseTime;
@@ -684,6 +683,12 @@ impl WeldModule {
         uniquify_dur = uniquify_dur + start.to(end);
         stats.weld_times.push(("Uniquify outside Passes".to_string(), uniquify_dur));
         debug!("Optimized Weld program:\n{}\n", expr.pretty_print());
+
+        let json = serde_json::to_string(&expr).unwrap();
+        debug!("JSON representation: {}", json);
+
+        let reconstructed: Expr = serde_json::from_str(&json).unwrap();
+        debug!("Reconstructed expr: {}", reconstructed.pretty_print());
 
         // Convert the AST to SIR.
         let start = PreciseTime::now();
