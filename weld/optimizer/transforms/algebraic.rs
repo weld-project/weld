@@ -157,7 +157,8 @@ fn eliminate_redundant_negation_impl(expr: &mut Expr) -> Option<ExprKind> {
             match outer.as_mut().kind {
                 Literal(ref kind) => {
                     match kind {
-                        BoolLiteral(b) => Some(Literal(BoolLiteral(!b))), // !true = false and !false = true
+                         // !true = false and !false = true
+                        BoolLiteral(b) => Some(Literal(BoolLiteral(!b))),
                         _ => None,
                     }
                 }
@@ -210,8 +211,10 @@ fn eliminate_redundant_negation_impl(expr: &mut Expr) -> Option<ExprKind> {
     }
 }
 
+/// Changes the associativity of expressions to compute operations over constants first.
+///
+/// This enables constant folding in downstream transformations.
 pub fn shift_work_to_constants(expr: &mut Expr) {
-    //let mut f = |ref mut expr: Expr| ;
     expr.transform_kind(&mut shift_work_to_constants_impl)
 }
 
@@ -307,7 +310,9 @@ fn shift_work_to_constants_impl(expr: &mut Expr) -> Option<ExprKind> {
                                     // x / (y / z) = (x * z) / y
                                     use self::RangeClassification::*;
                                     match classify(inner_rhs) {
-                                        Positive | Negative => Some(left_associate2(Multiply, Divide, lhs.take(), inner_rhs.take(), inner_lhs.take())),
+                                        Positive | Negative => {
+                                            Some(left_associate2(Multiply, Divide, lhs.take(), inner_rhs.take(), inner_lhs.take()))
+                                        }
                                         Zero | Unknown => None, // don't reorder on z=0, to avoid changing the division by 0 behaviour.
                                     }
                                 }
@@ -651,24 +656,11 @@ fn shift_work_to_constants_impl(expr: &mut Expr) -> Option<ExprKind> {
                 }
             }
         }
-        ref _kind => {
-            //println!("Got some other expression {:?}", kind);
+        _ => {
             None
         }
     }
 }
-
-//struct ShiftExprs {
-//
-//}
-//
-//fn shift_work(
-//    op: &BinOpKind,
-//    constant_side: &Expr,
-//    working_side: &Expr,
-//) -> (Expr, Expr) {
-//
-//}
 
 enum ExprCmp {
     Left,

@@ -111,11 +111,6 @@ lazy_static! {
         m.insert("infer-size",
                  Pass::new(vec![Transformation::new(size_inference::infer_size)],
                  "infer-size"));
-        m.insert("inline-literals",
-                 Pass::new(vec![Transformation::new(inliner::inline_negate),
-                                Transformation::new(inliner::inline_cast),
-                                Transformation::new(inliner::simplify_branch_conditions)],
-                 "inline-literals"));
         m.insert(
             "algebraic",
             Pass::new(
@@ -126,6 +121,11 @@ lazy_static! {
                 "algebraic",
             ),
         );
+        m.insert("inline-literals",
+                 Pass::new(vec![Transformation::new(inliner::inline_negate),
+                                Transformation::new(inliner::inline_cast),
+                                Transformation::new(inliner::simplify_branch_conditions)],
+                 "inline-literals"));
         m.insert("cse",
                  // Calls inline_let internally.
                  Pass::new(vec![Transformation::new(cse::common_subexpression_elimination)],
