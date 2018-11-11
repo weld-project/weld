@@ -1110,6 +1110,7 @@ impl<'t> Parser<'t> {
             }
 
             TMinus => Ok(expr_box(Negate(try!(self.leaf_expr())), Annotations::new())),
+            TBang => Ok(expr_box(Not(self.leaf_expr()?), Annotations::new())),
 
             TMin => {
                 try!(self.consume(TOpenParen));

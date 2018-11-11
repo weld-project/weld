@@ -36,6 +36,9 @@ pub trait NumericExpressionGen {
     unsafe fn gen_binop(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()>;
     /// Generates code for the negation operator.
     unsafe fn gen_negate(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()>;
+    /// Generates code for the not operator.
+    unsafe fn gen_not(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()>;
+
     /// Generates a literal.
     ///
     /// This method supports both scalar and SIMD values.
@@ -171,6 +174,21 @@ impl NumericExpressionGen for LlvmGenerator {
             };
             let output = ctx.get_value(statement.output.as_ref().unwrap())?;
             LLVMBuildStore(ctx.builder, result, output);
+            Ok(())
+        } else {
+            unreachable!()
+        }
+    }
+
+    unsafe fn gen_not(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()> {
+        use sir::StatementKind::Not;
+        use self::llvm_sys::LLVMIntPredicate::LLVMIntEQ;
+        if let Not(ref child) = statement.kind {
+            let value = self.load(ctx.builder, ctx.get_value(child)?)?;
+            let result = LLVMBuildICmp(ctx.builder, LLVMIntEQ, value, self.bool(false), c_str!(""));
+            let result =  self.i1_to_bool(ctx.builder, result);
+            let output = ctx.get_value(statement.output.as_ref().unwrap())?;
+            let _ = LLVMBuildStore(ctx.builder, result, output);
             Ok(())
         } else {
             unreachable!()

@@ -193,6 +193,7 @@ impl Type {
         }
     }
 
+
     /// Returns whether this `Type` contains a builder.
     pub fn contains_builder(&self) -> bool {
         use self::Type::Builder;
@@ -385,6 +386,11 @@ impl ScalarKind {
         self.is_signed_integer() || self.is_unsigned_integer()
     }
 
+    /// Returns whether the scalar is a numeric.
+    pub fn is_numeric(&self) -> bool {
+        self.is_integer() || self.is_float()
+    }
+
     /// Return the length of this scalar type in bits.
     pub fn bits(&self) -> u32 {
         match *self {
@@ -394,6 +400,16 @@ impl ScalarKind {
             I32 | U32 | F32 => 32,
             I64 | U64 | F64 => 64
         }
+    }
+
+    /// Returns whether this type is smaller in bits than `target`.
+    pub fn is_upcast(&self, target: &ScalarKind) -> bool {
+        target.bits() >= self.bits()
+    }
+
+    /// Returns whether this type is strictly smaller in bits than `target`.
+    pub fn is_strict_upcast(&self, target: &ScalarKind) -> bool {
+        target.bits() > self.bits()
     }
 }
 
@@ -614,6 +630,8 @@ pub enum ExprKind {
     Literal(LiteralKind),
     /// An identifier.
     Ident(Symbol),
+    /// Invert a boolean expression.
+    Not(Box<Expr>),
     /// Negates a numerical expression.
     Negate(Box<Expr>),
     /// Broadcasts a scalar into a vector.
@@ -762,6 +780,7 @@ impl ExprKind {
         match *self {
             Literal(_) => "Literal",
             Ident(_) => "Ident",
+            Not(_) => "Not",
             Negate(_) => "Negate",
             Broadcast(_) => "Broadcast",
             BinOp{ .. } => "BinOp",
@@ -1060,6 +1079,7 @@ impl Expr {
             Deserialize { ref value, .. } => vec![value.as_ref()],
             CUDF { ref args, .. } => args.iter().collect(),
             Negate(ref t) => vec![t.as_ref()],
+            Not(ref t) => vec![t.as_ref()],
             Broadcast(ref t) => vec![t.as_ref()],
             // Explicitly list types instead of doing _ => ... to remember to add new types.
             Literal(_) | Ident(_) => vec![],
@@ -1171,6 +1191,7 @@ impl Expr {
             Deserialize { ref mut value, .. } => vec![value.as_mut()],
             CUDF { ref mut args, .. } => args.iter_mut().collect(),
             Negate(ref mut t) => vec![t.as_mut()],
+            Not(ref mut t) => vec![t.as_mut()],
             Broadcast(ref mut t) => vec![t.as_mut()],
             // Explicitly list types instead of doing _ => ... to remember to add new types.
             Literal(_) | Ident(_) => vec![],
@@ -1329,6 +1350,21 @@ impl Expr {
         }
     }
 
+    /// Transform an expression by replacing its kind with another `ExprKind`.
+    ///
+    /// The type of the expression is unmodified.
+    pub fn transform_kind<F>(&mut self, func: &mut F)
+        where F: FnMut(&mut Expr) -> Option<ExprKind>,
+    {
+        if let Some(k) = func(self) {
+            self.kind = k;
+            return self.transform_kind(func);
+        }
+        for c in self.children_mut() {
+            c.transform_kind(func);
+        }
+    }
+
     /// Returns true if this expressions contains `other`.
     pub fn contains(&self, other: &Expr) -> bool {
         if *self == *other {
@@ -1401,6 +1437,7 @@ impl Takeable for Expr {
     fn take(&mut self) -> Expr {
         use std::mem;
         let mut new = Self::new_placeholder();
+        new.ty = self.ty.clone();
         mem::swap(self, &mut new);
         new
     }
@@ -1410,6 +1447,7 @@ impl Takeable for Box<Expr> {
     fn take(&mut self) -> Box<Expr> {
         use std::mem;
         let mut new = Self::new_placeholder();
+        new.ty = self.ty.clone();
         mem::swap(self.as_mut(), new.as_mut());
         new
     }
