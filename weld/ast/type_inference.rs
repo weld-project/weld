@@ -410,6 +410,18 @@ impl InferTypesInternal for Expr {
                 self.ty.push(&c.ty)
             }
 
+            Not(ref value) => {
+                match value.ty {
+                    Scalar(ref kind) | Simd(ref kind) if kind.is_bool() => {
+                        self.ty.push(&value.ty)
+                    }
+                    Unknown => Ok(false),
+                    _ => {
+                        compile_err!("Expected boolean type for ! operator")
+                    }
+                }
+            }
+
             Broadcast(ref c) => {
                 if let Scalar(ref kind) = c.ty {
                     self.ty.push(&Simd(kind.clone()))
