@@ -1,4 +1,4 @@
-//! C-compatible Foreign Function Interfaces to Weld.
+//! C-compatible foreign function interface to Weld.
 //!
 //! This module provides a C-compatible interface to the Weld library.
 
