@@ -1,4 +1,4 @@
-//! Defines the Weld Abstract Syntax Tree.
+//! Defines the Weld abstract syntax tree.
 //!
 //! Most of Weld's optimizations occur over the AST, which doubles as a "High-Level IR." The AST
 //! captures the expressions in Weld using a tree data structure.
