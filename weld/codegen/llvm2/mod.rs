@@ -146,7 +146,7 @@ pub fn compile(program: &SirProgram,
     trace!("{}", codegen);
 
     unsafe {
-        runtime::weld_init();
+        runtime::ffi::weld_init();
     }
 
     let module = unsafe { jit::compile(codegen.context, codegen.module, conf, stats)? };
