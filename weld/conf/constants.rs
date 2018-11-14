@@ -72,6 +72,21 @@ pub const CONF_DUMP_CODE_KEY: &'static str = "weld.compile.dumpCode";
 /// This parameter should be set for compilation.
 pub const CONF_DUMP_CODE_DIR_KEY: &'static str = "weld.compile.dumpCodeDir";
 
+/// Specifies the filename prefix for dumped code.
+/// 
+/// This parameter should be set for compilation.
+pub const CONF_DUMP_CODE_FILENAME_KEY: &'static str = "weld.compile.dumpCodeFilename";
+
+/// Specifies the formats to dump for dumped code.
+///
+/// This key does not have an explicit default value: if it is not specified, all formats
+/// are dumped. The possible formats are:
+///
+/// weld,weldopt,llvm,llvmopt,sir,assembly.
+/// 
+/// This parameter should be set for compilation.
+pub const CONF_DUMP_CODE_FORMATS_KEY: &'static str = "weld.compile.dumpCodeFormats";
+
 /// Enables runtime bounds checking for loops before executing them.
 ///
 /// This parameter should be set for compilation.

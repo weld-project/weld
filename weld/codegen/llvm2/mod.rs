@@ -132,17 +132,16 @@ pub fn size_of(ty: &Type) -> usize {
 /// calls.
 pub fn compile(program: &SirProgram,
                conf: &ParsedConf,
-               stats: &mut CompilationStats,
-               dump_prefix: &str) -> WeldResult<Box<dyn Runnable + Send + Sync>> {
+               stats: &mut CompilationStats) -> WeldResult<Box<dyn Runnable + Send + Sync>> {
 
     use runtime;
+    use util::dump::{write_code, DumpCodeFormat};
 
     info!("Compiling using single thread runtime");
 
     let codegen = unsafe { LlvmGenerator::generate(conf.clone(), &program)? };
-    if conf.dump_code.enabled {
-        write_code(codegen.to_string(), "ll", dump_prefix, &conf.dump_code.dir);
-    }
+
+    write_code(codegen.to_string(), DumpCodeFormat::LLVM, &conf.dump_code)?;
     trace!("{}", codegen);
 
     unsafe {
@@ -151,10 +150,9 @@ pub fn compile(program: &SirProgram,
 
     let module = unsafe { jit::compile(codegen.context, codegen.module, conf, stats)? };
 
-    if conf.dump_code.enabled {
-        write_code(module.asm()?, "S", format!("{}-opt", dump_prefix), &conf.dump_code.dir);
-        write_code(module.llvm()?, "ll", format!("{}-opt", dump_prefix), &conf.dump_code.dir);
-    }
+    write_code(module.asm()?, DumpCodeFormat::Assembly, &conf.dump_code)?;
+    write_code(module.llvm()?, DumpCodeFormat::LLVMOpt, &conf.dump_code)?;
+
     Ok(Box::new(module))
 }
 

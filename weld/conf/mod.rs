@@ -8,6 +8,10 @@ use optimizer::Pass;
 pub mod constants;
 
 use self::constants::*;
+use util::dump::{DumpCodeConfig, DumpCodeFormat};
+use util::timestamp_unique;
+
+use std::collections::HashSet;
 
 lazy_static! {
     pub static ref CONF_OPTIMIZATION_PASSES: Vec<Pass> = {
@@ -16,13 +20,6 @@ lazy_static! {
             .clone())
             .collect()
     };
-}
-
-/// Options for dumping code.
-#[derive(Clone,Debug)]
-pub struct DumpCodeConf {
-    pub enabled: bool,
-    pub dir: String,
 }
 
 /// A parsed configuration with correctly typed fields.
@@ -35,7 +32,7 @@ pub struct ParsedConf {
     pub enable_experimental_passes: bool,
     pub optimization_passes: Vec<Pass>,
     pub llvm_optimization_level: u32,
-    pub dump_code: DumpCodeConf,
+    pub dump_code: DumpCodeConfig,
     pub enable_bounds_checks: bool,
 }
 
@@ -52,9 +49,11 @@ impl ParsedConf {
             enable_experimental_passes: false,
             optimization_passes: vec![],
             llvm_optimization_level: 0,
-            dump_code: DumpCodeConf {
+            dump_code: DumpCodeConfig {
                 enabled: false,
-                dir: "".to_string()
+                filename: "".to_string(),
+                directory: "".to_string(),
+                formats: HashSet::new(),
             },
             enable_bounds_checks: false,
         }
@@ -87,6 +86,13 @@ pub fn parse(conf: &WeldConf) -> WeldResult<ParsedConf> {
     let value = get_value(conf, CONF_DUMP_CODE_DIR_KEY);
     let dump_code_dir = value.unwrap_or(CONF_DUMP_CODE_DIR_DEFAULT.to_string());
 
+    let value = get_value(conf, CONF_DUMP_CODE_FILENAME_KEY);
+    let dump_code_filename = value.unwrap_or(format!("code-{}", timestamp_unique()));
+
+    let value = get_value(conf, CONF_DUMP_CODE_FORMATS_KEY);
+    let dump_code_formats = value.map(|s| parse_dump_code_formats(&s))
+                      .unwrap_or(Ok(DumpCodeFormat::all().into_iter().collect::<HashSet<_>>()))?;
+
     let value = get_value(conf, CONF_DUMP_CODE_KEY);
     let dump_code_enabled = value.map(|s| parse_bool_flag(&s, "Invalid flag for dumpCode"))
                       .unwrap_or(Ok(CONF_DUMP_CODE_DEFAULT))?;
@@ -116,9 +122,11 @@ pub fn parse(conf: &WeldConf) -> WeldResult<ParsedConf> {
         optimization_passes: passes,
         llvm_optimization_level: level,
         enable_bounds_checks: enable_bounds_check,
-        dump_code: DumpCodeConf {
+        dump_code: DumpCodeConfig {
             enabled: dump_code_enabled,
-            dir: dump_code_dir,
+            filename: dump_code_filename,
+            directory: dump_code_dir,
+            formats: dump_code_formats,
         }
     })
 }
@@ -127,6 +135,22 @@ fn get_value(conf: &WeldConf, key: &str) -> Option<String> {
     conf.get(key)
         .cloned()
         .map(|v| v.into_string().unwrap())
+}
+
+/// Parses a comma separated list of formats.
+fn parse_dump_code_formats(s: &str) -> WeldResult<HashSet<DumpCodeFormat>> {
+    use util::dump::DumpCodeFormat::*;
+    s.split(",").map(|s| {
+        match s.to_lowercase().as_ref() {
+            "weld" => Ok(Weld),
+            "weldopt" => Ok(WeldOpt), 
+            "llvm" => Ok(LLVM),   
+            "llvmopt" => Ok(LLVMOpt),   
+            "assembly" => Ok(Assembly),   
+            "sir" => Ok(SIR),   
+            other => compile_err!("Unknown dumpCode format '{}'", other),
+        }
+    }).collect::<WeldResult<HashSet<DumpCodeFormat>>>()
 }
 
 /// Parse a number of threads.
