@@ -652,7 +652,7 @@ impl WeldModule {
               unoptimized_code);
 
         // Dump the generated Weld program before applying any analyses.
-        write_code(&unoptimized_code, DumpCodeFormat::Weld, &conf.dump_code)?;
+        nonfatal!(write_code(&unoptimized_code, DumpCodeFormat::Weld, &conf.dump_code));
 
         // Uniquify symbol names.
         let start = PreciseTime::now();
@@ -699,8 +699,8 @@ impl WeldModule {
         debug!("Optimized SIR program:\n{}\n", &sir_prog);
         stats.weld_times.push(("SIR Optimization".to_string(), start.to(end)));
 
-        write_code(expr.pretty_print(), DumpCodeFormat::WeldOpt, &conf.dump_code)?;
-        write_code(sir_prog.to_string(), DumpCodeFormat::SIR, &conf.dump_code)?;
+        nonfatal!(write_code(expr.pretty_print(), DumpCodeFormat::WeldOpt, &conf.dump_code));
+        nonfatal!(write_code(sir_prog.to_string(), DumpCodeFormat::SIR, &conf.dump_code));
 
         // Generate code.
         let compiled_module = codegen::compile_program(&sir_prog, conf, &mut stats)?;

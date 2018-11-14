@@ -8,6 +8,18 @@ macro_rules! compile_err {
     })
 }
 
+/// Converts a non-fatal error into a log message.
+macro_rules! nonfatal {
+    ( $arg:expr ) => ({
+        match $arg {
+            ::std::result::Result::Err(weld_err) => {
+                error!("{}", weld_err.to_string());
+            }
+            _ => ()
+        };
+    })
+}
+
 /// A compilation error produced by Weld.
 #[derive(Debug, Clone)]
 pub struct WeldCompileError(String);

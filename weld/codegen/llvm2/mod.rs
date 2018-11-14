@@ -141,8 +141,7 @@ pub fn compile(program: &SirProgram,
 
     let codegen = unsafe { LlvmGenerator::generate(conf.clone(), &program)? };
 
-    write_code(codegen.to_string(), DumpCodeFormat::LLVM, &conf.dump_code)?;
-    trace!("{}", codegen);
+    nonfatal!(write_code(codegen.to_string(), DumpCodeFormat::LLVM, &conf.dump_code));
 
     unsafe {
         runtime::ffi::weld_init();
@@ -150,8 +149,8 @@ pub fn compile(program: &SirProgram,
 
     let module = unsafe { jit::compile(codegen.context, codegen.module, conf, stats)? };
 
-    write_code(module.asm()?, DumpCodeFormat::Assembly, &conf.dump_code)?;
-    write_code(module.llvm()?, DumpCodeFormat::LLVMOpt, &conf.dump_code)?;
+    nonfatal!(write_code(module.asm()?, DumpCodeFormat::Assembly, &conf.dump_code));
+    nonfatal!(write_code(module.llvm()?, DumpCodeFormat::LLVMOpt, &conf.dump_code));
 
     Ok(Box::new(module))
 }
