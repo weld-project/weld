@@ -31,9 +31,47 @@ pub struct ParsedConf {
     pub enable_sir_opt: bool,
     pub enable_experimental_passes: bool,
     pub optimization_passes: Vec<Pass>,
-    pub llvm_optimization_level: u32,
+    pub llvm: LLVMConfig,
     pub dump_code: DumpCodeConfig,
     pub enable_bounds_checks: bool,
+}
+
+/// LLVM configuration.
+#[derive(Clone,Debug)]
+pub struct LLVMConfig {
+    /// LLVM optimization level.
+    pub opt_level: u32,
+    /// Enables the LLVM unroller.
+    pub llvm_unroller: bool,
+    /// Enables the LLVM vectorizer.
+    ///
+    /// Requires that target analysis passes are enabled.
+    pub llvm_vectorizer: bool,
+    /// Enables target analysis passes
+    pub target_analysis_passes: bool,
+    /// Enables full module optimizations.
+    ///
+    /// This uses the Clang module optimization pipeline. The specific passes are determined by the
+    /// optimization level.
+    pub module_optimizations: bool,
+    /// Enables per-function optimizations.
+    ///
+    /// This uses the Clang module optimization pipeline. The specific passes are determined by the
+    /// optimization level.
+    pub func_optimizations: bool,
+}
+
+impl Default for LLVMConfig {
+    fn default() -> Self {
+        LLVMConfig {
+            opt_level: CONF_LLVM_OPTIMIZATION_LEVEL_DEFAULT,
+            llvm_unroller: CONF_LLVM_UNROLLER_DEFAULT,
+            llvm_vectorizer: CONF_LLVM_VECTORIZER_DEFAULT,
+            target_analysis_passes: CONF_LLVM_TARGET_PASSES_DEFAULT,
+            module_optimizations: CONF_LLVM_MODULE_OPTS_DEFAULT,
+            func_optimizations: CONF_LLVM_FUNC_OPTS_DEFAULT,
+        }
+    }
 }
 
 impl ParsedConf {
@@ -48,7 +86,7 @@ impl ParsedConf {
             enable_sir_opt: false,
             enable_experimental_passes: false,
             optimization_passes: vec![],
-            llvm_optimization_level: 0,
+            llvm: LLVMConfig::default(),
             dump_code: DumpCodeConfig {
                 enabled: false,
                 filename: "".to_string(),
@@ -113,6 +151,27 @@ pub fn parse(conf: &WeldConf) -> WeldResult<ParsedConf> {
     let enable_bounds_check = value.map(|s| parse_bool_flag(&s, "Invalid flag for enableBoundsChecks"))
                       .unwrap_or(Ok(CONF_ENABLE_BOUNDS_CHECKS_DEFAULT))?;
 
+    let value = get_value(conf, CONF_LLVM_UNROLLER_KEY);
+    let llvm_unroller = value.map(|s| parse_bool_flag(&s, "Invalid flag for LLVM unrolling"))
+                      .unwrap_or(Ok(CONF_LLVM_UNROLLER_DEFAULT))?;
+
+
+    let value = get_value(conf, CONF_LLVM_VECTORIZER_KEY);
+    let llvm_vectorizer = value.map(|s| parse_bool_flag(&s, "Invalid flag for LLVM vectorization"))
+                      .unwrap_or(Ok(CONF_LLVM_VECTORIZER_DEFAULT))?;
+
+    let value = get_value(conf, CONF_LLVM_TARGET_PASSES_KEY);
+    let llvm_target_passes = value.map(|s| parse_bool_flag(&s, "Invalid flag for LLVM target passes"))
+                      .unwrap_or(Ok(CONF_LLVM_TARGET_PASSES_DEFAULT))?;
+
+    let value = get_value(conf, CONF_LLVM_MODULE_OPTS_KEY);
+    let llvm_module_opts = value.map(|s| parse_bool_flag(&s, "Invalid flag for LLVM module opts"))
+                      .unwrap_or(Ok(CONF_LLVM_MODULE_OPTS_DEFAULT))?;
+
+    let value = get_value(conf, CONF_LLVM_FUNC_OPTS_KEY);
+    let llvm_func_opts = value.map(|s| parse_bool_flag(&s, "Invalid flag for LLVM func opts"))
+                      .unwrap_or(Ok(CONF_LLVM_FUNC_OPTS_DEFAULT))?;
+
     Ok(ParsedConf {
         memory_limit: memory_limit,
         threads: threads,
@@ -120,7 +179,14 @@ pub fn parse(conf: &WeldConf) -> WeldResult<ParsedConf> {
         enable_sir_opt: sir_opt_enabled,
         enable_experimental_passes: enable_experimental_passes,
         optimization_passes: passes,
-        llvm_optimization_level: level,
+        llvm: LLVMConfig {
+            opt_level: level,
+            llvm_unroller: llvm_unroller,
+            llvm_vectorizer: llvm_vectorizer,
+            target_analysis_passes: llvm_target_passes,
+            module_optimizations: llvm_module_opts,
+            func_optimizations: llvm_func_opts,
+        },
         enable_bounds_checks: enable_bounds_check,
         dump_code: DumpCodeConfig {
             enabled: dump_code_enabled,

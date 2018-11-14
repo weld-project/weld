@@ -121,13 +121,13 @@ pub unsafe fn compile(context: LLVMContextRef,
     stats.llvm_times.push(("Module Verification".to_string(), start.to(end)));
 
     let start = PreciseTime::now();
-    optimize_module(module, conf.llvm_optimization_level)?;
+    optimize_module(module, conf)?;
     let end = PreciseTime::now();
     stats.llvm_times.push(("Module Optimization".to_string(), start.to(end)));
     
     let start = PreciseTime::now();
     // Takes ownership of the module.
-    let engine = create_exec_engine(module, conf.llvm_optimization_level)?;
+    let engine = create_exec_engine(module, conf)?;
     let end = PreciseTime::now();
     stats.llvm_times.push(("Create Exec Engine".to_string(), start.to(end)));
 
@@ -227,50 +227,11 @@ unsafe fn verify_module(module: LLVMModuleRef) -> WeldResult<()> {
     }
 }
 
-/*
-/// Parse a string of IR code into an `LLVMModuleRef` for the given context.
-unsafe fn parse_module_str(context: LLVMContextRef,
-                           code: &str)
-                           -> WeldResult<LLVMModuleRef> {
-    // Create an LLVM memory buffer around the code
-    let code_len = code.len();
-    let name = CString::new("module").unwrap();
-    let code = CString::new(code).unwrap();
-    let buffer = LLVMCreateMemoryBufferWithMemoryRange(code.as_ptr(),
-                                                                   code_len,
-                                                                   name.as_ptr(),
-                                                                   0);
-    if buffer.is_null() {
-        return compile_err!("create buf failed");
-    }
-
-    parse_module_helper(context, buffer)
-}
-
-unsafe fn parse_module_helper(context: LLVMContextRef,
-                              buffer: LLVMMemoryBufferRef)
-                              -> WeldResult<LLVMModuleRef> {
-    // Parse IR into a module
-    let mut module = 0 as LLVMModuleRef;
-    let mut error_str = 0 as *mut c_char;
-
-    let result_code =
-        ir_reader::LLVMParseIRInContext(context, buffer, &mut module, &mut error_str);
-    if result_code != 0 {
-        let msg = format!("Compile error: {}",
-                          CStr::from_ptr(error_str).to_str().unwrap());
-        return compile_err!("{}", msg);
-    }
-
-    Ok(module)
-}
-*/
-
 /// Optimize an LLVM module using a given LLVM optimization level.
 ///
 /// This function is currently modeled after the `AddOptimizationPasses` in the LLVM `opt` tool:
 /// https://github.com/llvm-mirror/llvm/blob/master/tools/opt/opt.cpp
-unsafe fn optimize_module(module: LLVMModuleRef, level: u32) -> WeldResult<()> {
+unsafe fn optimize_module(module: LLVMModuleRef, conf: &ParsedConf) -> WeldResult<()> {
     info!("Optimizing LLVM module");
     use self::llvm_sys::transforms::pass_manager_builder::*;
     let mpm = LLVMCreatePassManager();
@@ -290,24 +251,30 @@ unsafe fn optimize_module(module: LLVMModuleRef, level: u32) -> WeldResult<()> {
     debug!("CPU: {}, Description: {} Features: {}", cpu, description, features);
     let start = PreciseTime::now();
 
-    LLVMAddTargetLibraryInfo(LLVMExtTargetLibraryInfo(), mpm);
-    LLVMAddAnalysisPasses(target_machine, mpm);
-    LLVMExtAddTargetPassConfig(target_machine, mpm);
-
-    LLVMAddAnalysisPasses(target_machine, fpm);
+    if conf.llvm.target_analysis_passes {
+        LLVMAddTargetLibraryInfo(LLVMExtTargetLibraryInfo(), mpm);
+        LLVMAddAnalysisPasses(target_machine, mpm);
+        LLVMExtAddTargetPassConfig(target_machine, mpm);
+        LLVMAddAnalysisPasses(target_machine, fpm);
+    }
 
     // TODO set the size and inliner threshold depending on the optimization level. Right now, we
     // set the inliner to be as aggressive as the -O3 inliner in Clang.
     let builder = LLVMPassManagerBuilderCreate();
-    LLVMPassManagerBuilderSetOptLevel(builder, level);
+    LLVMPassManagerBuilderSetOptLevel(builder, conf.llvm.opt_level);
     LLVMPassManagerBuilderSetSizeLevel(builder, 0);
-    LLVMPassManagerBuilderSetDisableUnrollLoops(builder, 1);
-    LLVMExtPassManagerBuilderSetDisableVectorize(builder, 0);
+    LLVMPassManagerBuilderSetDisableUnrollLoops(builder, if conf.llvm.llvm_unroller { 0 } else { 1 });
+    LLVMExtPassManagerBuilderSetDisableVectorize(builder, if conf.llvm.llvm_vectorizer { 0 } else { 1 });
     // 250 should correspond to OptLevel = 3
     LLVMPassManagerBuilderUseInlinerWithThreshold(builder, 250);
 
-    LLVMPassManagerBuilderPopulateFunctionPassManager(builder, fpm);
-    LLVMPassManagerBuilderPopulateModulePassManager(builder, mpm);
+    if conf.llvm.func_optimizations {
+        LLVMPassManagerBuilderPopulateFunctionPassManager(builder, fpm);
+    }
+
+    if conf.llvm.module_optimizations {
+        LLVMPassManagerBuilderPopulateModulePassManager(builder, mpm);
+    }
 
     LLVMPassManagerBuilderDispose(builder);
     let end = PreciseTime::now();
@@ -337,13 +304,13 @@ unsafe fn optimize_module(module: LLVMModuleRef, level: u32) -> WeldResult<()> {
 
 /// Create an MCJIT execution engine for a given module.
 unsafe fn create_exec_engine(module: LLVMModuleRef,
-                             level: u32) -> WeldResult<LLVMExecutionEngineRef> {
+                             conf: &ParsedConf) -> WeldResult<LLVMExecutionEngineRef> {
     let mut engine = mem::uninitialized();
     let mut error_str = mem::uninitialized();
     let mut options: LLVMMCJITCompilerOptions = mem::uninitialized();
     let options_size = mem::size_of::<LLVMMCJITCompilerOptions>();
     LLVMInitializeMCJITCompilerOptions(&mut options, options_size);
-    options.OptLevel = level;
+    options.OptLevel = conf.llvm.opt_level;
     options.CodeModel = LLVMCodeModel::LLVMCodeModelDefault;
 
     let result_code = LLVMCreateMCJITCompilerForModule(&mut engine,

@@ -53,6 +53,33 @@ pub const CONF_SIR_OPT_KEY: &'static str = "weld.optimization.sirOptimization";
 /// This parameter should be set for compilation.
 pub const CONF_LLVM_OPTIMIZATION_LEVEL_KEY: &'static str = "weld.llvm.optimization.level";
 
+/// Toggles LLVM loop unrolling.
+///
+/// This parameter should be set for compilation.
+pub const CONF_LLVM_UNROLLER_KEY: &'static str = "weld.llvm.optimization.unroller";
+
+/// Toggles LLVM vectorization.
+///
+/// Requires targetPasses to be true to have an effect.
+///
+/// This parameter should be set for compilation.
+pub const CONF_LLVM_VECTORIZER_KEY: &'static str = "weld.llvm.optimization.vectorizer";
+
+/// Toggles LLVM target passes.
+///
+/// This parameter should be set for compilation.
+pub const CONF_LLVM_TARGET_PASSES_KEY: &'static str = "weld.llvm.optimization.targetPasses";
+
+/// Toggles full module optimizations.
+///
+/// This parameter should be set for compilation.
+pub const CONF_LLVM_MODULE_OPTS_KEY: &'static str = "weld.llvm.optimization.moduleOpts";
+
+/// Toggles per-function optimizations.
+///
+/// This parameter should be set for compilation.
+pub const CONF_LLVM_FUNC_OPTS_KEY: &'static str = "weld.llvm.optimization.funcOpts";
+
 /// Enables dumping code during compilation.
 ///
 /// This will produce several files in the directory specified by `weld.compile.dumpCodeDir`:
@@ -103,6 +130,21 @@ pub const CONF_SIR_OPT_DEFAULT: bool = true;
 
 /// Default LLVM optimization level.
 pub const CONF_LLVM_OPTIMIZATION_LEVEL_DEFAULT: u32 = 2;
+
+/// Default LLVM loop unroller setting.
+pub const CONF_LLVM_UNROLLER_DEFAULT: bool = true;
+
+/// Default LLVM loop vectorizer setting.
+pub const CONF_LLVM_VECTORIZER_DEFAULT: bool = true;
+
+/// Default LLVM target analysis passes.
+pub const CONF_LLVM_TARGET_PASSES_DEFAULT: bool = true;
+
+/// Default LLVM module passes setting.
+pub const CONF_LLVM_MODULE_OPTS_DEFAULT: bool = true;
+
+/// Default LLVM function passes setting.
+pub const CONF_LLVM_FUNC_OPTS_DEFAULT: bool = true;
 
 /// Default setting for whether to dump code.
 pub const CONF_DUMP_CODE_DEFAULT: bool = false;
