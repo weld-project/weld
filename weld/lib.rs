@@ -254,7 +254,7 @@ impl WeldContext {
         let threads = conf.threads;
         let mem_limit = conf.memory_limit;
 
-        let run = WeldRuntimeContext::new(threads, mem_limit);
+        let run = WeldRuntimeContext::new(threads as i32, mem_limit);
         Ok(WeldContext {
             context: Rc::new(RefCell::new(run))
         })

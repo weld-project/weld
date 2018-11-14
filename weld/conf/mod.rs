@@ -92,7 +92,7 @@ pub struct ParsedConf {
     /// Memory limit for a single context.
     pub memory_limit: i64,
     /// Worker threads to use on backends that support threading.
-    pub threads: i32,
+    pub threads: u32,
     /// Toggles tracing in generated code.
     pub trace_run: bool,
     /// Enables SIR optimizations.
@@ -125,10 +125,15 @@ impl Default for ParsedConf {
     }
 }
 
+/// Methods for parsing a `String` to `String` map into typed values.
 trait ConfigParser {
+    /// Retrieves the value mapped to key and parses it to type `F`. The `map` function is applied to
+    /// the parsed value. If the value does not exist, the default value is returned.
     fn parse_map<F, T, G>(&self, key: &str, default: T, map: G) -> WeldResult<T>
         where F: FromStr, G: FnMut(F) -> WeldResult<T>;
 
+    /// Retrieves the value mapped to `key` and parse it to type `F`. Returns `default` if key does
+    /// not exist.
     fn parse_str<F>(&self, key: &str, default: F) -> WeldResult<F>
         where F: FromStr {
             self.parse_map(key, default, &mut |v| Ok(v))
@@ -136,12 +141,12 @@ trait ConfigParser {
 }
 
 impl ConfigParser for WeldConf {
-    fn parse_map<F, T, G>(&self, key: &str, default: T, mut map: G) -> WeldResult<T>
+    fn parse_map<F, T, G>(&self, key: &str, default: T, mut func: G) -> WeldResult<T>
         where F: FromStr, G: FnMut(F) -> WeldResult<T> {
             match self.get(key).cloned().map(|s| s.into_string().unwrap()) {
                 Some(field) => {
                     match field.parse::<F>() {
-                        Ok(result) => map(result),
+                        Ok(result) => func(result),
                         Err(_) => compile_err!("Invalid configuration value '{}' for '{}'",
                                                field, key)
                     }
@@ -215,22 +220,6 @@ fn parse_dump_code_formats(s: String) -> WeldResult<HashSet<DumpCodeFormat>> {
     }).collect::<WeldResult<HashSet<DumpCodeFormat>>>()
 }
 
-/// Parse a boolean flag with a custom error message.
-fn parse_bool_flag(s: &str, err: &str) -> WeldResult<bool> {
-    match s.parse::<bool>() {
-        Ok(v) => Ok(v),
-        _ => compile_err!("{}: {}", err, s),
-    }
-}
-
-/// Parse a memory limit.
-fn parse_memory_limit(s: &str) -> WeldResult<i64> {
-    match s.parse::<i64>() {
-        Ok(v) if v > 0 => Ok(v),
-        _ => compile_err!("Invalid memory limit: {}", s),
-    }
-}
-
 /// Parse a list of optimization passes.
 fn parse_passes(s: String) -> WeldResult<Vec<Pass>> {
     if s.len() == 0 {
@@ -245,33 +234,4 @@ fn parse_passes(s: String) -> WeldResult<Vec<Pass>> {
         }
     }
     Ok(result)
-}
-
-/// Parse an LLVM optimization level.
-fn parse_llvm_optimization_level(s: &str) -> WeldResult<u32> {
-    match s.parse::<u32>() {
-        Ok(v) if v <= 3 => Ok(v),
-        _ => compile_err!("Invalid LLVM optimization level: {}", s),
-    }
-}
-
-#[test]
-fn conf_parsing() {
-    assert_eq!(parse_threads("1").unwrap(), 1);
-    assert_eq!(parse_threads("2").unwrap(), 2);
-    assert!(parse_threads("-1").is_err());
-    assert!(parse_threads("").is_err());
-
-    assert_eq!(parse_memory_limit("1000000").unwrap(), 1000000);
-    assert!(parse_memory_limit("-1").is_err());
-    assert!(parse_memory_limit("").is_err());
-
-    assert_eq!(parse_passes("loop-fusion,inline-let").unwrap().len(), 2);
-    assert_eq!(parse_passes("loop-fusion").unwrap().len(), 1);
-    assert_eq!(parse_passes("").unwrap().len(), 0);
-    assert!(parse_passes("non-existent-pass").is_err());
-
-    assert_eq!(parse_llvm_optimization_level("0").unwrap(), 0);
-    assert_eq!(parse_llvm_optimization_level("2").unwrap(), 2);
-    assert!(parse_llvm_optimization_level("5").is_err());
 }
