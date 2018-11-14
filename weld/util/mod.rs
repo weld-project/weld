@@ -7,15 +7,12 @@
 extern crate libc;
 extern crate fnv;
 extern crate time;
-extern crate uuid;
 
 use ast::*;
 use ast::ExprKind::*;
 
 use std::iter;
 use std::cmp::max;
-
-use uuid::Uuid;
 
 pub mod stats;
 pub mod colors;
@@ -78,11 +75,3 @@ pub fn join<T: iter::Iterator<Item = String>>(start: &str, sep: &str, end: &str,
     res
 }
 
-/// Return a timestamp-based filename for `dumpCode`.
-///
-/// The timestamp has a 2-character identifier attached to prevent naming conflicts.
-pub fn timestamp_unique() -> String {
-    let uuid = Uuid::new_v4().to_simple().to_string();
-    let ref suffix = uuid[0..2];
-    format!("{}-{}", time::now().to_timespec().sec, suffix)
-}

@@ -121,7 +121,7 @@ pub fn load_library(libname: &str) -> WeldResult<()> {
 /// Returns the size of a type in bytes.
 pub fn size_of(ty: &Type) -> usize {
     unsafe {
-        let mut gen = LlvmGenerator::new(ParsedConf::new()).unwrap();
+        let mut gen = LlvmGenerator::new(ParsedConf::default()).unwrap();
         gen.size_of_ty(ty)
     }
 }

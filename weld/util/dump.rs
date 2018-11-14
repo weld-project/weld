@@ -3,14 +3,18 @@
 //! This module can be used both for writing code for consumption in another program (e.g., writing
 //! LLVM files that can then be passed to Clang) or for debugging.
 
+extern crate uuid;
+extern crate time;
+
+use conf::DumpCodeConfig;
 use error::*;
 
-// For dumping files.
-use std::collections::HashSet;
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::io::Error as IOError;
 use std::path::PathBuf;
+
+use uuid::Uuid;
 
 impl From<IOError> for WeldCompileError {
     fn from(err: IOError) -> WeldCompileError {
@@ -29,7 +33,6 @@ pub enum DumpCodeFormat {
 }
 
 impl DumpCodeFormat {
-
     /// Returns a vector with all formats.
     pub fn all() -> Vec<DumpCodeFormat> {
         use self::DumpCodeFormat::*;
@@ -57,14 +60,6 @@ impl DumpCodeFormat {
     }
 }
 
-/// Configuration for dumping code.
-#[derive(Clone,Debug)]
-pub struct DumpCodeConfig {
-    pub enabled: bool,
-    pub filename: String,
-    pub directory: String,
-    pub formats: HashSet<DumpCodeFormat>,
-}
 
 /// Writes code to a file using the given configuration.
 ///
@@ -97,4 +92,13 @@ pub fn write_code<T: AsRef<str>>(code: T,
 
     file.write_all(code.as_ref().as_bytes())?; 
     Ok(())
+}
+
+/// Return a timestamp-based filename for `dumpCode`.
+///
+/// The timestamp has a 2-character identifier attached to prevent naming conflicts.
+pub fn unique_filename() -> String {
+    let uuid = Uuid::new_v4().to_simple().to_string();
+    let ref suffix = uuid[0..2];
+    format!("code-{}-{}", time::now().to_timespec().sec, suffix)
 }

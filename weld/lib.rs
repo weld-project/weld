@@ -185,6 +185,7 @@ pub use conf::constants::*;
 #[cfg(test)]
 mod tests;
 
+use conf::ParsedConf;
 use runtime::WeldRuntimeContext;
 use util::dump::{DumpCodeFormat, write_code};
 use util::stats::CompilationStats;
@@ -249,7 +250,7 @@ impl WeldContext {
     /// let context = WeldContext::new(conf).unwrap();
     /// ```
     pub fn new(conf: &WeldConf) -> WeldResult<WeldContext> {
-        let ref mut conf = conf::parse(conf)?;
+        let ref mut conf = ParsedConf::parse(conf)?;
         let threads = conf.threads;
         let mem_limit = conf.memory_limit;
 
@@ -628,7 +629,7 @@ impl WeldModule {
 
         let e2e_start = PreciseTime::now();
         let mut stats = CompilationStats::new();
-        let ref mut conf = conf::parse(conf)?;
+        let ref mut conf = ParsedConf::parse(conf)?;
         let code = code.as_ref();
 
         let uuid = Uuid::new_v4();
