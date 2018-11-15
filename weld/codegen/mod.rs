@@ -19,7 +19,6 @@ use error::*;
 use runtime::WeldRuntimeErrno;
 use sir::*;
 use util::stats::CompilationStats;
-use util::write_code;
 
 use std::fmt;
 
@@ -89,9 +88,8 @@ impl fmt::Debug for CompiledModule {
 /// the `dumpCode` option is enabled, code is dumped to a filename `code-<timestamp>.[ll|S].
 pub fn compile_program(program: &SirProgram,
                        conf: &mut ParsedConf,
-                       stats: &mut CompilationStats,
-                       timestamp: &str) -> WeldResult<CompiledModule> {
-    let runnable = llvm2::compile(&program, conf, stats, timestamp)?;
+                       stats: &mut CompilationStats) -> WeldResult<CompiledModule> {
+    let runnable = llvm2::compile(&program, conf, stats)?;
     let result = CompiledModule {
         runnable: runnable,
     };
