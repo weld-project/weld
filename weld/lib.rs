@@ -185,7 +185,9 @@ pub use conf::constants::*;
 #[cfg(test)]
 mod tests;
 
+use conf::ParsedConf;
 use runtime::WeldRuntimeContext;
+use util::dump::{DumpCodeFormat, write_code};
 use util::stats::CompilationStats;
 
 // Error codes are exposed publicly.
@@ -248,11 +250,11 @@ impl WeldContext {
     /// let context = WeldContext::new(conf).unwrap();
     /// ```
     pub fn new(conf: &WeldConf) -> WeldResult<WeldContext> {
-        let ref mut conf = conf::parse(conf)?;
+        let ref mut conf = ParsedConf::parse(conf)?;
         let threads = conf.threads;
         let mem_limit = conf.memory_limit;
 
-        let run = WeldRuntimeContext::new(threads, mem_limit);
+        let run = WeldRuntimeContext::new(threads as i32, mem_limit);
         Ok(WeldContext {
             context: Rc::new(RefCell::new(run))
         })
@@ -624,13 +626,12 @@ impl WeldModule {
     /// ```
     pub fn compile<S: AsRef<str>>(code: S, conf: &WeldConf) -> WeldResult<WeldModule> {
         use self::ast::*;
+
         let e2e_start = PreciseTime::now();
         let mut stats = CompilationStats::new();
-        let ref mut conf = conf::parse(conf)?;
+        let ref mut conf = ParsedConf::parse(conf)?;
         let code = code.as_ref();
 
-        // For dumping code, if enabled.
-        let ref timestamp = util::timestamp_unique();
         let uuid = Uuid::new_v4();
 
         // Configuration.
@@ -652,11 +653,7 @@ impl WeldModule {
               unoptimized_code);
 
         // Dump the generated Weld program before applying any analyses.
-        if conf.dump_code.enabled {
-            info!("Writing code to directory '{}' with timestamp {}",
-                  &conf.dump_code.dir, timestamp);
-            util::write_code(&unoptimized_code, "weld", timestamp, &conf.dump_code.dir);
-        }
+        nonfatal!(write_code(&unoptimized_code, DumpCodeFormat::Weld, &conf.dump_code));
 
         // Uniquify symbol names.
         let start = PreciseTime::now();
@@ -703,18 +700,11 @@ impl WeldModule {
         debug!("Optimized SIR program:\n{}\n", &sir_prog);
         stats.weld_times.push(("SIR Optimization".to_string(), start.to(end)));
 
-        // Dump files if needed.
-        if conf.dump_code.enabled {
-            util::write_code(expr.pretty_print(), "weld",
-                format!("{}-opt", timestamp), &conf.dump_code.dir);
-            util::write_code(sir_prog.to_string(), "sir", timestamp, &conf.dump_code.dir);
-        }
+        nonfatal!(write_code(expr.pretty_print(), DumpCodeFormat::WeldOpt, &conf.dump_code));
+        nonfatal!(write_code(sir_prog.to_string(), DumpCodeFormat::SIR, &conf.dump_code));
 
         // Generate code.
-        let compiled_module = codegen::compile_program(&sir_prog,
-                                                       conf,
-                                                       &mut stats,
-                                                       timestamp)?;
+        let compiled_module = codegen::compile_program(&sir_prog, conf, &mut stats)?;
         debug!("\n{}\n", stats.pretty_print());
 
         let (param_types, return_type) = if let Type::Function(ref param_tys, ref return_ty) = expr.ty {
@@ -722,7 +712,6 @@ impl WeldModule {
         } else {
             unreachable!()
         };
-
 
         let end = PreciseTime::now();
         let duration = e2e_start.to(end);
@@ -814,8 +803,8 @@ impl WeldModule {
     pub unsafe fn run(&self,
                       context: &mut WeldContext,
                       arg: &WeldValue) -> WeldResult<WeldValue> {
-        let start = PreciseTime::now();
 
+        let start = PreciseTime::now();
         let nworkers = context.context.borrow().threads();
         let mem_limit = context.context.borrow().memory_limit();
 

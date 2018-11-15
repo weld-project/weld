@@ -7,7 +7,6 @@
 extern crate libc;
 extern crate fnv;
 extern crate time;
-extern crate uuid;
 
 use ast::*;
 use ast::ExprKind::*;
@@ -15,14 +14,9 @@ use ast::ExprKind::*;
 use std::iter;
 use std::cmp::max;
 
-// For dumping files.
-use std::io::Write;
-use std::path::PathBuf;
-use std::fs::OpenOptions;
-use uuid::Uuid;
-
 pub mod stats;
 pub mod colors;
+pub mod dump;
 
 /// Utility struct that can track and generate unique IDs and symbols for use in an expression.
 /// Each SymbolGenerator tracks the maximum ID used for every symbol name, and can be used to
@@ -81,41 +75,3 @@ pub fn join<T: iter::Iterator<Item = String>>(start: &str, sep: &str, end: &str,
     res
 }
 
-/// Return a timestamp-based filename for `dumpCode`.
-///
-/// The timestamp has a 2-character identifier attached to prevent naming conflicts.
-pub fn timestamp_unique() -> String {
-    let uuid = Uuid::new_v4().to_simple().to_string();
-    let ref suffix = uuid[0..2];
-    format!("{}-{}", time::now().to_timespec().sec, suffix)
-}
-
-
-/// Writes code to a file specified by `PathBuf`. Writes a log message if it failed.
-pub fn write_code<T: AsRef<str>, U: AsRef<str>, V: AsRef<str>>(code: T,
-                                                               ext: U,
-                                                               prefix: V,
-                                                               dir_path: &str) {
-
-    let ref mut path = PathBuf::new();
-    path.push(dir_path);
-
-    let mut options = OpenOptions::new();
-    options.write(true)
-        .create_new(true);
-
-    path.push(format!("code-{}", prefix.as_ref()));
-    path.set_extension(ext.as_ref());
-
-    let ref path_str = format!("{}", path.display());
-    match options.open(path) {
-        Ok(ref mut file) => {
-            if let Err(_) = file.write_all(code.as_ref().as_bytes()) {
-                error!("Write failed: could not write code to file {}", path_str);
-            }
-        }
-        Err(_) => {
-            error!("Open failed: could not write code to file {}", path_str);
-        }
-    }
-}
