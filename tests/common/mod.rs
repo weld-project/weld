@@ -38,8 +38,7 @@ pub fn default_conf() -> WeldConf {
 }
 
 pub fn many_threads_conf() -> WeldConf {
-    let mut conf = conf(4);
-    conf
+    conf(4)
 }
 
 fn conf(threads: i32) -> WeldConf {

@@ -123,7 +123,7 @@ pub const CONF_ENABLE_BOUNDS_CHECKS_KEY: &'static str = "weld.compile.enableBoun
 pub const CONF_MEMORY_LIMIT_DEFAULT: i64 = 1000000000;
 
 /// Default number of threads.
-pub const CONF_THREADS_DEFAULT: u32 = 1;
+pub const CONF_THREADS_DEFAULT: i32 = 1;
 
 /// Default setting for SIR optimization.
 pub const CONF_SIR_OPT_DEFAULT: bool = true;
@@ -163,6 +163,9 @@ pub const CONF_DUMP_CODE_DIR_DEFAULT: &'static str = ".";
 
 /// Default set of optimization passes.
 pub const CONF_OPTIMIZATION_PASSES_DEFAULT: &[&'static str] =  &[
+"inline-zip",
+"inline-let",
+"inline-apply",
 "loop-fusion",
 "unroll-static-loop",
 "infer-size",

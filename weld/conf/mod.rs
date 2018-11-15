@@ -92,7 +92,7 @@ pub struct ParsedConf {
     /// Memory limit for a single context.
     pub memory_limit: i64,
     /// Worker threads to use on backends that support threading.
-    pub threads: u32,
+    pub threads: i32,
     /// Toggles tracing in generated code.
     pub trace_run: bool,
     /// Enables SIR optimizations.
@@ -226,6 +226,14 @@ fn parse_passes(s: String) -> WeldResult<Vec<Pass>> {
         return Ok(vec![]); // Special case because split() creates an empty piece here
     }
     let mut result = vec![];
+
+
+    // Insert mandatory passes to the beginning.
+    //
+    // TODO: These shouldn't be passes, since things break if we don't run them...
+    result.push(OPTIMIZATION_PASSES.get("inline-zip").unwrap().clone());
+    result.push(OPTIMIZATION_PASSES.get("inline-let").unwrap().clone());
+    result.push(OPTIMIZATION_PASSES.get("inline-apply").unwrap().clone());
 
     for piece in s.split(",") {
         match OPTIMIZATION_PASSES.get(piece) {
