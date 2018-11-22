@@ -179,7 +179,6 @@ impl GenCmp for LlvmGenerator {
             }
             // Vectors comprised of unsigned chars or booleans can be compared for using `memcmp`.
             Vector(ref elem) if elem.supports_memcmp() => {
-                print!("vector memcmp\n");
                 let left_vector = self.load(builder, left)?;
                 let right_vector = self.load(builder, right)?;
                 let left_size = self.gen_size(builder, ty, left_vector)?;
@@ -214,7 +213,6 @@ impl GenCmp for LlvmGenerator {
                 LLVMBuildRet(builder, memcmp_result);
             }
             Vector(ref elem) => {
-                print!("vector loop cmp\n");
                 // Compare vectors with a loop. Check size like before.
                 let loop_block = LLVMAppendBasicBlockInContext(self.context(), function,  c_str!(""));
                 let done_block = LLVMAppendBasicBlockInContext(self.context, function, c_str!(""));
@@ -261,7 +259,6 @@ impl GenCmp for LlvmGenerator {
                 LLVMBuildRet(builder, result);
             }
             Function(_,_) | Unknown => {
-                print!("Unknown type!\n");
                 unreachable!()
             }
         };
@@ -352,7 +349,6 @@ impl GenCmp for LlvmGenerator {
         let left  = LLVMBuildBitCast(builder, left,  LLVMPointerType(*elem_ty, 0), c_str!(""));
         let right = LLVMBuildBitCast(builder, right, LLVMPointerType(*elem_ty, 0), c_str!(""));
 
-        print!("kf\n");
         // Call the key function.
         let left_value  = self.load(builder, left)?;
         let right_value = self.load(builder, right)?;
@@ -378,7 +374,6 @@ impl GenCmp for LlvmGenerator {
         LLVMDisposeBuilder(builder);
 
         self.keyfunc_cmp_fns.insert(kf_id.clone(), function);
-        print!("finished kf\n");
         Ok(function)
     }
 

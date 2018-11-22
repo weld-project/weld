@@ -742,26 +742,22 @@ impl LlvmGenerator {
 
     /// Generate code for an SIR program.
     unsafe fn generate(conf: ParsedConf, program: &SirProgram) -> WeldResult<LlvmGenerator> {
-        print!("generating....\n");
         let mut gen = LlvmGenerator::new(conf)?;
 
         // Declare each function first to create a reference to it. Loop body functions are only
         // called by their ParallelForData terminators, so those are generated on-the-fly during
         // loop code generation.
-        print!("declaring....\n");
         for func in program.funcs.iter().filter(|f| !f.loop_body) {
             gen.declare_sir_function(func)?;
         }
 
         // Generate each non-loop body function in turn. Loop body functions are constructed when
         // the For loop terminator is generated, with the loop control flow injected into the function.
-        print!("generating funcs....\n");
         for func in program.funcs.iter().filter(|f| !f.loop_body) {
             gen.gen_sir_function(program, func)?;
         }
 
         // Generates a callable entry function in the module.
-        print!("entry....\n");
         gen.gen_entry(program)?;
         Ok(gen)
     }
@@ -1281,7 +1277,6 @@ impl LlvmGenerator {
                     statement.output.as_ref().unwrap())?;
                 
                 let ref cmpfunc_func = context.sir_program.funcs[*cmpfunc];
-                print!("in sort\n");
                 if let Vector(ref elem_ty) = *output_type {
                     let child_value = self.load(context.builder, context.get_value(child)?)?;
                     let child_type = context.sir_function.symbol_type(child)?;
