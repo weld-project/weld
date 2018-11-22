@@ -1,9 +1,13 @@
-//! Weld's runtime functions.
+//! Functions called from within the Weld runtime.
 //!
 //! These are functions that are accessed from generated code.
 
 extern crate libc;
 extern crate fnv;
+
+pub mod ffi;
+
+use self::ffi::*;
 
 use std::alloc::System as Allocator;
 use libc::{c_char, int32_t, int64_t, uint64_t};
@@ -18,12 +22,11 @@ use std::sync::{Once, ONCE_INIT};
 use std::alloc::{Layout, GlobalAlloc};
 
 pub type Ptr = *mut u8;
-pub type WeldRuntimeContextRef = *mut WeldRuntimeContext;
 
 /// Initialize the Weld runtime only once.
 static ONCE: Once = ONCE_INIT;
-static mut INITIALIZE_FAILED: bool = false;
 
+/// Alignment for allocations.
 const DEFAULT_ALIGN: usize = 8;
 
 /// An errno set by the runtime but also used by the Weld API.
@@ -233,101 +236,19 @@ impl Drop for WeldRuntimeContext {
 }
 
 unsafe fn initialize() {
-    // Hack to prevent symbols from being compiled out in a Rust binary.
-    let mut x =  weld_runst_init as i64;
-    x += weld_runst_set_result as i64;
-    x += weld_runst_get_result as i64;
-    x += weld_runst_malloc as i64;
-    x += weld_runst_realloc as i64;
-    x += weld_runst_free as i64;
-    x += weld_runst_get_errno as i64;
-    x += weld_runst_set_errno as i64;
+    ONCE.call_once(|| {
+        // Hack to prevent symbols from being compiled out in a Rust binary.
+        let mut x =  weld_runst_init as i64;
+        x += weld_runst_set_result as i64;
+        x += weld_runst_get_result as i64;
+        x += weld_runst_malloc as i64;
+        x += weld_runst_realloc as i64;
+        x += weld_runst_free as i64;
+        x += weld_runst_get_errno as i64;
+        x += weld_runst_set_errno as i64;
 
-    x += weld_runst_print_int as i64;
-    x += weld_runst_print as i64;
-
-    trace!("Runtime initialized with hashed values {}", x);
-}
-
-#[no_mangle]
-/// Initialize the runtime.
-///
-/// This call currently circumvents an awkward problem with binaries using Rust, where the FFI
-/// below used by the Weld runtime is compiled out.
-pub unsafe extern "C" fn weld_init() {
-    ONCE.call_once(|| initialize());
-    if INITIALIZE_FAILED {
-        panic!("Weld runtime initialization failed")
-    }
-}
-
-#[no_mangle]
-/// Initialize the runtime if necessary, and then initialize run-specific information.
-pub unsafe extern "C" fn weld_runst_init(nworkers: int32_t, memlimit: int64_t) -> WeldRuntimeContextRef {
-    Box::into_raw(Box::new(WeldRuntimeContext::new(nworkers, memlimit)))
-}
-
-#[no_mangle]
-/// Allocate memory using `libc` `malloc`, tracking memory usage information.
-pub unsafe extern "C" fn weld_runst_malloc(run: WeldRuntimeContextRef, size: int64_t) -> Ptr {
-    let run = &mut *run;
-    run.malloc(size)
-}
-
-#[no_mangle]
-/// Allocate memory using `libc` `remalloc`, tracking memory usage information.
-pub unsafe extern "C" fn weld_runst_realloc(run: WeldRuntimeContextRef,
-                                     ptr: Ptr,
-                                     newsize: int64_t) -> Ptr {
-    let run = &mut *run;
-    run.realloc(ptr, newsize)
-}
-
-#[no_mangle]
-/// Free memory using `libc` `free`, tracking memory usage information.
-pub unsafe extern "C" fn weld_runst_free(run: WeldRuntimeContextRef, ptr: Ptr) {
-    let run = &mut *run;
-    run.free(ptr)
-}
-
-#[no_mangle]
-/// Set the result pointer.
-pub unsafe extern "C" fn weld_runst_set_result(run: WeldRuntimeContextRef, ptr: Ptr) {
-    let run = &mut *run;
-    run.set_result(ptr)
-}
-
-#[no_mangle]
-/// Set the errno value.
-pub unsafe extern "C" fn weld_runst_set_errno(run: WeldRuntimeContextRef,
-                                              errno: WeldRuntimeErrno) {
-    let run = &mut *run;
-    run.set_errno(errno)
-}
-
-#[no_mangle]
-/// Get the errno value.
-pub unsafe extern "C" fn weld_runst_get_errno(run: WeldRuntimeContextRef) -> WeldRuntimeErrno {
-    let run = &mut *run;
-    run.errno()
-}
-
-#[no_mangle]
-/// Get the result pointer.
-pub unsafe extern "C" fn weld_runst_get_result(run: WeldRuntimeContextRef) -> Ptr {
-    let run = &mut *run;
-    run.result()
-}
-
-#[no_mangle]
-/// Print a value from generated code.
-pub unsafe extern "C" fn weld_runst_print(_run: WeldRuntimeContextRef, string: *const c_char) {
-    let string = CStr::from_ptr(string).to_str().unwrap();
-    println!("{} ", string);
-}
-
-#[no_mangle]
-/// Print a value from generated code.
-pub unsafe extern "C" fn weld_runst_print_int(_run: WeldRuntimeContextRef, i: uint64_t) {
-    println!("{}", i);
+        x += weld_runst_print_int as i64;
+        x += weld_runst_print as i64;
+        trace!("Runtime initialized with hashed values {}", x);
+    });
 }

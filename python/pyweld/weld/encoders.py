@@ -3,13 +3,13 @@ Implements some common standard encoders and decoders mapping
 Python types to Weld types.
 """
 
-from types import *
-
-from weldobject import WeldObjectEncoder, WeldObjectDecoder
-import bindings as cweld
+import ctypes
 
 import numpy as np
-import ctypes
+
+from . import bindings as cweld
+from .types import *
+from .weldobject import WeldObjectEncoder, WeldObjectDecoder
 
 
 def dtype_to_weld_type(dtype):

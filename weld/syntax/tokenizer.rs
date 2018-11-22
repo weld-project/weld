@@ -101,6 +101,7 @@ pub enum Token {
     TColon,
     TSemicolon,
     TQuestion,
+    TBang,
     TEqualEqual,
     TNotEqual,
     TLessThanOrEqual,
@@ -142,6 +143,7 @@ impl Token {
                 TColon |
                 TSemicolon |
                 TQuestion |
+                TBang |
                 TEqualEqual |
                 TNotEqual |
                 TLessThanOrEqual |
@@ -168,7 +170,7 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
         static ref TOKEN_RE: Regex = Regex::new(concat!(
             "(?m)#.*$|",
             r#"[0-9]+\.[0-9]+([eE]-?[0-9]+)?[fF]?|[0-9]+[eE]-?[0-9]+[fF]?|"[^"]*"|"#,
-            r#"[A-Za-z0-9$_]+|==|!=|>=|<=|&&|\|\||[-+/*%,=()[\]{}|@&\.:;?&\|^<>]|\S+"#
+            r#"[A-Za-z0-9$_]+|==|!=|>=|<=|&&|\|\||[-+/*%,=()[\]{}|@&\.:;?!&\|^<>]|\S+"#
         )).unwrap();
 
         // Regular expressions for various types of tokens.
@@ -343,6 +345,7 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
                             ":" => TColon,
                             ";" => TSemicolon,
                             "?" => TQuestion,
+                            "!" => TBang,
                             "==" => TEqualEqual,
                             "!=" => TNotEqual,
                             "<" => TLessThan,
@@ -466,6 +469,7 @@ impl fmt::Display for Token {
                     TColon => ":",
                     TSemicolon => ";",
                     TQuestion => "?",
+                    TBang => "!",
                     TEqualEqual => "==",
                     TNotEqual => "!=",
                     TLessThan => "<",

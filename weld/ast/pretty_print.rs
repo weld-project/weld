@@ -183,6 +183,10 @@ fn to_string_impl(expr: &Expr, config: &mut PrettyPrintConfig) -> String {
             format!("(-{})", to_string_impl(e, config))
         }
 
+        Not(ref e) => {
+            format!("(!{})", to_string_impl(e, config))
+        }
+
         Broadcast(ref e) => {
             format!("broadcast({})", to_string_impl(e, config))
         }

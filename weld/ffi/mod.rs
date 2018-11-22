@@ -1,4 +1,4 @@
-//! A Foreign Function Interface to Weld.
+//! C-compatible foreign function interface to Weld.
 //!
 //! This module provides a C-compatible interface to the Weld library.
 
@@ -9,6 +9,9 @@ use libc::{c_char, c_void, int64_t};
 
 use std::ptr;
 use std::ffi::CStr;
+
+// Re-export the FFI for the runtime.
+pub use runtime::ffi::*;
 
 /// An opauqe handle to a Weld configuration.
 pub type WeldConfRef = *mut WeldConf;
