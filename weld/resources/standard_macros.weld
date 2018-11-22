@@ -22,6 +22,7 @@ macro sum(data) = (
   ))
 );
 
-macro compare(x, y) = (
-  if(x > y, 1, if(x < y, -1, 0))
-)
+# Default comparator.
+macro compare(e1, e2) = (
+  if(e1 > e2, 1, if(e1 < e2, -1, 0))
+);

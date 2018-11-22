@@ -5,7 +5,7 @@ extern crate weld;
 mod common;
 use common::*;
 
-// #[test]
+#[test]
 fn string_sort() {
     #[derive(Clone)]
     #[allow(dead_code)]
@@ -25,7 +25,7 @@ fn string_sort() {
         x: WeldVec::from(&strs),
     };
 
-    let code = "|e0: vec[vec[u8]]| sort(e0, |i:vec[u8]| i)";
+    let code = "|e0: vec[vec[u8]]| sort(e0, |x:vec[u8], y:vec[u8]| compare(x, y))";
 
     let ref conf = default_conf();
     let ret_value = compile_and_run(code, conf, input_data);
@@ -39,16 +39,14 @@ fn string_sort() {
             assert_eq!(val, sorted[i as usize][j as usize])
         }
     }
-
-
 }
 
-// #[test]
+#[test]
 fn if_sort() {
     let ys = vec![2, 3, 1, 4, 5];
     let ref input_data = WeldVec::from(&ys);
 
-    let code = "|ys:vec[i32]| sort(ys, |x:i32| if(x != 5, x + 1, 0))";
+    let code = "|ys:vec[i32]| sort(ys, |x:i32, y:i32| compare(if(x != 5, x + 1, 0), if(y != 5, y + 1, 0)))";
     let ref conf = default_conf();
     let ret_value = compile_and_run(code, conf, input_data);
     let data = ret_value.data() as *const WeldVec<i32>;
@@ -67,7 +65,7 @@ fn simple_sort() {
     let ys = vec![2, 3, 1, 4, 5];
     let ref input_data = WeldVec::from(&ys);
 
-    let code = "|ys:vec[i32]| sort(ys, |x:i32| x+1)";
+    let code = "|ys:vec[i32]| sort(ys, |x:i32, y:i32| if(x+1 > y+1, 1, if(x+1 < y+1, -1, 0)))";
     let ref conf = default_conf();
     let ret_value = compile_and_run(code, conf, input_data);
     let data = ret_value.data() as *const WeldVec<i32>;
@@ -80,12 +78,10 @@ fn simple_sort() {
         assert_eq!(unsafe { *result.data.offset(i) }, expected[i as usize])
     }
 
-
-
     let ys = vec![2.0, 3.0, 1.0, 5.001, 5.0001];
     let ref input_data = WeldVec::from(&ys);
 
-    let code = "|ys:vec[f64]| sort(sort(ys, |x:f64| x), |x:f64| x)";
+    let code = "|ys:vec[f64]| sort(sort(ys, |x:f64, y:f64| compare(x, y)), |x:f64, y:f64| compare(x, y))";
     let ref conf = default_conf();
     let ret_value = compile_and_run(code, conf, input_data);
     let data = ret_value.data() as *const WeldVec<f64>;
@@ -97,7 +93,7 @@ fn simple_sort() {
         assert_eq!(unsafe { *result.data.offset(i) }, expected[i as usize])
     }
 
-    let code = "|ys:vec[f64]| sort(ys, |x:f64| 1.0 / exp(-1.0*x))";
+    let code = "|ys:vec[f64]| sort(ys, |x:f64, y:f64| compare(1.0 / exp(-1.0*x), 1.0 / exp(-1.0*y)))";
     let ref conf = default_conf();
     let ret_value = compile_and_run(code, conf, input_data);
     let data = ret_value.data() as *const WeldVec<f64>;
@@ -111,7 +107,7 @@ fn simple_sort() {
 
 }
 
-// #[test]
+#[test]
 fn complex_sort() {
     #[derive(Clone)]
     #[allow(dead_code)]
@@ -136,7 +132,7 @@ fn complex_sort() {
                         |b,i,e| merge(b, e)
                       )
                     ),
-                    |x:{i32, i32}| x.$0
+                    |x:{i32, i32}, y:{i32, i32}| compare(x.$0, y.$0)
                 )";
     let ref conf = default_conf();
     let ret_value = compile_and_run(code, conf, input_data);

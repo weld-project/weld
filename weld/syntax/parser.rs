@@ -963,11 +963,11 @@ impl<'t> Parser<'t> {
                 try!(self.consume(TOpenParen));
                 let data = try!(self.expr());
                 try!(self.consume(TComma));
-                let keyfunc = try!(self.expr());
+                let cmpfunc = try!(self.expr());
                 try!(self.consume(TCloseParen));
                 Ok(expr_box(Sort {
                                 data: data,
-                                keyfunc: keyfunc,
+                                cmpfunc: cmpfunc,
                             },
                             Annotations::new()))
             }

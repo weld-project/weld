@@ -73,16 +73,13 @@ pub trait GenCmp {
                                  keyfunc: &LLVMValueRef,
                                  kf_return_ty: &Type) -> WeldResult<LLVMValueRef>;
 
-    /// Generates an opaque comparator using the specified key function and specified comparator function.
+    /// Generates an opaque comparator using the specified comparator function.
     /// The comparator should return -1 for left < right, 1 for left > right, and 0 for left == right.
     /// These functions are not currently cached.
-    unsafe fn gen_keyfunc_custom_cmp(&mut self,
-                                     elem_ty: &LLVMTypeRef,
-                                     kf_id: &FunctionId,
-                                     keyfunc: &LLVMValueRef,
-                                     kf_return_ty: &Type,
-                                     cf_id: &FunctionId,
-                                     cmpfunc: &LLVMValueRef) -> WeldResult<LLVMValueRef>;
+    unsafe fn gen_custom_cmp(&mut self,
+                             elem_ty: &LLVMTypeRef,
+                             cf_id: &FunctionId,
+                             cmpfunc: &LLVMValueRef) -> WeldResult<LLVMValueRef>;
 }
 
 impl GenCmp for LlvmGenerator {
@@ -385,23 +382,14 @@ impl GenCmp for LlvmGenerator {
         Ok(function)
     }
 
-    unsafe fn gen_keyfunc_custom_cmp(&mut self,
-                                     elem_ty: &LLVMTypeRef,
-                                     kf_id: &FunctionId,
-                                     keyfunc: &LLVMValueRef,
-                                     kf_return_ty: &Type,
-                                     cf_id: &FunctionId,
-                                     cmpfunc: &LLVMValueRef) -> WeldResult<LLVMValueRef> {
+    unsafe fn gen_custom_cmp(&mut self,
+                             elem_ty: &LLVMTypeRef,
+                             cf_id: &FunctionId,
+                             cmpfunc: &LLVMValueRef) -> WeldResult<LLVMValueRef> {
         let mut arg_tys = [self.void_pointer_type(), self.void_pointer_type(), self.run_handle_type()];
         let ret_ty = self.i32_type();
 
-        let c_prefix = LLVMPrintTypeToString(self.llvm_type(kf_return_ty)?);
-        let prefix = CStr::from_ptr(c_prefix);
-        let prefix = prefix.to_str().unwrap();
-        let name = format!("{}.{}.{}.custom_cmp", prefix, kf_id, cf_id);
-
-        // Free the allocated string.
-        LLVMDisposeMessage(c_prefix);
+        let name = format!("{}.custom_cmp", cf_id);
 
         let (function, builder, _) = self.define_function_with_visibility(ret_ty,
                                                                           &mut arg_tys,
@@ -418,25 +406,16 @@ impl GenCmp for LlvmGenerator {
         let left  = LLVMBuildBitCast(builder, left,  LLVMPointerType(*elem_ty, 0), c_str!(""));
         let right = LLVMBuildBitCast(builder, right, LLVMPointerType(*elem_ty, 0), c_str!(""));
 
-        // Call the key function.
+        // Load arguments.
         let left_value  = self.load(builder, left)?;
         let right_value = self.load(builder, right)?;
-        let left_var = LLVMBuildAlloca(builder, self.llvm_type(kf_return_ty)?, c_str!(""));
-        let right_var = LLVMBuildAlloca(builder, self.llvm_type(kf_return_ty)?, c_str!(""));
-        let mut kf_left_arg  = [left_value, run];
-        let mut kf_right_arg = [right_value, run];
-        let kf_left  = LLVMBuildCall(builder, *keyfunc,
-                                     kf_left_arg.as_mut_ptr(), kf_left_arg.len() as u32, c_str!(""));
-        LLVMSetInstructionCallConv(kf_left, SIR_FUNC_CALL_CONV);
-        let kf_right = LLVMBuildCall(builder, *keyfunc,
-                                     kf_right_arg.as_mut_ptr(), kf_right_arg.len() as u32, c_str!(""));
-        LLVMSetInstructionCallConv(kf_right, SIR_FUNC_CALL_CONV);
-        LLVMBuildStore(builder, kf_left, left_var);
-        LLVMBuildStore(builder, kf_right, right_var);
+        let mut cmp_args  = [left_value, right_value, run];
 
         // Call the comparator.
-        let mut args = [left_var, right_var];
-        let result = LLVMBuildCall(builder, *cmpfunc, args.as_mut_ptr(), args.len() as u32, c_str!(""));
+        let result = LLVMBuildCall(builder, *cmpfunc, cmp_args.as_mut_ptr(),
+                                   cmp_args.len() as u32, c_str!(""));
+        LLVMSetInstructionCallConv(result, SIR_FUNC_CALL_CONV);
+
         let result = LLVMBuildZExt(builder, result, self.i32_type(), c_str!(""));
         LLVMBuildRet(builder, result);
         LLVMDisposeBuilder(builder);

@@ -74,7 +74,7 @@ pub enum StatementKind {
     },
     Sort {
         child: Symbol,
-        keyfunc: FunctionId,
+        cmpfunc: FunctionId,
     },
     Serialize(Symbol),
     Deserialize(Symbol),
@@ -1055,29 +1055,30 @@ fn gen_expr(expr: &Expr,
 
         ExprKind::Sort {
             ref data,
-            ref keyfunc,
+            ref cmpfunc,
         } => {
             if let ExprKind::Lambda {
                        ref params,
                        ref body,
-            } = keyfunc.kind {
-                let keyfunc_id = prog.add_func();
-                let keyblock = prog.funcs[keyfunc_id].add_block();
-                let (keyfunc_id, keyblock, key_sym) = gen_expr(body, prog, keyfunc_id, keyblock, tracker, multithreaded)?;
-                prog.funcs[keyfunc_id].params.insert(params[0].name.clone(), params[0].ty.clone());
-                prog.funcs[keyfunc_id].blocks[keyblock].terminator = Terminator::EndFunction(key_sym.clone());
+            } = cmpfunc.kind {
+                let cmpfunc_id = prog.add_func();
+                let cmpblock = prog.funcs[cmpfunc_id].add_block();
+                let (cmpfunc_id, cmpblock, cmp_sym) = gen_expr(body, prog, cmpfunc_id, cmpblock, tracker, multithreaded)?;
+                prog.funcs[cmpfunc_id].params.insert(params[0].name.clone(), params[0].ty.clone());
+                prog.funcs[cmpfunc_id].params.insert(params[1].name.clone(), params[1].ty.clone());
+                prog.funcs[cmpfunc_id].blocks[cmpblock].terminator = Terminator::EndFunction(cmp_sym.clone());
 
                 let (cur_func, cur_block, data_sym) = gen_expr(data, prog, cur_func, cur_block, tracker, multithreaded)?;
-                let key_function = prog.funcs[keyfunc_id].clone();
+                let cmp_function = prog.funcs[cmpfunc_id].clone();
 
                 let kind = Sort {
                     child: data_sym,
-                    keyfunc: keyfunc_id,
+                    cmpfunc: cmpfunc_id,
                 };
                 let res_sym = tracker.symbol_for_statement(prog, cur_func, cur_block, &expr.ty, kind);
                 Ok((cur_func, cur_block, res_sym))
             } else {
-                compile_err!("Sort key function expected lambda type, instead {:?} provided", keyfunc.ty)
+                compile_err!("Sort comparison function expected lambda type, instead {:?} provided", cmpfunc.ty)
             }
         }
         ExprKind::Select {
