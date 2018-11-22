@@ -1285,7 +1285,7 @@ impl LlvmGenerator {
                     // check that type of key (return type of SirFunction) is a comparable type
                     print!("in vector - match keyfunc\n");
                     match keyfunc_func.return_type {
-                        Scalar(_) => {
+                        Scalar(_) | Vector(_) | Struct(_) => {
                             print!("got scalar keyfunc\n");
                             let child_value = self.load(context.builder, context.get_value(child)?)?;
                             let child_type = context.sir_function.symbol_type(child)?;
@@ -1311,8 +1311,8 @@ impl LlvmGenerator {
                                                                      &keyfunc_ll_fn,
                                                                      &keyfunc_func.return_type)?;
 
-                            // args to qsort are: base array pointer, num elements,
-                            // element size, comparator function
+                            // args to qsort_r are: base array pointer, num elements,
+                            // element size, comparator function, run handle
                             let mut args = vec![elems_ptr, size, ty_size, comparator, run];
                             let mut arg_tys = vec![LLVMTypeOf(elems_ptr),
                                                    LLVMTypeOf(size),
@@ -1329,11 +1329,9 @@ impl LlvmGenerator {
                             
                             Ok(())
                         },
-                        Vector(_) => {
-                            unimplemented!()
-                        },
                         _ => {
-                            return compile_err!("Sort key function must have scalar or vector return type: {}", keyfunc_func.return_type)
+                            return compile_err!("Sort key function must return comparable type: {}",
+                                                keyfunc_func.return_type)
                         }
                     }
                 } else {

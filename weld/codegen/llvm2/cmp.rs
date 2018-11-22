@@ -87,10 +87,13 @@ pub trait GenCmp {
 
 impl GenCmp for LlvmGenerator {
     /// Generates a default comparison function for a type.
-    /// For scalars, the comparison function returns -1 if left < right, 1 if left > right, and 0 otherwise.
-    /// For flat aggregate types (i.e. vectors), the comparison function returns the scalar comparison value for
-    /// the first element where the values are not equal, or 0 if all values are equal.
-    /// For nested aggregate types (i.e. structs), the comparison function is applied recursively to the elements.
+    /// For scalars, the comparison function returns -1 if left < right, 1 if left > right,
+    /// and 0 otherwise.
+    /// For flat aggregate types (i.e. vectors), the comparison function returns
+    /// the scalar comparison value for the first element where the values are not equal, or 0 if
+    /// all values are equal.
+    /// For nested aggregate types (i.e. structs), the comparison function is applied
+    /// recursively to the elements.
     unsafe fn gen_cmp_fn(&mut self, ty: &Type) -> WeldResult<LLVMValueRef> {
         use ast::Type::*;
         let result = self.cmp_fns.get(ty).cloned();
@@ -147,46 +150,49 @@ impl GenCmp for LlvmGenerator {
                 let mut values = [self.i32(-1), on_geq];
                 LLVMAddIncoming(result, values.as_mut_ptr(), blocks.as_mut_ptr(), values.len() as u32);
 
-                result
+                LLVMBuildRet(builder, result);
             }
-            Struct(ref elems) => {
-                let mut result = self.i1(true);
+            Struct(ref elems) => { // recursively apply cmp to elements
+                let mut result = self.i32(0);
                 for (i, elem) in elems.iter().enumerate() {
                     let func = self.gen_cmp_fn(elem)?;
-                    let on_neq_block = LLVMAppendBasicBlockInContext(self.context, function, c_str!(""));
+                    let next_block = LLVMAppendBasicBlockInContext(self.context, function, c_str!(""));
                     let done_block = LLVMAppendBasicBlockInContext(self.context, function, c_str!(""));
+
                     let field_left = LLVMBuildStructGEP(builder, left, i as u32, c_str!(""));
                     let field_right = LLVMBuildStructGEP(builder, right, i as u32, c_str!(""));
+
                     let mut args = [field_left, field_right];
-                    let field_result = LLVMBuildCall(builder, func, args.as_mut_ptr(), args.len() as u32, c_str!("")); // -1, 0, 1
+                    // Compare struct field.
+                    let field_result = LLVMBuildCall(builder, func, args.as_mut_ptr(), args.len() as u32, c_str!(""));
+                    let cond = LLVMBuildICmp(builder, LLVMIntEQ, field_result, self.i32(0), c_str!(""));
 
-                    // Finish block - set result.
-                    LLVMPositionBuilderAtEnd(builder, done_block);
-                    let result = LLVMBuildPhi(builder, ret_ty, c_str!(""));
-                    let mut blocks = [entry_block, on_neq_block];
-                    let mut values = [self.i32(-1), on_geq];
-                    LLVMAddIncoming(result, values.as_mut_ptr(), blocks.as_mut_ptr(), values.len() as u32);
+                    // Continue to next only if the field result returns 0 (fields are equal).
+                    LLVMBuildCondBr(builder, cond, next_block, done_block);
                     
-                    result = LLVMBuildAnd(builder, result, field_result, c_str!(""));
+                    // If field result is nonzero, return field result.
+                    LLVMPositionBuilderAtEnd(builder, done_block);
+                    LLVMBuildRet(builder, field_result);
+                    
+                    LLVMPositionBuilderAtEnd(builder, next_block);
                 }
-                result
+                
+                // All blocks equal, return 0.
+                LLVMBuildRet(builder, result); 
             }
-            // Vectors comprised of integers or structs of integers can be compared for using `memcmp`.
-            //
-            // XXX Note eventually when we support comparison for sorting, this won't work! We can
-            // then only support unsigned integers and booleans (and structs thereof).
+            // Vectors comprised of unsigned chars or booleans can be compared for using `memcmp`.
             Vector(ref elem) if elem.supports_memcmp() => {
-                let compare_data_block = LLVMAppendBasicBlockInContext(self.context, function, c_str!(""));
-                let done_block = LLVMAppendBasicBlockInContext(self.context, function, c_str!(""));
-
+                print!("vector memcmp\n");
                 let left_vector = self.load(builder, left)?;
                 let right_vector = self.load(builder, right)?;
                 let left_size = self.gen_size(builder, ty, left_vector)?;
                 let right_size = self.gen_size(builder, ty, right_vector)?;
-                let size_eq = gen_binop(builder, Equal, left_size, right_size, &Scalar(I64))?;
-                LLVMBuildCondBr(builder, size_eq, compare_data_block, done_block);
 
-                LLVMPositionBuilderAtEnd(builder, compare_data_block);
+                // memcmp will run off the end of the smaller buffer,
+                // so emulate strcmp semantics by stopping at the end of the smaller buffer.
+                // Note that this only works when both vectors have elements of the same type.
+                let min_size = gen_binop(builder, Min, left_size, right_size, &Scalar(I64))?;
+
                 let zero = self.i64(0);
                 let left_data = self.gen_at(builder, ty, left_vector, zero)?;
                 let right_data = self.gen_at(builder, ty, right_vector, zero)?;
@@ -194,7 +200,7 @@ impl GenCmp for LlvmGenerator {
                 let right_data = LLVMBuildBitCast(builder, right_data, self.void_pointer_type(), c_str!(""));
                 let elem_ty = self.llvm_type(elem)?;
                 let elem_size = self.size_of(elem_ty);
-                let bytes = LLVMBuildNSWMul(builder, left_size, elem_size, c_str!(""));
+                let bytes = LLVMBuildNSWMul(builder, min_size, elem_size, c_str!(""));
 
                 // Call memcmp
                 let name = "memcmp";
@@ -208,25 +214,11 @@ impl GenCmp for LlvmGenerator {
                 let ref mut args = [left_data, right_data, bytes];
                 let memcmp_result = self.intrinsics.call(builder, name, args)?;
 
-                // If MemCmp returns 0, the two buffers are equal.
-                let data_eq = gen_binop(builder, Equal, memcmp_result, self.i32(0), &Scalar(I32))?;
-                LLVMBuildBr(builder, done_block);
-
-                // Finished - build a PHI node to select the result.
-                LLVMPositionBuilderAtEnd(builder, done_block);
-                let result = LLVMBuildPhi(builder, self.i1_type(), c_str!(""));
-
-                let mut incoming_blocks = [entry_block, compare_data_block];
-                let mut incoming_values = [size_eq, data_eq];
-                LLVMAddIncoming(result,
-                                incoming_values.as_mut_ptr(),
-                                incoming_blocks.as_mut_ptr(),
-                                incoming_blocks.len() as u32);
-                result
+                LLVMBuildRet(builder, memcmp_result);
             }
             Vector(ref elem) => {
+                print!("vector loop cmp\n");
                 // Compare vectors with a loop. Check size like before.
-                let compare_data_block = LLVMAppendBasicBlockInContext(self.context, function, c_str!(""));
                 let loop_block = LLVMAppendBasicBlockInContext(self.context(), function,  c_str!(""));
                 let done_block = LLVMAppendBasicBlockInContext(self.context, function, c_str!(""));
 
@@ -234,12 +226,10 @@ impl GenCmp for LlvmGenerator {
                 let right_vector = self.load(builder, right)?;
                 let left_size = self.gen_size(builder, ty, left_vector)?;
                 let right_size = self.gen_size(builder, ty, right_vector)?;
-                let size_eq = gen_binop(builder, Equal, left_size, right_size, &Scalar(I64))?;
-                LLVMBuildCondBr(builder, size_eq, compare_data_block, done_block);
+                let min_size = gen_binop(builder, Min, left_size, right_size, &Scalar(I64))?;
 
-                LLVMPositionBuilderAtEnd(builder, compare_data_block);
                 // Check if there are any elements to loop over.
-                let check = LLVMBuildICmp(builder, LLVMIntNE, left_size, self.i64(0), c_str!(""));
+                let check = LLVMBuildICmp(builder, LLVMIntNE, min_size, self.i64(0), c_str!(""));
 
                 LLVMBuildCondBr(builder, check, loop_block, done_block);
                 LLVMPositionBuilderAtEnd(builder, loop_block);
@@ -252,7 +242,7 @@ impl GenCmp for LlvmGenerator {
                 let right_value = self.gen_at(builder, ty, right_vector, phi_i)?;
                 let mut args = [left_value, right_value];
                 let cmp_result = LLVMBuildCall(builder, func, args.as_mut_ptr(), args.len() as u32, c_str!(""));
-                let neq = LLVMBuildNot(builder, cmp_result, c_str!(""));
+                let neq = LLVMBuildICmp(builder, LLVMIntNE, cmp_result, self.i32(0), c_str!(""));
 
                 let updated_i = LLVMBuildNSWAdd(builder, phi_i, self.i64(1), c_str!(""));
                 let check1 = LLVMBuildICmp(builder, LLVMIntEQ, updated_i, left_size, c_str!(""));
@@ -260,22 +250,25 @@ impl GenCmp for LlvmGenerator {
                 // End loop if i == size || left != right
                 LLVMBuildCondBr(builder, check2, done_block, loop_block);
 
-                let mut blocks = [compare_data_block, loop_block];
+                let mut blocks = [entry_block, loop_block];
                 let mut values = [self.i64(0), updated_i];
                 LLVMAddIncoming(phi_i, values.as_mut_ptr(), blocks.as_mut_ptr(), values.len() as u32);
 
                 // Finish block - set result and compute number of consumed bits.
                 LLVMPositionBuilderAtEnd(builder, done_block);
-                let result = LLVMBuildPhi(builder, self.i1_type(), c_str!(""));
-                let mut blocks = [entry_block, compare_data_block, loop_block];
-                let mut values = [size_eq, self.i1(true), cmp_result];
+                let result = LLVMBuildPhi(builder, self.i32_type(), c_str!(""));
+                let mut blocks = [entry_block, loop_block];
+                let mut values = [self.i32(1), cmp_result];
                 LLVMAddIncoming(result, values.as_mut_ptr(), blocks.as_mut_ptr(), values.len() as u32);
-                result
+
+                LLVMBuildRet(builder, result);
             }
-            Function(_,_) | Unknown => unreachable!()
+            Function(_,_) | Unknown => {
+                print!("Unknown type!\n");
+                unreachable!()
+            }
         };
 
-        LLVMBuildRet(builder, result);
         LLVMDisposeBuilder(builder);
 
         self.cmp_fns.insert(ty.clone(), function);
