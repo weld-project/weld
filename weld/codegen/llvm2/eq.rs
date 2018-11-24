@@ -91,7 +91,8 @@ impl GenEq for LlvmGenerator {
         let result = match *ty {
             Builder(_, _) => unreachable!(),
             Dict(_, _) => unimplemented!(), // Dictionary Equality
-            Scalar(_) | Simd(_) => {
+            Simd(_) => unimplemented!(),
+            Scalar(_) => {
                 let left = self.load(builder, left)?;
                 let right = self.load(builder, right)?;
                 gen_binop(builder, Equal, left, right, ty)?

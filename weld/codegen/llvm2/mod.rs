@@ -59,7 +59,7 @@ use std::mem;
 use std::ffi::{CStr, CString};
 
 use fnv::FnvHashMap;
-use libc::{c_char, c_double, c_ulonglong};
+use libc::{c_char, c_double, c_uint, c_ulonglong};
 
 use conf::ParsedConf;
 use error::*;
@@ -305,8 +305,6 @@ pub struct LlvmGenerator {
     /// These are used by qsort.
     opaque_cmp_fns: FnvHashMap<Type, LLVMValueRef>,
     /// Opaque comparison functions that contain a key function, indexed by the ID of the key function.
-    keyfunc_cmp_fns: FnvHashMap<FunctionId, LLVMValueRef>,
-    /// Hash functions on various types.
     hash_fns: FnvHashMap<Type, LLVMValueRef>,
     /// Serialization functions on various types.
     serialize_fns: FnvHashMap<Type, LLVMValueRef>,
@@ -502,16 +500,7 @@ pub trait CodeGenExt {
 
     /// Returns the LLVM type corresponding to size_t on this architecture.
     unsafe fn size_t_type(&self) -> WeldResult<LLVMTypeRef> {
-        let size_t_bytes = mem::size_of::<libc::size_t>();
-        match size_t_bytes {
-            8 => Ok(self.i8_type()),
-            16 => Ok(self.i16_type()),
-            32 => Ok(self.i32_type()),
-            64 => Ok(self.i64_type()),
-            _ => {
-                return compile_err!("Unrecognized size in size_t")
-            }
-        }
+        Ok(LLVMIntTypeInContext(self.context(), mem::size_of::<libc::size_t>() as c_uint))
     }
 
     /// Computes the next power of two for the given value.
@@ -730,7 +719,6 @@ impl LlvmGenerator {
             opaque_eq_fns: FnvHashMap::default(),
             cmp_fns: FnvHashMap::default(),
             opaque_cmp_fns: FnvHashMap::default(),
-            keyfunc_cmp_fns: FnvHashMap::default(),
             hash_fns: FnvHashMap::default(),
             serialize_fns: FnvHashMap::default(),
             deserialize_fns: FnvHashMap::default(),
@@ -1276,7 +1264,6 @@ impl LlvmGenerator {
                 let output_type = context.sir_function.symbol_type(
                     statement.output.as_ref().unwrap())?;
                 
-                let ref cmpfunc_func = context.sir_program.funcs[*cmpfunc];
                 if let Vector(ref elem_ty) = *output_type {
                     let child_value = self.load(context.builder, context.get_value(child)?)?;
                     let child_type = context.sir_function.symbol_type(child)?;
@@ -1314,9 +1301,10 @@ impl LlvmGenerator {
                                            LLVMTypeOf(comparator),
                                            LLVMTypeOf(run)];
                     
-                    // Generate the call to qsort
+                    // Generate the call to qsort.
+                    // In-place sort. TODO: clone vector before sorting.
                     let void_type = self.void_type();
-                    self.intrinsics.add("qsort_r", void_type, &mut arg_tys); // In-place sort.
+                    self.intrinsics.add("qsort_r", void_type, &mut arg_tys); 
                     self.intrinsics.call(context.builder, "qsort_r", &mut args);
 
                     LLVMBuildStore(context.builder, child_value, output_pointer);

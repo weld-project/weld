@@ -1073,12 +1073,12 @@ fn gen_expr(expr: &Expr,
             } = cmpfunc.kind {
                 let cmpfunc_id = prog.add_func();
                 let cmpblock = prog.funcs[cmpfunc_id].add_block();
-                let (cmpfunc_id, cmpblock, cmp_sym) = gen_expr(body, prog, cmpfunc_id, cmpblock, tracker, multithreaded)?;
+                let (cmpfunc_id, cmpblock, cmp_sym) = gen_expr(body, prog, cmpfunc_id, cmpblock, tracker)?;
                 prog.funcs[cmpfunc_id].params.insert(params[0].name.clone(), params[0].ty.clone());
                 prog.funcs[cmpfunc_id].params.insert(params[1].name.clone(), params[1].ty.clone());
                 prog.funcs[cmpfunc_id].blocks[cmpblock].terminator = Terminator::EndFunction(cmp_sym.clone());
 
-                let (cur_func, cur_block, data_sym) = gen_expr(data, prog, cur_func, cur_block, tracker, multithreaded)?;
+                let (cur_func, cur_block, data_sym) = gen_expr(data, prog, cur_func, cur_block, tracker)?;
                 let cmp_function = prog.funcs[cmpfunc_id].clone();
 
                 let kind = Sort {
