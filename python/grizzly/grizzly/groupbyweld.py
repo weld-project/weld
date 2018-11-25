@@ -321,7 +321,7 @@ class GroupedDataFrameWeld(LazyOpResult):
             exprs.append(expr)
             i += 1
 
-        result = utils.group(exprs).evaluate(verbose=True, passes=passes)
+        result = utils.group(exprs).evaluate(verbose=verbose, passes=passes)
         df = pd.DataFrame(columns=[])
         all_columns = self.column_names + self.grouping_column_name
         for i, column_name in enumerate(all_columns):
