@@ -131,7 +131,7 @@ impl Default for SymbolTracker {
 /// Count the occurances of each symbol defined by a `Let` statement.
 fn count_symbols(expr: &Expr, usage: &mut FnvHashMap<Symbol, SymbolTracker>) {
     match expr.kind {
-        For { ref func, .. } | Iterate { update_func: ref func, .. } | Sort { keyfunc: ref func, .. } => {
+        For { ref func, .. } | Iterate { update_func: ref func, .. } | Sort { cmpfunc: ref func, .. } => {
             // Mark all symbols seen so far as "in a loop"
             for value in usage.values_mut() {
                 value.loop_nest += 1;

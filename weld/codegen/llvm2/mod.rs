@@ -55,10 +55,11 @@ extern crate llvm_sys;
 extern crate lazy_static;
 
 use std::fmt;
+use std::mem;
 use std::ffi::{CStr, CString};
 
 use fnv::FnvHashMap;
-use libc::{c_char, c_double, c_ulonglong};
+use libc::{c_char, c_double, c_uint, c_ulonglong};
 
 use conf::ParsedConf;
 use error::*;
@@ -91,6 +92,7 @@ macro_rules! c_str {
 }
 
 mod builder;
+mod cmp;
 mod dict;
 mod eq;
 mod hash;
@@ -296,7 +298,9 @@ pub struct LlvmGenerator {
     ///
     /// These are used by the dicitonary.
     opaque_eq_fns: FnvHashMap<Type, LLVMValueRef>,
-    /// Hash functions on various types.
+    /// Comparison functions on various types.
+    cmp_fns: FnvHashMap<Type, LLVMValueRef>,
+    /// Opaque comparison functions that contain a key function, indexed by the ID of the key function.
     hash_fns: FnvHashMap<Type, LLVMValueRef>,
     /// Serialization functions on various types.
     serialize_fns: FnvHashMap<Type, LLVMValueRef>,
@@ -488,6 +492,11 @@ pub trait CodeGenExt {
     unsafe fn size_of_bits(&self, ty: LLVMTypeRef) -> u64 {
         let layout = llvm_sys::target::LLVMGetModuleDataLayout(self.module());
         llvm_sys::target::LLVMSizeOfTypeInBits(layout, ty) as u64
+    }
+
+    /// Returns the LLVM type corresponding to size_t on this architecture.
+    unsafe fn size_t_type(&self) -> WeldResult<LLVMTypeRef> {
+        Ok(LLVMIntTypeInContext(self.context(), mem::size_of::<libc::size_t>() as c_uint))
     }
 
     /// Computes the next power of two for the given value.
@@ -704,6 +713,7 @@ impl LlvmGenerator {
             strings: FnvHashMap::default(),
             eq_fns: FnvHashMap::default(),
             opaque_eq_fns: FnvHashMap::default(),
+            cmp_fns: FnvHashMap::default(),
             hash_fns: FnvHashMap::default(),
             serialize_fns: FnvHashMap::default(),
             deserialize_fns: FnvHashMap::default(),
@@ -715,7 +725,6 @@ impl LlvmGenerator {
 
     /// Generate code for an SIR program.
     unsafe fn generate(conf: ParsedConf, program: &SirProgram) -> WeldResult<LlvmGenerator> {
-
         let mut gen = LlvmGenerator::new(conf)?;
 
         // Declare each function first to create a reference to it. Loop body functions are only
@@ -835,7 +844,7 @@ impl LlvmGenerator {
         // Run the Weld program.
         let entry_function = *self.functions.get(&program.funcs[0].id).unwrap();
         let inst = LLVMBuildCall(builder, entry_function,
-                              func_args.as_mut_ptr(), func_args.len() as u32, c_str!(""));
+                                 func_args.as_mut_ptr(), func_args.len() as u32, c_str!(""));
         LLVMSetInstructionCallConv(inst, SIR_FUNC_CALL_CONV);
 
         let result = self.intrinsics.call_weld_run_get_result(builder, run, None);
@@ -1245,8 +1254,56 @@ impl LlvmGenerator {
                     unreachable!()
                 }
             }
-            Sort { .. } => {
-                unimplemented!() // Sort
+            Sort { ref child, ref cmpfunc } => { // cmpfunc is an SirFunction
+                let output_pointer = context.get_value(output)?;
+                let output_type = context.sir_function.symbol_type(
+                    statement.output.as_ref().unwrap())?;
+                
+                if let Vector(ref elem_ty) = *output_type {
+                    let child_value = self.load(context.builder, context.get_value(child)?)?;
+                    let child_type = context.sir_function.symbol_type(child)?;
+
+                    use self::vector::VectorExt;
+                    let zero = self.zero(self.i64_type());
+                    let child_elems = self.gen_at(context.builder, child_type, child_value, zero)?;
+                    let elems_ptr = LLVMBuildBitCast(context.builder, child_elems,
+                                                     self.void_pointer_type(),
+                                                     c_str!(""));
+                    let size = self.gen_size(context.builder, child_type, child_value)?;
+                    let elem_ll_ty = self.llvm_type(elem_ty)?;
+                    let ty_size = self.size_of(elem_ll_ty);
+                    
+                    use self::cmp::GenCmp;
+                    let cmpfunc_ll_fn = self.functions[cmpfunc];
+
+                    let run = context.get_run();
+
+                    // Generate the comparator from the provided custom code.
+                    let comparator = self.gen_custom_cmp(elem_ll_ty,
+                                                         *cmpfunc,
+                                                         cmpfunc_ll_fn)?;
+
+                    // args to qsort_r are: base array pointer, num elements,
+                    // element size, comparator function, run handle
+                    let mut args = vec![elems_ptr, size, ty_size, comparator, run];
+                    let mut arg_tys = vec![LLVMTypeOf(elems_ptr),
+                                           LLVMTypeOf(size),
+                                           LLVMTypeOf(ty_size),
+                                           LLVMTypeOf(comparator),
+                                           LLVMTypeOf(run)];
+                    
+                    // Generate the call to qsort.
+                    // In-place sort. TODO: clone vector before sorting.
+                    let void_type = self.void_type();
+                    self.intrinsics.add("qsort_r", void_type, &mut arg_tys); 
+                    self.intrinsics.call(context.builder, "qsort_r", &mut args)?;
+
+                    LLVMBuildStore(context.builder, child_value, output_pointer);
+                    
+                    Ok(())
+                } else {
+                    unreachable!()
+                }
             }
             ToVec(ref child) => {
                 let output_pointer = context.get_value(output)?;
@@ -1372,11 +1429,11 @@ impl LlvmGenerator {
                     let value_ty = self.llvm_type(value)?;
                     let key_comparator = self.gen_eq_fn(key)?;
                     let dict = dict::Dict::define("dict",
-                                                    key_ty,
-                                                    key_comparator,
-                                                    value_ty,
-                                                    self.context,
-                                                    self.module);
+                                                  key_ty,
+                                                  key_comparator,
+                                                  value_ty,
+                                                  self.context,
+                                                  self.module);
                     self.dictionaries.insert(ty.clone(), dict);
                 }
                 self.dictionaries.get(ty).unwrap().dict_ty
