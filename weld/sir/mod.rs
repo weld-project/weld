@@ -1079,7 +1079,6 @@ fn gen_expr(expr: &Expr,
                 prog.funcs[cmpfunc_id].blocks[cmpblock].terminator = Terminator::EndFunction(cmp_sym.clone());
 
                 let (cur_func, cur_block, data_sym) = gen_expr(data, prog, cur_func, cur_block, tracker)?;
-                let cmp_function = prog.funcs[cmpfunc_id].clone();
 
                 let kind = Sort {
                     child: data_sym,

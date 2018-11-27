@@ -293,7 +293,7 @@ impl NumericExpressionGen for LlvmGenerator {
                                 LLVMBuildNot(ctx.builder, gt, c_str!(""))
                             }
                         }, 
-                        _ => unimplemented!(), // Vector comparison
+                        _ => unreachable!(),
                     };
 
                     // Extend the `i1` result to a boolean.

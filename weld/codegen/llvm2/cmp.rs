@@ -54,25 +54,18 @@ pub trait GenCmp {
     ///
     /// The comparators are over pointers of the type, e.g., a comparator for `i32`
     /// has the type signature `i1 (i32*, i32*)`. This method returns the generated function. The
-    /// function returns -1 if the first element is smaller, 0 if the elements are equal, and 1 if
+    /// function returns a value <0 if the first element is smaller, 0 if the elements are equal, and >0 if
     /// the first element is larger.
     unsafe fn gen_cmp_fn(&mut self, ty: &Type) -> WeldResult<LLVMValueRef>; 
 
-    /// Generates an opaque comparator for a type.
-    ///
-    /// Opaque comparators are linked externally and operate over opaque (i.e., `void*`)
-    /// arguments. These are used, e.g., as an argument to qsort. This method returns the
-    /// generated function.
-    unsafe fn gen_opaque_cmp_fn(&mut self, ty: &Type) -> WeldResult<LLVMValueRef>;
-
     /// Generates an opaque comparator using the specified comparator function.
     ///
-    /// The comparator should return -1 for left < right, 1 for left > right, and 0 for left == right.
-    /// These functions are not currently cached.
+    /// The comparator should return a value <0 if the first element is smaller, 0 if the elements are equal,
+    /// and >0 if the first element is larger.
     unsafe fn gen_custom_cmp(&mut self,
-                             elem_ty: &LLVMTypeRef,
-                             cf_id: &FunctionId,
-                             cmpfunc: &LLVMValueRef) -> WeldResult<LLVMValueRef>;
+                             elem_ty: LLVMTypeRef,
+                             cf_id: FunctionId,
+                             cmpfunc: LLVMValueRef) -> WeldResult<LLVMValueRef>;
 }
 
 impl GenCmp for LlvmGenerator {
@@ -106,14 +99,13 @@ impl GenCmp for LlvmGenerator {
 
         let (function, builder, entry_block) = self.define_function(ret_ty, &mut arg_tys, name);
 
-        LLVMExtAddAttrsOnFunction(self.context, function, &[InlineHint]);
         LLVMExtAddAttrsOnParameter(self.context, function, &[ReadOnly, NoAlias, NonNull, NoCapture], 0);
         LLVMExtAddAttrsOnParameter(self.context, function, &[ReadOnly, NoAlias, NonNull, NoCapture], 1);
 
         let left = LLVMGetParam(function, 0);
         let right = LLVMGetParam(function, 1);
 
-        let result = match *ty {
+        match *ty {
             Builder(_, _) => unreachable!(),
             Dict(_, _) => unimplemented!(), // dictionary comparison
             Simd(_) => unimplemented!(),
@@ -180,7 +172,7 @@ impl GenCmp for LlvmGenerator {
                 let right_size = self.gen_size(builder, ty, right_vector)?;
 
                 // memcmp will run off the end of the smaller buffer,
-                // so emulate strcmp semantics by stopping at the end of the smaller buffer.
+                // so emulate strcmp semantics by stopping at the end of the smaller buffer (and then comparing sizes).
                 // Note that this only works when both vectors have elements of the same type.
                 let min_size = gen_binop(builder, Min, left_size, right_size, &Scalar(I64))?;
 
@@ -205,7 +197,19 @@ impl GenCmp for LlvmGenerator {
                 let ref mut args = [left_data, right_data, bytes];
                 let memcmp_result = self.intrinsics.call(builder, name, args)?;
 
-                LLVMBuildRet(builder, memcmp_result);
+                // If all compared bytes were equal but sizes were not equal, the smaller vector is the lesser element.
+                let func = self.gen_cmp_fn(&Scalar(I64))?;
+                let left_size_ptr = LLVMBuildAlloca(builder, self.i64_type(), c_str!(""));
+                let right_size_ptr = LLVMBuildAlloca(builder, self.i64_type(), c_str!(""));
+                LLVMBuildStore(builder, left_size, left_size_ptr);
+                LLVMBuildStore(builder, right_size, right_size_ptr);
+                let mut args = [left_size_ptr, right_size_ptr];
+                let size_eq = LLVMBuildCall(builder, func, args.as_mut_ptr(), args.len() as u32, c_str!(""));
+                
+                let bytes_equal = LLVMBuildICmp(builder, LLVMIntEQ, memcmp_result, self.i32(0), c_str!(""));
+                let result = LLVMBuildSelect(builder, bytes_equal, size_eq, memcmp_result, c_str!(""));
+                
+                LLVMBuildRet(builder, result);
             }
             Vector(ref elem) => {
                 // Compare vectors with a loop. Check size like before.
@@ -235,7 +239,7 @@ impl GenCmp for LlvmGenerator {
                 let neq = LLVMBuildICmp(builder, LLVMIntNE, cmp_result, self.i32(0), c_str!(""));
 
                 let updated_i = LLVMBuildNSWAdd(builder, phi_i, self.i64(1), c_str!(""));
-                let check1 = LLVMBuildICmp(builder, LLVMIntEQ, updated_i, left_size, c_str!(""));
+                let check1 = LLVMBuildICmp(builder, LLVMIntEQ, updated_i, min_size, c_str!(""));
                 let check2 = LLVMBuildOr(builder, check1, neq, c_str!(""));
                 // End loop if i == size || left != right
                 LLVMBuildCondBr(builder, check2, done_block, loop_block);
@@ -248,9 +252,21 @@ impl GenCmp for LlvmGenerator {
                 LLVMPositionBuilderAtEnd(builder, done_block);
                 let result = LLVMBuildPhi(builder, self.i32_type(), c_str!(""));
                 let mut blocks = [entry_block, loop_block];
-                let mut values = [self.i32(1), cmp_result];
+                let mut values = [self.i32(0), cmp_result];
                 LLVMAddIncoming(result, values.as_mut_ptr(), blocks.as_mut_ptr(), values.len() as u32);
 
+                // If all compared bytes were equal but sizes were not equal, the smaller vector is the lesser element.
+                let func = self.gen_cmp_fn(&Scalar(I64))?;
+                let left_size_ptr = LLVMBuildAlloca(builder, self.i64_type(), c_str!(""));
+                let right_size_ptr = LLVMBuildAlloca(builder, self.i64_type(), c_str!(""));
+                LLVMBuildStore(builder, left_size, left_size_ptr);
+                LLVMBuildStore(builder, right_size, right_size_ptr);
+                let mut args = [left_size_ptr, right_size_ptr];
+                let size_eq = LLVMBuildCall(builder, func, args.as_mut_ptr(), args.len() as u32, c_str!(""));
+                
+                let bytes_equal = LLVMBuildICmp(builder, LLVMIntEQ, result, self.i32(0), c_str!(""));
+                let result = LLVMBuildSelect(builder, bytes_equal, size_eq, result, c_str!(""));
+                
                 LLVMBuildRet(builder, result);
             }
             Function(_,_) | Unknown => {
@@ -264,54 +280,10 @@ impl GenCmp for LlvmGenerator {
         Ok(function)
     }
 
-    /// Generates an opaque comparison function for a type.
-    unsafe fn gen_opaque_cmp_fn(&mut self, ty: &Type) -> WeldResult<LLVMValueRef> {
-        let result = self.opaque_cmp_fns.get(ty).cloned();
-        if let Some(result) = result {
-            return Ok(result)
-        }
-
-        let llvm_ty = self.llvm_type(ty)?;
-        let mut arg_tys = [self.void_pointer_type(), self.void_pointer_type()];
-        let ret_ty = self.i32_type();
-
-        let c_prefix = LLVMPrintTypeToString(llvm_ty);
-        let prefix = CStr::from_ptr(c_prefix);
-        let prefix = prefix.to_str().unwrap();
-        let name = format!("{}.opaque_cmp", prefix);
-
-        // Free the allocated string.
-        LLVMDisposeMessage(c_prefix);
-
-        let (function, builder, _) = self.define_function_with_visibility(ret_ty,
-                                                                          &mut arg_tys,
-                                                                          LLVMLinkage::LLVMExternalLinkage,
-                                                                          name);
-
-        LLVMExtAddAttrsOnFunction(self.context, function, &[InlineHint]);
-        LLVMExtAddAttrsOnParameter(self.context, function, &[ReadOnly, NoAlias, NonNull, NoCapture], 0);
-        LLVMExtAddAttrsOnParameter(self.context, function, &[ReadOnly, NoAlias, NonNull, NoCapture], 1);
-
-        let left = LLVMGetParam(function, 0);
-        let right = LLVMGetParam(function, 1);
-        let left = LLVMBuildBitCast(builder, left, LLVMPointerType(llvm_ty, 0), c_str!(""));
-        let right = LLVMBuildBitCast(builder, right, LLVMPointerType(llvm_ty, 0), c_str!(""));
-
-        let func = self.gen_cmp_fn(ty)?;
-        let mut args = [left, right];
-        let result = LLVMBuildCall(builder, func, args.as_mut_ptr(), args.len() as u32, c_str!(""));
-        let result = LLVMBuildZExt(builder, result, self.i32_type(), c_str!(""));
-        LLVMBuildRet(builder, result);
-        LLVMDisposeBuilder(builder);
-
-        self.opaque_cmp_fns.insert(ty.clone(), function);
-        Ok(function)
-    }
-
     unsafe fn gen_custom_cmp(&mut self,
-                             elem_ty: &LLVMTypeRef,
-                             cf_id: &FunctionId,
-                             cmpfunc: &LLVMValueRef) -> WeldResult<LLVMValueRef> {
+                             elem_ty: LLVMTypeRef,
+                             cf_id: FunctionId,
+                             cmpfunc: LLVMValueRef) -> WeldResult<LLVMValueRef> {
         let mut arg_tys = [self.void_pointer_type(), self.void_pointer_type(), self.run_handle_type()];
         let ret_ty = self.i32_type();
 
@@ -329,8 +301,8 @@ impl GenCmp for LlvmGenerator {
         let left  = LLVMGetParam(function, 0);
         let right = LLVMGetParam(function, 1);
         let run   = LLVMGetParam(function, 2);
-        let left  = LLVMBuildBitCast(builder, left,  LLVMPointerType(*elem_ty, 0), c_str!(""));
-        let right = LLVMBuildBitCast(builder, right, LLVMPointerType(*elem_ty, 0), c_str!(""));
+        let left  = LLVMBuildBitCast(builder, left,  LLVMPointerType(elem_ty, 0), c_str!(""));
+        let right = LLVMBuildBitCast(builder, right, LLVMPointerType(elem_ty, 0), c_str!(""));
 
         // Load arguments.
         let left_value  = self.load(builder, left)?;
@@ -338,7 +310,7 @@ impl GenCmp for LlvmGenerator {
         let mut cmp_args  = [left_value, right_value, run];
 
         // Call the comparator.
-        let result = LLVMBuildCall(builder, *cmpfunc, cmp_args.as_mut_ptr(),
+        let result = LLVMBuildCall(builder, cmpfunc, cmp_args.as_mut_ptr(),
                                    cmp_args.len() as u32, c_str!(""));
         LLVMSetInstructionCallConv(result, SIR_FUNC_CALL_CONV);
 

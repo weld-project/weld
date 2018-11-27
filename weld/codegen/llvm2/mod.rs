@@ -300,10 +300,6 @@ pub struct LlvmGenerator {
     opaque_eq_fns: FnvHashMap<Type, LLVMValueRef>,
     /// Comparison functions on various types.
     cmp_fns: FnvHashMap<Type, LLVMValueRef>,
-    /// Opaque, externally visible wrappers for comparison functions.
-    ///
-    /// These are used by qsort.
-    opaque_cmp_fns: FnvHashMap<Type, LLVMValueRef>,
     /// Opaque comparison functions that contain a key function, indexed by the ID of the key function.
     hash_fns: FnvHashMap<Type, LLVMValueRef>,
     /// Serialization functions on various types.
@@ -718,7 +714,6 @@ impl LlvmGenerator {
             eq_fns: FnvHashMap::default(),
             opaque_eq_fns: FnvHashMap::default(),
             cmp_fns: FnvHashMap::default(),
-            opaque_cmp_fns: FnvHashMap::default(),
             hash_fns: FnvHashMap::default(),
             serialize_fns: FnvHashMap::default(),
             deserialize_fns: FnvHashMap::default(),
@@ -1268,8 +1263,6 @@ impl LlvmGenerator {
                     let child_value = self.load(context.builder, context.get_value(child)?)?;
                     let child_type = context.sir_function.symbol_type(child)?;
 
-                    use ast::Type::Scalar;
-                    use ast::ScalarKind;
                     use self::vector::VectorExt;
                     let zero = self.zero(self.i64_type());
                     let child_elems = self.gen_at(context.builder, child_type, child_value, zero)?;
@@ -1277,7 +1270,7 @@ impl LlvmGenerator {
                                                      self.void_pointer_type(),
                                                      c_str!(""));
                     let size = self.gen_size(context.builder, child_type, child_value)?;
-                    let mut elem_ll_ty = self.llvm_type(&*elem_ty)?;
+                    let elem_ll_ty = self.llvm_type(elem_ty)?;
                     let ty_size = self.size_of(elem_ll_ty);
                     
                     use self::cmp::GenCmp;
@@ -1286,11 +1279,9 @@ impl LlvmGenerator {
                     let run = context.get_run();
 
                     // Generate the comparator from the provided custom code.
-                    // The custom comparator can only make use of BinOps that are supported by Weld
-                    // (e.g., lt/gt between scalars, vectors, or structs).
-                    let comparator = self.gen_custom_cmp(&elem_ll_ty,
-                                                         cmpfunc,
-                                                         &cmpfunc_ll_fn)?;
+                    let comparator = self.gen_custom_cmp(elem_ll_ty,
+                                                         *cmpfunc,
+                                                         cmpfunc_ll_fn)?;
 
                     // args to qsort_r are: base array pointer, num elements,
                     // element size, comparator function, run handle
@@ -1305,7 +1296,7 @@ impl LlvmGenerator {
                     // In-place sort. TODO: clone vector before sorting.
                     let void_type = self.void_type();
                     self.intrinsics.add("qsort_r", void_type, &mut arg_tys); 
-                    self.intrinsics.call(context.builder, "qsort_r", &mut args);
+                    self.intrinsics.call(context.builder, "qsort_r", &mut args)?;
 
                     LLVMBuildStore(context.builder, child_value, output_pointer);
                     
