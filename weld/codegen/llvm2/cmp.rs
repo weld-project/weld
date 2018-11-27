@@ -4,11 +4,16 @@ extern crate llvm_sys;
 
 use std::ffi::{CStr, CString};
 
+use ast::BinOpKind::*;
 use ast::Type;
-use super::vector::VectorExt;
 use ast::ScalarKind::{I32, I64};
+use codegen::llvm2::numeric::gen_binop;
+use codegen::llvm2::SIR_FUNC_CALL_CONV;
 use error::*;
 use sir::FunctionId;
+
+use super::vector;
+use super::vector::VectorExt;
 
 use super::llvm_exts::*;
 use super::llvm_exts::LLVMExtAttribute::*;
@@ -20,10 +25,6 @@ use self::llvm_sys::LLVMIntPredicate::*;
 
 use super::CodeGenExt;
 use super::LlvmGenerator;
-
-use ast::BinOpKind::*;
-use codegen::llvm2::numeric::gen_binop;
-use codegen::llvm2::SIR_FUNC_CALL_CONV;
 
 /// Returns whether a value can be compared with libc's `memcmp`.
 trait SupportsMemCmp {
@@ -166,21 +167,25 @@ impl GenCmp for LlvmGenerator {
             }
             // Vectors comprised of unsigned chars or booleans can be compared for using `memcmp`.
             Vector(ref elem) if elem.supports_memcmp() => {
-                let left_vector = self.load(builder, left)?;
-                let right_vector = self.load(builder, right)?;
-                let left_size = self.gen_size(builder, ty, left_vector)?;
-                let right_size = self.gen_size(builder, ty, right_vector)?;
+                let left_data_ptr = LLVMBuildStructGEP(builder, left, vector::POINTER_INDEX, c_str!(""));
+                let left_data = self.load(builder, left_data_ptr)?;
+                let left_cast = LLVMBuildBitCast(builder, left_data,
+                                                 self.void_pointer_type(), c_str!(""));
+                let right_data_ptr = LLVMBuildStructGEP(builder, right, vector::POINTER_INDEX, c_str!(""));
+                let right_data = self.load(builder, right_data_ptr)?;
+                let right_cast = LLVMBuildBitCast(builder, right_data,
+                                                  self.void_pointer_type(), c_str!(""));
+                
+                let left_size_ptr = LLVMBuildStructGEP(builder, left, vector::SIZE_INDEX, c_str!(""));
+                let left_size = self.load(builder, left_size_ptr)?;
+                let right_size_ptr = LLVMBuildStructGEP(builder, right, vector::SIZE_INDEX, c_str!(""));
+                let right_size = self.load(builder, right_size_ptr)?;
 
                 // memcmp will run off the end of the smaller buffer,
                 // so emulate strcmp semantics by stopping at the end of the smaller buffer (and then comparing sizes).
                 // Note that this only works when both vectors have elements of the same type.
                 let min_size = gen_binop(builder, Min, left_size, right_size, &Scalar(I64))?;
 
-                let zero = self.i64(0);
-                let left_data = self.gen_at(builder, ty, left_vector, zero)?;
-                let right_data = self.gen_at(builder, ty, right_vector, zero)?;
-                let left_data = LLVMBuildBitCast(builder, left_data, self.void_pointer_type(), c_str!(""));
-                let right_data = LLVMBuildBitCast(builder, right_data, self.void_pointer_type(), c_str!(""));
                 let elem_ty = self.llvm_type(elem)?;
                 let elem_size = self.size_of(elem_ty);
                 let bytes = LLVMBuildNSWMul(builder, min_size, elem_size, c_str!(""));
@@ -194,15 +199,11 @@ impl GenCmp for LlvmGenerator {
                     LLVMExtAddAttrsOnParameter(self.context, memcmp, &[ReadOnly, NoCapture], 0);
                     LLVMExtAddAttrsOnParameter(self.context, memcmp, &[ReadOnly, NoCapture], 1);
                 }
-                let ref mut args = [left_data, right_data, bytes];
+                let ref mut args = [left_cast, right_cast, bytes];
                 let memcmp_result = self.intrinsics.call(builder, name, args)?;
 
                 // If all compared bytes were equal but sizes were not equal, the smaller vector is the lesser element.
                 let func = self.gen_cmp_fn(&Scalar(I64))?;
-                let left_size_ptr = LLVMBuildAlloca(builder, self.i64_type(), c_str!(""));
-                let right_size_ptr = LLVMBuildAlloca(builder, self.i64_type(), c_str!(""));
-                LLVMBuildStore(builder, left_size, left_size_ptr);
-                LLVMBuildStore(builder, right_size, right_size_ptr);
                 let mut args = [left_size_ptr, right_size_ptr];
                 let size_eq = LLVMBuildCall(builder, func, args.as_mut_ptr(), args.len() as u32, c_str!(""));
                 
@@ -218,8 +219,12 @@ impl GenCmp for LlvmGenerator {
 
                 let left_vector = self.load(builder, left)?;
                 let right_vector = self.load(builder, right)?;
-                let left_size = self.gen_size(builder, ty, left_vector)?;
-                let right_size = self.gen_size(builder, ty, right_vector)?;
+                
+                let left_size_ptr = LLVMBuildStructGEP(builder, left, vector::SIZE_INDEX, c_str!(""));
+                let left_size = self.load(builder, left_size_ptr)?;
+                let right_size_ptr = LLVMBuildStructGEP(builder, right, vector::SIZE_INDEX, c_str!(""));
+                let right_size = self.load(builder, right_size_ptr)?;
+
                 let min_size = gen_binop(builder, Min, left_size, right_size, &Scalar(I64))?;
 
                 // Check if there are any elements to loop over.
@@ -257,10 +262,6 @@ impl GenCmp for LlvmGenerator {
 
                 // If all compared bytes were equal but sizes were not equal, the smaller vector is the lesser element.
                 let func = self.gen_cmp_fn(&Scalar(I64))?;
-                let left_size_ptr = LLVMBuildAlloca(builder, self.i64_type(), c_str!(""));
-                let right_size_ptr = LLVMBuildAlloca(builder, self.i64_type(), c_str!(""));
-                LLVMBuildStore(builder, left_size, left_size_ptr);
-                LLVMBuildStore(builder, right_size, right_size_ptr);
                 let mut args = [left_size_ptr, right_size_ptr];
                 let size_eq = LLVMBuildCall(builder, func, args.as_mut_ptr(), args.len() as u32, c_str!(""));
                 
