@@ -556,9 +556,9 @@ impl InferTypesInternal for Expr {
                 }
             }
 
-            Sort { ref mut data, ref mut keyfunc } => {
+            Sort { ref mut data, ref mut cmpfunc } => {
                 if let Vector(ref elem_type) = data.ty {
-                    let mut changed = sync_function(keyfunc, vec![&elem_type])?;
+                    let mut changed = sync_function(cmpfunc, vec![&elem_type, &elem_type])?;
                     changed |= self.ty.push(&data.ty)?;
                     Ok(changed)
                 } else if data.ty == Unknown {

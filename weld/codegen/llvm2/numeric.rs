@@ -19,6 +19,7 @@ use std::ffi::CString;
 
 use self::llvm_sys::prelude::*;
 use self::llvm_sys::core::*;
+use self::llvm_sys::LLVMIntPredicate::*;
 
 use codegen::llvm2::intrinsic::Intrinsics;
 
@@ -230,7 +231,7 @@ impl NumericExpressionGen for LlvmGenerator {
 
     unsafe fn gen_binop(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()> {
         use ast::BinOpKind;
-        use ast::Type::{Scalar, Simd, Vector};
+        use ast::Type::{Scalar, Simd, Vector, Struct};
         use sir::StatementKind::BinOp;
         if let BinOp { op, ref left, ref right } = statement.kind {
             let ty = ctx.sir_function.symbol_type(left)?;
@@ -250,7 +251,8 @@ impl NumericExpressionGen for LlvmGenerator {
                         result
                     }
                 }
-                &Vector(_) if op.is_comparison() => {
+                &Vector(_) | &Struct(_) if op.is_comparison() => {
+                    // Note that we assume structs being compared have the same type.
                     let result = match op {
                         BinOpKind::Equal | BinOpKind::NotEqual => {
                             use super::eq::GenEq;
@@ -262,13 +264,41 @@ impl NumericExpressionGen for LlvmGenerator {
                             } else {
                                 LLVMBuildNot(ctx.builder, equal, c_str!(""))
                             }
-                        }
-                        _ => unimplemented!(), // Vector comparison
+                        },
+                        BinOpKind::LessThan | BinOpKind::GreaterThanOrEqual => {
+                            use super::cmp::GenCmp;
+                            let func = self.gen_cmp_fn(ty)?;
+                            let mut args = [ctx.get_value(left)?, ctx.get_value(right)?];
+                            let cmp = LLVMBuildCall(ctx.builder, func, args.as_mut_ptr(), args.len() as u32, c_str!(""));
+                            let lt = LLVMBuildICmp(ctx.builder, LLVMIntSLT, cmp,
+                                                   self.i32(0), c_str!(""));
+                            
+                            if op == BinOpKind::LessThan {
+                                lt
+                            } else {
+                                LLVMBuildNot(ctx.builder, lt, c_str!(""))
+                            }
+                        }, 
+                        BinOpKind::GreaterThan | BinOpKind::LessThanOrEqual => {
+                            use super::cmp::GenCmp;
+                            let func = self.gen_cmp_fn(ty)?;
+                            let mut args = [ctx.get_value(left)?, ctx.get_value(right)?];
+                            let cmp = LLVMBuildCall(ctx.builder, func, args.as_mut_ptr(), args.len() as u32, c_str!(""));
+                            let gt = LLVMBuildICmp(ctx.builder, LLVMIntSGT, cmp,
+                                                   self.i32(0), c_str!(""));
+                            
+                            if op == BinOpKind::GreaterThan {
+                                gt
+                            } else {
+                                LLVMBuildNot(ctx.builder, gt, c_str!(""))
+                            }
+                        }, 
+                        _ => unreachable!(),
                     };
 
                     // Extend the `i1` result to a boolean.
                     self.i1_to_bool(ctx.builder, result)
-                }
+                },
                 // Invalid binary operator.
                 _ => unreachable!(),
             };

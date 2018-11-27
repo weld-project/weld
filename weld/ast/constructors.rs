@@ -218,11 +218,11 @@ pub fn slice_expr(data: Expr, index: Expr, size: Expr) -> WeldResult<Expr> {
              ty)
 }
 
-pub fn sort_expr(data: Expr, keyfunc: Expr) -> WeldResult<Expr> {
+pub fn sort_expr(data: Expr, cmpfunc: Expr) -> WeldResult<Expr> {
     let mut type_checked = false;
 
     if let Vector(ref vec_ty) = data.ty {
-        if let Function(ref params, ref body) = keyfunc.ty {
+        if let Function(ref params, ref body) = cmpfunc.ty {
             if params.len() == 1 && params[0] == **vec_ty {
                 if let Scalar(_) = **body {
                     type_checked = true;
@@ -239,7 +239,7 @@ pub fn sort_expr(data: Expr, keyfunc: Expr) -> WeldResult<Expr> {
     let ty = data.ty.clone();
     new_expr(Sort {
                  data: Box::new(data),
-                 keyfunc: Box::new(keyfunc),
+                 cmpfunc: Box::new(cmpfunc),
              },
              ty)
 }
