@@ -21,3 +21,8 @@ macro sum(data) = (
     |b,i,x| merge(b, x)
   ))
 );
+
+# Default comparator.
+macro compare(e1, e2) = (
+  if(e1 > e2, 1, if(e1 < e2, -1, 0))
+);

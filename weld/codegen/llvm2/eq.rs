@@ -26,12 +26,12 @@ use codegen::llvm2::numeric::gen_binop;
 /// Returns whether a value can be compared with libc's `memcmp`.
 ///
 /// XXX For now, this returns true if `memcmp` can be used for equality.
-trait SupportsMemCmp {
-    fn supports_memcmp(&self) -> bool;
+trait SupportsMemCmpEq {
+    fn supports_memcmp_eq(&self) -> bool;
 }
 
-impl SupportsMemCmp for Type {
-    fn supports_memcmp(&self) -> bool {
+impl SupportsMemCmpEq for Type {
+    fn supports_memcmp_eq(&self) -> bool {
         use ast::Type::*;
         // Structs do not support memcmp because they may be padded.
         match *self {
@@ -91,7 +91,8 @@ impl GenEq for LlvmGenerator {
         let result = match *ty {
             Builder(_, _) => unreachable!(),
             Dict(_, _) => unimplemented!(), // Dictionary Equality
-            Scalar(_) | Simd(_) => {
+            Simd(_) => unimplemented!(),
+            Scalar(_) => {
                 let left = self.load(builder, left)?;
                 let right = self.load(builder, right)?;
                 gen_binop(builder, Equal, left, right, ty)?
@@ -112,7 +113,7 @@ impl GenEq for LlvmGenerator {
             //
             // XXX Note eventually when we support comparison for sorting, this won't work! We can
             // then only support unsigned integers and booleans (and structs thereof).
-            Vector(ref elem) if elem.supports_memcmp() => {
+            Vector(ref elem) if elem.supports_memcmp_eq() => {
                 let compare_data_block = LLVMAppendBasicBlockInContext(self.context, function, c_str!(""));
                 let done_block = LLVMAppendBasicBlockInContext(self.context, function, c_str!(""));
 

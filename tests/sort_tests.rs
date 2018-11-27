@@ -5,7 +5,7 @@ extern crate weld;
 mod common;
 use common::*;
 
-// #[test]
+#[test]
 fn string_sort() {
     #[derive(Clone)]
     #[allow(dead_code)]
@@ -25,7 +25,7 @@ fn string_sort() {
         x: WeldVec::from(&strs),
     };
 
-    let code = "|e0: vec[vec[u8]]| sort(e0, |i:vec[u8]| i)";
+    let code = "|e0: vec[vec[u8]]| sort(e0, |x:vec[u8], y:vec[u8]| compare(x, y))";
 
     let ref conf = default_conf();
     let ret_value = compile_and_run(code, conf, input_data);
@@ -39,16 +39,14 @@ fn string_sort() {
             assert_eq!(val, sorted[i as usize][j as usize])
         }
     }
-
-
 }
 
-// #[test]
+#[test]
 fn if_sort() {
     let ys = vec![2, 3, 1, 4, 5];
     let ref input_data = WeldVec::from(&ys);
 
-    let code = "|ys:vec[i32]| sort(ys, |x:i32| if(x != 5, x + 1, 0))";
+    let code = "|ys:vec[i32]| sort(ys, |x:i32, y:i32| compare(if(x != 5, x + 1, 0), if(y != 5, y + 1, 0)))";
     let ref conf = default_conf();
     let ret_value = compile_and_run(code, conf, input_data);
     let data = ret_value.data() as *const WeldVec<i32>;
@@ -62,12 +60,12 @@ fn if_sort() {
     }
 }
 
-// #[test]
+#[test]
 fn simple_sort() {
     let ys = vec![2, 3, 1, 4, 5];
     let ref input_data = WeldVec::from(&ys);
 
-    let code = "|ys:vec[i32]| sort(ys, |x:i32| x + 1)";
+    let code = "|ys:vec[i32]| sort(ys, |x:i32, y:i32| if(x+1 > y+1, 1, if(x+1 < y+1, -1, 0)))";
     let ref conf = default_conf();
     let ret_value = compile_and_run(code, conf, input_data);
     let data = ret_value.data() as *const WeldVec<i32>;
@@ -80,12 +78,10 @@ fn simple_sort() {
         assert_eq!(unsafe { *result.data.offset(i) }, expected[i as usize])
     }
 
-
-
     let ys = vec![2.0, 3.0, 1.0, 5.001, 5.0001];
     let ref input_data = WeldVec::from(&ys);
 
-    let code = "|ys:vec[f64]| sort(sort(ys, |x:f64| x), |x:f64| x)";
+    let code = "|ys:vec[f64]| sort(sort(ys, |x:f64, y:f64| compare(x, y)), |x:f64, y:f64| compare(x, y))";
     let ref conf = default_conf();
     let ret_value = compile_and_run(code, conf, input_data);
     let data = ret_value.data() as *const WeldVec<f64>;
@@ -97,7 +93,7 @@ fn simple_sort() {
         assert_eq!(unsafe { *result.data.offset(i) }, expected[i as usize])
     }
 
-    let code = "|ys:vec[f64]| sort(ys, |x:f64| 1.0 / exp(-1.0*x))";
+    let code = "|ys:vec[f64]| sort(ys, |x:f64, y:f64| compare(1.0 / exp(-1.0*x), 1.0 / exp(-1.0*y)))";
     let ref conf = default_conf();
     let ret_value = compile_and_run(code, conf, input_data);
     let data = ret_value.data() as *const WeldVec<f64>;
@@ -111,7 +107,7 @@ fn simple_sort() {
 
 }
 
-// #[test]
+#[test]
 fn complex_sort() {
     #[derive(Clone)]
     #[allow(dead_code)]
@@ -131,12 +127,12 @@ fn complex_sort() {
                   sort(
                     result(
                       for(
-                        zip(xs,ys),
+                        zip(ys,xs),
                         appender[{i32,i32}],
                         |b,i,e| merge(b, e)
                       )
                     ),
-                    |x:{i32, i32}| x.$0
+                    |x:{i32, i32}, y:{i32, i32}| compare(x.$0, y.$0)
                 )";
     let ref conf = default_conf();
     let ret_value = compile_and_run(code, conf, input_data);
@@ -156,6 +152,113 @@ fn complex_sort() {
             expected[i as usize][1]
         );
     }
+}
 
+#[test]
+fn mixed_type_sort() {
+    #[derive(Clone)]
+    #[allow(dead_code)]
+    #[repr(C)]
+    struct Elem {
+        x: f64,
+        y: i32,
+        z: WeldVec<u8>,
+    };
+    
+    #[derive(Clone)]
+    #[allow(dead_code)]
+    struct Args {
+        x: WeldVec<Elem>,
+    };
 
+    let s1 = vec!['A' as u8, 'B' as u8];
+    let s2 = vec!['C' as u8, 'D' as u8];
+    let s3 = vec!['F' as u8];
+
+    let e1 = Elem { x: 1.0, y: 3, z: WeldVec::from(&s1) };
+    let e2 = Elem { x: 0.5, y: 6, z: WeldVec::from(&s2) };
+    let e3 = Elem { x: 0.5, y: 3, z: WeldVec::from(&s3) };
+
+    let elems = vec![e1.clone(), e2.clone(), e3.clone()];
+    let sorted = vec![e3, e2, e1];
+    let sorted_strs = vec![s3.clone(), s2.clone(), s1.clone()]; // simplifies checking
+    
+    let ref input_data = Args {
+        x: WeldVec::from(&elems),
+    };
+
+    let code = "|e0: vec[{f64,i32,vec[u8]}]| sort(e0, |x:{f64,i32,vec[u8]}, y:{f64,i32,vec[u8]}| compare(x, y))";
+
+    let ref conf = default_conf();
+    
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = ret_value.data() as *const WeldVec<Elem>;
+    let result = unsafe { (*data).clone() };
+
+    for i in 0..(result.len as isize) {
+        let elt = unsafe { (*result.data.offset(i)).clone() };
+        assert_eq!(elt.x, sorted[i as usize].x);
+        assert_eq!(elt.y, sorted[i as usize].y);
+        for j in 0..(elt.z.len as isize) {
+            let c = unsafe { (*elt.z.data.offset(j)) };
+            assert_eq!(c, sorted_strs[i as usize][j as usize]);
+        }
+    }
+}
+
+#[test]
+fn nested_struct_sort() {
+    #[derive(Clone)]
+    #[allow(dead_code)]
+    #[repr(C)]
+    struct InnerElem {
+        x: i32,
+        y: i32,
+    };
+
+    #[derive(Clone)]
+    #[allow(dead_code)]
+    #[repr(C)]
+    struct Elem {
+        x: i32,
+        y: i32,
+        z: InnerElem,
+    };
+    
+    #[derive(Clone)]
+    #[allow(dead_code)]
+    struct Args {
+        x: WeldVec<Elem>,
+    };
+
+    let s1 = InnerElem { x: 1, y: 2 };
+    let s2 = InnerElem { x: 0, y: 2 };
+    let s3 = InnerElem { x: 0, y: 3 };
+
+    let e1 = Elem { x: 2, y: 3, z: s1 };
+    let e2 = Elem { x: 1, y: 3, z: s2 };
+    let e3 = Elem { x: 1, y: 3, z: s3 };
+
+    let elems = vec![e1.clone(), e2.clone(), e3.clone()];
+    let sorted = vec![e2, e3, e1];
+    
+    let ref input_data = Args {
+        x: WeldVec::from(&elems),
+    };
+
+    let code = "|e0: vec[{i32, i32, {i32, i32}}]| sort(e0, |x:{i32, i32, {i32, i32}}, y:{i32, i32, {i32, i32}}| compare(x, y))";
+
+    let ref conf = default_conf();
+    
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = ret_value.data() as *const WeldVec<Elem>;
+    let result = unsafe { (*data).clone() };
+
+    for i in 0..(result.len as isize) {
+        let elt = unsafe { (*result.data.offset(i)).clone() };
+        assert_eq!(elt.x, sorted[i as usize].x);
+        assert_eq!(elt.y, sorted[i as usize].y);
+        assert_eq!(elt.z.x, sorted[i as usize].z.x);
+        assert_eq!(elt.z.y, sorted[i as usize].z.y);
+    }
 }
