@@ -1317,7 +1317,6 @@ impl LlvmGenerator {
                     };
 
                     // Generate the call to qsort.
-                    // In-place sort. TODO: clone vector before sorting.
                     let void_type = self.void_type();
                     self.intrinsics.add("qsort_r", void_type, &mut arg_tys);
                     self.intrinsics.call(context.builder, "qsort_r", &mut args)?;
