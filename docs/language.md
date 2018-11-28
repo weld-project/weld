@@ -136,11 +136,11 @@ refer to types.
 
 * `lookup(dict, key)` and `lookup(vec, index)` return an element from a dictionary and vector respectively. `index` must be of type `i64`. It is an error to call `lookup` on a dictionary
   with a key that does not exist: see `keyexists`.
-* `optlookup(dict, key)` batches `keyexists and `lookup` into a single call. This can be more efficient since the key only needs to be hashed a single time. This operator returns `{bool, V}` where the boolean indicates whether the key was present in the dictionary. If the boolean is false, it is an error to access `V`; although this is not enforced at the moment, the type system may be extended to support it eventually (e.g., by adding an `option` type).
+* `optlookup(dict, key)` batches `keyexists` and `lookup` into a single call. This can be more efficient since the key only needs to be hashed a single time. This operator returns `{bool, V}` (`V` is the value type) where the boolean indicates whether the key was present in the dictionary. If the boolean is false, it is an error to access `V`; although this is not enforced at the moment, the type system may be extended to support it eventually (e.g., by adding an `option` type).
 * `keyexists(dict, key)` returns whether the `key` is in `dict`.
 * `len(vec)` return its length as an `i64`.
 * `slice(vec, index, size)` creates a view into a vector without allocating memory starting at `index` and containing `size` elements. Both must be of type `i64`.
-* `sort(vec, func)` sorts a vector. `func` is of type `|T, T| => i32`, where `T` is the input vector element type. The function should return a positive integer if `left > right`, an negative number if `left < right`, and zero if `left == right`. By default, using the comparison binary operators, vectors are compared lexigraphically and structs are compared field-by-field from left to right. Sorting on vectors of dictionaries, builders, and SIMD values is currently disallowed.
+* `sort(vec, func)` sorts a vector. `func` is of type `|T, T| => i32`, where `T` is the input vector's element type. The function returns a positive `i32` if `left > right`, a negative integer if `left < right`, and zero if `left == right`. By default, using the comparison binary operators, vectors are compared lexigraphically and structs are compared field-by-field from left to right. Sorting on vectors of dictionaries, builders, and SIMD values is currently disallowed.
 * `struct.$0`, `struct.$1`, etc. are used to access fields of a struct.
 * `tovec(dict)` gets the entries of a dictionary as a vector of `{K, V}` pairs.
 
