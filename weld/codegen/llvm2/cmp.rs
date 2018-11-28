@@ -61,8 +61,15 @@ pub trait GenCmp {
 
     /// Generates an opaque comparator using the specified comparator function.
     ///
-    /// The comparator should return a value <0 if the first element is smaller, 0 if the elements are equal,
+    /// The comparator should return a value < 0 if the first element is smaller, 0 if the elements are equal,
     /// and >0 if the first element is larger.
+    ///
+    /// # Portability Notes
+    ///
+    /// The opaque comparator is generated with a function signature compatible with the `libc`
+    /// `qsort_r` function. Note that the function signature is slightly different for Linux
+    /// platforms and FreeBSD platforms: as such, the code generated will differ by platform as
+    /// well.
     unsafe fn gen_custom_cmp(&mut self,
                              elem_ty: LLVMTypeRef,
                              cf_id: FunctionId,

@@ -1292,7 +1292,6 @@ impl LlvmGenerator {
                     //
                     // MacOS and Linux pass arguments to qsort_r in different order.
                     let (mut args, mut arg_tys) = if cfg!(target_os = "macos") {
-                        println!("macos");
                         let mut args = vec![elems_ptr, size, ty_size, run, comparator];
                         let mut arg_tys = vec![
                             LLVMTypeOf(elems_ptr),
