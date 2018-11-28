@@ -2,11 +2,11 @@
 
 extern crate llvm_sys;
 
-use std::ffi::{CStr, CString};
+use std::ffi::CStr;
 
 use ast::BinOpKind::*;
 use ast::Type;
-use ast::ScalarKind::{I32, I64};
+use ast::ScalarKind::I64;
 use codegen::llvm2::numeric::gen_binop;
 use codegen::llvm2::SIR_FUNC_CALL_CONV;
 use error::*;
