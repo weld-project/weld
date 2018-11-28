@@ -247,7 +247,6 @@ unsafe fn initialize() {
         x += weld_runst_get_errno as i64;
         x += weld_runst_set_errno as i64;
 
-        x += weld_runst_print_int as i64;
         x += weld_runst_print as i64;
         trace!("Runtime initialized with hashed values {}", x);
     });

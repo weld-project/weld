@@ -285,7 +285,7 @@ Signature | Notes
 `filter(v: vec[T], f: T => bit): vec[T]` |
 `flatten(v: vec[vec[T]]): vec[T]` |
 `zip(v1: vec[T1], v2: vec[T2], ...): vec[{T1, T2, ...}]` | Only allowed in the `vec` argument of the `for` loop.
-`compare(x: T, y: T) => i32` | Implements a default comparator for `sort`. Expands to `if(x > y, 1, if(x < y, -1, 0))`.
+`compare(x: T, y: T)` | Implements a default comparator for `sort`. Expands to `if(x > y, 1, if(x < y, -1, 0))`.
 
 All of these operations can straightforwardly be translated into `for` expressions.
 For example, the macro rules for `map` and `filter` would be implemented as follows:

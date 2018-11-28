@@ -697,7 +697,7 @@ pub enum ExprKind {
     },
     /// Sorts a vector.
     /// 
-    /// The sort operator takes a vector comprised of any non-builder, SIMD, or non-dictionary type
+    /// The sort operator takes a vector comprised of any non-builder, non-SIMD, or non-dictionary type
     /// and returns a new sorted vector. The sort order is determined by `cmpfunc`.
     ///
     /// The comparator takes two arguments `x` and `y` whose type is the vector element type and
