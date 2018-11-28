@@ -225,17 +225,6 @@ impl Intrinsics {
                       args.as_mut_ptr(), args.len() as u32, c_str!(""))
     }
 
-    /// Convinience wrapper for calling the `weld_run_print` intrinsic.
-    pub unsafe fn call_weld_run_print_int(&mut self,
-                                      builder: LLVMBuilderRef,
-                                      run: LLVMValueRef,
-                                      value: LLVMValueRef) -> LLVMValueRef {
-        let mut args = [run, value];
-        LLVMBuildCall(builder,
-                      self.get("weld_runst_print_int").unwrap(),
-                      args.as_mut_ptr(), args.len() as u32, c_str!(""))
-    }
-
     /// Convinience wrapper for calling `memcpy`.
     ///
     /// This assumes the `memcpy` is non-volatile and uses an default alignment value of 8.
@@ -343,12 +332,6 @@ impl Intrinsics {
         let function = LLVMAddFunction(self.module, name.as_ptr(), fn_type);
         LLVMExtAddAttrsOnParameter(self.context, function, &[NoCapture, NoAlias, NonNull, ReadOnly], 0);
         LLVMExtAddAttrsOnParameter(self.context, function, &[NoCapture, NoAlias, NonNull, ReadOnly], 1);
-        self.intrinsics.insert(name.into_string().unwrap(), function);
-
-        let mut params = vec![self.run_handle_type(), self.i64_type()];
-        let name = CString::new("weld_runst_print_int").unwrap();
-        let fn_type = LLVMFunctionType(self.void_type(), params.as_mut_ptr(), params.len() as u32, 0);
-        let function = LLVMAddFunction(self.module, name.as_ptr(), fn_type);
         self.intrinsics.insert(name.into_string().unwrap(), function);
 
         let mut params = vec![int8p, int8p, self.i64_type(), self.i32_type(), self.i1_type()];
