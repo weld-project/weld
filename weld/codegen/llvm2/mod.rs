@@ -1254,25 +1254,29 @@ impl LlvmGenerator {
                     unreachable!()
                 }
             }
-            Sort { ref child, ref cmpfunc } => { // cmpfunc is an SirFunction
+            Sort { ref child, ref cmpfunc } => {
+
                 let output_pointer = context.get_value(output)?;
                 let output_type = context.sir_function.symbol_type(
                     statement.output.as_ref().unwrap())?;
-                
-                if let Vector(ref elem_ty) = *output_type {
-                    let child_value = self.load(context.builder, context.get_value(child)?)?;
-                    let child_type = context.sir_function.symbol_type(child)?;
 
+                if let Vector(ref elem_ty) = *output_type {
                     use self::vector::VectorExt;
+
+                    let child_value = self.load(context.builder, context.get_value(child)?)?;
+
+                    // Sort clones the vector at the moment.
+                    let output_value = self.gen_clone(context.builder, output_type, child_value, context.get_run())?;
+
                     let zero = self.zero(self.i64_type());
-                    let child_elems = self.gen_at(context.builder, child_type, child_value, zero)?;
-                    let elems_ptr = LLVMBuildBitCast(context.builder, child_elems,
+                    let elems = self.gen_at(context.builder, output_type, output_value, zero)?;
+                    let elems_ptr = LLVMBuildBitCast(context.builder, elems,
                                                      self.void_pointer_type(),
                                                      c_str!(""));
-                    let size = self.gen_size(context.builder, child_type, child_value)?;
+                    let size = self.gen_size(context.builder, output_type, output_value)?;
                     let elem_ll_ty = self.llvm_type(elem_ty)?;
                     let ty_size = self.size_of(elem_ll_ty);
-                    
+
                     use self::cmp::GenCmp;
                     let cmpfunc_ll_fn = self.functions[cmpfunc];
 
@@ -1284,22 +1288,40 @@ impl LlvmGenerator {
                                                          cmpfunc_ll_fn)?;
 
                     // args to qsort_r are: base array pointer, num elements,
-                    // element size, comparator function, run handle
-                    let mut args = vec![elems_ptr, size, ty_size, comparator, run];
-                    let mut arg_tys = vec![LLVMTypeOf(elems_ptr),
-                                           LLVMTypeOf(size),
-                                           LLVMTypeOf(ty_size),
-                                           LLVMTypeOf(comparator),
-                                           LLVMTypeOf(run)];
-                    
+                    // element size, comparator function, run handle.
+                    //
+                    // MacOS and Linux pass arguments to qsort_r in different order.
+                    let (mut args, mut arg_tys) = if cfg!(target_os = "macos") {
+                        let mut args = vec![elems_ptr, size, ty_size, run, comparator];
+                        let mut arg_tys = vec![
+                            LLVMTypeOf(elems_ptr),
+                            LLVMTypeOf(size),
+                            LLVMTypeOf(ty_size),
+                            LLVMTypeOf(run),
+                            LLVMTypeOf(comparator)
+                        ];
+                        (args, arg_tys)
+                    } else if cfg!(target_os = "linux") {
+                        let mut args = vec![elems_ptr, size, ty_size, comparator, run];
+                        let mut arg_tys = vec![
+                            LLVMTypeOf(elems_ptr),
+                            LLVMTypeOf(size),
+                            LLVMTypeOf(ty_size),
+                            LLVMTypeOf(comparator),
+                            LLVMTypeOf(run)
+                        ];
+                        (args, arg_tys)
+                    } else {
+                        unimplemented!("Sort not available on this platform.");
+                    };
+
                     // Generate the call to qsort.
-                    // In-place sort. TODO: clone vector before sorting.
                     let void_type = self.void_type();
-                    self.intrinsics.add("qsort_r", void_type, &mut arg_tys); 
+                    self.intrinsics.add("qsort_r", void_type, &mut arg_tys);
                     self.intrinsics.call(context.builder, "qsort_r", &mut args)?;
 
-                    LLVMBuildStore(context.builder, child_value, output_pointer);
-                    
+                    LLVMBuildStore(context.builder, output_value, output_pointer);
+
                     Ok(())
                 } else {
                     unreachable!()

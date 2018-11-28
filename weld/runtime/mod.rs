@@ -10,7 +10,7 @@ pub mod ffi;
 use self::ffi::*;
 
 use std::alloc::System as Allocator;
-use libc::{c_char, int32_t, int64_t, uint64_t};
+use libc::{c_char, int32_t, int64_t};
 
 use fnv::FnvHashMap;
 
@@ -247,7 +247,6 @@ unsafe fn initialize() {
         x += weld_runst_get_errno as i64;
         x += weld_runst_set_errno as i64;
 
-        x += weld_runst_print_int as i64;
         x += weld_runst_print as i64;
         trace!("Runtime initialized with hashed values {}", x);
     });

@@ -2,11 +2,11 @@
 
 extern crate llvm_sys;
 
-use std::ffi::{CStr, CString};
+use std::ffi::CStr;
 
 use ast::BinOpKind::*;
 use ast::Type;
-use ast::ScalarKind::{I32, I64};
+use ast::ScalarKind::I64;
 use codegen::llvm2::numeric::gen_binop;
 use codegen::llvm2::SIR_FUNC_CALL_CONV;
 use error::*;
@@ -61,8 +61,15 @@ pub trait GenCmp {
 
     /// Generates an opaque comparator using the specified comparator function.
     ///
-    /// The comparator should return a value <0 if the first element is smaller, 0 if the elements are equal,
+    /// The comparator should return a value < 0 if the first element is smaller, 0 if the elements are equal,
     /// and >0 if the first element is larger.
+    ///
+    /// # Portability Notes
+    ///
+    /// The opaque comparator is generated with a function signature compatible with the `libc`
+    /// `qsort_r` function. Note that the function signature is slightly different for Linux
+    /// platforms and FreeBSD platforms: as such, the code generated will differ by platform as
+    /// well.
     unsafe fn gen_custom_cmp(&mut self,
                              elem_ty: LLVMTypeRef,
                              cf_id: FunctionId,
@@ -285,7 +292,16 @@ impl GenCmp for LlvmGenerator {
                              elem_ty: LLVMTypeRef,
                              cf_id: FunctionId,
                              cmpfunc: LLVMValueRef) -> WeldResult<LLVMValueRef> {
-        let mut arg_tys = [self.void_pointer_type(), self.void_pointer_type(), self.run_handle_type()];
+
+        // Annoyingly, Linux and MacOS pass these in different orders as well...
+        let mut arg_tys = if cfg!(target_os = "macos") {
+            [self.run_handle_type(), self.void_pointer_type(), self.void_pointer_type()]
+        } else if cfg!(target_os = "linux") {
+            [self.void_pointer_type(), self.void_pointer_type(), self.run_handle_type()]
+        } else {
+            unimplemented!()
+        };
+
         let ret_ty = self.i32_type();
 
         let name = format!("{}.custom_cmp", cf_id);
@@ -296,12 +312,29 @@ impl GenCmp for LlvmGenerator {
                                                                           name);
 
         LLVMExtAddAttrsOnFunction(self.context, function, &[InlineHint]);
-        LLVMExtAddAttrsOnParameter(self.context, function, &[ReadOnly, NoAlias, NonNull, NoCapture], 0);
-        LLVMExtAddAttrsOnParameter(self.context, function, &[ReadOnly, NoAlias, NonNull, NoCapture], 1);
 
-        let left  = LLVMGetParam(function, 0);
-        let right = LLVMGetParam(function, 1);
-        let run   = LLVMGetParam(function, 2);
+        let (left, right, run) = if cfg!(target_os = "macos") {
+            LLVMExtAddAttrsOnParameter(self.context, function, &[ReadOnly, NoAlias, NonNull, NoCapture], 1);
+            LLVMExtAddAttrsOnParameter(self.context, function, &[ReadOnly, NoAlias, NonNull, NoCapture], 2);
+
+            let run  = LLVMGetParam(function, 0);
+            let left = LLVMGetParam(function, 1);
+            let right   = LLVMGetParam(function, 2);
+
+            (left, right, run)
+        } else if cfg!(target_os = "linux") {
+            LLVMExtAddAttrsOnParameter(self.context, function, &[ReadOnly, NoAlias, NonNull, NoCapture], 0);
+            LLVMExtAddAttrsOnParameter(self.context, function, &[ReadOnly, NoAlias, NonNull, NoCapture], 1);
+
+            let left  = LLVMGetParam(function, 0);
+            let right = LLVMGetParam(function, 1);
+            let run   = LLVMGetParam(function, 2);
+
+            (left, right, run)
+        } else {
+            unimplemented!()
+        };
+
         let left  = LLVMBuildBitCast(builder, left,  LLVMPointerType(elem_ty, 0), c_str!(""));
         let right = LLVMBuildBitCast(builder, right, LLVMPointerType(elem_ty, 0), c_str!(""));
 

@@ -741,7 +741,7 @@ def pivot_table(expr, value_index, value_ty, index_index, index_ty, columns_inde
                        merge(b.$2, {e.$%(cd)s, 1L})}
           );
           let agg_dict = result(bs.$0);
-          let ind_vec = sort(map(tovec(result(bs.$1)), |x| x.$0), |x| x);
+          let ind_vec = sort(map(tovec(result(bs.$1)), |x| x.$0), |x, y| compare(x,y));
           let col_vec = map(tovec(result(bs.$2)), |x| x.$0);
           let pivot = map(
             col_vec,
@@ -760,7 +760,7 @@ def pivot_table(expr, value_index, value_ty, index_index, index_ty, columns_inde
                        merge(b.$2, {e.$%(cd)s, 1L})}
           );
           let agg_dict = result(bs.$0);
-          let ind_vec = sort(map(tovec(result(bs.$1)), |x| x.$0), |x| x);
+          let ind_vec = sort(map(tovec(result(bs.$1)), |x| x.$0), |x, y| compare(x,y));
           let col_vec = map(tovec(result(bs.$2)), |x| x.$0);
           let pivot = map(
             col_vec,
@@ -838,7 +838,7 @@ def pivot_sort(pivot, column_name, index_type, column_type, pivot_type):
               |b,i,e| merge(b, {e,i})
             )
           ),
-          |x| x.$0
+          |x,y| compare(x.$0, y.$0)
         ),
         |x| x.$1
       );
@@ -1229,7 +1229,7 @@ def groupby_size(columns, column_tys, grouping_columns, grouping_column_tys):
           )
         )
       ),
-      |x:{%(gty)s, i64}| x.$0
+      |x:{%(gty)s, i64}, y:{%(gty)s, i64}| compare(x.$0, y.$0)
     );
     {
       map(
@@ -1330,9 +1330,11 @@ def groupby_sort(columns, column_tys, grouping_columns, grouping_column_tys, key
         result_str = "merge(b, {%s})" % ", ".join(result_str_list)
 
     if key_index == None:
-        key_str = "x"
+        key_str_x = "x"
+        key_str_y = "y"
     else :
-        key_str = "x.$%d" % key_index
+        key_str_x = "x.$%d" % key_index
+        key_str_y = "y.$%d" % key_index
 
     if ascending == False:
         key_str = key_str + "* %s(-1)" % column_tys[key_index]
@@ -1348,7 +1350,7 @@ def groupby_sort(columns, column_tys, grouping_columns, grouping_column_tys, key
          )
        )
      ),
-    |a:{%(gty)s, vec[%(ty)s]}| {a.$0, sort(a.$1, |x:%(ty)s| %(key_str)s)}
+    |a:{%(gty)s, vec[%(ty)s]}| {a.$0, sort(a.$1, |x:%(ty)s| compare(%(key_str_x)s, %(key_str_y)s))}
     )
   """
 

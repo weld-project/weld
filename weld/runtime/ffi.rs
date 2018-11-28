@@ -88,9 +88,3 @@ pub unsafe extern "C" fn weld_runst_print(_run: WeldRuntimeContextRef, string: *
     let string = CStr::from_ptr(string).to_str().unwrap();
     println!("{} ", string);
 }
-
-#[no_mangle]
-/// Print a value from generated code.
-pub unsafe extern "C" fn weld_runst_print_int(_run: WeldRuntimeContextRef, i: uint64_t) {
-    println!("{}", i);
-}

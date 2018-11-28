@@ -136,10 +136,11 @@ refer to types.
 
 * `lookup(dict, key)` and `lookup(vec, index)` return an element from a dictionary and vector respectively. `index` must be of type `i64`. It is an error to call `lookup` on a dictionary
   with a key that does not exist: see `keyexists`.
+* `optlookup(dict, key)` batches `keyexists` and `lookup` into a single call. This can be more efficient since the key only needs to be hashed a single time. This operator returns `{bool, V}` (`V` is the value type) where the boolean indicates whether the key was present in the dictionary. If the boolean is false, it is an error to access `V`; although this is not enforced at the moment, the type system may be extended to support it eventually (e.g., by adding an `option` type).
 * `keyexists(dict, key)` returns whether the `key` is in `dict`.
 * `len(vec)` return its length as an `i64`.
 * `slice(vec, index, size)` creates a view into a vector without allocating memory starting at `index` and containing `size` elements. Both must be of type `i64`.
-* `sort(vec, func)` sorts a vector. `func` is of type `T => U`, where `T` is the input vector type and `U` is the type we want to compare. Currently, the comparison for each type is done in ascending order for scalars, left to right for structs, and element by element for vectors. Vectors of dictionaries and SIMD values do not support sorting. The sort is also not guaranteed to be stable.
+* `sort(vec, func)` sorts a vector. `func` is of type `|T, T| => i32`, where `T` is the input vector's element type. The function returns a positive `i32` if `left > right`, a negative integer if `left < right`, and zero if `left == right`. By default, using the comparison binary operators, vectors are compared lexigraphically and structs are compared field-by-field from left to right. Sorting on vectors of dictionaries, builders, and SIMD values is currently disallowed.
 * `struct.$0`, `struct.$1`, etc. are used to access fields of a struct.
 * `tovec(dict)` gets the entries of a dictionary as a vector of `{K, V}` pairs.
 
@@ -284,6 +285,7 @@ Signature | Notes
 `filter(v: vec[T], f: T => bit): vec[T]` |
 `flatten(v: vec[vec[T]]): vec[T]` |
 `zip(v1: vec[T1], v2: vec[T2], ...): vec[{T1, T2, ...}]` | Only allowed in the `vec` argument of the `for` loop.
+`compare(x: T, y: T)` | Implements a default comparator for `sort`. Expands to `if(x > y, 1, if(x < y, -1, 0))`.
 
 All of these operations can straightforwardly be translated into `for` expressions.
 For example, the macro rules for `map` and `filter` would be implemented as follows:
@@ -346,14 +348,12 @@ In addition, it's possible to specify annotations on both builder types and expr
 @(name1:value1, name2:value2, ...) dictmerger[K,V,bin_op]
 ```
 
-Annotations need to be specified before the builder type or expression, and multiple annotations need to be comma-separated. Currently, we support the following annotations on builder types:
-* `impl`: Specifies the builder's implementation strategy -- permitted values are `global` and `local`.
+Annotations need to be specified before the builder type or expression, and
+multiple annotations need to be comma-separated. Annotations are unstructured
+string to string maps, and their definition and behavior is dependent on the
+transforms and backends that use them.
 
 In addition, we support the following annotations on generic expressions:
 * `predicate`: Specifies whether the expression should be predicated or not -- value must be a `bool`.
 * `vectorize`: Specifies whether the expression should be vectorized or not -- value must be a `bool`.
-* `tile_size`: Specifies the tile size to be used to tile the expression -- value must be a `i32`.
-* `grain_size`: Specifies the grain size for the expression -- value must be a `i32`.
 * `size`: Specifies the size of the expression -- value must be a `i64`.
-* `branch_selectivity`: Specifies the selectivity of a branch in the expression -- value must be a `i32` (fraction of `10,000`).
-* `num_keys`: Specifies the number of keys in the expression -- value must be a `i64`.
