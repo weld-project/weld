@@ -1254,22 +1254,26 @@ impl LlvmGenerator {
                     unreachable!()
                 }
             }
-            Sort { ref child, ref cmpfunc } => { // cmpfunc is an SirFunction
+            Sort { ref child, ref cmpfunc } => {
+
                 let output_pointer = context.get_value(output)?;
                 let output_type = context.sir_function.symbol_type(
                     statement.output.as_ref().unwrap())?;
 
                 if let Vector(ref elem_ty) = *output_type {
-                    let child_value = self.load(context.builder, context.get_value(child)?)?;
-                    let child_type = context.sir_function.symbol_type(child)?;
-
                     use self::vector::VectorExt;
+
+                    let child_value = self.load(context.builder, context.get_value(child)?)?;
+
+                    // Sort clones the vector at the moment.
+                    let output_value = self.gen_clone(context.builder, output_type, child_value, context.get_run())?;
+
                     let zero = self.zero(self.i64_type());
-                    let child_elems = self.gen_at(context.builder, child_type, child_value, zero)?;
-                    let elems_ptr = LLVMBuildBitCast(context.builder, child_elems,
+                    let elems = self.gen_at(context.builder, output_type, output_value, zero)?;
+                    let elems_ptr = LLVMBuildBitCast(context.builder, elems,
                                                      self.void_pointer_type(),
                                                      c_str!(""));
-                    let size = self.gen_size(context.builder, child_type, child_value)?;
+                    let size = self.gen_size(context.builder, output_type, output_value)?;
                     let elem_ll_ty = self.llvm_type(elem_ty)?;
                     let ty_size = self.size_of(elem_ll_ty);
 
@@ -1318,7 +1322,7 @@ impl LlvmGenerator {
                     self.intrinsics.add("qsort_r", void_type, &mut arg_tys);
                     self.intrinsics.call(context.builder, "qsort_r", &mut args)?;
 
-                    LLVMBuildStore(context.builder, child_value, output_pointer);
+                    LLVMBuildStore(context.builder, output_value, output_pointer);
 
                     Ok(())
                 } else {
