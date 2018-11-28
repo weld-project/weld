@@ -695,7 +695,13 @@ pub enum ExprKind {
         index: Box<Expr>,
         size: Box<Expr>,
     },
-    /// Sort a vector.
+    /// Sorts a vector.
+    /// 
+    /// The sort operator takes a vector comprised of any non-builder, non-SIMD, or non-dictionary type
+    /// and returns a new sorted vector. The sort order is determined by `cmpfunc`.
+    ///
+    /// The comparator takes two arguments `x` and `y` whose type is the vector element type and
+    /// returns a positive `i32` if `x > y`, zero if `x == y`, and a negative number of `x < y`.
     Sort {
         data: Box<Expr>,
         cmpfunc: Box<Expr>,

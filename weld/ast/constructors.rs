@@ -228,11 +228,14 @@ pub fn sort_expr(data: Expr, cmpfunc: Expr) -> WeldResult<Expr> {
 
     if let Vector(ref vec_ty) = data.ty {
         if let Function(ref params, ref body) = cmpfunc.ty {
-            if params.len() == 1 && params[0] == **vec_ty {
-                if let Scalar(_) = **body {
-                    type_checked = true;
+            if params.len() == 2 && params[0] == **vec_ty {
+                // Return type must be i32.
+                if let Scalar(ScalarKind::I32) = **body {
+                    // Both parameters must be of the same type.
+                    if params[0] == params[1] {
+                        type_checked = true;
+                    }
                 }
-
             }
         }
     }

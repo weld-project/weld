@@ -2,8 +2,6 @@
 
 extern crate weld;
 
-use weld::runtime::WeldRuntimeErrno;
-
 mod common;
 use common::*;
 
