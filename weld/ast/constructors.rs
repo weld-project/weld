@@ -42,7 +42,12 @@ pub fn binop_expr(kind: BinOpKind, left: Expr, right: Expr) -> WeldResult<Expr> 
     if left.ty != right.ty {
         compile_err!("Internal error: Mismatched types in binop_expr")
     } else {
-        let ty = left.ty.clone();
+        let ty = if kind.is_comparison() {
+            Scalar(ScalarKind::Bool)
+        } else {
+            left.ty.clone()
+        };
+        
         new_expr(BinOp {
                      kind: kind,
                      left: Box::new(left),
@@ -568,6 +573,16 @@ fn binop_test() {
 
     assert_eq!(print_expr_without_indent(&expr), "(1+1)");
     assert_eq!(expr.ty, Scalar(ScalarKind::I32));
+}
+
+#[test]
+fn comparison_test() {
+    let right = literal_expr(LiteralKind::I32Literal(2)).unwrap();
+    let left = literal_expr(LiteralKind::I32Literal(1)).unwrap();
+    let expr = binop_expr(BinOpKind::GreaterThan, left, right).unwrap();
+
+    assert_eq!(print_expr_without_indent(&expr), "(1>2)");
+    assert_eq!(expr.ty, Scalar(ScalarKind::Bool));
 }
 
 #[test]
