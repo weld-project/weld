@@ -7,8 +7,6 @@
 ### LLVM ST Unsupported Features
 This backend currently lacks a few features. These features are tracked via the `unimplemented.sh` script.
 
-* Sorting
-* Comparing Vectors (e.g., `>=`, `==`)
 * The `NdIter` iterator
 * Vector keys in dictionaries where the vector contain pointers.
 
