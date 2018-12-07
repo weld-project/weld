@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-pub use self::link::{weld_runtime_init, weld_run_memory_usage, weld_run_dispose};
+pub use self::link::{weld_run_dispose, weld_run_memory_usage, weld_runtime_init};
 
 pub mod link;
 
@@ -52,4 +52,3 @@ impl fmt::Display for WeldRuntimeErrno {
         write!(f, "{:?}", self)
     }
 }
-

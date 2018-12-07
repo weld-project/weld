@@ -54,7 +54,6 @@ fn float_literals() {
         let result = unsafe { *data };
         assert_eq!(result, v);
 
-
         // Try parsing the value as a float
         let code = format!("|| {:e}f", v);
         let ref conf = default_conf();
@@ -63,7 +62,6 @@ fn float_literals() {
         let data = ret_value.data() as *const f32;
         let result = unsafe { *data };
         assert_eq!(result, v as f32);
-
     }
 }
 

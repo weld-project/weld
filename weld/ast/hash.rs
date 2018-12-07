@@ -1,5 +1,5 @@
 //! Hash-based symbol agnostic AST comparison.
-//! 
+//!
 //! Developers should use the `expr_hash` module when checking whether an AST has changed, or in
 //! other scenarios that would otherwise require cloning the AST. In general, computing a hash,
 //! modifying the AST, and then comparing the hash of the old AST to the new one is much faster
@@ -8,9 +8,9 @@
 
 extern crate fnv;
 
-use super::ast::*;
 use super::ast::ExprKind::*;
 use super::ast::LiteralKind::*;
+use super::ast::*;
 use error::*;
 
 use std::collections::hash_map::Entry;
@@ -49,9 +49,12 @@ impl fmt::Debug for ExprHash {
 impl ExprHash {
     /// Recurisvely computes signatures for an expression and each of its subexpressions.
     /// The precise symbol names defined within the expression are ignored.
-    fn from_expr<'a>(&mut self, expr: &'a Expr,
-                                    symbol_positions: &mut fnv::FnvHashMap<&'a Symbol, Vec<i32>>,
-                                    max_id: &mut i32) -> WeldResult<()> {
+    fn from_expr<'a>(
+        &mut self,
+        expr: &'a Expr,
+        symbol_positions: &mut fnv::FnvHashMap<&'a Symbol, Vec<i32>>,
+        max_id: &mut i32,
+    ) -> WeldResult<()> {
         // In expressions that define new symbols, subexpressions will be handled in the match.
         let mut finished_subexpressions = false;
         // Hash the type.
@@ -60,22 +63,20 @@ impl ExprHash {
         expr.kind.name().hash(&mut self.hasher);
         // Hash the kind.
         match expr.kind {
-            Literal(ref kind) => {
-                match *kind {
-                    BoolLiteral(v) => v.hash(&mut self.hasher),
-                    I8Literal(v) => v.hash(&mut self.hasher),
-                    I16Literal(v) => v.hash(&mut self.hasher),
-                    I32Literal(v) => v.hash(&mut self.hasher),
-                    I64Literal(v) => v.hash(&mut self.hasher),
-                    U8Literal(v) => v.hash(&mut self.hasher),
-                    U16Literal(v) => v.hash(&mut self.hasher),
-                    U32Literal(v) => v.hash(&mut self.hasher),
-                    U64Literal(v) => v.hash(&mut self.hasher),
-                    F32Literal(v) => v.hash(&mut self.hasher),
-                    F64Literal(v) => v.hash(&mut self.hasher),
-                    StringLiteral(ref v) => v.hash(&mut self.hasher)
-                }
-            }
+            Literal(ref kind) => match *kind {
+                BoolLiteral(v) => v.hash(&mut self.hasher),
+                I8Literal(v) => v.hash(&mut self.hasher),
+                I16Literal(v) => v.hash(&mut self.hasher),
+                I32Literal(v) => v.hash(&mut self.hasher),
+                I64Literal(v) => v.hash(&mut self.hasher),
+                U8Literal(v) => v.hash(&mut self.hasher),
+                U16Literal(v) => v.hash(&mut self.hasher),
+                U32Literal(v) => v.hash(&mut self.hasher),
+                U64Literal(v) => v.hash(&mut self.hasher),
+                F32Literal(v) => v.hash(&mut self.hasher),
+                F64Literal(v) => v.hash(&mut self.hasher),
+                StringLiteral(ref v) => v.hash(&mut self.hasher),
+            },
             Ident(ref sym) => {
                 // We track symbols to disambiguate redefinitions, but also to ignore the actual
                 // textual symbol name. By hashing a number representing the symbol, expressions
@@ -84,25 +85,29 @@ impl ExprHash {
                 match symbol_positions.entry(sym) {
                     Entry::Occupied(ref ent) => {
                         ent.get().hash(&mut self.hasher);
-                    },
+                    }
                     _ => {
                         return compile_err!("Undefined symbol {}", sym);
                     }
                 }
             }
-            BinOp {ref kind, .. } => {
+            BinOp { ref kind, .. } => {
                 kind.hash(&mut self.hasher);
             }
-            UnaryOp {ref kind, .. } => {
+            UnaryOp { ref kind, .. } => {
                 kind.hash(&mut self.hasher);
             }
-            Cast { ref kind, .. } =>  {
+            Cast { ref kind, .. } => {
                 kind.hash(&mut self.hasher);
             }
             GetField { ref index, .. } => {
                 index.hash(&mut self.hasher);
             }
-            Let { ref name, ref value, ref body } => {
+            Let {
+                ref name,
+                ref value,
+                ref body,
+            } => {
                 // Do the value before pushing onto the symbol staack.
                 self.from_expr(value, symbol_positions, max_id)?;
                 {
@@ -116,7 +121,10 @@ impl ExprHash {
                 let _ = entry.pop();
                 finished_subexpressions = true;
             }
-            Lambda { ref params, ref body } => {
+            Lambda {
+                ref params,
+                ref body,
+            } => {
                 // Push the stack for each param.
                 for param in params.iter() {
                     let entry = symbol_positions.entry(&param.name).or_insert(Vec::new());
@@ -131,11 +139,15 @@ impl ExprHash {
                 }
                 finished_subexpressions = true;
             }
-            CUDF { ref sym_name, ref return_ty, .. } => {
+            CUDF {
+                ref sym_name,
+                ref return_ty,
+                ..
+            } => {
                 sym_name.hash(&mut self.hasher);
                 return_ty.hash(&mut self.hasher);
             }
-            Deserialize  { ref value_ty, .. } => {
+            Deserialize { ref value_ty, .. } => {
                 value_ty.hash(&mut self.hasher);
             }
             For { ref iters, .. } => {
@@ -145,10 +157,25 @@ impl ExprHash {
             }
             // Other expressions (listed explicitly so we don't forget to add new ones). If the
             // expression doesn't have a non-Expr field, it goes here.
-            Negate(_) | Broadcast(_) | Serialize(_) | ToVec{ .. } | MakeStruct { .. } | MakeVector { .. } |
-                Zip { .. } | Length { .. } | Lookup { .. } | KeyExists { .. } |
-                Slice { .. } | Sort { .. } | If { .. } | Iterate { .. } | Select { .. } | Apply { .. } |
-                NewBuilder(_) | Merge { .. } | Res { .. } => {}
+            Negate(_)
+            | Broadcast(_)
+            | Serialize(_)
+            | ToVec { .. }
+            | MakeStruct { .. }
+            | MakeVector { .. }
+            | Zip { .. }
+            | Length { .. }
+            | Lookup { .. }
+            | KeyExists { .. }
+            | Slice { .. }
+            | Sort { .. }
+            | If { .. }
+            | Iterate { .. }
+            | Select { .. }
+            | Apply { .. }
+            | NewBuilder(_)
+            | Merge { .. }
+            | Res { .. } => {}
         }
         if !finished_subexpressions {
             for child in expr.children() {
@@ -160,12 +187,14 @@ impl ExprHash {
 
     /// Return a numeric value for this signature.
     pub fn value(&self) -> u64 {
-        return self.hasher.finish() 
+        return self.hasher.finish();
     }
 
     /// Create a signature from an expression.
     pub fn from(expr: &Expr) -> WeldResult<ExprHash> {
-        let mut sig = ExprHash { hasher: fnv::FnvHasher::default() };
+        let mut sig = ExprHash {
+            hasher: fnv::FnvHasher::default(),
+        };
         let mut symbol_positions = fnv::FnvHashMap::default();
         let mut max_id = 0;
         sig.from_expr(expr, &mut symbol_positions, &mut max_id)?;
@@ -203,7 +232,6 @@ fn test_compare_different_symbols_ne() {
     let ref b = parse_expr("|| let c = 1; let d = 1; d").unwrap();
     assert!(ExprHash::from(a).unwrap() != ExprHash::from(b).unwrap());
 }
-
 
 #[test]
 fn test_lambda() {

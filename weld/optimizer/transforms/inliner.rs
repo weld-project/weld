@@ -1,8 +1,8 @@
 //! Various inlining transforms. These transforms take a set of nested expressions
 //! and fuse them into a single one.
 
-use ast::*;
 use ast::ExprKind::*;
+use ast::*;
 
 use annotation::*;
 
@@ -30,36 +30,35 @@ pub fn inline_get_field(expr: &mut Expr) {
 pub fn inline_zips(expr: &mut Expr) {
     expr.transform(&mut |ref mut e| {
         if let For {
-                   ref mut iters,
-                   ref builder,
-                   ref func,
-               } = e.kind {
+            ref mut iters,
+            ref builder,
+            ref func,
+        } = e.kind
+        {
             if iters.len() == 1 {
                 let ref first_iter = iters[0];
                 if let Zip { ref vectors } = first_iter.data.kind {
                     let new_iters = vectors
                         .iter()
-                        .map(|v| {
-                                 Iter {
-                                     data: Box::new(v.clone()),
-                                     start: None,
-                                     end: None,
-                                     stride: None,
-                                     kind: first_iter.kind.clone(),
-                                     shape: None,
-                                     strides: None,
-                                 }
-                             })
+                        .map(|v| Iter {
+                            data: Box::new(v.clone()),
+                            start: None,
+                            end: None,
+                            stride: None,
+                            kind: first_iter.kind.clone(),
+                            shape: None,
+                            strides: None,
+                        })
                         .collect::<Vec<_>>();
                     return Some(Expr {
-                                    ty: e.ty.clone(),
-                                    kind: For {
-                                        iters: new_iters,
-                                        builder: builder.clone(),
-                                        func: func.clone(),
-                                    },
-                                    annotations: Annotations::new(),
-                                });
+                        ty: e.ty.clone(),
+                        kind: For {
+                            iters: new_iters,
+                            builder: builder.clone(),
+                            func: func.clone(),
+                        },
+                        annotations: Annotations::new(),
+                    });
                 }
             }
         }
@@ -80,13 +79,15 @@ pub fn inline_zips(expr: &mut Expr) {
 pub fn inline_apply(expr: &mut Expr) {
     expr.transform(&mut |ref mut expr| {
         if let Apply {
-                   ref func,
-                   params: ref args,
-               } = expr.kind {
+            ref func,
+            params: ref args,
+        } = expr.kind
+        {
             if let Lambda {
-                       ref params,
-                       ref body,
-                   } = func.kind {
+                ref params,
+                ref body,
+            } = func.kind
+            {
                 let mut new = *body.clone();
                 for (param, arg) in params.iter().zip(args) {
                     new.substitute(&param.name, &arg);
@@ -107,7 +108,8 @@ pub fn inline_let(expr: &mut Expr) {
                 ref mut name,
                 ref mut value,
                 ref mut body,
-            } = expr.kind {
+            } = expr.kind
+            {
                 if symbol_usage_count(name, body) <= 1 {
                     body.transform(&mut |ref mut expr| {
                         if let Ident(ref symbol) = expr.kind {
@@ -127,18 +129,22 @@ pub fn inline_let(expr: &mut Expr) {
 
 /// Changes negations of literal values to be literal negated values.
 pub fn inline_negate(expr: &mut Expr) {
-    use ast::LiteralKind::*;
     use ast::constructors::literal_expr;
+    use ast::LiteralKind::*;
     expr.transform(&mut |ref mut expr| {
         if let Negate(ref child_expr) = expr.kind {
             if let Literal(ref literal_kind) = child_expr.kind {
-                let res = match  *literal_kind {
+                let res = match *literal_kind {
                     I8Literal(a) => Some(literal_expr(I8Literal(-a)).unwrap()),
                     I16Literal(a) => Some(literal_expr(I16Literal(-a)).unwrap()),
                     I32Literal(a) => Some(literal_expr(I32Literal(-a)).unwrap()),
                     I64Literal(a) => Some(literal_expr(I64Literal(-a)).unwrap()),
-                    F32Literal(a) => Some(literal_expr(F32Literal((-f32::from_bits(a)).to_bits())).unwrap()),
-                    F64Literal(a) => Some(literal_expr(F64Literal((-f64::from_bits(a)).to_bits())).unwrap()),
+                    F32Literal(a) => {
+                        Some(literal_expr(F32Literal((-f32::from_bits(a)).to_bits())).unwrap())
+                    }
+                    F64Literal(a) => {
+                        Some(literal_expr(F64Literal((-f64::from_bits(a)).to_bits())).unwrap())
+                    }
                     _ => None,
                 };
                 return res;
@@ -150,19 +156,27 @@ pub fn inline_negate(expr: &mut Expr) {
 
 /// Changes casts of literal values to be literal values of the casted type.
 pub fn inline_cast(expr: &mut Expr) {
-    use ast::ScalarKind::*;
-    use ast::LiteralKind::*;
     use ast::constructors::literal_expr;
+    use ast::LiteralKind::*;
+    use ast::ScalarKind::*;
     expr.transform(&mut |ref mut expr| {
-        if let Cast { kind: ref scalar_kind, ref child_expr } = expr.kind {
+        if let Cast {
+            kind: ref scalar_kind,
+            ref child_expr,
+        } = expr.kind
+        {
             if let Literal(ref literal_kind) = child_expr.kind {
                 return match (scalar_kind, literal_kind) {
-                    (&F64, &I32Literal(a)) => Some(literal_expr(F64Literal((a as f64).to_bits())).unwrap()),
+                    (&F64, &I32Literal(a)) => {
+                        Some(literal_expr(F64Literal((a as f64).to_bits())).unwrap())
+                    }
                     (&I64, &I32Literal(a)) => Some(literal_expr(I64Literal(a as i64)).unwrap()),
-                    (&F64, &I64Literal(a)) => Some(literal_expr(F64Literal((a as f64).to_bits())).unwrap()),
+                    (&F64, &I64Literal(a)) => {
+                        Some(literal_expr(F64Literal((a as f64).to_bits())).unwrap())
+                    }
                     (&I64, &I64Literal(a)) => Some(literal_expr(I64Literal(a as i64)).unwrap()),
                     _ => None,
-                }
+                };
             }
         }
         None
@@ -172,7 +186,11 @@ pub fn inline_cast(expr: &mut Expr) {
 /// Checks if `expr` is a `GetField` on an identifier with name `sym`. If so,
 /// returns the field index being accessed.
 fn getfield_on_symbol(expr: &Expr, sym: &Symbol) -> Option<u32> {
-    if let GetField { ref expr, ref index } = expr.kind {
+    if let GetField {
+        ref expr,
+        ref index,
+    } = expr.kind
+    {
         if let Ident(ref ident_name) = expr.kind {
             if sym == ident_name {
                 return Some(*index);
@@ -206,15 +224,18 @@ pub fn unroll_structs(expr: &mut Expr) {
     let mut sym_gen = SymbolGenerator::from_expression(expr);
     expr.transform_up(&mut |ref mut expr| {
         match expr.kind {
-            Let { ref name, ref value, ref body } => {
+            Let {
+                ref name,
+                ref value,
+                ref body,
+            } => {
                 if let MakeStruct { ref elems } = value.kind {
-
                     // First, ensure that the name is not used anywhere but a `GetField`.
                     let mut total_count: i32 = 0;
                     let mut getstruct_count: i32 = 0;
                     body.traverse(&mut |ref e| {
                         if getfield_on_symbol(e, name).is_some() {
-                                    getstruct_count += 1;
+                            getstruct_count += 1;
                         }
                         if let Ident(ref ident_name) = e.kind {
                             if ident_name == name {
@@ -234,7 +255,7 @@ pub fn unroll_structs(expr: &mut Expr) {
                     new_body.transform(&mut |ref mut expr2| {
                         if let Some(index) = getfield_on_symbol(expr2, name) {
                             let sym = symbols.get(index as usize).unwrap().clone();
-                            return Some(ident_expr(sym, expr2.ty.clone()).unwrap())
+                            return Some(ident_expr(sym, expr2.ty.clone()).unwrap());
                         }
                         None
                     });
@@ -246,13 +267,12 @@ pub fn unroll_structs(expr: &mut Expr) {
                     }
                     return Some(prev);
                 }
-            },
-            _ => ()
+            }
+            _ => (),
         }
         None
     });
 }
-
 
 /// Count the occurances of a `Symbol` in an expression.
 fn symbol_usage_count(sym: &Symbol, expr: &Expr) -> u32 {
@@ -286,12 +306,16 @@ fn inline_lets() {
     let e2 = typed_expression("let a = 1; a + a + 2");
     assert!(e1.compare_ignoring_symbols(&e2).unwrap());
 
-    let mut e1 = typed_expression("let a = 1L; for([1L,2L,3L], appender, |b,i,e| merge(b, e + a \
-                                   + 2L))");
+    let mut e1 = typed_expression(
+        "let a = 1L; for([1L,2L,3L], appender, |b,i,e| merge(b, e + a \
+         + 2L))",
+    );
     inline_let(&mut e1);
     // The transform should fail since the identifier is used in a loop.
-    let e2 = typed_expression("let a = 1L; for([1L,2L,3L], appender, |b,i,e| merge(b, e + a + \
-                               2L))");
+    let e2 = typed_expression(
+        "let a = 1L; for([1L,2L,3L], appender, |b,i,e| merge(b, e + a + \
+         2L))",
+    );
     assert!(e1.compare_ignoring_symbols(&e2).unwrap());
 
     let mut e1 = typed_expression("let a = 1; let b = 2; let c = 3; a + b + c");

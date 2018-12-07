@@ -4,8 +4,8 @@
 extern crate libc;
 extern crate weld;
 
-use weld::*;
 use std::convert::AsRef;
+use weld::*;
 
 #[derive(Clone, Debug)]
 #[repr(C)]
@@ -102,7 +102,6 @@ unsafe fn _compile_and_run<T>(code: &str, conf: &WeldConf, ptr: &T) -> WeldResul
 pub fn compile_and_run<T>(code: &str, conf: &WeldConf, ptr: &T) -> WeldValue {
     unsafe { _compile_and_run(code, conf, ptr).expect("Run failed!") }
 }
-
 
 /// Runs `code` with the given `conf` and input data pointer `ptr`, expecting
 /// a succeessful result to be returned. Panics if an error is thrown by the runtime.

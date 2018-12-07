@@ -39,8 +39,6 @@ fn string_sort() {
             assert_eq!(val, sorted[i as usize][j as usize])
         }
     }
-
-
 }
 
 #[test]
@@ -60,8 +58,6 @@ fn if_sort() {
     for i in 0..(expected.len() as isize) {
         assert_eq!(unsafe { *result.data.offset(i) }, expected[i as usize])
     }
-
-
 }
 
 #[test]
@@ -81,8 +77,6 @@ fn simple_sort() {
     for i in 0..(expected.len() as isize) {
         assert_eq!(unsafe { *result.data.offset(i) }, expected[i as usize])
     }
-
-
 
     let ys = vec![2.0, 3.0, 1.0, 5.001, 5.0001];
     let ref input_data = WeldVec::from(&ys);
@@ -109,8 +103,6 @@ fn simple_sort() {
     for i in 0..(expected.len() as isize) {
         assert_eq!(unsafe { *result.data.offset(i) }, expected[i as usize])
     }
-
-
 }
 
 #[test]
@@ -142,7 +134,7 @@ fn complex_sort() {
                 )";
     let ref conf = default_conf();
     let ret_value = compile_and_run(code, conf, input_data);
-    let data = ret_value.data() as *const WeldVec<Pair<i32,i32>>;
+    let data = ret_value.data() as *const WeldVec<Pair<i32, i32>>;
     let result = unsafe { (*data).clone() };
 
     let expected = [[1, 5], [2, 4], [3, 3], [4, 2], [5, 1]];
@@ -158,6 +150,4 @@ fn complex_sort() {
             expected[i as usize][1]
         );
     }
-
-
 }

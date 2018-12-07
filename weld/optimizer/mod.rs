@@ -8,5 +8,5 @@
 
 pub use self::passes::*;
 
-pub mod transforms;
 mod passes;
+pub mod transforms;

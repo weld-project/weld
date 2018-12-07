@@ -19,19 +19,22 @@ pub enum AnnotationKind {
 
 impl fmt::Display for AnnotationKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}",
-               match *self {
-                   AnnotationKind::BuilderImplementation => "impl",
-                   AnnotationKind::TileSize => "tile_size",
-                   AnnotationKind::GrainSize => "grain_size",
-                   AnnotationKind::Size => "size",
-                   AnnotationKind::LoopSize => "loopsize",
-                   AnnotationKind::BranchSelectivity => "branch_selectivity",
-                   AnnotationKind::NumKeys => "num_keys",
-                   AnnotationKind::Predicate => "predicate",
-                   AnnotationKind::Vectorize => "vectorize",
-                   AnnotationKind::AlwaysUseRuntime => "always_use_runtime",
-               })
+        write!(
+            f,
+            "{}",
+            match *self {
+                AnnotationKind::BuilderImplementation => "impl",
+                AnnotationKind::TileSize => "tile_size",
+                AnnotationKind::GrainSize => "grain_size",
+                AnnotationKind::Size => "size",
+                AnnotationKind::LoopSize => "loopsize",
+                AnnotationKind::BranchSelectivity => "branch_selectivity",
+                AnnotationKind::NumKeys => "num_keys",
+                AnnotationKind::Predicate => "predicate",
+                AnnotationKind::Vectorize => "vectorize",
+                AnnotationKind::AlwaysUseRuntime => "always_use_runtime",
+            }
+        )
     }
 }
 
@@ -70,20 +73,23 @@ enum AnnotationValue {
 
 impl fmt::Display for AnnotationValue {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-       write!(f, "{}",
-              match *self {
-                   AnnotationValue::VBuilderImplementation(ref kind) => format!("{}", kind),
-                   AnnotationValue::VTileSize(ref v) => format!("{}", v),
-                   AnnotationValue::VGrainSize(ref v) => format!("{}", v),
-                   AnnotationValue::VSize(ref v) => format!("{}", v),
-                   AnnotationValue::VLoopSize(ref v) => format!("{}", v),
-                   AnnotationValue::VBranchSelectivity(ref v) => format!("{}", v),
-                   AnnotationValue::VNumKeys(ref v) => format!("{}", v),
-                   // These are flags, so their existence indicates that the value is `true`.
-                   AnnotationValue::VPredicate => "true".to_string(),
-                   AnnotationValue::VVectorize => "true".to_string(),
-                   AnnotationValue::VAlwaysUseRuntime => "true".to_string(),
-               })
+        write!(
+            f,
+            "{}",
+            match *self {
+                AnnotationValue::VBuilderImplementation(ref kind) => format!("{}", kind),
+                AnnotationValue::VTileSize(ref v) => format!("{}", v),
+                AnnotationValue::VGrainSize(ref v) => format!("{}", v),
+                AnnotationValue::VSize(ref v) => format!("{}", v),
+                AnnotationValue::VLoopSize(ref v) => format!("{}", v),
+                AnnotationValue::VBranchSelectivity(ref v) => format!("{}", v),
+                AnnotationValue::VNumKeys(ref v) => format!("{}", v),
+                // These are flags, so their existence indicates that the value is `true`.
+                AnnotationValue::VPredicate => "true".to_string(),
+                AnnotationValue::VVectorize => "true".to_string(),
+                AnnotationValue::VAlwaysUseRuntime => "true".to_string(),
+            }
+        )
     }
 }
 
@@ -109,7 +115,10 @@ impl Annotations {
     }
 
     pub fn set_builder_implementation(&mut self, value: BuilderImplementationKind) {
-        self.values.insert(AnnotationKind::BuilderImplementation, AnnotationValue::VBuilderImplementation(value));
+        self.values.insert(
+            AnnotationKind::BuilderImplementation,
+            AnnotationValue::VBuilderImplementation(value),
+        );
     }
 
     pub fn tile_size(&self) -> Option<i32> {
@@ -122,7 +131,8 @@ impl Annotations {
     }
 
     pub fn set_tile_size(&mut self, value: i32) {
-        self.values.insert(AnnotationKind::TileSize, AnnotationValue::VTileSize(value));
+        self.values
+            .insert(AnnotationKind::TileSize, AnnotationValue::VTileSize(value));
     }
 
     pub fn grain_size(&self) -> Option<i32> {
@@ -135,7 +145,10 @@ impl Annotations {
     }
 
     pub fn set_grain_size(&mut self, value: i32) {
-        self.values.insert(AnnotationKind::GrainSize, AnnotationValue::VGrainSize(value));
+        self.values.insert(
+            AnnotationKind::GrainSize,
+            AnnotationValue::VGrainSize(value),
+        );
     }
 
     pub fn size(&self) -> Option<i64> {
@@ -148,7 +161,8 @@ impl Annotations {
     }
 
     pub fn set_size(&mut self, value: i64) {
-        self.values.insert(AnnotationKind::Size, AnnotationValue::VSize(value));
+        self.values
+            .insert(AnnotationKind::Size, AnnotationValue::VSize(value));
     }
 
     pub fn loopsize(&self) -> Option<i64> {
@@ -161,7 +175,8 @@ impl Annotations {
     }
 
     pub fn set_loopsize(&mut self, value: i64) {
-        self.values.insert(AnnotationKind::LoopSize, AnnotationValue::VLoopSize(value));
+        self.values
+            .insert(AnnotationKind::LoopSize, AnnotationValue::VLoopSize(value));
     }
 
     pub fn num_keys(&self) -> Option<i64> {
@@ -174,7 +189,8 @@ impl Annotations {
     }
 
     pub fn set_num_keys(&mut self, value: i64) {
-        self.values.insert(AnnotationKind::NumKeys, AnnotationValue::VNumKeys(value));
+        self.values
+            .insert(AnnotationKind::NumKeys, AnnotationValue::VNumKeys(value));
     }
 
     pub fn branch_selectivity(&self) -> Option<i32> {
@@ -187,7 +203,10 @@ impl Annotations {
     }
 
     pub fn set_branch_selectivity(&mut self, value: i32) {
-        self.values.insert(AnnotationKind::BranchSelectivity, AnnotationValue::VBranchSelectivity(value));
+        self.values.insert(
+            AnnotationKind::BranchSelectivity,
+            AnnotationValue::VBranchSelectivity(value),
+        );
     }
 
     pub fn predicate(&self) -> bool {
@@ -196,7 +215,8 @@ impl Annotations {
 
     pub fn set_predicate(&mut self, val: bool) {
         if val {
-            self.values.insert(AnnotationKind::Predicate, AnnotationValue::VPredicate);
+            self.values
+                .insert(AnnotationKind::Predicate, AnnotationValue::VPredicate);
         } else {
             self.values.remove(&AnnotationKind::Predicate);
         }
@@ -208,7 +228,8 @@ impl Annotations {
 
     pub fn set_vectorize(&mut self, val: bool) {
         if val {
-            self.values.insert(AnnotationKind::Vectorize, AnnotationValue::VVectorize);
+            self.values
+                .insert(AnnotationKind::Vectorize, AnnotationValue::VVectorize);
         } else {
             self.values.remove(&AnnotationKind::Vectorize);
         }
@@ -220,7 +241,10 @@ impl Annotations {
 
     pub fn set_always_use_runtime(&mut self, val: bool) {
         if val {
-            self.values.insert(AnnotationKind::AlwaysUseRuntime, AnnotationValue::VAlwaysUseRuntime);
+            self.values.insert(
+                AnnotationKind::AlwaysUseRuntime,
+                AnnotationValue::VAlwaysUseRuntime,
+            );
         } else {
             self.values.remove(&AnnotationKind::AlwaysUseRuntime);
         }

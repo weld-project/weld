@@ -2,8 +2,8 @@
 
 use ast::Expr;
 
-pub use syntax::parser::parse_expr;
 pub use ast::CompareIgnoringSymbols;
+pub use syntax::parser::parse_expr;
 
 /// Returns a typed expression.
 #[cfg(test)]
@@ -17,19 +17,19 @@ pub fn typed_expression(s: &str) -> Expr {
 /// Print an un-indented expression for string comparison.
 #[cfg(test)]
 pub fn print_expr_without_indent(e: &Expr) -> String {
-    use ast::{PrettyPrintConfig, PrettyPrint};
+    use ast::{PrettyPrint, PrettyPrintConfig};
     let ref config = PrettyPrintConfig::new()
-                            .show_types(false)
-                            .should_indent(false);
+        .show_types(false)
+        .should_indent(false);
     e.pretty_print_config(config)
 }
 
 /// Print an un-indented expression for string comparison.
 #[cfg(test)]
 pub fn print_typed_expr_without_indent(e: &Expr) -> String {
-    use ast::{PrettyPrintConfig, PrettyPrint};
+    use ast::{PrettyPrint, PrettyPrintConfig};
     let ref config = PrettyPrintConfig::new()
-                            .show_types(true)
-                            .should_indent(false);
+        .show_types(true)
+        .should_indent(false);
     e.pretty_print_config(config)
 }

@@ -22,7 +22,6 @@ fn simple_for_vecmerger_loop() {
     for i in 0..(result.len as isize) {
         assert_eq!(unsafe { *result.data.offset(i) }, input_vec[i as usize]);
     }
-
 }
 
 #[test]
@@ -68,7 +67,6 @@ fn simple_for_vecmerger_binops() {
             cmp::max(input_vec[i as usize], i as i64)
         );
     }
-
 }
 
 #[test]
@@ -90,6 +88,4 @@ fn parallel_for_vecmerger_loop() {
             input_vec[i as usize] + input_vec[i as usize] * 7
         );
     }
-
-
 }

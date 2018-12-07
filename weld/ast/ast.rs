@@ -4,9 +4,9 @@ use annotation::Annotations;
 use error::*;
 use util;
 
+use self::BinOpKind::*;
 use self::ExprKind::*;
 use self::ScalarKind::*;
-use self::BinOpKind::*;
 
 use std::fmt;
 use std::vec;
@@ -38,32 +38,18 @@ pub enum Type {
 impl Type {
     /// Returns the child types of this `Type`.
     pub fn children(&self) -> vec::IntoIter<&Type> {
-        use self::Type::*;
         use self::BuilderKind::*;
+        use self::Type::*;
         match *self {
             Unknown | Scalar(_) | Simd(_) => vec![],
-            Vector(ref elem) => {
-                vec![elem.as_ref()]
-            }
-            Dict(ref key, ref value) => {
-                vec![key.as_ref(), value.as_ref()]
-            }
+            Vector(ref elem) => vec![elem.as_ref()],
+            Dict(ref key, ref value) => vec![key.as_ref(), value.as_ref()],
             Builder(ref kind, _) => match kind {
-                Appender(ref elem) => {
-                    vec![elem.as_ref()]
-                }
-                Merger(ref elem, _) => {
-                    vec![elem.as_ref()]
-                }
-                DictMerger(ref key, ref value, _) => {
-                    vec![key.as_ref(), value.as_ref()]
-                }
-                GroupMerger(ref key, ref value) =>  {
-                    vec![key.as_ref(), value.as_ref()]
-                }
-                VecMerger(ref elem, _) => {
-                    vec![elem.as_ref()]
-                }
+                Appender(ref elem) => vec![elem.as_ref()],
+                Merger(ref elem, _) => vec![elem.as_ref()],
+                DictMerger(ref key, ref value, _) => vec![key.as_ref(), value.as_ref()],
+                GroupMerger(ref key, ref value) => vec![key.as_ref(), value.as_ref()],
+                VecMerger(ref elem, _) => vec![elem.as_ref()],
             },
             Struct(ref elems) => elems.iter().collect(),
             Function(ref params, ref res) => {
@@ -74,7 +60,8 @@ impl Type {
                 children.push(res.as_ref());
                 children
             }
-        }.into_iter()
+        }
+        .into_iter()
     }
 
     /// Returns whether this `Type` is a SIMD value.
@@ -87,7 +74,7 @@ impl Type {
         match *self {
             Simd(_) | Builder(_, _) => true,
             Struct(ref fields) => fields.iter().all(|f| f.is_simd()),
-            _ => false
+            _ => false,
         }
     }
 
@@ -95,7 +82,7 @@ impl Type {
         use self::Type::Scalar;
         match *self {
             Scalar(_) => true,
-            _ => false
+            _ => false,
         }
     }
 
@@ -111,7 +98,7 @@ impl Type {
                 let result: WeldResult<_> = fields.iter().map(|f| f.simd_type()).collect();
                 Ok(Struct(result?))
             }
-            _ => compile_err!("simd_type called on non-scalar type {}", self)
+            _ => compile_err!("simd_type called on non-scalar type {}", self),
         }
     }
 
@@ -127,7 +114,7 @@ impl Type {
                 let result: WeldResult<_> = fields.iter().map(|f| f.scalar_type()).collect();
                 Ok(Struct(result?))
             }
-            _ => compile_err!("scalar_type called on non-SIMD type {}", self)
+            _ => compile_err!("scalar_type called on non-SIMD type {}", self),
         }
     }
 
@@ -138,7 +125,6 @@ impl Type {
         use self::Type::Builder;
         if let Builder(ref kind, _) = *self {
             Ok(kind.merge_type())
-
         } else {
             compile_err!("merge_type called on non-builder type {}", self)
         }
@@ -160,31 +146,19 @@ impl fmt::Display for Type {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use self::Type::*;
         let ref text = match *self {
-            Scalar(ref kind) => {
-                format!("{}", kind)
-            }
-            Simd(ref kind) => {
-                format!("simd[{}]", kind)
-            }
-            Vector(ref elem) => {
-                format!("vec[{}]", elem)
-            }
-            Dict(ref key, ref value) => {
-                format!("dict[{},{}]", key, value)
-            }
-            Struct(ref elems) => {
-                util::join("{", ",", "}", elems.iter().map(|e| e.to_string()))
-            }
+            Scalar(ref kind) => format!("{}", kind),
+            Simd(ref kind) => format!("simd[{}]", kind),
+            Vector(ref elem) => format!("vec[{}]", elem),
+            Dict(ref key, ref value) => format!("dict[{},{}]", key, value),
+            Struct(ref elems) => util::join("{", ",", "}", elems.iter().map(|e| e.to_string())),
             Function(ref params, ref return_type) => {
                 let mut res = util::join("|", ",", "|(", params.iter().map(|e| e.to_string()));
                 res.push_str(&return_type.to_string());
                 res.push_str(")");
                 res
             }
-            Builder(ref kind, ref annotations) => {
-                format!("{}{}", annotations, kind)
-            }
-            Unknown => String::from("?")
+            Builder(ref kind, ref annotations) => format!("{}{}", annotations, kind),
+            Unknown => String::from("?"),
         };
         f.write_str(text)
     }
@@ -213,7 +187,7 @@ impl ScalarKind {
     pub fn is_float(&self) -> bool {
         match *self {
             F32 | F64 => true,
-            _ => false
+            _ => false,
         }
     }
 
@@ -221,7 +195,7 @@ impl ScalarKind {
     pub fn is_bool(&self) -> bool {
         match *self {
             Bool => true,
-            _ => false
+            _ => false,
         }
     }
 
@@ -231,7 +205,7 @@ impl ScalarKind {
     pub fn is_signed_integer(&self) -> bool {
         match *self {
             I8 | I16 | I32 | I64 => true,
-            _ => false
+            _ => false,
         }
     }
 
@@ -241,7 +215,7 @@ impl ScalarKind {
     pub fn is_unsigned_integer(&self) -> bool {
         match *self {
             U8 | U16 | U32 | U64 => true,
-            _ => false
+            _ => false,
         }
     }
 
@@ -259,7 +233,7 @@ impl ScalarKind {
             I8 | U8 => 8,
             I16 | U16 => 16,
             I32 | U32 | F32 => 32,
-            I64 | U64 | F64 => 64
+            I64 | U64 | F64 => 64,
         }
     }
 }
@@ -322,8 +296,8 @@ impl BuilderKind {
 
     /// Returns the type produced by this `BuilderKind`.
     pub fn result_type(&self) -> Type {
-        use self::Type::*;
         use self::BuilderKind::*;
+        use self::Type::*;
         match *self {
             Appender(ref elem) => Vector(elem.clone()),
             Merger(ref elem, _) => *elem.clone(),
@@ -338,21 +312,11 @@ impl fmt::Display for BuilderKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use self::BuilderKind::*;
         let ref text = match *self {
-            Appender(ref t) => {
-                format!("appender[{}]", t)
-            }
-            DictMerger(ref key, ref value, op) => {
-                format!("dictmerger[{},{},{}]", key, value, op)
-            }
-            GroupMerger(ref key, ref value) => {
-                format!("groupmerger[{},{}]", key, value)
-            }
-            VecMerger(ref elem, op) => {
-                format!("vecmerger[{},{}]", elem, op)
-            }
-            Merger(ref elem, op) => {
-                format!("merger[{},{}]", elem, op)
-            }
+            Appender(ref t) => format!("appender[{}]", t),
+            DictMerger(ref key, ref value, op) => format!("dictmerger[{},{},{}]", key, value, op),
+            GroupMerger(ref key, ref value) => format!("groupmerger[{},{}]", key, value),
+            VecMerger(ref elem, op) => format!("vecmerger[{},{}]", elem, op),
+            Merger(ref elem, op) => format!("merger[{},{}]", elem, op),
         };
         f.write_str(text)
     }
@@ -458,8 +422,10 @@ impl Iter {
     /// An iterator is simple if it has no start/stride/end specified (i.e., it iterates over all
     /// the input data) and kind `ScalarIter`.
     pub fn is_simple(&self) -> bool {
-        return self.start.is_none() && self.end.is_none() && self.stride.is_none() &&
-            self.kind == IterKind::ScalarIter;
+        return self.start.is_none()
+            && self.end.is_none()
+            && self.stride.is_none()
+            && self.kind == IterKind::ScalarIter;
     }
 }
 
@@ -488,12 +454,25 @@ pub enum ExprKind {
         kind: ScalarKind,
         child_expr: Box<Expr>,
     },
-    ToVec { child_expr: Box<Expr> },
-    MakeStruct { elems: Vec<Expr> },
-    MakeVector { elems: Vec<Expr> },
-    Zip { vectors: Vec<Expr> },
-    GetField { expr: Box<Expr>, index: u32 },
-    Length { data: Box<Expr> },
+    ToVec {
+        child_expr: Box<Expr>,
+    },
+    MakeStruct {
+        elems: Vec<Expr>,
+    },
+    MakeVector {
+        elems: Vec<Expr>,
+    },
+    Zip {
+        vectors: Vec<Expr>,
+    },
+    GetField {
+        expr: Box<Expr>,
+        index: u32,
+    },
+    Length {
+        data: Box<Expr>,
+    },
     Lookup {
         data: Box<Expr>,
         index: Box<Expr>,
@@ -558,7 +537,9 @@ pub enum ExprKind {
         builder: Box<Expr>,
         value: Box<Expr>,
     },
-    Res { builder: Box<Expr> },
+    Res {
+        builder: Box<Expr>,
+    },
 }
 
 impl ExprKind {
@@ -571,7 +552,7 @@ impl ExprKind {
             Ident(_) => "Ident",
             Negate(_) => "Negate",
             Broadcast(_) => "Broadcast",
-            BinOp{ .. } => "BinOp",
+            BinOp { .. } => "BinOp",
             UnaryOp { .. } => "UnaryOp",
             Cast { .. } => "Cast",
             ToVec { .. } => "ToVec",
@@ -588,7 +569,7 @@ impl ExprKind {
             If { .. } => "If",
             Iterate { .. } => "Iterate",
             Select { .. } => "Select",
-            Lambda  { .. } => "Lambda",
+            Lambda { .. } => "Lambda",
             Apply { .. } => "Apply",
             CUDF { .. } => "CUDF",
             Serialize(_) => "Serialize",
@@ -774,7 +755,7 @@ impl Expr {
                 ref right,
                 ..
             } => vec![left.as_ref(), right.as_ref()],
-            UnaryOp {ref value, ..} => vec![value.as_ref()],
+            UnaryOp { ref value, .. } => vec![value.as_ref()],
             Cast { ref child_expr, .. } => vec![child_expr.as_ref()],
             ToVec { ref child_expr } => vec![child_expr.as_ref()],
             Let {
@@ -865,7 +846,8 @@ impl Expr {
             Broadcast(ref t) => vec![t.as_ref()],
             // Explicitly list types instead of doing _ => ... to remember to add new types.
             Literal(_) | Ident(_) => vec![],
-        }.into_iter()
+        }
+        .into_iter()
     }
 
     /// Get an iterator of mutable references to the children of this expression.
@@ -878,7 +860,9 @@ impl Expr {
                 ..
             } => vec![left.as_mut(), right.as_mut()],
             UnaryOp { ref mut value, .. } => vec![value.as_mut()],
-            Cast { ref mut child_expr, .. } => vec![child_expr.as_mut()],
+            Cast {
+                ref mut child_expr, ..
+            } => vec![child_expr.as_mut()],
             ToVec { ref mut child_expr } => vec![child_expr.as_mut()],
             Let {
                 ref mut value,
@@ -972,9 +956,9 @@ impl Expr {
             Broadcast(ref mut t) => vec![t.as_mut()],
             // Explicitly list types instead of doing _ => ... to remember to add new types.
             Literal(_) | Ident(_) => vec![],
-        }.into_iter()
+        }
+        .into_iter()
     }
-
 
     /// Returns whether this `Expr` is partially typed.
     ///
@@ -1034,7 +1018,8 @@ impl Expr {
 
     /// Run a closure on this expression and every child, in pre-order.
     pub fn traverse<F>(&self, func: &mut F)
-        where F: FnMut(&Expr) -> ()
+    where
+        F: FnMut(&Expr) -> (),
     {
         func(self);
         for c in self.children() {
@@ -1057,7 +1042,8 @@ impl Expr {
 
     /// Recursively transforms an expression in place by running a function on it and optionally replacing it with another expression.
     pub fn transform_and_continue<F>(&mut self, func: &mut F)
-        where F: FnMut(&mut Expr) -> (Option<Expr>, bool)
+    where
+        F: FnMut(&mut Expr) -> (Option<Expr>, bool),
     {
         match func(self) {
             (Some(e), true) => {
@@ -1079,31 +1065,32 @@ impl Expr {
     /// Recursively transforms an expression in place by running a function on it and optionally replacing it with another expression.
     /// Supports returning an error, which is treated as returning (None, false)
     pub fn transform_and_continue_res<F>(&mut self, func: &mut F)
-        where F: FnMut(&mut Expr) -> WeldResult<(Option<Expr>, bool)>
-        {
-            if let Ok(result) = func(self) {
-                match result {
-                    (Some(e), true) => {
-                        *self = e;
-                        return self.transform_and_continue_res(func);
-                    }
-                    (Some(e), false) => {
-                        *self = e;
-                    }
-                    (None, true) => {
-                        for c in self.children_mut() {
-                            c.transform_and_continue_res(func);
-                        }
-                    }
-                    (None, false) => {}
+    where
+        F: FnMut(&mut Expr) -> WeldResult<(Option<Expr>, bool)>,
+    {
+        if let Ok(result) = func(self) {
+            match result {
+                (Some(e), true) => {
+                    *self = e;
+                    return self.transform_and_continue_res(func);
                 }
+                (Some(e), false) => {
+                    *self = e;
+                }
+                (None, true) => {
+                    for c in self.children_mut() {
+                        c.transform_and_continue_res(func);
+                    }
+                }
+                (None, false) => {}
             }
         }
-
+    }
 
     /// Recursively transforms an expression in place by running a function on it and optionally replacing it with another expression.
     pub fn transform<F>(&mut self, func: &mut F)
-        where F: FnMut(&mut Expr) -> Option<Expr>
+    where
+        F: FnMut(&mut Expr) -> Option<Expr>,
     {
         if let Some(e) = func(self) {
             *self = e;
@@ -1117,7 +1104,8 @@ impl Expr {
     /// Recursively transforms an expression in place by running a function first on its children, then on the root
     /// expression itself; this can be more efficient than `transform` for some cases
     pub fn transform_up<F>(&mut self, func: &mut F)
-        where F: FnMut(&mut Expr) -> Option<Expr>
+    where
+        F: FnMut(&mut Expr) -> Option<Expr>,
     {
         for c in self.children_mut() {
             c.transform(func);
@@ -1144,10 +1132,10 @@ impl Expr {
 /// Create a box containing an untyped expression of the given kind.
 pub fn expr_box(kind: ExprKind, annot: Annotations) -> Box<Expr> {
     Box::new(Expr {
-                 ty: Type::Unknown,
-                 kind: kind,
-                 annotations: annot,
-             })
+        ty: Type::Unknown,
+        kind: kind,
+        annotations: annot,
+    })
 }
 
 #[test]

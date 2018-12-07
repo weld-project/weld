@@ -1,9 +1,9 @@
 //! Configurations and defaults for the Weld runtime.
 
-use super::WeldConf;
 use super::error::WeldResult;
-use optimizer::OPTIMIZATION_PASSES;
+use super::WeldConf;
 use optimizer::Pass;
+use optimizer::OPTIMIZATION_PASSES;
 
 use std::path::{Path, PathBuf};
 
@@ -31,8 +31,18 @@ pub const DEFAULT_EXPERIMENTAL_PASSES: bool = false;
 
 lazy_static! {
     pub static ref DEFAULT_OPTIMIZATION_PASSES: Vec<Pass> = {
-        let m = ["loop-fusion", "unroll-static-loop", "infer-size", "short-circuit-booleans", "predicate", "vectorize", "fix-iterate"];
-        m.iter().map(|e| (*OPTIMIZATION_PASSES.get(e).unwrap()).clone()).collect()
+        let m = [
+            "loop-fusion",
+            "unroll-static-loop",
+            "infer-size",
+            "short-circuit-booleans",
+            "predicate",
+            "vectorize",
+            "fix-iterate",
+        ];
+        m.iter()
+            .map(|e| (*OPTIMIZATION_PASSES.get(e).unwrap()).clone())
+            .collect()
     };
     pub static ref DEFAULT_DUMP_CODE_DIR: PathBuf = Path::new(".").to_path_buf();
 }
@@ -59,16 +69,19 @@ pub struct ParsedConf {
 /// Parse a configuration from a WeldConf key-value dictionary.
 pub fn parse(conf: &WeldConf) -> WeldResult<ParsedConf> {
     let value = get_value(conf, MEMORY_LIMIT_KEY);
-    let memory_limit = value.map(|s| parse_memory_limit(&s))
-                            .unwrap_or(Ok(DEFAULT_MEMORY_LIMIT))?;
+    let memory_limit = value
+        .map(|s| parse_memory_limit(&s))
+        .unwrap_or(Ok(DEFAULT_MEMORY_LIMIT))?;
 
     let value = get_value(conf, THREADS_KEY);
-    let threads = value.map(|s| parse_threads(&s))
-                       .unwrap_or(Ok(DEFAULT_THREADS))?;
+    let threads = value
+        .map(|s| parse_threads(&s))
+        .unwrap_or(Ok(DEFAULT_THREADS))?;
 
     let value = get_value(conf, OPTIMIZATION_PASSES_KEY);
-    let mut passes = value.map(|s| parse_passes(&s))
-                      .unwrap_or(Ok(DEFAULT_OPTIMIZATION_PASSES.clone()))?;
+    let mut passes = value
+        .map(|s| parse_passes(&s))
+        .unwrap_or(Ok(DEFAULT_OPTIMIZATION_PASSES.clone()))?;
 
     // Insert mandatory passes to the beginning.
     passes.insert(0, OPTIMIZATION_PASSES.get("inline-zip").unwrap().clone());
@@ -76,32 +89,39 @@ pub fn parse(conf: &WeldConf) -> WeldResult<ParsedConf> {
     passes.insert(0, OPTIMIZATION_PASSES.get("inline-apply").unwrap().clone());
 
     let value = get_value(conf, LLVM_OPTIMIZATION_LEVEL_KEY);
-    let level = value.map(|s| parse_llvm_optimization_level(&s))
-                      .unwrap_or(Ok(DEFAULT_LLVM_OPTIMIZATION_LEVEL))?;
+    let level = value
+        .map(|s| parse_llvm_optimization_level(&s))
+        .unwrap_or(Ok(DEFAULT_LLVM_OPTIMIZATION_LEVEL))?;
 
     let value = get_value(conf, SUPPORT_MULTITHREAD_KEY);
-    let support_multithread = value.map(|s| parse_bool_flag(&s, "Invalid flag for multithreadSupport"))
-                      .unwrap_or(Ok(DEFAULT_SUPPORT_MULTITHREAD))?;
+    let support_multithread = value
+        .map(|s| parse_bool_flag(&s, "Invalid flag for multithreadSupport"))
+        .unwrap_or(Ok(DEFAULT_SUPPORT_MULTITHREAD))?;
 
     let value = get_value(conf, DUMP_CODE_DIR_KEY);
-    let dump_code_dir = value.map(|s| parse_dir(&s))
-                      .unwrap_or(Ok(DEFAULT_DUMP_CODE_DIR.clone()))?;
+    let dump_code_dir = value
+        .map(|s| parse_dir(&s))
+        .unwrap_or(Ok(DEFAULT_DUMP_CODE_DIR.clone()))?;
 
     let value = get_value(conf, DUMP_CODE_KEY);
-    let dump_code_enabled = value.map(|s| parse_bool_flag(&s, "Invalid flag for dumpCode"))
-                      .unwrap_or(Ok(DEFAULT_DUMP_CODE))?;
+    let dump_code_enabled = value
+        .map(|s| parse_bool_flag(&s, "Invalid flag for dumpCode"))
+        .unwrap_or(Ok(DEFAULT_DUMP_CODE))?;
 
     let value = get_value(conf, SIR_OPT_KEY);
-    let sir_opt_enabled = value.map(|s| parse_bool_flag(&s, "Invalid flag for sirOptimization"))
-                      .unwrap_or(Ok(DEFAULT_SIR_OPT))?;
+    let sir_opt_enabled = value
+        .map(|s| parse_bool_flag(&s, "Invalid flag for sirOptimization"))
+        .unwrap_or(Ok(DEFAULT_SIR_OPT))?;
 
     let value = get_value(conf, EXPERIMENTAL_PASSES_KEY);
-    let enable_experimental_passes = value.map(|s| parse_bool_flag(&s, "Invalid flag for applyExperimentalPasses"))
-                      .unwrap_or(Ok(DEFAULT_EXPERIMENTAL_PASSES))?;
+    let enable_experimental_passes = value
+        .map(|s| parse_bool_flag(&s, "Invalid flag for applyExperimentalPasses"))
+        .unwrap_or(Ok(DEFAULT_EXPERIMENTAL_PASSES))?;
 
     let value = get_value(conf, TRACE_RUN_KEY);
-    let trace_run = value.map(|s| parse_bool_flag(&s, "Invalid flag for trace.run"))
-                      .unwrap_or(Ok(DEFAULT_TRACE_RUN))?;
+    let trace_run = value
+        .map(|s| parse_bool_flag(&s, "Invalid flag for trace.run"))
+        .unwrap_or(Ok(DEFAULT_TRACE_RUN))?;
 
     Ok(ParsedConf {
         memory_limit: memory_limit,
@@ -115,14 +135,12 @@ pub fn parse(conf: &WeldConf) -> WeldResult<ParsedConf> {
         dump_code: DumpCodeConf {
             enabled: dump_code_enabled,
             dir: dump_code_dir,
-        }
+        },
     })
 }
 
 fn get_value(conf: &WeldConf, key: &str) -> Option<String> {
-    conf.get(key)
-        .cloned()
-        .map(|v| v.into_string().unwrap())
+    conf.get(key).cloned().map(|v| v.into_string().unwrap())
 }
 
 /// Parses a string into a path and checks if the path is a directory in the filesystem.
@@ -130,7 +148,7 @@ fn parse_dir(s: &str) -> WeldResult<PathBuf> {
     let path = Path::new(s);
     match path.metadata() {
         Ok(_) if path.is_dir() => Ok(path.to_path_buf()),
-        _ => compile_err!("WeldConf: {} is not a directory", s)
+        _ => compile_err!("WeldConf: {} is not a directory", s),
     }
 }
 
@@ -168,7 +186,7 @@ fn parse_passes(s: &str) -> WeldResult<Vec<Pass>> {
     for piece in s.split(",") {
         match OPTIMIZATION_PASSES.get(piece) {
             Some(pass) => result.push(pass.clone()),
-            None => return compile_err!("Unknown optimization pass: {}", piece)
+            None => return compile_err!("Unknown optimization pass: {}", piece),
         }
     }
     Ok(result)

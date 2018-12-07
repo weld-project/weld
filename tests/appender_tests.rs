@@ -66,7 +66,6 @@ fn simple_parallel_for_appender_loop() {
     for i in 0..(result.len as isize) {
         assert_eq!(unsafe { *result.data.offset(i) }, i as i64)
     }
-
 }
 
 #[test]
@@ -88,7 +87,6 @@ fn simple_parallel_for_multi_appender_loop() {
     for i in 0..(result.len as isize) {
         assert_eq!(unsafe { *result.data.offset(i) }, (i as i64) % size)
     }
-
 }
 
 #[test]
@@ -114,6 +112,4 @@ fn complex_parallel_for_appender_loop() {
         assert_eq!(unsafe { *result.data.offset(i * 3 + 2) }, 0);
         assert_eq!(unsafe { *result.data.offset(i * 3 + 3) }, 2)
     }
-
-
 }

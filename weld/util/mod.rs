@@ -4,18 +4,18 @@
 //! and ID generators and a module for measuring compile-time performance of various aspects of the
 //! compiler.
 
-extern crate libc;
 extern crate fnv;
+extern crate libc;
 
 use std::iter;
 
 use std::cmp::max;
 
-use ast::*;
 use ast::ExprKind::*;
+use ast::*;
 
-pub mod stats;
 pub mod colors;
+pub mod stats;
 
 /// Utility struct that can track and generate unique IDs and symbols for use in an expression.
 /// Each SymbolGenerator tracks the maximum ID used for every symbol name, and can be used to
@@ -27,7 +27,9 @@ pub struct SymbolGenerator {
 impl SymbolGenerator {
     /// Initialize a SymbolGenerator with no existing symbols.
     pub fn new() -> SymbolGenerator {
-        SymbolGenerator { id_map: fnv::FnvHashMap::default() }
+        SymbolGenerator {
+            id_map: fnv::FnvHashMap::default(),
+        }
     }
 
     /// Initialize a SymbolGenerator from all the symbols defined in an expression.
@@ -40,15 +42,15 @@ impl SymbolGenerator {
         };
 
         expr.traverse(&mut |e| match e.kind {
-                               Let { ref name, .. } => update_id(&mut id_map, name),
-                               Ident(ref sym) => update_id(&mut id_map, sym),
-                               Lambda { ref params, .. } => {
-                                   for ref p in params {
-                                       update_id(&mut id_map, &p.name);
-                                   }
-                               }
-                               _ => {}
-                           });
+            Let { ref name, .. } => update_id(&mut id_map, name),
+            Ident(ref sym) => update_id(&mut id_map, sym),
+            Lambda { ref params, .. } => {
+                for ref p in params {
+                    update_id(&mut id_map, &p.name);
+                }
+            }
+            _ => {}
+        });
 
         SymbolGenerator { id_map: id_map }
     }
@@ -94,7 +96,12 @@ impl IdGenerator {
     }
 }
 
-pub fn join<T: iter::Iterator<Item = String>>(start: &str, sep: &str, end: &str, strings: T) -> String {
+pub fn join<T: iter::Iterator<Item = String>>(
+    start: &str,
+    sep: &str,
+    end: &str,
+    strings: T,
+) -> String {
     let mut res = String::new();
     res.push_str(start);
     for (i, s) in strings.enumerate() {

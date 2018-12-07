@@ -1,38 +1,40 @@
 //! Constructors for creating typed expressions.
 #![allow(dead_code)]
 
-use ast::*;
-use ast::ExprKind::*;
-use ast::Type::*;
-use ast::BuilderKind::*;
-use ast::LiteralKind::*;
-use error::*;
 use annotation::*;
+use ast::BuilderKind::*;
+use ast::ExprKind::*;
+use ast::LiteralKind::*;
+use ast::Type::*;
+use ast::*;
+use error::*;
 
 pub fn new_expr(kind: ExprKind, ty: Type) -> WeldResult<Expr> {
     Ok(Expr {
-           kind: kind,
-           ty: ty,
-           annotations: Annotations::new(),
-       })
+        kind: kind,
+        ty: ty,
+        annotations: Annotations::new(),
+    })
 }
 
 pub fn literal_expr(kind: LiteralKind) -> WeldResult<Expr> {
-    new_expr(Literal(kind.clone()),
-             match kind {
-                 BoolLiteral(_) => Scalar(ScalarKind::Bool),
-                 I8Literal(_) => Scalar(ScalarKind::I8),
-                 I16Literal(_) => Scalar(ScalarKind::I16),
-                 I32Literal(_) => Scalar(ScalarKind::I32),
-                 I64Literal(_) => Scalar(ScalarKind::I64),
-                 U8Literal(_) => Scalar(ScalarKind::U8),
-                 U16Literal(_) => Scalar(ScalarKind::U16),
-                 U32Literal(_) => Scalar(ScalarKind::U32),
-                 U64Literal(_) => Scalar(ScalarKind::U64),
-                 F32Literal(_) => Scalar(ScalarKind::F32),
-                 F64Literal(_) => Scalar(ScalarKind::F64),
-                 StringLiteral(_) => Vector(Box::new(Scalar(ScalarKind::I8))),
-             })
+    new_expr(
+        Literal(kind.clone()),
+        match kind {
+            BoolLiteral(_) => Scalar(ScalarKind::Bool),
+            I8Literal(_) => Scalar(ScalarKind::I8),
+            I16Literal(_) => Scalar(ScalarKind::I16),
+            I32Literal(_) => Scalar(ScalarKind::I32),
+            I64Literal(_) => Scalar(ScalarKind::I64),
+            U8Literal(_) => Scalar(ScalarKind::U8),
+            U16Literal(_) => Scalar(ScalarKind::U16),
+            U32Literal(_) => Scalar(ScalarKind::U32),
+            U64Literal(_) => Scalar(ScalarKind::U64),
+            F32Literal(_) => Scalar(ScalarKind::F32),
+            F64Literal(_) => Scalar(ScalarKind::F64),
+            StringLiteral(_) => Vector(Box::new(Scalar(ScalarKind::I8))),
+        },
+    )
 }
 
 pub fn ident_expr(symbol: Symbol, ty: Type) -> WeldResult<Expr> {
@@ -44,21 +46,26 @@ pub fn binop_expr(kind: BinOpKind, left: Expr, right: Expr) -> WeldResult<Expr> 
         compile_err!("Internal error: Mismatched types in binop_expr")
     } else {
         let ty = left.ty.clone();
-        new_expr(BinOp {
-                     kind: kind,
-                     left: Box::new(left),
-                     right: Box::new(right),
-                 },
-                 ty)
+        new_expr(
+            BinOp {
+                kind: kind,
+                left: Box::new(left),
+                right: Box::new(right),
+            },
+            ty,
+        )
     }
 }
 
 pub fn unaryop_expr(kind: UnaryOpKind, value: Expr) -> WeldResult<Expr> {
     let ty = value.ty.clone();
-    new_expr(UnaryOp {
-                 kind: kind,
-                 value: Box::new(value),
-             }, ty)
+    new_expr(
+        UnaryOp {
+            kind: kind,
+            value: Box::new(value),
+        },
+        ty,
+    )
 }
 
 pub fn cast_expr(kind: ScalarKind, expr: Expr) -> WeldResult<Expr> {
@@ -67,11 +74,13 @@ pub fn cast_expr(kind: ScalarKind, expr: Expr) -> WeldResult<Expr> {
     } else {
         return compile_err!("Internal error: Mismatched types in cast_expr");
     };
-    new_expr(Cast {
-                 kind: kind,
-                 child_expr: Box::new(expr),
-             },
-             ty)
+    new_expr(
+        Cast {
+            kind: kind,
+            child_expr: Box::new(expr),
+        },
+        ty,
+    )
 }
 
 pub fn negate_expr(expr: Expr) -> WeldResult<Expr> {
@@ -98,7 +107,12 @@ pub fn tovec_expr(expr: Expr) -> WeldResult<Expr> {
     } else {
         return compile_err!("Internal error: Mismatched types in tovec_expr");
     };
-    new_expr(ToVec { child_expr: Box::new(expr.clone()) }, ty)
+    new_expr(
+        ToVec {
+            child_expr: Box::new(expr.clone()),
+        },
+        ty,
+    )
 }
 
 pub fn makestruct_expr(exprs: Vec<Expr>) -> WeldResult<Expr> {
@@ -130,16 +144,23 @@ pub fn getfield_expr(expr: Expr, index: u32) -> WeldResult<Expr> {
     } else {
         return compile_err!("Internal error: Mismatched types in getfield_expr");
     };
-    new_expr(GetField {
-                 expr: Box::new(expr),
-                 index: index,
-             },
-             ty)
+    new_expr(
+        GetField {
+            expr: Box::new(expr),
+            index: index,
+        },
+        ty,
+    )
 }
 
 pub fn length_expr(expr: Expr) -> WeldResult<Expr> {
     if let Vector(_) = expr.ty {
-        new_expr(Length { data: Box::new(expr) }, Scalar(ScalarKind::I64))
+        new_expr(
+            Length {
+                data: Box::new(expr),
+            },
+            Scalar(ScalarKind::I64),
+        )
     } else {
         compile_err!("Internal error: Mismatched types in length_expr")
     }
@@ -154,11 +175,13 @@ pub fn lookup_expr(data: Expr, index: Expr) -> WeldResult<Expr> {
     };
 
     if let Scalar(ScalarKind::I64) = index.ty {
-        new_expr(Lookup {
-                     data: Box::new(data),
-                     index: Box::new(index),
-                 },
-                 ty)
+        new_expr(
+            Lookup {
+                data: Box::new(data),
+                index: Box::new(index),
+            },
+            ty,
+        )
     } else {
         err
     }
@@ -175,11 +198,13 @@ pub fn keyexists_expr(data: Expr, key: Expr) -> WeldResult<Expr> {
     if key.ty != kt {
         return err;
     }
-    new_expr(KeyExists {
-                 data: Box::new(data),
-                 key: Box::new(key),
-             },
-             Scalar(ScalarKind::Bool))
+    new_expr(
+        KeyExists {
+            data: Box::new(data),
+            key: Box::new(key),
+        },
+        Scalar(ScalarKind::Bool),
+    )
 }
 
 pub fn slice_expr(data: Expr, index: Expr, size: Expr) -> WeldResult<Expr> {
@@ -202,12 +227,14 @@ pub fn slice_expr(data: Expr, index: Expr, size: Expr) -> WeldResult<Expr> {
     }
 
     let ty = data.ty.clone();
-    new_expr(Slice {
-                 data: Box::new(data),
-                 index: Box::new(index),
-                 size: Box::new(size),
-             },
-             ty)
+    new_expr(
+        Slice {
+            data: Box::new(data),
+            index: Box::new(index),
+            size: Box::new(size),
+        },
+        ty,
+    )
 }
 
 pub fn sort_expr(data: Expr, keyfunc: Expr) -> WeldResult<Expr> {
@@ -219,31 +246,34 @@ pub fn sort_expr(data: Expr, keyfunc: Expr) -> WeldResult<Expr> {
                 if let Scalar(_) = **body {
                     type_checked = true;
                 }
-
             }
         }
     }
 
     if !type_checked {
-        return compile_err!("Internal error: Mismatched types in sort_expr")
+        return compile_err!("Internal error: Mismatched types in sort_expr");
     }
 
     let ty = data.ty.clone();
-    new_expr(Sort {
-                 data: Box::new(data),
-                 keyfunc: Box::new(keyfunc),
-             },
-             ty)
+    new_expr(
+        Sort {
+            data: Box::new(data),
+            keyfunc: Box::new(keyfunc),
+        },
+        ty,
+    )
 }
 
 pub fn let_expr(name: Symbol, value: Expr, body: Expr) -> WeldResult<Expr> {
     let ty = body.ty.clone();
-    new_expr(Let {
-                 name: name,
-                 value: Box::new(value),
-                 body: Box::new(body),
-             },
-             ty)
+    new_expr(
+        Let {
+            name: name,
+            value: Box::new(value),
+            body: Box::new(body),
+        },
+        ty,
+    )
 }
 
 pub fn if_expr(cond: Expr, on_true: Expr, on_false: Expr) -> WeldResult<Expr> {
@@ -257,12 +287,14 @@ pub fn if_expr(cond: Expr, on_true: Expr, on_false: Expr) -> WeldResult<Expr> {
     }
 
     let ty = on_true.ty.clone();
-    new_expr(If {
-                 cond: Box::new(cond),
-                 on_true: Box::new(on_true),
-                 on_false: Box::new(on_false),
-             },
-             ty)
+    new_expr(
+        If {
+            cond: Box::new(cond),
+            on_true: Box::new(on_true),
+            on_false: Box::new(on_false),
+        },
+        ty,
+    )
 }
 
 pub fn select_expr(cond: Expr, on_true: Expr, on_false: Expr) -> WeldResult<Expr> {
@@ -276,22 +308,28 @@ pub fn select_expr(cond: Expr, on_true: Expr, on_false: Expr) -> WeldResult<Expr
     }
 
     let ty = on_true.ty.clone();
-    new_expr(Select {
-                 cond: Box::new(cond),
-                 on_true: Box::new(on_true),
-                 on_false: Box::new(on_false),
-             },
-             ty)
+    new_expr(
+        Select {
+            cond: Box::new(cond),
+            on_true: Box::new(on_true),
+            on_false: Box::new(on_false),
+        },
+        ty,
+    )
 }
 
 pub fn lambda_expr(params: Vec<Parameter>, body: Expr) -> WeldResult<Expr> {
-    let ty = Function(params.iter().map(|p| p.ty.clone()).collect(),
-                      Box::new(body.ty.clone()));
-    new_expr(Lambda {
-                 params: params,
-                 body: Box::new(body),
-             },
-             ty)
+    let ty = Function(
+        params.iter().map(|p| p.ty.clone()).collect(),
+        Box::new(body.ty.clone()),
+    );
+    new_expr(
+        Lambda {
+            params: params,
+            body: Box::new(body),
+        },
+        ty,
+    )
 }
 
 pub fn apply_expr(func: Expr, params: Vec<Expr>) -> WeldResult<Expr> {
@@ -309,20 +347,24 @@ pub fn apply_expr(func: Expr, params: Vec<Expr>) -> WeldResult<Expr> {
         return err;
     }
 
-    new_expr(Apply {
-                 func: Box::new(func),
-                 params: params,
-             },
-             *ty.unwrap())
+    new_expr(
+        Apply {
+            func: Box::new(func),
+            params: params,
+        },
+        *ty.unwrap(),
+    )
 }
 
 pub fn cudf_expr(sym_name: String, args: Vec<Expr>, return_ty: Type) -> WeldResult<Expr> {
-    new_expr(CUDF {
-                 sym_name: sym_name,
-                 args: args,
-                 return_ty: Box::new(return_ty.clone()),
-             },
-             return_ty)
+    new_expr(
+        CUDF {
+            sym_name: sym_name,
+            args: args,
+            return_ty: Box::new(return_ty.clone()),
+        },
+        return_ty,
+    )
 }
 
 pub fn newbuilder_expr(kind: BuilderKind, expr: Option<Expr>) -> WeldResult<Expr> {
@@ -366,13 +408,14 @@ pub fn newbuilder_expr(kind: BuilderKind, expr: Option<Expr>) -> WeldResult<Expr
         return compile_err!("Internal error: Mismatched types in newbuilder_expr");
     }
 
-    new_expr(NewBuilder(expr.map(|e| Box::new(e))),
-             Builder(kind, Annotations::new()))
+    new_expr(
+        NewBuilder(expr.map(|e| Box::new(e))),
+        Builder(kind, Annotations::new()),
+    )
 }
 
 // TODO - the vectorized flag is temporary!
 pub fn for_expr(iters: Vec<Iter>, builder: Expr, func: Expr, vectorized: bool) -> WeldResult<Expr> {
-
     let vec_tys = iters.iter().map(|i| i.data.ty.clone()).collect::<Vec<_>>();
     let mut vec_elem_tys = vec![];
     for ty in vec_tys.iter() {
@@ -382,7 +425,9 @@ pub fn for_expr(iters: Vec<Iter>, builder: Expr, func: Expr, vectorized: bool) -
     }
 
     if vec_tys.len() != vec_elem_tys.len() {
-        return compile_err!("Internal error: Mismatched types in for_expr - non vector type in iter");
+        return compile_err!(
+            "Internal error: Mismatched types in for_expr - non vector type in iter"
+        );
     }
 
     let builder_ty = builder.ty.clone();
@@ -395,16 +440,22 @@ pub fn for_expr(iters: Vec<Iter>, builder: Expr, func: Expr, vectorized: bool) -
 
         // Check builder.
         if param_0_ty != &builder_ty {
-            return compile_err!("Internal error: Mismatched types in for_expr - function builder type",);
+            return compile_err!(
+                "Internal error: Mismatched types in for_expr - function builder type",
+            );
         }
 
         // Check the index.
         if *param_1_ty != Scalar(ScalarKind::I64) {
-            return compile_err!("Internal error: Mismatched types in for_expr - function index type");
+            return compile_err!(
+                "Internal error: Mismatched types in for_expr - function index type"
+            );
         }
 
         if iters.len() != vec_elem_tys.len() {
-            return compile_err!("Internal error: Mismatched types in for_expr - iters and vec_tys length",);
+            return compile_err!(
+                "Internal error: Mismatched types in for_expr - iters and vec_tys length",
+            );
         }
 
         // Check the element type.
@@ -413,14 +464,19 @@ pub fn for_expr(iters: Vec<Iter>, builder: Expr, func: Expr, vectorized: bool) -
                 if let Scalar(ref sk) = vec_elem_tys[0] {
                     Simd(sk.clone())
                 } else {
-                    return compile_err!("Internal error: Mismatched types in for_expr - bad vector",);
+                    return compile_err!(
+                        "Internal error: Mismatched types in for_expr - bad vector",
+                    );
                 }
             } else {
                 vec_elem_tys[0].clone()
             };
             if *param_2_ty != elem_ty {
-                return compile_err!("Internal error: Mismatched types in for_expr - function elem type {} != {}",
-                                 param_2_ty, &elem_ty);
+                return compile_err!(
+                    "Internal error: Mismatched types in for_expr - function elem type {} != {}",
+                    param_2_ty,
+                    &elem_ty
+                );
             }
         } else {
             let composite_ty = if vectorized {
@@ -429,7 +485,9 @@ pub fn for_expr(iters: Vec<Iter>, builder: Expr, func: Expr, vectorized: bool) -
                     if let Scalar(ref sk) = ty {
                         vec_elem_tys_simd.push(Simd(sk.clone()))
                     } else {
-                        return compile_err!("Internal error: Mismatched types in for_expr - bad vector",);
+                        return compile_err!(
+                            "Internal error: Mismatched types in for_expr - bad vector",
+                        );
                     }
                 }
                 Struct(vec_elem_tys_simd)
@@ -438,22 +496,28 @@ pub fn for_expr(iters: Vec<Iter>, builder: Expr, func: Expr, vectorized: bool) -
             };
 
             if *param_2_ty != composite_ty {
-                return compile_err!("Internal error: Mismatched types in for_expr - function zipped elem type",);
+                return compile_err!(
+                    "Internal error: Mismatched types in for_expr - function zipped elem type",
+                );
             }
         }
 
         // Function return type should match builder type.
         if ret_ty.as_ref() != &builder_ty {
-            return compile_err!("Internal error: Mismatched types in for_expr - function return type");
+            return compile_err!(
+                "Internal error: Mismatched types in for_expr - function return type"
+            );
         }
     }
 
-    new_expr(For {
-                 iters: iters,
-                 builder: Box::new(builder),
-                 func: Box::new(func),
-             },
-             builder_ty)
+    new_expr(
+        For {
+            iters: iters,
+            builder: Box::new(builder),
+            func: Box::new(func),
+        },
+        builder_ty,
+    )
 }
 
 pub fn merge_expr(builder: Expr, value: Expr) -> WeldResult<Expr> {
@@ -472,7 +536,9 @@ pub fn merge_expr(builder: Expr, value: Expr) -> WeldResult<Expr> {
             }
             DictMerger(ref elem_ty1, ref elem_ty2, _) => {
                 if let Struct(ref v_ty) = value.ty {
-                    if v_ty.len() < 2 { return err; }
+                    if v_ty.len() < 2 {
+                        return err;
+                    }
 
                     if elem_ty1.as_ref() != &v_ty[0] {
                         return err;
@@ -486,7 +552,9 @@ pub fn merge_expr(builder: Expr, value: Expr) -> WeldResult<Expr> {
             }
             GroupMerger(ref elem_ty1, ref elem_ty2) => {
                 if let Struct(ref v_ty) = value.ty {
-                    if v_ty.len() < 2 { return err; }
+                    if v_ty.len() < 2 {
+                        return err;
+                    }
 
                     if elem_ty1.as_ref() != &v_ty[0] {
                         return err;
@@ -517,11 +585,13 @@ pub fn merge_expr(builder: Expr, value: Expr) -> WeldResult<Expr> {
     }
 
     let ty = builder.ty.clone();
-    new_expr(Merge {
-                 builder: Box::new(builder),
-                 value: Box::new(value),
-             },
-             ty)
+    new_expr(
+        Merge {
+            builder: Box::new(builder),
+            value: Box::new(value),
+        },
+        ty,
+    )
 }
 
 pub fn result_expr(builder: Expr) -> WeldResult<Expr> {
@@ -537,7 +607,12 @@ pub fn result_expr(builder: Expr) -> WeldResult<Expr> {
     } else {
         return err;
     };
-    new_expr(Res { builder: Box::new(builder) }, ty)
+    new_expr(
+        Res {
+            builder: Box::new(builder),
+        },
+        ty,
+    )
 }
 
 #[cfg(test)]
@@ -549,7 +624,6 @@ fn literal_test() {
     assert_eq!(print_expr_without_indent(&expr), "1");
     let expr = literal_expr(LiteralKind::F32Literal(1f32.to_bits())).unwrap();
     assert_eq!(print_expr_without_indent(&expr), "1.0F");
-
 }
 
 #[test]
@@ -599,18 +673,20 @@ fn builder_exprs_test() {
     };
 
     // Create a list of params for the for loop's function.
-    let params = vec![Parameter {
-                          name: Symbol::new("b", 0),
-                          ty: builder_type.clone(),
-                      },
-                      Parameter {
-                          name: Symbol::new("i", 0),
-                          ty: Scalar(ScalarKind::I64),
-                      },
-                      Parameter {
-                          name: Symbol::new("e", 0),
-                          ty: i32_literal.ty.clone(),
-                      }];
+    let params = vec![
+        Parameter {
+            name: Symbol::new("b", 0),
+            ty: builder_type.clone(),
+        },
+        Parameter {
+            name: Symbol::new("i", 0),
+            ty: Scalar(ScalarKind::I64),
+        },
+        Parameter {
+            name: Symbol::new("e", 0),
+            ty: i32_literal.ty.clone(),
+        },
+    ];
 
     let builder_iden = ident_expr(params[0].name.clone(), params[0].ty.clone()).unwrap();
     let elem_iden = ident_expr(params[2].name.clone(), params[2].ty.clone()).unwrap();
@@ -619,8 +695,10 @@ fn builder_exprs_test() {
     let for_func = lambda_expr(params, for_body.clone()).unwrap();
     let for_loop = for_expr(vec![iter], builder.clone(), for_func, false).unwrap();
 
-    assert_eq!(print_expr_without_indent(&for_loop),
-               "for([5],merger[i32,+],|b,i,e|merge(b,e))");
+    assert_eq!(
+        print_expr_without_indent(&for_loop),
+        "for([5],merger[i32,+],|b,i,e|merge(b,e))"
+    );
 
     let result = result_expr(for_loop).unwrap();
     assert_eq!(result.ty, i32_literal.ty);

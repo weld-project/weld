@@ -6,8 +6,8 @@ extern crate libc;
 
 use libc::{c_char, c_void, int64_t};
 
-use std::ptr;
 use std::ffi::CStr;
+use std::ptr;
 
 use super::*;
 
@@ -20,8 +20,8 @@ pub type WeldModuleRef = *mut WeldModule;
 /// An opauqe handle to a Weld data value.
 pub type WeldValueRef = *mut WeldValue;
 
-pub use runtime::WeldRuntimeErrno;
 pub use super::WeldLogLevel;
+pub use runtime::WeldRuntimeErrno;
 
 trait ToRustStr {
     fn to_str(&self) -> &str;
@@ -137,9 +137,11 @@ pub unsafe extern "C" fn weld_value_memory_usage(value: WeldValueRef) -> int64_t
 /// an error (which indicates a compilation error or success) in `err`.
 ///
 /// This function is a wrapper for `WeldModule::compile`.
-pub unsafe extern "C" fn weld_module_compile(code: *const c_char,
-                                             conf: WeldConfRef,
-                                             err: WeldErrorRef) -> WeldModuleRef {
+pub unsafe extern "C" fn weld_module_compile(
+    code: *const c_char,
+    conf: WeldConfRef,
+    err: WeldErrorRef,
+) -> WeldModuleRef {
     let code = code.to_str();
     let conf = &*conf;
     let err = &mut *err;
@@ -163,10 +165,12 @@ pub unsafe extern "C" fn weld_module_compile(code: *const c_char,
 /// and a the method returns `null`. Otherwise, `err` indicates success.
 ///
 /// This function is a wrapper for `WeldModule::run`.
-pub unsafe extern "C" fn weld_module_run(module: WeldModuleRef,
-                                         conf: WeldConfRef,
-                                         arg: WeldValueRef,
-                                         err: WeldErrorRef) -> WeldValueRef {
+pub unsafe extern "C" fn weld_module_run(
+    module: WeldModuleRef,
+    conf: WeldConfRef,
+    arg: WeldValueRef,
+    err: WeldErrorRef,
+) -> WeldValueRef {
     let module = &mut *module;
     let conf = &*conf;
     let arg = &*arg;
@@ -227,7 +231,6 @@ pub unsafe extern "C" fn weld_error_free(err: WeldErrorRef) {
         Box::from_raw(err);
     }
 }
-
 
 #[no_mangle]
 /// Load a dynamic library that a Weld program can access.
