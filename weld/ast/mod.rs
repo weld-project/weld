@@ -15,6 +15,7 @@ pub use self::uniquify::Uniquify;
 pub mod constructors;
 
 mod ast;
+mod builder;
 mod cmp;
 mod hash;
 mod pretty_print;
