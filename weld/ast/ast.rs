@@ -12,9 +12,6 @@ use std::fmt;
 use std::vec;
 use std::collections::BTreeMap;
 
-#[cfg(test)]
-use tests::*;
-
 /// Name used for placeholder expressions.
 const PLACEHOLDER_NAME: &'static str = "#placeholder";
 
@@ -1459,33 +1456,3 @@ impl Takeable for Box<Expr> {
     }
 }
 
-#[test]
-fn compare_expressions() {
-    let e1 = parse_expr("for([1,2], appender, |e| e+1)").unwrap();
-    let e2 = parse_expr("for([1,2], appender, |f| f+1)").unwrap();
-    assert!(e1.compare_ignoring_symbols(&e2).unwrap());
-
-    let e1 = parse_expr("let a = 2; a").unwrap();
-    let e2 = parse_expr("let b = 2; b").unwrap();
-    assert!(e1.compare_ignoring_symbols(&e2).unwrap());
-
-    let e2 = parse_expr("let b = 2; c").unwrap();
-    assert!(!e1.compare_ignoring_symbols(&e2).unwrap());
-
-    // Undefined symbols should work as long as the symbol is the same.
-    let e1 = parse_expr("[1, 2, 3, d]").unwrap();
-    let e2 = parse_expr("[1, 2, 3, d]").unwrap();
-    assert!(e1.compare_ignoring_symbols(&e2).unwrap());
-
-    let e2 = parse_expr("[1, 2, 3, e]").unwrap();
-    assert!(!e1.compare_ignoring_symbols(&e2).unwrap());
-
-    // Symbols can be substituted, so equal.
-    let e1 = parse_expr("|a, b| a + b").unwrap();
-    let e2 = parse_expr("|c, d| c + d").unwrap();
-    assert!(e1.compare_ignoring_symbols(&e2).unwrap());
-
-    // Symbols don't match up.
-    let e2 = parse_expr("|c, d| d + c").unwrap();
-    assert!(!e1.compare_ignoring_symbols(&e2).unwrap());
-}
