@@ -7,6 +7,17 @@ use ast::ExprKind::*;
 use ast::Type::*;
 use error::*;
 
+/// A trait that implements constructors for expression variants.
+///
+/// This trait provides constructors with type checking to expression variants. The type of each
+/// expression is inferred locally based on its immediate children. Each function returns an error
+/// if a type error is detected.
+///
+/// The `new` and `new_with_type` functions take `ExprKind` values directly and perform type
+/// checking and inference on the built expression.
+///
+/// This trait is re-exported as part of the `ast` module and should not need to be imported
+/// directly.
 pub trait NewExpr {
     /// Creates a new expression with the given kind.
     ///
@@ -17,379 +28,69 @@ pub trait NewExpr {
     /// Returns an error if types in the `kind` mismatch.
     fn new_with_type(kind: ExprKind, ty: Type) -> WeldResult<Expr>;
     /// Creates a new literal expression.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// # use weld::ast::prelude::*;
-    ///
-    /// let expr = Expr::new_literal(I32Literal(1)).unwrap();
-    /// assert_eq!(expr.ty, Scalar(I32));
-    /// ```
     fn new_literal(kind: LiteralKind) -> WeldResult<Expr>;
     /// Creates a new typed identifier expression.
-    /// # Examples
-    ///
-    /// ```rust
-    /// # use weld::ast::prelude::*;
-    ///
-    /// let name = Symbol::new("a", 0);
-    /// let ty = Scalar(I32);
-    /// let expr = Expr::new_ident(name, ty.clone()).unwrap();
-    /// assert_eq!(expr.ty, ty);
-    /// ```
     fn new_ident(symbol: Symbol, ty: Type) -> WeldResult<Expr>;
     /// Creates a new binary operator expression.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// # use weld::ast::prelude::*;
-    ///
-    /// let one = Expr::new_literal(I32Literal(1)).unwrap();
-    /// let expr = Expr::new_bin_op(Add, one.clone(), one).unwrap();
-    /// assert_eq!(expr.ty, Scalar(I32));
-    /// ```
     fn new_bin_op(kind: BinOpKind, left: Expr, right: Expr) -> WeldResult<Expr>;
     /// Creates a new unary operator expression.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// # use weld::ast::prelude::*;
-    ///
-    /// let one = Expr::new_literal(F32Literal((1.0_f32).to_bits())).unwrap();
-    /// let expr = Expr::new_unary_op(Cos, one).unwrap();
-    /// assert_eq!(expr.ty, Scalar(F32));
-    /// ```
     fn new_unary_op(kind: UnaryOpKind, value: Expr) -> WeldResult<Expr>;
     /// Creates a new cast operator expression.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// # use weld::ast::prelude::*;
-    ///
-    /// let one = Expr::new_literal(I32Literal(1)).unwrap();
-    /// let expr = Expr::new_cast(F32, one).unwrap();
-    /// assert_eq!(expr.ty, Scalar(F32));
-    /// ```
     fn new_cast(kind: ScalarKind, expr: Expr) -> WeldResult<Expr>;
     /// Creates a new negation operator expression.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// # use weld::ast::prelude::*;
-    ///
-    /// let one = Expr::new_literal(I32Literal(1)).unwrap();
-    /// let expr = Expr::new_negate(one).unwrap();
-    /// assert_eq!(expr.ty, Scalar(I32));
-    /// ```
     fn new_negate(expr: Expr) -> WeldResult<Expr>;
     /// Creates a new not operator expression.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// # use weld::ast::prelude::*;
-    ///
-    /// let value = Expr::new_literal(BoolLiteral(false)).unwrap();
-    /// let expr = Expr::new_not(value).unwrap();
-    /// assert_eq!(expr.ty, Scalar(Bool));
-    /// ```
     fn new_not(expr: Expr) -> WeldResult<Expr>;
     /// Creates a new scalar to SIMD broadcast expression.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// # use weld::ast::prelude::*;
-    ///
-    /// let one = Expr::new_literal(I32Literal(1)).unwrap();
-    /// let expr = Expr::new_broadcast(one).unwrap();
-    /// assert_eq!(expr.ty, Simd(I32));
-    /// ```
     fn new_broadcast(expr: Expr) -> WeldResult<Expr>;
     /// Creates a new dictionary to vector expression.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// # use weld::ast::prelude::*;
-    ///
-    /// let dict_ty = Dict(Box::new(Scalar(I32)), Box::new(Scalar(I32)));
-    /// let dict = Expr::new_ident(Symbol::new("d", 0), dict_ty).unwrap();
-    /// let expr = Expr::new_to_vec(dict).unwrap();
-    /// assert_eq!(expr.ty, Vector(Box::new(Struct(vec![Scalar(I32), Scalar(I32)]))));
-    /// ```
     fn new_to_vec(expr: Expr) -> WeldResult<Expr>;
     /// Creates a new struct literal expression.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// # use weld::ast::prelude::*;
-    ///
-    /// let one = Expr::new_literal(I32Literal(1)).unwrap();
-    /// let expr = Expr::new_make_struct(vec![one.clone(), one.clone(), one]).unwrap();
-    /// assert_eq!(expr.ty, Struct(vec![Scalar(I32), Scalar(I32), Scalar(I32)]));
-    /// ```
     fn new_make_struct(exprs: Vec<Expr>) -> WeldResult<Expr>;
     /// Creates a new vector literal expression.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// # use weld::ast::prelude::*;
-    ///
-    /// let one = Expr::new_literal(I32Literal(1)).unwrap();
-    /// let expr = Expr::new_make_vector(vec![one.clone(), one.clone(), one]).unwrap();
-    /// assert_eq!(expr.ty, Vector(Box::new(Scalar(I32))));
-    /// ```
     fn new_make_vector(exprs: Vec<Expr>) -> WeldResult<Expr>;
     /// Creates a new typed vector literal expression.
     ///
     /// This version can be used if `exprs` is empty and the type cannot be inferred with
     /// `new_make_vector.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// # use weld::ast::prelude::*;
-    ///
-    /// let one = Expr::new_literal(I32Literal(1)).unwrap();
-    /// let expr = Expr::new_bin_op(Add, one.clone(), one).unwrap();
-    /// assert_eq!(expr.ty, Scalar(I32));
-    /// ```
-    fn new_make_vector_typed(exprs: Vec<Expr>, ty: Type) -> WeldResult<Expr>;                   ///////////////////////////// IM HERE!
+    fn new_make_vector_typed(exprs: Vec<Expr>, ty: Type) -> WeldResult<Expr>;
     /// Creates a new field access expression on struct.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// # use weld::ast::prelude::*;
-    ///
-    /// let one = Expr::new_literal(I32Literal(1)).unwrap();
-    /// let expr = Expr::new_bin_op(Add, one.clone(), one).unwrap();
-    /// assert_eq!(expr.ty, Scalar(I32));
-    /// ```
     fn new_get_field(expr: Expr, index: u32) -> WeldResult<Expr>;
     /// Creates a new vector length expression.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// # use weld::ast::prelude::*;
-    ///
-    /// let one = Expr::new_literal(I32Literal(1)).unwrap();
-    /// let expr = Expr::new_bin_op(Add, one.clone(), one).unwrap();
-    /// assert_eq!(expr.ty, Scalar(I32));
-    /// ```
     fn new_length(expr: Expr) -> WeldResult<Expr>;
     /// Creates a new vector or dictionary lookup expression.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// # use weld::ast::prelude::*;
-    ///
-    /// let one = Expr::new_literal(I32Literal(1)).unwrap();
-    /// let expr = Expr::new_bin_op(Add, one.clone(), one).unwrap();
-    /// assert_eq!(expr.ty, Scalar(I32));
-    /// ```
     fn new_lookup(data: Expr, index: Expr) -> WeldResult<Expr>;
     /// Creates a new dictionary optional lookup expression.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// # use weld::ast::prelude::*;
-    ///
-    /// let one = Expr::new_literal(I32Literal(1)).unwrap();
-    /// let expr = Expr::new_bin_op(Add, one.clone(), one).unwrap();
-    /// assert_eq!(expr.ty, Scalar(I32));
-    /// ```
     fn new_opt_lookup(data: Expr, index: Expr) -> WeldResult<Expr>;
     /// Creates a new dictionary key exists expression.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// # use weld::ast::prelude::*;
-    ///
-    /// let one = Expr::new_literal(I32Literal(1)).unwrap();
-    /// let expr = Expr::new_bin_op(Add, one.clone(), one).unwrap();
-    /// assert_eq!(expr.ty, Scalar(I32));
-    /// ```
     fn new_key_exists(data: Expr, key: Expr) -> WeldResult<Expr>;
     /// Creates a new vector slicing expression.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// # use weld::ast::prelude::*;
-    ///
-    /// let one = Expr::new_literal(I32Literal(1)).unwrap();
-    /// let expr = Expr::new_bin_op(Add, one.clone(), one).unwrap();
-    /// assert_eq!(expr.ty, Scalar(I32));
-    /// ```
     fn new_slice(data: Expr, index: Expr, size: Expr) -> WeldResult<Expr>;
     /// Creates a new vector sort expression.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// # use weld::ast::prelude::*;
-    ///
-    /// let one = Expr::new_literal(I32Literal(1)).unwrap();
-    /// let expr = Expr::new_bin_op(Add, one.clone(), one).unwrap();
-    /// assert_eq!(expr.ty, Scalar(I32));
-    /// ```
     fn new_sort(data: Expr, cmpfunc: Expr) -> WeldResult<Expr>;
     /// Creates a new let expression.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// # use weld::ast::prelude::*;
-    ///
-    /// let one = Expr::new_literal(I32Literal(1)).unwrap();
-    /// let expr = Expr::new_bin_op(Add, one.clone(), one).unwrap();
-    /// assert_eq!(expr.ty, Scalar(I32));
-    /// ```
     fn new_let(name: Symbol, value: Expr, body: Expr) -> WeldResult<Expr>;
     /// Creates a new if expression.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// # use weld::ast::prelude::*;
-    ///
-    /// let one = Expr::new_literal(I32Literal(1)).unwrap();
-    /// let expr = Expr::new_bin_op(Add, one.clone(), one).unwrap();
-    /// assert_eq!(expr.ty, Scalar(I32));
-    /// ```
     fn new_if(cond: Expr, on_true: Expr, on_false: Expr) -> WeldResult<Expr>;
     /// Creates a new select expression.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// # use weld::ast::prelude::*;
-    ///
-    /// let one = Expr::new_literal(I32Literal(1)).unwrap();
-    /// let expr = Expr::new_bin_op(Add, one.clone(), one).unwrap();
-    /// assert_eq!(expr.ty, Scalar(I32));
-    /// ```
     fn new_select(cond: Expr, on_true: Expr, on_false: Expr) -> WeldResult<Expr>;
     /// Creates a new lambda expression.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// # use weld::ast::prelude::*;
-    ///
-    /// let one = Expr::new_literal(I32Literal(1)).unwrap();
-    /// let expr = Expr::new_bin_op(Add, one.clone(), one).unwrap();
-    /// assert_eq!(expr.ty, Scalar(I32));
-    /// ```
     fn new_lambda(params: Vec<Parameter>, body: Expr) -> WeldResult<Expr>;
     /// Creates a new apply expression.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// # use weld::ast::prelude::*;
-    ///
-    /// let one = Expr::new_literal(I32Literal(1)).unwrap();
-    /// let expr = Expr::new_bin_op(Add, one.clone(), one).unwrap();
-    /// assert_eq!(expr.ty, Scalar(I32));
-    /// ```
     fn new_apply(func: Expr, params: Vec<Expr>) -> WeldResult<Expr>;
     /// Creates a new CUDF expression.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// # use weld::ast::prelude::*;
-    ///
-    /// let one = Expr::new_literal(I32Literal(1)).unwrap();
-    /// let expr = Expr::new_bin_op(Add, one.clone(), one).unwrap();
-    /// assert_eq!(expr.ty, Scalar(I32));
-    /// ```
     fn new_cudf(sym_name: String, args: Vec<Expr>, return_ty: Type) -> WeldResult<Expr>;
     /// Creates a builder initialization expression.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// # use weld::ast::prelude::*;
-    ///
-    /// let one = Expr::new_literal(I32Literal(1)).unwrap();
-    /// let expr = Expr::new_bin_op(Add, one.clone(), one).unwrap();
-    /// assert_eq!(expr.ty, Scalar(I32));
-    /// ```
     fn new_new_builder(kind: BuilderKind, expr: Option<Expr>) -> WeldResult<Expr>;
     /// Creates a new parallel for loop expression.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// # use weld::ast::prelude::*;
-    ///
-    /// let one = Expr::new_literal(I32Literal(1)).unwrap();
-    /// let expr = Expr::new_bin_op(Add, one.clone(), one).unwrap();
-    /// assert_eq!(expr.ty, Scalar(I32));
-    /// ```
     fn new_for(iters: Vec<Iter>, builder: Expr, func: Expr) -> WeldResult<Expr>;
     /// Creates a new merge expression.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// # use weld::ast::prelude::*;
-    ///
-    /// let one = Expr::new_literal(I32Literal(1)).unwrap();
-    /// let expr = Expr::new_bin_op(Add, one.clone(), one).unwrap();
-    /// assert_eq!(expr.ty, Scalar(I32));
-    /// ```
     fn new_merge(builder: Expr, value: Expr) -> WeldResult<Expr>;
     /// Creates a new result expression.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// # use weld::ast::prelude::*;
-    ///
-    /// let one = Expr::new_literal(I32Literal(1)).unwrap();
-    /// let expr = Expr::new_bin_op(Add, one.clone(), one).unwrap();
-    /// assert_eq!(expr.ty, Scalar(I32));
-    /// ```
     fn new_result(builder: Expr) -> WeldResult<Expr>;
     /// Creates a new serialize expression.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// # use weld::ast::prelude::*;
-    ///
-    /// let one = Expr::new_literal(I32Literal(1)).unwrap();
-    /// let expr = Expr::new_bin_op(Add, one.clone(), one).unwrap();
-    /// assert_eq!(expr.ty, Scalar(I32));
-    /// ```
     fn new_serialize(value: Expr) -> WeldResult<Expr>;
     /// Creates a new deserialize expression.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// # use weld::ast::prelude::*;
-    ///
-    /// let one = Expr::new_literal(I32Literal(1)).unwrap();
-    /// let expr = Expr::new_bin_op(Add, one.clone(), one).unwrap();
-    /// assert_eq!(expr.ty, Scalar(I32));
-    /// ```
     fn new_deserialize(value: Expr, ty: Type) -> WeldResult<Expr>;
 }
 
