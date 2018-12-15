@@ -7,7 +7,7 @@ use ast::ExprKind::*;
 use ast::Type::*;
 use error::*;
 
-/// A trait that implements constructors for expression variants.
+/// A trait for initializing expressions with type inference.
 ///
 /// This trait provides constructors with type checking to expression variants. The type of each
 /// expression is inferred locally based on its immediate children. Each function returns an error
