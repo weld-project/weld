@@ -107,6 +107,7 @@ impl NewExpr for Expr {
             annotations: Annotations::new(),
         };
 
+        // Check the type/infer unknown types locally.
         expr.infer_local()?;
         Ok(expr)
     }
@@ -130,7 +131,7 @@ impl NewExpr for Expr {
             StringLiteral(_) => Vector(Box::new(Scalar(ScalarKind::I8))),
         };
 
-        Self::new_with_type(Literal(kind.clone()), ty)
+        Self::new_with_type(Literal(kind), ty)
     }
 
     fn new_ident(symbol: Symbol, ty: Type) -> WeldResult<Expr> {
@@ -173,7 +174,7 @@ impl NewExpr for Expr {
 
     fn new_to_vec(expr: Expr) -> WeldResult<Expr> {
         Self::new(ToVec {
-            child_expr: Box::new(expr.clone())
+            child_expr: Box::new(expr)
         })
     }
 
@@ -284,7 +285,7 @@ impl NewExpr for Expr {
         Self::new(CUDF {
             sym_name: sym_name,
             args: args,
-            return_ty: Box::new(return_ty.clone()),
+            return_ty: Box::new(return_ty),
         })
     }
 
