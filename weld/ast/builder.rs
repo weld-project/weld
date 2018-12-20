@@ -52,7 +52,7 @@ pub trait NewExpr {
     /// Creates a new typed vector literal expression.
     ///
     /// This version can be used if `exprs` is empty and the type cannot be inferred with
-    /// `new_make_vector.
+    /// `new_make_vector`.
     fn new_make_vector_typed(exprs: Vec<Expr>, ty: Type) -> WeldResult<Expr>;
     /// Creates a new field access expression on struct.
     fn new_get_field(expr: Expr, index: u32) -> WeldResult<Expr>;
