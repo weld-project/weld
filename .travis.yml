@@ -19,7 +19,7 @@ install:
 - sudo rm -f `which llvm-config`
 - export WELD_HOME=`pwd`
 - PATH=$PATH:/home/travis/.cargo/bin
-- sudo -E apt-get -yq update &>> ~/apt-get-update.log
+- sudo -E apt-get -yq update
 - sudo -E apt-get --no-install-suggests --no-install-recommends -qy --allow-unauthenticated install gcc make llvm-6.0 llvm-6.0-dev clang-6.0 lib32z1-dev python2.7
   # - pip install virtualenv==15.1.0
   # - bash -e build_tools/travis/init_virtualenvs.sh 2.7 3.6
