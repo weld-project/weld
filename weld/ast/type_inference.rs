@@ -24,12 +24,31 @@ pub trait InferTypes {
     /// Returns an error if types are inconsistent or all types could not be inferred. That is, if
     /// the resulting value has any partial types, this method will return an error.
     fn infer_types(&mut self) -> WeldResult<()>;
+
+    /// Locally check and infer types.
+    ///
+    /// This method will check types (and infer unknown ones) for a given expression without
+    /// recursing into its children. Returns an error if the expression or its direct
+    /// sub-expression have invalid types.
+    ///
+    /// Because this function only looks at local sub-expressions, identifiers with `Unknown` type
+    /// are disallowed.
+    fn infer_local(&mut self) -> WeldResult<()>;
 }
 
 impl InferTypes for Expr {
     /// Checks and infers types in place.
     fn infer_types(&mut self) -> WeldResult<()> {
         self.infer_types_internal()
+    }
+
+    fn infer_local(&mut self) -> WeldResult<()> {
+        let ref mut env = TypeMap::default();
+        if let Ident(ref sym) = self.kind {
+            env.insert(sym.clone(), self.ty.clone());
+        }
+
+        self.infer_locally(env).map(|_| ())
     }
 }
 
