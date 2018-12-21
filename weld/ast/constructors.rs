@@ -1,5 +1,6 @@
 //! Constructors for creating typed expressions.
 #![allow(dead_code)]
+#[deprecated(since="0.2.0", note="Please use the `NewExpr` trait on `Expr` instead")]
 
 use ast::*;
 use ast::ExprKind::*;
