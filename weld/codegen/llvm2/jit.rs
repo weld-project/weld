@@ -132,7 +132,7 @@ pub unsafe fn compile(context: LLVMContextRef,
     stats.llvm_times.push(("Create Exec Engine".to_string(), start.to(end)));
 
     let start = PreciseTime::now();
-    let run_func = find_function(engine, "run")?;
+    let run_func = find_function(engine, &conf.llvm.run_func_name)?;
     let end = PreciseTime::now();
     stats.llvm_times.push(("Find Run Func Address".to_string(), start.to(end)));
 
