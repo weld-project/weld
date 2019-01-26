@@ -774,7 +774,7 @@ impl LlvmGenerator {
         let input_type = WeldInputArgs::llvm_type(self.context);
         let output_type = WeldOutputArgs::llvm_type(self.context);
 
-        let name = CString::new("run").unwrap();
+        let name = CString::new(self.conf.llvm.run_func_name.as_bytes()).unwrap();
         let func_ty = LLVMFunctionType(self.i64_type(), [self.i64_type()].as_mut_ptr(), 1, 0);
         let function = LLVMAddFunction(self.module, name.as_ptr(), func_ty);
 

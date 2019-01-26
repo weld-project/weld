@@ -80,6 +80,9 @@ pub const CONF_LLVM_MODULE_OPTS_KEY: &'static str = "weld.llvm.optimization.modu
 /// This parameter should be set for compilation.
 pub const CONF_LLVM_FUNC_OPTS_KEY: &'static str = "weld.llvm.optimization.funcOpts";
 
+/// Sets the symbol name of the entry-point function.
+pub const CONF_LLVM_RUN_FUNC_NAME_KEY: &'static str = "weld.llvm.runFunctionName";
+
 /// Enables dumping code during compilation.
 ///
 /// This will produce several files in the directory specified by `weld.compile.dumpCodeDir`:
@@ -146,6 +149,9 @@ pub const CONF_LLVM_MODULE_OPTS_DEFAULT: bool = true;
 /// Default LLVM function passes setting.
 pub const CONF_LLVM_FUNC_OPTS_DEFAULT: bool = true;
 
+/// Default symbol name for LLVM entry-point function.
+pub const CONF_LLVM_RUN_FUNC_NAME_DEFAULT: &'static str = "run";
+
 /// Default setting for whether to dump code.
 pub const CONF_DUMP_CODE_DEFAULT: bool = false;
 
@@ -160,6 +166,7 @@ pub const CONF_ENABLE_BOUNDS_CHECKS_DEFAULT: bool = false;
 
 /// Default directory for dumping code.
 pub const CONF_DUMP_CODE_DIR_DEFAULT: &'static str = ".";
+
 
 /// Default set of optimization passes.
 pub const CONF_OPTIMIZATION_PASSES_DEFAULT: &[&'static str] =  &[

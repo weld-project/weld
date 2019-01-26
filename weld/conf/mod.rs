@@ -71,6 +71,11 @@ pub struct LLVMConfig {
     /// This uses the Clang function optimization pipeline. The specific passes are determined by the
     /// optimization level.
     pub func_optimizations: bool,
+    /// Name of the entry-point function.
+    ///
+    /// This setting is useful if the dumped LLVM code is compiled independently and the run
+    /// function needs a unique name.
+    pub run_func_name: String,
 }
 
 impl Default for LLVMConfig {
@@ -82,6 +87,7 @@ impl Default for LLVMConfig {
             target_analysis_passes: CONF_LLVM_TARGET_PASSES_DEFAULT,
             module_optimizations: CONF_LLVM_MODULE_OPTS_DEFAULT,
             func_optimizations: CONF_LLVM_FUNC_OPTS_DEFAULT,
+            run_func_name: CONF_LLVM_RUN_FUNC_NAME_DEFAULT.to_string(),
         }
     }
 }
@@ -187,6 +193,8 @@ impl ParsedConf {
                                                      CONF_LLVM_MODULE_OPTS_DEFAULT)?,
                 func_optimizations: conf.parse_str(CONF_LLVM_FUNC_OPTS_KEY,
                                                    CONF_LLVM_FUNC_OPTS_DEFAULT)?,
+                run_func_name: conf.parse_str(CONF_LLVM_RUN_FUNC_NAME_KEY,
+                                              CONF_LLVM_RUN_FUNC_NAME_DEFAULT.to_string())?,
             },
             dump_code: DumpCodeConfig {
                 enabled: conf.parse_str(CONF_DUMP_CODE_KEY,
