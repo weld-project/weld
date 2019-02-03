@@ -84,9 +84,11 @@ impl CompiledModule {
     /// Dumps the optimized LLVM IR for this module.
     pub fn llvm(&self) -> WeldResult<String> {
         unsafe { 
-            let start = LLVMPrintModuleToString(self.module);
-            let c_str: &CStr = CStr::from_ptr(start as *mut c_char);
-            Ok(c_str.to_str().unwrap().to_owned())
+            let c_str = LLVMPrintModuleToString(self.module);
+            let ir = CStr::from_ptr(c_str).to_str()
+                .map_err(|e| WeldCompileError::new(e.to_string()))?;
+            LLVMDisposeMessage(c_str);
+            Ok(ir.to_string())
         }
     }
 }
@@ -205,6 +207,7 @@ pub unsafe fn set_triple_and_layout(module: LLVMModuleRef) -> WeldResult<()> {
     LLVMSetTarget(module, PROCESS_TRIPLE.as_ptr() as *const _);
     debug!("Set module target {:?}", PROCESS_TRIPLE.to_str().unwrap());
     let target_machine = target_machine()?;
+    // TODO: leaks
     let layout = LLVMCreateTargetDataLayout(target_machine);
     LLVMSetModuleDataLayout(module, layout);
     LLVMDisposeTargetMachine(target_machine);
@@ -219,12 +222,16 @@ unsafe fn verify_module(module: LLVMModuleRef) -> WeldResult<()> {
     let result_code = LLVMVerifyModule(module,
                                        LLVMReturnStatusAction,
                                        &mut error_str);
-    if result_code != 0 {
-        let err = CStr::from_ptr(error_str).to_str().unwrap();
-        compile_err!("{}", format!("Module verification failed: {}", err))
-    } else {
-        Ok(())
-    }
+    let result = {
+        if result_code != 0 {
+            let err = CStr::from_ptr(error_str).to_str().unwrap();
+            compile_err!("{}", format!("Module verification failed: {}", err))
+        } else {
+            Ok(())
+        }
+    };
+    let _ = CString::from_raw(error_str); // Free memory
+    result
 }
 
 /// Optimize an LLVM module using a given LLVM optimization level.
@@ -243,20 +250,27 @@ unsafe fn optimize_module(module: LLVMModuleRef, conf: &ParsedConf) -> WeldResul
     let target = LLVMGetTargetMachineTarget(target_machine);
 
     // Log some information about the machine...
-    // TODO this leaks stuff
-    let cpu = CStr::from_ptr(LLVMGetTargetMachineCPU(target_machine)).to_str().unwrap();
-    let description = CStr::from_ptr(LLVMGetTargetDescription(target)).to_str().unwrap();
-    let features = CStr::from_ptr(LLVMGetTargetMachineFeatureString(target_machine)).to_str().unwrap();
+    let cpu_ptr = LLVMGetTargetMachineCPU(target_machine);
+    let cpu = CStr::from_ptr(cpu_ptr).to_str().unwrap();
+    let description  = CStr::from_ptr(LLVMGetTargetDescription(target)).to_str().unwrap();
+    let features_ptr = LLVMGetTargetMachineFeatureString(target_machine);
+    let features = CStr::from_ptr(features_ptr).to_str().unwrap();
 
     debug!("CPU: {}, Description: {} Features: {}", cpu, description, features);
     let start = PreciseTime::now();
 
     if conf.llvm.target_analysis_passes {
-        LLVMAddTargetLibraryInfo(LLVMExtTargetLibraryInfo(), mpm);
+        // TODO: Leaks memory
+        let lib_info = LLVMExtTargetLibraryInfo();
+        LLVMAddTargetLibraryInfo(lib_info, mpm);
         LLVMAddAnalysisPasses(target_machine, mpm);
         LLVMExtAddTargetPassConfig(target_machine, mpm);
         LLVMAddAnalysisPasses(target_machine, fpm);
     }
+
+    // Free memory
+    let _ = CString::from_raw(cpu_ptr);
+    let _ = CString::from_raw(features_ptr);
 
     // TODO set the size and inliner threshold depending on the optimization level. Right now, we
     // set the inliner to be as aggressive as the -O3 inliner in Clang.
