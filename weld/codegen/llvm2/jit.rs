@@ -70,23 +70,29 @@ impl CompiledModule {
                                                           &mut err,
                                                           &mut output_buf);
             if res == 1 {
-                let err = CStr::from_ptr(err as *mut c_char).to_str().unwrap();
-                return compile_err!("Machine code generation failed with error {}", err);
+                let err_str = CStr::from_ptr(err as *mut c_char)
+                    .to_string_lossy().into_owned();
+                libc::free(err as *mut libc::c_void); // err is only allocated if res == 1
+                compile_err!("Machine code generation failed with error {}", err_str)
+            } else {
+                let start = LLVMGetBufferStart(output_buf);
+                let c_str = CStr::from_ptr(start as *mut c_char)
+                    .to_string_lossy().into_owned();
+                LLVMDisposeMemoryBuffer(output_buf);
+                Ok(c_str)
             }
-            LLVMDisposeMessage(err);
-
-            let start = LLVMGetBufferStart(output_buf);
-            let c_str = CStr::from_ptr(start as *mut c_char);
-            Ok(c_str.to_string_lossy().into_owned())
         }
     }
 
     /// Dumps the optimized LLVM IR for this module.
     pub fn llvm(&self) -> WeldResult<String> {
         unsafe { 
-            let start = LLVMPrintModuleToString(self.module);
-            let c_str: &CStr = CStr::from_ptr(start as *mut c_char);
-            Ok(c_str.to_str().unwrap().to_owned())
+            let c_str = LLVMPrintModuleToString(self.module);
+            let ir = CStr::from_ptr(c_str).to_str()
+                .map_err(|e| WeldCompileError::new(e.to_string()))?;
+            let ir = ir.to_string();
+            LLVMDisposeMessage(c_str);
+            Ok(ir)
         }
     }
 }
@@ -186,19 +192,21 @@ unsafe fn initialize() {
 unsafe fn target_machine() -> WeldResult<LLVMTargetMachineRef> {
     let mut target = mem::uninitialized();
     let mut err = ptr::null_mut();
-    let result = LLVMGetTargetFromTriple(PROCESS_TRIPLE.as_ptr(), &mut target, &mut err);
-    if result == 1 {
-        let err = CStr::from_ptr(err as *mut c_char).to_str().unwrap();
-        return compile_err!("Target initialization failed with error {}", err);
+    let ret = LLVMGetTargetFromTriple(PROCESS_TRIPLE.as_ptr(), &mut target, &mut err);
+    if ret == 1 {
+        let err_msg = CStr::from_ptr(err as *mut c_char).to_string_lossy()
+            .into_owned();
+        LLVMDisposeMessage(err); // err is only allocated on res == 1
+        compile_err!("Target initialization failed with error {}", err_msg)
+    } else {
+        Ok(LLVMCreateTargetMachine(target,
+                                   PROCESS_TRIPLE.as_ptr(),
+                                   HOST_CPU_NAME.as_ptr(),
+                                   HOST_CPU_FEATURES.as_ptr(),
+                                   LLVMCodeGenOptLevel::LLVMCodeGenLevelAggressive,
+                                   LLVMRelocMode::LLVMRelocDefault,
+                                   LLVMCodeModel::LLVMCodeModelDefault))
     }
-    LLVMDisposeMessage(err);
-    Ok(LLVMCreateTargetMachine(target,
-                            PROCESS_TRIPLE.as_ptr(),
-                            HOST_CPU_NAME.as_ptr(),
-                            HOST_CPU_FEATURES.as_ptr(),
-                            LLVMCodeGenOptLevel::LLVMCodeGenLevelAggressive,
-                            LLVMRelocMode::LLVMRelocDefault,
-                            LLVMCodeModel::LLVMCodeModelDefault))
 }
 
 pub unsafe fn set_triple_and_layout(module: LLVMModuleRef) -> WeldResult<()> {
@@ -208,6 +216,7 @@ pub unsafe fn set_triple_and_layout(module: LLVMModuleRef) -> WeldResult<()> {
     let layout = LLVMCreateTargetDataLayout(target_machine);
     LLVMSetModuleDataLayout(module, layout);
     LLVMDisposeTargetMachine(target_machine);
+    LLVMDisposeTargetData(layout);
     Ok(())
 }
 
@@ -219,12 +228,18 @@ unsafe fn verify_module(module: LLVMModuleRef) -> WeldResult<()> {
     let result_code = LLVMVerifyModule(module,
                                        LLVMReturnStatusAction,
                                        &mut error_str);
-    if result_code != 0 {
-        let err = CStr::from_ptr(error_str).to_str().unwrap();
-        compile_err!("{}", format!("Module verification failed: {}", err))
-    } else {
-        Ok(())
-    }
+    let result = {
+        if result_code != 0 {
+            let err = CStr::from_ptr(error_str)
+                .to_string_lossy()
+                .into_owned();
+            compile_err!("{}", format!("Module verification failed: {}", err))
+        } else {
+            Ok(())
+        }
+    };
+    libc::free(error_str as *mut libc::c_void);
+    result
 }
 
 /// Optimize an LLVM module using a given LLVM optimization level.
@@ -243,20 +258,25 @@ unsafe fn optimize_module(module: LLVMModuleRef, conf: &ParsedConf) -> WeldResul
     let target = LLVMGetTargetMachineTarget(target_machine);
 
     // Log some information about the machine...
-    // TODO this leaks stuff
-    let cpu = CStr::from_ptr(LLVMGetTargetMachineCPU(target_machine)).to_str().unwrap();
-    let description = CStr::from_ptr(LLVMGetTargetDescription(target)).to_str().unwrap();
-    let features = CStr::from_ptr(LLVMGetTargetMachineFeatureString(target_machine)).to_str().unwrap();
+    let cpu_ptr = LLVMGetTargetMachineCPU(target_machine);
+    let cpu = CStr::from_ptr(cpu_ptr).to_str().unwrap();
+    let description  = CStr::from_ptr(LLVMGetTargetDescription(target)).to_str().unwrap();
+    let features_ptr = LLVMGetTargetMachineFeatureString(target_machine);
+    let features = CStr::from_ptr(features_ptr).to_str().unwrap();
 
     debug!("CPU: {}, Description: {} Features: {}", cpu, description, features);
     let start = PreciseTime::now();
 
     if conf.llvm.target_analysis_passes {
-        LLVMAddTargetLibraryInfo(LLVMExtTargetLibraryInfo(), mpm);
+        LLVMExtAddTargetLibraryInfo(mpm);
         LLVMAddAnalysisPasses(target_machine, mpm);
         LLVMExtAddTargetPassConfig(target_machine, mpm);
         LLVMAddAnalysisPasses(target_machine, fpm);
     }
+
+    // Free memory
+    libc::free(cpu_ptr as *mut libc::c_void);
+    libc::free(features_ptr as *mut libc::c_void);
 
     // TODO set the size and inliner threshold depending on the optimization level. Right now, we
     // set the inliner to be as aggressive as the -O3 inliner in Clang.
