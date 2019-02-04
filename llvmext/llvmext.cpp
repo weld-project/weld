@@ -97,13 +97,13 @@ extern "C" void LLVMExtAddTargetPassConfig(LLVMTargetMachineRef target, LLVMPass
   Passes->add(TPC);
 }
 
-extern "C" LLVMTargetLibraryInfoRef LLVMExtTargetLibraryInfo() {
+extern "C" void LLVMExtAddTargetLibraryInfo(LLVMPassManagerRef manager){
+  legacy::PassManagerBase *Passes = reinterpret_cast<legacy::PassManagerBase *>(manager);
   Triple triple = Triple(LLVMExtGetProcessTriple());
-  // TODO this currently leaks!!
-  TargetLibraryInfoImpl *P = new TargetLibraryInfoImpl(triple);
-  TargetLibraryInfoImpl *X = const_cast<TargetLibraryInfoImpl*>(P);
-  return reinterpret_cast<LLVMTargetLibraryInfoRef>(X);
+  TargetLibraryInfoWrapperPass *D = new TargetLibraryInfoWrapperPass(triple);
+  Passes->add(D);
 }
+
 
 /** Disable or enable vectorization.
  *

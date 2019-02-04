@@ -1511,7 +1511,10 @@ impl LlvmGenerator {
 impl fmt::Display for LlvmGenerator {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let s = unsafe {
-            CStr::from_ptr(LLVMPrintModuleToString(self.module) as *mut c_char)
+            let c_str = LLVMPrintModuleToString(self.module) as *mut c_char;
+            let msg = CStr::from_ptr(c_str).to_owned();
+            LLVMDisposeMessage(c_str);
+            msg
         };
         write!(f, "{}", s.to_str().unwrap())
     }
