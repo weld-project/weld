@@ -69,22 +69,18 @@ impl CompiledModule {
                                                           file_type,
                                                           &mut err,
                                                           &mut output_buf);
-
-            let result = {
-                if res == 1 {
-                    let err_str = CStr::from_ptr(err as *mut c_char)
-                        .to_string_lossy().into_owned();
-                    libc::free(err as *mut libc::c_void); // err is only allocated if res == 1
-                    compile_err!("Machine code generation failed with error {}", err_str)
-                } else {
-                    let start = LLVMGetBufferStart(output_buf);
-                    // TODO: output_buf Leaks. Is allocated with new and mismatches with libc::free
-                    let c_str = CStr::from_ptr(start as *mut c_char)
-                        .to_string_lossy().into_owned();
-                    Ok(c_str)
-                }
-            };
-            result
+            if res == 1 {
+                let err_str = CStr::from_ptr(err as *mut c_char)
+                    .to_string_lossy().into_owned();
+                libc::free(err as *mut libc::c_void); // err is only allocated if res == 1
+                compile_err!("Machine code generation failed with error {}", err_str)
+            } else {
+                let start = LLVMGetBufferStart(output_buf);
+                let c_str = CStr::from_ptr(start as *mut c_char)
+                    .to_string_lossy().into_owned();
+                LLVMDisposeMemoryBuffer(output_buf);
+                Ok(c_str)
+            }
         }
     }
 
@@ -197,33 +193,30 @@ unsafe fn target_machine() -> WeldResult<LLVMTargetMachineRef> {
     let mut target = mem::uninitialized();
     let mut err = ptr::null_mut();
     let ret = LLVMGetTargetFromTriple(PROCESS_TRIPLE.as_ptr(), &mut target, &mut err);
-    let result = {
-        if ret == 1 {
-            let err_msg = CStr::from_ptr(err as *mut c_char).to_string_lossy()
-                .into_owned();
-            LLVMDisposeMessage(err); // err is only allocated on res == 1
-            compile_err!("Target initialization failed with error {}", err_msg)
-        } else {
-            Ok(LLVMCreateTargetMachine(target,
-                                       PROCESS_TRIPLE.as_ptr(),
-                                       HOST_CPU_NAME.as_ptr(),
-                                       HOST_CPU_FEATURES.as_ptr(),
-                                       LLVMCodeGenOptLevel::LLVMCodeGenLevelAggressive,
-                                       LLVMRelocMode::LLVMRelocDefault,
-                                       LLVMCodeModel::LLVMCodeModelDefault))
-        }
-    };
-    result
+    if ret == 1 {
+        let err_msg = CStr::from_ptr(err as *mut c_char).to_string_lossy()
+            .into_owned();
+        LLVMDisposeMessage(err); // err is only allocated on res == 1
+        compile_err!("Target initialization failed with error {}", err_msg)
+    } else {
+        Ok(LLVMCreateTargetMachine(target,
+                                   PROCESS_TRIPLE.as_ptr(),
+                                   HOST_CPU_NAME.as_ptr(),
+                                   HOST_CPU_FEATURES.as_ptr(),
+                                   LLVMCodeGenOptLevel::LLVMCodeGenLevelAggressive,
+                                   LLVMRelocMode::LLVMRelocDefault,
+                                   LLVMCodeModel::LLVMCodeModelDefault))
+    }
 }
 
 pub unsafe fn set_triple_and_layout(module: LLVMModuleRef) -> WeldResult<()> {
     LLVMSetTarget(module, PROCESS_TRIPLE.as_ptr() as *const _);
     debug!("Set module target {:?}", PROCESS_TRIPLE.to_str().unwrap());
     let target_machine = target_machine()?;
-    // TODO: Leaks. Is allocated with new and mismatches with libc::free
     let layout = LLVMCreateTargetDataLayout(target_machine);
     LLVMSetModuleDataLayout(module, layout);
     LLVMDisposeTargetMachine(target_machine);
+    LLVMDisposeTargetData(layout);
     Ok(())
 }
 
@@ -245,9 +238,7 @@ unsafe fn verify_module(module: LLVMModuleRef) -> WeldResult<()> {
             Ok(())
         }
     };
-    if !error_str.is_null() {
-        libc::free(error_str as *mut libc::c_void);
-    }
+    libc::free(error_str as *mut libc::c_void);
     result
 }
 
@@ -277,9 +268,7 @@ unsafe fn optimize_module(module: LLVMModuleRef, conf: &ParsedConf) -> WeldResul
     let start = PreciseTime::now();
 
     if conf.llvm.target_analysis_passes {
-        // TODO: Leaks memory. Is allocated with new and mismatches with libc:free
-        let lib_info = LLVMExtTargetLibraryInfo();
-        LLVMAddTargetLibraryInfo(lib_info, mpm);
+        LLVMExtAddTargetLibraryInfo(mpm);
         LLVMAddAnalysisPasses(target_machine, mpm);
         LLVMExtAddTargetPassConfig(target_machine, mpm);
         LLVMAddAnalysisPasses(target_machine, fpm);
