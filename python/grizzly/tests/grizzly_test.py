@@ -44,8 +44,8 @@ class PandasWeldTestMethods(unittest.TestCase):
 
     def test_filter_self(self):
         input = gr.SeriesWeld(np.array(["False", "True", "True", "False"], dtype=str),gr.WeldVec(gr.WeldChar()))
-        print input.lower().evaluate()
-        print input.filter(input.lower() == "true").evaluate()
+        print(input.lower().evaluate())
+        print(input.filter(input.lower() == "true").evaluate())
 
     def test_groupby_sort(self):
         # test single column
