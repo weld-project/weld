@@ -355,11 +355,6 @@ weld::vec<weld::vec<uint8_t> > numpy_to_weld_char_arr_arr(PyObject* in) {
   for (int i = 0; i < t.size; i++) {
     PyObject* curr_item = PyArray_GETITEM(inp, ptr);
     t.ptr[i] = numpy_to_weld_char_arr(curr_item);
-    // t.ptr[i].size = strlen((char *) ptr);
-    // if ((int) inp->dimensions[1] < t.ptr[i].size) {
-    //   t.ptr[i].size = (int) inp->dimensions[1];
-    // }
-    // t.ptr[i].ptr = (uint8_t *)(data + i * inp->strides[0]);
     ptr += (PyArray_STRIDES(inp)[0]);
   }
   return t;
