@@ -4,7 +4,7 @@ Attributes:
     decoder_ (NumPyEncoder): Description
     encoder_ (NumPyDecoder): Description
 """
-from encoders import *
+from .encoders import *
 from weld.weldobject import *
 
 
@@ -248,7 +248,7 @@ def pivot_filter(pivot_array, predicates, ty=None):
 
 def isin(array, predicates, ty):
     """ Checks if elements in array is also in predicates
-    
+
     # TODO: better parameter naming
 
     Args:
@@ -717,7 +717,7 @@ def join(expr1, expr2, d1_keys, d2_keys, keys_type, d1_vals, df1_vals_ty, d2_val
                                           "df2key":d2_key_struct,
                                           "df2vals":d2_val_struct,
                                           "df2vals2":d2_val_fields2}
-    
+
     return weld_obj
 
 def pivot_table(expr, value_index, value_ty, index_index, index_ty, columns_index, columns_ty, aggfunc):
@@ -1168,11 +1168,11 @@ def groupby_std(columns, column_tys, grouping_columns, grouping_column_tys):
     );
     map(
         sort(tovec(sum_dict), |x| x.$0),
-        |e| {e.$0, 
+        |e| {e.$0,
                    (let sum = result(for(e.$1, merger[%(ty)s,+], |b,i,a| merge(b, a)));
-                    let m = f64(sum) / f64(len(e.$1)); 
+                    let m = f64(sum) / f64(len(e.$1));
                     let msqr = result(for(e.$1, merger[f64,+], |b,i,a| merge(b, (f64(a)-m)*(f64(a)-m))));
-                    sqrt(msqr / f64(len(e.$1) - 1L)) 
+                    sqrt(msqr / f64(len(e.$1) - 1L))
                    )}
     )
   """

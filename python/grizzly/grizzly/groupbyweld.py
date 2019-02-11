@@ -1,13 +1,13 @@
 import numpy as np
 import pandas as pd
 
-import grizzly_impl
-from lazy_op import LazyOpResult, to_weld_type
+from grizzly import grizzly_impl
+from .lazy_op import LazyOpResult, to_weld_type
 from weld.weldobject import *
-import utils
+from grizzly import utils
 
-import dataframeweld
-from seriesweld import SeriesWeld
+from grizzly import dataframeweld
+from .seriesweld import SeriesWeld
 
 class GroupByWeld:
     """Summary
@@ -28,7 +28,7 @@ class GroupByWeld:
             df (TYPE): Description
             grouping_column_name (TYPE): Description
         """
-    
+
         self.df = df
         self.grouping_columns = []
         self.grouping_column_types = []
