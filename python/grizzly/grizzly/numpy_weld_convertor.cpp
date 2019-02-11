@@ -1,6 +1,5 @@
 #include "Python.h"
 #include "numpy/arrayobject.h"
-#include "bytesobject.h"
 #include "common.h"
 #include <cstdlib>
 #include <cstdio>
@@ -89,10 +88,7 @@ weld::vec<uint8_t> numpy_to_weld_char_arr(PyObject* in) {
   weld::vec<uint8_t> t;
   t.size = dimension;
 #if defined(IS_PY3K)
-  t.ptr = (uint8_t*) PyUnicode_AsEncodedString(in, "UTF-8", "strict");
-  // PyObject* temp_bytes = PyUnicode_AsEncodedString(in, "UTF-8", "strict");
-  // t.ptr = (uint8_t*) PyBytes_AsString(temp_bytes);
-  // Py_DECREF(temp_bytes);
+  t.ptr = (uint8_t*) PyUnicode_AsUTF8(in);
 #else
   t.ptr = (uint8_t*) PyString_AsString(in);
 #endif
@@ -357,14 +353,15 @@ weld::vec<weld::vec<uint8_t> > numpy_to_weld_char_arr_arr(PyObject* in) {
   uint8_t* ptr = (uint8_t *) PyArray_DATA(inp);
   uint8_t* data = ptr;
   for (int i = 0; i < t.size; i++) {
-    t.ptr[i].size = strlen((char *) ptr);
-    if ((int) inp->dimensions[1] < t.ptr[i].size) {
-      t.ptr[i].size = (int) inp->dimensions[1];
-    }
-    t.ptr[i].ptr = (uint8_t *)(data + i * inp->strides[0]);
+    PyObject* curr_item = PyArray_GETITEM(inp, ptr);
+    t.ptr[i] = numpy_to_weld_char_arr(curr_item);
+    // t.ptr[i].size = strlen((char *) ptr);
+    // if ((int) inp->dimensions[1] < t.ptr[i].size) {
+    //   t.ptr[i].size = (int) inp->dimensions[1];
+    // }
+    // t.ptr[i].ptr = (uint8_t *)(data + i * inp->strides[0]);
     ptr += (PyArray_STRIDES(inp)[0]);
   }
-
   return t;
 }
 
