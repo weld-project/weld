@@ -82,14 +82,16 @@ weld::vec<double> numpy_to_weld_double_arr(PyObject* in) {
 extern "C"
 weld::vec<uint8_t> numpy_to_weld_char_arr(PyObject* in) {
 #if defined(IS_PY3K)
-  int64_t dimension = (int64_t) PyBytes_Size(in);
+  int64_t dimension = (int64_t) PyUnicode_GetLength(in);
 #else
   int64_t dimension = (int64_t) PyString_Size(in);
 #endif
   weld::vec<uint8_t> t;
   t.size = dimension;
 #if defined(IS_PY3K)
-  t.ptr = (uint8_t*) PyBytes_AsString(in);
+  PyObject* temp_bytes = PyUnicode_AsEncodedString(in, "UTF-8", "strict");
+  t.ptr = (uint8_t*) PyBytes_AsString(temp_bytes);
+  Py_DECREF(temp_bytes);
 #else
   t.ptr = (uint8_t*) PyString_AsString(in);
 #endif
@@ -628,7 +630,7 @@ PyObject* weld_to_numpy_char_arr_arr(weld::vec< weld::vec<uint8_t> > inp) {
   for (int i = 0; i < num_rows; i++) {
     int size = inp.ptr[i].size;
 #if defined(IS_PY3K)
-    PyObject* buffer = PyBytes_FromStringAndSize((const char*) inp.ptr[i].ptr, size);
+    PyObject* buffer = PyUnicode_FromStringAndSize((const char*) inp.ptr[i].ptr, size);
 #else
     PyObject* buffer = PyString_FromStringAndSize((const char*) inp.ptr[i].ptr, size);
 #endif
