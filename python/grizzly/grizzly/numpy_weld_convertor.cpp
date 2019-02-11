@@ -1,10 +1,16 @@
 #include "Python.h"
 #include "numpy/arrayobject.h"
+#include "bytesobject.h"
 #include "common.h"
 #include <cstdlib>
 #include <cstdio>
 #include <iostream>
 //#include <omp.h> //uncomment to enable parallel encode
+
+// Include directives to check for python version
+#if PY_MAJOR_VERSION >= 3
+#define IS_PY3K
+#endif
 
 using namespace std;
 
@@ -75,10 +81,18 @@ weld::vec<double> numpy_to_weld_double_arr(PyObject* in) {
  */
 extern "C"
 weld::vec<uint8_t> numpy_to_weld_char_arr(PyObject* in) {
+#if defined(IS_PY3K)
+  int64_t dimension = (int64_t) PyBytes_Size(in);
+#else
   int64_t dimension = (int64_t) PyString_Size(in);
+#endif
   weld::vec<uint8_t> t;
   t.size = dimension;
+#if defined(IS_PY3K)
+  t.ptr = (uint8_t*) PyBytes_AS_STRING(in);
+#else
   t.ptr = (uint8_t*) PyString_AsString(in);
+#endif
   return t;
 }
 
@@ -291,7 +305,7 @@ struct numpy_to_weld_char_arr_arr_args {
 //  */
 // extern "C"
 // weld::vec<weld::vec<uint8_t> > numpy_to_weld_char_arr_arr(PyObject* in, int num_threads) {
-  
+
 //   PyArrayObject* inp = (PyArrayObject*) in;
 //   int64_t dimension = (int64_t) PyArray_DIMS(inp)[0];
 //   weld::vec<weld::vec<uint8_t> > t;
@@ -300,7 +314,7 @@ struct numpy_to_weld_char_arr_arr_args {
 //   struct numpy_to_weld_char_arr_arr_args args[num_threads];
 //   int fringe_length = t.size % num_threads;
 //   for (int i = 0; i < num_threads; i++) {
-    
+
 //     args[i].inp = inp;
 //     args[i].ptr = (uint8_t *) PyArray_DATA(inp);
 //     args[i].t = &t;
@@ -613,7 +627,11 @@ PyObject* weld_to_numpy_char_arr_arr(weld::vec< weld::vec<uint8_t> > inp) {
 
   for (int i = 0; i < num_rows; i++) {
     int size = inp.ptr[i].size;
+#if defined(IS_PY3K)
+    PyObject* buffer = PyBytes_FromStringAndSize((const char*) inp.ptr[i].ptr, size);
+#else
     PyObject* buffer = PyString_FromStringAndSize((const char*) inp.ptr[i].ptr, size);
+#endif
     ptr_array[i] = buffer;
   }
   npy_intp size = num_rows;
