@@ -89,7 +89,7 @@ weld::vec<uint8_t> numpy_to_weld_char_arr(PyObject* in) {
   weld::vec<uint8_t> t;
   t.size = dimension;
 #if defined(IS_PY3K)
-  t.ptr = (uint8_t*) PyBytes_AS_STRING(in);
+  t.ptr = (uint8_t*) PyBytes_AsString(in);
 #else
   t.ptr = (uint8_t*) PyString_AsString(in);
 #endif

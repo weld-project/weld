@@ -1020,7 +1020,7 @@ def groupby_sum(columns, column_tys, grouping_columns, grouping_column_tys):
         columns_var = columns_var_list[0]
         tys_str = column_tys[0]
         key_str_list = []
-        for i in xrange(0, len(grouping_columns)):
+        for i in range(0, len(grouping_columns)):
             key_str_list.append("e.$%d" % i)
         key_str = "{%s}" % ", ".join(key_str_list)
         value_str = "e.$" + str(len(grouping_columns))
@@ -1032,7 +1032,7 @@ def groupby_sum(columns, column_tys, grouping_columns, grouping_column_tys):
         tys_str = "{%s}" % ", ".join(column_tys)
         key_str = "e.$0"
         value_str_list = []
-        for i in xrange(1, len(columns) + 1):
+        for i in range(1, len(columns) + 1):
             value_str_list.append("e.$%d" % i)
         value_str = "{%s}" % ", ".join(value_str_list)
         result_str_list = [key_str, value_str]
@@ -1044,11 +1044,11 @@ def groupby_sum(columns, column_tys, grouping_columns, grouping_column_tys):
         key_str_list = []
         key_size = len(grouping_columns)
         value_size = len(columns)
-        for i in xrange(0, key_size):
+        for i in range(0, key_size):
             key_str_list.append("e.$%d" % i)
         key_str = "{%s}" % ", ".join(key_str_list)
         value_str_list = []
-        for i in xrange(key_size, key_size + value_size):
+        for i in range(key_size, key_size + value_size):
             value_str_list.append("e.$%d" % i)
         value_str = "{%s}" % ", ".join(value_str_list)
         result_str_list = [key_str, value_str]
@@ -1122,7 +1122,7 @@ def groupby_std(columns, column_tys, grouping_columns, grouping_column_tys):
         columns_var = columns_var_list[0]
         tys_str = column_tys[0]
         key_str_list = []
-        for i in xrange(0, len(grouping_columns)):
+        for i in range(0, len(grouping_columns)):
             key_str_list.append("e.$%d" % i)
         key_str = "{%s}" % ", ".join(key_str_list)
         value_str = "e.$" + str(len(grouping_columns))
@@ -1134,7 +1134,7 @@ def groupby_std(columns, column_tys, grouping_columns, grouping_column_tys):
         tys_str = "{%s}" % ", ".join(column_tys)
         key_str = "e.$0"
         value_str_list = []
-        for i in xrange(1, len(columns) + 1):
+        for i in range(1, len(columns) + 1):
             value_str_list.append("e.$%d" % i)
         value_str = "{%s}" % ", ".join(value_str_list)
         result_str_list = [key_str, value_str]
@@ -1146,11 +1146,11 @@ def groupby_std(columns, column_tys, grouping_columns, grouping_column_tys):
         key_str_list = []
         key_size = len(grouping_columns)
         value_size = len(columns)
-        for i in xrange(0, key_size):
+        for i in range(0, key_size):
             key_str_list.append("e.$%d" % i)
         key_str = "{%s}" % ", ".join(key_str_list)
         value_str_list = []
-        for i in xrange(key_size, key_size + value_size):
+        for i in range(key_size, key_size + value_size):
             value_str_list.append("e.$%d" % i)
         value_str = "{%s}" % ", ".join(value_str_list)
         result_str_list = [key_str, value_str]
@@ -1295,7 +1295,7 @@ def groupby_sort(columns, column_tys, grouping_columns, grouping_column_tys, key
         columns_var = columns_var_list[0]
         tys_str = column_tys[0]
         key_str_list = []
-        for i in xrange(0, len(grouping_columns)):
+        for i in range(0, len(grouping_columns)):
             key_str_list.append("e.$%d" % i)
         key_str = "{%s}" % ", ".join(key_str_list)
         value_str = "e.$" + str(len(grouping_columns))
@@ -1307,7 +1307,7 @@ def groupby_sort(columns, column_tys, grouping_columns, grouping_column_tys, key
         tys_str = "{%s}" % ", ".join(column_tys)
         key_str = "e.$0"
         value_str_list = []
-        for i in xrange(1, len(columns) + 1):
+        for i in range(1, len(columns) + 1):
             value_str_list.append("e.$%d" % i)
         value_str = "{%s}" % ", ".join(value_str_list)
         result_str_list = [key_str, value_str]
@@ -1319,11 +1319,11 @@ def groupby_sort(columns, column_tys, grouping_columns, grouping_column_tys, key
         key_str_list = []
         key_size = len(grouping_columns)
         value_size = len(columns)
-        for i in xrange(0, key_size):
+        for i in range(0, key_size):
             key_str_list.append("e.$%d" % i)
         key_str = "{%s}" % ", ".join(key_str_list)
         value_str_list = []
-        for i in xrange(key_size, key_size + value_size):
+        for i in range(key_size, key_size + value_size):
             value_str_list.append("e.$%d" % i)
         value_str = "{%s}" % ", ".join(value_str_list)
         result_str_list = [key_str, value_str]
