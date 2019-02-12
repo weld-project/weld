@@ -14,26 +14,26 @@ class PandasWeldTestMethods(unittest.TestCase):
         df = pd.DataFrame({"a":[3,2,3], "b":[4,5,6]})
         input = gr.DataFrameWeld(df)
         groupby = input.groupby("a").sum().evaluate(False)
-        self.assertItemsEqual([5, 10], groupby.to_pandas()["b"])
+        self.assertListEqual([5, 10], list(groupby.to_pandas()["b"].values))
 
         # test multi column
         df = pd.DataFrame({"a":[3,2,3], "b":[4,5,6], "c":[6, 4, 3]})
         input = gr.DataFrameWeld(df)
         groupby = input.groupby("a").sum().evaluate(False)
-        self.assertItemsEqual([5, 10], groupby.to_pandas()["b"])
-        self.assertItemsEqual([4, 9], groupby.to_pandas()["c"])
+        self.assertListEqual([5, 10], list(groupby.to_pandas()["b"].values))
+        self.assertListEqual([4, 9], list(groupby.to_pandas()["c"].values))
 
         # test multikey single column
         df = pd.DataFrame({"a":[3,2,3], "b":[2,3,2], "c":[6, 5, 4]})
         input = gr.DataFrameWeld(df)
         groupby = input.groupby(["a", "b"]).sum().evaluate(False)
-        self.assertItemsEqual([5, 10], groupby.to_pandas()["c"])
+        self.assertListEqual([5, 10], list(groupby.to_pandas()["c"].values))
 
         # test multikey multi column
         df = pd.DataFrame({"a":[3,2,3], "b":[2,3,2], "c":[6, 5, 4], "d":[6, 4, 3]})
         input = gr.DataFrameWeld(df)
         groupby = input.groupby(["a", "b"]).sum().evaluate(False)
-        self.assertItemsEqual([5, 10], groupby.to_pandas()["c"])
+        self.assertListEqual([5, 10], list(groupby.to_pandas()["c"].values))
 
     def test_filter_self(self):
         k = np.array(["A", "b", "D", "F", "e", "A", "A", "ac"], dtype=str)
@@ -63,8 +63,8 @@ class PandasWeldTestMethods(unittest.TestCase):
         inp = gr.SeriesWeld(
             np.array(["aaa", "bbb", "aaa", "ccc"], dtype=str),
             gr.WeldVec(gr.WeldChar()))
-        self.assertItemsEqual(["aaa", "bbb", "ccc"],
-                              inp.unique().evaluate(False))
+        grizzly_result = list(inp.unique().evaluate(False).sort_values().values)
+        self.assertListEqual(["aaa", "bbb", "ccc"], grizzly_result)
 
     def test_sum(self):
         inp = gr.SeriesWeld(
