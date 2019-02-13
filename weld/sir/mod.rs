@@ -23,6 +23,7 @@ pub type FunctionId = usize;
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum StatementKind {
     Assign(Symbol),
+    Assert(Symbol),
     AssignLiteral(LiteralKind),
     BinOp {
         op: BinOpKind,
@@ -156,6 +157,9 @@ impl StatementKind {
                 vars.push(child);
             }
             Not(ref child) => {
+                vars.push(child);
+            }
+            Assert(ref child) => {
                 vars.push(child);
             }
             Broadcast(ref child) => {
@@ -545,6 +549,7 @@ impl fmt::Display for StatementKind {
             } => write!(f, "merge({}, {})", builder, value),
             Negate(ref child) => write!(f, "-{}", child),
             Not(ref child) => write!(f, "!{}", child),
+            Assert(ref child) => write!(f, "assert({})", child),
             NewBuilder {
                 ref arg,
                 ref ty,
@@ -973,6 +978,13 @@ fn gen_expr(expr: &Expr,
         ExprKind::Not(ref child_expr) => {
             let (cur_func, cur_block, child_sym) = gen_expr(child_expr, prog, cur_func, cur_block, tracker)?;
             let kind = Not(child_sym);
+            let res_sym = tracker.symbol_for_statement(prog, cur_func, cur_block, &expr.ty, kind);
+            Ok((cur_func, cur_block, res_sym))
+        }
+
+        ExprKind::Assert(ref child_expr) => {
+            let (cur_func, cur_block, child_sym) = gen_expr(child_expr, prog, cur_func, cur_block, tracker)?;
+            let kind = Assert(child_sym);
             let res_sym = tracker.symbol_for_statement(prog, cur_func, cur_block, &expr.ty, kind);
             Ok((cur_func, cur_block, res_sym))
         }

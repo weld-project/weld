@@ -65,6 +65,8 @@ pub enum WeldRuntimeErrno {
     DeserializationError,
     /// A key was not found in a dictionary.
     KeyNotFoundError,
+    /// An assertion evaluated to `false`.
+    AssertionError,
     /// Maximum errno value.
     ///
     /// All errors will have a value less than this value and greater than 0.
@@ -246,8 +248,9 @@ unsafe fn initialize() {
         x += weld_runst_free as i64;
         x += weld_runst_get_errno as i64;
         x += weld_runst_set_errno as i64;
-
+        x += weld_runst_assert as i64;
         x += weld_runst_print as i64;
+
         trace!("Runtime initialized with hashed values {}", x);
     });
 }

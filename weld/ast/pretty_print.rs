@@ -187,6 +187,10 @@ fn to_string_impl(expr: &Expr, config: &mut PrettyPrintConfig) -> String {
             format!("(!{})", to_string_impl(e, config))
         }
 
+        Assert(ref e) => {
+            format!("assert({})", to_string_impl(e, config))
+        }
+
         Broadcast(ref e) => {
             format!("broadcast({})", to_string_impl(e, config))
         }
