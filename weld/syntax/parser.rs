@@ -158,10 +158,10 @@ impl<'t> Parser<'t> {
         self.position == self.tokens.len() || *self.peek() == TEndOfInput
     }
 
-    /// Parse a program (optional macros + one body expression) starting at the current position.
+    /// Parse a program (optional type aliases + optional macros + one body expression) starting at the current position.
     fn program(&mut self) -> WeldResult<Program> {
-        let macros = try!(self.macros());
         let type_aliases = try!(self.type_aliases());
+        let macros = try!(self.macros());
         let body = try!(self.expr());
         Ok(Program {
                macros: macros,

@@ -307,8 +307,7 @@ macro filter(data, func) = (
 
 ## Custom Macros
 
-The operations listed above are macros that are loaded by default. However, users can also define their own macros. Macro definitions must precede the Weld expression
-that is to be compiled:
+The operations listed above are macros that are loaded by default. However, users can also define their own macros. Macro definitions must come after [type aliases](#typename-aliasing)  and precede the Weld expression that is to be compiled:
 
 ```
 # A macro to add values.
@@ -326,13 +325,13 @@ Since macros do not require types in their parameters, they are a useful way to 
 
 # Typename Aliasing
 
-Weld supports aliases for types ("typename aliases"). Aliases must currently be listed after macros and before the expression representing the Weld program:
+Weld supports aliases for types ("typename aliases"). Aliases must currently be listed before macros before the expression representing the Weld program:
 
 ```
-# Define macros above these.
-
 type int = i32;
 type pair = {i32,i32};
+
+# Define macros above these.
 
 |v: int, p: pair| v + p.$0 + p.$1
 ```
@@ -344,6 +343,19 @@ type int = i32;
 type pair = {int,int};
 
 |v: int, p: pair| v + p.$0 + p.$1
+```
+
+Macros can also use typename aliases:
+
+```
+type int = i32;
+
+macro addOne(a) = (
+  cudf[addOneUdf,int](a)
+);
+
+# Expands to |v: i64| cudf[addOneUdf,i64](v)
+|v: int| addOne(v)
 ```
 
 Currently, typename aliases are treated similarly to macros: when a program is compiled, type typenames are replaced with their true types, and the naming information is lost. This means that dumping code, logging messages, etc. will currently show the actual type rather than the typename. We hope to propagate type name information through the compiler soon.
