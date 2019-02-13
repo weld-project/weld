@@ -41,10 +41,18 @@ pub fn process_program(program: &Program) -> WeldResult<Expr> {
 /// Replace alias types in the AST with real ones.
 pub fn process_type_aliases(expr: &mut Expr,
                             type_aliases: Vec<TypeAlias>) -> WeldResult<()> {
-    let ref type_map = type_aliases.into_iter()
-        .map(|t| (t.name, t.ty))
-        .collect::<HashMap<_, _>>();
-    type_alias_helper(expr, type_map)
+    let mut type_map = HashMap::new();
+    for alias in type_aliases.into_iter() {
+        let (name, mut ty) = (alias.name, alias.ty);
+        // This imposes the requirement that types are defined before they are used
+        // in other aliases, which prevents confusing situations where nested aliases
+        // are then redefined and the alias type becomes ambiguous.
+        update_alias(&mut ty, &type_map)?;
+
+        // Overrides name if its already in the type_map.
+        type_map.insert(name, ty);
+    }
+    type_alias_helper(expr, &type_map)
 }
 
 fn type_alias_helper(expr: &mut Expr,
@@ -79,11 +87,11 @@ fn type_alias_helper(expr: &mut Expr,
 /// If the type is not a `Type::Alias`, this function does nothing.
 fn update_alias(ty: &mut Type, type_map: &HashMap<String, Type>) -> WeldResult<()> {
 
-    let aliased = dbg!(if let Type::Alias(ref name, _) = *ty {
+    let aliased = if let Type::Alias(ref name, _) = *ty {
         Some(name.clone())
     } else {
         None
-    });
+    };
 
     if let Some(name) = aliased {
         let real_type = type_map.get(&name);
@@ -223,6 +231,80 @@ fn basic_macros() {
     let expr = parse_expr("foo(bar(a, b))").unwrap();
     let result = process_macros(&expr, &macros).unwrap();
     assert_eq!(print_expr_without_indent(&result).as_str(), "((a*b)+(a*b))");
+}
+
+#[test]
+fn basic_type_alias() {
+    let aliases = parse_type_aliases("type int = i32;").unwrap();
+    let mut expr = parse_expr("|a: int| a + 1").unwrap();
+    process_type_aliases(&mut expr, aliases).unwrap();
+    assert_eq!(print_expr_without_indent(&expr).as_str(), "|a:i32|(a+1)");
+}
+
+#[test]
+fn overwrite_type_alias() {
+    let aliases = parse_type_aliases("type int = i32; type int = i64;").unwrap();
+    let mut expr = parse_expr("|a: int| a + 1L").unwrap();
+    process_type_aliases(&mut expr, aliases).unwrap();
+    assert_eq!(print_expr_without_indent(&expr).as_str(), "|a:i64|(a+1L)");
+}
+
+#[test]
+fn invalid_type_alias() {
+    let aliases = parse_type_aliases("type int = i32;").unwrap();
+    let mut expr = parse_expr("|a: otherInt| a + 1").unwrap();
+    process_type_aliases(&mut expr, aliases).expect_err(
+        "Type alises processing should fail with unknown type"
+    );
+}
+
+#[test]
+fn type_alias_in_type_alias() {
+    let aliases = parse_type_aliases("type int = i32; type pair = {int,int};").unwrap();
+    let mut expr = parse_expr("|a: pair| a.$0 + 1").unwrap();
+    process_type_aliases(&mut expr, aliases).unwrap();
+    assert_eq!(print_expr_without_indent(&expr).as_str(), "|a:{i32,i32}|(a.$0+1)");
+}
+
+#[test]
+fn redefinition_with_type_alias_in_type_alias() {
+    // Types are defined in order: redefining a type shouldn't redefine
+    // types that occur before it.
+    let aliases = parse_type_aliases("type int = i32;
+                                     type pair = {int,int};
+                                     type int = i64;").unwrap();
+    let mut expr = parse_expr("|a: pair| a").unwrap();
+    process_type_aliases(&mut expr, aliases).unwrap();
+    assert_eq!(print_expr_without_indent(&expr).as_str(), "|a:{i32,i32}|a");
+}
+
+#[test]
+fn invalid_type_alias_in_type_alias() {
+    // Aliases must be defined in order.
+    let aliases = parse_type_aliases("type pair = {int,int}; type int = i32;").unwrap();
+    let mut expr = parse_expr("|a: pair| a.$0 + 1").unwrap();
+    process_type_aliases(&mut expr, aliases).expect_err(
+        "Type alises processing should fail with unknown type"
+    );
+}
+
+#[test]
+fn nested_type_alias() {
+    let aliases = parse_type_aliases("type int = i32;").unwrap();
+    let mut expr = parse_expr("|a: vec[int]| lookup(a, 0L) + 1").unwrap();
+    process_type_aliases(&mut expr, aliases).unwrap();
+    assert_eq!(print_expr_without_indent(&expr).as_str(), "|a:vec[i32]|(lookup(a,0L)+1)");
+}
+
+#[test]
+fn expr_with_type_alias() {
+    let aliases = parse_type_aliases("type pair = {i32,i32};").unwrap();
+    let mut expr = parse_expr("|a: i32| cudf[i32ToPair,pair](a)").unwrap();
+    process_type_aliases(&mut expr, aliases).unwrap();
+    assert_eq!(
+        print_expr_without_indent(&expr).as_str(),
+        "|a:i32|cudf[i32ToPair,{i32,i32}](a)"
+    );
 }
 
 #[test]

@@ -57,6 +57,15 @@ pub fn parse_macros(input: &str) -> WeldResult<Vec<Macro>> {
     check_parse_error!(parser, res)
 }
 
+/// Parse the complete input string as a list of type aliases.
+pub fn parse_type_aliases(input: &str) -> WeldResult<Vec<TypeAlias>> {
+    let tokens = try!(tokenize(input));
+    let mut parser = Parser::new(&tokens);
+    let res = parser.type_aliases();
+
+    check_parse_error!(parser, res)
+}
+
 /// Parse the complete input string as an expression.
 pub fn parse_expr(input: &str) -> WeldResult<Expr> {
     let tokens = try!(tokenize(input));
