@@ -243,7 +243,8 @@ fn main() {
         return;
     }
 
-    let home_path = env::home_dir().unwrap_or(PathBuf::new());
+    let home_path = env::var("HOME").map(|s| PathBuf::from(s))
+        .unwrap_or(PathBuf::new());
     let history_file_path = home_path.join(".weld_history");
     let history_file_path = history_file_path.to_str().unwrap_or(".weld_history");
 
