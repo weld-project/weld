@@ -27,7 +27,7 @@ data = gr.merge(gr.merge(ratings, users), movies).evaluate(True).to_pandas()
 end = time.time()
 
 start1 = time.time()
-print data
+print(data)
 data = gr.DataFrameWeld(data)
 mean_ratings = data.pivot_table('rating', index='title', columns='gender',
                                 aggfunc='mean')
@@ -44,7 +44,7 @@ rating_std_by_title = rating_std_by_title.sort_values(ascending=False)[0:10]
 sorted_by_diff, rating_std_by_title = gr.group_eval([sorted_by_diff, rating_std_by_title])
 end1 = time.time()
 
-print sorted_by_diff
-print rating_std_by_title
-print "Time to merge:", (end - start)
-print "Time for analysis:", (end1 - start1)
+print(sorted_by_diff)
+print(rating_std_by_title)
+print("Time to merge:", (end - start))
+print("Time for analysis:", (end1 - start1))
