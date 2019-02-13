@@ -117,17 +117,20 @@ pub enum Type {
     Struct(Vec<Type>),
     /// A function with a list of arguments and return type.
     Function(Vec<Type>, Box<Type>),
+    /// An alias for a type.
+    Alias(String, Box<Type>),
     /// An unknown type, used only before type inference.
     Unknown,
 }
 
 impl Type {
-    /// Returns the child types of this `Type`.
+    /// Returns an iterator of references to child types of this `Type`.
     pub fn children(&self) -> vec::IntoIter<&Type> {
         use self::Type::*;
         use self::BuilderKind::*;
         match *self {
             Unknown | Scalar(_) | Simd(_) => vec![],
+            Alias(_, ref ty) => vec![ty.as_ref()],
             Vector(ref elem) => {
                 vec![elem.as_ref()]
             }
@@ -158,6 +161,48 @@ impl Type {
                     children.push(param);
                 }
                 children.push(res.as_ref());
+                children
+            }
+        }.into_iter()
+    }
+
+    /// Returns an iterator over mutable references to child types of this `Type`.
+    pub fn children_mut(&mut self) -> vec::IntoIter<&mut Type> {
+        use self::Type::*;
+        use self::BuilderKind::*;
+        match *self {
+            Unknown | Scalar(_) | Simd(_) => vec![],
+            Alias(_, ref mut ty) => vec![ty.as_mut()],
+            Vector(ref mut elem) => {
+                vec![elem.as_mut()]
+            }
+            Dict(ref mut key, ref mut value) => {
+                vec![key.as_mut(), value.as_mut()]
+            }
+            Builder(ref mut kind, _) => match kind {
+                Appender(ref mut elem) => {
+                    vec![elem.as_mut()]
+                }
+                Merger(ref mut elem, _) => {
+                    vec![elem.as_mut()]
+                }
+                DictMerger(ref mut key, ref mut value, _) => {
+                    vec![key.as_mut(), value.as_mut()]
+                }
+                GroupMerger(ref mut key, ref mut value) =>  {
+                    vec![key.as_mut(), value.as_mut()]
+                }
+                VecMerger(ref mut elem, _) => {
+                    vec![elem.as_mut()]
+                }
+            },
+            Struct(ref mut elems) => elems.iter_mut().collect(),
+            Function(ref mut params, ref mut res) => {
+                let mut children = vec![];
+                for param in params.iter_mut() {
+                    children.push(param);
+                }
+                children.push(res.as_mut());
                 children
             }
         }.into_iter()
@@ -221,7 +266,7 @@ impl Type {
             Vector(ref elem) => elem.is_hashable(),
             Builder(_, _) => false,
             Dict(_, _) => false,
-            Function(_, _) | Unknown => false
+            Function(_, _) | Alias(_, _) | Unknown => false
         }
     }
 
@@ -310,6 +355,7 @@ impl fmt::Display for Type {
             Builder(ref kind, ref annotations) => {
                 format!("{}{}", annotations, kind)
             }
+            Alias(ref name, _) => format!("ALIAS({})", name),
             Unknown => String::from("?")
         };
         f.write_str(text)

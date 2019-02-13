@@ -528,7 +528,7 @@ impl Hash for LlvmGenerator {
                 LLVMAddIncoming(result, values.as_mut_ptr(), blocks.as_mut_ptr(), values.len() as u32);
                 result
             }
-            Dict(_,_) | Builder(_,_) | Function(_,_) | Unknown => {
+            Dict(_,_) | Builder(_,_) | Function(_,_) | Unknown | Alias(_, _) => {
                 return compile_err!("Unhashable type {}", ty);
             }
         };
