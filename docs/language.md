@@ -331,7 +331,7 @@ Weld supports aliases for types ("typename aliases"). Aliases must currently be 
 type int = i32;
 type pair = {i32,i32};
 
-# Define macros above these.
+# Define macros here.
 
 |v: int, p: pair| v + p.$0 + p.$1
 ```
