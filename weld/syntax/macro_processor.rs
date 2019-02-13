@@ -39,7 +39,8 @@ pub fn process_program(program: &Program) -> WeldResult<Expr> {
 }
 
 /// Replace alias types in the AST with real ones.
-pub fn process_type_aliases(expr: &mut Expr, type_aliases: Vec<TypeAlias>) -> WeldResult<()> {
+pub fn process_type_aliases(expr: &mut Expr,
+                            type_aliases: Vec<TypeAlias>) -> WeldResult<()> {
     let ref type_map = type_aliases.into_iter()
         .map(|t| (t.name, t.ty))
         .collect::<HashMap<_, _>>();
@@ -203,24 +204,24 @@ fn update_defined_ids(expr: &mut Expr, sym_gen: &mut SymbolGenerator) {
 fn basic_macros() {
     let macros = parse_macros("macro foo(a) = a + a;").unwrap();
     let expr = parse_expr("foo(b * b)").unwrap();
-    let result = process_expression(&expr, &macros).unwrap();
+    let result = process_macros(&expr, &macros).unwrap();
     assert_eq!(print_expr_without_indent(&result).as_str(), "((b*b)+(b*b))");
 
     let macros = parse_macros("macro foo(a) = a + a;").unwrap();
     let expr = parse_expr("foo(foo(b))").unwrap();
-    let result = process_expression(&expr, &macros).unwrap();
+    let result = process_macros(&expr, &macros).unwrap();
     assert_eq!(print_expr_without_indent(&result).as_str(), "((b+b)+(b+b))");
 
     // Macro whose parameter symbol is also used as an argument inside
     let macros = parse_macros("macro foo(a) = a + a;").unwrap();
     let expr = parse_expr("foo(a * a)").unwrap();
-    let result = process_expression(&expr, &macros).unwrap();
+    let result = process_macros(&expr, &macros).unwrap();
     assert_eq!(print_expr_without_indent(&result).as_str(), "((a*a)+(a*a))");
 
     // Multiple macros
     let macros = parse_macros("macro foo(a) = a + a; macro bar(a, b) = a * b;").unwrap();
     let expr = parse_expr("foo(bar(a, b))").unwrap();
-    let result = process_expression(&expr, &macros).unwrap();
+    let result = process_macros(&expr, &macros).unwrap();
     assert_eq!(print_expr_without_indent(&result).as_str(), "((a*b)+(a*b))");
 }
 
@@ -230,40 +231,40 @@ fn macros_introducing_symbols() {
     // we should replace that with a new symbol.
     let macros = parse_macros("macro adder(a) = |x| x+a;").unwrap();
     let expr = parse_expr("adder(x)").unwrap();
-    let result = process_expression(&expr, &macros).unwrap();
+    let result = process_macros(&expr, &macros).unwrap();
     assert_eq!(print_expr_without_indent(&result).as_str(), "|x__1:?|(x__1+x)");
 
     // Same case as above except we define a symbol in a Let instead of Lambda.
     let macros = parse_macros("macro twice(a) = (let x = a; x+x);").unwrap();
     let expr = parse_expr("twice(x)").unwrap();
-    let result = process_expression(&expr, &macros).unwrap();
+    let result = process_macros(&expr, &macros).unwrap();
     assert_eq!(print_expr_without_indent(&result).as_str(),
                "(let x__1=(x);(x__1+x__1))");
 
     // On the other hand, if x is not used in the parameter, keep its ID as is.
     let macros = parse_macros("macro adder(a) = |x| x+a;").unwrap();
     let expr = parse_expr("adder(b)").unwrap();
-    let result = process_expression(&expr, &macros).unwrap();
+    let result = process_macros(&expr, &macros).unwrap();
     assert_eq!(print_expr_without_indent(&result).as_str(), "|x:?|(x+b)");
 
     // Same case as above except we define a symbol in a Let instead of Lambda.
     let macros = parse_macros("macro twice(a) = (let x = a; x+x);").unwrap();
     let expr = parse_expr("twice(b)").unwrap();
-    let result = process_expression(&expr, &macros).unwrap();
+    let result = process_macros(&expr, &macros).unwrap();
     assert_eq!(print_expr_without_indent(&result).as_str(),
                "(let x=(b);(x+x))");
 
     // If a symbol is used multiple times during macro substitution, replace it with distinct IDs.
     let macros = parse_macros("macro adder(a) = |x| x+a;").unwrap();
     let expr = parse_expr("adder(x+adder(x)(1))").unwrap();
-    let result = process_expression(&expr, &macros).unwrap();
+    let result = process_macros(&expr, &macros).unwrap();
     assert_eq!(print_expr_without_indent(&result).as_str(),
                "|x__1:?|(x__1+(x+(|x__2|(x__2+x))(1)))");
 
     // Similar case with multiple macros.
     let macros = parse_macros("macro adder(a)=|x|x+a; macro twice(a)=(let x=a; x+x);").unwrap();
     let expr = parse_expr("adder(twice(x))").unwrap();
-    let result = process_expression(&expr, &macros).unwrap();
+    let result = process_macros(&expr, &macros).unwrap();
     assert_eq!(print_expr_without_indent(&result).as_str(),
                "|x__1:?|(x__1+(let x__2=(x);(x__2+x__2)))");
 }
