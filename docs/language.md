@@ -17,7 +17,9 @@
     + [Aside: Linearity of Builder Types](#aside-linearity-of-builder-types)
 - [Comments](#comments)
 - [Type Inference](#type-inference)
-- [Sugar Operations](#sugar-operations)
+- [Sugar Operations and Macros](#sugar-operations-and-macros)
+    + [Custom Macros](#custom-macros)
+- [Typename Aliasing](#typename-aliasing)
 - [User Defined Functions](#user-defined-functions)
     + [Examples](#examples)
 - [Annotations](#annotations)
@@ -257,6 +259,7 @@ Weld supports Python-style one line comments with the `#` character. For example
 ```
 
 
+
 # Type Inference
 
 Weld supports some basic type inference, so users do not need to specify a full type for each expression in the program (but may optionally choose to do so).
@@ -272,10 +275,10 @@ In particular, Weld only requires types for the top-level function arguments, an
       )
 ```
 
-# Sugar Operations
+# Sugar Operations and Macros
 
-To make programs easier to write, the Weld implementation also supports some "sugar" operations that translate into `for`s and builders.
-These are currently represented as *macros*, which are substitution rules whose definitions are not handled by the optimizer.
+To make programs easier to write, Weld also supports some "sugar" operations that translate into `for`s and builders.
+Most of are currently represented as *macros*, which are substitution rules whose definitions are not handled by the optimizer.
 The sugar operations are commonly used functional programming operations such as `map` and `filter`.
 We list them below:
 
@@ -287,7 +290,7 @@ Signature | Notes
 `zip(v1: vec[T1], v2: vec[T2], ...): vec[{T1, T2, ...}]` | Only allowed in the `vec` argument of the `for` loop.
 `compare(x: T, y: T)` | Implements a default comparator for `sort`. Expands to `if(x > y, 1, if(x < y, -1, 0))`.
 
-All of these operations can straightforwardly be translated into `for` expressions.
+With the exception of `zip` (which is a special syntactic sugar that isn't expanded from a macro), all of these operations can be translated into `for` expressions.
 For example, the macro rules for `map` and `filter` would be implemented as follows:
 
 ```
@@ -301,6 +304,49 @@ macro filter(data, func) = (
   result(for(data, appender, |b, i, x| if(func(x), merge(b, x), b)))
 );
 ```
+
+## Custom Macros
+
+The operations listed above are macros that are loaded by default. However, users can also define their own macros. Macro definitions must precede the Weld expression
+that is to be compiled:
+
+```
+# A macro to add values.
+macro doubleAdd(a, b) = (
+  a + a + b + b
+);
+
+|v1: i32, v2: i32|
+  # Expands to v1 + v1 + v2 + v2
+  doubleAdd(v1 ,v2)
+```
+
+Macros are _hygenic_, so variable names defined within a macro will never clash (and by extension cannot be accessed from outside the macro expansion).
+Since macros do not require types in their parameters, they are a useful way to leverage type inference and write templatized Weld code.
+
+# Typename Aliasing
+
+Weld supports aliases for types ("typename aliases"). Aliases must currently be listed after macros and before the expression representing the Weld program:
+
+```
+# Define macros above these.
+
+type int = i32;
+type pair = {i32,i32};
+
+|v: int, p: pair| v + p.$0 + p.$1
+```
+
+Typename aliases can be used within other typename aliases (as long as they are defined before):
+
+```
+type int = i32;
+type pair = {int,int};
+
+|v: int, p: pair| v + p.$0 + p.$1
+```
+
+Currently, typename aliases are treated similarly to macros: when a program is compiled, type typenames are replaced with their true types, and the naming information is lost. This means that dumping code, logging messages, etc. will currently show the actual type rather than the typename. We hope to propagate type name information through the compiler soon.
 
 # User Defined Functions
 
