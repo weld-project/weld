@@ -1,6 +1,7 @@
 
 
 import ctypes
+import sys
 
 from weld.bindings import *
 
@@ -9,13 +10,16 @@ code = "|x:i64| x + 5L"
 module = WeldModule(code, WeldConf(), WeldError())
 
 while True:
-    inp = raw_input(">>> ")
+    if sys.version_info[0] < 3:
+        inp = raw_input(">>> ")
+    else:
+        inp = input(">>> ")
     try:
         if inp == "quit":
             break
         inp = int(inp)
     except ValueError:
-        print "nope, try again."
+        print("nope, try again.")
         continue
 
     arg = ctypes.c_int64(inp)
