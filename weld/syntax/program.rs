@@ -16,7 +16,7 @@ pub struct Program {
     /// Program body -- this will likely be a Lambda, but not always.
     pub body: Expr,
 }
-/// A type alias we will substitate at compile time.
+/// A type alias we will substitute at compile time.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TypeAlias {
     pub name: String,

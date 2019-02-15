@@ -17,8 +17,8 @@
     + [Aside: Linearity of Builder Types](#aside-linearity-of-builder-types)
 - [Comments](#comments)
 - [Type Inference](#type-inference)
-- [Sugar Operations and Macros](#sugar-operations-and-macros)
-    + [Custom Macros](#custom-macros)
+- [Macros](#macros)
+    + [Builtin Macros](#builtin-macros)
 - [Typename Aliasing](#typename-aliasing)
 - [User Defined Functions](#user-defined-functions)
     + [Examples](#examples)
@@ -275,39 +275,17 @@ In particular, Weld only requires types for the top-level function arguments, an
       )
 ```
 
-# Sugar Operations and Macros
+# Macros
 
-To make programs easier to write, Weld also supports some "sugar" operations that translate into `for`s and builders.
-Most of are currently represented as *macros*, which are substitution rules whose definitions are not handled by the optimizer.
-The sugar operations are commonly used functional programming operations such as `map` and `filter`.
-We list them below:
-
-Signature | Notes
-------------- | -------------
-`map(v: vec[T], f: T => U): vec[U]` |
-`filter(v: vec[T], f: T => bit): vec[T]` |
-`flatten(v: vec[vec[T]]): vec[T]` |
-`zip(v1: vec[T1], v2: vec[T2], ...): vec[{T1, T2, ...}]` | Only allowed in the `vec` argument of the `for` loop.
-`compare(x: T, y: T)` | Implements a default comparator for `sort`. Expands to `if(x > y, 1, if(x < y, -1, 0))`.
-
-With the exception of `zip` (which is a special syntactic sugar that isn't expanded from a macro), all of these operations can be translated into `for` expressions.
-For example, the macro rules for `map` and `filter` would be implemented as follows:
+To make programs easier to write, Weld also supports _macros_, which allows users to write simple substitution rules in a Weld program. Macro definitions must come after [type aliases](#typename-aliasing) and precede the Weld expression that is to be compiled. They use the following syntax:
 
 ```
-macro map(data, func) = (
-  result(for(data, appender, |b, i, x| merge(b, func(x))))
+macro Name(<args>) = (
+  expression
 );
 ```
 
-```
-macro filter(data, func) = (
-  result(for(data, appender, |b, i, x| if(func(x), merge(b, x), b)))
-);
-```
-
-## Custom Macros
-
-The operations listed above are macros that are loaded by default. However, users can also define their own macros. Macro definitions must come after [type aliases](#typename-aliasing)  and precede the Weld expression that is to be compiled:
+An example of defining and using a macro:
 
 ```
 # A macro to add values.
@@ -320,8 +298,32 @@ macro doubleAdd(a, b) = (
   doubleAdd(v1 ,v2)
 ```
 
-Macros are _hygenic_, so variable names defined within a macro will never clash (and by extension cannot be accessed from outside the macro expansion).
-Since macros do not require types in their parameters, they are a useful way to leverage type inference and write templatized Weld code.
+Macros are _hygienic_, so variable names defined within a macro will never clash (and by extension cannot be accessed from outside the macro expansion).
+
+## Builtin Macros
+
+Weld contains some builtin macros that are defined for all programs. These macros translate into `for`s and builders. The builtin macros are commonly used functional programming operations such as `map` and `filter`. We list them below:
+
+Signature | Notes
+------------- | -------------
+`map(v: vec[T], f: T => U): vec[U]` |
+`filter(v: vec[T], f: T => bit): vec[T]` |
+`flatten(v: vec[vec[T]]): vec[T]` |
+`compare(x: T, y: T)` | Implements a default comparator for `sort`. Expands to `if(x > y, 1, if(x < y, -1, 0))`.
+
+Most of these operations are translated into `for` expressions. For example, the macro rules for `map` and `filter` would be implemented as follows:
+
+```
+macro map(data, func) = (
+  result(for(data, appender, |b, i, x| merge(b, func(x))))
+);
+```
+
+```
+macro filter(data, func) = (
+  result(for(data, appender, |b, i, x| if(func(x), merge(b, x), b)))
+);
+```
 
 # Typename Aliasing
 
