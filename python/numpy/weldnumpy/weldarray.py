@@ -1,3 +1,5 @@
+import numpy as np
+
 from weld.weldobject import *
 from weld.encoders import NumpyArrayEncoder, NumpyArrayDecoder
 from weldnumpy import *

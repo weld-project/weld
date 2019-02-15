@@ -1,6 +1,7 @@
 
 
 import ctypes
+import sys
 
 from weld.bindings import *
 
@@ -9,13 +10,16 @@ code = "|x:i64| x + 5L"
 module = WeldModule(code, WeldConf(), WeldError())
 
 while True:
-    inp = raw_input(">>> ")
+    if sys.version_info[0] < 3:
+        inp = raw_input(">>> ")
+    else:
+        inp = input(">>> ")
     try:
         if inp == "quit":
             break
         inp = int(inp)
     except ValueError:
-        print "nope, try again."
+        print("nope, try again.")
         continue
 
     arg = ctypes.c_int64(inp)
@@ -23,7 +27,7 @@ while True:
     data = res_obj.data()
     res_value = ctypes.cast(data, ctypes.POINTER(
         ctypes.c_int64)).contents.value
-    print res_value
+    print(res_value)
 
     # Free the object and its underlying data. If we want python to track the
     # data, we should first copy it's value out.

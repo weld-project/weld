@@ -5,7 +5,7 @@ Attributes:
     encoder_ (TYPE): Description
     norm_factor_id_ (int): Unique IDs given to norm factor literals
 """
-from encoders import *
+from .encoders import *
 from weld.weldobject import *
 
 encoder_ = NumPyEncoder()

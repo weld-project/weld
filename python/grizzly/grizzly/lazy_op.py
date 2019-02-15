@@ -13,7 +13,7 @@ def to_weld_type(weld_type, dim):
     Returns:
         TYPE: Description
     """
-    for i in xrange(dim):
+    for i in range(dim):
         weld_type = WeldVec(weld_type)
     return weld_type
 

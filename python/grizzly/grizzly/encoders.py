@@ -79,7 +79,7 @@ class NumPyEncoder(WeldObjectEncoder):
                 base = WeldBit()
             else:
                 base = WeldVec(WeldChar())  # TODO: Fix this
-            for i in xrange(obj.ndim):
+            for i in range(obj.ndim):
                 base = WeldVec(base)
         elif isinstance(obj, str):
             base = WeldVec(WeldChar())

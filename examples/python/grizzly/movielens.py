@@ -20,7 +20,7 @@ movies = pd.read_table('data/ml-1m/movies.dat', sep='::', header=None,
 start = time.time()
 data = pd.merge(pd.merge(ratings, users), movies)
 end = time.time()
-print data
+print(data)
 start1 = time.time()
 mean_ratings = data.pivot_table('rating', index='title', columns='gender',
                                 aggfunc='mean')
@@ -36,7 +36,7 @@ rating_std_by_title = rating_std_by_title.loc[active_titles]
 rating_std_by_title = rating_std_by_title.sort_values(ascending=False)[:10]
 end1 = time.time()
 
-print sorted_by_diff
-print rating_std_by_title
-print "Time to merge:", (end - start)
-print "Time for analysis:", (end1 - start1)
+print(sorted_by_diff)
+print(rating_std_by_title)
+print("Time to merge:", (end - start))
+print("Time for analysis:", (end1 - start1))

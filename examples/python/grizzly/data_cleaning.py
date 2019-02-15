@@ -9,7 +9,7 @@ import time
 na_values = ['NO CLUE', 'N/A', '0']
 requests = pd.read_csv('data/311-service-requests.csv',
                        na_values=na_values, dtype={'Incident Zip': str})
-print "Done reading input file..."
+print("Done reading input file...")
 
 start = time.time()
 
@@ -21,7 +21,7 @@ zero_zips = requests['Incident Zip'] == '00000'
 requests['Incident Zip'][zero_zips] = np.nan
 
 # Display unique incident zips again (this time cleaned)
-print requests['Incident Zip'].unique()
+print(requests['Incident Zip'].unique())
 end = time.time()
 
-print "Total end-to-end time: %.2f" % (end - start)
+print("Total end-to-end time: %.2f" % (end - start))

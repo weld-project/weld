@@ -20,7 +20,7 @@ for year in years:
 
 # Concatenate everything into a single DataFrame
 names = pd.concat(pieces, ignore_index=True)
-print "Size of names: %d" % len(names)
+print("Size of names: %d" % len(names))
 
 def get_top1000(group):
     # Note that there is a slight difference that arises
@@ -46,8 +46,8 @@ table = filtered.pivot_table('births', index='year',
 
 table = table.div(table.sum(1), axis=0)
 end1 = time.time()
-print table
+print(table)
 
 
-print "Time taken by preprocess portion:   %.5f" % (end0 - start0)
-print "Time taken by analysis portion  :   %.5f" % (end1 - start1)
+print("Time taken by preprocess portion:   %.5f" % (end0 - start0))
+print("Time taken by analysis portion  :   %.5f" % (end1 - start1))

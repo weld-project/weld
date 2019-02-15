@@ -11,7 +11,7 @@ import time
 raw_data = pd.read_csv('data/us_cities_states_counties.csv', delimiter='|')
 raw_data.dropna(inplace=True)
 data = gr.DataFrameWeld(raw_data)
-print "Done reading input file..."
+print("Done reading input file...")
 
 start = time.time()
 
@@ -29,7 +29,7 @@ data_big_cities["Crime index"] = predictions
 # Aggregate "crime index" scores by state
 data_big_cities["Crime index"][data_big_cities["Crime index"] >= 0.02] = 0.032
 data_big_cities["Crime index"][data_big_cities["Crime index"] < 0.01] = 0.005
-print data_big_cities["Crime index"].sum().evaluate()
+print(data_big_cities["Crime index"].sum().evaluate())
 end = time.time()
 
-print "Total end-to-end time: %.2f" % (end - start)
+print("Total end-to-end time: %.2f" % (end - start))
