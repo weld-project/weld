@@ -202,7 +202,7 @@ impl Intrinsics {
                       args.as_mut_ptr(), args.len() as u32, name.unwrap_or(c_str!("")))
     }
 
-    /// Convinience wrapper for calling the `weld_run_set_errno` intrinsic.
+    /// Convinience wrapper for calling the `weld_runst_set_errno` intrinsic.
     pub unsafe fn call_weld_run_set_errno(&mut self,
                                       builder: LLVMBuilderRef,
                                       run: LLVMValueRef,
@@ -211,6 +211,18 @@ impl Intrinsics {
         let mut args = [run, errno];
         LLVMBuildCall(builder,
                       self.get("weld_runst_set_errno").unwrap(),
+                      args.as_mut_ptr(), args.len() as u32, name.unwrap_or(c_str!("")))
+    }
+
+    /// Convinience wrapper for calling the `weld_runst_assert` intrinsic.
+    pub unsafe fn call_weld_run_assert(&mut self,
+                                      builder: LLVMBuilderRef,
+                                      run: LLVMValueRef,
+                                      cond: LLVMValueRef,
+                                      name: Option<*const c_char>) -> LLVMValueRef {
+        let mut args = [run, cond];
+        LLVMBuildCall(builder,
+                      self.get("weld_runst_assert").unwrap(),
                       args.as_mut_ptr(), args.len() as u32, name.unwrap_or(c_str!("")))
     }
 
@@ -323,6 +335,13 @@ impl Intrinsics {
         let fn_type = LLVMFunctionType(self.void_type(), params.as_mut_ptr(), params.len() as u32, 0);
         let function = LLVMAddFunction(self.module, name.as_ptr(), fn_type);
         LLVMExtAddAttrsOnFunction(self.context, function, &[NoReturn]);
+        LLVMExtAddAttrsOnParameter(self.context, function, &[NoCapture, NoAlias, NonNull], 0);
+        self.intrinsics.insert(name.into_string().unwrap(), function);
+
+        let mut params = vec![self.run_handle_type(), self.bool_type()];
+        let name = CString::new("weld_runst_assert").unwrap();
+        let fn_type = LLVMFunctionType(self.bool_type(), params.as_mut_ptr(), params.len() as u32, 0);
+        let function = LLVMAddFunction(self.module, name.as_ptr(), fn_type);
         LLVMExtAddAttrsOnParameter(self.context, function, &[NoCapture, NoAlias, NonNull], 0);
         self.intrinsics.insert(name.into_string().unwrap(), function);
 

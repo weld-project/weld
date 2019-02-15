@@ -441,6 +441,11 @@ impl InferTypesInternal for Expr {
                 }
             }
 
+            Assert(ref value) => {
+                self.ty.push(&value.ty)?;
+                self.ty.push_complete(Scalar(Bool))
+            }
+
             Broadcast(ref c) => {
                 if let Scalar(ref kind) = c.ty {
                     self.ty.push(&Simd(kind.clone()))
