@@ -277,7 +277,7 @@ impl GenCmp for LlvmGenerator {
                 
                 LLVMBuildRet(builder, result);
             }
-            Function(_,_) | Unknown => {
+            Function(_,_) | Unknown | Alias(_, _)=> {
                 unreachable!()
             }
         };

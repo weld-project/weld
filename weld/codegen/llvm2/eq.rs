@@ -210,7 +210,7 @@ impl GenEq for LlvmGenerator {
                 LLVMAddIncoming(result, values.as_mut_ptr(), blocks.as_mut_ptr(), values.len() as u32);
                 result
             }
-            Function(_,_) | Unknown => unreachable!()
+            Function(_,_) | Unknown | Alias(_, _) => unreachable!()
         };
 
         LLVMBuildRet(builder, result);
