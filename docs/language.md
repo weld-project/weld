@@ -17,7 +17,9 @@
     + [Aside: Linearity of Builder Types](#aside-linearity-of-builder-types)
 - [Comments](#comments)
 - [Type Inference](#type-inference)
-- [Sugar Operations](#sugar-operations)
+- [Macros](#macros)
+    + [Builtin Macros](#builtin-macros)
+- [Typename Aliasing](#typename-aliasing)
 - [User Defined Functions](#user-defined-functions)
     + [Examples](#examples)
 - [Annotations](#annotations)
@@ -259,6 +261,7 @@ Weld supports Python-style one line comments with the `#` character. For example
 ```
 
 
+
 # Type Inference
 
 Weld supports some basic type inference, so users do not need to specify a full type for each expression in the program (but may optionally choose to do so).
@@ -274,23 +277,43 @@ In particular, Weld only requires types for the top-level function arguments, an
       )
 ```
 
-# Sugar Operations
+# Macros
 
-To make programs easier to write, the Weld implementation also supports some "sugar" operations that translate into `for`s and builders.
-These are currently represented as *macros*, which are substitution rules whose definitions are not handled by the optimizer.
-The sugar operations are commonly used functional programming operations such as `map` and `filter`.
-We list them below:
+To make programs easier to write, Weld also supports _macros_, which allows users to write simple substitution rules in a Weld program. Macro definitions must come after [type aliases](#typename-aliasing) and precede the Weld expression that is to be compiled. They use the following syntax:
+
+```
+macro Name(<args>) = (
+  expression
+);
+```
+
+An example of defining and using a macro:
+
+```
+# A macro to add values.
+macro doubleAdd(a, b) = (
+  a + a + b + b
+);
+
+|v1: i32, v2: i32|
+  # Expands to v1 + v1 + v2 + v2
+  doubleAdd(v1 ,v2)
+```
+
+Macros are _hygienic_, so variable names defined within a macro will never clash (and by extension cannot be accessed from outside the macro expansion).
+
+## Builtin Macros
+
+Weld contains some builtin macros that are defined for all programs. These macros translate into `for`s and builders. The builtin macros are commonly used functional programming operations such as `map` and `filter`. We list them below:
 
 Signature | Notes
 ------------- | -------------
 `map(v: vec[T], f: T => U): vec[U]` |
 `filter(v: vec[T], f: T => bit): vec[T]` |
 `flatten(v: vec[vec[T]]): vec[T]` |
-`zip(v1: vec[T1], v2: vec[T2], ...): vec[{T1, T2, ...}]` | Only allowed in the `vec` argument of the `for` loop.
 `compare(x: T, y: T)` | Implements a default comparator for `sort`. Expands to `if(x > y, 1, if(x < y, -1, 0))`.
 
-All of these operations can straightforwardly be translated into `for` expressions.
-For example, the macro rules for `map` and `filter` would be implemented as follows:
+Most of these operations are translated into `for` expressions. For example, the macro rules for `map` and `filter` would be implemented as follows:
 
 ```
 macro map(data, func) = (
@@ -303,6 +326,43 @@ macro filter(data, func) = (
   result(for(data, appender, |b, i, x| if(func(x), merge(b, x), b)))
 );
 ```
+
+# Typename Aliasing
+
+Weld supports aliases for types ("typename aliases"). Aliases must currently be listed before macros before the expression representing the Weld program:
+
+```
+type int = i32;
+type pair = {i32,i32};
+
+# Define macros here.
+
+|v: int, p: pair| v + p.$0 + p.$1
+```
+
+Typename aliases can be used within other typename aliases (as long as they are defined before):
+
+```
+type int = i32;
+type pair = {int,int};
+
+|v: int, p: pair| v + p.$0 + p.$1
+```
+
+Macros can also use typename aliases:
+
+```
+type int = i32;
+
+macro addOne(a) = (
+  cudf[addOneUdf,int](a)
+);
+
+# Expands to |v: i64| cudf[addOneUdf,i64](v)
+|v: int| addOne(v)
+```
+
+Currently, typename aliases are treated similarly to macros: when a program is compiled, type typenames are replaced with their true types, and the naming information is lost. This means that dumping code, logging messages, etc. will currently show the actual type rather than the typename. We hope to propagate type name information through the compiler soon.
 
 # User Defined Functions
 

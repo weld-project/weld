@@ -253,7 +253,7 @@ impl HasPointer for Type {
             Dict(_, _) => true,
             Builder(_, _) => true,
             Struct(ref tys) => tys.iter().any(|ref t| t.has_pointer()),
-            Function(_, _) | Unknown => unreachable!(),
+            Function(_, _) | Unknown | Alias(_,_) => unreachable!(),
         }
     }
 }
@@ -1508,7 +1508,7 @@ impl LlvmGenerator {
                 }
                 self.vectors.get(elem_type).unwrap().vector_ty
             }
-            Function(_, _) | Unknown => unreachable!(),
+            Function(_, _) | Unknown | Alias(_, _) => unreachable!(),
         };
         Ok(result)
     }

@@ -366,7 +366,7 @@ impl SerHelper for LlvmGenerator {
                                           key_ser_fn,
                                           val_ser_fn)?
                 }
-                Unknown | Simd(_) | Function(_,_) | Builder(_, _) => unreachable!(),
+                Unknown | Alias(_,_) | Simd(_) | Function(_,_) | Builder(_, _) => unreachable!(),
             };
 
             let ret = LLVMBuildInsertValue(builder, LLVMGetUndef(ret_ty), updated_buffer, 0, c_str!(""));
@@ -683,7 +683,7 @@ impl DeHelper for LlvmGenerator {
                     LLVMBuildStore(builder, dictionary, output);
                     phi_position
                 }
-                Unknown | Simd(_) | Function(_,_) | Builder(_, _) => unreachable!(),
+                Unknown | Alias(_,_) | Simd(_) | Function(_,_) | Builder(_, _) => unreachable!(),
             };
 
             LLVMBuildRet(builder, updated_position);

@@ -57,6 +57,15 @@ pub fn parse_macros(input: &str) -> WeldResult<Vec<Macro>> {
     check_parse_error!(parser, res)
 }
 
+/// Parse the complete input string as a list of type aliases.
+pub fn parse_type_aliases(input: &str) -> WeldResult<Vec<TypeAlias>> {
+    let tokens = try!(tokenize(input));
+    let mut parser = Parser::new(&tokens);
+    let res = parser.type_aliases();
+
+    check_parse_error!(parser, res)
+}
+
 /// Parse the complete input string as an expression.
 pub fn parse_expr(input: &str) -> WeldResult<Expr> {
     let tokens = try!(tokenize(input));
@@ -149,12 +158,14 @@ impl<'t> Parser<'t> {
         self.position == self.tokens.len() || *self.peek() == TEndOfInput
     }
 
-    /// Parse a program (optional macros + one body expression) starting at the current position.
+    /// Parse a program (optional type aliases + optional macros + one body expression) starting at the current position.
     fn program(&mut self) -> WeldResult<Program> {
+        let type_aliases = try!(self.type_aliases());
         let macros = try!(self.macros());
         let body = try!(self.expr());
         Ok(Program {
                macros: macros,
+               type_aliases: type_aliases,
                body: *body,
            })
     }
@@ -167,6 +178,7 @@ impl<'t> Parser<'t> {
         }
         Ok(res)
     }
+
 
     /// Parse a single macro starting at the current position.
     fn macro_(&mut self) -> WeldResult<Macro> {
@@ -190,6 +202,29 @@ impl<'t> Parser<'t> {
                name: name,
                parameters: params,
                body: *body,
+           })
+    }
+
+    /// Parse a list of type aliases starting at the current position.
+    fn type_aliases(&mut self) -> WeldResult<Vec<TypeAlias>> {
+        let mut res: Vec<TypeAlias> = Vec::new();
+        while *self.peek() == TType {
+            res.push(try!(self.type_alias_()));
+        }
+        Ok(res)
+    }
+
+
+    /// Parse a single macro starting at the current position.
+    fn type_alias_(&mut self) -> WeldResult<TypeAlias> {
+        self.consume(TType)?;
+        let name = self.symbol()?;
+        self.consume(TEqual)?;
+        let ty = self.type_()?;
+        self.consume(TSemicolon)?;
+        Ok(TypeAlias {
+               name: name.to_string(),
+               ty: ty,
            })
     }
 
@@ -1218,6 +1253,13 @@ impl<'t> Parser<'t> {
     fn type_(&mut self) -> WeldResult<Type> {
         let mut annotations = Annotations::new();
         try!(self.parse_annotations(&mut annotations));
+
+        if !self.peek().signals_type() {
+            let name = self.symbol()?.to_string();
+            // NOTE: The type field is not used right now, but may be later if we decide
+            // to keep type alias information past macro substitution.
+            return Ok(Alias(name, Box::new(Unknown)));
+        }
 
         match *self.next() {
             TI8 => Ok(Scalar(ScalarKind::I8)),
