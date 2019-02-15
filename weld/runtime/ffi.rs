@@ -83,6 +83,20 @@ pub unsafe extern "C" fn weld_runst_get_result(run: WeldRuntimeContextRef) -> Pt
 }
 
 #[no_mangle]
+/// Check whether cond is 0 (assertion fails).
+pub unsafe extern "C" fn weld_runst_assert(run: WeldRuntimeContextRef,
+                                           cond: u8) -> u8 {
+    let run = &mut *run;
+    if cond == 0 {
+        // Doesn't return.
+        run.set_errno(WeldRuntimeErrno::AssertionError);
+        unreachable!()
+    } else {
+        1
+    }
+}
+
+#[no_mangle]
 /// Print a value from generated code.
 pub unsafe extern "C" fn weld_runst_print(_run: WeldRuntimeContextRef, string: *const c_char) {
     let string = CStr::from_ptr(string).to_str().unwrap();
