@@ -1,6 +1,5 @@
 //! Generates headers for a Weld program.
 
-#[macro_use]
 extern crate weld;
 extern crate clap;
 extern crate code_builder;

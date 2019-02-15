@@ -675,6 +675,11 @@ pub enum ExprKind {
     Ident(Symbol),
     /// Invert a boolean expression.
     Not(Box<Expr>),
+    /// Asserts that the child expression is true. If it isn't, an error is thrown.
+    /// Otherwise, this expression always returns `true`.
+    ///
+    /// NOTE: Assert currently causes a panic.
+    Assert(Box<Expr>),
     /// Negates a numerical expression.
     Negate(Box<Expr>),
     /// Broadcasts a scalar into a vector.
@@ -830,6 +835,7 @@ impl ExprKind {
             Literal(_) => "Literal",
             Ident(_) => "Ident",
             Not(_) => "Not",
+            Assert(_) => "Assert",
             Negate(_) => "Negate",
             Broadcast(_) => "Broadcast",
             BinOp{ .. } => "BinOp",
@@ -1129,6 +1135,7 @@ impl Expr {
             CUDF { ref args, .. } => args.iter().collect(),
             Negate(ref t) => vec![t.as_ref()],
             Not(ref t) => vec![t.as_ref()],
+            Assert(ref t) => vec![t.as_ref()],
             Broadcast(ref t) => vec![t.as_ref()],
             // Explicitly list types instead of doing _ => ... to remember to add new types.
             Literal(_) | Ident(_) => vec![],
@@ -1241,6 +1248,7 @@ impl Expr {
             CUDF { ref mut args, .. } => args.iter_mut().collect(),
             Negate(ref mut t) => vec![t.as_mut()],
             Not(ref mut t) => vec![t.as_mut()],
+            Assert(ref mut t) => vec![t.as_mut()],
             Broadcast(ref mut t) => vec![t.as_mut()],
             // Explicitly list types instead of doing _ => ... to remember to add new types.
             Literal(_) | Ident(_) => vec![],
