@@ -132,6 +132,7 @@ refer to types.
 * `deserialize[T](data)` deserializes `data` (a `vec[i8]`) into a value of type `T`.
 * Casting: `T(data)` implements a cast between scalar types if `T` is a scalar and `data` is also a scalar type.
 * `broadcast(data)` takes a scalar value `data` and broadcasts the value into a SIMD type.
+* `assert(value)` takes a boolean value and checks that it is `true`. If so, the expression itself returns `true`. Otherwise, an error is thrown and the program terminates.
 
 ## Expressions on Collections (Vectors, Dictionaries, Structs)
 

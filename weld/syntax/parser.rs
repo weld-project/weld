@@ -1112,6 +1112,13 @@ impl<'t> Parser<'t> {
             TMinus => Ok(expr_box(Negate(try!(self.leaf_expr())), Annotations::new())),
             TBang => Ok(expr_box(Not(self.leaf_expr()?), Annotations::new())),
 
+            TAssert => {
+                self.consume(TOpenParen)?;
+                let cond = self.expr()?;
+                self.consume(TCloseParen)?;
+                Ok(expr_box(Assert(cond), Annotations::new()))
+            }
+
             TMin => {
                 try!(self.consume(TOpenParen));
                 let left = try!(self.expr());

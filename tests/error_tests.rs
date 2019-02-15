@@ -39,3 +39,29 @@ fn outofmemory_error_test() {
     let err_value = compile_and_run_error(code, conf, input_data);
     assert_eq!(err_value.code(), WeldRuntimeErrno::OutOfMemory);
 }
+
+#[test]
+fn assert_pass_test() {
+    let code = "|x: i32| assert(x == 0)";
+    let ref mut conf = default_conf();
+
+    let ref input_data: i32 = 0;
+
+    let ret_value = compile_and_run(code, conf, input_data);
+    let data = ret_value.data() as *const i8;
+    let result = unsafe { *data };
+    assert_eq!(result, 1);
+}
+
+#[test]
+#[should_panic]
+// XXX The new runtime throws panics for these currently.
+fn assert_fail_test() {
+    let code = "|x: i32| assert(x == 1)";
+    let ref mut conf = default_conf();
+
+    let ref input_data: i32 = 0;
+
+    let err_value = compile_and_run_error(code, conf, input_data);
+    assert_eq!(err_value.code(), WeldRuntimeErrno::AssertionError);
+}
