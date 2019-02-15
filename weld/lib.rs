@@ -643,7 +643,7 @@ impl WeldModule {
         let end = PreciseTime::now();
         stats.weld_times.push(("Parsing".to_string(), start.to(end)));
 
-        // Substitute macros in the parsed program.
+        // Substitute macros and type aliases in the parsed program.
         let mut expr = syntax::macro_processor::process_program(&program)?;
         debug!("After macro substitution:\n{}\n", expr.pretty_print());
 
