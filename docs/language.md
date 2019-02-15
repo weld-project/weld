@@ -57,6 +57,7 @@ Except from the SIMD type `simd[S]` (where `S` must be a scalar type), `T` in th
 ## Builder Types
 
 * `appender[T]`: Builds a `vec[T]` from elements of type `T`.
+   * The `appender` supports an optional _size hint_ to allocate large vectors in advance: `appender[T](size)`, where `size` is an expression of type `i64`. 
 * `merger[T,binop]`: Combines `T` values using a binary operation. Its parameters are:
    * `T`: The type of value this merger creates. Can be a scalar or a struct of scalars.
    * `binop`: [A commutative binary operation](#commutative-binary-operations-for-builders)
