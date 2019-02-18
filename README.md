@@ -4,15 +4,9 @@
 
 **This is an under-development branch that only supports single-threaded execution and [lacks a few features from the main branch](#llvm-st-unsupported-features). For multi-threaded support, use the `master` branch. For workloads that only require single-threaded execution and do not rely on the missing features, this branch provides a next-generation backend that should deliver substantially improved performance.**
 
-### LLVM ST Unsupported Features
-This backend currently lacks a few features. These features are tracked via the `unimplemented.sh` script.
-
-* The `NdIter` iterator
-* Vector keys in dictionaries where the vector contain pointers.
-
 --- 
 
-[Documentation](https://www.weld.rs/docs/weld/)
+[Documentation](https://www.weld.rs/docs/llvm-st/weld/)
 
 Weld is a language and runtime for improving the performance of data-intensive applications. It optimizes across libraries and functions by expressing the core computations in libraries using a common intermediate representation, and optimizing across each framework.
 
@@ -148,3 +142,9 @@ This repository contains a number of useful command line tools which are built
 automatically with the main Weld repository, including an interactive REPL for
 inspecting and debugging programs.  More information on those tools can be
 found under [docs/tools.md](https://github.com/weld-project/weld/tree/master/docs/tools.md).
+
+## LLVM ST Unsupported Features
+On top of multi-threading support, this backend currently lacks a few minor features:
+
+* The `NdIter` iterator
+* Vector keys in dictionaries where the vector contain pointers.
