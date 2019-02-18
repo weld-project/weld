@@ -2,7 +2,9 @@
 
 [![Build Status](https://travis-ci.org/weld-project/weld.svg?branch=master)](https://travis-ci.org/weld-project/weld)
 
-[Documentation](https://www.weld.rs/docs/weld/)
+**Note: The `llvm-st` branch in this repository is actively developed and contains a new, faster LLVM code generator. It also contains the latest optimizations, features, and updates to Weld. However, it currently does not have multi-threading support. Nevertheless, for most users, we suggest trying Weld with the `llvm-st` branch.**
+
+[Documentation](https://www.weld.rs/docs/master/weld/)
 
 Weld is a language and runtime for improving the performance of data-intensive applications. It optimizes across libraries and functions by expressing the core computations in libraries using a common intermediate representation, and optimizing across each framework.
 
