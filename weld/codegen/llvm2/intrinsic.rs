@@ -27,6 +27,9 @@ use super::LLVM_VECTOR_WIDTH;
 use self::llvm_sys::prelude::*;
 use self::llvm_sys::core::*;
 
+use runtime::ffi;
+use libc::c_void;
+
 /// Intrinsics defined in the code generator.
 ///
 /// An intrinsic is any function that appears without a definition in the generated module. Code
@@ -34,7 +37,8 @@ use self::llvm_sys::core::*;
 pub struct Intrinsics {
     context: LLVMContextRef,
     module: LLVMModuleRef,
-    intrinsics: FnvHashMap<String, LLVMValueRef>, 
+    pub intrinsics: FnvHashMap<String, LLVMValueRef>, 
+    pub pointers: FnvHashMap<String, *mut c_void>,
 }
 
 impl CodeGenExt for Intrinsics {
@@ -53,6 +57,7 @@ impl Intrinsics {
             context: context,
             module: module,
             intrinsics: FnvHashMap::default(),
+            pointers: FnvHashMap::default(),
         };
 
         intrinsics.populate_defaults();
@@ -297,7 +302,8 @@ impl Intrinsics {
         let function = LLVMAddFunction(self.module, name.as_ptr(), fn_type);
         LLVMExtAddAttrsOnFunction(self.context, function, &[NoUnwind]);
         LLVMExtAddAttrsOnParameter(self.context, function, &[NoCapture, NoAlias, NonNull], 0);
-        self.intrinsics.insert(name.into_string().unwrap(), function);
+        self.intrinsics.insert(name.clone().into_string().unwrap(), function);
+        self.pointers.insert(name.into_string().unwrap(), ffi::weld_runst_set_result as *mut c_void);
 
         let mut params = vec![self.run_handle_type(), self.i64_type()];
         let name = CString::new("weld_runst_malloc").unwrap();

@@ -29,6 +29,7 @@ use self::llvm_sys::target_machine::*;
 use codegen::Runnable;
 
 use codegen::llvm2::llvm_exts::*;
+use codegen::llvm2::intrinsic::Intrinsics;
 
 static ONCE: Once = ONCE_INIT;
 static mut INITIALIZE_FAILED: bool = false;
@@ -117,6 +118,7 @@ pub unsafe fn init() {
 /// Compile a constructed module in the given LLVM context.
 pub unsafe fn compile(context: LLVMContextRef,
                module: LLVMModuleRef,
+               intrinsics: &Intrinsics,
                conf: &ParsedConf,
                stats: &mut CompilationStats) -> WeldResult<CompiledModule> {
     init();
@@ -133,7 +135,7 @@ pub unsafe fn compile(context: LLVMContextRef,
     
     let start = PreciseTime::now();
     // Takes ownership of the module.
-    let engine = create_exec_engine(module, conf)?;
+    let engine = create_exec_engine(module, intrinsics, conf)?;
     let end = PreciseTime::now();
     stats.llvm_times.push(("Create Exec Engine".to_string(), start.to(end)));
 
@@ -324,6 +326,7 @@ unsafe fn optimize_module(module: LLVMModuleRef, conf: &ParsedConf) -> WeldResul
 
 /// Create an MCJIT execution engine for a given module.
 unsafe fn create_exec_engine(module: LLVMModuleRef,
+                             intrinsics: &Intrinsics,
                              conf: &ParsedConf) -> WeldResult<LLVMExecutionEngineRef> {
     let mut engine = mem::uninitialized();
     let mut error_str = mem::uninitialized();
@@ -338,6 +341,11 @@ unsafe fn create_exec_engine(module: LLVMModuleRef,
                                                        &mut options,
                                                        options_size,
                                                        &mut error_str);
+
+    LLVMAddGlobalMapping(engine,
+                         *intrinsics.intrinsics.get("weld_runst_set_result").unwrap(),
+                         *intrinsics.pointers.get("weld_runst_set_result").unwrap());
+
     if result_code != 0 {
         compile_err!("Creating execution engine failed: {}",
                           CStr::from_ptr(error_str).to_str().unwrap())

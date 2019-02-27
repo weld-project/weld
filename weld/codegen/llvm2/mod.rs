@@ -149,7 +149,7 @@ pub fn compile(program: &SirProgram,
         runtime::ffi::weld_init();
     }
 
-    let module = unsafe { jit::compile(codegen.context, codegen.module, conf, stats)? };
+    let module = unsafe { jit::compile(codegen.context, codegen.module, &codegen.intrinsics, conf, stats)? };
 
     nonfatal!(write_code(module.asm()?, DumpCodeFormat::Assembly, &conf.dump_code));
     nonfatal!(write_code(module.llvm()?, DumpCodeFormat::LLVMOpt, &conf.dump_code));
