@@ -346,6 +346,22 @@ unsafe fn create_exec_engine(module: LLVMModuleRef,
                          *intrinsics.intrinsics.get("weld_runst_set_result").unwrap(),
                          *intrinsics.pointers.get("weld_runst_set_result").unwrap());
 
+    LLVMAddGlobalMapping(engine,
+                         *intrinsics.intrinsics.get("weld_runst_get_result").unwrap(),
+                         *intrinsics.pointers.get("weld_runst_get_result").unwrap());
+
+    LLVMAddGlobalMapping(engine,
+                         *intrinsics.intrinsics.get("weld_runst_init").unwrap(),
+                         *intrinsics.pointers.get("weld_runst_init").unwrap());
+
+    LLVMAddGlobalMapping(engine,
+                         *intrinsics.intrinsics.get("weld_runst_malloc").unwrap(),
+                         *intrinsics.pointers.get("weld_runst_malloc").unwrap());
+
+    LLVMAddGlobalMapping(engine,
+                         *intrinsics.intrinsics.get("weld_runst_get_errno").unwrap(),
+                         *intrinsics.pointers.get("weld_runst_get_errno").unwrap());
+
     if result_code != 0 {
         compile_err!("Creating execution engine failed: {}",
                           CStr::from_ptr(error_str).to_str().unwrap())

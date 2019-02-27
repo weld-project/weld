@@ -286,7 +286,8 @@ impl Intrinsics {
         let name = CString::new("weld_runst_init").unwrap();
         let fn_type = LLVMFunctionType(self.run_handle_type(), params.as_mut_ptr(), params.len() as u32, 0);
         let function = LLVMAddFunction(self.module, name.as_ptr(), fn_type);
-        self.intrinsics.insert(name.into_string().unwrap(), function);
+        self.intrinsics.insert(name.clone().into_string().unwrap(), function);
+        self.pointers.insert(name.into_string().unwrap(), ffi::weld_runst_init as *mut c_void);
 
         let mut params = vec![self.run_handle_type()];
         let name = CString::new("weld_runst_get_result").unwrap();
@@ -294,7 +295,8 @@ impl Intrinsics {
         let function = LLVMAddFunction(self.module, name.as_ptr(), fn_type);
         LLVMExtAddAttrsOnFunction(self.context, function, &[NoUnwind]);
         LLVMExtAddAttrsOnParameter(self.context, function, &[NoCapture, NoAlias, NonNull, ReadOnly], 0);
-        self.intrinsics.insert(name.into_string().unwrap(), function);
+        self.intrinsics.insert(name.clone().into_string().unwrap(), function);
+        self.pointers.insert(name.into_string().unwrap(), ffi::weld_runst_get_result as *mut c_void);
 
         let mut params = vec![self.run_handle_type(), int8p];
         let name = CString::new("weld_runst_set_result").unwrap();
@@ -311,7 +313,8 @@ impl Intrinsics {
         let function = LLVMAddFunction(self.module, name.as_ptr(), fn_type);
         LLVMExtAddAttrsOnParameter(self.context, function, &[NoCapture, NoAlias, NonNull], 0);
         LLVMExtAddAttrsOnReturn(self.context, function, &[NoAlias]);
-        self.intrinsics.insert(name.into_string().unwrap(), function);
+        self.intrinsics.insert(name.clone().into_string().unwrap(), function);
+        self.pointers.insert(name.into_string().unwrap(), ffi::weld_runst_malloc as *mut c_void);
 
         let mut params = vec![self.run_handle_type(), int8p, self.i64_type()];
         let name = CString::new("weld_runst_realloc").unwrap();
@@ -334,7 +337,8 @@ impl Intrinsics {
         let function = LLVMAddFunction(self.module, name.as_ptr(), fn_type);
         LLVMExtAddAttrsOnFunction(self.context, function, &[NoUnwind]);
         LLVMExtAddAttrsOnParameter(self.context, function, &[NoCapture, NoAlias, NonNull, ReadOnly], 0);
-        self.intrinsics.insert(name.into_string().unwrap(), function);
+        self.intrinsics.insert(name.clone().into_string().unwrap(), function);
+        self.pointers.insert(name.into_string().unwrap(), ffi::weld_runst_get_errno as *mut c_void);
 
         let mut params = vec![self.run_handle_type(), self.i64_type()];
         let name = CString::new("weld_runst_set_errno").unwrap();
