@@ -29,6 +29,7 @@ use self::llvm_sys::target_machine::*;
 use codegen::Runnable;
 
 use codegen::llvm2::llvm_exts::*;
+use codegen::llvm2::intrinsic;
 
 static ONCE: Once = ONCE_INIT;
 static mut INITIALIZE_FAILED: bool = false;
@@ -117,6 +118,7 @@ pub unsafe fn init() {
 /// Compile a constructed module in the given LLVM context.
 pub unsafe fn compile(context: LLVMContextRef,
                module: LLVMModuleRef,
+               mappings: &[intrinsic::Mapping],
                conf: &ParsedConf,
                stats: &mut CompilationStats) -> WeldResult<CompiledModule> {
     init();
@@ -133,7 +135,7 @@ pub unsafe fn compile(context: LLVMContextRef,
     
     let start = PreciseTime::now();
     // Takes ownership of the module.
-    let engine = create_exec_engine(module, conf)?;
+    let engine = create_exec_engine(module, mappings, conf)?;
     let end = PreciseTime::now();
     stats.llvm_times.push(("Create Exec Engine".to_string(), start.to(end)));
 
@@ -324,7 +326,22 @@ unsafe fn optimize_module(module: LLVMModuleRef, conf: &ParsedConf) -> WeldResul
 
 /// Create an MCJIT execution engine for a given module.
 unsafe fn create_exec_engine(module: LLVMModuleRef,
+                             mappings: &[intrinsic::Mapping],
                              conf: &ParsedConf) -> WeldResult<LLVMExecutionEngineRef> {
+
+    // Create a filtered list of globals. Needs to be done before creating the execution engine
+    // since we lose ownership of the module. (?)
+    let mut globals = vec![];
+    for mapping in mappings.iter() {
+        let global = LLVMGetNamedFunction(module, mapping.0.as_ptr());
+        // The LLVM optimizer can delete globals, so we need this check here!
+        if global != ptr::null_mut() {
+            globals.push((global, mapping.1));
+        } else {
+            trace!("Function {:?} was deleted from module by optimizer", mapping.0);
+        }
+    }
+
     let mut engine = mem::uninitialized();
     let mut error_str = mem::uninitialized();
     let mut options: LLVMMCJITCompilerOptions = mem::uninitialized();
@@ -338,10 +355,14 @@ unsafe fn create_exec_engine(module: LLVMModuleRef,
                                                        &mut options,
                                                        options_size,
                                                        &mut error_str);
+
     if result_code != 0 {
         compile_err!("Creating execution engine failed: {}",
-                          CStr::from_ptr(error_str).to_str().unwrap())
+                     CStr::from_ptr(error_str).to_str().unwrap())
     } else {
+        for global in globals {
+            LLVMAddGlobalMapping(engine, global.0, global.1);
+        }
         Ok(engine)
     }
 }
