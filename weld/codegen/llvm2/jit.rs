@@ -328,6 +328,21 @@ unsafe fn optimize_module(module: LLVMModuleRef, conf: &ParsedConf) -> WeldResul
 unsafe fn create_exec_engine(module: LLVMModuleRef,
                              mappings: &Vec<intrinsic::Mapping>,
                              conf: &ParsedConf) -> WeldResult<LLVMExecutionEngineRef> {
+
+    // Create a filtered list of globals. Needs to be done before creating the execution engine
+    // since we lose ownership of the module. (?)
+    let mut globals = vec![];
+    for mapping in mappings.iter() {
+        let global = LLVMGetNamedGlobal(module, mapping.0.as_ptr());
+        // The LLVM optimizer can delete globals, so we need this check here!
+        if global != ptr::null_mut() {
+            trace!("Adding mapping {:?}.", mapping);
+            globals.push((global, mapping.1));
+        } else {
+            trace!("Function {:?} was deleted by optimizer", mapping.0);
+        }
+    }
+
     let mut engine = mem::uninitialized();
     let mut error_str = mem::uninitialized();
     let mut options: LLVMMCJITCompilerOptions = mem::uninitialized();
@@ -348,9 +363,8 @@ unsafe fn create_exec_engine(module: LLVMModuleRef,
         compile_err!("Creating execution engine failed: {}",
                      CStr::from_ptr(error_str).to_str().unwrap())
     } else {
-        for mapping in mappings.iter() {
-            trace!("Adding mapping {:?}.", mapping);
-            LLVMAddGlobalMapping(engine, mapping.0, mapping.1);
+        for global in globals {
+            LLVMAddGlobalMapping(engine, global.0, global.1);
         }
         trace!("Finished adding mappings.");
         Ok(engine)

@@ -47,7 +47,7 @@ impl Intrinsic {
 }
 
 /// A mapping from an LLVM value to its function pointer.
-pub type Mapping = (LLVMValueRef, *mut c_void);
+pub type Mapping = (CString, *mut c_void);
 
 /// Intrinsics defined in the code generator.
 ///
@@ -79,10 +79,10 @@ impl Intrinsics {
     pub fn mappings(&self) -> Vec<Mapping> {
         let mut mappings = vec![];
         for (name, entry) in self.intrinsics.iter() {
-            trace!("{} -> {:?}", name, entry);
             match *entry {
-                Intrinsic::FunctionPointer(value, ptr) if self.used.contains(name) => {
-                    mappings.push((value, ptr)) 
+                Intrinsic::FunctionPointer(_, ptr) if self.used.contains(name) => {
+                    trace!("Adding {} to mappings", name);
+                    mappings.push((CString::new(name.as_str()).unwrap(), ptr)) 
                 }
                 _ => ()
             }
