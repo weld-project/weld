@@ -333,7 +333,7 @@ unsafe fn create_exec_engine(module: LLVMModuleRef,
     // since we lose ownership of the module. (?)
     let mut globals = vec![];
     for mapping in mappings.iter() {
-        let global = LLVMGetNamedGlobal(module, mapping.0.as_ptr());
+        let global = LLVMGetNamedFunction(module, mapping.0.as_ptr());
         // The LLVM optimizer can delete globals, so we need this check here!
         if global != ptr::null_mut() {
             trace!("Adding mapping {:?}.", mapping);
