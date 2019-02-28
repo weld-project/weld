@@ -124,7 +124,7 @@ impl Intrinsics {
     }
 
     /// Get the intrinsic function value with the given name.
-    pub fn get<T: AsRef<str>>(&mut self, key: T) -> Option<LLVMValueRef> {
+    pub fn get<T: AsRef<str>>(&self, key: T) -> Option<LLVMValueRef> {
         self.intrinsics.get(key.as_ref()).map(|r| r.value())
     }
 

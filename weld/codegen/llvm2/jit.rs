@@ -336,10 +336,9 @@ unsafe fn create_exec_engine(module: LLVMModuleRef,
         let global = LLVMGetNamedFunction(module, mapping.0.as_ptr());
         // The LLVM optimizer can delete globals, so we need this check here!
         if global != ptr::null_mut() {
-            trace!("Adding mapping {:?}.", mapping);
             globals.push((global, mapping.1));
         } else {
-            trace!("Function {:?} was deleted by optimizer", mapping.0);
+            trace!("Function {:?} was deleted from module by optimizer", mapping.0);
         }
     }
 
@@ -357,8 +356,6 @@ unsafe fn create_exec_engine(module: LLVMModuleRef,
                                                        options_size,
                                                        &mut error_str);
 
-    trace!("Created execution engine.");
-
     if result_code != 0 {
         compile_err!("Creating execution engine failed: {}",
                      CStr::from_ptr(error_str).to_str().unwrap())
@@ -366,7 +363,6 @@ unsafe fn create_exec_engine(module: LLVMModuleRef,
         for global in globals {
             LLVMAddGlobalMapping(engine, global.0, global.1);
         }
-        trace!("Finished adding mappings.");
         Ok(engine)
     }
 }
