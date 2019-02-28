@@ -10,7 +10,7 @@ extern crate libc;
 extern crate llvm_sys;
 extern crate fnv;
 
-use fnv::{FnvHashMap,  FnvHashSet};
+use fnv::FnvHashMap;
 
 use libc::c_char;
 
@@ -46,7 +46,7 @@ impl Intrinsic {
     }
 }
 
-/// A mapping from an LLVM value to its function pointer.
+/// A mapping from a function name to its function pointer.
 pub type Mapping = (CString, *mut c_void);
 
 /// Intrinsics defined in the code generator.
@@ -57,8 +57,6 @@ pub struct Intrinsics {
     context: LLVMContextRef,
     module: LLVMModuleRef,
     intrinsics: FnvHashMap<String, Intrinsic>, 
-    // tracks which intrinsics are actually used.
-    used: FnvHashSet<String>,
 }
 
 impl CodeGenExt for Intrinsics {
@@ -80,7 +78,7 @@ impl Intrinsics {
         let mut mappings = vec![];
         for (name, entry) in self.intrinsics.iter() {
             match *entry {
-                Intrinsic::FunctionPointer(_, ptr) if self.used.contains(name) => {
+                Intrinsic::FunctionPointer(_, ptr) => {
                     trace!("Adding {} to mappings", name);
                     mappings.push((CString::new(name.as_str()).unwrap(), ptr)) 
                 }
@@ -94,7 +92,6 @@ impl Intrinsics {
         let mut intrinsics = Intrinsics {
             context: context,
             module: module,
-            used: FnvHashSet::default(),
             intrinsics: FnvHashMap::default(),
         };
 
@@ -127,10 +124,7 @@ impl Intrinsics {
     }
 
     /// Get the intrinsic function value with the given name.
-    ///
-    /// This also marks the function as used.
     pub fn get<T: AsRef<str>>(&mut self, key: T) -> Option<LLVMValueRef> {
-        self.used.insert(key.as_ref().to_string());
         self.intrinsics.get(key.as_ref()).map(|r| r.value())
     }
 
@@ -165,7 +159,6 @@ impl Intrinsics {
             if args.len() != LLVMCountParams(func) as usize {
                 panic!("Argument length didn't match number of parameters")
             }
-            self.used.insert(name.as_ref().to_string());
             Ok(LLVMBuildCall(builder, func, args.as_mut_ptr(), args.len() as u32, c_str!("")))
         } else {
             unreachable!()
@@ -179,10 +172,8 @@ impl Intrinsics {
                                           memlimit: LLVMValueRef,
                                           name: Option<*const c_char>) -> LLVMValueRef {
         let mut args = [nworkers, memlimit];
-        let func_name = "weld_runst_init";
-        self.used.insert(func_name.to_string());
         LLVMBuildCall(builder,
-                      self.get(func_name).unwrap(),
+                      self.get("weld_runst_init").unwrap(),
                       args.as_mut_ptr(), args.len() as u32, name.unwrap_or(c_str!("")))
     }
 
