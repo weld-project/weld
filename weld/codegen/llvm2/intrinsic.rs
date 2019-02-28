@@ -10,7 +10,7 @@ extern crate libc;
 extern crate llvm_sys;
 extern crate fnv;
 
-use fnv::FnvHashMap;
+use fnv::{FnvHashMap,  FnvHashSet};
 
 use libc::c_char;
 
@@ -41,7 +41,7 @@ impl Intrinsic {
     /// Returns the LLVM value for the intrinsic.
     fn value(&self) -> LLVMValueRef {
         match *self {
-            Intrinsic::Builtin(ref val) | Intrinsic::FunctionPointer(ref val, _) => *val,
+            Intrinsic::Builtin(val) | Intrinsic::FunctionPointer(val, _) => val,
         } 
     }
 }
@@ -57,6 +57,8 @@ pub struct Intrinsics {
     context: LLVMContextRef,
     module: LLVMModuleRef,
     intrinsics: FnvHashMap<String, Intrinsic>, 
+    // tracks which intrinsics are actually used.
+    used: FnvHashSet<String>,
 }
 
 impl CodeGenExt for Intrinsics {
@@ -79,10 +81,10 @@ impl Intrinsics {
         for (name, entry) in self.intrinsics.iter() {
             trace!("{} -> {:?}", name, entry);
             match *entry {
-                Intrinsic::FunctionPointer(value, ptr) => {
+                Intrinsic::FunctionPointer(value, ptr) if self.used.contains(name) => {
                     mappings.push((value, ptr)) 
                 }
-                Intrinsic::Builtin(_) => ()
+                _ => ()
             }
         }
         mappings
@@ -92,6 +94,7 @@ impl Intrinsics {
         let mut intrinsics = Intrinsics {
             context: context,
             module: module,
+            used: FnvHashSet::default(),
             intrinsics: FnvHashMap::default(),
         };
 
@@ -124,8 +127,11 @@ impl Intrinsics {
     }
 
     /// Get the intrinsic function value with the given name.
-    pub fn get<T: AsRef<str>>(&self, key: T) -> Option<LLVMValueRef> {
-        return self.intrinsics.get(key.as_ref()).map(|r| r.value())
+    ///
+    /// This also marks the function as used.
+    pub fn get<T: AsRef<str>>(&mut self, key: T) -> Option<LLVMValueRef> {
+        self.used.insert(key.as_ref().to_string());
+        self.intrinsics.get(key.as_ref()).map(|r| r.value())
     }
 
     /// Add a new intrinsic function with the given name, return type, and argument types.
@@ -155,10 +161,12 @@ impl Intrinsics {
                                       name: T,
                                       args: &mut [LLVMValueRef]) -> WeldResult<LLVMValueRef> {
         if let Some(func) = self.intrinsics.get(name.as_ref()) {
-            if args.len() != LLVMCountParams(func.value()) as usize {
+            let func = func.value();
+            if args.len() != LLVMCountParams(func) as usize {
                 panic!("Argument length didn't match number of parameters")
             }
-            Ok(LLVMBuildCall(builder, func.value(), args.as_mut_ptr(), args.len() as u32, c_str!("")))
+            self.used.insert(name.as_ref().to_string());
+            Ok(LLVMBuildCall(builder, func, args.as_mut_ptr(), args.len() as u32, c_str!("")))
         } else {
             unreachable!()
         }
@@ -171,8 +179,10 @@ impl Intrinsics {
                                           memlimit: LLVMValueRef,
                                           name: Option<*const c_char>) -> LLVMValueRef {
         let mut args = [nworkers, memlimit];
+        let func_name = "weld_runst_init";
+        self.used.insert(func_name.to_string());
         LLVMBuildCall(builder,
-                      self.get("weld_runst_init").unwrap(),
+                      self.get(func_name).unwrap(),
                       args.as_mut_ptr(), args.len() as u32, name.unwrap_or(c_str!("")))
     }
 
