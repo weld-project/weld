@@ -76,10 +76,11 @@ impl Intrinsics {
     /// Builtins are filtered out of this list.
     pub fn mappings(&self) -> Vec<Mapping> {
         let mut mappings = vec![];
-        for (_name, entry) in self.intrinsics.iter() {
+        for (name, entry) in self.intrinsics.iter() {
+            trace!("{} -> {:?}", name, entry);
             match *entry {
-                Intrinsic::FunctionPointer(ref value, ref ptr) => {
-                    mappings.push((value.clone(), ptr.clone())) 
+                Intrinsic::FunctionPointer(value, ptr) => {
+                    mappings.push((value, ptr)) 
                 }
                 Intrinsic::Builtin(_) => ()
             }

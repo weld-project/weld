@@ -342,15 +342,17 @@ unsafe fn create_exec_engine(module: LLVMModuleRef,
                                                        options_size,
                                                        &mut error_str);
 
-
-    for mapping in mappings.iter() {
-        LLVMAddGlobalMapping(engine, mapping.0, mapping.1);
-    }
+    trace!("Created execution engine.");
 
     if result_code != 0 {
         compile_err!("Creating execution engine failed: {}",
-                          CStr::from_ptr(error_str).to_str().unwrap())
+                     CStr::from_ptr(error_str).to_str().unwrap())
     } else {
+        for mapping in mappings.iter() {
+            trace!("Adding mapping {:?}.", mapping);
+            LLVMAddGlobalMapping(engine, mapping.0, mapping.1);
+        }
+        trace!("Finished adding mappings.");
         Ok(engine)
     }
 }
