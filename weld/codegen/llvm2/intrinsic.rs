@@ -79,7 +79,6 @@ impl Intrinsics {
         for (name, entry) in self.intrinsics.iter() {
             match *entry {
                 Intrinsic::FunctionPointer(_, ptr) => {
-                    trace!("Adding {} to mappings", name);
                     mappings.push((CString::new(name.as_str()).unwrap(), ptr)) 
                 }
                 _ => ()

@@ -118,7 +118,7 @@ pub unsafe fn init() {
 /// Compile a constructed module in the given LLVM context.
 pub unsafe fn compile(context: LLVMContextRef,
                module: LLVMModuleRef,
-               mappings: &Vec<intrinsic::Mapping>,
+               mappings: &[intrinsic::Mapping],
                conf: &ParsedConf,
                stats: &mut CompilationStats) -> WeldResult<CompiledModule> {
     init();
@@ -326,7 +326,7 @@ unsafe fn optimize_module(module: LLVMModuleRef, conf: &ParsedConf) -> WeldResul
 
 /// Create an MCJIT execution engine for a given module.
 unsafe fn create_exec_engine(module: LLVMModuleRef,
-                             mappings: &Vec<intrinsic::Mapping>,
+                             mappings: &[intrinsic::Mapping],
                              conf: &ParsedConf) -> WeldResult<LLVMExecutionEngineRef> {
 
     // Create a filtered list of globals. Needs to be done before creating the execution engine
