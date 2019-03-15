@@ -1,5 +1,5 @@
 
-extern crate num_integer;
+use num_integer;
 
 use crate::ast::ExprKind::*;
 use crate::ast::LiteralKind::*;

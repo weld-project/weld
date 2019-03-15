@@ -123,14 +123,14 @@ extern crate lazy_static;
 #[macro_use]
 extern crate log;
 
-extern crate regex;
-extern crate libc;
-extern crate env_logger;
-extern crate chrono;
-extern crate fnv;
-extern crate time;
-extern crate code_builder;
-extern crate uuid;
+
+use libc;
+use env_logger;
+use chrono;
+use fnv;
+use time;
+
+
 
 use self::time::PreciseTime;
 
@@ -882,7 +882,7 @@ pub enum WeldLogLevel {
 }
 
 impl fmt::Display for WeldLogLevel {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", self)
     }
 }
@@ -929,7 +929,7 @@ pub fn set_log_level(level: WeldLogLevel) {
     use crate::util::colors::Color::*;
 
     let filter: log::LogLevelFilter = level.into();
-    let format = |rec: &log::LogRecord| {
+    let format = |rec: &log::LogRecord<'_>| {
         let prefix = match rec.level() {
             log::LogLevel::Error => format_color(Red, "error"),
             log::LogLevel::Warn => format_color(Yellow, "warn"),

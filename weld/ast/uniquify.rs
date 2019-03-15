@@ -8,7 +8,7 @@ use crate::error::*;
 
 use std::collections::hash_map::Entry;
 
-extern crate fnv;
+use fnv;
 
 #[cfg(test)]
 use crate::tests::*;

@@ -84,7 +84,7 @@ impl Annotations {
 }
 
 impl fmt::Display for Annotations {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.values.is_none() {
             return write!(f, "");
         }
@@ -328,7 +328,7 @@ impl Type {
 }
 
 impl fmt::Display for Type {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use self::Type::*;
         let ref text = match *self {
             Scalar(ref kind) => {
@@ -457,7 +457,7 @@ impl ScalarKind {
 }
 
 impl fmt::Display for ScalarKind {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let text = match *self {
             Bool => "bool",
             I8 => "i8",
@@ -527,7 +527,7 @@ impl BuilderKind {
 }
 
 impl fmt::Display for BuilderKind {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use self::BuilderKind::*;
         let ref text = match *self {
             Appender(ref t) => {
@@ -581,7 +581,7 @@ impl Symbol {
 }
 
 impl fmt::Display for Symbol {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.id == 0 {
             write!(f, "{}", self.name)
         } else {
@@ -622,7 +622,7 @@ pub enum IterKind {
 }
 
 impl fmt::Display for IterKind {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use self::IterKind::*;
         let ref text = match *self {
             ScalarIter => "",
@@ -895,7 +895,7 @@ pub enum LiteralKind {
 }
 
 impl fmt::Display for LiteralKind {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use self::LiteralKind::*;
         let ref text = match *self {
             BoolLiteral(v) => format!("{}", v),
@@ -966,7 +966,7 @@ impl BinOpKind {
 }
 
 impl fmt::Display for BinOpKind {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let text = match *self {
             Add => "+",
             Subtract => "-",
@@ -1011,7 +1011,7 @@ pub enum UnaryOpKind {
 }
 
 impl fmt::Display for UnaryOpKind {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let text = format!("{:?}", self);
         f.write_str(text.to_lowercase().as_ref())
     }
@@ -1027,7 +1027,7 @@ pub struct Parameter {
 }
 
 impl fmt::Display for Parameter {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}:{}", self.name, self.ty)
     }
 }

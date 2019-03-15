@@ -2,7 +2,7 @@
 //!
 //! This module provides a C-compatible interface to the Weld library.
 
-extern crate libc;
+use libc;
 
 use super::*;
 use libc::{c_char, c_void, int64_t};

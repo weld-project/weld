@@ -7,9 +7,9 @@
 //! * `Cast`
 //! * `Negate`
 
-extern crate time;
-extern crate libc;
-extern crate llvm_sys;
+
+
+use llvm_sys;
 
 use crate::ast::*;
 use crate::error::*;
@@ -30,29 +30,29 @@ pub trait NumericExpressionGen {
     /// Generates code for a numeric unary operator.
     ///
     /// This method supports operators over both scalar and SIMD values.
-    unsafe fn gen_unaryop(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()>;
+    unsafe fn gen_unaryop(&mut self, ctx: &mut FunctionContext<'_>, statement: &Statement) -> WeldResult<()>;
     /// Generates code for a numeric binary operator.
     ///
     /// This method supports operators over both scalar and SIMD values.
-    unsafe fn gen_binop(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()>;
+    unsafe fn gen_binop(&mut self, ctx: &mut FunctionContext<'_>, statement: &Statement) -> WeldResult<()>;
     /// Generates code for the negation operator.
-    unsafe fn gen_negate(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()>;
+    unsafe fn gen_negate(&mut self, ctx: &mut FunctionContext<'_>, statement: &Statement) -> WeldResult<()>;
     /// Generates code for the not operator.
-    unsafe fn gen_not(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()>;
+    unsafe fn gen_not(&mut self, ctx: &mut FunctionContext<'_>, statement: &Statement) -> WeldResult<()>;
 
     /// Generates a literal.
     ///
     /// This method supports both scalar and SIMD values.
-    unsafe fn gen_assign_literal(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()>;
+    unsafe fn gen_assign_literal(&mut self, ctx: &mut FunctionContext<'_>, statement: &Statement) -> WeldResult<()>;
     /// Generates a cast expression.
-    unsafe fn gen_cast(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()>;
+    unsafe fn gen_cast(&mut self, ctx: &mut FunctionContext<'_>, statement: &Statement) -> WeldResult<()>;
 }
 
 /// Helper trait for generating numeric code.
 trait NumericExpressionGenInternal {
     /// Generates the math `Pow` operator.
     unsafe fn gen_pow(&mut self,
-               ctx: &mut FunctionContext,
+               ctx: &mut FunctionContext<'_>,
                left: LLVMValueRef,
                right: LLVMValueRef,
                ty: &Type) -> WeldResult<LLVMValueRef>; 
@@ -60,7 +60,7 @@ trait NumericExpressionGenInternal {
 
 impl NumericExpressionGenInternal for LlvmGenerator {
     unsafe fn gen_pow(&mut self,
-               ctx: &mut FunctionContext,
+               ctx: &mut FunctionContext<'_>,
                left: LLVMValueRef,
                right: LLVMValueRef,
                ty: &Type) -> WeldResult<LLVMValueRef> {
@@ -113,7 +113,7 @@ impl UnaryOpSupport for UnaryOpKind {
 }
 
 impl NumericExpressionGen for LlvmGenerator {
-    unsafe fn gen_unaryop(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()> {
+    unsafe fn gen_unaryop(&mut self, ctx: &mut FunctionContext<'_>, statement: &Statement) -> WeldResult<()> {
         use crate::ast::Type::{Scalar, Simd};
         use self::UnaryOpSupport;
         use crate::sir::StatementKind::UnaryOp;
@@ -181,7 +181,7 @@ impl NumericExpressionGen for LlvmGenerator {
         }
     }
 
-    unsafe fn gen_not(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()> {
+    unsafe fn gen_not(&mut self, ctx: &mut FunctionContext<'_>, statement: &Statement) -> WeldResult<()> {
         use crate::sir::StatementKind::Not;
         use self::llvm_sys::LLVMIntPredicate::LLVMIntEQ;
         if let Not(ref child) = statement.kind {
@@ -196,7 +196,7 @@ impl NumericExpressionGen for LlvmGenerator {
         }
     }
 
-    unsafe fn gen_negate(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()> {
+    unsafe fn gen_negate(&mut self, ctx: &mut FunctionContext<'_>, statement: &Statement) -> WeldResult<()> {
         use crate::ast::BinOpKind::Subtract;
         use crate::ast::ScalarKind::{F32, F64};
         use crate::ast::Type::{Scalar, Simd};
@@ -229,7 +229,7 @@ impl NumericExpressionGen for LlvmGenerator {
         }
     }
 
-    unsafe fn gen_binop(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()> {
+    unsafe fn gen_binop(&mut self, ctx: &mut FunctionContext<'_>, statement: &Statement) -> WeldResult<()> {
         use crate::ast::BinOpKind;
         use crate::ast::Type::{Scalar, Simd, Vector, Struct};
         use crate::sir::StatementKind::BinOp;
@@ -310,7 +310,7 @@ impl NumericExpressionGen for LlvmGenerator {
         }
     }
 
-    unsafe fn gen_assign_literal(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()> {
+    unsafe fn gen_assign_literal(&mut self, ctx: &mut FunctionContext<'_>, statement: &Statement) -> WeldResult<()> {
         use crate::sir::StatementKind::AssignLiteral;
         if let AssignLiteral(ref value) = statement.kind {
             let output = statement.output.as_ref().unwrap();
@@ -337,7 +337,7 @@ impl NumericExpressionGen for LlvmGenerator {
         }
     }
 
-    unsafe fn gen_cast(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()> {
+    unsafe fn gen_cast(&mut self, ctx: &mut FunctionContext<'_>, statement: &Statement) -> WeldResult<()> {
         use crate::sir::StatementKind::Cast;
         let ref output = statement.output.clone().unwrap();
         let output_pointer = ctx.get_value(output)?;

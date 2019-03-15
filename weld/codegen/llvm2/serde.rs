@@ -6,10 +6,10 @@
 //! * `Deserialize`
 
 
-extern crate time;
-extern crate libc;
-extern crate llvm_sys;
-extern crate lazy_static;
+
+
+use llvm_sys;
+
 
 use std::ffi::CStr;
 
@@ -37,18 +37,18 @@ pub trait SerDeGen {
     ///
     /// Code is generated at the provided function context. The code generator may add a helper
     /// function to serialize the type if one does not exist.
-    unsafe fn gen_serialize(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()>;
+    unsafe fn gen_serialize(&mut self, ctx: &mut FunctionContext<'_>, statement: &Statement) -> WeldResult<()>;
 
     /// Generates code to deserialize a value.
     ///
     /// Code is generated at the provided function context. The code generator may add a helper
     /// function to serialize the type if one does not exist.
-    unsafe fn gen_deserialize(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()>;
+    unsafe fn gen_deserialize(&mut self, ctx: &mut FunctionContext<'_>, statement: &Statement) -> WeldResult<()>;
 }
 
 impl SerDeGen for LlvmGenerator {
     unsafe fn gen_serialize(&mut self,
-                            ctx: &mut FunctionContext,
+                            ctx: &mut FunctionContext<'_>,
                             statement: &Statement) -> WeldResult<()> {
         use crate::sir::StatementKind::Serialize;
         if let Serialize(ref child) = statement.kind {
@@ -70,7 +70,7 @@ impl SerDeGen for LlvmGenerator {
         }
     }
 
-    unsafe fn gen_deserialize(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()> {
+    unsafe fn gen_deserialize(&mut self, ctx: &mut FunctionContext<'_>, statement: &Statement) -> WeldResult<()> {
         use crate::sir::StatementKind::Deserialize;
         if let Deserialize(ref child) = statement.kind {
             let output = statement.output.as_ref().unwrap();
@@ -355,8 +355,8 @@ impl SerHelper for LlvmGenerator {
                     let dictionary = self.load(builder, value)?;
                     let key_ser_fn = self.gen_serialize_fn(key)?;
                     let val_ser_fn = self.gen_serialize_fn(val)?;
-                    let mut methods = self.dictionaries.get_mut(ty).unwrap();
-                    let mut buffer_vector = self.vectors.get_mut(&Scalar(ScalarKind::I8)).unwrap();
+                    let methods = self.dictionaries.get_mut(ty).unwrap();
+                    let buffer_vector = self.vectors.get_mut(&Scalar(ScalarKind::I8)).unwrap();
                     methods.gen_serialize(builder,
                                           function,
                                           entry_block,
@@ -606,7 +606,7 @@ impl DeHelper for LlvmGenerator {
                     // Computes the next power-of-2.
                     let capacity = self.next_pow2(builder, size);
                     let dictionary = {
-                        let mut methods = self.dictionaries.get_mut(ty).unwrap();
+                        let methods = self.dictionaries.get_mut(ty).unwrap();
                         methods.gen_new(builder, &mut self.intrinsics, capacity, run)?
                     };
 
@@ -648,7 +648,7 @@ impl DeHelper for LlvmGenerator {
                     let value_pointer = {
                         let value_llvm_ty = self.llvm_type(value_ty)?;
                         let zero = self.zero(value_llvm_ty);
-                        let mut methods = self.dictionaries.get_mut(ty).unwrap();
+                        let methods = self.dictionaries.get_mut(ty).unwrap();
                         let slot = methods.gen_upsert(builder,
                                            &mut self.intrinsics,
                                            dictionary,

@@ -2,8 +2,8 @@
 //!
 //! These are functions that are accessed from generated code.
 
-extern crate libc;
-extern crate fnv;
+use libc;
+use fnv;
 
 pub mod ffi;
 
@@ -75,7 +75,7 @@ pub enum WeldRuntimeErrno {
 
 impl fmt::Display for WeldRuntimeErrno {
     /// Just return the errno name.
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", self)
     }
 }

@@ -3,9 +3,9 @@
 //! This module manages verifying the generated LLVM module, optimizing it using the LLVM
 //! optimization passes, and compiling it to machine code.
 
-extern crate llvm_sys;
-extern crate time;
-extern crate libc;
+use llvm_sys;
+use time;
+use libc;
 
 use std::ffi::{CStr, CString};
 use std::mem;

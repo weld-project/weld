@@ -1,8 +1,8 @@
 //! Generates headers for a Weld program.
 
-extern crate weld;
-extern crate clap;
-extern crate code_builder;
+
+
+
 
 use code_builder::CodeBuilder;
 

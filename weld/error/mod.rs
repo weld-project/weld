@@ -31,7 +31,7 @@ impl WeldCompileError {
 }
 
 impl fmt::Display for WeldCompileError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
     }
 }
@@ -41,7 +41,7 @@ impl error::Error for WeldCompileError {
         &self.0
     }
 
-    fn cause(&self) -> Option<&error::Error> {
+    fn cause(&self) -> Option<&dyn error::Error> {
         None
     }
 }

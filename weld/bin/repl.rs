@@ -1,11 +1,11 @@
-extern crate rustyline;
-extern crate weld;
-extern crate libc;
+
+
+
 
 #[macro_use]
 extern crate lazy_static;
 
-extern crate clap;
+
 use clap::{Arg, App};
 
 use rustyline::error::ReadlineError;
@@ -30,7 +30,7 @@ enum ReplCommands {
 }
 
 impl fmt::Display for ReplCommands {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
             ReplCommands::LoadFile => write!(f, "load"),
             ReplCommands::GetConf => write!(f, "getconf"),

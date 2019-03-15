@@ -1,6 +1,6 @@
 //! Type inference for Weld expressions.
 
-extern crate fnv;
+use fnv;
 
 use crate::ast::*;
 use crate::ast::ExprKind::*;
@@ -137,7 +137,7 @@ impl PushType for Type {
                 elem.push(other_elem)
             }
             (&mut Dict(ref mut key, ref mut value), &Dict(ref other_key, ref other_value)) => {
-                let mut changed = key.push(other_key)? || value.push(other_value)?;
+                let changed = key.push(other_key)? || value.push(other_value)?;
                 key_hashable(key.as_ref())?;
                 Ok(changed)
             }
@@ -172,7 +172,7 @@ impl PushType for Type {
                         &mut DictMerger(ref mut key, ref mut value, ref mut op),
                         &DictMerger(ref other_key, ref other_value, ref other_op)
                     ) if *op == *other_op => {
-                        let mut changed = key.push(other_key)? || value.push(other_value)?;
+                        let changed = key.push(other_key)? || value.push(other_value)?;
                         key_hashable(key.as_ref())?;
                         Ok(changed)
                     }
@@ -180,7 +180,7 @@ impl PushType for Type {
                         &mut GroupMerger(ref mut key, ref mut value),
                         &GroupMerger(ref other_key, ref other_value)
                     ) => {
-                        let mut changed = key.push(other_key)? || value.push(other_value)?;
+                        let changed = key.push(other_key)? || value.push(other_value)?;
                         key_hashable(key.as_ref())?;
                         Ok(changed)
                     }
@@ -853,7 +853,7 @@ impl InferTypesInternal for Expr {
                 }
 
                 // Now get the vector data types.
-                let mut elem_types: Vec<_> = iters.iter().map(|iter| {
+                let elem_types: Vec<_> = iters.iter().map(|iter| {
                     // If the iterator is a RangeIter, special case it -- the data must be a "dummy"
                     // empty vector with type vec[i64].
                     if iter.kind == IterKind::RangeIter {

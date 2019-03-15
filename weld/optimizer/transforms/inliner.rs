@@ -2,7 +2,7 @@
 //!
 //! These transforms take a set of nested expressions and fuse them into a single one.
 
-extern crate fnv;
+use fnv;
 
 use crate::ast::*;
 use crate::ast::ExprKind::*;

@@ -1,6 +1,6 @@
 //! Tests for serializing and deserializing Weld objects.
 
-extern crate weld;
+
 
 use std::fmt::Debug;
 

@@ -12,9 +12,9 @@
 //!
 //!
 
-extern crate lazy_static;
-extern crate llvm_sys;
-extern crate libc;
+
+use llvm_sys;
+
 
 use std::ffi::CString;
 

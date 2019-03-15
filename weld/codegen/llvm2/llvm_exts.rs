@@ -5,9 +5,9 @@
 
 #![allow(non_snake_case)]
 
-extern crate llvm_sys;
-extern crate lazy_static;
-extern crate libc;
+use llvm_sys;
+
+use libc;
 
 use libc::{c_char, c_uint};
 
@@ -60,7 +60,7 @@ pub enum LLVMExtAttribute {
 }
 
 impl fmt::Display for LLVMExtAttribute {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use self::LLVMExtAttribute::*;
         let ref string = match *self {
             AlwaysInline => "alwaysinline",

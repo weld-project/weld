@@ -2,7 +2,7 @@
 //!
 //! This module uses the C API to simplify multi-threaded testing.
 
-extern crate weld;
+use weld;
 
 use weld::*;
 use std::thread;

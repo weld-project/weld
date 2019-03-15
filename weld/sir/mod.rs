@@ -11,7 +11,7 @@ use super::ast::Type::*;
 use super::error::*;
 use super::util::{SymbolGenerator, join};
 
-extern crate fnv;
+use fnv;
 
 pub mod optimizations;
 
@@ -501,7 +501,7 @@ impl BasicBlock {
 }
 
 impl fmt::Display for StatementKind {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use self::StatementKind::*;
         match *self {
             Assign(ref value) => write!(f, "{}", value),
@@ -607,7 +607,7 @@ impl fmt::Display for StatementKind {
 }
 
 impl fmt::Display for Statement {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Some(ref sym) = self.output {
             write!(f, "{} = {}", sym, self.kind)
         } else {
@@ -617,7 +617,7 @@ impl fmt::Display for Statement {
 }
 
 impl fmt::Display for Terminator {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use self::Terminator::*;
         match *self {
             Branch {
@@ -634,7 +634,7 @@ impl fmt::Display for Terminator {
 }
 
 impl fmt::Display for ParallelForIter {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let iterkind = match self.kind {
             IterKind::ScalarIter => "iter",
             IterKind::SimdIter => "simditer",
@@ -670,7 +670,7 @@ impl fmt::Display for ParallelForIter {
 }
 
 impl fmt::Display for BasicBlock {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "B{}:\n", self.id)?;
         for stmt in &self.statements {
             write!(f, "  {}\n", stmt)?;
@@ -681,7 +681,7 @@ impl fmt::Display for BasicBlock {
 }
 
 impl fmt::Display for SirFunction {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let loopbody = if self.loop_body {
             " (loopbody)"
         } else {
@@ -706,7 +706,7 @@ impl fmt::Display for SirFunction {
 }
 
 impl fmt::Display for SirProgram {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for func in &self.funcs {
             write!(f, "{}\n", func)?;
         }

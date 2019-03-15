@@ -1,6 +1,6 @@
 //! Tests that make use of the Sort operator.
 
-extern crate weld;
+use weld;
 
 mod common;
 use crate::common::*;

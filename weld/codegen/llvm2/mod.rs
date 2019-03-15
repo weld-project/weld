@@ -48,11 +48,11 @@
 //!
 //! * The `target` module provides parsed target specific feature information.
 
-extern crate fnv;
-extern crate time;
-extern crate libc;
-extern crate llvm_sys;
-extern crate lazy_static;
+use fnv;
+
+use libc;
+use llvm_sys;
+
 
 use std::fmt;
 use std::mem;
@@ -907,7 +907,7 @@ impl LlvmGenerator {
     ///
     /// The allocas should generally be generated in the entry block of the function. The caller
     /// should ensure that the context builder is appropriately positioned.
-    unsafe fn gen_allocas(&mut self, context: &mut FunctionContext) -> WeldResult<()> {
+    unsafe fn gen_allocas(&mut self, context: &mut FunctionContext<'_>) -> WeldResult<()> {
         // Add the function parameters, which are stored in alloca'd variables. The
         // function parameters are always enumerated alphabetically sorted by symbol name.
         for (symbol, ty) in context.sir_function.params.iter() {
@@ -926,7 +926,7 @@ impl LlvmGenerator {
     }
 
     /// Generates code to store function parameters in alloca'd variables.
-    unsafe fn gen_store_parameters(&mut self, context: &mut FunctionContext) -> WeldResult<()> {
+    unsafe fn gen_store_parameters(&mut self, context: &mut FunctionContext<'_>) -> WeldResult<()> {
         // Store the parameter values in the alloca'd symbols.
         for (i, (symbol, _)) in context.sir_function.params.iter().enumerate() {
             let pointer = context.get_value(symbol)?;
@@ -940,7 +940,7 @@ impl LlvmGenerator {
     ///
     /// This function does not actually generate the basic block code: it only adds the basic
     /// blocks to the context so they can be forward referenced if necessary.
-    unsafe fn gen_basic_block_defs(&mut self, context: &mut FunctionContext) -> WeldResult<()> {
+    unsafe fn gen_basic_block_defs(&mut self, context: &mut FunctionContext<'_>) -> WeldResult<()> {
         for bb in context.sir_function.blocks.iter() {
             let name = CString::new(format!("b{}", bb.id)).unwrap();
             let block = LLVMAppendBasicBlockInContext(self.context,
@@ -992,7 +992,7 @@ impl LlvmGenerator {
     /// Generate code for a single SIR statement.
     ///
     /// The code is generated at the position specified by the function context.
-    unsafe fn gen_statement(&mut self, context: &mut FunctionContext, statement: &Statement) -> WeldResult<()> {
+    unsafe fn gen_statement(&mut self, context: &mut FunctionContext<'_>, statement: &Statement) -> WeldResult<()> {
         use crate::ast::Type::*;
         use crate::sir::StatementKind::*;
         let ref output = statement.output.clone().unwrap_or(Symbol::new("unused", 0));
@@ -1079,7 +1079,7 @@ impl LlvmGenerator {
                 };
 
                 let result = {
-                    let mut methods = self.dictionaries.get_mut(child_type).unwrap();
+                    let methods = self.dictionaries.get_mut(child_type).unwrap();
                     methods.gen_key_exists(context.builder,
                                            child_value,
                                            context.get_value(key)?,
@@ -1093,13 +1093,13 @@ impl LlvmGenerator {
                 let child_value = self.load(context.builder, context.get_value(child)?)?;
                 let child_type = context.sir_function.symbol_type(child)?;
                 if let Vector(ref elem_type) = *child_type {
-                    let mut methods = self.vectors.get_mut(elem_type).unwrap();
+                    let methods = self.vectors.get_mut(elem_type).unwrap();
                     let result = methods.gen_size(context.builder, child_value)?;
                     LLVMBuildStore(context.builder, result, output_pointer);
                     Ok(())
                 } else if let Dict(_, _) = *child_type {
                     let pointer = {
-                        let mut methods = self.dictionaries.get_mut(child_type).unwrap();
+                        let methods = self.dictionaries.get_mut(child_type).unwrap();
                         methods.gen_size(context.builder, child_value)?
                     };
                     let result = self.load(context.builder, pointer)?;
@@ -1124,7 +1124,7 @@ impl LlvmGenerator {
                     use self::hash::GenHash;
                     let hash = self.gen_hash(key, context.builder, context.get_value(index)?, None)?;
                     let result = {
-                        let mut methods = self.dictionaries.get_mut(child_type).unwrap();
+                        let methods = self.dictionaries.get_mut(child_type).unwrap();
                         let slot = methods.gen_lookup(context.builder,
                                                       &mut self.intrinsics,
                                                       child_value,
@@ -1148,7 +1148,7 @@ impl LlvmGenerator {
                     use self::hash::GenHash;
                     let hash = self.gen_hash(key, context.builder, context.get_value(index)?, None)?;
                     let (filled, value) = {
-                        let mut methods = self.dictionaries.get_mut(child_type).unwrap();
+                        let methods = self.dictionaries.get_mut(child_type).unwrap();
                         let slot = methods.gen_opt_lookup(context.builder,
                                                       child_value,
                                                       context.get_value(index)?,
@@ -1257,7 +1257,7 @@ impl LlvmGenerator {
                 let child_type = context.sir_function.symbol_type(child)?;
                 if let Vector(ref elem_type) = *child_type {
                     let result = {
-                        let mut methods = self.vectors.get_mut(elem_type).unwrap();
+                        let methods = self.vectors.get_mut(elem_type).unwrap();
                         methods.gen_slice(context.builder, child_value, index_value, size_value)?
                     };
                     LLVMBuildStore(context.builder, result, output_pointer);
@@ -1304,8 +1304,8 @@ impl LlvmGenerator {
                     //
                     // MacOS and Linux pass arguments to qsort_r in different order.
                     let (mut args, mut arg_tys) = if cfg!(target_os = "macos") {
-                        let mut args = vec![elems_ptr, size, ty_size, run, comparator];
-                        let mut arg_tys = vec![
+                        let args = vec![elems_ptr, size, ty_size, run, comparator];
+                        let arg_tys = vec![
                             LLVMTypeOf(elems_ptr),
                             LLVMTypeOf(size),
                             LLVMTypeOf(ty_size),
@@ -1314,8 +1314,8 @@ impl LlvmGenerator {
                         ];
                         (args, arg_tys)
                     } else if cfg!(target_os = "linux") {
-                        let mut args = vec![elems_ptr, size, ty_size, comparator, run];
-                        let mut arg_tys = vec![
+                        let args = vec![elems_ptr, size, ty_size, comparator, run];
+                        let arg_tys = vec![
                             LLVMTypeOf(elems_ptr),
                             LLVMTypeOf(size),
                             LLVMTypeOf(ty_size),
@@ -1354,8 +1354,8 @@ impl LlvmGenerator {
 
                 let _ = self.llvm_type(output_type)?;
                 let result = {
-                    let mut vector_methods = self.vectors.get_mut(elem).unwrap();
-                    let mut methods = self.dictionaries.get_mut(child_type).unwrap();
+                    let vector_methods = self.vectors.get_mut(elem).unwrap();
+                    let methods = self.dictionaries.get_mut(child_type).unwrap();
                     methods.gen_to_vec(context.builder,
                                        &mut self.intrinsics,
                                        vector_methods,
@@ -1385,7 +1385,7 @@ impl LlvmGenerator {
     /// builder is positioned in, as long as the builder is logically within the passed SIR basic
     /// block.
     unsafe fn gen_terminator(&mut self,
-                                  context: &mut FunctionContext,
+                                  context: &mut FunctionContext<'_>,
                                   bb: &BasicBlock,
                                   loop_terminator: Option<(LLVMBasicBlockRef, LLVMValueRef)>) -> WeldResult<()> {
 
@@ -1521,7 +1521,7 @@ impl LlvmGenerator {
 }
 
 impl fmt::Display for LlvmGenerator {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let s = unsafe {
             let c_str = LLVMPrintModuleToString(self.module) as *mut c_char;
             let msg = CStr::from_ptr(c_str).to_owned();

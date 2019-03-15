@@ -92,7 +92,7 @@ struct Parser<'t> {
 }
 
 impl<'t> Parser<'t> {
-    fn new(tokens: &[Token]) -> Parser {
+    fn new(tokens: &[Token]) -> Parser<'_> {
         Parser {
             tokens: tokens,
             position: 0,

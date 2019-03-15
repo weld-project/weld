@@ -1,8 +1,8 @@
 //! Utilities and helper functions for integration tests.
 #![allow(dead_code)]
 
-extern crate libc;
-extern crate weld;
+
+use weld;
 
 
 use weld::*;
@@ -28,7 +28,7 @@ where
     K: fmt::Display,
     V: fmt::Display
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "({}, {})", self.ele1, self.ele2)
     }
 }

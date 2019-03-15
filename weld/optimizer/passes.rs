@@ -29,7 +29,7 @@ pub struct Transformation {
 }
 
 impl fmt::Debug for Transformation {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Transformation(experimental={})", self.experimental)
     }
 }

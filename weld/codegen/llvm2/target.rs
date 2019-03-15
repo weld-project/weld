@@ -3,7 +3,7 @@
 //! This module provides functionality for querying whether target-specific features are available
 //! on the current platform.
 
-extern crate fnv;
+use fnv;
 
 use std::fmt;
 use std::str;
@@ -29,7 +29,7 @@ pub enum X86Feature {
 }
 
 impl fmt::Display for X86Feature {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let s = format!("{:?}", self);
         write!(f, "{}", s.to_lowercase().replace("_", "."))
     }
@@ -66,7 +66,7 @@ pub enum TargetFeatures {
 }
 
 impl fmt::Display for TargetFeatures {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use self::TargetFeatures::*;
         match *self {
             X86(ref features) => {

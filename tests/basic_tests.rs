@@ -1,6 +1,6 @@
 //! Various tests for the different expressions in Weld.
 
-extern crate weld;
+use weld;
 
 mod common;
 use crate::common::*;

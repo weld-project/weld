@@ -382,7 +382,7 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
 }
 
 impl fmt::Display for Token {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use self::Token::*;
         match *self {
             // Cases that return variable strings

@@ -6,7 +6,7 @@
 //! pass, and also provides utilities for applying passes until a fix point (that is, until the
 //! pass stops modifying the AST).
 
-extern crate time;
+use time;
 
 use time::PreciseTime;
 

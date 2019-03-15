@@ -1,6 +1,6 @@
 //! Tests for the VecMerger builder type.
 
-extern crate weld;
+use weld;
 
 use std::cmp;
 

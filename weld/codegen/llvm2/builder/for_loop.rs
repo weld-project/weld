@@ -7,7 +7,7 @@
 //! The `GenForLoopInternal` is the main workhorse of this module, and provides methods for
 //! building a loop, creating bounds checks, loading elements, and so forth.
 
-extern crate llvm_sys;
+use llvm_sys;
 
 use std::ffi::CString;
 
@@ -35,7 +35,7 @@ pub trait ForLoopGenInternal {
     /// This is the only function in the trait that should be called -- all other methods are
     /// helpers. 
     unsafe fn gen_for_internal(&mut self,
-                               ctx: &mut FunctionContext,
+                               ctx: &mut FunctionContext<'_>,
                                output: &Symbol,
                                parfor: &ParallelForData) -> WeldResult<()>; 
     /// Generates bounds checking code for the loop and return number of iterations.
@@ -44,7 +44,7 @@ pub trait ForLoopGenInternal {
     /// also ensures that each zipped vector has the same number of consumed elements. If these
     /// checks fail, the generated code raises an error.
     unsafe fn gen_bounds_check(&mut self,
-                               ctx: &mut FunctionContext,
+                               ctx: &mut FunctionContext<'_>,
                                parfor: &ParallelForData) -> WeldResult<LLVMValueRef>; 
     /// Generates the loop body.
     ///
@@ -57,7 +57,7 @@ pub trait ForLoopGenInternal {
     ///
     /// Returns a value representing the number of iterations the iterator will produce.
     unsafe fn gen_iter_bounds_check(&mut self,
-                               ctx: &mut FunctionContext,
+                               ctx: &mut FunctionContext<'_>,
                                iterator: &ParallelForIter,
                                pass_block: LLVMBasicBlockRef,
                                fail_block: LLVMBasicBlockRef) -> WeldResult<LLVMValueRef>;
@@ -65,7 +65,7 @@ pub trait ForLoopGenInternal {
     ///
     /// If the number of iterations is not the same, the module raises an error and exits.
     unsafe fn gen_check_equal(&mut self,
-                              ctx: &mut FunctionContext,
+                              ctx: &mut FunctionContext<'_>,
                               iterations: &Vec<LLVMValueRef>,
                               pass_block: LLVMBasicBlockRef,
                               fail_block: LLVMBasicBlockRef) -> WeldResult<()>;
@@ -73,7 +73,7 @@ pub trait ForLoopGenInternal {
     /// 
     /// `e` must be a pointer, and `i` must be a loaded index argument of type `i64`.
     unsafe fn gen_loop_element(&mut self,
-                                    ctx: &mut FunctionContext, 
+                                    ctx: &mut FunctionContext<'_>, 
                                     i: LLVMValueRef,
                                     e: LLVMValueRef,
                                     parfor: &ParallelForData) -> WeldResult<()>;
@@ -82,7 +82,7 @@ pub trait ForLoopGenInternal {
 impl ForLoopGenInternal for LlvmGenerator {
     /// Entry point to generating a for loop.
     unsafe fn gen_for_internal(&mut self,
-                               ctx: &mut FunctionContext,
+                               ctx: &mut FunctionContext<'_>,
                                output: &Symbol,
                                parfor: &ParallelForData) -> WeldResult<()> {
 
@@ -134,7 +134,7 @@ impl ForLoopGenInternal for LlvmGenerator {
     /// The bounds check code positions the `FunctionContext` builder after all bounds checking is
     /// complete.
     unsafe fn gen_bounds_check(&mut self,
-                               ctx: &mut FunctionContext,
+                               ctx: &mut FunctionContext<'_>,
                                parfor: &ParallelForData) -> WeldResult<LLVMValueRef> {
 
         let mut pass_blocks = vec![];
@@ -348,7 +348,7 @@ impl ForLoopGenInternal for LlvmGenerator {
     }
 
     unsafe fn gen_loop_element(&mut self,
-                                    ctx: &mut FunctionContext,
+                                    ctx: &mut FunctionContext<'_>,
                                     i: LLVMValueRef,
                                     e: LLVMValueRef,
                                     parfor: &ParallelForData) -> WeldResult<()> {
@@ -429,7 +429,7 @@ impl ForLoopGenInternal for LlvmGenerator {
     }
 
     unsafe fn gen_iter_bounds_check(&mut self,
-                               ctx: &mut FunctionContext,
+                               ctx: &mut FunctionContext<'_>,
                                iter: &ParallelForIter,
                                pass_block: LLVMBasicBlockRef,
                                fail_block: LLVMBasicBlockRef) -> WeldResult<LLVMValueRef> {
@@ -521,7 +521,7 @@ impl ForLoopGenInternal for LlvmGenerator {
     }
 
     unsafe fn gen_check_equal(&mut self,
-                              ctx: &mut FunctionContext,
+                              ctx: &mut FunctionContext<'_>,
                               iterations: &Vec<LLVMValueRef>,
                               pass_block: LLVMBasicBlockRef,
                               fail_block: LLVMBasicBlockRef) -> WeldResult<()> {
@@ -529,7 +529,7 @@ impl ForLoopGenInternal for LlvmGenerator {
         let mut passed = self.i1(true);
         if self.conf.enable_bounds_checks {
             for value in iterations.iter().skip(1) {
-                let mut check = LLVMBuildICmp(ctx.builder, LLVMIntEQ, iterations[0], *value, c_str!(""));
+                let check = LLVMBuildICmp(ctx.builder, LLVMIntEQ, iterations[0], *value, c_str!(""));
                 passed = LLVMBuildAnd(ctx.builder, passed, check, c_str!(""));
             }
         }

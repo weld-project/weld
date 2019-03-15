@@ -9,7 +9,7 @@ use crate::error::*;
 
 use crate::util::SymbolGenerator;
 
-extern crate fnv;
+use fnv;
 
 struct MergeSingle<'a> {
     params: &'a Vec<Parameter>,
@@ -69,7 +69,7 @@ struct MapIter<'a> {
 }
 
 impl<'a> MapIter<'a> {
-    fn extract(iter: &'a Iter) -> Option<MapIter> {
+    fn extract(iter: &'a Iter) -> Option<MapIter<'_>> {
         if iter.is_simple() {
             if let Some(rfa) = ResForAppender::extract(&iter.data) {
                 if rfa.iters.iter().all(|ref i| i.is_simple()) {

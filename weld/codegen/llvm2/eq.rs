@@ -1,6 +1,6 @@
 //! Generates code to compare values for equality.
 
-extern crate llvm_sys;
+use llvm_sys;
 
 use std::ffi::CStr;
 

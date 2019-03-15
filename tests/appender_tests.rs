@@ -1,6 +1,6 @@
 //! Tests for the Appender builder.
 
-extern crate weld;
+use weld;
 
 mod common;
 use crate::common::*;

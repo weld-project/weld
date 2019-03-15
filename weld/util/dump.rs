@@ -3,8 +3,8 @@
 //! This module can be used both for writing code for consumption in another program (e.g., writing
 //! LLVM files that can then be passed to Clang) or for debugging.
 
-extern crate uuid;
-extern crate time;
+use uuid;
+use time;
 
 use crate::conf::DumpCodeConfig;
 use crate::error::*;

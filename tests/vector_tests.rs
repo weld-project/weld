@@ -1,6 +1,6 @@
 //! Tests related to the Vector type.
 
-extern crate weld;
+use weld;
 
 mod common;
 use crate::common::*;

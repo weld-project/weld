@@ -8,7 +8,7 @@
 //!
 //! The module additionally encapsulates the builder data structures.
 
-extern crate llvm_sys;
+use llvm_sys;
 
 use crate::ast::*;
 use crate::ast::BuilderKind::*;
@@ -50,13 +50,13 @@ pub trait BuilderExpressionGen {
                            builder_value_pointer: LLVMValueRef,
                            merge_value_pointer: LLVMValueRef) -> WeldResult<()>;
     /// Generates code for the `NewBuilder` statement.
-    unsafe fn gen_new_builder(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()>;
+    unsafe fn gen_new_builder(&mut self, ctx: &mut FunctionContext<'_>, statement: &Statement) -> WeldResult<()>;
     /// Generates code for the `Merge` statement.
-    unsafe fn gen_merge(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()>;
+    unsafe fn gen_merge(&mut self, ctx: &mut FunctionContext<'_>, statement: &Statement) -> WeldResult<()>;
     /// Generates code for the `Result` statement.
-    unsafe fn gen_result(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()>;
+    unsafe fn gen_result(&mut self, ctx: &mut FunctionContext<'_>, statement: &Statement) -> WeldResult<()>;
     /// Generates code for the `ParallelFor` terminator.
-    unsafe fn gen_for(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()>;
+    unsafe fn gen_for(&mut self, ctx: &mut FunctionContext<'_>, statement: &Statement) -> WeldResult<()>;
     /// Generates code to define builder types.
     unsafe fn builder_type(&mut self, builder: &Type) -> WeldResult<LLVMTypeRef>;
 }
@@ -186,7 +186,7 @@ impl BuilderExpressionGen for LlvmGenerator {
         Ok(())
     }
 
-    unsafe fn gen_new_builder(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()> {
+    unsafe fn gen_new_builder(&mut self, ctx: &mut FunctionContext<'_>, statement: &Statement) -> WeldResult<()> {
         let nb = NewBuilderStatement::extract(statement, ctx.sir_function)?;
         let output_pointer = ctx.get_value(nb.output)?;
         match *nb.kind {
@@ -198,7 +198,7 @@ impl BuilderExpressionGen for LlvmGenerator {
                     self.i64(appender::DEFAULT_CAPACITY)
                 };
                 let appender = {
-                    let mut methods = self.appenders.get_mut(nb.kind).unwrap();
+                    let methods = self.appenders.get_mut(nb.kind).unwrap();
                     let run = ctx.get_run();
                     methods.gen_new(ctx.builder, &mut self.intrinsics, run, argument)?
                 };
@@ -209,7 +209,7 @@ impl BuilderExpressionGen for LlvmGenerator {
                 let ref dict_type = Dict(key.clone(), val.clone());
                 let default_capacity = self.i64(dict::INITIAL_CAPACITY);
                 let dictmerger = {
-                    let mut methods = self.dictionaries.get_mut(dict_type).unwrap();
+                    let methods = self.dictionaries.get_mut(dict_type).unwrap();
                     methods.gen_new(ctx.builder, &mut self.intrinsics, default_capacity, ctx.get_run())?
                 };
                 LLVMBuildStore(ctx.builder, dictmerger, output_pointer);
@@ -219,7 +219,7 @@ impl BuilderExpressionGen for LlvmGenerator {
                 let ref dict_type = Dict(key.clone(), Box::new(Vector(val.clone())));
                 let default_capacity = self.i64(dict::INITIAL_CAPACITY);
                 let groupmerger = {
-                    let mut methods = self.dictionaries.get_mut(dict_type).unwrap();
+                    let methods = self.dictionaries.get_mut(dict_type).unwrap();
                     methods.gen_new(ctx.builder, &mut self.intrinsics, default_capacity, ctx.get_run())?
                 };
                 LLVMBuildStore(ctx.builder, groupmerger, output_pointer);
@@ -230,11 +230,11 @@ impl BuilderExpressionGen for LlvmGenerator {
                 let argument = if let Some(arg) = nb.arg {
                     self.load(ctx.builder, ctx.get_value(arg)?)?
                 } else {
-                    let mut methods = self.mergers.get_mut(nb.kind).unwrap();
+                    let methods = self.mergers.get_mut(nb.kind).unwrap();
                     methods.binop_identity(methods.op, methods.scalar_kind)?
                 };
                 let merger = {
-                    let mut methods = self.mergers.get_mut(nb.kind).unwrap();
+                    let methods = self.mergers.get_mut(nb.kind).unwrap();
                     methods.gen_new(ctx.builder, argument)?
                 };
                 LLVMBuildStore(ctx.builder, merger, output_pointer);
@@ -252,13 +252,13 @@ impl BuilderExpressionGen for LlvmGenerator {
         }
     }
 
-    unsafe fn gen_merge(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()> {
+    unsafe fn gen_merge(&mut self, ctx: &mut FunctionContext<'_>, statement: &Statement) -> WeldResult<()> {
         let m = MergeStatement::extract(statement, ctx.sir_function)?;
         let builder_pointer = ctx.get_value(m.builder)?;
         match *m.kind {
             Appender(_) => {
                 let merge_value = self.load(ctx.builder, ctx.get_value(m.value)?)?;
-                let mut methods = self.appenders.get_mut(m.kind).unwrap();
+                let methods = self.appenders.get_mut(m.kind).unwrap();
                 let _ = methods.gen_merge(ctx.builder, &mut self.intrinsics, ctx.get_run(), builder_pointer, merge_value)?;
                 Ok(())
             }
@@ -308,7 +308,7 @@ impl BuilderExpressionGen for LlvmGenerator {
 
                 let ref dict_type = Dict(key.clone(), val.clone());
                 let slot_value_pointer = {
-                    let mut methods = self.dictionaries.get_mut(dict_type).unwrap();
+                    let methods = self.dictionaries.get_mut(dict_type).unwrap();
                     let slot = methods.gen_upsert(ctx.builder,
                                        &mut self.intrinsics,
                                        builder_loaded,
@@ -337,7 +337,7 @@ impl BuilderExpressionGen for LlvmGenerator {
                 let builder_loaded = self.load(ctx.builder, builder_pointer)?;
 
                 let ref dict_type = Dict(key.clone(), Box::new(Vector(value.clone())));
-                let mut methods = self.dictionaries.get_mut(dict_type).unwrap();
+                let methods = self.dictionaries.get_mut(dict_type).unwrap();
                 let _ = methods.gen_merge_grouped(ctx.builder,
                                           &mut self.intrinsics,
                                           self.vectors.get_mut(value).unwrap(),
@@ -350,7 +350,7 @@ impl BuilderExpressionGen for LlvmGenerator {
             }
             Merger(_, _) => {
                 let merge_value = self.load(ctx.builder, ctx.get_value(m.value)?)?;
-                let mut methods = self.mergers.get_mut(m.kind).unwrap();
+                let methods = self.mergers.get_mut(m.kind).unwrap();
                 let _ = methods.gen_merge(ctx.builder, builder_pointer, merge_value)?;
                 Ok(())
             }
@@ -381,7 +381,7 @@ impl BuilderExpressionGen for LlvmGenerator {
         }
     }
 
-    unsafe fn gen_result(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()> {
+    unsafe fn gen_result(&mut self, ctx: &mut FunctionContext<'_>, statement: &Statement) -> WeldResult<()> {
         let m = ResStatement::extract(statement, ctx.sir_function)?;
         let output_pointer = ctx.get_value(m.output)?;
         let builder_pointer = ctx.get_value(m.builder)?;
@@ -390,7 +390,7 @@ impl BuilderExpressionGen for LlvmGenerator {
                 let ref vector = Vector(elem_type.clone());
                 let vector_type = self.llvm_type(vector)?;
                 let result = {
-                    let mut methods = self.appenders.get_mut(m.kind).unwrap();
+                    let methods = self.appenders.get_mut(m.kind).unwrap();
                     methods.gen_result(ctx.builder, vector_type, builder_pointer)?
                 };
                 LLVMBuildStore(ctx.builder, result, output_pointer);
@@ -405,7 +405,7 @@ impl BuilderExpressionGen for LlvmGenerator {
             }
             Merger(_, _) => {
                 let result = {
-                    let mut methods = self.mergers.get_mut(m.kind).unwrap();
+                    let methods = self.mergers.get_mut(m.kind).unwrap();
                     methods.gen_result(ctx.builder, builder_pointer)?
                 };
                 LLVMBuildStore(ctx.builder, result, output_pointer);
@@ -421,7 +421,7 @@ impl BuilderExpressionGen for LlvmGenerator {
     }
 
     unsafe fn gen_for(&mut self,
-                      ctx: &mut FunctionContext,
+                      ctx: &mut FunctionContext<'_>,
                       statement: &Statement) -> WeldResult<()> {
         use self::for_loop::ForLoopGenInternal;
         if statement.output.is_none() {

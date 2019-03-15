@@ -11,7 +11,7 @@
 //! module will provide the shared Weld optimization and SIR conversion logic that currently lives in the
 //! `llvm` module.
 
-extern crate time;
+
 
 use crate::ast::*;
 use crate::conf::ParsedConf;
@@ -76,7 +76,7 @@ impl CompiledModule {
 }
 
 impl fmt::Debug for CompiledModule {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "CompiledModule")
     }
 }

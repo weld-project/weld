@@ -1,6 +1,6 @@
 //! Compare expression trees ignoring Symbol values.
 
-extern crate fnv;
+use fnv;
 
 use super::ast::*;
 use crate::error::*;

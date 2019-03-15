@@ -6,7 +6,7 @@
 //! than cloning the AST and then checking if the tree was mutated using
 //! `compare_ignoring_symbols`.
 
-extern crate fnv;
+use fnv;
 
 use super::ast::*;
 use super::ast::ExprKind::*;
@@ -41,7 +41,7 @@ struct ExprHash {
 }
 
 impl fmt::Debug for ExprHash {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "ExprHash({})", self.hasher.finish())
     }
 }

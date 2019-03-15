@@ -16,7 +16,7 @@ use std::collections::BTreeMap;
 use crate::error::*;
 use crate::sir::*;
 
-extern crate fnv;
+use fnv;
 
 /// Evaluates a binary operation over two literals, returning a new literal.
 // TODO(shoumik): Maybe we should just implement this as a method or as traits (e.g., Add, Sub,

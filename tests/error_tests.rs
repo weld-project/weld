@@ -1,7 +1,7 @@
 //! Tests for runtime errors that Weld can throw.
 
-extern crate libc;
-extern crate weld;
+
+use weld;
 
 use weld::runtime::WeldRuntimeErrno;
 

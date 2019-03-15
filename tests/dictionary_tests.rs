@@ -1,8 +1,8 @@
 //! Tests that use dictionaries. This includes the DictMerger and GroupBuilder
 //! builder types, as well as operations on read-only dictionaries (e.g., lookups).
 
-extern crate fnv;
-extern crate weld;
+use fnv;
+use weld;
 
 use std::collections::hash_map::Entry;
 
@@ -244,7 +244,7 @@ fn dictmerger_repeated_keys() {
             Entry::Occupied(mut ent) => {
                 *ent.get_mut() += i as i32;
             }
-            Entry::Vacant(mut ent) => {
+            Entry::Vacant(ent) => {
                 ent.insert(i as i32);
             }
         }

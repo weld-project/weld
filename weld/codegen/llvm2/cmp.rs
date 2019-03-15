@@ -1,6 +1,6 @@
 //! Generates code to compare values using a comparison function.
 
-extern crate llvm_sys;
+use llvm_sys;
 
 use std::ffi::CStr;
 
@@ -145,7 +145,7 @@ impl GenCmp for LlvmGenerator {
                 LLVMBuildRet(builder, result);
             }
             Struct(ref elems) => { // recursively apply cmp to elements
-                let mut result = self.i32(0);
+                let result = self.i32(0);
                 for (i, elem) in elems.iter().enumerate() {
                     let func = self.gen_cmp_fn(elem)?;
                     let next_block = LLVMAppendBasicBlockInContext(self.context, function, c_str!(""));

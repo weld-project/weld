@@ -1,6 +1,6 @@
 //! Code generation for the merger builder type.
 
-extern crate llvm_sys;
+use llvm_sys;
 
 use std::ffi::CString;
 

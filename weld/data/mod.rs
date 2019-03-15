@@ -19,7 +19,7 @@
 //! builder definitions here should be used as _opaque sized types_ rather than as structs whose
 //! fields can be accessed.
 
-extern crate libc;
+
 
 use std::convert::AsRef;
 use std::marker::PhantomData;
@@ -90,7 +90,7 @@ impl<T> fmt::Display for WeldVec<T>
 where
     T: fmt::Display + Clone,
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "[ ")?;
         for i in 0..self.len {
             let v = unsafe { (*self.data.offset(i as isize)).clone() };

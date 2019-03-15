@@ -5,7 +5,7 @@
 //! CRC32 using Intel's SSE 4.2 CRC32 intrinsics. Eventually, the module is slated to use a Weld
 //! configuration to choose among a collection of hash functions.
 
-extern crate llvm_sys;
+use llvm_sys;
 
 use std::ffi::CStr;
 

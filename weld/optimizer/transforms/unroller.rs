@@ -43,7 +43,7 @@ impl LoopSizeAnnotation for Expr {
 
 impl<'a> UnrollPattern<'a> {
     /// Extracts a `UnrollPattern` from the expression, or returns `None`.
-    fn extract(expr: &'a Expr) -> Option<UnrollPattern> {
+    fn extract(expr: &'a Expr) -> Option<UnrollPattern<'_>> {
         if let Res { ref builder } = expr.kind {
             if let Some(loopsize) = builder.loopsize() {
                 if loopsize <= UNROLL_LIMIT {

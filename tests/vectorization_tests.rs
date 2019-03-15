@@ -1,6 +1,6 @@
 //! Tests related to Weld's SIMD vectorizer transformation.
 
-extern crate weld;
+use weld;
 use weld::WeldValue;
 
 mod common;

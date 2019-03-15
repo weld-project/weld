@@ -2,7 +2,7 @@
 //!
 //! These tests reuse builders across Weld programs by reusing contexts.
 
-extern crate weld;
+use weld;
 
 use weld::*;
 use weld::data::*;

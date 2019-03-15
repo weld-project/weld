@@ -8,7 +8,7 @@
 //! tuple (pointer, size). Other modules may use knowledge of this layout to, e.g., provide vector
 //! operators over pointers (the methods here are over loaded structs).
 
-extern crate llvm_sys;
+use llvm_sys;
 
 use std::ffi::CString;
 
@@ -75,7 +75,7 @@ impl VectorExt for LlvmGenerator {
                size: LLVMValueRef,
                run: LLVMValueRef) -> WeldResult<LLVMValueRef> {
         if let Type::Vector(ref elem_type) = *vector_type {
-            let mut methods = self.vectors.get_mut(elem_type).unwrap();
+            let methods = self.vectors.get_mut(elem_type).unwrap();
             methods.gen_new(builder, &mut self.intrinsics, run, size)
         } else {
             unreachable!()
@@ -88,7 +88,7 @@ impl VectorExt for LlvmGenerator {
               vector: LLVMValueRef,
               run: LLVMValueRef) -> WeldResult<LLVMValueRef> {
         if let Type::Vector(ref elem_type) = *vector_type {
-            let mut methods = self.vectors.get_mut(elem_type).unwrap();
+            let methods = self.vectors.get_mut(elem_type).unwrap();
             methods.gen_clone(builder, &mut self.intrinsics, vector, run)
         } else {
             unreachable!()
@@ -101,7 +101,7 @@ impl VectorExt for LlvmGenerator {
               vector: LLVMValueRef,
               index: LLVMValueRef) -> WeldResult<LLVMValueRef> {
         if let Type::Vector(ref elem_type) = *vector_type {
-            let mut methods = self.vectors.get_mut(elem_type).unwrap();
+            let methods = self.vectors.get_mut(elem_type).unwrap();
             methods.gen_at(builder, vector, index)
         } else {
             unreachable!()
@@ -114,7 +114,7 @@ impl VectorExt for LlvmGenerator {
                vector: LLVMValueRef,
                index: LLVMValueRef) -> WeldResult<LLVMValueRef> {
         if let Type::Vector(ref elem_type) = *vector_type {
-            let mut methods = self.vectors.get_mut(elem_type).unwrap();
+            let methods = self.vectors.get_mut(elem_type).unwrap();
             methods.gen_vat(builder, vector, index)
         } else {
             unreachable!()
@@ -126,7 +126,7 @@ impl VectorExt for LlvmGenerator {
                 vector_type: &Type,
                 vector: LLVMValueRef) -> WeldResult<LLVMValueRef> {
         if let Type::Vector(ref elem_type) = *vector_type {
-            let mut methods = self.vectors.get_mut(elem_type).unwrap();
+            let methods = self.vectors.get_mut(elem_type).unwrap();
             methods.gen_size(builder, vector)
         } else {
             unreachable!()
@@ -140,7 +140,7 @@ impl VectorExt for LlvmGenerator {
                 size: LLVMValueRef,
                 run: LLVMValueRef) -> WeldResult<LLVMValueRef> {
         if let Type::Vector(ref elem_type) = *vector_type {
-            let mut methods = self.vectors.get_mut(elem_type).unwrap();
+            let methods = self.vectors.get_mut(elem_type).unwrap();
             methods.gen_extend(builder, &mut self.intrinsics, run, vec, size)
         } else {
             unreachable!()

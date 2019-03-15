@@ -1,6 +1,6 @@
 //! Tests for the various For loop iterators.
 
-extern crate weld;
+use weld;
 
 mod common;
 use crate::common::*;

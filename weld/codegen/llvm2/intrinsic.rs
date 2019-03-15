@@ -6,9 +6,9 @@
 //!
 //! For documentation on the default intrinsics, see `weld::runtime::strt`.
 
-extern crate libc;
-extern crate llvm_sys;
-extern crate fnv;
+use libc;
+use llvm_sys;
+use fnv;
 
 use fnv::FnvHashMap;
 

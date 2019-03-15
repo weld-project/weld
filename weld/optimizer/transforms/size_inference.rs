@@ -94,7 +94,7 @@ pub fn infer_size(expr: &mut Expr) {
                                 }
                             }
                             assert_ne!(i, iters.len());
-                            let mut e = binop_expr(BinOpKind::Subtract, *iters[i].end.as_ref().unwrap().clone(),
+                            let e = binop_expr(BinOpKind::Subtract, *iters[i].end.as_ref().unwrap().clone(),
                                                    *iters[i].start.as_ref().unwrap().clone());
                             let length = binop_expr(BinOpKind::Divide, e.unwrap(), *iters[i].stride.as_ref().unwrap().clone());
                             (length.unwrap(), None)

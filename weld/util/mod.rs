@@ -4,9 +4,9 @@
 //! and ID generators and a module for measuring compile-time performance of various aspects of the
 //! compiler.
 
-extern crate libc;
-extern crate fnv;
-extern crate time;
+
+use fnv;
+
 
 use crate::ast::*;
 use crate::ast::ExprKind::*;

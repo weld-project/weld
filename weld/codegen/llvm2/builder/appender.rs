@@ -5,7 +5,7 @@
 //! is that an appender has a third capacity field (in addition to the vector's data pointer and
 //! size). The appender also contains methods for dynamic resizing.
 
-extern crate llvm_sys;
+use llvm_sys;
 
 use std::ffi::CString;
 

@@ -1,6 +1,6 @@
 //! Utility struct for measuring compilation time.
 
-extern crate time;
+use time;
 
 use self::time::Duration;
 
