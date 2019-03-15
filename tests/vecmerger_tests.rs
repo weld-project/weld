@@ -1,7 +1,5 @@
 //! Tests for the VecMerger builder type.
 
-use weld;
-
 use std::cmp;
 
 mod common;

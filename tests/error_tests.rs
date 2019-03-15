@@ -1,8 +1,5 @@
 //! Tests for runtime errors that Weld can throw.
 
-
-use weld;
-
 use weld::runtime::WeldRuntimeErrno;
 
 mod common;

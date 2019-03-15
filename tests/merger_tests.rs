@@ -1,7 +1,5 @@
 //! Tests for the Merger builder type.
 
-use weld;
-
 mod common;
 use crate::common::*;
 

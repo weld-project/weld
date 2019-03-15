@@ -2,7 +2,6 @@
 //! builder types, as well as operations on read-only dictionaries (e.g., lookups).
 
 use fnv;
-use weld;
 
 use std::collections::hash_map::Entry;
 

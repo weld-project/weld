@@ -1,7 +1,5 @@
 //! Tests which exercise various aspects of the `For` loop.
 
-use weld;
-
 mod common;
 use crate::common::*;
 
