@@ -156,7 +156,7 @@ macro_rules! weld_err {
 /// A build ID.
 ///
 /// If Weld was compiled in a non-standard manner (i.e., without Cargo), this will be unknown.
-pub const BUILD: &'static str = "hi";//env!("BUILD_ID");
+pub const BUILD: &'static str = env!("BUILD_ID");
 
 /// Weld version.
 ///
