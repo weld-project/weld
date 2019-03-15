@@ -1,6 +1,5 @@
 //! Various tests for the different expressions in Weld.
 
-use weld;
 
 mod common;
 use crate::common::*;
@@ -15,26 +14,6 @@ fn basic_program() {
     let data = ret_value.data() as *const i32;
     let result = unsafe { *data };
     assert_eq!(result, 42);
-}
-
-// #[test]
-fn basic_string() {
-    // XXX This test is segfaulting for some reason with a regular string...
-    let code = r#"|| "hello""#;
-    let ref conf = default_conf();
-    let ref input_data = 0;
-
-    let ret_value = compile_and_run(code, conf, input_data);
-    let data = ret_value.data() as *const WeldVec<i8>;
-    let result = unsafe { (*data).clone() };
-    // The string as a vector includes a terminating null byte.
-    assert_eq!(result.len, 6);
-
-    unsafe {
-        use std::ffi::CStr;
-        let cstr = CStr::from_ptr(result.data).to_str().unwrap();
-        assert_eq!(cstr, "hello");
-    }
 }
 
 #[test]

@@ -1,6 +1,5 @@
 //! Tests for binary comparisons.
 
-use weld;
 
 mod common;
 use crate::common::*;

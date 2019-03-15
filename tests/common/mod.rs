@@ -2,9 +2,6 @@
 #![allow(dead_code)]
 
 
-use weld;
-
-
 use weld::*;
 use std::fmt;
 
