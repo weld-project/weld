@@ -126,7 +126,7 @@ pub fn process_macros(expr: &Expr,
 
     let mut expr = expr.clone();
     for _ in 1..MAX_MACRO_DEPTH {
-        if !r#try!(apply_macros(&mut expr, &macro_map, &mut sym_gen)) {
+        if !apply_macros(&mut expr, &macro_map, &mut sym_gen)? {
             return Ok(expr);
         }
     }
@@ -163,7 +163,7 @@ fn apply_macros(expr: &mut Expr,
         changed = true;
     }
     for c in expr.children_mut() {
-        changed |= r#try!(apply_macros(c, macros, sym_gen));
+        changed |= apply_macros(c, macros, sym_gen)?;
     }
     Ok(changed)
 }

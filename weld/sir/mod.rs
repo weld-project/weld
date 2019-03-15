@@ -1366,16 +1366,16 @@ fn gen_expr(expr: &Expr,
                     prog.funcs[body_func]
                         .params
                         .insert(data_res.2.clone(), iter.data.ty.clone());
-                    let start_sym = r#try!(get_iter_sym(&iter.start, prog, &mut cur_func, &mut cur_block,
-                                                      tracker, body_func));
-                    let end_sym = r#try!(get_iter_sym(&iter.end, prog, &mut cur_func, &mut cur_block,
-                                                    tracker, body_func));
-                    let stride_sym = r#try!(get_iter_sym(&iter.stride, prog, &mut cur_func, &mut cur_block,
-                                                       tracker, body_func));
-                    let shape_sym = r#try!(get_iter_sym(&iter.shape, prog, &mut cur_func, &mut cur_block,
-                                                       tracker, body_func));
-                    let strides_sym = r#try!(get_iter_sym(&iter.strides, prog, &mut cur_func, &mut cur_block,
-                                                        tracker, body_func));
+                    let start_sym = get_iter_sym(&iter.start, prog, &mut cur_func, &mut cur_block,
+                                                      tracker, body_func)?;
+                    let end_sym = get_iter_sym(&iter.end, prog, &mut cur_func, &mut cur_block,
+                                                    tracker, body_func)?;
+                    let stride_sym = get_iter_sym(&iter.stride, prog, &mut cur_func, &mut cur_block,
+                                                       tracker, body_func)?;
+                    let shape_sym = get_iter_sym(&iter.shape, prog, &mut cur_func, &mut cur_block,
+                                                       tracker, body_func)?;
+                    let strides_sym = get_iter_sym(&iter.strides, prog, &mut cur_func, &mut cur_block,
+                                                        tracker, body_func)?;
                     pf_iters.push(ParallelForIter {
                                       data: data_res.2,
                                       start: start_sym,
