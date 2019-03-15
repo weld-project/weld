@@ -11,7 +11,7 @@ use std::ptr;
 use std::ffi::CStr;
 
 // Re-export the FFI for the runtime.
-pub use runtime::ffi::*;
+pub use crate::runtime::ffi::*;
 
 /// An opauqe handle to a Weld configuration.
 pub type WeldConfRef = *mut WeldConf;

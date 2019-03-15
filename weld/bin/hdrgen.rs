@@ -94,7 +94,7 @@ impl CppHeaderGenerator {
 
     /// Generates a single type in returns its name.
     fn generate_type(&mut self, ty: &Type) -> WeldResult<String> {
-        use ast::Type::*;
+        use crate::ast::Type::*;
         if let Some(name) = self.generated_types.get(ty) {
             return Ok(name.to_string());
         }

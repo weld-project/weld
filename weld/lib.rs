@@ -179,19 +179,19 @@ pub mod ffi;
 pub mod runtime;
 pub mod data;
 
-pub use conf::constants::*;
+pub use crate::conf::constants::*;
 
 // Tests.
 #[cfg(test)]
 mod tests;
 
-use conf::ParsedConf;
-use runtime::WeldRuntimeContext;
-use util::dump::{DumpCodeFormat, write_code};
-use util::stats::CompilationStats;
+use crate::conf::ParsedConf;
+use crate::runtime::WeldRuntimeContext;
+use crate::util::dump::{DumpCodeFormat, write_code};
+use crate::util::stats::CompilationStats;
 
 // Error codes are exposed publicly.
-pub use runtime::WeldRuntimeErrno;
+pub use crate::runtime::WeldRuntimeErrno;
 
 /// A wrapper for a C pointer.
 pub type Data = *const libc::c_void;
@@ -692,7 +692,7 @@ impl WeldModule {
         // If enabled, apply SIR optimizations.
         let start = PreciseTime::now();
         if conf.enable_sir_opt {
-            use sir::optimizations;
+            use crate::sir::optimizations;
             info!("Applying SIR optimizations");
             optimizations::fold_constants::fold_constants(&mut sir_prog)?;
         }
@@ -925,8 +925,8 @@ pub fn load_linked_library<S: AsRef<str>>(filename: S) -> WeldResult<()> {
 /// This function is ignored if it has already been called once, or if some other code in the
 /// process has initialized logging using Rust's `log` crate.
 pub fn set_log_level(level: WeldLogLevel) {
-    use util::colors::*;
-    use util::colors::Color::*;
+    use crate::util::colors::*;
+    use crate::util::colors::Color::*;
 
     let filter: log::LogLevelFilter = level.into();
     let format = |rec: &log::LogRecord| {

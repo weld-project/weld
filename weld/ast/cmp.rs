@@ -3,10 +3,10 @@
 extern crate fnv;
 
 use super::ast::*;
-use error::*;
+use crate::error::*;
 
 #[cfg(test)]
-use tests::*;
+use crate::tests::*;
 
 /// A trait for symbol-agnostic tree comparison.
 pub trait CompareIgnoringSymbols {

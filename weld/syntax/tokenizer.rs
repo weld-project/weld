@@ -12,7 +12,7 @@ use std::vec::Vec;
 
 use regex::Regex;
 
-use error::*;
+use crate::error::*;
 
 #[derive(Clone,Debug,PartialEq)]
 pub enum Token {
@@ -308,29 +308,29 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
         } else if IDENT_RE.is_match(text) {
             tokens.push(TIdent(text.to_string()));
         } else if I8_BASE_10_RE.is_match(text) {
-            tokens.push(try!(parse_i8_literal(text, 10)))
+            tokens.push(r#try!(parse_i8_literal(text, 10)))
         } else if I8_BASE_2_RE.is_match(text) {
-            tokens.push(try!(parse_i8_literal(text, 2)))
+            tokens.push(r#try!(parse_i8_literal(text, 2)))
         } else if I8_BASE_16_RE.is_match(text) {
-            tokens.push(try!(parse_i8_literal(text, 16)))
+            tokens.push(r#try!(parse_i8_literal(text, 16)))
         } else if I16_BASE_10_RE.is_match(text) {
-            tokens.push(try!(parse_i16_literal(text, 10)))
+            tokens.push(r#try!(parse_i16_literal(text, 10)))
         } else if I16_BASE_2_RE.is_match(text) {
-            tokens.push(try!(parse_i16_literal(text, 2)))
+            tokens.push(r#try!(parse_i16_literal(text, 2)))
         } else if I16_BASE_16_RE.is_match(text) {
-            tokens.push(try!(parse_i16_literal(text, 16)))
+            tokens.push(r#try!(parse_i16_literal(text, 16)))
         } else if I32_BASE_10_RE.is_match(text) {
-            tokens.push(try!(parse_i32_literal(text, 10)))
+            tokens.push(r#try!(parse_i32_literal(text, 10)))
         } else if I32_BASE_2_RE.is_match(text) {
-            tokens.push(try!(parse_i32_literal(text, 2)))
+            tokens.push(r#try!(parse_i32_literal(text, 2)))
         } else if I32_BASE_16_RE.is_match(text) {
-            tokens.push(try!(parse_i32_literal(text, 16)))
+            tokens.push(r#try!(parse_i32_literal(text, 16)))
         } else if I64_BASE_10_RE.is_match(text) {
-            tokens.push(try!(parse_i64_literal(text, 10)))
+            tokens.push(r#try!(parse_i64_literal(text, 10)))
         } else if I64_BASE_2_RE.is_match(text) {
-            tokens.push(try!(parse_i64_literal(text, 2)))
+            tokens.push(r#try!(parse_i64_literal(text, 2)))
         } else if I64_BASE_16_RE.is_match(text) {
-            tokens.push(try!(parse_i64_literal(text, 16)))
+            tokens.push(r#try!(parse_i64_literal(text, 16)))
         } else if F32_RE.is_match(text) {
             match f32::from_str(&text[..text.len() - 1]) {
                 Ok(value) => tokens.push(Token::TF32Literal(value)),

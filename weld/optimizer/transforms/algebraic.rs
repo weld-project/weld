@@ -1,11 +1,11 @@
 
 extern crate num_integer;
 
-use ast::ExprKind::*;
-use ast::LiteralKind::*;
-use ast::Type::*;
-use ast::*;
-use ast::constructors::*;
+use crate::ast::ExprKind::*;
+use crate::ast::LiteralKind::*;
+use crate::ast::Type::*;
+use crate::ast::*;
+use crate::ast::constructors::*;
 
 use self::num_integer::Integer;
 
@@ -26,7 +26,7 @@ fn eliminate_redundant_negation_impl(expr: &mut Expr) -> Option<ExprKind> {
             left: ref mut lhs,
             right: ref mut rhs,
         } => {
-            use ast::BinOpKind::*;
+            use crate::ast::BinOpKind::*;
             match binop_kind {
                 Subtract => {
                     match rhs.as_mut().kind {
@@ -168,7 +168,7 @@ fn eliminate_redundant_negation_impl(expr: &mut Expr) -> Option<ExprKind> {
                     left: ref mut lhs,
                     right: ref mut rhs,
                 } => {
-                    use ast::BinOpKind::*;
+                    use crate::ast::BinOpKind::*;
                     match binop_kind {
                         LogicalAnd | LogicalOr => {
                             /*
@@ -235,7 +235,7 @@ fn shift_work_to_constants_impl(expr: &mut Expr) -> Option<ExprKind> {
                             right: ref mut inner_rhs,
                         } => {
                             use self::ExprCmp::*;
-                            use ast::BinOpKind::*;
+                            use crate::ast::BinOpKind::*;
                             let should_isolate = faster_change(inner_lhs, inner_rhs);
                             match (binop_kind, inner_binop_kind, should_isolate) {
                                 (Add, Add, Left) => Some(
@@ -399,7 +399,7 @@ fn shift_work_to_constants_impl(expr: &mut Expr) -> Option<ExprKind> {
                                     right: inner_expr.take(),
                                 })
                             } else {
-                                use ast::BinOpKind::*;
+                                use crate::ast::BinOpKind::*;
                                 match binop_kind {
                                     Add => {
                                         // x + -y = x - y
@@ -440,7 +440,7 @@ fn shift_work_to_constants_impl(expr: &mut Expr) -> Option<ExprKind> {
                             right: ref mut inner_rhs,
                         } => {
                             use self::ExprCmp::*;
-                            use ast::BinOpKind::*;
+                            use crate::ast::BinOpKind::*;
                             let should_isolate = faster_change(inner_lhs, inner_rhs);
                             match (inner_binop_kind, binop_kind, should_isolate) {
                                 (Add, Add, Left) => Some(right_associate(
@@ -609,7 +609,7 @@ fn shift_work_to_constants_impl(expr: &mut Expr) -> Option<ExprKind> {
                                 };
                                 Some(new)
                             } else {
-                                use ast::BinOpKind::*;
+                                use crate::ast::BinOpKind::*;
                                 match binop_kind {
                                     Add => {
                                         // -x + y = y - x
@@ -696,7 +696,7 @@ fn is_constant(e: &Expr) -> bool {
 fn is_even(e: &Expr) -> bool {
     match e.kind {
         Literal(ref kind) => {
-            use ast::LiteralKind::*;
+            use crate::ast::LiteralKind::*;
             match kind {
                 BoolLiteral(_) => false,
                 I8Literal(n) => n.is_even(),
@@ -725,7 +725,7 @@ fn is_even(e: &Expr) -> bool {
             left: ref l,
             right: ref r,
         } => {
-            use ast::BinOpKind::*;
+            use crate::ast::BinOpKind::*;
             match k {
                 Add | Subtract => is_even(l) && is_even(r), // TODO || (is_odd(l) && is_odd(r))
                 Min | Max => is_even(l) && is_even(r),
@@ -746,7 +746,7 @@ fn is_even(e: &Expr) -> bool {
 }
 
 fn flip_comp(k: &BinOpKind) -> BinOpKind {
-    use ast::BinOpKind::*;
+    use crate::ast::BinOpKind::*;
     match k {
         Equal | NotEqual => k.clone(), // nothing to flip here
         LessThan => GreaterThan,
@@ -758,7 +758,7 @@ fn flip_comp(k: &BinOpKind) -> BinOpKind {
 }
 
 fn flip_logical(k: &BinOpKind) -> BinOpKind {
-    use ast::BinOpKind::*;
+    use crate::ast::BinOpKind::*;
     match k {
         LogicalAnd => LogicalOr,
         LogicalOr => LogicalAnd,
@@ -923,7 +923,7 @@ fn classify(e: &Expr) -> RangeClassification {
             right: ref r,
         } => {
             use self::RangeClassification::*;
-            use ast::BinOpKind::*;
+            use crate::ast::BinOpKind::*;
 
             let lc = classify(l);
             let rc = classify(r);
@@ -998,7 +998,7 @@ fn classify(e: &Expr) -> RangeClassification {
         }
         UnaryOp { kind: ref k, value: ref e } => {
             use self::RangeClassification::*;
-            use ast::UnaryOpKind::*;
+            use crate::ast::UnaryOpKind::*;
             let ec = classify(e);
             match k {
                 Exp => Positive, // e^x > 0

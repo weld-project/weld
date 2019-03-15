@@ -6,7 +6,7 @@ extern crate weld;
 use weld::runtime::WeldRuntimeErrno;
 
 mod common;
-use common::*;
+use crate::common::*;
 
 #[test]
 #[should_panic] // XXX The new runtime throws panics for these currently.

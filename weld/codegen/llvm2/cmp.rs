@@ -4,13 +4,13 @@ extern crate llvm_sys;
 
 use std::ffi::CStr;
 
-use ast::BinOpKind::*;
-use ast::Type;
-use ast::ScalarKind::I64;
-use codegen::llvm2::numeric::gen_binop;
-use codegen::llvm2::SIR_FUNC_CALL_CONV;
-use error::*;
-use sir::FunctionId;
+use crate::ast::BinOpKind::*;
+use crate::ast::Type;
+use crate::ast::ScalarKind::I64;
+use crate::codegen::llvm2::numeric::gen_binop;
+use crate::codegen::llvm2::SIR_FUNC_CALL_CONV;
+use crate::error::*;
+use crate::sir::FunctionId;
 
 use super::vector;
 use super::vector::VectorExt;
@@ -34,11 +34,11 @@ trait SupportsMemCmp {
 /// Only i8 or smaller values can be compared using `memcmp`.
 impl SupportsMemCmp for Type {
     fn supports_memcmp(&self) -> bool {
-        use ast::Type::*;
+        use crate::ast::Type::*;
         // Structs do not support memcmp because they may be padded.
         match *self {
             Scalar(ref kind) => {
-                use ast::ScalarKind::*;
+                use crate::ast::ScalarKind::*;
                 match *kind {
                     Bool | I8 | U8 | U16 | U32 | U64 => true,
                     _ => false,
@@ -87,7 +87,7 @@ impl GenCmp for LlvmGenerator {
     /// For nested aggregate types (i.e. structs), the comparison function is applied
     /// recursively to the elements.
     unsafe fn gen_cmp_fn(&mut self, ty: &Type) -> WeldResult<LLVMValueRef> {
-        use ast::Type::*;
+        use crate::ast::Type::*;
         let result = self.cmp_fns.get(ty).cloned();
         if let Some(result) = result {
             return Ok(result)

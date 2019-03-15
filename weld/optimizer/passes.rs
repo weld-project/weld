@@ -4,8 +4,8 @@
 
 use std::fmt;
 
-use ast::*;
-use error::*;
+use crate::ast::*;
+use crate::error::*;
 
 use super::transforms::cse;
 use super::transforms::loop_fusion;

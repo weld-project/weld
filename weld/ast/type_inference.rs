@@ -2,14 +2,14 @@
 
 extern crate fnv;
 
-use ast::*;
-use ast::ExprKind::*;
-use ast::Type::*;
-use ast::LiteralKind::*;
-use ast::BuilderKind::*;
-use ast::ScalarKind::*;
+use crate::ast::*;
+use crate::ast::ExprKind::*;
+use crate::ast::Type::*;
+use crate::ast::LiteralKind::*;
+use crate::ast::BuilderKind::*;
+use crate::ast::ScalarKind::*;
 
-use error::*;
+use crate::error::*;
 
 use fnv::FnvHashMap;
 
@@ -245,7 +245,7 @@ fn sync_function(expr: &mut Expr, tys: Vec<&Type>) -> WeldResult<bool> {
 trait InferTypesInternal {
     fn infer_types_internal(&mut self) -> WeldResult<()>;
     fn infer_locally(&mut self, env: &TypeMap) -> WeldResult<bool>;
-    fn infer_up(&mut self, &mut TypeMap) -> WeldResult<bool>;
+    fn infer_up(&mut self, _: &mut TypeMap) -> WeldResult<bool>;
 }
 
 impl InferTypesInternal for Expr {
@@ -921,7 +921,7 @@ impl InferTypesInternal for Expr {
 
 #[test]
 fn infer_types_test() {
-    use tests::*;
+    use crate::tests::*;
     let e = parse_expr("a").unwrap();
     assert_eq!(print_typed_expr_without_indent(&e).as_str(), "a:?");
 

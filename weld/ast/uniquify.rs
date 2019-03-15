@@ -4,14 +4,14 @@
 
 use super::ast::*;
 use super::ast::ExprKind::*;
-use error::*;
+use crate::error::*;
 
 use std::collections::hash_map::Entry;
 
 extern crate fnv;
 
 #[cfg(test)]
-use tests::*;
+use crate::tests::*;
 
 /// A trait that uniquifies symbol names in-place.
 pub trait Uniquify {

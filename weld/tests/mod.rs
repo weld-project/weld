@@ -1,14 +1,14 @@
 //! Utilities used in unit testing.
 
-use ast::Expr;
+use crate::ast::Expr;
 
-pub use syntax::parser::parse_expr;
-pub use ast::CompareIgnoringSymbols;
+pub use crate::syntax::parser::parse_expr;
+pub use crate::ast::CompareIgnoringSymbols;
 
 /// Returns a typed expression.
 #[cfg(test)]
 pub fn typed_expression(s: &str) -> Expr {
-    use ast::InferTypes;
+    use crate::ast::InferTypes;
     let mut expr = parse_expr(s).unwrap();
     expr.infer_types().unwrap();
     expr
@@ -20,7 +20,7 @@ pub fn check_transform(input: &str,
                        expect: &str,
                        transform: fn(&mut Expr)) {
 
-    use ast::{PrettyPrint, PrettyPrintConfig};
+    use crate::ast::{PrettyPrint, PrettyPrintConfig};
 
     let ref conf = PrettyPrintConfig::new()
         .show_types(true);
@@ -40,7 +40,7 @@ pub fn check_transform(input: &str,
 /// Print an un-indented expression for string comparison.
 #[cfg(test)]
 pub fn print_expr_without_indent(e: &Expr) -> String {
-    use ast::{PrettyPrintConfig, PrettyPrint};
+    use crate::ast::{PrettyPrintConfig, PrettyPrint};
     let ref config = PrettyPrintConfig::new()
                             .show_types(false)
                             .should_indent(false);
@@ -50,7 +50,7 @@ pub fn print_expr_without_indent(e: &Expr) -> String {
 /// Print an un-indented expression for string comparison.
 #[cfg(test)]
 pub fn print_typed_expr_without_indent(e: &Expr) -> String {
-    use ast::{PrettyPrintConfig, PrettyPrint};
+    use crate::ast::{PrettyPrintConfig, PrettyPrint};
     let ref config = PrettyPrintConfig::new()
                             .show_types(true)
                             .should_indent(false);

@@ -5,7 +5,7 @@ extern crate weld;
 use std::fmt::Debug;
 
 mod common;
-use common::*;
+use crate::common::*;
 
 /// A helper for serialization tests.
 ///

@@ -139,11 +139,11 @@
 //!
 //! This is our final CSE'd output.
 
-use ast::*;
-use ast::constructors::*;
-use ast::ExprKind::*;
+use crate::ast::*;
+use crate::ast::constructors::*;
+use crate::ast::ExprKind::*;
 
-use util::SymbolGenerator;
+use crate::util::SymbolGenerator;
 use std::collections::{HashMap, HashSet};
 use std::collections::hash_map::Entry;
 
@@ -609,7 +609,7 @@ impl Cse {
 
 #[cfg(test)]
 fn check_cse(input: &str, expect: &str) {
-    use tests::check_transform;
+    use crate::tests::check_transform;
     check_transform(input, expect, common_subexpression_elimination);
 }
 

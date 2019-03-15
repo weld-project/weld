@@ -61,10 +61,10 @@ use std::ffi::{CStr, CString};
 use fnv::FnvHashMap;
 use libc::{c_char, c_double, c_uint, c_ulonglong};
 
-use conf::ParsedConf;
-use error::*;
-use sir::*;
-use util::stats::CompilationStats;
+use crate::conf::ParsedConf;
+use crate::error::*;
+use crate::sir::*;
+use crate::util::stats::CompilationStats;
 
 use self::llvm_sys::prelude::*;
 use self::llvm_sys::core::*;
@@ -136,8 +136,8 @@ pub fn compile(program: &SirProgram,
                conf: &ParsedConf,
                stats: &mut CompilationStats) -> WeldResult<Box<dyn Runnable + Send + Sync>> {
 
-    use runtime;
-    use util::dump::{write_code, DumpCodeFormat};
+    use crate::runtime;
+    use crate::util::dump::{write_code, DumpCodeFormat};
 
     info!("Compiling using single thread runtime");
 
@@ -246,7 +246,7 @@ pub trait HasPointer {
 
 impl HasPointer for Type {
     fn has_pointer(&self) -> bool {
-        use ast::Type::*;
+        use crate::ast::Type::*;
         match *self {
             Scalar(_) => false,
             Simd(_) => false,
@@ -424,7 +424,7 @@ pub trait CodeGenExt {
     ///
     /// This method does not generate any code.
     unsafe fn scalar_literal(&self, kind: &LiteralKind) -> LLVMValueRef {
-        use ast::LiteralKind::*;
+        use crate::ast::LiteralKind::*;
         match *kind {
             BoolLiteral(val) => self.bool(val),
             I8Literal(val) => self.i8(val),
@@ -444,8 +444,8 @@ pub trait CodeGenExt {
 
     /// Returns the identity for a given scalar kind and binary operator.
     unsafe fn binop_identity(&self, op: BinOpKind, kind: ScalarKind) -> WeldResult<LLVMValueRef> {
-        use ast::BinOpKind::*;
-        use ast::ScalarKind::*;
+        use crate::ast::BinOpKind::*;
+        use crate::ast::ScalarKind::*;
         match kind {
             _ if kind.is_integer() => {
                 let ty = LLVMIntTypeInContext(self.context(), kind.bits());
@@ -770,7 +770,7 @@ impl LlvmGenerator {
     /// The entry function takes an `i64` and returns an `i64`. Both represent pointers that
     /// point to a `WeldInputArgs` and `WeldOutputArgs` respectively.
     unsafe fn gen_entry(&mut self, program: &SirProgram) -> WeldResult<()> {
-        use ast::Type::Struct;
+        use crate::ast::Type::Struct;
 
         let input_type = WeldInputArgs::llvm_type(self.context);
         let output_type = WeldOutputArgs::llvm_type(self.context);
@@ -993,8 +993,8 @@ impl LlvmGenerator {
     ///
     /// The code is generated at the position specified by the function context.
     unsafe fn gen_statement(&mut self, context: &mut FunctionContext, statement: &Statement) -> WeldResult<()> {
-        use ast::Type::*;
-        use sir::StatementKind::*;
+        use crate::ast::Type::*;
+        use crate::sir::StatementKind::*;
         let ref output = statement.output.clone().unwrap_or(Symbol::new("unused", 0));
 
         if self.conf.trace_run {
@@ -1395,7 +1395,7 @@ impl LlvmGenerator {
                            CString::new(format!("{}", bb.terminator)).unwrap())?;
         }
 
-        use sir::Terminator::*;
+        use crate::sir::Terminator::*;
         match bb.terminator {
             ProgramReturn(ref sym) => {
                 let value = self.load(context.builder, context.get_value(sym)?)?;
@@ -1432,7 +1432,7 @@ impl LlvmGenerator {
                 }
             }
             Crash => {
-                use runtime::WeldRuntimeErrno;
+                use crate::runtime::WeldRuntimeErrno;
                 let errno = self.i64(WeldRuntimeErrno::Unknown as i64);
                 self.intrinsics.call_weld_run_set_errno(context.builder,
                                                         context.get_run(),
@@ -1449,8 +1449,8 @@ impl LlvmGenerator {
     /// This method may generate auxillary code before returning the type. For example, for complex
     /// data structures, this function may generate a definition for the data structure first.
     unsafe fn llvm_type(&mut self, ty: &Type) -> WeldResult<LLVMTypeRef> {
-        use ast::Type::*;
-        use ast::ScalarKind::*;
+        use crate::ast::Type::*;
+        use crate::ast::ScalarKind::*;
         let result = match *ty {
             Builder(_, _) => {
                 use self::builder::BuilderExpressionGen;

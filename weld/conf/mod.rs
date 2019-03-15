@@ -2,10 +2,10 @@
 
 use super::WeldConf;
 use super::error::WeldResult;
-use optimizer::OPTIMIZATION_PASSES;
-use optimizer::Pass;
+use crate::optimizer::OPTIMIZATION_PASSES;
+use crate::optimizer::Pass;
 
-use util::dump::{unique_filename, DumpCodeFormat};
+use crate::util::dump::{unique_filename, DumpCodeFormat};
 
 use std::collections::HashSet;
 use std::str::FromStr;
@@ -214,7 +214,7 @@ impl ParsedConf {
 
 /// Parses a comma separated list of formats.
 fn parse_dump_code_formats(s: String) -> WeldResult<HashSet<DumpCodeFormat>> {
-    use util::dump::DumpCodeFormat::*;
+    use crate::util::dump::DumpCodeFormat::*;
     s.split(",").map(|s| {
         match s.to_lowercase().as_ref() {
             "weld" => Ok(Weld),

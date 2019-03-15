@@ -4,7 +4,7 @@ extern crate weld;
 use weld::WeldValue;
 
 mod common;
-use common::*;
+use crate::common::*;
 
 #[test]
 fn simple_for_vectorizable_loop() {

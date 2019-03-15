@@ -3,10 +3,10 @@
 //! This module prints Weld expressions. The printed expression is a valid Weld program and can be
 //! re-parsed using the Weld API.
 
-use ast::*;
-use ast::ExprKind::*;
+use crate::ast::*;
+use crate::ast::ExprKind::*;
 
-use util::join;
+use crate::util::join;
 
 /// The number of spaces used when indenting code.
 const INDENT_LEVEL: i32 = 2;

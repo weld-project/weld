@@ -3,7 +3,7 @@
 extern crate weld;
 
 mod common;
-use common::*;
+use crate::common::*;
 
 #[test]
 fn basic_program() {

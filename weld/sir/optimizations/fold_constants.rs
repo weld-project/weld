@@ -13,8 +13,8 @@
 
 use std::collections::BTreeMap;
 
-use error::*;
-use sir::*;
+use crate::error::*;
+use crate::sir::*;
 
 extern crate fnv;
 
@@ -22,8 +22,8 @@ extern crate fnv;
 // TODO(shoumik): Maybe we should just implement this as a method or as traits (e.g., Add, Sub,
 // etc.) on LiteralKind? Not every literal implements every binop, however...
 fn evaluate_binop(kind: BinOpKind, left: LiteralKind, right: LiteralKind) -> WeldResult<LiteralKind> {
-    use ast::LiteralKind::*;
-    use ast::BinOpKind::*;
+    use crate::ast::LiteralKind::*;
+    use crate::ast::BinOpKind::*;
     let result = match kind {
         // Just support the basics for now.
         Add => {
@@ -109,7 +109,7 @@ pub fn fold_constants(prog: &mut SirProgram) -> WeldResult<()> {
 }
 
 fn fold_constants_in_function(func: &mut SirFunction, global_params: &fnv::FnvHashSet<Symbol>) -> WeldResult<()> {
-    use sir::StatementKind::*;
+    use crate::sir::StatementKind::*;
     let mut assignment_counts: fnv::FnvHashMap<Symbol, i32> = fnv::FnvHashMap::default();
     for block in func.blocks.iter_mut() {
         for statement in block.statements.iter_mut() {

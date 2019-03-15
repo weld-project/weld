@@ -10,7 +10,7 @@ use std::str;
 
 use fnv::FnvHashSet;
 
-use error::*;
+use crate::error::*;
 
 /// X86-specific feature list.
 #[derive(Debug,Copy,Clone,Hash,PartialEq,Eq)]

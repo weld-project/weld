@@ -11,20 +11,20 @@ extern crate llvm_sys;
 
 use std::ffi::CString;
 
-use ast::*;
-use ast::IterKind::*;
-use error::*;
-use runtime::WeldRuntimeErrno;
-use sir::*;
+use crate::ast::*;
+use crate::ast::IterKind::*;
+use crate::error::*;
+use crate::runtime::WeldRuntimeErrno;
+use crate::sir::*;
 
 use self::llvm_sys::{LLVMIntPredicate, LLVMLinkage};
 use self::llvm_sys::prelude::*;
 use self::llvm_sys::core::*;
 
-use codegen::llvm2::llvm_exts::*;
-use codegen::llvm2::llvm_exts::LLVMExtAttribute::*;
-use codegen::llvm2::vector::VectorExt;
-use codegen::llvm2::{SIR_FUNC_CALL_CONV, LLVM_VECTOR_WIDTH};
+use crate::codegen::llvm2::llvm_exts::*;
+use crate::codegen::llvm2::llvm_exts::LLVMExtAttribute::*;
+use crate::codegen::llvm2::vector::VectorExt;
+use crate::codegen::llvm2::{SIR_FUNC_CALL_CONV, LLVM_VECTOR_WIDTH};
 
 use super::{CodeGenExt, FunctionContext, LlvmGenerator};
 

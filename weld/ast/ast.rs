@@ -1,7 +1,7 @@
 //! Defines the Weld abstract syntax tree.
 
-use error::*;
-use util;
+use crate::error::*;
+use crate::util;
 
 use self::ExprKind::*;
 use self::ScalarKind::*;

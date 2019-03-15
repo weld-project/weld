@@ -8,15 +8,15 @@
 use std::collections::HashMap;
 use std::vec::Vec;
 
-use ast::*;
-use ast::ExprKind::*;
+use crate::ast::*;
+use crate::ast::ExprKind::*;
 use super::parser::*;
 use super::program::*;
-use error::*;
-use util::SymbolGenerator;
+use crate::error::*;
+use crate::util::SymbolGenerator;
 
 #[cfg(test)]
-use tests::print_expr_without_indent;
+use crate::tests::print_expr_without_indent;
 
 const MAX_MACRO_DEPTH: i32 = 30;
 
@@ -126,7 +126,7 @@ pub fn process_macros(expr: &Expr,
 
     let mut expr = expr.clone();
     for _ in 1..MAX_MACRO_DEPTH {
-        if !try!(apply_macros(&mut expr, &macro_map, &mut sym_gen)) {
+        if !r#try!(apply_macros(&mut expr, &macro_map, &mut sym_gen)) {
             return Ok(expr);
         }
     }
@@ -163,7 +163,7 @@ fn apply_macros(expr: &mut Expr,
         changed = true;
     }
     for c in expr.children_mut() {
-        changed |= try!(apply_macros(c, macros, sym_gen));
+        changed |= r#try!(apply_macros(c, macros, sym_gen));
     }
     Ok(changed)
 }

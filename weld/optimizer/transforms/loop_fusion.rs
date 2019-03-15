@@ -1,20 +1,20 @@
 //! Transforms which fuse loops to reduce memory movement and prevent unncessary
 //! traversals of data.
 
-use ast::*;
-use ast::ExprKind::*;
-use ast::Type::*;
-use ast::BuilderKind::*;
-use ast::LiteralKind::*;
-use error::*;
-use ast::constructors;
+use crate::ast::*;
+use crate::ast::ExprKind::*;
+use crate::ast::Type::*;
+use crate::ast::BuilderKind::*;
+use crate::ast::LiteralKind::*;
+use crate::error::*;
+use crate::ast::constructors;
 
 use super::inliner::inline_apply;
 
-use util::SymbolGenerator;
+use crate::util::SymbolGenerator;
 
 #[cfg(test)]
-use tests::*;
+use crate::tests::*;
 
 /// Fuses for loops over the same vector in a zip into a single for loop which produces a vector of
 /// structs directly.

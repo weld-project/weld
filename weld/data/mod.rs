@@ -141,10 +141,10 @@ pub struct GroupMerger<K, V> {
 // Ensures that the sizes of the types defined here match the sizes of the types in the backend.
 #[test]
 fn size_check() {
-    use ast::*;
-    use ast::ScalarKind::I32;
-    use ast::BinOpKind::Add;
-    use codegen::size_of;
+    use crate::ast::*;
+    use crate::ast::ScalarKind::I32;
+    use crate::ast::BinOpKind::Add;
+    use crate::codegen::size_of;
     use std::mem;
 
     let i32_ty = Box::new(Type::Scalar(I32));

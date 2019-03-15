@@ -10,15 +10,15 @@
 
 extern crate llvm_sys;
 
-use ast::*;
-use ast::BuilderKind::*;
-use ast::Type::*;
-use ast::BinOpKind;
+use crate::ast::*;
+use crate::ast::BuilderKind::*;
+use crate::ast::Type::*;
+use crate::ast::BinOpKind;
 
-use error::*;
+use crate::error::*;
 
-use sir::*;
-use sir::StatementKind::*;
+use crate::sir::*;
+use crate::sir::StatementKind::*;
 
 use self::llvm_sys::prelude::*;
 use self::llvm_sys::core::*;
@@ -263,7 +263,7 @@ impl BuilderExpressionGen for LlvmGenerator {
                 Ok(())
             }
             DictMerger(ref key, ref val, ref binop) => {
-                use ast::Type::Scalar;
+                use crate::ast::Type::Scalar;
                 use self::hash::*;
 
                 // Build the default value that we upsert if the key is not present in the

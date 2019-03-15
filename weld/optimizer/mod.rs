@@ -10,9 +10,9 @@ extern crate time;
 
 use time::PreciseTime;
 
-use ast::*;
-use error::*;
-use util::stats::CompilationStats;
+use crate::ast::*;
+use crate::error::*;
+use crate::util::stats::CompilationStats;
 
 pub use self::passes::*;
 

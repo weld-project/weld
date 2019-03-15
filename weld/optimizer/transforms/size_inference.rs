@@ -1,11 +1,11 @@
 //! Implements size inference for `For` loops.
 
-use ast::*;
-use ast::ExprKind::*;
-use ast::Type::*;
-use ast::BuilderKind::*;
-use ast::constructors::*;
-use util::SymbolGenerator;
+use crate::ast::*;
+use crate::ast::ExprKind::*;
+use crate::ast::Type::*;
+use crate::ast::BuilderKind::*;
+use crate::ast::constructors::*;
+use crate::util::SymbolGenerator;
 
 struct NewAppender<'a> {
     elem_type: &'a Type

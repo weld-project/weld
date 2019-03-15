@@ -4,15 +4,15 @@
 
 extern crate fnv;
 
-use ast::*;
-use ast::ExprKind::*;
+use crate::ast::*;
+use crate::ast::ExprKind::*;
 
 use fnv::FnvHashMap;
 
 use std::mem;
 
 #[cfg(test)]
-use tests::*;
+use crate::tests::*;
 
 /// Inlines GetField(MakeStruct(*)) expressions, which can occur during loop fusion when some
 /// of the loops are zipping together multiple column vectors.
@@ -212,8 +212,8 @@ fn inline_let_helper(expr: &mut Expr, usages: &mut FnvHashMap<Symbol, SymbolTrac
 
 /// Changes negations of literal values to be literal negated values.
 pub fn inline_negate(expr: &mut Expr) {
-    use ast::LiteralKind::*;
-    use ast::constructors::literal_expr;
+    use crate::ast::LiteralKind::*;
+    use crate::ast::constructors::literal_expr;
     expr.transform(&mut |ref mut expr| {
         if let Negate(ref child_expr) = expr.kind {
             if let Literal(ref literal_kind) = child_expr.kind {
@@ -238,10 +238,10 @@ pub fn inline_negate(expr: &mut Expr) {
 /// This changes casts of literal values to be literal values of the casted type. It additionally
 /// removes "self casts" (e.g., `i64(x: i64)` becomes `x`).
 pub fn inline_cast(expr: &mut Expr) {
-    use ast::Type::Scalar;
-    use ast::ScalarKind::*;
-    use ast::LiteralKind::*;
-    use ast::constructors::literal_expr;
+    use crate::ast::Type::Scalar;
+    use crate::ast::ScalarKind::*;
+    use crate::ast::LiteralKind::*;
+    use crate::ast::constructors::literal_expr;
     expr.transform(&mut |ref mut expr| {
         if let Cast { kind: ref scalar_kind, ref child_expr } = expr.kind {
             if let Literal(ref literal_kind) = child_expr.kind {
@@ -280,8 +280,8 @@ fn getfield_on_symbol(expr: &Expr, sym: &Symbol) -> Option<u32> {
 ///
 /// This switches the true condition and the false condition.
 pub fn simplify_branch_conditions(expr: &mut Expr) {
-    use ast::BinOpKind;
-    use ast::LiteralKind::BoolLiteral;
+    use crate::ast::BinOpKind;
+    use crate::ast::LiteralKind::BoolLiteral;
     expr.uniquify().unwrap();
     expr.transform_up(&mut |ref mut expr| {
         if let If { ref mut cond, ref mut on_true, ref mut on_false } = expr.kind {
@@ -326,8 +326,8 @@ pub fn simplify_branch_conditions(expr: &mut Expr) {
 /// us + us#1 + us#2
 ///
 pub fn unroll_structs(expr: &mut Expr) {
-    use ast::constructors::*;
-    use util::SymbolGenerator;
+    use crate::ast::constructors::*;
+    use crate::util::SymbolGenerator;
 
     expr.uniquify().unwrap();
     let mut sym_gen = SymbolGenerator::from_expression(expr);

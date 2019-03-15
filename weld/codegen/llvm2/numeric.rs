@@ -11,9 +11,9 @@ extern crate time;
 extern crate libc;
 extern crate llvm_sys;
 
-use ast::*;
-use error::*;
-use sir::*;
+use crate::ast::*;
+use crate::error::*;
+use crate::sir::*;
 
 use std::ffi::CString;
 
@@ -21,7 +21,7 @@ use self::llvm_sys::prelude::*;
 use self::llvm_sys::core::*;
 use self::llvm_sys::LLVMIntPredicate::*;
 
-use codegen::llvm2::intrinsic::Intrinsics;
+use crate::codegen::llvm2::intrinsic::Intrinsics;
 
 use super::{LlvmGenerator, CodeGenExt, FunctionContext, LLVM_VECTOR_WIDTH};
 
@@ -64,7 +64,7 @@ impl NumericExpressionGenInternal for LlvmGenerator {
                left: LLVMValueRef,
                right: LLVMValueRef,
                ty: &Type) -> WeldResult<LLVMValueRef> {
-        use ast::Type::{Scalar, Simd};
+        use crate::ast::Type::{Scalar, Simd};
         match *ty {
             Scalar(kind) if kind.is_float() => {
                 let name = Intrinsics::llvm_numeric("pow", kind, false); 
@@ -100,7 +100,7 @@ trait UnaryOpSupport {
 
 impl UnaryOpSupport for UnaryOpKind {
     fn llvm_intrinsic(&self) -> Option<&'static str> {
-        use ast::UnaryOpKind::*;
+        use crate::ast::UnaryOpKind::*;
         match *self {
             Exp => Some("exp"),
             Log => Some("log"),
@@ -114,9 +114,9 @@ impl UnaryOpSupport for UnaryOpKind {
 
 impl NumericExpressionGen for LlvmGenerator {
     unsafe fn gen_unaryop(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()> {
-        use ast::Type::{Scalar, Simd};
+        use crate::ast::Type::{Scalar, Simd};
         use self::UnaryOpSupport;
-        use sir::StatementKind::UnaryOp;
+        use crate::sir::StatementKind::UnaryOp;
         if let UnaryOp { op, ref child } = statement.kind {
             let ty = ctx.sir_function.symbol_type(child)?;
             let (kind, simd) = match *ty {
@@ -135,8 +135,8 @@ impl NumericExpressionGen for LlvmGenerator {
                 self.intrinsics.add(&name, ret_ty, &mut arg_tys);
                 self.intrinsics.call(ctx.builder, name, &mut [child])?
             } else {
-                use ast::UnaryOpKind::*;
-                use ast::ScalarKind::{F32, F64};
+                use crate::ast::UnaryOpKind::*;
+                use crate::ast::ScalarKind::{F32, F64};
                 let name = match (op, kind) {
                     (Tan, F32) => "tanf",
                     (ASin, F32) => "asinf",
@@ -182,7 +182,7 @@ impl NumericExpressionGen for LlvmGenerator {
     }
 
     unsafe fn gen_not(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()> {
-        use sir::StatementKind::Not;
+        use crate::sir::StatementKind::Not;
         use self::llvm_sys::LLVMIntPredicate::LLVMIntEQ;
         if let Not(ref child) = statement.kind {
             let value = self.load(ctx.builder, ctx.get_value(child)?)?;
@@ -197,10 +197,10 @@ impl NumericExpressionGen for LlvmGenerator {
     }
 
     unsafe fn gen_negate(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()> {
-        use ast::BinOpKind::Subtract;
-        use ast::ScalarKind::{F32, F64};
-        use ast::Type::{Scalar, Simd};
-        use sir::StatementKind::Negate;
+        use crate::ast::BinOpKind::Subtract;
+        use crate::ast::ScalarKind::{F32, F64};
+        use crate::ast::Type::{Scalar, Simd};
+        use crate::sir::StatementKind::Negate;
         if let Negate(ref child) = statement.kind {
             let ty = ctx.sir_function.symbol_type(child)?;
             let (kind, simd) = match *ty {
@@ -230,9 +230,9 @@ impl NumericExpressionGen for LlvmGenerator {
     }
 
     unsafe fn gen_binop(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()> {
-        use ast::BinOpKind;
-        use ast::Type::{Scalar, Simd, Vector, Struct};
-        use sir::StatementKind::BinOp;
+        use crate::ast::BinOpKind;
+        use crate::ast::Type::{Scalar, Simd, Vector, Struct};
+        use crate::sir::StatementKind::BinOp;
         if let BinOp { op, ref left, ref right } = statement.kind {
             let ty = ctx.sir_function.symbol_type(left)?;
             let result = match ty {
@@ -311,7 +311,7 @@ impl NumericExpressionGen for LlvmGenerator {
     }
 
     unsafe fn gen_assign_literal(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()> {
-        use sir::StatementKind::AssignLiteral;
+        use crate::sir::StatementKind::AssignLiteral;
         if let AssignLiteral(ref value) = statement.kind {
             let output = statement.output.as_ref().unwrap();
             let output_type = ctx.sir_function.symbol_type(output)?;
@@ -338,7 +338,7 @@ impl NumericExpressionGen for LlvmGenerator {
     }
 
     unsafe fn gen_cast(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()> {
-        use sir::StatementKind::Cast;
+        use crate::sir::StatementKind::Cast;
         let ref output = statement.output.clone().unwrap();
         let output_pointer = ctx.get_value(output)?;
         let output_type = ctx.sir_function.symbol_type(output)?;
@@ -360,8 +360,8 @@ pub unsafe fn gen_cast(builder: LLVMBuilderRef,
                    from: &Type,
                    to: &Type,
                    to_ll: LLVMTypeRef) -> WeldResult<LLVMValueRef> {
-    use ast::Type::Scalar;
-    use ast::ScalarKind::*;
+    use crate::ast::Type::Scalar;
+    use crate::ast::ScalarKind::*;
     let result = match (from, to) {
         (&Scalar(s1), &Scalar(s2)) => {
             match (s1, s2) {
@@ -434,8 +434,8 @@ pub unsafe fn gen_binop(builder: LLVMBuilderRef,
              op: BinOpKind,
              left: LLVMValueRef,
              right: LLVMValueRef, ty: &Type) -> WeldResult<LLVMValueRef> {
-    use ast::Type::*;
-    use ast::BinOpKind::*;
+    use crate::ast::Type::*;
+    use crate::ast::BinOpKind::*;
     use self::llvm_sys::LLVMIntPredicate::*;
     use self::llvm_sys::LLVMRealPredicate::*;
     let name = c_str!("");

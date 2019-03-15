@@ -9,11 +9,11 @@ extern crate llvm_sys;
 
 use std::ffi::CStr;
 
-use ast::*;
-use ast::Type::*;
-use ast::ScalarKind::*;
+use crate::ast::*;
+use crate::ast::Type::*;
+use crate::ast::ScalarKind::*;
 
-use error::*;
+use crate::error::*;
 
 use self::llvm_sys::prelude::*;
 use self::llvm_sys::core::*;

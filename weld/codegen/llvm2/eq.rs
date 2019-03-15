@@ -4,10 +4,10 @@ extern crate llvm_sys;
 
 use std::ffi::CStr;
 
-use ast::Type;
+use crate::ast::Type;
 use super::vector::VectorExt;
-use ast::ScalarKind::{I32, I64};
-use error::*;
+use crate::ast::ScalarKind::{I32, I64};
+use crate::error::*;
 
 use super::llvm_exts::*;
 use super::llvm_exts::LLVMExtAttribute::*;
@@ -20,8 +20,8 @@ use self::llvm_sys::LLVMIntPredicate::*;
 use super::CodeGenExt;
 use super::LlvmGenerator;
 
-use ast::BinOpKind::Equal;
-use codegen::llvm2::numeric::gen_binop;
+use crate::ast::BinOpKind::Equal;
+use crate::codegen::llvm2::numeric::gen_binop;
 
 /// Returns whether a value can be compared with libc's `memcmp`.
 ///
@@ -32,7 +32,7 @@ trait SupportsMemCmpEq {
 
 impl SupportsMemCmpEq for Type {
     fn supports_memcmp_eq(&self) -> bool {
-        use ast::Type::*;
+        use crate::ast::Type::*;
         // Structs do not support memcmp because they may be padded.
         match *self {
             Scalar(ref kind) => kind.is_integer(),
@@ -61,7 +61,7 @@ pub trait GenEq {
 impl GenEq for LlvmGenerator {
     /// Generates an equality function for a type.
     unsafe fn gen_eq_fn(&mut self, ty: &Type) -> WeldResult<LLVMValueRef> {
-        use ast::Type::*;
+        use crate::ast::Type::*;
         let result = self.eq_fns.get(ty).cloned();
         if let Some(result) = result {
             return Ok(result)

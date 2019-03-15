@@ -2,10 +2,10 @@
 //!
 //! This module provides constructors with type checking for Weld expressions.
 
-use ast::*;
-use ast::ExprKind::*;
-use ast::Type::*;
-use error::*;
+use crate::ast::*;
+use crate::ast::ExprKind::*;
+use crate::ast::Type::*;
+use crate::error::*;
 
 /// A trait for initializing expressions with type inference.
 ///
@@ -113,8 +113,8 @@ impl NewExpr for Expr {
     }
 
     fn new_literal(kind: LiteralKind) -> WeldResult<Expr> {
-        use ast::LiteralKind::*;
-        use ast::Type::Scalar;
+        use crate::ast::LiteralKind::*;
+        use crate::ast::Type::Scalar;
 
         let ty = match kind {
             BoolLiteral(_) => Scalar(ScalarKind::Bool),

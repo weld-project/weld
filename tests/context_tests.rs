@@ -8,7 +8,7 @@ use weld::*;
 use weld::data::*;
 
 mod common;
-use common::*;
+use crate::common::*;
 
 #[test]
 fn reuse_appender_test() {

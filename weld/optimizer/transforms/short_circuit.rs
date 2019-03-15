@@ -1,12 +1,12 @@
 
-use ast::*;
-use ast::ExprKind::*;
-use ast::constructors::*;
+use crate::ast::*;
+use crate::ast::ExprKind::*;
+use crate::ast::constructors::*;
 
-use optimizer::transforms::vectorizer::ShouldPredicate;
+use crate::optimizer::transforms::vectorizer::ShouldPredicate;
 
 #[cfg(test)]
-use tests::*;
+use crate::tests::*;
 
 pub fn short_circuit_booleans(expr: &mut Expr) {
     // For If statements annotated as predicated, do not apply the transform on the condition,

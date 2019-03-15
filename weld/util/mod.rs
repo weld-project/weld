@@ -8,8 +8,8 @@ extern crate libc;
 extern crate fnv;
 extern crate time;
 
-use ast::*;
-use ast::ExprKind::*;
+use crate::ast::*;
+use crate::ast::ExprKind::*;
 
 use std::iter;
 use std::cmp::max;

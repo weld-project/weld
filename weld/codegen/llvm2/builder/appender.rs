@@ -9,17 +9,17 @@ extern crate llvm_sys;
 
 use std::ffi::CString;
 
-use error::*;
+use crate::error::*;
 
 use self::llvm_sys::prelude::*;
 use self::llvm_sys::core::*;
 use self::llvm_sys::LLVMTypeKind;
 use self::llvm_sys::LLVMIntPredicate::*;
 
-use codegen::llvm2::llvm_exts::*;
-use codegen::llvm2::intrinsic::Intrinsics;
-use codegen::llvm2::CodeGenExt;
-use codegen::llvm2::LLVM_VECTOR_WIDTH;
+use crate::codegen::llvm2::llvm_exts::*;
+use crate::codegen::llvm2::intrinsic::Intrinsics;
+use crate::codegen::llvm2::CodeGenExt;
+use crate::codegen::llvm2::LLVM_VECTOR_WIDTH;
 
 pub const POINTER_INDEX: u32 = 0;
 pub const SIZE_INDEX: u32 = 1;
@@ -256,7 +256,7 @@ impl Appender {
                              vector_ty: LLVMTypeRef,
                              builder_arg: LLVMValueRef) -> WeldResult<LLVMValueRef> {
         // The vector type that the appender generates.
-        use codegen::llvm2::vector;
+        use crate::codegen::llvm2::vector;
         if self.result.is_none() {
             let mut arg_tys = [LLVMPointerType(self.appender_ty, 0)];
             let ret_ty = vector_ty;

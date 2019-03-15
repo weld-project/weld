@@ -5,7 +5,7 @@ extern crate weld;
 use weld::runtime::WeldRuntimeErrno;
 
 mod common;
-use common::*;
+use crate::common::*;
 
 trait Close<Rhs: ?Sized = Self> {
     /// Returns true if self is close to other. The closeness is dictated by granularity.

@@ -14,8 +14,8 @@ use fnv::FnvHashMap;
 
 use libc::c_char;
 
-use ast::ScalarKind;
-use error::*;
+use crate::ast::ScalarKind;
+use crate::error::*;
 
 use std::ffi::CString;
 
@@ -27,7 +27,7 @@ use super::LLVM_VECTOR_WIDTH;
 use self::llvm_sys::prelude::*;
 use self::llvm_sys::core::*;
 
-use runtime::ffi;
+use crate::runtime::ffi;
 use libc::c_void;
 
 /// A single intrinsic.
@@ -100,7 +100,7 @@ impl Intrinsics {
 
     /// Returns a string name for a numeric type's LLVM intrinsic.
     pub fn llvm_numeric<T: AsRef<str>>(name: T, kind: ScalarKind, simd: bool) -> String {
-        use ast::ScalarKind::*;
+        use crate::ast::ScalarKind::*;
         let mut result = format!("llvm.{}.", name.as_ref());
         if simd {
             result.push_str(&format!("v{}", LLVM_VECTOR_WIDTH));

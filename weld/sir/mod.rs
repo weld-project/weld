@@ -312,7 +312,7 @@ impl StatementTracker {
                             sym_ty: &Type,
                             kind: StatementKind) -> Symbol {
 
-        use sir::StatementKind::CUDF;
+        use crate::sir::StatementKind::CUDF;
 
         let site = ProgramSite(func, block);
         let map = self.generated.entry(site).or_insert(fnv::FnvHashMap::default());
@@ -785,7 +785,7 @@ fn sir_param_correction_helper(prog: &mut SirProgram,
 /// This function recurses assigns a return type to the given function ID. It recurses into the
 /// terminators and propogates the return types of the terminator to current function.
 fn assign_return_types_helper(prog: &mut SirProgram, func: FunctionId) -> WeldResult<Type> {
-    use sir::Terminator::*;
+    use crate::sir::Terminator::*;
 
     // Base case - already visited this function!
     if prog.funcs[func].return_type != Unknown {
@@ -1366,15 +1366,15 @@ fn gen_expr(expr: &Expr,
                     prog.funcs[body_func]
                         .params
                         .insert(data_res.2.clone(), iter.data.ty.clone());
-                    let start_sym = try!(get_iter_sym(&iter.start, prog, &mut cur_func, &mut cur_block,
+                    let start_sym = r#try!(get_iter_sym(&iter.start, prog, &mut cur_func, &mut cur_block,
                                                       tracker, body_func));
-                    let end_sym = try!(get_iter_sym(&iter.end, prog, &mut cur_func, &mut cur_block,
+                    let end_sym = r#try!(get_iter_sym(&iter.end, prog, &mut cur_func, &mut cur_block,
                                                     tracker, body_func));
-                    let stride_sym = try!(get_iter_sym(&iter.stride, prog, &mut cur_func, &mut cur_block,
+                    let stride_sym = r#try!(get_iter_sym(&iter.stride, prog, &mut cur_func, &mut cur_block,
                                                        tracker, body_func));
-                    let shape_sym = try!(get_iter_sym(&iter.shape, prog, &mut cur_func, &mut cur_block,
+                    let shape_sym = r#try!(get_iter_sym(&iter.shape, prog, &mut cur_func, &mut cur_block,
                                                        tracker, body_func));
-                    let strides_sym = try!(get_iter_sym(&iter.strides, prog, &mut cur_func, &mut cur_block,
+                    let strides_sym = r#try!(get_iter_sym(&iter.strides, prog, &mut cur_func, &mut cur_block,
                                                         tracker, body_func));
                     pf_iters.push(ParallelForIter {
                                       data: data_res.2,

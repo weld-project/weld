@@ -16,9 +16,9 @@ use libc::c_char;
 
 use self::time::PreciseTime;
 
-use conf::ParsedConf;
-use error::*;
-use util::stats::CompilationStats;
+use crate::conf::ParsedConf;
+use crate::error::*;
+use crate::util::stats::CompilationStats;
 
 use self::llvm_sys::core::*;
 use self::llvm_sys::prelude::*;
@@ -26,10 +26,10 @@ use self::llvm_sys::execution_engine::*;
 use self::llvm_sys::target::*;
 use self::llvm_sys::target_machine::*;
 
-use codegen::Runnable;
+use crate::codegen::Runnable;
 
-use codegen::llvm2::llvm_exts::*;
-use codegen::llvm2::intrinsic;
+use crate::codegen::llvm2::llvm_exts::*;
+use crate::codegen::llvm2::intrinsic;
 
 static ONCE: Once = ONCE_INIT;
 static mut INITIALIZE_FAILED: bool = false;

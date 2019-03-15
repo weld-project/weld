@@ -2,12 +2,12 @@
 #![allow(dead_code)]
 #[deprecated(since="0.2.0", note="Please use the `NewExpr` trait on `Expr` instead")]
 
-use ast::*;
-use ast::ExprKind::*;
-use ast::Type::*;
-use ast::BuilderKind::*;
-use ast::LiteralKind::*;
-use error::*;
+use crate::ast::*;
+use crate::ast::ExprKind::*;
+use crate::ast::Type::*;
+use crate::ast::BuilderKind::*;
+use crate::ast::LiteralKind::*;
+use crate::error::*;
 
 pub fn new_expr(kind: ExprKind, ty: Type) -> WeldResult<Expr> {
     Ok(Expr {
@@ -558,7 +558,7 @@ pub fn result_expr(builder: Expr) -> WeldResult<Expr> {
 }
 
 #[cfg(test)]
-use tests::print_expr_without_indent;
+use crate::tests::print_expr_without_indent;
 
 #[test]
 fn literal_test() {

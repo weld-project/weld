@@ -18,20 +18,20 @@ extern crate libc;
 
 use std::ffi::CString;
 
-use error::*;
+use crate::error::*;
 
 use self::llvm_sys::prelude::*;
 use self::llvm_sys::core::*;
 use self::llvm_sys::LLVMIntPredicate::*;
 use self::llvm_sys::LLVMTypeKind;
 
-use codegen::llvm2::llvm_exts::LLVMExtAttribute::*;
-use codegen::llvm2::llvm_exts::*;
-use codegen::llvm2::intrinsic::Intrinsics;
+use crate::codegen::llvm2::llvm_exts::LLVMExtAttribute::*;
+use crate::codegen::llvm2::llvm_exts::*;
+use crate::codegen::llvm2::intrinsic::Intrinsics;
 
 // Need vector type for ToVec and Serialize.
-use codegen::llvm2::vector;
-use codegen::llvm2::vector::Vector;
+use crate::codegen::llvm2::vector;
+use crate::codegen::llvm2::vector::Vector;
 
 use super::CodeGenExt;
 
@@ -908,7 +908,7 @@ impl Dict {
                              hash: LLVMValueRef,
                              run: LLVMValueRef) -> WeldResult<LLVMValueRef> {
 
-        use runtime::WeldRuntimeErrno::KeyNotFoundError;
+        use crate::runtime::WeldRuntimeErrno::KeyNotFoundError;
 
         if self.lookup.is_none() {
             let mut arg_tys = [

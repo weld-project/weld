@@ -13,11 +13,11 @@ extern crate lazy_static;
 
 use std::ffi::CStr;
 
-use ast::*;
-use ast::Type::*;
-use codegen::llvm2::vector::VectorExt;
-use error::*;
-use sir::*;
+use crate::ast::*;
+use crate::ast::Type::*;
+use crate::codegen::llvm2::vector::VectorExt;
+use crate::error::*;
+use crate::sir::*;
 
 use self::llvm_sys::prelude::*;
 use self::llvm_sys::core::*;
@@ -50,7 +50,7 @@ impl SerDeGen for LlvmGenerator {
     unsafe fn gen_serialize(&mut self,
                             ctx: &mut FunctionContext,
                             statement: &Statement) -> WeldResult<()> {
-        use sir::StatementKind::Serialize;
+        use crate::sir::StatementKind::Serialize;
         if let Serialize(ref child) = statement.kind {
             let zero = self.i64(0);
             let buffer = self.gen_new(ctx.builder, &SER_TY, zero, ctx.get_run())?;
@@ -71,7 +71,7 @@ impl SerDeGen for LlvmGenerator {
     }
 
     unsafe fn gen_deserialize(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()> {
-        use sir::StatementKind::Deserialize;
+        use crate::sir::StatementKind::Deserialize;
         if let Deserialize(ref child) = statement.kind {
             let output = statement.output.as_ref().unwrap();
             let output_ty = ctx.sir_function.symbol_type(output)?;
@@ -439,7 +439,7 @@ impl DeHelper for LlvmGenerator {
                            ty: LLVMTypeRef,
                            buffer: LLVMValueRef,
                            position: LLVMValueRef) -> WeldResult<(LLVMValueRef, LLVMValueRef)> {
-        use codegen::llvm2::vector::VectorExt;
+        use crate::codegen::llvm2::vector::VectorExt;
 
         let size = self.size_of(ty);
         let pointer = self.gen_at(builder, &SER_TY, buffer, position)?;
@@ -463,7 +463,7 @@ impl DeHelper for LlvmGenerator {
                            size: LLVMValueRef,
                            buffer: LLVMValueRef,
                            position: LLVMValueRef) -> WeldResult<LLVMValueRef> {
-        use codegen::llvm2::vector::VectorExt;
+        use crate::codegen::llvm2::vector::VectorExt;
         let elem_size = self.size_of(LLVMGetElementType(LLVMTypeOf(ptr)));
         let size = LLVMBuildNSWMul(builder, size, elem_size, c_str!(""));
 
@@ -599,7 +599,7 @@ impl DeHelper for LlvmGenerator {
                     // NOTE: This requires re-hashing: we could look into encoding dictionaries without
                     // having to do this.
                     use self::llvm_sys::LLVMIntPredicate::LLVMIntSGT;
-                    use codegen::llvm2::hash::GenHash;
+                    use crate::codegen::llvm2::hash::GenHash;
 
                     let size_type = self.i64_type();
                     let (size, start_position) = self.gen_get_value(builder, size_type, buffer, position)?;

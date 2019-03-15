@@ -7,7 +7,7 @@
 
 use std::vec::Vec;
 
-use ast::{Expr, Symbol, Type};
+use crate::ast::{Expr, Symbol, Type};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Program {

@@ -6,8 +6,8 @@
 extern crate uuid;
 extern crate time;
 
-use conf::DumpCodeConfig;
-use error::*;
+use crate::conf::DumpCodeConfig;
+use crate::error::*;
 
 use std::fs::OpenOptions;
 use std::io::Write;

@@ -12,8 +12,8 @@ extern crate llvm_sys;
 
 use std::ffi::CString;
 
-use ast::Type;
-use error::*;
+use crate::ast::Type;
+use crate::error::*;
 
 use super::llvm_exts::*;
 use super::llvm_exts::LLVMExtAttribute::*;

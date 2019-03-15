@@ -4,19 +4,19 @@ extern crate llvm_sys;
 
 use std::ffi::CString;
 
-use ast::BinOpKind;
-use ast::ScalarKind;
-use ast::Type::{Scalar, Simd};
-use error::*;
+use crate::ast::BinOpKind;
+use crate::ast::ScalarKind;
+use crate::ast::Type::{Scalar, Simd};
+use crate::error::*;
 
 use self::llvm_sys::prelude::*;
 use self::llvm_sys::core::*;
 use self::llvm_sys::LLVMTypeKind;
 
-use codegen::llvm2::llvm_exts::*;
-use codegen::llvm2::CodeGenExt;
-use codegen::llvm2::numeric::gen_binop;
-use codegen::llvm2::LLVM_VECTOR_WIDTH;
+use crate::codegen::llvm2::llvm_exts::*;
+use crate::codegen::llvm2::CodeGenExt;
+use crate::codegen::llvm2::numeric::gen_binop;
+use crate::codegen::llvm2::LLVM_VECTOR_WIDTH;
 
 const SCALAR_INDEX: u32 = 0;
 const VECTOR_INDEX: u32 = 1;

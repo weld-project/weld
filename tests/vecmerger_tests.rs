@@ -5,7 +5,7 @@ extern crate weld;
 use std::cmp;
 
 mod common;
-use common::*;
+use crate::common::*;
 
 #[test]
 fn simple_for_vecmerger_loop() {

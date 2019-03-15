@@ -7,7 +7,7 @@ extern crate weld;
 use std::collections::hash_map::Entry;
 
 mod common;
-use common::*;
+use crate::common::*;
 
 #[repr(C)]
 struct I32KeyValArgs {

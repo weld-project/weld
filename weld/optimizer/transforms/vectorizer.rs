@@ -6,15 +6,15 @@
 
 use std::collections::HashSet;
 
-use ast::*;
-use ast::ExprKind::*;
-use ast::Type::*;
-use error::*;
-use ast::constructors;
-use util::SymbolGenerator;
+use crate::ast::*;
+use crate::ast::ExprKind::*;
+use crate::ast::Type::*;
+use crate::error::*;
+use crate::ast::constructors;
+use crate::util::SymbolGenerator;
 
 #[cfg(test)]
-use tests::*;
+use crate::tests::*;
 
 /// Checks whether an annotation specifies predication.
 pub trait ShouldPredicate {
@@ -280,7 +280,7 @@ fn vectorize_expr(e: &mut Expr, broadcast_idens: &HashSet<Symbol>) -> WeldResult
 /// Returns Some(false) if it is a builder, struct of builders, but no appender or mergers.
 /// Returns None if it is not a builder.
 fn vectorizable_builder(expr: &Expr) -> Option<bool> {
-    use ast::BuilderKind::*;
+    use crate::ast::BuilderKind::*;
     match expr.kind {
         Ident(_) | NewBuilder(_) => {
             if let Builder(ref bk, _) = expr.ty {

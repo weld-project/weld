@@ -11,7 +11,7 @@ extern crate fnv;
 use super::ast::*;
 use super::ast::ExprKind::*;
 use super::ast::LiteralKind::*;
-use error::*;
+use crate::error::*;
 
 use std::collections::hash_map::Entry;
 use std::hash::{Hash, Hasher};
@@ -181,7 +181,7 @@ impl PartialEq for ExprHash {
 }
 
 #[cfg(test)]
-use syntax::parser::*;
+use crate::syntax::parser::*;
 
 #[test]
 fn test_compare_same() {

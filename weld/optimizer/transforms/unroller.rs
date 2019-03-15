@@ -4,14 +4,14 @@
 
 use std::error::Error;
 
-use ast::*;
+use crate::ast::*;
 
-use ast::constructors::*;
-use ast::BuilderKind::*;
-use ast::ExprKind::*;
-use ast::Type::*;
+use crate::ast::constructors::*;
+use crate::ast::BuilderKind::*;
+use crate::ast::ExprKind::*;
+use crate::ast::Type::*;
 
-use error::*;
+use crate::error::*;
 
 /// Maximum number of iterations this transformation will unroll.
 pub const UNROLL_LIMIT: u64 = 8;
@@ -77,7 +77,7 @@ impl<'a> UnrollPattern<'a> {
 }
 
 pub fn unroll_static_loop(expr: &mut Expr) {
-    use util::SymbolGenerator;
+    use crate::util::SymbolGenerator;
 
     if let Err(_) = expr.uniquify() {
         return;
@@ -204,7 +204,7 @@ fn combine_unrolled_values(bk: BuilderKind, values: Vec<Expr>) -> WeldResult<Exp
 }
 
 #[cfg(test)]
-use tests::*;
+use crate::tests::*;
 
 
 #[test]

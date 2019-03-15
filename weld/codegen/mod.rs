@@ -13,12 +13,12 @@
 
 extern crate time;
 
-use ast::*;
-use conf::ParsedConf;
-use error::*;
-use runtime::WeldRuntimeErrno;
-use sir::*;
-use util::stats::CompilationStats;
+use crate::ast::*;
+use crate::conf::ParsedConf;
+use crate::error::*;
+use crate::runtime::WeldRuntimeErrno;
+use crate::sir::*;
+use crate::util::stats::CompilationStats;
 
 use std::fmt;
 

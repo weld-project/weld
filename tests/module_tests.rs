@@ -9,7 +9,7 @@ use std::thread;
 use std::sync::Arc;
 
 mod common;
-use common::*;
+use crate::common::*;
 
 #[test]
 fn multithreaded_module_run() {
