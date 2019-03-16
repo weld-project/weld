@@ -449,7 +449,7 @@ impl NumericExpressionGen for LlvmGenerator {
         statement: &Statement,
     ) -> WeldResult<()> {
         use crate::sir::StatementKind::Cast;
-        let ref output = statement.output.clone().unwrap();
+        let output = &statement.output.clone().unwrap();
         let output_pointer = ctx.get_value(output)?;
         let output_type = ctx.sir_function.symbol_type(output)?;
         if let Cast(ref child, _) = statement.kind {

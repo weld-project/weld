@@ -782,7 +782,7 @@ fn assign_return_types_helper(prog: &mut SirProgram, func: FunctionId) -> WeldRe
     // Symbol returned by the terminator.
     let mut return_symbol = None;
     {
-        let ref function = prog.funcs[func];
+        let function = &prog.funcs[func];
         for block in function.blocks.iter() {
             match block.terminator {
                 Branch { .. } => (),
@@ -825,7 +825,7 @@ fn sir_param_correction(prog: &mut SirProgram) -> WeldResult<()> {
     let mut closure = HashSet::new();
     let mut visited = HashSet::new();
     sir_param_correction_helper(prog, 0, &mut env, &mut closure, &mut visited);
-    let ref func = prog.funcs[0];
+    let func = &prog.funcs[0];
     for name in closure {
         if func.params.get(&name) == None {
             compile_err!("Unbound symbol {}", name.to_string())?;

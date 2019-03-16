@@ -505,10 +505,10 @@ pub fn merge_makestruct_loops(expr: &mut Expr) {
                 // indexing to match the first body. This handles zips over the same vectors in a
                 // different order (which could be common if upstream transforms shuffle things around).
                 if rfa.iters.len() > 1 {
-                    let ref rev_map = ident_indices[i];
+                    let rev_map = &ident_indices[i];
 
                     // third parameter is the element.
-                    let ref elem_name = ma.params[2];
+                    let elem_name = &ma.params[2];
 
                     // This will be a no-op for the first iterator.
                     new_body.transform(&mut |ref mut e| {
@@ -535,8 +535,8 @@ pub fn merge_makestruct_loops(expr: &mut Expr) {
                 // Skip the first one since that's the builder, and since this is matching a
                 // MergeSingle pattern, we shouldn't have any builders in here.
                 for (j, ref param) in ma.params.iter().enumerate() {
-                    let ref replacement =
-                        ident_expr(first_ma.params[j].name.clone(), param.ty.clone()).unwrap();
+                    let replacement =
+                        &ident_expr(first_ma.params[j].name.clone(), param.ty.clone()).unwrap();
                     new_body.substitute(&param.name, replacement);
                 }
                 // Add the new merge expression to the list of bodies.

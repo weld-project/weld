@@ -161,9 +161,9 @@ fn unroll_values(
         return compile_err!("Expected three parameters to Merge function");
     }
 
-    let ref index_symbol = parameters[1].name;
-    let ref elem_symbol = parameters[2].name;
-    let ref elem_ident = ident_expr(elem_symbol.clone(), parameters[2].ty.clone())?;
+    let index_symbol = &parameters[1].name;
+    let elem_symbol = &parameters[2].name;
+    let elem_ident = &ident_expr(elem_symbol.clone(), parameters[2].ty.clone())?;
 
     let mut expressions = vec![];
     for i in 0..loopsize {
@@ -261,7 +261,7 @@ fn simple_merger_loop() {
     );
 
     unroll_static_loop(&mut e);
-    let ref expect = typed_expression("|v:vec[i32]| let t0 = v; lookup(t0, 0L) + lookup(t0, 1L)");
+    let expect = &typed_expression("|v:vec[i32]| let t0 = v; lookup(t0, 0L) + lookup(t0, 1L)");
     assert!(e.compare_ignoring_symbols(expect).unwrap());
 }
 
@@ -275,7 +275,7 @@ fn zipped_merger_loop() {
     );
 
     unroll_static_loop(&mut e);
-    let ref expect = typed_expression(
+    let expect = &typed_expression(
         "|v:vec[i32], w:vec[i32]| let t0 = v; let t1 = w;
                                       lookup(t0, 0L) * lookup(t1, 0L) +
                                       lookup(t0, 1L) * lookup(t1, 1L)",
@@ -293,7 +293,7 @@ fn simple_appender_loop() {
     );
 
     unroll_static_loop(&mut e);
-    let ref expect = typed_expression("|v:vec[i32]| let t0 = v; [lookup(t0, 0L), lookup(t0, 1L)]");
+    let expect = &typed_expression("|v:vec[i32]| let t0 = v; [lookup(t0, 0L), lookup(t0, 1L)]");
     assert!(e.compare_ignoring_symbols(expect).unwrap());
 }
 
@@ -307,7 +307,7 @@ fn zipped_appender_loop() {
     );
 
     unroll_static_loop(&mut e);
-    let ref expect = typed_expression(
+    let expect = &typed_expression(
         "|v:vec[i32], w:vec[i32]| let t0 = v; let t1 = w;
                                       [lookup(t0, 0L) * lookup(t1, 0L),
                                       lookup(t0, 1L) * lookup(t1, 1L)]",
@@ -328,7 +328,7 @@ fn large_merger_loop() {
         .as_ref(),
     );
     // The annotation is more than the unroll limit, so don't unroll.
-    let ref expect = e.clone();
+    let expect = &e.clone();
     unroll_static_loop(&mut e);
     assert!(e.compare_ignoring_symbols(expect).unwrap());
 }

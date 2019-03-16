@@ -80,7 +80,7 @@ pub fn write_code<T: AsRef<str>>(
         return Ok(());
     }
 
-    let ref mut path = PathBuf::new();
+    let path = &mut PathBuf::new();
     path.push(&config.directory);
     path.push(&format!("{}{}", &config.filename, format.suffix()));
     path.set_extension(format.extension());
@@ -99,6 +99,6 @@ pub fn write_code<T: AsRef<str>>(
 /// The timestamp has a 2-character identifier attached to prevent naming conflicts.
 pub fn unique_filename() -> String {
     let uuid = Uuid::new_v4().to_simple().to_string();
-    let ref suffix = uuid[0..2];
+    let suffix = &uuid[0..2];
     format!("code-{}-{}", time::now().to_timespec().sec, suffix)
 }

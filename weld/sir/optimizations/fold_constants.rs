@@ -98,7 +98,7 @@ fn evaluate_binop(
 }
 
 pub fn fold_constants(prog: &mut SirProgram) -> WeldResult<()> {
-    let ref mut parameters = fnv::FnvHashSet::default();
+    let parameters = &mut fnv::FnvHashSet::default();
     // Collect all the Symbols passed between functions. We will keep the
     // definitions of these symbols intact (even if we assign simple literal
     // values to them).

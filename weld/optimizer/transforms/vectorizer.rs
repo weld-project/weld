@@ -468,7 +468,7 @@ fn vectorizable(for_loop: &Expr) -> Option<HashSet<Symbol>> {
 }
 
 fn get_id_element(ty: &Type, op: &BinOpKind) -> WeldResult<Option<Expr>> {
-    let ref sk = match *ty {
+    let sk = &match *ty {
         Scalar(sk) => sk,
         _ => {
             return Ok(None);

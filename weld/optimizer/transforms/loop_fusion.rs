@@ -257,7 +257,7 @@ pub fn fuse_loops_vertical(expr: &mut Expr) {
         } = expr.kind
         {
             if all_iters.len() == 1 {
-                let ref iter1 = all_iters[0];
+                let iter1 = &all_iters[0];
                 if let Res {
                     builder: ref res_bldr,
                 } = iter1.data.kind
@@ -364,9 +364,9 @@ fn replace_builder(
         } = nested.kind
         {
             let mut new_body = *body.clone();
-            let ref old_bldr = args[0];
-            let ref old_index = args[1];
-            let ref old_arg = args[2];
+            let old_bldr = &args[0];
+            let old_index = &args[1];
+            let old_arg = &args[2];
             let new_bldr_sym = sym_gen.new_symbol(&old_bldr.name.name());
             let new_index_sym = sym_gen.new_symbol(&old_index.name.name());
             let new_bldr =

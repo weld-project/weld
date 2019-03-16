@@ -1575,10 +1575,10 @@ fn basic_parsing() {
     assert_eq!(print_expr_without_indent(&p.macros[0].body), "(x+x)");
     assert_eq!(print_expr_without_indent(&p.macros[1].body), "5");
 
-    let ref t = parse_type("{i32, vec[vec[?]], ?}").unwrap().to_string();
+    let t = &parse_type("{i32, vec[vec[?]], ?}").unwrap().to_string();
     assert_eq!(t, "{i32,vec[vec[?]],?}");
 
-    let ref t = parse_type("{}").unwrap().to_string();
+    let t = &parse_type("{}").unwrap().to_string();
     assert_eq!(t, "{}");
 }
 

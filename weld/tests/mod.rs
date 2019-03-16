@@ -19,10 +19,10 @@ pub fn typed_expression(s: &str) -> Expr {
 pub fn check_transform(input: &str, expect: &str, transform: fn(&mut Expr)) {
     use crate::ast::{PrettyPrint, PrettyPrintConfig};
 
-    let ref conf = PrettyPrintConfig::new().show_types(true);
+    let conf = &PrettyPrintConfig::new().show_types(true);
 
-    let ref mut input = typed_expression(input);
-    let ref expect = typed_expression(expect);
+    let input = &mut typed_expression(input);
+    let expect = &typed_expression(expect);
 
     transform(input);
 
@@ -39,7 +39,7 @@ pub fn check_transform(input: &str, expect: &str, transform: fn(&mut Expr)) {
 #[cfg(test)]
 pub fn print_expr_without_indent(e: &Expr) -> String {
     use crate::ast::{PrettyPrint, PrettyPrintConfig};
-    let ref config = PrettyPrintConfig::new()
+    let config = &PrettyPrintConfig::new()
         .show_types(false)
         .should_indent(false);
     e.pretty_print_config(config)
@@ -49,7 +49,7 @@ pub fn print_expr_without_indent(e: &Expr) -> String {
 #[cfg(test)]
 pub fn print_typed_expr_without_indent(e: &Expr) -> String {
     use crate::ast::{PrettyPrint, PrettyPrintConfig};
-    let ref config = PrettyPrintConfig::new()
+    let config = &PrettyPrintConfig::new()
         .show_types(true)
         .should_indent(false);
     e.pretty_print_config(config)
