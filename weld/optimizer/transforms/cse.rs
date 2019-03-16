@@ -48,7 +48,7 @@
 //! As an example, consider the following Weld program, annotated with sites:
 //!
 //! ```weld
-//! |x: i32, w: vec[i32], v: vec[i32], z: vec[i32]|      |
+//! |x: i32, w: vec[i32], vec[i32], z: vec[i32]|      |
 //!     lookup(w, 1) +                                   |
 //!     if(x > 0,                                        |
 //!         lookup(v, 0) + lookup(v, 0) + lookup(w, 1),  | |_______site [0, 1]
@@ -64,7 +64,7 @@
 //! The bindings generator takes as input an expression that looks as follows:
 //!
 //! ```weld
-//! |x: i32, w: vec[i32], v: vec[i32], z: vec[i32]|
+//! |x: i32, w: vec[i32], vec[i32], z: vec[i32]|
 //! cse7
 //! ```
 //!
@@ -380,7 +380,7 @@ impl Cse {
 
             // Replace the expression with its CSE name.
             let replacement = Expr {
-                ty: ty,
+                ty,
                 kind: Ident(name),
                 annotations: Annotations::new(),
             };

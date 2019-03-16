@@ -128,8 +128,8 @@ impl Target {
         };
 
         let result = Target {
-            cpu: cpu,
-            features: features,
+            cpu,
+            features,
         };
         Ok(result)
     }

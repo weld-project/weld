@@ -70,10 +70,10 @@ impl Appender {
         LLVMStructSetBody(appender, layout.as_mut_ptr(), layout.len() as u32, 0);
         Appender {
             appender_ty: appender,
-            elem_ty: elem_ty,
+            elem_ty,
             name: c_name.into_string().unwrap(),
-            context: context,
-            module: module,
+            context,
+            module,
             new: None,
             merge: None,
             vmerge: None,

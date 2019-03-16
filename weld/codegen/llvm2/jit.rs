@@ -159,9 +159,9 @@ pub unsafe fn compile(
         .push(("Find Run Func Address".to_string(), start.to(end)));
 
     let result = CompiledModule {
-        context: context,
-        module: module,
-        engine: engine,
+        context,
+        module,
+        engine,
         run_function: run_func,
     };
     Ok(result)

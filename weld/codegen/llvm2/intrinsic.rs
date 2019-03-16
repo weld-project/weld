@@ -88,8 +88,8 @@ impl Intrinsics {
 
     pub unsafe fn defaults(context: LLVMContextRef, module: LLVMModuleRef) -> Intrinsics {
         let mut intrinsics = Intrinsics {
-            context: context,
-            module: module,
+            context,
+            module,
             intrinsics: FnvHashMap::default(),
         };
 

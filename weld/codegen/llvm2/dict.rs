@@ -187,11 +187,11 @@ impl SlotType {
         LLVMStructSetBody(slot_ty, layout.as_mut_ptr(), layout.len() as u32, 0);
 
         SlotType {
-            slot_ty: slot_ty,
-            key_ty: key_ty,
-            val_ty: val_ty,
-            context: context,
-            module: module,
+            slot_ty,
+            key_ty,
+            val_ty,
+            context,
+            module,
         }
     }
 
@@ -329,13 +329,13 @@ impl Dict {
         let name = c_name.into_string().unwrap();
 
         Dict {
-            name: name,
+            name,
             dict_ty: LLVMPointerType(dict_inner_ty, 0),
-            dict_inner_ty: dict_inner_ty,
-            key_comparator: key_comparator,
-            slot_ty: slot_ty,
-            context: context,
-            module: module,
+            dict_inner_ty,
+            key_comparator,
+            slot_ty,
+            context,
+            module,
             slot_for_key: None,
             new: None,
             lookup: None,
@@ -1006,7 +1006,7 @@ impl Dict {
     /// Returns the slot for a key.
     ///
     /// If the key is not in the hash table, returns an uninitialized slot. It is *invalid
-    /// behavior* to modify an uninitialized slot: the caller should observe the `filled` value of
+    /// behavior* to modify an uninitialized slothe caller should observe the `filled` value of
     /// the slot to see whether it is initialized.
     pub unsafe fn gen_opt_lookup(
         &mut self,

@@ -37,14 +37,14 @@ impl fmt::Debug for Transformation {
 impl Transformation {
     pub fn new(func: PassFn) -> Transformation {
         Transformation {
-            func: func,
+            func,
             experimental: false,
         }
     }
 
     pub fn new_experimental(func: PassFn) -> Transformation {
         Transformation {
-            func: func,
+            func,
             experimental: true,
         }
     }
@@ -59,7 +59,7 @@ pub struct Pass {
 impl Pass {
     pub fn new(transforms: Vec<Transformation>, pass_name: &'static str) -> Pass {
         Pass {
-            transforms: transforms,
+            transforms,
             pass_name: String::from(pass_name),
         }
     }

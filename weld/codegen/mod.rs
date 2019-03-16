@@ -90,7 +90,7 @@ pub fn compile_program(
     stats: &mut CompilationStats,
 ) -> WeldResult<CompiledModule> {
     let runnable = llvm2::compile(&program, conf, stats)?;
-    let result = CompiledModule { runnable: runnable };
+    let result = CompiledModule { runnable };
     Ok(result)
 }
 

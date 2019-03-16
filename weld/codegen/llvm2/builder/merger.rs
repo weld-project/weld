@@ -61,12 +61,12 @@ impl Merger {
         LLVMStructSetBody(merger, layout.as_mut_ptr(), layout.len() as u32, 0);
         Merger {
             name: c_name.into_string().unwrap(),
-            op: op,
+            op,
             merger_ty: merger,
-            elem_ty: elem_ty,
-            scalar_kind: scalar_kind,
-            context: context,
-            module: module,
+            elem_ty,
+            scalar_kind,
+            context,
+            module,
             new: None,
             merge: None,
             vmerge: None,
@@ -117,7 +117,7 @@ impl Merger {
 
     /// Builds the `Merge` function and returns a reference to the function.
     ///
-    /// The merge function is similar for the scalar and vector variant: the `gep_index determines
+    /// The merge function is similar for the scalar and vector varianthe `gep_index determines
     /// which one is generated.
     unsafe fn gen_merge_internal(
         &mut self,

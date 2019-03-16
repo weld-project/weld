@@ -83,9 +83,7 @@ pub trait BuilderExpressionGen {
 struct NewBuilderStatement<'a> {
     output: &'a Symbol,
     arg: Option<&'a Symbol>,
-    _ty: &'a Type,
     kind: &'a BuilderKind,
-    _annotations: &'a Annotations,
 }
 
 impl<'a> NewBuilderStatement<'a> {
@@ -99,13 +97,11 @@ impl<'a> NewBuilderStatement<'a> {
         if let NewBuilder { ref arg, .. } = statement.kind {
             let output = statement.output.as_ref().unwrap();
             let builder_type = func.symbol_type(output)?;
-            if let Builder(ref kind, ref annotations) = *builder_type {
+            if let Builder(ref kind, _) = *builder_type {
                 let result = NewBuilderStatement {
-                    output: output,
+                    output,
                     arg: arg.as_ref(),
-                    _ty: builder_type,
-                    kind: kind,
-                    _annotations: annotations,
+                    kind,
                 };
                 return Ok(result);
             }
@@ -119,7 +115,6 @@ struct MergeStatement<'a> {
     builder: &'a Symbol,
     value: &'a Symbol,
     kind: &'a BuilderKind,
-    _annotations: &'a Annotations,
 }
 
 impl<'a> MergeStatement<'a> {
@@ -130,12 +125,11 @@ impl<'a> MergeStatement<'a> {
         } = statement.kind
         {
             let builder_type = func.symbol_type(builder)?;
-            if let Builder(ref kind, ref annotations) = *builder_type {
+            if let Builder(ref kind, _) = *builder_type {
                 let result = MergeStatement {
-                    builder: builder,
-                    value: value,
-                    kind: kind,
-                    _annotations: annotations,
+                    builder,
+                    value,
+                    kind,
                 };
                 return Ok(result);
             }
@@ -149,7 +143,6 @@ struct ResStatement<'a> {
     output: &'a Symbol,
     builder: &'a Symbol,
     kind: &'a BuilderKind,
-    _annotations: &'a Annotations,
 }
 
 impl<'a> ResStatement<'a> {
@@ -159,12 +152,11 @@ impl<'a> ResStatement<'a> {
         }
         if let Res(ref builder) = statement.kind {
             let builder_type = func.symbol_type(builder)?;
-            if let Builder(ref kind, ref annotations) = *builder_type {
+            if let Builder(ref kind, _) = *builder_type {
                 let result = ResStatement {
                     output: statement.output.as_ref().unwrap(),
-                    builder: builder,
-                    kind: kind,
-                    _annotations: annotations,
+                    builder,
+                    kind,
                 };
                 return Ok(result);
             }

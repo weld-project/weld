@@ -214,10 +214,10 @@ impl Vector {
         LLVMStructSetBody(vector, layout.as_mut_ptr(), layout.len() as u32, 0);
         Vector {
             name: c_name.into_string().unwrap(),
-            context: context,
-            module: module,
+            context,
+            module,
             vector_ty: vector,
-            elem_ty: elem_ty,
+            elem_ty,
             new: None,
             clone: None,
             at: None,
