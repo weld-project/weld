@@ -36,7 +36,8 @@ trait LoopSizeAnnotation {
 impl LoopSizeAnnotation for Expr {
     fn loopsize(&self) -> Option<u64> {
         println!("{}", self.annotations);
-        self.annotations.get("loopsize")
+        self.annotations
+            .get("loopsize")
             .and_then(|value| value.parse::<u64>().ok())
     }
 }
@@ -47,10 +48,23 @@ impl<'a> UnrollPattern<'a> {
         if let Res { ref builder } = expr.kind {
             if let Some(loopsize) = builder.loopsize() {
                 if loopsize <= UNROLL_LIMIT {
-                    if let For { ref iters, ref builder, ref func } = builder.kind {
+                    if let For {
+                        ref iters,
+                        ref builder,
+                        ref func,
+                    } = builder.kind
+                    {
                         if let Builder(ref bk, _) = builder.ty {
-                            if let Lambda {ref params, ref body} = func.kind {
-                                if let Merge { builder: ref builder2, ref value} = body.kind {
+                            if let Lambda {
+                                ref params,
+                                ref body,
+                            } = func.kind
+                            {
+                                if let Merge {
+                                    builder: ref builder2,
+                                    ref value,
+                                } = body.kind
+                                {
                                     match builder2.kind {
                                         Ident(ref name) if *name == params[0].name => {
                                             return Some(UnrollPattern {
@@ -86,10 +100,15 @@ pub fn unroll_static_loop(expr: &mut Expr) {
     let mut sym_gen = SymbolGenerator::from_expression(expr);
     expr.transform_up(&mut |ref mut expr| {
         if let Some(pat) = UnrollPattern::extract(expr) {
-
             // Create a vector of identifiers which will bind to the iterator data.
-            let symbols: Vec<_> = (0..pat.iters.len()).map(|_| sym_gen.new_symbol("tmp")).collect();
-            let idents = symbols.iter().zip(pat.iters.iter()).map(|ref t| ident_expr(t.0.clone(), t.1.data.ty.clone()).unwrap()).collect();
+            let symbols: Vec<_> = (0..pat.iters.len())
+                .map(|_| sym_gen.new_symbol("tmp"))
+                .collect();
+            let idents = symbols
+                .iter()
+                .zip(pat.iters.iter())
+                .map(|ref t| ident_expr(t.0.clone(), t.1.data.ty.clone()).unwrap())
+                .collect();
 
             let vals = unroll_values(pat.merge_params, pat.merge_value, &idents, pat.loop_size);
             if vals.is_err() {
@@ -100,7 +119,10 @@ pub fn unroll_static_loop(expr: &mut Expr) {
 
             let combined_expr = combine_unrolled_values(pat.builder_kind.clone(), vals);
             if combined_expr.is_err() {
-                trace!("Unroller error: {}", combined_expr.unwrap_err().description());
+                trace!(
+                    "Unroller error: {}",
+                    combined_expr.unwrap_err().description()
+                );
                 return None;
             }
 
@@ -129,7 +151,12 @@ fn is_same_ident(expr: &Expr, other: &Expr) -> bool {
 
 /// Takes a `MergeSingle` and returns a list of expressions which replace the element
 /// in the merge with a Lookup.
-fn unroll_values(parameters: &Vec<Parameter>, value: &Expr, vectors: &Vec<Expr>, loopsize: u64) -> WeldResult<Vec<Expr>> {
+fn unroll_values(
+    parameters: &Vec<Parameter>,
+    value: &Expr,
+    vectors: &Vec<Expr>,
+    loopsize: u64,
+) -> WeldResult<Vec<Expr>> {
     if parameters.len() != 3 {
         return compile_err!("Expected three parameters to Merge function");
     }
@@ -150,15 +177,30 @@ fn unroll_values(parameters: &Vec<Parameter>, value: &Expr, vectors: &Vec<Expr>,
                 Ident(ref name) if name == elem_symbol && vectors.len() == 1 => {
                     // There is a single iterator, which means the type of the element is the type
                     // of the iterator's data. Replace it with a lookup into the vector.
-                    Some(lookup_expr(vectors[0].clone(), literal_expr(LiteralKind::I64Literal(i as i64)).unwrap()).unwrap())
+                    Some(
+                        lookup_expr(
+                            vectors[0].clone(),
+                            literal_expr(LiteralKind::I64Literal(i as i64)).unwrap(),
+                        )
+                        .unwrap(),
+                    )
                 }
-                GetField { ref expr, ref index } if is_same_ident(expr, elem_ident) && vectors.len() > 1 => {
+                GetField {
+                    ref expr,
+                    ref index,
+                } if is_same_ident(expr, elem_ident) && vectors.len() > 1 => {
                     // There are multiple iterators zipped into a struct, and this expression is
                     // pulling one of the elements out of that struct. Replace it with a lookup into the vector.
                     let data_expr = vectors[*index as usize].clone();
-                    Some(lookup_expr(data_expr, literal_expr(LiteralKind::I64Literal(i as i64)).unwrap()).unwrap())
+                    Some(
+                        lookup_expr(
+                            data_expr,
+                            literal_expr(LiteralKind::I64Literal(i as i64)).unwrap(),
+                        )
+                        .unwrap(),
+                    )
                 }
-                _ => None
+                _ => None,
             }
         });
         expressions.push(unrolled_value);
@@ -198,7 +240,10 @@ fn combine_unrolled_values(bk: BuilderKind, values: Vec<Expr>) -> WeldResult<Exp
             return makevector_expr(values);
         }
         ref bk => {
-            return compile_err!("Unroller transform does not support loops with builder of kind {:?}", bk);
+            return compile_err!(
+                "Unroller transform does not support loops with builder of kind {:?}",
+                bk
+            );
         }
     }
 }
@@ -206,40 +251,46 @@ fn combine_unrolled_values(bk: BuilderKind, values: Vec<Expr>) -> WeldResult<Exp
 #[cfg(test)]
 use crate::tests::*;
 
-
 #[test]
 fn simple_merger_loop() {
-    let mut e = typed_expression("|v:vec[i32]| result(
+    let mut e = typed_expression(
+        "|v:vec[i32]| result(
             @(loopsize:2L)
             for(v, merger[i32,+],
-            |b,i,e| merge(b, e)))");
+            |b,i,e| merge(b, e)))",
+    );
 
     unroll_static_loop(&mut e);
     let ref expect = typed_expression("|v:vec[i32]| let t0 = v; lookup(t0, 0L) + lookup(t0, 1L)");
     assert!(e.compare_ignoring_symbols(expect).unwrap());
 }
 
-
 #[test]
 fn zipped_merger_loop() {
-    let mut e = typed_expression("|v:vec[i32], w: vec[i32]| result(
+    let mut e = typed_expression(
+        "|v:vec[i32], w: vec[i32]| result(
             @(loopsize:2L)
             for(zip(v, w), merger[i32,+],
-            |b,i,e| merge(b, e.$0 * e.$1)))");
+            |b,i,e| merge(b, e.$0 * e.$1)))",
+    );
 
     unroll_static_loop(&mut e);
-    let ref expect = typed_expression("|v:vec[i32], w:vec[i32]| let t0 = v; let t1 = w;
+    let ref expect = typed_expression(
+        "|v:vec[i32], w:vec[i32]| let t0 = v; let t1 = w;
                                       lookup(t0, 0L) * lookup(t1, 0L) +
-                                      lookup(t0, 1L) * lookup(t1, 1L)");
+                                      lookup(t0, 1L) * lookup(t1, 1L)",
+    );
     assert!(e.compare_ignoring_symbols(expect).unwrap());
 }
 
 #[test]
 fn simple_appender_loop() {
-    let mut e = typed_expression("|v:vec[i32]| result(
+    let mut e = typed_expression(
+        "|v:vec[i32]| result(
             @(loopsize:2L)
             for(v, appender,
-            |b,i,e| merge(b, e)))");
+            |b,i,e| merge(b, e)))",
+    );
 
     unroll_static_loop(&mut e);
     let ref expect = typed_expression("|v:vec[i32]| let t0 = v; [lookup(t0, 0L), lookup(t0, 1L)]");
@@ -248,24 +299,34 @@ fn simple_appender_loop() {
 
 #[test]
 fn zipped_appender_loop() {
-    let mut e = typed_expression("|v:vec[i32], w: vec[i32]| result(
+    let mut e = typed_expression(
+        "|v:vec[i32], w: vec[i32]| result(
             @(loopsize:2L)
             for(zip(v, w), appender,
-            |b,i,e| merge(b, e.$0 * e.$1)))");
+            |b,i,e| merge(b, e.$0 * e.$1)))",
+    );
 
     unroll_static_loop(&mut e);
-    let ref expect = typed_expression("|v:vec[i32], w:vec[i32]| let t0 = v; let t1 = w;
+    let ref expect = typed_expression(
+        "|v:vec[i32], w:vec[i32]| let t0 = v; let t1 = w;
                                       [lookup(t0, 0L) * lookup(t1, 0L),
-                                      lookup(t0, 1L) * lookup(t1, 1L)]");
+                                      lookup(t0, 1L) * lookup(t1, 1L)]",
+    );
     assert!(e.compare_ignoring_symbols(expect).unwrap());
 }
 
 #[test]
 fn large_merger_loop() {
-    let mut e = typed_expression(format!("|v:vec[i32]| result(
+    let mut e = typed_expression(
+        format!(
+            "|v:vec[i32]| result(
             @(loopsize:{}L)
             for(v, merger[i32,+],
-            |b,i,e| merge(b, e)))", UNROLL_LIMIT + 1).as_ref());
+            |b,i,e| merge(b, e)))",
+            UNROLL_LIMIT + 1
+        )
+        .as_ref(),
+    );
     // The annotation is more than the unroll limit, so don't unroll.
     let ref expect = e.clone();
     unroll_static_loop(&mut e);

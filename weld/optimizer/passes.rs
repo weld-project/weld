@@ -7,15 +7,15 @@ use std::fmt;
 use crate::ast::*;
 use crate::error::*;
 
+use super::transforms::algebraic;
 use super::transforms::cse;
+use super::transforms::inliner;
 use super::transforms::loop_fusion;
 use super::transforms::loop_fusion_2;
-use super::transforms::inliner;
-use super::transforms::size_inference;
 use super::transforms::short_circuit;
-use super::transforms::vectorizer;
+use super::transforms::size_inference;
 use super::transforms::unroller;
-use super::transforms::algebraic;
+use super::transforms::vectorizer;
 
 use std::collections::HashMap;
 
@@ -50,7 +50,7 @@ impl Transformation {
     }
 }
 
-#[derive(Clone,Debug)]
+#[derive(Clone, Debug)]
 pub struct Pass {
     transforms: Vec<Transformation>,
     pass_name: String,

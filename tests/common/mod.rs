@@ -2,8 +2,8 @@
 #![allow(dead_code)]
 
 
-use weld::*;
 use std::fmt;
+use weld::*;
 
 pub use weld::data::*;
 
@@ -23,7 +23,7 @@ impl<K, V> Pair<K, V> {
 impl<K, V> fmt::Display for Pair<K, V>
 where
     K: fmt::Display,
-    V: fmt::Display
+    V: fmt::Display,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "({}, {})", self.ele1, self.ele2)
@@ -67,7 +67,6 @@ unsafe fn _compile_and_run<T>(code: &str, conf: &WeldConf, ptr: &T) -> WeldResul
 pub fn compile_and_run<T>(code: &str, conf: &WeldConf, ptr: &T) -> WeldValue {
     unsafe { _compile_and_run(code, conf, ptr).expect("Run failed!") }
 }
-
 
 /// Runs `code` with the given `conf` and input data pointer `ptr`, expecting
 /// a succeessful result to be returned. Panics if an error is thrown by the runtime.

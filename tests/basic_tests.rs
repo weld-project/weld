@@ -1,6 +1,5 @@
 //! Various tests for the different expressions in Weld.
 
-
 mod common;
 use crate::common::*;
 
@@ -31,7 +30,6 @@ fn float_literals() {
         let result = unsafe { *data };
         assert_eq!(result, v);
 
-
         // Try parsing the value as a float
         let code = format!("|| {:e}f", v);
         let ref conf = default_conf();
@@ -40,7 +38,6 @@ fn float_literals() {
         let data = ret_value.data() as *const f32;
         let result = unsafe { *data };
         assert_eq!(result, v as f32);
-
     }
 }
 
@@ -116,8 +113,8 @@ fn bool_eq() {
 
     let bool1 = unsafe { (*result.data.offset(0)).clone() };
     let bool2 = unsafe { (*result.data.offset(1)).clone() };
-    assert_eq!(bool1 , 1);
-    assert_eq!(bool2 , 0);
+    assert_eq!(bool1, 1);
+    assert_eq!(bool2, 0);
 }
 
 #[test]

@@ -123,24 +123,21 @@ extern crate lazy_static;
 #[macro_use]
 extern crate log;
 
-
-use libc;
-use env_logger;
 use chrono;
+use env_logger;
 use fnv;
+use libc;
 use time;
-
-
 
 use self::time::PreciseTime;
 
-use std::error::Error;
 use std::default::Default;
-use std::ffi::{CString, CStr};
+use std::error::Error;
+use std::ffi::{CStr, CString};
 use std::fmt;
 
-use std::rc::Rc;
 use std::cell::RefCell;
+use std::rc::Rc;
 
 use uuid::Uuid;
 
@@ -151,7 +148,6 @@ macro_rules! weld_err {
         ::std::result::Result::Err($crate::WeldError::new_unknown(format!($($arg)*)))
     })
 }
-
 
 /// A build ID.
 ///
@@ -169,15 +165,15 @@ mod error;
 mod codegen;
 mod conf;
 mod optimizer;
-mod syntax;
 mod sir;
+mod syntax;
 mod util;
 
 // Public interfaces.
 pub mod ast;
+pub mod data;
 pub mod ffi;
 pub mod runtime;
-pub mod data;
 
 pub use crate::conf::constants::*;
 
@@ -187,7 +183,7 @@ mod tests;
 
 use crate::conf::ParsedConf;
 use crate::runtime::WeldRuntimeContext;
-use crate::util::dump::{DumpCodeFormat, write_code};
+use crate::util::dump::{write_code, DumpCodeFormat};
 use crate::util::stats::CompilationStats;
 
 // Error codes are exposed publicly.
@@ -203,7 +199,7 @@ pub type DataMut = *mut libc::c_void;
 pub type RunId = i64;
 
 /// An error when compiling or running a Weld program.
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub struct WeldError {
     message: CString,
     code: WeldRuntimeErrno,
@@ -221,7 +217,7 @@ pub type WeldResult<T> = Result<T, WeldError>;
 /// point to the same underlying object).
 ///
 /// Contexts are *not* thread-safe, and thus do not implement `Send+Sync`.
-#[derive(Clone,Debug,PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct WeldContext {
     context: Rc<RefCell<WeldRuntimeContext>>,
 }
@@ -256,7 +252,7 @@ impl WeldContext {
 
         let run = WeldRuntimeContext::new(threads as i32, mem_limit);
         Ok(WeldContext {
-            context: Rc::new(RefCell::new(run))
+            context: Rc::new(RefCell::new(run)),
         })
     }
 
@@ -386,7 +382,10 @@ impl Default for WeldError {
 // Conversion from a compilation error to an external WeldError.
 impl From<error::WeldCompileError> for WeldError {
     fn from(err: error::WeldCompileError) -> WeldError {
-        WeldError::new(CString::new(err.description()).unwrap(), WeldRuntimeErrno::CompileError)
+        WeldError::new(
+            CString::new(err.description()).unwrap(),
+            WeldRuntimeErrno::CompileError,
+        )
     }
 }
 
@@ -394,7 +393,7 @@ impl From<error::WeldCompileError> for WeldError {
 ///
 /// Values produced by Weld (i.e., as a return value from `WeldModule::run`) hold a reference to
 /// the context they are allocated in.
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub struct WeldValue {
     data: Data,
     run: Option<RunId>,
@@ -495,7 +494,7 @@ impl WeldValue {
 }
 
 /// A struct used to configure compilation and the Weld runtime.
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub struct WeldConf {
     dict: fnv::FnvHashMap<String, CString>,
 }
@@ -516,7 +515,9 @@ impl WeldConf {
     /// let conf = WeldConf::new();
     /// ```
     pub fn new() -> WeldConf {
-        WeldConf { dict: fnv::FnvHashMap::default() }
+        WeldConf {
+            dict: fnv::FnvHashMap::default(),
+        }
     }
 
     /// Adds a configuration to this `WeldConf`.
@@ -641,19 +642,27 @@ impl WeldModule {
         let start = PreciseTime::now();
         let program = syntax::parser::parse_program(code)?;
         let end = PreciseTime::now();
-        stats.weld_times.push(("Parsing".to_string(), start.to(end)));
+        stats
+            .weld_times
+            .push(("Parsing".to_string(), start.to(end)));
 
         // Substitute macros and type aliases in the parsed program.
         let mut expr = syntax::macro_processor::process_program(&program)?;
         debug!("After macro substitution:\n{}\n", expr.pretty_print());
 
         let unoptimized_code = expr.pretty_print();
-        info!("Compiling module with UUID={}, code\n{}",
-              uuid.to_hyphenated(),
-              unoptimized_code);
+        info!(
+            "Compiling module with UUID={}, code\n{}",
+            uuid.to_hyphenated(),
+            unoptimized_code
+        );
 
         // Dump the generated Weld program before applying any analyses.
-        nonfatal!(write_code(&unoptimized_code, DumpCodeFormat::Weld, &conf.dump_code));
+        nonfatal!(write_code(
+            &unoptimized_code,
+            DumpCodeFormat::Weld,
+            &conf.dump_code
+        ));
 
         // Uniquify symbol names.
         let start = PreciseTime::now();
@@ -665,28 +674,36 @@ impl WeldModule {
         let start = PreciseTime::now();
         expr.infer_types()?;
         let end = PreciseTime::now();
-        stats.weld_times.push(("Type Inference".to_string(), start.to(end)));
+        stats
+            .weld_times
+            .push(("Type Inference".to_string(), start.to(end)));
         debug!("After type inference:\n{}\n", expr.pretty_print());
 
         // Apply optimization passes.
-        optimizer::apply_passes(&mut expr,
-                                &conf.optimization_passes,
-                                &mut stats,
-                                conf.enable_experimental_passes)?;
+        optimizer::apply_passes(
+            &mut expr,
+            &conf.optimization_passes,
+            &mut stats,
+            conf.enable_experimental_passes,
+        )?;
 
         // Uniquify again.
         let start = PreciseTime::now();
         expr.uniquify()?;
         let end = PreciseTime::now();
         uniquify_dur = uniquify_dur + start.to(end);
-        stats.weld_times.push(("Uniquify outside Passes".to_string(), uniquify_dur));
+        stats
+            .weld_times
+            .push(("Uniquify outside Passes".to_string(), uniquify_dur));
         debug!("Optimized Weld program:\n{}\n", expr.pretty_print());
 
         // Convert the AST to SIR.
         let start = PreciseTime::now();
         let mut sir_prog = sir::ast_to_sir(&expr)?;
         let end = PreciseTime::now();
-        stats.weld_times.push(("AST to SIR".to_string(), start.to(end)));
+        stats
+            .weld_times
+            .push(("AST to SIR".to_string(), start.to(end)));
         debug!("SIR program:\n{}\n", &sir_prog);
 
         // If enabled, apply SIR optimizations.
@@ -698,28 +715,41 @@ impl WeldModule {
         }
         let end = PreciseTime::now();
         debug!("Optimized SIR program:\n{}\n", &sir_prog);
-        stats.weld_times.push(("SIR Optimization".to_string(), start.to(end)));
+        stats
+            .weld_times
+            .push(("SIR Optimization".to_string(), start.to(end)));
 
-        nonfatal!(write_code(expr.pretty_print(), DumpCodeFormat::WeldOpt, &conf.dump_code));
-        nonfatal!(write_code(sir_prog.to_string(), DumpCodeFormat::SIR, &conf.dump_code));
+        nonfatal!(write_code(
+            expr.pretty_print(),
+            DumpCodeFormat::WeldOpt,
+            &conf.dump_code
+        ));
+        nonfatal!(write_code(
+            sir_prog.to_string(),
+            DumpCodeFormat::SIR,
+            &conf.dump_code
+        ));
 
         // Generate code.
         let compiled_module = codegen::compile_program(&sir_prog, conf, &mut stats)?;
         debug!("\n{}\n", stats.pretty_print());
 
-        let (param_types, return_type) = if let Type::Function(ref param_tys, ref return_ty) = expr.ty {
-            (param_tys.clone(), *return_ty.clone())
-        } else {
-            unreachable!()
-        };
+        let (param_types, return_type) =
+            if let Type::Function(ref param_tys, ref return_ty) = expr.ty {
+                (param_tys.clone(), *return_ty.clone())
+            } else {
+                unreachable!()
+            };
 
         let end = PreciseTime::now();
         let duration = e2e_start.to(end);
         let us = duration.num_microseconds().unwrap_or(std::i64::MAX);
         let e2e_ms: f64 = us as f64 / 1000.0;
-        info!("Compiled module with UUID={} in {} ms",
-              uuid.to_hyphenated(),
-              e2e_ms);
+        info!(
+            "Compiled module with UUID={} in {} ms",
+            uuid.to_hyphenated(),
+            e2e_ms
+        );
 
         Ok(WeldModule {
             llvm_module: compiled_module,
@@ -800,15 +830,12 @@ impl WeldModule {
     ///     assert_eq!(input.get() + 1, result);
     /// }
     /// ```
-    pub unsafe fn run(&self,
-                      context: &mut WeldContext,
-                      arg: &WeldValue) -> WeldResult<WeldValue> {
-
+    pub unsafe fn run(&self, context: &mut WeldContext, arg: &WeldValue) -> WeldResult<WeldValue> {
         let start = PreciseTime::now();
         let nworkers = context.context.borrow().threads();
         let mem_limit = context.context.borrow().memory_limit();
 
-         // Borrow the inner context mutably since we pass a mutable pointer to it to the compiled
+        // Borrow the inner context mutably since we pass a mutable pointer to it to the compiled
         // module. This enforces the single-mutable-borrow rule manually for contexts.
         let mut context_borrowed = context.context.borrow_mut();
 
@@ -842,14 +869,18 @@ impl WeldModule {
         let duration = start.to(end);
         let us = duration.num_microseconds().unwrap_or(std::i64::MAX);
         let ms: f64 = us as f64 / 1000.0;
-        debug!("Ran module UUID={} in {} ms",
-              self.module_id.to_hyphenated(), ms);
+        debug!(
+            "Ran module UUID={} in {} ms",
+            self.module_id.to_hyphenated(),
+            ms
+        );
 
         // Check whether the run was successful -- if not, free the data in the module, andn return
         // an error indicating what went wrong.
         if result.errno != WeldRuntimeErrno::Success {
             // The WeldValue is automatically dropped and freed here.
-            let message = CString::new(format!("Weld program failed with error {:?}", result.errno)).unwrap();
+            let message =
+                CString::new(format!("Weld program failed with error {:?}", result.errno)).unwrap();
             Err(WeldError::new(message, result.errno))
         } else {
             // Free the WeldOutputArgs struct.
@@ -895,7 +926,7 @@ impl From<WeldLogLevel> for log::LogLevelFilter {
             WeldLogLevel::Info => log::LogLevelFilter::Info,
             WeldLogLevel::Debug => log::LogLevelFilter::Debug,
             WeldLogLevel::Trace => log::LogLevelFilter::Trace,
-            _ => log::LogLevelFilter::Off
+            _ => log::LogLevelFilter::Off,
         }
     }
 }
@@ -908,7 +939,7 @@ impl From<log::LogLevelFilter> for WeldLogLevel {
             log::LogLevelFilter::Info => WeldLogLevel::Info,
             log::LogLevelFilter::Debug => WeldLogLevel::Debug,
             log::LogLevelFilter::Trace => WeldLogLevel::Trace,
-            _ => WeldLogLevel::Off
+            _ => WeldLogLevel::Off,
         }
     }
 }
@@ -925,8 +956,8 @@ pub fn load_linked_library<S: AsRef<str>>(filename: S) -> WeldResult<()> {
 /// This function is ignored if it has already been called once, or if some other code in the
 /// process has initialized logging using Rust's `log` crate.
 pub fn set_log_level(level: WeldLogLevel) {
-    use crate::util::colors::*;
     use crate::util::colors::Color::*;
+    use crate::util::colors::*;
 
     let filter: log::LogLevelFilter = level.into();
     let format = |rec: &log::LogRecord<'_>| {
@@ -946,5 +977,9 @@ pub fn set_log_level(level: WeldLogLevel) {
     builder.filter(None, filter);
     builder.init().unwrap_or(());
 
-    info!("Weld Version {} (Build {})", VERSION.unwrap_or("unknown"), BUILD);
+    info!(
+        "Weld Version {} (Build {})",
+        VERSION.unwrap_or("unknown"),
+        BUILD
+    );
 }

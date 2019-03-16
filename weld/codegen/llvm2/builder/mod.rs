@@ -10,18 +10,18 @@
 
 use llvm_sys;
 
-use crate::ast::*;
+use crate::ast::BinOpKind;
 use crate::ast::BuilderKind::*;
 use crate::ast::Type::*;
-use crate::ast::BinOpKind;
+use crate::ast::*;
 
 use crate::error::*;
 
-use crate::sir::*;
 use crate::sir::StatementKind::*;
+use crate::sir::*;
 
-use self::llvm_sys::prelude::*;
 use self::llvm_sys::core::*;
+use self::llvm_sys::prelude::*;
 
 use super::dict;
 
@@ -43,20 +43,38 @@ pub trait BuilderExpressionGen {
     /// Merges two pointer values using the provided binary operator.
     ///
     /// Specifically, performs `*builder_value = *builder_value <binop> *merge_value`
-    unsafe fn merge_values(&mut self,
-                           builder: LLVMBuilderRef,
-                           merge_ty: &Type,
-                           binop: BinOpKind,
-                           builder_value_pointer: LLVMValueRef,
-                           merge_value_pointer: LLVMValueRef) -> WeldResult<()>;
+    unsafe fn merge_values(
+        &mut self,
+        builder: LLVMBuilderRef,
+        merge_ty: &Type,
+        binop: BinOpKind,
+        builder_value_pointer: LLVMValueRef,
+        merge_value_pointer: LLVMValueRef,
+    ) -> WeldResult<()>;
     /// Generates code for the `NewBuilder` statement.
-    unsafe fn gen_new_builder(&mut self, ctx: &mut FunctionContext<'_>, statement: &Statement) -> WeldResult<()>;
+    unsafe fn gen_new_builder(
+        &mut self,
+        ctx: &mut FunctionContext<'_>,
+        statement: &Statement,
+    ) -> WeldResult<()>;
     /// Generates code for the `Merge` statement.
-    unsafe fn gen_merge(&mut self, ctx: &mut FunctionContext<'_>, statement: &Statement) -> WeldResult<()>;
+    unsafe fn gen_merge(
+        &mut self,
+        ctx: &mut FunctionContext<'_>,
+        statement: &Statement,
+    ) -> WeldResult<()>;
     /// Generates code for the `Result` statement.
-    unsafe fn gen_result(&mut self, ctx: &mut FunctionContext<'_>, statement: &Statement) -> WeldResult<()>;
+    unsafe fn gen_result(
+        &mut self,
+        ctx: &mut FunctionContext<'_>,
+        statement: &Statement,
+    ) -> WeldResult<()>;
     /// Generates code for the `ParallelFor` terminator.
-    unsafe fn gen_for(&mut self, ctx: &mut FunctionContext<'_>, statement: &Statement) -> WeldResult<()>;
+    unsafe fn gen_for(
+        &mut self,
+        ctx: &mut FunctionContext<'_>,
+        statement: &Statement,
+    ) -> WeldResult<()>;
     /// Generates code to define builder types.
     unsafe fn builder_type(&mut self, builder: &Type) -> WeldResult<LLVMTypeRef>;
 }
@@ -71,7 +89,10 @@ struct NewBuilderStatement<'a> {
 }
 
 impl<'a> NewBuilderStatement<'a> {
-    fn extract(statement: &'a Statement, func: &'a SirFunction) -> WeldResult<NewBuilderStatement<'a>> {
+    fn extract(
+        statement: &'a Statement,
+        func: &'a SirFunction,
+    ) -> WeldResult<NewBuilderStatement<'a>> {
         if statement.output.is_none() {
             unreachable!()
         }
@@ -103,7 +124,11 @@ struct MergeStatement<'a> {
 
 impl<'a> MergeStatement<'a> {
     fn extract(statement: &'a Statement, func: &'a SirFunction) -> WeldResult<MergeStatement<'a>> {
-        if let Merge { ref builder, ref value } = statement.kind {
+        if let Merge {
+            ref builder,
+            ref value,
+        } = statement.kind
+        {
             let builder_type = func.symbol_type(builder)?;
             if let Builder(ref kind, ref annotations) = *builder_type {
                 let result = MergeStatement {
@@ -152,41 +177,45 @@ impl BuilderExpressionGen for LlvmGenerator {
     /// Merges two pointer values using the provided binary operator.
     ///
     /// Specifically, performs `*builder_value = *builder_value <binop> *merge_value`
-    unsafe fn merge_values(&mut self,
-                           builder: LLVMBuilderRef,
-                           merge_ty: &Type,
-                           binop: BinOpKind,
-                           builder_value_pointer: LLVMValueRef,
-                           merge_value_pointer: LLVMValueRef) -> WeldResult<()> {
+    unsafe fn merge_values(
+        &mut self,
+        builder: LLVMBuilderRef,
+        merge_ty: &Type,
+        binop: BinOpKind,
+        builder_value_pointer: LLVMValueRef,
+        merge_value_pointer: LLVMValueRef,
+    ) -> WeldResult<()> {
         match *merge_ty {
             Scalar(_) => {
                 let merge_value = self.load(builder, merge_value_pointer)?;
                 let builder_value = self.load(builder, builder_value_pointer)?;
-                let merged = numeric::gen_binop(builder, binop, builder_value, merge_value, merge_ty)?;
+                let merged =
+                    numeric::gen_binop(builder, binop, builder_value, merge_value, merge_ty)?;
                 LLVMBuildStore(builder, merged, builder_value_pointer);
             }
             Struct(ref elems) => {
                 for (i, elem) in elems.iter().enumerate() {
-                    let builder_elem_pointer = LLVMBuildStructGEP(builder,
-                                                               builder_value_pointer,
-                                                               i as u32,
-                                                               c_str!(""));
+                    let builder_elem_pointer =
+                        LLVMBuildStructGEP(builder, builder_value_pointer, i as u32, c_str!(""));
                     let builder_value = self.load(builder, builder_elem_pointer)?;
-                    let merge_elem_pointer = LLVMBuildStructGEP(builder,
-                                                                merge_value_pointer,
-                                                                i as u32,
-                                                                c_str!(""));
+                    let merge_elem_pointer =
+                        LLVMBuildStructGEP(builder, merge_value_pointer, i as u32, c_str!(""));
                     let merge_value = self.load(builder, merge_elem_pointer)?;
-                    let merged = numeric::gen_binop(builder, binop, builder_value, merge_value, elem)?;
+                    let merged =
+                        numeric::gen_binop(builder, binop, builder_value, merge_value, elem)?;
                     LLVMBuildStore(builder, merged, builder_elem_pointer);
                 }
             }
-            _ => unreachable!()
+            _ => unreachable!(),
         };
         Ok(())
     }
 
-    unsafe fn gen_new_builder(&mut self, ctx: &mut FunctionContext<'_>, statement: &Statement) -> WeldResult<()> {
+    unsafe fn gen_new_builder(
+        &mut self,
+        ctx: &mut FunctionContext<'_>,
+        statement: &Statement,
+    ) -> WeldResult<()> {
         let nb = NewBuilderStatement::extract(statement, ctx.sir_function)?;
         let output_pointer = ctx.get_value(nb.output)?;
         match *nb.kind {
@@ -210,7 +239,12 @@ impl BuilderExpressionGen for LlvmGenerator {
                 let default_capacity = self.i64(dict::INITIAL_CAPACITY);
                 let dictmerger = {
                     let methods = self.dictionaries.get_mut(dict_type).unwrap();
-                    methods.gen_new(ctx.builder, &mut self.intrinsics, default_capacity, ctx.get_run())?
+                    methods.gen_new(
+                        ctx.builder,
+                        &mut self.intrinsics,
+                        default_capacity,
+                        ctx.get_run(),
+                    )?
                 };
                 LLVMBuildStore(ctx.builder, dictmerger, output_pointer);
                 Ok(())
@@ -220,7 +254,12 @@ impl BuilderExpressionGen for LlvmGenerator {
                 let default_capacity = self.i64(dict::INITIAL_CAPACITY);
                 let groupmerger = {
                     let methods = self.dictionaries.get_mut(dict_type).unwrap();
-                    methods.gen_new(ctx.builder, &mut self.intrinsics, default_capacity, ctx.get_run())?
+                    methods.gen_new(
+                        ctx.builder,
+                        &mut self.intrinsics,
+                        default_capacity,
+                        ctx.get_run(),
+                    )?
                 };
                 LLVMBuildStore(ctx.builder, groupmerger, output_pointer);
                 Ok(())
@@ -245,26 +284,37 @@ impl BuilderExpressionGen for LlvmGenerator {
                 let argument = nb.arg.unwrap();
                 let argument = self.load(ctx.builder, ctx.get_value(argument)?)?;
                 // XXX This is currently a shallow copy, which isn't quite correct in all cases...
-                let builder_value = self.gen_clone(ctx.builder, &Vector(elem.clone()), argument, ctx.get_run())?;
+                let builder_value =
+                    self.gen_clone(ctx.builder, &Vector(elem.clone()), argument, ctx.get_run())?;
                 LLVMBuildStore(ctx.builder, builder_value, output_pointer);
                 Ok(())
             }
         }
     }
 
-    unsafe fn gen_merge(&mut self, ctx: &mut FunctionContext<'_>, statement: &Statement) -> WeldResult<()> {
+    unsafe fn gen_merge(
+        &mut self,
+        ctx: &mut FunctionContext<'_>,
+        statement: &Statement,
+    ) -> WeldResult<()> {
         let m = MergeStatement::extract(statement, ctx.sir_function)?;
         let builder_pointer = ctx.get_value(m.builder)?;
         match *m.kind {
             Appender(_) => {
                 let merge_value = self.load(ctx.builder, ctx.get_value(m.value)?)?;
                 let methods = self.appenders.get_mut(m.kind).unwrap();
-                let _ = methods.gen_merge(ctx.builder, &mut self.intrinsics, ctx.get_run(), builder_pointer, merge_value)?;
+                let _ = methods.gen_merge(
+                    ctx.builder,
+                    &mut self.intrinsics,
+                    ctx.get_run(),
+                    builder_pointer,
+                    merge_value,
+                )?;
                 Ok(())
             }
             DictMerger(ref key, ref val, ref binop) => {
-                use crate::ast::Type::Scalar;
                 use self::hash::*;
+                use crate::ast::Type::Scalar;
 
                 // Build the default value that we upsert if the key is not present in the
                 // dictionary yet.
@@ -275,17 +325,19 @@ impl BuilderExpressionGen for LlvmGenerator {
                         for (i, elem) in elems.iter().enumerate() {
                             if let Scalar(ref kind) = *elem {
                                 let mut indices = [i as u32];
-                                default = LLVMConstInsertValue(default,
-                                                               self.binop_identity(*binop, *kind)?,
-                                                               indices.as_mut_ptr(),
-                                                               indices.len() as u32);
+                                default = LLVMConstInsertValue(
+                                    default,
+                                    self.binop_identity(*binop, *kind)?,
+                                    indices.as_mut_ptr(),
+                                    indices.len() as u32,
+                                );
                             } else {
                                 unreachable!()
                             }
                         }
                         default
                     }
-                    _ => unreachable!()
+                    _ => unreachable!(),
                 };
 
                 // The type of the merge value is {key, value} so use GEP to extract
@@ -296,11 +348,13 @@ impl BuilderExpressionGen for LlvmGenerator {
                     // non-struct type or access something out-of-bounds.
                     Struct(ref elems) if elems.len() == 2 => {
                         let merge_value = ctx.get_value(m.value)?;
-                        let key_pointer = LLVMBuildStructGEP(ctx.builder, merge_value, 0, c_str!(""));
-                        let val_pointer = LLVMBuildStructGEP(ctx.builder, merge_value, 1, c_str!(""));
+                        let key_pointer =
+                            LLVMBuildStructGEP(ctx.builder, merge_value, 0, c_str!(""));
+                        let val_pointer =
+                            LLVMBuildStructGEP(ctx.builder, merge_value, 1, c_str!(""));
                         (key_pointer, val_pointer)
                     }
-                    _ => unreachable!()
+                    _ => unreachable!(),
                 };
 
                 let hash = self.gen_hash(key, ctx.builder, key_pointer, None)?;
@@ -309,23 +363,31 @@ impl BuilderExpressionGen for LlvmGenerator {
                 let ref dict_type = Dict(key.clone(), val.clone());
                 let slot_value_pointer = {
                     let methods = self.dictionaries.get_mut(dict_type).unwrap();
-                    let slot = methods.gen_upsert(ctx.builder,
-                                       &mut self.intrinsics,
-                                       builder_loaded,
-                                       key_pointer,
-                                       hash,
-                                       default,
-                                       ctx.get_run())?;
+                    let slot = methods.gen_upsert(
+                        ctx.builder,
+                        &mut self.intrinsics,
+                        builder_loaded,
+                        key_pointer,
+                        hash,
+                        default,
+                        ctx.get_run(),
+                    )?;
                     methods.slot_ty.value(ctx.builder, slot)
                 };
 
                 // Generate the merge code. We either load the values and add them, or, if the
                 // values are structs, we load each element at a time and apply the binop.
-                self.merge_values(ctx.builder, val.as_ref(), *binop, slot_value_pointer, value_pointer)
+                self.merge_values(
+                    ctx.builder,
+                    val.as_ref(),
+                    *binop,
+                    slot_value_pointer,
+                    value_pointer,
+                )
             }
             GroupMerger(ref key, ref value) => {
-                use self::hash::*;
                 use self::dict::GroupingDict;
+                use self::hash::*;
                 // The merge value is a {K, V} struct.
                 let merge_value_ptr = ctx.get_value(m.value)?;
                 let key_pointer = LLVMBuildStructGEP(ctx.builder, merge_value_ptr, 0, c_str!(""));
@@ -338,14 +400,16 @@ impl BuilderExpressionGen for LlvmGenerator {
 
                 let ref dict_type = Dict(key.clone(), Box::new(Vector(value.clone())));
                 let methods = self.dictionaries.get_mut(dict_type).unwrap();
-                let _ = methods.gen_merge_grouped(ctx.builder,
-                                          &mut self.intrinsics,
-                                          self.vectors.get_mut(value).unwrap(),
-                                          builder_loaded,
-                                          key_pointer,
-                                          hash,
-                                          val,
-                                          ctx.get_run())?;
+                let _ = methods.gen_merge_grouped(
+                    ctx.builder,
+                    &mut self.intrinsics,
+                    self.vectors.get_mut(value).unwrap(),
+                    builder_loaded,
+                    key_pointer,
+                    hash,
+                    val,
+                    ctx.get_run(),
+                )?;
                 Ok(())
             }
             Merger(_, _) => {
@@ -365,23 +429,36 @@ impl BuilderExpressionGen for LlvmGenerator {
                     // non-struct type or access something out-of-bounds.
                     Struct(ref elems) if elems.len() == 2 => {
                         let merge_value = ctx.get_value(m.value)?;
-                        let index_pointer = LLVMBuildStructGEP(ctx.builder, merge_value, 0, c_str!(""));
-                        let val_pointer = LLVMBuildStructGEP(ctx.builder, merge_value, 1, c_str!(""));
+                        let index_pointer =
+                            LLVMBuildStructGEP(ctx.builder, merge_value, 0, c_str!(""));
+                        let val_pointer =
+                            LLVMBuildStructGEP(ctx.builder, merge_value, 1, c_str!(""));
                         (index_pointer, val_pointer)
                     }
-                    _ => unreachable!()
+                    _ => unreachable!(),
                 };
                 let index = self.load(ctx.builder, index_pointer)?;
-                let slot_value_pointer = self.gen_at(ctx.builder, &Vector(elem.clone()), builder_loaded, index)?;
+                let slot_value_pointer =
+                    self.gen_at(ctx.builder, &Vector(elem.clone()), builder_loaded, index)?;
 
                 // Generate the merge code. We either load the values and add them, or, if the
                 // values are structs, we load each element at a time and apply the binop.
-                self.merge_values(ctx.builder, elem.as_ref(), *binop, slot_value_pointer, value_pointer)
+                self.merge_values(
+                    ctx.builder,
+                    elem.as_ref(),
+                    *binop,
+                    slot_value_pointer,
+                    value_pointer,
+                )
             }
         }
     }
 
-    unsafe fn gen_result(&mut self, ctx: &mut FunctionContext<'_>, statement: &Statement) -> WeldResult<()> {
+    unsafe fn gen_result(
+        &mut self,
+        ctx: &mut FunctionContext<'_>,
+        statement: &Statement,
+    ) -> WeldResult<()> {
         let m = ResStatement::extract(statement, ctx.sir_function)?;
         let output_pointer = ctx.get_value(m.output)?;
         let builder_pointer = ctx.get_value(m.builder)?;
@@ -420,9 +497,11 @@ impl BuilderExpressionGen for LlvmGenerator {
         }
     }
 
-    unsafe fn gen_for(&mut self,
-                      ctx: &mut FunctionContext<'_>,
-                      statement: &Statement) -> WeldResult<()> {
+    unsafe fn gen_for(
+        &mut self,
+        ctx: &mut FunctionContext<'_>,
+        statement: &Statement,
+    ) -> WeldResult<()> {
         use self::for_loop::ForLoopGenInternal;
         if statement.output.is_none() {
             unreachable!()
@@ -441,10 +520,12 @@ impl BuilderExpressionGen for LlvmGenerator {
                 Appender(ref elem_type) => {
                     if !self.appenders.contains_key(kind) {
                         let llvm_elem_type = self.llvm_type(elem_type)?;
-                        let appender = appender::Appender::define("appender",
-                                                                  llvm_elem_type,
-                                                                  self.context,
-                                                                  self.module);
+                        let appender = appender::Appender::define(
+                            "appender",
+                            llvm_elem_type,
+                            self.context,
+                            self.module,
+                        );
                         self.appenders.insert(kind.clone(), appender);
                     }
                     Ok(self.appenders.get(kind).unwrap().appender_ty)
@@ -466,12 +547,14 @@ impl BuilderExpressionGen for LlvmGenerator {
                             unreachable!()
                         };
                         let llvm_elem_type = self.llvm_type(elem_type)?;
-                        let merger = merger::Merger::define("merger",
-                                                            *binop,
-                                                            llvm_elem_type,
-                                                            scalar_kind,
-                                                            self.context,
-                                                            self.module);
+                        let merger = merger::Merger::define(
+                            "merger",
+                            *binop,
+                            llvm_elem_type,
+                            scalar_kind,
+                            self.context,
+                            self.module,
+                        );
                         self.mergers.insert(kind.clone(), merger);
                     }
                     Ok(self.mergers.get(kind).unwrap().merger_ty)

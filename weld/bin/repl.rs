@@ -1,23 +1,18 @@
-
-
-
-
 #[macro_use]
 extern crate lazy_static;
 
-
-use clap::{Arg, App};
+use clap::{App, Arg};
 
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
+use std::collections::HashMap;
 use std::env;
+use std::error::Error;
+use std::fmt;
+use std::fs::File;
+use std::io::prelude::*;
 use std::path::Path;
 use std::path::PathBuf;
-use std::fs::File;
-use std::error::Error;
-use std::io::prelude::*;
-use std::fmt;
-use std::collections::HashMap;
 
 use weld::*;
 
@@ -78,9 +73,11 @@ fn process_loadfile(arg: &str) -> Result<String, String> {
     let mut file;
     match File::open(&path) {
         Err(why) => {
-            return Err(format!("Error: couldn't open {}: {}",
-                               path_display,
-                               why.description()));
+            return Err(format!(
+                "Error: couldn't open {}: {}",
+                path_display,
+                why.description()
+            ));
         }
         Ok(res) => {
             file = res;
@@ -90,9 +87,11 @@ fn process_loadfile(arg: &str) -> Result<String, String> {
     let mut contents = String::new();
     match file.read_to_string(&mut contents) {
         Err(why) => {
-            return Err(format!("Error: couldn't read {}: {}",
-                               path_display,
-                               why.description()));
+            return Err(format!(
+                "Error: couldn't read {}: {}",
+                path_display,
+                why.description()
+            ));
         }
         _ => {}
     }
@@ -135,17 +134,13 @@ fn handle_string<'a>(command: &'a str, conf: &mut WeldConf) -> Option<String> {
     if RESERVED_WORDS.contains_key(repl_command) {
         let command = RESERVED_WORDS.get(repl_command).unwrap();
         match *command {
-            ReplCommands::LoadFile => {
-                match process_loadfile(arg) {
-                    Err(s) => {
-                        println!("{}", s);
-                        None
-                    }
-                    Ok(code) => {
-                        Some(code)
-                    }
+            ReplCommands::LoadFile => match process_loadfile(arg) {
+                Err(s) => {
+                    println!("{}", s);
+                    None
                 }
-            }
+                Ok(code) => Some(code),
+            },
             ReplCommands::SetConf => {
                 let mut setconf_args = arg.splitn(2, " ");
                 let key = setconf_args.next().unwrap_or("");
@@ -183,40 +178,51 @@ fn main() {
         .version("0.1.0")
         .author("Weld authors <weld-group@cs.stanford.edu")
         .about("A REPL for Weld")
-        .arg(Arg::with_name("loglevel")
-             .short("l")
-             .long("loglevel")
-             .value_name("LEVEL")
-             .help("Log level for the Weld compiler")
-             .takes_value(true))
-        .arg(Arg::with_name("logdir")
-             .short("D")
-             .long("logdir")
-             .value_name("DIR")
-             .help("Directory to write log demo")
-             .takes_value(true))
-        .arg(Arg::with_name("dumpcode")
-             .short("d")
-             .long("dumpcode")
-             .help("Dump code to file")
-             .takes_value(false))
-        .arg(Arg::with_name("input")
-             .short("i")
-             .long("input")
-             .value_name("FILE")
-             .help("Run the REPL on the input and quit")
-             .takes_value(true))
+        .arg(
+            Arg::with_name("loglevel")
+                .short("l")
+                .long("loglevel")
+                .value_name("LEVEL")
+                .help("Log level for the Weld compiler")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("logdir")
+                .short("D")
+                .long("logdir")
+                .value_name("DIR")
+                .help("Directory to write log demo")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("dumpcode")
+                .short("d")
+                .long("dumpcode")
+                .help("Dump code to file")
+                .takes_value(false),
+        )
+        .arg(
+            Arg::with_name("input")
+                .short("i")
+                .long("input")
+                .value_name("FILE")
+                .help("Run the REPL on the input and quit")
+                .takes_value(true),
+        )
         .get_matches();
 
     // Parse the log level.
-    let log_level_str = matches.value_of("loglevel").unwrap_or("debug").to_lowercase();
+    let log_level_str = matches
+        .value_of("loglevel")
+        .unwrap_or("debug")
+        .to_lowercase();
     let (log_level, log_str) = match log_level_str.as_str() {
-        "none" =>   (WeldLogLevel::Off,         "none"),
-        "error" =>  (WeldLogLevel::Error,       "\x1b[0;31merror\x1b[0m"),
-        "warn" =>   (WeldLogLevel::Warn,        "\x1b[0;33mwarn\x1b[0m"),
-        "info" =>   (WeldLogLevel::Info,        "\x1b[0;33minfo\x1b[0m"),
-        "debug" =>  (WeldLogLevel::Debug,       "\x1b[0;32mdebug\x1b[0m"), 
-        "trace" =>  (WeldLogLevel::Trace,       "\x1b[0;32mtrace\x1b[0m"),
+        "none" => (WeldLogLevel::Off, "none"),
+        "error" => (WeldLogLevel::Error, "\x1b[0;31merror\x1b[0m"),
+        "warn" => (WeldLogLevel::Warn, "\x1b[0;33mwarn\x1b[0m"),
+        "info" => (WeldLogLevel::Info, "\x1b[0;33minfo\x1b[0m"),
+        "debug" => (WeldLogLevel::Debug, "\x1b[0;32mdebug\x1b[0m"),
+        "trace" => (WeldLogLevel::Trace, "\x1b[0;32mtrace\x1b[0m"),
         ref s => {
             println!("Unrecognized log level {}", s);
             std::process::exit(1);
@@ -243,7 +249,8 @@ fn main() {
         return;
     }
 
-    let home_path = env::var("HOME").map(|s| PathBuf::from(s))
+    let home_path = env::var("HOME")
+        .map(|s| PathBuf::from(s))
         .unwrap_or(PathBuf::new());
     let history_file_path = home_path.join(".weld_history");
     let history_file_path = history_file_path.to_str().unwrap_or(".weld_history");

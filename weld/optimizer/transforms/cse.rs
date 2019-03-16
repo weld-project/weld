@@ -139,13 +139,13 @@
 //!
 //! This is our final CSE'd output.
 
-use crate::ast::*;
 use crate::ast::constructors::*;
 use crate::ast::ExprKind::*;
+use crate::ast::*;
 
 use crate::util::SymbolGenerator;
-use std::collections::{HashMap, HashSet};
 use std::collections::hash_map::Entry;
+use std::collections::{HashMap, HashSet};
 
 /// Implements the CSE transform.
 pub fn common_subexpression_elimination(expr: &mut Expr) {
@@ -189,7 +189,7 @@ impl UseCse for Expr {
         }
         match self.kind {
             Let { .. } | Literal(_) | Ident(_) | Lambda { .. } => false,
-            _ => true
+            _ => true,
         }
     }
 }
@@ -238,22 +238,20 @@ impl Site {
         if self.site.len() > other.site.len() {
             return false;
         }
-        self.site.iter().zip(other.site.iter()).all(|(a,b)| a == b)
+        self.site.iter().zip(other.site.iter()).all(|(a, b)| a == b)
     }
 }
 
 /// An unordered list of sites.
 #[derive(Debug)]
 struct SiteList {
-    sites: Vec<Site>
+    sites: Vec<Site>,
 }
 
 impl SiteList {
     /// Creates a new site list.
     fn new() -> SiteList {
-        SiteList {
-            sites: vec![],
-        }
+        SiteList { sites: vec![] }
     }
 
     /// Returns whether this site or an ancestor exists in the list.
@@ -265,7 +263,8 @@ impl SiteList {
     ///
     /// Returns `None` if no ancestor exists in the list.
     fn get_with_index(&self, site: &Site) -> Option<(usize, &Site)> {
-        self.sites.iter()
+        self.sites
+            .iter()
             .enumerate()
             .filter(|(_, s)| s.contains(&site))
             .next()
@@ -321,7 +320,6 @@ impl SiteList {
     }
 }
 
-
 /// Maps a Symbol to its value.
 type Binding = (Symbol, Expr);
 
@@ -342,12 +340,13 @@ impl Cse {
         cse.remove_common_subexpressions(expr, bindings);
 
         // Convert the bindings map from Expr -> Symbol to Symbol -> Expr.
-        let ref mut bindings = bindings.drain()
+        let ref mut bindings = bindings
+            .drain()
             .map(|(k, v)| (v, k))
             .collect::<HashMap<Symbol, Expr>>();
 
         cse.counter = 0;
-        let ref mut sites =  cse.build_site_map(expr, bindings);
+        let ref mut sites = cse.build_site_map(expr, bindings);
         let ref mut generated = HashSet::new();
         let ref mut stack = vec![];
 
@@ -360,10 +359,11 @@ impl Cse {
     /// This method updates the bindings map to hold expression to identifier information for each
     /// subexpression in the given expression tree. The expressions can be looked up in the
     /// bindings map to find common subexpressions.
-    fn remove_common_subexpressions(&mut self,
-                                    expr: &mut Expr,
-                                    bindings: &mut HashMap<Expr, Symbol>) {
-
+    fn remove_common_subexpressions(
+        &mut self,
+        expr: &mut Expr,
+        bindings: &mut HashMap<Expr, Symbol>,
+    ) {
         use self::UseCse;
         expr.transform_up(&mut |ref mut e| {
             if !e.use_cse() {
@@ -373,7 +373,8 @@ impl Cse {
             let e = e.take();
             let ty = e.ty.clone();
 
-            let name = bindings.entry(e)
+            let name = bindings
+                .entry(e)
                 .or_insert_with(&mut || self.sym_gen.new_symbol("cse"))
                 .clone();
 
@@ -391,23 +392,26 @@ impl Cse {
     /// Builds a site map for each identifier.
     ///
     /// The site map maps a symbol to the *least deep* (i.e., highest) site in an expression tree.
-    fn build_site_map(&mut self,
-                       expr: &Expr,
-                       bindings: &HashMap<Symbol, Expr>) -> SiteMap {
+    fn build_site_map(&mut self, expr: &Expr, bindings: &HashMap<Symbol, Expr>) -> SiteMap {
         let mut sites = SiteMap::new();
         self.build_site_map_helper(expr, bindings, &mut sites, &mut Site::new());
         sites
     }
 
-    fn build_site_map_helper(&mut self,
-                           expr: &Expr,
-                           bindings: &HashMap<Symbol, Expr>,
-                           site_map: &mut SiteMap,
-                           current_site: &mut Site) {
-
+    fn build_site_map_helper(
+        &mut self,
+        expr: &Expr,
+        bindings: &HashMap<Symbol, Expr>,
+        site_map: &mut SiteMap,
+        current_site: &mut Site,
+    ) {
         let mut handled = true;
         match expr.kind {
-            If { ref cond, ref on_true, ref on_false } => {
+            If {
+                ref cond,
+                ref on_true,
+                ref on_false,
+            } => {
                 self.build_site_map_helper(cond, bindings, site_map, current_site);
 
                 // Update current site for branch targets.
@@ -427,7 +431,11 @@ impl Cse {
                 self.build_site_map_helper(body, bindings, site_map, current_site);
                 current_site.pop();
             }
-            Let { ref value, ref body, .. } => {
+            Let {
+                ref value,
+                ref body,
+                ..
+            } => {
                 self.build_site_map_helper(value, bindings, site_map, current_site);
 
                 current_site.push(self.counter);
@@ -493,26 +501,50 @@ impl Cse {
     /// are already inserted are tracked in `generated`. The `stack` tracks sites to generate the
     /// bindings in (where each site holds bindings to be generated at a particular site in the
     /// expression tree), and `sites` maps each symbol to its highest site.
-    fn generate_bindings(&mut self,
-                         expr: &mut Expr,
-                         bindings: &mut HashMap<Symbol, Expr>,
-                         generated: &mut HashSet<Symbol>,
-                         current_site: &mut Site,
-                         stack: &mut Vec<Vec<Binding>>,
-                         sites: &mut SiteMap) {
+    fn generate_bindings(
+        &mut self,
+        expr: &mut Expr,
+        bindings: &mut HashMap<Symbol, Expr>,
+        generated: &mut HashSet<Symbol>,
+        current_site: &mut Site,
+        stack: &mut Vec<Vec<Binding>>,
+        sites: &mut SiteMap,
+    ) {
         // NOTE: Because of the way paths are built, this method must traverse Lambdas and If
         // statements in the exact same order as build_site_map_helper!
         let handled = match expr.kind {
             Lambda { ref mut body, .. } => {
-                self.generate_bindings_scoped(body, bindings, generated, current_site, stack, sites);
+                self.generate_bindings_scoped(
+                    body,
+                    bindings,
+                    generated,
+                    current_site,
+                    stack,
+                    sites,
+                );
                 true
             }
-            Let { ref mut value, ref mut body, .. } => {
+            Let {
+                ref mut value,
+                ref mut body,
+                ..
+            } => {
                 self.generate_bindings(value, bindings, generated, current_site, stack, sites);
-                self.generate_bindings_scoped(body, bindings, generated, current_site, stack, sites);
+                self.generate_bindings_scoped(
+                    body,
+                    bindings,
+                    generated,
+                    current_site,
+                    stack,
+                    sites,
+                );
                 true
             }
-            If { ref mut cond, ref mut on_true, ref mut on_false } => {
+            If {
+                ref mut cond,
+                ref mut on_true,
+                ref mut on_false,
+            } => {
                 // Generate bindings for the condition, since we won't recurse down into
                 // subexpressions.
                 self.generate_bindings(cond, bindings, generated, current_site, stack, sites);
@@ -520,8 +552,22 @@ impl Cse {
                 // We want to keep definitions of If/Else statements within the branch target
                 // to prevent moving expressions out from behind a branch condition.
 
-                self.generate_bindings_scoped(on_true, bindings, generated, current_site, stack, sites);
-                self.generate_bindings_scoped(on_false, bindings, generated, current_site, stack, sites);
+                self.generate_bindings_scoped(
+                    on_true,
+                    bindings,
+                    generated,
+                    current_site,
+                    stack,
+                    sites,
+                );
+                self.generate_bindings_scoped(
+                    on_false,
+                    bindings,
+                    generated,
+                    current_site,
+                    stack,
+                    sites,
+                );
                 true
             }
             Ident(ref mut sym) if bindings.contains_key(sym) => {
@@ -531,25 +577,33 @@ impl Cse {
                 if sites.get(&sym).unwrap().contains(&current_site) {
                     // Generate the definition of this identifier and its dependencies.
                     let mut value = bindings.get(sym).cloned().unwrap();
-                    self.generate_bindings(&mut value, bindings, generated, current_site, stack, sites);
+                    self.generate_bindings(
+                        &mut value,
+                        bindings,
+                        generated,
+                        current_site,
+                        stack,
+                        sites,
+                    );
 
                     let site_list = sites.get_mut(&sym).unwrap();
 
-                    let delete_index = if let Some(ref result) = site_list.get_with_index(&current_site) {
-                        let index_in_list =  result.0;
-                        let site_with_expr =  result.1;
+                    let delete_index =
+                        if let Some(ref result) = site_list.get_with_index(&current_site) {
+                            let index_in_list = result.0;
+                            let site_with_expr = result.1;
 
-                        // The depth gives us the index into the stack holding the bindings (e.g.,
-                        // if the site is (0,1), we access the second Binding list in `stack`).
-                        let index = site_with_expr.depth() - 1;
-                        let binding_list = stack.get_mut(index).unwrap();
-                        binding_list.push((sym.clone(), value));
-                        index_in_list
-                    } else {
-                        // We checked whether sites contains the current_site, and an identifier's dependencies
-                        // can't depend on that identifier!
-                        unreachable!()
-                    };
+                            // The depth gives us the index into the stack holding the bindings (e.g.,
+                            // if the site is (0,1), we access the second Binding list in `stack`).
+                            let index = site_with_expr.depth() - 1;
+                            let binding_list = stack.get_mut(index).unwrap();
+                            binding_list.push((sym.clone(), value));
+                            index_in_list
+                        } else {
+                            // We checked whether sites contains the current_site, and an identifier's dependencies
+                            // can't depend on that identifier!
+                            unreachable!()
+                        };
 
                     // Delete this site - this implicitly marks the binding as generated for this
                     // site and all its children.
@@ -574,17 +628,17 @@ impl Cse {
     /// The created bindings may not necessarily be in the newest site -- bindings for a symbol
     /// `sym` are generated in the site defined by `sites` (i.e., in the site
     /// `stack[sites.get(sym)]`).
-    fn generate_bindings_scoped(&mut self,
-                               expr: &mut Expr,
-                               bindings: &mut HashMap<Symbol, Expr>,
-                               generated: &mut HashSet<Symbol>,
-                               current_site: &mut Site,
-                               stack: &mut Vec<Vec<(Symbol, Expr)>>,
-                               sites: &mut SiteMap) {
-
+    fn generate_bindings_scoped(
+        &mut self,
+        expr: &mut Expr,
+        bindings: &mut HashMap<Symbol, Expr>,
+        generated: &mut HashSet<Symbol>,
+        current_site: &mut Site,
+        stack: &mut Vec<Vec<(Symbol, Expr)>>,
+        sites: &mut SiteMap,
+    ) {
         current_site.push(self.counter);
         self.counter += 1;
-
 
         stack.push(vec![]);
 
@@ -771,14 +825,16 @@ fn for_test() {
 #[test]
 fn for_test_2() {
     let input = "|| result(for([1], merger[i32,+], |b,i,e| merge(b, e + (1+2)))) + (1+2)";
-    let expect = "|| let cse = (1+2); result(for([1], merger[i32,+], |b,i,e| merge(b, e + cse))) + cse";
+    let expect =
+        "|| let cse = (1+2); result(for([1], merger[i32,+], |b,i,e| merge(b, e + cse))) + cse";
     check_cse(input, expect);
 }
 
 #[test]
 fn for_test_3() {
     let input = "|| result(for([1], merger[i32,+], |b,i,e| merge(b, e + (1+2) + (1+2))))";
-    let expect = "|| result(for([1], merger[i32,+], |b,i,e| let cse = (1+2); merge(b, e + cse + cse)))";
+    let expect =
+        "|| result(for([1], merger[i32,+], |b,i,e| let cse = (1+2); merge(b, e + cse + cse)))";
     check_cse(input, expect);
 }
 
@@ -789,7 +845,6 @@ fn for_test_4() {
     let expect = input;
     check_cse(input, expect);
 }
-
 
 #[test]
 fn builder_test() {
@@ -804,7 +859,6 @@ fn builder_test_2() {
     let expect = "|| let cse = result(appender[i32]); {cse, cse}";
     check_cse(input, expect);
 }
-
 
 #[test]
 fn builder_test_3() {
@@ -826,7 +880,6 @@ fn alias_test() {
     let expect = input;
     check_cse(input, expect);
 }
-
 
 #[test]
 fn let_test() {

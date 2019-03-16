@@ -16,14 +16,16 @@ use crate::util::stats::CompilationStats;
 
 pub use self::passes::*;
 
-pub mod transforms;
 mod passes;
+pub mod transforms;
 
 /// Apply passes from a list until fix point.
-pub fn apply_passes(expr: &mut Expr,
-                        passes: &Vec<Pass>,
-                        stats: &mut CompilationStats,
-                        use_experimental: bool) -> WeldResult<()> {
+pub fn apply_passes(
+    expr: &mut Expr,
+    passes: &Vec<Pass>,
+    stats: &mut CompilationStats,
+    use_experimental: bool,
+) -> WeldResult<()> {
     for pass in passes {
         if pass.pass_name() == "vectorize" {
             continue;

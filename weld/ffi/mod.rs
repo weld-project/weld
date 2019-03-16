@@ -7,8 +7,8 @@ use libc;
 use super::*;
 use libc::{c_char, c_void, int64_t};
 
-use std::ptr;
 use std::ffi::CStr;
+use std::ptr;
 
 // Re-export the FFI for the runtime.
 pub use crate::runtime::ffi::*;
@@ -24,8 +24,8 @@ pub type WeldValueRef = *mut WeldValue;
 /// An opauqe handle to a Weld context.
 pub type WeldContextRef = *mut WeldContext;
 
-pub use super::WeldRuntimeErrno;
 pub use super::WeldLogLevel;
+pub use super::WeldRuntimeErrno;
 
 trait ToRustStr {
     fn to_str(&self) -> &str;
@@ -175,7 +175,6 @@ pub unsafe extern "C" fn weld_value_free(value: WeldValueRef) {
     }
 }
 
-
 #[no_mangle]
 /// Compiles a Weld program into a runnable module.
 ///
@@ -183,9 +182,11 @@ pub unsafe extern "C" fn weld_value_free(value: WeldValueRef) {
 /// an error (which indicates a compilation error or success) in `err`.
 ///
 /// This function is a wrapper for `WeldModule::compile`.
-pub unsafe extern "C" fn weld_module_compile(code: *const c_char,
-                                             conf: WeldConfRef,
-                                             err: WeldErrorRef) -> WeldModuleRef {
+pub unsafe extern "C" fn weld_module_compile(
+    code: *const c_char,
+    conf: WeldConfRef,
+    err: WeldErrorRef,
+) -> WeldModuleRef {
     let code = code.to_str();
     let conf = &*conf;
     let err = &mut *err;
@@ -209,10 +210,12 @@ pub unsafe extern "C" fn weld_module_compile(code: *const c_char,
 /// and a the method returns `null`. Otherwise, `err` indicates success.
 ///
 /// This function is a wrapper for `WeldModule::run`.
-pub unsafe extern "C" fn weld_module_run(module: WeldModuleRef,
-                                         context: WeldContextRef,
-                                         arg: WeldValueRef,
-                                         err: WeldErrorRef) -> WeldValueRef {
+pub unsafe extern "C" fn weld_module_run(
+    module: WeldModuleRef,
+    context: WeldContextRef,
+    arg: WeldValueRef,
+    err: WeldErrorRef,
+) -> WeldValueRef {
     let module = &mut *module;
     let context = &mut *context;
     let arg = &*arg;
@@ -273,7 +276,6 @@ pub unsafe extern "C" fn weld_error_free(err: WeldErrorRef) {
         Box::from_raw(err);
     }
 }
-
 
 #[no_mangle]
 /// Load a dynamic library that a Weld program can access.

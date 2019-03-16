@@ -18,7 +18,10 @@ pub unsafe extern "C" fn weld_init() {
 
 #[no_mangle]
 /// Returns a new runtime handle.
-pub unsafe extern "C" fn weld_runst_init(nworkers: int32_t, memlimit: int64_t) -> WeldRuntimeContextRef {
+pub unsafe extern "C" fn weld_runst_init(
+    nworkers: int32_t,
+    memlimit: int64_t,
+) -> WeldRuntimeContextRef {
     Box::into_raw(Box::new(WeldRuntimeContext::new(nworkers, memlimit)))
 }
 
@@ -39,9 +42,11 @@ pub unsafe extern "C" fn weld_runst_malloc(run: WeldRuntimeContextRef, size: int
 /// Reallocate memory within the provided context.
 ///
 /// This function has semantics equal to the `realloc` function.
-pub unsafe extern "C" fn weld_runst_realloc(run: WeldRuntimeContextRef,
-                                     ptr: Ptr,
-                                     newsize: int64_t) -> Ptr {
+pub unsafe extern "C" fn weld_runst_realloc(
+    run: WeldRuntimeContextRef,
+    ptr: Ptr,
+    newsize: int64_t,
+) -> Ptr {
     let run = &mut *run;
     run.realloc(ptr, newsize)
 }
@@ -62,8 +67,7 @@ pub unsafe extern "C" fn weld_runst_set_result(run: WeldRuntimeContextRef, ptr: 
 
 #[no_mangle]
 /// Set the errno value.
-pub unsafe extern "C" fn weld_runst_set_errno(run: WeldRuntimeContextRef,
-                                              errno: WeldRuntimeErrno) {
+pub unsafe extern "C" fn weld_runst_set_errno(run: WeldRuntimeContextRef, errno: WeldRuntimeErrno) {
     let run = &mut *run;
     run.set_errno(errno)
 }
@@ -84,8 +88,7 @@ pub unsafe extern "C" fn weld_runst_get_result(run: WeldRuntimeContextRef) -> Pt
 
 #[no_mangle]
 /// Check whether cond is 0 (assertion fails).
-pub unsafe extern "C" fn weld_runst_assert(run: WeldRuntimeContextRef,
-                                           cond: u8) -> u8 {
+pub unsafe extern "C" fn weld_runst_assert(run: WeldRuntimeContextRef, cond: u8) -> u8 {
     let run = &mut *run;
     if cond == 0 {
         // Doesn't return.

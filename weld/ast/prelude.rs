@@ -9,5 +9,5 @@ pub use super::ast::BuilderKind::*;
 pub use super::ast::ExprKind::*;
 pub use super::ast::LiteralKind::*;
 pub use super::ast::ScalarKind::*;
-pub use super::ast::UnaryOpKind::*;
 pub use super::ast::Type::*;
+pub use super::ast::UnaryOpKind::*;

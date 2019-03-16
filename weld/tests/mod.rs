@@ -2,8 +2,8 @@
 
 use crate::ast::Expr;
 
-pub use crate::syntax::parser::parse_expr;
 pub use crate::ast::CompareIgnoringSymbols;
+pub use crate::syntax::parser::parse_expr;
 
 /// Returns a typed expression.
 #[cfg(test)]
@@ -16,23 +16,21 @@ pub fn typed_expression(s: &str) -> Expr {
 
 /// Checks whether transform(input) == expect.
 #[cfg(test)]
-pub fn check_transform(input: &str,
-                       expect: &str,
-                       transform: fn(&mut Expr)) {
-
+pub fn check_transform(input: &str, expect: &str, transform: fn(&mut Expr)) {
     use crate::ast::{PrettyPrint, PrettyPrintConfig};
 
-    let ref conf = PrettyPrintConfig::new()
-        .show_types(true);
+    let ref conf = PrettyPrintConfig::new().show_types(true);
 
     let ref mut input = typed_expression(input);
     let ref expect = typed_expression(expect);
 
     transform(input);
 
-    println!("\nInput: {}\nExpect: {}",
-             input.pretty_print_config(conf),
-             expect.pretty_print_config(conf));
+    println!(
+        "\nInput: {}\nExpect: {}",
+        input.pretty_print_config(conf),
+        expect.pretty_print_config(conf)
+    );
 
     assert!(input.compare_ignoring_symbols(expect).unwrap());
 }
@@ -40,19 +38,19 @@ pub fn check_transform(input: &str,
 /// Print an un-indented expression for string comparison.
 #[cfg(test)]
 pub fn print_expr_without_indent(e: &Expr) -> String {
-    use crate::ast::{PrettyPrintConfig, PrettyPrint};
+    use crate::ast::{PrettyPrint, PrettyPrintConfig};
     let ref config = PrettyPrintConfig::new()
-                            .show_types(false)
-                            .should_indent(false);
+        .show_types(false)
+        .should_indent(false);
     e.pretty_print_config(config)
 }
 
 /// Print an un-indented expression for string comparison.
 #[cfg(test)]
 pub fn print_typed_expr_without_indent(e: &Expr) -> String {
-    use crate::ast::{PrettyPrintConfig, PrettyPrint};
+    use crate::ast::{PrettyPrint, PrettyPrintConfig};
     let ref config = PrettyPrintConfig::new()
-                            .show_types(true)
-                            .should_indent(false);
+        .show_types(true)
+        .should_indent(false);
     e.pretty_print_config(config)
 }

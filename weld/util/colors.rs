@@ -7,7 +7,7 @@ pub enum Color {
     Red,
     BoldRed,
     Green,
-    Yellow
+    Yellow,
 }
 
 trait Prefix {
@@ -17,10 +17,10 @@ trait Prefix {
 impl Prefix for Color {
     fn prefix(&self) -> &str {
         match *self {
-            Color::Red     => "\x1b[0;31m",
+            Color::Red => "\x1b[0;31m",
             Color::BoldRed => "\x1b[1;31m",
-            Color::Green   => "\x1b[0;32m",
-            Color::Yellow  => "\x1b[0;33m",
+            Color::Green => "\x1b[0;32m",
+            Color::Yellow => "\x1b[0;33m",
         }
     }
 }

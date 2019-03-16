@@ -27,7 +27,7 @@ fn simple_for_dictmerger_loop() {
     };
 
     let ret_value = compile_and_run(code, conf, input_data);
-    let data = ret_value.data() as *const WeldVec<Pair<_,_>>;
+    let data = ret_value.data() as *const WeldVec<Pair<_, _>>;
     let result = unsafe { (*data).clone() };
 
     let output_keys = vec![1, 2, 3];
@@ -47,7 +47,6 @@ fn simple_for_dictmerger_loop() {
         }
         assert_eq!(success, true);
     }
-
 }
 
 /// Similar case to parallel_for_vecmerger_loop but values and keys are structs
@@ -89,15 +88,16 @@ fn dictmerger_with_structs() {
         // Check whether we find the entry anywhere in the expected outputs
         let mut success = false;
         for j in 0..(output_keys.len()) {
-            if entry.k1 == output_keys[j] && entry.k2 == output_keys[j]
-                && entry.v1 == output_vals[j] && entry.v2 == output_vals[j] as f32
+            if entry.k1 == output_keys[j]
+                && entry.k2 == output_keys[j]
+                && entry.v1 == output_vals[j]
+                && entry.v2 == output_vals[j] as f32
             {
                 success = true;
             }
         }
         assert_eq!(success, true);
     }
-
 }
 
 #[test]
@@ -150,7 +150,6 @@ fn simple_groupmerger() {
     res.sort_by_key(|a| a.0);
 
     assert_eq!(res, output);
-
 }
 
 #[test]
@@ -202,14 +201,12 @@ fn complex_groupmerger_with_struct_key() {
     res.sort_by_key(|a| a.0);
 
     assert_eq!(res, output);
-
 }
 
 /// Larger dictmerger test with repeated keys
 #[test]
 fn dictmerger_repeated_keys() {
-    let code =
-        "|x:vec[i32], y:vec[i32]| tovec(result(for(zip(x,y),
+    let code = "|x:vec[i32], y:vec[i32]| tovec(result(for(zip(x,y),
                 dictmerger[i32,i32,+], |b,i,e| merge(b, e))))";
     let ref mut conf = many_threads_conf();
 
@@ -230,7 +227,7 @@ fn dictmerger_repeated_keys() {
     };
 
     let ret_value = compile_and_run(&code, conf, input_data);
-    let data = ret_value.data() as *const WeldVec<Pair<_,_>>;
+    let data = ret_value.data() as *const WeldVec<Pair<_, _>>;
     let result = unsafe { (*data).clone() };
 
     assert_eq!(UNIQUE_KEYS as i64, result.len);

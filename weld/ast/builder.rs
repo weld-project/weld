@@ -2,9 +2,9 @@
 //!
 //! This module provides constructors with type checking for Weld expressions.
 
-use crate::ast::*;
 use crate::ast::ExprKind::*;
 use crate::ast::Type::*;
+use crate::ast::*;
 use crate::error::*;
 
 /// A trait for initializing expressions with type inference.
@@ -95,7 +95,6 @@ pub trait NewExpr {
 }
 
 impl NewExpr for Expr {
-
     fn new(kind: ExprKind) -> WeldResult<Expr> {
         Self::new_with_type(kind, Unknown)
     }
@@ -142,14 +141,14 @@ impl NewExpr for Expr {
         Self::new(BinOp {
             kind: kind,
             left: Box::new(left),
-            right: Box::new(right) 
+            right: Box::new(right),
         })
     }
 
     fn new_unary_op(kind: UnaryOpKind, value: Expr) -> WeldResult<Expr> {
         Self::new(UnaryOp {
             kind: kind,
-            value: Box::new(value)
+            value: Box::new(value),
         })
     }
 
@@ -174,20 +173,16 @@ impl NewExpr for Expr {
 
     fn new_to_vec(expr: Expr) -> WeldResult<Expr> {
         Self::new(ToVec {
-            child_expr: Box::new(expr)
+            child_expr: Box::new(expr),
         })
     }
 
     fn new_make_struct(exprs: Vec<Expr>) -> WeldResult<Expr> {
-        Self::new(MakeStruct {
-            elems: exprs,
-        })
+        Self::new(MakeStruct { elems: exprs })
     }
 
     fn new_make_vector(exprs: Vec<Expr>) -> WeldResult<Expr> {
-        Self::new(MakeVector {
-            elems: exprs,
-        })
+        Self::new(MakeVector { elems: exprs })
     }
 
     fn new_make_vector_typed(exprs: Vec<Expr>, ty: Type) -> WeldResult<Expr> {
@@ -203,7 +198,7 @@ impl NewExpr for Expr {
 
     fn new_length(expr: Expr) -> WeldResult<Expr> {
         Self::new(Length {
-            data: Box::new(expr)
+            data: Box::new(expr),
         })
     }
 
@@ -311,7 +306,7 @@ impl NewExpr for Expr {
 
     fn new_result(builder: Expr) -> WeldResult<Expr> {
         Self::new(Res {
-            builder: Box::new(builder)
+            builder: Box::new(builder),
         })
     }
 

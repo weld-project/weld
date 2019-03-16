@@ -3,15 +3,15 @@
 //! This module can be used both for writing code for consumption in another program (e.g., writing
 //! LLVM files that can then be passed to Clang) or for debugging.
 
-use uuid;
 use time;
+use uuid;
 
 use crate::conf::DumpCodeConfig;
 use crate::error::*;
 
 use std::fs::OpenOptions;
-use std::io::Write;
 use std::io::Error as IOError;
+use std::io::Write;
 use std::path::PathBuf;
 
 use uuid::Uuid;
@@ -22,7 +22,7 @@ impl From<IOError> for WeldCompileError {
     }
 }
 
-#[derive(Copy,Clone,Debug,Hash,PartialEq,Eq)]
+#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
 pub enum DumpCodeFormat {
     Weld,
     WeldOpt,
@@ -44,8 +44,9 @@ impl DumpCodeFormat {
         use self::DumpCodeFormat::*;
         match self {
             WeldOpt | LLVMOpt => "-opt",
-            _ => ""
-        }.to_string()
+            _ => "",
+        }
+        .to_string()
     }
 
     /// Returns a filename extension for the format.
@@ -56,26 +57,27 @@ impl DumpCodeFormat {
             LLVM | LLVMOpt => "ll",
             SIR => "sir",
             Assembly => "S",
-        }.to_string()
+        }
+        .to_string()
     }
 }
-
 
 /// Writes code to a file using the given configuration.
 ///
 /// The format determines the extension used for the dumped file.
-pub fn write_code<T: AsRef<str>>(code: T,
-                                 format: DumpCodeFormat,
-                                 config: &DumpCodeConfig) -> WeldResult<()> {
-
+pub fn write_code<T: AsRef<str>>(
+    code: T,
+    format: DumpCodeFormat,
+    config: &DumpCodeConfig,
+) -> WeldResult<()> {
     // Code dumping is not enabled - return.
     if !config.enabled {
-        return Ok(())
+        return Ok(());
     }
 
     // Format not registered: return.
     if !config.formats.contains(&format) {
-        return Ok(())
+        return Ok(());
     }
 
     let ref mut path = PathBuf::new();
@@ -86,11 +88,9 @@ pub fn write_code<T: AsRef<str>>(code: T,
     info!("Writing code to {}", path.to_str().unwrap());
 
     let mut options = OpenOptions::new();
-    let mut file = options.write(true)
-        .create_new(true)
-        .open(path)?;
+    let mut file = options.write(true).create_new(true).open(path)?;
 
-    file.write_all(code.as_ref().as_bytes())?; 
+    file.write_all(code.as_ref().as_bytes())?;
     Ok(())
 }
 

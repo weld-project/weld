@@ -9,10 +9,11 @@ fn register_build_id() {
         .arg("rev-parse")
         .arg("--short")
         .arg("HEAD")
-        .output() {
-            Ok(output) => String::from_utf8(output.stdout).unwrap_or(unknown_build),
-            Err(_) => unknown_build,
-        };
+        .output()
+    {
+        Ok(output) => String::from_utf8(output.stdout).unwrap_or(unknown_build),
+        Err(_) => unknown_build,
+    };
     println!("cargo:rustc-env=BUILD_ID={}", build_id);
 }
 
