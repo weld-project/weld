@@ -514,7 +514,7 @@ impl Symbol {
     pub fn new<T: Into<String>>(name: T, id: i32) -> Symbol {
         Symbol {
             name: Rc::new(name.into()),
-            id: id,
+            id,
         }
     }
 
@@ -1383,7 +1383,7 @@ impl Expr {
 pub fn expr_box(kind: ExprKind, annot: Annotations) -> Box<Expr> {
     Box::new(Expr {
         ty: Type::Unknown,
-        kind: kind,
+        kind,
         annotations: annot,
     })
 }

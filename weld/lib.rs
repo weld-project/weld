@@ -303,7 +303,7 @@ impl WeldError {
     pub fn new<T: Into<Vec<u8>>>(message: T, code: WeldRuntimeErrno) -> WeldError {
         WeldError {
             message: CString::new(message).unwrap(),
-            code: code,
+            code,
         }
     }
 
@@ -417,7 +417,7 @@ impl WeldValue {
     /// ```
     pub fn new_from_data(data: Data) -> WeldValue {
         WeldValue {
-            data: data,
+            data,
             run: None,
             context: None,
         }
@@ -753,8 +753,8 @@ impl WeldModule {
 
         Ok(WeldModule {
             llvm_module: compiled_module,
-            param_types: param_types,
-            return_type: return_type,
+            param_types,
+            return_type,
             module_id: uuid,
         })
     }
@@ -843,8 +843,8 @@ impl WeldModule {
             // This is the required input format of data passed into a compiled module.
             let input = Box::new(codegen::WeldInputArgs {
                 input: arg.data as i64,
-                nworkers: nworkers,
-                mem_limit: mem_limit,
+                nworkers,
+                mem_limit,
                 run: context.context.as_ptr() as i64,
             });
             let ptr = Box::into_raw(input) as i64;

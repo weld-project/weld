@@ -176,7 +176,7 @@ impl WeldRuntimeContext {
             allocations: FnvHashMap::default(),
             errno: WeldRuntimeErrno::Success,
             result: ptr::null_mut(),
-            nworkers: nworkers,
+            nworkers,
             memlimit: memlimit as usize,
             allocated: 0,
         }

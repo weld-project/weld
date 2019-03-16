@@ -264,8 +264,8 @@ pub struct Statement {
 impl Statement {
     pub fn new(output: Option<Symbol>, kind: StatementKind) -> Statement {
         Statement {
-            output: output,
-            kind: kind,
+            output,
+            kind,
         }
     }
 }
@@ -1398,7 +1398,7 @@ fn gen_expr(
 
             let kind = GetField {
                 value: struct_sym,
-                index: index,
+                index,
             };
             let res_sym = tracker.symbol_for_statement(prog, cur_func, cur_block, &field_ty, kind);
             Ok((cur_func, cur_block, res_sym))

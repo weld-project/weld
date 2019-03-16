@@ -51,7 +51,7 @@ impl<T> WeldVec<T> {
     pub fn new(ptr: *const T, len: i64) -> WeldVec<T> {
         WeldVec {
             data: ptr,
-            len: len,
+            len,
         }
     }
 }

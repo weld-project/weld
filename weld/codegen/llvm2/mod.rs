@@ -740,10 +740,10 @@ impl LlvmGenerator {
         debug!("LlvmGenerator features: {}", target.features);
 
         Ok(LlvmGenerator {
-            conf: conf,
-            context: context,
-            module: module,
-            target: target,
+            conf,
+            context,
+            module,
+            target,
             functions: FnvHashMap::default(),
             vectors: FnvHashMap::default(),
             mergers: FnvHashMap::default(),
@@ -758,7 +758,7 @@ impl LlvmGenerator {
             deserialize_fns: FnvHashMap::default(),
             struct_names: FnvHashMap::default(),
             struct_index: 0,
-            intrinsics: intrinsics,
+            intrinsics,
         })
     }
 
@@ -1771,9 +1771,9 @@ impl<'a> FunctionContext<'a> {
         llvm_function: LLVMValueRef,
     ) -> FunctionContext<'a> {
         FunctionContext {
-            sir_program: sir_program,
-            sir_function: sir_function,
-            llvm_function: llvm_function,
+            sir_program,
+            sir_function,
+            llvm_function,
             builder: unsafe { LLVMCreateBuilderInContext(llvm_context) },
             symbols: FnvHashMap::default(),
             blocks: FnvHashMap::default(),

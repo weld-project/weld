@@ -52,7 +52,7 @@ impl SymbolGenerator {
             _ => {}
         });
 
-        SymbolGenerator { id_map: id_map }
+        SymbolGenerator { id_map }
     }
 
     pub fn new_symbol(&mut self, name: &str) -> Symbol {

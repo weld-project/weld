@@ -13,8 +13,8 @@ use crate::error::*;
 
 pub fn new_expr(kind: ExprKind, ty: Type) -> WeldResult<Expr> {
     Ok(Expr {
-        kind: kind,
-        ty: ty,
+        kind,
+        ty,
         annotations: Annotations::new(),
     })
 }
@@ -55,7 +55,7 @@ pub fn binop_expr(kind: BinOpKind, left: Expr, right: Expr) -> WeldResult<Expr> 
 
         new_expr(
             BinOp {
-                kind: kind,
+                kind,
                 left: Box::new(left),
                 right: Box::new(right),
             },
@@ -68,7 +68,7 @@ pub fn unaryop_expr(kind: UnaryOpKind, value: Expr) -> WeldResult<Expr> {
     let ty = value.ty.clone();
     new_expr(
         UnaryOp {
-            kind: kind,
+            kind,
             value: Box::new(value),
         },
         ty,
@@ -83,7 +83,7 @@ pub fn cast_expr(kind: ScalarKind, expr: Expr) -> WeldResult<Expr> {
     };
     new_expr(
         Cast {
-            kind: kind,
+            kind,
             child_expr: Box::new(expr),
         },
         ty,
@@ -163,7 +163,7 @@ pub fn getfield_expr(expr: Expr, index: u32) -> WeldResult<Expr> {
     new_expr(
         GetField {
             expr: Box::new(expr),
-            index: index,
+            index,
         },
         ty,
     )
@@ -288,7 +288,7 @@ pub fn let_expr(name: Symbol, value: Expr, body: Expr) -> WeldResult<Expr> {
     let ty = body.ty.clone();
     new_expr(
         Let {
-            name: name,
+            name,
             value: Box::new(value),
             body: Box::new(body),
         },
@@ -345,7 +345,7 @@ pub fn lambda_expr(params: Vec<Parameter>, body: Expr) -> WeldResult<Expr> {
     );
     new_expr(
         Lambda {
-            params: params,
+            params,
             body: Box::new(body),
         },
         ty,
@@ -370,7 +370,7 @@ pub fn apply_expr(func: Expr, params: Vec<Expr>) -> WeldResult<Expr> {
     new_expr(
         Apply {
             func: Box::new(func),
-            params: params,
+            params,
         },
         *ty.unwrap(),
     )
@@ -379,8 +379,8 @@ pub fn apply_expr(func: Expr, params: Vec<Expr>) -> WeldResult<Expr> {
 pub fn cudf_expr(sym_name: String, args: Vec<Expr>, return_ty: Type) -> WeldResult<Expr> {
     new_expr(
         CUDF {
-            sym_name: sym_name,
-            args: args,
+            sym_name,
+            args,
             return_ty: Box::new(return_ty.clone()),
         },
         return_ty,
@@ -532,7 +532,7 @@ pub fn for_expr(iters: Vec<Iter>, builder: Expr, func: Expr, vectorized: bool) -
 
     new_expr(
         For {
-            iters: iters,
+            iters,
             builder: Box::new(builder),
             func: Box::new(func),
         },

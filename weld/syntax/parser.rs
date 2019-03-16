@@ -102,7 +102,7 @@ struct Parser<'t> {
 impl<'t> Parser<'t> {
     fn new(tokens: &[Token]) -> Parser<'_> {
         Parser {
-            tokens: tokens,
+            tokens,
             position: 0,
         }
     }
@@ -174,8 +174,8 @@ impl<'t> Parser<'t> {
         let macros = self.macros()?;
         let body = self.expr()?;
         Ok(Program {
-            macros: macros,
-            type_aliases: type_aliases,
+            macros,
+            type_aliases,
             body: *body,
         })
     }
@@ -208,7 +208,7 @@ impl<'t> Parser<'t> {
         let body = self.expr()?;
         self.consume(TSemicolon)?;
         Ok(Macro {
-            name: name,
+            name,
             parameters: params,
             body: *body,
         })
@@ -232,7 +232,7 @@ impl<'t> Parser<'t> {
         self.consume(TSemicolon)?;
         Ok(TypeAlias {
             name: name.to_string(),
-            ty: ty,
+            ty,
         })
     }
 
@@ -265,9 +265,9 @@ impl<'t> Parser<'t> {
         let body = self.expr()?;
         let expr = expr_box(
             Let {
-                name: name,
-                value: value,
-                body: body,
+                name,
+                value,
+                body,
             },
             Annotations::new(),
         );
@@ -283,7 +283,7 @@ impl<'t> Parser<'t> {
             while *self.peek() != TBar {
                 let name = self.symbol()?;
                 let ty = self.optional_type()?;
-                params.push(Parameter { name: name, ty: ty });
+                params.push(Parameter { name, ty });
                 if *self.peek() == TComma {
                     self.next();
                 } else if *self.peek() != TBar {
@@ -297,8 +297,8 @@ impl<'t> Parser<'t> {
         let body = self.expr()?;
         Ok(expr_box(
             Lambda {
-                params: params,
-                body: body,
+                params,
+                body,
             },
             Annotations::new(),
         ))
@@ -319,7 +319,7 @@ impl<'t> Parser<'t> {
                 BinOp {
                     kind: LogicalOr,
                     left: res,
-                    right: right,
+                    right,
                 },
                 Annotations::new(),
             )
@@ -337,7 +337,7 @@ impl<'t> Parser<'t> {
                 BinOp {
                     kind: LogicalAnd,
                     left: res,
-                    right: right,
+                    right,
                 },
                 Annotations::new(),
             )
@@ -355,7 +355,7 @@ impl<'t> Parser<'t> {
                 BinOp {
                     kind: BitwiseOr,
                     left: res,
-                    right: right,
+                    right,
                 },
                 Annotations::new(),
             )
@@ -373,7 +373,7 @@ impl<'t> Parser<'t> {
                 BinOp {
                     kind: Xor,
                     left: res,
-                    right: right,
+                    right,
                 },
                 Annotations::new(),
             )
@@ -391,7 +391,7 @@ impl<'t> Parser<'t> {
                 BinOp {
                     kind: BitwiseAnd,
                     left: res,
-                    right: right,
+                    right,
                 },
                 Annotations::new(),
             )
@@ -411,7 +411,7 @@ impl<'t> Parser<'t> {
                     BinOp {
                         kind: Equal,
                         left: res,
-                        right: right,
+                        right,
                     },
                     Annotations::new(),
                 )
@@ -420,7 +420,7 @@ impl<'t> Parser<'t> {
                     BinOp {
                         kind: NotEqual,
                         left: res,
-                        right: right,
+                        right,
                     },
                     Annotations::new(),
                 )
@@ -449,7 +449,7 @@ impl<'t> Parser<'t> {
                 BinOp {
                     kind: op,
                     left: res,
-                    right: right,
+                    right,
                 },
                 Annotations::new(),
             )
@@ -468,7 +468,7 @@ impl<'t> Parser<'t> {
                     BinOp {
                         kind: Add,
                         left: res,
-                        right: right,
+                        right,
                     },
                     Annotations::new(),
                 )
@@ -477,7 +477,7 @@ impl<'t> Parser<'t> {
                     BinOp {
                         kind: Subtract,
                         left: res,
-                        right: right,
+                        right,
                     },
                     Annotations::new(),
                 )
@@ -500,7 +500,7 @@ impl<'t> Parser<'t> {
                 BinOp {
                     kind: op,
                     left: res,
-                    right: right,
+                    right,
                 },
                 Annotations::new(),
             )
@@ -529,8 +529,8 @@ impl<'t> Parser<'t> {
                                 Ok(index) => {
                                     expr = expr_box(
                                         GetField {
-                                            expr: expr,
-                                            index: index,
+                                            expr,
+                                            index,
                                         },
                                         Annotations::new(),
                                     )
@@ -560,7 +560,7 @@ impl<'t> Parser<'t> {
                 expr = expr_box(
                     Apply {
                         func: expr,
-                        params: params,
+                        params,
                     },
                     Annotations::new(),
                 )
@@ -598,18 +598,18 @@ impl<'t> Parser<'t> {
                 }
 
                 let iter = Iter {
-                    data: data,
-                    start: start,
-                    end: end,
-                    stride: stride,
+                    data,
+                    start,
+                    end,
+                    stride,
                     kind: match iter {
                         TSimdIter => SimdIter,
                         TFringeIter => FringeIter,
                         TNdIter => NdIter,
                         _ => ScalarIter,
                     },
-                    shape: shape,
-                    strides: strides,
+                    shape,
+                    strides,
                 };
                 self.consume(TCloseParen)?;
                 Ok(iter)
@@ -639,7 +639,7 @@ impl<'t> Parser<'t> {
             _ => {
                 let data = self.expr()?;
                 let iter = Iter {
-                    data: data,
+                    data,
                     start: None,
                     end: None,
                     stride: None,
@@ -663,14 +663,14 @@ impl<'t> Parser<'t> {
         if *self.next() != TOpenParen {
             return compile_err!("Expected '('");
         }
-        let expr = self.expr()?;
+        let child_expr = self.expr()?;
         if *self.next() != TCloseParen {
             return compile_err!("Expected ')'");
         }
         let cast_expr = expr_box(
             Cast {
-                kind: kind,
-                child_expr: expr,
+                kind,
+                child_expr,
             },
             Annotations::new(),
         );
@@ -750,8 +750,8 @@ impl<'t> Parser<'t> {
         let kind = self.unary_op_kind_for_token(token)?;
         Ok(expr_box(
             UnaryOp {
-                kind: kind,
-                value: value,
+                kind,
+                value,
             },
             Annotations::new(),
         ))
@@ -799,7 +799,7 @@ impl<'t> Parser<'t> {
                 self.consume(TCloseParen)?;
                 Ok(expr_box(
                     ToVec {
-                        child_expr: child_expr,
+                        child_expr,
                     },
                     Annotations::new(),
                 ))
@@ -858,9 +858,9 @@ impl<'t> Parser<'t> {
                 self.consume(TCloseParen)?;
                 Ok(expr_box(
                     If {
-                        cond: cond,
-                        on_true: on_true,
-                        on_false: on_false,
+                        cond,
+                        on_true,
+                        on_false,
                     },
                     annotations,
                 ))
@@ -874,8 +874,8 @@ impl<'t> Parser<'t> {
                 self.consume(TCloseParen)?;
                 Ok(expr_box(
                     Iterate {
-                        initial: initial,
-                        update_func: update_func,
+                        initial,
+                        update_func,
                     },
                     Annotations::new(),
                 ))
@@ -891,9 +891,9 @@ impl<'t> Parser<'t> {
                 self.consume(TCloseParen)?;
                 Ok(expr_box(
                     Select {
-                        cond: cond,
-                        on_true: on_true,
-                        on_false: on_false,
+                        cond,
+                        on_true,
+                        on_false,
                     },
                     Annotations::new(),
                 ))
@@ -923,7 +923,7 @@ impl<'t> Parser<'t> {
                 Ok(expr_box(
                     Deserialize {
                         value_ty: Box::new(value_ty),
-                        value: value,
+                        value,
                     },
                     annotations,
                 ))
@@ -949,7 +949,7 @@ impl<'t> Parser<'t> {
                     CUDF {
                         sym_name: sym_name.name(),
                         return_ty: Box::new(return_ty),
-                        args: args,
+                        args,
                     },
                     annotations,
                 ))
@@ -971,7 +971,7 @@ impl<'t> Parser<'t> {
                 if vectors.len() < 2 {
                     return compile_err!("Expected two or more arguments in Zip");
                 }
-                Ok(expr_box(Zip { vectors: vectors }, Annotations::new()))
+                Ok(expr_box(Zip { vectors }, Annotations::new()))
             }
 
             TFor => {
@@ -993,14 +993,14 @@ impl<'t> Parser<'t> {
                     iters.push(self.parse_iter()?);
                 }
                 self.consume(TComma)?;
-                let builders = self.expr()?;
+                let builder = self.expr()?;
                 self.consume(TComma)?;
                 let body = self.expr()?;
                 self.consume(TCloseParen)?;
                 Ok(expr_box(
                     For {
-                        iters: iters,
-                        builder: builders,
+                        iters,
+                        builder,
                         func: body,
                     },
                     annotations,
@@ -1011,7 +1011,7 @@ impl<'t> Parser<'t> {
                 self.consume(TOpenParen)?;
                 let data = self.expr()?;
                 self.consume(TCloseParen)?;
-                Ok(expr_box(Length { data: data }, Annotations::new()))
+                Ok(expr_box(Length { data }, Annotations::new()))
             }
 
             TLookup => {
@@ -1022,8 +1022,8 @@ impl<'t> Parser<'t> {
                 self.consume(TCloseParen)?;
                 Ok(expr_box(
                     Lookup {
-                        data: data,
-                        index: index,
+                        data,
+                        index,
                     },
                     Annotations::new(),
                 ))
@@ -1037,8 +1037,8 @@ impl<'t> Parser<'t> {
                 self.consume(TCloseParen)?;
                 Ok(expr_box(
                     OptLookup {
-                        data: data,
-                        index: index,
+                        data,
+                        index,
                     },
                     Annotations::new(),
                 ))
@@ -1052,8 +1052,8 @@ impl<'t> Parser<'t> {
                 self.consume(TCloseParen)?;
                 Ok(expr_box(
                     KeyExists {
-                        data: data,
-                        key: key,
+                        data,
+                        key,
                     },
                     Annotations::new(),
                 ))
@@ -1069,9 +1069,9 @@ impl<'t> Parser<'t> {
                 self.consume(TCloseParen)?;
                 Ok(expr_box(
                     Slice {
-                        data: data,
-                        index: index,
-                        size: size,
+                        data,
+                        index,
+                        size,
                     },
                     Annotations::new(),
                 ))
@@ -1085,8 +1085,8 @@ impl<'t> Parser<'t> {
                 self.consume(TCloseParen)?;
                 Ok(expr_box(
                     Sort {
-                        data: data,
-                        cmpfunc: cmpfunc,
+                        data,
+                        cmpfunc,
                     },
                     Annotations::new(),
                 ))
@@ -1113,8 +1113,8 @@ impl<'t> Parser<'t> {
                 self.consume(TCloseParen)?;
                 Ok(expr_box(
                     Merge {
-                        builder: builder,
-                        value: value,
+                        builder,
+                        value,
                     },
                     Annotations::new(),
                 ))
@@ -1253,8 +1253,8 @@ impl<'t> Parser<'t> {
                 let res = expr_box(
                     BinOp {
                         kind: Min,
-                        left: left,
-                        right: right,
+                        left,
+                        right,
                     },
                     Annotations::new(),
                 );
@@ -1272,8 +1272,8 @@ impl<'t> Parser<'t> {
                 let res = expr_box(
                     BinOp {
                         kind: Max,
-                        left: left,
-                        right: right,
+                        left,
+                        right,
                     },
                     Annotations::new(),
                 );
@@ -1291,8 +1291,8 @@ impl<'t> Parser<'t> {
                 let res = expr_box(
                     BinOp {
                         kind: Pow,
-                        left: left,
-                        right: right,
+                        left,
+                        right,
                     },
                     Annotations::new(),
                 );

@@ -101,8 +101,8 @@ impl NewExpr for Expr {
 
     fn new_with_type(kind: ExprKind, ty: Type) -> WeldResult<Expr> {
         let mut expr = Expr {
-            kind: kind,
-            ty: ty,
+            kind,
+            ty,
             annotations: Annotations::new(),
         };
 
@@ -139,7 +139,7 @@ impl NewExpr for Expr {
 
     fn new_bin_op(kind: BinOpKind, left: Expr, right: Expr) -> WeldResult<Expr> {
         Self::new(BinOp {
-            kind: kind,
+            kind,
             left: Box::new(left),
             right: Box::new(right),
         })
@@ -147,14 +147,14 @@ impl NewExpr for Expr {
 
     fn new_unary_op(kind: UnaryOpKind, value: Expr) -> WeldResult<Expr> {
         Self::new(UnaryOp {
-            kind: kind,
+            kind,
             value: Box::new(value),
         })
     }
 
     fn new_cast(kind: ScalarKind, expr: Expr) -> WeldResult<Expr> {
         Self::new(Cast {
-            kind: kind,
+            kind,
             child_expr: Box::new(expr),
         })
     }
@@ -192,7 +192,7 @@ impl NewExpr for Expr {
     fn new_get_field(expr: Expr, index: u32) -> WeldResult<Expr> {
         Self::new(GetField {
             expr: Box::new(expr),
-            index: index,
+            index,
         })
     }
 
@@ -240,7 +240,7 @@ impl NewExpr for Expr {
 
     fn new_let(name: Symbol, value: Expr, body: Expr) -> WeldResult<Expr> {
         Self::new(Let {
-            name: name,
+            name,
             value: Box::new(value),
             body: Box::new(body),
         })
@@ -264,7 +264,7 @@ impl NewExpr for Expr {
 
     fn new_lambda(params: Vec<Parameter>, body: Expr) -> WeldResult<Expr> {
         Self::new(Lambda {
-            params: params,
+            params,
             body: Box::new(body),
         })
     }
@@ -272,14 +272,14 @@ impl NewExpr for Expr {
     fn new_apply(func: Expr, params: Vec<Expr>) -> WeldResult<Expr> {
         Self::new(Apply {
             func: Box::new(func),
-            params: params,
+            params,
         })
     }
 
     fn new_cudf(sym_name: String, args: Vec<Expr>, return_ty: Type) -> WeldResult<Expr> {
         Self::new(CUDF {
-            sym_name: sym_name,
-            args: args,
+            sym_name,
+            args,
             return_ty: Box::new(return_ty),
         })
     }
@@ -291,7 +291,7 @@ impl NewExpr for Expr {
 
     fn new_for(iters: Vec<Iter>, builder: Expr, func: Expr) -> WeldResult<Expr> {
         Self::new(For {
-            iters: iters,
+            iters,
             builder: Box::new(builder),
             func: Box::new(func),
         })

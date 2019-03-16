@@ -69,7 +69,7 @@ impl<'a> UnrollPattern<'a> {
                                         Ident(ref name) if *name == params[0].name => {
                                             return Some(UnrollPattern {
                                                 loop_size: loopsize,
-                                                iters: iters,
+                                                iters,
                                                 builder_kind: bk,
                                                 merge_params: params,
                                                 merge_value: value,
