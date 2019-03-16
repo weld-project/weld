@@ -100,7 +100,7 @@ fn uniquify_helper(expr: &mut Expr, symbol_stack: &mut SymbolStack) -> WeldResul
             // Update the parameter of the lambda with new names.
             let original_params = params.clone();
             for param in params.iter_mut() {
-                let ref mut sym = param.name;
+                let sym = &mut param.name;
                 symbol_stack.push_symbol(sym.clone());
                 *sym = symbol_stack.symbol(sym.clone())?;
             }

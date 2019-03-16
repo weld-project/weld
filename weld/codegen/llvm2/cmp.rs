@@ -232,7 +232,7 @@ impl GenCmp for LlvmGenerator {
                 // Call memcmp
                 let name = "memcmp";
                 let ret_ty = self.i32_type();
-                let ref mut arg_tys = [
+                let arg_tys = &mut [
                     self.void_pointer_type(),
                     self.void_pointer_type(),
                     self.i64_type(),
@@ -242,7 +242,7 @@ impl GenCmp for LlvmGenerator {
                     LLVMExtAddAttrsOnParameter(self.context, memcmp, &[ReadOnly, NoCapture], 0);
                     LLVMExtAddAttrsOnParameter(self.context, memcmp, &[ReadOnly, NoCapture], 1);
                 }
-                let ref mut args = [left_cast, right_cast, bytes];
+                let args = &mut [left_cast, right_cast, bytes];
                 let memcmp_result = self.intrinsics.call(builder, name, args)?;
 
                 // If all compared bytes were equal but sizes were not equal, the smaller vector is the lesser element.

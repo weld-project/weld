@@ -106,7 +106,7 @@ impl GenHash for LlvmGenerator {
 
                 // Use the CRC-32 set of hash functions. These functions are exposed as target-specific
                 // x86 intrinsics.
-                let ref funcs = HashFuncs {
+                let funcs = &HashFuncs {
                     hash64: self.intrinsics.get(crc64).unwrap(),
                     hash32: self.intrinsics.get(crc32).unwrap(),
                     hash16: self.intrinsics.get(crc16).unwrap(),

@@ -153,7 +153,7 @@ pub fn compile(
         runtime::ffi::weld_init();
     }
 
-    let ref mappings = codegen.intrinsics.mappings();
+    let mappings = &codegen.intrinsics.mappings();
     let module = unsafe { jit::compile(codegen.context, codegen.module, mappings, conf, stats)? };
 
     nonfatal!(write_code(
@@ -900,7 +900,7 @@ impl LlvmGenerator {
         // Still a pointer, but now as an integer.
         let arg_pointer = self.load(builder, arg_pointer)?;
         // The first SIR function is the entry point.
-        let ref arg_ty = Struct(program.top_params.iter().map(|p| p.ty.clone()).collect());
+        let arg_ty = &Struct(program.top_params.iter().map(|p| p.ty.clone()).collect());
         let llvm_arg_ty = self.llvm_type(arg_ty)?;
         let arg_struct_pointer = LLVMBuildIntToPtr(
             builder,
@@ -1083,7 +1083,7 @@ impl LlvmGenerator {
         }
 
         // Create a context for the function.
-        let ref mut context = FunctionContext::new(self.context, program, func, function);
+        let context = &mut FunctionContext::new(self.context, program, func, function);
 
         // Create the entry basic block, where we define alloca'd variables.
         let entry_bb =
@@ -1119,7 +1119,7 @@ impl LlvmGenerator {
     ) -> WeldResult<()> {
         use crate::ast::Type::*;
         use crate::sir::StatementKind::*;
-        let ref output = statement.output.clone().unwrap_or(Symbol::new("unused", 0));
+        let output = &statement.output.clone().unwrap_or(Symbol::new("unused", 0));
 
         if self.conf.trace_run {
             self.gen_print(

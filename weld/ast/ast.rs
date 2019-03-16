@@ -303,7 +303,7 @@ impl Type {
 impl fmt::Display for Type {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use self::Type::*;
-        let ref text = match *self {
+        let text = &match *self {
             Scalar(ref kind) => format!("{}", kind),
             Simd(ref kind) => format!("simd[{}]", kind),
             Vector(ref elem) => format!("vec[{}]", elem),
@@ -490,7 +490,7 @@ impl BuilderKind {
 impl fmt::Display for BuilderKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use self::BuilderKind::*;
-        let ref text = match *self {
+        let text = &match *self {
             Appender(ref t) => format!("appender[{}]", t),
             DictMerger(ref key, ref value, op) => format!("dictmerger[{},{},{}]", key, value, op),
             GroupMerger(ref key, ref value) => format!("groupmerger[{},{}]", key, value),
@@ -575,7 +575,7 @@ pub enum IterKind {
 impl fmt::Display for IterKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use self::IterKind::*;
-        let ref text = match *self {
+        let text = &match *self {
             ScalarIter => "",
             SimdIter => "simd",
             FringeIter => "fringe",
@@ -832,7 +832,7 @@ pub enum LiteralKind {
 impl fmt::Display for LiteralKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use self::LiteralKind::*;
-        let ref text = match *self {
+        let text = &match *self {
             BoolLiteral(v) => format!("{}", v),
             I8Literal(v) => format!("{}c", v),
             I16Literal(v) => format!("{}si", v),

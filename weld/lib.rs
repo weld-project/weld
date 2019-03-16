@@ -32,15 +32,15 @@
 //! }
 //!
 //! let code = "|a: i32, b: i32| a + b";
-//! let ref conf = WeldConf::new();
+//! let conf = &WeldConf::new();
 //! let mut module = WeldModule::compile(code, conf).unwrap();
 //!
 //! // Weld accepts a packed C struct as an argument.
-//! let ref args = MyArgs { a: 1, b: 50 };
-//! let ref input = WeldValue::new_from_data(args as *const _ as Data);
+//! let args = &MyArgs { a: 1, b: 50 };
+//! let input = &WeldValue::new_from_data(args as *const _ as Data);
 //!
 //! // A context manages memory.
-//! let ref mut context = WeldContext::new(conf).unwrap();
+//! let context = &mut WeldContext::new(conf).unwrap();
 //!
 //! // Running a Weld module and reading a value out of it is unsafe!
 //! unsafe {
@@ -236,7 +236,7 @@ impl WeldContext {
     /// use weld::{WeldConf, WeldContext};
     ///
     /// // Create a new default configuration.
-    /// let ref mut conf = WeldConf::new();
+    /// let conf = &mut WeldConf::new();
     ///
     /// // Set 1KB memory limit, 2 worker threads.
     /// conf.set("weld.memory.limit", "1024");
@@ -246,7 +246,7 @@ impl WeldContext {
     /// let context = WeldContext::new(conf).unwrap();
     /// ```
     pub fn new(conf: &WeldConf) -> WeldResult<WeldContext> {
-        let ref mut conf = ParsedConf::parse(conf)?;
+        let conf = &mut ParsedConf::parse(conf)?;
         let threads = conf.threads;
         let mem_limit = conf.memory_limit;
 
@@ -277,7 +277,7 @@ impl WeldContext {
     /// ```rust
     /// use weld::{WeldConf, WeldContext};
     ///
-    /// let ref mut conf = WeldConf::new();
+    /// let conf = &mut WeldConf::new();
     ///
     /// // Set 1KB memory limit, 2 worker threads.
     /// conf.set("weld.memory.limit", "1024");
@@ -468,12 +468,12 @@ impl WeldValue {
     /// // Wrap in Cell so we can get a raw pointer
     /// let input = Cell::new(1 as i32);
     ///
-    /// let ref conf = WeldConf::new();
+    /// let conf = &WeldConf::new();
     /// let mut module = WeldModule::compile("|x: i32| x + 1", conf).unwrap();
     ///
-    /// let ref input_value = WeldValue::new_from_data(input.as_ptr() as Data);
+    /// let input_value = &WeldValue::new_from_data(input.as_ptr() as Data);
     ///
-    /// let ref mut context = WeldContext::new(conf).unwrap();
+    /// let context = &mut WeldContext::new(conf).unwrap();
     /// let result = unsafe { module.run(context, input_value).unwrap() };
     ///
     /// assert!(result.context().is_some());
@@ -598,7 +598,7 @@ impl WeldModule {
     /// ```rust,no_run
     /// use weld::*;
     ///
-    /// let ref conf = WeldConf::new();
+    /// let conf = &WeldConf::new();
     /// let code = "|| 1";
     ///
     /// let mut module = WeldModule::compile(code, conf);
@@ -609,7 +609,7 @@ impl WeldModule {
     ///
     /// ```rust,no_run
     /// # use weld::*;
-    /// let ref mut conf = WeldConf::new();
+    /// let conf = &mut WeldConf::new();
     ///
     /// // Type error in program!
     /// let mut module = WeldModule::compile("|| 1 + f32(1)", conf);
@@ -630,7 +630,7 @@ impl WeldModule {
 
         let e2e_start = PreciseTime::now();
         let mut stats = CompilationStats::new();
-        let ref mut conf = ParsedConf::parse(conf)?;
+        let conf = &mut ParsedConf::parse(conf)?;
         let code = code.as_ref();
 
         let uuid = Uuid::new_v4();
@@ -808,12 +808,12 @@ impl WeldModule {
     ///
     /// // Wrap in Cell so we can get a raw pointer
     /// let input = Cell::new(1 as i32);
-    /// let ref conf = WeldConf::new();
+    /// let conf = &WeldConf::new();
     ///
     /// // Program that adds one to an i32.
     /// let mut module = WeldModule::compile("|x: i32| x + 1", conf).unwrap();
-    /// let ref input_value = WeldValue::new_from_data(input.as_ptr() as Data);
-    /// let ref mut context = WeldContext::new(conf).unwrap();
+    /// let input_value = &WeldValue::new_from_data(input.as_ptr() as Data);
+    /// let context = &mut WeldContext::new(conf).unwrap();
     ///
     /// // Running is unsafe, since we're outside of Rust in JIT'd code, operating over
     /// // raw pointers.

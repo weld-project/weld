@@ -235,7 +235,7 @@ impl BuilderExpressionGen for LlvmGenerator {
                 Ok(())
             }
             DictMerger(ref key, ref val, _) => {
-                let ref dict_type = Dict(key.clone(), val.clone());
+                let dict_type = &Dict(key.clone(), val.clone());
                 let default_capacity = self.i64(dict::INITIAL_CAPACITY);
                 let dictmerger = {
                     let methods = self.dictionaries.get_mut(dict_type).unwrap();
@@ -250,7 +250,7 @@ impl BuilderExpressionGen for LlvmGenerator {
                 Ok(())
             }
             GroupMerger(ref key, ref val) => {
-                let ref dict_type = Dict(key.clone(), Box::new(Vector(val.clone())));
+                let dict_type = &Dict(key.clone(), Box::new(Vector(val.clone())));
                 let default_capacity = self.i64(dict::INITIAL_CAPACITY);
                 let groupmerger = {
                     let methods = self.dictionaries.get_mut(dict_type).unwrap();
@@ -360,7 +360,7 @@ impl BuilderExpressionGen for LlvmGenerator {
                 let hash = self.gen_hash(key, ctx.builder, key_pointer, None)?;
                 let builder_loaded = self.load(ctx.builder, builder_pointer)?;
 
-                let ref dict_type = Dict(key.clone(), val.clone());
+                let dict_type = &Dict(key.clone(), val.clone());
                 let slot_value_pointer = {
                     let methods = self.dictionaries.get_mut(dict_type).unwrap();
                     let slot = methods.gen_upsert(
@@ -398,7 +398,7 @@ impl BuilderExpressionGen for LlvmGenerator {
 
                 let builder_loaded = self.load(ctx.builder, builder_pointer)?;
 
-                let ref dict_type = Dict(key.clone(), Box::new(Vector(value.clone())));
+                let dict_type = &Dict(key.clone(), Box::new(Vector(value.clone())));
                 let methods = self.dictionaries.get_mut(dict_type).unwrap();
                 let _ = methods.gen_merge_grouped(
                     ctx.builder,
@@ -464,7 +464,7 @@ impl BuilderExpressionGen for LlvmGenerator {
         let builder_pointer = ctx.get_value(m.builder)?;
         match *m.kind {
             Appender(ref elem_type) => {
-                let ref vector = Vector(elem_type.clone());
+                let vector = &Vector(elem_type.clone());
                 let vector_type = self.llvm_type(vector)?;
                 let result = {
                     let methods = self.appenders.get_mut(m.kind).unwrap();
@@ -531,12 +531,12 @@ impl BuilderExpressionGen for LlvmGenerator {
                     Ok(self.appenders.get(kind).unwrap().appender_ty)
                 }
                 DictMerger(ref key, ref value, _) => {
-                    let ref dict_type = Dict(key.clone(), value.clone());
+                    let dict_type = &Dict(key.clone(), value.clone());
                     self.llvm_type(dict_type)
                 }
                 GroupMerger(ref key, ref value) => {
                     // GroupMerger is backed by dictionary, but the value type is a vector.
-                    let ref dict_type = Dict(key.clone(), Box::new(Vector(value.clone())));
+                    let dict_type = &Dict(key.clone(), Box::new(Vector(value.clone())));
                     self.llvm_type(dict_type)
                 }
                 Merger(ref elem_type, ref binop) => {
@@ -560,7 +560,7 @@ impl BuilderExpressionGen for LlvmGenerator {
                     Ok(self.mergers.get(kind).unwrap().merger_ty)
                 }
                 VecMerger(ref elem, _) => {
-                    let ref vec_type = Vector(elem.clone());
+                    let vec_type = &Vector(elem.clone());
                     self.llvm_type(vec_type)
                 }
             }

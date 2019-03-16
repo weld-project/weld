@@ -62,7 +62,7 @@ pub enum LLVMExtAttribute {
 impl fmt::Display for LLVMExtAttribute {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use self::LLVMExtAttribute::*;
-        let ref string = match *self {
+        let string = match *self {
             AlwaysInline => "alwaysinline",
             InlineHint => "inlinehint",
             NoAlias => "noalias",

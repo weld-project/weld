@@ -217,28 +217,28 @@ use crate::syntax::parser::*;
 
 #[test]
 fn test_compare_same() {
-    let ref a = parse_expr("|| let a = 1; let b = 1; a").unwrap();
-    let ref b = parse_expr("|| let a = 1; let b = 1; a").unwrap();
+    let a = &parse_expr("|| let a = 1; let b = 1; a").unwrap();
+    let b = &parse_expr("|| let a = 1; let b = 1; a").unwrap();
     assert_eq!(ExprHash::from(a).unwrap(), ExprHash::from(b).unwrap());
 }
 
 #[test]
 fn test_compare_different_symbols() {
-    let ref a = parse_expr("|| let a = 1; let b = 1; a").unwrap();
-    let ref b = parse_expr("|| let c = 1; let d = 1; c").unwrap();
+    let a = &parse_expr("|| let a = 1; let b = 1; a").unwrap();
+    let b = &parse_expr("|| let c = 1; let d = 1; c").unwrap();
     assert_eq!(ExprHash::from(a).unwrap(), ExprHash::from(b).unwrap());
 }
 
 #[test]
 fn test_compare_different_symbols_ne() {
-    let ref a = parse_expr("|| let a = 1; let b = 1; a").unwrap();
-    let ref b = parse_expr("|| let c = 1; let d = 1; d").unwrap();
+    let a = &parse_expr("|| let a = 1; let b = 1; a").unwrap();
+    let b = &parse_expr("|| let c = 1; let d = 1; d").unwrap();
     assert!(ExprHash::from(a).unwrap() != ExprHash::from(b).unwrap());
 }
 
 #[test]
 fn test_lambda() {
-    let ref a = parse_expr("|a: i32| let a = 1; let b = 1; a").unwrap();
-    let ref b = parse_expr("|a: i32| let a = 1; let c = 1; a").unwrap();
+    let a = &parse_expr("|a: i32| let a = 1; let b = 1; a").unwrap();
+    let b = &parse_expr("|a: i32| let a = 1; let c = 1; a").unwrap();
     assert_eq!(ExprHash::from(a).unwrap(), ExprHash::from(b).unwrap());
 }

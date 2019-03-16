@@ -101,7 +101,7 @@ impl ForLoopGenInternal for LlvmGenerator {
     ) -> WeldResult<()> {
         let iterations = self.gen_bounds_check(ctx, parfor)?;
 
-        let ref sir_function = ctx.sir_program.funcs[parfor.body];
+        let sir_function = &ctx.sir_program.funcs[parfor.body];
         assert!(sir_function.loop_body);
 
         self.gen_loop_body_function(ctx.sir_program, sir_function, parfor)?;
@@ -253,7 +253,7 @@ impl ForLoopGenInternal for LlvmGenerator {
         // Each loop provides a single builder expression (which could be a struct of builders).
         // The loop's output is by definition derived from this builder.
         assert_eq!(builders.len(), 1);
-        let ref weld_ty = builders[0];
+        let weld_ty = &builders[0];
 
         let mut arg_tys = self.argument_types(func)?;
         // The second-to-last argument is the *total* number of iterations across all threads (in a
@@ -279,7 +279,7 @@ impl ForLoopGenInternal for LlvmGenerator {
         self.functions.insert(func.id, function);
 
         // Create a context for the function.
-        let ref mut context = FunctionContext::new(self.context, program, func, function);
+        let context = &mut FunctionContext::new(self.context, program, func, function);
         // Reference to the parameter storing the max number of iterations.
         let max = LLVMGetParam(context.llvm_function, num_iterations_index);
         // Create the entry basic block, where we define alloca'd variables.

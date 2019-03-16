@@ -41,7 +41,7 @@ pub fn inline_zips(expr: &mut Expr) {
         } = e.kind
         {
             if iters.len() == 1 {
-                let ref first_iter = iters[0];
+                let first_iter = &iters[0];
                 if let Zip { ref vectors } = first_iter.data.kind {
                     let new_iters = vectors
                         .iter()
@@ -106,7 +106,7 @@ pub fn inline_apply(expr: &mut Expr) {
 
 pub fn inline_let(expr: &mut Expr) {
     expr.uniquify().unwrap();
-    let ref mut usages = FnvHashMap::default();
+    let usages = &mut FnvHashMap::default();
     count_symbols(expr, usages);
     trace!("Symbol count: {:?}", usages);
     inline_let_helper(expr, usages)

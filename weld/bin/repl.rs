@@ -173,7 +173,7 @@ fn process_code(code: &str, conf: &mut WeldConf) {
 }
 
 fn main() {
-    let ref mut conf = WeldConf::new();
+    let conf = &mut WeldConf::new();
     let matches = App::new("Weld REPL")
         .version("0.1.0")
         .author("Weld authors <weld-group@cs.stanford.edu")

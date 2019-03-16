@@ -454,9 +454,9 @@ pub fn for_expr(iters: Vec<Iter>, builder: Expr, func: Expr, vectorized: bool) -
 
     if let Function(ref params, ref ret_ty) = func.ty {
         // Make sure the function parameters match.
-        let ref param_0_ty = params[0];
-        let ref param_1_ty = params[1];
-        let ref param_2_ty = params[2];
+        let param_0_ty = &params[0];
+        let param_1_ty = &params[1];
+        let param_2_ty = &params[2];
 
         // Check builder.
         if param_0_ty != &builder_ty {

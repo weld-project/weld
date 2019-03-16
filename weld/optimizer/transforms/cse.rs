@@ -335,20 +335,20 @@ impl Cse {
         };
 
         // Maps expressions to symbol names.
-        let ref mut bindings = HashMap::new();
+        let bindings = &mut HashMap::new();
 
         cse.remove_common_subexpressions(expr, bindings);
 
         // Convert the bindings map from Expr -> Symbol to Symbol -> Expr.
-        let ref mut bindings = bindings
+        let bindings = &mut bindings
             .drain()
             .map(|(k, v)| (v, k))
             .collect::<HashMap<Symbol, Expr>>();
 
         cse.counter = 0;
-        let ref mut sites = cse.build_site_map(expr, bindings);
-        let ref mut generated = HashSet::new();
-        let ref mut stack = vec![];
+        let sites = &mut cse.build_site_map(expr, bindings);
+        let generated = &mut HashSet::new();
+        let stack = &mut vec![];
 
         cse.counter = 0;
         cse.generate_bindings(expr, bindings, generated, &mut Site::new(), stack, sites);

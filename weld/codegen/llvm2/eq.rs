@@ -156,7 +156,7 @@ impl GenEq for LlvmGenerator {
                 // Call memcmp
                 let name = "memcmp";
                 let ret_ty = self.i32_type();
-                let ref mut arg_tys = [
+                let arg_tys = &mut [
                     self.void_pointer_type(),
                     self.void_pointer_type(),
                     self.i64_type(),
@@ -166,7 +166,7 @@ impl GenEq for LlvmGenerator {
                     LLVMExtAddAttrsOnParameter(self.context, memcmp, &[ReadOnly, NoCapture], 0);
                     LLVMExtAddAttrsOnParameter(self.context, memcmp, &[ReadOnly, NoCapture], 1);
                 }
-                let ref mut args = [left_data, right_data, bytes];
+                let args = &mut [left_data, right_data, bytes];
                 let memcmp_result = self.intrinsics.call(builder, name, args)?;
 
                 // If MemCmp returns 0, the two buffers are equal.

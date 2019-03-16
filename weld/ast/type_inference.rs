@@ -42,7 +42,7 @@ impl InferTypes for Expr {
     }
 
     fn infer_local(&mut self) -> WeldResult<()> {
-        let ref mut env = TypeMap::default();
+        let env = &mut TypeMap::default();
         if let Ident(ref sym) = self.kind {
             env.insert(sym.clone(), self.ty.clone());
         }
@@ -242,7 +242,7 @@ impl InferTypesInternal for Expr {
     /// Internal implementation of type inference.
     fn infer_types_internal(&mut self) -> WeldResult<()> {
         loop {
-            let ref mut env = TypeMap::default();
+            let env = &mut TypeMap::default();
             if !self.infer_up(env)? {
                 if self.partially_typed() {
                     return compile_err!("Could not infer some types");
@@ -338,7 +338,7 @@ impl InferTypesInternal for Expr {
                 ref mut right,
             } => {
                 // First, sync the left and right types into the elem_type.
-                let ref mut elem_type = Unknown;
+                let elem_type = &mut Unknown;
                 elem_type.push(&left.ty)?;
                 elem_type.push(&right.ty)?;
 
@@ -376,7 +376,7 @@ impl InferTypesInternal for Expr {
 
             ToVec { ref mut child_expr } => {
                 // The base type is vec[{?,?}] - infer the key and value type.
-                let ref base_type = Vector(Box::new(Struct(vec![Unknown, Unknown])));
+                let base_type = &mut Vector(Box::new(Struct(vec![Unknown, Unknown])));
                 let mut changed = self.ty.push(base_type)?;
 
                 let mut set_types = false;
@@ -459,7 +459,7 @@ impl InferTypesInternal for Expr {
                 }
 
                 // If no error eccord, push the element type to the expression.
-                let ref vec_type = Vector(Box::new(elem_type));
+                let vec_type = &Vector(Box::new(elem_type));
                 changed |= self.ty.push(vec_type)?;
                 Ok(changed)
             }
@@ -467,7 +467,7 @@ impl InferTypesInternal for Expr {
             Zip { ref mut vectors } => {
                 let mut changed = false;
 
-                let ref base_type = Vector(Box::new(Struct(vec![Unknown; vectors.len()])));
+                let base_type = &Vector(Box::new(Struct(vec![Unknown; vectors.len()])));
                 changed |= self.ty.push(base_type)?;
 
                 // Push the vector type to each vector.
@@ -495,7 +495,7 @@ impl InferTypesInternal for Expr {
                             .join(",")
                     )
                 } else {
-                    let ref base_type = Vector(Box::new(Struct(types)));
+                    let base_type = &Vector(Box::new(Struct(types)));
                     changed |= self.ty.push(base_type)?;
                     Ok(changed)
                 }
@@ -503,7 +503,7 @@ impl InferTypesInternal for Expr {
 
             MakeStruct { ref mut elems } => {
                 let mut changed = false;
-                let ref base_type = Struct(vec![Unknown; elems.len()]);
+                let base_type = &Struct(vec![Unknown; elems.len()]);
                 changed |= self.ty.push(base_type)?;
 
                 if let Struct(ref mut elem_types) = self.ty {
@@ -619,7 +619,7 @@ impl InferTypesInternal for Expr {
                         // Push the value type.
                         changed |= my_type.get_mut(1).unwrap().push(value_type)?;
 
-                        let ref mut struct_ty = Struct(my_type);
+                        let struct_ty = &mut Struct(my_type);
                         changed |= self.ty.sync(struct_ty)?;
 
                         Ok(changed)
@@ -718,7 +718,7 @@ impl InferTypesInternal for Expr {
                 let func_type = Function(vec![Unknown; params.len()], Box::new(Unknown));
                 let mut changed = func.ty.push(&func_type)?;
 
-                let ref mut fty = func.ty;
+                let fty = &mut func.ty;
                 if let Function(ref mut param_types, ref mut res_type) = *fty {
                     changed |= self.ty.sync(res_type)?;
                     for (param_ty, param_expr) in param_types.iter_mut().zip(params.iter_mut()) {
@@ -946,7 +946,7 @@ impl InferTypesInternal for Expr {
                 // Impose the correct types on the function.
                 // Function should be (builder, i64, elems) -> builder.
                 let builder_type = builder.ty.clone();
-                let ref func_type = Function(
+                let func_type = &Function(
                     vec![builder_type.clone(), Scalar(I64), elem_types],
                     Box::new(builder_type),
                 );

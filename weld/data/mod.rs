@@ -147,22 +147,22 @@ fn size_check() {
 
     let i32_ty = Box::new(Type::Scalar(I32));
 
-    let ref vector = Type::Vector(i32_ty.clone());
+    let vector = &Type::Vector(i32_ty.clone());
     assert_eq!(size_of(vector), mem::size_of::<WeldVec<i32>>());
 
-    let ref dict = Type::Dict(i32_ty.clone(), i32_ty.clone());
+    let dict = &Type::Dict(i32_ty.clone(), i32_ty.clone());
     assert_eq!(size_of(dict), mem::size_of::<Dict<i32, i32>>());
 
-    let ref appender = Type::Builder(BuilderKind::Appender(i32_ty.clone()), Annotations::new());
+    let appender = &Type::Builder(BuilderKind::Appender(i32_ty.clone()), Annotations::new());
     assert_eq!(size_of(appender), mem::size_of::<Appender<i32>>());
 
-    let ref dictmerger = Type::Builder(
+    let dictmerger = &Type::Builder(
         BuilderKind::DictMerger(i32_ty.clone(), i32_ty.clone(), Add),
         Annotations::new(),
     );
     assert_eq!(size_of(dictmerger), mem::size_of::<DictMerger<i32, i32>>());
 
-    let ref groupmerger = Type::Builder(
+    let groupmerger = &Type::Builder(
         BuilderKind::GroupMerger(i32_ty.clone(), i32_ty.clone()),
         Annotations::new(),
     );

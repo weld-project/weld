@@ -47,8 +47,8 @@ struct LambdaTypes {
 }
 
 fn parse_weld_lambda(code: &str) -> WeldResult<LambdaTypes> {
-    let ref conf = WeldConf::new();
-    let ref module = WeldModule::compile(code, conf)?;
+    let conf = &WeldConf::new();
+    let module = &WeldModule::compile(code, conf)?;
     let result = LambdaTypes {
         return_type: module.return_type(),
         param_types: module.param_types(),

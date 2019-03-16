@@ -30,7 +30,7 @@ pub trait PrettyPrint {
 impl PrettyPrint for Expr {
     /// Pretty print an expression.
     fn pretty_print(&self) -> String {
-        let ref mut config = PrettyPrintConfig::new()
+        let config = &mut PrettyPrintConfig::new()
             .should_indent(true)
             .show_types(false);
         to_string_impl(self, config)
@@ -38,7 +38,7 @@ impl PrettyPrint for Expr {
 
     /// Pretty print an expression with the given configuration.
     fn pretty_print_config(&self, config: &PrettyPrintConfig) -> String {
-        let ref mut config = config.clone();
+        let config = &mut config.clone();
         config.indent = INDENT_LEVEL;
         to_string_impl(self, config)
     }
@@ -262,8 +262,8 @@ fn to_string_impl(expr: &Expr, config: &mut PrettyPrintConfig) -> String {
         ),
 
         Zip { ref vectors } => {
-            let ref begin = format!("zip({}{}", newline, indent_str);
-            let ref newlines = format!(",{}{}", newline, indent_str);
+            let begin = &format!("zip({}{}", newline, indent_str);
+            let newlines = &format!(",{}{}", newline, indent_str);
             join(
                 begin,
                 newlines,
