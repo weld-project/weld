@@ -3,6 +3,7 @@
 mod common;
 use crate::common::*;
 
+/*
 #[test]
 fn basic_program() {
     let code = "|| 40 + 2";
@@ -14,6 +15,7 @@ fn basic_program() {
     let result = unsafe { *data };
     assert_eq!(result, 42);
 }
+*/
 
 #[test]
 fn float_literals() {
