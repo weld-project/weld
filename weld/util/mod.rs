@@ -45,7 +45,7 @@ impl SymbolGenerator {
             Let { ref name, .. } => update_id(&mut id_map, name),
             Ident(ref sym) => update_id(&mut id_map, sym),
             Lambda { ref params, .. } => {
-                for ref p in params {
+                for p in params.iter() {
                     update_id(&mut id_map, &p.name);
                 }
             }

@@ -167,7 +167,7 @@ fn fold_constants_in_function(
                 // Literal value - add it to the map
                 AssignLiteral(ref lit) => {
                     let output_sym = statement.output.clone().unwrap();
-                    if *assignment_counts.get(&output_sym).unwrap() == 1 {
+                    if assignment_counts[&output_sym] == 1 {
                         values.insert(output_sym, (*lit).clone());
                         Some((*lit).clone())
                     } else {
@@ -179,7 +179,7 @@ fn fold_constants_in_function(
                     // contains_key instead of get to avoid double mutable borrow
                     if values.contains_key(sym) {
                         let output_sym = statement.output.clone().unwrap();
-                        let value = (*values.get(sym).unwrap()).clone();
+                        let value = values[sym].clone();
                         if *assignment_counts.get(&output_sym).unwrap() == 1 {
                             values.insert(output_sym, value.clone());
                         }
@@ -193,13 +193,13 @@ fn fold_constants_in_function(
                     ref left,
                     ref right,
                 } if (&values).contains_key(left) && (&values).contains_key(right) => {
-                    let left_val = (*values.get(left).unwrap()).clone();
-                    let right_val = (*values.get(right).unwrap()).clone();
+                    let left_val = values[left].clone();
+                    let right_val = values[right].clone();
                     // If this throws an error, it just means that we don't support evaluating the
                     // expression right now.
                     if let Ok(result) = evaluate_binop(*op, left_val, right_val) {
                         let output_sym = statement.output.clone().unwrap();
-                        if *assignment_counts.get(&output_sym).unwrap() == 1 {
+                        if assignment_counts[&output_sym] == 1 {
                             values.insert(output_sym, result.clone());
                         }
                         Some(result)

@@ -267,9 +267,9 @@ pub fn inline_cast(expr: &mut Expr) {
             if let Literal(ref literal_kind) = child_expr.kind {
                 return match (scalar_kind, literal_kind) {
                     (&F64, &I32Literal(a)) => {
-                        Some(literal_expr(F64Literal((a as f64).to_bits())).unwrap())
+                        Some(literal_expr(F64Literal((f64::from(a)).to_bits())).unwrap())
                     }
-                    (&I64, &I32Literal(a)) => Some(literal_expr(I64Literal(a as i64)).unwrap()),
+                    (&I64, &I32Literal(a)) => Some(literal_expr(I64Literal(i64::from(a))).unwrap()),
                     (&F64, &I64Literal(a)) => {
                         Some(literal_expr(F64Literal((a as f64).to_bits())).unwrap())
                     }
@@ -319,11 +319,11 @@ pub fn simplify_branch_conditions(expr: &mut Expr) {
         } = expr.kind
         {
             let mut taken = None;
-            if let &mut BinOp {
+            if let BinOp {
                 ref mut kind,
                 ref mut left,
                 ref mut right,
-            } = &mut cond.kind
+            } = *(&mut cond.kind)
             {
                 if *kind == BinOpKind::Equal {
                     if let Literal(BoolLiteral(false)) = left.kind {
@@ -370,52 +370,49 @@ pub fn unroll_structs(expr: &mut Expr) {
     expr.uniquify().unwrap();
     let mut sym_gen = SymbolGenerator::from_expression(expr);
     expr.transform_up(&mut |ref mut expr| {
-        match expr.kind {
-            Let {
-                ref name,
-                ref value,
-                ref body,
-            } => {
-                if let MakeStruct { ref elems } = value.kind {
-                    // First, ensure that the name is not used anywhere but a `GetField`.
-                    let mut total_count: i32 = 0;
-                    let mut getstruct_count: i32 = 0;
-                    body.traverse(&mut |ref e| {
-                        if getfield_on_symbol(e, name).is_some() {
-                            getstruct_count += 1;
-                        }
-                        if let Ident(ref ident_name) = e.kind {
-                            if ident_name == name {
-                                total_count += 1;
-                            }
-                        }
-                    });
-
-                    // We used the struct somewhere else, so we can't safely get rid of it.
-                    if total_count != getstruct_count {
-                        return None;
+        if let Let {
+            ref name,
+            ref value,
+            ref body,
+        } = expr.kind {
+            if let MakeStruct { ref elems } = value.kind {
+                // First, ensure that the name is not used anywhere but a `GetField`.
+                let mut total_count: i32 = 0;
+                let mut getstruct_count: i32 = 0;
+                body.traverse(&mut |ref e| {
+                    if getfield_on_symbol(e, name).is_some() {
+                        getstruct_count += 1;
                     }
-
-                    let mut new_body = body.as_ref().clone();
-                    let symbols: Vec<_> = elems.iter().map(|_| sym_gen.new_symbol("us")).collect();
-                    // Replace the new_body with the symbol we assigned the struct element to.
-                    new_body.transform(&mut |ref mut expr2| {
-                        if let Some(index) = getfield_on_symbol(expr2, name) {
-                            let sym = symbols.get(index as usize).unwrap().clone();
-                            return Some(ident_expr(sym, expr2.ty.clone()).unwrap());
+                    if let Ident(ref ident_name) = e.kind {
+                        if ident_name == name {
+                            total_count += 1;
                         }
-                        None
-                    });
-
-                    // Unroll the struct elements by assigning each one to a name.
-                    let mut prev = new_body;
-                    for (i, sym) in symbols.into_iter().enumerate().rev() {
-                        prev = let_expr(sym, elems[i].clone(), prev).unwrap();
                     }
-                    return Some(prev);
+                });
+
+                // We used the struct somewhere else, so we can't safely get rid of it.
+                if total_count != getstruct_count {
+                    return None;
                 }
+
+                let mut new_body = body.as_ref().clone();
+                let symbols: Vec<_> = elems.iter().map(|_| sym_gen.new_symbol("us")).collect();
+                // Replace the new_body with the symbol we assigned the struct element to.
+                new_body.transform(&mut |ref mut expr2| {
+                    if let Some(index) = getfield_on_symbol(expr2, name) {
+                        let sym = symbols[index as usize].clone();
+                        return Some(ident_expr(sym, expr2.ty.clone()).unwrap());
+                    }
+                    None
+                });
+
+                // Unroll the struct elements by assigning each one to a name.
+                let mut prev = new_body;
+                for (i, sym) in symbols.into_iter().enumerate().rev() {
+                    prev = let_expr(sym, elems[i].clone(), prev).unwrap();
+                }
+                return Some(prev);
             }
-            _ => (),
         }
         None
     });

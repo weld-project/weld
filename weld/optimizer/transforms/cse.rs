@@ -266,8 +266,7 @@ impl SiteList {
         self.sites
             .iter()
             .enumerate()
-            .filter(|(_, s)| s.contains(&site))
-            .next()
+            .find(|(_, s)| s.contains(&site))
     }
 
     /// Deletes the site with the given index from the list.
@@ -298,7 +297,7 @@ impl SiteList {
             let mut first_seen = i32::max_value();
             let mut i = 0;
             while i != self.sites.len() {
-                if new.contains(&mut self.sites[i]) {
+                if new.contains(&self.sites[i]) {
                     let previous_site = self.sites.swap_remove(i);
                     first_seen = ::std::cmp::min(previous_site.first_seen, first_seen);
                 } else {
@@ -596,7 +595,7 @@ impl Cse {
                             // The depth gives us the index into the stack holding the bindings (e.g.,
                             // if the site is (0,1), we access the second Binding list in `stack`).
                             let index = site_with_expr.depth() - 1;
-                            let binding_list = stack.get_mut(index).unwrap();
+                            let binding_list = &mut stack[index];
                             binding_list.push((sym.clone(), value));
                             index_in_list
                         } else {

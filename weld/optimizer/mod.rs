@@ -22,7 +22,7 @@ pub mod transforms;
 /// Apply passes from a list until fix point.
 pub fn apply_passes(
     expr: &mut Expr,
-    passes: &Vec<Pass>,
+    passes: &[Pass],
     stats: &mut CompilationStats,
     use_experimental: bool,
 ) -> WeldResult<()> {

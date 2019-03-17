@@ -312,7 +312,7 @@ impl StatementTracker {
         let map = self
             .generated
             .entry(site)
-            .or_insert(fnv::FnvHashMap::default());
+            .or_insert_with(fnv::FnvHashMap::default);
 
         // CUDFs are the only functions that can have side-effects so we always need to give them
         // a new name.
@@ -350,7 +350,7 @@ impl StatementTracker {
         let map = self
             .generated
             .entry(site)
-            .or_insert(fnv::FnvHashMap::default());
+            .or_insert_with(fnv::FnvHashMap::default);
 
         prog.add_local_named(sym_ty, &named_sym, func);
         prog.funcs[func].blocks[block]
@@ -420,10 +420,10 @@ impl SirFunction {
     /// Gets the Type for a Symbol in the function. Symbols may be either local variables or
     /// parameters.
     pub fn symbol_type(&self, sym: &Symbol) -> WeldResult<&Type> {
-        self.locals.get(sym).map(|s| Ok(s)).unwrap_or_else(|| {
+        self.locals.get(sym).map(Ok).unwrap_or_else(|| {
             self.params
                 .get(sym)
-                .map(|s| Ok(s))
+                .map(Ok)
                 .unwrap_or_else(|| compile_err!("Can't find symbol {}", sym.to_string()))
         })
     }
@@ -438,11 +438,11 @@ pub struct SirProgram {
 }
 
 impl SirProgram {
-    pub fn new(ret_ty: &Type, top_params: &Vec<Parameter>) -> SirProgram {
+    pub fn new(ret_ty: &Type, top_params: &[Parameter]) -> SirProgram {
         let mut prog = SirProgram {
             funcs: vec![],
             ret_ty: ret_ty.clone(),
-            top_params: top_params.clone(),
+            top_params: top_params.to_vec(),
             sym_gen: SymbolGenerator::new(),
         };
         // Add the main function.
@@ -715,7 +715,7 @@ fn sir_param_correction_helper(
     // this is needed for cases where params are added outside of sir_param_correction and are not
     // based on variable reads in the function (e.g. in the Iterate case);
     // and when there are loops in the call graph (also in the Iterate case)
-    for (name, _) in &prog.funcs[func_id].params {
+    for name in prog.funcs[func_id].params.keys() {
         closure.insert(name.clone());
     }
     if !visited.insert(func_id) {
@@ -748,11 +748,8 @@ fn sir_param_correction_helper(
         // Recurse into other called functions.
         for statement in &block.statements {
             use self::StatementKind::ParallelFor;
-            match statement.kind {
-                ParallelFor(ref pf) => {
-                    sir_param_correction_helper(prog, pf.body, env, &mut inner_closure, visited);
-                }
-                _ => (),
+            if let ParallelFor(ref pf) = statement.kind {
+                sir_param_correction_helper(prog, pf.body, env, &mut inner_closure, visited);
             }
         }
 
@@ -877,12 +874,8 @@ fn get_iter_sym(
     tracker: &mut StatementTracker,
     body_func: FunctionId,
 ) -> WeldResult<Option<Symbol>> {
-    if let &Some(ref opt_expr) = opt {
+    if let Some(ref opt_expr) = *opt {
         let opt_res = gen_expr(&opt_expr, prog, *cur_func, *cur_block, tracker)?;
-        /* TODO pari: Originally, in gen_expr cur_func, and cur_block were also being set - but this
-        does not seem to have any effect. Could potentially remove this if it wasn't needed? All
-        the tests seem to pass fine without it as well.
-        */
         *cur_func = opt_res.0;
         *cur_block = opt_res.1;
         prog.funcs[body_func]

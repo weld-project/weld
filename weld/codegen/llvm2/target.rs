@@ -39,7 +39,7 @@ impl str::FromStr for X86Feature {
     type Err = WeldCompileError;
     fn from_str(s: &str) -> WeldResult<X86Feature> {
         use self::X86Feature::*;
-        match s.as_ref() {
+        match s {
             "aes" => Ok(AES),
             "avx" => Ok(AVX),
             "avx2" => Ok(AVX2),
@@ -111,8 +111,8 @@ impl Target {
             let mut features = FnvHashSet::default();
             let feature_tokens = feature_string
                 .as_ref()
-                .split(",")
-                .filter(|s| s.starts_with("+"));
+                .split(',')
+                .filter(|s| s.starts_with('+'));
             for feature_token in feature_tokens {
                 // Since we use the LLVM string, just ignore errors. They indicate features that we
                 // don't support/know about yet.

@@ -28,7 +28,7 @@ const PLACEHOLDER_NAME: &str = "#placeholder";
 ///
 /// The annotation system should in theory support arbitrary string key/value pairs: the parser
 /// will eventually be updated to support this.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct Annotations {
     /// Holds the annotations.
     ///
@@ -40,7 +40,7 @@ pub struct Annotations {
 impl Annotations {
     /// Create a new set of empty annotations.
     pub fn new() -> Annotations {
-        Annotations { values: None }
+        Annotations::default()
     }
 
     /// Set an annotation with key associated with value.
@@ -60,12 +60,8 @@ impl Annotations {
     ///
     /// Returns `None` if the key was not found.
     pub fn get<K: AsRef<str>>(&self, key: K) -> Option<&str> {
-        if self.values.is_none() {
-            return None;
-        }
         self.values
-            .as_ref()
-            .unwrap()
+            .as_ref()?
             .get(key.as_ref())
             .map(|v| v.as_ref())
     }
@@ -343,16 +339,16 @@ impl ScalarKind {
     /// Returns whether this scalar is a floating-point type.
     ///
     /// The current floating point kinds are `F32` and `F64`.
-    pub fn is_float(&self) -> bool {
-        match *self {
+    pub fn is_float(self) -> bool {
+        match self {
             F32 | F64 => true,
             _ => false,
         }
     }
 
     /// Returns whether this scalar is a boolean.
-    pub fn is_bool(&self) -> bool {
-        match *self {
+    pub fn is_bool(self) -> bool {
+        match self {
             Bool => true,
             _ => false,
         }
@@ -361,8 +357,8 @@ impl ScalarKind {
     /// Returns whether this scalar is a signed integer.
     ///
     /// Booleans are not considered to be signed integers.
-    pub fn is_signed_integer(&self) -> bool {
-        match *self {
+    pub fn is_signed_integer(self) -> bool {
+        match self {
             I8 | I16 | I32 | I64 => true,
             _ => false,
         }
@@ -371,33 +367,33 @@ impl ScalarKind {
     /// Returns whether this scalar is an unsigned integer.
     ///
     /// Booleans are not considered to be unsigned integers.
-    pub fn is_unsigned_integer(&self) -> bool {
-        match *self {
+    pub fn is_unsigned_integer(self) -> bool {
+        match self {
             U8 | U16 | U32 | U64 => true,
             _ => false,
         }
     }
 
     /// Returns whether this scalar is signed.
-    pub fn is_signed(&self) -> bool {
+    pub fn is_signed(self) -> bool {
         self.is_signed_integer() || self.is_float()
     }
 
     /// Returns whether this scalar is an integer.
     ///
     /// Booleans are not considered to be integers.
-    pub fn is_integer(&self) -> bool {
+    pub fn is_integer(self) -> bool {
         self.is_signed_integer() || self.is_unsigned_integer()
     }
 
     /// Returns whether the scalar is a numeric.
-    pub fn is_numeric(&self) -> bool {
+    pub fn is_numeric(self) -> bool {
         self.is_integer() || self.is_float()
     }
 
     /// Return the length of this scalar type in bits.
-    pub fn bits(&self) -> u32 {
-        match *self {
+    pub fn bits(self) -> u32 {
+        match self {
             Bool => 1,
             I8 | U8 => 8,
             I16 | U16 => 16,
@@ -407,12 +403,12 @@ impl ScalarKind {
     }
 
     /// Returns whether this type is smaller in bits than `target`.
-    pub fn is_upcast(&self, target: &ScalarKind) -> bool {
+    pub fn is_upcast(self, target: ScalarKind) -> bool {
         target.bits() >= self.bits()
     }
 
     /// Returns whether this type is strictly smaller in bits than `target`.
-    pub fn is_strict_upcast(&self, target: &ScalarKind) -> bool {
+    pub fn is_strict_upcast(self, target: ScalarKind) -> bool {
         target.bits() > self.bits()
     }
 }
@@ -845,16 +841,16 @@ impl fmt::Display for LiteralKind {
             F32Literal(v) => {
                 let mut res = format!("{}", f32::from_bits(v));
                 // Hack to disambiguate from integers.
-                if !res.contains(".") {
+                if !res.contains('.') {
                     res.push_str(".0");
                 }
-                res.push_str("F");
+                res.push('F');
                 res
             }
             F64Literal(v) => {
                 let mut res = format!("{}", f64::from_bits(v));
                 // Hack to disambiguate from integers.
-                if !res.contains(".") {
+                if !res.contains('.') {
                     res.push_str(".0");
                 }
                 res

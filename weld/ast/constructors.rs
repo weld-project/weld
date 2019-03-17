@@ -92,7 +92,7 @@ pub fn cast_expr(kind: ScalarKind, expr: Expr) -> WeldResult<Expr> {
 
 pub fn negate_expr(expr: Expr) -> WeldResult<Expr> {
     let ty = if let Scalar(ref k) = expr.ty {
-        Scalar(k.clone())
+        Scalar(*k)
     } else {
         return compile_err!("Internal error: Mismatched types in negate_expr");
     };
@@ -101,7 +101,7 @@ pub fn negate_expr(expr: Expr) -> WeldResult<Expr> {
 
 pub fn not_expr(expr: Expr) -> WeldResult<Expr> {
     let ty = if let Scalar(ref k) = expr.ty {
-        Scalar(k.clone())
+        Scalar(*k)
     } else {
         return compile_err!("Internal error: Mismatched types in not_expr");
     };
@@ -429,7 +429,7 @@ pub fn newbuilder_expr(kind: BuilderKind, expr: Option<Expr>) -> WeldResult<Expr
     }
 
     new_expr(
-        NewBuilder(expr.map(|e| Box::new(e))),
+        NewBuilder(expr.map(Box::new)),
         Builder(kind, Annotations::new()),
     )
 }
@@ -482,7 +482,7 @@ pub fn for_expr(iters: Vec<Iter>, builder: Expr, func: Expr, vectorized: bool) -
         if iters.len() == 1 {
             let elem_ty = if vectorized {
                 if let Scalar(ref sk) = vec_elem_tys[0] {
-                    Simd(sk.clone())
+                    Simd(*sk)
                 } else {
                     return compile_err!(
                         "Internal error: Mismatched types in for_expr - bad vector",
@@ -503,7 +503,7 @@ pub fn for_expr(iters: Vec<Iter>, builder: Expr, func: Expr, vectorized: bool) -
                 let mut vec_elem_tys_simd = vec![];
                 for ty in vec_elem_tys {
                     if let Scalar(ref sk) = ty {
-                        vec_elem_tys_simd.push(Simd(sk.clone()))
+                        vec_elem_tys_simd.push(Simd(*sk))
                     } else {
                         return compile_err!(
                             "Internal error: Mismatched types in for_expr - bad vector",

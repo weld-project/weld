@@ -93,7 +93,7 @@ impl<'a> UnrollPattern<'a> {
 pub fn unroll_static_loop(expr: &mut Expr) {
     use crate::util::SymbolGenerator;
 
-    if let Err(_) = expr.uniquify() {
+    if expr.uniquify().is_err() {
         return;
     }
 
@@ -152,7 +152,7 @@ fn is_same_ident(expr: &Expr, other: &Expr) -> bool {
 /// Takes a `MergeSingle` and returns a list of expressions which replace the element
 /// in the merge with a Lookup.
 fn unroll_values(
-    parameters: &Vec<Parameter>,
+    parameters: &[Parameter],
     value: &Expr,
     vectors: &Vec<Expr>,
     loopsize: u64,
@@ -214,7 +214,7 @@ fn unroll_values(
 /// As an example, if `values` is [ Literal(1), Literal(2), Literal(3)] and the builder was a
 /// merger[i32,+], this function will produce the expression Literal(1) + Literal(2) + Literal(3).
 fn combine_unrolled_values(bk: BuilderKind, values: Vec<Expr>) -> WeldResult<Expr> {
-    if values.len() == 0 {
+    if values.is_empty() {
         return compile_err!("Need at least one value to combine in unroller");
     }
     match bk {

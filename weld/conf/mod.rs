@@ -227,7 +227,7 @@ impl ParsedConf {
 /// Parses a comma separated list of formats.
 fn parse_dump_code_formats(s: String) -> WeldResult<HashSet<DumpCodeFormat>> {
     use crate::util::dump::DumpCodeFormat::*;
-    s.split(",")
+    s.split(',')
         .map(|s| match s.to_lowercase().as_ref() {
             "weld" => Ok(Weld),
             "weldopt" => Ok(WeldOpt),
@@ -242,7 +242,7 @@ fn parse_dump_code_formats(s: String) -> WeldResult<HashSet<DumpCodeFormat>> {
 
 /// Parse a list of optimization passes.
 fn parse_passes(s: String) -> WeldResult<Vec<Pass>> {
-    if s.len() == 0 {
+    if s.is_empty() {
         return Ok(vec![]); // Special case because split() creates an empty piece here
     }
     let mut result = vec![];
@@ -254,7 +254,7 @@ fn parse_passes(s: String) -> WeldResult<Vec<Pass>> {
     result.push(OPTIMIZATION_PASSES.get("inline-let").unwrap().clone());
     result.push(OPTIMIZATION_PASSES.get("inline-apply").unwrap().clone());
 
-    for piece in s.split(",") {
+    for piece in s.split(',') {
         match OPTIMIZATION_PASSES.get(piece) {
             Some(pass) => result.push(pass.clone()),
             None => return compile_err!("Unknown optimization pass: {}", piece),

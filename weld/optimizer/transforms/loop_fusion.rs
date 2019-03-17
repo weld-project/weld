@@ -294,21 +294,21 @@ pub fn fuse_loops_vertical(expr: &mut Expr) {
 
 /// Given an iterator, returns whether the iterator consumes every element of its data vector.
 fn consumes_all(iter: &Iter) -> bool {
-    if let &Iter {
+    if let Iter {
         start: None,
         end: None,
         stride: None,
         ..
-    } = iter
+    } = *iter
     {
         return true;
-    } else if let &Iter {
+    } else if let Iter {
         ref data,
         start: Some(ref start),
         end: Some(ref end),
         stride: Some(ref stride),
         ..
-    } = iter
+    } = *iter
     {
         // Checks if the stride is 1 and an entire vector represented by a symbol is consumed.
         if let (

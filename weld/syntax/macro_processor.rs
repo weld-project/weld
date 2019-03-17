@@ -111,7 +111,7 @@ fn update_alias(ty: &mut Type, type_map: &HashMap<String, Type>) -> WeldResult<(
 }
 
 /// Apply a specific list of macros to an expression (does not load the standard macros).
-pub fn process_macros(expr: &Expr, macros: &Vec<Macro>) -> WeldResult<Expr> {
+pub fn process_macros(expr: &Expr, macros: &[Macro]) -> WeldResult<Expr> {
     let mut macro_map: HashMap<Symbol, &Macro> = HashMap::new();
     for m in macros {
         if macro_map.contains_key(&m.name) {
@@ -192,7 +192,7 @@ fn update_defined_ids(expr: &mut Expr, sym_gen: &mut SymbolGenerator) {
         ref mut body,
     } = expr.kind
     {
-        for ref mut param in params {
+        for param in params.iter_mut() {
             let sym = &mut param.name;
             if sym.id() == 0 {
                 let new_sym = sym_gen.new_symbol(&sym.name());

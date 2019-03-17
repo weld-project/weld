@@ -153,7 +153,7 @@ pub fn predicate_merge_expr(e: &mut Expr) {
                                     }
                                 };
 
-                                let identity = get_id_element(ty.as_ref(), op)?;
+                                let identity = get_id_element(ty.as_ref(), *op)?;
                                 match identity {
                                     Some(x) => {
                                         match *bk {
@@ -260,7 +260,7 @@ pub fn predicate_simple_expr(e: &mut Expr) {
 /// Returns `true` if this is a set of iterators we can vectorize, `false` otherwise.
 ///
 /// We can vectorize an iterator if all of its iterators consume the entire collection.
-fn vectorizable_iters(iters: &Vec<Iter>) -> bool {
+fn vectorizable_iters(iters: &[Iter]) -> bool {
     iters.iter().all(|ref iter| {
         iter.start.is_none()
             && iter.end.is_none()
@@ -467,7 +467,7 @@ fn vectorizable(for_loop: &Expr) -> Option<HashSet<Symbol>> {
     None
 }
 
-fn get_id_element(ty: &Type, op: &BinOpKind) -> WeldResult<Option<Expr>> {
+fn get_id_element(ty: &Type, op: BinOpKind) -> WeldResult<Option<Expr>> {
     let sk = &match *ty {
         Scalar(sk) => sk,
         _ => {
@@ -476,7 +476,7 @@ fn get_id_element(ty: &Type, op: &BinOpKind) -> WeldResult<Option<Expr>> {
     };
 
     /* Dummy element to merge when predicate fails. */
-    let identity = match *op {
+    let identity = match op {
         BinOpKind::Add => match *sk {
             ScalarKind::I8 => constructors::literal_expr(LiteralKind::I8Literal(0))?,
             ScalarKind::I32 => constructors::literal_expr(LiteralKind::I32Literal(0))?,

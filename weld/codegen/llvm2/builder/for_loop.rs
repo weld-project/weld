@@ -340,7 +340,7 @@ impl ForLoopGenInternal for LlvmGenerator {
         // basic block ID to gen_terminator to change the `EndFunction` terminators to a basic
         // block jump to the end of the loop.
         for bb in func.blocks.iter() {
-            LLVMPositionBuilderAtEnd(context.builder, context.get_block(&bb.id)?);
+            LLVMPositionBuilderAtEnd(context.builder, context.get_block(bb.id)?);
             for statement in bb.statements.iter() {
                 self.gen_statement(context, statement)?;
             }

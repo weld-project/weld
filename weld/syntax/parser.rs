@@ -130,7 +130,7 @@ impl<'t> Parser<'t> {
             if i == self.position {
                 string.push_str(format_color(Color::BoldRed, token_str.as_str()).as_str());
             } else {
-                string.push_str(format!("{}", token_str.as_str()).as_str());
+                string.push_str(&token_str);
             }
 
             if i != self.position - 1
@@ -524,7 +524,7 @@ impl<'t> Parser<'t> {
             if *self.next() == TDot {
                 match *self.next() {
                     TIdent(ref value) => {
-                        if value.starts_with("$") {
+                        if value.starts_with('$') {
                             match u32::from_str_radix(&value[1..], 10) {
                                 Ok(index) => {
                                     expr = expr_box(
@@ -1382,7 +1382,7 @@ impl<'t> Parser<'t> {
                 let elem_type = self.type_()?;
                 self.consume(TCloseBracket)?;
                 if let Scalar(ref kind) = elem_type {
-                    Ok(Simd(kind.clone()))
+                    Ok(Simd(*kind))
                 } else {
                     compile_err!("Expected Scalar type in simd")
                 }

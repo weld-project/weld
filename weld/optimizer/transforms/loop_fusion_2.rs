@@ -165,7 +165,7 @@ pub fn fuse_loops_2(expr: &mut Expr) {
                         let mut map_elem_types: Vec<Type> = Vec::new();
                         let mut map_elem_symbols: Vec<Symbol> = Vec::new();
                         let mut map_elem_exprs: Vec<Expr> = Vec::new();
-                        for ref map_iter in map.iters {
+                        for map_iter in map.iters.iter() {
                             // Check whether this iterator is already in our new_iters list; if so, reuse the old one
                             let iter_num;
                             if let Some(pos) = new_iters
@@ -176,8 +176,8 @@ pub fn fuse_loops_2(expr: &mut Expr) {
                             } else {
                                 // If it is indeed a new iterator, remember its element type and assign it a symbol.
                                 new_iters.push((*map_iter).clone());
-                                let elem_type = match &map_iter.data.ty {
-                                    &Vector(ref ty) => ty,
+                                let elem_type = match map_iter.data.ty {
+                                    Vector(ref ty) => ty,
                                     _ => panic!("Iterator was not over a vector"),
                                 };
                                 new_elem_types.push(elem_type.as_ref().clone());
@@ -332,7 +332,7 @@ pub fn move_merge_before_let(expr: &mut Expr) {
 fn is_fusable_expr(expr: &Expr) -> bool {
     if let Some(rfa) = ResForAppender::extract(expr) {
         if rfa.iters.iter().all(|ref i| i.is_simple()) {
-            if let Some(_) = MergeSingle::extract(&rfa.func) {
+            if MergeSingle::extract(&rfa.func).is_some() {
                 return true;
             }
         }
@@ -389,9 +389,8 @@ pub fn aggressive_inline_let(expr: &mut Expr) {
             ref mut body,
         } = expr.kind
         {
-            if !is_fusable_expr(value) {
-                return None;
-            } else if !only_used_in_zip(name, body) {
+            if !is_fusable_expr(value)
+                || !only_used_in_zip(name, body) {
                 return None;
             }
             let mut new_body = body.as_ref().clone();
@@ -468,7 +467,7 @@ pub fn merge_makestruct_loops(expr: &mut Expr) {
             }
 
             // For the future when we may support iteration over ranges.
-            if idents.len() == 0 {
+            if idents.is_empty() {
                 return None;
             }
 
@@ -521,8 +520,8 @@ pub fn merge_makestruct_loops(expr: &mut Expr) {
                                 if *name == elem_name.name && expr.ty == elem_name.ty {
                                     // Get the vector identifier this index refers to.
                                     let vec_name = rev_map.get(&(*index as usize)).unwrap();
-                                    let change_to = first_rfa_map.get(vec_name).unwrap();
-                                    *index = *change_to as u32;
+                                    let change_to = first_rfa_map[vec_name];
+                                    *index = change_to as u32;
                                 }
                             }
                         }

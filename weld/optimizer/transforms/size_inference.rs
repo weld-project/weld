@@ -59,7 +59,7 @@ pub fn infer_size(expr: &mut Expr) {
         if let For { ref mut iters, ref mut builder, ref mut func } = expr.kind {
             /* Without this condition, the transform_up calls seems to end up in an infinite recursive loop */
             if let NewBuilder(None) = builder.kind {
-                if iters.len() > 0 && func_has_simple_merge(func) {
+                if !iters.is_empty() && func_has_simple_merge(func) {
                     if let Ident(_) = iters[0].data.kind {
                         /* Need the data_sym var after the length has been determined to update the
                          * expression. SymbolGenerator seems to borrow expression immutably, so we can't borrow it mutably before.*/

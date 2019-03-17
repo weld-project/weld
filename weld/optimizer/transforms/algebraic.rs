@@ -179,7 +179,7 @@ fn eliminate_redundant_negation_impl(expr: &mut Expr) -> Option<ExprKind> {
                             match (&lhs.kind, &rhs.kind) {
                                 (&Ident(_), &Ident(_)) => None, // nothing to gain here
                                 (_, _) => {
-                                    let kind = flip_logical(binop_kind);
+                                    let kind = flip_logical(*binop_kind);
                                     Some(BinOp {
                                         kind,
                                         left: Box::new(not_expr(lhs.as_mut().take()).unwrap()),
@@ -409,7 +409,7 @@ fn shift_work_to_constants_impl(expr: &mut Expr) -> Option<ExprKind> {
                                     // x cmp (y + z) <=> (x - z) flip(cmp) y
                                     left_associate2(
                                         Subtract,
-                                        flip_comp(*cmp),
+                                        flip_comp(**cmp),
                                         lhs.take(),
                                         inner_rhs.take(),
                                         inner_lhs.take(),
@@ -419,7 +419,7 @@ fn shift_work_to_constants_impl(expr: &mut Expr) -> Option<ExprKind> {
                                     // x cmp (y + z) <=> (x - y) flip(cmp) z
                                     left_associate2(
                                         Subtract,
-                                        flip_comp(*cmp),
+                                        flip_comp(**cmp),
                                         lhs.take(),
                                         inner_lhs.take(),
                                         inner_rhs.take(),
@@ -438,7 +438,7 @@ fn shift_work_to_constants_impl(expr: &mut Expr) -> Option<ExprKind> {
                                 (ref cmp, Subtract, Right) if cmp.is_comparison() => Some(
                                     // x cmp (y - z) <=> z flip(cmp) (y - x)
                                     right_associate2(
-                                        flip_comp(*cmp),
+                                        flip_comp(**cmp),
                                         Subtract,
                                         inner_rhs.take(),
                                         inner_lhs.take(),
@@ -458,7 +458,7 @@ fn shift_work_to_constants_impl(expr: &mut Expr) -> Option<ExprKind> {
                                         )),
                                         Negative => Some(left_associate2(
                                             Divide,
-                                            flip_comp(*cmp),
+                                            flip_comp(**cmp),
                                             lhs.take(),
                                             inner_rhs.take(),
                                             inner_lhs.take(),
@@ -484,7 +484,7 @@ fn shift_work_to_constants_impl(expr: &mut Expr) -> Option<ExprKind> {
                                         )),
                                         Negative => Some(left_associate2(
                                             Divide,
-                                            flip_comp(*cmp),
+                                            flip_comp(**cmp),
                                             lhs.take(),
                                             inner_lhs.take(),
                                             inner_rhs.take(),
@@ -511,7 +511,7 @@ fn shift_work_to_constants_impl(expr: &mut Expr) -> Option<ExprKind> {
                                         )),
                                         Negative => Some(left_associate2(
                                             Multiply,
-                                            flip_comp(*cmp),
+                                            flip_comp(**cmp),
                                             lhs.take(),
                                             inner_rhs.take(),
                                             inner_lhs.take(),
@@ -538,7 +538,7 @@ fn shift_work_to_constants_impl(expr: &mut Expr) -> Option<ExprKind> {
                             if binop_kind.is_comparison() {
                                 // x > -y = -x < y and x < -y = -x > y equivalent for >= and <=
                                 Some(BinOp {
-                                    kind: flip_comp(binop_kind),
+                                    kind: flip_comp(*binop_kind),
                                     left: Box::new(negate_expr(lhs.as_mut().take()).unwrap()),
                                     right: inner_expr.take(),
                                 })
@@ -698,7 +698,7 @@ fn shift_work_to_constants_impl(expr: &mut Expr) -> Option<ExprKind> {
                                 (Subtract, ref cmp, Right) if cmp.is_comparison() => Some(
                                     // (x - y) cmp z <=> y flip(cmp) (x - z)
                                     right_associate2(
-                                        flip_comp(*cmp),
+                                        flip_comp(**cmp),
                                         Subtract,
                                         inner_rhs.take(),
                                         inner_lhs.take(),
@@ -757,7 +757,7 @@ fn shift_work_to_constants_impl(expr: &mut Expr) -> Option<ExprKind> {
                                             inner_rhs.take(),
                                         )),
                                         RangeClassification::Negative => Some(right_associate2(
-                                            flip_comp(*cmp),
+                                            flip_comp(**cmp),
                                             Divide,
                                             inner_lhs.take(),
                                             rhs.take(),
@@ -782,7 +782,7 @@ fn shift_work_to_constants_impl(expr: &mut Expr) -> Option<ExprKind> {
                                             inner_lhs.take(),
                                         )),
                                         RangeClassification::Negative => Some(right_associate2(
-                                            flip_comp(*cmp),
+                                            flip_comp(**cmp),
                                             Divide,
                                             inner_rhs.take(),
                                             rhs.take(),
@@ -850,7 +850,7 @@ fn shift_work_to_constants_impl(expr: &mut Expr) -> Option<ExprKind> {
                                             inner_rhs.take(),
                                         )),
                                         RangeClassification::Negative => Some(right_associate2(
-                                            flip_comp(*cmp),
+                                            flip_comp(**cmp),
                                             Multiply,
                                             inner_lhs.take(),
                                             rhs.take(),
@@ -878,7 +878,7 @@ fn shift_work_to_constants_impl(expr: &mut Expr) -> Option<ExprKind> {
                             if binop_kind.is_comparison() {
                                 // -x > y = x < -y and -x < y = x > -y equivalent for >= and <=
                                 let new = BinOp {
-                                    kind: flip_comp(binop_kind),
+                                    kind: flip_comp(*binop_kind),
                                     left: inner_expr.take(),
                                     right: Box::new(negate_expr(rhs.as_mut().take()).unwrap()),
                                 };
@@ -1025,10 +1025,10 @@ fn is_even(e: &Expr) -> bool {
     }
 }
 
-fn flip_comp(k: &BinOpKind) -> BinOpKind {
+fn flip_comp(k: BinOpKind) -> BinOpKind {
     use crate::ast::BinOpKind::*;
     match k {
-        Equal | NotEqual => k.clone(), // nothing to flip here
+        Equal | NotEqual => k, // nothing to flip here
         LessThan => GreaterThan,
         GreaterThan => LessThan,
         LessThanOrEqual => GreaterThanOrEqual,
@@ -1037,7 +1037,7 @@ fn flip_comp(k: &BinOpKind) -> BinOpKind {
     }
 }
 
-fn flip_logical(k: &BinOpKind) -> BinOpKind {
+fn flip_logical(k: BinOpKind) -> BinOpKind {
     use crate::ast::BinOpKind::*;
     match k {
         LogicalAnd => LogicalOr,
@@ -1387,7 +1387,7 @@ fn classify(e: &Expr) -> RangeClassification {
                             Unknown => Unknown,
                         }
                     } else if ty.is_unsigned_integer() {
-                        if ty.is_strict_upcast(k) && k.is_integer() {
+                        if ty.is_strict_upcast(*k) && k.is_integer() {
                             let ec = classify(e);
                             match ec {
                                 Positive => Positive,

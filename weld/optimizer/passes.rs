@@ -76,7 +76,7 @@ impl Pass {
                 (transform.func)(&mut expr);
             }
             let after = expr.hash_ignoring_symbols()?;
-            continue_pass = !(before == after);
+            continue_pass = before != after;
             before = after;
         }
         Ok(())

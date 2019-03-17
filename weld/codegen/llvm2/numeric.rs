@@ -306,8 +306,8 @@ impl NumericExpressionGen for LlvmGenerator {
         } = statement.kind
         {
             let ty = ctx.sir_function.symbol_type(left)?;
-            let result = match ty {
-                &Scalar(_) | &Simd(_) => {
+            let result = match *ty {
+                Scalar(_) | Simd(_) => {
                     let llvm_left = self.load(ctx.builder, ctx.get_value(left)?)?;
                     let llvm_right = self.load(ctx.builder, ctx.get_value(right)?)?;
                     let result = match op {
@@ -322,7 +322,7 @@ impl NumericExpressionGen for LlvmGenerator {
                         result
                     }
                 }
-                &Vector(_) | &Struct(_) if op.is_comparison() => {
+                Vector(_) | Struct(_) if op.is_comparison() => {
                     // Note that we assume structs being compared have the same type.
                     let result = match op {
                         BinOpKind::Equal | BinOpKind::NotEqual => {
@@ -424,7 +424,7 @@ impl NumericExpressionGen for LlvmGenerator {
                 let len = (c_str.to_bytes().len() + 1) as i64;
                 let string = self.gen_global_string(ctx.builder, c_str);
                 let pointer = LLVMConstBitCast(string, LLVMPointerType(self.i8_type(), 0));
-                let methods = self.vectors.get(&Type::Scalar(ScalarKind::I8)).unwrap();
+                let methods = &self.vectors[&Type::Scalar(ScalarKind::I8)];
                 methods.const_literal_from_parts(pointer, self.i64(len))
             } else {
                 self.scalar_literal(value)
@@ -562,8 +562,8 @@ pub unsafe fn gen_binop(
     use crate::ast::BinOpKind::*;
     use crate::ast::Type::*;
     let name = c_str!("");
-    let result = match ty {
-        &Scalar(s) | &Simd(s) => match op {
+    let result = match *ty {
+        Scalar(s) | Simd(s) => match op {
             Add if s.is_integer() => LLVMBuildAdd(builder, left, right, name),
             Add if s.is_float() => LLVMBuildFAdd(builder, left, right, name),
 

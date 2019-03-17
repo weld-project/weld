@@ -40,7 +40,7 @@ impl DumpCodeFormat {
     }
 
     /// Returns a filename suffix for the format.
-    pub fn suffix(&self) -> String {
+    pub fn suffix(self) -> String {
         use self::DumpCodeFormat::*;
         match self {
             WeldOpt | LLVMOpt => "-opt",
@@ -50,7 +50,7 @@ impl DumpCodeFormat {
     }
 
     /// Returns a filename extension for the format.
-    pub fn extension(&self) -> String {
+    pub fn extension(self) -> String {
         use self::DumpCodeFormat::*;
         match self {
             Weld | WeldOpt => "weld",
