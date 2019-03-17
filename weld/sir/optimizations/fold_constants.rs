@@ -180,7 +180,7 @@ fn fold_constants_in_function(
                     if values.contains_key(sym) {
                         let output_sym = statement.output.clone().unwrap();
                         let value = values[sym].clone();
-                        if *assignment_counts.get(&output_sym).unwrap() == 1 {
+                        if assignment_counts[&output_sym] == 1 {
                             values.insert(output_sym, value.clone());
                         }
                         Some(value)

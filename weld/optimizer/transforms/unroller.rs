@@ -104,7 +104,7 @@ pub fn unroll_static_loop(expr: &mut Expr) {
             let symbols: Vec<_> = (0..pat.iters.len())
                 .map(|_| sym_gen.new_symbol("tmp"))
                 .collect();
-            let idents = symbols
+            let idents: Vec<_> = symbols
                 .iter()
                 .zip(pat.iters.iter())
                 .map(|ref t| ident_expr(t.0.clone(), t.1.data.ty.clone()).unwrap())
@@ -154,7 +154,7 @@ fn is_same_ident(expr: &Expr, other: &Expr) -> bool {
 fn unroll_values(
     parameters: &[Parameter],
     value: &Expr,
-    vectors: &Vec<Expr>,
+    vectors: &[Expr],
     loopsize: u64,
 ) -> WeldResult<Vec<Expr>> {
     if parameters.len() != 3 {

@@ -331,11 +331,10 @@ pub fn move_merge_before_let(expr: &mut Expr) {
 /// Checks whether a For loop is simple enough to be fused.
 fn is_fusable_expr(expr: &Expr) -> bool {
     if let Some(rfa) = ResForAppender::extract(expr) {
-        if rfa.iters.iter().all(|ref i| i.is_simple()) {
-            if MergeSingle::extract(&rfa.func).is_some() {
+        if rfa.iters.iter().all(|ref i| i.is_simple())
+            && MergeSingle::extract(&rfa.func).is_some() {
                 return true;
             }
-        }
     }
     false
 }
@@ -431,10 +430,12 @@ pub fn merge_makestruct_loops(expr: &mut Expr) {
                 .collect();
 
             // Make sure all the iterators are simple, and each map just has a single merge.
-            if !rfas.iter().all(|ref rfa| {
+            let all_iters_simple = rfas.iter().all(|ref rfa| {
                 rfa.iters.iter().all(|ref iter| iter.is_simple())
                     && MergeSingle::extract(rfa.func).is_some()
-            }) {
+            });
+
+            if !all_iters_simple {
                 return None;
             }
 

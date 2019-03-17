@@ -110,7 +110,7 @@ pub fn not_expr(expr: Expr) -> WeldResult<Expr> {
 
 pub fn broadcast_expr(expr: Expr) -> WeldResult<Expr> {
     let ty = if let Scalar(ref k) = expr.ty {
-        Simd(k.clone())
+        Simd(*k)
     } else {
         return compile_err!("Internal error: Mismatched types in broadcast_expr");
     };

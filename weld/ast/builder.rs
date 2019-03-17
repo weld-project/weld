@@ -285,7 +285,7 @@ impl NewExpr for Expr {
     }
 
     fn new_new_builder(kind: BuilderKind, expr: Option<Expr>) -> WeldResult<Expr> {
-        let expr = expr.map(|e| Box::new(e));
+        let expr = expr.map(Box::new);
         Self::new_with_type(NewBuilder(expr), Builder(kind, Annotations::new()))
     }
 

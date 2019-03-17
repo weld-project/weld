@@ -49,7 +49,7 @@ impl fmt::Debug for ExprHash {
 impl ExprHash {
     /// Recurisvely computes signatures for an expression and each of its subexpressions.
     /// The precise symbol names defined within the expression are ignored.
-    fn from_expr<'a>(
+    fn hash_expr<'a>(
         &mut self,
         expr: &'a Expr,
         symbol_positions: &mut fnv::FnvHashMap<&'a Symbol, Vec<i32>>,
@@ -109,15 +109,15 @@ impl ExprHash {
                 ref body,
             } => {
                 // Do the value before pushing onto the symbol staack.
-                self.from_expr(value, symbol_positions, max_id)?;
+                self.hash_expr(value, symbol_positions, max_id)?;
                 {
-                    let entry = symbol_positions.entry(name).or_insert(Vec::new());
+                    let entry = symbol_positions.entry(name).or_insert_with(|| Vec::new());
                     entry.push(*max_id);
                     *max_id += 1;
                 } // brackets to end the borrow.
-                self.from_expr(body, symbol_positions, max_id)?;
+                self.hash_expr(body, symbol_positions, max_id)?;
                 // pop the stack.
-                let entry = symbol_positions.entry(name).or_insert(Vec::new());
+                let entry = symbol_positions.entry(name).or_insert_with(|| Vec::new());
                 let _ = entry.pop();
                 finished_subexpressions = true;
             }
@@ -127,14 +127,14 @@ impl ExprHash {
             } => {
                 // Push the stack for each param.
                 for param in params.iter() {
-                    let entry = symbol_positions.entry(&param.name).or_insert(Vec::new());
+                    let entry = symbol_positions.entry(&param.name).or_insert_with(|| Vec::new());
                     entry.push(*max_id);
                     *max_id += 1;
                 }
-                self.from_expr(body, symbol_positions, max_id)?;
+                self.hash_expr(body, symbol_positions, max_id)?;
                 // Pop the stack.
                 for param in params.iter() {
-                    let entry = symbol_positions.entry(&param.name).or_insert(Vec::new());
+                    let entry = symbol_positions.entry(&param.name).or_insert_with(|| Vec::new());
                     entry.pop();
                 }
                 finished_subexpressions = true;
@@ -182,7 +182,7 @@ impl ExprHash {
         }
         if !finished_subexpressions {
             for child in expr.children() {
-                self.from_expr(child, symbol_positions, max_id)?;
+                self.hash_expr(child, symbol_positions, max_id)?;
             }
         }
         Ok(())
@@ -200,7 +200,7 @@ impl ExprHash {
         };
         let mut symbol_positions = fnv::FnvHashMap::default();
         let mut max_id = 0;
-        sig.from_expr(expr, &mut symbol_positions, &mut max_id)?;
+        sig.hash_expr(expr, &mut symbol_positions, &mut max_id)?;
         Ok(sig)
     }
 }

@@ -323,7 +323,7 @@ pub fn simplify_branch_conditions(expr: &mut Expr) {
                 ref mut kind,
                 ref mut left,
                 ref mut right,
-            } = *(&mut cond.kind)
+            } = cond.kind
             {
                 if *kind == BinOpKind::Equal {
                     if let Literal(BoolLiteral(false)) = left.kind {

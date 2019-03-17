@@ -886,8 +886,8 @@ pub enum BinOpKind {
 }
 
 impl BinOpKind {
-    pub fn is_comparison(&self) -> bool {
-        match *self {
+    pub fn is_comparison(self) -> bool {
+        match self {
             Equal | NotEqual | LessThan | GreaterThan | LessThanOrEqual | GreaterThanOrEqual => {
                 true
             }

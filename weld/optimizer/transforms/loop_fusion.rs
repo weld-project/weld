@@ -51,7 +51,7 @@ pub fn fuse_loops_horizontal(expr: &mut Expr) {
                 // First, check if all the lambdas are over the same vector and have a pattern we can merge.
                 // Below, for each iterator in the for loop, we checked if each nested for loop is
                 // over the same vector and has the same Iter parameters (i.e., same start, end, stride).
-                if all_iters.iter().all(|ref iter| {
+                let iters_same = all_iters.iter().all(|ref iter| {
                     if (&iter.start, &iter.end, &iter.stride) == first_iter {
                         // Make sure each nested for loop follows the ``result(for(a, appender, ...)) pattern.
                         if let Res {
@@ -103,7 +103,9 @@ pub fn fuse_loops_horizontal(expr: &mut Expr) {
                     }
                     // The pattern doesn't match for some Iter -- abort the transform.
                     false
-                }) {
+                });
+
+                if iters_same {
                     // All Iters are over the same range and same vector, with a pattern we can
                     // transform. Produce the new expression by zipping the functions of each
                     // nested for into a single merge into a struct.

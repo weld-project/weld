@@ -1260,7 +1260,7 @@ fn gen_expr(
             };
 
             // Do a normal JumpBlock since it should be in the same function.
-            assert!(body_end_func == cur_func && cur_func == cur_func);
+            assert!(body_end_func == cur_func);
             prog.funcs[body_end_func].blocks[repeat_block].terminator = JumpBlock(body_start_block);
 
             // Our final value is available in finish_block.

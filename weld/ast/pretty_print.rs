@@ -30,10 +30,10 @@ pub trait PrettyPrint {
 impl PrettyPrint for Expr {
     /// Pretty print an expression.
     fn pretty_print(&self) -> String {
-        let config = &mut PrettyPrintConfig::new()
+        let mut config = PrettyPrintConfig::default()
             .should_indent(true)
             .show_types(false);
-        to_string_impl(self, config)
+        to_string_impl(self, &mut config)
     }
 
     /// Pretty print an expression with the given configuration.
@@ -60,11 +60,11 @@ pub struct PrettyPrintConfig {
     top: bool,
 }
 
-impl PrettyPrintConfig {
+impl std::default::Default for PrettyPrintConfig {
     /// Returns a new default `PrettyPrintConfig`.
     ///
     /// The default configuration does not show types for each symbol name and indents code.
-    pub fn new() -> Self {
+    fn default() -> Self {
         PrettyPrintConfig {
             show_types: false,
             should_indent: true,
@@ -72,7 +72,9 @@ impl PrettyPrintConfig {
             top: true,
         }
     }
+}
 
+impl PrettyPrintConfig {
     /// Set whether this print configuration should show types for each symbol.
     pub fn show_types(mut self, show_types: bool) -> PrettyPrintConfig {
         self.show_types = show_types;
@@ -104,7 +106,7 @@ fn indentation(config: &PrettyPrintConfig) -> (String, String, String) {
 }
 
 /// Prints a list of iterators for a For loop.
-fn print_iters(iters: &Vec<Iter>, config: &mut PrettyPrintConfig) -> String {
+fn print_iters(iters: &[Iter], config: &mut PrettyPrintConfig) -> String {
     use self::IterKind::*;
     let mut iter_strs = vec![];
     let (less_indent_str, indent_str, newline) = indentation(config);

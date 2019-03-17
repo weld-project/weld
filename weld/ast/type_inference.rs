@@ -154,8 +154,9 @@ impl PushType for Type {
                 &mut Builder(ref mut kind, ref mut annotations),
                 &Builder(ref other_kind, ref other_annotations),
             ) => {
+
                 // Perform type checking on the BuilderKind, followed by the annotations.
-                let mut changed = match (kind, other_kind) {
+                let changed = match (kind, other_kind) {
                     (&mut Appender(ref mut elem), &Appender(ref other_elem)) => {
                         elem.push(other_elem)
                     }
@@ -193,14 +194,15 @@ impl PushType for Type {
                     | (&mut Merger(_, _), _) => {
                         compile_err!("Type mismatch: expected builder type {}", other)
                     }
-                }?;
+                };
 
                 // Check the annotations.
                 if *annotations != *other_annotations && !annotations.is_empty() {
                     *annotations = other_annotations.clone();
-                    changed = true;
+                    Ok(true)
+                } else {
+                    changed
                 }
-                Ok(changed)
             }
             (ref this, ref other) => {
                 compile_err!("Type mismatch: expected {} but got {}", other, this)
