@@ -2,13 +2,13 @@
 //!
 //! These tests reuse builders across Weld programs by reusing contexts.
 
-extern crate weld;
+use weld;
 
-use weld::*;
 use weld::data::*;
+use weld::*;
 
 mod common;
-use common::*;
+use crate::common::*;
 
 #[test]
 fn reuse_appender_test() {
@@ -58,7 +58,8 @@ fn reuse_appender_test() {
     for i in 0..result.len as isize {
         assert_eq!(
             unsafe { *result.data.offset(i) as i32 },
-            input_vec[(i % input_vec.len() as isize) as usize]);
+            input_vec[(i % input_vec.len() as isize) as usize]
+        );
     }
 }
 
@@ -89,7 +90,7 @@ fn reuse_groupmerger_test() {
 
     let module = WeldModule::compile(program1, conf).unwrap();
     let ret_value = unsafe { module.run(context, input_value).unwrap() };
-    let data = ret_value.data() as *const GroupMerger<i32,i32>;
+    let data = ret_value.data() as *const GroupMerger<i32, i32>;
     let groupmerger = unsafe { (*data).clone() };
 
     // The input for the second program.
@@ -99,7 +100,7 @@ fn reuse_groupmerger_test() {
     struct Program2Args {
         keys: WeldVec<i32>,
         vals: WeldVec<i32>,
-        builder: GroupMerger<i32,i32>,
+        builder: GroupMerger<i32, i32>,
     }
 
     let program2 = "|keys: vec[i32], vals: vec[i32], gm: groupmerger[i32,i32]|
@@ -116,14 +117,14 @@ fn reuse_groupmerger_test() {
 
     // Run new module with same context.
     let ret_value = unsafe { module.run(context, input_value).unwrap() };
-    let data = ret_value.data() as *const WeldVec<Pair<i32,WeldVec<i32>>>;
+    let data = ret_value.data() as *const WeldVec<Pair<i32, WeldVec<i32>>>;
 
     let result = unsafe { (*data).clone() };
 
     let expect: Vec<(i32, Vec<i32>)> = vec![
         (1, vec![2, 2, 2, 2]),
         (2, vec![3, 4, 3, 4]),
-        (3, vec![1, 0, 1, 0])
+        (3, vec![1, 0, 1, 0]),
     ];
 
     // Check correctness

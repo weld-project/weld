@@ -1,11 +1,11 @@
 //! Tests for the math functions Weld natively supports.
 
-extern crate weld;
+use weld;
 
 use weld::runtime::WeldRuntimeErrno;
 
 mod common;
-use common::*;
+use crate::common::*;
 
 trait Close<Rhs: ?Sized = Self> {
     /// Returns true if self is close to other. The closeness is dictated by granularity.
@@ -44,7 +44,6 @@ fn simple_log() {
     let result = unsafe { (*data).clone() };
     let output = 1.0f64;
     assert!(output.close(result, 5));
-
 }
 
 #[test]
@@ -66,7 +65,6 @@ fn simple_exp() {
     let result = unsafe { (*data).clone() };
     let output = 2.718281828459045;
     assert!(output.close(result, 5));
-
 }
 
 #[test]
@@ -125,7 +123,6 @@ fn simple_trig() {
         let data = ret_value.data() as *const f32;
         let result = unsafe { (*data).clone() };
         assert!(expect.close(result, 5));
-
     }
 
     fn check_trig_f64(op: &str, input: f64, expect: f64) {
@@ -135,7 +132,6 @@ fn simple_trig() {
         let data = ret_value.data() as *const f64;
         let result = unsafe { (*data).clone() };
         assert!(expect.close(result, 5));
-
     }
 
     let inp: f32 = 1.0;

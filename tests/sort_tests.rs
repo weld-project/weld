@@ -1,9 +1,7 @@
 //! Tests that make use of the Sort operator.
 
-extern crate weld;
-
 mod common;
-use common::*;
+use crate::common::*;
 
 #[test]
 fn string_sort() {
@@ -81,7 +79,8 @@ fn simple_sort() {
     let ys = vec![2.0, 3.0, 1.0, 5.001, 5.0001];
     let ref input_data = WeldVec::from(&ys);
 
-    let code = "|ys:vec[f64]| sort(sort(ys, |x:f64, y:f64| compare(x, y)), |x:f64, y:f64| compare(x, y))";
+    let code =
+        "|ys:vec[f64]| sort(sort(ys, |x:f64, y:f64| compare(x, y)), |x:f64, y:f64| compare(x, y))";
     let ref conf = default_conf();
     let ret_value = compile_and_run(code, conf, input_data);
     let data = ret_value.data() as *const WeldVec<f64>;
@@ -93,7 +92,8 @@ fn simple_sort() {
         assert_eq!(unsafe { *result.data.offset(i) }, expected[i as usize])
     }
 
-    let code = "|ys:vec[f64]| sort(ys, |x:f64, y:f64| compare(1.0 / exp(-1.0*x), 1.0 / exp(-1.0*y)))";
+    let code =
+        "|ys:vec[f64]| sort(ys, |x:f64, y:f64| compare(1.0 / exp(-1.0*x), 1.0 / exp(-1.0*y)))";
     let ref conf = default_conf();
     let ret_value = compile_and_run(code, conf, input_data);
     let data = ret_value.data() as *const WeldVec<f64>;
@@ -103,8 +103,6 @@ fn simple_sort() {
     for i in 0..(expected.len() as isize) {
         assert_eq!(unsafe { *result.data.offset(i) }, expected[i as usize])
     }
-
-
 }
 
 #[test]
@@ -136,7 +134,7 @@ fn complex_sort() {
                 )";
     let ref conf = default_conf();
     let ret_value = compile_and_run(code, conf, input_data);
-    let data = ret_value.data() as *const WeldVec<Pair<i32,i32>>;
+    let data = ret_value.data() as *const WeldVec<Pair<i32, i32>>;
     let result = unsafe { (*data).clone() };
 
     let expected = [[1, 5], [2, 4], [3, 3], [4, 2], [5, 1]];
@@ -164,7 +162,7 @@ fn mixed_type_sort() {
         y: i32,
         z: WeldVec<u8>,
     };
-    
+
     #[derive(Clone)]
     #[allow(dead_code)]
     struct Args {
@@ -175,14 +173,26 @@ fn mixed_type_sort() {
     let s2 = vec!['C' as u8, 'D' as u8];
     let s3 = vec!['F' as u8];
 
-    let e1 = Elem { x: 1.0, y: 3, z: WeldVec::from(&s1) };
-    let e2 = Elem { x: 0.5, y: 6, z: WeldVec::from(&s2) };
-    let e3 = Elem { x: 0.5, y: 3, z: WeldVec::from(&s3) };
+    let e1 = Elem {
+        x: 1.0,
+        y: 3,
+        z: WeldVec::from(&s1),
+    };
+    let e2 = Elem {
+        x: 0.5,
+        y: 6,
+        z: WeldVec::from(&s2),
+    };
+    let e3 = Elem {
+        x: 0.5,
+        y: 3,
+        z: WeldVec::from(&s3),
+    };
 
     let elems = vec![e1.clone(), e2.clone(), e3.clone()];
     let sorted = vec![e3, e2, e1];
     let sorted_strs = vec![s3.clone(), s2.clone(), s1.clone()]; // simplifies checking
-    
+
     let ref input_data = Args {
         x: WeldVec::from(&elems),
     };
@@ -190,7 +200,7 @@ fn mixed_type_sort() {
     let code = "|e0: vec[{f64,i32,vec[u8]}]| sort(e0, |x:{f64,i32,vec[u8]}, y:{f64,i32,vec[u8]}| compare(x, y))";
 
     let ref conf = default_conf();
-    
+
     let ret_value = compile_and_run(code, conf, input_data);
     let data = ret_value.data() as *const WeldVec<Elem>;
     let result = unsafe { (*data).clone() };
@@ -224,7 +234,7 @@ fn nested_struct_sort() {
         y: i32,
         z: InnerElem,
     };
-    
+
     #[derive(Clone)]
     #[allow(dead_code)]
     struct Args {
@@ -241,7 +251,7 @@ fn nested_struct_sort() {
 
     let elems = vec![e1.clone(), e2.clone(), e3.clone()];
     let sorted = vec![e2, e3, e1];
-    
+
     let ref input_data = Args {
         x: WeldVec::from(&elems),
     };
@@ -249,7 +259,7 @@ fn nested_struct_sort() {
     let code = "|e0: vec[{i32, i32, {i32, i32}}]| sort(e0, |x:{i32, i32, {i32, i32}}, y:{i32, i32, {i32, i32}}| compare(x, y))";
 
     let ref conf = default_conf();
-    
+
     let ret_value = compile_and_run(code, conf, input_data);
     let data = ret_value.data() as *const WeldVec<Elem>;
     let result = unsafe { (*data).clone() };

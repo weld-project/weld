@@ -1,9 +1,7 @@
 //! Tests related to the Vector type.
 
-extern crate weld;
-
 mod common;
-use common::*;
+use crate::common::*;
 
 #[test]
 fn map_comparison() {

@@ -1,9 +1,7 @@
 //! Tests for the Merger builder type.
 
-extern crate weld;
-
 mod common;
-use common::*;
+use crate::common::*;
 
 #[test]
 fn empty_merger_loop() {

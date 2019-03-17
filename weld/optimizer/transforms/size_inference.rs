@@ -1,24 +1,24 @@
 //! Implements size inference for `For` loops.
 
-use ast::*;
-use ast::ExprKind::*;
-use ast::Type::*;
-use ast::BuilderKind::*;
-use ast::constructors::*;
-use util::SymbolGenerator;
+use crate::ast::constructors::*;
+use crate::ast::BuilderKind::*;
+use crate::ast::ExprKind::*;
+use crate::ast::Type::*;
+use crate::ast::*;
+use crate::util::SymbolGenerator;
 
 struct NewAppender<'a> {
-    elem_type: &'a Type
+    elem_type: &'a Type,
 }
 
 impl<'a> NewAppender<'a> {
     fn extract(expr: &'a Expr) -> Option<NewAppender<'a>> {
         if let NewBuilder(_) = expr.kind {
             if let Builder(Appender(ref elem_type), _) = expr.ty {
-                return Some(NewAppender{elem_type})
+                return Some(NewAppender { elem_type });
             }
         }
-        return None
+        None
     }
 }
 
@@ -30,7 +30,10 @@ fn newbuilder_with_size(builder: &Expr, length: Expr) -> Option<Expr> {
     }
     if let MakeStruct { ref elems } = builder.kind {
         if elems.iter().all(|ref e| NewAppender::extract(e).is_some()) {
-            let newbuilders = elems.iter().map(|ref e| newbuilder_with_size(e, length.clone()).unwrap()).collect();
+            let newbuilders = elems
+                .iter()
+                .map(|ref e| newbuilder_with_size(e, length.clone()).unwrap())
+                .collect();
             return Some(makestruct_expr(newbuilders).unwrap());
         }
     }
@@ -38,7 +41,11 @@ fn newbuilder_with_size(builder: &Expr, length: Expr) -> Option<Expr> {
 }
 
 fn func_has_simple_merge(expr: &Expr) -> bool {
-    if let Lambda { ref params, ref body } = expr.kind {
+    if let Lambda {
+        ref params,
+        ref body,
+    } = expr.kind
+    {
         simple_merge(&params[0].name, body)
     } else {
         false
@@ -52,7 +59,7 @@ pub fn infer_size(expr: &mut Expr) {
         if let For { ref mut iters, ref mut builder, ref mut func } = expr.kind {
             /* Without this condition, the transform_up calls seems to end up in an infinite recursive loop */
             if let NewBuilder(None) = builder.kind {
-                if iters.len() > 0 && func_has_simple_merge(func) {
+                if !iters.is_empty() && func_has_simple_merge(func) {
                     if let Ident(_) = iters[0].data.kind {
                         /* Need the data_sym var after the length has been determined to update the
                          * expression. SymbolGenerator seems to borrow expression immutably, so we can't borrow it mutably before.*/
@@ -94,14 +101,14 @@ pub fn infer_size(expr: &mut Expr) {
                                 }
                             }
                             assert_ne!(i, iters.len());
-                            let mut e = binop_expr(BinOpKind::Subtract, *iters[i].end.as_ref().unwrap().clone(),
+                            let e = binop_expr(BinOpKind::Subtract, *iters[i].end.as_ref().unwrap().clone(),
                                                    *iters[i].start.as_ref().unwrap().clone());
                             let length = binop_expr(BinOpKind::Divide, e.unwrap(), *iters[i].stride.as_ref().unwrap().clone());
                             (length.unwrap(), None)
                         } else {
                             // FIXME(shoumik): NDIter uses strides and shapes instead of
                             // stride/start/end, so need to handle it differently...
-                            return None;    
+                            return None;
                         };
 
                         if let Some(newbuilder) = newbuilder_with_size(builder, length) {
@@ -137,17 +144,23 @@ pub fn infer_size(expr: &mut Expr) {
 /// that the loop containing `expr`'s size can be inferred.
 fn simple_merge(sym: &Symbol, expr: &Expr) -> bool {
     match expr.kind {
-        Merge { ref builder, ref value } => {
+        Merge {
+            ref builder,
+            ref value,
+        } => {
             if let Ident(ref s) = builder.kind {
                 if s == sym {
                     return !value.contains_symbol(sym);
                 }
             }
-            return false;
+            false
         }
-        If { ref cond, ref on_true, ref on_false } => {
-            !cond.contains_symbol(sym) && simple_merge(sym, on_true) &&
-                simple_merge(sym, on_false)
+        If {
+            ref cond,
+            ref on_true,
+            ref on_false,
+        } => {
+            !cond.contains_symbol(sym) && simple_merge(sym, on_true) && simple_merge(sym, on_false)
         }
         _ => false,
     }

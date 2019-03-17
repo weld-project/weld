@@ -1,11 +1,10 @@
+use num_integer;
 
-extern crate num_integer;
-
-use ast::ExprKind::*;
-use ast::LiteralKind::*;
-use ast::Type::*;
-use ast::*;
-use ast::constructors::*;
+use crate::ast::constructors::*;
+use crate::ast::ExprKind::*;
+use crate::ast::LiteralKind::*;
+use crate::ast::Type::*;
+use crate::ast::*;
 
 use self::num_integer::Integer;
 
@@ -26,7 +25,7 @@ fn eliminate_redundant_negation_impl(expr: &mut Expr) -> Option<ExprKind> {
             left: ref mut lhs,
             right: ref mut rhs,
         } => {
-            use ast::BinOpKind::*;
+            use crate::ast::BinOpKind::*;
             match binop_kind {
                 Subtract => {
                     match rhs.as_mut().kind {
@@ -157,7 +156,7 @@ fn eliminate_redundant_negation_impl(expr: &mut Expr) -> Option<ExprKind> {
             match outer.as_mut().kind {
                 Literal(ref kind) => {
                     match kind {
-                         // !true = false and !false = true
+                        // !true = false and !false = true
                         BoolLiteral(b) => Some(Literal(BoolLiteral(!b))),
                         _ => None,
                     }
@@ -168,7 +167,7 @@ fn eliminate_redundant_negation_impl(expr: &mut Expr) -> Option<ExprKind> {
                     left: ref mut lhs,
                     right: ref mut rhs,
                 } => {
-                    use ast::BinOpKind::*;
+                    use crate::ast::BinOpKind::*;
                     match binop_kind {
                         LogicalAnd | LogicalOr => {
                             /*
@@ -180,7 +179,7 @@ fn eliminate_redundant_negation_impl(expr: &mut Expr) -> Option<ExprKind> {
                             match (&lhs.kind, &rhs.kind) {
                                 (&Ident(_), &Ident(_)) => None, // nothing to gain here
                                 (_, _) => {
-                                    let kind = flip_logical(binop_kind);
+                                    let kind = flip_logical(*binop_kind);
                                     Some(BinOp {
                                         kind,
                                         left: Box::new(not_expr(lhs.as_mut().take()).unwrap()),
@@ -235,24 +234,46 @@ fn shift_work_to_constants_impl(expr: &mut Expr) -> Option<ExprKind> {
                             right: ref mut inner_rhs,
                         } => {
                             use self::ExprCmp::*;
-                            use ast::BinOpKind::*;
+                            use crate::ast::BinOpKind::*;
                             let should_isolate = faster_change(inner_lhs, inner_rhs);
                             match (binop_kind, inner_binop_kind, should_isolate) {
                                 (Add, Add, Left) => Some(
                                     // x + (y + z) = y + (x + z)
-                                    right_associate(Add, inner_lhs.take(), lhs.take(), inner_rhs.take()),
+                                    right_associate(
+                                        Add,
+                                        inner_lhs.take(),
+                                        lhs.take(),
+                                        inner_rhs.take(),
+                                    ),
                                 ),
                                 (Add, Add, Right) => Some(
                                     // x + (y + z) = (x + y) + z
-                                    left_associate(Add, lhs.take(), inner_lhs.take(), inner_rhs.take()),
+                                    left_associate(
+                                        Add,
+                                        lhs.take(),
+                                        inner_lhs.take(),
+                                        inner_rhs.take(),
+                                    ),
                                 ),
                                 (Add, Subtract, Left) => Some(
                                     // x + (y - z) = y + (x - z)
-                                    right_associate2(Add, Subtract, inner_lhs.take(), lhs.take(), inner_rhs.take()),
+                                    right_associate2(
+                                        Add,
+                                        Subtract,
+                                        inner_lhs.take(),
+                                        lhs.take(),
+                                        inner_rhs.take(),
+                                    ),
                                 ),
                                 (Add, Subtract, Right) => Some(
                                     // x + (y - z) = (x + y) - z
-                                    left_associate2(Add, Subtract, lhs.take(), inner_lhs.take(), inner_rhs.take()),
+                                    left_associate2(
+                                        Add,
+                                        Subtract,
+                                        lhs.take(),
+                                        inner_lhs.take(),
+                                        inner_rhs.take(),
+                                    ),
                                 ),
                                 //(Add, Multiply, _) => None, // x + (y * z)
                                 //(Add, Divide, _) => None, // x + (y / z)
@@ -260,19 +281,41 @@ fn shift_work_to_constants_impl(expr: &mut Expr) -> Option<ExprKind> {
                                 // (Add, ref cmp, _) => None // x + (y cmp z)
                                 (Subtract, Add, Left) => Some(
                                     // x - (y + z) = (x - z) - y
-                                    left_associate(Subtract, lhs.take(), inner_rhs.take(), inner_lhs.take()),
+                                    left_associate(
+                                        Subtract,
+                                        lhs.take(),
+                                        inner_rhs.take(),
+                                        inner_lhs.take(),
+                                    ),
                                 ),
                                 (Subtract, Add, Right) => Some(
                                     // x - (y + z) = (x - y) - z
-                                    left_associate(Subtract, lhs.take(), inner_lhs.take(), inner_rhs.take()),
+                                    left_associate(
+                                        Subtract,
+                                        lhs.take(),
+                                        inner_lhs.take(),
+                                        inner_rhs.take(),
+                                    ),
                                 ),
                                 (Subtract, Subtract, Left) => Some(
                                     // x - (y - z) = (x + z) - y
-                                    left_associate2(Add, Subtract, lhs.take(), inner_rhs.take(), inner_lhs.take()),
+                                    left_associate2(
+                                        Add,
+                                        Subtract,
+                                        lhs.take(),
+                                        inner_rhs.take(),
+                                        inner_lhs.take(),
+                                    ),
                                 ),
                                 (Subtract, Subtract, Right) => Some(
                                     // x - (y - z) =  (x - y) + z
-                                    left_associate2(Subtract, Add, lhs.take(), inner_lhs.take(), inner_rhs.take()),
+                                    left_associate2(
+                                        Subtract,
+                                        Add,
+                                        lhs.take(),
+                                        inner_lhs.take(),
+                                        inner_rhs.take(),
+                                    ),
                                 ),
                                 //(Subtract, Multiply, _) => None, // x - (y * z)
                                 //(Subtract, Divide, _) => None, // x - (y / z)
@@ -281,68 +324,145 @@ fn shift_work_to_constants_impl(expr: &mut Expr) -> Option<ExprKind> {
                                 //(Multiply, Subtract, _) => None, // x * (y - z) = xy - xz
                                 (Multiply, Multiply, Left) => Some(
                                     // x * (y * z) = y * (x * z)
-                                    right_associate(Multiply, inner_lhs.take(), lhs.take(), inner_rhs.take()),
+                                    right_associate(
+                                        Multiply,
+                                        inner_lhs.take(),
+                                        lhs.take(),
+                                        inner_rhs.take(),
+                                    ),
                                 ),
                                 (Multiply, Multiply, Right) => Some(
                                     // x * (y * z) = (x * y) * z
-                                    left_associate(Multiply, lhs.take(), inner_lhs.take(), inner_rhs.take()),
+                                    left_associate(
+                                        Multiply,
+                                        lhs.take(),
+                                        inner_lhs.take(),
+                                        inner_rhs.take(),
+                                    ),
                                 ),
                                 (Multiply, Divide, Left) => Some(
                                     // x * (y / z) = y * (x / z)
-                                    right_associate2(Multiply, Divide, inner_lhs.take(), lhs.take(), inner_rhs.take()),
+                                    right_associate2(
+                                        Multiply,
+                                        Divide,
+                                        inner_lhs.take(),
+                                        lhs.take(),
+                                        inner_rhs.take(),
+                                    ),
                                 ),
                                 (Multiply, Divide, Right) => Some(
                                     // x * (y / z) = (x * y) / z
-                                    left_associate2(Multiply, Divide, lhs.take(), inner_lhs.take(), inner_rhs.take()),
+                                    left_associate2(
+                                        Multiply,
+                                        Divide,
+                                        lhs.take(),
+                                        inner_lhs.take(),
+                                        inner_rhs.take(),
+                                    ),
                                 ),
                                 // (Multiply, Modulo, _) => None // x * (y % z)
                                 //(Divide, Add, _) => None, // x / (y + z)
                                 //(Divide, Subtract, _) => None, // x / (y - z)
                                 (Divide, Multiply, Left) => Some(
                                     // x / (y * z) = (x / z) / y
-                                    left_associate(Divide, lhs.take(), inner_rhs.take(), inner_lhs.take()),
+                                    left_associate(
+                                        Divide,
+                                        lhs.take(),
+                                        inner_rhs.take(),
+                                        inner_lhs.take(),
+                                    ),
                                 ),
                                 (Divide, Multiply, Right) => Some(
                                     // x / (y * z) = (x / y) / z
-                                    left_associate(Divide, lhs.take(), inner_lhs.take(), inner_rhs.take()),
+                                    left_associate(
+                                        Divide,
+                                        lhs.take(),
+                                        inner_lhs.take(),
+                                        inner_rhs.take(),
+                                    ),
                                 ),
                                 (Divide, Divide, Left) => {
                                     // x / (y / z) = (x * z) / y
                                     use self::RangeClassification::*;
                                     match classify(inner_rhs) {
-                                        Positive | Negative => {
-                                            Some(left_associate2(Multiply, Divide, lhs.take(), inner_rhs.take(), inner_lhs.take()))
-                                        }
+                                        Positive | Negative => Some(left_associate2(
+                                            Multiply,
+                                            Divide,
+                                            lhs.take(),
+                                            inner_rhs.take(),
+                                            inner_lhs.take(),
+                                        )),
                                         Zero | Unknown => None, // don't reorder on z=0, to avoid changing the division by 0 behaviour.
                                     }
                                 }
                                 (Divide, Divide, Right) => Some(
                                     // x / (y / z) = (x / y) / z
-                                    left_associate(Divide, lhs.take(), inner_lhs.take(), inner_rhs.take()),
+                                    left_associate(
+                                        Divide,
+                                        lhs.take(),
+                                        inner_lhs.take(),
+                                        inner_rhs.take(),
+                                    ),
                                 ),
                                 // (Divide, Modulo, _) => None // x / (y % z)
                                 (ref cmp, Add, Left) if cmp.is_comparison() => Some(
                                     // x cmp (y + z) <=> (x - z) flip(cmp) y
-                                    left_associate2(Subtract, flip_comp(*cmp), lhs.take(), inner_rhs.take(), inner_lhs.take()),
+                                    left_associate2(
+                                        Subtract,
+                                        flip_comp(**cmp),
+                                        lhs.take(),
+                                        inner_rhs.take(),
+                                        inner_lhs.take(),
+                                    ),
                                 ),
                                 (ref cmp, Add, Right) if cmp.is_comparison() => Some(
                                     // x cmp (y + z) <=> (x - y) flip(cmp) z
-                                    left_associate2(Subtract, flip_comp(*cmp), lhs.take(), inner_lhs.take(), inner_rhs.take()),
+                                    left_associate2(
+                                        Subtract,
+                                        flip_comp(**cmp),
+                                        lhs.take(),
+                                        inner_lhs.take(),
+                                        inner_rhs.take(),
+                                    ),
                                 ),
                                 (ref cmp, Subtract, Left) if cmp.is_comparison() => Some(
                                     // x cmp (y - z) <=> (x + z) cmp y
-                                    left_associate2(Add, **cmp, lhs.take(), inner_rhs.take(), inner_lhs.take()),
+                                    left_associate2(
+                                        Add,
+                                        **cmp,
+                                        lhs.take(),
+                                        inner_rhs.take(),
+                                        inner_lhs.take(),
+                                    ),
                                 ),
                                 (ref cmp, Subtract, Right) if cmp.is_comparison() => Some(
                                     // x cmp (y - z) <=> z flip(cmp) (y - x)
-                                    right_associate2(flip_comp(*cmp), Subtract, inner_rhs.take(), inner_lhs.take(), lhs.take()),
+                                    right_associate2(
+                                        flip_comp(**cmp),
+                                        Subtract,
+                                        inner_rhs.take(),
+                                        inner_lhs.take(),
+                                        lhs.take(),
+                                    ),
                                 ),
                                 (ref cmp, Multiply, Left) if cmp.is_comparison() => {
                                     // x cmp (y * z) <=> (x / z) cmp y
                                     use self::RangeClassification::*;
                                     match classify(inner_rhs) {
-                                        Positive => Some(left_associate2(Divide, **cmp, lhs.take(), inner_rhs.take(), inner_lhs.take())),
-                                        Negative => Some(left_associate2(Divide, flip_comp(*cmp), lhs.take(), inner_rhs.take(), inner_lhs.take())),
+                                        Positive => Some(left_associate2(
+                                            Divide,
+                                            **cmp,
+                                            lhs.take(),
+                                            inner_rhs.take(),
+                                            inner_lhs.take(),
+                                        )),
+                                        Negative => Some(left_associate2(
+                                            Divide,
+                                            flip_comp(**cmp),
+                                            lhs.take(),
+                                            inner_rhs.take(),
+                                            inner_lhs.take(),
+                                        )),
                                         Zero => Some(BinOp {
                                             kind: **cmp,
                                             left: lhs.take(),
@@ -355,8 +475,20 @@ fn shift_work_to_constants_impl(expr: &mut Expr) -> Option<ExprKind> {
                                     // x cmp (y * z) <=> (x / y) cmp z
                                     use self::RangeClassification::*;
                                     match classify(inner_lhs) {
-                                        Positive => Some(left_associate2(Divide, **cmp, lhs.take(), inner_lhs.take(), inner_rhs.take())),
-                                        Negative => Some(left_associate2(Divide, flip_comp(*cmp), lhs.take(), inner_lhs.take(), inner_rhs.take())),
+                                        Positive => Some(left_associate2(
+                                            Divide,
+                                            **cmp,
+                                            lhs.take(),
+                                            inner_lhs.take(),
+                                            inner_rhs.take(),
+                                        )),
+                                        Negative => Some(left_associate2(
+                                            Divide,
+                                            flip_comp(**cmp),
+                                            lhs.take(),
+                                            inner_lhs.take(),
+                                            inner_rhs.take(),
+                                        )),
                                         Zero => Some(BinOp {
                                             kind: **cmp,
                                             left: lhs.take(),
@@ -370,8 +502,20 @@ fn shift_work_to_constants_impl(expr: &mut Expr) -> Option<ExprKind> {
                                     // if y is constant, next pass will optimise this
                                     use self::RangeClassification::*;
                                     match classify(inner_rhs) {
-                                        Positive => Some(left_associate2(Multiply, **cmp, lhs.take(), inner_rhs.take(), inner_lhs.take())),
-                                        Negative => Some(left_associate2(Multiply, flip_comp(*cmp), lhs.take(), inner_rhs.take(), inner_lhs.take())),
+                                        Positive => Some(left_associate2(
+                                            Multiply,
+                                            **cmp,
+                                            lhs.take(),
+                                            inner_rhs.take(),
+                                            inner_lhs.take(),
+                                        )),
+                                        Negative => Some(left_associate2(
+                                            Multiply,
+                                            flip_comp(**cmp),
+                                            lhs.take(),
+                                            inner_rhs.take(),
+                                            inner_lhs.take(),
+                                        )),
                                         Zero => None, // division by 0!
                                         Unknown => None,
                                     }
@@ -394,12 +538,12 @@ fn shift_work_to_constants_impl(expr: &mut Expr) -> Option<ExprKind> {
                             if binop_kind.is_comparison() {
                                 // x > -y = -x < y and x < -y = -x > y equivalent for >= and <=
                                 Some(BinOp {
-                                    kind: flip_comp(binop_kind),
+                                    kind: flip_comp(*binop_kind),
                                     left: Box::new(negate_expr(lhs.as_mut().take()).unwrap()),
                                     right: inner_expr.take(),
                                 })
                             } else {
-                                use ast::BinOpKind::*;
+                                use crate::ast::BinOpKind::*;
                                 match binop_kind {
                                     Add => {
                                         // x + -y = x - y
@@ -421,7 +565,9 @@ fn shift_work_to_constants_impl(expr: &mut Expr) -> Option<ExprKind> {
                                         // x * -y = -x * y and x/-y = -x/y
                                         Some(BinOp {
                                             kind: *binop_kind,
-                                            left: Box::new(negate_expr(lhs.as_mut().take()).unwrap()),
+                                            left: Box::new(
+                                                negate_expr(lhs.as_mut().take()).unwrap(),
+                                            ),
                                             right: inner_expr.take(),
                                         })
                                     }
@@ -440,7 +586,7 @@ fn shift_work_to_constants_impl(expr: &mut Expr) -> Option<ExprKind> {
                             right: ref mut inner_rhs,
                         } => {
                             use self::ExprCmp::*;
-                            use ast::BinOpKind::*;
+                            use crate::ast::BinOpKind::*;
                             let should_isolate = faster_change(inner_lhs, inner_rhs);
                             match (inner_binop_kind, binop_kind, should_isolate) {
                                 (Add, Add, Left) => Some(right_associate(
@@ -478,63 +624,145 @@ fn shift_work_to_constants_impl(expr: &mut Expr) -> Option<ExprKind> {
                                 //(Add, Modulo, _) => None, // (x + y) % z
                                 (Add, ref cmp, Left) if cmp.is_comparison() => Some(
                                     // (x + y) cmp z <=> x cmp (z - y)
-                                    right_associate2(**cmp, Subtract, inner_lhs.take(), rhs.take(), inner_rhs.take()),
+                                    right_associate2(
+                                        **cmp,
+                                        Subtract,
+                                        inner_lhs.take(),
+                                        rhs.take(),
+                                        inner_rhs.take(),
+                                    ),
                                 ),
                                 (Add, ref cmp, Right) if cmp.is_comparison() => Some(
                                     // (x + y) cmp z <=> y cmp (z - x)
-                                    right_associate2(**cmp, Subtract, inner_rhs.take(), rhs.take(), inner_lhs.take()),
+                                    right_associate2(
+                                        **cmp,
+                                        Subtract,
+                                        inner_rhs.take(),
+                                        rhs.take(),
+                                        inner_lhs.take(),
+                                    ),
                                 ),
                                 (Subtract, Add, Left) => Some(
                                     // (x - y) + z = x + (z - y)
-                                    right_associate2(Add, Subtract, inner_lhs.take(), rhs.take(), inner_rhs.take()),
+                                    right_associate2(
+                                        Add,
+                                        Subtract,
+                                        inner_lhs.take(),
+                                        rhs.take(),
+                                        inner_rhs.take(),
+                                    ),
                                 ),
                                 (Subtract, Add, Right) => Some(
                                     // (x - y) + z = (x + z) - y
-                                    left_associate2(Add, Subtract, inner_lhs.take(), rhs.take(), inner_rhs.take()),
+                                    left_associate2(
+                                        Add,
+                                        Subtract,
+                                        inner_lhs.take(),
+                                        rhs.take(),
+                                        inner_rhs.take(),
+                                    ),
                                 ),
                                 (Subtract, Subtract, Left) => Some(
                                     // (x - y) - z = x - (y + z)
-                                    right_associate2(Subtract, Add, inner_lhs.take(), inner_rhs.take(), rhs.take()),
+                                    right_associate2(
+                                        Subtract,
+                                        Add,
+                                        inner_lhs.take(),
+                                        inner_rhs.take(),
+                                        rhs.take(),
+                                    ),
                                 ),
                                 (Subtract, Subtract, Right) => Some(
                                     // (x - y) - z = (x - z) - y
-                                    left_associate2(Subtract, Subtract, inner_lhs.take(), rhs.take(), inner_rhs.take()),
+                                    left_associate2(
+                                        Subtract,
+                                        Subtract,
+                                        inner_lhs.take(),
+                                        rhs.take(),
+                                        inner_rhs.take(),
+                                    ),
                                 ),
                                 //(Subtract, Multiply, _) => None, // (x - y) * z = x * z - y * z
                                 //(Subtract, Divide, _) => None, // (x - y) / z = x/z - y/z
                                 //(Subtract, Modulo, _) => None, // (x - y) % z
                                 (Subtract, ref cmp, Left) if cmp.is_comparison() => Some(
                                     // (x - y) cmp z <=> x cmp (y + z)
-                                    right_associate2(**cmp, Add, inner_lhs.take(), inner_rhs.take(), rhs.take()),
+                                    right_associate2(
+                                        **cmp,
+                                        Add,
+                                        inner_lhs.take(),
+                                        inner_rhs.take(),
+                                        rhs.take(),
+                                    ),
                                 ),
                                 (Subtract, ref cmp, Right) if cmp.is_comparison() => Some(
                                     // (x - y) cmp z <=> y flip(cmp) (x - z)
-                                    right_associate2(flip_comp(*cmp), Subtract, inner_rhs.take(), inner_lhs.take(), rhs.take()),
+                                    right_associate2(
+                                        flip_comp(**cmp),
+                                        Subtract,
+                                        inner_rhs.take(),
+                                        inner_lhs.take(),
+                                        rhs.take(),
+                                    ),
                                 ),
                                 //(Multiply, Add, _) => None, // (x * y) + z = x * (y + z/x)
                                 //(Multiply, Subtract, _) => None, // (x * y) - z = x * (y - z/x)
                                 (Multiply, Multiply, Left) => Some(
                                     // (x * y) * z = x * (y * z)
-                                    right_associate(Multiply, inner_lhs.take(), inner_rhs.take(), rhs.take()),
+                                    right_associate(
+                                        Multiply,
+                                        inner_lhs.take(),
+                                        inner_rhs.take(),
+                                        rhs.take(),
+                                    ),
                                 ),
                                 (Multiply, Multiply, Right) => Some(
                                     // (x * y) * z = y * (x * z)
-                                    right_associate(Multiply, inner_rhs.take(), inner_lhs.take(), rhs.take()),
+                                    right_associate(
+                                        Multiply,
+                                        inner_rhs.take(),
+                                        inner_lhs.take(),
+                                        rhs.take(),
+                                    ),
                                 ),
                                 (Multiply, Divide, Left) => Some(
                                     // (x * y) / z = x * (y / z)
-                                    right_associate2(Multiply, Divide, inner_lhs.take(), inner_rhs.take(), rhs.take()),
+                                    right_associate2(
+                                        Multiply,
+                                        Divide,
+                                        inner_lhs.take(),
+                                        inner_rhs.take(),
+                                        rhs.take(),
+                                    ),
                                 ),
                                 (Multiply, Divide, Right) => Some(
                                     // (x * y) / z = y * (x / z)
-                                    right_associate2(Multiply, Divide, inner_rhs.take(), inner_lhs.take(), rhs.take()),
+                                    right_associate2(
+                                        Multiply,
+                                        Divide,
+                                        inner_rhs.take(),
+                                        inner_lhs.take(),
+                                        rhs.take(),
+                                    ),
                                 ),
                                 // (Multiply, Modulo, _) => None // (x * y) % z
                                 (Multiply, ref cmp, Left) if cmp.is_comparison() => {
                                     // (x * y) cmp z <=> x cmp (z/y)
                                     match classify(inner_rhs) {
-                                        RangeClassification::Positive => Some(right_associate2(**cmp, Divide, inner_lhs.take(), rhs.take(), inner_rhs.take())),
-                                        RangeClassification::Negative => Some(right_associate2(flip_comp(*cmp), Divide, inner_lhs.take(), rhs.take(), inner_rhs.take())),
+                                        RangeClassification::Positive => Some(right_associate2(
+                                            **cmp,
+                                            Divide,
+                                            inner_lhs.take(),
+                                            rhs.take(),
+                                            inner_rhs.take(),
+                                        )),
+                                        RangeClassification::Negative => Some(right_associate2(
+                                            flip_comp(**cmp),
+                                            Divide,
+                                            inner_lhs.take(),
+                                            rhs.take(),
+                                            inner_rhs.take(),
+                                        )),
                                         RangeClassification::Zero => Some(BinOp {
                                             kind: **cmp,
                                             left: inner_rhs.take(),
@@ -546,8 +774,20 @@ fn shift_work_to_constants_impl(expr: &mut Expr) -> Option<ExprKind> {
                                 (Multiply, ref cmp, Right) if cmp.is_comparison() => {
                                     // (x * y) cmp z <=> y cmp (z/x)
                                     match classify(inner_lhs) {
-                                        RangeClassification::Positive => Some(right_associate2(**cmp, Divide, inner_rhs.take(), rhs.take(), inner_lhs.take())),
-                                        RangeClassification::Negative => Some(right_associate2(flip_comp(*cmp), Divide, inner_rhs.take(), rhs.take(), inner_lhs.take())),
+                                        RangeClassification::Positive => Some(right_associate2(
+                                            **cmp,
+                                            Divide,
+                                            inner_rhs.take(),
+                                            rhs.take(),
+                                            inner_lhs.take(),
+                                        )),
+                                        RangeClassification::Negative => Some(right_associate2(
+                                            flip_comp(**cmp),
+                                            Divide,
+                                            inner_rhs.take(),
+                                            rhs.take(),
+                                            inner_lhs.take(),
+                                        )),
                                         RangeClassification::Zero => Some(BinOp {
                                             kind: **cmp,
                                             left: inner_lhs.take(),
@@ -560,27 +800,62 @@ fn shift_work_to_constants_impl(expr: &mut Expr) -> Option<ExprKind> {
                                 //(Divide, Subtract, _) => None, // (x / y) - z = (x - yz) / y
                                 (Divide, Multiply, Left) => Some(
                                     // (x / y) * z = x * (z / y)
-                                    right_associate2(Multiply, Divide, inner_lhs.take(), rhs.take(), inner_rhs.take()),
+                                    right_associate2(
+                                        Multiply,
+                                        Divide,
+                                        inner_lhs.take(),
+                                        rhs.take(),
+                                        inner_rhs.take(),
+                                    ),
                                 ),
                                 (Divide, Multiply, Right) => Some(
                                     // (x / y) * z = (x * z) / y
-                                    left_associate2(Multiply, Divide, inner_lhs.take(), rhs.take(), inner_rhs.take()),
+                                    left_associate2(
+                                        Multiply,
+                                        Divide,
+                                        inner_lhs.take(),
+                                        rhs.take(),
+                                        inner_rhs.take(),
+                                    ),
                                 ),
                                 (Divide, Divide, Left) => Some(
                                     // (x / y) / z = x / (y *  z)
-                                    right_associate2(Divide, Multiply, inner_lhs.take(), inner_rhs.take(), rhs.take()),
+                                    right_associate2(
+                                        Divide,
+                                        Multiply,
+                                        inner_lhs.take(),
+                                        inner_rhs.take(),
+                                        rhs.take(),
+                                    ),
                                 ),
                                 (Divide, Divide, Right) => Some(
                                     // (x / y) / z = (x / z) / y
-                                    left_associate(Divide, inner_lhs.take(), rhs.take(), inner_rhs.take()),
+                                    left_associate(
+                                        Divide,
+                                        inner_lhs.take(),
+                                        rhs.take(),
+                                        inner_rhs.take(),
+                                    ),
                                 ),
                                 // (Divide, Modulo, _) => None // (x / y) % z
                                 (Divide, ref cmp, _) if cmp.is_comparison() => {
                                     // (x / y) cmp z <=> x cmp (z * y)
                                     // if y is constant, leave the (x / z) cmp y optimisation to the next pass
                                     match classify(inner_rhs) {
-                                        RangeClassification::Positive => Some(right_associate2(**cmp, Multiply, inner_lhs.take(), rhs.take(), inner_rhs.take())),
-                                        RangeClassification::Negative => Some(right_associate2(flip_comp(*cmp), Multiply, inner_lhs.take(), rhs.take(), inner_rhs.take())),
+                                        RangeClassification::Positive => Some(right_associate2(
+                                            **cmp,
+                                            Multiply,
+                                            inner_lhs.take(),
+                                            rhs.take(),
+                                            inner_rhs.take(),
+                                        )),
+                                        RangeClassification::Negative => Some(right_associate2(
+                                            flip_comp(**cmp),
+                                            Multiply,
+                                            inner_lhs.take(),
+                                            rhs.take(),
+                                            inner_rhs.take(),
+                                        )),
                                         RangeClassification::Zero => None, // could rewrite like in multiply, but it would change the semantics (i.e. throwing exception vs no exception)
                                         RangeClassification::Unknown => None,
                                     }
@@ -603,13 +878,13 @@ fn shift_work_to_constants_impl(expr: &mut Expr) -> Option<ExprKind> {
                             if binop_kind.is_comparison() {
                                 // -x > y = x < -y and -x < y = x > -y equivalent for >= and <=
                                 let new = BinOp {
-                                    kind: flip_comp(binop_kind),
+                                    kind: flip_comp(*binop_kind),
                                     left: inner_expr.take(),
                                     right: Box::new(negate_expr(rhs.as_mut().take()).unwrap()),
                                 };
                                 Some(new)
                             } else {
-                                use ast::BinOpKind::*;
+                                use crate::ast::BinOpKind::*;
                                 match binop_kind {
                                     Add => {
                                         // -x + y = y - x
@@ -624,7 +899,9 @@ fn shift_work_to_constants_impl(expr: &mut Expr) -> Option<ExprKind> {
                                         // -x - y = -y - x
                                         let new = BinOp {
                                             kind: Subtract,
-                                            left: Box::new(negate_expr(rhs.as_mut().take()).unwrap()),
+                                            left: Box::new(
+                                                negate_expr(rhs.as_mut().take()).unwrap(),
+                                            ),
                                             right: inner_expr.take(),
                                         };
                                         Some(new)
@@ -634,7 +911,9 @@ fn shift_work_to_constants_impl(expr: &mut Expr) -> Option<ExprKind> {
                                         let new = BinOp {
                                             kind: *binop_kind,
                                             left: inner_expr.take(),
-                                            right: Box::new(negate_expr(rhs.as_mut().take()).unwrap()),
+                                            right: Box::new(
+                                                negate_expr(rhs.as_mut().take()).unwrap(),
+                                            ),
                                         };
                                         Some(new)
                                     }
@@ -656,9 +935,7 @@ fn shift_work_to_constants_impl(expr: &mut Expr) -> Option<ExprKind> {
                 }
             }
         }
-        _ => {
-            None
-        }
+        _ => None,
     }
 }
 
@@ -696,7 +973,7 @@ fn is_constant(e: &Expr) -> bool {
 fn is_even(e: &Expr) -> bool {
     match e.kind {
         Literal(ref kind) => {
-            use ast::LiteralKind::*;
+            use crate::ast::LiteralKind::*;
             match kind {
                 BoolLiteral(_) => false,
                 I8Literal(n) => n.is_even(),
@@ -725,7 +1002,7 @@ fn is_even(e: &Expr) -> bool {
             left: ref l,
             right: ref r,
         } => {
-            use ast::BinOpKind::*;
+            use crate::ast::BinOpKind::*;
             match k {
                 Add | Subtract => is_even(l) && is_even(r), // TODO || (is_odd(l) && is_odd(r))
                 Min | Max => is_even(l) && is_even(r),
@@ -735,7 +1012,10 @@ fn is_even(e: &Expr) -> bool {
             }
         }
         UnaryOp { .. } => false,
-        Cast { kind: ref k, child_expr: ref e } => k.is_numeric() && is_even(e),
+        Cast {
+            kind: ref k,
+            child_expr: ref e,
+        } => k.is_numeric() && is_even(e),
         If {
             cond: ref _c,
             on_true: ref te,
@@ -745,10 +1025,10 @@ fn is_even(e: &Expr) -> bool {
     }
 }
 
-fn flip_comp(k: &BinOpKind) -> BinOpKind {
-    use ast::BinOpKind::*;
+fn flip_comp(k: BinOpKind) -> BinOpKind {
+    use crate::ast::BinOpKind::*;
     match k {
-        Equal | NotEqual => k.clone(), // nothing to flip here
+        Equal | NotEqual => k, // nothing to flip here
         LessThan => GreaterThan,
         GreaterThan => LessThan,
         LessThanOrEqual => GreaterThanOrEqual,
@@ -757,8 +1037,8 @@ fn flip_comp(k: &BinOpKind) -> BinOpKind {
     }
 }
 
-fn flip_logical(k: &BinOpKind) -> BinOpKind {
-    use ast::BinOpKind::*;
+fn flip_logical(k: BinOpKind) -> BinOpKind {
+    use crate::ast::BinOpKind::*;
     match k {
         LogicalAnd => LogicalOr,
         LogicalOr => LogicalAnd,
@@ -771,16 +1051,42 @@ fn right_associate(op: BinOpKind, e1: Box<Expr>, e2: Box<Expr>, e3: Box<Expr>) -
     BinOp {
         kind: op,
         left: e1,
-        right: Box::new(new_expr(BinOp { kind: op, left: e2, right: e3 }, ty).unwrap()),
+        right: Box::new(
+            new_expr(
+                BinOp {
+                    kind: op,
+                    left: e2,
+                    right: e3,
+                },
+                ty,
+            )
+            .unwrap(),
+        ),
     }
 }
 
-fn right_associate2(op1: BinOpKind, op2: BinOpKind, e1: Box<Expr>, e2: Box<Expr>, e3: Box<Expr>) -> ExprKind {
+fn right_associate2(
+    op1: BinOpKind,
+    op2: BinOpKind,
+    e1: Box<Expr>,
+    e2: Box<Expr>,
+    e3: Box<Expr>,
+) -> ExprKind {
     let ty = e1.ty.clone();
     BinOp {
         kind: op1,
         left: e1,
-        right: Box::new(new_expr(BinOp { kind: op2, left: e2, right: e3 }, ty).unwrap()),
+        right: Box::new(
+            new_expr(
+                BinOp {
+                    kind: op2,
+                    left: e2,
+                    right: e3,
+                },
+                ty,
+            )
+            .unwrap(),
+        ),
     }
 }
 
@@ -788,16 +1094,42 @@ fn left_associate(op: BinOpKind, e1: Box<Expr>, e2: Box<Expr>, e3: Box<Expr>) ->
     let ty = e1.ty.clone();
     BinOp {
         kind: op,
-        left: Box::new(new_expr(BinOp { kind: op, left: e1, right: e2 }, ty).unwrap()),
+        left: Box::new(
+            new_expr(
+                BinOp {
+                    kind: op,
+                    left: e1,
+                    right: e2,
+                },
+                ty,
+            )
+            .unwrap(),
+        ),
         right: e3,
     }
 }
 
-fn left_associate2(op1: BinOpKind, op2: BinOpKind, e1: Box<Expr>, e2: Box<Expr>, e3: Box<Expr>) -> ExprKind {
+fn left_associate2(
+    op1: BinOpKind,
+    op2: BinOpKind,
+    e1: Box<Expr>,
+    e2: Box<Expr>,
+    e3: Box<Expr>,
+) -> ExprKind {
     let ty = e1.ty.clone();
     BinOp {
         kind: op2,
-        left: Box::new(new_expr(BinOp { kind: op1, left: e1, right: e2 }, ty).unwrap()),
+        left: Box::new(
+            new_expr(
+                BinOp {
+                    kind: op1,
+                    left: e1,
+                    right: e2,
+                },
+                ty,
+            )
+            .unwrap(),
+        ),
         right: e3,
     }
 }
@@ -923,7 +1255,7 @@ fn classify(e: &Expr) -> RangeClassification {
             right: ref r,
         } => {
             use self::RangeClassification::*;
-            use ast::BinOpKind::*;
+            use crate::ast::BinOpKind::*;
 
             let lc = classify(l);
             let rc = classify(r);
@@ -996,9 +1328,12 @@ fn classify(e: &Expr) -> RangeClassification {
                 _ => Unknown,
             }
         }
-        UnaryOp { kind: ref k, value: ref e } => {
+        UnaryOp {
+            kind: ref k,
+            value: ref e,
+        } => {
             use self::RangeClassification::*;
-            use ast::UnaryOpKind::*;
+            use crate::ast::UnaryOpKind::*;
             let ec = classify(e);
             match k {
                 Exp => Positive, // e^x > 0
@@ -1037,7 +1372,10 @@ fn classify(e: &Expr) -> RangeClassification {
                 _ => Unknown,
             }
         }
-        Cast { kind: ref k, child_expr: ref e } => {
+        Cast {
+            kind: ref k,
+            child_expr: ref e,
+        } => {
             use self::RangeClassification::*;
             if k.is_numeric() {
                 if let Scalar(ty) = e.ty {
@@ -1049,7 +1387,7 @@ fn classify(e: &Expr) -> RangeClassification {
                             Unknown => Unknown,
                         }
                     } else if ty.is_unsigned_integer() {
-                        if ty.is_strict_upcast(k) && k.is_integer() {
+                        if ty.is_strict_upcast(*k) && k.is_integer() {
                             let ec = classify(e);
                             match ec {
                                 Positive => Positive,

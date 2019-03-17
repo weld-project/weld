@@ -1,11 +1,10 @@
-
 //!
 //! This module manages verifying the generated LLVM module, optimizing it using the LLVM
 //! optimization passes, and compiling it to machine code.
 
-extern crate llvm_sys;
-extern crate time;
-extern crate libc;
+use libc;
+use llvm_sys;
+use time;
 
 use std::ffi::{CStr, CString};
 use std::mem;
@@ -16,20 +15,20 @@ use libc::c_char;
 
 use self::time::PreciseTime;
 
-use conf::ParsedConf;
-use error::*;
-use util::stats::CompilationStats;
+use crate::conf::ParsedConf;
+use crate::error::*;
+use crate::util::stats::CompilationStats;
 
 use self::llvm_sys::core::*;
-use self::llvm_sys::prelude::*;
 use self::llvm_sys::execution_engine::*;
+use self::llvm_sys::prelude::*;
 use self::llvm_sys::target::*;
 use self::llvm_sys::target_machine::*;
 
-use codegen::Runnable;
+use crate::codegen::Runnable;
 
-use codegen::llvm2::llvm_exts::*;
-use codegen::llvm2::intrinsic;
+use crate::codegen::llvm2::intrinsic;
+use crate::codegen::llvm2::llvm_exts::*;
 
 static ONCE: Once = ONCE_INIT;
 static mut INITIALIZE_FAILED: bool = false;
@@ -65,20 +64,24 @@ impl CompiledModule {
             let mut err = ptr::null_mut();
             let target = LLVMGetExecutionEngineTargetMachine(self.engine);
             let file_type = LLVMCodeGenFileType::LLVMAssemblyFile;
-            let res = LLVMTargetMachineEmitToMemoryBuffer(target,
-                                                          self.module,
-                                                          file_type,
-                                                          &mut err,
-                                                          &mut output_buf);
+            let res = LLVMTargetMachineEmitToMemoryBuffer(
+                target,
+                self.module,
+                file_type,
+                &mut err,
+                &mut output_buf,
+            );
             if res == 1 {
                 let err_str = CStr::from_ptr(err as *mut c_char)
-                    .to_string_lossy().into_owned();
+                    .to_string_lossy()
+                    .into_owned();
                 libc::free(err as *mut libc::c_void); // err is only allocated if res == 1
                 compile_err!("Machine code generation failed with error {}", err_str)
             } else {
                 let start = LLVMGetBufferStart(output_buf);
                 let c_str = CStr::from_ptr(start as *mut c_char)
-                    .to_string_lossy().into_owned();
+                    .to_string_lossy()
+                    .into_owned();
                 LLVMDisposeMemoryBuffer(output_buf);
                 Ok(c_str)
             }
@@ -87,9 +90,10 @@ impl CompiledModule {
 
     /// Dumps the optimized LLVM IR for this module.
     pub fn llvm(&self) -> WeldResult<String> {
-        unsafe { 
+        unsafe {
             let c_str = LLVMPrintModuleToString(self.module);
-            let ir = CStr::from_ptr(c_str).to_str()
+            let ir = CStr::from_ptr(c_str)
+                .to_str()
                 .map_err(|e| WeldCompileError::new(e.to_string()))?;
             let ir = ir.to_string();
             LLVMDisposeMessage(c_str);
@@ -116,38 +120,48 @@ pub unsafe fn init() {
 }
 
 /// Compile a constructed module in the given LLVM context.
-pub unsafe fn compile(context: LLVMContextRef,
-               module: LLVMModuleRef,
-               mappings: &[intrinsic::Mapping],
-               conf: &ParsedConf,
-               stats: &mut CompilationStats) -> WeldResult<CompiledModule> {
+pub unsafe fn compile(
+    context: LLVMContextRef,
+    module: LLVMModuleRef,
+    mappings: &[intrinsic::Mapping],
+    conf: &ParsedConf,
+    stats: &mut CompilationStats,
+) -> WeldResult<CompiledModule> {
     init();
 
     let start = PreciseTime::now();
     verify_module(module)?;
     let end = PreciseTime::now();
-    stats.llvm_times.push(("Module Verification".to_string(), start.to(end)));
+    stats
+        .llvm_times
+        .push(("Module Verification".to_string(), start.to(end)));
 
     let start = PreciseTime::now();
     optimize_module(module, conf)?;
     let end = PreciseTime::now();
-    stats.llvm_times.push(("Module Optimization".to_string(), start.to(end)));
-    
+    stats
+        .llvm_times
+        .push(("Module Optimization".to_string(), start.to(end)));
+
     let start = PreciseTime::now();
     // Takes ownership of the module.
     let engine = create_exec_engine(module, mappings, conf)?;
     let end = PreciseTime::now();
-    stats.llvm_times.push(("Create Exec Engine".to_string(), start.to(end)));
+    stats
+        .llvm_times
+        .push(("Create Exec Engine".to_string(), start.to(end)));
 
     let start = PreciseTime::now();
     let run_func = find_function(engine, &conf.llvm.run_func_name)?;
     let end = PreciseTime::now();
-    stats.llvm_times.push(("Find Run Func Address".to_string(), start.to(end)));
+    stats
+        .llvm_times
+        .push(("Find Run Func Address".to_string(), start.to(end)));
 
     let result = CompiledModule {
-        context: context,
-        module: module,
-        engine: engine,
+        context,
+        module,
+        engine,
         run_function: run_func,
     };
     Ok(result)
@@ -196,18 +210,21 @@ unsafe fn target_machine() -> WeldResult<LLVMTargetMachineRef> {
     let mut err = ptr::null_mut();
     let ret = LLVMGetTargetFromTriple(PROCESS_TRIPLE.as_ptr(), &mut target, &mut err);
     if ret == 1 {
-        let err_msg = CStr::from_ptr(err as *mut c_char).to_string_lossy()
+        let err_msg = CStr::from_ptr(err as *mut c_char)
+            .to_string_lossy()
             .into_owned();
         LLVMDisposeMessage(err); // err is only allocated on res == 1
         compile_err!("Target initialization failed with error {}", err_msg)
     } else {
-        Ok(LLVMCreateTargetMachine(target,
-                                   PROCESS_TRIPLE.as_ptr(),
-                                   HOST_CPU_NAME.as_ptr(),
-                                   HOST_CPU_FEATURES.as_ptr(),
-                                   LLVMCodeGenOptLevel::LLVMCodeGenLevelAggressive,
-                                   LLVMRelocMode::LLVMRelocDefault,
-                                   LLVMCodeModel::LLVMCodeModelDefault))
+        Ok(LLVMCreateTargetMachine(
+            target,
+            PROCESS_TRIPLE.as_ptr(),
+            HOST_CPU_NAME.as_ptr(),
+            HOST_CPU_FEATURES.as_ptr(),
+            LLVMCodeGenOptLevel::LLVMCodeGenLevelAggressive,
+            LLVMRelocMode::LLVMRelocDefault,
+            LLVMCodeModel::LLVMCodeModelDefault,
+        ))
     }
 }
 
@@ -224,17 +241,13 @@ pub unsafe fn set_triple_and_layout(module: LLVMModuleRef) -> WeldResult<()> {
 
 /// Verify a module using LLVM's verifier.
 unsafe fn verify_module(module: LLVMModuleRef) -> WeldResult<()> {
-    use self::llvm_sys::analysis::LLVMVerifyModule;
     use self::llvm_sys::analysis::LLVMVerifierFailureAction::*;
-    let mut error_str = 0 as *mut c_char;
-    let result_code = LLVMVerifyModule(module,
-                                       LLVMReturnStatusAction,
-                                       &mut error_str);
+    use self::llvm_sys::analysis::LLVMVerifyModule;
+    let mut error_str = ptr::null_mut();
+    let result_code = LLVMVerifyModule(module, LLVMReturnStatusAction, &mut error_str);
     let result = {
         if result_code != 0 {
-            let err = CStr::from_ptr(error_str)
-                .to_string_lossy()
-                .into_owned();
+            let err = CStr::from_ptr(error_str).to_string_lossy().into_owned();
             compile_err!("{}", format!("Module verification failed: {}", err))
         } else {
             Ok(())
@@ -262,11 +275,16 @@ unsafe fn optimize_module(module: LLVMModuleRef, conf: &ParsedConf) -> WeldResul
     // Log some information about the machine...
     let cpu_ptr = LLVMGetTargetMachineCPU(target_machine);
     let cpu = CStr::from_ptr(cpu_ptr).to_str().unwrap();
-    let description  = CStr::from_ptr(LLVMGetTargetDescription(target)).to_str().unwrap();
+    let description = CStr::from_ptr(LLVMGetTargetDescription(target))
+        .to_str()
+        .unwrap();
     let features_ptr = LLVMGetTargetMachineFeatureString(target_machine);
     let features = CStr::from_ptr(features_ptr).to_str().unwrap();
 
-    debug!("CPU: {}, Description: {} Features: {}", cpu, description, features);
+    debug!(
+        "CPU: {}, Description: {} Features: {}",
+        cpu, description, features
+    );
     let start = PreciseTime::now();
 
     if conf.llvm.target_analysis_passes {
@@ -285,8 +303,14 @@ unsafe fn optimize_module(module: LLVMModuleRef, conf: &ParsedConf) -> WeldResul
     let builder = LLVMPassManagerBuilderCreate();
     LLVMPassManagerBuilderSetOptLevel(builder, conf.llvm.opt_level);
     LLVMPassManagerBuilderSetSizeLevel(builder, 0);
-    LLVMPassManagerBuilderSetDisableUnrollLoops(builder, if conf.llvm.llvm_unroller { 0 } else { 1 });
-    LLVMExtPassManagerBuilderSetDisableVectorize(builder, if conf.llvm.llvm_vectorizer { 0 } else { 1 });
+    LLVMPassManagerBuilderSetDisableUnrollLoops(
+        builder,
+        if conf.llvm.llvm_unroller { 0 } else { 1 },
+    );
+    LLVMExtPassManagerBuilderSetDisableVectorize(
+        builder,
+        if conf.llvm.llvm_vectorizer { 0 } else { 1 },
+    );
     // 250 should correspond to OptLevel = 3
     LLVMPassManagerBuilderUseInlinerWithThreshold(builder, 250);
 
@@ -300,22 +324,31 @@ unsafe fn optimize_module(module: LLVMModuleRef, conf: &ParsedConf) -> WeldResul
 
     LLVMPassManagerBuilderDispose(builder);
     let end = PreciseTime::now();
-    debug!("LLVM Constructed PassManager in {} ms", start.to(end).num_milliseconds());
+    debug!(
+        "LLVM Constructed PassManager in {} ms",
+        start.to(end).num_milliseconds()
+    );
 
     let start = PreciseTime::now();
     let mut func = LLVMGetFirstFunction(module);
-    while func != ptr::null_mut() {
+    while !func.is_null() {
         LLVMRunFunctionPassManager(fpm, func);
         func = LLVMGetNextFunction(func);
     }
     LLVMFinalizeFunctionPassManager(fpm);
     let end = PreciseTime::now();
-    debug!("LLVM Function Passes Ran in {} ms", start.to(end).num_milliseconds());
+    debug!(
+        "LLVM Function Passes Ran in {} ms",
+        start.to(end).num_milliseconds()
+    );
 
     let start = PreciseTime::now();
     LLVMRunPassManager(mpm, module);
     let end = PreciseTime::now();
-    debug!("LLVM Module Passes Ran in {} ms", start.to(end).num_milliseconds());
+    debug!(
+        "LLVM Module Passes Ran in {} ms",
+        start.to(end).num_milliseconds()
+    );
 
     LLVMDisposePassManager(fpm);
     LLVMDisposePassManager(mpm);
@@ -325,20 +358,24 @@ unsafe fn optimize_module(module: LLVMModuleRef, conf: &ParsedConf) -> WeldResul
 }
 
 /// Create an MCJIT execution engine for a given module.
-unsafe fn create_exec_engine(module: LLVMModuleRef,
-                             mappings: &[intrinsic::Mapping],
-                             conf: &ParsedConf) -> WeldResult<LLVMExecutionEngineRef> {
-
+unsafe fn create_exec_engine(
+    module: LLVMModuleRef,
+    mappings: &[intrinsic::Mapping],
+    conf: &ParsedConf,
+) -> WeldResult<LLVMExecutionEngineRef> {
     // Create a filtered list of globals. Needs to be done before creating the execution engine
     // since we lose ownership of the module. (?)
     let mut globals = vec![];
     for mapping in mappings.iter() {
         let global = LLVMGetNamedFunction(module, mapping.0.as_ptr());
         // The LLVM optimizer can delete globals, so we need this check here!
-        if global != ptr::null_mut() {
+        if !global.is_null() {
             globals.push((global, mapping.1));
         } else {
-            trace!("Function {:?} was deleted from module by optimizer", mapping.0);
+            trace!(
+                "Function {:?} was deleted from module by optimizer",
+                mapping.0
+            );
         }
     }
 
@@ -350,15 +387,19 @@ unsafe fn create_exec_engine(module: LLVMModuleRef,
     options.OptLevel = conf.llvm.opt_level;
     options.CodeModel = LLVMCodeModel::LLVMCodeModelDefault;
 
-    let result_code = LLVMCreateMCJITCompilerForModule(&mut engine,
-                                                       module,
-                                                       &mut options,
-                                                       options_size,
-                                                       &mut error_str);
+    let result_code = LLVMCreateMCJITCompilerForModule(
+        &mut engine,
+        module,
+        &mut options,
+        options_size,
+        &mut error_str,
+    );
 
     if result_code != 0 {
-        compile_err!("Creating execution engine failed: {}",
-                     CStr::from_ptr(error_str).to_str().unwrap())
+        compile_err!(
+            "Creating execution engine failed: {}",
+            CStr::from_ptr(error_str).to_str().unwrap()
+        )
     } else {
         for global in globals {
             LLVMAddGlobalMapping(engine, global.0, global.1);

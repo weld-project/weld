@@ -2,10 +2,10 @@
 //!
 //! This module provides constructors with type checking for Weld expressions.
 
-use ast::*;
-use ast::ExprKind::*;
-use ast::Type::*;
-use error::*;
+use crate::ast::ExprKind::*;
+use crate::ast::Type::*;
+use crate::ast::*;
+use crate::error::*;
 
 /// A trait for initializing expressions with type inference.
 ///
@@ -95,15 +95,14 @@ pub trait NewExpr {
 }
 
 impl NewExpr for Expr {
-
     fn new(kind: ExprKind) -> WeldResult<Expr> {
         Self::new_with_type(kind, Unknown)
     }
 
     fn new_with_type(kind: ExprKind, ty: Type) -> WeldResult<Expr> {
         let mut expr = Expr {
-            kind: kind,
-            ty: ty,
+            kind,
+            ty,
             annotations: Annotations::new(),
         };
 
@@ -113,8 +112,8 @@ impl NewExpr for Expr {
     }
 
     fn new_literal(kind: LiteralKind) -> WeldResult<Expr> {
-        use ast::LiteralKind::*;
-        use ast::Type::Scalar;
+        use crate::ast::LiteralKind::*;
+        use crate::ast::Type::Scalar;
 
         let ty = match kind {
             BoolLiteral(_) => Scalar(ScalarKind::Bool),
@@ -140,22 +139,22 @@ impl NewExpr for Expr {
 
     fn new_bin_op(kind: BinOpKind, left: Expr, right: Expr) -> WeldResult<Expr> {
         Self::new(BinOp {
-            kind: kind,
+            kind,
             left: Box::new(left),
-            right: Box::new(right) 
+            right: Box::new(right),
         })
     }
 
     fn new_unary_op(kind: UnaryOpKind, value: Expr) -> WeldResult<Expr> {
         Self::new(UnaryOp {
-            kind: kind,
-            value: Box::new(value)
+            kind,
+            value: Box::new(value),
         })
     }
 
     fn new_cast(kind: ScalarKind, expr: Expr) -> WeldResult<Expr> {
         Self::new(Cast {
-            kind: kind,
+            kind,
             child_expr: Box::new(expr),
         })
     }
@@ -174,20 +173,16 @@ impl NewExpr for Expr {
 
     fn new_to_vec(expr: Expr) -> WeldResult<Expr> {
         Self::new(ToVec {
-            child_expr: Box::new(expr)
+            child_expr: Box::new(expr),
         })
     }
 
     fn new_make_struct(exprs: Vec<Expr>) -> WeldResult<Expr> {
-        Self::new(MakeStruct {
-            elems: exprs,
-        })
+        Self::new(MakeStruct { elems: exprs })
     }
 
     fn new_make_vector(exprs: Vec<Expr>) -> WeldResult<Expr> {
-        Self::new(MakeVector {
-            elems: exprs,
-        })
+        Self::new(MakeVector { elems: exprs })
     }
 
     fn new_make_vector_typed(exprs: Vec<Expr>, ty: Type) -> WeldResult<Expr> {
@@ -197,13 +192,13 @@ impl NewExpr for Expr {
     fn new_get_field(expr: Expr, index: u32) -> WeldResult<Expr> {
         Self::new(GetField {
             expr: Box::new(expr),
-            index: index,
+            index,
         })
     }
 
     fn new_length(expr: Expr) -> WeldResult<Expr> {
         Self::new(Length {
-            data: Box::new(expr)
+            data: Box::new(expr),
         })
     }
 
@@ -245,7 +240,7 @@ impl NewExpr for Expr {
 
     fn new_let(name: Symbol, value: Expr, body: Expr) -> WeldResult<Expr> {
         Self::new(Let {
-            name: name,
+            name,
             value: Box::new(value),
             body: Box::new(body),
         })
@@ -269,7 +264,7 @@ impl NewExpr for Expr {
 
     fn new_lambda(params: Vec<Parameter>, body: Expr) -> WeldResult<Expr> {
         Self::new(Lambda {
-            params: params,
+            params,
             body: Box::new(body),
         })
     }
@@ -277,26 +272,26 @@ impl NewExpr for Expr {
     fn new_apply(func: Expr, params: Vec<Expr>) -> WeldResult<Expr> {
         Self::new(Apply {
             func: Box::new(func),
-            params: params,
+            params,
         })
     }
 
     fn new_cudf(sym_name: String, args: Vec<Expr>, return_ty: Type) -> WeldResult<Expr> {
         Self::new(CUDF {
-            sym_name: sym_name,
-            args: args,
+            sym_name,
+            args,
             return_ty: Box::new(return_ty),
         })
     }
 
     fn new_new_builder(kind: BuilderKind, expr: Option<Expr>) -> WeldResult<Expr> {
-        let expr = expr.map(|e| Box::new(e));
+        let expr = expr.map(Box::new);
         Self::new_with_type(NewBuilder(expr), Builder(kind, Annotations::new()))
     }
 
     fn new_for(iters: Vec<Iter>, builder: Expr, func: Expr) -> WeldResult<Expr> {
         Self::new(For {
-            iters: iters,
+            iters,
             builder: Box::new(builder),
             func: Box::new(func),
         })
@@ -311,7 +306,7 @@ impl NewExpr for Expr {
 
     fn new_result(builder: Expr) -> WeldResult<Expr> {
         Self::new(Res {
-            builder: Box::new(builder)
+            builder: Box::new(builder),
         })
     }
 

@@ -7,84 +7,120 @@
 //! * `Cast`
 //! * `Negate`
 
-extern crate time;
-extern crate libc;
-extern crate llvm_sys;
+use llvm_sys;
 
-use ast::*;
-use error::*;
-use sir::*;
+use crate::ast::*;
+use crate::error::*;
+use crate::sir::*;
 
 use std::ffi::CString;
 
-use self::llvm_sys::prelude::*;
 use self::llvm_sys::core::*;
+use self::llvm_sys::prelude::*;
 use self::llvm_sys::LLVMIntPredicate::*;
 
-use codegen::llvm2::intrinsic::Intrinsics;
+use crate::codegen::llvm2::intrinsic::Intrinsics;
 
-use super::{LlvmGenerator, CodeGenExt, FunctionContext, LLVM_VECTOR_WIDTH};
+use super::{CodeGenExt, FunctionContext, LlvmGenerator, LLVM_VECTOR_WIDTH};
 
 /// Generates numeric expresisons.
 pub trait NumericExpressionGen {
     /// Generates code for a numeric unary operator.
     ///
     /// This method supports operators over both scalar and SIMD values.
-    unsafe fn gen_unaryop(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()>;
+    unsafe fn gen_unaryop(
+        &mut self,
+        ctx: &mut FunctionContext<'_>,
+        statement: &Statement,
+    ) -> WeldResult<()>;
     /// Generates code for a numeric binary operator.
     ///
     /// This method supports operators over both scalar and SIMD values.
-    unsafe fn gen_binop(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()>;
+    unsafe fn gen_binop(
+        &mut self,
+        ctx: &mut FunctionContext<'_>,
+        statement: &Statement,
+    ) -> WeldResult<()>;
     /// Generates code for the negation operator.
-    unsafe fn gen_negate(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()>;
+    unsafe fn gen_negate(
+        &mut self,
+        ctx: &mut FunctionContext<'_>,
+        statement: &Statement,
+    ) -> WeldResult<()>;
     /// Generates code for the not operator.
-    unsafe fn gen_not(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()>;
+    unsafe fn gen_not(
+        &mut self,
+        ctx: &mut FunctionContext<'_>,
+        statement: &Statement,
+    ) -> WeldResult<()>;
 
     /// Generates a literal.
     ///
     /// This method supports both scalar and SIMD values.
-    unsafe fn gen_assign_literal(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()>;
+    unsafe fn gen_assign_literal(
+        &mut self,
+        ctx: &mut FunctionContext<'_>,
+        statement: &Statement,
+    ) -> WeldResult<()>;
     /// Generates a cast expression.
-    unsafe fn gen_cast(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()>;
+    unsafe fn gen_cast(
+        &mut self,
+        ctx: &mut FunctionContext<'_>,
+        statement: &Statement,
+    ) -> WeldResult<()>;
 }
 
 /// Helper trait for generating numeric code.
 trait NumericExpressionGenInternal {
     /// Generates the math `Pow` operator.
-    unsafe fn gen_pow(&mut self,
-               ctx: &mut FunctionContext,
-               left: LLVMValueRef,
-               right: LLVMValueRef,
-               ty: &Type) -> WeldResult<LLVMValueRef>; 
+    unsafe fn gen_pow(
+        &mut self,
+        ctx: &mut FunctionContext<'_>,
+        left: LLVMValueRef,
+        right: LLVMValueRef,
+        ty: &Type,
+    ) -> WeldResult<LLVMValueRef>;
 }
 
 impl NumericExpressionGenInternal for LlvmGenerator {
-    unsafe fn gen_pow(&mut self,
-               ctx: &mut FunctionContext,
-               left: LLVMValueRef,
-               right: LLVMValueRef,
-               ty: &Type) -> WeldResult<LLVMValueRef> {
-        use ast::Type::{Scalar, Simd};
+    unsafe fn gen_pow(
+        &mut self,
+        ctx: &mut FunctionContext<'_>,
+        left: LLVMValueRef,
+        right: LLVMValueRef,
+        ty: &Type,
+    ) -> WeldResult<LLVMValueRef> {
+        use crate::ast::Type::{Scalar, Simd};
         match *ty {
             Scalar(kind) if kind.is_float() => {
-                let name = Intrinsics::llvm_numeric("pow", kind, false); 
+                let name = Intrinsics::llvm_numeric("pow", kind, false);
                 let ret_ty = LLVMTypeOf(left);
                 let mut arg_tys = [ret_ty, ret_ty];
                 self.intrinsics.add(&name, ret_ty, &mut arg_tys);
                 self.intrinsics.call(ctx.builder, name, &mut [left, right])
             }
             Simd(kind) if kind.is_float() => {
-                let name = Intrinsics::llvm_numeric("pow", kind, false); 
+                let name = Intrinsics::llvm_numeric("pow", kind, false);
                 let ret_ty = self.llvm_type(&Scalar(kind))?;
                 let mut arg_tys = [ret_ty, ret_ty];
                 self.intrinsics.add(&name, ret_ty, &mut arg_tys);
                 // Unroll vector and apply function to each element.
                 let mut result = LLVMGetUndef(LLVMVectorType(ret_ty, LLVM_VECTOR_WIDTH));
                 for i in 0..LLVM_VECTOR_WIDTH {
-                    let base = LLVMBuildExtractElement(ctx.builder, left, self.i32(i as i32), c_str!(""));
-                    let power = LLVMBuildExtractElement(ctx.builder, right, self.i32(i as i32), c_str!(""));
-                    let value = self.intrinsics.call(ctx.builder, &name, &mut [base, power])?;
-                    result = LLVMBuildInsertElement(ctx.builder, result, value, self.i32(i as i32), c_str!(""));
+                    let base =
+                        LLVMBuildExtractElement(ctx.builder, left, self.i32(i as i32), c_str!(""));
+                    let power =
+                        LLVMBuildExtractElement(ctx.builder, right, self.i32(i as i32), c_str!(""));
+                    let value = self
+                        .intrinsics
+                        .call(ctx.builder, &name, &mut [base, power])?;
+                    result = LLVMBuildInsertElement(
+                        ctx.builder,
+                        result,
+                        value,
+                        self.i32(i as i32),
+                        c_str!(""),
+                    );
                 }
                 Ok(result)
             }
@@ -94,29 +130,33 @@ impl NumericExpressionGenInternal for LlvmGenerator {
 }
 
 trait UnaryOpSupport {
-    /// Returns the intrinsic name for a unary op. 
+    /// Returns the intrinsic name for a unary op.
     fn llvm_intrinsic(&self) -> Option<&'static str>;
 }
 
 impl UnaryOpSupport for UnaryOpKind {
     fn llvm_intrinsic(&self) -> Option<&'static str> {
-        use ast::UnaryOpKind::*;
+        use crate::ast::UnaryOpKind::*;
         match *self {
             Exp => Some("exp"),
             Log => Some("log"),
             Sqrt => Some("sqrt"),
             Sin => Some("sin"),
             Cos => Some("cos"),
-            _ => None
+            _ => None,
         }
     }
 }
 
 impl NumericExpressionGen for LlvmGenerator {
-    unsafe fn gen_unaryop(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()> {
-        use ast::Type::{Scalar, Simd};
+    unsafe fn gen_unaryop(
+        &mut self,
+        ctx: &mut FunctionContext<'_>,
+        statement: &Statement,
+    ) -> WeldResult<()> {
         use self::UnaryOpSupport;
-        use sir::StatementKind::UnaryOp;
+        use crate::ast::Type::{Scalar, Simd};
+        use crate::sir::StatementKind::UnaryOp;
         if let UnaryOp { op, ref child } = statement.kind {
             let ty = ctx.sir_function.symbol_type(child)?;
             let (kind, simd) = match *ty {
@@ -129,14 +169,14 @@ impl NumericExpressionGen for LlvmGenerator {
             // Use the LLVM intrinsic if one is available, since LLVM may be able to vectorize it.
             // Otherwise, fall back to the libc math variant and unroll SIMD values manually.
             let result = if let Some(name) = op.llvm_intrinsic() {
-                let name = Intrinsics::llvm_numeric(name, kind, simd); 
+                let name = Intrinsics::llvm_numeric(name, kind, simd);
                 let ret_ty = LLVMTypeOf(child);
                 let mut arg_tys = [ret_ty];
                 self.intrinsics.add(&name, ret_ty, &mut arg_tys);
                 self.intrinsics.call(ctx.builder, name, &mut [child])?
             } else {
-                use ast::UnaryOpKind::*;
-                use ast::ScalarKind::{F32, F64};
+                use crate::ast::ScalarKind::{F32, F64};
+                use crate::ast::UnaryOpKind::*;
                 let name = match (op, kind) {
                     (Tan, F32) => "tanf",
                     (ASin, F32) => "asinf",
@@ -166,9 +206,20 @@ impl NumericExpressionGen for LlvmGenerator {
                 } else {
                     let mut result = LLVMGetUndef(LLVMVectorType(ret_ty, LLVM_VECTOR_WIDTH));
                     for i in 0..LLVM_VECTOR_WIDTH {
-                        let element = LLVMBuildExtractElement(ctx.builder, child, self.i32(i as i32), c_str!(""));
+                        let element = LLVMBuildExtractElement(
+                            ctx.builder,
+                            child,
+                            self.i32(i as i32),
+                            c_str!(""),
+                        );
                         let value = self.intrinsics.call(ctx.builder, &name, &mut [element])?;
-                        result = LLVMBuildInsertElement(ctx.builder, result, value, self.i32(i as i32), c_str!(""));
+                        result = LLVMBuildInsertElement(
+                            ctx.builder,
+                            result,
+                            value,
+                            self.i32(i as i32),
+                            c_str!(""),
+                        );
                     }
                     result
                 }
@@ -181,13 +232,17 @@ impl NumericExpressionGen for LlvmGenerator {
         }
     }
 
-    unsafe fn gen_not(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()> {
-        use sir::StatementKind::Not;
+    unsafe fn gen_not(
+        &mut self,
+        ctx: &mut FunctionContext<'_>,
+        statement: &Statement,
+    ) -> WeldResult<()> {
         use self::llvm_sys::LLVMIntPredicate::LLVMIntEQ;
+        use crate::sir::StatementKind::Not;
         if let Not(ref child) = statement.kind {
             let value = self.load(ctx.builder, ctx.get_value(child)?)?;
             let result = LLVMBuildICmp(ctx.builder, LLVMIntEQ, value, self.bool(false), c_str!(""));
-            let result =  self.i1_to_bool(ctx.builder, result);
+            let result = self.i1_to_bool(ctx.builder, result);
             let output = ctx.get_value(statement.output.as_ref().unwrap())?;
             let _ = LLVMBuildStore(ctx.builder, result, output);
             Ok(())
@@ -196,11 +251,15 @@ impl NumericExpressionGen for LlvmGenerator {
         }
     }
 
-    unsafe fn gen_negate(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()> {
-        use ast::BinOpKind::Subtract;
-        use ast::ScalarKind::{F32, F64};
-        use ast::Type::{Scalar, Simd};
-        use sir::StatementKind::Negate;
+    unsafe fn gen_negate(
+        &mut self,
+        ctx: &mut FunctionContext<'_>,
+        statement: &Statement,
+    ) -> WeldResult<()> {
+        use crate::ast::BinOpKind::Subtract;
+        use crate::ast::ScalarKind::{F32, F64};
+        use crate::ast::Type::{Scalar, Simd};
+        use crate::sir::StatementKind::Negate;
         if let Negate(ref child) = statement.kind {
             let ty = ctx.sir_function.symbol_type(child)?;
             let (kind, simd) = match *ty {
@@ -216,7 +275,10 @@ impl NumericExpressionGen for LlvmGenerator {
             };
 
             if simd {
-                zero = LLVMConstVector([zero; LLVM_VECTOR_WIDTH as usize].as_mut_ptr(), LLVM_VECTOR_WIDTH);
+                zero = LLVMConstVector(
+                    [zero; LLVM_VECTOR_WIDTH as usize].as_mut_ptr(),
+                    LLVM_VECTOR_WIDTH,
+                );
             }
 
             let child = self.load(ctx.builder, ctx.get_value(child)?)?;
@@ -229,14 +291,23 @@ impl NumericExpressionGen for LlvmGenerator {
         }
     }
 
-    unsafe fn gen_binop(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()> {
-        use ast::BinOpKind;
-        use ast::Type::{Scalar, Simd, Vector, Struct};
-        use sir::StatementKind::BinOp;
-        if let BinOp { op, ref left, ref right } = statement.kind {
+    unsafe fn gen_binop(
+        &mut self,
+        ctx: &mut FunctionContext<'_>,
+        statement: &Statement,
+    ) -> WeldResult<()> {
+        use crate::ast::BinOpKind;
+        use crate::ast::Type::{Scalar, Simd, Struct, Vector};
+        use crate::sir::StatementKind::BinOp;
+        if let BinOp {
+            op,
+            ref left,
+            ref right,
+        } = statement.kind
+        {
             let ty = ctx.sir_function.symbol_type(left)?;
-            let result = match ty {
-                &Scalar(_) | &Simd(_) => { 
+            let result = match *ty {
+                Scalar(_) | Simd(_) => {
                     let llvm_left = self.load(ctx.builder, ctx.get_value(left)?)?;
                     let llvm_right = self.load(ctx.builder, ctx.get_value(right)?)?;
                     let result = match op {
@@ -251,54 +322,82 @@ impl NumericExpressionGen for LlvmGenerator {
                         result
                     }
                 }
-                &Vector(_) | &Struct(_) if op.is_comparison() => {
+                Vector(_) | Struct(_) if op.is_comparison() => {
                     // Note that we assume structs being compared have the same type.
                     let result = match op {
                         BinOpKind::Equal | BinOpKind::NotEqual => {
                             use super::eq::GenEq;
                             let func = self.gen_eq_fn(ty)?;
                             let mut args = [ctx.get_value(left)?, ctx.get_value(right)?];
-                            let equal = LLVMBuildCall(ctx.builder, func, args.as_mut_ptr(), args.len() as u32, c_str!(""));
+                            let equal = LLVMBuildCall(
+                                ctx.builder,
+                                func,
+                                args.as_mut_ptr(),
+                                args.len() as u32,
+                                c_str!(""),
+                            );
                             if op == BinOpKind::Equal {
                                 equal
                             } else {
                                 LLVMBuildNot(ctx.builder, equal, c_str!(""))
                             }
-                        },
+                        }
                         BinOpKind::LessThan | BinOpKind::GreaterThanOrEqual => {
                             use super::cmp::GenCmp;
                             let func = self.gen_cmp_fn(ty)?;
                             let mut args = [ctx.get_value(left)?, ctx.get_value(right)?];
-                            let cmp = LLVMBuildCall(ctx.builder, func, args.as_mut_ptr(), args.len() as u32, c_str!(""));
-                            let lt = LLVMBuildICmp(ctx.builder, LLVMIntSLT, cmp,
-                                                   self.i32(0), c_str!(""));
-                            
+                            let cmp = LLVMBuildCall(
+                                ctx.builder,
+                                func,
+                                args.as_mut_ptr(),
+                                args.len() as u32,
+                                c_str!(""),
+                            );
+                            let lt = LLVMBuildICmp(
+                                ctx.builder,
+                                LLVMIntSLT,
+                                cmp,
+                                self.i32(0),
+                                c_str!(""),
+                            );
+
                             if op == BinOpKind::LessThan {
                                 lt
                             } else {
                                 LLVMBuildNot(ctx.builder, lt, c_str!(""))
                             }
-                        }, 
+                        }
                         BinOpKind::GreaterThan | BinOpKind::LessThanOrEqual => {
                             use super::cmp::GenCmp;
                             let func = self.gen_cmp_fn(ty)?;
                             let mut args = [ctx.get_value(left)?, ctx.get_value(right)?];
-                            let cmp = LLVMBuildCall(ctx.builder, func, args.as_mut_ptr(), args.len() as u32, c_str!(""));
-                            let gt = LLVMBuildICmp(ctx.builder, LLVMIntSGT, cmp,
-                                                   self.i32(0), c_str!(""));
-                            
+                            let cmp = LLVMBuildCall(
+                                ctx.builder,
+                                func,
+                                args.as_mut_ptr(),
+                                args.len() as u32,
+                                c_str!(""),
+                            );
+                            let gt = LLVMBuildICmp(
+                                ctx.builder,
+                                LLVMIntSGT,
+                                cmp,
+                                self.i32(0),
+                                c_str!(""),
+                            );
+
                             if op == BinOpKind::GreaterThan {
                                 gt
                             } else {
                                 LLVMBuildNot(ctx.builder, gt, c_str!(""))
                             }
-                        }, 
+                        }
                         _ => unreachable!(),
                     };
 
                     // Extend the `i1` result to a boolean.
                     self.i1_to_bool(ctx.builder, result)
-                },
+                }
                 // Invalid binary operator.
                 _ => unreachable!(),
             };
@@ -310,8 +409,12 @@ impl NumericExpressionGen for LlvmGenerator {
         }
     }
 
-    unsafe fn gen_assign_literal(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()> {
-        use sir::StatementKind::AssignLiteral;
+    unsafe fn gen_assign_literal(
+        &mut self,
+        ctx: &mut FunctionContext<'_>,
+        statement: &Statement,
+    ) -> WeldResult<()> {
+        use crate::sir::StatementKind::AssignLiteral;
         if let AssignLiteral(ref value) = statement.kind {
             let output = statement.output.as_ref().unwrap();
             let output_type = ctx.sir_function.symbol_type(output)?;
@@ -321,13 +424,16 @@ impl NumericExpressionGen for LlvmGenerator {
                 let len = (c_str.to_bytes().len() + 1) as i64;
                 let string = self.gen_global_string(ctx.builder, c_str);
                 let pointer = LLVMConstBitCast(string, LLVMPointerType(self.i8_type(), 0));
-                let methods = self.vectors.get(&Type::Scalar(ScalarKind::I8)).unwrap();
+                let methods = &self.vectors[&Type::Scalar(ScalarKind::I8)];
                 methods.const_literal_from_parts(pointer, self.i64(len))
             } else {
                 self.scalar_literal(value)
             };
             if let Type::Simd(_) = output_type {
-                result = LLVMConstVector([result; LLVM_VECTOR_WIDTH as usize].as_mut_ptr(), LLVM_VECTOR_WIDTH)
+                result = LLVMConstVector(
+                    [result; LLVM_VECTOR_WIDTH as usize].as_mut_ptr(),
+                    LLVM_VECTOR_WIDTH,
+                )
             }
             let pointer = ctx.get_value(output)?;
             let _ = LLVMBuildStore(ctx.builder, result, pointer);
@@ -337,15 +443,25 @@ impl NumericExpressionGen for LlvmGenerator {
         }
     }
 
-    unsafe fn gen_cast(&mut self, ctx: &mut FunctionContext, statement: &Statement) -> WeldResult<()> {
-        use sir::StatementKind::Cast;
-        let ref output = statement.output.clone().unwrap();
+    unsafe fn gen_cast(
+        &mut self,
+        ctx: &mut FunctionContext<'_>,
+        statement: &Statement,
+    ) -> WeldResult<()> {
+        use crate::sir::StatementKind::Cast;
+        let output = &statement.output.clone().unwrap();
         let output_pointer = ctx.get_value(output)?;
         let output_type = ctx.sir_function.symbol_type(output)?;
         if let Cast(ref child, _) = statement.kind {
             let child_type = ctx.sir_function.symbol_type(child)?;
             let child_value = self.load(ctx.builder, ctx.get_value(child)?)?;
-            let result = gen_cast(ctx.builder, child_value, child_type, output_type, self.llvm_type(output_type)?)?;
+            let result = gen_cast(
+                ctx.builder,
+                child_value,
+                child_type,
+                output_type,
+                self.llvm_type(output_type)?,
+            )?;
             let _ = LLVMBuildStore(ctx.builder, result, output_pointer);
             Ok(())
         } else {
@@ -355,13 +471,15 @@ impl NumericExpressionGen for LlvmGenerator {
 }
 
 /// Workhorse for generating casts.
-pub unsafe fn gen_cast(builder: LLVMBuilderRef,
-                   value: LLVMValueRef,
-                   from: &Type,
-                   to: &Type,
-                   to_ll: LLVMTypeRef) -> WeldResult<LLVMValueRef> {
-    use ast::Type::Scalar;
-    use ast::ScalarKind::*;
+pub unsafe fn gen_cast(
+    builder: LLVMBuilderRef,
+    value: LLVMValueRef,
+    from: &Type,
+    to: &Type,
+    to_ll: LLVMTypeRef,
+) -> WeldResult<LLVMValueRef> {
+    use crate::ast::ScalarKind::*;
+    use crate::ast::Type::Scalar;
     let result = match (from, to) {
         (&Scalar(s1), &Scalar(s2)) => {
             match (s1, s2) {
@@ -391,7 +509,9 @@ pub unsafe fn gen_cast(builder: LLVMBuilderRef,
 
                 // Boolean to other integers. Since booleans are i8s, we either zero-extend them if
                 // the target type is larger, or simply return the same type otherwise.
-                (Bool, _) if s2.is_integer() && s2.bits() > 8 => LLVMBuildZExt(builder, value, to_ll, c_str!("")),
+                (Bool, _) if s2.is_integer() && s2.bits() > 8 => {
+                    LLVMBuildZExt(builder, value, to_ll, c_str!(""))
+                }
                 (Bool, _) if s2.is_integer() => value,
 
                 // Zero-extension.
@@ -405,19 +525,19 @@ pub unsafe fn gen_cast(builder: LLVMBuilderRef,
                 }
 
                 // Truncation
-                (_, _) if s2.bits() < s1.bits() => LLVMBuildTrunc(builder, value, to_ll, c_str!("")),
+                (_, _) if s2.bits() < s1.bits() => {
+                    LLVMBuildTrunc(builder, value, to_ll, c_str!(""))
+                }
 
                 // Bitcast
-                (_, _) if s2.bits() == s1.bits() => LLVMBuildBitCast(builder, value, to_ll, c_str!("")),
+                (_, _) if s2.bits() == s1.bits() => {
+                    LLVMBuildBitCast(builder, value, to_ll, c_str!(""))
+                }
 
-                 _ => {
-                     return compile_err!("Cannot cast {} to {}", from, to)
-                 }
+                _ => return compile_err!("Cannot cast {} to {}", from, to),
             }
         }
-        _ => {
-            return compile_err!("Cannot cast {} to {}", from, to)
-        }
+        _ => return compile_err!("Cannot cast {} to {}", from, to),
     };
     Ok(result)
 }
@@ -430,79 +550,104 @@ pub unsafe fn gen_cast(builder: LLVMBuilderRef,
 ///
 /// If `op.is_comparison()` is true, this function returns a value with type `i1`. Otherwise, this
 /// function returns a value of type `LLVMTypeOf(left)`.
-pub unsafe fn gen_binop(builder: LLVMBuilderRef,
-             op: BinOpKind,
-             left: LLVMValueRef,
-             right: LLVMValueRef, ty: &Type) -> WeldResult<LLVMValueRef> {
-    use ast::Type::*;
-    use ast::BinOpKind::*;
+pub unsafe fn gen_binop(
+    builder: LLVMBuilderRef,
+    op: BinOpKind,
+    left: LLVMValueRef,
+    right: LLVMValueRef,
+    ty: &Type,
+) -> WeldResult<LLVMValueRef> {
     use self::llvm_sys::LLVMIntPredicate::*;
     use self::llvm_sys::LLVMRealPredicate::*;
+    use crate::ast::BinOpKind::*;
+    use crate::ast::Type::*;
     let name = c_str!("");
-    let result = match ty {
-        &Scalar(s) | &Simd(s) => {
-            match op {
-                Add if s.is_integer() => LLVMBuildAdd(builder, left, right, name),
-                Add if s.is_float() => LLVMBuildFAdd(builder, left, right, name),
+    let result = match *ty {
+        Scalar(s) | Simd(s) => match op {
+            Add if s.is_integer() => LLVMBuildAdd(builder, left, right, name),
+            Add if s.is_float() => LLVMBuildFAdd(builder, left, right, name),
 
-                Subtract if s.is_integer() => LLVMBuildSub(builder, left, right, name),
-                Subtract if s.is_float() => LLVMBuildFSub(builder, left, right, name),
+            Subtract if s.is_integer() => LLVMBuildSub(builder, left, right, name),
+            Subtract if s.is_float() => LLVMBuildFSub(builder, left, right, name),
 
-                Multiply if s.is_integer() => LLVMBuildMul(builder, left, right, name),
-                Multiply if s.is_float() => LLVMBuildFMul(builder, left, right, name),
+            Multiply if s.is_integer() => LLVMBuildMul(builder, left, right, name),
+            Multiply if s.is_float() => LLVMBuildFMul(builder, left, right, name),
 
-                Divide if s.is_signed_integer() => LLVMBuildSDiv(builder, left, right, name),
-                Divide if s.is_unsigned_integer() => LLVMBuildUDiv(builder, left, right, name),
-                Divide if s.is_float() => LLVMBuildFDiv(builder, left, right, name),
+            Divide if s.is_signed_integer() => LLVMBuildSDiv(builder, left, right, name),
+            Divide if s.is_unsigned_integer() => LLVMBuildUDiv(builder, left, right, name),
+            Divide if s.is_float() => LLVMBuildFDiv(builder, left, right, name),
 
-                Modulo if s.is_signed_integer() => LLVMBuildSRem(builder, left, right, name),
-                Modulo if s.is_unsigned_integer() => LLVMBuildURem(builder, left, right, name),
-                Modulo if s.is_float() => LLVMBuildFRem(builder, left, right, name),
+            Modulo if s.is_signed_integer() => LLVMBuildSRem(builder, left, right, name),
+            Modulo if s.is_unsigned_integer() => LLVMBuildURem(builder, left, right, name),
+            Modulo if s.is_float() => LLVMBuildFRem(builder, left, right, name),
 
-                Equal if s.is_integer() || s.is_bool() => LLVMBuildICmp(builder, LLVMIntEQ, left, right, name),
-                Equal if s.is_float() => LLVMBuildFCmp(builder, LLVMRealOEQ, left, right, name),
-
-                NotEqual if s.is_integer() || s.is_bool() => LLVMBuildICmp(builder, LLVMIntNE, left, right, name),
-                NotEqual if s.is_float() => LLVMBuildFCmp(builder, LLVMRealONE, left, right, name),
-
-                LessThan if s.is_signed_integer() => LLVMBuildICmp(builder, LLVMIntSLT, left, right, name),
-                LessThan if s.is_unsigned_integer() => LLVMBuildICmp(builder, LLVMIntULT, left, right, name),
-                LessThan if s.is_float() => LLVMBuildFCmp(builder, LLVMRealOLT, left, right, name),
-
-                LessThanOrEqual if s.is_signed_integer() => LLVMBuildICmp(builder, LLVMIntSLE, left, right, name),
-                LessThanOrEqual if s.is_unsigned_integer() => LLVMBuildICmp(builder, LLVMIntULE, left, right, name),
-                LessThanOrEqual if s.is_float() => LLVMBuildFCmp(builder, LLVMRealOLE, left, right, name),
-
-                GreaterThan if s.is_signed_integer() => LLVMBuildICmp(builder, LLVMIntSGT, left, right, name),
-                GreaterThan if s.is_unsigned_integer() => LLVMBuildICmp(builder, LLVMIntUGT, left, right, name),
-                GreaterThan if s.is_float() => LLVMBuildFCmp(builder, LLVMRealOGT, left, right, name),
-
-                GreaterThanOrEqual if s.is_signed_integer() => LLVMBuildICmp(builder, LLVMIntSGE, left, right, name),
-                GreaterThanOrEqual if s.is_unsigned_integer() => LLVMBuildICmp(builder, LLVMIntUGE, left, right, name),
-                GreaterThanOrEqual if s.is_float() => LLVMBuildFCmp(builder, LLVMRealOGE, left, right, name),
-
-                LogicalAnd if s.is_bool() => LLVMBuildAnd(builder, left, right, name),
-                BitwiseAnd if s.is_integer() || s.is_bool() =>LLVMBuildAnd(builder, left, right, name),
-
-                LogicalOr if s.is_bool() => LLVMBuildOr(builder, left, right, name),
-                BitwiseOr if s.is_integer() || s.is_bool() => LLVMBuildOr(builder, left, right, name),
-
-                Xor if s.is_integer() || s.is_bool() => LLVMBuildXor(builder, left, right, name),
-
-                Max => {
-                    let compare = gen_binop(builder, GreaterThanOrEqual, left, right, ty)?;
-                    LLVMBuildSelect(builder, compare, left, right, c_str!(""))
-                }
-
-                Min => {
-                    let compare = gen_binop(builder, LessThanOrEqual, left, right, ty)?;
-                    LLVMBuildSelect(builder, compare, left, right, c_str!(""))
-                }
-
-                _ => return compile_err!("Unsupported binary op: {} on {}", op, ty)
+            Equal if s.is_integer() || s.is_bool() => {
+                LLVMBuildICmp(builder, LLVMIntEQ, left, right, name)
             }
-        }
-        _ => return compile_err!("Unsupported binary op: {} on {}", op, ty)
+            Equal if s.is_float() => LLVMBuildFCmp(builder, LLVMRealOEQ, left, right, name),
+
+            NotEqual if s.is_integer() || s.is_bool() => {
+                LLVMBuildICmp(builder, LLVMIntNE, left, right, name)
+            }
+            NotEqual if s.is_float() => LLVMBuildFCmp(builder, LLVMRealONE, left, right, name),
+
+            LessThan if s.is_signed_integer() => {
+                LLVMBuildICmp(builder, LLVMIntSLT, left, right, name)
+            }
+            LessThan if s.is_unsigned_integer() => {
+                LLVMBuildICmp(builder, LLVMIntULT, left, right, name)
+            }
+            LessThan if s.is_float() => LLVMBuildFCmp(builder, LLVMRealOLT, left, right, name),
+
+            LessThanOrEqual if s.is_signed_integer() => {
+                LLVMBuildICmp(builder, LLVMIntSLE, left, right, name)
+            }
+            LessThanOrEqual if s.is_unsigned_integer() => {
+                LLVMBuildICmp(builder, LLVMIntULE, left, right, name)
+            }
+            LessThanOrEqual if s.is_float() => {
+                LLVMBuildFCmp(builder, LLVMRealOLE, left, right, name)
+            }
+
+            GreaterThan if s.is_signed_integer() => {
+                LLVMBuildICmp(builder, LLVMIntSGT, left, right, name)
+            }
+            GreaterThan if s.is_unsigned_integer() => {
+                LLVMBuildICmp(builder, LLVMIntUGT, left, right, name)
+            }
+            GreaterThan if s.is_float() => LLVMBuildFCmp(builder, LLVMRealOGT, left, right, name),
+
+            GreaterThanOrEqual if s.is_signed_integer() => {
+                LLVMBuildICmp(builder, LLVMIntSGE, left, right, name)
+            }
+            GreaterThanOrEqual if s.is_unsigned_integer() => {
+                LLVMBuildICmp(builder, LLVMIntUGE, left, right, name)
+            }
+            GreaterThanOrEqual if s.is_float() => {
+                LLVMBuildFCmp(builder, LLVMRealOGE, left, right, name)
+            }
+
+            LogicalAnd if s.is_bool() => LLVMBuildAnd(builder, left, right, name),
+            BitwiseAnd if s.is_integer() || s.is_bool() => LLVMBuildAnd(builder, left, right, name),
+
+            LogicalOr if s.is_bool() => LLVMBuildOr(builder, left, right, name),
+            BitwiseOr if s.is_integer() || s.is_bool() => LLVMBuildOr(builder, left, right, name),
+
+            Xor if s.is_integer() || s.is_bool() => LLVMBuildXor(builder, left, right, name),
+
+            Max => {
+                let compare = gen_binop(builder, GreaterThanOrEqual, left, right, ty)?;
+                LLVMBuildSelect(builder, compare, left, right, c_str!(""))
+            }
+
+            Min => {
+                let compare = gen_binop(builder, LessThanOrEqual, left, right, ty)?;
+                LLVMBuildSelect(builder, compare, left, right, c_str!(""))
+            }
+
+            _ => return compile_err!("Unsupported binary op: {} on {}", op, ty),
+        },
+        _ => return compile_err!("Unsupported binary op: {} on {}", op, ty),
     };
     Ok(result)
 }

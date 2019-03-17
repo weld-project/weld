@@ -1,10 +1,10 @@
 //! Tests related to Weld's SIMD vectorizer transformation.
 
-extern crate weld;
+use weld;
 use weld::WeldValue;
 
 mod common;
-use common::*;
+use crate::common::*;
 
 #[test]
 fn simple_for_vectorizable_loop() {
@@ -26,7 +26,6 @@ fn simple_for_vectorizable_loop() {
     let result = unsafe { (*data).clone() };
     let output = size * 3;
     assert_eq!(result, output);
-
 }
 
 #[test]
@@ -59,7 +58,6 @@ fn fringed_for_vectorizable_loop() {
     let result = unsafe { (*data).clone() };
     let output = size * 3;
     assert_eq!(result, output);
-
 }
 
 #[test]
@@ -93,7 +91,6 @@ fn fringed_for_vectorizable_loop_with_par() {
     let result = unsafe { (*data).clone() };
     let output = size * 3;
     assert_eq!(result, output);
-
 }
 
 #[test]
@@ -128,14 +125,12 @@ fn for_predicated_vectorizable_loop() {
     let result = unsafe { (*data).clone() };
     let output = size;
     assert_eq!(result, output);
-
 }
 
 fn check_result_and_free(ret_value: WeldValue, expected: i32) {
     let data = ret_value.data() as *const i32;
     let result = unsafe { (*data).clone() };
     assert_eq!(result, expected);
-
 }
 
 #[test]
