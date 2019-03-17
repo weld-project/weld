@@ -18,7 +18,7 @@ before_install:
 - echo "deb http://ppa.launchpad.net/ubuntu-toolchain-r/test/ubuntu trusty main" | sudo tee -a /etc/apt/sources.list >/dev/null
 install:
 - (cargo install rustfmt || true)
-- (cargo install clippy || true)
+- rustup component add clippy
 - sudo rm -f `which llvm-config`
 - export WELD_HOME=`pwd`
 - sudo -E apt-get -yq update &>> ~/apt-get-update.log
