@@ -3,45 +3,53 @@
 //! Weld is designed to be parseable in one left-to-right pass through the input, without
 //! backtracking, so we simply track a position as we go and keep incrementing it.
 
-use std::vec::Vec;
 use std::cmp::min;
+use std::vec::Vec;
 
-use ast::*;
-use ast::Type::*;
-use ast::BinOpKind::*;
-use ast::UnaryOpKind::*;
-use ast::ExprKind::*;
-use ast::LiteralKind::*;
-use ast::BuilderKind::*;
-use ast::IterKind::*;
-use util::colors::*;
-use error::*;
+use crate::ast::BinOpKind::*;
+use crate::ast::BuilderKind::*;
+use crate::ast::ExprKind::*;
+use crate::ast::IterKind::*;
+use crate::ast::LiteralKind::*;
+use crate::ast::Type::*;
+use crate::ast::UnaryOpKind::*;
+use crate::ast::*;
+use crate::error::*;
+use crate::util::colors::*;
 
 use super::program::*;
-use super::tokenizer::*;
 use super::tokenizer::Token::*;
+use super::tokenizer::*;
 
 use std::error::Error;
 
 #[cfg(test)]
-use tests::{print_expr_without_indent, print_typed_expr_without_indent};
+use crate::tests::{print_expr_without_indent, print_typed_expr_without_indent};
 
 /// Returns a formatted parse error if the parse failed, or returns the `res`.
 macro_rules! check_parse_error {
-    ($parser:expr, $res:expr) => ({
+    ($parser:expr, $res:expr) => {{
         if $res.is_ok() && !$parser.is_done() {
-            return compile_err!("Unexpected token {} at {}", $parser.peek(), $parser.error_context());
+            return compile_err!(
+                "Unexpected token {} at {}",
+                $parser.peek(),
+                $parser.error_context()
+            );
         } else if $res.is_err() {
-            return compile_err!("{} (at {})", $res.unwrap_err().description(), $parser.error_context());
+            return compile_err!(
+                "{} (at {})",
+                $res.unwrap_err().description(),
+                $parser.error_context()
+            );
         } else {
             $res
         }
-    })
+    }};
 }
 
 /// Parse the complete input string as a Weld program (optional macros plus one expression).
 pub fn parse_program(input: &str) -> WeldResult<Program> {
-    let tokens = try!(tokenize(input));
+    let tokens = tokenize(input)?;
     let mut parser = Parser::new(&tokens);
     let res = parser.program();
 
@@ -50,7 +58,7 @@ pub fn parse_program(input: &str) -> WeldResult<Program> {
 
 /// Parse the complete input string as a list of macros.
 pub fn parse_macros(input: &str) -> WeldResult<Vec<Macro>> {
-    let tokens = try!(tokenize(input));
+    let tokens = tokenize(input)?;
     let mut parser = Parser::new(&tokens);
     let res = parser.macros();
 
@@ -59,7 +67,7 @@ pub fn parse_macros(input: &str) -> WeldResult<Vec<Macro>> {
 
 /// Parse the complete input string as a list of type aliases.
 pub fn parse_type_aliases(input: &str) -> WeldResult<Vec<TypeAlias>> {
-    let tokens = try!(tokenize(input));
+    let tokens = tokenize(input)?;
     let mut parser = Parser::new(&tokens);
     let res = parser.type_aliases();
 
@@ -68,7 +76,7 @@ pub fn parse_type_aliases(input: &str) -> WeldResult<Vec<TypeAlias>> {
 
 /// Parse the complete input string as an expression.
 pub fn parse_expr(input: &str) -> WeldResult<Expr> {
-    let tokens = try!(tokenize(input));
+    let tokens = tokenize(input)?;
     let mut parser = Parser::new(&tokens);
     let res = parser.expr().map(|b| *b);
 
@@ -77,7 +85,7 @@ pub fn parse_expr(input: &str) -> WeldResult<Expr> {
 
 /// Parse the complete input string as a Type.
 pub fn parse_type(input: &str) -> WeldResult<Type> {
-    let tokens = try!(tokenize(input));
+    let tokens = tokenize(input)?;
     let mut parser = Parser::new(&tokens);
     let res = parser.type_();
 
@@ -92,9 +100,9 @@ struct Parser<'t> {
 }
 
 impl<'t> Parser<'t> {
-    fn new(tokens: &[Token]) -> Parser {
+    fn new(tokens: &[Token]) -> Parser<'_> {
         Parser {
-            tokens: tokens,
+            tokens,
             position: 0,
         }
     }
@@ -115,18 +123,21 @@ impl<'t> Parser<'t> {
             self.position
         };
 
-        for i in (self.position - context_length)..min(self.position + context_length, self.tokens.len()-1) {
+        for i in (self.position - context_length)
+            ..min(self.position + context_length, self.tokens.len() - 1)
+        {
             let token_str = format!("{}", &self.tokens[i]);
-            if i == self.position { 
+            if i == self.position {
                 string.push_str(format_color(Color::BoldRed, token_str.as_str()).as_str());
             } else {
-                string.push_str(format!("{}", token_str.as_str()).as_str());
+                string.push_str(&token_str);
             }
 
-            if i != self.position - 1 && self.tokens[i+1].requires_space() {
-                if self.tokens[i].requires_space() {
-                    string.push_str(" ");
-                }
+            if i != self.position - 1
+                && self.tokens[i + 1].requires_space()
+                && self.tokens[i].requires_space()
+            {
+                string.push_str(" ");
             }
         }
 
@@ -160,60 +171,58 @@ impl<'t> Parser<'t> {
 
     /// Parse a program (optional type aliases + optional macros + one body expression) starting at the current position.
     fn program(&mut self) -> WeldResult<Program> {
-        let type_aliases = try!(self.type_aliases());
-        let macros = try!(self.macros());
-        let body = try!(self.expr());
+        let type_aliases = self.type_aliases()?;
+        let macros = self.macros()?;
+        let body = self.expr()?;
         Ok(Program {
-               macros: macros,
-               type_aliases: type_aliases,
-               body: *body,
-           })
+            macros,
+            type_aliases,
+            body: *body,
+        })
     }
 
     /// Parse a list of macros starting at the current position.
     fn macros(&mut self) -> WeldResult<Vec<Macro>> {
         let mut res: Vec<Macro> = Vec::new();
         while *self.peek() == TMacro {
-            res.push(try!(self.macro_()));
+            res.push(self.macro_()?);
         }
         Ok(res)
     }
 
-
     /// Parse a single macro starting at the current position.
     fn macro_(&mut self) -> WeldResult<Macro> {
-        try!(self.consume(TMacro));
-        let name = try!(self.symbol());
+        self.consume(TMacro)?;
+        let name = self.symbol()?;
         let mut params: Vec<Symbol> = Vec::new();
-        try!(self.consume(TOpenParen));
+        self.consume(TOpenParen)?;
         while *self.peek() != TCloseParen {
-            params.push(try!(self.symbol()));
+            params.push(self.symbol()?);
             if *self.peek() == TComma {
                 self.next();
             } else if *self.peek() != TCloseParen {
                 return compile_err!("Expected ',' or ')'");
             }
         }
-        try!(self.consume(TCloseParen));
-        try!(self.consume(TEqual));
-        let body = try!(self.expr());
-        try!(self.consume(TSemicolon));
+        self.consume(TCloseParen)?;
+        self.consume(TEqual)?;
+        let body = self.expr()?;
+        self.consume(TSemicolon)?;
         Ok(Macro {
-               name: name,
-               parameters: params,
-               body: *body,
-           })
+            name,
+            parameters: params,
+            body: *body,
+        })
     }
 
     /// Parse a list of type aliases starting at the current position.
     fn type_aliases(&mut self) -> WeldResult<Vec<TypeAlias>> {
         let mut res: Vec<TypeAlias> = Vec::new();
         while *self.peek() == TType {
-            res.push(try!(self.type_alias_()));
+            res.push(self.type_alias_()?);
         }
         Ok(res)
     }
-
 
     /// Parse a single macro starting at the current position.
     fn type_alias_(&mut self) -> WeldResult<TypeAlias> {
@@ -223,9 +232,9 @@ impl<'t> Parser<'t> {
         let ty = self.type_()?;
         self.consume(TSemicolon)?;
         Ok(TypeAlias {
-               name: name.to_string(),
-               ty: ty,
-           })
+            name: name.to_string(),
+            ty,
+        })
     }
 
     /// Parse an expression starting at the current position.
@@ -241,11 +250,11 @@ impl<'t> Parser<'t> {
 
     /// Parse 'let name = value; body' starting at the current position.
     fn let_expr(&mut self) -> WeldResult<Box<Expr>> {
-        try!(self.consume(TLet));
-        let name = try!(self.symbol());
-        let ty = try!(self.optional_type());
-        try!(self.consume(TEqual));
-        let mut value = try!(self.operator_expr());
+        self.consume(TLet)?;
+        let name = self.symbol()?;
+        let ty = self.optional_type()?;
+        self.consume(TEqual)?;
+        let mut value = self.operator_expr()?;
 
         // If a type was found, assign it (even if the value already has a known type).
         // Type inference will catch any type mismatches later on.
@@ -253,14 +262,9 @@ impl<'t> Parser<'t> {
             value.ty = ty;
         }
 
-        try!(self.consume(TSemicolon));
-        let body = try!(self.expr());
-        let expr = expr_box(Let {
-                                    name: name,
-                                    value: value,
-                                    body: body,
-                                },
-                                Annotations::new());
+        self.consume(TSemicolon)?;
+        let body = self.expr()?;
+        let expr = expr_box(Let { name, value, body }, Annotations::new());
         Ok(expr)
     }
 
@@ -271,25 +275,21 @@ impl<'t> Parser<'t> {
         let token = self.next();
         if *token == TBar {
             while *self.peek() != TBar {
-                let name = try!(self.symbol());
-                let ty = try!(self.optional_type());
-                params.push(Parameter { name: name, ty: ty });
+                let name = self.symbol()?;
+                let ty = self.optional_type()?;
+                params.push(Parameter { name, ty });
                 if *self.peek() == TComma {
                     self.next();
                 } else if *self.peek() != TBar {
                     return compile_err!("Expected ',' or '|'");
                 }
             }
-            try!(self.consume(TBar));
+            self.consume(TBar)?;
         } else if *token != TLogicalOr {
             return compile_err!("Expected '|' or '||'");
         }
-        let body = try!(self.expr());
-        Ok(expr_box(Lambda {
-                        params: params,
-                        body: body,
-                    },
-                    Annotations::new()))
+        let body = self.expr()?;
+        Ok(expr_box(Lambda { params, body }, Annotations::new()))
     }
 
     /// Parse an expression involving operators (||, &&, +, -, etc down the precedence chain)
@@ -299,105 +299,119 @@ impl<'t> Parser<'t> {
 
     /// Parse a logical or expression with terms separated by || (for operator precedence).
     fn logical_or_expr(&mut self) -> WeldResult<Box<Expr>> {
-        let mut res = try!(self.logical_and_expr());
+        let mut res = self.logical_and_expr()?;
         while *self.peek() == TLogicalOr {
             self.consume(TLogicalOr)?;
-            let right = try!(self.logical_and_expr());
-            res = expr_box(BinOp {
-                               kind: LogicalOr,
-                               left: res,
-                               right: right,
-                           },
-                           Annotations::new())
+            let right = self.logical_and_expr()?;
+            res = expr_box(
+                BinOp {
+                    kind: LogicalOr,
+                    left: res,
+                    right,
+                },
+                Annotations::new(),
+            )
         }
         Ok(res)
     }
 
     /// Parse a logical and expression with terms separated by && (for operator precedence).
     fn logical_and_expr(&mut self) -> WeldResult<Box<Expr>> {
-        let mut res = try!(self.bitwise_or_expr());
+        let mut res = self.bitwise_or_expr()?;
         while *self.peek() == TLogicalAnd {
             self.consume(TLogicalAnd)?;
-            let right = try!(self.bitwise_or_expr());
-            res = expr_box(BinOp {
-                               kind: LogicalAnd,
-                               left: res,
-                               right: right,
-                           },
-                           Annotations::new())
+            let right = self.bitwise_or_expr()?;
+            res = expr_box(
+                BinOp {
+                    kind: LogicalAnd,
+                    left: res,
+                    right,
+                },
+                Annotations::new(),
+            )
         }
         Ok(res)
     }
 
     /// Parse a bitwise or expression with terms separated by | (for operator precedence).
     fn bitwise_or_expr(&mut self) -> WeldResult<Box<Expr>> {
-        let mut res = try!(self.xor_expr());
+        let mut res = self.xor_expr()?;
         while *self.peek() == TBar {
             self.consume(TBar)?;
-            let right = try!(self.xor_expr());
-            res = expr_box(BinOp {
-                               kind: BitwiseOr,
-                               left: res,
-                               right: right,
-                           },
-                           Annotations::new())
+            let right = self.xor_expr()?;
+            res = expr_box(
+                BinOp {
+                    kind: BitwiseOr,
+                    left: res,
+                    right,
+                },
+                Annotations::new(),
+            )
         }
         Ok(res)
     }
 
     /// Parse a bitwise or expression with terms separated by ^ (for operator precedence).
     fn xor_expr(&mut self) -> WeldResult<Box<Expr>> {
-        let mut res = try!(self.bitwise_and_expr());
+        let mut res = self.bitwise_and_expr()?;
         while *self.peek() == TXor {
             self.consume(TXor)?;
-            let right = try!(self.bitwise_and_expr());
-            res = expr_box(BinOp {
-                               kind: Xor,
-                               left: res,
-                               right: right,
-                           },
-                           Annotations::new())
+            let right = self.bitwise_and_expr()?;
+            res = expr_box(
+                BinOp {
+                    kind: Xor,
+                    left: res,
+                    right,
+                },
+                Annotations::new(),
+            )
         }
         Ok(res)
     }
 
     /// Parse a bitwise and expression with terms separated by & (for operator precedence).
     fn bitwise_and_expr(&mut self) -> WeldResult<Box<Expr>> {
-        let mut res = try!(self.equality_expr());
+        let mut res = self.equality_expr()?;
         while *self.peek() == TBitwiseAnd {
             self.consume(TBitwiseAnd)?;
-            let right = try!(self.equality_expr());
-            res = expr_box(BinOp {
-                               kind: BitwiseAnd,
-                               left: res,
-                               right: right,
-                           },
-                           Annotations::new())
+            let right = self.equality_expr()?;
+            res = expr_box(
+                BinOp {
+                    kind: BitwiseAnd,
+                    left: res,
+                    right,
+                },
+                Annotations::new(),
+            )
         }
         Ok(res)
     }
 
     /// Parse an == or != expression (for operator precedence).
     fn equality_expr(&mut self) -> WeldResult<Box<Expr>> {
-        let mut res = try!(self.comparison_expr());
+        let mut res = self.comparison_expr()?;
         // Unlike other expressions, we only allow one operator here; prevents stuff like a==b==c
         if *self.peek() == TEqualEqual || *self.peek() == TNotEqual {
             let token = self.next();
-            let right = try!(self.comparison_expr());
+            let right = self.comparison_expr()?;
             if *token == TEqualEqual {
-                res = expr_box(BinOp {
-                                   kind: Equal,
-                                   left: res,
-                                   right: right,
-                               },
-                               Annotations::new())
+                res = expr_box(
+                    BinOp {
+                        kind: Equal,
+                        left: res,
+                        right,
+                    },
+                    Annotations::new(),
+                )
             } else {
-                res = expr_box(BinOp {
-                                   kind: NotEqual,
-                                   left: res,
-                                   right: right,
-                               },
-                               Annotations::new())
+                res = expr_box(
+                    BinOp {
+                        kind: NotEqual,
+                        left: res,
+                        right,
+                    },
+                    Annotations::new(),
+                )
             }
         }
         Ok(res)
@@ -405,47 +419,56 @@ impl<'t> Parser<'t> {
 
     /// Parse a <, >, <= or >= expression (for operator precedence).
     fn comparison_expr(&mut self) -> WeldResult<Box<Expr>> {
-        let mut res = try!(self.sum_expr());
+        let mut res = self.sum_expr()?;
         // Unlike other expressions, we only allow one operator here; prevents stuff like a>b>c
-        if *self.peek() == TLessThan || *self.peek() == TLessThanOrEqual ||
-           *self.peek() == TGreaterThan || *self.peek() == TGreaterThanOrEqual {
+        if *self.peek() == TLessThan
+            || *self.peek() == TLessThanOrEqual
+            || *self.peek() == TGreaterThan
+            || *self.peek() == TGreaterThanOrEqual
+        {
             let op = match *self.next() {
                 TLessThan => LessThan,
                 TGreaterThan => GreaterThan,
                 TLessThanOrEqual => LessThanOrEqual,
                 _ => GreaterThanOrEqual,
             };
-            let right = try!(self.sum_expr());
-            res = expr_box(BinOp {
-                               kind: op,
-                               left: res,
-                               right: right,
-                           },
-                           Annotations::new())
+            let right = self.sum_expr()?;
+            res = expr_box(
+                BinOp {
+                    kind: op,
+                    left: res,
+                    right,
+                },
+                Annotations::new(),
+            )
         }
         Ok(res)
     }
 
     /// Parse a sum expression with terms separated by + and - (for operator precedence).
     fn sum_expr(&mut self) -> WeldResult<Box<Expr>> {
-        let mut res = try!(self.product_expr());
+        let mut res = self.product_expr()?;
         while *self.peek() == TPlus || *self.peek() == TMinus {
             let token = self.next();
-            let right = try!(self.product_expr());
+            let right = self.product_expr()?;
             if *token == TPlus {
-                res = expr_box(BinOp {
-                                   kind: Add,
-                                   left: res,
-                                   right: right,
-                               },
-                               Annotations::new())
+                res = expr_box(
+                    BinOp {
+                        kind: Add,
+                        left: res,
+                        right,
+                    },
+                    Annotations::new(),
+                )
             } else {
-                res = expr_box(BinOp {
-                                   kind: Subtract,
-                                   left: res,
-                                   right: right,
-                               },
-                               Annotations::new())
+                res = expr_box(
+                    BinOp {
+                        kind: Subtract,
+                        left: res,
+                        right,
+                    },
+                    Annotations::new(),
+                )
             }
         }
         Ok(res)
@@ -453,50 +476,50 @@ impl<'t> Parser<'t> {
 
     /// Parse a product expression with terms separated by *, / and % (for precedence).
     fn product_expr(&mut self) -> WeldResult<Box<Expr>> {
-        let mut res = try!(self.ascribe_expr());
+        let mut res = self.ascribe_expr()?;
         while *self.peek() == TTimes || *self.peek() == TDivide || *self.peek() == TModulo {
             let op = match *self.next() {
                 TTimes => Multiply,
                 TDivide => Divide,
                 _ => Modulo,
             };
-            let right = try!(self.ascribe_expr());
-            res = expr_box(BinOp {
-                               kind: op,
-                               left: res,
-                               right: right,
-                           },
-                           Annotations::new())
+            let right = self.ascribe_expr()?;
+            res = expr_box(
+                BinOp {
+                    kind: op,
+                    left: res,
+                    right,
+                },
+                Annotations::new(),
+            )
         }
         Ok(res)
     }
 
     /// Parse a type abscription expression such as 'e: T', or lower-level ones in precedence.
     fn ascribe_expr(&mut self) -> WeldResult<Box<Expr>> {
-        let mut expr = try!(self.apply_expr());
+        let mut expr = self.apply_expr()?;
         if *self.peek() == TColon {
-            expr.ty = try!(self.optional_type());
+            expr.ty = self.optional_type()?;
         }
         Ok(expr)
     }
 
     /// Parse application chain expression such as a.0().3().
     fn apply_expr(&mut self) -> WeldResult<Box<Expr>> {
-        let mut expr = try!(self.leaf_expr());
+        let mut expr = self.leaf_expr()?;
         while *self.peek() == TDot || *self.peek() == TOpenParen {
             if *self.next() == TDot {
                 match *self.next() {
                     TIdent(ref value) => {
-                        if value.starts_with("$") {
+                        if value.starts_with('$') {
                             match u32::from_str_radix(&value[1..], 10) {
                                 Ok(index) => {
-                                    expr = expr_box(GetField {
-                                                        expr: expr,
-                                                        index: index,
-                                                    },
-                                                    Annotations::new())
+                                    expr = expr_box(GetField { expr, index }, Annotations::new())
                                 }
-                                _ => return compile_err!("Expected field index but got '{}'", value),
+                                _ => {
+                                    return compile_err!("Expected field index but got '{}'", value);
+                                }
                             }
                         }
                     }
@@ -507,7 +530,7 @@ impl<'t> Parser<'t> {
                 // TOpenParen
                 let mut params: Vec<Expr> = Vec::new();
                 while *self.peek() != TCloseParen {
-                    let param = try!(self.expr());
+                    let param = self.expr()?;
                     params.push(*param);
                     if *self.peek() == TComma {
                         self.next();
@@ -515,12 +538,8 @@ impl<'t> Parser<'t> {
                         return compile_err!("Expected ',' or ')'");
                     }
                 }
-                try!(self.consume(TCloseParen));
-                expr = expr_box(Apply {
-                                    func: expr,
-                                    params: params,
-                                },
-                                Annotations::new())
+                self.consume(TCloseParen)?;
+                expr = expr_box(Apply { func: expr, params }, Annotations::new())
             }
         }
         Ok(expr)
@@ -532,53 +551,53 @@ impl<'t> Parser<'t> {
         let iter: Token = self.peek().clone();
         match iter {
             TScalarIter | TSimdIter | TFringeIter | TNdIter => {
-                try!(self.consume(iter.clone()));
-                try!(self.consume(TOpenParen));
-                let data = try!(self.expr());
-                let (mut start, mut end, mut stride, mut shape, mut strides) 
-                    = (None, None, None, None, None);
+                self.consume(iter.clone())?;
+                self.consume(TOpenParen)?;
+                let data = self.expr()?;
+                let (mut start, mut end, mut stride, mut shape, mut strides) =
+                    (None, None, None, None, None);
 
                 if *self.peek() == TComma {
-                    try!(self.consume(TComma));
-                    start = Some(try!(self.expr()));
-                    try!(self.consume(TComma));
-                    end = Some(try!(self.expr()));
-                    try!(self.consume(TComma));
-                    stride = Some(try!(self.expr()));
+                    self.consume(TComma)?;
+                    start = Some(self.expr()?);
+                    self.consume(TComma)?;
+                    end = Some(self.expr()?);
+                    self.consume(TComma)?;
+                    stride = Some(self.expr()?);
                 }
 
                 if iter == TNdIter && *self.peek() == TComma {
-                    try!(self.consume(TComma));
-                    shape = Some(try!(self.expr()));
-                    try!(self.consume(TComma));
-                    strides = Some(try!(self.expr()));
+                    self.consume(TComma)?;
+                    shape = Some(self.expr()?);
+                    self.consume(TComma)?;
+                    strides = Some(self.expr()?);
                 }
 
                 let iter = Iter {
-                    data: data,
-                    start: start,
-                    end: end,
-                    stride: stride,
+                    data,
+                    start,
+                    end,
+                    stride,
                     kind: match iter {
                         TSimdIter => SimdIter,
                         TFringeIter => FringeIter,
                         TNdIter => NdIter,
                         _ => ScalarIter,
                     },
-                    shape: shape,
-                    strides: strides,
+                    shape,
+                    strides,
                 };
-                try!(self.consume(TCloseParen));
+                self.consume(TCloseParen)?;
                 Ok(iter)
-            },
+            }
             TRangeIter => {
-                try!(self.consume(iter.clone()));
-                try!(self.consume(TOpenParen));
-                let start = try!(self.expr());
-                try!(self.consume(TComma));
-                let end = try!(self.expr());
-                try!(self.consume(TComma));
-                let stride = try!(self.expr());
+                self.consume(iter.clone())?;
+                self.consume(TOpenParen)?;
+                let start = self.expr()?;
+                self.consume(TComma)?;
+                let end = self.expr()?;
+                self.consume(TComma)?;
+                let stride = self.expr()?;
                 let mut dummy_data = expr_box(MakeVector { elems: vec![] }, Annotations::new());
                 dummy_data.as_mut().ty = Vector(Box::new(Scalar(ScalarKind::I64)));
                 let iter = Iter {
@@ -590,13 +609,13 @@ impl<'t> Parser<'t> {
                     shape: None,
                     strides: None,
                 };
-                try!(self.consume(TCloseParen));
+                self.consume(TCloseParen)?;
                 Ok(iter)
-            },
+            }
             _ => {
-                let data = try!(self.expr());
+                let data = self.expr()?;
                 let iter = Iter {
-                    data: data,
+                    data,
                     start: None,
                     end: None,
                     stride: None,
@@ -620,15 +639,11 @@ impl<'t> Parser<'t> {
         if *self.next() != TOpenParen {
             return compile_err!("Expected '('");
         }
-        let expr = try!(self.expr());
+        let child_expr = self.expr()?;
         if *self.next() != TCloseParen {
             return compile_err!("Expected ')'");
         }
-        let cast_expr = expr_box(Cast {
-                                     kind: kind,
-                                     child_expr: expr,
-                                 },
-                                 Annotations::new());
+        let cast_expr = expr_box(Cast { kind, child_expr }, Annotations::new());
         Ok(cast_expr)
     }
 
@@ -651,7 +666,9 @@ impl<'t> Parser<'t> {
                     TStringLiteral(ref v) => v.clone(),
                     TIdent(ref v) => v.clone(),
                     _ => {
-                        return compile_err!("Annotation value must be a literal or identifier/string");
+                        return compile_err!(
+                            "Annotation value must be a literal or identifier/string"
+                        );
                     }
                 };
 
@@ -667,7 +684,7 @@ impl<'t> Parser<'t> {
                     return compile_err!("Expected ',' or ')'");
                 }
             }
-            try!(self.consume(TCloseParen));
+            self.consume(TCloseParen)?;
         }
         Ok(())
     }
@@ -697,31 +714,36 @@ impl<'t> Parser<'t> {
 
     /// Helper function for leaf_expr as all functions with unary args follow same pattern.
     fn unary_leaf_expr(&mut self, token: Token) -> WeldResult<Box<Expr>> {
-        try!(self.consume(TOpenParen));
-        let value = try!(self.expr());
-        try!(self.consume(TCloseParen));
+        self.consume(TOpenParen)?;
+        let value = self.expr()?;
+        self.consume(TCloseParen)?;
         let kind = self.unary_op_kind_for_token(token)?;
-        Ok(expr_box(UnaryOp {
-            kind: kind,
-            value: value,
-        }, Annotations::new()))
+        Ok(expr_box(UnaryOp { kind, value }, Annotations::new()))
     }
 
     /// Parse a terminal expression at the bottom of the precedence chain.
     fn leaf_expr(&mut self) -> WeldResult<Box<Expr>> {
         let mut annotations = Annotations::new();
-        try!(self.parse_annotations(&mut annotations));
+        self.parse_annotations(&mut annotations)?;
 
         match *self.next() {
             TI16Literal(v) => Ok(expr_box(Literal(I16Literal(v)), Annotations::new())),
             TI8Literal(v) => Ok(expr_box(Literal(I8Literal(v)), Annotations::new())),
             TI32Literal(v) => Ok(expr_box(Literal(I32Literal(v)), Annotations::new())),
             TI64Literal(v) => Ok(expr_box(Literal(I64Literal(v)), Annotations::new())),
-            TF32Literal(v) => Ok(expr_box(Literal(F32Literal(v.to_bits())), Annotations::new())),
-            TF64Literal(v) => Ok(expr_box(Literal(F64Literal(v.to_bits())), Annotations::new())),
+            TF32Literal(v) => Ok(expr_box(
+                Literal(F32Literal(v.to_bits())),
+                Annotations::new(),
+            )),
+            TF64Literal(v) => Ok(expr_box(
+                Literal(F64Literal(v.to_bits())),
+                Annotations::new(),
+            )),
             TBoolLiteral(v) => Ok(expr_box(Literal(BoolLiteral(v)), Annotations::new())),
-            TStringLiteral(ref v) => Ok(expr_box(Literal(StringLiteral(v.clone())),
-                                                 Annotations::new())),
+            TStringLiteral(ref v) => Ok(expr_box(
+                Literal(StringLiteral(v.clone())),
+                Annotations::new(),
+            )),
 
             TI8 => Ok(self.parse_cast(ScalarKind::I8)?),
             TI16 => Ok(self.parse_cast(ScalarKind::I16)?),
@@ -736,19 +758,19 @@ impl<'t> Parser<'t> {
             TBool => Ok(self.parse_cast(ScalarKind::Bool)?),
 
             TToVec => {
-                try!(self.consume(TOpenParen));
-                let child_expr = try!(self.expr());
-                try!(self.consume(TCloseParen));
-                Ok(expr_box(ToVec { child_expr: child_expr }, Annotations::new()))
+                self.consume(TOpenParen)?;
+                let child_expr = self.expr()?;
+                self.consume(TCloseParen)?;
+                Ok(expr_box(ToVec { child_expr }, Annotations::new()))
             }
 
-            TIdent(ref name) => {
-                Ok(expr_box(Ident(Symbol::new(name.as_str(), 0)),
-                            Annotations::new()))
-            }
+            TIdent(ref name) => Ok(expr_box(
+                Ident(Symbol::new(name.as_str(), 0)),
+                Annotations::new(),
+            )),
 
             TOpenParen => {
-                let expr = try!(self.expr());
+                let expr = self.expr()?;
                 if *self.next() != TCloseParen {
                     return compile_err!("Expected ')' after {:?}", expr);
                 }
@@ -758,7 +780,7 @@ impl<'t> Parser<'t> {
             TOpenBracket => {
                 let mut exprs: Vec<Expr> = Vec::new();
                 while *self.peek() != TCloseBracket {
-                    let expr = try!(self.expr());
+                    let expr = self.expr()?;
                     exprs.push(*expr);
                     if *self.peek() == TComma {
                         self.next();
@@ -766,14 +788,14 @@ impl<'t> Parser<'t> {
                         return compile_err!("Expected ',' or ']'");
                     }
                 }
-                try!(self.consume(TCloseBracket));
+                self.consume(TCloseBracket)?;
                 Ok(expr_box(MakeVector { elems: exprs }, Annotations::new()))
             }
 
             TOpenBrace => {
                 let mut exprs: Vec<Expr> = Vec::new();
                 while *self.peek() != TCloseBrace {
-                    let expr = try!(self.expr());
+                    let expr = self.expr()?;
                     exprs.push(*expr);
                     if *self.peek() == TComma {
                         self.next();
@@ -781,112 +803,122 @@ impl<'t> Parser<'t> {
                         return compile_err!("Expected ',' or '}}'");
                     }
                 }
-                try!(self.consume(TCloseBrace));
+                self.consume(TCloseBrace)?;
                 Ok(expr_box(MakeStruct { elems: exprs }, Annotations::new()))
             }
 
             TIf => {
-                try!(self.consume(TOpenParen));
-                let cond = try!(self.expr());
-                try!(self.consume(TComma));
-                let on_true = try!(self.expr());
-                try!(self.consume(TComma));
-                let on_false = try!(self.expr());
-                try!(self.consume(TCloseParen));
-                Ok(expr_box(If {
-                                cond: cond,
-                                on_true: on_true,
-                                on_false: on_false,
-                            },
-                            annotations))
+                self.consume(TOpenParen)?;
+                let cond = self.expr()?;
+                self.consume(TComma)?;
+                let on_true = self.expr()?;
+                self.consume(TComma)?;
+                let on_false = self.expr()?;
+                self.consume(TCloseParen)?;
+                Ok(expr_box(
+                    If {
+                        cond,
+                        on_true,
+                        on_false,
+                    },
+                    annotations,
+                ))
             }
 
             TIterate => {
-                try!(self.consume(TOpenParen));
-                let initial = try!(self.expr());
-                try!(self.consume(TComma));
-                let update_func = try!(self.expr());
-                try!(self.consume(TCloseParen));
-                Ok(expr_box(Iterate {
-                                initial: initial,
-                                update_func: update_func,
-                            },
-                            Annotations::new()))
+                self.consume(TOpenParen)?;
+                let initial = self.expr()?;
+                self.consume(TComma)?;
+                let update_func = self.expr()?;
+                self.consume(TCloseParen)?;
+                Ok(expr_box(
+                    Iterate {
+                        initial,
+                        update_func,
+                    },
+                    Annotations::new(),
+                ))
             }
 
             TSelect => {
-                try!(self.consume(TOpenParen));
-                let cond = try!(self.expr());
-                try!(self.consume(TComma));
-                let on_true = try!(self.expr());
-                try!(self.consume(TComma));
-                let on_false = try!(self.expr());
-                try!(self.consume(TCloseParen));
-                Ok(expr_box(Select {
-                                cond: cond,
-                                on_true: on_true,
-                                on_false: on_false,
-                            },
-                            Annotations::new()))
+                self.consume(TOpenParen)?;
+                let cond = self.expr()?;
+                self.consume(TComma)?;
+                let on_true = self.expr()?;
+                self.consume(TComma)?;
+                let on_false = self.expr()?;
+                self.consume(TCloseParen)?;
+                Ok(expr_box(
+                    Select {
+                        cond,
+                        on_true,
+                        on_false,
+                    },
+                    Annotations::new(),
+                ))
             }
 
             TBroadcast => {
-                try!(self.consume(TOpenParen));
-                let expr = try!(self.expr());
-                try!(self.consume(TCloseParen));
+                self.consume(TOpenParen)?;
+                let expr = self.expr()?;
+                self.consume(TCloseParen)?;
                 Ok(expr_box(Broadcast(expr), Annotations::new()))
             }
 
             TSerialize => {
-                try!(self.consume(TOpenParen));
-                let expr = try!(self.expr());
-                try!(self.consume(TCloseParen));
+                self.consume(TOpenParen)?;
+                let expr = self.expr()?;
+                self.consume(TCloseParen)?;
                 Ok(expr_box(Serialize(expr), Annotations::new()))
             }
 
             TDeserialize => {
-                try!(self.consume(TOpenBracket));
-                let value_ty = try!(self.type_());
-                try!(self.consume(TCloseBracket));
-                try!(self.consume(TOpenParen));
-                let value = try!(self.expr());
-                try!(self.consume(TCloseParen));
-                Ok(expr_box(Deserialize {
-                                value_ty: Box::new(value_ty),
-                                value: value,
-                            },
-                            annotations))
+                self.consume(TOpenBracket)?;
+                let value_ty = self.type_()?;
+                self.consume(TCloseBracket)?;
+                self.consume(TOpenParen)?;
+                let value = self.expr()?;
+                self.consume(TCloseParen)?;
+                Ok(expr_box(
+                    Deserialize {
+                        value_ty: Box::new(value_ty),
+                        value,
+                    },
+                    annotations,
+                ))
             }
 
             TCUDF => {
                 let mut args = vec![];
-                try!(self.consume(TOpenBracket));
-                let sym_name = try!(self.symbol());
-                try!(self.consume(TComma));
-                let return_ty = try!(self.type_());
-                try!(self.consume(TCloseBracket));
-                try!(self.consume(TOpenParen));
+                self.consume(TOpenBracket)?;
+                let sym_name = self.symbol()?;
+                self.consume(TComma)?;
+                let return_ty = self.type_()?;
+                self.consume(TCloseBracket)?;
+                self.consume(TOpenParen)?;
                 while *self.peek() != TCloseParen {
-                    let arg = try!(self.expr());
+                    let arg = self.expr()?;
                     args.push(*arg);
                     if *self.peek() == TComma {
-                        try!(self.consume(TComma));
+                        self.consume(TComma)?;
                     }
                 }
-                try!(self.consume(TCloseParen));
-                Ok(expr_box(CUDF {
-                                sym_name: sym_name.name(),
-                                return_ty: Box::new(return_ty),
-                                args: args,
-                            },
-                            annotations))
+                self.consume(TCloseParen)?;
+                Ok(expr_box(
+                    CUDF {
+                        sym_name: sym_name.name(),
+                        return_ty: Box::new(return_ty),
+                        args,
+                    },
+                    annotations,
+                ))
             }
 
             TZip => {
-                try!(self.consume(TOpenParen));
+                self.consume(TOpenParen)?;
                 let mut vectors = vec![];
                 while *self.peek() != TCloseParen {
-                    let vector = try!(self.expr());
+                    let vector = self.expr()?;
                     vectors.push(*vector);
                     if *self.peek() == TComma {
                         self.next();
@@ -894,117 +926,98 @@ impl<'t> Parser<'t> {
                         return compile_err!("Expected ',' or ')'");
                     }
                 }
-                try!(self.consume(TCloseParen));
+                self.consume(TCloseParen)?;
                 if vectors.len() < 2 {
                     return compile_err!("Expected two or more arguments in Zip");
                 }
-                Ok(expr_box(Zip { vectors: vectors }, Annotations::new()))
+                Ok(expr_box(Zip { vectors }, Annotations::new()))
             }
 
             TFor => {
-                try!(self.consume(TOpenParen));
+                self.consume(TOpenParen)?;
                 let mut iters = vec![];
                 // Zips only appear as syntactic sugar in the context of Fors (they don't
                 // become Zip expressions).
                 if *self.peek() == TZip {
-                    try!(self.consume(TZip));
-                    try!(self.consume(TOpenParen));
-                    iters.push(try!(self.parse_iter()));
+                    self.consume(TZip)?;
+                    self.consume(TOpenParen)?;
+                    iters.push(self.parse_iter()?);
                     while *self.peek() == TComma {
-                        try!(self.consume(TComma));
-                        iters.push(try!(self.parse_iter()));
+                        self.consume(TComma)?;
+                        iters.push(self.parse_iter()?);
                     }
-                    try!(self.consume(TCloseParen));
+                    self.consume(TCloseParen)?;
                 } else {
                     // Single unzipped vector.
-                    iters.push(try!(self.parse_iter()));
+                    iters.push(self.parse_iter()?);
                 }
-                try!(self.consume(TComma));
-                let builders = try!(self.expr());
-                try!(self.consume(TComma));
-                let body = try!(self.expr());
-                try!(self.consume(TCloseParen));
-                Ok(expr_box(For {
-                                iters: iters,
-                                builder: builders,
-                                func: body,
-                            },
-                            annotations))
+                self.consume(TComma)?;
+                let builder = self.expr()?;
+                self.consume(TComma)?;
+                let body = self.expr()?;
+                self.consume(TCloseParen)?;
+                Ok(expr_box(
+                    For {
+                        iters,
+                        builder,
+                        func: body,
+                    },
+                    annotations,
+                ))
             }
 
             TLen => {
-                try!(self.consume(TOpenParen));
-                let data = try!(self.expr());
-                try!(self.consume(TCloseParen));
-                Ok(expr_box(Length { data: data }, Annotations::new()))
+                self.consume(TOpenParen)?;
+                let data = self.expr()?;
+                self.consume(TCloseParen)?;
+                Ok(expr_box(Length { data }, Annotations::new()))
             }
 
             TLookup => {
-                try!(self.consume(TOpenParen));
-                let data = try!(self.expr());
-                try!(self.consume(TComma));
-                let index = try!(self.expr());
-                try!(self.consume(TCloseParen));
-                Ok(expr_box(Lookup {
-                                data: data,
-                                index: index,
-                            },
-                            Annotations::new()))
+                self.consume(TOpenParen)?;
+                let data = self.expr()?;
+                self.consume(TComma)?;
+                let index = self.expr()?;
+                self.consume(TCloseParen)?;
+                Ok(expr_box(Lookup { data, index }, Annotations::new()))
             }
 
             TOptLookup => {
-                try!(self.consume(TOpenParen));
-                let data = try!(self.expr());
-                try!(self.consume(TComma));
-                let index = try!(self.expr());
-                try!(self.consume(TCloseParen));
-                Ok(expr_box(OptLookup {
-                                data: data,
-                                index: index,
-                            },
-                            Annotations::new()))
+                self.consume(TOpenParen)?;
+                let data = self.expr()?;
+                self.consume(TComma)?;
+                let index = self.expr()?;
+                self.consume(TCloseParen)?;
+                Ok(expr_box(OptLookup { data, index }, Annotations::new()))
             }
 
             TKeyExists => {
-                try!(self.consume(TOpenParen));
-                let data = try!(self.expr());
-                try!(self.consume(TComma));
-                let key = try!(self.expr());
-                try!(self.consume(TCloseParen));
-                Ok(expr_box(KeyExists {
-                                data: data,
-                                key: key,
-                            },
-                            Annotations::new()))
+                self.consume(TOpenParen)?;
+                let data = self.expr()?;
+                self.consume(TComma)?;
+                let key = self.expr()?;
+                self.consume(TCloseParen)?;
+                Ok(expr_box(KeyExists { data, key }, Annotations::new()))
             }
 
             TSlice => {
-                try!(self.consume(TOpenParen));
-                let data = try!(self.expr());
-                try!(self.consume(TComma));
-                let index = try!(self.expr());
-                try!(self.consume(TComma));
-                let size = try!(self.expr());
-                try!(self.consume(TCloseParen));
-                Ok(expr_box(Slice {
-                                data: data,
-                                index: index,
-                                size: size,
-                            },
-                            Annotations::new()))
+                self.consume(TOpenParen)?;
+                let data = self.expr()?;
+                self.consume(TComma)?;
+                let index = self.expr()?;
+                self.consume(TComma)?;
+                let size = self.expr()?;
+                self.consume(TCloseParen)?;
+                Ok(expr_box(Slice { data, index, size }, Annotations::new()))
             }
 
             TSort => {
-                try!(self.consume(TOpenParen));
-                let data = try!(self.expr());
-                try!(self.consume(TComma));
-                let cmpfunc = try!(self.expr());
-                try!(self.consume(TCloseParen));
-                Ok(expr_box(Sort {
-                                data: data,
-                                cmpfunc: cmpfunc,
-                            },
-                            Annotations::new()))
+                self.consume(TOpenParen)?;
+                let data = self.expr()?;
+                self.consume(TComma)?;
+                let cmpfunc = self.expr()?;
+                self.consume(TCloseParen)?;
+                Ok(expr_box(Sort { data, cmpfunc }, Annotations::new()))
             }
             TExp => self.unary_leaf_expr(TExp),
             TLog => self.unary_leaf_expr(TLog),
@@ -1021,31 +1034,27 @@ impl<'t> Parser<'t> {
             TTanh => self.unary_leaf_expr(TTanh),
 
             TMerge => {
-                try!(self.consume(TOpenParen));
-                let builder = try!(self.expr());
-                try!(self.consume(TComma));
-                let value = try!(self.expr());
-                try!(self.consume(TCloseParen));
-                Ok(expr_box(Merge {
-                                builder: builder,
-                                value: value,
-                            },
-                            Annotations::new()))
+                self.consume(TOpenParen)?;
+                let builder = self.expr()?;
+                self.consume(TComma)?;
+                let value = self.expr()?;
+                self.consume(TCloseParen)?;
+                Ok(expr_box(Merge { builder, value }, Annotations::new()))
             }
 
             TResult => {
-                try!(self.consume(TOpenParen));
-                let value = try!(self.expr());
-                try!(self.consume(TCloseParen));
+                self.consume(TOpenParen)?;
+                let value = self.expr()?;
+                self.consume(TCloseParen)?;
                 Ok(expr_box(Res { builder: value }, Annotations::new()))
             }
 
             TAppender => {
                 let mut elem_type = Unknown;
                 if *self.peek() == TOpenBracket {
-                    try!(self.consume(TOpenBracket));
-                    elem_type = try!(self.type_());
-                    try!(self.consume(TCloseBracket));
+                    self.consume(TOpenBracket)?;
+                    elem_type = self.type_()?;
+                    self.consume(TCloseBracket)?;
                 }
 
                 let arg = if *self.peek() == TOpenParen {
@@ -1085,13 +1094,13 @@ impl<'t> Parser<'t> {
             TDictMerger => {
                 let key_type: Type;
                 let value_type: Type;
-                try!(self.consume(TOpenBracket));
-                key_type = try!(self.type_());
-                try!(self.consume(TComma));
-                value_type = try!(self.type_());
-                try!(self.consume(TComma));
+                self.consume(TOpenBracket)?;
+                key_type = self.type_()?;
+                self.consume(TComma)?;
+                value_type = self.type_()?;
+                self.consume(TComma)?;
                 let bin_op = self.commutative_binop_()?;
-                try!(self.consume(TCloseBracket));
+                self.consume(TCloseBracket)?;
 
                 let arg = if *self.peek() == TOpenParen {
                     self.consume(TOpenParen)?;
@@ -1103,26 +1112,30 @@ impl<'t> Parser<'t> {
                 };
 
                 let mut expr = expr_box(NewBuilder(arg), Annotations::new());
-                expr.ty = Builder(DictMerger(Box::new(key_type.clone()),
-                                             Box::new(value_type.clone()),
-                                             bin_op),
-                                  annotations);
+                expr.ty = Builder(
+                    DictMerger(
+                        Box::new(key_type.clone()),
+                        Box::new(value_type.clone()),
+                        bin_op,
+                    ),
+                    annotations,
+                );
                 Ok(expr)
             }
-
 
             TGroupMerger => {
                 let key_type: Type;
                 let value_type: Type;
-                try!(self.consume(TOpenBracket));
-                key_type = try!(self.type_());
-                try!(self.consume(TComma));
-                value_type = try!(self.type_());
-                try!(self.consume(TCloseBracket));
+                self.consume(TOpenBracket)?;
+                key_type = self.type_()?;
+                self.consume(TComma)?;
+                value_type = self.type_()?;
+                self.consume(TCloseBracket)?;
                 let mut expr = expr_box(NewBuilder(None), Annotations::new());
-                expr.ty = Builder(GroupMerger(Box::new(key_type.clone()),
-                                              Box::new(value_type.clone())),
-                                  annotations);
+                expr.ty = Builder(
+                    GroupMerger(Box::new(key_type.clone()), Box::new(value_type.clone())),
+                    annotations,
+                );
                 Ok(expr)
             }
 
@@ -1138,13 +1151,11 @@ impl<'t> Parser<'t> {
                 self.consume(TCloseParen)?;
 
                 let mut expr = expr_box(NewBuilder(Some(expr)), Annotations::new());
-                expr.ty = Builder(VecMerger(Box::new(elem_type.clone()),
-                                            bin_op),
-                                  annotations);
+                expr.ty = Builder(VecMerger(Box::new(elem_type.clone()), bin_op), annotations);
                 Ok(expr)
             }
 
-            TMinus => Ok(expr_box(Negate(try!(self.leaf_expr())), Annotations::new())),
+            TMinus => Ok(expr_box(Negate(self.leaf_expr()?), Annotations::new())),
             TBang => Ok(expr_box(Not(self.leaf_expr()?), Annotations::new())),
 
             TAssert => {
@@ -1155,52 +1166,61 @@ impl<'t> Parser<'t> {
             }
 
             TMin => {
-                try!(self.consume(TOpenParen));
-                let left = try!(self.expr());
-                try!(self.consume(TComma));
-                let right = try!(self.expr());
-                try!(self.consume(TCloseParen));
-                
-                let res = expr_box(BinOp {
-                    kind: Min,
-                    left: left,
-                    right: right,
-                }, Annotations::new());
-                
+                self.consume(TOpenParen)?;
+                let left = self.expr()?;
+                self.consume(TComma)?;
+                let right = self.expr()?;
+                self.consume(TCloseParen)?;
+
+                let res = expr_box(
+                    BinOp {
+                        kind: Min,
+                        left,
+                        right,
+                    },
+                    Annotations::new(),
+                );
+
                 Ok(res)
             }
 
             TMax => {
-                try!(self.consume(TOpenParen));
-                let left = try!(self.expr());
-                try!(self.consume(TComma));
-                let right = try!(self.expr());
-                try!(self.consume(TCloseParen));
-                
-                let res = expr_box(BinOp {
-                    kind: Max,
-                    left: left,
-                    right: right,
-                }, Annotations::new());
-                
+                self.consume(TOpenParen)?;
+                let left = self.expr()?;
+                self.consume(TComma)?;
+                let right = self.expr()?;
+                self.consume(TCloseParen)?;
+
+                let res = expr_box(
+                    BinOp {
+                        kind: Max,
+                        left,
+                        right,
+                    },
+                    Annotations::new(),
+                );
+
                 Ok(res)
             }
 
             TPow => {
-                try!(self.consume(TOpenParen));
-                let left = try!(self.expr());
-                try!(self.consume(TComma));
-                let right = try!(self.expr());
-                try!(self.consume(TCloseParen));
-                
-                let res = expr_box(BinOp {
-                    kind: Pow,
-                    left: left,
-                    right: right,
-                }, Annotations::new());
+                self.consume(TOpenParen)?;
+                let left = self.expr()?;
+                self.consume(TComma)?;
+                let right = self.expr()?;
+                self.consume(TCloseParen)?;
+
+                let res = expr_box(
+                    BinOp {
+                        kind: Pow,
+                        left,
+                        right,
+                    },
+                    Annotations::new(),
+                );
                 Ok(res)
             }
-            
+
             ref other => compile_err!("Expected expression but got '{}'", other),
         }
     }
@@ -1217,7 +1237,7 @@ impl<'t> Parser<'t> {
     /// gives Unknown if there is no type annotation at the current position.
     fn optional_type(&mut self) -> WeldResult<Type> {
         if *self.peek() == TColon {
-            try!(self.consume(TColon));
+            self.consume(TColon)?;
             self.type_()
         } else {
             Ok(Unknown)
@@ -1243,16 +1263,14 @@ impl<'t> Parser<'t> {
                 self.consume(TMin)?;
                 Ok(Min)
             }
-            ref t => {
-                compile_err!("expected commutative binary op in but got '{}'", t)
-            }
+            ref t => compile_err!("expected commutative binary op in but got '{}'", t),
         }
     }
 
     /// Parse a Type starting at the current input position.
     fn type_(&mut self) -> WeldResult<Type> {
         let mut annotations = Annotations::new();
-        try!(self.parse_annotations(&mut annotations));
+        self.parse_annotations(&mut annotations)?;
 
         if !self.peek().signals_type() {
             let name = self.symbol()?.to_string();
@@ -1275,28 +1293,27 @@ impl<'t> Parser<'t> {
             TBool => Ok(Scalar(ScalarKind::Bool)),
 
             TVec => {
-                try!(self.consume(TOpenBracket));
-                let elem_type = try!(self.type_());
-                try!(self.consume(TCloseBracket));
+                self.consume(TOpenBracket)?;
+                let elem_type = self.type_()?;
+                self.consume(TCloseBracket)?;
                 Ok(Vector(Box::new(elem_type)))
             }
 
             TSimd => {
-                try!(self.consume(TOpenBracket));
-                let elem_type = try!(self.type_());
-                try!(self.consume(TCloseBracket));
+                self.consume(TOpenBracket)?;
+                let elem_type = self.type_()?;
+                self.consume(TCloseBracket)?;
                 if let Scalar(ref kind) = elem_type {
-                    Ok(Simd(kind.clone()))
+                    Ok(Simd(*kind))
                 } else {
                     compile_err!("Expected Scalar type in simd")
                 }
             }
 
             TAppender => {
-                try!(self.consume(TOpenBracket));
-                let elem_type = try!(self.type_());
-                try!(self.consume(TCloseBracket));
-
+                self.consume(TOpenBracket)?;
+                let elem_type = self.type_()?;
+                self.consume(TCloseBracket)?;
 
                 Ok(Builder(Appender(Box::new(elem_type)), annotations))
             }
@@ -1312,15 +1329,14 @@ impl<'t> Parser<'t> {
                 Ok(Builder(Merger(Box::new(elem_type), binop), annotations))
             }
 
-
             TDict => {
                 let key_type: Type;
                 let value_type: Type;
-                try!(self.consume(TOpenBracket));
-                key_type = try!(self.type_());
-                try!(self.consume(TComma));
-                value_type = try!(self.type_());
-                try!(self.consume(TCloseBracket));
+                self.consume(TOpenBracket)?;
+                key_type = self.type_()?;
+                self.consume(TComma)?;
+                value_type = self.type_()?;
+                self.consume(TCloseBracket)?;
                 Ok(Dict(Box::new(key_type), Box::new(value_type)))
             }
 
@@ -1334,10 +1350,14 @@ impl<'t> Parser<'t> {
                 self.consume(TComma)?;
                 let binop = self.commutative_binop_()?;
                 self.consume(TCloseBracket)?;
-                Ok(Builder(DictMerger(Box::new(key_type.clone()),
-                                      Box::new(value_type.clone()),
-                                      binop),
-                           annotations))
+                Ok(Builder(
+                    DictMerger(
+                        Box::new(key_type.clone()),
+                        Box::new(value_type.clone()),
+                        binop,
+                    ),
+                    annotations,
+                ))
             }
 
             TGroupMerger => {
@@ -1358,15 +1378,16 @@ impl<'t> Parser<'t> {
                 let binop = self.commutative_binop_()?;
                 self.consume(TCloseBracket)?;
 
-                Ok(Builder(VecMerger(Box::new(elem_type.clone()),
-                                     binop),
-                           annotations))
+                Ok(Builder(
+                    VecMerger(Box::new(elem_type.clone()), binop),
+                    annotations,
+                ))
             }
 
             TOpenBrace => {
                 let mut types: Vec<Type> = Vec::new();
                 while *self.peek() != TCloseBrace {
-                    let ty = try!(self.type_());
+                    let ty = self.type_()?;
                     types.push(ty);
                     if *self.peek() == TComma {
                         self.next();
@@ -1374,7 +1395,7 @@ impl<'t> Parser<'t> {
                         return compile_err!("Expected ',' or '}}'");
                     }
                 }
-                try!(self.consume(TCloseBrace));
+                self.consume(TCloseBrace)?;
                 Ok(Struct(types))
             }
 
@@ -1412,8 +1433,10 @@ fn basic_parsing() {
     assert_eq!(print_expr_without_indent(&e), "[1,(2+3),2]");
 
     let e = parse_expr("let a = 3+2; let b = (let c=a; c); b").unwrap();
-    assert_eq!(print_expr_without_indent(&e),
-               "(let a=((3+2));(let b=((let c=(a);c));b))");
+    assert_eq!(
+        print_expr_without_indent(&e),
+        "(let a=((3+2));(let b=((let c=(a);c));b))"
+    );
 
     let e = parse_expr("let a: vec[i32] = [2, 3]; a").unwrap();
     assert_eq!(print_expr_without_indent(&e), "(let a=([2,3]);a)");
@@ -1449,12 +1472,16 @@ fn basic_parsing() {
     assert_eq!(print_expr_without_indent(&e), "appender[i32](1000L)");
 
     let e = parse_expr("@(impl:local) dictmerger[i32,i32,+]").unwrap();
-    assert_eq!(print_expr_without_indent(&e),
-               "@(impl:local)dictmerger[i32,i32,+]");
+    assert_eq!(
+        print_expr_without_indent(&e),
+        "@(impl:local)dictmerger[i32,i32,+]"
+    );
 
     let e = parse_expr("@(impl:local, num_keys:12l) dictmerger[i32,i32,+]").unwrap();
-    assert_eq!(print_expr_without_indent(&e),
-               "@(impl:local,num_keys:12)dictmerger[i32,i32,+]");
+    assert_eq!(
+        print_expr_without_indent(&e),
+        "@(impl:local,num_keys:12)dictmerger[i32,i32,+]"
+    );
 
     let e = parse_expr("a: i32 + b").unwrap();
     assert_eq!(print_typed_expr_without_indent(&e), "(a:i32+b:?)");
@@ -1470,10 +1497,10 @@ fn basic_parsing() {
     assert_eq!(print_expr_without_indent(&p.macros[0].body), "(x+x)");
     assert_eq!(print_expr_without_indent(&p.macros[1].body), "5");
 
-    let ref t = parse_type("{i32, vec[vec[?]], ?}").unwrap().to_string();
+    let t = &parse_type("{i32, vec[vec[?]], ?}").unwrap().to_string();
     assert_eq!(t, "{i32,vec[vec[?]],?}");
 
-    let ref t = parse_type("{}").unwrap().to_string();
+    let t = &parse_type("{}").unwrap().to_string();
     assert_eq!(t, "{}");
 }
 
@@ -1483,20 +1510,28 @@ fn operator_precedence() {
     assert_eq!(print_expr_without_indent(&e), "(((a-b)-c)-d)");
 
     let e = parse_expr("a || b && c | d ^ e & f == g > h + i * j").unwrap();
-    assert_eq!(print_expr_without_indent(&e),
-               "(a||(b&&(c|(d^(e&(f==(g>(h+(i*j)))))))))");
+    assert_eq!(
+        print_expr_without_indent(&e),
+        "(a||(b&&(c|(d^(e&(f==(g>(h+(i*j)))))))))"
+    );
 
     let e = parse_expr("a * b + c > d == e & f ^ g | h && i || j").unwrap();
-    assert_eq!(print_expr_without_indent(&e),
-               "(((((((((a*b)+c)>d)==e)&f)^g)|h)&&i)||j)");
+    assert_eq!(
+        print_expr_without_indent(&e),
+        "(((((((((a*b)+c)>d)==e)&f)^g)|h)&&i)||j)"
+    );
 
     let e = parse_expr("a / b - c <= d != e & f ^ g | h && i || j").unwrap();
-    assert_eq!(print_expr_without_indent(&e),
-               "(((((((((a/b)-c)<=d)!=e)&f)^g)|h)&&i)||j)");
+    assert_eq!(
+        print_expr_without_indent(&e),
+        "(((((((((a/b)-c)<=d)!=e)&f)^g)|h)&&i)||j)"
+    );
 
     let e = parse_expr("a % b - c >= d != e & f ^ g | h && i || j").unwrap();
-    assert_eq!(print_expr_without_indent(&e),
-               "(((((((((a%b)-c)>=d)!=e)&f)^g)|h)&&i)||j)");
+    assert_eq!(
+        print_expr_without_indent(&e),
+        "(((((((((a%b)-c)>=d)!=e)&f)^g)|h)&&i)||j)"
+    );
 }
 
 #[test]
@@ -1511,27 +1546,29 @@ fn read_to_end_of_input() {
 
 #[test]
 fn parse_and_print_literal_expressions() {
-    let tests = vec![// i32 literal expressions
-                     ("23", "23"),
-                     ("0b111", "7"),
-                     ("0xff", "255"),
-                     // i64 literal expressions
-                     ("23L", "23L"),
-                     ("7L", "7L"),
-                     ("0xffL", "255L"),
-                     // f64 literal expressions
-                     ("23.0", "23.0"),
-                     ("23.5", "23.5"),
-                     ("23e5", "2300000.0"),
-                     ("23.5e5", "2350000.0"),
-                     // f32 literal expressions
-                     ("23.0f", "23.0F"),
-                     ("23.5f", "23.5F"),
-                     ("23e5f", "2300000.0F"),
-                     ("23.5e5f", "2350000.0F"),
-                     // bool literal expressions
-                     ("true", "true"),
-                     ("false", "false")];
+    let tests = vec![
+        // i32 literal expressions
+        ("23", "23"),
+        ("0b111", "7"),
+        ("0xff", "255"),
+        // i64 literal expressions
+        ("23L", "23L"),
+        ("7L", "7L"),
+        ("0xffL", "255L"),
+        // f64 literal expressions
+        ("23.0", "23.0"),
+        ("23.5", "23.5"),
+        ("23e5", "2300000.0"),
+        ("23.5e5", "2350000.0"),
+        // f32 literal expressions
+        ("23.0f", "23.0F"),
+        ("23.5f", "23.5F"),
+        ("23e5f", "2300000.0F"),
+        ("23.5e5f", "2350000.0F"),
+        // bool literal expressions
+        ("true", "true"),
+        ("false", "false"),
+    ];
 
     for test in tests {
         let e = parse_expr(test.0).unwrap();
@@ -1574,33 +1611,47 @@ fn parse_and_print_simple_expressions() {
     assert_eq!(print_expr_without_indent(&e).as_str(), "|a:?,b:?|(a+b)");
 
     let e = parse_expr("for(d, appender, |e| e+1)").unwrap();
-    assert_eq!(print_expr_without_indent(&e).as_str(),
-               "for(d,appender[?],|e|(e+1))");
+    assert_eq!(
+        print_expr_without_indent(&e).as_str(),
+        "for(d,appender[?],|e|(e+1))"
+    );
 }
 
 #[test]
 fn parse_and_print_for_expressions() {
     let e = parse_expr("for(d, appender, |e| e+1)").unwrap();
-    assert_eq!(print_expr_without_indent(&e).as_str(),
-               "for(d,appender[?],|e|(e+1))");
+    assert_eq!(
+        print_expr_without_indent(&e).as_str(),
+        "for(d,appender[?],|e|(e+1))"
+    );
 
     let e = parse_expr("for(iter(d), appender, |e| e+1)").unwrap();
-    assert_eq!(print_expr_without_indent(&e).as_str(),
-               "for(d,appender[?],|e|(e+1))");
+    assert_eq!(
+        print_expr_without_indent(&e).as_str(),
+        "for(d,appender[?],|e|(e+1))"
+    );
 
     let e = parse_expr("for(iter(d,0L,4L,1L), appender, |e| e+1)").unwrap();
-    assert_eq!(print_expr_without_indent(&e).as_str(),
-               "for(iter(d,0L,4L,1L),appender[?],|e|(e+1))");
+    assert_eq!(
+        print_expr_without_indent(&e).as_str(),
+        "for(iter(d,0L,4L,1L),appender[?],|e|(e+1))"
+    );
 
     let e = parse_expr("for(zip(d), appender, |e| e+1)").unwrap();
-    assert_eq!(print_expr_without_indent(&e).as_str(),
-               "for(d,appender[?],|e|(e+1))");
+    assert_eq!(
+        print_expr_without_indent(&e).as_str(),
+        "for(d,appender[?],|e|(e+1))"
+    );
 
     let e = parse_expr("for(zip(d,e), appender, |e| e+1)").unwrap();
-    assert_eq!(print_expr_without_indent(&e).as_str(),
-               "for(zip(d,e),appender[?],|e|(e+1))");
+    assert_eq!(
+        print_expr_without_indent(&e).as_str(),
+        "for(zip(d,e),appender[?],|e|(e+1))"
+    );
 
     let e = parse_expr("for(zip(a,b,iter(c,0L,4L,1L),iter(d)), appender, |e| e+1)").unwrap();
-    assert_eq!(print_expr_without_indent(&e).as_str(),
-               "for(zip(a,b,iter(c,0L,4L,1L),d),appender[?],|e|(e+1))");
+    assert_eq!(
+        print_expr_without_indent(&e).as_str(),
+        "for(zip(a,b,iter(c,0L,4L,1L),d),appender[?],|e|(e+1))"
+    );
 }

@@ -8,15 +8,15 @@
 use std::collections::HashMap;
 use std::vec::Vec;
 
-use ast::*;
-use ast::ExprKind::*;
 use super::parser::*;
 use super::program::*;
-use error::*;
-use util::SymbolGenerator;
+use crate::ast::ExprKind::*;
+use crate::ast::*;
+use crate::error::*;
+use crate::util::SymbolGenerator;
 
 #[cfg(test)]
-use tests::print_expr_without_indent;
+use crate::tests::print_expr_without_indent;
 
 const MAX_MACRO_DEPTH: i32 = 30;
 
@@ -39,8 +39,7 @@ pub fn process_program(program: &Program) -> WeldResult<Expr> {
 }
 
 /// Replace alias types in the AST with real ones.
-pub fn process_type_aliases(expr: &mut Expr,
-                            type_aliases: Vec<TypeAlias>) -> WeldResult<()> {
+pub fn process_type_aliases(expr: &mut Expr, type_aliases: Vec<TypeAlias>) -> WeldResult<()> {
     let mut type_map = HashMap::new();
     for alias in type_aliases.into_iter() {
         let (name, mut ty) = (alias.name, alias.ty);
@@ -55,9 +54,7 @@ pub fn process_type_aliases(expr: &mut Expr,
     type_alias_helper(expr, &type_map)
 }
 
-fn type_alias_helper(expr: &mut Expr,
-                         type_map: &HashMap<String, Type>) -> WeldResult<()> {
-
+fn type_alias_helper(expr: &mut Expr, type_map: &HashMap<String, Type>) -> WeldResult<()> {
     // Expressions with types in them need to be handled here.
     match expr.kind {
         Lambda { ref mut params, .. } => {
@@ -65,13 +62,17 @@ fn type_alias_helper(expr: &mut Expr,
                 update_alias(&mut p.ty, type_map)?;
             }
         }
-        CUDF { ref mut return_ty, .. } => {
+        CUDF {
+            ref mut return_ty, ..
+        } => {
             update_alias(return_ty, type_map)?;
         }
-        Deserialize { ref mut value_ty, .. } => {
+        Deserialize {
+            ref mut value_ty, ..
+        } => {
             update_alias(value_ty, type_map)?;
         }
-        _ => ()
+        _ => (),
     };
 
     update_alias(&mut expr.ty, type_map)?;
@@ -86,7 +87,6 @@ fn type_alias_helper(expr: &mut Expr,
 ///
 /// If the type is not a `Type::Alias`, this function does nothing.
 fn update_alias(ty: &mut Type, type_map: &HashMap<String, Type>) -> WeldResult<()> {
-
     let aliased = if let Type::Alias(ref name, _) = *ty {
         Some(name.clone())
     } else {
@@ -111,8 +111,7 @@ fn update_alias(ty: &mut Type, type_map: &HashMap<String, Type>) -> WeldResult<(
 }
 
 /// Apply a specific list of macros to an expression (does not load the standard macros).
-pub fn process_macros(expr: &Expr,
-                          macros: &Vec<Macro>) -> WeldResult<Expr> {
+pub fn process_macros(expr: &Expr, macros: &[Macro]) -> WeldResult<Expr> {
     let mut macro_map: HashMap<Symbol, &Macro> = HashMap::new();
     for m in macros {
         if macro_map.contains_key(&m.name) {
@@ -126,7 +125,7 @@ pub fn process_macros(expr: &Expr,
 
     let mut expr = expr.clone();
     for _ in 1..MAX_MACRO_DEPTH {
-        if !try!(apply_macros(&mut expr, &macro_map, &mut sym_gen)) {
+        if !apply_macros(&mut expr, &macro_map, &mut sym_gen)? {
             return Ok(expr);
         }
     }
@@ -134,15 +133,17 @@ pub fn process_macros(expr: &Expr,
     compile_err!("Marco expansion recursed past {} levels", MAX_MACRO_DEPTH)
 }
 
-fn apply_macros(expr: &mut Expr,
-                macros: &HashMap<Symbol, &Macro>,
-                sym_gen: &mut SymbolGenerator)
-                -> WeldResult<bool> {
+fn apply_macros(
+    expr: &mut Expr,
+    macros: &HashMap<Symbol, &Macro>,
+    sym_gen: &mut SymbolGenerator,
+) -> WeldResult<bool> {
     let mut new_expr = None;
     if let Apply {
-               ref func,
-               ref params,
-           } = expr.kind {
+        ref func,
+        ref params,
+    } = expr.kind
+    {
         if let Ident(ref name) = func.kind {
             if let Some(mac) = macros.get(name) {
                 let mut new_body = mac.body.clone();
@@ -163,17 +164,18 @@ fn apply_macros(expr: &mut Expr,
         changed = true;
     }
     for c in expr.children_mut() {
-        changed |= try!(apply_macros(c, macros, sym_gen));
+        changed |= apply_macros(c, macros, sym_gen)?;
     }
     Ok(changed)
 }
 
 fn update_defined_ids(expr: &mut Expr, sym_gen: &mut SymbolGenerator) {
     if let Let {
-               name: ref mut sym,
-               ref value,
-               ref mut body,
-           } = expr.kind {
+        name: ref mut sym,
+        ref value,
+        ref mut body,
+    } = expr.kind
+    {
         if sym.id() == 0 {
             let new_sym = sym_gen.new_symbol(&sym.name());
             let new_ident = Expr {
@@ -186,10 +188,11 @@ fn update_defined_ids(expr: &mut Expr, sym_gen: &mut SymbolGenerator) {
         }
     }
     if let Lambda {
-               ref mut params,
-               ref mut body,
-           } = expr.kind {
-        for ref mut param in params {
+        ref mut params,
+        ref mut body,
+    } = expr.kind
+    {
+        for param in params.iter_mut() {
             let sym = &mut param.name;
             if sym.id() == 0 {
                 let new_sym = sym_gen.new_symbol(&sym.name());
@@ -253,9 +256,8 @@ fn overwrite_type_alias() {
 fn invalid_type_alias() {
     let aliases = parse_type_aliases("type int = i32;").unwrap();
     let mut expr = parse_expr("|a: otherInt| a + 1").unwrap();
-    process_type_aliases(&mut expr, aliases).expect_err(
-        "Type alises processing should fail with unknown type"
-    );
+    process_type_aliases(&mut expr, aliases)
+        .expect_err("Type alises processing should fail with unknown type");
 }
 
 #[test]
@@ -263,16 +265,22 @@ fn type_alias_in_type_alias() {
     let aliases = parse_type_aliases("type int = i32; type pair = {int,int};").unwrap();
     let mut expr = parse_expr("|a: pair| a.$0 + 1").unwrap();
     process_type_aliases(&mut expr, aliases).unwrap();
-    assert_eq!(print_expr_without_indent(&expr).as_str(), "|a:{i32,i32}|(a.$0+1)");
+    assert_eq!(
+        print_expr_without_indent(&expr).as_str(),
+        "|a:{i32,i32}|(a.$0+1)"
+    );
 }
 
 #[test]
 fn redefinition_with_type_alias_in_type_alias() {
     // Types are defined in order: redefining a type shouldn't redefine
     // types that occur before it.
-    let aliases = parse_type_aliases("type int = i32;
+    let aliases = parse_type_aliases(
+        "type int = i32;
                                      type pair = {int,int};
-                                     type int = i64;").unwrap();
+                                     type int = i64;",
+    )
+    .unwrap();
     let mut expr = parse_expr("|a: pair| a").unwrap();
     process_type_aliases(&mut expr, aliases).unwrap();
     assert_eq!(print_expr_without_indent(&expr).as_str(), "|a:{i32,i32}|a");
@@ -283,9 +291,8 @@ fn invalid_type_alias_in_type_alias() {
     // Aliases must be defined in order.
     let aliases = parse_type_aliases("type pair = {int,int}; type int = i32;").unwrap();
     let mut expr = parse_expr("|a: pair| a.$0 + 1").unwrap();
-    process_type_aliases(&mut expr, aliases).expect_err(
-        "Type alises processing should fail with unknown type"
-    );
+    process_type_aliases(&mut expr, aliases)
+        .expect_err("Type alises processing should fail with unknown type");
 }
 
 #[test]
@@ -293,7 +300,10 @@ fn nested_type_alias() {
     let aliases = parse_type_aliases("type int = i32;").unwrap();
     let mut expr = parse_expr("|a: vec[int]| lookup(a, 0L) + 1").unwrap();
     process_type_aliases(&mut expr, aliases).unwrap();
-    assert_eq!(print_expr_without_indent(&expr).as_str(), "|a:vec[i32]|(lookup(a,0L)+1)");
+    assert_eq!(
+        print_expr_without_indent(&expr).as_str(),
+        "|a:vec[i32]|(lookup(a,0L)+1)"
+    );
 }
 
 #[test]
@@ -314,14 +324,19 @@ fn macros_introducing_symbols() {
     let macros = parse_macros("macro adder(a) = |x| x+a;").unwrap();
     let expr = parse_expr("adder(x)").unwrap();
     let result = process_macros(&expr, &macros).unwrap();
-    assert_eq!(print_expr_without_indent(&result).as_str(), "|x__1:?|(x__1+x)");
+    assert_eq!(
+        print_expr_without_indent(&result).as_str(),
+        "|x__1:?|(x__1+x)"
+    );
 
     // Same case as above except we define a symbol in a Let instead of Lambda.
     let macros = parse_macros("macro twice(a) = (let x = a; x+x);").unwrap();
     let expr = parse_expr("twice(x)").unwrap();
     let result = process_macros(&expr, &macros).unwrap();
-    assert_eq!(print_expr_without_indent(&result).as_str(),
-               "(let x__1=(x);(x__1+x__1))");
+    assert_eq!(
+        print_expr_without_indent(&result).as_str(),
+        "(let x__1=(x);(x__1+x__1))"
+    );
 
     // On the other hand, if x is not used in the parameter, keep its ID as is.
     let macros = parse_macros("macro adder(a) = |x| x+a;").unwrap();
@@ -333,22 +348,28 @@ fn macros_introducing_symbols() {
     let macros = parse_macros("macro twice(a) = (let x = a; x+x);").unwrap();
     let expr = parse_expr("twice(b)").unwrap();
     let result = process_macros(&expr, &macros).unwrap();
-    assert_eq!(print_expr_without_indent(&result).as_str(),
-               "(let x=(b);(x+x))");
+    assert_eq!(
+        print_expr_without_indent(&result).as_str(),
+        "(let x=(b);(x+x))"
+    );
 
     // If a symbol is used multiple times during macro substitution, replace it with distinct IDs.
     let macros = parse_macros("macro adder(a) = |x| x+a;").unwrap();
     let expr = parse_expr("adder(x+adder(x)(1))").unwrap();
     let result = process_macros(&expr, &macros).unwrap();
-    assert_eq!(print_expr_without_indent(&result).as_str(),
-               "|x__1:?|(x__1+(x+(|x__2|(x__2+x))(1)))");
+    assert_eq!(
+        print_expr_without_indent(&result).as_str(),
+        "|x__1:?|(x__1+(x+(|x__2|(x__2+x))(1)))"
+    );
 
     // Similar case with multiple macros.
     let macros = parse_macros("macro adder(a)=|x|x+a; macro twice(a)=(let x=a; x+x);").unwrap();
     let expr = parse_expr("adder(twice(x))").unwrap();
     let result = process_macros(&expr, &macros).unwrap();
-    assert_eq!(print_expr_without_indent(&result).as_str(),
-               "|x__1:?|(x__1+(let x__2=(x);(x__2+x__2)))");
+    assert_eq!(
+        print_expr_without_indent(&result).as_str(),
+        "|x__1:?|(x__1+(let x__2=(x);(x__2+x__2)))"
+    );
 }
 
 #[test]
@@ -356,6 +377,8 @@ fn standard_macros() {
     // Check that the standard macros file is loaded
     let program = parse_program("map([1,2,3], |a|a+1)").unwrap();
     let result = process_program(&program).unwrap();
-    assert_eq!(print_expr_without_indent(&result).as_str(),
-               "result(for([1,2,3],appender[?],|b,i,x|merge(b,(|a|(a+1))(x))))");
+    assert_eq!(
+        print_expr_without_indent(&result).as_str(),
+        "result(for([1,2,3],appender[?],|b,i,x|merge(b,(|a|(a+1))(x))))"
+    );
 }

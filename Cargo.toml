@@ -8,6 +8,7 @@ readme = "README.md"
 license = "BSD-3-Clause"
 homepage = "https://www.weld.rs"
 repository = "https://github.com/weld-project/weld"
+edition = "2018"
 
 [dependencies]
 lazy_static = "0.2.1"

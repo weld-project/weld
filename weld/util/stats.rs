@@ -1,6 +1,6 @@
 //! Utility struct for measuring compilation time.
 
-extern crate time;
+use time;
 
 use self::time::Duration;
 
@@ -42,26 +42,47 @@ impl CompilationStats {
         result.push_str("Weld Compiler:\n");
         let mut total = Duration::milliseconds(0);
         for &(ref name, ref dur) in self.weld_times.iter() {
-            result.push_str(&format!("\t{}: {:.3} ms\n", name, CompilationStats::format_time(dur)));
+            result.push_str(&format!(
+                "\t{}: {:.3} ms\n",
+                name,
+                CompilationStats::format_time(dur)
+            ));
             total = total + *dur;
         }
-        result.push_str(&format!("\t\x1b[0;32mWeld Compiler Total\x1b[0m {} ms\n", CompilationStats::format_time(&total)));
+        result.push_str(&format!(
+            "\t\x1b[0;32mWeld Compiler Total\x1b[0m {} ms\n",
+            CompilationStats::format_time(&total)
+        ));
 
         let mut total = Duration::milliseconds(0);
         result.push_str("Weld Optimization Passes:\n");
         for &(ref name, ref dur) in self.pass_times.iter() {
-            result.push_str(&format!("\t{}: {:.3} ms\n", name, CompilationStats::format_time(dur)));
+            result.push_str(&format!(
+                "\t{}: {:.3} ms\n",
+                name,
+                CompilationStats::format_time(dur)
+            ));
             total = total + *dur;
         }
-        result.push_str(&format!("\t\x1b[0;32mWeld Optimization Passes Total\x1b[0m {} ms\n", CompilationStats::format_time(&total)));
+        result.push_str(&format!(
+            "\t\x1b[0;32mWeld Optimization Passes Total\x1b[0m {} ms\n",
+            CompilationStats::format_time(&total)
+        ));
 
         let mut total = Duration::milliseconds(0);
         result.push_str("LLVM:\n");
         for &(ref name, ref dur) in self.llvm_times.iter() {
-            result.push_str(&format!("\t{}: {:.3} ms\n", name, CompilationStats::format_time(dur)));
+            result.push_str(&format!(
+                "\t{}: {:.3} ms\n",
+                name,
+                CompilationStats::format_time(dur)
+            ));
             total = total + *dur;
         }
-        result.push_str(&format!("\t\x1b[0;32mLLVM Total\x1b[0m {} ms\n", CompilationStats::format_time(&total)));
+        result.push_str(&format!(
+            "\t\x1b[0;32mLLVM Total\x1b[0m {} ms\n",
+            CompilationStats::format_time(&total)
+        ));
 
         result
     }

@@ -11,14 +11,12 @@
 //! module will provide the shared Weld optimization and SIR conversion logic that currently lives in the
 //! `llvm` module.
 
-extern crate time;
-
-use ast::*;
-use conf::ParsedConf;
-use error::*;
-use runtime::WeldRuntimeErrno;
-use sir::*;
-use util::stats::CompilationStats;
+use crate::ast::*;
+use crate::conf::ParsedConf;
+use crate::error::*;
+use crate::runtime::WeldRuntimeErrno;
+use crate::sir::*;
+use crate::util::stats::CompilationStats;
 
 use std::fmt;
 
@@ -76,7 +74,7 @@ impl CompiledModule {
 }
 
 impl fmt::Debug for CompiledModule {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "CompiledModule")
     }
 }
@@ -86,17 +84,17 @@ impl fmt::Debug for CompiledModule {
 /// This function dispatches to the backend specified in `conf` to generate a compiled, runnable
 /// module. Statistics about compilation (e.g., time to generate code) are written into `stats`. If
 /// the `dumpCode` option is enabled, code is dumped to a filename `code-<timestamp>.[ll|S].
-pub fn compile_program(program: &SirProgram,
-                       conf: &mut ParsedConf,
-                       stats: &mut CompilationStats) -> WeldResult<CompiledModule> {
+pub fn compile_program(
+    program: &SirProgram,
+    conf: &mut ParsedConf,
+    stats: &mut CompilationStats,
+) -> WeldResult<CompiledModule> {
     let runnable = llvm2::compile(&program, conf, stats)?;
-    let result = CompiledModule {
-        runnable: runnable,
-    };
+    let result = CompiledModule { runnable };
     Ok(result)
 }
 
 /// Get the size of a value for a given target.
 pub fn size_of(ty: &Type) -> usize {
-    llvm2::size_of(ty) 
+    llvm2::size_of(ty)
 }

@@ -2,16 +2,16 @@
 //!
 //! This trait makes symbol names unique in the AST.
 
-use super::ast::*;
 use super::ast::ExprKind::*;
-use error::*;
+use super::ast::*;
+use crate::error::*;
 
 use std::collections::hash_map::Entry;
 
-extern crate fnv;
+use fnv;
 
 #[cfg(test)]
-use tests::*;
+use crate::tests::*;
 
 /// A trait that uniquifies symbol names in-place.
 pub trait Uniquify {
@@ -49,26 +49,24 @@ impl SymbolStack {
         match self.stack.entry(sym.clone()) {
             Entry::Occupied(ref ent) => {
                 let name = ent.key().name();
-                let id = ent.get()
-                    .last()
-                    .map(|v| *v)
-                    .ok_or(WeldCompileError::new(format!("Symbol {} is out of scope", &sym)))?;
+                let id = ent.get().last().cloned().ok_or_else(|| {
+                    WeldCompileError::new(format!("Symbol {} is out of scope", &sym))
+                })?;
                 Ok(Symbol::new(name, id))
             }
             _ => compile_err!("Undefined symbol {}", sym),
         }
     }
 
-
     /// Push a new symbol onto the stack, assigning it a unique name. This enters a new scope for
     /// the name. The symbol can be retrieved with `symbol()`.
     fn push_symbol(&mut self, sym: Symbol) {
-        let stack_entry = self.stack.entry(sym.clone()).or_insert(Vec::new());
+        let stack_entry = self.stack.entry(sym.clone()).or_insert_with(Vec::new);
         let next_entry = self.next_unique_symbol.entry(sym.name()).or_insert(-1);
         *next_entry = if sym.id() > *next_entry {
             sym.id()
         } else {
-           *next_entry + 1 
+            *next_entry + 1
         };
         stack_entry.push(*next_entry);
     }
@@ -79,8 +77,8 @@ impl SymbolStack {
             Entry::Occupied(mut ent) => {
                 ent.get_mut().pop();
                 Ok(())
-            },
-            _ => compile_err!("Attempting to pop undefined symbol {}", sym)
+            }
+            _ => compile_err!("Attempting to pop undefined symbol {}", sym),
         }
     }
 }
@@ -90,24 +88,31 @@ impl SymbolStack {
 fn uniquify_helper(expr: &mut Expr, symbol_stack: &mut SymbolStack) -> WeldResult<()> {
     match expr.kind {
         // First, handle expressions which define *new* symbols - Let and Lambda
-        Lambda {ref mut params, ref mut body} => {
+        Lambda {
+            ref mut params,
+            ref mut body,
+        } => {
             // Update the parameter of the lambda with new names.
             let original_params = params.clone();
             for param in params.iter_mut() {
-                let ref mut sym = param.name;
+                let sym = &mut param.name;
                 symbol_stack.push_symbol(sym.clone());
                 *sym = symbol_stack.symbol(sym.clone())?;
             }
 
             // Then, uniquify the lambda using the newly pushed symbols.
             uniquify_helper(body, symbol_stack)?;
-            
+
             // Finally, pop off the symbol names since they are out of scope now.
             for param in original_params {
                 symbol_stack.pop_symbol(param.name)?;
             }
         }
-        Let {ref mut name, ref mut value, ref mut body} => {
+        Let {
+            ref mut name,
+            ref mut value,
+            ref mut body,
+        } => {
             // First, uniquify the value *without* the updated stack, since the Let hasn't defined
             // the symbol yet.
             uniquify_helper(value, symbol_stack)?;
@@ -146,26 +151,32 @@ fn parse_and_print_uniquified_expressions() {
     // Redefine a symbol.
     let mut e = parse_expr("let a = 2; let a = 3; a").unwrap();
     let _ = e.uniquify();
-    assert_eq!(print_expr_without_indent(&e).as_str(),
-               "(let a=(2);(let a__1=(3);a__1))");
+    assert_eq!(
+        print_expr_without_indent(&e).as_str(),
+        "(let a=(2);(let a__1=(3);a__1))"
+    );
 
     // Make sure Let values aren't renamed.
     let mut e = parse_expr("let a = 2; let a = a+1; a").unwrap();
     let _ = e.uniquify();
-    assert_eq!(print_expr_without_indent(&e).as_str(),
-               "(let a=(2);(let a__1=((a+1));a__1))");
+    assert_eq!(
+        print_expr_without_indent(&e).as_str(),
+        "(let a=(2);(let a__1=((a+1));a__1))"
+    );
 
     // Lambdas and proper scoping.
     let mut e = parse_expr("let a = 2; (|a,b|a+b)(1,2) + a").unwrap();
     let _ = e.uniquify();
-    assert_eq!(print_expr_without_indent(&e).as_str(),
-               "(let a=(2);((|a__1,b|(a__1+b))(1,2)+a))");
+    assert_eq!(
+        print_expr_without_indent(&e).as_str(),
+        "(let a=(2);((|a__1,b|(a__1+b))(1,2)+a))"
+    );
 
     // Lambdas and Lets
     let mut e = parse_expr("let b = for([1], appender[i32], |b,i,e| merge(b, e)); b").unwrap();
     let _ = e.uniquify();
-    assert_eq!(print_expr_without_indent(&e).as_str(),
-               "(let b__1=(for([1],appender[i32],|b,i,e|merge(b,e)));b__1)");
+    assert_eq!(
+        print_expr_without_indent(&e).as_str(),
+        "(let b__1=(for([1],appender[i32],|b,i,e|merge(b,e)));b__1)"
+    );
 }
-
-

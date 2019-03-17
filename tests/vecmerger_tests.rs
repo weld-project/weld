@@ -1,11 +1,9 @@
 //! Tests for the VecMerger builder type.
 
-extern crate weld;
-
 use std::cmp;
 
 mod common;
-use common::*;
+use crate::common::*;
 
 #[test]
 fn simple_for_vecmerger_loop() {
@@ -22,7 +20,6 @@ fn simple_for_vecmerger_loop() {
     for i in 0..(result.len as isize) {
         assert_eq!(unsafe { *result.data.offset(i) }, input_vec[i as usize]);
     }
-
 }
 
 #[test]
@@ -68,7 +65,6 @@ fn simple_for_vecmerger_binops() {
             cmp::max(input_vec[i as usize], i as i64)
         );
     }
-
 }
 
 #[test]

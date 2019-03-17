@@ -8,12 +8,12 @@
 /// context*, the run will fail with an `OutOfMemoryError`.
 ///
 /// This parameter should be set in a configuration passed to a `WeldContext`.
-pub const CONF_MEMORY_LIMIT_KEY: &'static str = "weld.memory.limit";
+pub const CONF_MEMORY_LIMIT_KEY: &str = "weld.memory.limit";
 
 /// Specifies the number of threads to use during execution.
 ///
 /// This parameter should be set in a configuration passed to a `WeldContext`.
-pub const CONF_THREADS_KEY: &'static str = "weld.threads";
+pub const CONF_THREADS_KEY: &str = "weld.threads";
 
 /// Specifies whether tracing should be enabled when compiling the program.
 ///
@@ -22,14 +22,14 @@ pub const CONF_THREADS_KEY: &'static str = "weld.threads";
 /// be enabled for debugging (e.g., to identify a crash).
 ///
 /// This parameter should be set for compilation.
-pub const CONF_TRACE_RUN_KEY: &'static str = "weld.compile.traceExecution";
+pub const CONF_TRACE_RUN_KEY: &str = "weld.compile.traceExecution";
 
 /// Specifies an ordered list of the optimizations to apply to a Weld program.
 ///
 /// This supercedes the default optimization set.
 ///
 /// This parameter should be set for compilation.
-pub const CONF_OPTIMIZATION_PASSES_KEY: &'static str = "weld.optimization.passes";
+pub const CONF_OPTIMIZATION_PASSES_KEY: &str = "weld.optimization.passes";
 
 /// Enables experimental (unstable) optimizations.
 ///
@@ -37,7 +37,7 @@ pub const CONF_OPTIMIZATION_PASSES_KEY: &'static str = "weld.optimization.passes
 /// unstable/still being tested. They may also improve the performance of a program, however.
 ///
 /// This parameter should be set for compilation.
-pub const CONF_EXPERIMENTAL_PASSES_KEY: &'static str = "weld.optimization.applyExperimentalTransforms";
+pub const CONF_EXPERIMENTAL_PASSES_KEY: &str = "weld.optimization.applyExperimentalTransforms";
 
 /// Enables internal Sequential IR (SIR) optimizations.
 ///
@@ -46,42 +46,42 @@ pub const CONF_EXPERIMENTAL_PASSES_KEY: &'static str = "weld.optimization.applyE
 /// tree.
 ///
 /// This parameter should be set for compilation.
-pub const CONF_SIR_OPT_KEY: &'static str = "weld.optimization.sirOptimization";
+pub const CONF_SIR_OPT_KEY: &str = "weld.optimization.sirOptimization";
 
 /// Set the LLVM optimization level.
 ///
 /// This parameter should be set for compilation.
-pub const CONF_LLVM_OPTIMIZATION_LEVEL_KEY: &'static str = "weld.llvm.optimization.level";
+pub const CONF_LLVM_OPTIMIZATION_LEVEL_KEY: &str = "weld.llvm.optimization.level";
 
 /// Toggles LLVM loop unrolling.
 ///
 /// This parameter should be set for compilation.
-pub const CONF_LLVM_UNROLLER_KEY: &'static str = "weld.llvm.optimization.unroller";
+pub const CONF_LLVM_UNROLLER_KEY: &str = "weld.llvm.optimization.unroller";
 
 /// Toggles LLVM vectorization.
 ///
 /// Requires targetPasses to be true to have an effect.
 ///
 /// This parameter should be set for compilation.
-pub const CONF_LLVM_VECTORIZER_KEY: &'static str = "weld.llvm.optimization.vectorizer";
+pub const CONF_LLVM_VECTORIZER_KEY: &str = "weld.llvm.optimization.vectorizer";
 
 /// Toggles LLVM target passes.
 ///
 /// This parameter should be set for compilation.
-pub const CONF_LLVM_TARGET_PASSES_KEY: &'static str = "weld.llvm.optimization.targetPasses";
+pub const CONF_LLVM_TARGET_PASSES_KEY: &str = "weld.llvm.optimization.targetPasses";
 
 /// Toggles full module optimizations.
 ///
 /// This parameter should be set for compilation.
-pub const CONF_LLVM_MODULE_OPTS_KEY: &'static str = "weld.llvm.optimization.moduleOpts";
+pub const CONF_LLVM_MODULE_OPTS_KEY: &str = "weld.llvm.optimization.moduleOpts";
 
 /// Toggles per-function optimizations.
 ///
 /// This parameter should be set for compilation.
-pub const CONF_LLVM_FUNC_OPTS_KEY: &'static str = "weld.llvm.optimization.funcOpts";
+pub const CONF_LLVM_FUNC_OPTS_KEY: &str = "weld.llvm.optimization.funcOpts";
 
 /// Sets the symbol name of the entry-point function.
-pub const CONF_LLVM_RUN_FUNC_NAME_KEY: &'static str = "weld.llvm.runFunctionName";
+pub const CONF_LLVM_RUN_FUNC_NAME_KEY: &str = "weld.llvm.runFunctionName";
 
 /// Enables dumping code during compilation.
 ///
@@ -95,17 +95,17 @@ pub const CONF_LLVM_RUN_FUNC_NAME_KEY: &'static str = "weld.llvm.runFunctionName
 /// * Assembly code for target architecture (e.g,. x64 assembly)
 ///
 /// This parameter should be set for compilation.
-pub const CONF_DUMP_CODE_KEY: &'static str = "weld.compile.dumpCode";
+pub const CONF_DUMP_CODE_KEY: &str = "weld.compile.dumpCode";
 
 /// Specifies the directory to dump code into.
-/// 
+///
 /// This parameter should be set for compilation.
-pub const CONF_DUMP_CODE_DIR_KEY: &'static str = "weld.compile.dumpCodeDir";
+pub const CONF_DUMP_CODE_DIR_KEY: &str = "weld.compile.dumpCodeDir";
 
 /// Specifies the filename prefix for dumped code.
-/// 
+///
 /// This parameter should be set for compilation.
-pub const CONF_DUMP_CODE_FILENAME_KEY: &'static str = "weld.compile.dumpCodeFilename";
+pub const CONF_DUMP_CODE_FILENAME_KEY: &str = "weld.compile.dumpCodeFilename";
 
 /// Specifies the formats to dump for dumped code.
 ///
@@ -113,17 +113,17 @@ pub const CONF_DUMP_CODE_FILENAME_KEY: &'static str = "weld.compile.dumpCodeFile
 /// are dumped. The possible formats are:
 ///
 /// weld,weldopt,llvm,llvmopt,sir,assembly.
-/// 
+///
 /// This parameter should be set for compilation.
-pub const CONF_DUMP_CODE_FORMATS_KEY: &'static str = "weld.compile.dumpCodeFormats";
+pub const CONF_DUMP_CODE_FORMATS_KEY: &str = "weld.compile.dumpCodeFormats";
 
 /// Enables runtime bounds checking for loops before executing them.
 ///
 /// This parameter should be set for compilation.
-pub const CONF_ENABLE_BOUNDS_CHECKS_KEY: &'static str = "weld.compile.enableBoundsChecks";
+pub const CONF_ENABLE_BOUNDS_CHECKS_KEY: &str = "weld.compile.enableBoundsChecks";
 
 /// Default memory limit.
-pub const CONF_MEMORY_LIMIT_DEFAULT: i64 = 1000000000;
+pub const CONF_MEMORY_LIMIT_DEFAULT: i64 = 1_000_000_000;
 
 /// Default number of threads.
 pub const CONF_THREADS_DEFAULT: i32 = 1;
@@ -150,7 +150,7 @@ pub const CONF_LLVM_MODULE_OPTS_DEFAULT: bool = true;
 pub const CONF_LLVM_FUNC_OPTS_DEFAULT: bool = true;
 
 /// Default symbol name for LLVM entry-point function.
-pub const CONF_LLVM_RUN_FUNC_NAME_DEFAULT: &'static str = "run";
+pub const CONF_LLVM_RUN_FUNC_NAME_DEFAULT: &str = "run";
 
 /// Default setting for whether to dump code.
 pub const CONF_DUMP_CODE_DEFAULT: bool = false;
@@ -165,21 +165,20 @@ pub const CONF_EXPERIMENTAL_PASSES_DEFAULT: bool = false;
 pub const CONF_ENABLE_BOUNDS_CHECKS_DEFAULT: bool = false;
 
 /// Default directory for dumping code.
-pub const CONF_DUMP_CODE_DIR_DEFAULT: &'static str = ".";
-
+pub const CONF_DUMP_CODE_DIR_DEFAULT: &str = ".";
 
 /// Default set of optimization passes.
-pub const CONF_OPTIMIZATION_PASSES_DEFAULT: &[&'static str] =  &[
-"inline-zip",
-"inline-let",
-"inline-apply",
-"loop-fusion",
-"unroll-static-loop",
-"infer-size",
-"algebraic",
-"inline-literals",
-"cse",
-"short-circuit-booleans",
-"predicate",
-"vectorize"
+pub const CONF_OPTIMIZATION_PASSES_DEFAULT: &[&str] = &[
+    "inline-zip",
+    "inline-let",
+    "inline-apply",
+    "loop-fusion",
+    "unroll-static-loop",
+    "infer-size",
+    "algebraic",
+    "inline-literals",
+    "cse",
+    "short-circuit-booleans",
+    "predicate",
+    "vectorize",
 ];

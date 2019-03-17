@@ -1,6 +1,7 @@
 language: rust
 sudo: required
 dist: trusty
+cache: cargo
 addons:
   artifacts:
     paths: results
@@ -16,6 +17,8 @@ before_install:
 - curl -sSL "https://build.travis-ci.org/files/gpg/travis-security.asc" | sudo -E apt-key add -
 - echo "deb http://ppa.launchpad.net/ubuntu-toolchain-r/test/ubuntu trusty main" | sudo tee -a /etc/apt/sources.list >/dev/null
 install:
+- rustup component add rustfmt
+- rustup component add clippy
 - sudo rm -f `which llvm-config`
 - export WELD_HOME=`pwd`
 - sudo -E apt-get -yq update &>> ~/apt-get-update.log

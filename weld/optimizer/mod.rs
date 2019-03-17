@@ -6,24 +6,26 @@
 //! pass, and also provides utilities for applying passes until a fix point (that is, until the
 //! pass stops modifying the AST).
 
-extern crate time;
+use time;
 
 use time::PreciseTime;
 
-use ast::*;
-use error::*;
-use util::stats::CompilationStats;
+use crate::ast::*;
+use crate::error::*;
+use crate::util::stats::CompilationStats;
 
 pub use self::passes::*;
 
-pub mod transforms;
 mod passes;
+pub mod transforms;
 
 /// Apply passes from a list until fix point.
-pub fn apply_passes(expr: &mut Expr,
-                        passes: &Vec<Pass>,
-                        stats: &mut CompilationStats,
-                        use_experimental: bool) -> WeldResult<()> {
+pub fn apply_passes(
+    expr: &mut Expr,
+    passes: &[Pass],
+    stats: &mut CompilationStats,
+    use_experimental: bool,
+) -> WeldResult<()> {
     for pass in passes {
         if pass.pass_name() == "vectorize" {
             continue;
