@@ -118,17 +118,17 @@ impl WeldRuntimeContext {
             );
         }
         let layout = Layout::from_size_align_unchecked(size as usize, DEFAULT_ALIGN);
-        let mem = Allocator.alloc(layout.clone());
+        let mem = Allocator.alloc(layout);
 
         self.allocated += layout.size();
         trace!("Alloc'd pointer {:?} ({} bytes)", mem, layout.size());
 
-        self.allocations.insert(mem.clone(), layout);
+        self.allocations.insert(mem, layout);
         mem
     }
 
     unsafe fn realloc(&mut self, pointer: Ptr, size: i64) -> Ptr {
-        if pointer == ptr::null_mut() {
+        if pointer.is_null() {
             return self.malloc(size);
         }
 
@@ -144,7 +144,7 @@ impl WeldRuntimeContext {
         }
 
         // Must pass *old* layout to realloc!
-        let mem = Allocator.realloc(pointer, old_layout.clone(), size);
+        let mem = Allocator.realloc(pointer, old_layout, size);
         let new_layout = Layout::from_size_align_unchecked(size, DEFAULT_ALIGN);
 
         self.allocated -= old_layout.size();
@@ -186,7 +186,7 @@ impl WeldRuntimeContext {
     ///
     /// Panics if the passed value was not allocated by the Weld runtime.
     pub unsafe fn free(&mut self, pointer: Ptr) {
-        if pointer == ptr::null_mut() {
+        if pointer.is_null() {
             trace!("Freed null pointer (no-op) in runst_free()");
             return;
         }
@@ -199,7 +199,7 @@ impl WeldRuntimeContext {
             layout.size()
         );
 
-        Allocator.dealloc(pointer, layout.clone());
+        Allocator.dealloc(pointer, layout);
         self.allocated -= layout.size();
     }
 
@@ -249,16 +249,16 @@ impl Drop for WeldRuntimeContext {
 unsafe fn initialize() {
     ONCE.call_once(|| {
         // Hack to prevent symbols from being compiled out in a Rust binary.
-        let mut x = weld_runst_init as i64;
-        x += weld_runst_set_result as i64;
-        x += weld_runst_get_result as i64;
-        x += weld_runst_malloc as i64;
-        x += weld_runst_realloc as i64;
-        x += weld_runst_free as i64;
-        x += weld_runst_get_errno as i64;
-        x += weld_runst_set_errno as i64;
-        x += weld_runst_assert as i64;
-        x += weld_runst_print as i64;
+        let mut x = weld_runst_init as usize;
+        x += weld_runst_set_result as usize;
+        x += weld_runst_get_result as usize;
+        x += weld_runst_malloc as usize;
+        x += weld_runst_realloc as usize;
+        x += weld_runst_free as usize;
+        x += weld_runst_get_errno as usize;
+        x += weld_runst_set_errno as usize;
+        x += weld_runst_assert as usize;
+        x += weld_runst_print as usize;
 
         trace!("Runtime initialized with hashed values {}", x);
     });

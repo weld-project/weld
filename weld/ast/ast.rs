@@ -1,4 +1,5 @@
 //! Defines the Weld abstract syntax tree.
+#![allow(clippy::module_inception)]
 
 use crate::error::*;
 use crate::util;

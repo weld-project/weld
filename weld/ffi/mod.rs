@@ -71,7 +71,7 @@ pub unsafe extern "C" fn weld_context_memory_usage(context: WeldContextRef) -> i
 /// All contexts created by the FFI should be freed. This includes contexts obtained from
 /// `weld_context_new` and `weld_value_context`.
 pub unsafe extern "C" fn weld_context_free(ptr: WeldContextRef) {
-    if ptr != ptr::null_mut() {
+    if !ptr.is_null() {
         Box::from_raw(ptr);
     }
 }
@@ -89,7 +89,7 @@ pub extern "C" fn weld_conf_new() -> WeldConfRef {
 ///
 /// The passsed configuration should have been allocated using `weld_conf_new`.
 pub unsafe extern "C" fn weld_conf_free(ptr: WeldConfRef) {
-    if ptr != ptr::null_mut() {
+    if !ptr.is_null() {
         Box::from_raw(ptr);
     }
 }
@@ -170,7 +170,7 @@ pub unsafe extern "C" fn weld_value_data(value: WeldValueRef) -> *const c_void {
 /// free the data they contain.  Weld values which are not owned by the runtime only free the
 /// structure used to wrap the data; the actual data itself is owned by the caller.
 pub unsafe extern "C" fn weld_value_free(value: WeldValueRef) {
-    if value != ptr::null_mut() {
+    if !value.is_null() {
         Box::from_raw(value);
     }
 }
@@ -240,7 +240,7 @@ pub unsafe extern "C" fn weld_module_run(
 /// Freeing a module does not free the memory it may have allocated. Values returned by the module
 /// must be freed explicitly using `weld_value_free`.
 pub unsafe extern "C" fn weld_module_free(ptr: WeldModuleRef) {
-    if ptr != ptr::null_mut() {
+    if !ptr.is_null() {
         Box::from_raw(ptr);
     }
 }
@@ -272,7 +272,7 @@ pub unsafe extern "C" fn weld_error_message(err: WeldErrorRef) -> *const c_char 
 #[no_mangle]
 /// Frees a Weld error object.
 pub unsafe extern "C" fn weld_error_free(err: WeldErrorRef) {
-    if err != ptr::null_mut() {
+    if !err.is_null() {
         Box::from_raw(err);
     }
 }

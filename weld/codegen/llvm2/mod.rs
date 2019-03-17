@@ -692,7 +692,7 @@ pub trait CodeGenExt {
     }
 
     unsafe fn u64(&self, v: u64) -> LLVMValueRef {
-        LLVMConstInt(self.u64_type(), u64::from(v), 0)
+        LLVMConstInt(self.u64_type(), v, 0)
     }
 
     unsafe fn f32(&self, v: f32) -> LLVMValueRef {

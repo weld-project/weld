@@ -19,7 +19,7 @@ pub fn typed_expression(s: &str) -> Expr {
 pub fn check_transform(input: &str, expect: &str, transform: fn(&mut Expr)) {
     use crate::ast::{PrettyPrint, PrettyPrintConfig};
 
-    let conf = &PrettyPrintConfig::new().show_types(true);
+    let conf = PrettyPrintConfig::default().show_types(true);
 
     let input = &mut typed_expression(input);
     let expect = &typed_expression(expect);
@@ -28,8 +28,8 @@ pub fn check_transform(input: &str, expect: &str, transform: fn(&mut Expr)) {
 
     println!(
         "\nInput: {}\nExpect: {}",
-        input.pretty_print_config(conf),
-        expect.pretty_print_config(conf)
+        input.pretty_print_config(&conf),
+        expect.pretty_print_config(&conf)
     );
 
     assert!(input.compare_ignoring_symbols(expect).unwrap());
@@ -39,18 +39,18 @@ pub fn check_transform(input: &str, expect: &str, transform: fn(&mut Expr)) {
 #[cfg(test)]
 pub fn print_expr_without_indent(e: &Expr) -> String {
     use crate::ast::{PrettyPrint, PrettyPrintConfig};
-    let config = &PrettyPrintConfig::new()
+    let config = PrettyPrintConfig::default()
         .show_types(false)
         .should_indent(false);
-    e.pretty_print_config(config)
+    e.pretty_print_config(&config)
 }
 
 /// Print an un-indented expression for string comparison.
 #[cfg(test)]
 pub fn print_typed_expr_without_indent(e: &Expr) -> String {
     use crate::ast::{PrettyPrint, PrettyPrintConfig};
-    let config = &PrettyPrintConfig::new()
+    let config = PrettyPrintConfig::default()
         .show_types(true)
         .should_indent(false);
-    e.pretty_print_config(config)
+    e.pretty_print_config(&config)
 }

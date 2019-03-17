@@ -116,6 +116,8 @@
 //! backing a `WeldContext` is freed when all references to the context are dropped.
 //!
 #![cfg_attr(not(test), allow(dead_code))]
+#![allow(clippy::cyclomatic_complexity)]
+#![allow(clippy::too_many_arguments)]
 
 #[macro_use]
 extern crate lazy_static;
@@ -494,7 +496,7 @@ impl WeldValue {
 }
 
 /// A struct used to configure compilation and the Weld runtime.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct WeldConf {
     dict: fnv::FnvHashMap<String, CString>,
 }
@@ -948,7 +950,7 @@ impl From<log::LogLevelFilter> for WeldLogLevel {
 ///
 /// The dynamic library is a C dynamic library identified by its filename.
 pub fn load_linked_library<S: AsRef<str>>(filename: S) -> WeldResult<()> {
-    codegen::load_library(filename.as_ref()).map_err(|e| WeldError::from(e))
+    codegen::load_library(filename.as_ref()).map_err(WeldError::from)
 }
 
 /// Enables logging to stderr in Weld with the given log level.

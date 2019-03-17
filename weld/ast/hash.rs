@@ -111,13 +111,13 @@ impl ExprHash {
                 // Do the value before pushing onto the symbol staack.
                 self.hash_expr(value, symbol_positions, max_id)?;
                 {
-                    let entry = symbol_positions.entry(name).or_insert_with(|| Vec::new());
+                    let entry = symbol_positions.entry(name).or_insert_with(Vec::new);
                     entry.push(*max_id);
                     *max_id += 1;
                 } // brackets to end the borrow.
                 self.hash_expr(body, symbol_positions, max_id)?;
                 // pop the stack.
-                let entry = symbol_positions.entry(name).or_insert_with(|| Vec::new());
+                let entry = symbol_positions.entry(name).or_insert_with(Vec::new);
                 let _ = entry.pop();
                 finished_subexpressions = true;
             }
@@ -127,14 +127,14 @@ impl ExprHash {
             } => {
                 // Push the stack for each param.
                 for param in params.iter() {
-                    let entry = symbol_positions.entry(&param.name).or_insert_with(|| Vec::new());
+                    let entry = symbol_positions.entry(&param.name).or_insert_with(Vec::new);
                     entry.push(*max_id);
                     *max_id += 1;
                 }
                 self.hash_expr(body, symbol_positions, max_id)?;
                 // Pop the stack.
                 for param in params.iter() {
-                    let entry = symbol_positions.entry(&param.name).or_insert_with(|| Vec::new());
+                    let entry = symbol_positions.entry(&param.name).or_insert_with(Vec::new);
                     entry.pop();
                 }
                 finished_subexpressions = true;

@@ -52,8 +52,8 @@ impl SymbolStack {
                 let id = ent
                     .get()
                     .last()
-                    .map(|v| *v)
-                    .ok_or(WeldCompileError::new(format!(
+                    .cloned()
+                    .ok_or_else(|| WeldCompileError::new(format!(
                         "Symbol {} is out of scope",
                         &sym
                     )))?;
@@ -66,7 +66,7 @@ impl SymbolStack {
     /// Push a new symbol onto the stack, assigning it a unique name. This enters a new scope for
     /// the name. The symbol can be retrieved with `symbol()`.
     fn push_symbol(&mut self, sym: Symbol) {
-        let stack_entry = self.stack.entry(sym.clone()).or_insert(Vec::new());
+        let stack_entry = self.stack.entry(sym.clone()).or_insert_with(Vec::new);
         let next_entry = self.next_unique_symbol.entry(sym.name()).or_insert(-1);
         *next_entry = if sym.id() > *next_entry {
             sym.id()

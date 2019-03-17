@@ -427,7 +427,7 @@ impl InferTypesInternal for Expr {
 
             Broadcast(ref c) => {
                 if let Scalar(ref kind) = c.ty {
-                    self.ty.push(&Simd(kind.clone()))
+                    self.ty.push(&Simd(*kind))
                 } else if c.ty == Unknown {
                     Ok(false)
                 } else {
@@ -617,7 +617,7 @@ impl InferTypesInternal for Expr {
                         changed |= index.ty.push(key_type)?;
 
                         // Push the value type.
-                        changed |= my_type.get_mut(1).unwrap().push(value_type)?;
+                        changed |= (&mut my_type[1]).push(value_type)?;
 
                         let struct_ty = &mut Struct(my_type);
                         changed |= self.ty.sync(struct_ty)?;
@@ -684,7 +684,7 @@ impl InferTypesInternal for Expr {
                 let mut changed = self.ty.sync(&mut initial.ty)?;
                 match update_func.ty {
                     Function(ref mut params, _) if params.len() == 1 => {
-                        changed |= params.get_mut(0).unwrap().sync(&mut initial.ty)?;
+                        changed |= (&mut params[0]).sync(&mut initial.ty)?;
                         Ok(changed)
                     }
                     _ => compile_err!(
@@ -809,16 +809,16 @@ impl InferTypesInternal for Expr {
                     }
                     DictMerger(ref mut key, ref mut value, _) => {
                         if let Struct(mut tys) = merge_type {
-                            mem::swap(key.as_mut(), tys.get_mut(0).unwrap());
-                            mem::swap(value.as_mut(), tys.get_mut(1).unwrap());
+                            mem::swap(key.as_mut(), &mut tys[0]);
+                            mem::swap(value.as_mut(), &mut tys[1]);
                         } else {
                             unreachable!()
                         }
                     }
                     GroupMerger(ref mut key, ref mut value) => {
                         if let Struct(mut tys) = merge_type {
-                            mem::swap(key.as_mut(), tys.get_mut(0).unwrap());
-                            mem::swap(value.as_mut(), tys.get_mut(1).unwrap());
+                            mem::swap(key.as_mut(), &mut tys[0]);
+                            mem::swap(value.as_mut(), &mut tys[1]);
                         } else {
                             unreachable!()
                         }
@@ -826,7 +826,7 @@ impl InferTypesInternal for Expr {
                     VecMerger(ref mut elem, _) => {
                         if let Struct(mut tys) = merge_type {
                             // tys[0] is the index.
-                            mem::swap(elem.as_mut(), tys.get_mut(1).unwrap());
+                            mem::swap(elem.as_mut(), &mut tys[1]);
                         } else {
                             unreachable!()
                         }
