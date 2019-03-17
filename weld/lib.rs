@@ -1,4 +1,3 @@
-//!
 //! Weld is a runtime for improving the performance of data-intensive applications. It optimizes
 //! across libraries and functions by expressing the core computations in libraries using a small
 //! common intermediate representation, similar to CUDA and OpenCL.
