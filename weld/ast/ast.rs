@@ -13,7 +13,7 @@ use std::rc::Rc;
 use std::vec;
 
 /// Name used for placeholder expressions.
-const PLACEHOLDER_NAME: &'static str = "#placeholder";
+const PLACEHOLDER_NAME: &str = "#placeholder";
 
 /// An annotation over a type or expression.
 ///
@@ -606,10 +606,10 @@ impl Iter {
     /// An iterator is simple if it has no start/stride/end specified (i.e., it iterates over all
     /// the input data) and kind `ScalarIter`.
     pub fn is_simple(&self) -> bool {
-        return self.start.is_none()
+        self.start.is_none()
             && self.end.is_none()
             && self.stride.is_none()
-            && self.kind == IterKind::ScalarIter;
+            && self.kind == IterKind::ScalarIter
     }
 }
 
@@ -1282,7 +1282,7 @@ impl Expr {
         match func(self) {
             (Some(e), true) => {
                 *self = e;
-                return self.transform_and_continue(func);
+                self.transform_and_continue(func)
             }
             (Some(e), false) => {
                 *self = e;
@@ -1375,7 +1375,7 @@ impl Expr {
                 return true;
             }
         }
-        return false;
+        false
     }
 }
 
@@ -1402,7 +1402,7 @@ impl Placeholder for Expr {
         if let Ident(ref name) = self.kind {
             return name.name.as_ref() == PLACEHOLDER_NAME;
         }
-        return false;
+        false
     }
 
     fn new_placeholder() -> Expr {

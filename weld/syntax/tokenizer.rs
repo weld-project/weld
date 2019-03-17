@@ -349,7 +349,7 @@ pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
         }
     }
     tokens.push(TEndOfInput);
-    return Ok(tokens);
+    Ok(tokens)
 }
 
 impl fmt::Display for Token {

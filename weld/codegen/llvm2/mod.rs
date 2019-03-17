@@ -655,16 +655,16 @@ pub trait CodeGenExt {
         LLVMPointerType(ty, 0)
     }
 
-    unsafe fn bool(&self, v: bool) -> LLVMValueRef {
-        LLVMConstInt(self.bool_type(), if v { 1 } else { 0 }, 0)
+    unsafe fn bool<T: Into<bool>>(&self, v: T) -> LLVMValueRef {
+        LLVMConstInt(self.bool_type(), if v.into() { 1 } else { 0 }, 0)
     }
 
-    unsafe fn i1(&self, v: bool) -> LLVMValueRef {
-        LLVMConstInt(self.i1_type(), if v { 1 } else { 0 }, 0)
+    unsafe fn i1<T: Into<bool>>(&self, v: T) -> LLVMValueRef {
+        LLVMConstInt(self.i1_type(), if v.into() { 1 } else { 0 }, 0)
     }
 
-    unsafe fn i8(&self, v: i8) -> LLVMValueRef {
-        LLVMConstInt(self.i8_type(), v as c_ulonglong, 1)
+    unsafe fn i8<T: Into<i8>>(&self, v: T) -> LLVMValueRef {
+        LLVMConstInt(self.i8_type(), v.into() as c_ulonglong, 1)
     }
 
     unsafe fn u8(&self, v: u8) -> LLVMValueRef {

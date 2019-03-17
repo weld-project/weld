@@ -243,7 +243,7 @@ pub unsafe fn set_triple_and_layout(module: LLVMModuleRef) -> WeldResult<()> {
 unsafe fn verify_module(module: LLVMModuleRef) -> WeldResult<()> {
     use self::llvm_sys::analysis::LLVMVerifierFailureAction::*;
     use self::llvm_sys::analysis::LLVMVerifyModule;
-    let mut error_str = 0 as *mut c_char;
+    let mut error_str = ptr::null_mut();
     let result_code = LLVMVerifyModule(module, LLVMReturnStatusAction, &mut error_str);
     let result = {
         if result_code != 0 {
@@ -331,7 +331,7 @@ unsafe fn optimize_module(module: LLVMModuleRef, conf: &ParsedConf) -> WeldResul
 
     let start = PreciseTime::now();
     let mut func = LLVMGetFirstFunction(module);
-    while func != ptr::null_mut() {
+    while !func.is_null() {
         LLVMRunFunctionPassManager(fpm, func);
         func = LLVMGetNextFunction(func);
     }
@@ -369,7 +369,7 @@ unsafe fn create_exec_engine(
     for mapping in mappings.iter() {
         let global = LLVMGetNamedFunction(module, mapping.0.as_ptr());
         // The LLVM optimizer can delete globals, so we need this check here!
-        if global != ptr::null_mut() {
+        if !global.is_null() {
             globals.push((global, mapping.1));
         } else {
             trace!(

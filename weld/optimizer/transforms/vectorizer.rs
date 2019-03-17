@@ -345,9 +345,9 @@ fn vectorizable_builder(expr: &Expr) -> Option<bool> {
                     None => return None,
                 }
             }
-            return Some(vectorizable);
+            Some(vectorizable)
         }
-        _ => return None,
+        _ => None,
     }
 }
 
@@ -516,7 +516,7 @@ fn make_select_for_kv(cond: Expr, kv: Expr, ident: Expr) -> WeldResult<Option<Ex
 
     let sel = constructors::select_expr(cond, kv_struct, kv_ident)?;
     let le = constructors::let_expr(name, kv, sel)?; /* avoid copying key */
-    return Ok(Some(le));
+    Ok(Some(le))
 }
 
 /// Check whether a function has a vectorized Merge call. We'll use this to check whether function

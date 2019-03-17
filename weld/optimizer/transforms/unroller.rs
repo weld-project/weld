@@ -205,7 +205,7 @@ fn unroll_values(
         });
         expressions.push(unrolled_value);
     }
-    return Ok(expressions);
+    Ok(expressions)
 }
 
 /// Combines the expressions in `values` into a single value based on the kind of builder the
@@ -231,19 +231,19 @@ fn combine_unrolled_values(bk: BuilderKind, values: Vec<Expr>) -> WeldResult<Exp
                     prev = Some(binop_expr(*binop, prev.unwrap(), value)?);
                 }
             }
-            return Ok(prev.unwrap());
+            Ok(prev.unwrap())
         }
         Appender(ref ty) => {
             if values.iter().any(|ref expr| expr.ty != *ty.as_ref()) {
                 return compile_err!("Mismatched types in Appender and unrolled values.");
             }
-            return makevector_expr(values);
+            makevector_expr(values)
         }
         ref bk => {
-            return compile_err!(
+            compile_err!(
                 "Unroller transform does not support loops with builder of kind {:?}",
                 bk
-            );
+            )
         }
     }
 }

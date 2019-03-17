@@ -622,8 +622,7 @@ impl DeHelper for LlvmGenerator {
                 Struct(_) if !ty.has_pointer() => {
                     // Copy a single value of the given type.
                     let one = self.i64(1);
-                    let position = self.gen_get_values(builder, output, one, buffer, position)?;
-                    position
+                    self.gen_get_values(builder, output, one, buffer, position)?
                 }
                 Vector(ref elem) if !elem.has_pointer() => {
                     let size_type = self.i64_type();

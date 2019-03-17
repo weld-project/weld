@@ -660,11 +660,11 @@ impl fmt::Display for ParallelForIter {
 
 impl fmt::Display for BasicBlock {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "B{}:\n", self.id)?;
+        writeln!(f, "B{}:", self.id)?;
         for stmt in &self.statements {
-            write!(f, "  {}\n", stmt)?;
+            writeln!(f, "  {}", stmt)?;
         }
-        write!(f, "  {}\n", self.terminator)?;
+        writeln!(f, "  {}", self.terminator)?;
         Ok(())
     }
 }
@@ -672,16 +672,16 @@ impl fmt::Display for BasicBlock {
 impl fmt::Display for SirFunction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let loopbody = if self.loop_body { " (loopbody)" } else { "" };
-        write!(f, "F{} -> {}{}:\n", self.id, &self.return_type, loopbody)?;
-        write!(f, "Params:\n")?;
+        writeln!(f, "F{} -> {}{}:", self.id, &self.return_type, loopbody)?;
+        writeln!(f, "Params:")?;
         let params_sorted: BTreeMap<&Symbol, &Type> = self.params.iter().collect();
         for (name, ty) in params_sorted {
-            write!(f, "  {}: {}\n", name, ty)?;
+            writeln!(f, "  {}: {}", name, ty)?;
         }
-        write!(f, "Locals:\n")?;
+        writeln!(f, "Locals:")?;
         let locals_sorted: BTreeMap<&Symbol, &Type> = self.locals.iter().collect();
         for (name, ty) in locals_sorted {
-            write!(f, "  {}: {}\n", name, ty)?;
+            writeln!(f, "  {}: {}", name, ty)?;
         }
         for block in &self.blocks {
             write!(f, "{}", block)?;
@@ -693,7 +693,7 @@ impl fmt::Display for SirFunction {
 impl fmt::Display for SirProgram {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for func in &self.funcs {
-            write!(f, "{}\n", func)?;
+            writeln!(f, "{}", func)?;
         }
         Ok(())
     }
@@ -906,15 +906,6 @@ fn gen_expr(
 ) -> WeldResult<(FunctionId, BasicBlockId, Symbol)> {
     use self::StatementKind::*;
     use self::Terminator::*;
-
-    /*
-    if prog.funcs[cur_func].return_type == Unknown {
-        prog.funcs[cur_func].return_type = expr.ty.clone();
-        debug!("F{} generating code for top expression\n{}", cur_func, expr.pretty_print());
-    } else {
-        trace!("F{} generating code for child expression\n{}", cur_func, expr.pretty_print());
-    }
-    */
 
     match expr.kind {
         ExprKind::Ident(ref sym) => Ok((cur_func, cur_block, sym.clone())),

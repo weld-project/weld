@@ -173,7 +173,7 @@ impl CompareIgnoringSymbols for Expr {
                     return res;
                 }
             }
-            return Ok(true);
+            Ok(true)
         }
         _compare_ignoring_symbols(self, other, &mut sym_map, &mut reverse_sym_map)
     }

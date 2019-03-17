@@ -29,7 +29,7 @@ use super::CodeGenExt;
 use super::HasPointer;
 use super::LlvmGenerator;
 
-pub const CRC32_SEED: u32 = 0xffffffff;
+pub const CRC32_SEED: u32 = 0xffff_ffff;
 
 /// Trait for generating hashing code.
 pub trait GenHash {
@@ -130,14 +130,14 @@ impl GenHash for LlvmGenerator {
 
         // Call the function.
         let function = self.hash_fns.get(ty).cloned().unwrap();
-        let mut args = [value_pointer, seed.unwrap_or(self.u32(CRC32_SEED))];
-        return Ok(LLVMBuildCall(
+        let mut args = [value_pointer, seed.unwrap_or_else(|| self.u32(CRC32_SEED))];
+        Ok(LLVMBuildCall(
             builder,
             function,
             args.as_mut_ptr(),
             args.len() as u32,
             c_str!(""),
-        ));
+        ))
     }
 }
 
@@ -233,7 +233,7 @@ impl Hash for LlvmGenerator {
             let string = CString::new(format!("Hashing bitwidth {}", kind)).unwrap();
             let rht = self.run_handle_type();
             let rht = LLVMConstPointerNull(rht);
-            let _ = self.gen_print(builder, rht, string).unwrap();
+            self.gen_print(builder, rht, string).unwrap();
         }
 
         match kind {
@@ -311,7 +311,7 @@ impl Hash for LlvmGenerator {
     ) -> WeldResult<(LLVMValueRef, LLVMValueRef)> {
         // Get the type that we hash.
         let int_ty = self.llvm_type(&Type::Scalar(kind))?;
-        let bitwidth = LLVMGetIntTypeWidth(int_ty) as i64;
+        let bitwidth = i64::from(LLVMGetIntTypeWidth(int_ty));
 
         let start_block = LLVMAppendBasicBlockInContext(self.context(), function, c_str!(""));
         let loop_block = LLVMAppendBasicBlockInContext(self.context(), function, c_str!(""));

@@ -196,11 +196,9 @@ impl PushType for Type {
                 }?;
 
                 // Check the annotations.
-                if *annotations != *other_annotations {
-                    if !annotations.is_empty() {
-                        *annotations = other_annotations.clone();
-                        changed = true;
-                    }
+                if *annotations != *other_annotations && !annotations.is_empty() {
+                    *annotations = other_annotations.clone();
+                    changed = true;
                 }
                 Ok(changed)
             }

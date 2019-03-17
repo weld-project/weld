@@ -204,7 +204,7 @@ impl Appender {
 
         let new_size = LLVMBuildNSWAdd(
             builder,
-            self.i64(num_elements as i64),
+            self.i64(i64::from(num_elements)),
             size,
             c_str!("newSize"),
         );

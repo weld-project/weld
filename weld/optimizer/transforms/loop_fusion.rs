@@ -102,7 +102,7 @@ pub fn fuse_loops_horizontal(expr: &mut Expr) {
                         }
                     }
                     // The pattern doesn't match for some Iter -- abort the transform.
-                    return false;
+                    false
                 }) {
                     // All Iters are over the same range and same vector, with a pattern we can
                     // transform. Produce the new expression by zipping the functions of each

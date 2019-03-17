@@ -133,10 +133,10 @@ impl<'t> Parser<'t> {
                 string.push_str(format!("{}", token_str.as_str()).as_str());
             }
 
-            if i != self.position - 1 && self.tokens[i + 1].requires_space() {
-                if self.tokens[i].requires_space() {
+            if i != self.position - 1
+                && self.tokens[i + 1].requires_space()
+                && self.tokens[i].requires_space() {
                     string.push_str(" ");
-                }
             }
         }
 

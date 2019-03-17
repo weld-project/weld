@@ -106,13 +106,13 @@ impl Merger {
         }
 
         let mut args = [init];
-        return Ok(LLVMBuildCall(
+        Ok(LLVMBuildCall(
             builder,
             self.new.unwrap(),
             args.as_mut_ptr(),
             args.len() as u32,
             c_str!(""),
-        ));
+        ))
     }
 
     /// Builds the `Merge` function and returns a reference to the function.

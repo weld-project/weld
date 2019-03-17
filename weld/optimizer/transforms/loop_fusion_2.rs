@@ -35,7 +35,7 @@ impl<'a> MergeSingle<'a> {
                 }
             }
         }
-        return None;
+        None
     }
 }
 
@@ -48,7 +48,7 @@ impl NewAppender {
                 return Some(NewAppender);
             }
         }
-        return None;
+        None
     }
 }
 
@@ -71,7 +71,7 @@ impl<'a> ResForAppender<'a> {
                 }
             }
         }
-        return None;
+        None
     }
 }
 
@@ -96,7 +96,7 @@ impl<'a> MapIter<'a> {
                 }
             }
         }
-        return None;
+        None
     }
 }
 
@@ -324,7 +324,7 @@ pub fn move_merge_before_let(expr: &mut Expr) {
                 }
             }
         }
-        return None;
+        None
     });
 }
 
@@ -337,7 +337,7 @@ fn is_fusable_expr(expr: &Expr) -> bool {
             }
         }
     }
-    return false;
+    false
 }
 
 /// Checks if a name binding can be fused with the loop its contained in.

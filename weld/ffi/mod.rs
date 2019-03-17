@@ -134,7 +134,7 @@ pub extern "C" fn weld_value_new(data: *const c_void) -> WeldValueRef {
 /// If this value was not returned by a Weld program, this function returns `-1`.
 pub unsafe extern "C" fn weld_value_run(value: WeldValueRef) -> int64_t {
     let value = &*value;
-    return value.run_id().unwrap_or(-1) as int64_t;
+    value.run_id().unwrap_or(-1) as int64_t
 }
 
 #[no_mangle]

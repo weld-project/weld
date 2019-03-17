@@ -279,13 +279,13 @@ impl Vector {
         }
 
         let mut args = [size, run];
-        return Ok(LLVMBuildCall(
+        Ok(LLVMBuildCall(
             builder,
             self.new.unwrap(),
             args.as_mut_ptr(),
             args.len() as u32,
             c_str!(""),
-        ));
+        ))
     }
 
     /// Generates the `clone` method on vectors and calls it.
@@ -340,13 +340,13 @@ impl Vector {
         }
 
         let mut args = [vector, run];
-        return Ok(LLVMBuildCall(
+        Ok(LLVMBuildCall(
             builder,
             self.clone.unwrap(),
             args.as_mut_ptr(),
             args.len() as u32,
             c_str!(""),
-        ));
+        ))
     }
 
     /// Generates the `at` method on vectors and calls it.

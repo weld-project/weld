@@ -75,7 +75,7 @@ pub trait ForLoopGenInternal {
     unsafe fn gen_check_equal(
         &mut self,
         ctx: &mut FunctionContext<'_>,
-        iterations: &Vec<LLVMValueRef>,
+        iterations: &[LLVMValueRef],
         pass_block: LLVMBasicBlockRef,
         fail_block: LLVMBasicBlockRef,
     ) -> WeldResult<()>;
@@ -105,7 +105,7 @@ impl ForLoopGenInternal for LlvmGenerator {
         assert!(sir_function.loop_body);
 
         self.gen_loop_body_function(ctx.sir_program, sir_function, parfor)?;
-        let body_function = *self.functions.get(&parfor.body).unwrap();
+        let body_function = self.functions[&parfor.body];
 
         // The parameters of the body function have symbol names that must exist in the current
         // context.
@@ -185,7 +185,7 @@ impl ForLoopGenInternal for LlvmGenerator {
             LLVMPositionBuilderAtEnd(ctx.builder, pass_block);
         }
 
-        assert!(num_iterations.len() > 0);
+        assert!(!num_iterations.is_empty());
 
         // Make sure each iterator produces the same number of iterations.
         if num_iterations.len() > 1 {
@@ -247,7 +247,7 @@ impl ForLoopGenInternal for LlvmGenerator {
             .params
             .values()
             .filter(|v| v.is_builder())
-            .map(|v| v.clone())
+            .cloned()
             .collect();
 
         // Each loop provides a single builder expression (which could be a struct of builders).
@@ -320,7 +320,7 @@ impl ForLoopGenInternal for LlvmGenerator {
             c_str!(""),
         );
         // First body block of the SIR function.
-        let first_body_block = *context.blocks.get(&0).unwrap();
+        let first_body_block = context.blocks[&0];
         LLVMBuildCondBr(
             context.builder,
             any_iters_cond,
@@ -425,7 +425,7 @@ impl ForLoopGenInternal for LlvmGenerator {
                     let i = LLVMBuildNSWMul(
                         ctx.builder,
                         i,
-                        self.i64(LLVM_VECTOR_WIDTH as i64),
+                        self.i64(i64::from(LLVM_VECTOR_WIDTH)),
                         c_str!(""),
                     );
                     let vector = self.load(ctx.builder, ctx.get_value(&iter.data)?)?;
@@ -445,7 +445,7 @@ impl ForLoopGenInternal for LlvmGenerator {
                     let tmp = LLVMBuildSRem(
                         ctx.builder,
                         size,
-                        self.i64(LLVM_VECTOR_WIDTH as i64),
+                        self.i64(i64::from(LLVM_VECTOR_WIDTH)),
                         c_str!(""),
                     );
                     let start = LLVMBuildNSWSub(ctx.builder, size, tmp, c_str!(""));
@@ -470,7 +470,7 @@ impl ForLoopGenInternal for LlvmGenerator {
             }
         }
 
-        assert!(values.len() > 0);
+        assert!(!values.is_empty());
 
         if values.len() > 1 {
             for (i, value) in values.into_iter().enumerate() {
@@ -541,7 +541,7 @@ impl ForLoopGenInternal for LlvmGenerator {
                 let iterations = LLVMBuildSDiv(
                     ctx.builder,
                     size,
-                    self.i64(LLVM_VECTOR_WIDTH as i64),
+                    self.i64(i64::from(LLVM_VECTOR_WIDTH)),
                     c_str!(""),
                 );
                 let _ = LLVMBuildBr(ctx.builder, pass_block);
@@ -552,7 +552,7 @@ impl ForLoopGenInternal for LlvmGenerator {
                 let iterations = LLVMBuildSRem(
                     ctx.builder,
                     size,
-                    self.i64(LLVM_VECTOR_WIDTH as i64),
+                    self.i64(i64::from(LLVM_VECTOR_WIDTH)),
                     c_str!(""),
                 );
                 let _ = LLVMBuildBr(ctx.builder, pass_block);
@@ -593,7 +593,7 @@ impl ForLoopGenInternal for LlvmGenerator {
     unsafe fn gen_check_equal(
         &mut self,
         ctx: &mut FunctionContext<'_>,
-        iterations: &Vec<LLVMValueRef>,
+        iterations: &[LLVMValueRef],
         pass_block: LLVMBasicBlockRef,
         fail_block: LLVMBasicBlockRef,
     ) -> WeldResult<()> {

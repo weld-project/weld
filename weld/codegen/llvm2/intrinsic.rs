@@ -76,11 +76,8 @@ impl Intrinsics {
     pub fn mappings(&self) -> Vec<Mapping> {
         let mut mappings = vec![];
         for (name, entry) in self.intrinsics.iter() {
-            match *entry {
-                Intrinsic::FunctionPointer(_, ptr) => {
-                    mappings.push((CString::new(name.as_str()).unwrap(), ptr))
-                }
-                _ => (),
+            if let Intrinsic::FunctionPointer(_, ptr) = *entry {
+                mappings.push((CString::new(name.as_str()).unwrap(), ptr))
             }
         }
         mappings

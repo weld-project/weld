@@ -994,13 +994,13 @@ impl Dict {
         }
 
         let mut args = [dict, key, hash, default, run];
-        return Ok(LLVMBuildCall(
+        Ok(LLVMBuildCall(
             builder,
             self.upsert.unwrap(),
             args.as_mut_ptr(),
             args.len() as u32,
             c_str!(""),
-        ));
+        ))
     }
 
     /// Returns the slot for a key.
@@ -1043,13 +1043,13 @@ impl Dict {
         }
 
         let mut args = [dict, key, hash];
-        return Ok(LLVMBuildCall(
+        Ok(LLVMBuildCall(
             builder,
             self.opt_lookup.unwrap(),
             args.as_mut_ptr(),
             args.len() as u32,
             c_str!(""),
-        ));
+        ))
     }
 
     /// Returns the pointer to the slot for a key.
@@ -1116,13 +1116,13 @@ impl Dict {
         }
 
         let mut args = [dict, key, hash, run];
-        return Ok(LLVMBuildCall(
+        Ok(LLVMBuildCall(
             builder,
             self.lookup.unwrap(),
             args.as_mut_ptr(),
             args.len() as u32,
             c_str!(""),
-        ));
+        ))
     }
 
     /// Returns whether a key exists.
@@ -1168,13 +1168,13 @@ impl Dict {
         }
 
         let mut args = [dict, key, hash];
-        return Ok(LLVMBuildCall(
+        Ok(LLVMBuildCall(
             builder,
             self.key_exists.unwrap(),
             args.as_mut_ptr(),
             args.len() as u32,
             c_str!(""),
-        ));
+        ))
     }
 
     /// Returns the number of keys in the dictionary.
@@ -1384,13 +1384,13 @@ impl Dict {
         }
 
         let mut args = [dict, run];
-        return Ok(LLVMBuildCall(
+        Ok(LLVMBuildCall(
             builder,
             self.to_vec.unwrap(),
             args.as_mut_ptr(),
             args.len() as u32,
             c_str!(""),
-        ));
+        ))
     }
 
     /// Generates the serialize function for dictionaries.

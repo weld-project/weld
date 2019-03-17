@@ -18,7 +18,7 @@ impl<'a> NewAppender<'a> {
                 return Some(NewAppender { elem_type });
             }
         }
-        return None;
+        None
     }
 }
 
@@ -153,7 +153,7 @@ fn simple_merge(sym: &Symbol, expr: &Expr) -> bool {
                     return !value.contains_symbol(sym);
                 }
             }
-            return false;
+            false
         }
         If {
             ref cond,

@@ -190,7 +190,7 @@ impl ExprHash {
 
     /// Return a numeric value for this signature.
     pub fn value(&self) -> u64 {
-        return self.hasher.finish();
+        self.hasher.finish()
     }
 
     /// Create a signature from an expression.

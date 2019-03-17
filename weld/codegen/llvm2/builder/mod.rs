@@ -520,7 +520,7 @@ impl BuilderExpressionGen for LlvmGenerator {
                         );
                         self.appenders.insert(kind.clone(), appender);
                     }
-                    Ok(self.appenders.get(kind).unwrap().appender_ty)
+                    Ok(self.appenders[kind].appender_ty)
                 }
                 DictMerger(ref key, ref value, _) => {
                     let dict_type = &Dict(key.clone(), value.clone());
@@ -549,7 +549,7 @@ impl BuilderExpressionGen for LlvmGenerator {
                         );
                         self.mergers.insert(kind.clone(), merger);
                     }
-                    Ok(self.mergers.get(kind).unwrap().merger_ty)
+                    Ok(self.mergers[kind].merger_ty)
                 }
                 VecMerger(ref elem, _) => {
                     let vec_type = &Vector(elem.clone());
