@@ -33,7 +33,7 @@ impl IdGenerator {
     }
 
     /// Generate a new ID.
-    pub fn next(&mut self) -> String {
+    pub fn next_id(&mut self) -> String {
         let res = format!("{}{}", self.prefix, self.next_id);
         self.next_id += 1;
         res
@@ -74,8 +74,8 @@ impl CppHeaderGenerator {
     }
 
     /// Generates a new Struct definition.
-    fn generate_struct_definition(&mut self, types: &Vec<Type>) -> WeldResult<String> {
-        let struct_name = self.struct_names.next();
+    fn generate_struct_definition(&mut self, types: &[Type]) -> WeldResult<String> {
+        let struct_name = self.struct_names.next_id();
         let mut names = vec![];
         for ty in types.iter() {
             names.push(self.generate_type(ty)?);

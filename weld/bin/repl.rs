@@ -16,7 +16,7 @@ use std::path::PathBuf;
 
 use weld::*;
 
-const PROMPT: &'static str = ">>> ";
+const PROMPT: &str = ">>> ";
 
 enum ReplCommands {
     LoadFile,
@@ -65,7 +65,7 @@ fn process_getconf(conf: &mut WeldConf, key: &str) -> Option<String> {
 /// The argument is a filename containing a Weld program. Returns the string
 /// representation of the program or an error with an error message.
 fn process_loadfile(arg: &str) -> Result<String, String> {
-    if arg.len() == 0 {
+    if arg.is_empty() {
         return Err("Error: expected argument for command 'load'".to_string());
     }
     let path = Path::new(arg);
@@ -85,15 +85,12 @@ fn process_loadfile(arg: &str) -> Result<String, String> {
     }
 
     let mut contents = String::new();
-    match file.read_to_string(&mut contents) {
-        Err(why) => {
-            return Err(format!(
+    if let Err(why) = file.read_to_string(&mut contents) {
+        return Err(format!(
                 "Error: couldn't read {}: {}",
                 path_display,
                 why.description()
-            ));
-        }
-        _ => {}
+        ));
     }
     Ok(contents.trim().to_string())
 }
@@ -128,7 +125,7 @@ fn read_input(rl: &mut Editor<()>, prompt: &str, history: bool) -> Option<String
 /// Handles a single string command. Returns a string if the command
 /// contains code or `None` if the command is fully processed.
 fn handle_string<'a>(command: &'a str, conf: &mut WeldConf) -> Option<String> {
-    let mut tokens = command.splitn(2, " ");
+    let mut tokens = command.splitn(2, ' ');
     let repl_command = tokens.next().unwrap();
     let arg = tokens.next().unwrap_or("");
     if RESERVED_WORDS.contains_key(repl_command) {
@@ -142,14 +139,14 @@ fn handle_string<'a>(command: &'a str, conf: &mut WeldConf) -> Option<String> {
                 Ok(code) => Some(code),
             },
             ReplCommands::SetConf => {
-                let mut setconf_args = arg.splitn(2, " ");
+                let mut setconf_args = arg.splitn(2, ' ');
                 let key = setconf_args.next().unwrap_or("");
                 let value = setconf_args.next().unwrap_or("");
                 process_setconf(conf, key, value);
                 None
             }
             ReplCommands::GetConf => {
-                let mut setconf_args = arg.splitn(2, " ");
+                let mut setconf_args = arg.splitn(2, ' ');
                 let key = setconf_args.next().unwrap_or("");
                 let value = process_getconf(conf, key);
                 if let Some(s) = value {
@@ -250,13 +247,13 @@ fn main() {
     }
 
     let home_path = env::var("HOME")
-        .map(|s| PathBuf::from(s))
-        .unwrap_or(PathBuf::new());
+        .map(PathBuf::from)
+        .unwrap_or_default();
     let history_file_path = home_path.join(".weld_history");
     let history_file_path = history_file_path.to_str().unwrap_or(".weld_history");
 
     let mut rl = Editor::<()>::new();
-    if let Err(_) = rl.load_history(&history_file_path) {}
+    let _ = rl.load_history(&history_file_path);
 
     // Enter the REPL.
     loop {
