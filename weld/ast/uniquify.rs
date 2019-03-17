@@ -49,14 +49,9 @@ impl SymbolStack {
         match self.stack.entry(sym.clone()) {
             Entry::Occupied(ref ent) => {
                 let name = ent.key().name();
-                let id = ent
-                    .get()
-                    .last()
-                    .cloned()
-                    .ok_or_else(|| WeldCompileError::new(format!(
-                        "Symbol {} is out of scope",
-                        &sym
-                    )))?;
+                let id = ent.get().last().cloned().ok_or_else(|| {
+                    WeldCompileError::new(format!("Symbol {} is out of scope", &sym))
+                })?;
                 Ok(Symbol::new(name, id))
             }
             _ => compile_err!("Undefined symbol {}", sym),

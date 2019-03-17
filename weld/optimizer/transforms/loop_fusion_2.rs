@@ -331,10 +331,10 @@ pub fn move_merge_before_let(expr: &mut Expr) {
 /// Checks whether a For loop is simple enough to be fused.
 fn is_fusable_expr(expr: &Expr) -> bool {
     if let Some(rfa) = ResForAppender::extract(expr) {
-        if rfa.iters.iter().all(|ref i| i.is_simple())
-            && MergeSingle::extract(&rfa.func).is_some() {
-                return true;
-            }
+        if rfa.iters.iter().all(|ref i| i.is_simple()) && MergeSingle::extract(&rfa.func).is_some()
+        {
+            return true;
+        }
     }
     false
 }
@@ -388,8 +388,7 @@ pub fn aggressive_inline_let(expr: &mut Expr) {
             ref mut body,
         } = expr.kind
         {
-            if !is_fusable_expr(value)
-                || !only_used_in_zip(name, body) {
+            if !is_fusable_expr(value) || !only_used_in_zip(name, body) {
                 return None;
             }
             let mut new_body = body.as_ref().clone();

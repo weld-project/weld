@@ -135,8 +135,9 @@ impl<'t> Parser<'t> {
 
             if i != self.position - 1
                 && self.tokens[i + 1].requires_space()
-                && self.tokens[i].requires_space() {
-                    string.push_str(" ");
+                && self.tokens[i].requires_space()
+            {
+                string.push_str(" ");
             }
         }
 
@@ -263,14 +264,7 @@ impl<'t> Parser<'t> {
 
         self.consume(TSemicolon)?;
         let body = self.expr()?;
-        let expr = expr_box(
-            Let {
-                name,
-                value,
-                body,
-            },
-            Annotations::new(),
-        );
+        let expr = expr_box(Let { name, value, body }, Annotations::new());
         Ok(expr)
     }
 
@@ -295,13 +289,7 @@ impl<'t> Parser<'t> {
             return compile_err!("Expected '|' or '||'");
         }
         let body = self.expr()?;
-        Ok(expr_box(
-            Lambda {
-                params,
-                body,
-            },
-            Annotations::new(),
-        ))
+        Ok(expr_box(Lambda { params, body }, Annotations::new()))
     }
 
     /// Parse an expression involving operators (||, &&, +, -, etc down the precedence chain)
@@ -527,13 +515,7 @@ impl<'t> Parser<'t> {
                         if value.starts_with('$') {
                             match u32::from_str_radix(&value[1..], 10) {
                                 Ok(index) => {
-                                    expr = expr_box(
-                                        GetField {
-                                            expr,
-                                            index,
-                                        },
-                                        Annotations::new(),
-                                    )
+                                    expr = expr_box(GetField { expr, index }, Annotations::new())
                                 }
                                 _ => {
                                     return compile_err!("Expected field index but got '{}'", value);
@@ -557,13 +539,7 @@ impl<'t> Parser<'t> {
                     }
                 }
                 self.consume(TCloseParen)?;
-                expr = expr_box(
-                    Apply {
-                        func: expr,
-                        params,
-                    },
-                    Annotations::new(),
-                )
+                expr = expr_box(Apply { func: expr, params }, Annotations::new())
             }
         }
         Ok(expr)
@@ -667,13 +643,7 @@ impl<'t> Parser<'t> {
         if *self.next() != TCloseParen {
             return compile_err!("Expected ')'");
         }
-        let cast_expr = expr_box(
-            Cast {
-                kind,
-                child_expr,
-            },
-            Annotations::new(),
-        );
+        let cast_expr = expr_box(Cast { kind, child_expr }, Annotations::new());
         Ok(cast_expr)
     }
 
@@ -748,13 +718,7 @@ impl<'t> Parser<'t> {
         let value = self.expr()?;
         self.consume(TCloseParen)?;
         let kind = self.unary_op_kind_for_token(token)?;
-        Ok(expr_box(
-            UnaryOp {
-                kind,
-                value,
-            },
-            Annotations::new(),
-        ))
+        Ok(expr_box(UnaryOp { kind, value }, Annotations::new()))
     }
 
     /// Parse a terminal expression at the bottom of the precedence chain.
@@ -797,12 +761,7 @@ impl<'t> Parser<'t> {
                 self.consume(TOpenParen)?;
                 let child_expr = self.expr()?;
                 self.consume(TCloseParen)?;
-                Ok(expr_box(
-                    ToVec {
-                        child_expr,
-                    },
-                    Annotations::new(),
-                ))
+                Ok(expr_box(ToVec { child_expr }, Annotations::new()))
             }
 
             TIdent(ref name) => Ok(expr_box(
@@ -1020,13 +979,7 @@ impl<'t> Parser<'t> {
                 self.consume(TComma)?;
                 let index = self.expr()?;
                 self.consume(TCloseParen)?;
-                Ok(expr_box(
-                    Lookup {
-                        data,
-                        index,
-                    },
-                    Annotations::new(),
-                ))
+                Ok(expr_box(Lookup { data, index }, Annotations::new()))
             }
 
             TOptLookup => {
@@ -1035,13 +988,7 @@ impl<'t> Parser<'t> {
                 self.consume(TComma)?;
                 let index = self.expr()?;
                 self.consume(TCloseParen)?;
-                Ok(expr_box(
-                    OptLookup {
-                        data,
-                        index,
-                    },
-                    Annotations::new(),
-                ))
+                Ok(expr_box(OptLookup { data, index }, Annotations::new()))
             }
 
             TKeyExists => {
@@ -1050,13 +997,7 @@ impl<'t> Parser<'t> {
                 self.consume(TComma)?;
                 let key = self.expr()?;
                 self.consume(TCloseParen)?;
-                Ok(expr_box(
-                    KeyExists {
-                        data,
-                        key,
-                    },
-                    Annotations::new(),
-                ))
+                Ok(expr_box(KeyExists { data, key }, Annotations::new()))
             }
 
             TSlice => {
@@ -1067,14 +1008,7 @@ impl<'t> Parser<'t> {
                 self.consume(TComma)?;
                 let size = self.expr()?;
                 self.consume(TCloseParen)?;
-                Ok(expr_box(
-                    Slice {
-                        data,
-                        index,
-                        size,
-                    },
-                    Annotations::new(),
-                ))
+                Ok(expr_box(Slice { data, index, size }, Annotations::new()))
             }
 
             TSort => {
@@ -1083,13 +1017,7 @@ impl<'t> Parser<'t> {
                 self.consume(TComma)?;
                 let cmpfunc = self.expr()?;
                 self.consume(TCloseParen)?;
-                Ok(expr_box(
-                    Sort {
-                        data,
-                        cmpfunc,
-                    },
-                    Annotations::new(),
-                ))
+                Ok(expr_box(Sort { data, cmpfunc }, Annotations::new()))
             }
             TExp => self.unary_leaf_expr(TExp),
             TLog => self.unary_leaf_expr(TLog),
@@ -1111,13 +1039,7 @@ impl<'t> Parser<'t> {
                 self.consume(TComma)?;
                 let value = self.expr()?;
                 self.consume(TCloseParen)?;
-                Ok(expr_box(
-                    Merge {
-                        builder,
-                        value,
-                    },
-                    Annotations::new(),
-                ))
+                Ok(expr_box(Merge { builder, value }, Annotations::new()))
             }
 
             TResult => {

@@ -154,7 +154,6 @@ impl PushType for Type {
                 &mut Builder(ref mut kind, ref mut annotations),
                 &Builder(ref other_kind, ref other_annotations),
             ) => {
-
                 // Perform type checking on the BuilderKind, followed by the annotations.
                 let changed = match (kind, other_kind) {
                     (&mut Appender(ref mut elem), &Appender(ref other_elem)) => {

@@ -374,7 +374,8 @@ pub fn unroll_structs(expr: &mut Expr) {
             ref name,
             ref value,
             ref body,
-        } = expr.kind {
+        } = expr.kind
+        {
             if let MakeStruct { ref elems } = value.kind {
                 // First, ensure that the name is not used anywhere but a `GetField`.
                 let mut total_count: i32 = 0;

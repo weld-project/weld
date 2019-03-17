@@ -263,10 +263,7 @@ pub struct Statement {
 
 impl Statement {
     pub fn new(output: Option<Symbol>, kind: StatementKind) -> Statement {
-        Statement {
-            output,
-            kind,
-        }
+        Statement { output, kind }
     }
 }
 

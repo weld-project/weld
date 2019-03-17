@@ -239,12 +239,10 @@ fn combine_unrolled_values(bk: BuilderKind, values: Vec<Expr>) -> WeldResult<Exp
             }
             makevector_expr(values)
         }
-        ref bk => {
-            compile_err!(
-                "Unroller transform does not support loops with builder of kind {:?}",
-                bk
-            )
-        }
+        ref bk => compile_err!(
+            "Unroller transform does not support loops with builder of kind {:?}",
+            bk
+        ),
     }
 }
 

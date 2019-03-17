@@ -37,8 +37,7 @@ pub const CONF_OPTIMIZATION_PASSES_KEY: &str = "weld.optimization.passes";
 /// unstable/still being tested. They may also improve the performance of a program, however.
 ///
 /// This parameter should be set for compilation.
-pub const CONF_EXPERIMENTAL_PASSES_KEY: &str =
-    "weld.optimization.applyExperimentalTransforms";
+pub const CONF_EXPERIMENTAL_PASSES_KEY: &str = "weld.optimization.applyExperimentalTransforms";
 
 /// Enables internal Sequential IR (SIR) optimizations.
 ///

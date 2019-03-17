@@ -127,10 +127,7 @@ impl Target {
             TargetFeatures::Unknown
         };
 
-        let result = Target {
-            cpu,
-            features,
-        };
+        let result = Target { cpu, features };
         Ok(result)
     }
 }

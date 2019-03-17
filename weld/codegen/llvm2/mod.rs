@@ -791,7 +791,8 @@ impl LlvmGenerator {
         string: CString,
     ) -> LLVMValueRef {
         let ptr = string.as_ptr();
-        *self.strings
+        *self
+            .strings
             .entry(string)
             .or_insert_with(|| LLVMBuildGlobalStringPtr(builder, ptr, c_str!("")))
     }
@@ -1118,7 +1119,10 @@ impl LlvmGenerator {
     ) -> WeldResult<()> {
         use crate::ast::Type::*;
         use crate::sir::StatementKind::*;
-        let output = &statement.output.clone().unwrap_or_else(|| Symbol::new("unused", 0));
+        let output = &statement
+            .output
+            .clone()
+            .unwrap_or_else(|| Symbol::new("unused", 0));
 
         if self.conf.trace_run {
             self.gen_print(
@@ -1781,20 +1785,17 @@ impl<'a> FunctionContext<'a> {
 
     /// Returns the LLVM value for a symbol in this function.
     pub fn get_value(&self, sym: &Symbol) -> WeldResult<LLVMValueRef> {
-        self.symbols
-            .get(sym)
-            .cloned()
-            .ok_or_else(|| WeldCompileError::new(format!(
-                "Undefined symbol {} in function codegen",
-                sym
-            )))
+        self.symbols.get(sym).cloned().ok_or_else(|| {
+            WeldCompileError::new(format!("Undefined symbol {} in function codegen", sym))
+        })
     }
 
     /// Returns the LLVM basic block for a basic block ID in this function.
     pub fn get_block(&self, id: BasicBlockId) -> WeldResult<LLVMBasicBlockRef> {
-        self.blocks.get(&id).cloned().ok_or_else(|| WeldCompileError::new(
-            "Undefined basic block in function codegen",
-        ))
+        self.blocks
+            .get(&id)
+            .cloned()
+            .ok_or_else(|| WeldCompileError::new("Undefined basic block in function codegen"))
     }
 
     /// Get the handle to the run.

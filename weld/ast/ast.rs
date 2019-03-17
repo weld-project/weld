@@ -61,10 +61,7 @@ impl Annotations {
     ///
     /// Returns `None` if the key was not found.
     pub fn get<K: AsRef<str>>(&self, key: K) -> Option<&str> {
-        self.values
-            .as_ref()?
-            .get(key.as_ref())
-            .map(|v| v.as_ref())
+        self.values.as_ref()?.get(key.as_ref()).map(|v| v.as_ref())
     }
 
     /// Return whether the annotations are empty.

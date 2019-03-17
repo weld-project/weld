@@ -87,9 +87,9 @@ fn process_loadfile(arg: &str) -> Result<String, String> {
     let mut contents = String::new();
     if let Err(why) = file.read_to_string(&mut contents) {
         return Err(format!(
-                "Error: couldn't read {}: {}",
-                path_display,
-                why.description()
+            "Error: couldn't read {}: {}",
+            path_display,
+            why.description()
         ));
     }
     Ok(contents.trim().to_string())
@@ -246,9 +246,7 @@ fn main() {
         return;
     }
 
-    let home_path = env::var("HOME")
-        .map(PathBuf::from)
-        .unwrap_or_default();
+    let home_path = env::var("HOME").map(PathBuf::from).unwrap_or_default();
     let history_file_path = home_path.join(".weld_history");
     let history_file_path = history_file_path.to_str().unwrap_or(".weld_history");
 

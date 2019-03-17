@@ -49,10 +49,7 @@ impl<T> WeldVec<T> {
     ///
     /// Consider using `WeldVec::from` instead, which automatically derives the length.
     pub fn new(ptr: *const T, len: i64) -> WeldVec<T> {
-        WeldVec {
-            data: ptr,
-            len,
-        }
+        WeldVec { data: ptr, len }
     }
 }
 
