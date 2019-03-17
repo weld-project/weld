@@ -1,0 +1,10 @@
+[package]
+name = "hdrgen"
+version = "0.2.0"
+authors = ["Weld Developers <weld-group@lists.stanford.edu>"]
+edition = "2018"
+
+[dependencies]
+weld = { path = "../weld" }
+clap = "2.31.1"
+code_builder = "0.1.0"
