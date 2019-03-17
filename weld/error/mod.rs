@@ -10,14 +10,11 @@ macro_rules! compile_err {
 
 /// Converts a non-fatal error into a log message.
 macro_rules! nonfatal {
-    ( $arg:expr ) => ({
-        match $arg {
-            ::std::result::Result::Err(weld_err) => {
-                error!("{}", weld_err.to_string());
-            }
-            _ => ()
-        };
-    })
+    ( $arg:expr ) => {{
+        if let ::std::result::Result::Err(weld_err) = $arg {
+            error!("{}", weld_err.to_string());
+        }
+    }};
 }
 
 /// A compilation error produced by Weld.
@@ -31,7 +28,7 @@ impl WeldCompileError {
 }
 
 impl fmt::Display for WeldCompileError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
     }
 }
@@ -41,7 +38,7 @@ impl error::Error for WeldCompileError {
         &self.0
     }
 
-    fn cause(&self) -> Option<&error::Error> {
+    fn cause(&self) -> Option<&dyn error::Error> {
         None
     }
 }

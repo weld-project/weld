@@ -1,9 +1,7 @@
 //! Tests for binary comparisons.
 
-extern crate weld;
-
 mod common;
-use common::*;
+use crate::common::*;
 
 #[test]
 fn simple_binop() {
@@ -39,7 +37,7 @@ fn string_cmp() {
     let ref conf = default_conf();
 
     let ref input_data: f64 = 0.0;
-    
+
     let ret_value = compile_and_run(code, conf, input_data);
     let data = ret_value.data() as *const bool;
     let result = unsafe { *data };

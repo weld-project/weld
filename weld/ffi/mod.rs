@@ -2,16 +2,16 @@
 //!
 //! This module provides a C-compatible interface to the Weld library.
 
-extern crate libc;
+use libc;
 
 use super::*;
 use libc::{c_char, c_void, int64_t};
 
-use std::ptr;
 use std::ffi::CStr;
+use std::ptr;
 
 // Re-export the FFI for the runtime.
-pub use runtime::ffi::*;
+pub use crate::runtime::ffi::*;
 
 /// An opauqe handle to a Weld configuration.
 pub type WeldConfRef = *mut WeldConf;
@@ -24,8 +24,8 @@ pub type WeldValueRef = *mut WeldValue;
 /// An opauqe handle to a Weld context.
 pub type WeldContextRef = *mut WeldContext;
 
-pub use super::WeldRuntimeErrno;
 pub use super::WeldLogLevel;
+pub use super::WeldRuntimeErrno;
 
 trait ToRustStr {
     fn to_str(&self) -> &str;
@@ -71,7 +71,7 @@ pub unsafe extern "C" fn weld_context_memory_usage(context: WeldContextRef) -> i
 /// All contexts created by the FFI should be freed. This includes contexts obtained from
 /// `weld_context_new` and `weld_value_context`.
 pub unsafe extern "C" fn weld_context_free(ptr: WeldContextRef) {
-    if ptr != ptr::null_mut() {
+    if !ptr.is_null() {
         Box::from_raw(ptr);
     }
 }
@@ -89,7 +89,7 @@ pub extern "C" fn weld_conf_new() -> WeldConfRef {
 ///
 /// The passsed configuration should have been allocated using `weld_conf_new`.
 pub unsafe extern "C" fn weld_conf_free(ptr: WeldConfRef) {
-    if ptr != ptr::null_mut() {
+    if !ptr.is_null() {
         Box::from_raw(ptr);
     }
 }
@@ -134,7 +134,7 @@ pub extern "C" fn weld_value_new(data: *const c_void) -> WeldValueRef {
 /// If this value was not returned by a Weld program, this function returns `-1`.
 pub unsafe extern "C" fn weld_value_run(value: WeldValueRef) -> int64_t {
     let value = &*value;
-    return value.run_id().unwrap_or(-1) as int64_t;
+    value.run_id().unwrap_or(-1) as int64_t
 }
 
 #[no_mangle]
@@ -170,11 +170,10 @@ pub unsafe extern "C" fn weld_value_data(value: WeldValueRef) -> *const c_void {
 /// free the data they contain.  Weld values which are not owned by the runtime only free the
 /// structure used to wrap the data; the actual data itself is owned by the caller.
 pub unsafe extern "C" fn weld_value_free(value: WeldValueRef) {
-    if value != ptr::null_mut() {
+    if !value.is_null() {
         Box::from_raw(value);
     }
 }
-
 
 #[no_mangle]
 /// Compiles a Weld program into a runnable module.
@@ -183,9 +182,11 @@ pub unsafe extern "C" fn weld_value_free(value: WeldValueRef) {
 /// an error (which indicates a compilation error or success) in `err`.
 ///
 /// This function is a wrapper for `WeldModule::compile`.
-pub unsafe extern "C" fn weld_module_compile(code: *const c_char,
-                                             conf: WeldConfRef,
-                                             err: WeldErrorRef) -> WeldModuleRef {
+pub unsafe extern "C" fn weld_module_compile(
+    code: *const c_char,
+    conf: WeldConfRef,
+    err: WeldErrorRef,
+) -> WeldModuleRef {
     let code = code.to_str();
     let conf = &*conf;
     let err = &mut *err;
@@ -209,10 +210,12 @@ pub unsafe extern "C" fn weld_module_compile(code: *const c_char,
 /// and a the method returns `null`. Otherwise, `err` indicates success.
 ///
 /// This function is a wrapper for `WeldModule::run`.
-pub unsafe extern "C" fn weld_module_run(module: WeldModuleRef,
-                                         context: WeldContextRef,
-                                         arg: WeldValueRef,
-                                         err: WeldErrorRef) -> WeldValueRef {
+pub unsafe extern "C" fn weld_module_run(
+    module: WeldModuleRef,
+    context: WeldContextRef,
+    arg: WeldValueRef,
+    err: WeldErrorRef,
+) -> WeldValueRef {
     let module = &mut *module;
     let context = &mut *context;
     let arg = &*arg;
@@ -237,7 +240,7 @@ pub unsafe extern "C" fn weld_module_run(module: WeldModuleRef,
 /// Freeing a module does not free the memory it may have allocated. Values returned by the module
 /// must be freed explicitly using `weld_value_free`.
 pub unsafe extern "C" fn weld_module_free(ptr: WeldModuleRef) {
-    if ptr != ptr::null_mut() {
+    if !ptr.is_null() {
         Box::from_raw(ptr);
     }
 }
@@ -269,11 +272,10 @@ pub unsafe extern "C" fn weld_error_message(err: WeldErrorRef) -> *const c_char 
 #[no_mangle]
 /// Frees a Weld error object.
 pub unsafe extern "C" fn weld_error_free(err: WeldErrorRef) {
-    if err != ptr::null_mut() {
+    if !err.is_null() {
         Box::from_raw(err);
     }
 }
-
 
 #[no_mangle]
 /// Load a dynamic library that a Weld program can access.

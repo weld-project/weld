@@ -4,18 +4,18 @@
 
 use std::fmt;
 
-use ast::*;
-use error::*;
+use crate::ast::*;
+use crate::error::*;
 
+use super::transforms::algebraic;
 use super::transforms::cse;
+use super::transforms::inliner;
 use super::transforms::loop_fusion;
 use super::transforms::loop_fusion_2;
-use super::transforms::inliner;
-use super::transforms::size_inference;
 use super::transforms::short_circuit;
-use super::transforms::vectorizer;
+use super::transforms::size_inference;
 use super::transforms::unroller;
-use super::transforms::algebraic;
+use super::transforms::vectorizer;
 
 use std::collections::HashMap;
 
@@ -29,7 +29,7 @@ pub struct Transformation {
 }
 
 impl fmt::Debug for Transformation {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Transformation(experimental={})", self.experimental)
     }
 }
@@ -37,20 +37,20 @@ impl fmt::Debug for Transformation {
 impl Transformation {
     pub fn new(func: PassFn) -> Transformation {
         Transformation {
-            func: func,
+            func,
             experimental: false,
         }
     }
 
     pub fn new_experimental(func: PassFn) -> Transformation {
         Transformation {
-            func: func,
+            func,
             experimental: true,
         }
     }
 }
 
-#[derive(Clone,Debug)]
+#[derive(Clone, Debug)]
 pub struct Pass {
     transforms: Vec<Transformation>,
     pass_name: String,
@@ -59,7 +59,7 @@ pub struct Pass {
 impl Pass {
     pub fn new(transforms: Vec<Transformation>, pass_name: &'static str) -> Pass {
         Pass {
-            transforms: transforms,
+            transforms,
             pass_name: String::from(pass_name),
         }
     }
@@ -76,7 +76,7 @@ impl Pass {
                 (transform.func)(&mut expr);
             }
             let after = expr.hash_ignoring_symbols()?;
-            continue_pass = !(before == after);
+            continue_pass = before != after;
             before = after;
         }
         Ok(())

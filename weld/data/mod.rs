@@ -19,8 +19,6 @@
 //! builder definitions here should be used as _opaque sized types_ rather than as structs whose
 //! fields can be accessed.
 
-extern crate libc;
-
 use std::convert::AsRef;
 use std::marker::PhantomData;
 
@@ -51,10 +49,7 @@ impl<T> WeldVec<T> {
     ///
     /// Consider using `WeldVec::from` instead, which automatically derives the length.
     pub fn new(ptr: *const T, len: i64) -> WeldVec<T> {
-        WeldVec {
-            data: ptr,
-            len: len,
-        }
+        WeldVec { data: ptr, len }
     }
 }
 
@@ -90,7 +85,7 @@ impl<T> fmt::Display for WeldVec<T>
 where
     T: fmt::Display + Clone,
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "[ ")?;
         for i in 0..self.len {
             let v = unsafe { (*self.data.offset(i as isize)).clone() };
@@ -135,48 +130,41 @@ pub struct DictMerger<K, V> {
 #[derive(Clone, Debug)]
 #[repr(C)]
 pub struct GroupMerger<K, V> {
-    d: Dict<K, WeldVec<V>>
+    d: Dict<K, WeldVec<V>>,
 }
 
 // Ensures that the sizes of the types defined here match the sizes of the types in the backend.
 #[test]
 fn size_check() {
-    use ast::*;
-    use ast::ScalarKind::I32;
-    use ast::BinOpKind::Add;
-    use codegen::size_of;
+    use crate::ast::BinOpKind::Add;
+    use crate::ast::ScalarKind::I32;
+    use crate::ast::*;
+    use crate::codegen::size_of;
     use std::mem;
 
     let i32_ty = Box::new(Type::Scalar(I32));
 
-    let ref vector = Type::Vector(i32_ty.clone());
-    assert_eq!(
-        size_of(vector),
-        mem::size_of::<WeldVec<i32>>());
+    let vector = &Type::Vector(i32_ty.clone());
+    assert_eq!(size_of(vector), mem::size_of::<WeldVec<i32>>());
 
-    let ref dict = Type::Dict(i32_ty.clone(), i32_ty.clone());
-    assert_eq!(
-        size_of(dict),
-        mem::size_of::<Dict<i32, i32>>());
+    let dict = &Type::Dict(i32_ty.clone(), i32_ty.clone());
+    assert_eq!(size_of(dict), mem::size_of::<Dict<i32, i32>>());
 
-    let ref appender = Type::Builder(
-        BuilderKind::Appender(i32_ty.clone()),
-        Annotations::new());
-    assert_eq!(
-        size_of(appender),
-        mem::size_of::<Appender<i32>>());
+    let appender = &Type::Builder(BuilderKind::Appender(i32_ty.clone()), Annotations::new());
+    assert_eq!(size_of(appender), mem::size_of::<Appender<i32>>());
 
-    let ref dictmerger = Type::Builder(
+    let dictmerger = &Type::Builder(
         BuilderKind::DictMerger(i32_ty.clone(), i32_ty.clone(), Add),
-        Annotations::new());
-    assert_eq!(
-        size_of(dictmerger),
-        mem::size_of::<DictMerger<i32, i32>>());
+        Annotations::new(),
+    );
+    assert_eq!(size_of(dictmerger), mem::size_of::<DictMerger<i32, i32>>());
 
-    let ref groupmerger = Type::Builder(
+    let groupmerger = &Type::Builder(
         BuilderKind::GroupMerger(i32_ty.clone(), i32_ty.clone()),
-        Annotations::new());
+        Annotations::new(),
+    );
     assert_eq!(
         size_of(groupmerger),
-        mem::size_of::<GroupMerger<i32, i32>>());
+        mem::size_of::<GroupMerger<i32, i32>>()
+    );
 }

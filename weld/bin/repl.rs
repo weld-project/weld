@@ -1,27 +1,22 @@
-extern crate rustyline;
-extern crate weld;
-extern crate libc;
-
 #[macro_use]
 extern crate lazy_static;
 
-extern crate clap;
-use clap::{Arg, App};
+use clap::{App, Arg};
 
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
+use std::collections::HashMap;
 use std::env;
+use std::error::Error;
+use std::fmt;
+use std::fs::File;
+use std::io::prelude::*;
 use std::path::Path;
 use std::path::PathBuf;
-use std::fs::File;
-use std::error::Error;
-use std::io::prelude::*;
-use std::fmt;
-use std::collections::HashMap;
 
 use weld::*;
 
-const PROMPT: &'static str = ">>> ";
+const PROMPT: &str = ">>> ";
 
 enum ReplCommands {
     LoadFile,
@@ -30,7 +25,7 @@ enum ReplCommands {
 }
 
 impl fmt::Display for ReplCommands {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
             ReplCommands::LoadFile => write!(f, "load"),
             ReplCommands::GetConf => write!(f, "getconf"),
@@ -70,7 +65,7 @@ fn process_getconf(conf: &mut WeldConf, key: &str) -> Option<String> {
 /// The argument is a filename containing a Weld program. Returns the string
 /// representation of the program or an error with an error message.
 fn process_loadfile(arg: &str) -> Result<String, String> {
-    if arg.len() == 0 {
+    if arg.is_empty() {
         return Err("Error: expected argument for command 'load'".to_string());
     }
     let path = Path::new(arg);
@@ -78,9 +73,11 @@ fn process_loadfile(arg: &str) -> Result<String, String> {
     let mut file;
     match File::open(&path) {
         Err(why) => {
-            return Err(format!("Error: couldn't open {}: {}",
-                               path_display,
-                               why.description()));
+            return Err(format!(
+                "Error: couldn't open {}: {}",
+                path_display,
+                why.description()
+            ));
         }
         Ok(res) => {
             file = res;
@@ -88,13 +85,12 @@ fn process_loadfile(arg: &str) -> Result<String, String> {
     }
 
     let mut contents = String::new();
-    match file.read_to_string(&mut contents) {
-        Err(why) => {
-            return Err(format!("Error: couldn't read {}: {}",
-                               path_display,
-                               why.description()));
-        }
-        _ => {}
+    if let Err(why) = file.read_to_string(&mut contents) {
+        return Err(format!(
+            "Error: couldn't read {}: {}",
+            path_display,
+            why.description()
+        ));
     }
     Ok(contents.trim().to_string())
 }
@@ -129,32 +125,28 @@ fn read_input(rl: &mut Editor<()>, prompt: &str, history: bool) -> Option<String
 /// Handles a single string command. Returns a string if the command
 /// contains code or `None` if the command is fully processed.
 fn handle_string<'a>(command: &'a str, conf: &mut WeldConf) -> Option<String> {
-    let mut tokens = command.splitn(2, " ");
+    let mut tokens = command.splitn(2, ' ');
     let repl_command = tokens.next().unwrap();
     let arg = tokens.next().unwrap_or("");
     if RESERVED_WORDS.contains_key(repl_command) {
         let command = RESERVED_WORDS.get(repl_command).unwrap();
         match *command {
-            ReplCommands::LoadFile => {
-                match process_loadfile(arg) {
-                    Err(s) => {
-                        println!("{}", s);
-                        None
-                    }
-                    Ok(code) => {
-                        Some(code)
-                    }
+            ReplCommands::LoadFile => match process_loadfile(arg) {
+                Err(s) => {
+                    println!("{}", s);
+                    None
                 }
-            }
+                Ok(code) => Some(code),
+            },
             ReplCommands::SetConf => {
-                let mut setconf_args = arg.splitn(2, " ");
+                let mut setconf_args = arg.splitn(2, ' ');
                 let key = setconf_args.next().unwrap_or("");
                 let value = setconf_args.next().unwrap_or("");
                 process_setconf(conf, key, value);
                 None
             }
             ReplCommands::GetConf => {
-                let mut setconf_args = arg.splitn(2, " ");
+                let mut setconf_args = arg.splitn(2, ' ');
                 let key = setconf_args.next().unwrap_or("");
                 let value = process_getconf(conf, key);
                 if let Some(s) = value {
@@ -178,45 +170,56 @@ fn process_code(code: &str, conf: &mut WeldConf) {
 }
 
 fn main() {
-    let ref mut conf = WeldConf::new();
+    let conf = &mut WeldConf::new();
     let matches = App::new("Weld REPL")
         .version("0.1.0")
         .author("Weld authors <weld-group@cs.stanford.edu")
         .about("A REPL for Weld")
-        .arg(Arg::with_name("loglevel")
-             .short("l")
-             .long("loglevel")
-             .value_name("LEVEL")
-             .help("Log level for the Weld compiler")
-             .takes_value(true))
-        .arg(Arg::with_name("logdir")
-             .short("D")
-             .long("logdir")
-             .value_name("DIR")
-             .help("Directory to write log demo")
-             .takes_value(true))
-        .arg(Arg::with_name("dumpcode")
-             .short("d")
-             .long("dumpcode")
-             .help("Dump code to file")
-             .takes_value(false))
-        .arg(Arg::with_name("input")
-             .short("i")
-             .long("input")
-             .value_name("FILE")
-             .help("Run the REPL on the input and quit")
-             .takes_value(true))
+        .arg(
+            Arg::with_name("loglevel")
+                .short("l")
+                .long("loglevel")
+                .value_name("LEVEL")
+                .help("Log level for the Weld compiler")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("logdir")
+                .short("D")
+                .long("logdir")
+                .value_name("DIR")
+                .help("Directory to write log demo")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("dumpcode")
+                .short("d")
+                .long("dumpcode")
+                .help("Dump code to file")
+                .takes_value(false),
+        )
+        .arg(
+            Arg::with_name("input")
+                .short("i")
+                .long("input")
+                .value_name("FILE")
+                .help("Run the REPL on the input and quit")
+                .takes_value(true),
+        )
         .get_matches();
 
     // Parse the log level.
-    let log_level_str = matches.value_of("loglevel").unwrap_or("debug").to_lowercase();
+    let log_level_str = matches
+        .value_of("loglevel")
+        .unwrap_or("debug")
+        .to_lowercase();
     let (log_level, log_str) = match log_level_str.as_str() {
-        "none" =>   (WeldLogLevel::Off,         "none"),
-        "error" =>  (WeldLogLevel::Error,       "\x1b[0;31merror\x1b[0m"),
-        "warn" =>   (WeldLogLevel::Warn,        "\x1b[0;33mwarn\x1b[0m"),
-        "info" =>   (WeldLogLevel::Info,        "\x1b[0;33minfo\x1b[0m"),
-        "debug" =>  (WeldLogLevel::Debug,       "\x1b[0;32mdebug\x1b[0m"), 
-        "trace" =>  (WeldLogLevel::Trace,       "\x1b[0;32mtrace\x1b[0m"),
+        "none" => (WeldLogLevel::Off, "none"),
+        "error" => (WeldLogLevel::Error, "\x1b[0;31merror\x1b[0m"),
+        "warn" => (WeldLogLevel::Warn, "\x1b[0;33mwarn\x1b[0m"),
+        "info" => (WeldLogLevel::Info, "\x1b[0;33minfo\x1b[0m"),
+        "debug" => (WeldLogLevel::Debug, "\x1b[0;32mdebug\x1b[0m"),
+        "trace" => (WeldLogLevel::Trace, "\x1b[0;32mtrace\x1b[0m"),
         ref s => {
             println!("Unrecognized log level {}", s);
             std::process::exit(1);
@@ -243,13 +246,12 @@ fn main() {
         return;
     }
 
-    let home_path = env::var("HOME").map(|s| PathBuf::from(s))
-        .unwrap_or(PathBuf::new());
+    let home_path = env::var("HOME").map(PathBuf::from).unwrap_or_default();
     let history_file_path = home_path.join(".weld_history");
     let history_file_path = history_file_path.to_str().unwrap_or(".weld_history");
 
     let mut rl = Editor::<()>::new();
-    if let Err(_) = rl.load_history(&history_file_path) {}
+    let _ = rl.load_history(&history_file_path);
 
     // Enter the REPL.
     loop {

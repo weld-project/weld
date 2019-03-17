@@ -1,23 +1,22 @@
 //! Type inference for Weld expressions.
 
-extern crate fnv;
+use fnv;
 
-use ast::*;
-use ast::ExprKind::*;
-use ast::Type::*;
-use ast::LiteralKind::*;
-use ast::BuilderKind::*;
-use ast::ScalarKind::*;
+use crate::ast::BuilderKind::*;
+use crate::ast::ExprKind::*;
+use crate::ast::LiteralKind::*;
+use crate::ast::ScalarKind::*;
+use crate::ast::Type::*;
+use crate::ast::*;
 
-use error::*;
+use crate::error::*;
 
 use fnv::FnvHashMap;
-
 
 type TypeMap = FnvHashMap<Symbol, Type>;
 type Binding = (Symbol, Option<Type>);
 
-/// A trait for checking and infering types in-place. 
+/// A trait for checking and infering types in-place.
 pub trait InferTypes {
     /// Checks and infers types in place.
     ///
@@ -43,7 +42,7 @@ impl InferTypes for Expr {
     }
 
     fn infer_local(&mut self) -> WeldResult<()> {
-        let ref mut env = TypeMap::default();
+        let env = &mut TypeMap::default();
         if let Ident(ref sym) = self.kind {
             env.insert(sym.clone(), self.ty.clone());
         }
@@ -93,9 +92,7 @@ impl PushType for Type {
                 *self = other;
                 Ok(true)
             }
-            Scalar(_) | Simd(_) if *self == other => {
-                Ok(false)
-            }
+            Scalar(_) | Simd(_) if *self == other => Ok(false),
             Vector(ref elem) if *self == Unknown => {
                 *self = Vector(elem.clone());
                 Ok(true)
@@ -107,9 +104,7 @@ impl PushType for Type {
                     compile_err!("Type mismatch: expected {} but got {}", &other, self)
                 }
             }
-            _ => {
-                compile_err!("Type mismatch: expected {} but got {}", &other, self)
-            }
+            _ => compile_err!("Type mismatch: expected {} but got {}", &other, self),
         }
     }
 
@@ -127,31 +122,27 @@ impl PushType for Type {
         // Match this `Type` with `other` to make sure the variant is the same. Then, recursively
         // call `push` on any subtypes.
         match (self, other) {
-            (&mut Scalar(a), &Scalar(b)) if a == b => {
-                Ok(false)
-            }
-            (&mut Simd(a), &Simd(b)) if a == b => {
-                Ok(false)
-            }
-            (&mut Vector(ref mut elem), &Vector(ref other_elem)) => {
-                elem.push(other_elem)
-            }
+            (&mut Scalar(a), &Scalar(b)) if a == b => Ok(false),
+            (&mut Simd(a), &Simd(b)) if a == b => Ok(false),
+            (&mut Vector(ref mut elem), &Vector(ref other_elem)) => elem.push(other_elem),
             (&mut Dict(ref mut key, ref mut value), &Dict(ref other_key, ref other_value)) => {
-                let mut changed = key.push(other_key)? || value.push(other_value)?;
+                let changed = key.push(other_key)? || value.push(other_value)?;
                 key_hashable(key.as_ref())?;
                 Ok(changed)
             }
-            (&mut Struct(ref mut types), &Struct(ref other_types)) if types.len() == other_types.len() => {
+            (&mut Struct(ref mut types), &Struct(ref other_types))
+                if types.len() == other_types.len() =>
+            {
                 let mut changed = false;
                 for (this, other) in types.iter_mut().zip(other_types) {
                     changed |= this.push(other)?;
                 }
                 Ok(changed)
             }
-            (&mut Function(ref mut params, ref mut body),
-             &Function(ref other_params, ref other_body))
-                if params.len() == other_params.len() => {
-
+            (
+                &mut Function(ref mut params, ref mut body),
+                &Function(ref other_params, ref other_body),
+            ) if params.len() == other_params.len() => {
                 let mut changed = false;
                 for (this, other) in params.iter_mut().zip(other_params) {
                     changed |= this.push(other)?;
@@ -159,65 +150,61 @@ impl PushType for Type {
                 changed |= body.push(other_body)?;
                 Ok(changed)
             }
-            (&mut Builder(ref mut kind, ref mut annotations), &Builder(ref other_kind, ref other_annotations)) => {
+            (
+                &mut Builder(ref mut kind, ref mut annotations),
+                &Builder(ref other_kind, ref other_annotations),
+            ) => {
                 // Perform type checking on the BuilderKind, followed by the annotations.
-                let mut changed = match (kind, other_kind) {
-                    (
-                        &mut Appender(ref mut elem),
-                        &Appender(ref other_elem)
-                    ) => {
+                let changed = match (kind, other_kind) {
+                    (&mut Appender(ref mut elem), &Appender(ref other_elem)) => {
                         elem.push(other_elem)
                     }
                     (
                         &mut DictMerger(ref mut key, ref mut value, ref mut op),
-                        &DictMerger(ref other_key, ref other_value, ref other_op)
+                        &DictMerger(ref other_key, ref other_value, ref other_op),
                     ) if *op == *other_op => {
-                        let mut changed = key.push(other_key)? || value.push(other_value)?;
+                        let changed = key.push(other_key)? || value.push(other_value)?;
                         key_hashable(key.as_ref())?;
                         Ok(changed)
                     }
                     (
                         &mut GroupMerger(ref mut key, ref mut value),
-                        &GroupMerger(ref other_key, ref other_value)
+                        &GroupMerger(ref other_key, ref other_value),
                     ) => {
-                        let mut changed = key.push(other_key)? || value.push(other_value)?;
+                        let changed = key.push(other_key)? || value.push(other_value)?;
                         key_hashable(key.as_ref())?;
                         Ok(changed)
                     }
                     (
                         &mut VecMerger(ref mut elem, ref mut op),
-                        &VecMerger(ref other_elem, ref other_op)
-                    ) if *op == *other_op => {
-                        elem.push(other_elem)
-                    }
+                        &VecMerger(ref other_elem, ref other_op),
+                    ) if *op == *other_op => elem.push(other_elem),
                     (
                         &mut Merger(ref mut elem, ref mut op),
-                        &Merger(ref other_elem, ref other_op)
-                    ) if *op == *other_op => {
-                        elem.push(other_elem)
-                    }
+                        &Merger(ref other_elem, ref other_op),
+                    ) if *op == *other_op => elem.push(other_elem),
                     // Mismatches in the binary operator of DictMerger, VecMerger, and GroupMerger,
                     // or other type mismatches in the BuilderKind. We list them explicitly so the
                     // compiler will throw an error if we add new types.
-                    (&mut Appender(_), _) | (&mut DictMerger(_,_,_), _) |
-                        (&mut GroupMerger(_,_), _) | (&mut VecMerger(_,_), _) |
-                        (&mut Merger(_,_), _) => {
-                            compile_err!("Type mismatch: expected builder type {}", other)
-                        }
-                }?;
+                    (&mut Appender(_), _)
+                    | (&mut DictMerger(_, _, _), _)
+                    | (&mut GroupMerger(_, _), _)
+                    | (&mut VecMerger(_, _), _)
+                    | (&mut Merger(_, _), _) => {
+                        compile_err!("Type mismatch: expected builder type {}", other)
+                    }
+                };
 
                 // Check the annotations.
-                if *annotations != *other_annotations {
-                    if !annotations.is_empty() {
-                        *annotations = other_annotations.clone();
-                        changed = true;
-                    }
+                if *annotations != *other_annotations && !annotations.is_empty() {
+                    *annotations = other_annotations.clone();
+                    Ok(true)
+                } else {
+                    changed
                 }
-                Ok(changed)
             }
             (ref this, ref other) => {
-                compile_err!("Type mismatch: expected {} but got {}",
-                             other, this)
+                compile_err!("Type mismatch: expected {} but got {}", other, this)
             }
         }
     }
@@ -233,9 +220,11 @@ fn sync_function(expr: &mut Expr, tys: Vec<&Type>) -> WeldResult<bool> {
             }
             Ok(changed)
         }
-        _ => {
-            compile_err!("Expected function with {} arguments, but got {}", tys.len(), &expr.ty)
-        }
+        _ => compile_err!(
+            "Expected function with {} arguments, but got {}",
+            tys.len(),
+            &expr.ty
+        ),
     }
 }
 
@@ -245,19 +234,19 @@ fn sync_function(expr: &mut Expr, tys: Vec<&Type>) -> WeldResult<bool> {
 trait InferTypesInternal {
     fn infer_types_internal(&mut self) -> WeldResult<()>;
     fn infer_locally(&mut self, env: &TypeMap) -> WeldResult<bool>;
-    fn infer_up(&mut self, &mut TypeMap) -> WeldResult<bool>;
+    fn infer_up(&mut self, _: &mut TypeMap) -> WeldResult<bool>;
 }
 
 impl InferTypesInternal for Expr {
     /// Internal implementation of type inference.
     fn infer_types_internal(&mut self) -> WeldResult<()> {
         loop {
-            let ref mut env = TypeMap::default();
+            let env = &mut TypeMap::default();
             if !self.infer_up(env)? {
                 if self.partially_typed() {
-                    return compile_err!("Could not infer some types")
+                    return compile_err!("Could not infer some types");
                 } else {
-                    return Ok(())
+                    return Ok(());
                 }
             }
         }
@@ -275,7 +264,11 @@ impl InferTypesInternal for Expr {
         let mut old_bindings: Vec<Binding> = Vec::new();
         // Let and Lambda are the only expressions that change bindings.
         match self.kind {
-            Let { ref mut name, ref mut value, ref mut body } => {
+            Let {
+                ref mut name,
+                ref mut value,
+                ref mut body,
+            } => {
                 // First perform type inference on the value. Then, take the old binding to `name`
                 // and perform type inference on the body. Finally, restore the original
                 // environment.
@@ -284,14 +277,17 @@ impl InferTypesInternal for Expr {
                 old_bindings.push((name.clone(), previous));
                 changed |= body.infer_up(env)?;
             }
-            Lambda { ref mut params, ref mut body } =>  {
+            Lambda {
+                ref mut params,
+                ref mut body,
+            } => {
                 for p in params {
                     let previous = env.insert(p.name.clone(), p.ty.clone());
                     old_bindings.push((p.name.clone(), previous));
                 }
                 changed |= body.infer_up(env)?;
             }
-            _ => ()
+            _ => (),
         };
 
         // For Let and Lambda, we already inferred the types of each child. For all other
@@ -322,34 +318,26 @@ impl InferTypesInternal for Expr {
     /// Infer the types of an expression based on direct subexpressions.
     fn infer_locally(&mut self, env: &TypeMap) -> WeldResult<bool> {
         match self.kind {
-            Literal(I8Literal(_)) =>
-                self.ty.push_complete(Scalar(I8)),
-            Literal(I16Literal(_)) =>
-                self.ty.push_complete(Scalar(I16)),
-            Literal(I32Literal(_)) =>
-                self.ty.push_complete(Scalar(I32)),
-            Literal(I64Literal(_)) =>
-                self.ty.push_complete(Scalar(I64)),
-            Literal(U8Literal(_)) =>
-                self.ty.push_complete(Scalar(U8)),
-            Literal(U16Literal(_)) =>
-                self.ty.push_complete(Scalar(U16)),
-            Literal(U32Literal(_)) =>
-                self.ty.push_complete(Scalar(U32)),
-            Literal(U64Literal(_)) =>
-                self.ty.push_complete(Scalar(U64)),
-            Literal(F32Literal(_)) =>
-                self.ty.push_complete(Scalar(F32)),
-            Literal(F64Literal(_)) =>
-                self.ty.push_complete(Scalar(F64)),
-            Literal(BoolLiteral(_)) =>
-                self.ty.push_complete(Scalar(Bool)),
-            Literal(StringLiteral(_)) =>
-                self.ty.push_complete(Type::string_type()),
+            Literal(I8Literal(_)) => self.ty.push_complete(Scalar(I8)),
+            Literal(I16Literal(_)) => self.ty.push_complete(Scalar(I16)),
+            Literal(I32Literal(_)) => self.ty.push_complete(Scalar(I32)),
+            Literal(I64Literal(_)) => self.ty.push_complete(Scalar(I64)),
+            Literal(U8Literal(_)) => self.ty.push_complete(Scalar(U8)),
+            Literal(U16Literal(_)) => self.ty.push_complete(Scalar(U16)),
+            Literal(U32Literal(_)) => self.ty.push_complete(Scalar(U32)),
+            Literal(U64Literal(_)) => self.ty.push_complete(Scalar(U64)),
+            Literal(F32Literal(_)) => self.ty.push_complete(Scalar(F32)),
+            Literal(F64Literal(_)) => self.ty.push_complete(Scalar(F64)),
+            Literal(BoolLiteral(_)) => self.ty.push_complete(Scalar(Bool)),
+            Literal(StringLiteral(_)) => self.ty.push_complete(Type::string_type()),
 
-            BinOp { kind: op, ref mut left, ref mut right } => {
+            BinOp {
+                kind: op,
+                ref mut left,
+                ref mut right,
+            } => {
                 // First, sync the left and right types into the elem_type.
-                let ref mut elem_type = Unknown;
+                let elem_type = &mut Unknown;
                 elem_type.push(&left.ty)?;
                 elem_type.push(&right.ty)?;
 
@@ -374,25 +362,20 @@ impl InferTypesInternal for Expr {
                 Ok(changed)
             }
 
-            UnaryOp { ref value, ref kind } => {
-                match value.ty {
-                    Scalar(ref kind) | Simd(ref kind) if kind.is_float() => {
-                        self.ty.push(&value.ty)
-                    }
-                    Unknown => Ok(false),
-                    _ => {
-                        compile_err!("Expected floating-point type for unary op '{}'", kind)
-                    }
-                }
-            }
+            UnaryOp {
+                ref value,
+                ref kind,
+            } => match value.ty {
+                Scalar(ref kind) | Simd(ref kind) if kind.is_float() => self.ty.push(&value.ty),
+                Unknown => Ok(false),
+                _ => compile_err!("Expected floating-point type for unary op '{}'", kind),
+            },
 
-            Cast { kind, .. } => {
-                self.ty.push_complete(Scalar(kind))
-            }
+            Cast { kind, .. } => self.ty.push_complete(Scalar(kind)),
 
             ToVec { ref mut child_expr } => {
                 // The base type is vec[{?,?}] - infer the key and value type.
-                let ref base_type = Vector(Box::new(Struct(vec![Unknown, Unknown])));
+                let base_type = &mut Vector(Box::new(Struct(vec![Unknown, Unknown])));
                 let mut changed = self.ty.push(base_type)?;
 
                 let mut set_types = false;
@@ -407,11 +390,14 @@ impl InferTypesInternal for Expr {
                         }
                     }
                 } else if child_expr.ty == Unknown {
-                    return Ok(false)
+                    return Ok(false);
                 }
 
                 if !set_types {
-                    compile_err!("Expected dictionary argument for tovec(...), got {}", &child_expr.ty)
+                    compile_err!(
+                        "Expected dictionary argument for tovec(...), got {}",
+                        &child_expr.ty
+                    )
                 } else {
                     Ok(changed)
                 }
@@ -425,21 +411,13 @@ impl InferTypesInternal for Expr {
                 }
             }
 
-            Negate(ref c) => {
-                self.ty.push(&c.ty)
-            }
+            Negate(ref c) => self.ty.push(&c.ty),
 
-            Not(ref value) => {
-                match value.ty {
-                    Scalar(ref kind) | Simd(ref kind) if kind.is_bool() => {
-                        self.ty.push(&value.ty)
-                    }
-                    Unknown => Ok(false),
-                    _ => {
-                        compile_err!("Expected boolean type for ! operator")
-                    }
-                }
-            }
+            Not(ref value) => match value.ty {
+                Scalar(ref kind) | Simd(ref kind) if kind.is_bool() => self.ty.push(&value.ty),
+                Unknown => Ok(false),
+                _ => compile_err!("Expected boolean type for ! operator"),
+            },
 
             Assert(ref value) => {
                 self.ty.push(&value.ty)?;
@@ -448,7 +426,7 @@ impl InferTypesInternal for Expr {
 
             Broadcast(ref c) => {
                 if let Scalar(ref kind) = c.ty {
-                    self.ty.push(&Simd(kind.clone()))
+                    self.ty.push(&Simd(*kind))
                 } else if c.ty == Unknown {
                     Ok(false)
                 } else {
@@ -456,22 +434,16 @@ impl InferTypesInternal for Expr {
                 }
             }
 
-            CUDF { ref return_ty, .. } => {
-                self.ty.push(return_ty)
-            }
+            CUDF { ref return_ty, .. } => self.ty.push(return_ty),
 
             Serialize(_) => {
                 let serialized_type = Vector(Box::new(Scalar(I8)));
                 self.ty.push_complete(serialized_type)
             }
 
-            Deserialize{ ref value_ty, .. } => {
-                self.ty.push(value_ty)
-            }
+            Deserialize { ref value_ty, .. } => self.ty.push(value_ty),
 
-            Let { ref mut body, .. } => {
-                self.ty.sync(&mut body.ty)
-            }
+            Let { ref mut body, .. } => self.ty.sync(&mut body.ty),
 
             MakeVector { ref mut elems } => {
                 // Sync the types of each element.
@@ -486,7 +458,7 @@ impl InferTypesInternal for Expr {
                 }
 
                 // If no error eccord, push the element type to the expression.
-                let ref vec_type = Vector(Box::new(elem_type));
+                let vec_type = &Vector(Box::new(elem_type));
                 changed |= self.ty.push(vec_type)?;
                 Ok(changed)
             }
@@ -494,7 +466,7 @@ impl InferTypesInternal for Expr {
             Zip { ref mut vectors } => {
                 let mut changed = false;
 
-                let ref base_type = Vector(Box::new(Struct(vec![Unknown; vectors.len()])));
+                let base_type = &Vector(Box::new(Struct(vec![Unknown; vectors.len()])));
                 changed |= self.ty.push(base_type)?;
 
                 // Push the vector type to each vector.
@@ -513,13 +485,16 @@ impl InferTypesInternal for Expr {
                 }
 
                 if !set_types || types.len() != vectors.len() {
-                    compile_err!("Expected vector types in zip, got types {}",
-                                 types.iter()
-                                    .map(|t| t.to_string())
-                                    .collect::<Vec<_>>()
-                                    .join(","))
+                    compile_err!(
+                        "Expected vector types in zip, got types {}",
+                        types
+                            .iter()
+                            .map(|t| t.to_string())
+                            .collect::<Vec<_>>()
+                            .join(",")
+                    )
                 } else {
-                    let ref base_type = Vector(Box::new(Struct(types)));
+                    let base_type = &Vector(Box::new(Struct(types)));
                     changed |= self.ty.push(base_type)?;
                     Ok(changed)
                 }
@@ -527,7 +502,7 @@ impl InferTypesInternal for Expr {
 
             MakeStruct { ref mut elems } => {
                 let mut changed = false;
-                let ref base_type = Struct(vec![Unknown; elems.len()]);
+                let base_type = &Struct(vec![Unknown; elems.len()]);
                 changed |= self.ty.push(base_type)?;
 
                 if let Struct(ref mut elem_types) = self.ty {
@@ -541,7 +516,10 @@ impl InferTypesInternal for Expr {
                 }
             }
 
-            GetField { expr: ref mut param, index } => {
+            GetField {
+                expr: ref mut param,
+                index,
+            } => {
                 if let Struct(ref mut elem_types) = param.ty {
                     let index = index as usize;
                     if index >= elem_types.len() {
@@ -552,7 +530,10 @@ impl InferTypesInternal for Expr {
                 } else if param.ty == Unknown {
                     Ok(false)
                 } else {
-                    compile_err!("Expected struct type for struct field access, got {}", &param.ty)
+                    compile_err!(
+                        "Expected struct type for struct field access, got {}",
+                        &param.ty
+                    )
                 }
             }
 
@@ -566,7 +547,11 @@ impl InferTypesInternal for Expr {
                 }
             }
 
-            Slice { ref mut data, ref mut index, ref mut size } => {
+            Slice {
+                ref mut data,
+                ref mut index,
+                ref mut size,
+            } => {
                 if let Vector(_) = data.ty {
                     let mut changed = false;
                     changed |= index.ty.push_complete(Scalar(I64))?;
@@ -580,7 +565,10 @@ impl InferTypesInternal for Expr {
                 }
             }
 
-            Sort { ref mut data, ref mut cmpfunc } => {
+            Sort {
+                ref mut data,
+                ref mut cmpfunc,
+            } => {
                 if let Vector(ref elem_type) = data.ty {
                     let mut changed = sync_function(cmpfunc, vec![&elem_type, &elem_type])?;
                     changed |= self.ty.push(&data.ty)?;
@@ -592,7 +580,10 @@ impl InferTypesInternal for Expr {
                 }
             }
 
-            Lookup { ref mut data, ref mut index } => {
+            Lookup {
+                ref mut data,
+                ref mut index,
+            } => {
                 let mut changed = false;
                 match data.ty {
                     Vector(ref elem_type) => {
@@ -606,36 +597,41 @@ impl InferTypesInternal for Expr {
                         Ok(changed)
                     }
                     Unknown => Ok(false),
-                    _ => {
-                        compile_err!("Expected vector or dict type in lookup, got {}", &data.ty)
-                    }
+                    _ => compile_err!("Expected vector or dict type in lookup, got {}", &data.ty),
                 }
             }
 
-            OptLookup { ref mut data, ref mut index } => {
-                debug!("optlookup type inference: optlookup({}, {}): {}", data.ty, index.ty, self.ty);
+            OptLookup {
+                ref mut data,
+                ref mut index,
+            } => {
+                debug!(
+                    "optlookup type inference: optlookup({}, {}): {}",
+                    data.ty, index.ty, self.ty
+                );
                 match data.ty {
                     Dict(ref key_type, ref value_type) => {
-                        let mut my_type = vec![ Scalar(Bool), value_type.as_ref().clone() ];
+                        let mut my_type = vec![Scalar(Bool), value_type.as_ref().clone()];
                         let mut changed = false;
                         changed |= index.ty.push(key_type)?;
 
                         // Push the value type.
-                        changed |= my_type.get_mut(1).unwrap().push(value_type)?;
+                        changed |= (&mut my_type[1]).push(value_type)?;
 
-                        let ref mut struct_ty = Struct(my_type);
+                        let struct_ty = &mut Struct(my_type);
                         changed |= self.ty.sync(struct_ty)?;
 
                         Ok(changed)
                     }
                     Unknown => Ok(false),
-                    _ => {
-                        compile_err!("Expected dict type in optlookup, got {}", &data.ty)
-                    }
+                    _ => compile_err!("Expected dict type in optlookup, got {}", &data.ty),
                 }
             }
 
-            KeyExists { ref mut data, ref mut key } => {
+            KeyExists {
+                ref mut data,
+                ref mut key,
+            } => {
                 if let Dict(ref key_type, _) = data.ty {
                     let mut changed = false;
                     changed |= key.ty.push(&key_type)?;
@@ -648,7 +644,10 @@ impl InferTypesInternal for Expr {
                 }
             }
 
-            Lambda { ref mut params, ref mut body } => {
+            Lambda {
+                ref mut params,
+                ref mut body,
+            } => {
                 let mut changed = false;
                 let base_type = Function(vec![Unknown; params.len()], Box::new(Unknown));
 
@@ -665,7 +664,11 @@ impl InferTypesInternal for Expr {
                 }
             }
 
-            If { ref mut cond, ref mut on_true, ref mut on_false } => {
+            If {
+                ref mut cond,
+                ref mut on_true,
+                ref mut on_false,
+            } => {
                 let mut changed = false;
                 changed |= cond.ty.push_complete(Scalar(Bool))?;
                 changed |= self.ty.sync(&mut on_true.ty)?;
@@ -673,18 +676,28 @@ impl InferTypesInternal for Expr {
                 Ok(changed)
             }
 
-            Iterate { ref mut initial, ref mut update_func } => {
+            Iterate {
+                ref mut initial,
+                ref mut update_func,
+            } => {
                 let mut changed = self.ty.sync(&mut initial.ty)?;
                 match update_func.ty {
                     Function(ref mut params, _) if params.len() == 1 => {
-                        changed |= params.get_mut(0).unwrap().sync(&mut initial.ty)?;
+                        changed |= (&mut params[0]).sync(&mut initial.ty)?;
                         Ok(changed)
                     }
-                    _ => compile_err!("Expected function with single type in iterate, got {}", &update_func.ty)
+                    _ => compile_err!(
+                        "Expected function with single type in iterate, got {}",
+                        &update_func.ty
+                    ),
                 }
             }
 
-            Select { ref mut cond, ref mut on_true, ref mut on_false } => {
+            Select {
+                ref mut cond,
+                ref mut on_true,
+                ref mut on_false,
+            } => {
                 let mut changed = false;
                 let cond_type = if cond.ty.is_simd() {
                     Simd(Bool)
@@ -697,11 +710,14 @@ impl InferTypesInternal for Expr {
                 Ok(changed)
             }
 
-            Apply { ref mut func, ref mut params } => {
+            Apply {
+                ref mut func,
+                ref mut params,
+            } => {
                 let func_type = Function(vec![Unknown; params.len()], Box::new(Unknown));
                 let mut changed = func.ty.push(&func_type)?;
 
-                let ref mut fty = func.ty;
+                let fty = &mut func.ty;
                 if let Function(ref mut param_types, ref mut res_type) = *fty {
                     changed |= self.ty.sync(res_type)?;
                     for (param_ty, param_expr) in param_types.iter_mut().zip(params.iter_mut()) {
@@ -740,7 +756,7 @@ impl InferTypesInternal for Expr {
                                 Ok(false)
                             }
                         }
-                        _ => Ok(false)
+                        _ => Ok(false),
                     }
                 } else if self.ty == Unknown {
                     Ok(false)
@@ -749,7 +765,10 @@ impl InferTypesInternal for Expr {
                 }
             }
 
-            Merge { ref mut builder, ref mut value } => {
+            Merge {
+                ref mut builder,
+                ref mut value,
+            } => {
                 use std::mem;
                 let mut changed = false;
 
@@ -766,9 +785,9 @@ impl InferTypesInternal for Expr {
                     }
                     (merge_type, builder_kind.clone())
                 } else if builder.ty == Unknown {
-                    return Ok(false)
+                    return Ok(false);
                 } else {
-                    return compile_err!("Expected builder type in merge, got {}", &builder.ty)
+                    return compile_err!("Expected builder type in merge, got {}", &builder.ty);
                 };
 
                 changed |= value.ty.sync(&mut merge_type)?;
@@ -789,16 +808,16 @@ impl InferTypesInternal for Expr {
                     }
                     DictMerger(ref mut key, ref mut value, _) => {
                         if let Struct(mut tys) = merge_type {
-                            mem::swap(key.as_mut(), tys.get_mut(0).unwrap());
-                            mem::swap(value.as_mut(), tys.get_mut(1).unwrap());
+                            mem::swap(key.as_mut(), &mut tys[0]);
+                            mem::swap(value.as_mut(), &mut tys[1]);
                         } else {
                             unreachable!()
                         }
                     }
                     GroupMerger(ref mut key, ref mut value) => {
                         if let Struct(mut tys) = merge_type {
-                            mem::swap(key.as_mut(), tys.get_mut(0).unwrap());
-                            mem::swap(value.as_mut(), tys.get_mut(1).unwrap());
+                            mem::swap(key.as_mut(), &mut tys[0]);
+                            mem::swap(value.as_mut(), &mut tys[1]);
                         } else {
                             unreachable!()
                         }
@@ -806,7 +825,7 @@ impl InferTypesInternal for Expr {
                     VecMerger(ref mut elem, _) => {
                         if let Struct(mut tys) = merge_type {
                             // tys[0] is the index.
-                            mem::swap(elem.as_mut(), tys.get_mut(1).unwrap());
+                            mem::swap(elem.as_mut(), &mut tys[1]);
                         } else {
                             unreachable!()
                         }
@@ -832,7 +851,11 @@ impl InferTypesInternal for Expr {
                 }
             }
 
-            For { ref mut iters, ref mut builder, ref mut func } => {
+            For {
+                ref mut iters,
+                ref mut builder,
+                ref mut func,
+            } => {
                 let mut changed = false;
                 // First, for each Iter, if it has a start, end, stride, etc., make sure the types of
                 // those expressions is Scalar(I64).
@@ -842,31 +865,52 @@ impl InferTypesInternal for Expr {
                     if iter.start.is_some() {
                         changed |= iter.start.as_mut().unwrap().ty.push_complete(Scalar(I64))?;
                         changed |= iter.end.as_mut().unwrap().ty.push_complete(Scalar(I64))?;
-                        changed |= iter.stride.as_mut().unwrap().ty.push_complete(Scalar(I64))?;
+                        changed |= iter
+                            .stride
+                            .as_mut()
+                            .unwrap()
+                            .ty
+                            .push_complete(Scalar(I64))?;
                     }
 
                     // For NDIter, the same rule applies for shape and stride.
                     if iter.strides.is_some() {
-                        changed |= iter.strides.as_mut().unwrap().ty.push_complete(Vector(Box::new(Scalar(I64))))?;
-                        changed |= iter.shape.as_mut().unwrap().ty.push_complete(Vector(Box::new(Scalar(I64))))?;
+                        changed |= iter
+                            .strides
+                            .as_mut()
+                            .unwrap()
+                            .ty
+                            .push_complete(Vector(Box::new(Scalar(I64))))?;
+                        changed |= iter
+                            .shape
+                            .as_mut()
+                            .unwrap()
+                            .ty
+                            .push_complete(Vector(Box::new(Scalar(I64))))?;
                     }
                 }
 
                 // Now get the vector data types.
-                let mut elem_types: Vec<_> = iters.iter().map(|iter| {
-                    // If the iterator is a RangeIter, special case it -- the data must be a "dummy"
-                    // empty vector with type vec[i64].
-                    if iter.kind == IterKind::RangeIter {
-                        Ok(Scalar(I64))
-                    } else {
-                        // Make sure the Iter's data is a Vector, and pull out its element kind.
-                        match iter.data.ty {
-                            Vector(ref elem) => Ok(elem.as_ref().clone()),
-                            Unknown => Ok(Unknown),
-                            _ => compile_err!("Expected vector type in for loop iter, got {}", &iter.data.ty)
+                let elem_types: Vec<_> = iters
+                    .iter()
+                    .map(|iter| {
+                        // If the iterator is a RangeIter, special case it -- the data must be a "dummy"
+                        // empty vector with type vec[i64].
+                        if iter.kind == IterKind::RangeIter {
+                            Ok(Scalar(I64))
+                        } else {
+                            // Make sure the Iter's data is a Vector, and pull out its element kind.
+                            match iter.data.ty {
+                                Vector(ref elem) => Ok(elem.as_ref().clone()),
+                                Unknown => Ok(Unknown),
+                                _ => compile_err!(
+                                    "Expected vector type in for loop iter, got {}",
+                                    &iter.data.ty
+                                ),
+                            }
                         }
-                    }
-                }).collect::<WeldResult<_>>()?;
+                    })
+                    .collect::<WeldResult<_>>()?;
 
                 // Convert the vector into a Type, which will either be a Struct or a single type.
                 let mut elem_types = if elem_types.len() == 1 {
@@ -883,23 +927,28 @@ impl InferTypesInternal for Expr {
                         // functinon is SIMD.
                         if params[2].ty.is_simd() {
                             if !iters.iter().all(|i| i.kind == IterKind::SimdIter) {
-                                return compile_err!("for loop requires that either all or none of the iters are simditer")
+                                return compile_err!("for loop requires that either all or none of the iters are simditer");
                             }
                             elem_types = elem_types.simd_type()?;
                         } else if iters.iter().any(|i| i.kind == IterKind::SimdIter) {
-                            return compile_err!("for loop requires that either all or none of the iters are simditer")
+                            return compile_err!("for loop requires that either all or none of the iters are simditer");
                         }
                     }
                     _ => {
                         // Invalid builder function.
-                        return compile_err!("Expected builder function of type |builder, i64, elements|")
+                        return compile_err!(
+                            "Expected builder function of type |builder, i64, elements|"
+                        );
                     }
                 }
 
                 // Impose the correct types on the function.
                 // Function should be (builder, i64, elems) -> builder.
                 let builder_type = builder.ty.clone();
-                let ref func_type = Function(vec![builder_type.clone(), Scalar(I64), elem_types], Box::new(builder_type));
+                let func_type = &Function(
+                    vec![builder_type.clone(), Scalar(I64), elem_types],
+                    Box::new(builder_type),
+                );
                 changed |= func.ty.push(func_type)?;
 
                 // This will never be false, since we pushed the Function type above.
@@ -921,7 +970,7 @@ impl InferTypesInternal for Expr {
 
 #[test]
 fn infer_types_test() {
-    use tests::*;
+    use crate::tests::*;
     let e = parse_expr("a").unwrap();
     assert_eq!(print_typed_expr_without_indent(&e).as_str(), "a:?");
 
@@ -936,32 +985,44 @@ fn infer_types_test() {
     assert_eq!(print_typed_expr_without_indent(&e).as_str(), "a:i32");
 
     let mut e = parse_expr("let a = 2; a").unwrap();
-    assert_eq!(print_typed_expr_without_indent(&e).as_str(),
-               "(let a:?=(2);a:?)");
+    assert_eq!(
+        print_typed_expr_without_indent(&e).as_str(),
+        "(let a:?=(2);a:?)"
+    );
     e.infer_types().unwrap();
-    assert_eq!(print_typed_expr_without_indent(&e).as_str(),
-               "(let a:i32=(2);a:i32)");
+    assert_eq!(
+        print_typed_expr_without_indent(&e).as_str(),
+        "(let a:i32=(2);a:i32)"
+    );
 
     let mut e = parse_expr("let a = 2; let a = false; a").unwrap();
     e.infer_types().unwrap();
-    assert_eq!(print_typed_expr_without_indent(&e).as_str(),
-               "(let a:i32=(2);(let a:bool=(false);a:bool))");
+    assert_eq!(
+        print_typed_expr_without_indent(&e).as_str(),
+        "(let a:i32=(2);(let a:bool=(false);a:bool))"
+    );
 
     // Types should propagate from function parameters to body
     let mut e = parse_expr("|a:i32, b:i32| a + b").unwrap();
     e.infer_types().unwrap();
-    assert_eq!(print_typed_expr_without_indent(&e).as_str(),
-               "|a:i32,b:i32|(a:i32+b:i32)");
+    assert_eq!(
+        print_typed_expr_without_indent(&e).as_str(),
+        "|a:i32,b:i32|(a:i32+b:i32)"
+    );
 
     let mut e = parse_expr("|a:f32, b:f32| a + b").unwrap();
     e.infer_types().unwrap();
-    assert_eq!(print_typed_expr_without_indent(&e).as_str(),
-               "|a:f32,b:f32|(a:f32+b:f32)");
+    assert_eq!(
+        print_typed_expr_without_indent(&e).as_str(),
+        "|a:f32,b:f32|(a:f32+b:f32)"
+    );
 
     let mut e = parse_expr("let a = [1, 2, 3]; 1").unwrap();
     e.infer_types().unwrap();
-    assert_eq!(print_typed_expr_without_indent(&e).as_str(),
-               "(let a:vec[i32]=([1,2,3]);1)");
+    assert_eq!(
+        print_typed_expr_without_indent(&e).as_str(),
+        "(let a:vec[i32]=([1,2,3]);1)"
+    );
 
     // Mismatched types in MakeVector
     let mut e = parse_expr("[1, true]").unwrap();
@@ -969,6 +1030,8 @@ fn infer_types_test() {
 
     let mut e = parse_expr("for([1],appender[?],|b,i,x|merge(b,x))").unwrap();
     e.infer_types().unwrap();
-    assert_eq!(print_typed_expr_without_indent(&e).as_str(),
-               "for([1],appender[i32],|b:appender[i32],i:i64,x:i32|merge(b:appender[i32],x:i32))");
+    assert_eq!(
+        print_typed_expr_without_indent(&e).as_str(),
+        "for([1],appender[i32],|b:appender[i32],i:i64,x:i32|merge(b:appender[i32],x:i32))"
+    );
 }

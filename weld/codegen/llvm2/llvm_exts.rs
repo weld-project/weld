@@ -5,19 +5,19 @@
 
 #![allow(non_snake_case)]
 
-extern crate llvm_sys;
-extern crate lazy_static;
-extern crate libc;
+use llvm_sys;
+
+use libc;
 
 use libc::{c_char, c_uint};
 
 use std::ffi::{CStr, CString};
 use std::fmt;
 
-use self::llvm_sys::prelude::*;
 use self::llvm_sys::core::*;
-use self::llvm_sys::{LLVMAttributeReturnIndex, LLVMAttributeFunctionIndex};
+use self::llvm_sys::prelude::*;
 use self::llvm_sys::transforms::pass_manager_builder::LLVMPassManagerBuilderRef;
+use self::llvm_sys::{LLVMAttributeFunctionIndex, LLVMAttributeReturnIndex};
 
 use self::llvm_sys::target_machine::LLVMTargetMachineRef;
 
@@ -41,13 +41,13 @@ lazy_static! {
 ///
 /// For some reason, these are not exposed in `llvm_sys` at the moment, so we provide hardcoded
 /// versions of them here.
-/// 
+///
 /// The list of available attributes is here:
 /// See http://llvm.org/docs/LangRef.html#parameter-attributes
 /// and http://llvm.org/docs/LangRef.html#function-attributes
 /// for the list of available attributes.
 ///
-#[derive(Debug,Copy,Clone,Eq,PartialEq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum LLVMExtAttribute {
     AlwaysInline,
     InlineHint,
@@ -60,9 +60,9 @@ pub enum LLVMExtAttribute {
 }
 
 impl fmt::Display for LLVMExtAttribute {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use self::LLVMExtAttribute::*;
-        let ref string = match *self {
+        let string = match *self {
             AlwaysInline => "alwaysinline",
             InlineHint => "inlinehint",
             NoAlias => "noalias",
@@ -79,10 +79,12 @@ impl fmt::Display for LLVMExtAttribute {
 /// Add attributes on an LLVM function, parameter, or return value.
 ///
 /// The `index` passed determines what the attribute is added on.
-unsafe fn add_attrs(context: LLVMContextRef,
-                             function: LLVMValueRef,
-                             attrs: &[LLVMExtAttribute],
-                             index: u32) {
+unsafe fn add_attrs(
+    context: LLVMContextRef,
+    function: LLVMValueRef,
+    attrs: &[LLVMExtAttribute],
+    index: u32,
+) {
     for attr in attrs {
         let name = CString::new(attr.to_string()).unwrap();
         let kind = LLVMGetEnumAttributeKindForName(name.as_ptr(), name.as_bytes().len());
@@ -97,26 +99,38 @@ unsafe fn add_attrs(context: LLVMContextRef,
 /// Add attributes on an LLVM function parameter.
 ///
 /// `param` indicates the parameter index.
-pub fn LLVMExtAddAttrsOnParameter(context: LLVMContextRef,
-                             function: LLVMValueRef,
-                             attrs: &[LLVMExtAttribute],
-                             index: u32) {
+pub fn LLVMExtAddAttrsOnParameter(
+    context: LLVMContextRef,
+    function: LLVMValueRef,
+    attrs: &[LLVMExtAttribute],
+    index: u32,
+) {
     // Parameters are indexed 1..N
-    unsafe { add_attrs(context, function, attrs, index + 1); }
+    unsafe {
+        add_attrs(context, function, attrs, index + 1);
+    }
 }
 
 /// Add attributes on an LLVM function.
-pub fn LLVMExtAddAttrsOnFunction(context: LLVMContextRef,
-                             function: LLVMValueRef,
-                             attrs: &[LLVMExtAttribute]) {
-    unsafe { add_attrs(context, function, attrs, LLVMAttributeFunctionIndex); }
+pub fn LLVMExtAddAttrsOnFunction(
+    context: LLVMContextRef,
+    function: LLVMValueRef,
+    attrs: &[LLVMExtAttribute],
+) {
+    unsafe {
+        add_attrs(context, function, attrs, LLVMAttributeFunctionIndex);
+    }
 }
 
 /// Add attributes on an LLVM return value.
-pub fn LLVMExtAddAttrsOnReturn(context: LLVMContextRef,
-                             function: LLVMValueRef,
-                             attrs: &[LLVMExtAttribute]) {
-    unsafe { add_attrs(context, function, attrs, LLVMAttributeReturnIndex); }
+pub fn LLVMExtAddAttrsOnReturn(
+    context: LLVMContextRef,
+    function: LLVMValueRef,
+    attrs: &[LLVMExtAttribute],
+) {
+    unsafe {
+        add_attrs(context, function, attrs, LLVMAttributeReturnIndex);
+    }
 }
 
 /// Add the host-specific attributes to a function.
@@ -125,21 +139,27 @@ pub fn LLVMExtAddAttrsOnReturn(context: LLVMContextRef,
 /// that enhance generated machine code quality.
 pub fn LLVMExtAddDefaultAttrs(context: LLVMContextRef, function: LLVMValueRef) {
     unsafe {
-        let cpu_name_attr = LLVMCreateStringAttribute(context,
-                                                      c_str!("target-cpu"), 10,
-                                                      HOST_CPU_NAME.as_ptr(),
-                                                      HOST_CPU_NAME.as_bytes().len() as u32);
-        let cpu_features_attr = LLVMCreateStringAttribute(context,
-                                                          c_str!("target-features"), 15,
-                                                          HOST_CPU_FEATURES.as_ptr(),
-                                                          HOST_CPU_FEATURES.as_bytes().len() as u32);
+        let cpu_name_attr = LLVMCreateStringAttribute(
+            context,
+            c_str!("target-cpu"),
+            10,
+            HOST_CPU_NAME.as_ptr(),
+            HOST_CPU_NAME.as_bytes().len() as u32,
+        );
+        let cpu_features_attr = LLVMCreateStringAttribute(
+            context,
+            c_str!("target-features"),
+            15,
+            HOST_CPU_FEATURES.as_ptr(),
+            HOST_CPU_FEATURES.as_bytes().len() as u32,
+        );
 
         LLVMAddAttributeAtIndex(function, LLVMAttributeFunctionIndex, cpu_name_attr);
         LLVMAddAttributeAtIndex(function, LLVMAttributeFunctionIndex, cpu_features_attr);
     }
 }
 
-#[link(name="llvmext", kind="static")]
+#[link(name = "llvmext", kind = "static")]
 extern "C" {
     #[no_mangle]
     pub fn LLVMExtGetProcessTriple() -> *const c_char;
@@ -150,10 +170,11 @@ extern "C" {
     #[no_mangle]
     pub fn LLVMExtAddTargetLibraryInfo(manager: LLVMPassManagerRef);
     #[no_mangle]
-    pub fn LLVMExtAddTargetPassConfig(target: LLVMTargetMachineRef,
-                                      manager: LLVMPassManagerRef);
+    pub fn LLVMExtAddTargetPassConfig(target: LLVMTargetMachineRef, manager: LLVMPassManagerRef);
     #[no_mangle]
-    pub fn LLVMExtPassManagerBuilderSetDisableVectorize(builder: LLVMPassManagerBuilderRef, disabled: c_uint);
-
+    pub fn LLVMExtPassManagerBuilderSetDisableVectorize(
+        builder: LLVMPassManagerBuilderRef,
+        disabled: c_uint,
+    );
 
 }

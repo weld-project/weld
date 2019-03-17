@@ -2,15 +2,15 @@
 //!
 //! These are functions that are accessed from generated code.
 
-extern crate libc;
-extern crate fnv;
+use fnv;
+use libc;
 
 pub mod ffi;
 
 use self::ffi::*;
 
-use std::alloc::System as Allocator;
 use libc::{c_char, int32_t, int64_t};
+use std::alloc::System as Allocator;
 
 use fnv::FnvHashMap;
 
@@ -19,7 +19,7 @@ use std::fmt;
 use std::ptr;
 use std::sync::{Once, ONCE_INIT};
 
-use std::alloc::{Layout, GlobalAlloc};
+use std::alloc::{GlobalAlloc, Layout};
 
 pub type Ptr = *mut u8;
 
@@ -75,14 +75,13 @@ pub enum WeldRuntimeErrno {
 
 impl fmt::Display for WeldRuntimeErrno {
     /// Just return the errno name.
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", self)
     }
 }
 
-
 /// Maintains information about a single Weld run.
-#[derive(Debug,PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct WeldRuntimeContext {
     /// Maps pointers to allocation size in bytes.
     allocations: FnvHashMap<Ptr, Layout>,
@@ -112,37 +111,40 @@ impl WeldRuntimeContext {
 
         if self.allocated + size > self.memlimit {
             self.errno = WeldRuntimeErrno::OutOfMemory;
-            panic!("Weld run ran out of memory (limit={}, attempted to allocate {}",
-                   self.memlimit,
-                   self.allocated + size);
+            panic!(
+                "Weld run ran out of memory (limit={}, attempted to allocate {}",
+                self.memlimit,
+                self.allocated + size
+            );
         }
         let layout = Layout::from_size_align_unchecked(size as usize, DEFAULT_ALIGN);
-        let mem = Allocator.alloc(layout.clone());
+        let mem = Allocator.alloc(layout);
 
         self.allocated += layout.size();
         trace!("Alloc'd pointer {:?} ({} bytes)", mem, layout.size());
 
-        self.allocations.insert(mem.clone(), layout);
+        self.allocations.insert(mem, layout);
         mem
     }
 
     unsafe fn realloc(&mut self, pointer: Ptr, size: i64) -> Ptr {
-
-        if pointer == ptr::null_mut() {
-            return self.malloc(size)
+        if pointer.is_null() {
+            return self.malloc(size);
         }
 
         let size = size as usize;
         let old_layout = self.allocations.remove(&pointer).unwrap();
         if self.allocated - old_layout.size() + size > self.memlimit {
             self.errno = WeldRuntimeErrno::OutOfMemory;
-            panic!("Weld run ran out of memory (limit={}, attempted to allocate {}",
-                   self.memlimit,
-                   self.allocated - old_layout.size() + size);
+            panic!(
+                "Weld run ran out of memory (limit={}, attempted to allocate {}",
+                self.memlimit,
+                self.allocated - old_layout.size() + size
+            );
         }
 
         // Must pass *old* layout to realloc!
-        let mem = Allocator.realloc(pointer, old_layout.clone(), size);
+        let mem = Allocator.realloc(pointer, old_layout, size);
         let new_layout = Layout::from_size_align_unchecked(size, DEFAULT_ALIGN);
 
         self.allocated -= old_layout.size();
@@ -164,7 +166,6 @@ impl WeldRuntimeContext {
     fn result(&self) -> Ptr {
         self.result
     }
-
 }
 
 // Public API.
@@ -175,7 +176,7 @@ impl WeldRuntimeContext {
             allocations: FnvHashMap::default(),
             errno: WeldRuntimeErrno::Success,
             result: ptr::null_mut(),
-            nworkers: nworkers,
+            nworkers,
             memlimit: memlimit as usize,
             allocated: 0,
         }
@@ -185,16 +186,20 @@ impl WeldRuntimeContext {
     ///
     /// Panics if the passed value was not allocated by the Weld runtime.
     pub unsafe fn free(&mut self, pointer: Ptr) {
-        if pointer == ptr::null_mut() {
+        if pointer.is_null() {
             trace!("Freed null pointer (no-op) in runst_free()");
             return;
         }
 
         let layout = self.allocations.remove(&pointer).unwrap();
 
-        trace!("Freeing pointer {:?} ({} bytes) in runst_free()", pointer, layout.size());
+        trace!(
+            "Freeing pointer {:?} ({} bytes) in runst_free()",
+            pointer,
+            layout.size()
+        );
 
-        Allocator.dealloc(pointer, layout.clone());
+        Allocator.dealloc(pointer, layout);
         self.allocated -= layout.size();
     }
 
@@ -230,7 +235,11 @@ impl Drop for WeldRuntimeContext {
         trace!("Allocations: {}", self.allocations.len());
         unsafe {
             for (pointer, layout) in self.allocations.iter() {
-                trace!("Freeing pointer {:?} ({} bytes) in drop()", *pointer, layout.size());
+                trace!(
+                    "Freeing pointer {:?} ({} bytes) in drop()",
+                    *pointer,
+                    layout.size()
+                );
                 Allocator.dealloc(*pointer, layout.clone());
             }
         }
@@ -240,16 +249,16 @@ impl Drop for WeldRuntimeContext {
 unsafe fn initialize() {
     ONCE.call_once(|| {
         // Hack to prevent symbols from being compiled out in a Rust binary.
-        let mut x =  weld_runst_init as i64;
-        x += weld_runst_set_result as i64;
-        x += weld_runst_get_result as i64;
-        x += weld_runst_malloc as i64;
-        x += weld_runst_realloc as i64;
-        x += weld_runst_free as i64;
-        x += weld_runst_get_errno as i64;
-        x += weld_runst_set_errno as i64;
-        x += weld_runst_assert as i64;
-        x += weld_runst_print as i64;
+        let mut x = weld_runst_init as usize;
+        x += weld_runst_set_result as usize;
+        x += weld_runst_get_result as usize;
+        x += weld_runst_malloc as usize;
+        x += weld_runst_realloc as usize;
+        x += weld_runst_free as usize;
+        x += weld_runst_get_errno as usize;
+        x += weld_runst_set_errno as usize;
+        x += weld_runst_assert as usize;
+        x += weld_runst_print as usize;
 
         trace!("Runtime initialized with hashed values {}", x);
     });

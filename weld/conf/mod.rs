@@ -1,11 +1,11 @@
 //! Configurations and defaults for the Weld runtime.
 
-use super::WeldConf;
 use super::error::WeldResult;
-use optimizer::OPTIMIZATION_PASSES;
-use optimizer::Pass;
+use super::WeldConf;
+use crate::optimizer::Pass;
+use crate::optimizer::OPTIMIZATION_PASSES;
 
-use util::dump::{unique_filename, DumpCodeFormat};
+use crate::util::dump::{unique_filename, DumpCodeFormat};
 
 use std::collections::HashSet;
 use std::str::FromStr;
@@ -25,7 +25,7 @@ lazy_static! {
 }
 
 /// Configuration for dumping code.
-#[derive(Clone,Debug)]
+#[derive(Clone, Debug)]
 pub struct DumpCodeConfig {
     /// Toggles code dump.
     pub enabled: bool,
@@ -49,7 +49,7 @@ impl Default for DumpCodeConfig {
 }
 
 /// LLVM configuration.
-#[derive(Clone,Debug)]
+#[derive(Clone, Debug)]
 pub struct LLVMConfig {
     /// LLVM optimization level.
     pub opt_level: u32,
@@ -93,7 +93,7 @@ impl Default for LLVMConfig {
 }
 
 /// A parsed Weld configuration.
-#[derive(Clone,Debug)]
+#[derive(Clone, Debug)]
 pub struct ParsedConf {
     /// Memory limit for a single context.
     pub memory_limit: i64,
@@ -136,77 +136,89 @@ trait ConfigParser {
     /// Retrieves the value mapped to key and parses it to type `F`. The `map` function is applied to
     /// the parsed value. If the value does not exist, the default value is returned.
     fn parse_map<F, T, G>(&self, key: &str, default: T, map: G) -> WeldResult<T>
-        where F: FromStr, G: FnMut(F) -> WeldResult<T>;
+    where
+        F: FromStr,
+        G: FnMut(F) -> WeldResult<T>;
 
     /// Retrieves the value mapped to `key` and parse it to type `F`. Returns `default` if key does
     /// not exist.
     fn parse_str<F>(&self, key: &str, default: F) -> WeldResult<F>
-        where F: FromStr {
-            self.parse_map(key, default, &mut |v| Ok(v))
-        }
+    where
+        F: FromStr,
+    {
+        self.parse_map(key, default, &mut |v| Ok(v))
+    }
 }
 
 impl ConfigParser for WeldConf {
     fn parse_map<F, T, G>(&self, key: &str, default: T, mut func: G) -> WeldResult<T>
-        where F: FromStr, G: FnMut(F) -> WeldResult<T> {
-            match self.get(key).cloned().map(|s| s.into_string().unwrap()) {
-                Some(field) => {
-                    match field.parse::<F>() {
-                        Ok(result) => func(result),
-                        Err(_) => compile_err!("Invalid configuration value '{}' for '{}'",
-                                               field, key)
-                    }
-                },
-                None => Ok(default),
-            }
+    where
+        F: FromStr,
+        G: FnMut(F) -> WeldResult<T>,
+    {
+        match self.get(key).cloned().map(|s| s.into_string().unwrap()) {
+            Some(field) => match field.parse::<F>() {
+                Ok(result) => func(result),
+                Err(_) => compile_err!("Invalid configuration value '{}' for '{}'", field, key),
+            },
+            None => Ok(default),
         }
+    }
 }
 
 impl ParsedConf {
     pub fn parse(conf: &WeldConf) -> WeldResult<ParsedConf> {
         let conf = ParsedConf {
-            memory_limit: conf.parse_str(CONF_MEMORY_LIMIT_KEY,
-                                         CONF_MEMORY_LIMIT_DEFAULT)?,
-            threads: conf.parse_str(CONF_THREADS_KEY,
-                                    CONF_THREADS_DEFAULT)?,
-            trace_run: conf.parse_str(CONF_TRACE_RUN_KEY,
-                                      CONF_TRACE_RUN_DEFAULT)?,
-            enable_sir_opt: conf.parse_str(CONF_SIR_OPT_KEY,
-                                           CONF_SIR_OPT_DEFAULT)?,
-            enable_experimental_passes: conf.parse_str(CONF_EXPERIMENTAL_PASSES_KEY,
-                                                       CONF_EXPERIMENTAL_PASSES_DEFAULT)?,
-            optimization_passes: conf.parse_map(CONF_OPTIMIZATION_PASSES_KEY,
-                                                CONF_OPTIMIZATION_PASSES.clone(),
-                                                parse_passes)?,
-            enable_bounds_checks: conf.parse_str(CONF_ENABLE_BOUNDS_CHECKS_KEY,
-                                                 CONF_ENABLE_BOUNDS_CHECKS_DEFAULT)?,
+            memory_limit: conf.parse_str(CONF_MEMORY_LIMIT_KEY, CONF_MEMORY_LIMIT_DEFAULT)?,
+            threads: conf.parse_str(CONF_THREADS_KEY, CONF_THREADS_DEFAULT)?,
+            trace_run: conf.parse_str(CONF_TRACE_RUN_KEY, CONF_TRACE_RUN_DEFAULT)?,
+            enable_sir_opt: conf.parse_str(CONF_SIR_OPT_KEY, CONF_SIR_OPT_DEFAULT)?,
+            enable_experimental_passes: conf.parse_str(
+                CONF_EXPERIMENTAL_PASSES_KEY,
+                CONF_EXPERIMENTAL_PASSES_DEFAULT,
+            )?,
+            optimization_passes: conf.parse_map(
+                CONF_OPTIMIZATION_PASSES_KEY,
+                CONF_OPTIMIZATION_PASSES.clone(),
+                parse_passes,
+            )?,
+            enable_bounds_checks: conf.parse_str(
+                CONF_ENABLE_BOUNDS_CHECKS_KEY,
+                CONF_ENABLE_BOUNDS_CHECKS_DEFAULT,
+            )?,
             llvm: LLVMConfig {
-                opt_level: conf.parse_str(CONF_LLVM_OPTIMIZATION_LEVEL_KEY,
-                                          CONF_LLVM_OPTIMIZATION_LEVEL_DEFAULT)?,
-                llvm_unroller: conf.parse_str(CONF_LLVM_UNROLLER_KEY,
-                                              CONF_LLVM_UNROLLER_DEFAULT)?,
-                llvm_vectorizer: conf.parse_str(CONF_LLVM_VECTORIZER_KEY,
-                                                CONF_LLVM_VECTORIZER_DEFAULT)?,
-                target_analysis_passes: conf.parse_str(CONF_LLVM_TARGET_PASSES_KEY,
-                                                       CONF_LLVM_TARGET_PASSES_DEFAULT)?,
-                module_optimizations: conf.parse_str(CONF_LLVM_MODULE_OPTS_KEY,
-                                                     CONF_LLVM_MODULE_OPTS_DEFAULT)?,
-                func_optimizations: conf.parse_str(CONF_LLVM_FUNC_OPTS_KEY,
-                                                   CONF_LLVM_FUNC_OPTS_DEFAULT)?,
-                run_func_name: conf.parse_str(CONF_LLVM_RUN_FUNC_NAME_KEY,
-                                              CONF_LLVM_RUN_FUNC_NAME_DEFAULT.to_string())?,
+                opt_level: conf.parse_str(
+                    CONF_LLVM_OPTIMIZATION_LEVEL_KEY,
+                    CONF_LLVM_OPTIMIZATION_LEVEL_DEFAULT,
+                )?,
+                llvm_unroller: conf
+                    .parse_str(CONF_LLVM_UNROLLER_KEY, CONF_LLVM_UNROLLER_DEFAULT)?,
+                llvm_vectorizer: conf
+                    .parse_str(CONF_LLVM_VECTORIZER_KEY, CONF_LLVM_VECTORIZER_DEFAULT)?,
+                target_analysis_passes: conf
+                    .parse_str(CONF_LLVM_TARGET_PASSES_KEY, CONF_LLVM_TARGET_PASSES_DEFAULT)?,
+                module_optimizations: conf
+                    .parse_str(CONF_LLVM_MODULE_OPTS_KEY, CONF_LLVM_MODULE_OPTS_DEFAULT)?,
+                func_optimizations: conf
+                    .parse_str(CONF_LLVM_FUNC_OPTS_KEY, CONF_LLVM_FUNC_OPTS_DEFAULT)?,
+                run_func_name: conf.parse_str(
+                    CONF_LLVM_RUN_FUNC_NAME_KEY,
+                    CONF_LLVM_RUN_FUNC_NAME_DEFAULT.to_string(),
+                )?,
             },
             dump_code: DumpCodeConfig {
-                enabled: conf.parse_str(CONF_DUMP_CODE_KEY,
-                                        CONF_DUMP_CODE_DEFAULT)?,
-                filename: conf.parse_str(CONF_DUMP_CODE_FILENAME_KEY,
-                                         unique_filename())?,
-                directory: conf.parse_str(CONF_DUMP_CODE_DIR_KEY,
-                                          CONF_DUMP_CODE_DIR_DEFAULT.to_string())?,
-                formats: conf.parse_map::<String, HashSet<_>, _>(CONF_DUMP_CODE_FORMATS_KEY,
-                                        DumpCodeFormat::all().into_iter().collect::<HashSet<_>>(),
-                                        parse_dump_code_formats)?,
-            }
+                enabled: conf.parse_str(CONF_DUMP_CODE_KEY, CONF_DUMP_CODE_DEFAULT)?,
+                filename: conf.parse_str(CONF_DUMP_CODE_FILENAME_KEY, unique_filename())?,
+                directory: conf.parse_str(
+                    CONF_DUMP_CODE_DIR_KEY,
+                    CONF_DUMP_CODE_DIR_DEFAULT.to_string(),
+                )?,
+                formats: conf.parse_map::<String, HashSet<_>, _>(
+                    CONF_DUMP_CODE_FORMATS_KEY,
+                    DumpCodeFormat::all().into_iter().collect::<HashSet<_>>(),
+                    parse_dump_code_formats,
+                )?,
+            },
         };
         Ok(conf)
     }
@@ -214,27 +226,26 @@ impl ParsedConf {
 
 /// Parses a comma separated list of formats.
 fn parse_dump_code_formats(s: String) -> WeldResult<HashSet<DumpCodeFormat>> {
-    use util::dump::DumpCodeFormat::*;
-    s.split(",").map(|s| {
-        match s.to_lowercase().as_ref() {
+    use crate::util::dump::DumpCodeFormat::*;
+    s.split(',')
+        .map(|s| match s.to_lowercase().as_ref() {
             "weld" => Ok(Weld),
-            "weldopt" => Ok(WeldOpt), 
-            "llvm" => Ok(LLVM),   
-            "llvmopt" => Ok(LLVMOpt),   
-            "assembly" => Ok(Assembly),   
-            "sir" => Ok(SIR),   
+            "weldopt" => Ok(WeldOpt),
+            "llvm" => Ok(LLVM),
+            "llvmopt" => Ok(LLVMOpt),
+            "assembly" => Ok(Assembly),
+            "sir" => Ok(SIR),
             other => compile_err!("Unknown dumpCode format '{}'", other),
-        }
-    }).collect::<WeldResult<HashSet<DumpCodeFormat>>>()
+        })
+        .collect::<WeldResult<HashSet<DumpCodeFormat>>>()
 }
 
 /// Parse a list of optimization passes.
 fn parse_passes(s: String) -> WeldResult<Vec<Pass>> {
-    if s.len() == 0 {
+    if s.is_empty() {
         return Ok(vec![]); // Special case because split() creates an empty piece here
     }
     let mut result = vec![];
-
 
     // Insert mandatory passes to the beginning.
     //
@@ -243,10 +254,10 @@ fn parse_passes(s: String) -> WeldResult<Vec<Pass>> {
     result.push(OPTIMIZATION_PASSES.get("inline-let").unwrap().clone());
     result.push(OPTIMIZATION_PASSES.get("inline-apply").unwrap().clone());
 
-    for piece in s.split(",") {
+    for piece in s.split(',') {
         match OPTIMIZATION_PASSES.get(piece) {
             Some(pass) => result.push(pass.clone()),
-            None => return compile_err!("Unknown optimization pass: {}", piece)
+            None => return compile_err!("Unknown optimization pass: {}", piece),
         }
     }
     Ok(result)

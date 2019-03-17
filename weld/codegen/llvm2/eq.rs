@@ -1,27 +1,27 @@
 //! Generates code to compare values for equality.
 
-extern crate llvm_sys;
+use llvm_sys;
 
 use std::ffi::CStr;
 
-use ast::Type;
 use super::vector::VectorExt;
-use ast::ScalarKind::{I32, I64};
-use error::*;
+use crate::ast::ScalarKind::{I32, I64};
+use crate::ast::Type;
+use crate::error::*;
 
-use super::llvm_exts::*;
 use super::llvm_exts::LLVMExtAttribute::*;
+use super::llvm_exts::*;
 
-use self::llvm_sys::prelude::*;
 use self::llvm_sys::core::*;
-use self::llvm_sys::LLVMLinkage;
+use self::llvm_sys::prelude::*;
 use self::llvm_sys::LLVMIntPredicate::*;
+use self::llvm_sys::LLVMLinkage;
 
 use super::CodeGenExt;
 use super::LlvmGenerator;
 
-use ast::BinOpKind::Equal;
-use codegen::llvm2::numeric::gen_binop;
+use crate::ast::BinOpKind::Equal;
+use crate::codegen::llvm2::numeric::gen_binop;
 
 /// Returns whether a value can be compared with libc's `memcmp`.
 ///
@@ -32,7 +32,7 @@ trait SupportsMemCmpEq {
 
 impl SupportsMemCmpEq for Type {
     fn supports_memcmp_eq(&self) -> bool {
-        use ast::Type::*;
+        use crate::ast::Type::*;
         // Structs do not support memcmp because they may be padded.
         match *self {
             Scalar(ref kind) => kind.is_integer(),
@@ -48,7 +48,7 @@ pub trait GenEq {
     /// The equality functions are over pointers of the type, e.g., an equality function for `i32`
     /// has the type signature `i1 (i32*, i32*)`. This method returns the generated function. The
     /// function returns `true` if the two operands are equal.
-    unsafe fn gen_eq_fn(&mut self, ty: &Type) -> WeldResult<LLVMValueRef>; 
+    unsafe fn gen_eq_fn(&mut self, ty: &Type) -> WeldResult<LLVMValueRef>;
 
     /// Generates an opaque equality function for a type.
     ///
@@ -61,10 +61,10 @@ pub trait GenEq {
 impl GenEq for LlvmGenerator {
     /// Generates an equality function for a type.
     unsafe fn gen_eq_fn(&mut self, ty: &Type) -> WeldResult<LLVMValueRef> {
-        use ast::Type::*;
+        use crate::ast::Type::*;
         let result = self.eq_fns.get(ty).cloned();
         if let Some(result) = result {
-            return Ok(result)
+            return Ok(result);
         }
 
         let llvm_ty = self.llvm_type(ty)?;
@@ -82,8 +82,18 @@ impl GenEq for LlvmGenerator {
         let (function, builder, entry_block) = self.define_function(ret_ty, &mut arg_tys, name);
 
         LLVMExtAddAttrsOnFunction(self.context, function, &[InlineHint]);
-        LLVMExtAddAttrsOnParameter(self.context, function, &[ReadOnly, NoAlias, NonNull, NoCapture], 0);
-        LLVMExtAddAttrsOnParameter(self.context, function, &[ReadOnly, NoAlias, NonNull, NoCapture], 1);
+        LLVMExtAddAttrsOnParameter(
+            self.context,
+            function,
+            &[ReadOnly, NoAlias, NonNull, NoCapture],
+            0,
+        );
+        LLVMExtAddAttrsOnParameter(
+            self.context,
+            function,
+            &[ReadOnly, NoAlias, NonNull, NoCapture],
+            1,
+        );
 
         let left = LLVMGetParam(function, 0);
         let right = LLVMGetParam(function, 1);
@@ -104,7 +114,13 @@ impl GenEq for LlvmGenerator {
                     let field_left = LLVMBuildStructGEP(builder, left, i as u32, c_str!(""));
                     let field_right = LLVMBuildStructGEP(builder, right, i as u32, c_str!(""));
                     let mut args = [field_left, field_right];
-                    let field_result = LLVMBuildCall(builder, func, args.as_mut_ptr(), args.len() as u32, c_str!(""));
+                    let field_result = LLVMBuildCall(
+                        builder,
+                        func,
+                        args.as_mut_ptr(),
+                        args.len() as u32,
+                        c_str!(""),
+                    );
                     result = LLVMBuildAnd(builder, result, field_result, c_str!(""));
                 }
                 result
@@ -114,7 +130,8 @@ impl GenEq for LlvmGenerator {
             // XXX Note eventually when we support comparison for sorting, this won't work! We can
             // then only support unsigned integers and booleans (and structs thereof).
             Vector(ref elem) if elem.supports_memcmp_eq() => {
-                let compare_data_block = LLVMAppendBasicBlockInContext(self.context, function, c_str!(""));
+                let compare_data_block =
+                    LLVMAppendBasicBlockInContext(self.context, function, c_str!(""));
                 let done_block = LLVMAppendBasicBlockInContext(self.context, function, c_str!(""));
 
                 let left_vector = self.load(builder, left)?;
@@ -128,8 +145,10 @@ impl GenEq for LlvmGenerator {
                 let zero = self.i64(0);
                 let left_data = self.gen_at(builder, ty, left_vector, zero)?;
                 let right_data = self.gen_at(builder, ty, right_vector, zero)?;
-                let left_data = LLVMBuildBitCast(builder, left_data, self.void_pointer_type(), c_str!(""));
-                let right_data = LLVMBuildBitCast(builder, right_data, self.void_pointer_type(), c_str!(""));
+                let left_data =
+                    LLVMBuildBitCast(builder, left_data, self.void_pointer_type(), c_str!(""));
+                let right_data =
+                    LLVMBuildBitCast(builder, right_data, self.void_pointer_type(), c_str!(""));
                 let elem_ty = self.llvm_type(elem)?;
                 let elem_size = self.size_of(elem_ty);
                 let bytes = LLVMBuildNSWMul(builder, left_size, elem_size, c_str!(""));
@@ -137,13 +156,17 @@ impl GenEq for LlvmGenerator {
                 // Call memcmp
                 let name = "memcmp";
                 let ret_ty = self.i32_type();
-                let ref mut arg_tys = [self.void_pointer_type(), self.void_pointer_type(), self.i64_type()];
+                let arg_tys = &mut [
+                    self.void_pointer_type(),
+                    self.void_pointer_type(),
+                    self.i64_type(),
+                ];
                 if self.intrinsics.add(name, ret_ty, arg_tys) {
                     let memcmp = self.intrinsics.get(name).unwrap();
                     LLVMExtAddAttrsOnParameter(self.context, memcmp, &[ReadOnly, NoCapture], 0);
                     LLVMExtAddAttrsOnParameter(self.context, memcmp, &[ReadOnly, NoCapture], 1);
                 }
-                let ref mut args = [left_data, right_data, bytes];
+                let args = &mut [left_data, right_data, bytes];
                 let memcmp_result = self.intrinsics.call(builder, name, args)?;
 
                 // If MemCmp returns 0, the two buffers are equal.
@@ -156,16 +179,20 @@ impl GenEq for LlvmGenerator {
 
                 let mut incoming_blocks = [entry_block, compare_data_block];
                 let mut incoming_values = [size_eq, data_eq];
-                LLVMAddIncoming(result,
-                                incoming_values.as_mut_ptr(),
-                                incoming_blocks.as_mut_ptr(),
-                                incoming_blocks.len() as u32);
+                LLVMAddIncoming(
+                    result,
+                    incoming_values.as_mut_ptr(),
+                    incoming_blocks.as_mut_ptr(),
+                    incoming_blocks.len() as u32,
+                );
                 result
             }
             Vector(ref elem) => {
                 // Compare vectors with a loop. Check size like before.
-                let compare_data_block = LLVMAppendBasicBlockInContext(self.context, function, c_str!(""));
-                let loop_block = LLVMAppendBasicBlockInContext(self.context(), function,  c_str!(""));
+                let compare_data_block =
+                    LLVMAppendBasicBlockInContext(self.context, function, c_str!(""));
+                let loop_block =
+                    LLVMAppendBasicBlockInContext(self.context(), function, c_str!(""));
                 let done_block = LLVMAppendBasicBlockInContext(self.context, function, c_str!(""));
 
                 let left_vector = self.load(builder, left)?;
@@ -189,7 +216,13 @@ impl GenEq for LlvmGenerator {
                 let left_value = self.gen_at(builder, ty, left_vector, phi_i)?;
                 let right_value = self.gen_at(builder, ty, right_vector, phi_i)?;
                 let mut args = [left_value, right_value];
-                let eq_result = LLVMBuildCall(builder, func, args.as_mut_ptr(), args.len() as u32, c_str!(""));
+                let eq_result = LLVMBuildCall(
+                    builder,
+                    func,
+                    args.as_mut_ptr(),
+                    args.len() as u32,
+                    c_str!(""),
+                );
                 let neq = LLVMBuildNot(builder, eq_result, c_str!(""));
 
                 let updated_i = LLVMBuildNSWAdd(builder, phi_i, self.i64(1), c_str!(""));
@@ -200,17 +233,27 @@ impl GenEq for LlvmGenerator {
 
                 let mut blocks = [compare_data_block, loop_block];
                 let mut values = [self.i64(0), updated_i];
-                LLVMAddIncoming(phi_i, values.as_mut_ptr(), blocks.as_mut_ptr(), values.len() as u32);
+                LLVMAddIncoming(
+                    phi_i,
+                    values.as_mut_ptr(),
+                    blocks.as_mut_ptr(),
+                    values.len() as u32,
+                );
 
                 // Finish block - set result and compute number of consumed bits.
                 LLVMPositionBuilderAtEnd(builder, done_block);
                 let result = LLVMBuildPhi(builder, self.i1_type(), c_str!(""));
                 let mut blocks = [entry_block, compare_data_block, loop_block];
                 let mut values = [size_eq, self.i1(true), eq_result];
-                LLVMAddIncoming(result, values.as_mut_ptr(), blocks.as_mut_ptr(), values.len() as u32);
+                LLVMAddIncoming(
+                    result,
+                    values.as_mut_ptr(),
+                    blocks.as_mut_ptr(),
+                    values.len() as u32,
+                );
                 result
             }
-            Function(_,_) | Unknown | Alias(_, _) => unreachable!()
+            Function(_, _) | Unknown | Alias(_, _) => unreachable!(),
         };
 
         LLVMBuildRet(builder, result);
@@ -224,7 +267,7 @@ impl GenEq for LlvmGenerator {
     unsafe fn gen_opaque_eq_fn(&mut self, ty: &Type) -> WeldResult<LLVMValueRef> {
         let result = self.opaque_eq_fns.get(ty).cloned();
         if let Some(result) = result {
-            return Ok(result)
+            return Ok(result);
         }
 
         let llvm_ty = self.llvm_type(ty)?;
@@ -239,14 +282,26 @@ impl GenEq for LlvmGenerator {
         // Free the allocated string.
         LLVMDisposeMessage(c_prefix);
 
-        let (function, builder, _) = self.define_function_with_visibility(ret_ty,
-                                                                          &mut arg_tys,
-                                                                          LLVMLinkage::LLVMExternalLinkage,
-                                                                          name);
+        let (function, builder, _) = self.define_function_with_visibility(
+            ret_ty,
+            &mut arg_tys,
+            LLVMLinkage::LLVMExternalLinkage,
+            name,
+        );
 
         LLVMExtAddAttrsOnFunction(self.context, function, &[InlineHint]);
-        LLVMExtAddAttrsOnParameter(self.context, function, &[ReadOnly, NoAlias, NonNull, NoCapture], 0);
-        LLVMExtAddAttrsOnParameter(self.context, function, &[ReadOnly, NoAlias, NonNull, NoCapture], 1);
+        LLVMExtAddAttrsOnParameter(
+            self.context,
+            function,
+            &[ReadOnly, NoAlias, NonNull, NoCapture],
+            0,
+        );
+        LLVMExtAddAttrsOnParameter(
+            self.context,
+            function,
+            &[ReadOnly, NoAlias, NonNull, NoCapture],
+            1,
+        );
 
         let left = LLVMGetParam(function, 0);
         let right = LLVMGetParam(function, 1);
@@ -255,7 +310,13 @@ impl GenEq for LlvmGenerator {
 
         let func = self.gen_eq_fn(ty)?;
         let mut args = [left, right];
-        let result = LLVMBuildCall(builder, func, args.as_mut_ptr(), args.len() as u32, c_str!(""));
+        let result = LLVMBuildCall(
+            builder,
+            func,
+            args.as_mut_ptr(),
+            args.len() as u32,
+            c_str!(""),
+        );
         let result = LLVMBuildZExt(builder, result, self.i32_type(), c_str!(""));
         LLVMBuildRet(builder, result);
         LLVMDisposeBuilder(builder);

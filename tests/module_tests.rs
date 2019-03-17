@@ -2,14 +2,14 @@
 //!
 //! This module uses the C API to simplify multi-threaded testing.
 
-extern crate weld;
+use weld;
 
-use weld::*;
-use std::thread;
 use std::sync::Arc;
+use std::thread;
+use weld::*;
 
 mod common;
-use common::*;
+use crate::common::*;
 
 #[test]
 fn multithreaded_module_run() {
@@ -35,7 +35,6 @@ fn multithreaded_module_run() {
         let input_vec = Arc::clone(&input_vec);
         threads.push(thread::spawn(move || {
             for _ in 0..num_runs {
-
                 let ref conf = WeldConf::new();
                 let input_data = WeldVec::from(input_vec.as_ref());
                 let ref input_value = WeldValue::new_from_data(&input_data as *const _ as Data);

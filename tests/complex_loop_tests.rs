@@ -1,9 +1,7 @@
 //! Tests which exercise various aspects of the `For` loop.
 
-extern crate weld;
-
 mod common;
-use common::*;
+use crate::common::*;
 
 #[test]
 fn if_statement_with_dict_loop() {
@@ -57,7 +55,7 @@ fn if_statement_with_dict_loop() {
     };
 
     let ret_value = compile_and_run(code, conf, input_data);
-    let data = ret_value.data() as *const WeldVec<Pair<i64,i64>>;
+    let data = ret_value.data() as *const WeldVec<Pair<i64, i64>>;
     let result = unsafe { (*data).clone() };
 
     // Output should be the left-side as pairs (i.e., {525,525}, {550,550},etc.)
