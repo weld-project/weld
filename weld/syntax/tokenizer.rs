@@ -150,6 +150,7 @@ impl Token {
 }
 
 /// Break up a string into tokens.
+#[allow(clippy::invalid_regex)]
 pub fn tokenize(input: &str) -> WeldResult<Vec<Token>> {
     lazy_static! {
         // Regular expression for splitting up tokens.
