@@ -1,6 +1,9 @@
-//! C-compatible foreign function interface to Weld.
+//! A C-compatible foreign function interface to Weld.
 //!
-//! This module provides a C-compatible interface to the Weld library.
+//! This crate provides a C-compatible interface to the Weld library and is compiled as a shared
+//! library and a static library.
+//!
+//! See the docs for the main Weld crate for more details on these functions.
 
 use weld::*;
 
