@@ -1,6 +1,6 @@
 [package]
 name = "weld-capi"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Shoumik Palkar <shoumik@cs.stanford.edu>"]
 edition = "2018"
 readme = "README.md"
@@ -14,4 +14,5 @@ cbindgen = "0.8.0"
 
 [lib]
 name = "weld"
+doc = false
 crate-type = ["cdylib", "staticlib"]
