@@ -1,0 +1,13 @@
+[package]
+name = "weld-capi"
+version = "0.2.0"
+authors = ["Shoumik Palkar <shoumik@cs.stanford.edu>"]
+edition = "2018"
+
+[dependencies]
+libc = "0.2.0"
+weld = { path = "../weld" }
+
+[lib]
+name = "weld"
+crate-type = ["cdylib", "staticlib"]

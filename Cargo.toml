@@ -1,3 +1,7 @@
 [workspace]
-
-members = [ "weld", "repl", "hdrgen" ]
+members = [
+  "weld",
+  "weld-capi",
+  "weld-repl",
+  "weld-hdrgen"
+]
