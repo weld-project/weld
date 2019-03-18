@@ -21,10 +21,10 @@ use self::llvm_sys::core::*;
 use self::llvm_sys::prelude::*;
 use self::llvm_sys::{LLVMIntPredicate, LLVMLinkage};
 
-use crate::codegen::llvm2::llvm_exts::LLVMExtAttribute::*;
-use crate::codegen::llvm2::llvm_exts::*;
-use crate::codegen::llvm2::vector::VectorExt;
-use crate::codegen::llvm2::{LLVM_VECTOR_WIDTH, SIR_FUNC_CALL_CONV};
+use crate::codegen::llvm::llvm_exts::LLVMExtAttribute::*;
+use crate::codegen::llvm::llvm_exts::*;
+use crate::codegen::llvm::vector::VectorExt;
+use crate::codegen::llvm::{LLVM_VECTOR_WIDTH, SIR_FUNC_CALL_CONV};
 
 use super::{CodeGenExt, FunctionContext, LlvmGenerator};
 
