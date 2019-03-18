@@ -11,17 +11,16 @@ repository = "https://github.com/weld-project/weld"
 edition = "2018"
 
 [dependencies]
-lazy_static = "0.2.1"
-regex = "0.1.71"
-libc = "0.2.0"
-csv = "0.15.0"
-num-integer = "0.1"
-log = "0.3.8"
-env_logger = "0.4.3"
 chrono = "0.4.0"
-time = "0.1.38"
-llvm-sys = "60.0.3"
+env_logger = "0.4.3"
 fnv = "1.0.5"
+lazy_static = "0.2.1"
+libc = "0.2.0"
+llvm-sys = "60.0.3"
+log = "0.3.8"
+num-integer = "0.1"
+regex = "0.1.71"
+time = "0.1.38"
 uuid = { version = "0.7.1", features = ["v4"] }
 
 [lib]
