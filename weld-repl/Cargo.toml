@@ -1,0 +1,11 @@
+[package]
+name = "repl"
+version = "0.2.0"
+authors = ["Weld Developers <weld-group@lists.stanford.edu>"]
+edition = "2018"
+
+[dependencies]
+clap = "2.31.1"
+lazy_static = "0.2.1"
+rustyline = "1.0.0"
+weld = { path = "../weld" }

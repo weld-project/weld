@@ -173,7 +173,6 @@ mod util;
 // Public interfaces.
 pub mod ast;
 pub mod data;
-pub mod ffi;
 pub mod runtime;
 
 pub use crate::conf::constants::*;

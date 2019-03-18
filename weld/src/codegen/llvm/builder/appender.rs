@@ -1,7 +1,7 @@
 //! Code generation for the appender builder type.
 //!
 //! Much of this code mirrors the implementation of the `vector` type, and it may be worth merging
-//! this module with `llvm2::vector` one day. The main difference between a vector and an appender
+//! this module with `llvm::vector` one day. The main difference between a vector and an appender
 //! is that an appender has a third capacity field (in addition to the vector's data pointer and
 //! size). The appender also contains methods for dynamic resizing.
 
@@ -16,10 +16,10 @@ use self::llvm_sys::prelude::*;
 use self::llvm_sys::LLVMIntPredicate::*;
 use self::llvm_sys::LLVMTypeKind;
 
-use crate::codegen::llvm2::intrinsic::Intrinsics;
-use crate::codegen::llvm2::llvm_exts::*;
-use crate::codegen::llvm2::CodeGenExt;
-use crate::codegen::llvm2::LLVM_VECTOR_WIDTH;
+use crate::codegen::llvm::intrinsic::Intrinsics;
+use crate::codegen::llvm::llvm_exts::*;
+use crate::codegen::llvm::CodeGenExt;
+use crate::codegen::llvm::LLVM_VECTOR_WIDTH;
 
 pub const POINTER_INDEX: u32 = 0;
 pub const SIZE_INDEX: u32 = 1;
@@ -307,7 +307,7 @@ impl Appender {
         builder_arg: LLVMValueRef,
     ) -> WeldResult<LLVMValueRef> {
         // The vector type that the appender generates.
-        use crate::codegen::llvm2::vector;
+        use crate::codegen::llvm::vector;
         if self.result.is_none() {
             let mut arg_tys = [LLVMPointerType(self.appender_ty, 0)];
             let ret_ty = vector_ty;

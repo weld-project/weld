@@ -13,10 +13,10 @@ use self::llvm_sys::core::*;
 use self::llvm_sys::prelude::*;
 use self::llvm_sys::LLVMTypeKind;
 
-use crate::codegen::llvm2::llvm_exts::*;
-use crate::codegen::llvm2::numeric::gen_binop;
-use crate::codegen::llvm2::CodeGenExt;
-use crate::codegen::llvm2::LLVM_VECTOR_WIDTH;
+use crate::codegen::llvm::llvm_exts::*;
+use crate::codegen::llvm::numeric::gen_binop;
+use crate::codegen::llvm::CodeGenExt;
+use crate::codegen::llvm::LLVM_VECTOR_WIDTH;
 
 const SCALAR_INDEX: u32 = 0;
 const VECTOR_INDEX: u32 = 1;
