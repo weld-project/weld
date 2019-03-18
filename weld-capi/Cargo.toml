@@ -8,6 +8,9 @@ edition = "2018"
 libc = "0.2.0"
 weld = { path = "../weld" }
 
+[build-dependencies]
+cbindgen = "0.8.0"
+
 [lib]
 name = "weld"
 crate-type = ["cdylib", "staticlib"]
