@@ -23,13 +23,13 @@ use self::llvm_sys::prelude::*;
 use self::llvm_sys::LLVMIntPredicate::*;
 use self::llvm_sys::LLVMTypeKind;
 
-use crate::codegen::llvm2::intrinsic::Intrinsics;
-use crate::codegen::llvm2::llvm_exts::LLVMExtAttribute::*;
-use crate::codegen::llvm2::llvm_exts::*;
+use crate::codegen::llvm::intrinsic::Intrinsics;
+use crate::codegen::llvm::llvm_exts::LLVMExtAttribute::*;
+use crate::codegen::llvm::llvm_exts::*;
 
 // Need vector type for ToVec and Serialize.
-use crate::codegen::llvm2::vector;
-use crate::codegen::llvm2::vector::Vector;
+use crate::codegen::llvm::vector;
+use crate::codegen::llvm::vector::Vector;
 
 use super::CodeGenExt;
 

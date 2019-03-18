@@ -1,10 +1,12 @@
-//! C-compatible foreign function interface to Weld.
+//! A C-compatible foreign function interface to Weld.
 //!
-//! This module provides a C-compatible interface to the Weld library.
+//! This crate provides a C-compatible interface to the Weld library and is compiled as a shared
+//! library and a static library.
+//!
+//! See the docs for the main Weld crate for more details on these functions.
 
-use libc;
+use weld::*;
 
-use super::*;
 use libc::{c_char, c_void, int64_t};
 
 use std::ffi::CStr;
@@ -24,8 +26,8 @@ pub type WeldValueRef = *mut WeldValue;
 /// An opauqe handle to a Weld context.
 pub type WeldContextRef = *mut WeldContext;
 
-pub use super::WeldLogLevel;
-pub use super::WeldRuntimeErrno;
+pub use weld::WeldLogLevel;
+pub use weld::WeldRuntimeErrno;
 
 trait ToRustStr {
     fn to_str(&self) -> &str;
