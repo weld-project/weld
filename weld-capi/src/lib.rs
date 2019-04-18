@@ -15,11 +15,28 @@ use std::ptr;
 // Re-export the FFI for the runtime.
 pub use weld::runtime::ffi::*;
 
-pub enum WeldConf {}
-pub enum WeldContext {}
-pub enum WeldError {}
-pub enum WeldModule {}
-pub enum WeldValue {}
+// These variants should never be constructed: they aren't 0-variant structs to enforce their
+// pointer alignment.
+#[repr(u64)]
+pub enum WeldConf {
+    _A,
+}
+#[repr(u64)]
+pub enum WeldContext {
+    _A,
+}
+#[repr(u64)]
+pub enum WeldError {
+    _A,
+}
+#[repr(u64)]
+pub enum WeldModule {
+    _A,
+}
+#[repr(u64)]
+pub enum WeldValue {
+    _A,
+}
 
 /// An opaque handle to a Weld configuration.
 #[allow(non_camel_case_types)]
