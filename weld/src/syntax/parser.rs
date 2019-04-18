@@ -518,7 +518,10 @@ impl<'t> Parser<'t> {
                                     expr = expr_box(GetField { expr, index }, Annotations::new())
                                 }
                                 _ => {
-                                    return compile_err!("Expected field index but got '{}'", value);
+                                    return compile_err!(
+                                        "Expected field index but got '{}'",
+                                        value
+                                    );
                                 }
                             }
                         }

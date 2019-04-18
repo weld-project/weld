@@ -912,6 +912,20 @@ pub enum WeldLogLevel {
     Trace,
 }
 
+impl From<u64> for WeldLogLevel {
+    fn from(value: u64) -> WeldLogLevel {
+        use WeldLogLevel::*;
+        match value {
+            0 => Off,
+            1 => Error,
+            2 => Warn,
+            3 => Info,
+            4 => Debug,
+            _ => Trace,
+        }
+    }
+}
+
 impl fmt::Display for WeldLogLevel {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", self)

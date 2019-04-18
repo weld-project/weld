@@ -20,13 +20,13 @@ endif
 all: $(LIB)
 
 test: $(LIB) test.cpp
-	$(CLANG) $(CFLAGS) -L$(LIBDIR) $(LLVMLIBS) $(LIB) test.cpp -o test
+	$(CLANG) $(CFLAGS) -L$(LIBDIR) $(LLVMLIBS) $(LIB) test.cpp -o $(OUT_DIR)/test
 
 llvmext.o: llvmext.cpp
-	$(CLANG) $(CFLAGS) -c $< -o $@
+	$(CLANG) $(CFLAGS) -c $< -o $(OUT_DIR)/$@
 
 $(LIB): llvmext.o
-	ar rcs $@ $^
+	ar rcs $(OUT_DIR)/$@ $(OUT_DIR)/$^
 
 clean:
-	rm -f *.o $(LIB)
+	rm -f $(OUT_DIR)/*.o $(OUT_DIR)/$(LIB)
