@@ -7,7 +7,7 @@
 #include <string.h>
 
 // Include the Weld API.
-#include "../../../c/weld.h"
+#include "../../../weld-capi/weld.h"
 
 int main() {
     // Load our shared library; its name will be passed by make as the macro UDFLIB

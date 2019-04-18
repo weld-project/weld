@@ -5,7 +5,7 @@
 #include <string.h>
 
 // Include the Weld API.
-#include "../../../c/weld.h"
+#include "../../../weld-capi/weld.h"
 
 extern "C" void add_five(int64_t *x, int64_t *result) {
     *result = *x + 5;

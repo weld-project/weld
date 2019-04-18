@@ -5,7 +5,7 @@
 #include <string.h>
 
 // Include the Weld API.
-#include "../../../c/weld.h"
+#include "../../../weld-capi/weld.h"
 
 const char *program = "|x:i32, ys:vec[i64]|\
 let a = result(for(ys, appender[i32], |b, i, y| merge(b, x)));\

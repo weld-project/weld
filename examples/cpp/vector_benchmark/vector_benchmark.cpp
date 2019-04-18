@@ -6,7 +6,7 @@
 #include <string.h>
 
 // Include the Weld API.
-#include "../../../c/weld.h"
+#include "../../../weld-capi/weld.h"
 
 struct weld_vector {
     int32_t *data;
