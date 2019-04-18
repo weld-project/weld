@@ -39,8 +39,9 @@ fn build_llvmext(project_dir: &str) {
         .unwrap();
     assert!(status.success());
 
+    let ref out_dir = env::var("OUT_DIR").unwrap();
     println!("cargo:rustc-link-lib=static=llvmext");
-    println!("cargo:rustc-link-search=native={}/llvmext", project_dir);
+    println!("cargo:rustc-link-search=native={}", out_dir);
 }
 
 fn main() {
