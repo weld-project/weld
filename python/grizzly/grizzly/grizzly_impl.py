@@ -1350,7 +1350,7 @@ def groupby_sort(columns, column_tys, grouping_columns, grouping_column_tys, key
          )
        )
      ),
-    |a:{%(gty)s, vec[%(ty)s]}| {a.$0, sort(a.$1, |x:%(ty)s| compare(%(key_str_x)s, %(key_str_y)s))}
+    |a:{%(gty)s, vec[%(ty)s]}| {a.$0, sort(a.$1, |x:%(ty)s, y:%(ty)s| compare(%(key_str_x)s, %(key_str_y)s))}
     )
   """
 
@@ -1359,7 +1359,8 @@ def groupby_sort(columns, column_tys, grouping_columns, grouping_column_tys, key
                                           "result": result_str,
                                           "ty": tys_str,
                                           "gty": grouping_column_ty_str,
-                                          "key_str": key_str}
+                                          "key_str_x": key_str_x,
+                                          "key_str_y": key_str_y}
     return weld_obj
 
 def flatten_group(expr, column_tys, grouping_column_tys):
