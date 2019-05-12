@@ -437,7 +437,7 @@ impl InferTypesInternal for Expr {
             CUDF { ref return_ty, .. } => self.ty.push(return_ty),
 
             Serialize(_) => {
-                let serialized_type = Vector(Box::new(Scalar(I8)));
+                let serialized_type = Vector(Box::new(Scalar(U8)));
                 self.ty.push_complete(serialized_type)
             }
 

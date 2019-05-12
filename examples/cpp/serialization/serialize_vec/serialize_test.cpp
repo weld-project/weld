@@ -91,8 +91,8 @@ int main() {
         exit(1);
     }
 
-    weld_vec<int8_t> *res_vec = (weld_vec<int8_t> *)weld_value_data(result);
-    int8_t *result_data = res_vec->data;
+    weld_vec<uint8_t> *res_vec = (weld_vec<uint8_t> *)weld_value_data(result);
+    uint8_t *result_data = res_vec->data;
 
     printf("Output data buffer length %ld\n", res_vec->length);
 
