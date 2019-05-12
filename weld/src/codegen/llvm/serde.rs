@@ -21,8 +21,8 @@ use self::llvm_sys::prelude::*;
 use super::{CodeGenExt, FunctionContext, HasPointer, LlvmGenerator};
 
 lazy_static! {
-    /// The serialized type, which is a vec[i8].
-    static ref SER_TY: Type = Type::Vector(Box::new(Type::Scalar(ScalarKind::I8)));
+    /// The serialized type, which is a vec[u8].
+    static ref SER_TY: Type = Type::Vector(Box::new(Type::Scalar(ScalarKind::U8)));
     /// The type returned by the serialization function.
     static ref SER_RET_TY: Type = Type::Struct(vec![SER_TY.clone(), Scalar(ScalarKind::I64)]);
 }
@@ -428,7 +428,7 @@ impl SerHelper for LlvmGenerator {
                     let key_ser_fn = self.gen_serialize_fn(key)?;
                     let val_ser_fn = self.gen_serialize_fn(val)?;
                     let methods = self.dictionaries.get_mut(ty).unwrap();
-                    let buffer_vector = self.vectors.get_mut(&Scalar(ScalarKind::I8)).unwrap();
+                    let buffer_vector = self.vectors.get_mut(&Scalar(ScalarKind::U8)).unwrap();
                     methods.gen_serialize(
                         builder,
                         function,

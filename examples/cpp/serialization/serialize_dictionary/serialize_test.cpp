@@ -37,8 +37,8 @@ const char *program_no_pointers = "|v:vec[{i32,i32}]| serialize(result(for(v, di
 const char *program_pointers = "|v:vec[{i32,i32}]| serialize(result(for(v, groupmerger[i32,i32], |b,i,e| merge(b, e))))";
 
 // Programs that deserialize outputs of the above programs.
-const char *deser_no_pointers = "|v:vec[i8]| tovec(deserialize[dict[i32,i32]](v))";
-const char *deser_pointers = "|v:vec[i8]| tovec(deserialize[dict[i32,vec[i32]]](v))";
+const char *deser_no_pointers = "|v:vec[u8]| tovec(deserialize[dict[i32,i32]](v))";
+const char *deser_pointers = "|v:vec[u8]| tovec(deserialize[dict[i32,vec[i32]]](v))";
 
 /** Runs a serialize test on a program that takes a vec[{i32,i32}] has input. */
 weld_value_t serialize_test(const char *program, SerializeCheckerFn checker) {
@@ -98,9 +98,9 @@ weld_value_t serialize_test(const char *program, SerializeCheckerFn checker) {
     return result;
 }
 
-/** Runs a serialize test on a program that takes a vec[i8] has input. */
+/** Runs a serialize test on a program that takes a vec[u8] has input. */
 void deserialize_test(const char *program,
-    weld_vec<int8_t> *a,
+    weld_vec<uint8_t> *a,
     SerializeCheckerFn checker) {
 
     weld_error_t e = weld_error_new();
@@ -143,9 +143,9 @@ void deserialize_test(const char *program,
 
 // Serialized as Length:i64, Key:i32, Value:i32, Key:i32, Value:i32, ...
 void check_nopointers(void *inp) {
-  weld_vec<int8_t> *res_vec = (weld_vec<int8_t> *)inp;
+  weld_vec<uint8_t> *res_vec = (weld_vec<uint8_t> *)inp;
   int64_t length = res_vec->length;
-  int8_t *data = res_vec->data;
+  uint8_t *data = res_vec->data;
 
   // Print the number of bytes in the serialized buffer.
   printf("Output data buffer length %lld\n", length);
@@ -161,7 +161,7 @@ void check_nopointers(void *inp) {
   }
 }
 
-int8_t *parse_veci32(int8_t *data) {
+uint8_t *parse_veci32(uint8_t *data) {
   int64_t length = *((int64_t *)data);
   data += sizeof(int64_t);
 
@@ -177,9 +177,9 @@ int8_t *parse_veci32(int8_t *data) {
 
 // Serialized as Length:i64, Key:i32, ValueLength:i64, Val1:i32, ..., Key:i32, ValLength:i64, Val1: i32, ...
 void check_pointers(void *inp) {
-  weld_vec<int8_t> *res_vec = (weld_vec<int8_t> *)inp;
+  weld_vec<uint8_t> *res_vec = (weld_vec<uint8_t> *)inp;
   int64_t length = res_vec->length;
-  int8_t *data = res_vec->data;
+  uint8_t *data = res_vec->data;
 
   int64_t size = *((int64_t *)data);
   data += sizeof(int64_t);
@@ -225,15 +225,16 @@ int main() {
   printf("Serializing Dictionary of type 'dict[i32,i32]':\n");
   weld_value_t no_ptrs = serialize_test(program_no_pointers, check_nopointers);
   printf("Deserializing Dictionary of type 'dict[i32,i32]':\n");
-  deserialize_test(deser_no_pointers, (weld_vec<int8_t> *)weld_value_data(no_ptrs), check_deserialize_nopointers);
+  deserialize_test(deser_no_pointers, (weld_vec<uint8_t> *)weld_value_data(no_ptrs), check_deserialize_nopointers);
   weld_value_free(no_ptrs);
   */
 
-  weld_set_log_level(WELD_LOG_LEVEL_INFO);
+  // set to INFO level
+  weld_set_log_level(3);
 
   weld_value_t ptrs = serialize_test(program_pointers, check_pointers);
   deserialize_test(deser_pointers,
-      (weld_vec<int8_t> *)weld_value_data(ptrs),
+      (weld_vec<uint8_t> *)weld_value_data(ptrs),
       check_deserialize_pointers);
   // weld_value_free(ptrs);
   printf("Success!\n");
