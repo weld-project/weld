@@ -48,8 +48,6 @@ $ ln -s /usr/local/Cellar/llvm/6.0.0/bin/llvm-config /usr/local/bin/llvm-config
 
 To make sure this worked correctly, run `llvm-config --version`. You should see `6.0.x`.
 
-Enter the `weld_rt/cpp` directory and try running `make`. If the command fails with errors related to missing header files, you may need to install XCode and/or XCode Command Line Tools. Run `xcode-select --install` to do this.
-
 #### Ubuntu LLVM Installation
 
 To install LLVM on Ubuntu, get the LLVM 6.0 sources and then `apt-get`:
