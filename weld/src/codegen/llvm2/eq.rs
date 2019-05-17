@@ -21,7 +21,7 @@ use super::CodeGenExt;
 use super::LlvmGenerator;
 
 use crate::ast::BinOpKind::Equal;
-use crate::codegen::llvm::numeric::gen_binop;
+use crate::codegen::llvm2::numeric::gen_binop;
 
 /// Returns whether a value can be compared with libc's `memcmp`.
 ///

@@ -27,8 +27,8 @@ use self::llvm_sys::target_machine::*;
 
 use crate::codegen::Runnable;
 
-use crate::codegen::llvm::intrinsic;
-use crate::codegen::llvm::llvm_exts::*;
+use crate::codegen::llvm2::intrinsic;
+use crate::codegen::llvm2::llvm_exts::*;
 
 static ONCE: Once = ONCE_INIT;
 static mut INITIALIZE_FAILED: bool = false;

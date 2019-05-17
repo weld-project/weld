@@ -5,7 +5,3 @@ members = [
   "weld-repl",
   "weld-hdrgen"
 ]
-
-# HotFix for compilation failure...
-[profile.release]
-opt-level = 0
