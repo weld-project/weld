@@ -7,8 +7,8 @@ use std::ffi::CStr;
 use crate::ast::BinOpKind::*;
 use crate::ast::ScalarKind::I64;
 use crate::ast::Type;
-use crate::codegen::llvm::numeric::gen_binop;
-use crate::codegen::llvm::SIR_FUNC_CALL_CONV;
+use crate::codegen::llvm2::numeric::gen_binop;
+use crate::codegen::llvm2::SIR_FUNC_CALL_CONV;
 use crate::error::*;
 use crate::sir::FunctionId;
 

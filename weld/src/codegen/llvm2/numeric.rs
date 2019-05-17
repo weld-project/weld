@@ -19,7 +19,7 @@ use self::llvm_sys::core::*;
 use self::llvm_sys::prelude::*;
 use self::llvm_sys::LLVMIntPredicate::*;
 
-use crate::codegen::llvm::intrinsic::Intrinsics;
+use crate::codegen::llvm2::intrinsic::Intrinsics;
 
 use super::{CodeGenExt, FunctionContext, LlvmGenerator, LLVM_VECTOR_WIDTH};
 

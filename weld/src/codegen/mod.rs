@@ -20,9 +20,9 @@ use crate::util::stats::CompilationStats;
 
 use std::fmt;
 
-mod llvm;
+mod llvm2;
 
-pub use self::llvm::load_library;
+pub use self::llvm2::load_library;
 
 /// A wrapper for a struct passed as input to Weld.
 #[derive(Clone, Debug)]
@@ -89,12 +89,12 @@ pub fn compile_program(
     conf: &mut ParsedConf,
     stats: &mut CompilationStats,
 ) -> WeldResult<CompiledModule> {
-    let runnable = llvm::compile(&program, conf, stats)?;
+    let runnable = llvm2::compile(&program, conf, stats)?;
     let result = CompiledModule { runnable };
     Ok(result)
 }
 
 /// Get the size of a value for a given target.
 pub fn size_of(ty: &Type) -> usize {
-    llvm::size_of(ty)
+    llvm2::size_of(ty)
 }
