@@ -477,7 +477,9 @@ pub trait CodeGenExt {
                 match op {
                     Add => Ok(LLVMConstInt(ty, 0, signed)),
                     Multiply => Ok(LLVMConstInt(ty, 1, signed)),
+                    Max if kind.is_signed() => Ok(LLVMConstInt(ty, ::std::i64::MIN as u64, signed)),
                     Max => Ok(LLVMConstInt(ty, ::std::u64::MIN, signed)),
+                    Min if kind.is_signed() => Ok(LLVMConstInt(ty, ::std::i64::MAX as u64, signed)),
                     Min => Ok(LLVMConstInt(ty, ::std::u64::MAX, signed)),
                     _ => unreachable!(),
                 }
