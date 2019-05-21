@@ -67,7 +67,7 @@ Except from the SIMD type `simd[S]` (where `S` must be a scalar type), `T` in th
    * `K`: Key type. Can be any type.
    * `V`: Value type. Can be a scalar or a struct of scalars.
    * `binop`: [A commutative binary operation](#commutative-binary-operations-for-builders)
-* `groupbuilder[K,V]`: Groups `{K, V}` by key in a dictionary. Used to produce a `dict[K,vec[V]]`.
+* `groupmerger[K,V]`: Groups `{K, V}` by key in a dictionary. Used to produce a `dict[K,vec[V]]`.
    * `K`: Key type. Can be any type.
    * `V`: Value type. Can be any type.
 * `vecmerger[T,binop]`: Combines `{i64, T}` pairs by key into a vector using `binop`. The builder is initialized with an initial vector to work with.
