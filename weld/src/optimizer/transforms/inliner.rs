@@ -139,6 +139,9 @@ fn count_symbols(expr: &Expr, usage: &mut FnvHashMap<Symbol, SymbolTracker>) {
         }
         | Sort {
             cmpfunc: ref func, ..
+        }
+        | Apply {
+            ref func, ..
         } => {
             // Mark all symbols seen so far as "in a loop"
             for value in usage.values_mut() {
