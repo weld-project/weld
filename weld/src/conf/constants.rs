@@ -170,8 +170,8 @@ pub const CONF_DUMP_CODE_DIR_DEFAULT: &str = ".";
 /// Default set of optimization passes.
 pub const CONF_OPTIMIZATION_PASSES_DEFAULT: &[&str] = &[
     "inline-zip",
-    "inline-let",
     "inline-apply",
+    "inline-let",
     "loop-fusion",
     "unroll-static-loop",
     "infer-size",
