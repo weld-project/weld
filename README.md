@@ -27,7 +27,7 @@ To build Weld, you need [the latest stable version of Rust](http://rust-lang.org
 To install Rust, follow the steps [here](https://rustup.rs). You can verify that Rust was installed correctly on your system by typing `rustc` into your shell. If you already have Rust and  `rustup` installed, you can upgrade to the latest stable version with:
 
 ```bash
-$ rustup update stable
+rustup update stable
 ```
 
 #### MacOS LLVM Installation
@@ -35,13 +35,13 @@ $ rustup update stable
 To install LLVM on macOS, first install [Homebrew](https://brew.sh/). Then:
 
 ```bash
-$ brew install llvm@6
+brew install llvm@6
 ```
 
 Weld's dependencies require `llvm-config` on `$PATH`, so you may need to create a symbolic link so the correct `llvm-config` is picked up (note that you might need to add `sudo` at the start of this command):
 
 ```bash
-$ ln -s /usr/local/Cellar/llvm/6.0.0/bin/llvm-config /usr/local/bin/llvm-config
+ln -sf `brew --prefix llvm@6`/bin/llvm-config /usr/local/bin/llvm-config
 ```
 
 To make sure this worked correctly, run `llvm-config --version`. You should see `6.0.x`.
@@ -71,7 +71,7 @@ sudo apt-get install llvm-6.0-dev clang-6.0
 Weld's dependencies require `llvm-config`, so you may need to create a symbolic link so the correct `llvm-config` is picked up. `sudo` may be required:
 
 ```bash
-$ ln -s /usr/bin/llvm-config-6.0 /usr/local/bin/llvm-config
+ln -s /usr/bin/llvm-config-6.0 /usr/local/bin/llvm-config
 ```
 
 To make sure this worked correctly, run `llvm-config --version`. You should see `6.0.x` or newer.
@@ -79,7 +79,7 @@ To make sure this worked correctly, run `llvm-config --version`. You should see 
 You will also need `zlib`:
 
 ```bash
-$ sudo apt-get install zlib1g-dev
+sudo apt-get install zlib1g-dev
 ```
 
 #### Building Weld
@@ -87,17 +87,17 @@ $ sudo apt-get install zlib1g-dev
 With LLVM and Rust installed, you can build Weld. Clone this repository, set the `WELD_HOME` environment variable, and build using `cargo`:
 
 ```bash
-$ git clone https://www.github.com/weld-project/weld
-$ cd weld/
-$ export WELD_HOME=`pwd`
-$ cargo build --release
+git clone https://www.github.com/weld-project/weld
+cd weld/
+export WELD_HOME=`pwd`
+cargo build --release
 ```
 Weld builds two dynamically linked libraries (`.so` files on Linux and `.dylib` files on Mac): `libweld` and `libweldrt`.
 
 Finally, run the unit and integration tests:
 
 ```bash
-$ cargo test
+cargo test
 ```
 
 ## Documentation

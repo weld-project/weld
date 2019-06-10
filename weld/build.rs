@@ -26,8 +26,9 @@ fn link_stdcpp() {
         for lib in libs {
             println!("cargo:rustc-link-lib={}", lib);
         }
+    } else {
+        println!("cargo:rustc-link-lib=dylib=stdc++");
     }
-    println!("cargo:rustc-link-lib=dylib=stdc++");
 }
 
 /// Build the LLVM Extensions.
