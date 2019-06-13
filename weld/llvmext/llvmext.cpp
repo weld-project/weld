@@ -71,8 +71,8 @@ extern "C" const char *LLVMExtGetHostCPUFeatures() {
     }
   }
 
-  sort(features_present.begin(), features_present.end());
-  sort(features_missing.begin(), features_missing.end());
+  std::sort(features_present.begin(), features_present.end());
+  std::sort(features_missing.begin(), features_missing.end());
 
   string result;
   for (auto it = features_present.begin(); it != features_present.end(); it++) {
