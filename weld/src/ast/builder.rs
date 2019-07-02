@@ -113,8 +113,6 @@ impl NewExpr for Expr {
 
     fn new_literal(kind: LiteralKind) -> WeldResult<Expr> {
         use crate::ast::LiteralKind::*;
-        use crate::ast::Type::Scalar;
-
         let ty = match kind {
             BoolLiteral(_) => Scalar(ScalarKind::Bool),
             I8Literal(_) => Scalar(ScalarKind::I8),

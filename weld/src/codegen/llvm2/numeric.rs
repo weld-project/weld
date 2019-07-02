@@ -154,7 +154,6 @@ impl NumericExpressionGen for LlvmGenerator {
         ctx: &mut FunctionContext<'_>,
         statement: &Statement,
     ) -> WeldResult<()> {
-        use self::UnaryOpSupport;
         use crate::ast::Type::{Scalar, Simd};
         use crate::sir::StatementKind::UnaryOp;
         if let UnaryOp { op, ref child } = statement.kind {
@@ -237,7 +236,6 @@ impl NumericExpressionGen for LlvmGenerator {
         ctx: &mut FunctionContext<'_>,
         statement: &Statement,
     ) -> WeldResult<()> {
-        use self::llvm_sys::LLVMIntPredicate::LLVMIntEQ;
         use crate::sir::StatementKind::Not;
         if let Not(ref child) = statement.kind {
             let value = self.load(ctx.builder, ctx.get_value(child)?)?;
@@ -296,7 +294,6 @@ impl NumericExpressionGen for LlvmGenerator {
         ctx: &mut FunctionContext<'_>,
         statement: &Statement,
     ) -> WeldResult<()> {
-        use crate::ast::BinOpKind;
         use crate::ast::Type::{Scalar, Simd, Struct, Vector};
         use crate::sir::StatementKind::BinOp;
         if let BinOp {

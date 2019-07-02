@@ -7,7 +7,7 @@
 
 use weld;
 
-use libc::{c_char, c_void, int64_t, uint64_t};
+use libc::{c_char, c_void};
 
 use std::ffi::CStr;
 use std::ptr;
@@ -96,10 +96,10 @@ pub unsafe extern "C" fn weld_context_new(conf: weld_conf_t) -> weld_context_t {
 /// Gets the memory allocated by a Weld context.
 ///
 /// This includes all live memory allocated in the given context.
-pub unsafe extern "C" fn weld_context_memory_usage(context: weld_context_t) -> int64_t {
+pub unsafe extern "C" fn weld_context_memory_usage(context: weld_context_t) -> i64 {
     let context = context as *mut weld::WeldContext;
     let context = &*context;
-    context.memory_usage() as int64_t
+    context.memory_usage()
 }
 
 #[no_mangle]
@@ -177,10 +177,10 @@ pub extern "C" fn weld_value_new(data: *const c_void) -> weld_value_t {
 /// Returns the Run ID of the value.
 ///
 /// If this value was not returned by a Weld program, this function returns `-1`.
-pub unsafe extern "C" fn weld_value_run(value: weld_value_t) -> int64_t {
+pub unsafe extern "C" fn weld_value_run(value: weld_value_t) -> i64 {
     let value = value as *mut weld::WeldValue;
     let value = &*value;
-    value.run_id().unwrap_or(-1) as int64_t
+    value.run_id().unwrap_or(-1)
 }
 
 #[no_mangle]
@@ -311,7 +311,7 @@ pub extern "C" fn weld_error_new() -> weld_error_t {
 /// Returns the error code for a Weld error.
 ///
 /// This function is a wrapper for `WeldError::code`.
-pub unsafe extern "C" fn weld_error_code(err: weld_error_t) -> uint64_t {
+pub unsafe extern "C" fn weld_error_code(err: weld_error_t) -> u64 {
     let err = err as *mut weld::WeldError;
     let err = &*err;
     err.code() as _
@@ -357,6 +357,6 @@ pub unsafe extern "C" fn weld_load_library(filename: *const c_char, err: weld_er
 ///
 /// This function is ignored if it has already been called once, or if some other code in the
 /// process has initialized logging using Rust's `log` crate.
-pub extern "C" fn weld_set_log_level(level: uint64_t) {
+pub extern "C" fn weld_set_log_level(level: u64) {
     weld::set_log_level(level.into())
 }
