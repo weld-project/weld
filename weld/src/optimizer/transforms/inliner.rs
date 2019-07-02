@@ -309,7 +309,6 @@ fn getfield_on_symbol(expr: &Expr, sym: &Symbol) -> Option<u32> {
 ///
 /// This switches the true condition and the false condition.
 pub fn simplify_branch_conditions(expr: &mut Expr) {
-    use crate::ast::BinOpKind;
     use crate::ast::LiteralKind::BoolLiteral;
     expr.uniquify().unwrap();
     expr.transform_up(&mut |ref mut expr| {

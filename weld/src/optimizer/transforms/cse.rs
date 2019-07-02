@@ -363,7 +363,6 @@ impl Cse {
         expr: &mut Expr,
         bindings: &mut HashMap<Expr, Symbol>,
     ) {
-        use self::UseCse;
         expr.transform_up(&mut |ref mut e| {
             if !e.use_cse() {
                 return None;

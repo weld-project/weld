@@ -18,10 +18,7 @@ pub unsafe extern "C" fn weld_init() {
 
 #[no_mangle]
 /// Returns a new runtime handle.
-pub unsafe extern "C" fn weld_runst_init(
-    nworkers: int32_t,
-    memlimit: int64_t,
-) -> WeldRuntimeContextRef {
+pub unsafe extern "C" fn weld_runst_init(nworkers: i32, memlimit: i64) -> WeldRuntimeContextRef {
     Box::into_raw(Box::new(WeldRuntimeContext::new(nworkers, memlimit)))
 }
 
@@ -33,7 +30,7 @@ pub unsafe extern "C" fn weld_runst_release(run: WeldRuntimeContextRef) {
 
 #[no_mangle]
 /// Allocate memory within the provided context.
-pub unsafe extern "C" fn weld_runst_malloc(run: WeldRuntimeContextRef, size: int64_t) -> Ptr {
+pub unsafe extern "C" fn weld_runst_malloc(run: WeldRuntimeContextRef, size: i64) -> Ptr {
     let run = &mut *run;
     run.malloc(size)
 }
@@ -45,7 +42,7 @@ pub unsafe extern "C" fn weld_runst_malloc(run: WeldRuntimeContextRef, size: int
 pub unsafe extern "C" fn weld_runst_realloc(
     run: WeldRuntimeContextRef,
     ptr: Ptr,
-    newsize: int64_t,
+    newsize: i64,
 ) -> Ptr {
     let run = &mut *run;
     run.realloc(ptr, newsize)

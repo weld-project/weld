@@ -306,7 +306,6 @@ impl BuilderExpressionGen for LlvmGenerator {
             }
             DictMerger(ref key, ref val, ref binop) => {
                 use self::hash::*;
-                use crate::ast::Type::Scalar;
 
                 // Build the default value that we upsert if the key is not present in the
                 // dictionary yet.

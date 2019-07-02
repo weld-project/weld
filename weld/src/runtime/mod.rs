@@ -9,7 +9,7 @@ pub mod ffi;
 
 use self::ffi::*;
 
-use libc::{c_char, int32_t, int64_t};
+use libc::c_char;
 use std::alloc::System as Allocator;
 
 use fnv::FnvHashMap;

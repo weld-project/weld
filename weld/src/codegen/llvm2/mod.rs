@@ -1633,7 +1633,6 @@ impl LlvmGenerator {
                 }
             }
             Crash => {
-                use crate::runtime::WeldRuntimeErrno;
                 let errno = self.i64(WeldRuntimeErrno::Unknown as i64);
                 self.intrinsics.call_weld_run_set_errno(
                     context.builder,

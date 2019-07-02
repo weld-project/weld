@@ -528,8 +528,6 @@ impl DeHelper for LlvmGenerator {
         buffer: LLVMValueRef,
         position: LLVMValueRef,
     ) -> WeldResult<(LLVMValueRef, LLVMValueRef)> {
-        use crate::codegen::llvm2::vector::VectorExt;
-
         let size = self.size_of(ty);
         let pointer = self.gen_at(builder, &SER_TY, buffer, position)?;
 
@@ -554,7 +552,6 @@ impl DeHelper for LlvmGenerator {
         buffer: LLVMValueRef,
         position: LLVMValueRef,
     ) -> WeldResult<LLVMValueRef> {
-        use crate::codegen::llvm2::vector::VectorExt;
         let elem_size = self.size_of(LLVMGetElementType(LLVMTypeOf(ptr)));
         let size = LLVMBuildNSWMul(builder, size, elem_size, c_str!(""));
 
