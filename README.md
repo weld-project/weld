@@ -113,7 +113,7 @@ The `docs/` directory contains documentation for the different components of Wel
 
 ## Python Bindings
 
-Weld's Python bindings are in [`python/weld`](https://github.com/weld-project/weld/tree/master/python/weld), with examples in [`examples/python`](https://github.com/weld-project/weld/tree/master/examples/python).
+Weld's Python bindings are in [`python`](https://github.com/weld-project/weld/tree/master/python), with examples in [`examples/python`](https://github.com/weld-project/weld/tree/master/examples/python).
 
 ## Grizzly
 
