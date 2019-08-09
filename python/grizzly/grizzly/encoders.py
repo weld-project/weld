@@ -18,7 +18,7 @@ numpy_to_weld_type_mapping = {
     'int64': WeldLong(),
     'float32': WeldFloat(),
     'float64': WeldDouble(),
-    'bool': WeldBit()
+    'bool': WeldBit(),
 }
 
 
