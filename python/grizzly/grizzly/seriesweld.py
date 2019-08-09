@@ -134,18 +134,18 @@ class SeriesWeld(LazyOpResult):
         # TODO : Make all series have a series attribute
         raise Exception("No index present")
 
-    def evaluate(self, verbose=False, passes=None):
+    def evaluate(self, verbose=False, passes=None, workers=1):
         if self.index_type is not None:
             index, column = LazyOpResult(
                 self.expr,
                 WeldStruct([WeldVec(self.index_type), WeldVec(self.weld_type)]),
                 0
-            ).evaluate(verbose=verbose, passes=passes)
+            ).evaluate(verbose=verbose, passes=passes, num_threads=workers)
             series = pd.Series(column, index)
             series.index.rename(self.index_name, True)
             return series
         else:
-            column = LazyOpResult.evaluate(self, verbose=verbose, passes=passes)
+            column = LazyOpResult.evaluate(self, verbose=verbose, passes=passes, num_threads=workers)
             return pd.Series(column)
 
     def sort_values(self, ascending=False):
