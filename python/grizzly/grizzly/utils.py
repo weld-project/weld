@@ -53,7 +53,7 @@ def merge(df1, df2):
         )
     return df1.merge(df2)
 
-def group_eval(objs, passes=None):
+def group_eval(objs, passes=None, workers=1):
     LazyOpResults = []
     for ob in objs:
         if isinstance(ob, SeriesWeld):
@@ -63,7 +63,7 @@ def group_eval(objs, passes=None):
         else:
             LazyOpResults.append(LazyOpResult(ob.expr, ob.weld_type, 0))
     
-    results = group(LazyOpResults).evaluate((True, -1), passes=passes)
+    results = group(LazyOpResults).evaluate((True, -1), passes=passes, workers=workers)
     pd_results = []
     for i, result in enumerate(results):
         ob = objs[i]

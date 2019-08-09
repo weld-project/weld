@@ -418,7 +418,7 @@ class DataFrameWeldExpr:
         else:
             raise Expcetion("sort_values needs to be implemented for non pivot tables")
 
-    def evaluate(self, verbose=True, passes=None):
+    def evaluate(self, verbose=True, passes=None, workers=1):
         """Summary
 
         Returns:
@@ -429,7 +429,7 @@ class DataFrameWeldExpr:
                 self.expr,
                 self.weld_type,
                 0
-            ).evaluate(verbose=verbose, passes=passes)
+            ).evaluate(verbose=verbose, passes=passes, workers=worekrs)
             df_dict = {}
             for i, column_name in enumerate(columns):
                 df_dict[column_name] = pivot[i]
@@ -447,7 +447,7 @@ class DataFrameWeldExpr:
                 ),
                 WeldStruct(weldvec_type_list),
                 0
-            ).evaluate(verbose=verbose, passes=passes)
+            ).evaluate(verbose=verbose, passes=passes, workers=workers)
 
             for i, column_name in enumerate(self.column_names):
                 df[column_name] = columns[i]

@@ -284,7 +284,7 @@ class GroupedDataFrameWeld(LazyOpResult):
                     self.grouping_column_types
                 )
 
-    def evaluate(self, verbose=True, passes=None):
+    def evaluate(self, verbose=True, passes=None, workers=1):
         """Summary
 
         Returns:
@@ -321,7 +321,7 @@ class GroupedDataFrameWeld(LazyOpResult):
             exprs.append(expr)
             i += 1
 
-        result = utils.group(exprs).evaluate(verbose=verbose, passes=passes)
+        result = utils.group(exprs).evaluate(verbose=verbose, passes=passes, num_threads=workers)
         df = pd.DataFrame(columns=[])
         all_columns = self.column_names + self.grouping_column_name
         for i, column_name in enumerate(all_columns):
