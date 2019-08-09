@@ -27,4 +27,4 @@ setup(name='weldnumpy',
       include_package_data=True,
       author='Weld Developers',
       author_email='weld-group@lists.stanford.edu',
-      install_requires=['pyweld', 'numpy>=1.13', 'scipy', 'pytest'])
+      install_requires=['pyweld', 'numpy>=1.13'])

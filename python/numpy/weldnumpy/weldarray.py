@@ -750,7 +750,7 @@ class weldarray(np.ndarray):
         if restype is None:
             # use default type for all weldarray operations
             restype = WeldVec(self._weld_type)
-        arr = self.weldobj.evaluate(restype, verbose=self._verbose, passes=CUR_PASSES, workers=workers)
+        arr = self.weldobj.evaluate(restype, verbose=self._verbose, passes=CUR_PASSES, num_threads=workers)
 
         if hasattr(arr, '__len__'):
             arr = arr.reshape(self._real_shape)

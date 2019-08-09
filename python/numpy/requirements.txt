@@ -1,4 +1,2 @@
 numpy>=1.13
 pyweld
-grizzly
-pytest
