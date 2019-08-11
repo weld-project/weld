@@ -34,7 +34,7 @@ def merge(df1, df2):
         tys = []
         for col_name, raw_column in df2.raw_columns.items():
             dtype = str(raw_column.dtype)
-            if dtype == 'object' or dtype == '|S64':
+            if dtype == 'object' or dtype.startswith('|S'):
                 weld_type = WeldVec(WeldChar())
             else:
                 weld_type = grizzly_impl.numpy_to_weld_type_mapping[dtype]
@@ -63,7 +63,7 @@ def group_eval(objs, passes=None, workers=1):
         else:
             LazyOpResults.append(LazyOpResult(ob.expr, ob.weld_type, 0))
     
-    results = group(LazyOpResults).evaluate((True, -1), passes=passes, workers=workers)
+    results = group(LazyOpResults).evaluate((True, -1), passes=passes, num_threads=workers)
     pd_results = []
     for i, result in enumerate(results):
         ob = objs[i]

@@ -390,7 +390,42 @@ class SeriesWeld(LazyOpResult):
         )
 
     def __sub__(self, other):
-        return self.sub(other)
+        # TODO subtractionw without index variables
+        if self.index_type is not None:
+            index = grizzly_impl.get_field(self.expr, 0)
+            expr1 = grizzly_impl.get_field(self.expr, 1)
+        else:
+            expr1 = self.expr
+        if other.index_type is not None:
+            index2 = grizzly_impl.get_field(other.expr, 0)
+            expr2 = grizzly_impl.get_field(other.expr, 1)
+        else:
+            expr2 = other.expr
+        index_expr = LazyOpResult(index, self.index_type, 0)
+        sub_expr = SeriesWeld(
+            grizzly_impl.element_wise_op(
+                expr1,
+                expr2,
+                "-",
+                self.weld_type
+            ),
+            self.weld_type,
+            self.df,
+            self.column_name
+        )
+
+        index_sub_expr = utils.group([index_expr, sub_expr])
+        return SeriesWeld(
+            index_sub_expr.expr,
+            self.weld_type,
+            self.df,
+            self.column_name,
+            self.index_type,
+            self.index_name
+        )
+        # We also need to ensure that both indexes of the subtracted
+        # columns are compatible
+
 
     def sub(self, other):
         """Summary

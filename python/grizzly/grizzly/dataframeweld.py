@@ -178,7 +178,7 @@ class DataFrameWeld:
         tys = []
         for col_name, raw_column in self.raw_columns.items():
             dtype = str(raw_column.dtype)
-            if dtype == 'object' or dtype == '|S64':
+            if dtype == 'object' or dtype.startswith('|S'):
                 weld_type = WeldVec(WeldChar())
             else:
                 weld_type = grizzly_impl.numpy_to_weld_type_mapping[dtype]
@@ -447,7 +447,7 @@ class DataFrameWeldExpr:
                 ),
                 WeldStruct(weldvec_type_list),
                 0
-            ).evaluate(verbose=verbose, passes=passes, workers=workers)
+            ).evaluate(verbose=verbose, passes=passes, num_threads=workers)
 
             for i, column_name in enumerate(self.column_names):
                 df[column_name] = columns[i]
