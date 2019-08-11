@@ -294,6 +294,35 @@ def isin(array, predicates, ty):
 
     return weld_obj
 
+def element_wise_op_scalar(array, other, op, ty):
+    """
+    Operation of series and scalar other
+
+    Args:
+        array (WeldObject / Numpy.ndarray): Input array
+        other: (scalar)
+        op (str): Op string used to compute element-wise operation (+ / *)
+        ty (WeldType): Type of each element in the input array
+
+    Returns:
+        A WeldObject representing this computation
+    """
+    weld_obj = WeldObject(encoder_, decoder_)
+
+    array_var = weld_obj.update(array)
+    if isinstance(array, WeldObject):
+        array_var = array.obj_id
+        weld_obj.dependencies[array_var] = array
+
+    weld_template = """
+       map(%(array)s,
+         |a| a %(op)s %(other)s
+       )
+    """
+
+    weld_obj.weld_code = weld_template % {"array": array_var,
+                                          "other": str(other), "op": op}
+    return weld_obj
 
 def element_wise_op(array, other, op, ty):
     """
