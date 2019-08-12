@@ -2629,7 +2629,7 @@ impl LlvmGenerator {
 
         // If we already generated a serialization call, return it.
         if let Some(ref serialize_fn) = self.serialize_fns.get(expr_ty) {
-            return Ok(String::from(serialize_fn.as_ref()))
+            return Ok(serialize_fn.to_string())
         }
 
         let serialize_fn = format!("{}.serialize", expr_ll_prefix);
@@ -2816,7 +2816,7 @@ impl LlvmGenerator {
 
         // If we already generated a serialization call, return it.
         if let Some(ref deserialize_fn) = self.deserialize_fns.get(output_ty) {
-            return Ok(String::from(deserialize_fn.as_ref()))
+            return Ok(deserialize_fn.to_string())
         }
         let deserialize_fn = format!("{}.deserialize", output_ll_prefix);
 
