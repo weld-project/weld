@@ -24,7 +24,7 @@ ifeq (${OS}, Darwin)
   PYTHON_INCLUDES=${PYTHON_HEADER_INCLUDE} ${NUMPY_HEADER_INCLUDE}
 else ifeq (${OS}, Linux)
   # Linux
-  CLANG ?= clang-${LLVM_VERSION}
+  CLANG ?= gcc-5
   CLANGPP ?= clang++-${LLVM_VERSION}
   FLAGS=-mavx2 -fuse-ld=gold -flto
   DFLAGS=-shared -fPIC
@@ -35,7 +35,7 @@ else
 endif
 
 convertor:
-	${CLANG} ${DFLAGS} -w -march=native $(PYTHON_LDFLAGS) numpy_weld_convertor.cpp -o numpy_weld_convertor${DYLIB_SUFFIX}  ${PYTHON_INCLUDES}
+	${CLANG} ${DFLAGS} -O3 -fopenmp -w -march=native $(PYTHON_LDFLAGS) numpy_weld_convertor.cpp -o numpy_weld_convertor${DYLIB_SUFFIX}  ${PYTHON_INCLUDES}
 
 clean:
 	rm -rf run numpy_weld_convertor${DYLIB_SUFFIX} *.pyc

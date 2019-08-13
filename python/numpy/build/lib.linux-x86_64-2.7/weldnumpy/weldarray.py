@@ -3,6 +3,7 @@ from weld.encoders import NumpyArrayEncoder, NumpyArrayDecoder
 from weldnumpy import *
 import weldnumpy as wn
 import numpy as np
+import os
 
 class weldarray(np.ndarray):
     '''
@@ -682,7 +683,7 @@ class weldarray(np.ndarray):
                     result=output)
         return None
 
-    def evaluate(self, workers=1):
+    def evaluate(self):
         '''
         User facing function - if he wants to explicitly evaluate all the
         registered ops. Idempotent if no new ops have been registerd on the
@@ -690,7 +691,7 @@ class weldarray(np.ndarray):
 
         @ret: a new weldarray with all the registered ops evaluated in Weld.
         '''
-        ret = weldarray(self._eval(workers=workers), verbose=self._verbose, new_weldobj=False)
+        ret = weldarray(self._eval(), verbose=self._verbose, new_weldobj=False)
         if self._weldarray_view:
             # Because it was an in place update, the shape, start/end information must be the same
             # as it was before evaluating (i.e, it can't change as it might happen if it was a
@@ -698,7 +699,7 @@ class weldarray(np.ndarray):
             ret._weldarray_view = self._weldarray_view
         return ret
 
-    def _eval(self, restype=None, workers=1):
+    def _eval(self, restype=None):
         '''
         Internal call - used at various points to implicitly evaluate self.
         Users should instead call evaluate which would return a weldarray as
@@ -750,7 +751,8 @@ class weldarray(np.ndarray):
         if restype is None:
             # use default type for all weldarray operations
             restype = WeldVec(self._weld_type)
-        arr = self.weldobj.evaluate(restype, verbose=self._verbose, passes=CUR_PASSES, workers=workers)
+            threads = int(os.getenv('WELD_THREADS', "1"))
+        arr = self.weldobj.evaluate(restype, verbose=self._verbose, passes=CUR_PASSES, num_threads=threads)
 
         if hasattr(arr, '__len__'):
             arr = arr.reshape(self._real_shape)
