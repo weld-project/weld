@@ -8,6 +8,8 @@ use crate::optimizer::transforms::vectorizer::ShouldPredicate;
 use crate::tests::*;
 
 pub fn short_circuit_booleans(expr: &mut Expr) {
+    // For If statements annotated as predicated, do not apply the transform on the condition,
+    // since it removes the predication opportunity.
     let should_predicate = expr.should_predicate();
     let applied = match expr.kind {
         If {
