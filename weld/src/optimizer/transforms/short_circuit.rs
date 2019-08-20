@@ -1,4 +1,3 @@
-use crate::ast::constructors::*;
 use crate::ast::ExprKind::*;
 use crate::ast::*;
 
@@ -28,36 +27,36 @@ pub fn short_circuit_booleans(expr: &mut Expr) {
         return;
     }
 
-    let new = match expr.kind {
+    let replaced = match expr.kind {
         BinOp {
-            ref kind,
-            ref left,
-            ref right,
+            ref mut kind,
+            ref mut left,
+            ref mut right,
         } if *kind == BinOpKind::LogicalAnd => Some(
-            if_expr(
-                left.as_ref().clone(),
-                right.as_ref().clone(),
-                literal_expr(LiteralKind::BoolLiteral(false)).unwrap(),
+            Expr::new_if(
+                *left.take(),
+                *right.take(),
+                Expr::new_literal(LiteralKind::BoolLiteral(false)).unwrap(),
             )
             .unwrap(),
         ),
         BinOp {
-            ref kind,
-            ref left,
-            ref right,
+            ref mut kind,
+            ref mut left,
+            ref mut right,
         } if *kind == BinOpKind::LogicalOr => Some(
-            if_expr(
-                left.as_ref().clone(),
-                literal_expr(LiteralKind::BoolLiteral(true)).unwrap(),
-                right.as_ref().clone(),
+            Expr::new_if(
+                *left.take(),
+                Expr::new_literal(LiteralKind::BoolLiteral(true)).unwrap(),
+                *right.take(),
             )
             .unwrap(),
         ),
         _ => None,
     };
 
-    if let Some(new) = new {
-        *expr = new;
+    if let Some(replaced) = replaced {
+        *expr = replaced;
     }
 
     for child in expr.children_mut() {
