@@ -878,10 +878,10 @@ fn get_iter_sym(
         prog.funcs[body_func]
             .params
             .insert(opt_res.2.clone(), opt_expr.ty.clone());
-        return Ok(Some(opt_res.2));
+        Ok(Some(opt_res.2))
     } else {
-        return Ok(None);
-    };
+        Ok(None)
+    }
 }
 
 /// Generate code to compute the expression `expr` starting at the current tail of `cur_block`,

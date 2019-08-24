@@ -115,7 +115,7 @@
 //! backing a `WeldContext` is freed when all references to the context are dropped.
 //!
 #![cfg_attr(not(test), allow(dead_code))]
-#![allow(clippy::cyclomatic_complexity)]
+#![allow(clippy::cognitive_complexity)]
 #![allow(clippy::too_many_arguments)]
 
 #[macro_use]
