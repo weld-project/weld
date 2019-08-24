@@ -15,7 +15,7 @@ use std::path::Path;
 
 use weld::ast::*;
 
-static PRELUDE_CODE: &'static str = include_str!("resources/cpp_prelude.h");
+static PRELUDE_CODE: &str = include_str!("resources/cpp_prelude.h");
 
 /// Utility struct to generate string IDs with a given prefix.
 pub struct IdGenerator {

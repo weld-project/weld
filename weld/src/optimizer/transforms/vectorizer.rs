@@ -330,11 +330,11 @@ fn vectorizable_builder(expr: &Expr) -> Option<bool> {
         Ident(_) | NewBuilder(_) => {
             if let Builder(ref bk, _) = expr.ty {
                 match *bk {
-                    Appender(ref elem) | Merger(ref elem, _) => return Some(elem.is_scalar()),
-                    _ => return Some(false),
+                    Appender(ref elem) | Merger(ref elem, _) => Some(elem.is_scalar()),
+                    _ => Some(false),
                 }
             } else {
-                return None;
+                None
             }
         }
         MakeStruct { ref elems } => {
