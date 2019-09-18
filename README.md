@@ -102,7 +102,7 @@ cargo test
 
 ## Documentation
 
-The [Rust Weld crate](https://crates.io/crates/weld) is documented [here](https://www.weld.rs/docs/weld/).
+The [Rust Weld crate](https://crates.io/crates/weld) is documented [here](https://www.weld.rs/docs/latest/weld/).
 
 The `docs/` directory contains documentation for the different components of Weld.
 
