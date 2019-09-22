@@ -33,7 +33,7 @@ This tutorial assumes you have a Weld installation and a familiarity of Python. 
 The tutorial also assumes you've installed the Weld Python package, as described [here](https://github.com/weld-project/weld/blob/master/docs/python.md). In particular, make sure you install the Weld packages by running:
 
 ```bash
-$ python $WELD_HOME/python/setup.py install
+$ python $WELD_HOME/python/pyweld/setup.py install
 ```
 
 ## Setting up the Project
