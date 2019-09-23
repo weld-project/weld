@@ -1,14 +1,11 @@
-#
-# WeldObject
-#
-# Holds an object that can be evaluated.
-#
-from __future__ import print_function
+"""
+Represents a lazy Weld computation.
+"""
 
 import ctypes
 import time
 
-from . import bindings as cweld
+from .bindings import *
 from .types import *
 
 
@@ -46,8 +43,7 @@ class WeldObjectDecoder(object):
 
 class WeldObject(object):
     """
-    Holds a Weld program to be lazily compiled and evaluated,
-    along with any context required to evaluate the program.
+    Holds a Weld program to be lazily compiled and evaluated.
 
     Libraries that use the Weld API return WeldObjects, which represent
     "lazy executions" of programs. WeldObjects can build on top of each other,

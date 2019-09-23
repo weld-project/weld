@@ -1,6 +1,5 @@
 """
-Implements some common standard encoders and decoders mapping
-Python types to Weld types.
+Standard encoders and decoders between common Python types and Weld types.
 """
 
 import ctypes
