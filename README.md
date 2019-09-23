@@ -22,7 +22,7 @@ You can join the discussion on Weld on our [Google Group](https://groups.google.
 
 ## Building
 
-To build Weld, you need [the latest stable version of Rust](http://rust-lang.org) and [LLVM](http://llvm.org) 6.0 or newer.
+To build Weld, you need [the latest stable version of Rust](http://rust-lang.org) and [LLVM/Clang++](http://llvm.org) 6.0.
 
 To install Rust, follow the steps [here](https://rustup.rs). You can verify that Rust was installed correctly on your system by typing `rustc` into your shell. If you already have Rust and  `rustup` installed, you can upgrade to the latest stable version with:
 

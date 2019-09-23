@@ -1248,7 +1248,7 @@ impl Dict {
             let mut zero_vector = LLVMGetUndef(kv_vector.vector_ty);
             zero_vector = LLVMConstInsertValue(
                 zero_vector,
-                self.i64(0),
+                self.null_ptr(kv_vector.elem_ty),
                 [vector::POINTER_INDEX].as_mut_ptr(),
                 1,
             );
@@ -1656,7 +1656,7 @@ impl GroupingDict for Dict {
             let mut zero_vector = LLVMGetUndef(group_vector.vector_ty);
             zero_vector = LLVMConstInsertValue(
                 zero_vector,
-                self.i64(0),
+                self.null_ptr(group_vector.elem_ty),
                 [vector::POINTER_INDEX].as_mut_ptr(),
                 1,
             );
