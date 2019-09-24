@@ -212,7 +212,7 @@ weld_conf_new();
  * @return the string value for the key, or NULL if the key does not exist.
  */
 extern "C" const char *
-weld_conf_set(weld_conf_t, const char *key);
+weld_conf_get(weld_conf_t, const char *key);
 
 /** Set a value for a Weld configuration key.
  *
@@ -220,7 +220,7 @@ weld_conf_set(weld_conf_t, const char *key);
  * @param key the value
  */
 extern "C" void
-weld_conf_get(weld_conf_t, const char *key, const char *value);
+weld_conf_set(weld_conf_t, const char *key, const char *value);
 
 /** Return a new Weld configuraiton.
  *
