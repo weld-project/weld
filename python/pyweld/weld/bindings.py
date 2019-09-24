@@ -371,7 +371,7 @@ class WeldError(c_void_p):
         weld_error_free.restype = None
         weld_error_free(self.error)
 
-class WeldLogLevel(enum.IntEnum)
+class WeldLogLevel(enum.IntEnum):
     OFF = 0
     ERROR = 1
     WARN = 2
