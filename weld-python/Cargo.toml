@@ -15,9 +15,3 @@ features = ["extension-module"]
 [lib]
 name = "weld_python"
 crate-type = ["cdylib"]
-
-[target.x86_64-apple-darwin]
-rustflags = [
-  "-C", "link-arg=-undefined",
-  "-C", "link-arg=dynamic_lookup",
-]
