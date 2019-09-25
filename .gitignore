@@ -23,8 +23,8 @@ python/pyweld/pyweld.egg-info/
 python/pyweld/build/
 python/pyweld/dist/
 python/grizzly/build
-python/grizzly/pygrizzly.egg-info/
-python/numpy/weldnumpy.egg-info/
+*.egg-info/
+weldenv/
 
 llvmext/test
 

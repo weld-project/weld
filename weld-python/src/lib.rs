@@ -1,3 +1,4 @@
+//! Python bindings for the core Weld API.
 
 use pyo3::prelude::*;
 use pyo3::wrap_pyfunction;
@@ -36,10 +37,13 @@ impl WeldConf {
     }
 
     fn get(&self, key: String) -> PyResult<String> {
-        Ok(self.conf.get(&key).unwrap_or("".to_string()).into())
+        let s = self.conf.get(&key)
+            .map(|e| e.clone().into_string().unwrap())
+            .unwrap_or("".to_string());
+        Ok(s)
     }
 
-    fn set(&self, key: String, value: String) -> PyResult<()> {
+    fn set(&mut self, key: String, value: String) -> PyResult<()> {
         self.conf.set(key, value);
         Ok(())
     }
@@ -80,7 +84,7 @@ impl WeldModule {
 }
 
 impl WeldValue {
-    fn from_weld(value: weld::WeldValue) {
+    fn from_weld(value: weld::WeldValue) -> WeldValue {
         WeldValue {
             value
         }
@@ -90,13 +94,20 @@ impl WeldValue {
 #[pymethods]
 impl WeldValue {
     #[new]
-    fn new(obj: &PyRawObject, x: i32) {
+    fn new(obj: &PyRawObject, pointer: usize) {
         obj.init({
             WeldValue {
-                // TODO
-                weld::WeldValue::new(std::ptr::null_mut())
+                value: weld::WeldValue::new_from_data(pointer as _)
             }
         });
+    }
+
+    fn context(&self) -> PyResult<()> {
+        Ok(())
+    }
+
+    fn data(&self) -> PyResult<usize> {
+        Ok(self.value.data() as usize)
     }
 }
 
@@ -105,5 +116,7 @@ impl WeldValue {
 fn weld_python(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_class::<WeldConf>()?;
     m.add_class::<WeldContext>()?;
+    m.add_class::<WeldValue>()?;
+    m.add_class::<WeldModule>()?;
     Ok(())
 }
