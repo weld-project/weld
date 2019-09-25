@@ -7,7 +7,7 @@ use weld as libweld;
 
 import_exception!(weld, WeldError);
 
-/// Converst a `Result` to `PyResult`.
+/// Converts a `Result` to `PyResult`.
 ///
 /// This is needed since we can't implement `From` for a struct that isn't implemented in this
 /// module.
