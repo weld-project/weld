@@ -2,7 +2,9 @@
 members = [
   "weld",
   "weld-capi",
-  "weld-python",
   "weld-repl",
   "weld-hdrgen"
+]
+exclude = [
+  "weld-python"
 ]

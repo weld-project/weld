@@ -8,10 +8,9 @@ setup_requires = ["setuptools-rust>=0.10.1", "wheel"]
 install_requires = []
 
 setup(
-    name="weld-python",
+    name="weld",
     version="0.1.0",
     classifiers=[
-        "License :: OSI Approved :: MIT License",
         "Development Status :: 3 - Alpha",
         "Intended Audience :: Developers",
         "Programming Language :: Python",
@@ -19,8 +18,8 @@ setup(
         "Operating System :: POSIX",
         "Operating System :: MacOS :: MacOS X",
     ],
-    packages=["weld_python"],
-    rust_extensions=[RustExtension("weld_python.weld_python")],
+    packages=["weld"],
+    rust_extensions=[RustExtension("weld.weld")],
     install_requires=install_requires,
     setup_requires=setup_requires,
     include_package_data=True,
