@@ -1,6 +1,6 @@
 
 import ctypes
-import weld_python.weld_python as weld
+import weld
 
 conf = weld.WeldConf()
 context = weld.WeldContext(conf)
@@ -19,5 +19,10 @@ print("Result:", data.contents)
 print("Memory usage:", context.memory_usage(), "bytes")
 
 
+# Try to compile a module that fails.
+try:
+    module = weld.WeldModule("|x: i32| x + 10 + whoops", conf)
+except weld.WeldError as e:
+    print(e)
 
 

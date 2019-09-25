@@ -1,9 +1,26 @@
 //! Python bindings for the core Weld API.
 
 use pyo3::prelude::*;
+use pyo3::import_exception;
 
-// Rename this since we need to define the weld() function to declare the module.
 use weld as libweld;
+
+import_exception!(weld, WeldError);
+
+/// Converst a `Result` to `PyResult`.
+///
+/// This is needed since we can't implement `From` for a struct that isn't implemented in this
+/// module.
+trait ToPyErr<T, E> {
+    /// Performs the conversion.
+    fn to_py(self) -> PyResult<T>;
+}
+
+impl<T> ToPyErr<T, libweld::WeldError> for libweld::WeldResult<T>  {
+    fn to_py(self) -> PyResult<T> {
+        self.map_err(|e| PyErr::new::<WeldError, _>(e.message().to_str().unwrap().to_string()))
+    }
+}
 
 #[pyclass]
 struct WeldContext {
@@ -38,9 +55,12 @@ impl WeldConf {
 
     fn get(&self, key: String) -> PyResult<String> {
         let s = self.conf.get(&key)
-            .map(|e| e.clone().into_string().unwrap())
-            .unwrap_or("".to_string());
-        Ok(s)
+            .map(|e| e.clone().into_string().unwrap());
+        if let Some(s) = s {
+            Ok(s)
+        } else {
+            Err(pyo3::exceptions::KeyError::py_err(format!("'{}'", key)))
+        }
     }
 
     fn set(&mut self, key: String, value: String) -> PyResult<()> {
@@ -52,12 +72,13 @@ impl WeldConf {
 #[pymethods]
 impl WeldContext {
     #[new]
-    fn new(obj: &PyRawObject, conf: &WeldConf) {
+    fn new(obj: &PyRawObject, conf: &WeldConf) -> PyResult<()> {
         obj.init({
             WeldContext {
-                context: libweld::WeldContext::new(&conf.conf).unwrap(),
+                context: libweld::WeldContext::new(&conf.conf).to_py()?,
             }
         });
+        Ok(())
     }
 
     fn memory_usage(&self) -> PyResult<i64> {
@@ -68,18 +89,18 @@ impl WeldContext {
 #[pymethods]
 impl WeldModule {
     #[new]
-    fn new(obj: &PyRawObject, code: String, conf: &WeldConf) {
-        // TODO Throw an error here.
-        let module = libweld::WeldModule::compile(code, &conf.conf).unwrap();
+    fn new(obj: &PyRawObject, code: String, conf: &WeldConf) -> PyResult<()> {
+        let module = libweld::WeldModule::compile(code, &conf.conf).to_py()?;
         obj.init({
             WeldModule {
                 module
             }
         });
+        Ok(())
     }
 
     unsafe fn run(&self, context: &mut WeldContext, value: &WeldValue) -> PyResult<WeldValue> {
-        Ok(WeldValue::from_weld(self.module.run(&mut context.context, &value.value).unwrap()))
+        Ok(WeldValue::from_weld(self.module.run(&mut context.context, &value.value).to_py()?))
     }
 }
 
@@ -116,7 +137,7 @@ impl WeldValue {
 fn weld(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_class::<WeldConf>()?;
     m.add_class::<WeldContext>()?;
-    m.add_class::<WeldValue>()?;
     m.add_class::<WeldModule>()?;
+    m.add_class::<WeldValue>()?;
     Ok(())
 }
