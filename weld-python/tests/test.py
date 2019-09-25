@@ -13,6 +13,9 @@ b = ctypes.c_int(20)
 value = weld.WeldValue(ctypes.addressof(b))
 result = module.run(context, value)
 
+ty = module.return_type()
+print(str(ty))
+
 data = result.data()
 data = ctypes.cast(data, pointer)
 print("Result:", data.contents)

@@ -42,6 +42,26 @@ struct WeldModule {
     module: libweld::WeldModule,
 }
 
+#[pyclass]
+struct WeldType {
+    ty: libweld::ast::Type,
+}
+
+impl WeldType {
+    fn new(ty: libweld::ast::Type) -> WeldType {
+        WeldType {
+            ty,
+        }
+    }
+}
+
+#[pyproto]
+impl pyo3::class::basic::PyObjectProtocol for WeldType {
+    fn __str__(&self) -> PyResult<String> {
+        Ok(self.ty.to_string())
+    }
+}
+
 #[pymethods]
 impl WeldConf {
     #[new]
@@ -101,6 +121,10 @@ impl WeldModule {
 
     unsafe fn run(&self, context: &mut WeldContext, value: &WeldValue) -> PyResult<WeldValue> {
         Ok(WeldValue::from_weld(self.module.run(&mut context.context, &value.value).to_py()?))
+    }
+
+    fn return_type(&self) -> PyResult<WeldType> {
+        Ok(WeldType::new(self.module.return_type()))
     }
 }
 
