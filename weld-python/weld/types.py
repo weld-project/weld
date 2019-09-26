@@ -1,9 +1,8 @@
 """
-Conversions for some primitive types in Python (integers, floats, and tuples)
-to types in Weld.
+Types available in Weld.
 """
 
-from abc import ABC
+from abc import ABC, abstractmethod
 import ctypes
 import sys
 
@@ -29,18 +28,20 @@ class WeldType(ABC):
 
     """
 
+    @abstractmethod
     def __str__(self):
         """
         Returns a Weld IR string representing this type.
         """
-        raise NotImplementedError
+        pass
 
     @property
+    @abstractmethod
     def ctype_class(self):
         """
         Returns a class representing this type's ctype representation.
         """
-        raise NotImplementedError
+        pass
 
 
 def define_primitive_type(typename, ir, ctype, classdoc=None, add_to_module=True):
